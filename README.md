@@ -1,5 +1,5 @@
 ###### This was already here
-
+<br>
 # ![Logo](chrome/app/theme/chromium/product_logo_64.png) Chromium
 
 Chromium is an open-source browser project that aims to build a safer, faster,
@@ -16,3 +16,9 @@ For historical reasons, there are some small top level directories. Now the
 guidance is that new top level directories are for product (e.g. Chrome,
 Android WebView, Ash). Even if these products have multiple executables, the
 code should be in subdirectories of the product.
+
+## What I want to do
+<br>
+1. Change logo so it has a Platypus head in it
+<br>
+2. Add more Dev stuff
