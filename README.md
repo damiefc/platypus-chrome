@@ -1,6 +1,6 @@
 ###### This was already here
 <br>
-![Logo Chromium](chrome/app/theme/chromium/win/tiles/Logo.png)
+![Logo Chromium](https://www.chromium.org/_/rsrc/1438879449147/config/customLogo.gif?revision=3)
 
 Chromium is an open-source browser project that aims to build a safer, faster,
 and more stable way for all users to experience the web.
