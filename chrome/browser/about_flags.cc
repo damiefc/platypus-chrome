@@ -3700,7 +3700,7 @@ const FeatureEntry kFeatureEntries[] = {
          "disallowFetchForDocWrittenScriptsInMainFrame=false")},
     {"document-transition", flag_descriptions::kDocumentTransitionName,
      flag_descriptions::kDocumentTransitionDescription, kOsAll,
-     FEATURE_VALUE_TYPE(features::kDocumentTransition)},
+     FEATURE_VALUE_TYPE(blink::features::kDocumentTransition)},
 #if defined(OS_WIN)
     {"use-winrt-midi-api", flag_descriptions::kUseWinrtMidiApiName,
      flag_descriptions::kUseWinrtMidiApiDescription, kOsWin,
@@ -4728,6 +4728,11 @@ const FeatureEntry kFeatureEntries[] = {
     {"chrome-tips-in-main-menu", flag_descriptions::kChromeTipsInMainMenuName,
      flag_descriptions::kChromeTipsInMainMenuDescription, kOsDesktop,
      FEATURE_VALUE_TYPE(features::kChromeTipsInMainMenu)},
+
+    {"chrome-tips-in-main-menu-new-badge",
+     flag_descriptions::kChromeTipsInMainMenuNewBadgeName,
+     flag_descriptions::kChromeTipsInMainMenuNewBadgeDescription, kOsDesktop,
+     FEATURE_VALUE_TYPE(features::kChromeTipsInMainMenuNewBadge)},
 #endif
 
     {"tab-hover-card-images", flag_descriptions::kTabHoverCardImagesName,
@@ -6954,9 +6959,8 @@ const FeatureEntry kFeatureEntries[] = {
      FEATURE_VALUE_TYPE(features::kExperimentalAccessibilityLabels)},
 #endif  // defined(OS_ANDROID)
 
-    // TODO(crbug.com/1155358): Enable Chrome Labs for ChromeOS
     {"chrome-labs", flag_descriptions::kChromeLabsName,
-     flag_descriptions::kChromeLabsDescription, kOsLinux | kOsMac | kOsWin,
+     flag_descriptions::kChromeLabsDescription, kOsDesktop,
      FEATURE_VALUE_TYPE(features::kChromeLabs)},
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -6997,6 +7001,10 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kSendTabToSelfWhenSignedInName,
      flag_descriptions::kSendTabToSelfWhenSignedInDescription, kOsAll,
      FEATURE_VALUE_TYPE(send_tab_to_self::kSendTabToSelfWhenSignedIn)},
+
+    {"send-tab-to-self-v2", flag_descriptions::kSendTabToSelfV2Name,
+     flag_descriptions::kSendTabToSelfV2Description, kOsAll,
+     FEATURE_VALUE_TYPE(send_tab_to_self::kSendTabToSelfV2)},
 
 #if defined(OS_ANDROID)
     {"mobile-pwa-install-use-bottom-sheet",

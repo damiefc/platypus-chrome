@@ -2116,14 +2116,6 @@ ci.clang_builder(
 )
 
 ci.clang_builder(
-    name = "ToTAndroidCFI",
-    console_view_entry = consoles.console_view_entry(
-        category = "ToT Android",
-        short_name = "cfi",
-    ),
-)
-
-ci.clang_builder(
     name = "ToTAndroidOfficial",
     console_view_entry = consoles.console_view_entry(
         category = "ToT Android",
@@ -2212,6 +2204,7 @@ clang_tot_linux_builder(
 
 ci.clang_builder(
     name = "ToTWin(dbg)",
+    builderless = False,
     console_view_entry = consoles.console_view_entry(
         category = "ToT Windows",
         short_name = "dbg",
@@ -2248,6 +2241,7 @@ ci.clang_builder(
 
 ci.clang_builder(
     name = "ToTWinASanLibfuzzer",
+    builderless = False,
     console_view_entry = consoles.console_view_entry(
         category = "ToT Windows|Asan",
         short_name = "fuz",

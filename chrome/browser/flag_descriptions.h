@@ -273,6 +273,9 @@ extern const char
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 extern const char kChromeTipsInMainMenuName[];
 extern const char kChromeTipsInMainMenuDescription[];
+
+extern const char kChromeTipsInMainMenuNewBadgeName[];
+extern const char kChromeTipsInMainMenuNewBadgeDescription[];
 #endif
 
 extern const char kCompositingBasedThrottling[];
@@ -1268,6 +1271,9 @@ extern const char kSecurePaymentConfirmationDebugDescription[];
 
 extern const char kSendTabToSelfWhenSignedInName[];
 extern const char kSendTabToSelfWhenSignedInDescription[];
+
+extern const char kSendTabToSelfV2Name[];
+extern const char kSendTabToSelfV2Description[];
 
 extern const char kSidePanelName[];
 extern const char kSidePanelDescription[];

@@ -461,6 +461,12 @@ const char kChromeTipsInMainMenuDescription[] =
     "Enables 'Tips for Chrome' in main menu; the menu item will take users to "
     "an official Google site with information about the latest and most "
     "popular Chrome features.";
+
+const char kChromeTipsInMainMenuNewBadgeName[] =
+    "Show 'New' promo badge on 'Tips for Chrome' in Help portion of main menu.";
+const char kChromeTipsInMainMenuNewBadgeDescription[] =
+    "Enables 'New' promo badge on 'Tips for Chrome' in main menu; experiment to"
+    " test the value of this user education feature.";
 #endif
 
 const char kCompositingBasedThrottling[] = "Compositing-based Throttling";
@@ -2199,6 +2205,11 @@ const char kSendTabToSelfWhenSignedInName[] = "Send tab to self when signed-in";
 const char kSendTabToSelfWhenSignedInDescription[] =
     "Makes the tab sharing feature also available for users who have \"only\" "
     "signed-in to their Google Account (as opposed to having enabled Sync).";
+
+extern const char kSendTabToSelfV2Name[] = "Send tab to self 2.0";
+extern const char kSendTabToSelfV2Description[] =
+    "Enables new received tab "
+    "UI shown next to the profile icon instead of using system notifications.";
 
 const char kSidePanelName[] = "Side panel";
 const char kSidePanelDescription[] = "Host some content in a side panel.";

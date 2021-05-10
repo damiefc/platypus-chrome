@@ -592,6 +592,11 @@
     "expiry_milestone": 95
   },
   {
+    "name": "chrome-tips-in-main-menu-new-badge",
+    "owners": [ "dfried" ],
+    "expiry_milestone": 95
+  },
+  {
     "name": "chromeos-direct-video-decoder",
     "owners": [ "chromeos-gfx-video@google.com" ],
     // TODO(b/159825227): remove when the "old" video decoder is fully launched.
@@ -1934,7 +1939,7 @@
   {
     "name": "enable-image-reader",
     "owners": [ "vikassoni", "liberato" ],
-    "expiry_milestone": 90
+    "expiry_milestone": 95
   },
   {
     "name": "enable-immersive-fullscreen-toolbar",
@@ -2105,8 +2110,8 @@
   },
   {
     "name": "enable-navigation-predictor",
-    "owners": [ "tbansal", "ryansturm", "instant-nav@google.com" ],
-    "expiry_milestone": 90
+    "owners": [ "spelchat", "ryansturm", "instant-nav@google.com" ],
+    "expiry_milestone": 94
   },
   {
     "name": "enable-network-logging-to-file",
@@ -3804,11 +3809,6 @@
     "expiry_milestone": 92
   },
   {
-    "name": "ntp-webui",
-    "owners": [ "aee", "mahmadi", "tiborg" ],
-    "expiry_milestone": 88
-  },
-  {
     "name": "offline-indicator-choice",
     "owners": [ "sclittle", "srsudar", "offline-dev" ],
     "expiry_milestone": 76
@@ -4716,6 +4716,11 @@
     "name": "select-to-speak-navigation-control",
     "owners": [ "joelriley@google.com" ],
     "expiry_milestone": 89
+  },
+  {
+    "name": "send-tab-to-self-v2",
+    "owners": ["kmilka", "chrome-sharing-eng@google.com"],
+    "expiry_milestone": 95
   },
   {
     "name": "send-tab-to-self-when-signed-in",

@@ -32410,6 +32410,7 @@ Called by update_use_counter_feature_enum.py.-->
   <int value="3899" label="ComputePressureObserver_Constructor"/>
   <int value="3900" label="ComputePressureObserver_Observe"/>
   <int value="3901" label="ComputePressureObserver_Stop"/>
+  <int value="3902" label="WebAppWindowControlsOverlay"/>
 </enum>
 
 <enum name="FeaturePolicyAllowlistType">
@@ -44627,6 +44628,7 @@ from previous Chrome versions.
   <int value="-1893668420"
       label="AutofillSaveCreditCardUsesStrikeSystem:enabled"/>
   <int value="-1893019071" label="CSSOMViewScrollCoordinates:disabled"/>
+  <int value="-1892758622" label="SendTabToSelfV2:disabled"/>
   <int value="-1892555086" label="disable-compositor-animation-timelines"/>
   <int value="-1892000374" label="SeccompSandboxAndroid:enabled"/>
   <int value="-1890374564" label="OobeRecommendAppsScreen:disabled"/>
@@ -46277,6 +46279,7 @@ from previous Chrome versions.
   <int value="-493551777" label="StaleWhileRevalidate2:disabled"/>
   <int value="-492864618" label="NTPForeignSessionsSuggestions:disabled"/>
   <int value="-491546546" label="MeteredShowToggle:enabled"/>
+  <int value="-491208379" label="ChromeTipsInMainMenuNewBadge:disabled"/>
   <int value="-491131428" label="OmniboxNewAnswerLayout:disabled"/>
   <int value="-490652941" label="WebViewZeroCopyVideo:enabled"/>
   <int value="-488779992" label="blink-settings"/>
@@ -46403,6 +46406,7 @@ from previous Chrome versions.
   <int value="-372171039" label="BlinkGenPropertyTrees:disabled"/>
   <int value="-371397346" label="ChromeOSSharingHub:enabled"/>
   <int value="-370876369" label="ContextualSearchLiteralTapSearch:enabled"/>
+  <int value="-369150124" label="SendTabToSelfV2:enabled"/>
   <int value="-367474066" label="DialogTouchBar:enabled"/>
   <int value="-366949535" label="KeyboardShortcutViewerApp:enabled"/>
   <int value="-365920680" label="ImageCaptureAPI:disabled"/>
@@ -48531,6 +48535,7 @@ from previous Chrome versions.
   <int value="1489915799" label="disable-permissions-blacklist"/>
   <int value="1490043732" label="enable-fill-on-account-select"/>
   <int value="1490255042" label="enable-overlay-scrollbar"/>
+  <int value="1491212579" label="ChromeTipsInMainMenuNewBadge:enabled"/>
   <int value="1492255992" label="OnDeviceGrammarCheck:enabled"/>
   <int value="1492541927" label="QuickAnswersTranslationCloudAPI:enabled"/>
   <int value="1495341532" label="disable-mtp-write-support"/>
@@ -51482,6 +51487,14 @@ Called by update_use_counter_css.py.-->
   <int value="5" label="Network"/>
   <int value="6" label="Connect Timeout"/>
   <int value="7" label="Ping Timeout"/>
+</enum>
+
+<enum name="MediaRouterCastFeedbackEvent">
+  <int value="0" label="Dialog opened"/>
+  <int value="1" label="Sending"/>
+  <int value="2" label="Resending"/>
+  <int value="3" label="Feedback sent"/>
+  <int value="4" label="Too many retries"/>
 </enum>
 
 <enum name="MediaRouterCastSinkSource">
@@ -71575,6 +71588,12 @@ https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.1.pdf
   <int value="6" label="TAB_GROUP"/>
   <int value="7" label="WEBAPP_NOTIFICATION"/>
   <int value="8" label="FEED"/>
+</enum>
+
+<enum name="ShareSourceAndroid">
+  <int value="0" label="ANDROID_SHARE_SHEET"/>
+  <int value="1" label="CHROME_SHARE_SHEET"/>
+  <int value="2" label="DIRECT_SHARE"/>
 </enum>
 
 <enum name="SharingActionSource">
