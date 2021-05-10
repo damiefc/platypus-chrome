@@ -34,12 +34,15 @@ class WebEngineDevToolsController;
 // All created Frames are owned by this object.
 class WEB_ENGINE_EXPORT ContextImpl : public fuchsia::web::Context {
  public:
-  // |browser_context| and |devtools_controller| must outlive ContextImpl.
-  ContextImpl(content::BrowserContext* browser_context,
+  // |devtools_controller| must outlive ContextImpl.
+  ContextImpl(std::unique_ptr<content::BrowserContext> browser_context,
               WebEngineDevToolsController* devtools_controller);
 
   // Tears down the Context, destroying any active Frames in the process.
   ~ContextImpl() final;
+
+  ContextImpl(const ContextImpl&) = delete;
+  ContextImpl& operator=(const ContextImpl&) = delete;
 
   // Removes and destroys the specified |frame|.
   void DestroyFrame(FrameImpl* frame);
@@ -47,14 +50,23 @@ class WEB_ENGINE_EXPORT ContextImpl : public fuchsia::web::Context {
   // Returns |true| if JS injection was enabled for this Context.
   bool IsJavaScriptInjectionAllowed();
 
-  // Registers a Frame originating from web content (i.e. a popup).
-  fidl::InterfaceHandle<fuchsia::web::Frame> CreateFrameForPopupWebContents(
-      std::unique_ptr<content::WebContents> web_contents);
+  // Creates a Frame with |params| for the |web_contents| and binds it to
+  // |frame_request|. The Frame will self-delete when |frame_request|
+  // disconnects.
+  void CreateFrameForWebContents(
+      std::unique_ptr<content::WebContents> web_contents,
+      fuchsia::web::CreateFrameParams params,
+      fidl::InterfaceRequest<fuchsia::web::Frame> frame_request);
 
   // Returns the DevTools controller for this Context.
   WebEngineDevToolsController* devtools_controller() const {
     return devtools_controller_;
   }
+
+  // Controls whether the CastStreaming receiver is available in this instance.
+  // At most one ContextImpl per-process may have CastStreaming enabled.
+  void SetCastStreamingEnabled();
+  bool has_cast_streaming_enabled() const { return cast_streaming_enabled_; }
 
   // fuchsia::web::Context implementation.
   void CreateFrame(fidl::InterfaceRequest<fuchsia::web::Frame> frame) final;
@@ -69,8 +81,8 @@ class WEB_ENGINE_EXPORT ContextImpl : public fuchsia::web::Context {
   // |frame_ptr| client.
   FrameImpl* GetFrameImplForTest(fuchsia::web::FramePtr* frame_ptr) const;
 
-  content::BrowserContext* browser_context_for_test() const {
-    return browser_context_;
+  content::BrowserContext* browser_context() const {
+    return browser_context_.get();
   }
 
  private:
@@ -78,7 +90,7 @@ class WEB_ENGINE_EXPORT ContextImpl : public fuchsia::web::Context {
   network::mojom::NetworkContext* GetNetworkContext();
 
   // Reference to the browser implementation for this Context.
-  content::BrowserContext* const browser_context_;
+  std::unique_ptr<content::BrowserContext> const browser_context_;
 
   // Reference to the class managing the DevTools remote debugging service.
   WebEngineDevToolsController* const devtools_controller_;
@@ -91,11 +103,12 @@ class WEB_ENGINE_EXPORT ContextImpl : public fuchsia::web::Context {
   // initialized at Context creation time.
   bool allow_javascript_injection_ = true;
 
+  // True if this instance should allows Frames to use CastStreaming.
+  bool cast_streaming_enabled_ = false;
+
   // Tracks all active FrameImpl instances, so that we can request their
   // destruction when this ContextImpl is destroyed.
   std::set<std::unique_ptr<FrameImpl>, base::UniquePtrComparator> frames_;
-
-  DISALLOW_COPY_AND_ASSIGN(ContextImpl);
 };
 
 #endif  // FUCHSIA_ENGINE_BROWSER_CONTEXT_IMPL_H_

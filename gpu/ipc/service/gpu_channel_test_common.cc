@@ -4,12 +4,12 @@
 
 #include "gpu/ipc/service/gpu_channel_test_common.h"
 
+#include <memory>
+
 #include "base/memory/unsafe_shared_memory_region.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
-#include "components/viz/common/features.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/shared_image_manager.h"
@@ -82,9 +82,6 @@ GpuChannelTestCommon::GpuChannelTestCommon(
   // We need GL bindings to actually initialize command buffers.
   if (use_stub_bindings) {
     gl::GLSurfaceTestSupport::InitializeOneOffWithStubBindings();
-    // GrContext cannot be created with stub bindings.
-    scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
-    scoped_feature_list_->InitAndDisableFeature(features::kUseSkiaRenderer);
   } else {
     gl::GLSurfaceTestSupport::InitializeOneOff();
   }
@@ -93,14 +90,14 @@ GpuChannelTestCommon::GpuChannelTestCommon(
   feature_info.enabled_gpu_driver_bug_workarounds =
       std::move(enabled_workarounds);
 
-  channel_manager_.reset(new GpuChannelManager(
+  channel_manager_ = std::make_unique<GpuChannelManager>(
       GpuPreferences(), channel_manager_delegate_.get(), nullptr, /* watchdog */
       task_runner_.get(), io_task_runner_.get(), scheduler_.get(),
       sync_point_manager_.get(), shared_image_manager_.get(),
       nullptr, /* gpu_memory_buffer_factory */
       std::move(feature_info), GpuProcessActivityFlags(),
       gl::init::CreateOffscreenGLSurface(gfx::Size()),
-      nullptr /* image_decode_accelerator_worker */));
+      nullptr /* image_decode_accelerator_worker */);
 }
 
 GpuChannelTestCommon::~GpuChannelTestCommon() {

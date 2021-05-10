@@ -7,7 +7,9 @@
 
 #include <algorithm>
 #include <memory>
+#include <string>
 
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
@@ -15,15 +17,17 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
 #include "chromecast/browser/cast_browser_context.h"
 #include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/cast_web_contents_impl.h"
+#include "chromecast/browser/test_interfaces.test-mojom.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -33,11 +37,16 @@
 #include "content/public/test/browser_test_base.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/url_loader_interceptor.h"
-#include "mojo/public/cpp/bindings/connector.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/http/http_status_code.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
+#include "services/service_manager/public/mojom/interface_provider.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -116,7 +125,7 @@ class MockCastWebContentsObserver : public CastWebContents::Observer {
            service_manager::InterfaceProvider* frame_interfaces,
            blink::AssociatedInterfaceProvider* frame_associated_interfaces));
   MOCK_METHOD1(ResourceLoadFailed, void(CastWebContents* cast_web_contents));
-  MOCK_METHOD1(UpdateTitle, void(const base::string16& title));
+  MOCK_METHOD1(UpdateTitle, void(const std::u16string& title));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockCastWebContentsObserver);
@@ -138,10 +147,10 @@ class TitleChangeObserver : public CastWebContents::Observer {
   // Spins a Runloop until the title of the page matches the |expected_title|
   // that have been set.
   void RunUntilTitleEquals(base::StringPiece expected_title) {
-    expected_title_ = expected_title.as_string();
+    expected_title_ = std::string(expected_title);
     // Spin the runloop until the expected conditions are met.
     if (current_title_ != expected_title_) {
-      expected_title_ = expected_title.as_string();
+      expected_title_ = std::string(expected_title);
       base::RunLoop run_loop;
       quit_closure_ = run_loop.QuitClosure();
       run_loop.Run();
@@ -149,7 +158,7 @@ class TitleChangeObserver : public CastWebContents::Observer {
   }
 
   // CastWebContents::Observer implementation:
-  void UpdateTitle(const base::string16& title) override {
+  void UpdateTitle(const std::u16string& title) override {
     // Resumes execution of RunUntilTitleEquals() if |title| matches
     // expectations.
     std::string title_utf8 = base::UTF16ToUTF8(title);
@@ -239,8 +248,9 @@ class CastWebContentsBrowserTest : public content::BrowserTestBase,
     SetUpCommandLine(base::CommandLine::ForCurrentProcess());
     BrowserTestBase::SetUp();
   }
-  void SetUpCommandLine(base::CommandLine* command_line) final {
+  void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitchASCII(switches::kTestType, "browser");
+    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures, "MojoJS");
   }
   void PreRunTestOnMainThread() override {
     // Pump startup related events.
@@ -754,13 +764,15 @@ IN_PROC_BROWSER_TEST_F(CastWebContentsBrowserTest, PostMessageToMainFrame) {
   // would post a message to the test page to redirect it to |title1.html|.
   // ===========================================================================
   constexpr char kOriginalTitle[] = "postmessage";
+  constexpr char16_t kOriginalTitle16[] = u"postmessage";
   constexpr char kPage1Path[] = "title1.html";
   constexpr char kPage1Title[] = "title 1";
+  constexpr char16_t kPage1Title16[] = u"title 1";
 
   EXPECT_CALL(mock_cast_wc_observer_,
-              UpdateTitle(base::ASCIIToUTF16(kPage1Title)));
+              UpdateTitle(std::u16string(kPage1Title16)));
   EXPECT_CALL(mock_cast_wc_observer_,
-              UpdateTitle(base::ASCIIToUTF16(kOriginalTitle)));
+              UpdateTitle(std::u16string(kOriginalTitle16)));
 
   embedded_test_server()->ServeFilesFromSourceDirectory(GetTestDataPath());
   StartTestServer();
@@ -781,11 +793,12 @@ IN_PROC_BROWSER_TEST_F(CastWebContentsBrowserTest, PostMessagePassMessagePort) {
   // through the port.
   // ===========================================================================
   constexpr char kOriginalTitle[] = "messageport";
+  constexpr char16_t kOriginalTitle16[] = u"messageport";
   constexpr char kHelloMsg[] = "hi";
   constexpr char kPingMsg[] = "ping";
 
   EXPECT_CALL(mock_cast_wc_observer_,
-              UpdateTitle(base::ASCIIToUTF16(kOriginalTitle)));
+              UpdateTitle(std::u16string(kOriginalTitle16)));
 
   // Load test page.
   embedded_test_server()->ServeFilesFromSourceDirectory(GetTestDataPath());
@@ -850,10 +863,11 @@ IN_PROC_BROWSER_TEST_F(CastWebContentsBrowserTest,
   // MessagePort disconnection event.
   // ===========================================================================
   constexpr char kOriginalTitle[] = "messageport";
+  constexpr char16_t kOriginalTitle16[] = u"messageport";
   constexpr char kHelloMsg[] = "hi";
 
   EXPECT_CALL(mock_cast_wc_observer_,
-              UpdateTitle(base::ASCIIToUTF16(kOriginalTitle)));
+              UpdateTitle(std::u16string(kOriginalTitle16)));
   // Load test page.
   embedded_test_server()->ServeFilesFromSourceDirectory(GetTestDataPath());
   StartTestServer();
@@ -945,14 +959,154 @@ IN_PROC_BROWSER_TEST_F(CastWebContentsBrowserTest, ExecuteJavaScript) {
   // Execute a script snippet to return the variable's value.
   base::RunLoop run_loop2;
   cast_web_contents_->ExecuteJavaScript(
-      base::UTF8ToUTF16("the_var;"),
-      base::BindLambdaForTesting([&](base::Value result_value) {
+      u"the_var;", base::BindLambdaForTesting([&](base::Value result_value) {
         std::string result_json;
         ASSERT_TRUE(base::JSONWriter::Write(result_value, &result_json));
         EXPECT_EQ(result_json, kSoyMilkJsonStringLiteral);
         run_loop2.Quit();
       }));
   run_loop2.Run();
+}
+
+// Helper for the test below. This exposes two interfaces, TestAdder and
+// TestDoubler. TestAdder is exposed only through a binder (see MakeAdderBinder)
+// which the test will register in the CastWebContents' binder_registry().
+// TestDoubler is exposed only through an InterfaceProvider, registered with the
+// CastWebContents using RegisterInterfaceProvider.
+class TestInterfaceProvider : public service_manager::mojom::InterfaceProvider,
+                              public mojom::TestAdder,
+                              public mojom::TestDoubler {
+ public:
+  TestInterfaceProvider()
+      : provider_(receiver_.BindNewPipeAndPassRemote(),
+                  base::SequencedTaskRunnerHandle::Get()) {}
+  ~TestInterfaceProvider() override = default;
+
+  size_t num_adders() const { return adders_.size(); }
+  size_t num_doublers() const { return doublers_.size(); }
+
+  service_manager::InterfaceProvider* interface_provider() {
+    return &provider_;
+  }
+
+  base::RepeatingCallback<void(mojo::PendingReceiver<mojom::TestAdder>)>
+  MakeAdderBinder() {
+    return base::BindLambdaForTesting(
+        [this](mojo::PendingReceiver<mojom::TestAdder> receiver) {
+          adders_.Add(this, std::move(receiver));
+          OnRequestHandled();
+        });
+  }
+
+  // Waits for some number of new interface binding requests to be dispatched
+  // and then invokes `callback`.
+  void WaitForRequests(size_t n, base::OnceClosure callback) {
+    wait_callback_ = std::move(callback);
+    num_requests_to_wait_for_ = n;
+  }
+
+  // service_manager::mojom::InterfaceProvider:
+  void GetInterface(const std::string& interface_name,
+                    mojo::ScopedMessagePipeHandle interface_pipe) override {
+    if (interface_name == mojom::TestDoubler::Name_) {
+      doublers_.Add(this, mojo::PendingReceiver<mojom::TestDoubler>(
+                              std::move(interface_pipe)));
+      OnRequestHandled();
+    }
+  }
+
+  // mojom::TestAdder:
+  void Add(int32_t a, int32_t b, AddCallback callback) override {
+    std::move(callback).Run(a + b);
+  }
+
+  // mojom::TestDouble:
+  void Double(int32_t x, DoubleCallback callback) override {
+    std::move(callback).Run(x * 2);
+  }
+
+ private:
+  void OnRequestHandled() {
+    if (num_requests_to_wait_for_ == 0)
+      return;
+    DCHECK(wait_callback_);
+    if (--num_requests_to_wait_for_ == 0)
+      std::move(wait_callback_).Run();
+  }
+
+  mojo::Receiver<service_manager::mojom::InterfaceProvider> receiver_{this};
+  service_manager::InterfaceProvider provider_;
+  mojo::ReceiverSet<mojom::TestAdder> adders_;
+  mojo::ReceiverSet<mojom::TestDoubler> doublers_;
+  size_t num_requests_to_wait_for_ = 0;
+  base::OnceClosure wait_callback_;
+};
+
+IN_PROC_BROWSER_TEST_F(CastWebContentsBrowserTest, InterfaceBinding) {
+  // This test verifies that interfaces registered with the CastWebContents --
+  // either via its binder_registry() or its RegisterInterfaceProvider() API --
+  // are reachable from render frames using either the deprecated
+  // InterfaceProvider API (which results in an OnInterfaceRequestFromFrame call
+  // on the WebContents) or the newer BrowserInterfaceBroker API which is used
+  // in most other places (including from Mojo JS).
+  TestInterfaceProvider provider;
+  cast_web_contents_->binder_registry()->AddInterface(
+      provider.MakeAdderBinder());
+  cast_web_contents_->RegisterInterfaceProvider(
+      CastWebContents::InterfaceSet{mojom::TestDoubler::Name_},
+      provider.interface_provider());
+
+  // First verify that both interfaces are reachable using the deprecated
+  // WebContents path, which is triggered only by renderer-side use of
+  // RenderFrame::GetRemoteInterfaces(). Since poking renderer state in browser
+  // tests is challenging, we simply simulate the resulting WebContentsObbserver
+  // calls here instead and verify end-to-end connection for each interface.
+  content::RenderFrameHost* main_frame =
+      cast_web_contents_->web_contents()->GetMainFrame();
+  mojo::Remote<mojom::TestAdder> adder;
+  mojo::ScopedMessagePipeHandle adder_receiver_pipe =
+      adder.BindNewPipeAndPassReceiver().PassPipe();
+  cast_web_contents_->OnInterfaceRequestFromFrame(
+      main_frame, mojom::TestAdder::Name_, &adder_receiver_pipe);
+  mojo::Remote<mojom::TestDoubler> doubler;
+  mojo::ScopedMessagePipeHandle doubler_receiver_pipe =
+      doubler.BindNewPipeAndPassReceiver().PassPipe();
+  cast_web_contents_->OnInterfaceRequestFromFrame(
+      main_frame, mojom::TestDoubler::Name_, &doubler_receiver_pipe);
+
+  base::RunLoop add_loop;
+  adder->Add(37, 5, base::BindLambdaForTesting([&](int32_t result) {
+               EXPECT_EQ(42, result);
+               add_loop.Quit();
+             }));
+  add_loop.Run();
+
+  base::RunLoop double_loop;
+  doubler->Double(21, base::BindLambdaForTesting([&](int32_t result) {
+                    EXPECT_EQ(42, result);
+                    double_loop.Quit();
+                  }));
+  double_loop.Run();
+
+  EXPECT_EQ(1u, provider.num_adders());
+  EXPECT_EQ(1u, provider.num_doublers());
+
+  // Now verify that the same interfaces are also reachable at the same binders
+  // when going through the newer BrowserInterfaceBroker path. For simplicity
+  // the test JS here does not have access to bindings and so does not make
+  // calls on the interfaces. It is however totally sufficient for us to verify
+  // that the page's requests result in new receivers being bound inside
+  // TestInterfaceProvider.
+  base::RunLoop loop;
+  provider.WaitForRequests(2, loop.QuitClosure());
+  embedded_test_server()->ServeFilesFromSourceDirectory(GetTestDataPath());
+  StartTestServer();
+  const GURL kUrl{embedded_test_server()->GetURL("/interface_binding.html")};
+  cast_web_contents_->LoadUrl(kUrl);
+  loop.Run();
+
+  EXPECT_EQ(2u, provider.num_adders());
+  EXPECT_EQ(2u, provider.num_doublers());
 }
 
 }  // namespace chromecast

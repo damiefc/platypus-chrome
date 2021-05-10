@@ -8,7 +8,9 @@
 
 #include "components/page_load_metrics/browser/observers/back_forward_cache_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/observers/core/uma_page_load_metrics_observer.h"
+#include "components/page_load_metrics/browser/observers/early_hints_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/observers/layout_page_load_metrics_observer.h"
+#include "components/page_load_metrics/browser/observers/prerender_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/observers/use_counter_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/page_load_tracker.h"
 
@@ -28,6 +30,12 @@ void PageLoadMetricsEmbedderBase::RegisterObservers(PageLoadTracker* tracker) {
     tracker->AddObserver(std::make_unique<UmaPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<LayoutPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<UseCounterPageLoadMetricsObserver>());
+    tracker->AddObserver(std::make_unique<EarlyHintsPageLoadMetricsObserver>());
+
+    // So far, PrerenderPageLoadMetricsObserver is used to gather metrics from
+    // normal (non-prerendering) page loads, to estimate future coverage of
+    // prerendering, so it's in the !IsPrerendering() block.
+    tracker->AddObserver(std::make_unique<PrerenderPageLoadMetricsObserver>());
   }
   // Allow the embedder to register any embedder-specific observers
   RegisterEmbedderObservers(tracker);

@@ -82,6 +82,7 @@ class GPU_GLES2_EXPORT SharedImageFactory {
                          int client_id,
                          gfx::GpuMemoryBufferHandle handle,
                          gfx::BufferFormat format,
+                         gfx::BufferPlane plane,
                          SurfaceHandle surface_handle,
                          const gfx::Size& size,
                          const gfx::ColorSpace& color_space,
@@ -211,6 +212,8 @@ class GPU_GLES2_EXPORT SharedImageRepresentationFactory {
       const Mailbox& mailbox,
       WGPUDevice device);
   std::unique_ptr<SharedImageRepresentationOverlay> ProduceOverlay(
+      const Mailbox& mailbox);
+  std::unique_ptr<SharedImageRepresentationMemory> ProduceMemory(
       const Mailbox& mailbox);
 
  private:

@@ -7,6 +7,7 @@
 
 #include "base/component_export.h"
 #include "base/unguessable_token.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/controls/button/button.h"
 
 namespace chromeos {
@@ -26,10 +27,9 @@ namespace ash {
 class AssistantViewDelegate;
 
 class COMPONENT_EXPORT(ASSISTANT_UI) AssistantOnboardingSuggestionView
-    : public views::Button,
-      public views::ButtonListener {
+    : public views::Button {
  public:
-  static constexpr char kClassName[] = "AssistantOnboardingSuggestionView";
+  METADATA_HEADER(AssistantOnboardingSuggestionView);
 
   AssistantOnboardingSuggestionView(
       AssistantViewDelegate* delegate,
@@ -43,24 +43,22 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AssistantOnboardingSuggestionView
   ~AssistantOnboardingSuggestionView() override;
 
   // views::View:
-  const char* GetClassName() const override;
   int GetHeightForWidth(int width) const override;
   void ChildPreferredSizeChanged(views::View* child) override;
   void AddLayerBeneathView(ui::Layer* layer) override;
   void RemoveLayerBeneathView(ui::Layer* layer) override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // Returns the icon for the suggestion.
-  const gfx::ImageSkia& GetIcon() const;
+  gfx::ImageSkia GetIcon() const;
 
   // Returns the text for the suggestion.
-  const base::string16& GetText() const;
+  const std::u16string& GetText() const;
 
  private:
   void InitLayout(const chromeos::assistant::AssistantSuggestion& suggestion);
   void UpdateIcon(const gfx::ImageSkia& icon);
+
+  void OnButtonPressed();
 
   AssistantViewDelegate* const delegate_;  // Owned by AssistantController.
   const base::UnguessableToken suggestion_id_;

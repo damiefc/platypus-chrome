@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// #import {RouteObserverBehavior, Route, Router} from '../router.m.js';
+// #import {RouteObserverBehavior, Route, Router} from '../router.js';
 // #import {assert} from 'chrome://resources/js/assert.m.js';
 
 cr.define('settings', function() {
@@ -59,7 +59,7 @@ cr.define('settings', function() {
       }
       const focusSelector = this.focusConfig_.get(oldRoute.path);
 
-      if (this.route_ != newRoute || !focusSelector) {
+      if (this.route_ !== newRoute || !focusSelector) {
         return;
       }
 

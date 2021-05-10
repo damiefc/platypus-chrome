@@ -15,7 +15,6 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
-#include "ui/events/ozone/evdev/keyboard_util_evdev.h"
 
 namespace ui {
 
@@ -26,7 +25,7 @@ const int kKeyReleaseValue = 0;
 const int kKeyRepeatValue = 2;
 
 // Values for the EV_SW code.
-const int kSwitchStylusInserted = 15;
+const int kSwitchStylusInserted = SW_PEN_INSERTED;
 
 }  // namespace
 
@@ -99,10 +98,8 @@ void EventConverterEvdevImpl::SetKeyFilter(bool enable_filter,
   }
 
   blocked_keys_.set();
-  for (const DomCode& it : allowed_keys) {
-    int evdev_code =
-        NativeCodeToEvdevCode(KeycodeConverter::DomCodeToNativeKeycode(it));
-    blocked_keys_.reset(evdev_code);
+  for (const DomCode& code : allowed_keys) {
+    blocked_keys_.reset(KeycodeConverter::DomCodeToEvdevCode(code));
   }
 
   // Release any pressed blocked keys.
@@ -246,7 +243,7 @@ void EventConverterEvdevImpl::OnButtonChange(int code,
 
   dispatcher_->DispatchMouseButtonEvent(MouseButtonEventParams(
       input_device_.id, EF_NONE, cursor_->GetLocation(), code, down,
-      /* allow_remap */ true, PointerDetails(EventPointerType::kMouse),
+      MouseButtonMapType::kMouse, PointerDetails(EventPointerType::kMouse),
       timestamp));
 }
 

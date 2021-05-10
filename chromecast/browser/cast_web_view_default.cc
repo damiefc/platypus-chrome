@@ -224,15 +224,14 @@ bool CastWebViewDefault::CheckMediaAccessPermission(
 bool CastWebViewDefault::DidAddMessageToConsole(
     content::WebContents* source,
     blink::mojom::ConsoleMessageLevel log_level,
-    const base::string16& message,
+    const std::u16string& message,
     int32_t line_no,
-    const base::string16& source_id) {
+    const std::u16string& source_id) {
   if (!log_js_console_messages_)
     return true;
-  base::string16 single_line_message;
+  std::u16string single_line_message;
   // Mult-line message is not friendly to dumpstate redact.
-  base::ReplaceChars(message, base::ASCIIToUTF16("\n"),
-                     base::ASCIIToUTF16("\\n "), &single_line_message);
+  base::ReplaceChars(message, u"\n", u"\\n ", &single_line_message);
   logging::LogMessage("CONSOLE", line_no, ::logging::LOG_INFO).stream()
       << log_prefix_ << ": \"" << single_line_message
       << "\", source: " << source_id << " (" << line_no << ")";
@@ -303,19 +302,6 @@ void CastWebViewDefault::RequestMediaAccessPermission(
 
   std::move(callback).Run(devices, blink::mojom::MediaStreamRequestResult::OK,
                           std::unique_ptr<content::MediaStreamUI>());
-}
-
-std::unique_ptr<content::BluetoothChooser>
-CastWebViewDefault::RunBluetoothChooser(
-    content::RenderFrameHost* frame,
-    const content::BluetoothChooser::EventHandler& event_handler) {
-  std::unique_ptr<content::BluetoothChooser> chooser;
-  if (delegate_) {
-    chooser = delegate_->RunBluetoothChooser(frame, event_handler);
-  }
-  return chooser
-             ? std::move(chooser)
-             : WebContentsDelegate::RunBluetoothChooser(frame, event_handler);
 }
 
 bool CastWebViewDefault::ShouldAllowRunningInsecureContent(

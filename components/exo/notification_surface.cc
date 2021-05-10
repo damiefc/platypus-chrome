@@ -10,6 +10,7 @@
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace exo {
@@ -22,7 +23,6 @@ NotificationSurface::NotificationSurface(NotificationSurfaceManager* manager,
       notification_key_(notification_key) {
   surface->AddSurfaceObserver(this);
   SetRootSurface(surface);
-  SetArcAppType(host_window());
   host_window()->Show();
   host_window()->AddObserver(this);
 }

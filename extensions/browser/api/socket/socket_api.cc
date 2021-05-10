@@ -4,13 +4,16 @@
 
 #include "extensions/browser/api/socket/socket_api.h"
 
+#include <memory>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/span.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/network_service_instance.h"
@@ -32,6 +35,8 @@
 #include "net/base/url_util.h"
 #include "net/dns/public/resolve_error_info.h"
 #include "net/log/net_log_with_source.h"
+
+using extensions::mojom::APIPermissionID;
 
 namespace extensions {
 
@@ -57,9 +62,9 @@ const char kSocketNotConnectedError[] = "Socket not connected";
 const char kWildcardAddress[] = "*";
 const uint16_t kWildcardPort = 0;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kFirewallFailure[] = "Failed to open firewall port";
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 bool IsPortValid(int port) {
   return port >= 0 && port <= 65535;
@@ -111,7 +116,7 @@ void SocketAsyncApiFunction::RemoveSocket(int api_resource_id) {
 void SocketAsyncApiFunction::OpenFirewallHole(const std::string& address,
                                               int socket_id,
                                               Socket* socket) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (!net::HostStringIsLocalhost(address)) {
     net::IPEndPoint local_address;
     if (!socket->GetLocalAddress(&local_address)) {
@@ -136,7 +141,7 @@ void SocketAsyncApiFunction::OpenFirewallHole(const std::string& address,
   AsyncWorkCompleted();
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 void SocketAsyncApiFunction::OpenFirewallHoleOnUIThread(
     AppFirewallHole::PortType type,
@@ -175,7 +180,7 @@ void SocketAsyncApiFunction::OnFirewallHoleOpened(
   AsyncWorkCompleted();
 }
 
-#endif  // OS_CHROMEOS
+#endif  // IS_CHROMEOS_ASH
 
 SocketExtensionWithDnsLookupFunction::SocketExtensionWithDnsLookupFunction() =
     default;
@@ -186,7 +191,8 @@ SocketExtensionWithDnsLookupFunction::~SocketExtensionWithDnsLookupFunction() {
 bool SocketExtensionWithDnsLookupFunction::PrePrepare() {
   if (!SocketAsyncApiFunction::PrePrepare())
     return false;
-  content::BrowserContext::GetDefaultStoragePartition(browser_context())
+  browser_context()
+      ->GetDefaultStoragePartition()
       ->GetNetworkContext()
       ->CreateHostResolver(
           base::nullopt,
@@ -238,6 +244,8 @@ bool SocketCreateFunction::Prepare() {
   params_ = api::socket::Create::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
 
+  browser_context_ = browser_context();
+
   switch (params_->type) {
     case extensions::api::socket::SOCKET_TYPE_TCP:
       socket_type_ = kSocketTypeTCP;
@@ -248,7 +256,7 @@ bool SocketCreateFunction::Prepare() {
       mojo::PendingRemote<network::mojom::UDPSocketListener> listener_remote;
       socket_listener_receiver_ =
           listener_remote.InitWithNewPipeAndPassReceiver();
-      content::BrowserContext::GetDefaultStoragePartition(browser_context())
+      browser_context_->GetDefaultStoragePartition()
           ->GetNetworkContext()
           ->CreateUDPSocket(socket_.InitWithNewPipeAndPassReceiver(),
                             std::move(listener_remote));
@@ -265,7 +273,10 @@ bool SocketCreateFunction::Prepare() {
 void SocketCreateFunction::Work() {
   Socket* socket = nullptr;
   if (socket_type_ == kSocketTypeTCP) {
-    socket = new TCPSocket(browser_context(), extension_->id());
+    // TODO(crbug.com/1191472): |browser_context_| is unsafe to access when
+    // DestroyProfileOnBrowserClose is enabled, since it could've been deleted
+    // by now. Fix this by creating the TCPSocket on the UI thread instead.
+    socket = new TCPSocket(browser_context_, extension_->id());
   } else if (socket_type_ == kSocketTypeUDP) {
     socket =
         new UDPSocket(std::move(socket_), std::move(socket_listener_receiver_),
@@ -333,7 +344,7 @@ void SocketConnectFunction::AsyncWorkStart() {
 
   SocketPermission::CheckParam param(operation_type, hostname_, port_);
   if (!extension()->permissions_data()->CheckAPIPermissionWithParam(
-          APIPermission::kSocket, &param)) {
+          APIPermissionID::kSocket, &param)) {
     error_ = kPermissionError;
     SetResult(std::make_unique<base::Value>(-1));
     AsyncWorkCompleted();
@@ -417,7 +428,7 @@ void SocketBindFunction::AsyncWorkStart() {
   SocketPermission::CheckParam param(SocketPermissionRequest::UDP_BIND,
                                      address_, port_);
   if (!extension()->permissions_data()->CheckAPIPermissionWithParam(
-          APIPermission::kSocket, &param)) {
+          APIPermissionID::kSocket, &param)) {
     error_ = kPermissionError;
     SetResult(std::make_unique<base::Value>(-1));
     AsyncWorkCompleted();
@@ -467,7 +478,7 @@ void SocketListenFunction::AsyncWorkStart() {
   SocketPermission::CheckParam param(SocketPermissionRequest::TCP_LISTEN,
                                      params_->address, params_->port);
   if (!extension()->permissions_data()->CheckAPIPermissionWithParam(
-          APIPermission::kSocket, &param)) {
+          APIPermissionID::kSocket, &param)) {
     error_ = kPermissionError;
     SetResult(std::make_unique<base::Value>(-1));
     AsyncWorkCompleted();
@@ -564,16 +575,14 @@ void SocketReadFunction::AsyncWorkStart() {
 void SocketReadFunction::OnCompleted(int bytes_read,
                                      scoped_refptr<net::IOBuffer> io_buffer,
                                      bool socket_destroying) {
-  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
-  result->SetInteger(kResultCodeKey, bytes_read);
-  if (bytes_read > 0) {
-    result->Set(kDataKey, base::Value::CreateWithCopiedBuffer(io_buffer->data(),
-                                                              bytes_read));
-  } else {
-    result->Set(kDataKey,
-                std::make_unique<base::Value>(base::Value::Type::BINARY));
-  }
-  SetResult(std::move(result));
+  base::Value result(base::Value::Type::DICTIONARY);
+  result.SetIntKey(kResultCodeKey, bytes_read);
+  base::span<const uint8_t> data_span;
+  if (bytes_read > 0)
+    data_span = base::as_bytes(base::make_span(io_buffer->data(), bytes_read));
+  result.SetKey(kDataKey, base::Value(data_span));
+  SetResult(base::DictionaryValue::From(
+      base::Value::ToUniquePtrValue(std::move(result))));
 
   AsyncWorkCompleted();
 }
@@ -646,18 +655,16 @@ void SocketRecvFromFunction::OnCompleted(int bytes_read,
                                          bool socket_destroying,
                                          const std::string& address,
                                          uint16_t port) {
-  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
-  result->SetInteger(kResultCodeKey, bytes_read);
-  if (bytes_read > 0) {
-    result->Set(kDataKey, base::Value::CreateWithCopiedBuffer(io_buffer->data(),
-                                                              bytes_read));
-  } else {
-    result->Set(kDataKey,
-                std::make_unique<base::Value>(base::Value::Type::BINARY));
-  }
-  result->SetString(kAddressKey, address);
-  result->SetInteger(kPortKey, port);
-  SetResult(std::move(result));
+  base::Value result(base::Value::Type::DICTIONARY);
+  result.SetIntKey(kResultCodeKey, bytes_read);
+  base::span<const uint8_t> data_span;
+  if (bytes_read > 0)
+    data_span = base::as_bytes(base::make_span(io_buffer->data(), bytes_read));
+  result.SetKey(kDataKey, base::Value(data_span));
+  result.SetStringKey(kAddressKey, address);
+  result.SetIntKey(kPortKey, port);
+  SetResult(base::DictionaryValue::From(
+      base::Value::ToUniquePtrValue(std::move(result))));
 
   AsyncWorkCompleted();
 }
@@ -707,7 +714,7 @@ void SocketSendToFunction::AsyncWorkStart() {
     SocketPermission::CheckParam param(
         SocketPermissionRequest::UDP_SEND_TO, hostname_, port_);
     if (!extension()->permissions_data()->CheckAPIPermissionWithParam(
-            APIPermission::kSocket, &param)) {
+            APIPermissionID::kSocket, &param)) {
       error_ = kPermissionError;
       SetResult(std::make_unique<base::Value>(-1));
       AsyncWorkCompleted();
@@ -839,16 +846,17 @@ void SocketGetInfoFunction::Work() {
   // that it should be closed locally.
   net::IPEndPoint peerAddress;
   if (socket->GetPeerAddress(&peerAddress)) {
-    info.peer_address.reset(new std::string(peerAddress.ToStringWithoutPort()));
-    info.peer_port.reset(new int(peerAddress.port()));
+    info.peer_address =
+        std::make_unique<std::string>(peerAddress.ToStringWithoutPort());
+    info.peer_port = std::make_unique<int>(peerAddress.port());
   }
 
   // Grab the local address as known by the OS.
   net::IPEndPoint localAddress;
   if (socket->GetLocalAddress(&localAddress)) {
-    info.local_address.reset(
-        new std::string(localAddress.ToStringWithoutPort()));
-    info.local_port.reset(new int(localAddress.port()));
+    info.local_address =
+        std::make_unique<std::string>(localAddress.ToStringWithoutPort());
+    info.local_port = std::make_unique<int>(localAddress.port());
   }
 
   SetResult(info.ToValue());
@@ -916,7 +924,7 @@ void SocketJoinGroupFunction::AsyncWorkStart() {
       kWildcardPort);
 
   if (!extension()->permissions_data()->CheckAPIPermissionWithParam(
-          APIPermission::kSocket, &param)) {
+          APIPermissionID::kSocket, &param)) {
     error_ = kPermissionError;
     SetResult(std::make_unique<base::Value>(result));
     AsyncWorkCompleted();
@@ -969,7 +977,7 @@ void SocketLeaveGroupFunction::AsyncWorkStart() {
       kWildcardAddress,
       kWildcardPort);
   if (!extension()->permissions_data()->CheckAPIPermissionWithParam(
-          APIPermission::kSocket, &param)) {
+          APIPermissionID::kSocket, &param)) {
     error_ = kPermissionError;
     SetResult(std::make_unique<base::Value>(result));
     AsyncWorkCompleted();
@@ -1083,7 +1091,7 @@ void SocketGetJoinedGroupsFunction::Work() {
       kWildcardAddress,
       kWildcardPort);
   if (!extension()->permissions_data()->CheckAPIPermissionWithParam(
-          APIPermission::kSocket, &param)) {
+          APIPermissionID::kSocket, &param)) {
     error_ = kPermissionError;
     SetResult(std::make_unique<base::Value>(result));
     return;

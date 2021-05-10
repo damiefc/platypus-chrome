@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/queue.h"
 #include "base/memory/free_deleter.h"
 #include "base/synchronization/lock.h"
@@ -269,7 +269,7 @@ DhcpPacFileFetcherWin::~DhcpPacFileFetcherWin() {
 }
 
 int DhcpPacFileFetcherWin::Fetch(
-    base::string16* utf16_text,
+    std::u16string* utf16_text,
     CompletionOnceCallback callback,
     const NetLogWithSource& net_log,
     const NetworkTrafficAnnotationTag traffic_annotation) {

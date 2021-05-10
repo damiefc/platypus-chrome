@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <memory>
 #include <sstream>
+#include <string>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -16,7 +17,6 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -59,8 +59,10 @@ class PasswordsPrivateApiTest : public ExtensionApiTest {
 
  protected:
   bool RunPasswordsSubtest(const std::string& subtest) {
-    return RunExtensionSubtest("passwords_private", "main.html?" + subtest,
-                               kFlagNone, kFlagLoadAsComponent);
+    const std::string page_url = "main.html?" + subtest;
+    return RunExtensionTest(
+        {.name = "passwords_private", .page_url = page_url.c_str()},
+        {.load_as_component = true});
   }
 
   bool importPasswordsWasTriggered() {
@@ -102,8 +104,8 @@ class PasswordsPrivateApiTest : public ExtensionApiTest {
     s_test_delegate_->AddCompromisedCredential(id);
   }
 
-  base::Optional<int> last_moved_password() const {
-    return s_test_delegate_->last_moved_password();
+  const std::vector<int>& last_moved_passwords() const {
+    return s_test_delegate_->last_moved_passwords();
   }
 
  private:
@@ -299,10 +301,10 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, GetPasswordCheckStatus) {
   EXPECT_TRUE(RunPasswordsSubtest("getPasswordCheckStatus")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, MovePasswordToAccount) {
-  EXPECT_FALSE(last_moved_password().has_value());
-  EXPECT_TRUE(RunPasswordsSubtest("movePasswordToAccount")) << message_;
-  EXPECT_EQ(42, last_moved_password());
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, MovePasswordsToAccount) {
+  EXPECT_TRUE(last_moved_passwords().empty());
+  EXPECT_TRUE(RunPasswordsSubtest("movePasswordsToAccount")) << message_;
+  EXPECT_EQ(42, last_moved_passwords()[0]);
 }
 
 }  // namespace extensions

@@ -16,18 +16,18 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "chrome/browser/chromeos/crostini/crostini_features.h"
-#include "chrome/browser/chromeos/crostini/crostini_mime_types_service.h"
-#include "chrome/browser/chromeos/crostini/crostini_mime_types_service_factory.h"
+#include "chrome/browser/ash/crostini/crostini_features.h"
+#include "chrome/browser/ash/crostini/crostini_mime_types_service.h"
+#include "chrome/browser/ash/crostini/crostini_mime_types_service_factory.h"
+#include "chrome/browser/ash/guest_os/guest_os_registry_service.h"
+#include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
+#include "chrome/browser/ash/plugin_vm/plugin_vm_features.h"
+#include "chrome/browser/ash/plugin_vm/plugin_vm_files.h"
+#include "chrome/browser/ash/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
-#include "chrome/browser/chromeos/guest_os/guest_os_registry_service.h"
-#include "chrome/browser/chromeos/guest_os/guest_os_registry_service_factory.h"
-#include "chrome/browser/chromeos/plugin_vm/plugin_vm_features.h"
-#include "chrome/browser/chromeos/plugin_vm/plugin_vm_files.h"
-#include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/common/webui_url_constants.h"
 #include "extensions/browser/entry_info.h"
 #include "storage/browser/file_system/file_system_context.h"
@@ -51,7 +51,6 @@ namespace {
 // upon whether it "thinks" it is binary or text content.
 constexpr char kUnknownBinaryMimeType[] = "application/octet-stream";
 constexpr char kUnknownTextMimeType[] = "text/plain";
-constexpr char kPluginVmAppNameSuffix[] = " (Windows)";
 
 bool HasSupportedMimeType(
     const std::set<std::string>& supported_mime_types,
@@ -136,9 +135,7 @@ auto ConvertLaunchPluginVmAppResultToTaskResult(
     case plugin_vm::LaunchPluginVmAppResult::SUCCESS:
       return fmp::TASK_RESULT_MESSAGE_SENT;
     case plugin_vm::LaunchPluginVmAppResult::FAILED_DIRECTORY_NOT_SHARED:
-      return fmp::TASK_RESULT_FAILED_PLUGIN_VM_TASK_DIRECTORY_NOT_SHARED;
-    case plugin_vm::LaunchPluginVmAppResult::FAILED_FILE_ON_EXTERNAL_DRIVE:
-      return fmp::TASK_RESULT_FAILED_PLUGIN_VM_TASK_EXTERNAL_DRIVE;
+      return fmp::TASK_RESULT_FAILED_PLUGIN_VM_DIRECTORY_NOT_SHARED;
     case plugin_vm::LaunchPluginVmAppResult::FAILED:
       return fmp::TASK_RESULT_FAILED;
   }
@@ -161,7 +158,7 @@ void FindGuestOsApps(
   for (const GURL& file_url : file_urls) {
     if (!file_manager::util::ConvertFileSystemURLToPathInsideVM(
             profile, file_system_context->CrackURL(file_url), dummy_vm_mount,
-            &not_used)) {
+            /*map_crostini_home=*/false, &not_used)) {
       return;
     }
   }
@@ -182,7 +179,6 @@ void FindGuestOsApps(
                                              registration)) {
           continue;
         }
-        app_names->push_back(registration.Name());
         break;
 
       case guest_os::GuestOsRegistryService::VmType::
@@ -190,7 +186,6 @@ void FindGuestOsApps(
         if (!AppSupportsExtensionOfAllEntries(entries, registration)) {
           continue;
         }
-        app_names->push_back(registration.Name() + kPluginVmAppNameSuffix);
         break;
 
       default:
@@ -199,6 +194,7 @@ void FindGuestOsApps(
     }
 
     app_ids->push_back(app_id);
+    app_names->push_back(registration.Name());
     vm_types->push_back(registration.VmType());
   }
 }
@@ -287,7 +283,6 @@ void ExecuteGuestOsTask(
   switch (vm_type) {
     case guest_os::GuestOsRegistryService::VmType::
         ApplicationList_VmType_TERMINA:
-      DCHECK(crostini::CrostiniFeatures::Get()->IsUIAllowed(profile));
       crostini::LaunchCrostiniApp(
           profile, task.app_id, display::kInvalidDisplayId, args,
           base::BindOnce(

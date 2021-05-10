@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/page_info/permission_selector_row.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
@@ -55,7 +57,7 @@ class ComboboxModelAdapter : public ui::ComboboxModel {
 
   // ui::ComboboxModel:
   int GetItemCount() const override;
-  base::string16 GetItemAt(int index) const override;
+  std::u16string GetItemAt(int index) const override;
 
  private:
   PermissionMenuModel* model_;
@@ -87,7 +89,7 @@ int ComboboxModelAdapter::GetItemCount() const {
   return model_->GetItemCount();
 }
 
-base::string16 ComboboxModelAdapter::GetItemAt(int index) const {
+std::u16string ComboboxModelAdapter::GetItemAt(int index) const {
   return model_->GetLabelAt(index);
 }
 
@@ -121,8 +123,8 @@ PermissionCombobox::PermissionCombobox(ComboboxModelAdapter* model,
                                        bool enabled,
                                        bool use_default)
     : views::Combobox(model), model_(model) {
-  set_callback(base::BindRepeating(&PermissionCombobox::PermissionChanged,
-                                   base::Unretained(this)));
+  SetCallback(base::BindRepeating(&PermissionCombobox::PermissionChanged,
+                                  base::Unretained(this)));
   SetEnabled(enabled);
   UpdateSelectedIndex(use_default);
   SetSizeToLargestLabel(false);
@@ -155,11 +157,9 @@ void PermissionCombobox::PermissionChanged() {
 ///////////////////////////////////////////////////////////////////////////////
 
 PermissionSelectorRow::PermissionSelectorRow(
-    Profile* profile,
-    const GURL& url,
+    PageInfoUiDelegate* delegate,
     const PageInfo::PermissionInfo& permission,
-    views::GridLayout* layout)
-    : profile_(profile) {
+    views::GridLayout* layout) {
   const int list_item_padding = ChromeLayoutProvider::Get()->GetDistanceMetric(
                                     DISTANCE_CONTROL_LIST_VERTICAL) /
                                 2;
@@ -175,17 +175,16 @@ PermissionSelectorRow::PermissionSelectorRow(
   label_ = layout->AddView(std::move(label));
   // Create the menu model.
   menu_model_ = std::make_unique<PermissionMenuModel>(
-      profile, url, permission,
-      base::Bind(&PermissionSelectorRow::PermissionChanged,
-                 base::Unretained(this)));
+      delegate, permission,
+      base::BindRepeating(&PermissionSelectorRow::PermissionChanged,
+                          base::Unretained(this)));
 
   // Create the permission combobox.
   InitializeComboboxView(layout, permission);
 
   // Show the permission decision reason, if it was not the user.
-  auto delegate = ChromePageInfoUiDelegate(profile);
-  base::string16 reason = PageInfoUI::PermissionDecisionReasonToUIString(
-      &delegate, permission, url);
+  std::u16string reason =
+      PageInfoUI::PermissionDecisionReasonToUIString(delegate, permission);
   if (!reason.empty()) {
     layout->StartRow(1.0, PageInfoBubbleView::kPermissionColumnSetId);
     layout->SkipColumns(1);
@@ -268,12 +267,12 @@ void PermissionSelectorRow::InitializeComboboxView(
     const PageInfo::PermissionInfo& permission) {
   bool button_enabled =
       permission.source == content_settings::SETTING_SOURCE_USER;
-  combobox_model_adapter_.reset(
-      new internal::ComboboxModelAdapter(menu_model_.get()));
+  combobox_model_adapter_ =
+      std::make_unique<internal::ComboboxModelAdapter>(menu_model_.get());
   auto combobox = std::make_unique<internal::PermissionCombobox>(
       combobox_model_adapter_.get(), button_enabled, true);
   combobox->SetEnabled(button_enabled);
-  combobox->SetTooltipText(l10n_util::GetStringFUTF16(
+  combobox->SetTooltipTextAndAccessibleName(l10n_util::GetStringFUTF16(
       IDS_PAGE_INFO_SELECTOR_TOOLTIP,
       PageInfoUI::PermissionTypeToUIString(permission.type)));
   combobox_ = layout->AddView(std::move(combobox));

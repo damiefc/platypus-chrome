@@ -7,7 +7,6 @@
 
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -159,7 +158,7 @@ struct HEADLESS_EXPORT HeadlessBrowser::Options {
   std::string user_agent;
 
   // The ProxyConfig to use. The system proxy settings are used by default.
-  std::unique_ptr<net::ProxyConfig> proxy_config = nullptr;
+  std::unique_ptr<net::ProxyConfig> proxy_config;
 
   // Default window size. This is also used to create the window tree host and
   // as initial screen size. Defaults to 800x600.

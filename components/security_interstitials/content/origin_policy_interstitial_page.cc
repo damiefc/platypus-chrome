@@ -68,13 +68,15 @@ void OriginPolicyInterstitialPage::PopulateInterstitialStrings(
       {"heading", IDS_ORIGIN_POLICY_HEADING},
       {"openDetails", IDS_ORIGIN_POLICY_DETAILS},
       {"optInLink", IDS_SAFE_BROWSING_SCOUT_REPORTING_AGREE},
+      {"enhancedProtectionMessage",
+       IDS_SAFE_BROWSING_ENHANCED_PROTECTION_MESSAGE},
       {"primaryButtonText", IDS_ORIGIN_POLICY_BUTTON},
       {"primaryParagraph", IDS_ORIGIN_POLICY_INFO},
       {"recurrentErrorParagraph", IDS_ORIGIN_POLICY_INFO2},
       {"tabTitle", IDS_ORIGIN_POLICY_TITLE},
   };
   // We interpolate _all_ strings with URL ($1) and origin ($2).
-  const std::vector<base::string16> message_params = {
+  const std::vector<std::u16string> message_params = {
       base::ASCIIToUTF16(request_url().spec()),
       base::ASCIIToUTF16(url::Origin::Create(request_url()).Serialize()),
   };

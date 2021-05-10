@@ -7,6 +7,7 @@
 #include "base/atomic_sequence_num.h"
 #include "base/lazy_instance.h"
 #include "base/notreached.h"
+#include "build/chromeos_buildflags.h"
 #include "printing/units.h"
 
 #if defined(USE_CUPS) && (defined(OS_MAC) || defined(OS_CHROMEOS))
@@ -184,7 +185,7 @@ void GetColorModelForModel(mojom::ColorModel color_model,
 
 #if defined(OS_MAC) || defined(OS_CHROMEOS)
 std::string GetIppColorModelForModel(mojom::ColorModel color_model) {
-  // Accept |kUnknownColorModel| for consistency with GetColorModelForModel().
+  // Accept `kUnknownColorModel` for consistency with GetColorModelForModel().
   if (color_model == mojom::ColorModel::kUnknownColorModel)
     return CUPS_PRINT_COLOR_MODE_MONOCHROME;
 

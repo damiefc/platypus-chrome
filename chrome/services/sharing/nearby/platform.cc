@@ -2,44 +2,45 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/nearby/src/cpp/platform_v2/api/platform.h"
+#include "third_party/nearby/src/cpp/platform/api/platform.h"
 
 #include "base/guid.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/thread_pool.h"
 #include "chrome/services/sharing/nearby/nearby_connections.h"
-#include "chrome/services/sharing/nearby/platform_v2/atomic_boolean.h"
-#include "chrome/services/sharing/nearby/platform_v2/atomic_uint32.h"
-#include "chrome/services/sharing/nearby/platform_v2/ble_medium.h"
-#include "chrome/services/sharing/nearby/platform_v2/bluetooth_adapter.h"
-#include "chrome/services/sharing/nearby/platform_v2/bluetooth_classic_medium.h"
-#include "chrome/services/sharing/nearby/platform_v2/condition_variable.h"
-#include "chrome/services/sharing/nearby/platform_v2/count_down_latch.h"
-#include "chrome/services/sharing/nearby/platform_v2/input_file.h"
-#include "chrome/services/sharing/nearby/platform_v2/log_message.h"
-#include "chrome/services/sharing/nearby/platform_v2/mutex.h"
-#include "chrome/services/sharing/nearby/platform_v2/output_file.h"
-#include "chrome/services/sharing/nearby/platform_v2/recursive_mutex.h"
-#include "chrome/services/sharing/nearby/platform_v2/scheduled_executor.h"
-#include "chrome/services/sharing/nearby/platform_v2/submittable_executor.h"
-#include "chrome/services/sharing/nearby/platform_v2/webrtc.h"
+#include "chrome/services/sharing/nearby/platform/atomic_boolean.h"
+#include "chrome/services/sharing/nearby/platform/atomic_uint32.h"
+#include "chrome/services/sharing/nearby/platform/ble_medium.h"
+#include "chrome/services/sharing/nearby/platform/bluetooth_adapter.h"
+#include "chrome/services/sharing/nearby/platform/bluetooth_classic_medium.h"
+#include "chrome/services/sharing/nearby/platform/condition_variable.h"
+#include "chrome/services/sharing/nearby/platform/count_down_latch.h"
+#include "chrome/services/sharing/nearby/platform/input_file.h"
+#include "chrome/services/sharing/nearby/platform/log_message.h"
+#include "chrome/services/sharing/nearby/platform/mutex.h"
+#include "chrome/services/sharing/nearby/platform/output_file.h"
+#include "chrome/services/sharing/nearby/platform/recursive_mutex.h"
+#include "chrome/services/sharing/nearby/platform/scheduled_executor.h"
+#include "chrome/services/sharing/nearby/platform/submittable_executor.h"
+#include "chrome/services/sharing/nearby/platform/webrtc.h"
 #include "device/bluetooth/public/mojom/adapter.mojom.h"
 #include "mojo/public/cpp/bindings/shared_remote.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/atomic_boolean.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/atomic_reference.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/ble.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/ble_v2.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/bluetooth_adapter.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/bluetooth_classic.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/condition_variable.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/count_down_latch.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/log_message.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/mutex.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/scheduled_executor.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/server_sync.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/submittable_executor.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/webrtc.h"
-#include "third_party/nearby/src/cpp/platform_v2/api/wifi.h"
-#include "third_party/nearby/src/cpp/platform_v2/impl/shared/file.h"
+#include "third_party/nearby/src/cpp/platform/api/atomic_boolean.h"
+#include "third_party/nearby/src/cpp/platform/api/atomic_reference.h"
+#include "third_party/nearby/src/cpp/platform/api/ble.h"
+#include "third_party/nearby/src/cpp/platform/api/ble_v2.h"
+#include "third_party/nearby/src/cpp/platform/api/bluetooth_adapter.h"
+#include "third_party/nearby/src/cpp/platform/api/bluetooth_classic.h"
+#include "third_party/nearby/src/cpp/platform/api/condition_variable.h"
+#include "third_party/nearby/src/cpp/platform/api/count_down_latch.h"
+#include "third_party/nearby/src/cpp/platform/api/log_message.h"
+#include "third_party/nearby/src/cpp/platform/api/mutex.h"
+#include "third_party/nearby/src/cpp/platform/api/scheduled_executor.h"
+#include "third_party/nearby/src/cpp/platform/api/server_sync.h"
+#include "third_party/nearby/src/cpp/platform/api/submittable_executor.h"
+#include "third_party/nearby/src/cpp/platform/api/webrtc.h"
+#include "third_party/nearby/src/cpp/platform/api/wifi.h"
+#include "third_party/nearby/src/cpp/platform/impl/shared/file.h"
 
 namespace location {
 namespace nearby {
@@ -61,9 +62,13 @@ ImplementationPlatform::CreateSingleThreadExecutor() {
 
 std::unique_ptr<SubmittableExecutor>
 ImplementationPlatform::CreateMultiThreadExecutor(int max_concurrency) {
-  // Chrome TaskRunner does not support |max_concurrency|. Simply use our
-  // SingleThreadExecutor.
-  return CreateSingleThreadExecutor();
+  // We ignore |max_concurrency| and submit tasks to the main process thread
+  // pool. Just before the task starts executing we enter a WILL_BLOCK scope
+  // which signals to the thread pool to allocate a new thread if needed. This
+  // gives the executor an effective thread count of whatever they need up to
+  // the max thread pool size of 255.
+  return std::make_unique<chrome::SubmittableExecutor>(
+      base::ThreadPool::CreateTaskRunner({base::MayBlock()}));
 }
 
 std::unique_ptr<ScheduledExecutor>
@@ -177,20 +182,23 @@ std::unique_ptr<WebRtcMedium> ImplementationPlatform::CreateWebRtcMedium() {
 
   const mojo::SharedRemote<network::mojom::P2PSocketManager>& socket_manager =
       connections.socket_manager();
-  const mojo::SharedRemote<network::mojom::MdnsResponder>& mdns_responder =
-      connections.mdns_responder();
+  const mojo::SharedRemote<
+      location::nearby::connections::mojom::MdnsResponderFactory>&
+      mdns_responder_factory = connections.mdns_responder_factory();
   const mojo::SharedRemote<sharing::mojom::IceConfigFetcher>&
       ice_config_fetcher = connections.ice_config_fetcher();
   const mojo::SharedRemote<sharing::mojom::WebRtcSignalingMessenger>&
       messenger = connections.webrtc_signaling_messenger();
 
-  if (!socket_manager.is_bound() || !mdns_responder.is_bound() ||
+  if (!socket_manager.is_bound() || !mdns_responder_factory.is_bound() ||
       !ice_config_fetcher.is_bound() || !messenger.is_bound()) {
+    LOG(ERROR)
+        << "Not all webrtc dependencies were bound. Returning null medium";
     return nullptr;
   }
 
   return std::make_unique<chrome::WebRtcMedium>(
-      socket_manager, mdns_responder, ice_config_fetcher, messenger,
+      socket_manager, mdns_responder_factory, ice_config_fetcher, messenger,
       connections.GetThreadTaskRunner());
 }
 

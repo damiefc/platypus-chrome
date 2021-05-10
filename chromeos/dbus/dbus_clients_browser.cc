@@ -18,7 +18,8 @@
 #include "chromeos/dbus/arc/fake_arc_obb_mounter_client.h"
 #include "chromeos/dbus/cec_service_client.h"
 #include "chromeos/dbus/chunneld_client.h"
-#include "chromeos/dbus/cicerone_client.h"
+#include "chromeos/dbus/cicerone/cicerone_client.h"
+#include "chromeos/dbus/cicerone/fake_cicerone_client.h"
 #include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/cros_disks_client.h"
 #include "chromeos/dbus/dbus_client_implementation_type.h"
@@ -29,27 +30,24 @@
 #include "chromeos/dbus/fake_anomaly_detector_client.h"
 #include "chromeos/dbus/fake_cec_service_client.h"
 #include "chromeos/dbus/fake_chunneld_client.h"
-#include "chromeos/dbus/fake_cicerone_client.h"
 #include "chromeos/dbus/fake_concierge_client.h"
 #include "chromeos/dbus/fake_cros_disks_client.h"
 #include "chromeos/dbus/fake_easy_unlock_client.h"
 #include "chromeos/dbus/fake_gnubby_client.h"
 #include "chromeos/dbus/fake_image_burner_client.h"
 #include "chromeos/dbus/fake_image_loader_client.h"
-#include "chromeos/dbus/fake_lorgnette_manager_client.h"
 #include "chromeos/dbus/fake_oobe_configuration_client.h"
 #include "chromeos/dbus/fake_runtime_probe_client.h"
-#include "chromeos/dbus/fake_seneschal_client.h"
 #include "chromeos/dbus/fake_smb_provider_client.h"
 #include "chromeos/dbus/fake_virtual_file_provider_client.h"
 #include "chromeos/dbus/fake_vm_plugin_dispatcher_client.h"
 #include "chromeos/dbus/gnubby_client.h"
 #include "chromeos/dbus/image_burner_client.h"
 #include "chromeos/dbus/image_loader_client.h"
-#include "chromeos/dbus/lorgnette_manager_client.h"
+#include "chromeos/dbus/lorgnette_manager/fake_lorgnette_manager_client.h"
+#include "chromeos/dbus/lorgnette_manager/lorgnette_manager_client.h"
 #include "chromeos/dbus/oobe_configuration_client.h"
 #include "chromeos/dbus/runtime_probe_client.h"
-#include "chromeos/dbus/seneschal_client.h"
 #include "chromeos/dbus/smb_provider_client.h"
 #include "chromeos/dbus/update_engine_client.h"
 #include "chromeos/dbus/virtual_file_provider_client.h"
@@ -107,7 +105,6 @@ DBusClientsBrowser::DBusClientsBrowser(bool use_real_clients) {
       CREATE_DBUS_CLIENT(OobeConfigurationClient, use_real_clients);
   runtime_probe_client_ =
       CREATE_DBUS_CLIENT(RuntimeProbeClient, use_real_clients);
-  seneschal_client_ = CREATE_DBUS_CLIENT(SeneschalClient, use_real_clients);
   smb_provider_client_ =
       CREATE_DBUS_CLIENT(SmbProviderClient, use_real_clients);
   update_engine_client_.reset(UpdateEngineClient::Create(client_impl_type));
@@ -141,7 +138,6 @@ void DBusClientsBrowser::Initialize(dbus::Bus* system_bus) {
   lorgnette_manager_client_->Init(system_bus);
   oobe_configuration_client_->Init(system_bus);
   runtime_probe_client_->Init(system_bus);
-  seneschal_client_->Init(system_bus);
   smb_provider_client_->Init(system_bus);
   update_engine_client_->Init(system_bus);
   virtual_file_provider_client_->Init(system_bus);

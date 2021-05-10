@@ -4,7 +4,7 @@
 
 (async function() {
   TestRunner.addResult(`Tests that console artifacts can be expanded, collapsed via keyboard.\n`);
-  await TestRunner.loadModule('console_test_runner');
+  await TestRunner.loadModule('console'); await TestRunner.loadTestModule('console_test_runner');
   await TestRunner.showPanel('console');
   ConsoleTestRunner.fixConsoleViewportDimensions(600, 200);
   await ConsoleTestRunner.waitUntilConsoleEditorLoaded();
@@ -275,7 +275,7 @@
   function dumpScrollInfo() {
     viewport.refresh();
     let infoText =
-        'Is at bottom: ' + viewport.element.isScrolledToBottom() + ', should stick: ' + viewport.stickToBottom();
+      'Is at bottom: ' + TestRunner.isScrolledToBottom(viewport.element) + ', should stick: ' + viewport.stickToBottom();
     TestRunner.addResult(infoText);
   }
 

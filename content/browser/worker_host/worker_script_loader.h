@@ -38,7 +38,6 @@ namespace content {
 class AppCacheHost;
 class BrowserContext;
 class NavigationLoaderInterceptor;
-class ResourceContext;
 class ServiceWorkerMainResourceHandle;
 
 // The URLLoader for loading a shared worker script. Only used for the main
@@ -55,10 +54,6 @@ class ServiceWorkerMainResourceHandle;
 class WorkerScriptLoader : public network::mojom::URLLoader,
                            public network::mojom::URLLoaderClient {
  public:
-  // Returns the resource context, or nullptr during shutdown. Must be called on
-  // the IO thread.
-  using ResourceContextGetter = base::RepeatingCallback<ResourceContext*(void)>;
-
   // Returns the browser context, or nullptr during shutdown. Must be called on
   // the UI thread.
   using BrowserContextGetter = base::RepeatingCallback<BrowserContext*(void)>;
@@ -71,7 +66,6 @@ class WorkerScriptLoader : public network::mojom::URLLoader,
   WorkerScriptLoader(
       int process_id,
       const DedicatedOrSharedWorkerToken& worker_token,
-      int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& resource_request,
@@ -80,7 +74,8 @@ class WorkerScriptLoader : public network::mojom::URLLoader,
       base::WeakPtr<AppCacheHost> appcache_host,
       const BrowserContextGetter& browser_context_getter,
       scoped_refptr<network::SharedURLLoaderFactory> default_loader_factory,
-      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation);
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
+      ukm::SourceId ukm_source_id);
   ~WorkerScriptLoader() override;
 
   // network::mojom::URLLoader:
@@ -95,6 +90,7 @@ class WorkerScriptLoader : public network::mojom::URLLoader,
   void ResumeReadingBodyFromNet() override;
 
   // network::mojom::URLLoaderClient:
+  void OnReceiveEarlyHints(network::mojom::EarlyHintsPtr early_hints) override;
   void OnReceiveResponse(
       network::mojom::URLResponseHeadPtr response_head) override;
   void OnReceiveRedirect(
@@ -146,7 +142,6 @@ class WorkerScriptLoader : public network::mojom::URLLoader,
 
   base::Optional<SubresourceLoaderParams> subresource_loader_params_;
 
-  const int32_t routing_id_;
   const int32_t request_id_;
   const uint32_t options_;
   network::ResourceRequest resource_request_;
@@ -155,6 +150,7 @@ class WorkerScriptLoader : public network::mojom::URLLoader,
   BrowserContextGetter browser_context_getter_;
   scoped_refptr<network::SharedURLLoaderFactory> default_loader_factory_;
   net::MutableNetworkTrafficAnnotationTag traffic_annotation_;
+  const ukm::SourceId ukm_source_id_;
 
   base::Optional<net::RedirectInfo> redirect_info_;
   int redirect_limit_ = net::URLRequest::kMaxRedirects;

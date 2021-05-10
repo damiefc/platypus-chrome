@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/md_text_button_with_down_arrow.h"
 
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/layout/layout_provider.h"
@@ -12,10 +13,9 @@
 
 namespace views {
 
-MdTextButtonWithDownArrow::MdTextButtonWithDownArrow(ButtonListener* listener,
-                                                     const base::string16& text)
-    : MdTextButton(listener, text) {
-  SetFocusForPlatform();
+MdTextButtonWithDownArrow::MdTextButtonWithDownArrow(PressedCallback callback,
+                                                     const std::u16string& text)
+    : MdTextButton(std::move(callback), text) {
   SetHorizontalAlignment(gfx::ALIGN_RIGHT);
   SetImageLabelSpacing(LayoutProvider::Get()->GetDistanceMetric(
       DISTANCE_DROPDOWN_BUTTON_LABEL_ARROW_SPACING));
@@ -45,5 +45,8 @@ void MdTextButtonWithDownArrow::SetDropArrowImage() {
       color_utils::DeriveDefaultIconColor(label()->GetEnabledColor()));
   SetImage(Button::STATE_NORMAL, drop_arrow_image);
 }
+
+BEGIN_METADATA(MdTextButtonWithDownArrow, views::MdTextButton)
+END_METADATA
 
 }  // namespace views

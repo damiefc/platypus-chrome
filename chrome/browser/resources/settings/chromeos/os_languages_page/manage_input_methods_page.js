@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// TODO(crbug.com/1097328): Delete this file, as it is unused.
+
 /**
  * @fileoverview 'settings-manage-input-methods-page' is a sub-page for enabling
  * and disabling input methods. Input methods are grouped by base languages to
@@ -91,7 +93,7 @@ Polymer({
 
     // Can be removed as long as there is another component IME.
     return this.languages.inputMethods.enabled.some(function(inputMethod) {
-      return inputMethod != targetInputMethod &&
+      return inputMethod !== targetInputMethod &&
           this.languageHelper.isComponentIme(inputMethod);
     }, this);
   },
@@ -128,7 +130,7 @@ Polymer({
       const languageFamilyCodes = [languageState.language.code];
       for (let j = i + 1; j < this.languages.enabled.length; j++) {
         const otherCode = this.languages.enabled[j].language.code;
-        if (this.languageHelper.getLanguageCodeWithoutRegion(otherCode) ==
+        if (this.languageHelper.getLanguageCodeWithoutRegion(otherCode) ===
             baseLanguageCode) {
           languageFamilyCodes.push(this.languages.enabled[j].language.code);
         }

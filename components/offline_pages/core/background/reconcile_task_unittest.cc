@@ -8,7 +8,7 @@
 #include <set>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/offline_pages/core/background/request_coordinator.h"
@@ -110,9 +110,9 @@ void ReconcileTaskTest::QueueRequests(const SavePageRequest& request1,
 }
 
 void ReconcileTaskTest::MakeTask() {
-  task_.reset(new ReconcileTask(
+  task_ = std::make_unique<ReconcileTask>(
       &store_, base::BindOnce(&ReconcileTaskTest::ReconcileCallback,
-                              base::Unretained(this))));
+                              base::Unretained(this)));
 }
 
 TEST_F(ReconcileTaskTest, Reconcile) {

@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <sstream>
 #include <string>
 
@@ -13,7 +14,7 @@
 #include "base/base64url.h"
 #include "base/big_endian.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -64,7 +65,7 @@ class GCMEncryptionProviderTest : public ::testing::Test {
   void SetUp() override {
     ASSERT_TRUE(scoped_temp_dir_.CreateUniqueTempDir());
 
-    encryption_provider_.reset(new GCMEncryptionProvider);
+    encryption_provider_ = std::make_unique<GCMEncryptionProvider>();
     encryption_provider_->Init(scoped_temp_dir_.GetPath(),
                                base::ThreadTaskRunnerHandle::Get());
   }

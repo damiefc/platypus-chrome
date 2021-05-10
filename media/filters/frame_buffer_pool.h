@@ -47,13 +47,15 @@ class MEDIA_EXPORT FrameBufferPool
 
   // Generates a "no_longer_needed" closure that holds a reference to this pool;
   // |fb_priv| must be a value previously returned by GetFrameBuffer().
-  base::Closure CreateFrameCallback(void* fb_priv);
+  base::OnceClosure CreateFrameCallback(void* fb_priv);
 
   size_t get_pool_size_for_testing() const { return frame_buffers_.size(); }
 
   void set_tick_clock_for_testing(const base::TickClock* tick_clock) {
     tick_clock_ = tick_clock;
   }
+
+  void force_allocation_error_for_testing() { force_allocation_error_ = true; }
 
   // Called when no more GetFrameBuffer() calls are expected. All unused memory
   // is released at this time. As frames are returned their memory is released.
@@ -91,6 +93,8 @@ class MEDIA_EXPORT FrameBufferPool
   bool in_shutdown_ = false;
 
   bool registered_dump_provider_ = false;
+
+  bool force_allocation_error_ = false;
 
   // |tick_clock_| is always a DefaultTickClock outside of testing.
   const base::TickClock* tick_clock_;

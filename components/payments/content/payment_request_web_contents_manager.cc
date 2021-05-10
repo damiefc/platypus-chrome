@@ -30,12 +30,11 @@ PaymentRequestWebContentsManager::GetOrCreateForWebContents(
 
 void PaymentRequestWebContentsManager::CreatePaymentRequest(
     content::RenderFrameHost* render_frame_host,
-    content::WebContents* web_contents,
     std::unique_ptr<ContentPaymentRequestDelegate> delegate,
     mojo::PendingReceiver<payments::mojom::PaymentRequest> receiver,
     PaymentRequest::ObserverForTest* observer_for_testing) {
   auto new_request = std::make_unique<PaymentRequest>(
-      render_frame_host, web_contents, std::move(delegate), /*manager=*/this,
+      render_frame_host, std::move(delegate), /*manager=*/this,
       delegate->GetDisplayManager(), std::move(receiver), observer_for_testing);
   PaymentRequest* request_ptr = new_request.get();
   payment_requests_.insert(std::make_pair(request_ptr, std::move(new_request)));
@@ -61,12 +60,13 @@ void PaymentRequestWebContentsManager::DidStartNavigation(
 
 void PaymentRequestWebContentsManager::RenderFrameDeleted(
     content::RenderFrameHost* render_frame_host) {
+  const auto render_frame_host_id =
+      render_frame_host->GetGlobalFrameRoutingId();
   // Two passes to avoid modifying the |payment_requests_| map while iterating
   // over it.
   std::vector<PaymentRequest*> obsolete;
   for (auto& it : payment_requests_) {
-    if (content::RenderFrameHost::FromID(
-            it.second->initiator_frame_routing_id()) == render_frame_host) {
+    if (it.second->initiator_frame_routing_id() == render_frame_host_id) {
       obsolete.push_back(it.first);
     }
   }

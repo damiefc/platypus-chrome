@@ -71,6 +71,9 @@ void MockClipboardHost::IsFormatAvailable(
     case mojom::ClipboardFormat::kBookmark:
       result = false;
       break;
+    case mojom::ClipboardFormat::kRtf:
+      result = false;
+      break;
   }
   std::move(callback).Run(result);
 }
@@ -98,6 +101,11 @@ void MockClipboardHost::ReadRtf(mojom::ClipboardBuffer clipboard_buffer,
 void MockClipboardHost::ReadImage(mojom::ClipboardBuffer clipboard_buffer,
                                   ReadImageCallback callback) {
   std::move(callback).Run(image_);
+}
+
+void MockClipboardHost::ReadFiles(mojom::ClipboardBuffer clipboard_buffer,
+                                  ReadFilesCallback callback) {
+  std::move(callback).Run(mojom::blink::ClipboardFiles::New());
 }
 
 void MockClipboardHost::ReadCustomData(mojom::ClipboardBuffer clipboard_buffer,

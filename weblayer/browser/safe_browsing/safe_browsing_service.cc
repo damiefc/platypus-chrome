@@ -4,6 +4,8 @@
 
 #include "weblayer/browser/safe_browsing/safe_browsing_service.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/path_service.h"
 #include "components/prefs/pref_service.h"
@@ -20,6 +22,7 @@
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_context.h"
+#include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
@@ -36,7 +39,7 @@ network::mojom::NetworkContextParamsPtr CreateDefaultNetworkContextParams(
   network::mojom::NetworkContextParamsPtr network_context_params =
       network::mojom::NetworkContextParams::New();
   network_context_params->cert_verifier_params = content::GetCertVerifierParams(
-      network::mojom::CertVerifierCreationParams::New());
+      cert_verifier::mojom::CertVerifierCreationParams::New());
   network_context_params->user_agent = user_agent;
   return network_context_params;
 }
@@ -87,8 +90,8 @@ void SafeBrowsingService::Initialize() {
     return;
   }
 
-  safe_browsing_api_handler_.reset(
-      new safe_browsing::SafeBrowsingApiHandlerBridge());
+  safe_browsing_api_handler_ =
+      std::make_unique<safe_browsing::SafeBrowsingApiHandlerBridge>();
   safe_browsing::SafeBrowsingApiHandler::SetInstance(
       safe_browsing_api_handler_.get());
 
@@ -127,7 +130,7 @@ std::unique_ptr<content::NavigationThrottle>
 SafeBrowsingService::CreateSafeBrowsingNavigationThrottle(
     content::NavigationHandle* handle) {
   return std::make_unique<SafeBrowsingNavigationThrottle>(
-      handle, GetSafeBrowsingUIManager());
+      handle, GetSafeBrowsingUIManager().get());
 }
 
 scoped_refptr<safe_browsing::UrlCheckerDelegate>
@@ -142,16 +145,17 @@ SafeBrowsingService::GetSafeBrowsingUrlCheckerDelegate() {
   return safe_browsing_url_checker_delegate_;
 }
 
-safe_browsing::RemoteSafeBrowsingDatabaseManager*
+scoped_refptr<safe_browsing::RemoteSafeBrowsingDatabaseManager>
 SafeBrowsingService::GetSafeBrowsingDBManager() {
   if (!safe_browsing_db_manager_) {
     CreateAndStartSafeBrowsingDBManager();
   }
-  return safe_browsing_db_manager_.get();
+  return safe_browsing_db_manager_;
 }
 
-SafeBrowsingUIManager* SafeBrowsingService::GetSafeBrowsingUIManager() {
-  return ui_manager_.get();
+scoped_refptr<SafeBrowsingUIManager>
+SafeBrowsingService::GetSafeBrowsingUIManager() {
+  return ui_manager_;
 }
 
 void SafeBrowsingService::CreateSafeBrowsingUIManager() {
@@ -160,11 +164,34 @@ void SafeBrowsingService::CreateSafeBrowsingUIManager() {
 }
 
 void SafeBrowsingService::CreateAndStartSafeBrowsingDBManager() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   DCHECK(!safe_browsing_db_manager_);
 
   safe_browsing_db_manager_ =
       new safe_browsing::RemoteSafeBrowsingDatabaseManager();
+
+  if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
+    // Posting a task to start the DB here ensures that it will be started by
+    // the time that a consumer uses it on the IO thread, as such a consumer
+    // would need to make it available for usage on the IO thread via a
+    // PostTask() that will be ordered after this one.
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &SafeBrowsingService::StartSafeBrowsingDBManagerOnIOThread,
+            base::Unretained(this)));
+  } else {
+    StartSafeBrowsingDBManagerOnIOThread();
+  }
+}
+
+void SafeBrowsingService::StartSafeBrowsingDBManagerOnIOThread() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  DCHECK(safe_browsing_db_manager_);
+
+  if (started_db_manager_)
+    return;
+
+  started_db_manager_ = true;
 
   // V4ProtocolConfig is not used. Just create one with empty values.
   safe_browsing::V4ProtocolConfig config("", false, "", "");
@@ -225,6 +252,7 @@ void SafeBrowsingService::StopDBManagerOnIOThread() {
   if (safe_browsing_db_manager_) {
     safe_browsing_db_manager_->StopOnIOThread(true /*shutdown*/);
     safe_browsing_db_manager_.reset();
+    started_db_manager_ = false;
   }
 }
 

@@ -85,14 +85,21 @@ class AuthenticationService : public KeyedService,
   // Virtual for testing.
   virtual ChromeIdentity* GetAuthenticatedIdentity() const;
 
-  // Signs |identity| in to Chrome with |hosted_domain| as its hosted domain,
-  // pauses sync and logs |identity| in to http://google.com.
+  // Grants signin::ConsentLevel::kSignin to |identity|.
+  // This method does not set up Sync-the-feature for the identity.
   // Virtual for testing.
   virtual void SignIn(ChromeIdentity* identity);
+
+  // Grants signin::ConsentLevel::kSync to |identity|.
+  // This starts setting up Sync-the-feature, but the setup will only complete
+  // once SyncUserSettings::SetFirstSetupComplete() is called.
+  // Virtual for testing.
+  virtual void GrantSyncConsent(ChromeIdentity* identity);
 
   // Signs the authenticated user out of Chrome and clears the browsing
   // data if the account is managed. If force_clear_browsing_data is true,
   // clears the browsing data unconditionally.
+  // Sync consent is automatically removed from all signed-out accounts.
   // Virtual for testing.
   virtual void SignOut(signin_metrics::ProfileSignout signout_source,
                        bool force_clear_browsing_data,
@@ -196,7 +203,7 @@ class AuthenticationService : public KeyedService,
   void OnEndBatchOfRefreshTokenStateChanges() override;
 
   // ChromeIdentityServiceObserver implementation.
-  void OnIdentityListChanged() override;
+  void OnIdentityListChanged(bool keychainReload) override;
   void OnAccessTokenRefreshFailed(ChromeIdentity* identity,
                                   NSDictionary* user_info) override;
   void OnChromeIdentityServiceWillBeDestroyed() override;

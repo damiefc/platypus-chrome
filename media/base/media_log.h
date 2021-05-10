@@ -17,6 +17,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/thread_annotations.h"
+#include "build/build_config.h"
 #include "media/base/buffering_state.h"
 #include "media/base/media_export.h"
 #include "media/base/media_log_events.h"
@@ -42,6 +43,15 @@ class MEDIA_EXPORT MediaLog {
  public:
   static const char kEventKey[];
   static const char kStatusText[];
+
+// Maximum limit for the total number of logs kept per renderer. At the time of
+// writing, 512 events of the kind: { "property": value } together consume ~88kb
+// of memory on linux.
+#if defined(OS_ANDROID)
+  static constexpr size_t kLogLimit = 128;
+#else
+  static constexpr size_t kLogLimit = 512;
+#endif
 
   // Constructor is protected, see below.
   virtual ~MediaLog();
@@ -204,8 +214,9 @@ class MEDIA_EXPORT LogHelper {
 
 // Provides a stringstream to collect a log entry to pass to the provided
 // MediaLog at the requested level.
-#define MEDIA_LOG(level, media_log) \
-  LogHelper((MediaLogMessageLevel::k##level), (media_log)).stream()
+#define MEDIA_LOG(level, media_log)                                      \
+  media::LogHelper((media::MediaLogMessageLevel::k##level), (media_log)) \
+      .stream()
 
 // Logs only while |count| < |max|, increments |count| for each log, and warns
 // in the log if |count| has just reached |max|.

@@ -7,10 +7,12 @@
 #include <memory>
 #include <string>
 
+#include "base/command_line.h"
 #include "base/path_service.h"
 #include "base/supports_user_data.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_database_helper.h"
 #include "chrome/browser/ui/browser.h"
@@ -39,6 +41,10 @@
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
+#if defined(OS_LINUX)
+#include "ui/ozone/public/ozone_switches.h"
+#endif
+
 namespace {
 const char kPopupFirstDocumentEngagement[] =
     "ContentSettings.Popups.FirstDocumentEngagementTime2";
@@ -55,6 +61,7 @@ const char kUkmWindowOpenDisposition[] = "WindowOpenDisposition";
 const char kUkmNumActivationInteractions[] = "NumActivationInteractions";
 const char kUkmNumGestureScrollBeginInteractions[] =
     "NumGestureScrollBeginInteractions";
+const char kUkmRedirectCount[] = "RedirectCount";
 }  // namespace
 
 using UkmEntry = ukm::builders::Popup_Closed;
@@ -195,7 +202,8 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest,
 
 // OpenURLFromTab goes through a different code path than traditional popups
 // that use window.open(). Make sure the tracker is created in those cases.
-IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, ControlClick_HasTracker) {
+// Disabled due to flakiness. See crbug.com/1186441.
+IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, DISABLED_ControlClick_HasTracker) {
   base::HistogramTester tester;
   const GURL url = embedded_test_server()->GetURL(
       "/popup_blocker/popup-simulated-click-on-anchor.html");
@@ -240,7 +248,8 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, ControlClick_HasTracker) {
       entry, kUkmNumGestureScrollBeginInteractions, 0u);
 }
 
-IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, ShiftClick_HasTracker) {
+// Disabled due to flakiness. See crbug.com/1186441.
+IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, DISABLED_ShiftClick_HasTracker) {
   base::HistogramTester tester;
   const GURL url = embedded_test_server()->GetURL(
       "/popup_blocker/popup-simulated-click-on-anchor.html");
@@ -538,7 +547,14 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, PopupInTab_IsWindowFalse) {
       static_cast<int>(WindowOpenDisposition::NEW_FOREGROUND_TAB));
 }
 
-IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, PopupInWindow_IsWindowTrue) {
+// TODO(crbug.com/1178846): Test is flaky on Linux.
+#if defined(OS_LINUX)
+#define MAYBE_PopupInWindow_IsWindowTrue DISABLED_PopupInWindow_IsWindowTrue
+#else
+#define MAYBE_PopupInWindow_IsWindowTrue PopupInWindow_IsWindowTrue
+#endif
+IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest,
+                       MAYBE_PopupInWindow_IsWindowTrue) {
   const GURL first_url = embedded_test_server()->GetURL("/title1.html");
   ui_test_utils::NavigateToURL(browser(), first_url);
 
@@ -569,4 +585,141 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, PopupInWindow_IsWindowTrue) {
   test_ukm_recorder_->ExpectEntryMetric(
       entry, kUkmWindowOpenDisposition,
       static_cast<int>(WindowOpenDisposition::NEW_POPUP));
+}
+
+// TODO(crbug.com/1146598): Test is flaky on Lacros, Linux Ozone Wayland.
+#if BUILDFLAG(IS_CHROMEOS_LACROS) || defined(OS_LINUX)
+#define MAYBE_PopupNoRedirect_RedirectCountZero DISABLED_PopupNoRedirect_RedirectCountZero
+#else
+#define MAYBE_PopupNoRedirect_RedirectCountZero PopupNoRedirect_RedirectCountZero
+#endif
+IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest,
+                       MAYBE_PopupNoRedirect_RedirectCountZero) {
+  const GURL first_url = embedded_test_server()->GetURL("/title1.html");
+  ui_test_utils::NavigateToURL(browser(), first_url);
+
+  content::TestNavigationObserver navigation_observer(nullptr, 1);
+  navigation_observer.StartWatchingNewWebContents();
+  EXPECT_TRUE(content::ExecJs(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "window.open('/title1.html', 'new_window', "
+      "'location=yes,height=570,width=520,scrollbars=yes,status=yes')"));
+  navigation_observer.Wait();
+  EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
+
+  Browser* created_browser = chrome::FindLastActive();
+
+  EXPECT_EQ(1, created_browser->tab_strip_model()->count());
+  content::WebContents* popup =
+      created_browser->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(blocked_content::PopupTracker::FromWebContents(popup));
+
+  // Close the popup and check that the pop up did not redirect.
+  int active_index = created_browser->tab_strip_model()->active_index();
+  content::WebContentsDestroyedWatcher destroyed_watcher(popup);
+  created_browser->tab_strip_model()->CloseWebContentsAt(
+      active_index, TabStripModel::CLOSE_USER_GESTURE);
+  destroyed_watcher.Wait();
+
+  auto* entry = ExpectAndGetEntry(first_url);
+  test_ukm_recorder_->ExpectEntryMetric(entry, kUkmRedirectCount, 0);
+}
+
+// TODO(crbug.com/1179235): Test is flaky on Lacros.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_PopupRedirectsTwice_RedirectCountTwo \
+  DISABLED_PopupRedirectsTwice_RedirectCountTwo
+#else
+#define MAYBE_PopupRedirectsTwice_RedirectCountTwo \
+  PopupRedirectsTwice_RedirectCountTwo
+#endif
+IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest,
+                       MAYBE_PopupRedirectsTwice_RedirectCountTwo) {
+#if defined(OS_LINUX)
+  {
+    auto* command_line = base::CommandLine::ForCurrentProcess();
+    if (command_line->HasSwitch(switches::kOzonePlatform) &&
+        command_line->GetSwitchValueASCII(switches::kOzonePlatform) ==
+            "wayland") {
+      // TODO(crbug.com/1179235): Test is flaky on Linux Wayland configuration.
+      GTEST_SKIP() << "Flaky on Linux Wayland";
+    }
+  }
+#endif
+
+  const GURL first_url = embedded_test_server()->GetURL("/title1.html");
+  ui_test_utils::NavigateToURL(browser(), first_url);
+
+  content::TestNavigationObserver navigation_observer(nullptr, 1);
+  navigation_observer.StartWatchingNewWebContents();
+
+  // Redirect the popup using /server-redirect twice.
+  EXPECT_TRUE(content::ExecJs(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "window.open('/server-redirect?/server-redirect?/title1.html',"
+      "'new_window', 'location=yes,height=570,width=520,scrollbars=yes,"
+      "status=yes')"));
+  navigation_observer.Wait();
+  EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
+
+  Browser* created_browser = chrome::FindLastActive();
+
+  EXPECT_EQ(1, created_browser->tab_strip_model()->count());
+  content::WebContents* popup =
+      created_browser->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(blocked_content::PopupTracker::FromWebContents(popup));
+
+  // Close the popup and check metric.
+  int active_index = created_browser->tab_strip_model()->active_index();
+  content::WebContentsDestroyedWatcher destroyed_watcher(popup);
+  created_browser->tab_strip_model()->CloseWebContentsAt(
+      active_index, TabStripModel::CLOSE_USER_GESTURE);
+  destroyed_watcher.Wait();
+
+  auto* entry = ExpectAndGetEntry(first_url);
+  test_ukm_recorder_->ExpectEntryMetric(entry, kUkmRedirectCount, 2);
+}
+
+// TODO(crbug.com/1179859): Test is flaky on Windows, Linux and Lacros.
+#if defined(OS_LINUX) || defined(OS_WIN) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_PopupJavascriptRenavigation_RedirectCountZero \
+  DISABLED_PopupJavascriptRenavigation_RedirectCountZero
+#else
+#define MAYBE_PopupJavascriptRenavigation_RedirectCountZero \
+  PopupJavascriptRenavigation_RedirectCountZero
+#endif
+IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest,
+                       MAYBE_PopupJavascriptRenavigation_RedirectCountZero) {
+  const GURL first_url = embedded_test_server()->GetURL("/title1.html");
+  ui_test_utils::NavigateToURL(browser(), first_url);
+
+  content::TestNavigationObserver navigation_observer(nullptr, 1);
+  navigation_observer.StartWatchingNewWebContents();
+
+  // Redirect the popup using /server-redirect twice.
+  EXPECT_TRUE(content::ExecJs(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "var w = window.open('',"
+      "'new_window', 'location=yes,height=570,width=520,scrollbars=yes,"
+      "status=yes'); "
+      "w.location = '/title1.html'"));
+  navigation_observer.Wait();
+  EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
+
+  Browser* created_browser = chrome::FindLastActive();
+
+  EXPECT_EQ(1, created_browser->tab_strip_model()->count());
+  content::WebContents* popup =
+      created_browser->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(blocked_content::PopupTracker::FromWebContents(popup));
+
+  // Close the popup and check metric.
+  int active_index = created_browser->tab_strip_model()->active_index();
+  content::WebContentsDestroyedWatcher destroyed_watcher(popup);
+  created_browser->tab_strip_model()->CloseWebContentsAt(
+      active_index, TabStripModel::CLOSE_USER_GESTURE);
+  destroyed_watcher.Wait();
+
+  auto* entry = ExpectAndGetEntry(first_url);
+  test_ukm_recorder_->ExpectEntryMetric(entry, kUkmRedirectCount, 0);
 }

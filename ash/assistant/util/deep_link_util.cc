@@ -7,7 +7,7 @@
 #include <set>
 
 #include "ash/assistant/util/i18n_util.h"
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -50,12 +50,6 @@ constexpr char kPauseTimer[] = "pauseTimer";
 constexpr char kRemoveAlarmOrTimer[] = "removeAlarmOrTimer";
 constexpr char kResumeTimer[] = "resumeTimer";
 
-// Supported proactive suggestions action deep link param values.
-constexpr char kCardClick[] = "cardClick";
-constexpr char kEntryPointClick[] = "entryPointClick";
-constexpr char kEntryPointClose[] = "entryPointClose";
-constexpr char kViewImpression[] = "viewImpression";
-
 // Supported reminder action deep link param values.
 constexpr char kCreateReminder[] = "create";
 constexpr char kEditReminder[] = "edit";
@@ -68,8 +62,6 @@ constexpr char kAssistantFeedbackPrefix[] = "googleassistant://send-feedback";
 constexpr char kAssistantListsPrefix[] = "googleassistant://lists";
 constexpr char kAssistantNotesPrefix[] = "googleassistant://notes";
 constexpr char kAssistantOnboardingPrefix[] = "googleassistant://onboarding";
-constexpr char kAssistantProactiveSuggestionsPrefix[] =
-    "googleassistant://proactive-suggestions";
 constexpr char kAssistantQueryPrefix[] = "googleassistant://send-query";
 constexpr char kAssistantRemindersPrefix[] = "googleassistant://reminders";
 constexpr char kAssistantScreenshotPrefix[] =
@@ -322,22 +314,6 @@ base::Optional<int64_t> GetDeepLinkParamAsInt64(
   return base::nullopt;
 }
 
-base::Optional<ProactiveSuggestionsAction>
-GetDeepLinkParamAsProactiveSuggestionsAction(
-    const std::map<std::string, std::string>& params,
-    DeepLinkParam param) {
-  const base::Optional<std::string>& value = GetDeepLinkParam(params, param);
-  if (value == kCardClick)
-    return ProactiveSuggestionsAction::kCardClick;
-  if (value == kEntryPointClick)
-    return ProactiveSuggestionsAction::kEntryPointClick;
-  if (value == kEntryPointClose)
-    return ProactiveSuggestionsAction::kEntryPointClose;
-  if (value == kViewImpression)
-    return ProactiveSuggestionsAction::kViewImpression;
-  return base::nullopt;
-}
-
 base::Optional<AssistantQuerySource> GetDeepLinkParamAsQuerySource(
     const std::map<std::string, std::string>& params,
     DeepLinkParam param) {
@@ -385,8 +361,6 @@ DeepLinkType GetDeepLinkType(const GURL& url) {
       {DeepLinkType::kLists, kAssistantListsPrefix},
       {DeepLinkType::kNotes, kAssistantNotesPrefix},
       {DeepLinkType::kOnboarding, kAssistantOnboardingPrefix},
-      {DeepLinkType::kProactiveSuggestions,
-       kAssistantProactiveSuggestionsPrefix},
       {DeepLinkType::kQuery, kAssistantQueryPrefix},
       {DeepLinkType::kReminders, kAssistantRemindersPrefix},
       {DeepLinkType::kScreenshot, kAssistantScreenshotPrefix},
@@ -471,7 +445,7 @@ GURL GetChromeSettingsUrl(const base::Optional<std::string>& page) {
   // chromeos.
   static const std::map<std::string, std::string> kAllowedOsPages = {
       {/*page=*/"googleAssistant", /*os_page=*/"googleAssistant"},
-      {/*page=*/"languages", /*os_page=*/"osLanguages/details"}};
+      {/*page=*/"languages", /*os_page=*/"osLanguages/languages"}};
 
   return page && base::Contains(kAllowedOsPages, page.value())
              ? GURL(kChromeOsSettingsUrl + kAllowedOsPages.at(page.value()))
@@ -503,7 +477,6 @@ base::Optional<GURL> GetWebUrl(
     case DeepLinkType::kChromeSettings:
     case DeepLinkType::kFeedback:
     case DeepLinkType::kOnboarding:
-    case DeepLinkType::kProactiveSuggestions:
     case DeepLinkType::kQuery:
     case DeepLinkType::kScreenshot:
     case DeepLinkType::kTaskManager:

@@ -35,7 +35,7 @@ class MockTextInputDelegate : public TextInput::Delegate {
   MOCK_METHOD0(Deactivated, void());
   MOCK_METHOD1(OnVirtualKeyboardVisibilityChanged, void(bool));
   MOCK_METHOD1(SetCompositionText, void(const ui::CompositionText&));
-  MOCK_METHOD1(Commit, void(const base::string16&));
+  MOCK_METHOD1(Commit, void(const std::u16string&));
   MOCK_METHOD1(SetCursor, void(const gfx::Range&));
   MOCK_METHOD1(DeleteSurroundingText, void(const gfx::Range&));
   MOCK_METHOD1(SendKey, void(const ui::KeyEvent&));
@@ -246,34 +246,67 @@ TEST_F(TextInputTest, CompositionText) {
   text_input()->ClearCompositionText();
 }
 
+TEST_F(TextInputTest, CompositionTextEmpty) {
+  SetCompositionText("");
+
+  EXPECT_CALL(*delegate(), SetCompositionText(_)).Times(0);
+  text_input()->ClearCompositionText();
+}
+
 TEST_F(TextInputTest, CommitCompositionText) {
   SetCompositionText("composition");
 
-  EXPECT_CALL(*delegate(), Commit(base::UTF8ToUTF16("composition"))).Times(1);
+  EXPECT_CALL(*delegate(), Commit(std::u16string(u"composition"))).Times(1);
   const uint32_t composition_text_length =
-      text_input()->ConfirmCompositionText(/** keep_selection */ false);
+      text_input()->ConfirmCompositionText(/*keep_selection=*/false);
   EXPECT_EQ(composition_text_length, static_cast<uint32_t>(11));
+  testing::Mock::VerifyAndClearExpectations(delegate());
+
+  // Second call should be the empty commit string.
+  EXPECT_EQ(0u, text_input()->ConfirmCompositionText(/*keep_selection=*/false));
+}
+
+TEST_F(TextInputTest, ResetCompositionText) {
+  SetCompositionText("composition");
+
+  text_input()->Reset();
+  EXPECT_EQ(0u, text_input()->ConfirmCompositionText(/*keep_selection=*/false));
 }
 
 TEST_F(TextInputTest, Commit) {
-  base::string16 s = base::ASCIIToUTF16("commit text");
+  std::u16string s = u"commit text";
 
   EXPECT_CALL(*delegate(), Commit(s)).Times(1);
-  text_input()->InsertText(s);
+  text_input()->InsertText(
+      s, ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
 }
 
 TEST_F(TextInputTest, InsertChar) {
+  text_input()->Activate(surface());
+
   ui::KeyEvent ev(ui::ET_KEY_PRESSED, ui::VKEY_RETURN, 0);
 
   EXPECT_CALL(*delegate(), SendKey(testing::Ref(ev))).Times(1);
   text_input()->InsertChar(ev);
 }
 
+TEST_F(TextInputTest, InsertCharCtrlV) {
+  text_input()->Activate(surface());
+
+  // CTRL+V is interpreted as non-IME consumed KeyEvent, so should
+  // not be sent.
+  ui::KeyEvent ev(ui::ET_KEY_PRESSED, ui::VKEY_V, ui::EF_CONTROL_DOWN);
+  EXPECT_CALL(*delegate(), SendKey(_)).Times(0);
+  text_input()->InsertChar(ev);
+}
+
 TEST_F(TextInputTest, InsertCharNormalKey) {
-  base::char16 ch = 'x';
+  text_input()->Activate(surface());
+
+  char16_t ch = 'x';
   ui::KeyEvent ev(ch, ui::VKEY_X, ui::DomCode::NONE, 0);
 
-  EXPECT_CALL(*delegate(), Commit(base::string16(1, ch))).Times(1);
+  EXPECT_CALL(*delegate(), Commit(std::u16string(1, ch))).Times(1);
   EXPECT_CALL(*delegate(), SendKey(_)).Times(0);
   text_input()->InsertChar(ev);
 }
@@ -283,10 +316,10 @@ TEST_F(TextInputTest, SurroundingText) {
   EXPECT_FALSE(text_input()->GetTextRange(&range));
   EXPECT_FALSE(text_input()->GetCompositionTextRange(&range));
   EXPECT_FALSE(text_input()->GetEditableSelectionRange(&range));
-  base::string16 got_text;
+  std::u16string got_text;
   EXPECT_FALSE(text_input()->GetTextFromRange(gfx::Range(0, 1), &got_text));
 
-  base::string16 text = base::UTF8ToUTF16("surrounding\xE3\x80\x80text");
+  std::u16string text = base::UTF8ToUTF16("surrounding\xE3\x80\x80text");
   text_input()->SetSurroundingText(text, 11, 12);
 
   EXPECT_TRUE(text_input()->GetTextRange(&range));
@@ -315,7 +348,7 @@ TEST_F(TextInputTest, SurroundingText) {
 }
 
 TEST_F(TextInputTest, GetTextRange) {
-  base::string16 text = base::UTF8ToUTF16("surrounding text");
+  std::u16string text = u"surrounding text";
   text_input()->SetSurroundingText(text, 11, 12);
 
   SetCompositionText("composition");
@@ -332,7 +365,7 @@ TEST_F(TextInputTest, GetTextRange) {
       {gfx::Range(22, 25), "tex"},
   };
   for (auto& c : kTestCases) {
-    base::string16 result;
+    std::u16string result;
     EXPECT_TRUE(text_input()->GetTextFromRange(c.range, &result))
         << c.range.ToString();
     EXPECT_EQ(base::UTF8ToUTF16(c.expected), result) << c.range.ToString();

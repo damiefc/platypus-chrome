@@ -16,7 +16,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_gatt_characteristic.h"
@@ -310,8 +310,7 @@ class BluetoothLowEnergyEventRouter
       const device::BluetoothDevice* device,
       const device::BluetoothLocalGattCharacteristic* characteristic,
       int offset,
-      Delegate::ValueCallback value_callback,
-      Delegate::ErrorCallback error_callback) override;
+      Delegate::ValueCallback value_callback) override;
   void OnCharacteristicWriteRequest(
       const device::BluetoothDevice* device,
       const device::BluetoothLocalGattCharacteristic* characteristic,
@@ -331,8 +330,7 @@ class BluetoothLowEnergyEventRouter
       const device::BluetoothDevice* device,
       const device::BluetoothLocalGattDescriptor* descriptor,
       int offset,
-      Delegate::ValueCallback value_callback,
-      Delegate::ErrorCallback error_callback) override;
+      Delegate::ValueCallback value_callback) override;
   void OnDescriptorWriteRequest(
       const device::BluetoothDevice* device,
       const device::BluetoothLocalGattDescriptor* descriptor,
@@ -435,14 +433,21 @@ class BluetoothLowEnergyEventRouter
 
   // Dispatches a BLUETOOTH_LOW_ENERGY_ON_CHARACTERISTIC_VALUE_CHANGED and runs
   // |callback|.
-  void OnReadRemoteCharacteristicSuccess(
+  void OnReadRemoteCharacteristic(
       const std::string& characteristic_instance_id,
       base::OnceClosure callback,
+      ErrorCallback error_callback,
+      base::Optional<device::BluetoothRemoteGattService::GattErrorCode>
+          error_code,
       const std::vector<uint8_t>& value);
 
   // Runs |callback|.
-  void OnReadRemoteDescriptorSuccess(base::OnceClosure callback,
-                                     const std::vector<uint8_t>& value);
+  void OnReadRemoteDescriptor(
+      base::OnceClosure callback,
+      ErrorCallback error_callback,
+      base::Optional<device::BluetoothRemoteGattService::GattErrorCode>
+          error_code,
+      const std::vector<uint8_t>& value);
 
   // Called by BluetoothDevice in response to a call to CreateGattConnection.
   void OnCreateGattConnection(
@@ -464,7 +469,7 @@ class BluetoothLowEnergyEventRouter
 
   // Called by BluetoothRemoteGattCharacteristic and
   // BluetoothRemoteGattDescriptor in
-  // case of an error during the read/write operations.
+  // case of an error during the write operations.
   void OnError(ErrorCallback error_callback,
                device::BluetoothRemoteGattService::GattErrorCode error_code);
 
@@ -582,8 +587,8 @@ class BluetoothLowEnergyEventRouter
   content::BrowserContext* browser_context_;
 
   // Listen to extension unloaded notification.
-  ScopedObserver<ExtensionRegistry, ExtensionRegistryObserver>
-      extension_registry_observer_{this};
+  base::ScopedObservation<ExtensionRegistry, ExtensionRegistryObserver>
+      extension_registry_observation_{this};
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

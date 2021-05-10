@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/sync_socket.h"
 #include "base/test/mock_callback.h"
@@ -160,7 +160,7 @@ struct TestEnvironment {
   StrictMock<MockAudioOutputStreamProviderClient> provider_client;
   std::unique_ptr<AudioOutputStreamBroker> broker;
   MockStreamFactory stream_factory;
-  mojo::Remote<audio::mojom::StreamFactory> factory_ptr{
+  mojo::Remote<media::mojom::AudioStreamFactory> factory_ptr{
       stream_factory.MakeRemote()};
 };
 

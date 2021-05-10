@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -143,7 +143,7 @@ class DownloadFramePolicyBrowserTest
         {subresource_filter::testing::CreateSuffixRule("ad_script.js"),
          subresource_filter::testing::CreateSuffixRule("disallow.zip")});
     embedded_test_server()->ServeFilesFromSourceDirectory(
-        "chrome/test/data/ad_tagging");
+        "components/test/data/ad_tagging");
     content::SetupCrossSiteRedirector(embedded_test_server());
     ASSERT_TRUE(embedded_test_server()->Start());
   }

@@ -4,7 +4,7 @@
 
 #include "chrome/browser/performance_manager/decorators/helpers/page_live_state_decorator_helper.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
@@ -70,7 +70,9 @@ void PageLiveStateDecoratorHelperTest::EndToEndStreamPropertyTest(
     base::Optional<media::mojom::DisplayMediaInformationPtr> display_media_info,
     bool (PageLiveStateDecorator::Data::*pm_getter)() const) {
   // By default all properties are set to false.
-  testing::TestPageNodePropertyOnPMSequence(web_contents(), pm_getter, false);
+  testing::TestPageNodePropertyOnPMSequence(
+      web_contents(), &PageLiveStateDecorator::Data::GetOrCreateForPageNode,
+      pm_getter, false);
 
   // Create the fake stream device and start it, this should set the property to
   // true.
@@ -79,12 +81,18 @@ void PageLiveStateDecoratorHelperTest::EndToEndStreamPropertyTest(
 
   std::unique_ptr<content::MediaStreamUI> ui =
       indicator()->RegisterMediaStream(web_contents(), {device});
-  ui->OnStarted(base::OnceClosure(), content::MediaStreamUI::SourceCallback());
-  testing::TestPageNodePropertyOnPMSequence(web_contents(), pm_getter, true);
+  ui->OnStarted(base::OnceClosure(), content::MediaStreamUI::SourceCallback(),
+                /*label=*/std::string(), /*screen_capture_ids=*/{},
+                content::MediaStreamUI::StateChangeCallback());
+  testing::TestPageNodePropertyOnPMSequence(
+      web_contents(), &PageLiveStateDecorator::Data::GetOrCreateForPageNode,
+      pm_getter, true);
 
   // Switch back to the default state.
   ui.reset();
-  testing::TestPageNodePropertyOnPMSequence(web_contents(), pm_getter, false);
+  testing::TestPageNodePropertyOnPMSequence(
+      web_contents(), &PageLiveStateDecorator::Data::GetOrCreateForPageNode,
+      pm_getter, false);
 }
 
 }  // namespace
@@ -128,17 +136,17 @@ TEST_F(PageLiveStateDecoratorHelperTest, OnIsCapturingDisplayChanged) {
 
 TEST_F(PageLiveStateDecoratorHelperTest, IsConnectedToBluetoothDevice) {
   testing::TestPageNodePropertyOnPMSequence(
-      web_contents(),
+      web_contents(), &PageLiveStateDecorator::Data::GetOrCreateForPageNode,
       &PageLiveStateDecorator::Data::IsConnectedToBluetoothDevice, false);
   content::WebContentsTester::For(web_contents())
       ->TestIncrementBluetoothConnectedDeviceCount();
   testing::TestPageNodePropertyOnPMSequence(
-      web_contents(),
+      web_contents(), &PageLiveStateDecorator::Data::GetOrCreateForPageNode,
       &PageLiveStateDecorator::Data::IsConnectedToBluetoothDevice, true);
   content::WebContentsTester::For(web_contents())
       ->TestDecrementBluetoothConnectedDeviceCount();
   testing::TestPageNodePropertyOnPMSequence(
-      web_contents(),
+      web_contents(), &PageLiveStateDecorator::Data::GetOrCreateForPageNode,
       &PageLiveStateDecorator::Data::IsConnectedToBluetoothDevice, false);
 }
 

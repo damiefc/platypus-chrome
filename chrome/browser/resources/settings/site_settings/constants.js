@@ -20,6 +20,7 @@ export const ContentSettingsTypes = {
   CAMERA: 'media-stream-camera',
   CLIPBOARD: 'clipboard',
   COOKIES: 'cookies',
+  FILE_HANDLING: 'file-handling',
   FILE_SYSTEM_WRITE: 'file-system-write',
   FONT_ACCESS: 'font-access',
   GEOLOCATION: 'location',
@@ -32,14 +33,12 @@ export const ContentSettingsTypes = {
   MIXEDSCRIPT: 'mixed-script',
   NOTIFICATIONS: 'notifications',
   PAYMENT_HANDLER: 'payment-handler',
-  PLUGINS: 'plugins',  // AKA Flash.
   POPUPS: 'popups',
   PROTECTED_CONTENT: 'protected-content',
   PROTOCOL_HANDLERS: 'register-protocol-handler',
   SENSORS: 'sensors',
   SERIAL_PORTS: 'serial-ports',
   SOUND: 'sound',
-  UNSANDBOXED_PLUGINS: 'ppapi-broker',
   USB_DEVICES: 'usb-devices',
   VR: 'vr',
   WINDOW_PLACEMENT: 'window-placement',
@@ -106,6 +105,18 @@ export const SiteSettingSource = {
   KILL_SWITCH: 'kill-switch',
   POLICY: 'policy',
   PREFERENCE: 'preference',
+};
+
+/**
+ * Enumeration of states for the notification default setting generated pref.
+ * Must be kept in sync with the enum of the same name located in:
+ * chrome/browser/content_settings/generated_notification_pref.h
+ * @enum {number}
+ */
+export const NotificationSetting = {
+  ASK: 0,
+  QUIETER_MESSAGING: 1,
+  BLOCK: 2,
 };
 
 /**

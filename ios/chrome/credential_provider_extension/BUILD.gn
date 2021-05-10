@@ -2,15 +2,19 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/apple/compile_entitlements.gni")
 import("//build/apple/tweak_info_plist.gni")
 import("//build/config/ios/rules.gni")
 import("//build/config/locales.gni")
-import("//build/config/mac/base_rules.gni")
 import("//ios/build/chrome_build.gni")
 import("//ios/build/config.gni")
 import("//ios/chrome/extension_repack.gni")
 import("//ios/chrome/tools/strings/generate_localizable_strings.gni")
 import("//ios/public/provider/chrome/browser/build_config.gni")
+
+assert(
+    ios_enable_credential_provider_extension,
+    "ios_enable_credential_provider_extension must be true to depend on //ios/chrome/credential_provider_extension")
 
 group("resources") {
   deps = [ "//ios/chrome/credential_provider_extension/strings" ]
@@ -24,6 +28,11 @@ extension_repack_all_locales("packed_resources") {
 
 tweak_info_plist("tweak_info_plist") {
   info_plist = "Info.plist"
+
+  # TODO(crbug.com/1140474): Remove once iOS 14.2 reaches mass adoption.
+  if (ios_lock_to_version != "") {
+    args = [ "--lock-to-version=$ios_lock_to_version" ]
+  }
 }
 
 compile_entitlements("entitlements") {
@@ -55,8 +64,10 @@ ios_appex_bundle("credential_provider_extension") {
     ":password_util",
     ":reauthentication_handler",
     ":system_strings",
+    "//base",
     "//ios/chrome/common/app_group",
     "//ios/chrome/common/app_group:client",
+    "//ios/chrome/common/crash_report",
     "//ios/chrome/common/credential_provider",
     "//ios/chrome/common/credential_provider:ui",
     "//ios/chrome/common/ui/colors",

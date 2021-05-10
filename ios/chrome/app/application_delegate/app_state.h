@@ -7,7 +7,9 @@
 
 #import <UIKit/UIKit.h>
 
+
 #import "ios/chrome/app/application_delegate/app_state_agent.h"
+#import "ios/chrome/app/application_delegate/app_state_observer.h"
 #import "ios/chrome/browser/ui/main/scene_state_observer.h"
 #import "ios/chrome/browser/ui/scoped_ui_blocker/ui_blocker_manager.h"
 
@@ -16,6 +18,7 @@
 class ChromeBrowserState;
 @class CommandDispatcher;
 @protocol ConnectionInformation;
+typedef NS_ENUM(NSUInteger, DefaultPromoType);
 @class SceneState;
 @class MainApplicationDelegate;
 @class MemoryWarningHelper;
@@ -24,25 +27,9 @@ class ChromeBrowserState;
 @protocol TabOpening;
 @protocol TabSwitching;
 
-@protocol AppStateObserver <NSObject>
-
-@optional
-
-// Called when a scene is connected.
-// On iOS 12, called when the mainSceneState is set.
-- (void)appState:(AppState*)appState sceneConnected:(SceneState*)sceneState;
-
-// Called when the first scene becomes active.
-- (void)appState:(AppState*)appState
-    firstSceneActivated:(SceneState*)sceneState;
-
-// Called after the app exits safe mode.
-- (void)appStateDidExitSafeMode:(AppState*)appState;
-
-// Called when |AppState.lastTappedWindow| changes.
-- (void)appState:(AppState*)appState lastTappedWindowChanged:(UIWindow*)window;
-
-@end
+namespace base {
+class TimeTicks;
+}
 
 // Represents the application state and responds to application state changes
 // and system events.
@@ -77,6 +64,16 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 // shown after the last cold start.
 @property(nonatomic) BOOL shouldShowDefaultBrowserPromo;
 
+// The type of default browser fullscreen promo that should be shown to the
+// user.
+@property(nonatomic) DefaultPromoType defaultBrowserPromoTypeToShow;
+
+// YES if the sign-out prompt should be shown to the user when the scene becomes
+// active and enters the foreground. This can happen if the policies have
+// changed since the last cold start, meaning the user was signed out during
+// startup.
+@property(nonatomic) BOOL shouldShowPolicySignoutPrompt;
+
 // When multiwindow is unavailable, this is the only scene state. It is created
 // by the app delegate.
 @property(nonatomic, strong) SceneState* mainSceneState;
@@ -93,6 +90,15 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 // The SceneSession ID for the last session, where the Device doesn't support
 // multiple windows.
 @property(nonatomic, strong) NSString* previousSingleWindowSessionID;
+
+// Timestamp of when a scene was last becoming active. Can be null.
+@property(nonatomic, assign) base::TimeTicks lastTimeInForeground;
+
+// Flag to track when the app is in safe mode.
+@property(nonatomic, assign, getter=isInSafeMode) BOOL inSafeMode;
+
+// The initialization stage the app is currently at.
+@property(nonatomic, readonly) InitStage initStage;
 
 // Saves the launchOptions to be used from -newTabFromLaunchOptions. If the
 // application is in background, initialize the browser to basic. If not, launch
@@ -151,6 +157,10 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 // Returns a list of all connected scenes.
 - (NSArray<SceneState*>*)connectedScenes;
 
+// Returns a list of all scenes in the foreground that are not necessarly
+// active.
+- (NSArray<SceneState*>*)foregroundScenes;
+
 // Adds an observer to this app state. The observers will be notified about
 // app state changes per AppStateObserver protocol.
 - (void)addObserver:(id<AppStateObserver>)observer;
@@ -161,6 +171,16 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 // Adds a new agent. Agents are owned by the app state.
 // This automatically sets the app state on the |agent|.
 - (void)addAgent:(id<AppStateAgent>)agent;
+
+// Queue the transition to the next app initialization stage. Will stop
+// transitioning when the Final stage is reached.
+// All observers will be notified about each transition until the next
+// transition takes place. If an observer calls this method from a transition
+// notification, the method will return, the observers will be notified of the
+// prior change, and then transition will take place. Then this method will
+// finally return to the runloop. It is an error to queue more than one
+// transition at once.
+- (void)queueTransitionToNextInitStage;
 
 @end
 

@@ -5,6 +5,7 @@
 #ifndef CC_METRICS_FRAME_SEQUENCE_METRICS_H_
 #define CC_METRICS_FRAME_SEQUENCE_METRICS_H_
 
+#include <bitset>
 #include <memory>
 
 #include "base/callback.h"
@@ -29,10 +30,37 @@ enum class FrameSequenceTrackerType {
   kScrollbarScroll = 8,
   kCustom = 9,  // Note that the metrics for kCustom are not reported on UMA,
                 // and instead are dispatched back to the LayerTreeHostClient.
-  kCanvas = 10,
+  kCanvasAnimation = 10,
   kJSAnimation = 11,
   kMaxType
 };
+
+using ActiveTrackers =
+    std::bitset<static_cast<size_t>(FrameSequenceTrackerType::kMaxType)>;
+
+inline bool IsScrollActive(const ActiveTrackers& trackers) {
+  return trackers.test(
+             static_cast<size_t>(FrameSequenceTrackerType::kWheelScroll)) ||
+         trackers.test(
+             static_cast<size_t>(FrameSequenceTrackerType::kTouchScroll)) ||
+         trackers.test(
+             static_cast<size_t>(FrameSequenceTrackerType::kScrollbarScroll));
+}
+
+inline bool HasMainThreadAnimation(const ActiveTrackers& trackers) {
+  return trackers.test(static_cast<size_t>(
+             FrameSequenceTrackerType::kMainThreadAnimation)) ||
+         trackers.test(
+             static_cast<size_t>(FrameSequenceTrackerType::kCanvasAnimation)) ||
+         trackers.test(
+             static_cast<size_t>(FrameSequenceTrackerType::kJSAnimation)) ||
+         trackers.test(static_cast<size_t>(FrameSequenceTrackerType::kRAF));
+}
+
+inline bool HasCompositorThreadAnimation(const ActiveTrackers& trackers) {
+  return trackers.test(
+      static_cast<size_t>(FrameSequenceTrackerType::kCompositorAnimation));
+}
 
 class CC_EXPORT FrameSequenceMetrics {
  public:
@@ -116,8 +144,12 @@ class CC_EXPORT FrameSequenceMetrics {
 
   void SetScrollingThread(ThreadType thread);
 
-  using CustomReporter =
-      base::OnceCallback<void(ThroughputData throughput_data)>;
+  struct CustomReportData {
+    uint32_t frames_expected = 0;
+    uint32_t frames_produced = 0;
+    uint32_t jank_count = 0;
+  };
+  using CustomReporter = base::OnceCallback<void(const CustomReportData& data)>;
   // Sets reporter callback for kCustom typed sequence.
   void SetCustomReporter(CustomReporter custom_reporter);
 
@@ -150,8 +182,18 @@ class CC_EXPORT FrameSequenceMetrics {
   void AdvanceTrace(base::TimeTicks timestamp);
 
   void ComputeJank(FrameSequenceMetrics::ThreadType thread_type,
+                   uint32_t frame_token,
                    base::TimeTicks presentation_time,
                    base::TimeDelta frame_interval);
+
+  void NotifySubmitForJankReporter(FrameSequenceMetrics::ThreadType thread_type,
+                                   uint32_t frame_token,
+                                   uint32_t sequence_number);
+
+  void NotifyNoUpdateForJankReporter(
+      FrameSequenceMetrics::ThreadType thread_type,
+      uint32_t sequence_number,
+      base::TimeDelta frame_interval);
 
  private:
   const FrameSequenceTrackerType type_;

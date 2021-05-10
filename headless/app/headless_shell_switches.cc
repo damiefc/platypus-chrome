@@ -75,6 +75,9 @@ const char kProxyBypassList[] = "proxy-bypass-list";
 // affects HTTP and HTTPS requests.
 const char kProxyServer[] = "proxy-server";
 
+// Do not use system proxy configuration service.
+const char kNoSystemProxyConfigService[] = "no-system-proxy-config-service";
+
 // Use the given address instead of the default loopback for accepting remote
 // debugging connections. Should be used together with --remote-debugging-port.
 // Note that the remote debugging protocol does not perform any authentication,
@@ -105,7 +108,8 @@ const char kUseGL[] = "use-gl";
 // A string used to override the default user agent with a custom one.
 const char kUserAgent[] = "user-agent";
 
-// Directory where the browser stores the user profile.
+// Directory where the browser stores the user profile. Note that if this switch
+// is added, the session will no longer be Incognito.
 const char kUserDataDir[] = "user-data-dir";
 
 // If set the system waits the specified number of virtual milliseconds before
@@ -120,7 +124,8 @@ const char kVirtualTimeBudget[] = "virtual-time-budget";
 const char kWindowSize[] = "window-size";
 
 // Allowlist for Negotiate Auth servers.
-const char kAuthServerAllowlist[] = "auth-server-whitelist";
+const char kAuthServerAllowlist[] = "auth-server-allowlist";
+const char kAuthServerAllowlistDeprecated[] = "auth-server-whitelist";
 
 // Sets font render hinting when running headless, affects Skia rendering and
 // whether glyph subpixel positioning is enabled.

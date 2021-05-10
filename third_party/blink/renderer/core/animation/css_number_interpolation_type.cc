@@ -11,7 +11,9 @@
 #include "third_party/blink/renderer/core/animation/number_property_functions.h"
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder.h"
+#include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
+#include "third_party/blink/renderer/core/css/scoped_css_value.h"
 
 namespace blink {
 
@@ -56,10 +58,11 @@ InterpolationValue CSSNumberInterpolationType::MaybeConvertNeutral(
 }
 
 InterpolationValue CSSNumberInterpolationType::MaybeConvertInitial(
-    const StyleResolverState&,
+    const StyleResolverState& state,
     ConversionCheckers& conversion_checkers) const {
   base::Optional<double> initial_number =
-      NumberPropertyFunctions::GetInitialNumber(CssProperty());
+      NumberPropertyFunctions::GetInitialNumber(
+          CssProperty(), state.GetDocument().GetStyleResolver().InitialStyle());
   if (!initial_number)
     return nullptr;
   return CreateNumberValue(*initial_number);
@@ -110,8 +113,10 @@ void CSSNumberInterpolationType::ApplyStandardPropertyValue(
                                           clamped_number)) {
     StyleBuilder::ApplyProperty(
         GetProperty().GetCSSProperty(), state,
-        *CSSNumericLiteralValue::Create(clamped_number,
-                                        CSSPrimitiveValue::UnitType::kNumber));
+        ScopedCSSValue(
+            *CSSNumericLiteralValue::Create(
+                clamped_number, CSSPrimitiveValue::UnitType::kNumber),
+            nullptr));
   }
 }
 

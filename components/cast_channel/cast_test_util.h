@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/cast_channel/cast_message_handler.h"
+#include "components/cast_channel/cast_message_util.h"
 #include "components/cast_channel/cast_socket.h"
 #include "components/cast_channel/cast_socket_service.h"
 #include "components/cast_channel/cast_transport.h"
@@ -79,7 +80,7 @@ class MockCastSocketObserver : public CastSocket::Observer {
                void(const CastSocket& socket, const CastMessage& message));
 };
 
-class MockCastSocketService : public CastSocketService {
+class MockCastSocketService : public CastSocketServiceImpl {
  public:
   explicit MockCastSocketService(
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
@@ -165,8 +166,11 @@ class MockCastMessageHandler : public CastMessageHandler {
   explicit MockCastMessageHandler(MockCastSocketService* socket_service);
   ~MockCastMessageHandler() override;
 
-  MOCK_METHOD3(EnsureConnection,
-               void(int, const std::string&, const std::string&));
+  MOCK_METHOD4(EnsureConnection,
+               void(int,
+                    const std::string&,
+                    const std::string&,
+                    VirtualConnectionType connection_type));
   MOCK_METHOD3(CloseConnection,
                void(int, const std::string&, const std::string&));
   MOCK_METHOD3(RequestAppAvailability,

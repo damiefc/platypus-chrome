@@ -6,7 +6,7 @@
 
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "content/public/test/browser_task_environment.h"
 #include "net/base/load_flags.h"
@@ -34,7 +34,6 @@ class FakeSharedURLLoaderFactory : public network::SharedURLLoaderFactory {
   // network::SharedURLLoaderFactory
   void CreateLoaderAndStart(
       mojo::PendingReceiver<network::mojom::URLLoader> receiver,
-      int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& url_request,

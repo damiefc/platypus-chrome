@@ -19,12 +19,12 @@
 #include "base/path_service.h"
 #include "base/process/process_metrics.h"
 #include "base/rand_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/common/content_constants_internal.h"
 #include "content/public/common/child_process_host_delegate.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "ipc/ipc.mojom.h"
@@ -100,7 +100,9 @@ base::FilePath ChildProcessHost::GetChildPath(int flags) {
 #if BUILDFLAG(ENABLE_PLUGINS)
     } else if (flags == CHILD_PLUGIN) {
       child_base_name += kMacHelperSuffix_plugin;
-#endif
+#endif  // ENABLE_PLUGINS
+    } else if (flags > CHILD_EMBEDDER_FIRST) {
+      return GetContentClient()->GetChildProcessPath(flags, child_path);
     } else {
       NOTREACHED();
     }
@@ -110,7 +112,7 @@ base::FilePath ChildProcessHost::GetChildPath(int flags) {
                      .Append("MacOS")
                      .Append(child_base_name);
   }
-#endif
+#endif  // OS_MAC
 
   return child_path;
 }
@@ -163,10 +165,10 @@ void ChildProcessHostImpl::BindReceiver(mojo::GenericPendingReceiver receiver) {
   child_process_->BindReceiver(std::move(receiver));
 }
 
-void ChildProcessHostImpl::RunService(
+void ChildProcessHostImpl::RunServiceDeprecated(
     const std::string& service_name,
-    mojo::PendingReceiver<service_manager::mojom::Service> receiver) {
-  child_process_->RunService(service_name, std::move(receiver));
+    mojo::ScopedMessagePipeHandle service_pipe) {
+  child_process_->RunServiceDeprecated(service_name, std::move(service_pipe));
 }
 
 void ChildProcessHostImpl::ForceShutdown() {

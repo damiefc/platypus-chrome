@@ -43,36 +43,33 @@ import org.chromium.base.compat.ApiHelperForO;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
-import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerHost;
+import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
-import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
 import org.chromium.chrome.browser.compositor.layouts.content.ContentOffsetProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
+import org.chromium.chrome.browser.layouts.components.VirtualView;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
+import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
-import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.chrome.browser.ui.TabObscuringHandler;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.widget.InsetObserverView;
-import org.chromium.components.content_capture.ContentCaptureConsumer;
-import org.chromium.components.content_capture.ContentCaptureConsumerImpl;
-import org.chromium.components.content_capture.ExperimentContentCaptureConsumer;
+import org.chromium.components.content_capture.OnscreenContentProvider;
 import org.chromium.components.embedder_support.view.ContentView;
+import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.UiUtils;
@@ -92,7 +89,7 @@ import java.util.Set;
  * This class holds a {@link CompositorView}. This level of indirection is needed to benefit from
  * the {@link android.view.ViewGroup#onInterceptTouchEvent(android.view.MotionEvent)} capability on
  * available on {@link android.view.ViewGroup}s.
- * This class also holds the {@link LayoutManager} responsible to describe the items to be
+ * This class also holds the {@link LayoutManagerImpl} responsible to describe the items to be
  * drawn by the UI compositor on the native side.
  */
 public class CompositorViewHolder extends FrameLayout
@@ -110,7 +107,7 @@ public class CompositorViewHolder extends FrameLayout
         /**
          * Initializes the {@link CompositorViewHolder} with the relevant content it needs to
          * properly show content on the screen.
-         * @param layoutManager             A {@link LayoutManager} instance.  This class is
+         * @param layoutManager             A {@link LayoutManagerImpl} instance.  This class is
          *                                  responsible for driving all high level screen content
          * and determines which {@link Layout} is shown when.
          * @param urlBar                    The {@link View} representing the URL bar (must be
@@ -119,7 +116,7 @@ public class CompositorViewHolder extends FrameLayout
          *                                  {@link Layout}s.
          * @param controlContainer          A {@link ControlContainer} instance to draw.
          */
-        void initializeCompositorContent(LayoutManager layoutManager, View urlBar,
+        void initializeCompositorContent(LayoutManagerImpl layoutManager, View urlBar,
                 ViewGroup contentContainer, ControlContainer controlContainer);
     }
 
@@ -148,7 +145,7 @@ public class CompositorViewHolder extends FrameLayout
     private boolean mIsKeyboardShowing;
 
     private final Invalidator mInvalidator = new Invalidator();
-    private LayoutManager mLayoutManager;
+    private LayoutManagerImpl mLayoutManager;
     private LayerTitleCache mLayerTitleCache;
     private CompositorView mCompositorView;
 
@@ -180,7 +177,8 @@ public class CompositorViewHolder extends FrameLayout
     private Runnable mSystemUiFullscreenResizeRunnable;
 
     /** The currently visible Tab. */
-    private Tab mTabVisible;
+    @VisibleForTesting
+    Tab mTabVisible;
 
     /** The currently attached View. */
     private View mView;
@@ -208,11 +206,14 @@ public class CompositorViewHolder extends FrameLayout
     private ApplicationViewportInsetSupplier mApplicationBottomInsetSupplier;
     private Callback<Integer> mViewportInsetObserver;
 
-    // Indicates if ContentCaptureConsumer should be created, we only try to create it once.
-    private boolean mShouldCreateContentCaptureConsumer = true;
-    // TODO: (crbug.com/1119663) Move consumers out of this class while support multiple consumers.
-    private ArrayList<ContentCaptureConsumer> mContentCaptureConsumers =
-            new ArrayList<ContentCaptureConsumer>();
+    /**
+     * Tracks whether geometrychange event is fired for the active tab when the keyboard
+     *  is shown/hidden. When active tab changes, this flag is reset so we can fire
+     *  geometrychange event for the new tab when the keyboard shows.
+     */
+    private boolean mHasKeyboardGeometryChangeFired;
+
+    private OnscreenContentProvider mOnscreenContentProvider;
 
     private Set<Runnable> mOnCompositorLayoutCallbacks = new HashSet<>();
     private Set<Runnable> mDidSwapFrameCallbacks = new HashSet<>();
@@ -223,6 +224,8 @@ public class CompositorViewHolder extends FrameLayout
      * active gesture, this is null.
      */
     private @Nullable MotionEvent mLastActiveTouchEvent;
+
+    private TopUiThemeColorProvider mTopUiThemeColorProvider;
 
     /**
      * This view is created on demand to display debugging information.
@@ -473,10 +476,10 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     /**
-     * @param layoutManager The {@link LayoutManager} instance that will be driving what
+     * @param layoutManager The {@link LayoutManagerImpl} instance that will be driving what
      *                      shows in this {@link CompositorViewHolder}.
      */
-    public void setLayoutManager(LayoutManager layoutManager) {
+    public void setLayoutManager(LayoutManagerImpl layoutManager) {
         mLayoutManager = layoutManager;
         onViewportChanged();
     }
@@ -503,6 +506,13 @@ public class CompositorViewHolder extends FrameLayout
             loader.registerResource(
                     R.id.control_container, mControlContainer.getToolbarResourceAdapter());
         }
+    }
+
+    /**
+     * @param themeColorProvider {@link ThemeColorProvider} for top UI part.
+     */
+    public void setTopUiThemeColorProvider(TopUiThemeColorProvider themeColorProvider) {
+        mTopUiThemeColorProvider = themeColorProvider;
     }
 
     /**
@@ -556,10 +566,7 @@ public class CompositorViewHolder extends FrameLayout
             mInsetObserverView.removeObserver(this);
             mInsetObserverView = null;
         }
-        for (ContentCaptureConsumer consumer : mContentCaptureConsumers) {
-            consumer.onWebContentsChanged(null);
-        }
-        mContentCaptureConsumers.clear();
+        if (mOnscreenContentProvider != null) mOnscreenContentProvider.destroy();
         if (mContentView != null) {
             mContentView.removeOnHierarchyChangeListener(this);
         }
@@ -572,15 +579,11 @@ public class CompositorViewHolder extends FrameLayout
             WindowAndroid windowAndroid, TabContentManager tabContentManager) {
         assert mLayerTitleCache == null : "Should be called once";
 
-        if (DeviceClassManager.enableLayerDecorationCache()) {
-            mLayerTitleCache = new LayerTitleCache(getContext());
-        }
-
         mCompositorView.initNativeCompositor(
-                SysUtils.isLowEndDevice(), windowAndroid, mLayerTitleCache, tabContentManager);
+                SysUtils.isLowEndDevice(), windowAndroid, tabContentManager);
 
-        if (mLayerTitleCache != null) {
-            mLayerTitleCache.setResourceManager(getResourceManager());
+        if (DeviceClassManager.enableLayerDecorationCache()) {
+            mLayerTitleCache = new LayerTitleCache(getContext(), getResourceManager());
         }
 
         if (mControlContainer != null) {
@@ -720,9 +723,9 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     /**
-     * @return The {@link LayoutManager} associated with this view.
+     * @return The {@link LayoutManagerImpl} associated with this view.
      */
-    public LayoutManager getLayoutManager() {
+    public LayoutManagerImpl getLayoutManager() {
         return mLayoutManager;
     }
 
@@ -784,7 +787,8 @@ public class CompositorViewHolder extends FrameLayout
      * @param w Width of the view.
      * @param h Height of the view.
      */
-    private void setSize(WebContents webContents, View view, int w, int h) {
+    @VisibleForTesting
+    void setSize(WebContents webContents, View view, int w, int h) {
         if (webContents == null || view == null) return;
 
         // When in VR, the CompositorView doesn't control the size of the WebContents.
@@ -802,7 +806,25 @@ public class CompositorViewHolder extends FrameLayout
                 : totalMinHeight;
 
         if (isAttachedToWindow(view)) {
+            // If overlay content flag is set and the keyboard is shown or hidden then resize the
+            // visual/layout viewports in WebContents to match the previous size so there
+            // isn't a change in size after the keyboard is raised or hidden.
+            // Also the geometrychange event should only fire to the foreground tab.
+            int keyboardHeight = 0;
+            boolean overlayContentForegroundTab = shouldVirtualKeyboardOverlayContent(webContents);
+            if (overlayContentForegroundTab) {
+                // During orientation changes, width of the |WebContents| changes to match the width
+                // of the screen and so does the keyboard. We fire geometrychange with the updated
+                // keyboard size as well as resize the viewport so the height resize doesn't affect
+                // the |WebContents|.
+                keyboardHeight = KeyboardVisibilityDelegate.getInstance().calculateKeyboardHeight(
+                        this.getRootView());
+                h += keyboardHeight;
+            }
             webContents.setSize(w, h - controlsHeight);
+            if (overlayContentForegroundTab) {
+                notifyVirtualKeyboardOverlayGeometryChangeEvent(w, keyboardHeight, webContents);
+            }
         } else {
             setSizeOfUnattachedView(view, webContents, controlsHeight);
             requestRender();
@@ -811,6 +833,51 @@ public class CompositorViewHolder extends FrameLayout
 
     private static boolean isAttachedToWindow(View view) {
         return view != null && view.getWindowToken() != null;
+    }
+
+    /**
+     * Returns true if the overlaycontent flag is set in the JS, else false.
+     * This determines whether to fire geometrychange event to JS for the current visible tab
+     * and also not resize the visual/layout viewports in response to keyboard visibility changes.
+     *
+     * @return Whether overlaycontent flag is set or not.
+     */
+    @VisibleForTesting
+    boolean shouldVirtualKeyboardOverlayContent(WebContents webContents) {
+        return webContents != null && mTabVisible != null
+                && mTabVisible.getWebContents() == webContents
+                && ImeAdapter.fromWebContents(webContents) != null
+                && ImeAdapter.fromWebContents(webContents).shouldVirtualKeyboardOverlayContent();
+    }
+
+    /**
+     * Notifies geometrychange event to JS.
+     * @param w  Width of the view.
+     * @param keyboardHeight Height of the keyboard.
+     * @param webContents Active WebContent for which this event needs to be fired.
+     */
+    private void notifyVirtualKeyboardOverlayGeometryChangeEvent(
+            int w, int keyboardHeight, WebContents webContents) {
+        assert shouldVirtualKeyboardOverlayContent(webContents);
+
+        boolean keyboardVisible = keyboardHeight > 0;
+        if (!keyboardVisible && !mHasKeyboardGeometryChangeFired) {
+            return;
+        }
+
+        mHasKeyboardGeometryChangeFired = keyboardVisible;
+        Rect appRect = new Rect();
+        getRootView().getWindowVisibleDisplayFrame(appRect);
+        if (keyboardVisible) {
+            // Fire geometrychange event to JS.
+            // The assumption here is that the keyboard is docked at the bottom so we use the
+            // root visible window frame's origin to calculate the position of the keyboard.
+            notifyVirtualKeyboardOverlayRect(
+                    webContents, appRect.left, appRect.top, w, keyboardHeight);
+        } else {
+            // Keyboard has hidden.
+            notifyVirtualKeyboardOverlayRect(webContents, 0, 0, 0, 0);
+        }
     }
 
     @Override
@@ -830,6 +897,22 @@ public class CompositorViewHolder extends FrameLayout
     private void onControlsResizeViewChanged(WebContents webContents, boolean controlsResizeView) {
         if (webContents != null && mCompositorView != null) {
             mCompositorView.onControlsResizeViewChanged(webContents, controlsResizeView);
+        }
+    }
+
+    /**
+     * Fires geometrychange event to JS with the keyboard size.
+     * @param webContents Active WebContent for which this event needs to be fired.
+     * @param x When the keyboard is shown, it has the left position of the app's rect, else, 0.
+     * @param y When the keyboard is shown, it has the top position of the app's rect, else, 0.
+     * @param width  When the keyboard is shown, it has the width of the view, else, 0.
+     * @param height The height of the keyboard.
+     */
+    @VisibleForTesting
+    void notifyVirtualKeyboardOverlayRect(
+            WebContents webContents, int x, int y, int width, int height) {
+        if (mCompositorView != null) {
+            mCompositorView.notifyVirtualKeyboardOverlayRect(webContents, x, y, width, height);
         }
     }
 
@@ -1168,7 +1251,7 @@ public class CompositorViewHolder extends FrameLayout
     public int getBrowserControlsBackgroundColor(Resources res) {
         return mTabVisible == null
                 ? ApiCompatibilityUtils.getColor(res, R.color.toolbar_background_primary)
-                : ToolbarColors.getToolbarSceneLayerBackground(mTabVisible);
+                : mTopUiThemeColorProvider.getSceneLayerBackground(mTabVisible);
     }
 
     @Override
@@ -1240,20 +1323,16 @@ public class CompositorViewHolder extends FrameLayout
      * @param tabModelSelector        The {@link TabModelSelector} this View should hold and
      *                                represent.
      * @param tabCreatorManager       The {@link TabCreatorManager} for this view.
-     * @param contextualSearchManager A {@link ContextualSearchManagementDelegate} instance.
-     * @param tabProvider             A means of acquiring the active tab.
      */
-    public void onFinishNativeInitialization(TabModelSelector tabModelSelector,
-            TabCreatorManager tabCreatorManager,
-            ContextualSearchManagementDelegate contextualSearchManager,
-            ActivityTabProvider tabProvider) {
+    public void onFinishNativeInitialization(
+            TabModelSelector tabModelSelector, TabCreatorManager tabCreatorManager) {
         assert mLayoutManager != null;
         mLayoutManager.init(tabModelSelector, tabCreatorManager, mControlContainer,
-                contextualSearchManager,
-                mCompositorView.getResourceManager().getDynamicResourceLoader(), tabProvider);
+                mCompositorView.getResourceManager().getDynamicResourceLoader(),
+                mTopUiThemeColorProvider);
 
         mTabModelSelector = tabModelSelector;
-        tabModelSelector.addObserver(new EmptyTabModelSelectorObserver() {
+        tabModelSelector.addObserver(new TabModelSelectorObserver() {
             @Override
             public void onChange() {
                 onContentChanged();
@@ -1329,6 +1408,8 @@ public class CompositorViewHolder extends FrameLayout
         updateContentOverlayVisibility(false);
 
         if (mTabVisible != tab) {
+            // Reset the geometrychange event flag so it can fire on the current active tab.
+            mHasKeyboardGeometryChangeFired = false;
             if (mTabVisible != null) mTabVisible.removeObserver(mTabObserver);
             if (tab != null) {
                 tab.addObserver(mTabObserver);
@@ -1344,20 +1425,11 @@ public class CompositorViewHolder extends FrameLayout
 
         if (mTabVisible != null) initializeTab(mTabVisible);
 
-        if (mShouldCreateContentCaptureConsumer) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ContentCaptureConsumer consumer =
-                        ContentCaptureConsumerImpl.create(getContext(), this, getWebContents());
-                if (consumer != null) mContentCaptureConsumers.add(consumer);
-            }
-            ContentCaptureConsumer consumer =
-                    ExperimentContentCaptureConsumer.create(getWebContents());
-            if (consumer != null) mContentCaptureConsumers.add(consumer);
-            mShouldCreateContentCaptureConsumer = false;
+        if (mOnscreenContentProvider == null) {
+            mOnscreenContentProvider =
+                    new OnscreenContentProvider(getContext(), this, getWebContents());
         } else {
-            for (ContentCaptureConsumer consumer : mContentCaptureConsumers) {
-                consumer.onWebContentsChanged(getWebContents());
-            }
+            mOnscreenContentProvider.onWebContentsChanged(getWebContents());
         }
     }
 
@@ -1417,6 +1489,11 @@ public class CompositorViewHolder extends FrameLayout
 
     @Override
     public TitleCache getTitleCache() {
+        return mLayerTitleCache;
+    }
+
+    /** @return A cache responsible for title textures. */
+    public LayerTitleCache getLayerTitleCache() {
         return mLayerTitleCache;
     }
 
@@ -1534,7 +1611,7 @@ public class CompositorViewHolder extends FrameLayout
                 int virtualViewId, int action, Bundle arguments) {
             switch (action) {
                 case AccessibilityNodeInfoCompat.ACTION_CLICK:
-                    mVirtualViews.get(virtualViewId).handleClick(LayoutManager.time());
+                    mVirtualViews.get(virtualViewId).handleClick(LayoutManagerImpl.time());
                     return true;
             }
 

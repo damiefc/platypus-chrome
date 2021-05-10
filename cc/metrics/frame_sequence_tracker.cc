@@ -60,8 +60,8 @@ const char* FrameSequenceTracker::GetFrameSequenceTrackerTypeName(
       return "ScrollbarScroll";
     case FrameSequenceTrackerType::kCustom:
       return "Custom";
-    case FrameSequenceTrackerType::kCanvas:
-      return "Canvas";
+    case FrameSequenceTrackerType::kCanvasAnimation:
+      return "CanvasAnimation";
     case FrameSequenceTrackerType::kJSAnimation:
       return "JSAnimation";
     case FrameSequenceTrackerType::kMaxType:
@@ -78,6 +78,11 @@ FrameSequenceTracker::FrameSequenceTracker(
                                                  throughput_ukm_reporter)) {
   DCHECK_LT(type, FrameSequenceTrackerType::kMaxType);
   DCHECK(type != FrameSequenceTrackerType::kCustom);
+  // TODO(crbug.com/1158439): remove the trace event once the validation is
+  // completed.
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
+      "cc,benchmark", "TrackerValidation", TRACE_ID_LOCAL(this),
+      base::TimeTicks::Now(), "name", GetFrameSequenceTrackerTypeName(type));
 }
 
 FrameSequenceTracker::FrameSequenceTracker(
@@ -92,6 +97,9 @@ FrameSequenceTracker::FrameSequenceTracker(
 }
 
 FrameSequenceTracker::~FrameSequenceTracker() {
+  TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
+      "cc,benchmark", "TrackerValidation", TRACE_ID_LOCAL(this),
+      base::TimeTicks::Now());
   CleanUp();
 }
 
@@ -134,7 +142,8 @@ void FrameSequenceTracker::ReportBeginImplFrame(
   DCHECK(!compositor_frame_submitted_) << TRACKER_DCHECK_MSG;
 
   UpdateTrackedFrameData(&begin_impl_frame_data_, args.frame_id.source_id,
-                         args.frame_id.sequence_number);
+                         args.frame_id.sequence_number,
+                         args.frames_throttled_since_last);
   impl_throughput().frames_expected +=
       begin_impl_frame_data_.previous_sequence_delta;
 #if DCHECK_IS_ON()
@@ -180,7 +189,8 @@ void FrameSequenceTracker::ReportBeginMainFrame(
   awaiting_main_response_sequence_ = args.frame_id.sequence_number;
 
   UpdateTrackedFrameData(&begin_main_frame_data_, args.frame_id.source_id,
-                         args.frame_id.sequence_number);
+                         args.frame_id.sequence_number,
+                         args.frames_throttled_since_last);
   if (!first_received_main_sequence_ ||
       first_received_main_sequence_ <= last_no_main_damage_sequence_) {
     first_received_main_sequence_ = args.frame_id.sequence_number;
@@ -276,6 +286,9 @@ void FrameSequenceTracker::ReportSubmitFrame(
 
   TRACKER_TRACE_STREAM << "s(" << frame_token % kDebugStrMod << ")";
   had_impl_frame_submitted_between_commits_ = true;
+  metrics()->NotifySubmitForJankReporter(
+      FrameSequenceMetrics::ThreadType::kCompositor, frame_token,
+      ack.frame_id.sequence_number);
 
   const bool main_changes_after_sequence_started =
       first_received_main_sequence_ &&
@@ -298,6 +311,9 @@ void FrameSequenceTracker::ReportSubmitFrame(
                            << origin_args.frame_id.sequence_number %
                                   kDebugStrMod
                            << ")";
+      metrics()->NotifySubmitForJankReporter(
+          FrameSequenceMetrics::ThreadType::kMain, frame_token,
+          origin_args.frame_id.sequence_number);
 
       last_submitted_main_sequence_ = origin_args.frame_id.sequence_number;
       main_frames_.push_back(frame_token);
@@ -358,6 +374,9 @@ void FrameSequenceTracker::ReportFrameEnd(
               impl_throughput().frames_ontime)
         << TRACKER_DCHECK_MSG;
     --impl_throughput().frames_expected;
+    metrics()->NotifyNoUpdateForJankReporter(
+        FrameSequenceMetrics::ThreadType::kCompositor,
+        args.frame_id.sequence_number, args.interval);
 #if DCHECK_IS_ON()
     ++impl_throughput().frames_processed;
     // If these two are the same, it means that each impl frame is either
@@ -432,13 +451,12 @@ void FrameSequenceTracker::ReportFramePresented(
   uint32_t impl_frames_ontime = 0;
   uint32_t main_frames_ontime = 0;
 
-  const auto& vsync_interval =
+  const auto vsync_interval =
       (feedback.interval.is_zero() ? viz::BeginFrameArgs::DefaultInterval()
-                                   : feedback.interval) *
-      1.5;
+                                   : feedback.interval);
   DCHECK(!vsync_interval.is_zero()) << TRACKER_DCHECK_MSG;
   base::TimeTicks safe_deadline_for_frame =
-      last_frame_presentation_timestamp_ + vsync_interval;
+      last_frame_presentation_timestamp_ + vsync_interval * 1.5;
 
   const bool was_presented = !feedback.failed();
   if (was_presented && submitted_frame_since_last_presentation) {
@@ -461,7 +479,7 @@ void FrameSequenceTracker::ReportFramePresented(
     }
 
     metrics()->ComputeJank(FrameSequenceMetrics::ThreadType::kCompositor,
-                           feedback.timestamp, feedback.interval);
+                           frame_token, feedback.timestamp, vsync_interval);
   }
 
   if (was_presented) {
@@ -483,7 +501,7 @@ void FrameSequenceTracker::ReportFramePresented(
       }
 
       metrics()->ComputeJank(FrameSequenceMetrics::ThreadType::kMain,
-                             feedback.timestamp, feedback.interval);
+                             frame_token, feedback.timestamp, vsync_interval);
     }
     if (main_frames_.size() < size_before_erase) {
       if (!last_frame_presentation_timestamp_.is_null() &&
@@ -598,6 +616,10 @@ void FrameSequenceTracker::ReportMainFrameCausedNoDamage(
       << TRACKER_DCHECK_MSG;
   last_no_main_damage_sequence_ = args.frame_id.sequence_number;
   --main_throughput().frames_expected;
+  metrics()->NotifyNoUpdateForJankReporter(
+      FrameSequenceMetrics::ThreadType::kMain, args.frame_id.sequence_number,
+      args.interval);
+
   DCHECK_GE(main_throughput().frames_expected, main_frames_.size())
       << TRACKER_DCHECK_MSG;
 
@@ -619,12 +641,15 @@ void FrameSequenceTracker::PauseFrameProduction() {
   reset_all_state_ = true;
 }
 
-void FrameSequenceTracker::UpdateTrackedFrameData(TrackedFrameData* frame_data,
-                                                  uint64_t source_id,
-                                                  uint64_t sequence_number) {
+void FrameSequenceTracker::UpdateTrackedFrameData(
+    TrackedFrameData* frame_data,
+    uint64_t source_id,
+    uint64_t sequence_number,
+    uint64_t throttled_frame_count) {
   if (frame_data->previous_sequence &&
       frame_data->previous_source == source_id) {
-    uint32_t current_latency = sequence_number - frame_data->previous_sequence;
+    uint32_t current_latency =
+        sequence_number - frame_data->previous_sequence - throttled_frame_count;
     DCHECK_GT(current_latency, 0u) << TRACKER_DCHECK_MSG;
     frame_data->previous_sequence_delta = current_latency;
   } else {

@@ -236,7 +236,7 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager,
     if (job_details->type() == ::printing::JobEventDetails::DOC_DONE) {
       const ::printing::PrintedDocument* document = job_details->document();
       DCHECK(document);
-      base::string16 title =
+      std::u16string title =
           ::printing::SimplifyDocumentTitle(document->name());
       if (title.empty()) {
         title = ::printing::SimplifyDocumentTitle(
@@ -249,16 +249,15 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager,
     }
   }
 
- private:
-  // Begin monitoring a print job for a given |printer_name| with the given
+  // Begin monitoring a print job for a given |printer_id| with the given
   // |title| with the pages |total_page_number|.
-  bool CreatePrintJob(const std::string& printer_name,
+  bool CreatePrintJob(const std::string& printer_id,
                       const std::string& title,
                       int job_id,
                       int total_page_number,
                       ::printing::PrintJob::Source source,
                       const std::string& source_id,
-                      const printing::proto::PrintSettings& settings) {
+                      const printing::proto::PrintSettings& settings) override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
     Profile* profile = ProfileManager::GetPrimaryUserProfile();
@@ -274,19 +273,13 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager,
       return false;
     }
 
-    base::Optional<Printer> printer = manager->GetPrinter(printer_name);
+    base::Optional<Printer> printer = manager->GetPrinter(printer_id);
     if (!printer) {
       LOG(WARNING)
           << "Printer was removed while job was in progress.  It cannot "
              "be tracked";
       return false;
     }
-
-    // Records the number of jobs we're currently tracking when a new job is
-    // started.  This is equivalent to print queue size in the current
-    // implementation.
-    UMA_HISTOGRAM_EXACT_LINEAR("Printing.CUPS.PrintJobsQueued", jobs_.size(),
-                               20);
 
     // Create a new print job.
     auto cpj = std::make_unique<CupsPrintJob>(*printer, job_id, title,
@@ -312,6 +305,7 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager,
     return true;
   }
 
+ private:
   void FinishPrintJob(CupsPrintJob* job) {
     // Copy job_id and printer_id.  |job| is about to be freed.
     const int job_id = job->job_id();
@@ -470,7 +464,7 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager,
         NotifyJobDone(job);
         break;
       case State::STATE_ERROR:
-        NotifyJobFailed(job);
+        NotifyJobUpdated(job);
         break;
     }
   }

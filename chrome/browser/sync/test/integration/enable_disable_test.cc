@@ -7,7 +7,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -31,7 +31,6 @@ using syncer::ModelTypeFromString;
 using syncer::ModelTypeSet;
 using syncer::ModelTypeToString;
 using syncer::ProxyTypes;
-using syncer::SyncPrefs;
 using syncer::SyncUserSettings;
 using syncer::UserSelectableType;
 using syncer::UserSelectableTypeSet;
@@ -127,7 +126,7 @@ class EnableDisableSingleClientTest : public SyncTest {
       ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
     }
 
-    registered_data_types_ = GetSyncService(0)->GetRegisteredDataTypes();
+    registered_data_types_ = GetSyncService(0)->GetRegisteredDataTypesForTest();
     multi_grouped_types_ = MultiGroupTypes(registered_data_types_);
     registered_selectable_types_ = GetRegisteredSelectableTypes(0);
   }
@@ -154,13 +153,7 @@ class EnableDisableSingleClientTest : public SyncTest {
   DISALLOW_COPY_AND_ASSIGN(EnableDisableSingleClientTest);
 };
 
-// Flakiness spike on Windows, see crbug.com/1111227.
-#if defined(OS_WIN)
-#define MAYBE_EnableOneAtATime DISABLED_EnableOneAtATime
-#else
-#define MAYBE_EnableOneAtATime EnableOneAtATime
-#endif
-IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, MAYBE_EnableOneAtATime) {
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableOneAtATime) {
   // Setup sync with no enabled types.
   SetupTest(/*all_types_enabled=*/false);
 
@@ -195,13 +188,7 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, MAYBE_EnableOneAtATime) {
   }
 }
 
-// Flakiness spike on Windows, see crbug.com/1111227.
-#if defined(OS_WIN)
-#define MAYBE_DisableOneAtATime DISABLED_DisableOneAtATime
-#else
-#define MAYBE_DisableOneAtATime DisableOneAtATime
-#endif
-IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, MAYBE_DisableOneAtATime) {
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, DisableOneAtATime) {
   // Setup sync with no disabled types.
   SetupTest(/*all_types_enabled=*/true);
 
@@ -228,14 +215,8 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, MAYBE_DisableOneAtATime) {
   }
 }
 
-// Flakiness spike on Windows, see crbug.com/1111227.
-#if defined(OS_WIN)
-#define MAYBE_FastEnableDisableOneAtATime DISABLED_FastEnableDisableOneAtATime
-#else
-#define MAYBE_FastEnableDisableOneAtATime FastEnableDisableOneAtATime
-#endif
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
-                       MAYBE_FastEnableDisableOneAtATime) {
+                       FastEnableDisableOneAtATime) {
   // Setup sync with no enabled types.
   SetupTest(/*all_types_enabled=*/false);
 
@@ -266,14 +247,8 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
   }
 }
 
-// Flakiness spike on Windows, see crbug.com/1111227.
-#if defined(OS_WIN)
-#define MAYBE_FastDisableEnableOneAtATime DISABLED_FastDisableEnableOneAtATime
-#else
-#define MAYBE_FastDisableEnableOneAtATime FastDisableEnableOneAtATime
-#endif
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
-                       MAYBE_FastDisableEnableOneAtATime) {
+                       FastDisableEnableOneAtATime) {
   // Setup sync with no disabled types.
   SetupTest(/*all_types_enabled=*/true);
 
@@ -296,16 +271,8 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
   }
 }
 
-// Flakiness spike on Windows, see crbug.com/1111227.
-#if defined(OS_WIN)
-#define MAYBE_FastEnableDisableEnableOneAtATime \
-  DISABLED_FastEnableDisableEnableOneAtATime
-#else
-#define MAYBE_FastEnableDisableEnableOneAtATime \
-  FastEnableDisableEnableOneAtATime
-#endif
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
-                       MAYBE_FastEnableDisableEnableOneAtATime) {
+                       FastEnableDisableEnableOneAtATime) {
   // Setup sync with no enabled types.
   SetupTest(/*all_types_enabled=*/false);
 
@@ -364,15 +331,7 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableAndRestart) {
   }
 }
 
-// Flakiness spike on Windows, see crbug.com/1111227.
-#if defined(OS_WIN)
-#define MAYBE_FastEnableDisableEnable DISABLED_FastEnableDisableEnable
-#else
-#define MAYBE_FastEnableDisableEnable FastEnableDisableEnable
-#endif
-
-IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
-                       MAYBE_FastEnableDisableEnable) {
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, FastEnableDisableEnable) {
   SetupTest(/*all_types_enabled=*/false);
 
   // Enable all, and then disable+reenable immediately afterwards, before
@@ -390,10 +349,10 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
   }
 }
 
-// This test makes sure that after a RequestStop(CLEAR_DATA), Sync data gets
-// redownloaded when Sync is started again. This does not actually verify that
-// the data is gone from disk (which seems infeasible); it's mostly here as a
-// baseline for the following tests.
+// This test makes sure that after a StopAndClear(), Sync data gets redownloaded
+// when Sync is started again. This does not actually verify that the data is
+// gone from disk (which seems infeasible); it's mostly here as a baseline for
+// the following tests.
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
                        RedownloadsAfterClearData) {
   ASSERT_TRUE(SetupClients());
@@ -424,15 +383,8 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
   EXPECT_EQ(GetNumUpdatesDownloadedInLastCycle(), initial_updates_downloaded);
 }
 
-// Flakiness spike on Windows, see crbug.com/1111227.
-#if defined(OS_WIN)
-#define MAYBE_DoesNotRedownloadAfterKeepData \
-  DISABLED_DoesNotRedownloadAfterKeepData
-#else
-#define MAYBE_DoesNotRedownloadAfterKeepData DoesNotRedownloadAfterKeepData
-#endif
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
-                       MAYBE_DoesNotRedownloadAfterKeepData) {
+                       DoesNotRedownloadAfterKeepData) {
   ASSERT_TRUE(SetupClients());
   ASSERT_FALSE(bookmarks_helper::GetBookmarkModel(0)->IsBookmarked(
       GURL(kSyncedBookmarkURL)));
@@ -473,21 +425,24 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
                                          /*REMOTE_INITIAL_UPDATE=*/5));
 }
 
-IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, ClearsPrefsIfClearData) {
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, ResetsPrefsIfClearData) {
   SetupTest(/*all_types_enabled=*/true);
 
-  SyncPrefs prefs(GetProfile(0)->GetPrefs());
-  ASSERT_NE("", prefs.GetCacheGuid());
+  syncer::SyncTransportDataPrefs prefs(GetProfile(0)->GetPrefs());
+  const std::string first_cache_guid = prefs.GetCacheGuid();
+  ASSERT_NE("", first_cache_guid);
 
   GetClient(0)->StopSyncServiceAndClearData();
-  EXPECT_EQ("", prefs.GetCacheGuid());
+  // Sync should have restarted in transport mode, creating a new cache GUID.
+  EXPECT_NE("", prefs.GetCacheGuid());
+  EXPECT_NE(first_cache_guid, prefs.GetCacheGuid());
 }
 
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
                        DoesNotClearPrefsWithKeepData) {
   SetupTest(/*all_types_enabled=*/true);
 
-  SyncPrefs prefs(GetProfile(0)->GetPrefs());
+  syncer::SyncTransportDataPrefs prefs(GetProfile(0)->GetPrefs());
   const std::string cache_guid = prefs.GetCacheGuid();
   ASSERT_NE("", cache_guid);
 
@@ -520,7 +475,7 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientSelfNotifyTest,
 
   SetupTest(/*all_types_enabled=*/true);
 
-  SyncPrefs prefs(GetProfile(0)->GetPrefs());
+  syncer::SyncTransportDataPrefs prefs(GetProfile(0)->GetPrefs());
   EXPECT_EQ(bag_of_chips.SerializeAsString(), prefs.GetBagOfChips());
 
   sync_pb::ClientToServerMessage message = TriggerGetUpdatesCycleAndWait();
@@ -531,7 +486,7 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientSelfNotifyTest,
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientSelfNotifyTest,
                        ResendsBagOfChips) {
   ASSERT_TRUE(SetupClients());
-  SyncPrefs prefs(GetProfile(0)->GetPrefs());
+  syncer::SyncTransportDataPrefs prefs(GetProfile(0)->GetPrefs());
   ASSERT_NE("", prefs.GetBagOfChips());
   ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
 

@@ -10,6 +10,8 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuClickHandler;
 import org.chromium.chrome.browser.ui.appmenu.CustomViewBinder;
@@ -27,13 +29,14 @@ class DividerLineMenuItemViewBinder implements CustomViewBinder {
 
     @Override
     public int getItemViewType(int id) {
-        return id == R.id.divider_line_id ? DIVIDER_LINE_ITEM_VIEW_TYPE
-                                          : CustomViewBinder.NOT_HANDLED;
+        return (id == R.id.divider_line_id) ? DIVIDER_LINE_ITEM_VIEW_TYPE
+                                            : CustomViewBinder.NOT_HANDLED;
     }
 
     @Override
-    public View getView(MenuItem item, View convertView, ViewGroup parent, LayoutInflater inflater,
-            AppMenuClickHandler appMenuClickHandler) {
+    public View getView(MenuItem item, @Nullable View convertView, ViewGroup parent,
+            LayoutInflater inflater, AppMenuClickHandler appMenuClickHandler,
+            @Nullable Integer highlightedItemId) {
         assert item.getItemId() == R.id.divider_line_id;
 
         if (convertView == null) {

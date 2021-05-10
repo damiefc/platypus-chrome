@@ -71,6 +71,11 @@ public final class EventConstants {
     public static final String PREVIEWS_PAGE_LOADED = "preview_page_load";
 
     /**
+     * Add to homescreen events.
+     */
+    public static final String ADD_TO_HOMESCREEN_DIALOG_SHOWN = "add_to_homescreen_dialog_shown";
+
+    /**
      * Contextual Search panel was opened.
      */
     public static final String CONTEXTUAL_SEARCH_PANEL_OPENED = "contextual_search_panel_opened";
@@ -120,6 +125,12 @@ public final class EventConstants {
      */
     public static final String CONTEXTUAL_SEARCH_TAPPED_BUT_SHOULD_LONGPRESS =
             "contextual_search_tapped_but_should_longpress";
+
+    /**
+     * Contextual Search acknowledged the suggestion that they should longpress instead of tap.
+     */
+    public static final String CONTEXTUAL_SEARCH_ACKNOWLEDGED_IN_PANEL_HELP =
+            "contextual_search_acknowledged_in_panel_help";
 
     /**
      * Contextual Search user fully enabled access to page content through the opt-in.
@@ -173,22 +184,62 @@ public final class EventConstants {
     public static final String EPHEMERAL_TAB_USED = "ephemeral_tab_used";
 
     /** HomepagePromo has been accepted. */
-    public static final String HOMEPAGE_PROMO_ACCEPTED = "homepage_promo_accepted";
-    public static final String HOMEPAGE_PROMO_SEEN = "homepage_promo_seen";
     public static final String NTP_SHOWN = "ntp_shown";
     public static final String NTP_HOME_BUTTON_CLICKED = "ntp_homebutton_clicked";
 
+    public static final String TAB_SWITCHER_BUTTON_CLICKED = "tab_switcher_button_clicked";
+
+    /** Read later related events. */
+    public static final String APP_MENU_BOOKMARK_STAR_ICON_PRESSED =
+            "app_menu_bookmark_star_icon_pressed";
+    public static final String READ_LATER_CONTEXT_MENU_TAPPED = "read_later_context_menu_tapped";
+    public static final String READ_LATER_ARTICLE_SAVED = "read_later_article_saved";
+    public static final String READ_LATER_BOTTOM_SHEET_FOLDER_SEEN =
+            "read_later_bottom_sheet_folder_seen";
+    public static final String READ_LATER_BOOKMARK_FOLDER_OPENED =
+            "read_later_bookmark_folder_opened";
+
     /** Video tutorial related events. */
+    public static final String VIDEO_TUTORIAL_DISMISSED_SUMMARY =
+            "video_tutorial_iph_dismissed_summary";
+    public static final String VIDEO_TUTORIAL_DISMISSED_CHROME_INTRO =
+            "video_tutorial_iph_dismissed_chrome_intro";
     public static final String VIDEO_TUTORIAL_DISMISSED_DOWNLOAD =
             "video_tutorial_iph_dismissed_download";
     public static final String VIDEO_TUTORIAL_DISMISSED_SEARCH =
             "video_tutorial_iph_dismissed_search";
+    public static final String VIDEO_TUTORIAL_DISMISSED_VOICE_SEARCH =
+            "video_tutorial_iph_dismissed_voice_search";
+    public static final String VIDEO_TUTORIAL_CLICKED_SUMMARY =
+            "video_tutorial_iph_clicked_summary";
+    public static final String VIDEO_TUTORIAL_CLICKED_CHROME_INTRO =
+            "video_tutorial_iph_clicked_chrome_intro";
     public static final String VIDEO_TUTORIAL_CLICKED_DOWNLOAD =
             "video_tutorial_iph_clicked_download";
     public static final String VIDEO_TUTORIAL_CLICKED_SEARCH = "video_tutorial_iph_clicked_search";
+    public static final String VIDEO_TUTORIAL_CLICKED_VOICE_SEARCH =
+            "video_tutorial_iph_clicked_voice_search";
 
     /** Reengagement events. */
     public static final String STARTED_FROM_MAIN_INTENT = "started_from_main_intent";
+
+    /** PWA install events. */
+    public static final String PWA_INSTALL_MENU_SELECTED = "pwa_install_menu_clicked";
+
+    /** PageInfo events. */
+    public static final String PAGE_INFO_OPENED = "page_info_opened";
+
+    /** Permission events. */
+    public static final String PERMISSION_REQUEST_SHOWN = "permission_request_shown";
+
+    /** Screenshot events */
+    public static final String SHARE_SCREENSHOT_SELECTED = "share_screenshot_clicked";
+
+    /** Mic toolbar IPH event */
+    public static final String SUCCESSFUL_VOICE_SEARCH = "successful_voice_search";
+
+    /** WebFeed events. */
+    public static final String WEB_FEED_FOLLOW_INTRO_CLICKED = "web_feed_follow_intro_clicked";
 
     /**
      * Do not instantiate.

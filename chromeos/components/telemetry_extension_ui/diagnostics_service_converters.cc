@@ -6,7 +6,8 @@
 
 #include "base/notreached.h"
 #include "base/optional.h"
-#include "chrome/browser/chromeos/wilco_dtc_supportd/mojo_utils.h"
+#include "base/strings/string_piece.h"
+#include "chrome/browser/ash/wilco_dtc_supportd/mojo_utils.h"
 #include "chromeos/components/telemetry_extension_ui/convert_ptr.h"
 #include "chromeos/components/telemetry_extension_ui/mojom/diagnostics_service.mojom.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_diagnostics.mojom.h"
@@ -20,9 +21,8 @@ namespace {
 
 std::string GetStringFromMojoHandle(mojo::ScopedHandle handle) {
   base::ReadOnlySharedMemoryMapping shared_memory;
-  return MojoUtils::GetStringPieceFromMojoHandle(std::move(handle),
-                                                 &shared_memory)
-      .as_string();
+  return std::string(MojoUtils::GetStringPieceFromMojoHandle(std::move(handle),
+                                                             &shared_memory));
 }
 
 }  // namespace
@@ -154,6 +154,8 @@ health::mojom::DiagnosticRoutineStatusEnum Convert(
       return health::mojom::DiagnosticRoutineStatusEnum::kCancelling;
     case cros_healthd::mojom::DiagnosticRoutineStatusEnum::kUnsupported:
       return health::mojom::DiagnosticRoutineStatusEnum::kUnsupported;
+    case cros_healthd::mojom::DiagnosticRoutineStatusEnum::kNotRun:
+      return health::mojom::DiagnosticRoutineStatusEnum::kNotRun;
   }
   NOTREACHED();
   return static_cast<health::mojom::DiagnosticRoutineStatusEnum>(

@@ -18,22 +18,60 @@ const base::Feature kWebViewBrotliSupport{"WebViewBrotliSupport",
 const base::Feature kWebViewConnectionlessSafeBrowsing{
     "WebViewConnectionlessSafeBrowsing", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Restricts WebView child processes to use only LITTLE cores on big.LITTLE
+// architectures.
+const base::Feature kWebViewCpuAffinityRestrictToLittleCores{
+    "WebViewCpuAffinityRestrictToLittleCores",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enable display cutout support for Android P and above.
 const base::Feature kWebViewDisplayCutout{"WebViewDisplayCutout",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Only allow extra headers added via loadUrl() to be sent to the original
-// domain (eTLD+1); strip them from the request if a cross-domain redirect
-// occurs. kWebViewExtraHeadersSameOriginOnly is stricter; when that's enabled,
-// this feature has no effect.
-const base::Feature kWebViewExtraHeadersSameDomainOnly{
-    "WebViewExtraHeadersSameDomainOnly", base::FEATURE_DISABLED_BY_DEFAULT};
+// When enabled, passive mixed content (Audio/Video/Image subresources loaded
+// over HTTP on HTTPS sites) will be autoupgraded to HTTPS, and the load will be
+// blocked if the resource fails to load over HTTPS. This only affects apps that
+// set the mixed content mode to MIXED_CONTENT_COMPATIBILITY_MODE, autoupgrades
+// are always disabled for MIXED_CONTENT_NEVER_ALLOW and
+// MIXED_CONTENT_ALWAYS_ALLOW modes.
+const base::Feature kWebViewMixedContentAutoupgrades{
+    "WebViewMixedContentAutoupgrades", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Only allow extra headers added via loadUrl() to be sent to the original
 // origin; strip them from the request if a cross-origin redirect occurs.
-// When this is enabled, kWebViewExtraHeadersSameDomainOnly has no effect.
 const base::Feature kWebViewExtraHeadersSameOriginOnly{
     "WebViewExtraHeadersSameOriginOnly", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable the new Java/JS Bridge code path with mojo implementation.
+const base::Feature kWebViewJavaJsBridgeMojo{"WebViewJavaJsBridgeMojo",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Measure the number of pixels occupied by one or more WebViews as a
+// proportion of the total screen size. Depending on the number of
+// WebVieaws and the size of the screen this might be expensive so
+// hidden behind a feature flag until the true runtime cost can be
+// measured.
+const base::Feature kWebViewMeasureScreenCoverage{
+    "WebViewMeasureScreenCoverage", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Field trial feature for controlling support of Origin Trials on WebView.
+const base::Feature kWebViewOriginTrials{"WebViewOriginTrials",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables package name logging for the most popular WebView embedders.
+const base::Feature kWebViewPackageNameLogging{
+    "WebViewPackageNameLogging", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Restricts all of WebView's out-of-process renderer threads to use only LITTLE
+// cores on big.LITTLE architectures when the power mode is idle.
+const base::Feature kWebViewPowerSchedulerThrottleIdle{
+    "WebViewPowerSchedulerThrottleIdle", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Disallows window.{alert, prompt, confirm} if triggered inside a subframe that
+// is not same origin with the main frame.
+const base::Feature kWebViewSuppressDifferentOriginSubframeJSDialogs{
+    "WebViewSuppressDifferentOriginSubframeJSDialogs",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // A Feature used for WebView variations tests. Not used in production.
 const base::Feature kWebViewTestFeature{"WebViewTestFeature",

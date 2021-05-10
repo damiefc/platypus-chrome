@@ -4,10 +4,10 @@
 
 #include "components/autofill_assistant/browser/actions/collect_user_data_action.h"
 
+#include <string>
 #include <utility>
 
 #include "base/guid.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/gmock_callback_support.h"
@@ -17,8 +17,11 @@
 #include "components/autofill_assistant/browser/actions/mock_action_delegate.h"
 #include "components/autofill_assistant/browser/mock_personal_data_manager.h"
 #include "components/autofill_assistant/browser/mock_website_login_manager.h"
+#include "components/autofill_assistant/browser/test_util.h"
 #include "components/autofill_assistant/browser/user_model.h"
 #include "components/strings/grit/components_strings.h"
+#include "content/public/test/browser_task_environment.h"
+#include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -41,13 +44,6 @@ void SetDateProto(DateProto* proto, int year, int month, int day) {
   proto->set_day(day);
 }
 
-MATCHER_P(EqualsProto, message, "") {
-  std::string expected_serialized, actual_serialized;
-  message.SerializeToString(&expected_serialized);
-  arg.SerializeToString(&actual_serialized);
-  return expected_serialized == actual_serialized;
-}
-
 using ::base::test::RunOnceCallback;
 using ::testing::_;
 using ::testing::ElementsAre;
@@ -60,10 +56,13 @@ using ::testing::SizeIs;
 using ::testing::StrEq;
 using ::testing::UnorderedElementsAre;
 
-class CollectUserDataActionTest : public content::RenderViewHostTestHarness {
+class CollectUserDataActionTest : public testing::Test {
  public:
   void SetUp() override {
-    RenderViewHostTestHarness::SetUp();
+    web_contents_ = content::WebContentsTester::CreateTestWebContents(
+        &browser_context_, nullptr);
+    content::WebContentsTester::For(web_contents_.get())
+        ->SetLastCommittedURL(GURL(kFakeUrl));
 
     ON_CALL(mock_action_delegate_, GetPersonalDataManager)
         .WillByDefault(Return(&mock_personal_data_manager_));
@@ -84,21 +83,21 @@ class CollectUserDataActionTest : public content::RenderViewHostTestHarness {
               std::move(collect_user_data_options->confirm_callback)
                   .Run(&user_data_, &user_model_);
             }));
-
     ON_CALL(mock_website_login_manager_, OnGetLoginsForUrl(_, _))
         .WillByDefault(
             RunOnceCallback<1>(std::vector<WebsiteLoginManager::Login>{
                 WebsiteLoginManager::Login(GURL(kFakeUrl), kFakeUsername)}));
     ON_CALL(mock_website_login_manager_, OnGetPasswordForLogin(_, _))
         .WillByDefault(RunOnceCallback<1>(true, kFakePassword));
-
-    content::WebContentsTester::For(web_contents())
-        ->SetLastCommittedURL(GURL(kFakeUrl));
     ON_CALL(mock_action_delegate_, GetWebContents())
-        .WillByDefault(Return(web_contents()));
+        .WillByDefault(Return(web_contents_.get()));
   }
 
  protected:
+  content::BrowserTaskEnvironment task_environment_;
+  content::RenderViewHostTestEnabler rvh_test_enabler_;
+  content::TestBrowserContext browser_context_;
+  std::unique_ptr<content::WebContents> web_contents_;
   base::MockCallback<Action::ProcessActionCallback> callback_;
   MockPersonalDataManager mock_personal_data_manager_;
   MockWebsiteLoginManager mock_website_login_manager_;
@@ -600,17 +599,15 @@ TEST_F(CollectUserDataActionTest, SelectContactDetails) {
 
   autofill::AutofillProfile contact_profile;
   contact_profile.SetRawInfo(autofill::ServerFieldType::NAME_FULL,
-                             base::UTF8ToUTF16("Marion Mitchell Morrison"));
-  contact_profile.SetRawInfo(autofill::ServerFieldType::NAME_FIRST,
-                             base::UTF8ToUTF16("Marion"));
+                             u"Marion Mitchell Morrison");
+  contact_profile.SetRawInfo(autofill::ServerFieldType::NAME_FIRST, u"Marion");
   contact_profile.SetRawInfo(autofill::ServerFieldType::NAME_MIDDLE,
-                             base::UTF8ToUTF16("Mitchell"));
-  contact_profile.SetRawInfo(autofill::ServerFieldType::NAME_LAST,
-                             base::UTF8ToUTF16("Morrison"));
+                             u"Mitchell");
+  contact_profile.SetRawInfo(autofill::ServerFieldType::NAME_LAST, u"Morrison");
   contact_profile.SetRawInfo(autofill::ServerFieldType::EMAIL_ADDRESS,
-                             base::UTF8ToUTF16("marion@me.xyz"));
+                             u"marion@me.xyz");
   contact_profile.SetRawInfo(autofill::ServerFieldType::PHONE_HOME_WHOLE_NUMBER,
-                             base::UTF8ToUTF16("16505678910"));
+                             u"16505678910");
 
   ON_CALL(mock_action_delegate_, CollectUserData(_))
       .WillByDefault(
@@ -653,11 +650,10 @@ TEST_F(CollectUserDataActionTest, SelectContactDetails) {
   EXPECT_EQ(user_data_.has_selected_address(kMemoryLocation), true);
   auto* profile = user_data_.selected_address(kMemoryLocation);
   EXPECT_EQ(profile->GetRawInfo(autofill::NAME_FULL),
-            base::UTF8ToUTF16("Marion Mitchell Morrison"));
+            u"Marion Mitchell Morrison");
   EXPECT_EQ(profile->GetRawInfo(autofill::PHONE_HOME_WHOLE_NUMBER),
-            base::UTF8ToUTF16("16505678910"));
-  EXPECT_EQ(profile->GetRawInfo(autofill::EMAIL_ADDRESS),
-            base::UTF8ToUTF16("marion@me.xyz"));
+            u"16505678910");
+  EXPECT_EQ(profile->GetRawInfo(autofill::EMAIL_ADDRESS), u"marion@me.xyz");
 }
 
 TEST_F(CollectUserDataActionTest,
@@ -904,8 +900,7 @@ TEST_F(CollectUserDataActionTest, UserDataComplete_Contact) {
                                                          options));
 
   user_data.selected_addresses_["profile"]->SetRawInfo(
-      autofill::ServerFieldType::EMAIL_ADDRESS,
-      base::UTF8ToUTF16("joedoe@example.com"));
+      autofill::ServerFieldType::EMAIL_ADDRESS, u"joedoe@example.com");
   EXPECT_TRUE(CollectUserDataAction::IsUserDataComplete(user_data, user_model_,
                                                         options));
 
@@ -914,7 +909,7 @@ TEST_F(CollectUserDataActionTest, UserDataComplete_Contact) {
                                                          options));
 
   user_data.selected_addresses_["profile"]->SetRawInfo(
-      autofill::ServerFieldType::NAME_FULL, base::UTF8ToUTF16("Joe Doe"));
+      autofill::ServerFieldType::NAME_FULL, u"Joe Doe");
   EXPECT_TRUE(CollectUserDataAction::IsUserDataComplete(user_data, user_model_,
                                                         options));
 
@@ -923,8 +918,7 @@ TEST_F(CollectUserDataActionTest, UserDataComplete_Contact) {
                                                          options));
 
   user_data.selected_addresses_["profile"]->SetRawInfo(
-      autofill::ServerFieldType::PHONE_HOME_WHOLE_NUMBER,
-      base::UTF8ToUTF16("+1 23 456 789 01"));
+      autofill::ServerFieldType::PHONE_HOME_WHOLE_NUMBER, u"+1 23 456 789 01");
   EXPECT_TRUE(CollectUserDataAction::IsUserDataComplete(user_data, user_model_,
                                                         options));
 }
@@ -963,15 +957,15 @@ TEST_F(CollectUserDataActionTest, UserDataComplete_Payment) {
                                                          options));
 
   user_data.selected_addresses_["billing_address"]->SetRawInfo(
-      autofill::ADDRESS_HOME_ZIP, base::UTF8ToUTF16("91601"));
+      autofill::ADDRESS_HOME_ZIP, u"91601");
   EXPECT_TRUE(CollectUserDataAction::IsUserDataComplete(user_data, user_model_,
                                                         options));
 
   // Zip code is optional in Argentinian address.
   user_data.selected_addresses_["billing_address"]->SetRawInfo(
-      autofill::ADDRESS_HOME_ZIP, base::UTF8ToUTF16(""));
+      autofill::ADDRESS_HOME_ZIP, u"");
   user_data.selected_addresses_["billing_address"]->SetRawInfo(
-      autofill::ADDRESS_HOME_COUNTRY, base::UTF8ToUTF16("AR"));
+      autofill::ADDRESS_HOME_COUNTRY, u"AR");
   EXPECT_TRUE(CollectUserDataAction::IsUserDataComplete(user_data, user_model_,
                                                         options));
 
@@ -980,13 +974,13 @@ TEST_F(CollectUserDataActionTest, UserDataComplete_Payment) {
                                                          options));
 
   user_data.selected_addresses_["billing_address"]->SetRawInfo(
-      autofill::ADDRESS_HOME_ZIP, base::UTF8ToUTF16("B1675"));
+      autofill::ADDRESS_HOME_ZIP, u"B1675");
   EXPECT_TRUE(CollectUserDataAction::IsUserDataComplete(user_data, user_model_,
                                                         options));
 
   // Expired credit card.
   user_data.selected_card_->SetRawInfo(autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR,
-                                       base::UTF8ToUTF16("2019"));
+                                       u"2019");
   EXPECT_FALSE(CollectUserDataAction::IsUserDataComplete(user_data, user_model_,
                                                          options));
 }
@@ -1042,7 +1036,7 @@ TEST_F(CollectUserDataActionTest, UserDataComplete_ShippingAddress) {
                                                          options));
 
   user_data.selected_addresses_["shipping_address"]->SetRawInfo(
-      autofill::ADDRESS_HOME_ZIP, base::UTF8ToUTF16("91601"));
+      autofill::ADDRESS_HOME_ZIP, u"91601");
   EXPECT_TRUE(CollectUserDataAction::IsUserDataComplete(user_data, user_model_,
                                                         options));
 }
@@ -1189,14 +1183,14 @@ TEST_F(CollectUserDataActionTest, SelectDateTimeRange) {
           Property(&ProcessedActionProto::status, ACTION_APPLIED),
           Property(&ProcessedActionProto::collect_user_data_result,
                    Property(&CollectUserDataResultProto::date_range_start_date,
-                            EqualsProto(actual_pickup_date))),
+                            Eq(actual_pickup_date))),
           Property(
               &ProcessedActionProto::collect_user_data_result,
               Property(&CollectUserDataResultProto::date_range_start_timeslot,
                        Eq(actual_pickup_time))),
           Property(&ProcessedActionProto::collect_user_data_result,
                    Property(&CollectUserDataResultProto::date_range_end_date,
-                            EqualsProto(actual_return_date))),
+                            Eq(actual_return_date))),
           Property(
               &ProcessedActionProto::collect_user_data_result,
               Property(&CollectUserDataResultProto::date_range_end_timeslot,

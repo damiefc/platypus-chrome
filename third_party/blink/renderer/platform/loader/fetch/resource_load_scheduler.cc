@@ -20,7 +20,6 @@
 #include "third_party/blink/renderer/platform/loader/fetch/console_logger.h"
 #include "third_party/blink/renderer/platform/loader/fetch/loading_behavior_observer.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher_properties.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/aggregated_metric_reporter.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_status.h"
 
@@ -475,6 +474,14 @@ bool ResourceLoadScheduler::ShouldDelay(
   // pending request even if it has low priority.
   if (in_flight_important_requests_ == 0)
     return false;
+
+  // Hidden pages already have requests throttled/deprioritized, and delaying
+  // further can have undesirable effects on sites, and there's little benefit
+  // to try to optimize them using this feature.
+  if (frame_scheduler_lifecycle_state_ ==
+      scheduler::SchedulingLifecycleState::kHidden) {
+    return false;
+  }
 
   // We didn't find the pending request for the id.
   if (found == pending_request_map_.end())

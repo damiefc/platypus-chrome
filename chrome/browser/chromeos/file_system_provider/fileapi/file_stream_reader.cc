@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/file_system_provider/fileapi/file_stream_reader.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -57,10 +58,10 @@ class FileStreamReader::OperationRunner
 
     file_system_ = parser.file_system()->GetWeakPtr();
     file_path_ = parser.file_path();
-    file_opener_.reset(new ScopedFileOpener(
+    file_opener_ = std::make_unique<ScopedFileOpener>(
         parser.file_system(), parser.file_path(), OPEN_FILE_MODE_READ,
-        base::Bind(&OperationRunner::OnOpenFileCompletedOnUIThread, this,
-                   base::Passed(&callback))));
+        base::BindOnce(&OperationRunner::OnOpenFileCompletedOnUIThread, this,
+                       std::move(callback)));
   }
 
   // Requests reading contents of a file. |callback| will always run eventually.
@@ -84,12 +85,9 @@ class FileStreamReader::OperationRunner
     }
 
     abort_callback_ = file_system_->ReadFile(
-        file_handle_,
-        buffer.get(),
-        offset,
-        length,
-        base::Bind(
-            &OperationRunner::OnReadFileCompletedOnUIThread, this, callback));
+        file_handle_, buffer.get(), offset, length,
+        base::BindRepeating(&OperationRunner::OnReadFileCompletedOnUIThread,
+                            this, callback));
   }
 
   // Requests metadata of a file. |callback| will always run eventually.

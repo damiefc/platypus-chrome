@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/chromeos/policy/display_rotation_default_handler.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 
 #include <utility>
 
@@ -64,7 +64,7 @@ const char* DisplayRotationDefaultHandler::SettingName() {
 // |display_rotation_default_| and |policy_enabled_|.
 void DisplayRotationDefaultHandler::OnSettingUpdate() {
   int new_rotation;
-  bool new_policy_enabled = chromeos::CrosSettings::Get()->GetInteger(
+  bool new_policy_enabled = ash::CrosSettings::Get()->GetInteger(
       chromeos::kDisplayRotationDefault, &new_rotation);
   display::Display::Rotation new_display_rotation_default =
       display::Display::ROTATE_0;

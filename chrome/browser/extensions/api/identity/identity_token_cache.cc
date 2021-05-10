@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "chrome/browser/extensions/api/identity/identity_constants.h"
 
@@ -19,26 +20,14 @@ IdentityTokenCacheValue& IdentityTokenCacheValue::operator=(
 IdentityTokenCacheValue::~IdentityTokenCacheValue() = default;
 
 // static
-IdentityTokenCacheValue IdentityTokenCacheValue::CreateIssueAdvice(
-    const IssueAdviceInfo& issue_advice) {
-  IdentityTokenCacheValue cache_value;
-  cache_value.status_ = CACHE_STATUS_ADVICE;
-  cache_value.issue_advice_ = issue_advice;
-  cache_value.expiration_time_ =
-      base::Time::Now() + base::TimeDelta::FromSeconds(
-                              identity_constants::kCachedIssueAdviceTTLSeconds);
-  return cache_value;
-}
-
-// static
 IdentityTokenCacheValue IdentityTokenCacheValue::CreateRemoteConsent(
     const RemoteConsentResolutionData& resolution_data) {
   IdentityTokenCacheValue cache_value;
-  cache_value.status_ = CACHE_STATUS_REMOTE_CONSENT;
-  cache_value.resolution_data_ = resolution_data;
+  cache_value.value_ = resolution_data;
   cache_value.expiration_time_ =
-      base::Time::Now() + base::TimeDelta::FromSeconds(
-                              identity_constants::kCachedIssueAdviceTTLSeconds);
+      base::Time::Now() +
+      base::TimeDelta::FromSeconds(
+          identity_constants::kCachedRemoteConsentTTLSeconds);
   return cache_value;
 }
 
@@ -46,11 +35,11 @@ IdentityTokenCacheValue IdentityTokenCacheValue::CreateRemoteConsent(
 IdentityTokenCacheValue IdentityTokenCacheValue::CreateRemoteConsentApproved(
     const std::string& consent_result) {
   IdentityTokenCacheValue cache_value;
-  cache_value.status_ = CACHE_STATUS_REMOTE_CONSENT_APPROVED;
-  cache_value.consent_result_ = consent_result;
+  cache_value.value_ = consent_result;
   cache_value.expiration_time_ =
-      base::Time::Now() + base::TimeDelta::FromSeconds(
-                              identity_constants::kCachedIssueAdviceTTLSeconds);
+      base::Time::Now() +
+      base::TimeDelta::FromSeconds(
+          identity_constants::kCachedRemoteConsentTTLSeconds);
   return cache_value;
 }
 
@@ -62,9 +51,7 @@ IdentityTokenCacheValue IdentityTokenCacheValue::CreateToken(
   DCHECK(!granted_scopes.empty());
 
   IdentityTokenCacheValue cache_value;
-  cache_value.status_ = CACHE_STATUS_TOKEN;
-  cache_value.token_ = token;
-  cache_value.granted_scopes_ = granted_scopes;
+  cache_value.value_ = TokenValue(token, granted_scopes);
 
   // Remove 20 minutes from the ttl so cached tokens will have some time
   // to live any time they are returned.
@@ -82,12 +69,26 @@ IdentityTokenCacheValue::CacheValueStatus IdentityTokenCacheValue::status()
     const {
   if (is_expired())
     return IdentityTokenCacheValue::CACHE_STATUS_NOTFOUND;
-  else
-    return status_;
+
+  return GetStatusInternal();
+}
+
+IdentityTokenCacheValue::CacheValueStatus
+IdentityTokenCacheValue::GetStatusInternal() const {
+  if (absl::holds_alternative<RemoteConsentResolutionData>(value_)) {
+    return CACHE_STATUS_REMOTE_CONSENT;
+  } else if (absl::holds_alternative<std::string>(value_)) {
+    return CACHE_STATUS_REMOTE_CONSENT_APPROVED;
+  } else if (absl::holds_alternative<TokenValue>(value_)) {
+    return CACHE_STATUS_TOKEN;
+  } else {
+    DCHECK(absl::holds_alternative<absl::monostate>(value_));
+    return CACHE_STATUS_NOTFOUND;
+  }
 }
 
 bool IdentityTokenCacheValue::is_expired() const {
-  return status_ == CACHE_STATUS_NOTFOUND ||
+  return GetStatusInternal() == CACHE_STATUS_NOTFOUND ||
          expiration_time_ < base::Time::Now();
 }
 
@@ -95,26 +96,34 @@ const base::Time& IdentityTokenCacheValue::expiration_time() const {
   return expiration_time_;
 }
 
-const IssueAdviceInfo& IdentityTokenCacheValue::issue_advice() const {
-  return issue_advice_;
-}
-
 const RemoteConsentResolutionData& IdentityTokenCacheValue::resolution_data()
     const {
-  return resolution_data_;
+  return absl::get<RemoteConsentResolutionData>(value_);
 }
 
 const std::string& IdentityTokenCacheValue::consent_result() const {
-  return consent_result_;
+  return absl::get<std::string>(value_);
 }
 
 const std::string& IdentityTokenCacheValue::token() const {
-  return token_;
+  return absl::get<TokenValue>(value_).token;
 }
 
 const std::set<std::string>& IdentityTokenCacheValue::granted_scopes() const {
-  return granted_scopes_;
+  return absl::get<TokenValue>(value_).granted_scopes;
 }
+
+IdentityTokenCacheValue::TokenValue::TokenValue(
+    const std::string& input_token,
+    const std::set<std::string>& input_granted_scopes)
+    : token(input_token), granted_scopes(input_granted_scopes) {}
+
+IdentityTokenCacheValue::TokenValue::TokenValue(const TokenValue& other) =
+    default;
+IdentityTokenCacheValue::TokenValue&
+IdentityTokenCacheValue::TokenValue::operator=(const TokenValue& other) =
+    default;
+IdentityTokenCacheValue::TokenValue::~TokenValue() = default;
 
 IdentityTokenCache::AccessTokensKey::AccessTokensKey(
     const ExtensionTokenKey& key)
@@ -192,6 +201,20 @@ void IdentityTokenCache::EraseAccessToken(const std::string& extension_id,
   }
 }
 
+void IdentityTokenCache::EraseAllTokensForExtension(
+    const std::string& extension_id) {
+  base::EraseIf(access_tokens_cache_,
+                [&extension_id](const auto& key_value_pair) {
+                  const AccessTokensKey& key = key_value_pair.first;
+                  return key.extension_id == extension_id;
+                });
+  base::EraseIf(intermediate_value_cache_,
+                [&extension_id](const auto& key_value_pair) {
+                  const ExtensionTokenKey& key = key_value_pair.first;
+                  return key.extension_id == extension_id;
+                });
+}
+
 void IdentityTokenCache::EraseAllTokens() {
   intermediate_value_cache_.clear();
   access_tokens_cache_.clear();
@@ -208,7 +231,8 @@ const IdentityTokenCacheValue& IdentityTokenCache::GetToken(
         cached_tokens.begin(), cached_tokens.end(),
         [&key](const auto& cached_token) {
           return key.scopes.size() <= cached_token.granted_scopes().size() &&
-                 base::STLIncludes(cached_token.granted_scopes(), key.scopes);
+                 base::ranges::includes(cached_token.granted_scopes(),
+                                        key.scopes);
         });
 
     if (matched_token_it != cached_tokens.end()) {

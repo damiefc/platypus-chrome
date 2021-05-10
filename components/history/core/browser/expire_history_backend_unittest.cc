@@ -17,12 +17,10 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "components/favicon/core/favicon_database.h"
 #include "components/history/core/browser/history_backend_client.h"
@@ -64,7 +62,7 @@ base::Time PretendNow() {
   return out_time;
 }
 
-// Returns whether |url| can be added to history.
+// Returns whether `url` can be added to history.
 bool MockCanAddURLToHistory(const GURL& url) {
   return url.is_valid();
 }
@@ -101,7 +99,7 @@ class ExpireHistoryTest : public testing::Test, public HistoryBackendNotifier {
 
   // EXPECTs that each URL-specific history thing (basically, everything but
   // favicons) is gone, the reason being either that it was automatically
-  // |expired|, or manually deleted.
+  // `expired`, or manually deleted.
   void EnsureURLInfoGone(const URLRow& row, bool expired);
 
   const DeletionInfo* GetLastDeletionInfo() {
@@ -111,7 +109,7 @@ class ExpireHistoryTest : public testing::Test, public HistoryBackendNotifier {
   }
 
   // Returns whether HistoryBackendNotifier::NotifyURLsModified was
-  // called for |url|.
+  // called for `url`.
   bool ModifiedNotificationSentDueToExpiry(const GURL& url);
   bool ModifiedNotificationSentDueToUserAction(const GURL& url);
 
@@ -157,7 +155,7 @@ class ExpireHistoryTest : public testing::Test, public HistoryBackendNotifier {
     ASSERT_TRUE(tmp_dir_.CreateUniqueTempDir());
 
     base::FilePath history_name = path().Append(kHistoryFilename);
-    main_db_.reset(new TestHistoryDatabase);
+    main_db_ = std::make_unique<TestHistoryDatabase>();
     if (main_db_->Init(history_name) != sql::INIT_OK)
       main_db_.reset();
 
@@ -166,7 +164,7 @@ class ExpireHistoryTest : public testing::Test, public HistoryBackendNotifier {
     if (thumb_db_->Init(thumb_name) != sql::INIT_OK)
       thumb_db_.reset();
 
-    pref_service_.reset(new TestingPrefServiceSimple);
+    pref_service_ = std::make_unique<TestingPrefServiceSimple>();
     TopSitesImpl::RegisterPrefs(pref_service_->registry());
 
     expirer_.SetDatabases(main_db_.get(), thumb_db_.get());
@@ -206,9 +204,9 @@ class ExpireHistoryTest : public testing::Test, public HistoryBackendNotifier {
                         const RedirectList& redirects,
                         base::Time visit_time) override {}
   void NotifyURLsModified(const URLRows& rows,
-                          bool is_from_expiration) override {
+                          UrlsModifiedReason reason) override {
     urls_modified_notifications_.push_back(
-        std::make_pair(is_from_expiration, rows));
+        std::make_pair(reason == UrlsModifiedReason::kExpired, rows));
   }
   void NotifyURLsDeleted(DeletionInfo deletion_info) override {
     urls_deleted_notifications_.push_back(std::move(deletion_info));
@@ -337,8 +335,8 @@ favicon_base::FaviconID ExpireHistoryTest::GetFavicon(
 }
 
 void ExpireHistoryTest::EnsureURLInfoGone(const URLRow& row, bool expired) {
-  // The passed in |row| must originate from |main_db_| so that its ID will be
-  // set to what had been in effect in |main_db_| before the deletion.
+  // The passed in `row` must originate from `main_db_` so that its ID will be
+  // set to what had been in effect in `main_db_` before the deletion.
   ASSERT_NE(0, row.id());
 
   // Verify the URL no longer exists.

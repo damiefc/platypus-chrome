@@ -26,8 +26,6 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_INDEXEDDB_WEB_IDB_DATABASE_CALLBACKS_IMPL_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_INDEXEDDB_WEB_IDB_DATABASE_CALLBACKS_IMPL_H_
 
-#include <memory>
-
 #include "third_party/blink/renderer/modules/indexeddb/idb_database_callbacks.h"
 #include "third_party/blink/renderer/modules/indexeddb/web_idb_database_callbacks.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -46,9 +44,6 @@ class WebIDBDatabaseCallbacksImpl final : public WebIDBDatabaseCallbacks {
   void OnVersionChange(int64_t old_version, int64_t new_version) override;
   void OnAbort(int64_t transaction_id, const IDBDatabaseError&) override;
   void OnComplete(int64_t transaction_id) override;
-  void OnChanges(const ObservationIndexMap&,
-                 Vector<Persistent<IDBObservation>> observations,
-                 const TransactionMap& transactions) override;
   void Detach() override;
 
  private:

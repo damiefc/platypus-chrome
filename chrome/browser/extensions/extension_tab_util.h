@@ -206,6 +206,9 @@ class ExtensionTabUtil {
   // Returns true if navigating to |url| would kill a page or the browser
   // itself, whether by simulating a crash, browser quit, thread hang, or
   // equivalent. Extensions should be prevented from navigating to such URLs.
+  //
+  // The caller should ensure that |url| has already been "fixed up" by calling
+  // url_formatter::FixupURL.
   static bool IsKillURL(const GURL& url);
 
   // Resolves the URL and ensures the extension is allowed to navigate to it.
@@ -225,7 +228,7 @@ class ExtensionTabUtil {
 
   // Executes the specified callback for all tabs in all browser windows.
   static void ForEachTab(
-      const base::Callback<void(content::WebContents*)>& callback);
+      base::RepeatingCallback<void(content::WebContents*)> callback);
 
   static WindowController* GetWindowControllerOfTab(
       const content::WebContents* web_contents);
@@ -250,6 +253,10 @@ class ExtensionTabUtil {
   // some non-const member functions of |contents|, but actually leaves it
   // unmodified.
   static api::tabs::TabStatus GetLoadingStatus(content::WebContents* contents);
+
+  // Clears the back-forward cache for all active tabs across all browser
+  // contexts.
+  static void ClearBackForwardCache();
 };
 
 }  // namespace extensions

@@ -6,7 +6,7 @@
 
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
@@ -21,8 +21,7 @@ namespace {
 class CannedIndexedDBHelperTest : public testing::Test {
  public:
   content::StoragePartition* StoragePartition() {
-    return content::BrowserContext::GetDefaultStoragePartition(
-        &browser_context_);
+    return browser_context_.GetDefaultStoragePartition();
   }
 
  private:

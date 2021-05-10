@@ -17,6 +17,7 @@
 #include "components/autofill_assistant/browser/actions/fallback_handler/required_fields_fallback_handler.h"
 #include "components/autofill_assistant/browser/client_status.h"
 #include "components/autofill_assistant/browser/field_formatter.h"
+#include "components/autofill_assistant/browser/user_data_util.h"
 #include "components/autofill_assistant/browser/user_model.h"
 #include "components/autofill_assistant/browser/value_util.h"
 
@@ -27,7 +28,6 @@ UseAddressAction::UseAddressAction(ActionDelegate* delegate,
     : Action(delegate, proto) {
   DCHECK(proto.has_use_address());
   selector_ = Selector(proto.use_address().form_field_element());
-  selector_.MustBeVisible();
 }
 
 UseAddressAction::~UseAddressAction() = default;
@@ -70,7 +70,7 @@ void UseAddressAction::InternalProcessAction(
         EndAction(ClientStatus(PRECONDITION_FAILED));
         return;
       }
-      profile_ = std::make_unique<autofill::AutofillProfile>(*profile);
+      profile_ = MakeUniqueFromProfile(*profile);
       break;
     }
     case UseAddressProto::kModelIdentifier: {
@@ -103,7 +103,7 @@ void UseAddressAction::InternalProcessAction(
         EndAction(ClientStatus(PRECONDITION_FAILED));
         return;
       }
-      profile_ = std::make_unique<autofill::AutofillProfile>(*profile);
+      profile_ = MakeUniqueFromProfile(*profile);
       break;
     }
     case UseAddressProto::ADDRESS_SOURCE_NOT_SET:
@@ -115,14 +115,11 @@ void UseAddressAction::InternalProcessAction(
   FillFormWithData();
 }
 
-void UseAddressAction::EndAction(
-    const ClientStatus& final_status,
-    const base::Optional<ClientStatus>& optional_details_status) {
-  UpdateProcessedAction(final_status);
-  if (optional_details_status.has_value() && !optional_details_status->ok()) {
-    processed_action_proto_->mutable_status_details()->MergeFrom(
-        optional_details_status->details());
-  }
+void UseAddressAction::EndAction(const ClientStatus& status) {
+  if (fallback_handler_)
+    action_stopwatch_.TransferToWaitTime(fallback_handler_->TotalWaitTime());
+
+  UpdateProcessedAction(status);
   std::move(process_action_callback_).Run(std::move(processed_action_proto_));
 }
 
@@ -133,9 +130,12 @@ void UseAddressAction::FillFormWithData() {
     return;
   }
 
-  delegate_->ShortWaitForElement(
-      selector_, base::BindOnce(&UseAddressAction::OnWaitForElement,
-                                weak_ptr_factory_.GetWeakPtr()));
+  delegate_->ShortWaitForElementWithSlowWarning(
+      selector_,
+      base::BindOnce(&UseAddressAction::OnWaitForElementTimed,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     base::BindOnce(&UseAddressAction::OnWaitForElement,
+                                    weak_ptr_factory_.GetWeakPtr())));
 }
 
 void UseAddressAction::OnWaitForElement(const ClientStatus& element_status) {

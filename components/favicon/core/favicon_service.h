@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "components/favicon/core/core_favicon_service.h"
+#include "components/favicon/core/large_favicon_provider.h"
 #include "components/favicon_base/favicon_callback.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/favicon_base/favicon_usage_data.h"
@@ -18,7 +19,7 @@ class GURL;
 
 namespace favicon {
 
-class FaviconService : public CoreFaviconService {
+class FaviconService : public CoreFaviconService, public LargeFaviconProvider {
  public:
   //////////////////////////////////////////////////////////////////////////////
   // Methods to request favicon bitmaps from the history backend for |icon_url|.
@@ -81,14 +82,6 @@ class FaviconService : public CoreFaviconService {
       favicon_base::FaviconRawBitmapCallback callback,
       base::CancelableTaskTracker* tracker) = 0;
 
-  // See HistoryService::GetLargestFaviconForPageURL().
-  virtual base::CancelableTaskTracker::TaskId GetLargestRawFaviconForPageURL(
-      const GURL& page_url,
-      const std::vector<favicon_base::IconTypeSet>& icon_types,
-      int minimum_size_in_pixels,
-      favicon_base::FaviconRawBitmapCallback callback,
-      base::CancelableTaskTracker* tracker) = 0;
-
   // Used to request a bitmap for the favicon with |favicon_id| which is not
   // resized from the size it is stored at in the database. If there are
   // multiple favicon bitmaps for |favicon_id|, the largest favicon bitmap is
@@ -116,7 +109,7 @@ class FaviconService : public CoreFaviconService {
   // See HistoryService::AddPageNoVisitForBookmark(). Adds an entry for the
   // specified url in the history service without creating a visit.
   virtual void AddPageNoVisitForBookmark(const GURL& url,
-                                         const base::string16& title) = 0;
+                                         const std::u16string& title) = 0;
 
   // Set the favicon for |page_url| for |icon_type| in the thumbnail database.
   // Unlike SetFavicons(), this method will not delete preexisting bitmap data

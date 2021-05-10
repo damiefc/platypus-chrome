@@ -41,10 +41,10 @@ class ASH_EXPORT LogoutButtonTray : public TrayBackgroundView,
   void UpdateBackground() override;
   void ClickedOutsideBubble() override;
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
-  base::string16 GetAccessibleNameForTray() override;
+  std::u16string GetAccessibleNameForTray() override;
   void HandleLocaleChange() override;
   const char* GetClassName() const override;
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  void OnThemeChanged() override;
 
   // SessionObserver:
   void OnActiveUserPrefServiceChanged(PrefService* prefs) override;
@@ -56,6 +56,8 @@ class ASH_EXPORT LogoutButtonTray : public TrayBackgroundView,
   void UpdateLogoutDialogDuration();
   void UpdateVisibility();
   void UpdateButtonTextAndImage();
+
+  void ButtonPressed();
 
   views::MdTextButton* button_;
   bool show_logout_button_in_tray_ = false;

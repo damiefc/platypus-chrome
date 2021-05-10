@@ -24,7 +24,6 @@
 #include "third_party/blink/renderer/platform/text/text_break_iterator.h"
 
 #include "base/stl_util.h"
-#include "third_party/blink/renderer/platform/text/character.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/ascii_ctype.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
@@ -321,7 +320,7 @@ inline int LazyLineBreakIterator::NextBreakablePosition(
     is_space = IsBreakableSpace(ch);
     switch (break_space) {
       case BreakSpaceType::kBeforeEverySpace:
-        if (is_space)
+        if (is_space || IsOtherSpaceSeparator<CharacterType>(ch))
           return i;
         break;
       case BreakSpaceType::kBeforeSpaceRun:
@@ -341,10 +340,11 @@ inline int LazyLineBreakIterator::NextBreakablePosition(
           return i;
         break;
       case BreakSpaceType::kAfterEverySpace:
-        if (is_last_space)
+        if (is_last_space || IsOtherSpaceSeparator<CharacterType>(last_ch))
           return i;
-        if (is_space)
-          continue;
+        if ((is_space || IsOtherSpaceSeparator<CharacterType>(ch)) &&
+            i + 1 < len)
+          return i + 1;
         break;
     }
 

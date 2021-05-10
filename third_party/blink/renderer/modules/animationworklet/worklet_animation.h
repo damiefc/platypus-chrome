@@ -240,8 +240,9 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
   bool effect_needs_restart_;
 
   FRIEND_TEST_ALL_PREFIXES(WorkletAnimationTest, PausePlay);
+  FRIEND_TEST_ALL_PREFIXES(WorkletAnimationTest, SetCurrentTimeInfNotCrash);
 };
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_MODULES_ANIMATIONWORKLET_WORKLET_ANIMATION_H_

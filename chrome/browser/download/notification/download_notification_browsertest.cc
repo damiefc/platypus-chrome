@@ -3,18 +3,22 @@
 // found in the LICENSE file.
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
+#include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
@@ -30,7 +34,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "components/download/public/common/download_item.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
@@ -220,15 +223,19 @@ class SlowDownloadInterceptor {
 
   static void SendBody(content::URLLoaderInterceptor::RequestParams* params,
                        std::string data) {
-    mojo::DataPipe pipe(data.size());
-    ASSERT_TRUE(pipe.producer_handle.is_valid());
+    mojo::ScopedDataPipeProducerHandle producer_handle;
+    mojo::ScopedDataPipeConsumerHandle consumer_handle;
+    ASSERT_EQ(
+        mojo::CreateDataPipe(data.size(), producer_handle, consumer_handle),
+        MOJO_RESULT_OK);
+
     uint32_t write_size = data.size();
-    MojoResult result = pipe.producer_handle->WriteData(
-        data.c_str(), &write_size, MOJO_WRITE_DATA_FLAG_NONE);
+    MojoResult result = producer_handle->WriteData(data.c_str(), &write_size,
+                                                   MOJO_WRITE_DATA_FLAG_NONE);
     ASSERT_EQ(MOJO_RESULT_OK, result);
     ASSERT_EQ(data.size(), write_size);
-    ASSERT_TRUE(pipe.consumer_handle.is_valid());
-    params->client->OnStartLoadingResponseBody(std::move(pipe.consumer_handle));
+    ASSERT_TRUE(consumer_handle.is_valid());
+    params->client->OnStartLoadingResponseBody(std::move(consumer_handle));
   }
 
   const std::map<std::string, Handler> handlers_;
@@ -323,7 +330,8 @@ class DownloadNotificationTest : public DownloadNotificationTestBase {
     Profile* profile = browser()->profile();
 
     std::unique_ptr<TestChromeDownloadManagerDelegate> test_delegate;
-    test_delegate.reset(new TestChromeDownloadManagerDelegate(profile));
+    test_delegate =
+        std::make_unique<TestChromeDownloadManagerDelegate>(profile);
     test_delegate->GetDownloadIdReceiverCallback().Run(
         download::DownloadItem::kInvalidId + 1);
     DownloadCoreServiceFactory::GetForBrowserContext(profile)
@@ -343,8 +351,8 @@ class DownloadNotificationTest : public DownloadNotificationTestBase {
     Profile* incognito_profile = incognito_browser_->profile();
 
     std::unique_ptr<TestChromeDownloadManagerDelegate> incognito_test_delegate;
-    incognito_test_delegate.reset(
-        new TestChromeDownloadManagerDelegate(incognito_profile));
+    incognito_test_delegate =
+        std::make_unique<TestChromeDownloadManagerDelegate>(incognito_profile);
     DownloadCoreServiceFactory::GetForBrowserContext(incognito_profile)
         ->SetDownloadManagerDelegateForTesting(
             std::move(incognito_test_delegate));
@@ -1043,7 +1051,7 @@ class MultiProfileDownloadNotificationTest
 
     signin::IdentityManager* identity_manager =
         IdentityManagerFactory::GetForProfile(profile);
-    if (!identity_manager->HasPrimaryAccount())
+    if (!identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync))
       signin::MakePrimaryAccountAvailable(identity_manager, info.email);
   }
 

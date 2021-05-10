@@ -2,18 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {browserProxy} from './browser_proxy/browser_proxy.js';
-import {assert} from './chrome_util.js';
+import {assert, assertInstanceof} from './chrome_util.js';
 import * as dom from './dom.js';
+import {reportError} from './error.js';
 import * as filesystem from './models/file_system.js';
 import {
-  AbstractDirectoryEntry,  // eslint-disable-line no-unused-vars
-  AbstractFileEntry,       // eslint-disable-line no-unused-vars
-} from './models/file_system_entry.js';
+  DirectoryAccessEntry,  // eslint-disable-line no-unused-vars
+  FileAccessEntry,       // eslint-disable-line no-unused-vars
+} from './models/file_system_access_entry.js';
 // eslint-disable-next-line no-unused-vars
 import {ResultSaver} from './models/result_saver.js';
 import {VideoSaver} from './models/video_saver.js';
-import * as util from './util.js';
+import {ChromeHelper} from './mojo/chrome_helper.js';
+import {scaleImage, scaleVideo} from './thumbnailer.js';
+import {
+  ErrorLevel,
+  ErrorType,
+} from './type.js';
 
 /**
  * Width of thumbnail used by cover photo of gallery button.
@@ -22,31 +27,23 @@ import * as util from './util.js';
 const THUMBNAIL_WIDTH = 240;
 
 /**
- * The maximum size of video used to generate the thumbnail. The file would be
- * truncated to that size before generating the thumbnail, which speeds up the
- * generation process significantly when the file is large. 32MB should be more
- * than enough for getting the first frame from a video.
- * @type {number}
- */
-const VIDEO_THUMBNAIL_SIZE_LIMIT = 32 << 20;
-
-/**
  * Cover photo of gallery button.
  */
 class CoverPhoto {
   /**
-   * @param {!AbstractFileEntry} file File entry of cover photo.
-   * @param {string} thumbnailUrl Url to its thumbnail.
+   * @param {!FileAccessEntry} file File entry of cover photo.
+   * @param {?string} thumbnailUrl Url to its thumbnail. Might be null if the
+   *     thumbnail is failed to load.
    */
   constructor(file, thumbnailUrl) {
     /**
-     * @type {!AbstractFileEntry}
+     * @type {!FileAccessEntry}
      * @const
      */
     this.file = file;
 
     /**
-     * @type {string}
+     * @type {?string}
      * @const
      */
     this.thumbnailUrl = thumbnailUrl;
@@ -64,23 +61,38 @@ class CoverPhoto {
    * Releases resources used by this cover photo.
    */
   release() {
-    URL.revokeObjectURL(this.thumbnailUrl);
+    if (this.thumbnailUrl !== null) {
+      URL.revokeObjectURL(this.thumbnailUrl);
+    }
   }
 
   /**
    * Creates CoverPhoto objects from photo file.
-   * @param {!AbstractFileEntry} file
-   * @return {!Promise<!CoverPhoto>}
+   * @param {!FileAccessEntry} file
+   * @return {!Promise<?CoverPhoto>}
    */
   static async create(file) {
-    const isVideo = filesystem.hasVideoPrefix(file);
-    const limit = isVideo ? VIDEO_THUMBNAIL_SIZE_LIMIT : Infinity;
-    const fileUrl = await filesystem.pictureURL(file, {limit});
-    const thumbnail =
-        await util.scalePicture(fileUrl, isVideo, THUMBNAIL_WIDTH);
-    URL.revokeObjectURL(fileUrl);
+    const blob = await file.file();
+    if (blob.size === 0) {
+      reportError(
+          ErrorType.EMPTY_FILE,
+          ErrorLevel.ERROR,
+          new Error('The file to generate cover photo is empty'),
+      );
+      return null;
+    }
 
-    return new CoverPhoto(file, URL.createObjectURL(thumbnail));
+    try {
+      const thumbnail = filesystem.hasVideoPrefix(file) ?
+          await scaleVideo(blob, THUMBNAIL_WIDTH) :
+          await scaleImage(blob, THUMBNAIL_WIDTH);
+      return new CoverPhoto(file, URL.createObjectURL(thumbnail));
+    } catch (e) {
+      reportError(
+          ErrorType.BROKEN_THUMBNAIL, ErrorLevel.ERROR,
+          assertInstanceof(e, Error));
+      return new CoverPhoto(file, null);
+    }
   }
 }
 
@@ -108,7 +120,7 @@ export class GalleryButton {
 
     /**
      * Directory holding saved pictures showing in gallery.
-     * @type {?AbstractDirectoryEntry}
+     * @type {?DirectoryAccessEntry}
      * @private
      */
     this.directory_ = null;
@@ -119,14 +131,15 @@ export class GalleryButton {
       // TODO(yuli): Remove this workaround for unable watching changed-files.
       await this.checkCover_();
       if (this.cover_ !== null) {
-        await browserProxy.openGallery(this.cover_.file);
+        await ChromeHelper.getInstance().openFileInGallery(
+            this.cover_.file.name);
       }
     });
   }
 
   /**
    * Initializes the gallery button.
-   * @param {!AbstractDirectoryEntry} dir Directory holding saved pictures
+   * @param {!DirectoryAccessEntry} dir Directory holding saved pictures
    *     showing in gallery.
    */
   async initialize(dir) {
@@ -135,7 +148,7 @@ export class GalleryButton {
   }
 
   /**
-   * @param {?AbstractFileEntry} file File to be set as cover photo.
+   * @param {?FileAccessEntry} file File to be set as cover photo.
    * @return {!Promise}
    * @private
    */
@@ -151,7 +164,9 @@ export class GalleryButton {
 
     this.button_.hidden = cover === null;
     this.button_.style.backgroundImage =
-        cover !== null ? `url("${cover.thumbnailUrl}")` : 'none';
+        cover !== null && cover.thumbnailUrl !== null ?
+        `url("${cover.thumbnailUrl}")` :
+        'none';
   }
 
   /**
@@ -193,24 +208,19 @@ export class GalleryButton {
    * @override
    */
   async savePhoto(blob, name) {
-    const orientedPhoto = await new Promise((resolve) => {
-      // Ignore errors since it is better to save something than
-      // nothing.
-      // TODO(yuli): Support showing images by EXIF orientation
-      // instead.
-      util.orientPhoto(blob, resolve, () => resolve(blob));
-    });
-    const file = await filesystem.saveBlob(orientedPhoto, name);
-    assert(file !== null);
+    const file = await filesystem.saveBlob(blob, name);
+
+    ChromeHelper.getInstance().sendNewCaptureBroadcast(
+        {isVideo: false, name: file.name});
     await this.updateCover_(file);
   }
 
   /**
    * @override
    */
-  async startSaveVideo() {
+  async startSaveVideo(videoRotation) {
     const file = await filesystem.createVideoFile();
-    return VideoSaver.createForFile(file);
+    return VideoSaver.createForFile(file, videoRotation);
   }
 
   /**
@@ -219,6 +229,9 @@ export class GalleryButton {
   async finishSaveVideo(video) {
     const file = await video.endWrite();
     assert(file !== null);
+
+    ChromeHelper.getInstance().sendNewCaptureBroadcast(
+        {isVideo: true, name: file.name});
     await this.updateCover_(file);
   }
 }

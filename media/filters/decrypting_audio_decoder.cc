@@ -7,12 +7,13 @@
 #include <stdint.h>
 
 #include <cstdlib>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/single_thread_task_runner.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_decoder_config.h"
@@ -34,7 +35,7 @@ static inline bool IsOutOfSync(const base::TimeDelta& timestamp_1,
 }
 
 DecryptingAudioDecoder::DecryptingAudioDecoder(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     MediaLog* media_log)
     : task_runner_(task_runner), media_log_(media_log) {}
 
@@ -42,8 +43,8 @@ bool DecryptingAudioDecoder::SupportsDecryption() const {
   return true;
 }
 
-std::string DecryptingAudioDecoder::GetDisplayName() const {
-  return "DecryptingAudioDecoder";
+AudioDecoderType DecryptingAudioDecoder::GetDecoderType() const {
+  return AudioDecoderType::kDecrypting;
 }
 
 void DecryptingAudioDecoder::Initialize(const AudioDecoderConfig& config,
@@ -52,7 +53,7 @@ void DecryptingAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                         const OutputCB& output_cb,
                                         const WaitingCB& waiting_cb) {
   DVLOG(2) << "Initialize()";
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(!decode_cb_);
   DCHECK(!reset_cb_);
 
@@ -110,7 +111,7 @@ void DecryptingAudioDecoder::Initialize(const AudioDecoderConfig& config,
 void DecryptingAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                                     DecodeCB decode_cb) {
   DVLOG(3) << "Decode()";
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(state_ == kIdle || state_ == kDecodeFinished) << state_;
   DCHECK(decode_cb);
   CHECK(!decode_cb_) << "Overlapping decodes are not supported.";
@@ -138,7 +139,7 @@ void DecryptingAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
 
 void DecryptingAudioDecoder::Reset(base::OnceClosure closure) {
   DVLOG(2) << "Reset() - state: " << state_;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(state_ == kIdle || state_ == kPendingDecode ||
          state_ == kWaitingForKey || state_ == kDecodeFinished)
       << state_;
@@ -170,7 +171,7 @@ void DecryptingAudioDecoder::Reset(base::OnceClosure closure) {
 
 DecryptingAudioDecoder::~DecryptingAudioDecoder() {
   DVLOG(2) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (state_ == kUninitialized)
     return;
@@ -198,7 +199,7 @@ void DecryptingAudioDecoder::InitializeDecoder() {
 
 void DecryptingAudioDecoder::FinishInitialization(bool success) {
   DVLOG(2) << "FinishInitialization()";
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(state_ == kPendingDecoderInit) << state_;
   DCHECK(init_cb_);
   DCHECK(!reset_cb_);   // No Reset() before initialization finished.
@@ -214,15 +215,15 @@ void DecryptingAudioDecoder::FinishInitialization(bool success) {
   }
 
   // Success!
-  timestamp_helper_.reset(
-      new AudioTimestampHelper(config_.samples_per_second()));
+  timestamp_helper_ =
+      std::make_unique<AudioTimestampHelper>(config_.samples_per_second());
 
   state_ = kIdle;
   std::move(init_cb_).Run(OkStatus());
 }
 
 void DecryptingAudioDecoder::DecodePendingBuffer() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(state_, kPendingDecode) << state_;
 
   int buffer_size = 0;
@@ -241,7 +242,7 @@ void DecryptingAudioDecoder::DeliverFrame(
     Decryptor::Status status,
     const Decryptor::AudioFrames& frames) {
   DVLOG(3) << "DeliverFrame() - status: " << status;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(state_, kPendingDecode) << state_;
   DCHECK(decode_cb_);
   DCHECK(pending_buffer_to_decode_.get());
@@ -262,7 +263,7 @@ void DecryptingAudioDecoder::DeliverFrame(
 
   if (status == Decryptor::kError) {
     DVLOG(2) << "DeliverFrame() - kError";
-    MEDIA_LOG(ERROR, media_log_) << GetDisplayName() << ": decode error";
+    MEDIA_LOG(ERROR, media_log_) << GetDecoderType() << ": decode error";
     state_ = kDecodeFinished;  // TODO add kError state
     std::move(decode_cb_).Run(DecodeStatus::DECODE_ERROR);
     return;
@@ -275,7 +276,7 @@ void DecryptingAudioDecoder::DeliverFrame(
         "no key for key ID " + base::HexEncode(key_id.data(), key_id.size()) +
         "; will resume decoding after new usable key is available";
     DVLOG(1) << __func__ << ": " << log_message;
-    MEDIA_LOG(INFO, media_log_) << GetDisplayName() << ": " << log_message;
+    MEDIA_LOG(INFO, media_log_) << GetDecoderType() << ": " << log_message;
 
     // Set |pending_buffer_to_decode_| back as we need to try decoding the
     // pending buffer again when new key is added to the decryptor.
@@ -284,7 +285,7 @@ void DecryptingAudioDecoder::DeliverFrame(
     if (need_to_try_again_if_nokey_is_returned) {
       // The |state_| is still kPendingDecode.
       MEDIA_LOG(INFO, media_log_)
-          << GetDisplayName() << ": key was added, resuming decode";
+          << GetDecoderType() << ": key was added, resuming decode";
       DecodePendingBuffer();
       return;
     }
@@ -319,7 +320,7 @@ void DecryptingAudioDecoder::DeliverFrame(
 }
 
 void DecryptingAudioDecoder::OnCdmContextEvent(CdmContext::Event event) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (event != CdmContext::Event::kHasAdditionalUsableKey)
     return;
@@ -331,7 +332,7 @@ void DecryptingAudioDecoder::OnCdmContextEvent(CdmContext::Event event) {
 
   if (state_ == kWaitingForKey) {
     MEDIA_LOG(INFO, media_log_)
-        << GetDisplayName() << ": key added, resuming decode";
+        << GetDecoderType() << ": key added, resuming decode";
     state_ = kPendingDecode;
     DecodePendingBuffer();
   }

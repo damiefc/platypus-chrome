@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -22,7 +23,6 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
-#include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/dom_distiller/tab_utils.h"
 #include "chrome/browser/favicon/favicon_utils.h"
@@ -30,12 +30,18 @@
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sessions/session_service.h"
+#include "chrome/browser/sessions/session_service_base.h"
 #include "chrome/browser/sessions/session_service_factory.h"
+#include "chrome/browser/sessions/session_service_lookup.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/accelerator_utils.h"
 #include "chrome/browser/ui/autofill/payments/manage_migration_ui_controller.h"
+#include "chrome/browser/ui/autofill/payments/offer_notification_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.h"
+#include "chrome/browser/ui/autofill/payments/virtual_card_manual_fallback_bubble_controller_impl.h"
+#include "chrome/browser/ui/autofill/save_update_address_profile_bubble_controller_impl.h"
 #include "chrome/browser/ui/bookmarks/bookmark_stats.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
@@ -47,23 +53,27 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/commander/commander.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
-#include "chrome/browser/ui/in_product_help/reopen_tab_in_product_help.h"
-#include "chrome/browser/ui/in_product_help/reopen_tab_in_product_help_factory.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/browser/ui/read_later/reading_list_model_factory.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble_controller.h"
+#include "chrome/browser/ui/sharing_hub/sharing_hub_bubble_controller.h"
 #include "chrome/browser/ui/status_bubble.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/translate/translate_bubble_view_state_transition.h"
+#include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/user_education/feature_promo_controller.h"
+#include "chrome/browser/ui/user_education/reopen_tab_in_product_help.h"
+#include "chrome/browser/ui/user_education/reopen_tab_in_product_help_factory.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
@@ -71,7 +81,6 @@
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/common/buildflags.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/content_restriction.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -80,7 +89,9 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/browsing_data/content/browsing_data_helper.h"
 #include "components/dom_distiller/core/url_utils.h"
+#include "components/embedder_support/user_agent_utils.h"
 #include "components/favicon/content/content_favicon_driver.h"
+#include "components/feature_engagement/public/feature_constants.h"
 #include "components/find_in_page/find_tab_helper.h"
 #include "components/find_in_page/find_types.h"
 #include "components/google/core/common/google_util.h"
@@ -90,6 +101,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/reading_list/core/reading_list_entry.h"
 #include "components/reading_list/core/reading_list_model.h"
+#include "components/reading_list/core/reading_list_pref_names.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/sessions/core/live_tab_context.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -109,7 +121,6 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/page_state.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/common/user_agent.h"
@@ -119,6 +130,7 @@
 #include "rlz/buildflags/buildflags.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/base/models/list_selection_model.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "url/gurl.h"
@@ -147,6 +159,10 @@
 
 #if BUILDFLAG(ENABLE_RLZ)
 #include "components/rlz/rlz_tracker.h"  // nogncheck
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/lacros/lacros_service.h"
 #endif
 
 namespace {
@@ -187,11 +203,11 @@ void CreateAndShowNewWindowWithContents(
     const Browser* original_browser) {
   Browser* new_browser = nullptr;
   if (original_browser->deprecated_is_app()) {
-    new_browser = new Browser(Browser::CreateParams::CreateForApp(
+    new_browser = Browser::Create(Browser::CreateParams::CreateForApp(
         original_browser->app_name(), original_browser->is_trusted_source(),
         gfx::Rect(), original_browser->profile(), true));
   } else {
-    new_browser = new Browser(Browser::CreateParams(
+    new_browser = Browser::Create(Browser::CreateParams(
         original_browser->type(), original_browser->profile(), true));
   }
   // Preserve the size of the original window. The new window has already
@@ -211,17 +227,14 @@ void CreateAndShowNewWindowWithContents(
                                                  TabStripModel::ADD_ACTIVE);
 }
 
-bool GetActiveTabURLAndTitleToSave(Browser* browser,
-                                   GURL* url,
-                                   base::string16* title) {
-  content::WebContents* web_contents =
-      browser->tab_strip_model()->GetActiveWebContents();
+bool GetTabURLAndTitleToSave(content::WebContents* web_contents,
+                             GURL* url,
+                             std::u16string* title) {
   // |web_contents| can be nullptr if the last tab in the browser was closed
   // but the browser wasn't closed yet. https://crbug.com/799668
   if (!web_contents)
     return false;
-  chrome::GetURLAndTitleToBookmark(web_contents, url, title);
-  return true;
+  return chrome::GetURLAndTitleToBookmark(web_contents, url, title);
 }
 
 ReadingListModel* GetReadingListModel(Browser* browser) {
@@ -283,7 +296,7 @@ WebContents* GetTabAndRevertIfNecessaryHelper(Browser* browser,
       std::unique_ptr<WebContents> new_tab = current_tab->Clone();
       WebContents* raw_new_tab = new_tab.get();
       Browser* new_browser =
-          new Browser(Browser::CreateParams(browser->profile(), true));
+          Browser::Create(Browser::CreateParams(browser->profile(), true));
       new_browser->tab_strip_model()->AddWebContents(std::move(new_tab), -1,
                                                      ui::PAGE_TRANSITION_LINK,
                                                      TabStripModel::ADD_ACTIVE);
@@ -419,38 +432,52 @@ int GetContentRestrictions(const Browser* browser) {
 }
 
 void NewEmptyWindow(Profile* profile) {
-  bool incognito = profile->IsOffTheRecord();
+  bool off_the_record = profile->IsOffTheRecord();
   PrefService* prefs = profile->GetPrefs();
-  if (incognito) {
+  if (off_the_record) {
     if (IncognitoModePrefs::GetAvailability(prefs) ==
         IncognitoModePrefs::DISABLED) {
-      incognito = false;
+      off_the_record = false;
     }
   } else if (profile->IsGuestSession() ||
              (browser_defaults::kAlwaysOpenIncognitoWindow &&
               IncognitoModePrefs::ShouldLaunchIncognito(
                   *base::CommandLine::ForCurrentProcess(), prefs))) {
-    incognito = true;
+    off_the_record = true;
   }
 
-  if (incognito) {
+  if (off_the_record) {
+    // This metric counts the Incognito and Off-The-Record Guest profiles
+    // together.
     base::RecordAction(UserMetricsAction("NewIncognitoWindow"));
-    OpenEmptyWindow(profile->GetPrimaryOTRProfile());
+    if (profile->IsGuestSession())
+      base::RecordAction(UserMetricsAction("NewGuestWindow"));
+    else
+      base::RecordAction(UserMetricsAction("NewIncognitoWindow2"));
+    OpenEmptyWindow(profile->GetPrimaryOTRProfile(/*create_if_needed=*/true));
+  } else if (profile->IsEphemeralGuestProfile()) {
+    base::RecordAction(UserMetricsAction("NewGuestWindow"));
+    OpenEmptyWindow(profile);
   } else {
     base::RecordAction(UserMetricsAction("NewWindow"));
     SessionService* session_service =
         SessionServiceFactory::GetForProfileForSessionRestore(
             profile->GetOriginalProfile());
     if (!session_service ||
-        !session_service->RestoreIfNecessary(std::vector<GURL>())) {
+        !session_service->RestoreIfNecessary(std::vector<GURL>(),
+                                             /* restore_apps */ false)) {
       OpenEmptyWindow(profile->GetOriginalProfile());
     }
   }
 }
 
 Browser* OpenEmptyWindow(Profile* profile) {
-  Browser* browser =
-      new Browser(Browser::CreateParams(Browser::TYPE_NORMAL, profile, true));
+  if (Browser::GetCreationStatusForProfile(profile) !=
+      Browser::CreationStatus::kOk) {
+    return nullptr;
+  }
+  Browser* browser = Browser::Create(
+      Browser::CreateParams(Browser::TYPE_NORMAL, profile, true));
   AddTabAt(browser, GURL(), -1, true);
   browser->window()->Show();
   return browser;
@@ -464,7 +491,8 @@ void OpenWindowWithRestoredTabs(Profile* profile) {
 }
 
 void OpenURLOffTheRecord(Profile* profile, const GURL& url) {
-  ScopedTabbedBrowserDisplayer displayer(profile->GetPrimaryOTRProfile());
+  ScopedTabbedBrowserDisplayer displayer(
+      profile->GetPrimaryOTRProfile(/*create_if_needed=*/true));
   AddSelectedTabWithURL(displayer.browser(), url, ui::PAGE_TRANSITION_LINK);
 }
 
@@ -562,6 +590,13 @@ void Home(Browser* browser, WindowOpenDisposition disposition) {
                             url.SchemeIs(chrome::kChromeNativeScheme);
   base::UmaHistogramBoolean("Navigation.Home.IsChromeInternal",
                             is_chrome_internal);
+  // Log a user action for the !is_chrome_internal case. This value is used as
+  // part of a high-level guiding metric, which is being migrated to user
+  // actions.
+  if (!is_chrome_internal) {
+    base::RecordAction(
+        base::UserMetricsAction("Navigation.Home.NotChromeInternal"));
+  }
   OpenURLParams params(
       url, Referrer(), disposition,
       ui::PageTransitionFromInt(ui::PAGE_TRANSITION_AUTO_BOOKMARK |
@@ -588,6 +623,8 @@ void OpenCurrentURL(Browser* browser) {
   params.tabstrip_add_types =
       TabStripModel::ADD_FORCE_INDEX | TabStripModel::ADD_INHERIT_OPENER;
   params.input_start = location_bar->GetMatchSelectionTimestamp();
+  params.is_using_https_as_default_scheme =
+      location_bar->IsInputTypedUrlWithoutScheme();
   Navigate(&params);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -624,12 +661,12 @@ void NewWindow(Browser* browser) {
         blink::mojom::DisplayMode::kBrowser) {
       launch_container = apps::mojom::LaunchContainer::kLaunchContainerTab;
     }
-    const apps::AppLaunchParams params = apps::AppLaunchParams(
+    apps::AppLaunchParams params = apps::AppLaunchParams(
         app_id, launch_container, WindowOpenDisposition::NEW_WINDOW,
         apps::mojom::AppLaunchSource::kSourceKeyboard);
     apps::AppServiceProxyFactory::GetForProfile(profile)
         ->BrowserAppLauncher()
-        ->LaunchAppWithParams(params);
+        ->LaunchAppWithParams(std::move(params));
     return;
   }
 
@@ -650,7 +687,7 @@ void NewWindow(Browser* browser) {
 }
 
 void NewIncognitoWindow(Profile* profile) {
-  NewEmptyWindow(profile->GetPrimaryOTRProfile());
+  NewEmptyWindow(profile->GetPrimaryOTRProfile(/*create_if_needed=*/true));
 }
 
 void CloseWindow(Browser* browser) {
@@ -683,6 +720,12 @@ void NewTab(Browser* browser) {
     // See http://crbug.com/6380.
     b->tab_strip_model()->GetActiveWebContents()->RestoreFocus();
   }
+}
+
+void NewTabToRight(Browser* browser) {
+  browser->tab_strip_model()->ExecuteContextMenuCommand(
+      browser->tab_strip_model()->active_index(),
+      TabStripModel::CommandNewTabToRight);
 }
 
 void CloseTab(Browser* browser) {
@@ -734,16 +777,29 @@ void MoveTabPrevious(Browser* browser) {
 void SelectNumberedTab(Browser* browser,
                        int index,
                        TabStripModel::UserGestureDetails gesture_detail) {
-  if (index < browser->tab_strip_model()->count()) {
-    base::RecordAction(UserMetricsAction("SelectNumberedTab"));
-    browser->tab_strip_model()->ActivateTabAt(index, gesture_detail);
+  int visible_count = 0;
+  for (int i = 0; i < browser->tab_strip_model()->count(); i++) {
+    if (browser->tab_strip_model()->IsTabCollapsed(i)) {
+      continue;
+    }
+    if (visible_count == index) {
+      base::RecordAction(UserMetricsAction("SelectNumberedTab"));
+      browser->tab_strip_model()->ActivateTabAt(i, gesture_detail);
+      break;
+    }
+    visible_count += 1;
   }
 }
 
 void SelectLastTab(Browser* browser,
                    TabStripModel::UserGestureDetails gesture_detail) {
-  base::RecordAction(UserMetricsAction("SelectLastTab"));
-  browser->tab_strip_model()->SelectLastTab(gesture_detail);
+  for (int i = browser->tab_strip_model()->count() - 1; i >= 0; i--) {
+    if (!browser->tab_strip_model()->IsTabCollapsed(i)) {
+      base::RecordAction(UserMetricsAction("SelectLastTab"));
+      browser->tab_strip_model()->ActivateTabAt(i, gesture_detail);
+      break;
+    }
+  }
 }
 
 void DuplicateTab(Browser* browser) {
@@ -762,12 +818,17 @@ bool CanDuplicateKeyboardFocusedTab(const Browser* browser) {
 }
 
 bool CanMoveActiveTabToNewWindow(Browser* browser) {
-  return CanMoveTabsToNewWindow(browser,
-                                {browser->tab_strip_model()->active_index()});
+  const ui::ListSelectionModel::SelectedIndices& selection =
+      browser->tab_strip_model()->selection_model().selected_indices();
+  return CanMoveTabsToNewWindow(
+      browser, std::vector<int>(selection.begin(), selection.end()));
 }
 
 void MoveActiveTabToNewWindow(Browser* browser) {
-  MoveTabsToNewWindow(browser, {browser->tab_strip_model()->active_index()});
+  const ui::ListSelectionModel::SelectedIndices& selection =
+      browser->tab_strip_model()->selection_model().selected_indices();
+  MoveTabsToNewWindow(browser,
+                      std::vector<int>(selection.begin(), selection.end()));
 }
 bool CanMoveTabsToNewWindow(Browser* browser,
                             const std::vector<int>& tab_indices) {
@@ -782,7 +843,7 @@ void MoveTabsToNewWindow(Browser* browser,
     return;
 
   Browser* new_browser =
-      new Browser(Browser::CreateParams(browser->profile(), true));
+      Browser::Create(Browser::CreateParams(browser->profile(), true));
 
   if (group.has_value()) {
     const tab_groups::TabGroupVisualData* old_visual_data =
@@ -856,8 +917,8 @@ WebContents* DuplicateTabAt(Browser* browser, int index) {
     CreateAndShowNewWindowWithContents(std::move(contents_dupe), browser);
   }
 
-  SessionService* session_service =
-      SessionServiceFactory::GetForProfileIfExisting(browser->profile());
+  SessionServiceBase* session_service =
+      GetAppropriateSessionServiceIfExisting(browser);
   if (session_service)
     session_service->TabRestored(raw_contents_dupe, pinned);
   return raw_contents_dupe;
@@ -946,7 +1007,7 @@ void ConvertPopupToTabbedBrowser(Browser* browser) {
   TabStripModel* tab_strip = browser->tab_strip_model();
   std::unique_ptr<content::WebContents> contents =
       tab_strip->DetachWebContentsAt(tab_strip->active_index());
-  Browser* b = new Browser(Browser::CreateParams(browser->profile(), true));
+  Browser* b = Browser::Create(Browser::CreateParams(browser->profile(), true));
   b->tab_strip_model()->AppendWebContents(std::move(contents), true);
   b->window()->Show();
 }
@@ -977,14 +1038,15 @@ void BookmarkCurrentTab(Browser* browser) {
     return;  // Ignore requests until bookmarks are loaded.
 
   GURL url;
-  base::string16 title;
+  std::u16string title;
   WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
   // |web_contents| can be nullptr if the last tab in the browser was closed
   // but the browser wasn't closed yet. https://crbug.com/799668
   if (!web_contents)
     return;
-  GetURLAndTitleToBookmark(web_contents, &url, &title);
+  if (!GetURLAndTitleToBookmark(web_contents, &url, &title))
+    return;
   bool is_bookmarked_by_any = model->IsBookmarked(url);
   if (!is_bookmarked_by_any &&
       web_contents->GetBrowserContext()->IsOffTheRecord()) {
@@ -1031,35 +1093,47 @@ bool CanBookmarkAllTabs(const Browser* browser) {
 }
 
 bool CanMoveActiveTabToReadLater(Browser* browser) {
-  GURL url =
-      GetURLToBookmark(browser->tab_strip_model()->GetActiveWebContents());
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
   ReadingListModel* model = GetReadingListModel(browser);
-  if (!model)
+  // |web_contents| can be nullptr if the last tab in the browser was closed
+  // but the browser wasn't closed yet. https://crbug.com/799668
+  if (!web_contents || !model)
     return false;
+  GURL url = GetURLToBookmark(web_contents);
   return model->IsUrlSupported(url);
 }
 
 bool MoveCurrentTabToReadLater(Browser* browser) {
+  return MoveTabToReadLater(browser,
+                            browser->tab_strip_model()->GetActiveWebContents());
+}
+
+bool MoveTabToReadLater(Browser* browser, content::WebContents* web_contents) {
   GURL url;
-  base::string16 title;
+  std::u16string title;
   ReadingListModel* model = GetReadingListModel(browser);
-  if (!model || !GetActiveTabURLAndTitleToSave(browser, &url, &title))
+  if (!model || !GetTabURLAndTitleToSave(web_contents, &url, &title) ||
+      !model->IsUrlSupported(url))
     return false;
   model->AddEntry(url, base::UTF16ToUTF8(title),
                   reading_list::EntrySource::ADDED_VIA_CURRENT_APP);
-  // Close current tab.
-  int index = browser->tab_strip_model()->active_index();
-  browser->tab_strip_model()->CloseWebContentsAt(
-      index, TabStripModel::CLOSE_CREATE_HISTORICAL_TAB |
-                 TabStripModel::CLOSE_USER_GESTURE);
+  MaybeShowBookmarkBarForReadLater(browser);
+  browser->window()->GetFeaturePromoController()->MaybeShowPromo(
+      feature_engagement::kIPHReadingListDiscoveryFeature);
+  base::UmaHistogramEnumeration(
+      "ReadingList.BookmarkBarState.OnEveryAddToReadingList",
+      browser->bookmark_bar_state());
   return true;
 }
 
 bool MarkCurrentTabAsReadInReadLater(Browser* browser) {
   GURL url;
-  base::string16 title;
+  std::u16string title;
   ReadingListModel* model = GetReadingListModel(browser);
-  if (!model || !GetActiveTabURLAndTitleToSave(browser, &url, &title))
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  if (!model || !GetTabURLAndTitleToSave(web_contents, &url, &title))
     return false;
   const ReadingListEntry* entry = model->GetEntryByURL(url);
   // Mark current tab as read.
@@ -1070,12 +1144,44 @@ bool MarkCurrentTabAsReadInReadLater(Browser* browser) {
 
 bool IsCurrentTabUnreadInReadLater(Browser* browser) {
   GURL url;
-  base::string16 title;
+  std::u16string title;
   ReadingListModel* model = GetReadingListModel(browser);
-  if (!model || !GetActiveTabURLAndTitleToSave(browser, &url, &title))
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  if (!model || !GetTabURLAndTitleToSave(web_contents, &url, &title))
     return false;
   const ReadingListEntry* entry = model->GetEntryByURL(url);
   return entry && !entry->IsRead();
+}
+
+void MaybeShowBookmarkBarForReadLater(Browser* browser) {
+#if !defined(OS_ANDROID)
+  if (base::FeatureList::IsEnabled(features::kSidePanel))
+    return;
+  PrefService* pref_service = browser->profile()->GetPrefs();
+  if (pref_service &&
+      !pref_service->GetBoolean(
+          reading_list::prefs::kReadingListDesktopFirstUseExperienceShown)) {
+    pref_service->SetBoolean(
+        reading_list::prefs::kReadingListDesktopFirstUseExperienceShown, true);
+    base::UmaHistogramEnumeration(
+        "ReadingList.BookmarkBarState.OnFirstAddToReadingList",
+        browser->bookmark_bar_state());
+
+    if (browser->bookmark_bar_state() == BookmarkBar::HIDDEN)
+      ToggleBookmarkBar(browser);
+  }
+#endif  // defined(OS_ANDROID)
+}
+
+void ShowOffersAndRewardsForPage(Browser* browser) {
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  autofill::OfferNotificationBubbleControllerImpl* controller =
+      autofill::OfferNotificationBubbleControllerImpl::FromWebContents(
+          web_contents);
+  DCHECK(controller);
+  controller->ReshowBubble();
 }
 
 void SaveCreditCard(Browser* browser) {
@@ -1095,28 +1201,23 @@ void MigrateLocalCards(Browser* browser) {
   controller->OnUserClickedCreditCardIcon();
 }
 
-void MaybeShowSaveLocalCardSignInPromo(Browser* browser) {
+void SaveAutofillAddress(Browser* browser) {
   WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
-  autofill::SaveCardBubbleControllerImpl* controller =
-      autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents);
-
-  // If controller does not exist for the tab, don't show the sign-in promo.
-  if (controller) {
-    // The sign in promo will only be shown when 1) The user is signed out or 2)
-    // The user is signed in through DICe, but did not turn on syncing.
-    controller->MaybeShowBubbleForSignInPromo();
-  }
+  autofill::SaveUpdateAddressProfileBubbleControllerImpl* controller =
+      autofill::SaveUpdateAddressProfileBubbleControllerImpl::FromWebContents(
+          web_contents);
+  controller->OnPageActionIconClicked();
 }
 
-void CloseSaveLocalCardSignInPromo(Browser* browser) {
+void ShowVirtualCardManualFallbackBubble(Browser* browser) {
   WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
-  autofill::SaveCardBubbleControllerImpl* controller =
-      autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents);
-
+  auto* controller =
+      autofill::VirtualCardManualFallbackBubbleControllerImpl::FromWebContents(
+          web_contents);
   if (controller)
-    controller->HideBubbleForSignInPromo();
+    controller->ReshowBubble();
 }
 
 void Translate(Browser* browser) {
@@ -1175,6 +1276,15 @@ void GenerateQRCodeFromPageAction(Browser* browser) {
   content::NavigationEntry* entry =
       web_contents->GetController().GetLastCommittedEntry();
   controller->ShowBubble(entry->GetURL());
+}
+
+void SharingHubFromPageAction(Browser* browser) {
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  sharing_hub::SharingHubBubbleController* controller =
+      sharing_hub::SharingHubBubbleController::CreateOrGetFromWebContents(
+          web_contents);
+  controller->ShowBubble();
 }
 
 void SavePage(Browser* browser) {
@@ -1292,6 +1402,10 @@ void ShowTabSearch(Browser* browser) {
   browser->window()->CreateTabSearchBubble();
 }
 
+void CloseTabSearch(Browser* browser) {
+  browser->window()->CloseTabSearchBubble();
+}
+
 bool CanCloseFind(Browser* browser) {
   WebContents* current_tab = browser->tab_strip_model()->GetActiveWebContents();
   if (!current_tab)
@@ -1353,12 +1467,14 @@ void FocusPreviousPane(Browser* browser) {
   browser->window()->RotatePaneFocus(false);
 }
 
-void ToggleDevToolsWindow(Browser* browser, DevToolsToggleAction action) {
+void ToggleDevToolsWindow(Browser* browser,
+                          DevToolsToggleAction action,
+                          DevToolsOpenedByAction opened_by) {
   if (action.type() == DevToolsToggleAction::kShowConsolePanel)
     base::RecordAction(UserMetricsAction("DevTools_ToggleConsole"));
   else
     base::RecordAction(UserMetricsAction("DevTools_ToggleWindow"));
-  DevToolsWindow::ToggleDevToolsWindow(browser, action);
+  DevToolsWindow::ToggleDevToolsWindow(browser, action, opened_by);
 }
 
 bool CanOpenTaskManager() {
@@ -1370,7 +1486,22 @@ bool CanOpenTaskManager() {
 }
 
 void OpenTaskManager(Browser* browser) {
-#if !defined(OS_ANDROID)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // Open linux version of task manager UI if ash TaskManager
+  // interface is in an old version.
+  if (chromeos::LacrosService::Get()->GetInterfaceVersion(
+          crosapi::mojom::TaskManager::Uuid_) < 1) {
+    base::RecordAction(UserMetricsAction("TaskManager"));
+    chrome::ShowTaskManager(browser);
+    return;
+  }
+  // Invoke task manager UI in ash, which will call chrome::OpenTaskManager()
+  // in ash to run through the code path in the next section
+  // (!defined(OS_ANDROID)).
+  chromeos::LacrosService::Get()
+      ->GetRemote<crosapi::mojom::TaskManager>()
+      ->ShowTaskManager();
+#elif !defined(OS_ANDROID)
   base::RecordAction(UserMetricsAction("TaskManager"));
   chrome::ShowTaskManager(browser);
 #else
@@ -1378,12 +1509,14 @@ void OpenTaskManager(Browser* browser) {
 #endif
 }
 
-void OpenFeedbackDialog(Browser* browser, FeedbackSource source) {
+void OpenFeedbackDialog(Browser* browser,
+                        FeedbackSource source,
+                        const std::string& description_template) {
   base::RecordAction(UserMetricsAction("Feedback"));
-  chrome::ShowFeedbackPage(
-      browser, source, std::string() /* description_template */,
-      std::string() /* description_placeholder_text */,
-      std::string() /* category_tag */, std::string() /* extra_diagnostics */);
+  chrome::ShowFeedbackPage(browser, source, description_template,
+                           std::string() /* description_placeholder_text */,
+                           std::string() /* category_tag */,
+                           std::string() /* extra_diagnostics */);
 }
 
 void ToggleBookmarkBar(Browser* browser) {
@@ -1396,7 +1529,6 @@ void ToggleShowFullURLs(Browser* browser) {
       omnibox::kPreventUrlElisionsInOmnibox);
   browser->profile()->GetPrefs()->SetBoolean(
       omnibox::kPreventUrlElisionsInOmnibox, !pref_enabled);
-  UMA_HISTOGRAM_BOOLEAN("Omnibox.ShowFullUrlsEnabled", !pref_enabled);
 }
 
 void ShowAppMenu(Browser* browser) {
@@ -1473,7 +1605,7 @@ void SetAndroidOsForTabletSite(content::WebContents* current_tab) {
     blink::UserAgentOverride ua_override;
     ua_override.ua_string_override = content::BuildUserAgentFromOSAndProduct(
         kOsOverrideForTabletSite, product);
-    ua_override.ua_metadata_override = GetUserAgentMetadata();
+    ua_override.ua_metadata_override = embedder_support::GetUserAgentMetadata();
     ua_override.ua_metadata_override->mobile = true;
     ua_override.ua_metadata_override->platform =
         kChPlatformOverrideForTabletSite;
@@ -1518,8 +1650,8 @@ Browser* OpenInChrome(Browser* hosted_app_browser) {
       chrome::FindTabbedBrowser(hosted_app_browser->profile(), false);
 
   if (!target_browser) {
-    target_browser =
-        new Browser(Browser::CreateParams(hosted_app_browser->profile(), true));
+    target_browser = Browser::Create(
+        Browser::CreateParams(hosted_app_browser->profile(), true));
   }
 
   TabStripModel* source_tabstrip = hosted_app_browser->tab_strip_model();
@@ -1537,7 +1669,27 @@ bool CanViewSource(const Browser* browser) {
                                              .CanViewSource();
 }
 
+bool CanToggleCaretBrowsing(Browser* browser) {
+#if defined(OS_MAC)
+  // On Mac, ignore the keyboard shortcut unless web contents is focused,
+  // because the keyboard shortcut interferes with a Japenese IME when the
+  // omnibox is focused.  See https://crbug.com/1138475
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  if (!web_contents)
+    return false;
+
+  content::RenderWidgetHostView* rwhv = web_contents->GetRenderWidgetHostView();
+  return rwhv && rwhv->HasFocus();
+#else
+  return true;
+#endif  // defined(OS_MAC)
+}
+
 void ToggleCaretBrowsing(Browser* browser) {
+  if (!CanToggleCaretBrowsing(browser))
+    return;
+
   PrefService* prefService = browser->profile()->GetPrefs();
   bool enabled = prefService->GetBoolean(prefs::kCaretBrowsingEnabled);
 
@@ -1564,6 +1716,10 @@ void ToggleCaretBrowsing(Browser* browser) {
 
 void PromptToNameWindow(Browser* browser) {
   chrome::ShowWindowNamePrompt(browser);
+}
+
+void ToggleCommander(Browser* browser) {
+  commander::Commander::Get()->ToggleForBrowser(browser);
 }
 
 #if !defined(TOOLKIT_VIEWS)

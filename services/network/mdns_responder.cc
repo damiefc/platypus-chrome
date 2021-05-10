@@ -6,6 +6,7 @@
 #include <cmath>
 #include <numeric>
 #include <queue>
+#include <string>
 #include <utility>
 
 #include "services/network/mdns_responder.h"
@@ -16,12 +17,14 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/optional.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_byteorder.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "net/base/address_family.h"
 #include "net/base/io_buffer.h"
@@ -809,6 +812,9 @@ void MdnsResponderManager::SocketHandler::ResponseScheduler::
 MdnsResponseSendOption::MdnsResponseSendOption() = default;
 MdnsResponseSendOption::~MdnsResponseSendOption() = default;
 
+// static
+constexpr base::TimeDelta MdnsResponderManager::kManagerStartThrottleDelay;
+
 MdnsResponderManager::MdnsResponderManager() : MdnsResponderManager(nullptr) {}
 
 MdnsResponderManager::MdnsResponderManager(
@@ -819,7 +825,7 @@ MdnsResponderManager::MdnsResponderManager(
     owned_socket_factory_ = net::MDnsSocketFactory::CreateDefault();
     socket_factory_ = owned_socket_factory_.get();
   }
-  Start();
+  StartIfNeeded();
 }
 
 MdnsResponderManager::~MdnsResponderManager() {
@@ -833,9 +839,24 @@ MdnsResponderManager::~MdnsResponderManager() {
   responders_.clear();
 }
 
-void MdnsResponderManager::Start() {
+void MdnsResponderManager::StartIfNeeded() {
+  if (start_result_ == SocketHandlerStartResult::ALL_SUCCESS ||
+      start_result_ == SocketHandlerStartResult::PARTIAL_SUCCESS) {
+    // Start not needed.
+    return;
+  }
+
+  if (!throttled_start_end_.is_null() &&
+      tick_clock_->NowTicks() < throttled_start_end_) {
+    // Attempts are throttled. Noop for now.
+    DCHECK(start_result_ == SocketHandlerStartResult::ALL_FAILURE);
+    return;
+  }
+  throttled_start_end_ = base::TimeTicks();
+
   VLOG(1) << "Starting mDNS responder manager.";
-  DCHECK(start_result_ == SocketHandlerStartResult::UNSPECIFIED);
+  DCHECK(start_result_ == SocketHandlerStartResult::UNSPECIFIED ||
+         start_result_ == SocketHandlerStartResult::ALL_FAILURE);
   DCHECK(socket_handler_by_id_.empty());
   std::vector<std::unique_ptr<net::DatagramServerSocket>> sockets;
   // Create and return only bound sockets.
@@ -865,6 +886,7 @@ void MdnsResponderManager::Start() {
   size_t num_started_socket_handlers = socket_handler_by_id_.size();
   if (socket_handler_by_id_.empty()) {
     start_result_ = SocketHandlerStartResult::ALL_FAILURE;
+    throttled_start_end_ = tick_clock_->NowTicks() + kManagerStartThrottleDelay;
     LOG(ERROR) << "mDNS responder manager failed to start.";
     ReportServiceError(MdnsResponderServiceError::kFailToStartManager);
     return;
@@ -880,6 +902,7 @@ void MdnsResponderManager::Start() {
 
 void MdnsResponderManager::CreateMdnsResponder(
     mojo::PendingReceiver<mojom::MdnsResponder> receiver) {
+  StartIfNeeded();
   if (start_result_ == SocketHandlerStartResult::UNSPECIFIED ||
       start_result_ == SocketHandlerStartResult::ALL_FAILURE) {
     LOG(ERROR) << "The mDNS responder manager is not started yet.";
@@ -923,6 +946,7 @@ void MdnsResponderManager::SetNameGeneratorForTesting(
 
 void MdnsResponderManager::SetTickClockForTesting(
     const base::TickClock* tick_clock) {
+  tick_clock_ = tick_clock;
   for (auto& id_handler_pair : socket_handler_by_id_) {
     id_handler_pair.second->SetTickClockForTesting(tick_clock);
   }
@@ -966,11 +990,12 @@ void MdnsResponderManager::OnMdnsQueryReceived(
   // responder only provides APIs to create address records, and hence limited
   // to handle only such records. Once we have expanded the API surface to
   // include the service publishing, the handling logic should be unified.
-  const std::string qname = net::DNSDomainToString(query.qname());
+  const base::Optional<std::string> qname =
+      net::DnsDomainToString(query.qname());
   if (base::FeatureList::IsEnabled(
           features::kMdnsResponderGeneratedNameListing)) {
-    if (should_respond_to_generator_service_query_ &&
-        qname == kMdnsNameGeneratorServiceInstanceName) {
+    if (should_respond_to_generator_service_query_ && qname &&
+        qname.value() == kMdnsNameGeneratorServiceInstanceName) {
       HandleMdnsNameGeneratorServiceQuery(query, recv_socket_handler_id);
       return;
     }
@@ -997,7 +1022,8 @@ void MdnsResponderManager::OnSocketHandlerReadError(uint16_t socket_handler_id,
         << "All socket handlers failed. Restarting the mDNS responder manager.";
     ReportServiceError(MdnsResponderServiceError::kFatalSocketHandlerError);
     start_result_ = MdnsResponderManager::SocketHandlerStartResult::UNSPECIFIED;
-    Start();
+    DCHECK(throttled_start_end_.is_null());
+    StartIfNeeded();
   }
 }
 
@@ -1233,8 +1259,11 @@ void MdnsResponder::RemoveNameForAddress(
 void MdnsResponder::OnMdnsQueryReceived(const net::DnsQuery& query,
                                         uint16_t recv_socket_handler_id) {
   // Currently we only support a single question in DnsQuery.
-  std::string dotted_name_to_resolve = net::DNSDomainToString(query.qname());
-  auto it = name_addr_map_.find(dotted_name_to_resolve);
+  base::Optional<std::string> dotted_name_to_resolve =
+      net::DnsDomainToString(query.qname());
+  if (!dotted_name_to_resolve)
+    return;
+  auto it = name_addr_map_.find(dotted_name_to_resolve.value());
   if (it == name_addr_map_.end())
     return;
 

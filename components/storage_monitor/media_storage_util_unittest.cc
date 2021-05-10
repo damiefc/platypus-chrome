@@ -5,7 +5,7 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
@@ -43,8 +43,8 @@ class MediaStorageUtilTest : public testing::Test {
 
   void ProcessAttach(const std::string& id,
                      const base::FilePath::StringType& location) {
-    StorageInfo info(id, location, base::string16(), base::string16(),
-                     base::string16(), 0);
+    StorageInfo info(id, location, std::u16string(), std::u16string(),
+                     std::u16string(), 0);
     monitor_->receiver()->ProcessAttach(info);
   }
 

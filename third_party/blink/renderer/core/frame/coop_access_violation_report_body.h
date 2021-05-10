@@ -12,22 +12,28 @@
 
 namespace blink {
 
-class CORE_EXPORT CoopAccessViolationReportBody : public LocationReportBody {
+class CORE_EXPORT CoopAccessViolationReportBody final
+    : public LocationReportBody {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   CoopAccessViolationReportBody(
       std::unique_ptr<SourceLocation> source_location,
       network::mojom::blink::CoopAccessReportType type,
-      const String& property);
+      const String& property,
+      const String& reported_url);
   ~CoopAccessViolationReportBody() final = default;
   String type() const;
+  String openeeURL() const;
+  String openerURL() const;
+  String otherDocumentURL() const;
   const String& property() const { return property_; }
   void BuildJSONValue(V8ObjectBuilder& builder) const final;
 
  private:
   network::mojom::blink::CoopAccessReportType type_;
   const String property_;
+  const String reported_url_;
 };
 
 }  // namespace blink

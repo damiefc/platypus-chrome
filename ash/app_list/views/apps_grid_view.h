@@ -14,17 +14,18 @@
 #include <tuple>
 #include <vector>
 
-#include "ash/app_list/app_list_export.h"
 #include "ash/app_list/model/app_list_model.h"
 #include "ash/app_list/model/app_list_model_observer.h"
 #include "ash/app_list/paged_view_structure.h"
 #include "ash/app_list/views/app_list_view.h"
+#include "ash/ash_export.h"
 #include "ash/public/cpp/pagination/pagination_model.h"
 #include "ash/public/cpp/pagination/pagination_model_observer.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "ui/base/models/list_model_observer.h"
@@ -34,14 +35,9 @@
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/views/animation/bounds_animator.h"
 #include "ui/views/animation/bounds_animator_observer.h"
-#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/view.h"
 #include "ui/views/view_model.h"
-
-namespace views {
-class ButtonListener;
-}
 
 namespace ash {
 
@@ -52,6 +48,7 @@ class AppsGridViewTestApi;
 
 class ApplicationDragAndDropHost;
 class AppListConfig;
+class AppListItem;
 class AppListItemView;
 class AppsGridViewFolderDelegate;
 class ContentsView;
@@ -60,8 +57,8 @@ class PulsingBlockView;
 class GhostImageView;
 
 // Represents the index to an item view in the grid.
-struct APP_LIST_EXPORT GridIndex {
-  GridIndex() : page(-1), slot(-1) {}
+struct ASH_EXPORT GridIndex {
+  GridIndex() = default;
   GridIndex(int page, int slot) : page(page), slot(slot) {}
 
   bool operator==(const GridIndex& other) const {
@@ -75,18 +72,17 @@ struct APP_LIST_EXPORT GridIndex {
   }
   std::string ToString() const;
 
-  int page;  // Which page an item view is on.
-  int slot;  // Which slot in the page an item view is in.
+  int page = -1;  // Which page an item view is on.
+  int slot = -1;  // Which slot in the page an item view is in.
 };
 
 // AppsGridView displays a grid for AppListItemList sub model.
-class APP_LIST_EXPORT AppsGridView : public views::View,
-                                     public views::ButtonListener,
-                                     public AppListItemListObserver,
-                                     public PaginationModelObserver,
-                                     public AppListModelObserver,
-                                     public ui::ImplicitAnimationObserver,
-                                     public views::BoundsAnimatorObserver {
+class ASH_EXPORT AppsGridView : public views::View,
+                                public AppListItemListObserver,
+                                public PaginationModelObserver,
+                                public AppListModelObserver,
+                                public ui::ImplicitAnimationObserver,
+                                public views::BoundsAnimatorObserver {
  public:
   enum Pointer {
     NONE,
@@ -266,7 +262,8 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   // Passes scroll information from AppListView to the PaginationController,
   // returns true if this scroll would change pages.
-  bool HandleScrollFromAppListView(const gfx::Vector2d& offset,
+  bool HandleScrollFromAppListView(const gfx::Point& location,
+                                   const gfx::Vector2d& offset,
                                    ui::EventType type);
 
   // Moves |reparented_item| from its folder to the root AppsGridView in the
@@ -312,6 +309,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // Translates the items container view to center the current page in the apps
   // grid.
   void RecenterItemsContainer();
+  // Calculates the background bounds for the grid depending on the value of
+  // |cardified_state_|
+  gfx::Rect BackgroundCardBounds(int new_page_index);
   // Appends a background card to the back of |background_cards_|.
   void AppendBackgroundCard();
   // Removes the background card at the end of |background_cards_|.
@@ -351,13 +351,17 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   const AppListModel* model() const { return model_; }
 
-  void set_page_flip_delay_in_ms_for_testing(int page_flip_delay_in_ms) {
-    page_flip_delay_in_ms_ = page_flip_delay_in_ms;
+  void set_page_flip_delay_for_testing(base::TimeDelta page_flip_delay) {
+    page_flip_delay_ = page_flip_delay;
   }
 
   views::BoundsAnimator* bounds_animator_for_testing() {
     return bounds_animator_.get();
   }
+
+  bool cardified_state_for_testing() const { return cardified_state_; }
+
+  int BackgroundCardCountForTesting() const { return background_cards_.size(); }
 
  private:
   class FadeoutLayerDelegate;
@@ -372,8 +376,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
     BETWEEN_ITEMS,
   };
 
-  // Returns all apps tiles per page based on |page|.
-  int TilesPerPage(int page) const;
+  // Returns the number of apps tiles per page. Folder grids may have different
+  // numbers of tiles from the main grid.
+  int TilesPerPage() const;
 
   // Updates from model.
   void Update();
@@ -384,6 +389,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // Updates the number of pulsing block views based on AppListModel status and
   // number of apps.
   void UpdatePulsingBlockViews();
+
+  std::unique_ptr<AppListItemView> CreateViewForItem(AppListItem* item,
+                                                     bool is_in_folder = false);
 
   std::unique_ptr<AppListItemView> CreateViewForItemAtIndex(size_t index);
 
@@ -512,8 +520,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // shelf.
   bool IsPointWithinBottomDragBuffer(const gfx::Point& point) const;
 
-  // Overridden from views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  // AppListItemView pressed callback binds here:
+  void OnAppListItemViewPressed(AppListItemView* pressed_item_view,
+                                const ui::Event& event);
 
   // Overridden from AppListItemListObserver:
   void OnListItemAdded(size_t index, AppListItem* item) override;
@@ -561,6 +570,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // Returns the slot number which the given |point| falls into or the closest
   // slot if |point| is outside the page's bounds.
   GridIndex GetNearestTileIndexForPoint(const gfx::Point& point) const;
+
+  // Calculates the offset distance to center the grid in the container.
+  gfx::Vector2d GetGridCenteringOffset() const;
 
   // Gets the bounds of the tile located at |index|, where |index| contains the
   // page/slot info.
@@ -710,21 +722,21 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   // Modifies the announcement view to verbalize that the focused view has new
   // updates, based on the item having a notification badge.
-  void AnnounceItemNotificationBadge(const base::string16& selected_view_title);
+  void AnnounceItemNotificationBadge(const std::u16string& selected_view_title);
 
   // Modifies the announcement view to verbalize that the current drag will move
   // |moving_view_title| and create a folder or move it into an existing folder
   // with |target_view_title|.
-  void AnnounceFolderDrop(const base::string16& moving_view_title,
-                          const base::string16& target_view_title,
+  void AnnounceFolderDrop(const std::u16string& moving_view_title,
+                          const std::u16string& target_view_title,
                           bool target_is_folder);
 
   // Modifies the announcement view to vervalize that the most recent keyboard
   // foldering action has either moved |moving_view_title| into
   // |target_view_title| folder or that |moving_view_title| and
   // |target_view_title| have formed a new folder.
-  void AnnounceKeyboardFoldering(const base::string16& moving_view_title,
-                                 const base::string16& target_view_title,
+  void AnnounceKeyboardFoldering(const std::u16string& moving_view_title,
+                                 const std::u16string& target_view_title,
                                  bool target_is_folder);
 
   // During an app drag, creates an a11y event to verbalize drop target
@@ -834,6 +846,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   base::OneShotTimer host_drag_start_timer_;
 
   // An application target drag and drop host which accepts dnd operations.
+  // Usually the shelf (e.g. ShelfView or ScrollableShelfView).
   ApplicationDragAndDropHost* drag_and_drop_host_ = nullptr;
 
   // The drag operation is currently inside the dnd host and events get
@@ -866,15 +879,15 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   std::unique_ptr<FadeoutLayerDelegate> fadeout_layer_delegate_;
 
-  // Delay in milliseconds of when |page_flip_timer_| should fire after user
-  // drags an item near the edges.
-  int page_flip_delay_in_ms_;
+  // Delay for when |page_flip_timer_| should fire after user drags an item near
+  // the edge.
+  base::TimeDelta page_flip_delay_;
 
   // True if it is the end gesture from shelf dragging.
   bool is_end_gesture_ = false;
 
   // view structure used only for non-folder.
-  PagedViewStructure view_structure_;
+  PagedViewStructure view_structure_{this};
 
   // True if an extra page is opened after the user drags an app to the bottom
   // of last page with intention to put it in a new page. This is only used for

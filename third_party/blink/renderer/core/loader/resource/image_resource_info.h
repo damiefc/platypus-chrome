@@ -58,9 +58,11 @@ class CORE_EXPORT ImageResourceInfo : public GarbageCollectedMixin {
 
   virtual bool IsAdResource() const = 0;
 
+  virtual const HashSet<String>* GetUnsupportedImageMimeTypes() const = 0;
+
   void Trace(Visitor* visitor) const override {}
 };
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_RESOURCE_IMAGE_RESOURCE_INFO_H_

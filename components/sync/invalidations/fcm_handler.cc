@@ -7,7 +7,7 @@
 #include <map>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "components/gcm_driver/gcm_driver.h"
@@ -18,10 +18,10 @@
 
 namespace syncer {
 
-const char kPayloadKey[] = "payload";
-
 // Lower bound time between two token validations when listening.
 const int kTokenValidationPeriodMinutesDefault = 60 * 24;
+
+const int kInstanceIDTokenTTLSeconds = 14 * 24 * 60 * 60;  // 2 weeks.
 
 FCMHandler::FCMHandler(gcm::GCMDriver* gcm_driver,
                        instance_id::InstanceIDDriver* instance_id_driver,
@@ -42,12 +42,16 @@ void FCMHandler::StartListening() {
   DCHECK(!IsListening());
   DCHECK(base::FeatureList::IsEnabled(switches::kUseSyncInvalidations));
   gcm_driver_->AddAppHandler(app_id_, this);
+  waiting_for_token_ = true;
   StartTokenFetch(base::BindOnce(&FCMHandler::DidRetrieveToken,
                                  weak_ptr_factory_.GetWeakPtr()));
 }
 
 void FCMHandler::StopListening() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // StopListening() may be called after StartListening() right away and
+  // DidRetrieveToken() won't be called.
+  waiting_for_token_ = false;
   if (IsListening()) {
     gcm_driver_->RemoveAppHandler(app_id_);
     token_validation_timer_.AbandonAndStop();
@@ -59,6 +63,10 @@ void FCMHandler::StopListeningPermanently() {
   if (instance_id_driver_->ExistsInstanceID(app_id_)) {
     instance_id_driver_->GetInstanceID(app_id_)->DeleteID(
         /*callback=*/base::DoNothing());
+    fcm_registration_token_.clear();
+    for (FCMRegistrationTokenObserver& token_observer : token_observers_) {
+      token_observer.OnFCMRegistrationTokenChanged();
+    }
   }
   StopListening();
 }
@@ -66,6 +74,11 @@ void FCMHandler::StopListeningPermanently() {
 const std::string& FCMHandler::GetFCMRegistrationToken() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return fcm_registration_token_;
+}
+
+bool FCMHandler::IsWaitingForToken() const {
+  DCHECK(!waiting_for_token_ || IsListening());
+  return waiting_for_token_;
 }
 
 void FCMHandler::ShutdownHandler() {
@@ -105,14 +118,8 @@ void FCMHandler::OnMessage(const std::string& app_id,
   DCHECK_EQ(app_id, app_id_);
   DCHECK(base::FeatureList::IsEnabled(switches::kUseSyncInvalidations));
 
-  auto it = message.data.find(kPayloadKey);
-  std::string payload;
-  if (it != message.data.end()) {
-    payload = it->second;
-  }
-
   for (InvalidationsListener& listener : listeners_) {
-    listener.OnInvalidationReceived(payload);
+    listener.OnInvalidationReceived(message.raw_data);
   }
 }
 
@@ -143,6 +150,8 @@ bool FCMHandler::IsListening() const {
 void FCMHandler::DidRetrieveToken(const std::string& subscription_token,
                                   instance_id::InstanceID::Result result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  waiting_for_token_ = false;
+
   if (!IsListening()) {
     // After we requested the token, |StopListening| has been called. Thus,
     // ignore the token.
@@ -203,11 +212,9 @@ void FCMHandler::DidReceiveTokenForValidation(
 
 void FCMHandler::StartTokenFetch(
     instance_id::InstanceID::GetTokenCallback callback) {
-  // TODO(crbug.com/1108780): set appropriate TTL.
   instance_id_driver_->GetInstanceID(app_id_)->GetToken(
       sender_id_, instance_id::kGCMScope,
-      /*time_to_live=*/base::TimeDelta(),
-      /*options=*/std::map<std::string, std::string>(),
+      /*time_to_live=*/base::TimeDelta::FromSeconds(kInstanceIDTokenTTLSeconds),
       /*flags=*/{instance_id::InstanceID::Flags::kIsLazy}, std::move(callback));
 }
 

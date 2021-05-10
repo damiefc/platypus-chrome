@@ -107,7 +107,8 @@ class PrintingApiTest : public ExtensionApiTest {
     chromeos::Printer printer = chromeos::Printer(printer_id);
     GetPrintersManager()->AddPrinter(printer,
                                      chromeos::PrinterClass::kEnterprise);
-    test_print_backend_->AddValidPrinter(printer_id, std::move(capabilities));
+    test_print_backend_->AddValidPrinter(printer_id, std::move(capabilities),
+                                         nullptr);
   }
 
  private:
@@ -118,9 +119,7 @@ class PrintingApiTest : public ExtensionApiTest {
         context, base::BindRepeating(&BuildTestCupsPrintersManager));
   }
 
-  std::unique_ptr<
-      BrowserContextDependencyManager::CreateServicesCallbackList::Subscription>
-      create_services_subscription_;
+  base::CallbackListSubscription create_services_subscription_;
 
   scoped_refptr<printing::TestPrintBackend> test_print_backend_;
 };
@@ -133,13 +132,15 @@ IN_PROC_BROWSER_TEST_F(PrintingApiTest, GetPrinters) {
   GetPrintersManager()->AddPrinter(printer, chromeos::PrinterClass::kSaved);
 
   SetCustomArg(kName);
-  ASSERT_TRUE(RunExtensionSubtest("printing", "get_printers.html"));
+  ASSERT_TRUE(
+      RunExtensionTest({.name = "printing", .page_url = "get_printers.html"}));
 }
 
 IN_PROC_BROWSER_TEST_F(PrintingApiTest, GetPrinterInfo) {
   AddAvailablePrinter(
       kId, std::make_unique<printing::PrinterSemanticCapsAndDefaults>());
-  ASSERT_TRUE(RunExtensionSubtest("printing", "get_printer_info.html"));
+  ASSERT_TRUE(RunExtensionTest(
+      {.name = "printing", .page_url = "get_printer_info.html"}));
 }
 
 // Verifies that:
@@ -160,7 +161,8 @@ IN_PROC_BROWSER_TEST_F(PrintingApiTest, SubmitJob) {
   base::AutoReset<bool> skip_confirmation_dialog_reset(
       PrintJobSubmitter::SkipConfirmationDialogForTesting());
 
-  ASSERT_TRUE(RunExtensionSubtest("printing", "submit_job.html"));
+  ASSERT_TRUE(
+      RunExtensionTest({.name = "printing", .page_url = "submit_job.html"}));
 }
 
 // Verifies that:
@@ -177,7 +179,8 @@ IN_PROC_BROWSER_TEST_F(PrintingApiTest, CancelJob) {
   base::AutoReset<bool> skip_confirmation_dialog_reset(
       PrintJobSubmitter::SkipConfirmationDialogForTesting());
 
-  ASSERT_TRUE(RunExtensionSubtest("printing", "cancel_job.html"));
+  ASSERT_TRUE(
+      RunExtensionTest({.name = "printing", .page_url = "cancel_job.html"}));
 }
 
 }  // namespace extensions

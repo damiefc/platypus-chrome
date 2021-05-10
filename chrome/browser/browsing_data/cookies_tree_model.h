@@ -12,16 +12,11 @@
 
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "base/strings/string16.h"
-#include "build/build_config.h"
+#include "chrome/browser/browsing_data/access_context_audit_database.h"
 #include "chrome/browser/browsing_data/local_data_container.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "extensions/buildflags/buildflags.h"
 #include "ui/base/models/tree_node_model.h"
-
-#if !defined(OS_ANDROID)
-#include "chrome/browser/browsing_data/access_context_audit_database.h"
-#endif  // !defined(OS_ANDROID)
 
 class AccessContextAuditService;
 class CookiesTreeModel;
@@ -35,7 +30,6 @@ class CookieTreeDatabaseNode;
 class CookieTreeDatabasesNode;
 class CookieTreeFileSystemNode;
 class CookieTreeFileSystemsNode;
-class CookieTreeFlashLSONode;
 class CookieTreeHostNode;
 class CookieTreeIndexedDBNode;
 class CookieTreeIndexedDBsNode;
@@ -100,7 +94,6 @@ class CookieTreeNode : public ui::TreeNode<CookieTreeNode> {
       TYPE_SHARED_WORKER,     // This is used for CookieTreeSharedWorkerNode.
       TYPE_CACHE_STORAGES,    // This is used for CookieTreeCacheStoragesNode.
       TYPE_CACHE_STORAGE,     // This is used for CookieTreeCacheStorageNode.
-      TYPE_FLASH_LSO,         // This is used for CookieTreeFlashLSONode.
       TYPE_MEDIA_LICENSES,    // This is used for CookieTreeMediaLicensesNode.
       TYPE_MEDIA_LICENSE,     // This is used for CookieTreeMediaLicenseNode.
     };
@@ -130,7 +123,6 @@ class CookieTreeNode : public ui::TreeNode<CookieTreeNode> {
         const browsing_data::SharedWorkerHelper::SharedWorkerInfo*
             shared_worker_info);
     DetailedInfo& InitCacheStorage(const content::StorageUsageInfo* usage_info);
-    DetailedInfo& InitFlashLSO(const std::string& flash_lso_domain);
     DetailedInfo& InitMediaLicense(
         const BrowsingDataMediaLicenseHelper::MediaLicenseInfo*
             media_license_info);
@@ -146,13 +138,12 @@ class CookieTreeNode : public ui::TreeNode<CookieTreeNode> {
     const BrowsingDataQuotaHelper::QuotaInfo* quota_info = nullptr;
     const browsing_data::SharedWorkerHelper::SharedWorkerInfo*
         shared_worker_info = nullptr;
-    std::string flash_lso_domain;
     const BrowsingDataMediaLicenseHelper::MediaLicenseInfo* media_license_info =
         nullptr;
   };
 
   CookieTreeNode() {}
-  explicit CookieTreeNode(const base::string16& title)
+  explicit CookieTreeNode(const std::u16string& title)
       : ui::TreeNode<CookieTreeNode>(title) {}
   ~CookieTreeNode() override {}
 
@@ -178,13 +169,11 @@ class CookieTreeNode : public ui::TreeNode<CookieTreeNode> {
  protected:
   void AddChildSortedByTitle(std::unique_ptr<CookieTreeNode> new_child);
 
-#if !defined(OS_ANDROID)
   // TODO (crbug.com/1113602): Remove this when all storage deletions from
   // the browser process use the StoragePartition directly.
   void ReportDeletionToAuditService(
       const url::Origin& origin,
       AccessContextAuditDatabase::StorageAPIType type);
-#endif  // !defined(OS_ANDROID)
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CookieTreeNode);
@@ -213,7 +202,7 @@ class CookieTreeRootNode : public CookieTreeNode {
 class CookieTreeHostNode : public CookieTreeNode {
  public:
   // Returns the host node's title to use for a given URL.
-  static base::string16 TitleForUrl(const GURL& url);
+  static std::u16string TitleForUrl(const GURL& url);
 
   explicit CookieTreeHostNode(const GURL& url);
   ~CookieTreeHostNode() override;
@@ -235,7 +224,6 @@ class CookieTreeHostNode : public CookieTreeNode {
   CookieTreeCacheStoragesNode* GetOrCreateCacheStoragesNode();
   CookieTreeQuotaNode* UpdateOrCreateQuotaNode(
       std::list<BrowsingDataQuotaHelper::QuotaInfo>::iterator quota_info);
-  CookieTreeFlashLSONode* GetOrCreateFlashLSONode(const std::string& domain);
   CookieTreeMediaLicensesNode* GetOrCreateMediaLicensesNode();
 
   std::string canonicalized_host() const { return canonicalized_host_; }
@@ -269,7 +257,6 @@ class CookieTreeHostNode : public CookieTreeNode {
   CookieTreeServiceWorkersNode* service_workers_child_ = nullptr;
   CookieTreeSharedWorkersNode* shared_workers_child_ = nullptr;
   CookieTreeCacheStoragesNode* cache_storages_child_ = nullptr;
-  CookieTreeFlashLSONode* flash_lso_child_ = nullptr;
   CookieTreeMediaLicensesNode* media_licenses_child_ = nullptr;
 
   // The URL for which this node was initially created.
@@ -347,7 +334,7 @@ class CookiesTreeModel : public ui::TreeNodeModel<CookieTreeNode> {
   void DeleteCookieNode(CookieTreeNode* cookie_node);
 
   // Filter the origins to only display matched results.
-  void UpdateSearchResults(const base::string16& filter);
+  void UpdateSearchResults(const std::u16string& filter);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Returns the set of extensions which protect the data item represented by
@@ -378,7 +365,6 @@ class CookiesTreeModel : public ui::TreeNodeModel<CookieTreeNode> {
   void PopulateServiceWorkerUsageInfo(LocalDataContainer* container);
   void PopulateSharedWorkerInfo(LocalDataContainer* container);
   void PopulateCacheStorageUsageInfo(LocalDataContainer* container);
-  void PopulateFlashLSOInfo(LocalDataContainer* container);
   void PopulateMediaLicenseInfo(LocalDataContainer* container);
 
   // Returns the Access Context Audit service provided to the cookies tree model
@@ -423,45 +409,42 @@ class CookiesTreeModel : public ui::TreeNodeModel<CookieTreeNode> {
 
   void PopulateAppCacheInfoWithFilter(LocalDataContainer* container,
                                       ScopedBatchUpdateNotifier* notifier,
-                                      const base::string16& filter);
+                                      const std::u16string& filter);
   void PopulateCookieInfoWithFilter(LocalDataContainer* container,
                                     ScopedBatchUpdateNotifier* notifier,
-                                    const base::string16& filter);
+                                    const std::u16string& filter);
   void PopulateDatabaseInfoWithFilter(LocalDataContainer* container,
                                       ScopedBatchUpdateNotifier* notifier,
-                                      const base::string16& filter);
+                                      const std::u16string& filter);
   void PopulateLocalStorageInfoWithFilter(LocalDataContainer* container,
                                           ScopedBatchUpdateNotifier* notifier,
-                                          const base::string16& filter);
+                                          const std::u16string& filter);
   void PopulateSessionStorageInfoWithFilter(LocalDataContainer* container,
                                             ScopedBatchUpdateNotifier* notifier,
-                                            const base::string16& filter);
+                                            const std::u16string& filter);
   void PopulateIndexedDBInfoWithFilter(LocalDataContainer* container,
                                        ScopedBatchUpdateNotifier* notifier,
-                                       const base::string16& filter);
+                                       const std::u16string& filter);
   void PopulateFileSystemInfoWithFilter(LocalDataContainer* container,
                                         ScopedBatchUpdateNotifier* notifier,
-                                        const base::string16& filter);
+                                        const std::u16string& filter);
   void PopulateQuotaInfoWithFilter(LocalDataContainer* container,
                                    ScopedBatchUpdateNotifier* notifier,
-                                   const base::string16& filter);
+                                   const std::u16string& filter);
   void PopulateServiceWorkerUsageInfoWithFilter(
       LocalDataContainer* container,
       ScopedBatchUpdateNotifier* notifier,
-      const base::string16& filter);
+      const std::u16string& filter);
   void PopulateSharedWorkerInfoWithFilter(LocalDataContainer* container,
                                           ScopedBatchUpdateNotifier* notifier,
-                                          const base::string16& filter);
+                                          const std::u16string& filter);
   void PopulateCacheStorageUsageInfoWithFilter(
       LocalDataContainer* container,
       ScopedBatchUpdateNotifier* notifier,
-      const base::string16& filter);
-  void PopulateFlashLSOInfoWithFilter(LocalDataContainer* container,
-                                      ScopedBatchUpdateNotifier* notifier,
-                                      const base::string16& filter);
+      const std::u16string& filter);
   void PopulateMediaLicenseInfoWithFilter(LocalDataContainer* container,
                                           ScopedBatchUpdateNotifier* notifier,
-                                          const base::string16& filter);
+                                          const std::u16string& filter);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // The extension special storage policy; see ExtensionsProtectingNode() above.

@@ -9,18 +9,17 @@
 #include "base/feature_list.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_feature_list.h"
-#include "base/test/task_environment.h"
 #include "base/values.h"
 #include "chrome/browser/ssl/ssl_config_service_manager.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/testing_pref_service.h"
 #include "content/public/browser/network_service_instance.h"
+#include "content/public/test/browser_task_environment.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "net/cert/cert_verifier.h"
 #include "net/ssl/ssl_config.h"
+#include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/ssl_config.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -49,7 +48,7 @@ class SSLConfigServiceManagerPrefTest : public testing::Test,
         network::mojom::NetworkContextParams::New();
     network_context_params->cert_verifier_params =
         content::GetCertVerifierParams(
-            network::mojom::CertVerifierCreationParams::New());
+            cert_verifier::mojom::CertVerifierCreationParams::New());
     config_manager->AddToNetworkContextParams(network_context_params.get());
     EXPECT_TRUE(network_context_params->initial_ssl_config);
     initial_config_ = std::move(network_context_params->initial_ssl_config);
@@ -92,7 +91,7 @@ class SSLConfigServiceManagerPrefTest : public testing::Test,
   }
 
  protected:
-  base::test::SingleThreadTaskEnvironment task_environment_;
+  content::BrowserTaskEnvironment task_environment_;
 
   TestingPrefServiceSimple local_state_;
 
@@ -159,7 +158,7 @@ TEST_F(SSLConfigServiceManagerPrefTest, BadDisabledCipherSuites) {
 }
 
 // Test that without command-line settings for minimum and maximum SSL versions,
-// TLS versions from 1.0 up to 1.1 or 1.2 are enabled.
+// TLS versions from 1.2 are enabled.
 TEST_F(SSLConfigServiceManagerPrefTest, NoCommandLinePrefs) {
   scoped_refptr<TestingPrefStore> local_state_store(new TestingPrefStore());
   TestingPrefServiceSimple local_state;
@@ -198,8 +197,26 @@ TEST_F(SSLConfigServiceManagerPrefTest, NoSSL3) {
   EXPECT_LE(network::mojom::SSLVersion::kTLS1, initial_config_->version_min);
 }
 
-// Tests that SSLVersionMin correctly sets the minimum version.
-TEST_F(SSLConfigServiceManagerPrefTest, SSLVersionMin) {
+// Tests that "tls1" is not treated as a valid minimum version.
+TEST_F(SSLConfigServiceManagerPrefTest, NoTLS10) {
+  scoped_refptr<TestingPrefStore> local_state_store(new TestingPrefStore());
+
+  TestingPrefServiceSimple local_state;
+  local_state.SetUserPref(prefs::kSSLVersionMin,
+                          std::make_unique<base::Value>("tls1"));
+  SSLConfigServiceManager::RegisterPrefs(local_state.registry());
+
+  std::unique_ptr<SSLConfigServiceManager> config_manager =
+      SetUpConfigServiceManager(&local_state);
+
+  // The command-line option must not have been honored.
+  EXPECT_LE(network::mojom::SSLVersion::kTLS1, initial_config_->version_min);
+  EXPECT_LE(network::mojom::SSLVersion::kTLS12,
+            initial_config_->version_min_warn);
+}
+
+// Tests that "tls1.1" is not treated as a valid minimum version.
+TEST_F(SSLConfigServiceManagerPrefTest, NoTLS11) {
   scoped_refptr<TestingPrefStore> local_state_store(new TestingPrefStore());
 
   TestingPrefServiceSimple local_state;
@@ -210,7 +227,25 @@ TEST_F(SSLConfigServiceManagerPrefTest, SSLVersionMin) {
   std::unique_ptr<SSLConfigServiceManager> config_manager =
       SetUpConfigServiceManager(&local_state);
 
-  EXPECT_EQ(network::mojom::SSLVersion::kTLS11, initial_config_->version_min);
+  // The command-line option must not have been honored.
+  EXPECT_LE(network::mojom::SSLVersion::kTLS1, initial_config_->version_min);
+  EXPECT_LE(network::mojom::SSLVersion::kTLS12,
+            initial_config_->version_min_warn);
+}
+
+// Tests that SSLVersionMin correctly sets the minimum version.
+TEST_F(SSLConfigServiceManagerPrefTest, SSLVersionMin) {
+  scoped_refptr<TestingPrefStore> local_state_store(new TestingPrefStore());
+
+  TestingPrefServiceSimple local_state;
+  local_state.SetUserPref(prefs::kSSLVersionMin,
+                          std::make_unique<base::Value>("tls1.3"));
+  SSLConfigServiceManager::RegisterPrefs(local_state.registry());
+
+  std::unique_ptr<SSLConfigServiceManager> config_manager =
+      SetUpConfigServiceManager(&local_state);
+
+  EXPECT_EQ(network::mojom::SSLVersion::kTLS13, initial_config_->version_min);
 }
 
 // Tests that SSL max version correctly sets the maximum version.
@@ -219,13 +254,13 @@ TEST_F(SSLConfigServiceManagerPrefTest, SSLVersionMax) {
 
   TestingPrefServiceSimple local_state;
   local_state.SetUserPref(prefs::kSSLVersionMax,
-                          std::make_unique<base::Value>("tls1.3"));
+                          std::make_unique<base::Value>("tls1.2"));
   SSLConfigServiceManager::RegisterPrefs(local_state.registry());
 
   std::unique_ptr<SSLConfigServiceManager> config_manager =
       SetUpConfigServiceManager(&local_state);
 
-  EXPECT_EQ(network::mojom::SSLVersion::kTLS13, initial_config_->version_max);
+  EXPECT_EQ(network::mojom::SSLVersion::kTLS12, initial_config_->version_max);
 }
 
 // Tests that SSL max version can not be set below TLS 1.2.

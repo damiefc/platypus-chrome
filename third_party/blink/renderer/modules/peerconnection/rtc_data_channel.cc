@@ -29,14 +29,13 @@
 #include <string>
 #include <utility>
 
-#include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer_view.h"
 #include "third_party/blink/renderer/modules/peerconnection/adapters/web_rtc_cross_thread_copier.h"
@@ -207,7 +206,7 @@ void RTCDataChannel::Observer::OnMessage(const webrtc::DataBuffer& buffer) {
       *main_thread_, FROM_HERE,
       CrossThreadBindOnce(&RTCDataChannel::Observer::OnMessageImpl,
                           scoped_refptr<Observer>(this),
-                          WTF::Passed(std::move(new_buffer))));
+                          std::move(new_buffer)));
 }
 
 void RTCDataChannel::Observer::OnStateChangeImpl(
@@ -245,7 +244,6 @@ RTCDataChannel::RTCDataChannel(
       buffered_amount_(0U),
       stopped_(false),
       closed_from_owner_(false),
-      is_rtp_data_channel_(peer_connection_handler->enable_rtp_data_channel()),
       observer_(base::MakeRefCounted<Observer>(
           context->GetTaskRunner(TaskType::kNetworking),
           this,
@@ -400,9 +398,7 @@ void RTCDataChannel::send(DOMArrayBuffer* data,
     return;
   }
 
-  size_t data_length = data->ByteLengthAsSizeT();
-  if (!data_length)
-    return;
+  size_t data_length = data->ByteLength();
 
   if (!(base::CheckedNumeric<unsigned>(buffered_amount_) + data_length)
            .IsValid()) {
@@ -419,15 +415,14 @@ void RTCDataChannel::send(DOMArrayBuffer* data,
 
 void RTCDataChannel::send(NotShared<DOMArrayBufferView> data,
                           ExceptionState& exception_state) {
-  if (!(base::CheckedNumeric<unsigned>(buffered_amount_) +
-        data.View()->byteLengthAsSizeT())
+  if (!(base::CheckedNumeric<unsigned>(buffered_amount_) + data->byteLength())
            .IsValid()) {
     ThrowBufferOverflowException(&exception_state);
     return;
   }
-  buffered_amount_ += data.View()->byteLengthAsSizeT();
-  if (!SendRawData(static_cast<const char*>(data.View()->BaseAddress()),
-                   data.View()->byteLengthAsSizeT())) {
+  buffered_amount_ += data->byteLength();
+  if (!SendRawData(static_cast<const char*>(data->BaseAddress()),
+                   data->byteLength())) {
     // TODO(https://crbug.com/937848): Don't throw an exception if data is
     // queued.
     ThrowCouldNotSendDataException(&exception_state);
@@ -507,6 +502,7 @@ bool RTCDataChannel::HasPendingActivity() const {
 
 void RTCDataChannel::Trace(Visitor* visitor) const {
   visitor->Trace(scheduled_events_);
+  visitor->Trace(scheduled_event_timer_);
   EventTargetWithInlineData::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);
 }
@@ -594,7 +590,9 @@ void RTCDataChannel::OnMessage(std::unique_ptr<webrtc::DataBuffer> buffer) {
     NOTREACHED();
   } else {
     String text =
-        String::FromUTF8(buffer->data.cdata<char>(), buffer->data.size());
+        buffer->data.size() > 0
+            ? String::FromUTF8(buffer->data.cdata<char>(), buffer->data.size())
+            : g_empty_string;
     if (!text) {
       LOG(ERROR) << "Failed convert received data to UTF16";
       return;
@@ -644,12 +642,8 @@ bool RTCDataChannel::SendRawData(const char* data, size_t length) {
 }
 
 bool RTCDataChannel::SendDataBuffer(webrtc::DataBuffer data_buffer) {
-  // RTP data channels return false on failure to send. SCTP data channels
-  // queue the packet on failure and always return true, so Send can be
-  // called asynchronously for them.
-  if (is_rtp_data_channel_) {
-    return channel()->Send(data_buffer);
-  }
+  // SCTP data channels queue the packet on failure and always return true, so
+  // Send can be called asynchronously for them.
   PostCrossThreadTask(*signaling_thread_.get(), FROM_HERE,
                       CrossThreadBindOnce(&SendOnSignalingThread, channel(),
                                           std::move(data_buffer)));
@@ -669,10 +663,7 @@ void RTCDataChannel::CreateFeatureHandleForScheduler() {
   feature_handle_for_scheduler_ =
       window->GetFrame()->GetFrameScheduler()->RegisterFeature(
           SchedulingPolicy::Feature::kWebRTC,
-          base::FeatureList::IsEnabled(features::kOptOutWebRTCFromAllThrottling)
-              ? SchedulingPolicy{SchedulingPolicy::DisableAllThrottling()}
-              : SchedulingPolicy{
-                    SchedulingPolicy::DisableAggressiveThrottling()});
+          SchedulingPolicy::DisableAggressiveThrottling());
 }
 
 }  // namespace blink

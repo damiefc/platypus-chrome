@@ -1,7 +1,7 @@
 // GENERATED CONTENT - DO NOT EDIT
 // Content was automatically extracted by Reffy into webref
 // (https://github.com/w3c/webref)
-// Source: WebRTC 1.0: Real-time Communication Between Browsers (https://w3c.github.io/webrtc-pc/)
+// Source: WebRTC 1.0: Real-Time Communication Between Browsers (https://w3c.github.io/webrtc-pc/)
 
 dictionary RTCConfiguration {
   sequence<RTCIceServer> iceServers;
@@ -119,7 +119,7 @@ interface RTCPeerConnection : EventTarget  {
   Promise<undefined> createOffer(RTCSessionDescriptionCallback successCallback,
                             RTCPeerConnectionErrorCallback failureCallback,
                             optional RTCOfferOptions options = {});
-  Promise<undefined> setLocalDescription(optional RTCLocalSessionDescriptionInit description = {},
+  Promise<undefined> setLocalDescription(RTCLocalSessionDescriptionInit description,
                                     VoidFunction successCallback,
                                     RTCPeerConnectionErrorCallback failureCallback);
   Promise<undefined> createAnswer(RTCSessionDescriptionCallback successCallback,
@@ -238,7 +238,7 @@ dictionary RTCPeerConnectionIceErrorEventInit : EventInit {
   unsigned short? port;
   DOMString url;
   required unsigned short errorCode;
-  USVString statusText;
+  USVString errorText;
 };
 
 partial interface RTCPeerConnection {
@@ -373,7 +373,6 @@ dictionary RTCRtpContributingSource {
 };
 
 dictionary RTCRtpSynchronizationSource : RTCRtpContributingSource {
-  boolean voiceActivityFlag;
 };
 
 [Exposed=Window]
@@ -519,7 +518,7 @@ interface RTCDataChannel : EventTarget {
   attribute EventHandler onclose;
   undefined close();
   attribute EventHandler onmessage;
-  attribute DOMString binaryType;
+  attribute BinaryType binaryType;
   undefined send(USVString data);
   undefined send(Blob data);
   undefined send(ArrayBuffer data);

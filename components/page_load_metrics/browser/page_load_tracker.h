@@ -12,6 +12,7 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "components/page_load_metrics/browser/observers/core/largest_contentful_paint_handler.h"
+#include "components/page_load_metrics/browser/page_load_metrics_event.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer_delegate.h"
 #include "components/page_load_metrics/browser/page_load_metrics_update_dispatcher.h"
@@ -39,6 +40,7 @@ class WebContents;
 
 namespace page_load_metrics {
 
+struct MemoryUpdate;
 class PageLoadMetricsEmbedderInterface;
 
 namespace internal {
@@ -193,7 +195,7 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
                                  const mojom::FrameMetadata& metadata) override;
   void UpdateFeaturesUsage(
       content::RenderFrameHost* rfh,
-      const mojom::PageLoadFeatures& new_features) override;
+      const std::vector<blink::UseCounterFeature>& new_features) override;
   void UpdateResourceDataUse(
       content::RenderFrameHost* rfh,
       const std::vector<mojom::ResourceDataUpdatePtr>& resources) override;
@@ -227,7 +229,10 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
   const mojom::FrameMetadata& GetMainFrameMetadata() const override;
   const mojom::FrameMetadata& GetSubframeMetadata() const override;
   const PageRenderData& GetPageRenderData() const override;
+  const NormalizedCLSData& GetNormalizedCLSData(
+      BfcacheStrategy bfcache_strategy) const override;
   const mojom::InputTiming& GetPageInputTiming() const override;
+  const blink::MobileFriendliness& GetMobileFriendliness() const override;
   const PageRenderData& GetMainFrameRenderData() const override;
   const ui::ScopedVisibilityTracker& GetVisibilityTracker() const override;
   const ResourceTracker& GetResourceTracker() const override;
@@ -252,7 +257,8 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
                              base::TimeTicks failed_load_time);
   void PageHidden();
   void PageShown();
-  void FrameDeleted(content::RenderFrameHost* rfh);
+  void RenderFrameDeleted(content::RenderFrameHost* rfh);
+  void FrameDeleted(int frame_tree_node_id);
 
   void OnInputEvent(const blink::WebInputEvent& event);
 
@@ -273,7 +279,7 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
   void OnLoadedResource(
       const ExtraRequestCompleteInfo& extra_request_complete_info);
 
-  void FrameReceivedFirstUserActivation(content::RenderFrameHost* rfh);
+  void FrameReceivedUserActivation(content::RenderFrameHost* rfh);
   void FrameDisplayStateChanged(content::RenderFrameHost* render_frame_host,
                                 bool is_display_none);
   void FrameSizeChanged(content::RenderFrameHost* render_frame_host,
@@ -360,9 +366,8 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
       const content::WebContentsObserver::MediaPlayerInfo& video_type,
       content::RenderFrameHost* render_frame_host);
 
-  // Informs the observers that the event corresponding to |event_key| has
-  // occurred.
-  void BroadcastEventToObservers(const void* const event_key);
+  // Informs the observers that |event| has occurred.
+  void BroadcastEventToObservers(PageLoadMetricsEvent event);
 
   void OnEnterBackForwardCache();
   void OnRestoreFromBackForwardCache(
@@ -371,6 +376,9 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
   // Called when the page tracked was just activated after being loaded inside a
   // portal.
   void DidActivatePortal(base::TimeTicks activation_time);
+
+  // Called when V8 per-frame memory usage updates are available.
+  void OnV8MemoryChanged(const std::vector<MemoryUpdate>& memory_updates);
 
  private:
   // This function converts a TimeTicks value taken in the browser process
@@ -385,7 +393,6 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
                              UserInitiatedInfo user_initiated_info,
                              base::TimeTicks timestamp,
                              bool is_certainly_browser_timestamp);
-
   // If |final_navigation| is null, then this is an "unparented" abort chain,
   // and represents a sequence of provisional aborts that never ends with a
   // committed load.
@@ -446,6 +453,7 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
   const bool started_in_foreground_;
 
   mojom::PageLoadTimingPtr last_dispatched_merged_page_timing_;
+  blink::MobileFriendliness latest_mobile_friendliness_;
 
   ui::PageTransition page_transition_;
 

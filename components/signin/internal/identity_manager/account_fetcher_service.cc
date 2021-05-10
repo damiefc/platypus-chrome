@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/image_fetcher/core/image_decoder.h"
@@ -48,7 +49,12 @@ AccountFetcherService::AccountFetcherService() = default;
 
 AccountFetcherService::~AccountFetcherService() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(shutdown_called_);
+  token_service_->RemoveObserver(this);
+#if defined(OS_ANDROID)
+  // child_info_request_ is an invalidation handler and needs to be
+  // unregistered during the lifetime of the invalidation service.
+  child_info_request_.reset();
+#endif
 }
 
 // static
@@ -78,24 +84,15 @@ void AccountFetcherService::Initialize(
   repeating_timer_ = std::make_unique<signin::PersistentRepeatingTimer>(
       signin_client_->GetPrefs(), AccountFetcherService::kLastUpdatePref,
       kRefreshFromTokenServiceDelay,
-      base::Bind(&AccountFetcherService::RefreshAllAccountInfo,
-                 base::Unretained(this), false));
+      base::BindRepeating(&AccountFetcherService::RefreshAllAccountInfo,
+                          base::Unretained(this),
+                          /*only_fetch_if_invalid=*/false));
 
   // Tokens may have already been loaded and we will not receive a
   // notification-on-registration for |token_service_->AddObserver(this)| few
   // lines above.
   if (token_service_->AreAllCredentialsLoaded())
     OnRefreshTokensLoaded();
-}
-
-void AccountFetcherService::Shutdown() {
-  token_service_->RemoveObserver(this);
-#if defined(OS_ANDROID)
-  // child_info_request_ is an invalidation handler and needs to be
-  // unregistered during the lifetime of the invalidation service.
-  child_info_request_.reset();
-#endif
-  shutdown_called_ = true;
 }
 
 bool AccountFetcherService::IsAllUserInfoFetched() const {
@@ -105,7 +102,7 @@ bool AccountFetcherService::IsAllUserInfoFetched() const {
 void AccountFetcherService::ForceRefreshOfAccountInfo(
     const CoreAccountId& account_id) {
   DCHECK(network_fetches_enabled_);
-  RefreshAccountInfo(account_id, false);
+  RefreshAccountInfo(account_id, /*only_fetch_if_invalid=*/false);
 }
 
 void AccountFetcherService::OnNetworkInitialized() {
@@ -167,7 +164,7 @@ void AccountFetcherService::MaybeEnableNetworkFetches() {
     network_fetches_enabled_ = true;
     repeating_timer_->Start();
   }
-  RefreshAllAccountInfo(true);
+  RefreshAllAccountInfo(/*only_fetch_if_invalid=*/true);
 #if defined(OS_ANDROID)
   UpdateChildInfo();
 #endif
@@ -188,6 +185,7 @@ void AccountFetcherService::StartFetchingUserInfo(
             token_service_, signin_client_->GetURLLoaderFactory(), this,
             account_id);
     request = std::move(fetcher);
+    user_info_fetch_start_times_[account_id] = base::TimeTicks::Now();
     request->Start();
   }
 }
@@ -221,15 +219,21 @@ void AccountFetcherService::RefreshAccountInfo(const CoreAccountId& account_id,
   const AccountInfo& info =
       account_tracker_service_->GetAccountInfo(account_id);
 
-// |only_fetch_if_invalid| is false when the service is due for a timed update.
-#if defined(OS_ANDROID)
-  // TODO(mlerman): Change this condition back to info.IsValid() and ensure the
-  // Fetch doesn't occur until after ProfileImpl::OnPrefsLoaded().
-  if (!only_fetch_if_invalid || info.gaia.empty())
-#else
-  if (!only_fetch_if_invalid || !info.IsValid())
-#endif
+  // |only_fetch_if_invalid| is false when the service is due for a timed
+  // update.
+  if (!only_fetch_if_invalid || !info.IsValid()) {
+    // Fetching the user info will also fetch the account image.
     StartFetchingUserInfo(account_id);
+    return;
+  }
+
+  // User info is already valid and does not need to be downloaded again.
+  // Fetch the account image in case it was not fetched previously.
+  //
+  // Note: |FetchAccountImage()| does not fetch the account image if the
+  // account image was already downloaded. So it is fine to call this method
+  // even when |only_fetch_if_invalid| is true.
+  FetchAccountImage(account_id);
 }
 
 void AccountFetcherService::OnUserInfoFetchSuccess(
@@ -237,6 +241,13 @@ void AccountFetcherService::OnUserInfoFetchSuccess(
     std::unique_ptr<base::DictionaryValue> user_info) {
   account_tracker_service_->SetAccountInfoFromUserInfo(account_id,
                                                        user_info.get());
+  auto it = user_info_fetch_start_times_.find(account_id);
+  if (it != user_info_fetch_start_times_.end()) {
+    base::UmaHistogramMediumTimes(
+        "Signin.AccountFetcher.AccountUserInfoFetchTime",
+        base::TimeTicks::Now() - it->second);
+    user_info_fetch_start_times_.erase(it);
+  }
   FetchAccountImage(account_id);
   user_info_requests_.erase(account_id);
 }
@@ -299,6 +310,7 @@ void AccountFetcherService::FetchAccountImage(const CoreAccountId& account_id) {
                                  image_url_with_size.spec());
   image_fetcher::ImageFetcherParams params(traffic_annotation,
                                            kImageFetcherUmaClient);
+  user_avatar_fetch_start_times_[account_id] = base::TimeTicks::Now();
   GetOrCreateImageFetcher()->FetchImage(image_url_with_size,
                                         std::move(callback), std::move(params));
 }
@@ -306,6 +318,8 @@ void AccountFetcherService::FetchAccountImage(const CoreAccountId& account_id) {
 void AccountFetcherService::OnUserInfoFetchFailure(
     const CoreAccountId& account_id) {
   LOG(WARNING) << "Failed to get UserInfo for " << account_id;
+  user_info_fetch_start_times_.erase(account_id);
+  // |account_id| is owned by the request. Cannot be used after this line.
   user_info_requests_.erase(account_id);
 }
 
@@ -323,7 +337,7 @@ void AccountFetcherService::OnRefreshTokenAvailable(
 
   if (!network_fetches_enabled_)
     return;
-  RefreshAccountInfo(account_id, true);
+  RefreshAccountInfo(account_id, /*only_fetch_if_invalid=*/true);
 #if defined(OS_ANDROID)
   UpdateChildInfo();
 #endif
@@ -368,4 +382,11 @@ void AccountFetcherService::OnImageFetched(
   }
   account_tracker_service_->SetAccountImage(account_id, image_url_with_size,
                                             image);
+  auto it = user_avatar_fetch_start_times_.find(account_id);
+  if (it != user_avatar_fetch_start_times_.end()) {
+    base::UmaHistogramMediumTimes(
+        "Signin.AccountFetcher.AccountAvatarFetchTime",
+        base::TimeTicks::Now() - it->second);
+    user_avatar_fetch_start_times_.erase(it);
+  }
 }

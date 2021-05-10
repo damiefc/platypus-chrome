@@ -9,10 +9,10 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 
-class ChromeBrowserState;
 @class ChromeIdentity;
 @protocol ChromeIdentityBrowserOpener;
 @class ChromeIdentityInteractionManager;
@@ -23,6 +23,7 @@ class ChromeBrowserState;
 @class NSError;
 @class NSString;
 @class NSURL;
+class PrefService;
 @class UIApplication;
 @class UIImage;
 @class UINavigationController;
@@ -78,7 +79,10 @@ class ChromeIdentityService {
     virtual ~Observer() {}
 
     // Handles identity list changed events.
-    virtual void OnIdentityListChanged() {}
+    // |keychainReload| is true if the identity list is updated by reloading the
+    // keychain. This means that a first party Google app had added or removed
+    // identities.
+    virtual void OnIdentityListChanged(bool keychainReload) {}
 
     // Handles access token refresh failed events.
     // |identity| is the the identity for which the access token refresh failed.
@@ -148,34 +152,32 @@ class ChromeIdentityService {
   // delegate.
   virtual ChromeIdentityInteractionManager*
   CreateChromeIdentityInteractionManager(
-      ChromeBrowserState* browser_state,
       id<ChromeIdentityInteractionManagerDelegate> delegate) const;
 
   // Returns YES if |identity| is valid and if the service has it in its list of
   // identitites.
   virtual bool IsValidIdentity(ChromeIdentity* identity);
 
-  // Returns the chrome identity having the email equal to |email| or |nil| if
-  // no matching identity is found.
-  virtual ChromeIdentity* GetIdentityWithEmail(const std::string& email);
-
   // Returns the chrome identity having the gaia ID equal to |gaia_id| or |nil|
   // if no matching identity is found.
   virtual ChromeIdentity* GetIdentityWithGaiaID(const std::string& gaia_id);
-
-  // Returns the canonicalized emails for all identities.
-  virtual std::vector<std::string> GetCanonicalizeEmailsForAllIdentities();
 
   // Returns true if there is at least one identity.
   virtual bool HasIdentities();
 
   // Returns all ChromeIdentity objects in an array.
+  // Deprecated. See GetAllIdentities(prefService).
   virtual NSArray* GetAllIdentities();
+
+  // Returns all ChromeIdentity objects in an array.It uses PrefService to
+  // filter ChromeIdentities according to enterprise policies.
+  virtual NSArray* GetAllIdentities(PrefService* pref_service);
 
   // Returns all ChromeIdentity objects sorted by the ordering used in the
   // account manager, which is typically based on the keychain ordering of
-  // accounts.
-  virtual NSArray* GetAllIdentitiesSortedForDisplay();
+  // accounts.It uses PrefService to filter ChromeIdentities according to
+  // enterprise policies.
+  virtual NSArray* GetAllIdentitiesSortedForDisplay(PrefService* pref_service);
 
   // Forgets the given identity on the device. This method logs the user out.
   // It is asynchronous because it needs to contact the server to revoke the
@@ -245,7 +247,10 @@ class ChromeIdentityService {
 
  protected:
   // Fires |OnIdentityListChanged| on all observers.
-  void FireIdentityListChanged();
+  // |keychainReload| is true if the identity list is updated by reloading the
+  // keychain. This means that a first party Google app had added or removed
+  // identities.
+  void FireIdentityListChanged(bool keychainReload);
 
   // Fires |OnAccessTokenRefreshFailed| on all observers, with the corresponding
   // identity and user info.

@@ -6,7 +6,7 @@
 
 #include <cstddef>
 
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -45,7 +45,7 @@ class CookieSettingsObserver : public CookieSettings::Observer {
  public:
   explicit CookieSettingsObserver(CookieSettings* settings)
       : settings_(settings) {
-    scoped_observer_.Add(settings);
+    scoped_observation_.Observe(settings);
   }
 
   void OnThirdPartyCookieBlockingChanged(
@@ -60,8 +60,8 @@ class CookieSettingsObserver : public CookieSettings::Observer {
  private:
   CookieSettings* settings_;
   bool last_value_ = false;
-  ScopedObserver<CookieSettings, CookieSettings::Observer> scoped_observer_{
-      this};
+  base::ScopedObservation<CookieSettings, CookieSettings::Observer>
+      scoped_observation_{this};
 
   DISALLOW_COPY_AND_ASSIGN(CookieSettingsObserver);
 };
@@ -149,7 +149,7 @@ class CookieSettingsTest : public testing::Test {
   base::test::ScopedFeatureList feature_list_;
 };
 
-TEST_F(CookieSettingsTest, TestWhitelistedScheme) {
+TEST_F(CookieSettingsTest, TestAllowlistedScheme) {
   cookie_settings_->SetDefaultCookieSetting(CONTENT_SETTING_BLOCK);
   EXPECT_FALSE(cookie_settings_->IsCookieAccessAllowed(kHttpSite, kChromeURL));
   EXPECT_TRUE(cookie_settings_->IsCookieAccessAllowed(kHttpsSite, kChromeURL));
@@ -399,7 +399,7 @@ TEST_F(CookieSettingsTest, CookiesThirdPartyBlockedAllSitesAllowed) {
   // match all HTTPS sites.
   settings_map_->SetContentSettingCustomScope(
       kAllHttpsSitesPattern, ContentSettingsPattern::Wildcard(),
-      ContentSettingsType::COOKIES, std::string(), CONTENT_SETTING_ALLOW);
+      ContentSettingsType::COOKIES, CONTENT_SETTING_ALLOW);
   cookie_settings_->SetDefaultCookieSetting(CONTENT_SETTING_SESSION_ONLY);
 
   // |kAllowedSite| should be allowed.
@@ -455,9 +455,8 @@ TEST_F(CookieSettingsTest, GetCookieSettingAllowedTelemetry) {
   base::HistogramTester histogram_tester;
   histogram_tester.ExpectTotalCount(kAllowedRequestsHistogram, 0);
 
-  ContentSetting setting;
-  cookie_settings_->GetCookieSetting(url, top_level_url, nullptr, &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(url, top_level_url, nullptr),
+            CONTENT_SETTING_ALLOW);
   histogram_tester.ExpectTotalCount(kAllowedRequestsHistogram, 1);
   histogram_tester.ExpectBucketCount(
       kAllowedRequestsHistogram,
@@ -480,12 +479,10 @@ TEST_F(CookieSettingsTest, GetCookieSettingDisabledSAA) {
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
       ContentSettingsPattern::FromURLNoWildcard(top_level_url),
-      ContentSettingsType::STORAGE_ACCESS, std::string(),
-      CONTENT_SETTING_ALLOW);
+      ContentSettingsType::STORAGE_ACCESS, CONTENT_SETTING_ALLOW);
 
-  ContentSetting setting;
-  cookie_settings_->GetCookieSetting(url, top_level_url, nullptr, &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(url, top_level_url, nullptr),
+            CONTENT_SETTING_BLOCK);
 }
 
 // The current default behaviour of the Storage Access API should be to not
@@ -503,12 +500,10 @@ TEST_F(CookieSettingsTest, GetCookieSettingDefaultSAA) {
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
       ContentSettingsPattern::FromURLNoWildcard(top_level_url),
-      ContentSettingsType::STORAGE_ACCESS, std::string(),
-      CONTENT_SETTING_ALLOW);
+      ContentSettingsType::STORAGE_ACCESS, CONTENT_SETTING_ALLOW);
 
-  ContentSetting setting;
-  cookie_settings_->GetCookieSetting(url, top_level_url, nullptr, &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(url, top_level_url, nullptr),
+            CONTENT_SETTING_BLOCK);
   histogram_tester.ExpectTotalCount(kAllowedRequestsHistogram, 1);
   histogram_tester.ExpectBucketCount(
       kAllowedRequestsHistogram,
@@ -535,15 +530,13 @@ TEST_F(CookieSettingsTest, GetCookieSettingEnabledSAA) {
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
       ContentSettingsPattern::FromURLNoWildcard(top_level_url),
-      ContentSettingsType::STORAGE_ACCESS, std::string(),
-      CONTENT_SETTING_ALLOW);
+      ContentSettingsType::STORAGE_ACCESS, CONTENT_SETTING_ALLOW);
 
   // When requesting our setting for the url/top-level combination our
   // grant is for access should be allowed. For any other domain pairs access
   // should still be blocked.
-  ContentSetting setting;
-  cookie_settings_->GetCookieSetting(url, top_level_url, nullptr, &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(url, top_level_url, nullptr),
+            CONTENT_SETTING_ALLOW);
   histogram_tester.ExpectTotalCount(kAllowedRequestsHistogram, 1);
   histogram_tester.ExpectBucketCount(
       kAllowedRequestsHistogram,
@@ -553,15 +546,15 @@ TEST_F(CookieSettingsTest, GetCookieSettingEnabledSAA) {
 
   // Invalid pair the |top_level_url| granting access to |url| is now
   // being loaded under |url| as the top level url.
-  cookie_settings_->GetCookieSetting(top_level_url, url, nullptr, &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(top_level_url, url, nullptr),
+            CONTENT_SETTING_BLOCK);
 
   // Invalid pairs where a |third_url| is used.
-  cookie_settings_->GetCookieSetting(url, third_url, nullptr, &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
-  cookie_settings_->GetCookieSetting(third_url, top_level_url, nullptr,
-                                     &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(url, third_url, nullptr),
+            CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(
+      cookie_settings_->GetCookieSetting(third_url, top_level_url, nullptr),
+      CONTENT_SETTING_BLOCK);
 }
 
 // Subdomains of the granted resource url should not gain access if a valid
@@ -579,16 +572,13 @@ TEST_F(CookieSettingsTest, GetCookieSettingSAAResourceWildcards) {
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
       ContentSettingsPattern::FromURLNoWildcard(top_level_url),
-      ContentSettingsType::STORAGE_ACCESS, std::string(),
-      CONTENT_SETTING_ALLOW);
+      ContentSettingsType::STORAGE_ACCESS, CONTENT_SETTING_ALLOW);
 
-  ContentSetting setting;
-  cookie_settings_->GetCookieSetting(url, top_level_url, nullptr, &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
-
-  cookie_settings_->GetCookieSetting(GURL(kHttpsSubdomainSite), top_level_url,
-                                     nullptr, &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(url, top_level_url, nullptr),
+            CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(GURL(kHttpsSubdomainSite),
+                                               top_level_url, nullptr),
+            CONTENT_SETTING_BLOCK);
 }
 
 // Subdomains of the granted top level url should not grant access if a valid
@@ -606,16 +596,13 @@ TEST_F(CookieSettingsTest, GetCookieSettingSAATopLevelWildcards) {
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
       ContentSettingsPattern::FromURLNoWildcard(top_level_url),
-      ContentSettingsType::STORAGE_ACCESS, std::string(),
-      CONTENT_SETTING_ALLOW);
+      ContentSettingsType::STORAGE_ACCESS, CONTENT_SETTING_ALLOW);
 
-  ContentSetting setting;
-  cookie_settings_->GetCookieSetting(url, top_level_url, nullptr, &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
-
-  cookie_settings_->GetCookieSetting(url, GURL(kHttpsSubdomainSite), nullptr,
-                                     &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(url, top_level_url, nullptr),
+            CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(url, GURL(kHttpsSubdomainSite),
+                                               nullptr),
+            CONTENT_SETTING_BLOCK);
 }
 
 // Any Storage Access API grant should not override an explicit setting to block
@@ -632,12 +619,10 @@ TEST_F(CookieSettingsTest, GetCookieSettingSAARespectsSettings) {
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
       ContentSettingsPattern::FromURLNoWildcard(top_level_url),
-      ContentSettingsType::STORAGE_ACCESS, std::string(),
-      CONTENT_SETTING_ALLOW);
+      ContentSettingsType::STORAGE_ACCESS, CONTENT_SETTING_ALLOW);
 
-  ContentSetting setting;
-  cookie_settings_->GetCookieSetting(url, top_level_url, nullptr, &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(url, top_level_url, nullptr),
+            CONTENT_SETTING_BLOCK);
 }
 
 // Once a grant expires access should no longer be given.
@@ -654,7 +639,7 @@ TEST_F(CookieSettingsTest, GetCookieSettingSAAExpiredGrant) {
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
       ContentSettingsPattern::FromURLNoWildcard(top_level_url),
-      ContentSettingsType::STORAGE_ACCESS, std::string(), CONTENT_SETTING_ALLOW,
+      ContentSettingsType::STORAGE_ACCESS, CONTENT_SETTING_ALLOW,
       {content_settings::GetConstraintExpiration(
            base::TimeDelta::FromSeconds(100)),
        SessionModel::UserSession});
@@ -662,15 +647,14 @@ TEST_F(CookieSettingsTest, GetCookieSettingSAAExpiredGrant) {
   // When requesting our setting for the url/top-level combination our
   // grant is for access should be allowed. For any other domain pairs access
   // should still be blocked.
-  ContentSetting setting;
-  cookie_settings_->GetCookieSetting(url, top_level_url, nullptr, &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(url, top_level_url, nullptr),
+            CONTENT_SETTING_ALLOW);
 
   // If we fastforward past the expiration of our grant the result should be
   // CONTENT_SETTING_BLOCK now.
   FastForwardTime(base::TimeDelta::FromSeconds(101));
-  cookie_settings_->GetCookieSetting(url, top_level_url, nullptr, &setting);
-  EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(cookie_settings_->GetCookieSetting(url, top_level_url, nullptr),
+            CONTENT_SETTING_BLOCK);
 }
 #endif
 
@@ -795,8 +779,7 @@ TEST_F(CookieSettingsTest,
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromString(kDomain),
       ContentSettingsPattern::Wildcard(),
-      ContentSettingsType::LEGACY_COOKIE_ACCESS, std::string(),
-      CONTENT_SETTING_BLOCK);
+      ContentSettingsType::LEGACY_COOKIE_ACCESS, CONTENT_SETTING_BLOCK);
   const struct {
     net::CookieAccessSemantics status;
     std::string cookie_domain;
@@ -826,8 +809,7 @@ TEST_F(CookieSettingsTest,
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromString(kDomainWildcardPattern),
       ContentSettingsPattern::Wildcard(),
-      ContentSettingsType::LEGACY_COOKIE_ACCESS, std::string(),
-      CONTENT_SETTING_BLOCK);
+      ContentSettingsType::LEGACY_COOKIE_ACCESS, CONTENT_SETTING_BLOCK);
   const struct {
     net::CookieAccessSemantics status;
     std::string cookie_domain;
@@ -868,8 +850,7 @@ TEST_F(SameSiteByDefaultCookieSettingsTest,
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromString(kDomain),
       ContentSettingsPattern::Wildcard(),
-      ContentSettingsType::LEGACY_COOKIE_ACCESS, std::string(),
-      CONTENT_SETTING_ALLOW);
+      ContentSettingsType::LEGACY_COOKIE_ACCESS, CONTENT_SETTING_ALLOW);
   const struct {
     net::CookieAccessSemantics status;
     std::string cookie_domain;
@@ -898,8 +879,7 @@ TEST_F(SameSiteByDefaultCookieSettingsTest,
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromString(kDomainWildcardPattern),
       ContentSettingsPattern::Wildcard(),
-      ContentSettingsType::LEGACY_COOKIE_ACCESS, std::string(),
-      CONTENT_SETTING_ALLOW);
+      ContentSettingsType::LEGACY_COOKIE_ACCESS, CONTENT_SETTING_ALLOW);
   const struct {
     net::CookieAccessSemantics status;
     std::string cookie_domain;

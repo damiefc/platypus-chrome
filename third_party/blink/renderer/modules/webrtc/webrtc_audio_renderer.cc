@@ -9,7 +9,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/stringprintf.h"
 #include "base/threading/thread_checker.h"
 #include "build/build_config.h"
 #include "media/audio/audio_sink_parameters.h"
@@ -212,7 +211,7 @@ class WebRtcAudioRenderer::InternalFrame {
     if (!frame_)
       return nullptr;
 
-    return static_cast<WebLocalFrame*>(WebFrame::FromFrame(frame()));
+    return static_cast<WebLocalFrame*>(WebFrame::FromCoreFrame(frame()));
   }
 
  private:

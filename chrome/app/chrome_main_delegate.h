@@ -62,6 +62,9 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
   void PostEarlyInitialization(bool is_running_tests) override;
   bool ShouldCreateFeatureList() override;
   void PostFieldTrialInitialization() override;
+#if defined(OS_WIN)
+  bool ShouldHandleConsoleControlEvents() override;
+#endif
 
   content::ContentClient* CreateContentClient() override;
   content::ContentBrowserClient* CreateContentBrowserClient() override;
@@ -79,15 +82,13 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
 
   std::unique_ptr<ChromeContentBrowserClient> chrome_content_browser_client_;
 
-  std::unique_ptr<StartupData> startup_data_;
-
   std::unique_ptr<tracing::TracingSamplerProfiler> tracing_sampler_profiler_;
 
   // The controller schedules UMA heap profiles collections and forwarding down
   // the reporting pipeline.
   std::unique_ptr<HeapProfilerController> heap_profiler_controller_;
 
-#if BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
   std::unique_ptr<chromeos::LacrosChromeServiceImpl> lacros_chrome_service_;
 #endif
 

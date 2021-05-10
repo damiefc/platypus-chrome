@@ -7,8 +7,8 @@
 #include "base/bind.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chromeos/components/multidevice/logging/logging.h"
-#include "chromeos/components/phonehub/connection_manager.h"
 #include "chromeos/components/phonehub/feature_status.h"
+#include "chromeos/services/secure_channel/public/cpp/client/connection_manager.h"
 
 namespace chromeos {
 namespace phonehub {
@@ -24,7 +24,7 @@ constexpr net::BackoffEntry::Policy kRetryBackoffPolicy = {
 };
 
 ConnectionSchedulerImpl::ConnectionSchedulerImpl(
-    ConnectionManager* connection_manager,
+    secure_channel::ConnectionManager* connection_manager,
     FeatureStatusProvider* feature_status_provider)
     : connection_manager_(connection_manager),
       feature_status_provider_(feature_status_provider),
@@ -50,7 +50,7 @@ void ConnectionSchedulerImpl::ScheduleConnectionNow() {
     return;
   }
 
-  connection_manager_->AttemptConnection();
+  connection_manager_->AttemptNearbyConnection();
 }
 
 void ConnectionSchedulerImpl::OnFeatureStatusChanged() {
@@ -58,12 +58,10 @@ void ConnectionSchedulerImpl::OnFeatureStatusChanged() {
   current_feature_status_ = feature_status_provider_->GetStatus();
 
   switch (current_feature_status_) {
-    // The following states indicate either the feature state of the devices
-    // changed or if a connection is established between the devices. In the
-    // case where the feature state has been changed, we do not want to
-    // schedule a new connection attempt until the devices are available to
-    // connect. If a connection is established, we also do not want to schedule
-    // a new connection. Reset the backoff and return early.
+    // The following feature states indicate that there is an interruption with
+    // establishing connection to the host phone or that the feature is blocked
+    // from initiating a connection. Disconnect the existing connection, reset
+    // backoffs, and return early.
     case FeatureStatus::kNotEligibleForFeature:
       FALLTHROUGH;
     case FeatureStatus::kEligiblePhoneButNotSetUp:
@@ -74,11 +72,17 @@ void ConnectionSchedulerImpl::OnFeatureStatusChanged() {
       FALLTHROUGH;
     case FeatureStatus::kUnavailableBluetoothOff:
       FALLTHROUGH;
+    case FeatureStatus::kLockOrSuspended:
+      DisconnectAndClearBackoffAttempts();
+      return;
+
+    // Connection has been established, clear existing backoffs and return
+    // early.
     case FeatureStatus::kEnabledAndConnected:
       ClearBackoffAttempts();
       return;
 
-    // Connection in progress, waiting for the next status update.
+    // Connection is in progress, return and wait for the result.
     case FeatureStatus::kEnabledAndConnecting:
       return;
 
@@ -113,6 +117,13 @@ void ConnectionSchedulerImpl::ClearBackoffAttempts() {
   // Reset the state of the backoff so that the next backoff retry starts at
   // the default initial delay.
   retry_backoff_.Reset();
+}
+
+void ConnectionSchedulerImpl::DisconnectAndClearBackoffAttempts() {
+  ClearBackoffAttempts();
+
+  // Disconnect existing connection or connection attempt.
+  connection_manager_->Disconnect();
 }
 
 base::TimeDelta

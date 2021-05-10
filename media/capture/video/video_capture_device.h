@@ -31,6 +31,7 @@
 #include "media/capture/mojom/image_capture.mojom.h"
 #include "media/capture/video/video_capture_buffer_handle.h"
 #include "media/capture/video/video_capture_device_descriptor.h"
+#include "media/capture/video/video_capture_feedback.h"
 #include "media/capture/video_capture_types.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
@@ -63,7 +64,21 @@ class CAPTURE_EXPORT VideoFrameConsumerFeedbackObserver {
   // It is used to indicate which particular frame the reported utilization
   // corresponds to.
   virtual void OnUtilizationReport(int frame_feedback_id,
-                                   media::VideoFrameFeedback feedback) {}
+                                   media::VideoCaptureFeedback feedback) {}
+};
+
+struct CAPTURE_EXPORT CapturedExternalVideoBuffer {
+  CapturedExternalVideoBuffer(gfx::GpuMemoryBufferHandle handle,
+                              VideoCaptureFormat format,
+                              gfx::ColorSpace color_space);
+  CapturedExternalVideoBuffer(CapturedExternalVideoBuffer&& other);
+  ~CapturedExternalVideoBuffer();
+
+  CapturedExternalVideoBuffer& operator=(CapturedExternalVideoBuffer&& other);
+
+  gfx::GpuMemoryBufferHandle handle;
+  VideoCaptureFormat format;
+  gfx::ColorSpace color_space;
 };
 
 class CAPTURE_EXPORT VideoCaptureDevice
@@ -179,13 +194,15 @@ class CAPTURE_EXPORT VideoCaptureDevice
         int frame_feedback_id = 0) = 0;
 
     // Captured a new video frame. The data for this frame is in |handle|,
-    // which is owned by the platform-specific capture device, and is kept valid
-    // by |read_access_permission|.
+    // which is owned by the platform-specific capture device. It is the
+    // responsibilty of the implementation to prevent the buffer in |handle|
+    // from being reused by the external capturer. In practice, this is used
+    // only on macOS, the external capturer maintains a CVPixelBufferPool, and
+    // gfx::ScopedInUseIOSurface is used to prevent reuse of buffers until all
+    // consumers have consumed them.
     virtual void OnIncomingCapturedExternalBuffer(
-        gfx::GpuMemoryBufferHandle handle,
-        std::unique_ptr<Buffer::ScopedAccessPermission> read_access_permission,
-        const VideoCaptureFormat& format,
-        const gfx::ColorSpace& color_space,
+        CapturedExternalVideoBuffer buffer,
+        std::vector<CapturedExternalVideoBuffer> scaled_buffers,
         base::TimeTicks reference_time,
         base::TimeDelta timestamp) = 0;
 
@@ -306,6 +323,10 @@ class CAPTURE_EXPORT VideoCaptureDevice
   // would be sequenced through the same task runner, so that deallocation
   // happens first.
   virtual void StopAndDeAllocate() = 0;
+
+  // Hints to the source that if it has an alpha channel, that alpha channel
+  // will be ignored and can be discarded.
+  virtual void SetCanDiscardAlpha(bool can_discard_alpha) {}
 
   // Retrieve the photo capabilities and settings of the device (e.g. zoom
   // levels etc). On success, invokes |callback|. On failure, drops callback

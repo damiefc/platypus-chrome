@@ -5,6 +5,7 @@
 #include "remoting/host/client_session.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -23,10 +24,13 @@
 #include "remoting/host/audio_capturer.h"
 #include "remoting/host/desktop_environment.h"
 #include "remoting/host/file_transfer/file_transfer_message_handler.h"
+#include "remoting/host/file_transfer/rtc_log_file_operations.h"
 #include "remoting/host/host_extension_session.h"
 #include "remoting/host/input_injector.h"
 #include "remoting/host/keyboard_layout_monitor.h"
 #include "remoting/host/mouse_shape_pump.h"
+#include "remoting/host/remote_open_url_constants.h"
+#include "remoting/host/remote_open_url_message_handler.h"
 #include "remoting/host/screen_controls.h"
 #include "remoting/host/screen_resolution.h"
 #include "remoting/proto/control.pb.h"
@@ -41,6 +45,10 @@
 #include "remoting/protocol/session_config.h"
 #include "remoting/protocol/video_frame_pump.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
+
+namespace {
+constexpr char kRtcLogTransferDataChannelPrefix[] = "rtc-log-transfer-";
+}  // namespace
 
 namespace remoting {
 
@@ -72,7 +80,8 @@ ClientSession::ClientSession(
   connection_->SetEventHandler(this);
 
   // Create a manager for the configured extensions, if any.
-  extension_manager_.reset(new HostExtensionSessionManager(extensions, this));
+  extension_manager_ =
+      std::make_unique<HostExtensionSessionManager>(extensions, this);
 
 #if defined(OS_WIN)
   // LocalInputMonitorWin filters out an echo of the injected input before it
@@ -182,6 +191,20 @@ void ClientSession::SetCapabilities(
     data_channel_manager_.RegisterCreateHandlerCallback(
         kFileTransferDataChannelPrefix,
         base::BindRepeating(&ClientSession::CreateFileTransferMessageHandler,
+                            base::Unretained(this)));
+  }
+
+  if (HasCapability(capabilities_, protocol::kRtcLogTransferCapability)) {
+    data_channel_manager_.RegisterCreateHandlerCallback(
+        kRtcLogTransferDataChannelPrefix,
+        base::BindRepeating(&ClientSession::CreateRtcLogTransferMessageHandler,
+                            base::Unretained(this)));
+  }
+
+  if (HasCapability(capabilities_, protocol::kRemoteOpenUrlCapability)) {
+    data_channel_manager_.RegisterCreateHandlerCallback(
+        kRemoteOpenUrlDataChannelName,
+        base::BindRepeating(&ClientSession::CreateRemoteOpenUrlMessageHandler,
                             base::Unretained(this)));
   }
 
@@ -366,6 +389,13 @@ void ClientSession::OnConnectionAuthenticated() {
   if (!host_capabilities_.empty())
     host_capabilities_.append(" ");
   host_capabilities_.append(extension_manager_->GetCapabilities());
+  if (!host_capabilities_.empty())
+    host_capabilities_.append(" ");
+  host_capabilities_.append(protocol::kRtcLogTransferCapability);
+  host_capabilities_.append(" ");
+  host_capabilities_.append(protocol::kWebrtcIceSdpRestartAction);
+  host_capabilities_.append(" ");
+  host_capabilities_.append(protocol::kRemoteOpenUrlCapability);
 
   // Create the object that controls the screen resolution.
   screen_controls_ = desktop_environment_->CreateScreenControls();
@@ -433,9 +463,9 @@ void ClientSession::OnConnectionChannelsConnected() {
   SetDisableInputs(false);
 
   // Create MouseShapePump to send mouse cursor shape.
-  mouse_shape_pump_.reset(
-      new MouseShapePump(desktop_environment_->CreateMouseCursorMonitor(),
-                         connection_->client_stub()));
+  mouse_shape_pump_ = std::make_unique<MouseShapePump>(
+      desktop_environment_->CreateMouseCursorMonitor(),
+      connection_->client_stub());
   mouse_shape_pump_->SetMouseCursorMonitorCallback(this);
 
   // Create KeyboardLayoutMonitor to send keyboard layout.
@@ -687,7 +717,8 @@ void ClientSession::OnVideoSizeChanged(protocol::VideoStream* video_stream,
   if (channels_connected_) {
     connection_->client_stub()->SetVideoLayout(layout);
   } else {
-    pending_video_layout_message_.reset(new protocol::VideoLayout(layout));
+    pending_video_layout_message_ =
+        std::make_unique<protocol::VideoLayout>(layout);
   }
 }
 
@@ -832,6 +863,14 @@ void ClientSession::CreateFileTransferMessageHandler(
                                  desktop_environment_->CreateFileOperations());
 }
 
+void ClientSession::CreateRtcLogTransferMessageHandler(
+    const std::string& channel_name,
+    std::unique_ptr<protocol::MessagePipe> pipe) {
+  new FileTransferMessageHandler(
+      channel_name, std::move(pipe),
+      std::make_unique<RtcLogFileOperations>(connection_.get()));
+}
+
 void ClientSession::CreateActionMessageHandler(
     std::vector<ActionRequest::Action> capabilities,
     const std::string& channel_name,
@@ -845,6 +884,15 @@ void ClientSession::CreateActionMessageHandler(
   // of |pipe|. Once |pipe| is closed, this instance will be cleaned up.
   new ActionMessageHandler(channel_name, capabilities, std::move(pipe),
                            std::move(action_executor));
+}
+
+void ClientSession::CreateRemoteOpenUrlMessageHandler(
+    const std::string& channel_name,
+    std::unique_ptr<protocol::MessagePipe> pipe) {
+  // RemoteOpenUrlMessageHandler manages its own lifetime and is tied to the
+  // lifetime of |pipe|. Once |pipe| is closed, this instance will be cleaned
+  // up.
+  new RemoteOpenUrlMessageHandler(channel_name, std::move(pipe));
 }
 
 }  // namespace remoting

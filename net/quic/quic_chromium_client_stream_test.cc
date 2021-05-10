@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -21,9 +22,9 @@
 #include "net/third_party/quiche/src/quic/core/http/quic_spdy_client_stream.h"
 #include "net/third_party/quiche/src/quic/core/http/spdy_utils.h"
 #include "net/third_party/quiche/src/quic/core/quic_utils.h"
-#include "net/third_party/quiche/src/quic/platform/api/quic_ptr_util.h"
 #include "net/third_party/quiche/src/quic/test_tools/crypto_test_utils.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_config_peer.h"
+#include "net/third_party/quiche/src/quic/test_tools/quic_connection_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_spdy_session_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_test_utils.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -60,14 +61,14 @@ class MockQuicClientSessionBase : public quic::QuicSpdyClientSessionBase {
                quic::QuicSpdyStream*(quic::PendingStream* pending));
   MOCK_METHOD0(CreateOutgoingBidirectionalStream, QuicChromiumClientStream*());
   MOCK_METHOD0(CreateOutgoingUnidirectionalStream, QuicChromiumClientStream*());
-  MOCK_METHOD6(WritevData,
-               quic::QuicConsumedData(
-                   quic::QuicStreamId id,
-                   size_t write_length,
-                   quic::QuicStreamOffset offset,
-                   quic::StreamSendingState state,
-                   quic::TransmissionType type,
-                   quiche::QuicheOptional<quic::EncryptionLevel> level));
+  MOCK_METHOD6(
+      WritevData,
+      quic::QuicConsumedData(quic::QuicStreamId id,
+                             size_t write_length,
+                             quic::QuicStreamOffset offset,
+                             quic::StreamSendingState state,
+                             quic::TransmissionType type,
+                             absl::optional<quic::EncryptionLevel> level));
   MOCK_METHOD4(SendRstStream,
                void(quic::QuicStreamId stream_id,
                     quic::QuicRstStreamErrorCode error,
@@ -76,7 +77,7 @@ class MockQuicClientSessionBase : public quic::QuicSpdyClientSessionBase {
 
   MOCK_METHOD2(OnStreamHeaders,
                void(quic::QuicStreamId stream_id,
-                    quiche::QuicheStringPiece headers_data));
+                    absl::string_view headers_data));
   MOCK_METHOD2(OnStreamHeadersPriority,
                void(quic::QuicStreamId stream_id,
                     const spdy::SpdyStreamPrecedence& precedence));
@@ -84,17 +85,17 @@ class MockQuicClientSessionBase : public quic::QuicSpdyClientSessionBase {
                void(quic::QuicStreamId stream_id, bool fin, size_t frame_len));
   MOCK_METHOD2(OnPromiseHeaders,
                void(quic::QuicStreamId stream_id,
-                    quiche::QuicheStringPiece headers_data));
+                    absl::string_view headers_data));
   MOCK_METHOD3(OnPromiseHeadersComplete,
                void(quic::QuicStreamId stream_id,
                     quic::QuicStreamId promised_stream_id,
                     size_t frame_len));
   MOCK_CONST_METHOD0(OneRttKeysAvailable, bool());
-  // Methods taking non-copyable types like spdy::SpdyHeaderBlock by value
+  // Methods taking non-copyable types like spdy::Http2HeaderBlock by value
   // cannot be mocked directly.
   size_t WriteHeadersOnHeadersStream(
       quic::QuicStreamId id,
-      spdy::SpdyHeaderBlock headers,
+      spdy::Http2HeaderBlock headers,
       bool fin,
       const spdy::SpdyStreamPrecedence& precedence,
       quic::QuicReferenceCountedPointer<quic::QuicAckListenerInterface>
@@ -104,7 +105,7 @@ class MockQuicClientSessionBase : public quic::QuicSpdyClientSessionBase {
   }
   MOCK_METHOD5(WriteHeadersOnHeadersStreamMock,
                size_t(quic::QuicStreamId id,
-                      const spdy::SpdyHeaderBlock& headers,
+                      const spdy::Http2HeaderBlock& headers,
                       bool fin,
                       const spdy::SpdyStreamPrecedence& precedence,
                       const quic::QuicReferenceCountedPointer<
@@ -146,7 +147,7 @@ MockQuicClientSessionBase::MockQuicClientSessionBase(
                                       push_promise_index,
                                       quic::test::DefaultQuicConfig(),
                                       connection->supported_versions()) {
-  crypto_stream_.reset(new quic::test::MockQuicCryptoStream(this));
+  crypto_stream_ = std::make_unique<quic::test::MockQuicCryptoStream>(this);
   Initialize();
   ON_CALL(*this, WritevData(_, _, _, _, _, _))
       .WillByDefault(testing::Return(quic::QuicConsumedData(0, false)));
@@ -190,6 +191,7 @@ class QuicChromiumClientStreamTest
     headers_[":host"] = "www.google.com";
     headers_[":path"] = "/index.hml";
     headers_[":scheme"] = "https";
+    headers_[":status"] = "200";
     headers_["cookie"] =
         "__utma=208381060.1228362404.1372200928.1372200928.1372200928.1; "
         "__utmc=160408618; "
@@ -216,29 +218,35 @@ class QuicChromiumClientStreamTest
         "JBCScs_ejbKaqBDoB7ZGxTvqlrB__2ZmnHHjCr8RgMRtKNtIeuZAo ";
   }
 
-  void ReadData(quiche::QuicheStringPiece expected_data) {
+  spdy::Http2HeaderBlock CreateResponseHeaders(const std::string& status_code) {
+    spdy::Http2HeaderBlock headers;
+    headers[":status"] = status_code;
+    return headers;
+  }
+
+  void ReadData(absl::string_view expected_data) {
     scoped_refptr<IOBuffer> buffer =
         base::MakeRefCounted<IOBuffer>(expected_data.length() + 1);
     EXPECT_EQ(static_cast<int>(expected_data.length()),
               stream_->Read(buffer.get(), expected_data.length() + 1));
-    EXPECT_EQ(expected_data, quiche::QuicheStringPiece(buffer->data(),
-                                                       expected_data.length()));
+    EXPECT_EQ(expected_data,
+              absl::string_view(buffer->data(), expected_data.length()));
   }
 
-  quic::QuicHeaderList ProcessHeaders(const spdy::SpdyHeaderBlock& headers) {
+  quic::QuicHeaderList ProcessHeaders(const spdy::Http2HeaderBlock& headers) {
     quic::QuicHeaderList h = quic::test::AsHeaderList(headers);
     stream_->OnStreamHeaderList(false, h.uncompressed_header_bytes(), h);
     return h;
   }
 
-  quic::QuicHeaderList ProcessTrailers(const spdy::SpdyHeaderBlock& headers) {
+  quic::QuicHeaderList ProcessTrailers(const spdy::Http2HeaderBlock& headers) {
     quic::QuicHeaderList h = quic::test::AsHeaderList(headers);
     stream_->OnStreamHeaderList(true, h.uncompressed_header_bytes(), h);
     return h;
   }
 
   quic::QuicHeaderList ProcessHeadersFull(
-      const spdy::SpdyHeaderBlock& headers) {
+      const spdy::Http2HeaderBlock& headers) {
     quic::QuicHeaderList h = ProcessHeaders(headers);
     TestCompletionCallback callback;
     EXPECT_EQ(static_cast<int>(h.uncompressed_header_bytes()),
@@ -280,8 +288,8 @@ class QuicChromiumClientStreamTest
   quic::test::MockAlarmFactory alarm_factory_;
   MockQuicClientSessionBase session_;
   QuicChromiumClientStream* stream_;
-  spdy::SpdyHeaderBlock headers_;
-  spdy::SpdyHeaderBlock trailers_;
+  spdy::Http2HeaderBlock headers_;
+  spdy::Http2HeaderBlock trailers_;
   quic::QuicClientPushPromiseIndex push_promise_index_;
 };
 
@@ -312,7 +320,7 @@ TEST_P(QuicChromiumClientStreamTest, Handle) {
   quic::QuicStreamFrame frame2(
       quic::test::GetNthClientInitiatedBidirectionalStreamId(
           version_.transport_version, 0),
-      true, offset, quiche::QuicheStringPiece());
+      true, offset, absl::string_view());
   stream_->OnStreamFrame(frame2);
   EXPECT_TRUE(handle_->fin_received());
   handle_->OnFinRead();
@@ -359,16 +367,13 @@ TEST_P(QuicChromiumClientStreamTest, Handle) {
       ERR_CONNECTION_CLOSED,
       handle_->WritevStreamData(buffers, lengths, true, callback.callback()));
 
-  spdy::SpdyHeaderBlock headers;
+  spdy::Http2HeaderBlock headers;
   EXPECT_EQ(0, handle_->WriteHeaders(std::move(headers), true, nullptr));
 }
 
 TEST_P(QuicChromiumClientStreamTest, HandleAfterConnectionClose) {
-  EXPECT_CALL(
-      session_,
-      SendRstStream(quic::test::GetNthClientInitiatedBidirectionalStreamId(
-                        version_.transport_version, 0),
-                    quic::QUIC_RST_ACKNOWLEDGEMENT, 0, _));
+  quic::test::QuicConnectionPeer::TearDownLocalConnectionState(
+      session_.connection());
   stream_->OnConnectionClosed(quic::QUIC_INVALID_FRAME_DATA,
                               quic::ConnectionCloseSource::FROM_PEER);
 
@@ -377,24 +382,6 @@ TEST_P(QuicChromiumClientStreamTest, HandleAfterConnectionClose) {
 }
 
 TEST_P(QuicChromiumClientStreamTest, HandleAfterStreamReset) {
-  // Verify that the Handle still behaves correctly after the stream is reset.
-  quic::QuicRstStreamFrame rst(
-      quic::kInvalidControlFrameId,
-      quic::test::GetNthClientInitiatedBidirectionalStreamId(
-          version_.transport_version, 0),
-      quic::QUIC_STREAM_CANCELLED, 0);
-
-  quic::QuicRstStreamErrorCode error_code = quic::QUIC_RST_ACKNOWLEDGEMENT;
-  if (version_.HasIetfQuicFrames()) {
-    error_code = quic::QUIC_STREAM_CANCELLED;
-  }
-  EXPECT_CALL(
-      session_,
-      SendRstStream(quic::test::GetNthClientInitiatedBidirectionalStreamId(
-                        version_.transport_version, 0),
-                    error_code, 0, _));
-
-  stream_->OnStreamReset(rst);
   if (version_.HasIetfQuicFrames()) {
     // Make a STOP_SENDING frame and pass it to QUIC. For V99/IETF QUIC,
     // we need both a REST_STREAM and a STOP_SENDING to effect a closed
@@ -406,6 +393,15 @@ TEST_P(QuicChromiumClientStreamTest, HandleAfterStreamReset) {
         quic::QUIC_STREAM_CANCELLED);
     session_.OnStopSendingFrame(stop_sending_frame);
   }
+
+  // Verify that the Handle still behaves correctly after the stream is reset.
+  quic::QuicRstStreamFrame rst(
+      quic::kInvalidControlFrameId,
+      quic::test::GetNthClientInitiatedBidirectionalStreamId(
+          version_.transport_version, 0),
+      quic::QUIC_STREAM_CANCELLED, 0);
+
+  stream_->OnStreamReset(rst);
   EXPECT_FALSE(handle_->IsOpen());
   EXPECT_EQ(quic::QUIC_STREAM_CANCELLED, handle_->stream_error());
 }
@@ -417,7 +413,7 @@ TEST_P(QuicChromiumClientStreamTest, OnFinRead) {
   quic::QuicStreamFrame frame2(
       quic::test::GetNthClientInitiatedBidirectionalStreamId(
           version_.transport_version, 0),
-      true, offset, quiche::QuicheStringPiece());
+      true, offset, absl::string_view());
   stream_->OnStreamFrame(frame2);
 }
 
@@ -448,8 +444,8 @@ TEST_P(QuicChromiumClientStreamTest, OnDataAvailable) {
   scoped_refptr<IOBuffer> buffer = base::MakeRefCounted<IOBuffer>(2 * data_len);
   EXPECT_EQ(data_len,
             handle_->ReadBody(buffer.get(), 2 * data_len, callback.callback()));
-  EXPECT_EQ(quiche::QuicheStringPiece(data),
-            quiche::QuicheStringPiece(buffer->data(), data_len));
+  EXPECT_EQ(absl::string_view(data),
+            absl::string_view(buffer->data(), data_len));
 }
 
 TEST_P(QuicChromiumClientStreamTest, OnDataAvailableAfterReadBody) {
@@ -483,19 +479,20 @@ TEST_P(QuicChromiumClientStreamTest, OnDataAvailableAfterReadBody) {
       /*offset=*/offset, data));
 
   EXPECT_EQ(data_len, callback.WaitForResult());
-  EXPECT_EQ(quiche::QuicheStringPiece(data),
-            quiche::QuicheStringPiece(buffer->data(), data_len));
+  EXPECT_EQ(absl::string_view(data),
+            absl::string_view(buffer->data(), data_len));
   base::RunLoop().RunUntilIdle();
 }
 
 TEST_P(QuicChromiumClientStreamTest, ProcessHeadersWithError) {
-  spdy::SpdyHeaderBlock bad_headers;
+  spdy::Http2HeaderBlock bad_headers;
   bad_headers["NAME"] = "...";
+
   EXPECT_CALL(
-      session_,
-      SendRstStream(quic::test::GetNthClientInitiatedBidirectionalStreamId(
+      *static_cast<quic::test::MockQuicConnection*>(session_.connection()),
+      OnStreamReset(quic::test::GetNthClientInitiatedBidirectionalStreamId(
                         version_.transport_version, 0),
-                    quic::QUIC_BAD_APPLICATION_PAYLOAD, 0, _));
+                    quic::QUIC_BAD_APPLICATION_PAYLOAD));
 
   auto headers = quic::test::AsHeaderList(bad_headers);
   stream_->OnStreamHeaderList(false, headers.uncompressed_header_bytes(),
@@ -508,11 +505,6 @@ TEST_P(QuicChromiumClientStreamTest, OnDataAvailableWithError) {
   InitializeHeaders();
   auto headers = quic::test::AsHeaderList(headers_);
   ProcessHeadersFull(headers_);
-  EXPECT_CALL(
-      session_,
-      SendRstStream(quic::test::GetNthClientInitiatedBidirectionalStreamId(
-                        version_.transport_version, 0),
-                    quic::QUIC_STREAM_CANCELLED, 0, _));
 
   const char data[] = "hello world!";
   int data_len = strlen(data);
@@ -526,6 +518,12 @@ TEST_P(QuicChromiumClientStreamTest, OnDataAvailableWithError) {
           buffer.get(), 2 * data_len,
           base::BindOnce(&QuicChromiumClientStreamTest::ResetStreamCallback,
                          base::Unretained(this), stream_)));
+
+  EXPECT_CALL(
+      *static_cast<quic::test::MockQuicConnection*>(session_.connection()),
+      OnStreamReset(quic::test::GetNthClientInitiatedBidirectionalStreamId(
+                        version_.transport_version, 0),
+                    quic::QUIC_STREAM_CANCELLED));
 
   // Receive the data and close the stream during the callback.
   size_t offset = 0;
@@ -581,10 +579,10 @@ TEST_P(QuicChromiumClientStreamTest, OnTrailers) {
   scoped_refptr<IOBuffer> buffer = base::MakeRefCounted<IOBuffer>(2 * data_len);
   EXPECT_EQ(data_len,
             handle_->ReadBody(buffer.get(), 2 * data_len, callback.callback()));
-  EXPECT_EQ(quiche::QuicheStringPiece(data),
-            quiche::QuicheStringPiece(buffer->data(), data_len));
+  EXPECT_EQ(absl::string_view(data),
+            absl::string_view(buffer->data(), data_len));
 
-  spdy::SpdyHeaderBlock trailers;
+  spdy::Http2HeaderBlock trailers;
   trailers["bar"] = "foo";
   if (!version_.HasIetfQuicFrames()) {
     trailers[quic::kFinalOffsetHeaderKey] = base::NumberToString(strlen(data));
@@ -637,15 +635,15 @@ TEST_P(QuicChromiumClientStreamTest, MarkTrailersConsumedWhenNotifyDelegate) {
   scoped_refptr<IOBuffer> buffer = base::MakeRefCounted<IOBuffer>(2 * data_len);
   EXPECT_EQ(data_len,
             handle_->ReadBody(buffer.get(), 2 * data_len, callback.callback()));
-  EXPECT_EQ(quiche::QuicheStringPiece(data),
-            quiche::QuicheStringPiece(buffer->data(), data_len));
+  EXPECT_EQ(absl::string_view(data),
+            absl::string_view(buffer->data(), data_len));
 
   // Read again, and it will be pending.
   EXPECT_THAT(
       handle_->ReadBody(buffer.get(), 2 * data_len, callback.callback()),
       IsError(ERR_IO_PENDING));
 
-  spdy::SpdyHeaderBlock trailers;
+  spdy::Http2HeaderBlock trailers;
   trailers["bar"] = "foo";
   if (!version_.HasIetfQuicFrames()) {
     trailers[quic::kFinalOffsetHeaderKey] = base::NumberToString(strlen(data));
@@ -700,11 +698,11 @@ TEST_P(QuicChromiumClientStreamTest, ReadAfterTrailersReceivedButNotDelivered) {
   scoped_refptr<IOBuffer> buffer = base::MakeRefCounted<IOBuffer>(2 * data_len);
   EXPECT_EQ(data_len,
             handle_->ReadBody(buffer.get(), 2 * data_len, callback.callback()));
-  EXPECT_EQ(quiche::QuicheStringPiece(data),
-            quiche::QuicheStringPiece(buffer->data(), data_len));
+  EXPECT_EQ(absl::string_view(data),
+            absl::string_view(buffer->data(), data_len));
 
   // Deliver trailers. Delegate notification is posted asynchronously.
-  spdy::SpdyHeaderBlock trailers;
+  spdy::Http2HeaderBlock trailers;
   trailers["bar"] = "foo";
   if (!version_.HasIetfQuicFrames()) {
     trailers[quic::kFinalOffsetHeaderKey] = base::NumberToString(strlen(data));
@@ -939,8 +937,8 @@ TEST_P(QuicChromiumClientStreamTest, HeadersAndDataBeforeHandle) {
   int data_len = base::size(data) - 1;
   scoped_refptr<IOBuffer> buffer = base::MakeRefCounted<IOBuffer>(data_len + 1);
   ASSERT_EQ(data_len, stream2->Read(buffer.get(), data_len + 1));
-  EXPECT_EQ(quiche::QuicheStringPiece(data),
-            quiche::QuicheStringPiece(buffer->data(), data_len));
+  EXPECT_EQ(absl::string_view(data),
+            absl::string_view(buffer->data(), data_len));
 }
 
 // Regression test for https://crbug.com/1043531.
@@ -948,19 +946,191 @@ TEST_P(QuicChromiumClientStreamTest, ResetOnEmptyResponseHeaders) {
   if (!VersionUsesHttp3(version_.transport_version)) {
     // QuicSpdyStream resets itself on empty headers,
     // because it is used to signal that headers were too large.
-    EXPECT_CALL(session_, SendRstStream(stream_->id(),
-                                        quic::QUIC_HEADERS_TOO_LARGE, 0, _));
+    EXPECT_CALL(
+        *static_cast<quic::test::MockQuicConnection*>(session_.connection()),
+        OnStreamReset(stream_->id(), quic::QUIC_HEADERS_TOO_LARGE));
   }
 
-  const spdy::SpdyHeaderBlock empty_response_headers;
+  const spdy::Http2HeaderBlock empty_response_headers;
   ProcessHeaders(empty_response_headers);
 
   if (VersionUsesHttp3(version_.transport_version)) {
     // Empty headers are allowed by QuicSpdyStream,
     // but an error is generated by QuicChromiumClientStream.
     int rv = handle_->ReadInitialHeaders(&headers_, CompletionOnceCallback());
-    EXPECT_THAT(rv, IsError(ERR_INVALID_RESPONSE));
+    EXPECT_THAT(rv, IsError(net::ERR_QUIC_PROTOCOL_ERROR));
   }
+}
+
+// Tests that the stream resets when it receives an invalid ":status"
+// pseudo-header value.
+TEST_P(QuicChromiumClientStreamTest, InvalidStatus) {
+  spdy::Http2HeaderBlock headers = CreateResponseHeaders("xxx");
+
+  EXPECT_CALL(
+      *static_cast<quic::test::MockQuicConnection*>(session_.connection()),
+      OnStreamReset(quic::test::GetNthClientInitiatedBidirectionalStreamId(
+                        version_.transport_version, 0),
+                    quic::QUIC_BAD_APPLICATION_PAYLOAD));
+
+  EXPECT_CALL(
+      *static_cast<quic::test::MockQuicConnection*>(session_.connection()),
+      SendControlFrame(_));
+
+  ProcessHeaders(headers);
+  EXPECT_FALSE(handle_->IsOpen());
+  EXPECT_EQ(quic::QUIC_BAD_APPLICATION_PAYLOAD, handle_->stream_error());
+}
+
+// Tests that the stream resets when it receives 101 Switching Protocols.
+TEST_P(QuicChromiumClientStreamTest, SwitchingProtocolsResponse) {
+  spdy::Http2HeaderBlock informational_headers = CreateResponseHeaders("101");
+
+  EXPECT_CALL(
+      *static_cast<quic::test::MockQuicConnection*>(session_.connection()),
+      OnStreamReset(quic::test::GetNthClientInitiatedBidirectionalStreamId(
+                        version_.transport_version, 0),
+                    quic::QUIC_BAD_APPLICATION_PAYLOAD));
+
+  EXPECT_CALL(
+      *static_cast<quic::test::MockQuicConnection*>(session_.connection()),
+      SendControlFrame(_));
+
+  ProcessHeaders(informational_headers);
+  EXPECT_FALSE(handle_->IsOpen());
+  EXPECT_EQ(quic::QUIC_BAD_APPLICATION_PAYLOAD, handle_->stream_error());
+}
+
+// Tests that the stream ignores 100 Continue response.
+TEST_P(QuicChromiumClientStreamTest, ContinueResponse) {
+  spdy::Http2HeaderBlock informational_headers = CreateResponseHeaders("100");
+
+  // This informational headers should be ignored.
+  ProcessHeaders(informational_headers);
+
+  // Pass the initial headers.
+  InitializeHeaders();
+  quic::QuicHeaderList header_list = ProcessHeaders(headers_);
+
+  // Read the initial headers.
+  spdy::Http2HeaderBlock response_headers;
+  // Pass DoNothing because the initial headers is already available and the
+  // callback won't be called.
+  EXPECT_EQ(static_cast<int>(header_list.uncompressed_header_bytes()),
+            handle_->ReadInitialHeaders(&response_headers, base::DoNothing()));
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(response_headers, headers_);
+}
+
+// Tests that the stream handles 103 Early Hints responses.
+TEST_P(QuicChromiumClientStreamTest, EarlyHintsResponses) {
+  // Pass Two Early Hints responses to the stream.
+  spdy::Http2HeaderBlock hints1_headers = CreateResponseHeaders("103");
+  hints1_headers["x-header1"] = "foo";
+  quic::QuicHeaderList header_list = ProcessHeaders(hints1_headers);
+  const size_t hints1_bytes = header_list.uncompressed_header_bytes();
+
+  spdy::Http2HeaderBlock hints2_headers = CreateResponseHeaders("103");
+  hints2_headers["x-header2"] = "foobarbaz";
+  header_list = ProcessHeaders(hints2_headers);
+  const size_t hints2_bytes = header_list.uncompressed_header_bytes();
+
+  // Pass the initial headers to the stream.
+  InitializeHeaders();
+  header_list = ProcessHeaders(headers_);
+  const size_t initial_headers_bytes = header_list.uncompressed_header_bytes();
+
+  spdy::Http2HeaderBlock headers;
+
+  // Read headers. The first two reads should return Early Hints.
+  EXPECT_EQ(static_cast<int>(hints1_bytes),
+            handle_->ReadInitialHeaders(&headers, base::DoNothing()));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(headers, hints1_headers);
+  base::TimeTicks first_early_hints_time = handle_->first_early_hints_time();
+  EXPECT_FALSE(first_early_hints_time.is_null());
+
+  EXPECT_EQ(static_cast<int>(hints2_bytes),
+            handle_->ReadInitialHeaders(&headers, base::DoNothing()));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(headers, hints2_headers);
+  EXPECT_EQ(first_early_hints_time, handle_->first_early_hints_time());
+
+  // The third read should return the initial headers.
+  EXPECT_EQ(static_cast<int>(initial_headers_bytes),
+            handle_->ReadInitialHeaders(&headers, base::DoNothing()));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(headers, headers_);
+}
+
+// Tests that pending reads for Early Hints work.
+TEST_P(QuicChromiumClientStreamTest, EarlyHintsAsync) {
+  spdy::Http2HeaderBlock headers;
+  TestCompletionCallback hints_callback;
+
+  // Try to read headers. The read should be blocked.
+  EXPECT_EQ(ERR_IO_PENDING,
+            handle_->ReadInitialHeaders(&headers, hints_callback.callback()));
+
+  // Pass an Early Hints and the initial headers.
+  spdy::Http2HeaderBlock hints_headers = CreateResponseHeaders("103");
+  hints_headers["x-header1"] = "foo";
+  quic::QuicHeaderList header_list = ProcessHeaders(hints_headers);
+  const size_t hints_bytes = header_list.uncompressed_header_bytes();
+  InitializeHeaders();
+  header_list = ProcessHeaders(headers_);
+  const size_t initial_headers_bytes = header_list.uncompressed_header_bytes();
+
+  // Wait for the pending headers read. The result should be the Early Hints.
+  const int hints_result = hints_callback.WaitForResult();
+  EXPECT_EQ(hints_result, static_cast<int>(hints_bytes));
+  EXPECT_EQ(headers, hints_headers);
+
+  // Second read should return the initial headers.
+  EXPECT_EQ(static_cast<int>(initial_headers_bytes),
+            handle_->ReadInitialHeaders(&headers, base::DoNothing()));
+  EXPECT_EQ(headers, headers_);
+}
+
+// Tests that Early Hints after the initial headers is treated as an error.
+TEST_P(QuicChromiumClientStreamTest, EarlyHintsAfterInitialHeaders) {
+  InitializeHeaders();
+  ProcessHeadersFull(headers_);
+
+  // Early Hints after the initial headers are treated as trailers, and it
+  // should result in an error because trailers must not contain pseudo-headers
+  // like ":status".
+  EXPECT_CALL(
+      *static_cast<quic::test::MockQuicConnection*>(session_.connection()),
+      CloseConnection(
+          quic::QUIC_INVALID_HEADERS_STREAM_DATA, _,
+          quic::ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET));
+
+  spdy::Http2HeaderBlock hints_headers;
+  hints_headers[":status"] = "103";
+  ProcessHeaders(hints_headers);
+  base::RunLoop().RunUntilIdle();
+}
+
+// Similar to the above test but don't read the initial headers.
+TEST_P(QuicChromiumClientStreamTest, EarlyHintsAfterInitialHeadersWithoutRead) {
+  InitializeHeaders();
+  ProcessHeaders(headers_);
+
+  // Early Hints after the initial headers are treated as trailers, and it
+  // should result in an error because trailers must not contain pseudo-headers
+  // like ":status".
+  EXPECT_CALL(
+      *static_cast<quic::test::MockQuicConnection*>(session_.connection()),
+      CloseConnection(
+          quic::QUIC_INVALID_HEADERS_STREAM_DATA, _,
+          quic::ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET));
+
+  spdy::Http2HeaderBlock hints_headers;
+  hints_headers[":status"] = "103";
+  ProcessHeaders(hints_headers);
+  base::RunLoop().RunUntilIdle();
 }
 
 }  // namespace

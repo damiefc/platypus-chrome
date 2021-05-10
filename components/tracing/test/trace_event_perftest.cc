@@ -11,6 +11,7 @@
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread.h"
+#include "base/trace_event/task_execution_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "perf_test_helpers.h"
@@ -48,7 +49,7 @@ class TraceEventPerfTest : public ::testing::Test {
     base::RunLoop run_loop;
     TraceLog::GetInstance()->SetDisabled();
     TraceLog::GetInstance()->Flush(
-        Bind(&OnTraceDataCollected, run_loop.QuitClosure()));
+        BindRepeating(&OnTraceDataCollected, run_loop.QuitClosure()));
     run_loop.Run();
   }
 

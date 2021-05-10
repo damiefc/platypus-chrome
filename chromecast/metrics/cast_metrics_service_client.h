@@ -15,6 +15,7 @@
 #include "build/build_config.h"
 #include "chromecast/public/cast_sys_info.h"
 #include "components/metrics/enabled_state_provider.h"
+#include "components/metrics/metrics_log_store.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_service_client.h"
 
@@ -42,8 +43,13 @@ class CastMetricsServiceDelegate {
  public:
   // Invoked when the metrics client ID changes.
   virtual void SetMetricsClientId(const std::string& client_id) = 0;
+
   // Allows registration of extra metrics providers.
   virtual void RegisterMetricsProviders(::metrics::MetricsService* service) = 0;
+
+  // Adds Cast embedder-specific storage limits to |limits| object.
+  virtual void ApplyMetricsStorageLimits(
+      ::metrics::MetricsLogStore::StorageLimits* limits) {}
 
  protected:
   virtual ~CastMetricsServiceDelegate() = default;
@@ -84,6 +90,7 @@ class CastMetricsServiceClient : public ::metrics::MetricsServiceClient,
   std::string GetApplicationLocale() override;
   bool GetBrand(std::string* brand_code) override;
   ::metrics::SystemProfileProto::Channel GetChannel() override;
+  bool IsExtendedStableChannel() override;
   std::string GetVersionString() override;
   void CollectFinalMetricsForLog(base::OnceClosure done_callback) override;
   GURL GetMetricsServerUrl() override;
@@ -95,6 +102,7 @@ class CastMetricsServiceClient : public ::metrics::MetricsServiceClient,
       const ::metrics::MetricsLogUploader::UploadCallback& on_upload_complete)
       override;
   base::TimeDelta GetStandardUploadInterval() override;
+  ::metrics::MetricsLogStore::StorageLimits GetStorageLimits() const override;
 
   // ::metrics::EnabledStateProvider:
   bool IsConsentGiven() const override;

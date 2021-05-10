@@ -20,6 +20,7 @@
 #include "chromeos/network/shill_property_util.h"
 #include "components/onc/onc_constants.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
+#include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
 namespace chromeos {
 
@@ -374,13 +375,24 @@ std::unique_ptr<base::DictionaryValue> CreateShillConfiguration(
     // Shill's GetProperties doesn't return credentials. Masking credentials
     // instead of just removing them, allows remembering if a credential is set
     // or not.
-    std::unique_ptr<base::DictionaryValue> sanitized_user_settings(
-        onc::MaskCredentialsInOncObject(onc::kNetworkConfigurationSignature,
-                                        *user_settings, kFakeCredential));
+    //
+    // If we're not saving credentials, explicitly set credentials in UIData to
+    // empty string so the UI will display empty text fields for them the next
+    // time they're viewed (instead of masked-out-placeholders, which would
+    // suggest that a credential has been saved).
+    const bool saving_credentials =
+        shill_dictionary->FindBoolKey(shill::kSaveCredentialsProperty)
+            .value_or(true);
+    const std::string credential_mask =
+        saving_credentials ? kFakeCredential : std::string();
+    std::unique_ptr<base::Value> sanitized_user_settings =
+        base::Value::ToUniquePtrValue(
+            onc::MaskCredentialsInOncObject(onc::kNetworkConfigurationSignature,
+                                            *user_settings, credential_mask));
     ui_data->SetUserSettingsDictionary(std::move(sanitized_user_settings));
   }
 
-  shill_property_util::SetUIData(*ui_data, shill_dictionary.get());
+  shill_property_util::SetUIDataAndSource(*ui_data, shill_dictionary.get());
 
   VLOG(2) << "Created Shill properties: " << *shill_dictionary;
 

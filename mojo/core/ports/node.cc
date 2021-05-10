@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -683,10 +684,11 @@ int Node::OnObserveProxy(std::unique_ptr<ObserveProxyEvent> event) {
         DVLOG(2) << "Delaying ObserveProxyAck to " << event->proxy_port_name()
                  << "@" << event->proxy_node_name();
 
-        port->send_on_proxy_removal.reset(new std::pair<NodeName, ScopedEvent>(
-            event->proxy_node_name(),
-            std::make_unique<ObserveProxyAckEvent>(event->proxy_port_name(),
-                                                   kInvalidSequenceNum)));
+        port->send_on_proxy_removal =
+            std::make_unique<std::pair<NodeName, ScopedEvent>>(
+                event->proxy_node_name(),
+                std::make_unique<ObserveProxyAckEvent>(event->proxy_port_name(),
+                                                       kInvalidSequenceNum));
       }
     } else {
       // Forward this event along to our peer. Eventually, it should find the
@@ -920,7 +922,8 @@ int Node::OnUserMessageReadAckRequest(
     }
   }
 
-  delegate_->ForwardEvent(peer_node_name, std::move(event_to_send));
+  if (event_to_send)
+    delegate_->ForwardEvent(peer_node_name, std::move(event_to_send));
 
   return OK;
 }

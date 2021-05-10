@@ -12,13 +12,13 @@ import 'chrome://resources/cr_elements/action_link_css.m.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
-import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.m.js';
+import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
-import '../icons.m.js';
-import '../settings_shared_css.m.js';
+import '../icons.js';
+import '../settings_shared_css.js';
 import './all_sites_icons.js';
 import './clear_storage_dialog_css.js';
 import './site_details_permission.js';
@@ -30,8 +30,9 @@ import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behav
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
+import {MetricsBrowserProxyImpl, PrivacyElementInteractions} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
-import {Route, RouteObserverBehavior, Router} from '../router.m.js';
+import {Route, RouteObserverBehavior, Router} from '../router.js';
 
 import {ContentSetting, ContentSettingsTypes} from './constants.js';
 import {SiteSettingsBehavior} from './site_settings_behavior.js';
@@ -103,16 +104,18 @@ Polymer({
     },
 
     /** @private */
-    storagePressureFlagEnabled_: {
-      type: Boolean,
-      value: () => loadTimeData.getBoolean('enableStoragePressureUI'),
-    },
-
-    /** @private */
     enableWebBluetoothNewPermissionsBackend_: {
       type: Boolean,
       value: () =>
           loadTimeData.getBoolean('enableWebBluetoothNewPermissionsBackend'),
+    },
+
+    /** @private */
+    enableFileHandlingContentSetting_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('enableFileHandlingContentSetting');
+      }
     },
   },
 
@@ -281,11 +284,7 @@ Polymer({
    */
   onConfirmClearStorage_(e) {
     e.preventDefault();
-    if (this.storagePressureFlagEnabled_) {
-      this.$.confirmClearStorageNew.showModal();
-    } else {
-      this.$.confirmClearStorage.showModal();
-    }
+    this.$.confirmClearStorageNew.showModal();
   },
 
   /**
@@ -295,9 +294,6 @@ Polymer({
   onResetSettings_(e) {
     this.browserProxy.setOriginPermissions(
         this.origin_, this.getCategoryList(), ContentSetting.DEFAULT);
-    if (this.getCategoryList().includes(ContentSettingsTypes.PLUGINS)) {
-      this.browserProxy.clearFlashPref(this.origin_);
-    }
 
     this.onCloseDialog_(e);
   },
@@ -307,6 +303,8 @@ Polymer({
    * @private
    */
   onClearStorage_(e) {
+    MetricsBrowserProxyImpl.getInstance().recordSettingsPageHistogram(
+        PrivacyElementInteractions.SITE_DETAILS_CLEAR_DATA);
     if (this.hasUsage_(this.storedData_, this.numCookies_)) {
       this.websiteUsageProxy_.clearUsage(this.toUrl(this.origin_).href);
       this.storedData_ = '';

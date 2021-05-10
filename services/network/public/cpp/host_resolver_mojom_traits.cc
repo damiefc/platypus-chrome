@@ -6,6 +6,8 @@
 
 #include "mojo/public/cpp/base/time_mojom_traits.h"
 #include "net/dns/public/dns_over_https_server_config.h"
+#include "net/dns/public/secure_dns_mode.h"
+#include "net/dns/public/secure_dns_policy.h"
 #include "services/network/public/cpp/ip_address_mojom_traits.h"
 #include "services/network/public/cpp/ip_endpoint_mojom_traits.h"
 #include "services/network/public/mojom/host_resolver.mojom.h"
@@ -167,7 +169,7 @@ bool StructTraits<DnsConfigOverridesDataView, net::DnsConfigOverrides>::Read(
     out->ndots = data.ndots();
   // if == -1, leave nullopt.
 
-  if (!data.ReadTimeout(&out->timeout))
+  if (!data.ReadFallbackPeriod(&out->fallback_period))
     return false;
 
   if (data.attempts() < -1)
@@ -214,6 +216,8 @@ DnsQueryType EnumTraits<DnsQueryType, net::DnsQueryType>::ToMojom(
       return DnsQueryType::PTR;
     case net::DnsQueryType::SRV:
       return DnsQueryType::SRV;
+    case net::DnsQueryType::HTTPS:
+      return DnsQueryType::HTTPS;
     case net::DnsQueryType::INTEGRITY:
       NOTIMPLEMENTED();
       return DnsQueryType::UNSPECIFIED;
@@ -242,6 +246,9 @@ bool EnumTraits<DnsQueryType, net::DnsQueryType>::FromMojom(
       return true;
     case DnsQueryType::SRV:
       *output = net::DnsQueryType::SRV;
+      return true;
+    case DnsQueryType::HTTPS:
+      *output = net::DnsQueryType::HTTPS;
       return true;
   }
 }
@@ -332,8 +339,6 @@ EnumTraits<network::mojom::SecureDnsMode, net::SecureDnsMode>::ToMojom(
     case net::SecureDnsMode::kSecure:
       return network::mojom::SecureDnsMode::SECURE;
   }
-  NOTREACHED();
-  return network::mojom::SecureDnsMode::OFF;
 }
 
 // static
@@ -351,7 +356,31 @@ bool EnumTraits<network::mojom::SecureDnsMode, net::SecureDnsMode>::FromMojom(
       *out = net::SecureDnsMode::kSecure;
       return true;
   }
-  return false;
+}
+
+// static
+network::mojom::SecureDnsPolicy
+EnumTraits<network::mojom::SecureDnsPolicy, net::SecureDnsPolicy>::ToMojom(
+    net::SecureDnsPolicy secure_dns_mode) {
+  switch (secure_dns_mode) {
+    case net::SecureDnsPolicy::kAllow:
+      return network::mojom::SecureDnsPolicy::ALLOW;
+    case net::SecureDnsPolicy::kDisable:
+      return network::mojom::SecureDnsPolicy::DISABLE;
+  }
+}
+
+// static
+bool EnumTraits<network::mojom::SecureDnsPolicy, net::SecureDnsPolicy>::
+    FromMojom(network::mojom::SecureDnsPolicy in, net::SecureDnsPolicy* out) {
+  switch (in) {
+    case network::mojom::SecureDnsPolicy::ALLOW:
+      *out = net::SecureDnsPolicy::kAllow;
+      return true;
+    case network::mojom::SecureDnsPolicy::DISABLE:
+      *out = net::SecureDnsPolicy::kDisable;
+      return true;
+  }
 }
 
 // static

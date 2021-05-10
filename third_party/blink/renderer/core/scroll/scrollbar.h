@@ -26,9 +26,10 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_SCROLL_SCROLLBAR_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_SCROLL_SCROLLBAR_H_
 
-#include "third_party/blink/public/common/css/color_scheme.h"
+#include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
+#include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_element_id.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -194,12 +195,15 @@ class CORE_EXPORT Scrollbar : public GarbageCollected<Scrollbar>,
   float EffectiveZoom() const;
   bool ContainerIsRightToLeft() const;
 
+  // scrollbar-width CSS property
+  EScrollbarWidth CSSScrollbarWidth() const;
+
   // The Element that supplies our style information. If the scrollbar is
   // for a document, this is either the <body> or <html> element. Otherwise, it
   // is the element that owns our PaintLayerScrollableArea.
   Element* StyleSource() const { return style_source_.Get(); }
 
-  ColorScheme UsedColorScheme() const;
+  mojom::blink::ColorScheme UsedColorScheme() const;
 
   virtual void Trace(Visitor*) const;
 
@@ -235,7 +239,7 @@ class CORE_EXPORT Scrollbar : public GarbageCollected<Scrollbar>,
 
   bool enabled_;
 
-  TaskRunnerTimer<Scrollbar> scroll_timer_;
+  HeapTaskRunnerTimer<Scrollbar> scroll_timer_;
 
   float elastic_overscroll_;
 

@@ -8,15 +8,17 @@
 
 #include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/wm/desks/desk_mini_view.h"
+#include "ash/wm/desks/desks_bar_view.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
-#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/views/background.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/native_cursor.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
@@ -46,21 +48,11 @@ bool IsDesksBarWidget(const views::Widget* widget) {
 
 }  // namespace
 
-DeskNameView::DeskNameView() {
+DeskNameView::DeskNameView(DeskMiniView* mini_view) : mini_view_(mini_view) {
   auto border = std::make_unique<WmHighlightItemBorder>(
       /*corner_radius=*/4, gfx::Insets(0, kDeskNameViewHorizontalPadding));
   border_ptr_ = border.get();
   SetBorder(std::move(border));
-
-  const SkColor text_color = AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorPrimary);
-  SetTextColor(text_color);
-  SetSelectionTextColor(text_color);
-
-  const SkColor selection_color =
-      AshColorProvider::Get()->GetControlsLayerColor(
-          AshColorProvider::ControlsLayerType::kFocusRingColor);
-  SetSelectionBackgroundColor(selection_color);
 
   SetCursorEnabled(true);
   SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_CENTER);
@@ -82,10 +74,13 @@ void DeskNameView::CommitChanges(views::Widget* widget) {
   focus_manager->SetStoredFocusView(nullptr);
 }
 
-void DeskNameView::SetTextAndElideIfNeeded(const base::string16& text) {
-  SetText(gfx::ElideText(text, GetFontList(),
-                         parent()->GetPreferredSize().width(),
-                         gfx::ELIDE_TAIL));
+void DeskNameView::SetTextAndElideIfNeeded(const std::u16string& text) {
+  // Use the potential max size of this to calculate elision, not its current
+  // size to avoid eliding names that don't need to be.
+  SetText(
+      gfx::ElideText(text, GetFontList(),
+                     parent()->GetPreferredSize().width() - GetInsets().width(),
+                     gfx::ELIDE_TAIL));
   full_text_ = text;
 }
 
@@ -123,8 +118,10 @@ bool DeskNameView::SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) {
 }
 
 void DeskNameView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ax::mojom::Role::kTextField;
-  node_data->SetName(full_text_);
+  Textfield::GetAccessibleNodeData(node_data);
+  // When Bento is enabled and the user creates a new desk, |full_text_| will be
+  // empty but the accesssible name for |this| will be the default desk name.
+  node_data->SetName(full_text_.empty() ? GetAccessibleName() : full_text_);
 }
 
 void DeskNameView::OnMouseEntered(const ui::MouseEvent& event) {
@@ -139,6 +136,20 @@ void DeskNameView::OnThemeChanged() {
   Textfield::OnThemeChanged();
   SetBackground(views::CreateRoundedRectBackground(GetBackgroundColor(),
                                                    kDeskNameViewBorderRadius));
+  AshColorProvider* color_provider = AshColorProvider::Get();
+  const SkColor text_color = color_provider->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary);
+  SetTextColor(text_color);
+  SetSelectionTextColor(text_color);
+
+  const SkColor selection_color = color_provider->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kFocusAuraColor);
+  SetSelectionBackgroundColor(selection_color);
+  UpdateBorderState();
+}
+
+gfx::NativeCursor DeskNameView::GetCursor(const ui::MouseEvent& event) {
+  return views::GetNativeIBeamCursor();
 }
 
 views::View* DeskNameView::GetView() {
@@ -151,8 +162,11 @@ void DeskNameView::MaybeActivateHighlightedView() {
 
 void DeskNameView::MaybeCloseHighlightedView() {}
 
+void DeskNameView::MaybeSwapHighlightedView(bool right) {}
+
 void DeskNameView::OnViewHighlighted() {
   UpdateBorderState();
+  mini_view_->owner_bar()->ScrollToShowMiniViewIfNecessary(mini_view_);
 }
 
 void DeskNameView::OnViewUnhighlighted() {

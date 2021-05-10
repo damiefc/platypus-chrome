@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/callback_helpers.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -18,29 +20,30 @@ namespace {
 
 constexpr int kWindowNameFieldId = 1;
 
-class WindowNamePromptDelegate : public ui::DialogModelDelegate {
- public:
-  void SetBrowserTitleFromTextField(Browser* browser) {
-    browser->SetWindowUserTitle(base::UTF16ToUTF8(
-        dialog_model()->GetTextfieldByUniqueId(kWindowNameFieldId)->text()));
-  }
-};
+void SetBrowserTitleFromTextfield(Browser* browser,
+                                  ui::DialogModel* dialog_model) {
+  std::string text = base::UTF16ToUTF8(
+      dialog_model->GetTextfieldByUniqueId(kWindowNameFieldId)->text());
+  if (text.empty())
+    base::RecordAction(base::UserMetricsAction("WindowNaming_Cleared"));
+  else
+    base::RecordAction(base::UserMetricsAction("WindowNaming_Set"));
+  browser->SetWindowUserTitle(text);
+}
 
 std::unique_ptr<views::DialogDelegate> CreateWindowNamePrompt(
     Browser* browser) {
-  auto bubble_delegate_unique = std::make_unique<WindowNamePromptDelegate>();
-  WindowNamePromptDelegate* bubble_delegate = bubble_delegate_unique.get();
-
+  ui::DialogModel::Builder dialog_builder;
   auto dialog_model =
-      ui::DialogModel::Builder(std::move(bubble_delegate_unique))
+      dialog_builder
           .SetTitle(l10n_util::GetStringUTF16(IDS_NAME_WINDOW_PROMPT_TITLE))
-          .AddOkButton(base::BindOnce(
-              &WindowNamePromptDelegate::SetBrowserTitleFromTextField,
-              base::Unretained(bubble_delegate), browser))
+          .AddOkButton(base::BindOnce(&SetBrowserTitleFromTextfield, browser,
+                                      dialog_builder.model()))
           .AddCancelButton(base::DoNothing())
           .AddTextfield(
-              l10n_util::GetStringUTF16(IDS_NAME_WINDOW_PROMPT_WINDOW_NAME),
-              base::UTF8ToUTF16(browser->user_title()),
+              // Deliberately use no label - the dialog contains only this
+              // textfield, and its title serves as a label for the textfield.
+              {}, base::UTF8ToUTF16(browser->user_title()),
               ui::DialogModelTextfield::Params().SetUniqueId(
                   kWindowNameFieldId))
           .SetInitiallyFocusedField(kWindowNameFieldId)
@@ -48,15 +51,14 @@ std::unique_ptr<views::DialogDelegate> CreateWindowNamePrompt(
 
   auto bubble = views::BubbleDialogModelHost::CreateModal(
       std::move(dialog_model), ui::MODAL_TYPE_WINDOW);
-  // TODO(pbos): Reconsider whether SetInitiallyFocusedView should imply
-  // initially-selected text.
-  bubble->SelectAllText(kWindowNameFieldId);
   return bubble;
 }
 
 void DoShowWindowNamePrompt(Browser* browser,
                             gfx::NativeView anchor,
                             gfx::NativeWindow context) {
+  base::RecordAction(base::UserMetricsAction("WindowNaming_DialogShown"));
+
   auto prompt = CreateWindowNamePrompt(browser);
   prompt->SetOwnedByWidget(true);
   views::DialogDelegate::CreateDialogWidget(std::move(prompt), context, anchor)

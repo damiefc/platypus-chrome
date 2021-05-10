@@ -13,19 +13,24 @@
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/interstitials/chrome_settings_page_helper.h"
 #include "chrome/browser/interstitials/enterprise_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/safe_browsing/chrome_controller_client.h"
+#include "chrome/browser/safe_browsing/safe_browsing_metrics_collector.h"
+#include "chrome/browser/safe_browsing/safe_browsing_metrics_collector_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/threat_details.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/common/utils.h"
 #include "components/safe_browsing/core/features.h"
 #include "components/safe_browsing/core/triggers/trigger_manager.h"
 #include "components/security_interstitials/content/content_metrics_helper.h"
 #include "components/security_interstitials/content/security_interstitial_controller_client.h"
+#include "components/security_interstitials/content/settings_page_helper.h"
 #include "components/security_interstitials/content/unsafe_resource_util.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
@@ -43,6 +48,29 @@ namespace safe_browsing {
 
 namespace {
 const char kHelpCenterLink[] = "cpn_safe_browsing";
+
+SafeBrowsingMetricsCollector::EventType GetEventTypeFromThreatSource(
+    ThreatSource threat_source) {
+  switch (threat_source) {
+    case ThreatSource::LOCAL_PVER4:
+    case ThreatSource::REMOTE:
+      return SafeBrowsingMetricsCollector::EventType::
+          DATABASE_INTERSTITIAL_BYPASS;
+      break;
+    case ThreatSource::CLIENT_SIDE_DETECTION:
+      return SafeBrowsingMetricsCollector::EventType::CSD_INTERSTITIAL_BYPASS;
+      break;
+    case ThreatSource::REAL_TIME_CHECK:
+      return SafeBrowsingMetricsCollector::EventType::
+          REAL_TIME_INTERSTITIAL_BYPASS;
+      break;
+    default:
+      NOTREACHED() << "Unexpected threat source.";
+      return SafeBrowsingMetricsCollector::EventType::
+          DATABASE_INTERSTITIAL_BYPASS;
+  }
+}
+
 }  // namespace
 
 // static
@@ -82,7 +110,8 @@ class SafeBrowsingBlockingPageFactoryImpl
         IsEnhancedProtectionEnabled(*prefs), is_proceed_anyway_disabled,
         true,  // should_open_links_in_new_tab
         true,  // always_show_back_to_safety
-        kHelpCenterLink);
+        true,  // is_enhanced_protection_message_enabled
+        IsSafeBrowsingPolicyManaged(*prefs), kHelpCenterLink);
 
     return new SafeBrowsingBlockingPage(
         ui_manager, web_contents, main_frame_url, unsafe_resources,
@@ -121,7 +150,8 @@ SafeBrowsingBlockingPage::SafeBrowsingBlockingPage(
           unsafe_resources,
           CreateControllerClient(web_contents, unsafe_resources, ui_manager),
           display_options),
-      threat_details_in_progress_(false) {
+      threat_details_in_progress_(false),
+      threat_source_(unsafe_resources[0].threat_source) {
   // Make sure the safe browsing service is available - it may not be when
   // shutting down.
   if (!g_browser_process->safe_browsing_service())
@@ -137,10 +167,9 @@ SafeBrowsingBlockingPage::SafeBrowsingBlockingPage(
     Profile* profile =
         Profile::FromBrowserContext(web_contents->GetBrowserContext());
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
-        url_loader_for_testing
-            ? url_loader_for_testing
-            : content::BrowserContext::GetDefaultStoragePartition(profile)
-                  ->GetURLLoaderFactoryForBrowserProcess();
+        url_loader_for_testing ? url_loader_for_testing
+                               : profile->GetDefaultStoragePartition()
+                                     ->GetURLLoaderFactoryForBrowserProcess();
     if (should_trigger_reporting) {
       threat_details_in_progress_ =
           g_browser_process->safe_browsing_service()
@@ -172,6 +201,15 @@ void SafeBrowsingBlockingPage::OnInterstitialClosing() {
                       proceeded(), controller()->metrics_helper()->NumVisits());
   if (!proceeded()) {
     OnDontProceedDone();
+  } else {
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+    auto* metrics_collector =
+        SafeBrowsingMetricsCollectorFactory::GetForProfile(profile);
+    if (metrics_collector) {
+      metrics_collector->AddSafeBrowsingEventToPref(
+          GetEventTypeFromThreatSource(threat_source_));
+    }
   }
   BaseBlockingPage::OnInterstitialClosing();
 }
@@ -210,8 +248,12 @@ SafeBrowsingBlockingPage* SafeBrowsingBlockingPage::CreateBlockingPage(
     const GURL& main_frame_url,
     const UnsafeResource& unsafe_resource,
     bool should_trigger_reporting) {
-  UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.BlockingPage.ResourceType",
-                            unsafe_resource.resource_type);
+  UMA_HISTOGRAM_ENUMERATION(
+      "SafeBrowsing.BlockingPage.ResourceType",
+      safe_browsing::GetResourceTypeFromRequestDestination(
+          unsafe_resource.request_destination));
+  UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.BlockingPage.RequestDestination",
+                            unsafe_resource.request_destination);
   const UnsafeResourceList resources{unsafe_resource};
   // Set up the factory if this has not been done already (tests do that
   // before this method is called).
@@ -239,9 +281,13 @@ SafeBrowsingBlockingPage::CreateControllerClient(
               ServiceAccessType::EXPLICIT_ACCESS),
           unsafe_resources[0].url, GetReportingInfo(unsafe_resources));
 
+  auto chrome_settings_page_helper =
+      std::make_unique<security_interstitials::ChromeSettingsPageHelper>();
+
   return std::make_unique<ChromeControllerClient>(
       web_contents, std::move(metrics_helper), profile->GetPrefs(),
-      ui_manager->app_locale(), ui_manager->default_safe_page());
+      ui_manager->app_locale(), ui_manager->default_safe_page(),
+      std::move(chrome_settings_page_helper));
 }
 
 }  // namespace safe_browsing

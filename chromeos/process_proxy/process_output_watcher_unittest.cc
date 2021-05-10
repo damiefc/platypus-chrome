@@ -145,7 +145,8 @@ class ProcessOutputWatcherTest : public testing::Test {
 
   void RunTest(const std::vector<TestCase>& test_cases) {
     ASSERT_FALSE(output_watch_thread_started_);
-    output_watch_thread_.reset(new base::Thread("ProcessOutpuWatchThread"));
+    output_watch_thread_ =
+        std::make_unique<base::Thread>("ProcessOutpuWatchThread");
     output_watch_thread_started_ = output_watch_thread_->StartWithOptions(
         base::Thread::Options(base::MessagePumpType::IO, 0));
     ASSERT_TRUE(output_watch_thread_started_);
@@ -308,7 +309,8 @@ TEST_F(ProcessOutputWatcherTest, EndsWithInvalidUTF8) {
   RunTest(test_cases);
 }
 
-TEST_F(ProcessOutputWatcherTest, FourByteUTF8) {
+// TODO(crbug.com/1177137) Re-enable test
+TEST_F(ProcessOutputWatcherTest, DISABLED_FourByteUTF8) {
   std::vector<TestCase> test_cases;
   test_cases.push_back(TestCase("\xf0\xa4\xad", false, ""));
   test_cases.push_back(TestCase("\xa2", false, "\xf0\xa4\xad\xa2"));

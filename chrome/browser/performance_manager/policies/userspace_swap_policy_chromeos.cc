@@ -40,12 +40,7 @@ class UserspaceSwapPolicyData
   base::TimeTicks last_swap_;
 };
 
-#ifndef NDEBUG
 constexpr base::TimeDelta kMetricsInterval = base::TimeDelta::FromSeconds(30);
-#endif
-
-constexpr base::TimeDelta kSwapDeviceAvailableSpaceCheckInterval =
-    base::TimeDelta::FromSeconds(30);
 
 }  // namespace
 
@@ -56,14 +51,13 @@ UserspaceSwapPolicy::UserspaceSwapPolicy(const UserspaceSwapConfig& config)
   if (base::SysInfo::IsRunningOnChromeOS()) {
     DCHECK(UserspaceSwapPolicy::UserspaceSwapSupportedAndEnabled());
   }
-#ifndef NDEBUG
-  if (!metrics_timer_->IsRunning()) {
+
+  if (VLOG_IS_ON(1) && !metrics_timer_->IsRunning()) {
     metrics_timer_->Start(
         FROM_HERE, kMetricsInterval,
         base::BindRepeating(&UserspaceSwapPolicy::PrintAllSwapMetrics,
                             weak_factory_.GetWeakPtr()));
   }
-#endif  // ifndef NDEBUG
 }
 
 UserspaceSwapPolicy::UserspaceSwapPolicy()
@@ -76,19 +70,19 @@ void UserspaceSwapPolicy::OnPassedToGraph(Graph* graph) {
   graph_ = graph;
   graph->AddProcessNodeObserver(this);
 
-  // Only create a memory pressure listener if the feature to swap on moderate
-  // pressure is enabled.
+  // Only handle the memory pressure notifications if the feature to swap on
+  // moderate pressure is enabled.
   if (config_.swap_on_moderate_pressure) {
-    memory_pressure_listener_.emplace(
-        FROM_HERE, base::BindRepeating(&UserspaceSwapPolicy::OnMemoryPressure,
-                                       weak_factory_.GetWeakPtr()));
+    graph_->AddSystemNodeObserver(this);
   }
 }
 
 void UserspaceSwapPolicy::OnTakenFromGraph(Graph* graph) {
   DCHECK_EQ(graph_, graph);
 
-  memory_pressure_listener_.reset();
+  if (config_.swap_on_moderate_pressure) {
+    graph_->RemoveSystemNodeObserver(this);
+  }
 
   graph->RemoveProcessNodeObserver(this);
   graph_ = nullptr;
@@ -100,7 +94,8 @@ void UserspaceSwapPolicy::OnAllFramesInProcessFrozen(
     // We don't provide a page node because the visibility requirements don't
     // matter on freeze.
     if (IsEligibleToSwap(process_node, nullptr)) {
-      VLOG(1) << "pid: " << process_node->GetProcessId() << " swap on freeze";
+      VLOG(1) << "rphid: " << process_node->GetRenderProcessHostId()
+              << " pid: " << process_node->GetProcessId() << " swap on freeze";
       UserspaceSwapPolicyData::EnsureForProcess(process_node)->last_swap_ =
           base::TimeTicks::Now();
       SwapProcessNode(process_node);
@@ -149,9 +144,10 @@ base::TimeTicks UserspaceSwapPolicy::GetLastSwapTime(
 }
 
 void UserspaceSwapPolicy::OnMemoryPressure(
-    base::MemoryPressureListener::MemoryPressureLevel level) {
-  if (level == base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE)
+    base::MemoryPressureListener::MemoryPressureLevel new_level) {
+  if (new_level == base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE) {
     return;
+  }
 
   auto now_ticks = base::TimeTicks::Now();
   // Try not to walk the graph too frequently because we can receive moderate
@@ -173,7 +169,8 @@ void UserspaceSwapPolicy::SwapNodesOnGraph() {
 
     const ProcessNode* process_node = main_frame_node->GetProcessNode();
     if (IsEligibleToSwap(process_node, page_node)) {
-      VLOG(1) << "pid: " << process_node->GetProcessId()
+      VLOG(1) << "rphid: " << process_node->GetRenderProcessHostId()
+              << " pid: " << process_node->GetProcessId()
               << " trigger swap for frame " << main_frame_node->GetURL();
       UserspaceSwapPolicyData::EnsureForProcess(process_node)->last_swap_ =
           base::TimeTicks::Now();
@@ -222,36 +219,35 @@ void UserspaceSwapPolicy::PrintAllSwapMetrics() {
 }
 
 void UserspaceSwapPolicy::SwapProcessNode(const ProcessNode* process_node) {
-  // TODO(bgeffon): This will trigger the swap in the userspace swap mechanism
-  // once it has landed.
+  performance_manager::mechanism::userspace_swap::SwapProcessNode(process_node);
 }
 
 uint64_t UserspaceSwapPolicy::GetProcessNodeSwapFileUsageBytes(
     const ProcessNode* process_node) {
-  // TODO(bgeffon): Once the mechanism is landed we will query it for the swap
-  // file usage for a specific renderer.
-  return 0;
+  return performance_manager::mechanism::userspace_swap::
+      GetProcessNodeSwapFileUsageBytes(process_node);
 }
 
 uint64_t UserspaceSwapPolicy::GetProcessNodeReclaimedBytes(
     const ProcessNode* process_node) {
-  // TODO(bgeffon): Once the mechanism is landed we will query it for the swap
-  // file usage for a specific renderer.
-  return 0;
+  return performance_manager::mechanism::userspace_swap::
+      GetProcessNodeReclaimedBytes(process_node);
 }
 
 uint64_t UserspaceSwapPolicy::GetTotalSwapFileUsageBytes() {
-  // TODO(bgeffon): Once the mechanism is landed we will query it for the swap
-  // file usage for a specific renderer.
-  return 0;
+  return performance_manager::mechanism::userspace_swap::
+      GetTotalSwapFileUsageBytes();
 }
 
 uint64_t UserspaceSwapPolicy::GetSwapDeviceFreeSpaceBytes() {
-  return SwapFile::GetBackingStoreFreeSpaceKB() << 10;  // Convert to bytes.
+  return performance_manager::mechanism::userspace_swap::
+      GetSwapDeviceFreeSpaceBytes();
 }
 
-bool UserspaceSwapPolicy::IsPageNodeLoading(const PageNode* page_node) {
-  return page_node->IsLoading();
+bool UserspaceSwapPolicy::IsPageNodeLoadingOrBusy(const PageNode* page_node) {
+  const PageNode::LoadingState loading_state = page_node->GetLoadingState();
+  return loading_state == PageNode::LoadingState::kLoading ||
+         loading_state == PageNode::LoadingState::kLoadedBusy;
 }
 
 bool UserspaceSwapPolicy::IsPageNodeAudible(const PageNode* page_node) {
@@ -297,7 +293,7 @@ bool UserspaceSwapPolicy::IsEligibleToSwap(const ProcessNode* process_node,
   // it.
   if (page_node) {
     // If we're loading, audible, or visible we will not swap.
-    if (IsPageNodeLoading(page_node) || IsPageNodeVisible(page_node) ||
+    if (IsPageNodeLoadingOrBusy(page_node) || IsPageNodeVisible(page_node) ||
         IsPageNodeAudible(page_node)) {
       return false;
     }
@@ -314,16 +310,8 @@ bool UserspaceSwapPolicy::IsEligibleToSwap(const ProcessNode* process_node,
   // available disk space for 30 seconds. But we only check if it's been
   // configured to enforce a swap device minimum.
   if (config_.minimum_swap_disk_space_available > 0) {
-    auto time_since_last_device_space_check =
-        now_ticks - last_device_space_check_;
-    if (time_since_last_device_space_check >
-        kSwapDeviceAvailableSpaceCheckInterval) {
-      last_device_space_check_ = now_ticks;
-      backing_store_available_bytes_ = GetSwapDeviceFreeSpaceBytes();
-    }
-
     // Check if we can't swap because the device is running low on space.
-    if (backing_store_available_bytes_ <
+    if (GetSwapDeviceFreeSpaceBytes() <
         config_.minimum_swap_disk_space_available) {
       return false;
     }

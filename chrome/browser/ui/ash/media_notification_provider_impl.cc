@@ -5,7 +5,8 @@
 #include "chrome/browser/ui/ash/media_notification_provider_impl.h"
 
 #include "ash/public/cpp/media_notification_provider_observer.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "base/metrics/histogram_functions.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_service.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_service_factory.h"
 #include "chrome/browser/ui/views/global_media_controls/media_notification_container_impl_view.h"
@@ -52,14 +53,16 @@ bool MediaNotificationProviderImpl::HasFrozenNotifications() {
 
 std::unique_ptr<views::View>
 MediaNotificationProviderImpl::GetMediaNotificationListView(
-    SkColor separator_color,
     int separator_thickness) {
   DCHECK(service_);
+  DCHECK(color_theme_);
   auto notification_list_view = std::make_unique<MediaNotificationListView>(
-      MediaNotificationListView::SeparatorStyle(separator_color,
+      MediaNotificationListView::SeparatorStyle(color_theme_->separator_color,
                                                 separator_thickness));
   active_session_view_ = notification_list_view.get();
   service_->SetDialogDelegate(this);
+  base::UmaHistogramEnumeration("Media.GlobalMediaControls.EntryPoint",
+                                GlobalMediaControlsEntryPoint::kSystemTray);
   return std::move(notification_list_view);
 }
 
@@ -72,6 +75,11 @@ void MediaNotificationProviderImpl::OnBubbleClosing() {
   service_->SetDialogDelegate(nullptr);
 }
 
+void MediaNotificationProviderImpl::SetColorTheme(
+    const media_message_center::NotificationTheme& color_theme) {
+  color_theme_ = color_theme;
+}
+
 MediaNotificationContainerImpl* MediaNotificationProviderImpl::ShowMediaSession(
     const std::string& id,
     base::WeakPtr<media_message_center::MediaNotificationItem> item) {
@@ -79,9 +87,8 @@ MediaNotificationContainerImpl* MediaNotificationProviderImpl::ShowMediaSession(
     return nullptr;
 
   auto container = std::make_unique<MediaNotificationContainerImplView>(
-      id, item, service_,
-      media_message_center::MediaNotificationViewImpl::BackgroundStyle::
-          kAshStyle);
+      id, item, service_, GlobalMediaControlsEntryPoint::kSystemTray,
+      color_theme_);
   MediaNotificationContainerImplView* container_ptr = container.get();
   container_ptr->AddObserver(this);
   observed_containers_[id] = container_ptr;

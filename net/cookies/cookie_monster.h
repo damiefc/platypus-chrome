@@ -37,10 +37,6 @@
 #include "net/log/net_log_with_source.h"
 #include "url/gurl.h"
 
-namespace base {
-class HistogramBase;
-}  // namespace base
-
 namespace net {
 
 class CookieChangeDispatcher;
@@ -190,10 +186,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // (i.e. as part of the instance initialization process).
   void SetPersistSessionCookies(bool persist_session_cookies);
 
-  // Determines if the scheme of the URL is a scheme that cookies will be
-  // stored for.
-  bool IsCookieableScheme(const std::string& scheme);
-
   // The default list of schemes the cookie monster can handle.
   static const char* const kDefaultCookieableSchemes[];
   static const int kDefaultCookieableSchemesCount;
@@ -236,6 +228,11 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // For CookieDeleteEquivalent histogram enum.
   FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest,
                            CookieDeleteEquivalentHistogramTest);
+
+  // For CookieSentToSamePort enum.
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest,
+                           CookiePortReadDiffersFromSetHistogram);
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest, IsCookieSentToSamePortThatSetIt);
 
   // Internal reasons for deletion, used to populate informative histograms
   // and to provide a public cause for onCookieChange notifications.
@@ -283,6 +280,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // of stored cookies. Please do not reorder the list when adding new entries.
   // New items MUST be added at the end of the list, just before
   // COOKIE_TYPE_LAST_ENTRY;
+  // There will be 2^COOKIE_TYPE_LAST_ENTRY buckets in the linear histogram.
   enum CookieType {
     COOKIE_TYPE_SAME_SITE = 0,
     COOKIE_TYPE_HTTPONLY,
@@ -294,8 +292,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // sources of Secure and non-Secure cookies: that is, whether such
   // cookies are set by origins with cryptographic or non-cryptographic
   // schemes. Please do not reorder the list when adding new
-  // entries. New items MUST be added at the end of the list, just
-  // before COOKIE_SOURCE_LAST_ENTRY.
+  // entries. New items MUST be added at the end of the list, and kMaxValue
+  // should be updated to the last value.
   //
   // COOKIE_SOURCE_(NON)SECURE_COOKIE_(NON)CRYPTOGRAPHIC_SCHEME means
   // that a cookie was set or overwritten from a URL with the given type
@@ -307,7 +305,29 @@ class NET_EXPORT CookieMonster : public CookieStore {
     COOKIE_SOURCE_SECURE_COOKIE_NONCRYPTOGRAPHIC_SCHEME,
     COOKIE_SOURCE_NONSECURE_COOKIE_CRYPTOGRAPHIC_SCHEME,
     COOKIE_SOURCE_NONSECURE_COOKIE_NONCRYPTOGRAPHIC_SCHEME,
-    COOKIE_SOURCE_LAST_ENTRY
+    kMaxValue = COOKIE_SOURCE_NONSECURE_COOKIE_NONCRYPTOGRAPHIC_SCHEME
+  };
+
+  // Enum for collecting metrics on how frequently a cookie is sent to the same
+  // port it was set by.
+  //
+  // kNoButDefault exists because we expect for cookies being sent between
+  // schemes to have a port mismatch and want to separate those out from other,
+  // more interesting, cases.
+  //
+  // Do not reorder or renumber. Used for metrics.
+  enum class CookieSentToSamePort {
+    kSourcePortUnspecified = 0,  // Cookie's source port is unspecified, we
+                                 // can't know if this is the same port or not.
+    kInvalid = 1,  // The source port was corrupted to be PORT_INVALID, we
+                   // can't know if this is the same port or not.
+    kNo = 2,       // Source port and destination port are different.
+    kNoButDefault =
+        3,     // Source and destination ports are different but they're
+               // the defaults for their scheme. This can mean that an http
+               // cookie was sent to a https origin or vice-versa.
+    kYes = 4,  // They're the same.
+    kMaxValue = kYes
   };
 
   // Record statistics every kRecordStatisticsIntervalSeconds of uptime.
@@ -395,9 +415,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   void SetDefaultCookieableSchemes();
 
-  void FindCookiesForRegistryControlledHost(
-      const GURL& url,
-      std::vector<CanonicalCookie*>* cookies);
+  std::vector<CanonicalCookie*> FindCookiesForRegistryControlledHost(
+      const GURL& url);
 
   void FilterCookiesWithOptions(const GURL url,
                                 const CookieOptions options,
@@ -408,10 +427,10 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // Possibly delete an existing cookie equivalent to |cookie_being_set| (same
   // path, domain, and name).
   //
-  // |source_secure| indicates if the source may override existing secure
-  // cookies. If the source is not secure, and there is an existing "equivalent"
-  // cookie that is Secure, that cookie will be preserved, under "Leave Secure
-  // Cookies Alone" (see
+  // |allowed_to_set_secure_cookie| indicates if the source may override
+  // existing secure cookies. If the source is not trustworthy, and there is an
+  // existing "equivalent" cookie that is Secure, that cookie will be preserved,
+  // under "Leave Secure Cookies Alone" (see
   // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-alone-01).
   // ("equivalent" here is in quotes because the equivalency check for the
   // purposes of preserving existing Secure cookies is slightly more inclusive.)
@@ -432,27 +451,22 @@ class NET_EXPORT CookieMonster : public CookieStore {
   void MaybeDeleteEquivalentCookieAndUpdateStatus(
       const std::string& key,
       const CanonicalCookie& cookie_being_set,
-      bool source_secure,
+      bool allowed_to_set_secure_cookie,
       bool skip_httponly,
       bool already_expired,
       base::Time* creation_date_to_inherit,
       CookieInclusionStatus* status);
 
-  // This is only used if the RecentCreationTimeGrantsLegacyCookieSemantics
-  // feature is enabled. It finds an equivalent cookie (based on name, domain,
-  // path) with the same value, if there is any, and returns its creation time,
-  // or the creation time of the |cookie| itself, if there is none.
-  base::Time EffectiveCreationTimeForMaybePreexistingCookie(
-      const std::string& key,
-      const CanonicalCookie& cookie) const;
-
-  // Inserts |cc| into cookies_. Returns an iterator that points to the inserted
-  // cookie in cookies_. Guarantee: all iterators to cookies_ remain valid.
+  // Inserts `cc` into cookies_. Returns an iterator that points to the inserted
+  // cookie in `cookies_`. Guarantee: all iterators to `cookies_` remain valid.
+  // Dispatches the change to `change_dispatcher_` iff `dispatch_change` is
+  // true.
   CookieMap::iterator InternalInsertCookie(
       const std::string& key,
       std::unique_ptr<CanonicalCookie> cc,
       bool sync_to_store,
-      const CookieAccessResult& access_result);
+      const CookieAccessResult& access_result,
+      bool dispatch_change = true);
 
   // Sets all cookies from |list| after deleting any equivalent cookie.
   // For data gathering purposes, this routine is treated as if it is
@@ -522,49 +536,11 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   bool HasCookieableScheme(const GURL& url);
 
-  // Get the cookie's access semantics (LEGACY or NONLEGACY), considering any
-  // features granting legacy semantics for special conditions (if any are
-  // active and meet the conditions for granting legacy access, pass true for
-  // |legacy_semantics_granted|). If none are active, this then checks for a
+  // Get the cookie's access semantics (LEGACY or NONLEGACY), by checking for a
   // value from the cookie access delegate, if it is non-null. Otherwise returns
   // UNKNOWN.
   CookieAccessSemantics GetAccessSemanticsForCookie(
-      const CanonicalCookie& cookie,
-      bool legacy_semantics_granted) const;
-
-  // This is called for getting a cookie.
-  CookieAccessSemantics GetAccessSemanticsForCookieGet(
       const CanonicalCookie& cookie) const;
-
-  // This is called for setting a cookie with the options specified by
-  // |options|. For setting a cookie, a same-site access is lax or better (since
-  // CookieOptions for setting a cookie will never be strict).
-  // |effective_creation_time| is the time that should be used for deciding
-  // whether the RecentCreationTimeGrantsLegacyCookieSemantics feature should
-  // grant legacy semantics. This may differ from the CreationDate() field of
-  // the cookie, if there was a preexisting equivalent cookie (in which case it
-  // is the creation time of that equivalent cookie).
-  CookieAccessSemantics GetAccessSemanticsForCookieSet(
-      const CanonicalCookie& cookie,
-      const CookieOptions& options,
-      base::Time effective_creation_time) const;
-
-  // Looks up the last time a cookie matching the (name, domain, path) of
-  // |cookie| was accessed in a same-site context permitting HttpOnly
-  // cookie access. If there was none, this returns a null base::Time.
-  // Returns null value if RecentHttpSameSiteAccessGrantsLegacyCookieSemantics
-  // is not enabled.
-  base::TimeTicks LastAccessFromHttpSameSiteContext(
-      const CanonicalCookie& cookie) const;
-
-  // Updates |last_http_same_site_accesses_| with the current time if the
-  // |options| are appropriate (same-site and permits HttpOnly access).
-  // |is_set| is true if the access is setting the cookie, false otherwise (e.g.
-  // if getting the cookie). Does nothing if
-  // RecentHttpSameSiteAccessGrantsLegacyCookieSemantics is not enabled.
-  void MaybeRecordCookieAccessWithOptions(const CanonicalCookie& cookie,
-                                          const CookieOptions& options,
-                                          bool is_set);
 
   // Statistics support
 
@@ -575,10 +551,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // Records the aforementioned stats if we have already finished loading all
   // cookies. Returns whether stats were recorded.
   bool DoRecordPeriodicStats();
-
-  // Initialize the histogram_* variables below; should only be called from
-  // the constructor.
-  void InitializeHistograms();
 
   // Defers the callback until the full coookie database has been loaded. If
   // it's already been loaded, runs the callback synchronously.
@@ -594,13 +566,15 @@ class NET_EXPORT CookieMonster : public CookieStore {
   void DoCookieCallbackForHostOrDomain(base::OnceClosure callback,
                                        base::StringPiece host_or_domain);
 
-  // Histogram variables; see CookieMonster::InitializeHistograms() in
-  // cookie_monster.cc for details.
-  base::HistogramBase* histogram_expiration_duration_minutes_;
-  base::HistogramBase* histogram_count_;
-  base::HistogramBase* histogram_cookie_type_;
-  base::HistogramBase* histogram_cookie_source_scheme_;
-  base::HistogramBase* histogram_time_blocked_on_load_;
+  // Checks to see if a cookie is being sent to the same port it was set by. For
+  // metrics.
+  //
+  // This is in CookieMonster because only CookieMonster uses it. It's otherwise
+  // a standalone utility function.
+  static CookieSentToSamePort IsCookieSentToSamePortThatSetIt(
+      const GURL& destination,
+      int source_port,
+      CookieSourceScheme source_scheme);
 
   // Set of keys (eTLD+1's) for which non-expired cookies have
   // been evicted for hitting the per-domain max. The size of this set is
@@ -661,17 +635,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // create a value that compares earlier than any other time value, which is
   // wanted.  Thus this value is not initialized.
   base::Time earliest_access_time_;
-
-  // Records the last access to a cookie (either getting or setting) from a
-  // context that is both same-site and permits HttpOnly access.
-  // The access is considered same-site if it is at least laxly same-site for
-  // set, or strictly same-site for get.
-  // This information is used to determine if the feature
-  // kRecentSameSiteAccessGrantsLegacyCookieSemantics should grant legacy
-  // access semantics to a cookie for subsequent accesses.
-  // This map is not used if that feature is not enabled.
-  std::map<CanonicalCookie::UniqueCookieKey, base::TimeTicks>
-      last_http_same_site_accesses_;
 
   std::vector<std::string> cookieable_schemes_;
 

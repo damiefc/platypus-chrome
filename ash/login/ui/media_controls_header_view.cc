@@ -39,8 +39,7 @@ constexpr gfx::Size kSpacerPreferredSize = gfx::Size(5, 5);
 }  // namespace
 
 MediaControlsHeaderView::MediaControlsHeaderView(
-    base::OnceClosure close_button_cb)
-    : close_button_cb_(std::move(close_button_cb)) {
+    views::Button::PressedCallback close_button_cb) {
   const views::FlexSpecification kAppNameFlex =
       views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kPreferred)
@@ -86,13 +85,13 @@ MediaControlsHeaderView::MediaControlsHeaderView(
   spacer->SetProperty(views::kFlexBehaviorKey, kSpacerFlex);
   AddChildView(std::move(spacer));
 
-  auto close_button = CreateVectorImageButton(this);
+  auto close_button = CreateVectorImageButton(std::move(close_button_cb));
   close_button->SetPreferredSize(kCloseButtonSize);
   close_button->SetFocusBehavior(View::FocusBehavior::ALWAYS);
-  base::string16 close_button_label(
+  std::u16string close_button_label(
       l10n_util::GetStringUTF16(IDS_ASH_LOCK_SCREEN_MEDIA_CONTROLS_CLOSE));
   close_button->SetAccessibleName(close_button_label);
-  close_button->SetInkDropBaseColor(
+  close_button->ink_drop()->SetBaseColor(
       color_utils::DeriveDefaultIconColor(gfx::kGoogleGrey700));
   close_button_ = AddChildView(std::move(close_button));
 }
@@ -103,7 +102,7 @@ void MediaControlsHeaderView::SetAppIcon(const gfx::ImageSkia& img) {
   app_icon_view_->SetImage(img);
 }
 
-void MediaControlsHeaderView::SetAppName(const base::string16& name) {
+void MediaControlsHeaderView::SetAppName(const std::u16string& name) {
   app_name_view_->SetText(name);
 }
 
@@ -120,12 +119,7 @@ void MediaControlsHeaderView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->SetName(app_name_view_->GetText());
 }
 
-void MediaControlsHeaderView::ButtonPressed(views::Button* sender,
-                                            const ui::Event& event) {
-  std::move(close_button_cb_).Run();
-}
-
-const base::string16& MediaControlsHeaderView::app_name_for_testing() const {
+const std::u16string& MediaControlsHeaderView::app_name_for_testing() const {
   return app_name_view_->GetText();
 }
 

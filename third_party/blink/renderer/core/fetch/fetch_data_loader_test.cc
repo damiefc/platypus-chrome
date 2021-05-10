@@ -403,7 +403,7 @@ TEST_F(FetchDataLoaderTest, LoadAsArrayBuffer) {
 
   ASSERT_TRUE(array_buffer);
   ASSERT_EQ(kQuickBrownFoxLengthWithTerminatingNull,
-            array_buffer->ByteLengthAsSizeT());
+            array_buffer->ByteLength());
   EXPECT_STREQ(kQuickBrownFox, static_cast<const char*>(array_buffer->Data()));
 }
 
@@ -839,7 +839,7 @@ TEST_F(FetchDataLoaderTest, LoadAsDataPipeFromDataPipe) {
   auto task_runner = base::MakeRefCounted<scheduler::FakeTaskRunner>();
   mojo::ScopedDataPipeConsumerHandle readable;
   mojo::ScopedDataPipeProducerHandle writable;
-  MojoResult rv = mojo::CreateDataPipe(nullptr, &writable, &readable);
+  MojoResult rv = mojo::CreateDataPipe(nullptr, writable, readable);
   ASSERT_EQ(rv, MOJO_RESULT_OK);
 
   ASSERT_TRUE(mojo::BlockingCopyFromString("hello", writable));
@@ -880,7 +880,7 @@ TEST_F(FetchDataLoaderTest, LoadAsDataPipeFromDataPipeFailure) {
   auto task_runner = base::MakeRefCounted<scheduler::FakeTaskRunner>();
   mojo::ScopedDataPipeConsumerHandle readable;
   mojo::ScopedDataPipeProducerHandle writable;
-  MojoResult rv = mojo::CreateDataPipe(nullptr, &writable, &readable);
+  MojoResult rv = mojo::CreateDataPipe(nullptr, writable, readable);
   ASSERT_EQ(rv, MOJO_RESULT_OK);
 
   ASSERT_TRUE(mojo::BlockingCopyFromString("hello", writable));

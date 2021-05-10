@@ -47,6 +47,11 @@ Polymer({
               settings.routes.CROSTINI_EXPORT_IMPORT.path,
               '#crostini .subpage-arrow');
         }
+        if (settings.routes.CROSTINI_PORT_FORWARDING) {
+          map.set(
+              settings.routes.CROSTINI_PORT_FORWARDING.path,
+              '#crostini .subpage-arrow');
+        }
         if (settings.routes.CROSTINI_SHARED_PATHS) {
           map.set(
               settings.routes.CROSTINI_SHARED_PATHS.path,
@@ -55,11 +60,6 @@ Polymer({
         if (settings.routes.CROSTINI_SHARED_USB_DEVICES) {
           map.set(
               settings.routes.CROSTINI_SHARED_USB_DEVICES.path,
-              '#crostini .subpage-arrow');
-        }
-        if (settings.routes.CROSTINI_PORT_FORWARDING) {
-          map.set(
-              settings.routes.CROSTINI_PORT_FORWARDING.path,
               '#crostini .subpage-arrow');
         }
         return map;
@@ -123,7 +123,7 @@ Polymer({
   /** @private */
   onSubpageTap_(event) {
     // We do not open the subpage if the click was on a link.
-    if (event.target && event.target.tagName == 'A') {
+    if (event.target && event.target.tagName === 'A') {
       event.stopPropagation();
       return;
     }

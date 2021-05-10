@@ -8,10 +8,11 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
+#include "base/containers/contains.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
@@ -202,10 +203,6 @@ class WebAppSyncBridgeTest : public WebAppTest {
  public:
   void SetUp() override {
     WebAppTest::SetUp();
-
-    WebAppProviderBase::GetProviderBase(profile())
-        ->os_integration_manager()
-        .SuppressOsHooksForTesting();
 
     test_registry_controller_ =
         std::make_unique<TestWebAppRegistryController>();

@@ -976,6 +976,7 @@
       ['#copy', true],
       ['#paste-into-folder', true],
       ['#share-with-linux', true],
+      ['#move-to-trash', false],
       ['#delete', false],
       ['#new-folder', true],
     ];
@@ -985,9 +986,14 @@
       ['#paste-into-folder', true],
       ['#share-with-linux', true],
       ['#rename', true],
+      ['#move-to-trash', true],
       ['#delete', true],
       ['#new-folder', true],
     ];
+    if (await sendTestMessage({name: 'isTrashEnabled'}) !== 'true') {
+      downloadsMenus.splice(4, 1);
+      photosTwoMenus.splice(5, 1);
+    }
 
     const photosTwo = new TestEntryInfo({
       type: EntryType.DIRECTORY,
@@ -1032,9 +1038,13 @@
         ['#paste-into-folder', false],
         ['#share-with-linux', true],
         ['#rename', true],
+        ['#move-to-trash', true],
         ['#delete', true],
         ['#new-folder', true],
       ];
+      if (await sendTestMessage({name: 'isTrashEnabled'}) !== 'true') {
+        photosMenus.splice(5, 1);
+      }
       // Check the context menu is on desired state for MyFiles.
       await checkContextMenu(
           appId, '/My files', myFilesMenus, false /* rootMenu */);
@@ -1075,9 +1085,13 @@
         ['#paste-into-folder', true],
         ['#share-with-linux', true],
         ['#rename', true],
+        ['#move-to-trash', true],
         ['#delete', true],
         ['#new-folder', true],
       ];
+      if (await sendTestMessage({name: 'isTrashEnabled'}) !== 'true') {
+        photosMenus.splice(5, 1);
+      }
 
       // Check the context menu is on desired state for MyFiles.
       await checkContextMenu(
@@ -1112,6 +1126,7 @@
       ['#copy', true],
       ['#paste-into-folder', false],
       ['#share-with-linux', true],
+      ['#move-to-trash', false],
       ['#delete', false],
       ['#new-folder', true],
     ];
@@ -1121,9 +1136,14 @@
       ['#paste-into-folder', false],
       ['#share-with-linux', true],
       ['#rename', true],
+      ['#move-to-trash', true],
       ['#delete', true],
       ['#new-folder', true],
     ];
+    if (await sendTestMessage({name: 'isTrashEnabled'}) !== 'true') {
+      downloadsMenus.splice(4, 1);
+      photosMenus.splice(5, 1);
+    }
 
     // Open Files app on local Downloads.
     const appId = await setupAndWaitUntilReady(
@@ -1172,9 +1192,13 @@
       ['#copy', true],
       ['#paste-into-folder', false],
       ['#rename', true],
+      ['#move-to-trash', true],
       ['#delete', true],
       ['#new-folder', true],
     ];
+    if (await sendTestMessage({name: 'isTrashEnabled'}) !== 'true') {
+      folderMenus.splice(4, 1);
+    }
     const linuxQuery = '#directory-tree [entry-label="Linux files"]';
 
     // Add a crostini folder.
@@ -1216,12 +1240,11 @@
       ['#new-folder', false],
     ];
     const folderMenus = [
-      ['#cut', true],
+      ['#cut', false],
       ['#copy', true],
       ['#paste-into-folder', false],
       ['#share-with-linux', true],
-      ['#rename', false],
-      ['#delete', true],
+      ['#delete', false],
       ['#new-folder', true],
     ];
 
@@ -1278,6 +1301,33 @@
       ['#delete', true],
       ['#new-folder', true],
     ];
+    const ext4DeviceMenus = [
+      ['#unmount', true],
+      ['#erase-device', true],
+      ['#share-with-linux', true],
+    ];
+    const ext4PartitionMenus = [
+      ['#share-with-linux', true],
+      ['#format', true],
+      ['#rename', false],
+      ['#new-folder', true],
+    ];
+    const ntfsDeviceMenus = [
+      ['#unmount', true],
+      ['#erase-device', true],
+      ['#share-with-linux', true],
+    ];
+    const ntfsPartitionMenus = [
+      ['#share-with-linux', true],
+      ['#format', true],
+      ['#rename', true],
+      ['#new-folder', true],
+    ];
+    const deviceMenus = [
+      ['#unmount', true],
+      ['#erase-device', true],
+      ['#share-with-linux', true],
+    ];
 
     // Mount removable volumes.
     await sendTestMessage({name: 'mountUsbWithPartitions'});
@@ -1287,34 +1337,75 @@
     const appId = await setupAndWaitUntilReady(
         RootPath.DOWNLOADS, [ENTRIES.beautiful], []);
 
-    // Check the context menu for single partition ext4 USB.
-    await checkContextMenu(
-        appId, '/fake-usb', ext4UsbMenus, true /* rootMenu */);
+    if (await isSinglePartitionFormat(appId)) {
+      // Check the context menu for single partition drive.
+      await checkContextMenu(
+          appId, '/FAKEUSB', ext4DeviceMenus, true /* rootMenu */);
 
-    // Check the context menu for a folder inside a single USB partition.
-    await checkContextMenu(
-        appId, '/fake-usb/A', folderMenus, false /* rootMenu */);
+      // Check the context menu for single partition ext4 USB.
+      await checkContextMenu(
+          appId, '/FAKEUSB/fake-usb', ext4PartitionMenus, false /* rootMenu */);
 
-    // Check the context menu for multiple partitions USB (root).
-    await checkContextMenu(
-        appId, '/Drive Label', partitionsRootMenus, true /* rootMenu */);
+      // Check the context menu for a folder inside a single USB partition.
+      await checkContextMenu(
+          appId, '/FAKEUSB/fake-usb/A', folderMenus, false /* rootMenu */);
 
-    // Check the context menu for multiple partitions USB (actual partition).
-    await checkContextMenu(
-        appId, '/Drive Label/partition-1', partition1Menus,
-        false /* rootMenu */);
+      // Check the context menu for multiple partitions USB (root).
+      await checkContextMenu(
+          appId, '/Drive Label', deviceMenus, true /* rootMenu */);
 
-    // Check the context menu for a folder inside a partition1.
-    await checkContextMenu(
-        appId, '/Drive Label/partition-1/A', folderMenus, false /* rootMenu */);
+      // Check the context menu for multiple partitions USB (actual partition).
+      await checkContextMenu(
+          appId, '/Drive Label/partition-1', partition1Menus,
+          false /* rootMenu */);
 
-    // Remount the single partition ext4 USB as NTFS
-    await sendTestMessage({name: 'unmountUsb'});
-    await sendTestMessage({name: 'mountFakeUsb', filesystem: 'ntfs'});
+      // Check the context menu for a folder inside a partition1.
+      await checkContextMenu(
+          appId, '/Drive Label/partition-1/A', folderMenus,
+          false /* rootMenu */);
 
-    // Check the context menu for a single partition NTFS USB.
-    await checkContextMenu(
-        appId, '/fake-usb', ntfsUsbMenus, true /* rootMenu */);
+      // Remount the single partition ext4 USB as NTFS
+      await sendTestMessage({name: 'unmountUsb'});
+      await sendTestMessage({name: 'mountFakeUsb', filesystem: 'ntfs'});
+
+      // Check the context menu for a single partition NTFS USB.
+      await checkContextMenu(
+          appId, '/FAKEUSB', ntfsDeviceMenus, true /* rootMenu */);
+
+      // Check the context menu for a single partition NTFS USB.
+      await checkContextMenu(
+          appId, '/FAKEUSB/fake-usb', ntfsPartitionMenus, false /* rootMenu */);
+    } else {
+      // Check the context menu for single partition ext4 USB.
+      await checkContextMenu(
+          appId, '/fake-usb', ext4UsbMenus, true /* rootMenu */);
+
+      // Check the context menu for a folder inside a single USB partition.
+      await checkContextMenu(
+          appId, '/fake-usb/A', folderMenus, false /* rootMenu */);
+
+      // Check the context menu for multiple partitions USB (root).
+      await checkContextMenu(
+          appId, '/Drive Label', partitionsRootMenus, true /* rootMenu */);
+
+      // Check the context menu for multiple partitions USB (actual partition).
+      await checkContextMenu(
+          appId, '/Drive Label/partition-1', partition1Menus,
+          false /* rootMenu */);
+
+      // Check the context menu for a folder inside a partition1.
+      await checkContextMenu(
+          appId, '/Drive Label/partition-1/A', folderMenus,
+          false /* rootMenu */);
+
+      // Remount the single partition ext4 USB as NTFS
+      await sendTestMessage({name: 'unmountUsb'});
+      await sendTestMessage({name: 'mountFakeUsb', filesystem: 'ntfs'});
+
+      // Check the context menu for a single partition NTFS USB.
+      await checkContextMenu(
+          appId, '/fake-usb', ntfsUsbMenus, true /* rootMenu */);
+    }
   };
 
   /**
@@ -1336,6 +1427,12 @@
       ['#delete', true],
       ['#new-folder', true],
     ];
+    const deviceUsbMenus = [
+      ['#share-with-linux', true],
+      ['#format', true],
+      ['#rename', false],
+      ['#new-folder', true],
+    ];
 
     // Mount removable volumes.
     await sendTestMessage({name: 'mountFakeUsbDcim'});
@@ -1344,12 +1441,23 @@
     const appId = await setupAndWaitUntilReady(
         RootPath.DOWNLOADS, [ENTRIES.beautiful], []);
 
-    // Check the context menu for single partition USB.
-    await checkContextMenu(appId, '/fake-usb', usbMenus, true /* rootMenu */);
+    if (await isSinglePartitionFormat(appId)) {
+      // Check the context menu for single partition USB.
+      await checkContextMenu(
+          appId, '/FAKEUSB/fake-usb', deviceUsbMenus, false /* rootMenu */);
 
-    // Check the context menu for the DCIM folder inside USB.
-    await checkContextMenu(
-        appId, '/fake-usb/DCIM', dcimFolderMenus, false /* rootMenu */);
+      // Check the context menu for the DCIM folder inside USB.
+      await checkContextMenu(
+          appId, '/FAKEUSB/fake-usb/DCIM', dcimFolderMenus,
+          false /* rootMenu */);
+    } else {
+      // Check the context menu for single partition USB.
+      await checkContextMenu(appId, '/fake-usb', usbMenus, true /* rootMenu */);
+
+      // Check the context menu for the DCIM folder inside USB.
+      await checkContextMenu(
+          appId, '/fake-usb/DCIM', dcimFolderMenus, false /* rootMenu */);
+    }
   };
 
   /*
@@ -1827,6 +1935,21 @@
     // Check the context menu for a folder inside a computer.
     await checkContextMenu(
         appId, '/Computers/Computer A/A', folderMenus, false /* rootMenu */);
+  };
+
+  /**
+   * Tests context menu for Trash root.
+   */
+  testcase.dirContextMenuTrash = async () => {
+    const trashMenu = [
+      ['#empty-trash', true],
+    ];
+
+    const appId =
+        await setupAndWaitUntilReady(RootPath.DOWNLOADS, [ENTRIES.photos], []);
+
+    // Check the context menu for Trash.
+    await checkContextMenu(appId, '/Trash', trashMenu, /*rootMenu=*/ false);
   };
 
   /**

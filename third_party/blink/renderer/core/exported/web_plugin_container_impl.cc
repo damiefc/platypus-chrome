@@ -36,9 +36,7 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_error.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -59,6 +57,7 @@
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
 #include "third_party/blink/renderer/core/clipboard/system_clipboard.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
+#include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/events/drag_event.h"
 #include "third_party/blink/renderer/core/events/gesture_event.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
@@ -91,7 +90,7 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator.h"
+#include "third_party/blink/renderer/core/page/pointer_lock_controller.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
@@ -107,7 +106,6 @@
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-blink.h"
 
@@ -122,6 +120,29 @@ const WebInputEvent::Modifiers kEditingModifier = WebInputEvent::kControlKey;
 #endif
 
 }  // namespace
+
+class WebPluginContainerImpl::MouseLockLostListener final
+    : public NativeEventListener {
+ public:
+  explicit MouseLockLostListener(WebPluginContainerImpl* plugin_container)
+      : plugin_container_(plugin_container) {}
+
+  void Disconnect() { plugin_container_ = nullptr; }
+
+  void Invoke(ExecutionContext*, Event*) override {
+    if (!plugin_container_)
+      return;
+    plugin_container_->MaybeLostMouseLock();
+  }
+
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(plugin_container_);
+    NativeEventListener::Trace(visitor);
+  }
+
+ private:
+  Member<WebPluginContainerImpl> plugin_container_;
+};
 
 // Public methods --------------------------------------------------------------
 
@@ -201,22 +222,14 @@ void WebPluginContainerImpl::UpdateGeometry() {
     layout->UpdateGeometry(*this);
 }
 
-void WebPluginContainerImpl::InvalidateRect(const IntRect& rect) {
-  // InvalidateRect can be called from Dispose when this plugin is no longer
-  // attached.  In this case, we return immediately.
+void WebPluginContainerImpl::Invalidate() {
+  // This can be called from Dispose when this plugin is no longer attached.
+  // In this case, we return immediately.
   if (!IsAttached())
     return;
 
-  LayoutBox* layout_object = ToLayoutBox(element_->GetLayoutObject());
-  if (!layout_object)
-    return;
-
-  IntRect dirty_rect = rect;
-  dirty_rect.Move(
-      (layout_object->BorderLeft() + layout_object->PaddingLeft()).ToInt(),
-      (layout_object->BorderTop() + layout_object->PaddingTop()).ToInt());
-
-  layout_object->InvalidatePaintRectangle(PhysicalRect(dirty_rect));
+  if (auto* layout_object = element_->GetLayoutObject())
+    layout_object->SetShouldDoFullPaintInvalidation();
 }
 
 void WebPluginContainerImpl::SetFocused(bool focused,
@@ -338,15 +351,10 @@ float WebPluginContainerImpl::PageZoomFactor() {
   return frame->PageZoomFactor();
 }
 
-void WebPluginContainerImpl::SetCcLayer(cc::Layer* new_layer,
-                                        bool prevent_contents_opaque_changes) {
-  if (layer_ == new_layer &&
-      prevent_contents_opaque_changes == prevent_contents_opaque_changes_)
+void WebPluginContainerImpl::SetCcLayer(cc::Layer* new_layer) {
+  if (layer_ == new_layer)
     return;
-
   layer_ = new_layer;
-  prevent_contents_opaque_changes_ = prevent_contents_opaque_changes;
-
   if (element_)
     element_->SetNeedsCompositingUpdate();
 }
@@ -361,6 +369,50 @@ bool WebPluginContainerImpl::IsFullscreenElement() const {
 
 void WebPluginContainerImpl::CancelFullscreen() {
   Fullscreen::FullyExitFullscreen(element_->GetDocument());
+}
+
+bool WebPluginContainerImpl::IsMouseLocked() {
+  return element_->GetDocument().PointerLockElement() == element_;
+}
+
+bool WebPluginContainerImpl::LockMouse(bool request_unadjusted_movement) {
+  if (Page* page = element_->GetDocument().GetPage()) {
+    bool res = page->GetPointerLockController().RequestPointerLock(
+        element_, WTF::Bind(&WebPluginContainerImpl::HandleLockMouseResult,
+                            WrapWeakPersistent(this)));
+    if (res) {
+      mouse_lock_lost_listener_ =
+          MakeGarbageCollected<MouseLockLostListener>(this);
+      element_->GetDocument().addEventListener(
+          event_type_names::kPointerlockchange, mouse_lock_lost_listener_,
+          false);
+    }
+    return res;
+  }
+  return false;
+}
+
+void WebPluginContainerImpl::UnlockMouse() {
+  element_->GetDocument().exitPointerLock();
+}
+
+void WebPluginContainerImpl::HandleLockMouseResult(
+    mojom::blink::PointerLockResult result) {
+  web_plugin_->DidReceiveMouseLockResult(
+      result == mojom::blink::PointerLockResult::kSuccess);
+}
+
+void WebPluginContainerImpl::MaybeLostMouseLock() {
+  if (!IsMouseLocked()) {
+    if (mouse_lock_lost_listener_) {
+      mouse_lock_lost_listener_->Disconnect();
+      element_->GetDocument().removeEventListener(
+          event_type_names::kPointerlockchange, mouse_lock_lost_listener_,
+          false);
+      mouse_lock_lost_listener_ = nullptr;
+    }
+    web_plugin_->DidLoseMouseLock();
+  }
 }
 
 bool WebPluginContainerImpl::SupportsPaginatedPrint() const {
@@ -471,14 +523,6 @@ void WebPluginContainerImpl::EnqueueMessageEvent(
   element_->EnqueueEvent(*event, TaskType::kInternalDefault);
 }
 
-void WebPluginContainerImpl::Invalidate() {
-  InvalidateRect(IntRect(0, 0, Size().Width(), Size().Height()));
-}
-
-void WebPluginContainerImpl::InvalidateRect(const WebRect& rect) {
-  InvalidateRect(static_cast<IntRect>(rect));
-}
-
 void WebPluginContainerImpl::ScheduleAnimation() {
   if (auto* frame_view = element_->GetDocument().View())
     frame_view->ScheduleAnimation();
@@ -516,44 +560,6 @@ v8::Local<v8::Object> WebPluginContainerImpl::V8ObjectForElement() {
   return v8::Local<v8::Object>::Cast(v8value);
 }
 
-// TODO(hiroshige): Consider merging with LocalFrame::ExecuteJavaScriptURL().
-WebString WebPluginContainerImpl::ExecuteScriptURL(const WebURL& url,
-                                                   bool popups_allowed) {
-  LocalFrame* frame = element_->GetDocument().GetFrame();
-  if (!frame)
-    return WebString();
-
-  const KURL& kurl = url;
-  DCHECK(kurl.ProtocolIs("javascript"));
-
-  String script = DecodeURLEscapeSequences(kurl.GetString(),
-                                           DecodeURLMode::kUTF8OrIsomorphic);
-
-  if (!element_->GetExecutionContext()->GetContentSecurityPolicy()->AllowInline(
-          ContentSecurityPolicy::InlineType::kNavigation, element_, script,
-          String() /* nonce */, element_->GetDocument().Url(),
-          OrdinalNumber())) {
-    return WebString();
-  }
-  script = script.Substring(strlen("javascript:"));
-
-  if (popups_allowed) {
-    LocalFrame::NotifyUserActivation(
-        frame, mojom::blink::UserActivationNotificationType::kPlugin);
-  }
-
-  v8::HandleScope handle_scope(ToIsolate(frame));
-  v8::Local<v8::Value> result =
-      ClassicScript::CreateUnspecifiedScript(
-          ScriptSourceCode(script, ScriptSourceLocationType::kJavascriptUrl))
-          ->RunScriptAndReturnValue(frame);
-
-  // Failure is reported as a null string.
-  if (result.IsEmpty() || !result->IsString())
-    return WebString();
-  return ToCoreString(v8::Local<v8::String>::Cast(result));
-}
-
 void WebPluginContainerImpl::LoadFrameRequest(const WebURLRequest& request,
                                               const WebString& target) {
   LocalDOMWindow* window = element_->GetDocument().domWindow();
@@ -570,7 +576,7 @@ void WebPluginContainerImpl::LoadFrameRequest(const WebURLRequest& request,
     target_frame->Navigate(frame_request, WebFrameLoadType::kStandard);
 }
 
-bool WebPluginContainerImpl::IsRectTopmost(const WebRect& rect) {
+bool WebPluginContainerImpl::IsRectTopmost(const gfx::Rect& rect) {
   // Disallow access to the frame during Dispose(), because it is not guaranteed
   // to be valid memory once this object has started disposal. In particular,
   // we might be being disposed because the frame has already be deleted and
@@ -583,7 +589,7 @@ bool WebPluginContainerImpl::IsRectTopmost(const WebRect& rect) {
   if (!frame)
     return false;
 
-  IntRect frame_rect = rect;
+  IntRect frame_rect(rect);
   frame_rect.MoveBy(Location());
   HitTestLocation location((PhysicalRect(frame_rect)));
   HitTestResult result = frame->GetEventHandler().HitTestResultAtLocation(
@@ -648,20 +654,11 @@ void WebPluginContainerImpl::SetWantsWheelEvents(bool wants_wheel_events) {
   }
 
   wants_wheel_events_ = wants_wheel_events;
-  if (auto* page = element_->GetDocument().GetPage()) {
-    if (ScrollingCoordinator* scrolling_coordinator =
-            page->GetScrollingCoordinator()) {
-      // Only call scrolling_coordinator if attached.  SetWantsWheelEvents can
-      // be called from Plugin Initialization when it is not yet attached.
-      if (IsAttached()) {
-        LocalFrameView* frame_view = element_->GetDocument().GetFrame()->View();
-        scrolling_coordinator->NotifyGeometryChanged(frame_view);
 
-        // Scroll hit test data depend on wheel events. They are painted in the
-        // background phase.
-        GetLayoutEmbeddedContent()->SetBackgroundNeedsFullPaintInvalidation();
-      }
-    }
+  if (IsAttached()) {
+    // Scroll hit test data depend on wheel events. They are painted in the
+    // background phase.
+    GetLayoutEmbeddedContent()->SetBackgroundNeedsFullPaintInvalidation();
   }
 }
 
@@ -682,10 +679,10 @@ gfx::Point WebPluginContainerImpl::LocalToRootFramePoint(
 }
 
 bool WebPluginContainerImpl::WasTargetForLastMouseEvent() {
-  return element_->GetDocument()
-             .GetFrame()
-             ->GetEventHandler()
-             .GetElementUnderMouse() == element_;
+  auto* frame = element_->GetDocument().GetFrame();
+  if (!frame)
+    return false;
+  return frame->GetEventHandler().GetElementUnderMouse() == element_;
 }
 
 void WebPluginContainerImpl::DidReceiveResponse(
@@ -713,10 +710,6 @@ void WebPluginContainerImpl::DidFailLoading(const ResourceError& error) {
 
 cc::Layer* WebPluginContainerImpl::CcLayer() const {
   return layer_;
-}
-
-bool WebPluginContainerImpl::PreventContentsOpaqueChangesToCcLayer() const {
-  return prevent_contents_opaque_changes_;
 }
 
 v8::Local<v8::Object> WebPluginContainerImpl::ScriptableObject(
@@ -759,12 +752,10 @@ bool WebPluginContainerImpl::WantsWheelEvents() const {
 WebPluginContainerImpl::WebPluginContainerImpl(HTMLPlugInElement& element,
                                                WebPlugin* web_plugin)
     : EmbeddedContentView(IntRect()),
-      ExecutionContextClient(element.GetDocument().GetFrame()),
       element_(element),
       web_plugin_(web_plugin),
       layer_(nullptr),
       touch_event_request_type_(kTouchEventRequestTypeNone),
-      prevent_contents_opaque_changes_(false),
       wants_wheel_events_(false) {}
 
 WebPluginContainerImpl::~WebPluginContainerImpl() {
@@ -814,7 +805,7 @@ void WebPluginContainerImpl::SetFrameRect(const IntRect& rect) {
 
 void WebPluginContainerImpl::Trace(Visitor* visitor) const {
   visitor->Trace(element_);
-  ExecutionContextClient::Trace(visitor);
+  visitor->Trace(mouse_lock_lost_listener_);
 }
 
 void WebPluginContainerImpl::HandleMouseEvent(MouseEvent& event) {
@@ -1091,7 +1082,7 @@ void WebPluginContainerImpl::ComputeClipRectsForPlugin(
   while (root_view->GetFrame()->OwnerLayoutObject())
     root_view = root_view->GetFrame()->OwnerLayoutObject()->View();
 
-  LayoutBox* box = ToLayoutBox(owner_element->GetLayoutObject());
+  auto* box = To<LayoutBox>(owner_element->GetLayoutObject());
 
   // Note: FrameRect() for this plugin is equal to contentBoxRect, mapped to
   // the containing view space, and rounded off.  See

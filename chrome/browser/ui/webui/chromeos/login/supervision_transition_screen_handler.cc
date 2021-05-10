@@ -8,15 +8,14 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "chrome/browser/ash/arc/arc_util.h"
+#include "chrome/browser/ash/arc/session/arc_session_manager.h"
+#include "chrome/browser/ash/login/oobe_screen.h"
+#include "chrome/browser/ash/login/screens/supervision_transition_screen.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/arc/arc_util.h"
-#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
-#include "chrome/browser/chromeos/login/oobe_screen.h"
-#include "chrome/browser/chromeos/login/screens/supervision_transition_screen.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/ash/login_screen_client.h"
-#include "chrome/browser/ui/ash/system_tray_client.h"
+#include "chrome/browser/ui/ash/system_tray_client_impl.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/arc/arc_prefs.h"
 #include "components/login/localized_values_builder.h"
@@ -103,10 +102,10 @@ void SupervisionTransitionScreenHandler::Show() {
 
   // Disable system tray, shutdown button and prevent login as guest when
   // supervision transition screen is shown.
-  SystemTrayClient::Get()->SetPrimaryTrayEnabled(false);
+  SystemTrayClientImpl::Get()->SetPrimaryTrayEnabled(false);
   ash::LoginScreen::Get()->EnableShutdownButton(false);
   ash::LoginScreen::Get()->SetAllowLoginAsGuest(false);
-  ash::LoginScreen::Get()->ShowGuestButtonInOobe(false);
+  ash::LoginScreen::Get()->SetIsFirstSigninStep(false);
 
   base::DictionaryValue data;
   data.SetBoolean("isRemovingSupervision",
@@ -149,7 +148,7 @@ void SupervisionTransitionScreenHandler::OnSupervisionTransitionFinished() {
   // RegisterMessages()). Once this screen exits, user session will be started,
   // so there's no need to re-enable shutdown button from login screen, only the
   // system tray.
-  SystemTrayClient::Get()->SetPrimaryTrayEnabled(true);
+  SystemTrayClientImpl::Get()->SetPrimaryTrayEnabled(true);
   if (screen_)
     screen_->OnSupervisionTransitionFinished();
 

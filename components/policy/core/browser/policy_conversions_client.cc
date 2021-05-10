@@ -76,7 +76,6 @@ base::Value PolicyConversionsClient::GetChromePolicies() {
   DCHECK(HasUserPolicies());
 
   PolicyService* policy_service = GetPolicyService();
-  PolicyMap map;
 
   auto* schema_registry = GetPolicySchemaRegistry();
   if (!schema_registry) {
@@ -90,7 +89,7 @@ base::Value PolicyConversionsClient::GetChromePolicies() {
 
   // Make a copy that can be modified, since some policy values are modified
   // before being displayed.
-  map.CopyFrom(policy_service->GetPolicies(policy_namespace));
+  PolicyMap map = policy_service->GetPolicies(policy_namespace).Clone();
 
   // Get a list of all the errors in the policy values.
   const ConfigurationPolicyHandlerList* handler_list = GetHandlerList();
@@ -153,7 +152,9 @@ Value PolicyConversionsClient::GetPolicyValue(
     value.SetKey("level", Value(Value((policy.level == POLICY_LEVEL_RECOMMENDED)
                                           ? "recommended"
                                           : "mandatory")));
-    value.SetKey("source", Value(kPolicySources[policy.source].name));
+    value.SetKey("source", Value(policy.IsDefaultValue()
+                                     ? "sourceDefault"
+                                     : kPolicySources[policy.source].name));
   } else {
     value.SetKey("scope", Value(policy.scope));
     value.SetKey("level", Value(policy.level));
@@ -170,7 +171,9 @@ Value PolicyConversionsClient::GetPolicyValue(
   if (policy.source == POLICY_SOURCE_MERGED) {
     bool policy_has_unmerged_source = false;
     for (const auto& conflict : policy.conflicts) {
-      if (PolicyMerger::ConflictCanBeMerged(conflict, policy))
+      if (PolicyMerger::ConflictCanBeMerged(
+              conflict.entry(), policy,
+              /*is_user_cloud_merging_enabled=*/false))
         continue;
       policy_has_unmerged_source = true;
       break;
@@ -179,7 +182,7 @@ Value PolicyConversionsClient::GetPolicyValue(
                                            !policy_has_unmerged_source));
   }
 
-  base::string16 error;
+  std::u16string error;
   if (!known_policy_schema.has_value()) {
     // We don't know what this policy is. This is an important error to
     // show.
@@ -187,26 +190,33 @@ Value PolicyConversionsClient::GetPolicyValue(
   } else {
     // The PolicyMap contains errors about retrieving the policy, while the
     // PolicyErrorMap contains validation errors. Concat the errors.
-    auto policy_map_errors = policy.GetLocalizedErrors(
+    auto policy_map_errors = policy.GetLocalizedMessages(
+        PolicyMap::MessageType::kError,
         base::BindRepeating(&l10n_util::GetStringUTF16));
     auto error_map_errors =
-        errors ? errors->GetErrors(policy_name) : base::string16();
+        errors ? errors->GetErrors(policy_name) : std::u16string();
     if (policy_map_errors.empty())
       error = error_map_errors;
     else if (error_map_errors.empty())
       error = policy_map_errors;
     else
-      error =
-          base::JoinString({policy_map_errors, errors->GetErrors(policy_name)},
-                           base::ASCIIToUTF16("\n"));
+      error = base::JoinString(
+          {policy_map_errors, errors->GetErrors(policy_name)}, u"\n");
   }
   if (!error.empty())
     value.SetKey("error", Value(error));
 
-  base::string16 warning = policy.GetLocalizedWarnings(
+  std::u16string warning = policy.GetLocalizedMessages(
+      PolicyMap::MessageType::kWarning,
       base::BindRepeating(&l10n_util::GetStringUTF16));
   if (!warning.empty())
     value.SetKey("warning", Value(warning));
+
+  std::u16string info = policy.GetLocalizedMessages(
+      PolicyMap::MessageType::kInfo,
+      base::BindRepeating(&l10n_util::GetStringUTF16));
+  if (!info.empty())
+    value.SetKey("info", Value(info));
 
   if (policy.ignored())
     value.SetBoolKey("ignored", true);
@@ -218,15 +228,34 @@ Value PolicyConversionsClient::GetPolicyValue(
     value.SetBoolKey("future", true);
 
   if (!policy.conflicts.empty()) {
-    Value conflict_values(Value::Type::LIST);
+    Value override_values(Value::Type::LIST);
+    Value supersede_values(Value::Type::LIST);
+
+    bool has_override_values = false;
+    bool has_supersede_values = false;
     for (const auto& conflict : policy.conflicts) {
       base::Value conflicted_policy_value =
-          GetPolicyValue(policy_name, conflict, deprecated_policies,
+          GetPolicyValue(policy_name, conflict.entry(), deprecated_policies,
                          future_policies, errors, known_policy_schemas);
-      conflict_values.Append(std::move(conflicted_policy_value));
+      switch (conflict.conflict_type()) {
+        case PolicyMap::ConflictType::Supersede:
+          supersede_values.Append(std::move(conflicted_policy_value));
+          has_supersede_values = true;
+          break;
+        case PolicyMap::ConflictType::Override:
+          override_values.Append(std::move(conflicted_policy_value));
+          has_override_values = true;
+          break;
+        default:
+          break;
+      }
     }
-
-    value.SetKey("conflicts", std::move(conflict_values));
+    if (has_override_values) {
+      value.SetKey("conflicts", std::move(override_values));
+    }
+    if (has_supersede_values) {
+      value.SetKey("superseded", std::move(supersede_values));
+    }
   }
 
   return value;

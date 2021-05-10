@@ -7,6 +7,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "content/browser/content_index/content_index_context_impl.h"
+#include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/common/content_export.h"
 #include "third_party/blink/public/mojom/content_index/content_index.mojom.h"
 #include "url/origin.h"
@@ -16,7 +17,7 @@ class GURL;
 namespace content {
 
 class RenderFrameHost;
-struct ServiceWorkerVersionInfo;
+struct ServiceWorkerVersionBaseInfo;
 
 // Lazily constructed by the corresponding renderer when the Content Index API
 // is triggered.
@@ -28,17 +29,21 @@ class CONTENT_EXPORT ContentIndexServiceImpl
       mojo::PendingReceiver<blink::mojom::ContentIndexService> receiver);
 
   static void CreateForWorker(
-      const ServiceWorkerVersionInfo& info,
+      const ServiceWorkerVersionBaseInfo& info,
       mojo::PendingReceiver<blink::mojom::ContentIndexService> receiver);
 
   ContentIndexServiceImpl(
       const url::Origin& origin,
-      scoped_refptr<ContentIndexContextImpl> content_index_context);
+      scoped_refptr<ContentIndexContextImpl> content_index_context,
+      scoped_refptr<ServiceWorkerContextWrapper> service_worker_context);
   ~ContentIndexServiceImpl() override;
 
   // blink::mojom::ContentIndexService implementation.
   void GetIconSizes(blink::mojom::ContentCategory category,
                     GetIconSizesCallback callback) override;
+  void CheckOfflineCapability(int64_t service_worker_registration_id,
+                              const GURL& launch_url,
+                              CheckOfflineCapabilityCallback callback) override;
   void Add(int64_t service_worker_registration_id,
            blink::mojom::ContentDescriptionPtr description,
            const std::vector<SkBitmap>& icons,
@@ -53,6 +58,7 @@ class CONTENT_EXPORT ContentIndexServiceImpl
  private:
   url::Origin origin_;
   scoped_refptr<ContentIndexContextImpl> content_index_context_;
+  scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentIndexServiceImpl);
 };

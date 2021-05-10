@@ -10,8 +10,8 @@
 #include "base/bind.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/fuchsia/process_context.h"
-#include "media/fuchsia/common/sysmem_buffer_reader.h"
-#include "media/fuchsia/common/sysmem_buffer_writer.h"
+#include "base/process/process_handle.h"
+#include "media/fuchsia/common/vmo_buffer.h"
 
 namespace media {
 
@@ -35,6 +35,13 @@ SysmemBufferPool::Creator::~Creator() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 }
 
+void SysmemBufferPool::Creator::SetName(uint32_t priority,
+                                        base::StringPiece name) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(!create_cb_);
+  collection_->SetName(priority, std::string(name));
+}
+
 void SysmemBufferPool::Creator::Create(
     fuchsia::sysmem::BufferCollectionConstraints constraints,
     CreateCB create_cb) {
@@ -45,21 +52,25 @@ void SysmemBufferPool::Creator::Create(
   // duplicate requests have been processed and sysmem knows about all clients
   // that will be using this buffer collection.
   collection_->Sync([this, constraints = std::move(constraints)]() mutable {
+    bool writable = constraints.usage.cpu & fuchsia::sysmem::cpuUsageWrite;
+
     collection_->SetConstraints(true /* has constraints */,
                                 std::move(constraints));
 
     DCHECK(create_cb_);
     std::move(create_cb_)
-        .Run(std::make_unique<SysmemBufferPool>(std::move(collection_),
-                                                std::move(shared_tokens_)));
+        .Run(std::make_unique<SysmemBufferPool>(
+            std::move(collection_), std::move(shared_tokens_), writable));
   });
 }
 
 SysmemBufferPool::SysmemBufferPool(
     fuchsia::sysmem::BufferCollectionPtr collection,
-    std::vector<fuchsia::sysmem::BufferCollectionTokenPtr> shared_tokens)
+    std::vector<fuchsia::sysmem::BufferCollectionTokenPtr> shared_tokens,
+    bool writable)
     : collection_(std::move(collection)),
-      shared_tokens_(std::move(shared_tokens)) {
+      shared_tokens_(std::move(shared_tokens)),
+      writable_(writable) {
   collection_.set_error_handler([this](zx_status_t status) {
     ZX_LOG(ERROR, status) << "fuchsia.sysmem.BufferCollection disconnected.";
     OnError();
@@ -80,18 +91,10 @@ fuchsia::sysmem::BufferCollectionTokenPtr SysmemBufferPool::TakeToken() {
   return token;
 }
 
-void SysmemBufferPool::CreateReader(CreateReaderCB create_cb) {
+void SysmemBufferPool::AcquireBuffers(AcquireBuffersCB cb) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(!create_reader_cb_);
-  create_reader_cb_ = std::move(create_cb);
-  collection_->WaitForBuffersAllocated(
-      fit::bind_member(this, &SysmemBufferPool::OnBuffersAllocated));
-}
-
-void SysmemBufferPool::CreateWriter(CreateWriterCB create_cb) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(!create_writer_cb_);
-  create_writer_cb_ = std::move(create_cb);
+  DCHECK(!acquire_buffers_cb_);
+  acquire_buffers_cb_ = std::move(cb);
   collection_->WaitForBuffersAllocated(
       fit::bind_member(this, &SysmemBufferPool::OnBuffersAllocated));
 }
@@ -107,28 +110,29 @@ void SysmemBufferPool::OnBuffersAllocated(
     return;
   }
 
-  if (create_reader_cb_) {
-    std::move(create_reader_cb_)
-        .Run(SysmemBufferReader::Create(std::move(buffer_collection_info)));
-  } else if (create_writer_cb_) {
-    std::move(create_writer_cb_)
-        .Run(SysmemBufferWriter::Create(std::move(buffer_collection_info)));
+  if (acquire_buffers_cb_) {
+    auto buffers = VmoBuffer::CreateBuffersFromSysmemCollection(
+        &buffer_collection_info, writable_);
+
+    std::move(acquire_buffers_cb_)
+        .Run(std::move(buffers), buffer_collection_info.settings);
   }
 }
 
 void SysmemBufferPool::OnError() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   collection_.Unbind();
-  if (create_reader_cb_)
-    std::move(create_reader_cb_).Run(nullptr);
-  if (create_writer_cb_)
-    std::move(create_writer_cb_).Run(nullptr);
+  if (acquire_buffers_cb_)
+    std::move(acquire_buffers_cb_).Run({}, {});
 }
 
-BufferAllocator::BufferAllocator() {
+BufferAllocator::BufferAllocator(base::StringPiece client_name) {
   allocator_ = base::ComponentContextForProcess()
                    ->svc()
                    ->Connect<fuchsia::sysmem::Allocator>();
+
+  allocator_->SetDebugClientInfo(std::string(client_name),
+                                 base::GetCurrentProcId());
 
   allocator_.set_error_handler([](zx_status_t status) {
     // Just log a warning. We will handle BufferCollection the failure when

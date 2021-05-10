@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/core/layout/line/inline_text_box.h"
 #include "third_party/blink/renderer/core/layout/line/line_orientation_utils.h"
 #include "third_party/blink/renderer/core/layout/line/root_inline_box.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_ink_overflow.h"
 #include "third_party/blink/renderer/core/paint/box_painter.h"
 #include "third_party/blink/renderer/core/paint/inline_flow_box_painter.h"
 #include "third_party/blink/renderer/core/paint/rounded_border_geometry.h"
@@ -46,17 +47,24 @@
 namespace blink {
 
 struct SameSizeAsInlineFlowBox : public InlineBox {
-  void* pointers[5];
+  void* pointers[1];
+  Member<void*> members[4];
   uint32_t bitfields : 23;
 };
 
 ASSERT_SIZE(InlineFlowBox, SameSizeAsInlineFlowBox);
 
+void InlineFlowBox::Trace(Visitor* visitor) const {
+  visitor->Trace(first_child_);
+  visitor->Trace(last_child_);
+  visitor->Trace(prev_line_box_);
+  visitor->Trace(next_line_box_);
+  InlineBox::Trace(visitor);
+}
+
 #if DCHECK_IS_ON()
-InlineFlowBox::~InlineFlowBox() {
-  if (!has_bad_child_list_)
-    for (InlineBox* child = FirstChild(); child; child = child->NextOnLine())
-      child->SetHasBadParent();
+void InlineFlowBox::Destroy() {
+  InlineBox::Destroy();
 }
 #endif
 
@@ -65,7 +73,7 @@ LayoutUnit InlineFlowBox::GetFlowSpacingLogicalWidth() {
       MarginBorderPaddingLogicalLeft() + MarginBorderPaddingLogicalRight();
   for (InlineBox* curr = FirstChild(); curr; curr = curr->NextOnLine()) {
     if (curr->IsInlineFlowBox())
-      tot_width += ToInlineFlowBox(curr)->GetFlowSpacingLogicalWidth();
+      tot_width += To<InlineFlowBox>(curr)->GetFlowSpacingLogicalWidth();
   }
   return tot_width;
 }
@@ -144,7 +152,7 @@ void InlineFlowBox::AddToLine(InlineBox* child) {
       has_text_children_ = true;
     SetHasTextDescendantsOnAncestors(this);
   } else if (child->IsInlineFlowBox()) {
-    if (ToInlineFlowBox(child)->HasTextDescendants())
+    if (To<InlineFlowBox>(child)->HasTextDescendants())
       SetHasTextDescendantsOnAncestors(this);
   }
 
@@ -176,7 +184,7 @@ void InlineFlowBox::AddToLine(InlineBox* child) {
         should_clear_descendants_have_same_line_height_and_baseline = true;
       } else {
         DCHECK(IsInlineFlowBox());
-        InlineFlowBox* child_flow_box = ToInlineFlowBox(child);
+        auto* child_flow_box = To<InlineFlowBox>(child);
         // Check the child's bit, and then also check for differences in font,
         // line-height, vertical-align
         if (!child_flow_box->DescendantsHaveSameLineHeightAndBaseline() ||
@@ -203,6 +211,11 @@ void InlineFlowBox::AddToLine(InlineBox* child) {
         child->ClearKnownToHaveNoOverflow();
     } else if (child->GetLineLayoutItem().IsAtomicInlineLevel()) {
       LineLayoutBox box = LineLayoutBox(child->GetLineLayoutItem());
+#if DCHECK_IS_ON()
+      // We're reading the previous overflow state. Read as no overflow if it
+      // was not computed yet.
+      NGInkOverflow::ReadUnsetAsNoneScope read_unset_as_none;
+#endif
       if (box.HasLayoutOverflow() || box.HasVisualOverflow() ||
           box.HasSelfPaintingLayer())
         child->ClearKnownToHaveNoOverflow();
@@ -224,7 +237,7 @@ void InlineFlowBox::AddToLine(InlineBox* child) {
     }
 
     if (KnownToHaveNoOverflow() && child->IsInlineFlowBox() &&
-        !ToInlineFlowBox(child)->KnownToHaveNoOverflow())
+        !To<InlineFlowBox>(child)->KnownToHaveNoOverflow())
       ClearKnownToHaveNoOverflow();
   }
 }
@@ -418,7 +431,7 @@ void InlineFlowBox::DetermineSpacingForFlowBoxes(
   for (InlineBox* curr_child = FirstChild(); curr_child;
        curr_child = curr_child->NextOnLine()) {
     if (curr_child->IsInlineFlowBox()) {
-      InlineFlowBox* curr_flow = ToInlineFlowBox(curr_child);
+      auto* curr_flow = To<InlineFlowBox>(curr_child);
       curr_flow->DetermineSpacingForFlowBoxes(last_line,
                                               is_logically_last_run_wrapped,
                                               logically_last_run_layout_object);
@@ -460,7 +473,7 @@ void InlineFlowBox::PlaceBoxRangeInInlineDirection(
   for (InlineBox* curr = first_child; curr && curr != last_child;
        curr = curr->NextOnLine()) {
     if (curr->GetLineLayoutItem().IsText()) {
-      InlineTextBox* text = ToInlineTextBox(curr);
+      auto* text = To<InlineTextBox>(curr);
       LineLayoutText rt = text->GetLineLayoutItem();
       LayoutUnit space;
       if (rt.TextLength()) {
@@ -501,7 +514,7 @@ void InlineFlowBox::PlaceBoxRangeInInlineDirection(
         continue;  // The positioned object has no effect on the width.
       }
       if (curr->GetLineLayoutItem().IsLayoutInline()) {
-        InlineFlowBox* flow = ToInlineFlowBox(curr);
+        auto* flow = To<InlineFlowBox>(curr);
         logical_left += flow->MarginLogicalLeft();
         if (KnownToHaveNoOverflow())
           min_logical_left = std::min(logical_left, min_logical_left);
@@ -584,7 +597,7 @@ void InlineFlowBox::AdjustMaxAscentAndDescent(LayoutUnit& max_ascent,
     }
 
     if (curr->IsInlineFlowBox())
-      ToInlineFlowBox(curr)->AdjustMaxAscentAndDescent(
+      To<InlineFlowBox>(curr)->AdjustMaxAscentAndDescent(
           max_ascent, max_descent, max_position_top, max_position_bottom);
   }
 }
@@ -653,11 +666,10 @@ void InlineFlowBox::ComputeLogicalBoxHeights(
     if (curr->GetLineLayoutItem().IsOutOfFlowPositioned())
       continue;  // Positioned placeholders don't affect calculations.
 
-    InlineFlowBox* inline_flow_box =
-        curr->IsInlineFlowBox() ? ToInlineFlowBox(curr) : nullptr;
+    auto* inline_flow_box = DynamicTo<InlineFlowBox>(curr);
 
-    bool affects_ascent = false;
-    bool affects_descent = false;
+    bool child_affects_ascent = false;
+    bool child_affects_descent = false;
 
     // The verticalPositionForBox function returns the distance between the
     // child box's baseline and the root box's baseline. The value is negative
@@ -670,7 +682,8 @@ void InlineFlowBox::ComputeLogicalBoxHeights(
     LayoutUnit ascent;
     LayoutUnit descent;
     root_box->AscentAndDescentForBox(curr, text_box_data_map, ascent, descent,
-                                     affects_ascent, affects_descent);
+                                     child_affects_ascent,
+                                     child_affects_descent);
 
     LayoutUnit box_height(ascent + descent);
     if (curr->VerticalAlign() == EVerticalAlign::kTop) {
@@ -695,12 +708,13 @@ void InlineFlowBox::ComputeLogicalBoxHeights(
       // we're willing to initially set maxAscent/Descent to negative values.
       ascent -= curr->LogicalTop();
       descent += curr->LogicalTop();
-      if (affects_ascent && (max_ascent < ascent || !set_max_ascent)) {
+      if (child_affects_ascent && (max_ascent < ascent || !set_max_ascent)) {
         max_ascent = ascent;
         set_max_ascent = true;
       }
 
-      if (affects_descent && (max_descent < descent || !set_max_descent)) {
+      if (child_affects_descent &&
+          (max_descent < descent || !set_max_descent)) {
         max_descent = descent;
         set_max_descent = true;
       }
@@ -760,8 +774,7 @@ void InlineFlowBox::PlaceBoxesInBlockDirection(
       continue;
     }
 
-    InlineFlowBox* inline_flow_box =
-        curr->IsInlineFlowBox() ? ToInlineFlowBox(curr) : nullptr;
+    auto* inline_flow_box = DynamicTo<InlineFlowBox>(curr);
     bool child_affects_top_bottom_pos = true;
     if (curr->VerticalAlign() == EVerticalAlign::kTop) {
       curr->SetLogicalTop(top);
@@ -859,10 +872,10 @@ void InlineFlowBox::PlaceBoxesInBlockDirection(
       }
       if (curr->IsInlineTextBox()) {
         TextEmphasisPosition emphasis_mark_position;
-        if (ToInlineTextBox(curr)->GetEmphasisMarkPosition(
+        if (To<InlineTextBox>(curr)->GetEmphasisMarkPosition(
                 curr->GetLineLayoutItem().StyleRef(IsFirstLineStyle()),
                 emphasis_mark_position)) {
-          if (HasEmphasisMarkBefore(ToInlineTextBox(curr)))
+          if (HasEmphasisMarkBefore(To<InlineTextBox>(curr)))
             has_annotations_before = true;
           else
             has_annotations_after = true;
@@ -969,11 +982,11 @@ LayoutUnit InlineFlowBox::FarthestPositionForUnderline(
       continue;
 
     if (curr->IsInlineFlowBox()) {
-      farthest = ToInlineFlowBox(curr)->FarthestPositionForUnderline(
+      farthest = To<InlineFlowBox>(curr)->FarthestPositionForUnderline(
           decorating_box, position_type, baseline_type, farthest);
     } else if (curr->IsInlineTextBox()) {
-      LayoutUnit position =
-          ToInlineTextBox(curr)->VerticalPosition(position_type, baseline_type);
+      LayoutUnit position = To<InlineTextBox>(curr)->VerticalPosition(
+          position_type, baseline_type);
       if (IsLineOverSide(position_type))
         farthest = std::min(farthest, position);
       else
@@ -994,7 +1007,7 @@ void InlineFlowBox::FlipLinesInBlockDirection(LayoutUnit line_top,
       continue;  // Positioned placeholders aren't affected here.
 
     if (curr->IsInlineFlowBox())
-      ToInlineFlowBox(curr)->FlipLinesInBlockDirection(line_top, line_bottom);
+      To<InlineFlowBox>(curr)->FlipLinesInBlockDirection(line_top, line_bottom);
     else
       curr->SetLogicalTop(line_bottom - (curr->LogicalTop() - line_top) -
                           curr->LogicalHeight());
@@ -1157,7 +1170,7 @@ void InlineFlowBox::AddReplacedChildrenVisualOverflow(LayoutUnit line_top,
       continue;
 
     if (item.IsLayoutInline()) {
-      InlineFlowBox* flow = ToInlineFlowBox(curr);
+      auto* flow = To<InlineFlowBox>(curr);
       flow->AddReplacedChildrenVisualOverflow(line_top, line_bottom);
       // Propagate visual overflow only if it may be present.
       if (!KnownToHaveNoOverflow()) {
@@ -1253,7 +1266,7 @@ void InlineFlowBox::ComputeOverflow(
       continue;  // Positioned placeholders don't affect calculations.
 
     if (curr->GetLineLayoutItem().IsText()) {
-      InlineTextBox* text = ToInlineTextBox(curr);
+      auto* text = To<InlineTextBox>(curr);
       LayoutRect text_box_overflow(text->LogicalFrameRect());
       if (text->IsLineBreak()) {
         text_box_overflow.SetWidth(
@@ -1273,7 +1286,7 @@ void InlineFlowBox::ComputeOverflow(
       }
       logical_visual_overflow.Unite(text_box_overflow);
     } else if (curr->GetLineLayoutItem().IsLayoutInline()) {
-      InlineFlowBox* flow = ToInlineFlowBox(curr);
+      auto* flow = To<InlineFlowBox>(curr);
       flow->ComputeOverflow(line_top, line_bottom, text_box_data_map);
       if (!flow->BoxModelObject().HasSelfPaintingLayer())
         logical_visual_overflow.Unite(
@@ -1424,7 +1437,7 @@ bool InlineFlowBox::NodeAtPoint(HitTestResult& result,
   }
 
   if (GetLineLayoutItem().IsBox() &&
-      ToLayoutBox(LineLayoutAPIShim::LayoutObjectFrom(GetLineLayoutItem()))
+      To<LayoutBox>(LineLayoutAPIShim::LayoutObjectFrom(GetLineLayoutItem()))
           ->HitTestClippedOutByBorder(hit_test_location, overflow_rect.offset))
     return false;
 
@@ -1487,7 +1500,7 @@ InlineBox* InlineFlowBox::FirstLeafChild() const {
   InlineBox* leaf = nullptr;
   for (InlineBox* child = FirstChild(); child && !leaf;
        child = child->NextOnLine())
-    leaf = child->IsLeaf() ? child : ToInlineFlowBox(child)->FirstLeafChild();
+    leaf = child->IsLeaf() ? child : To<InlineFlowBox>(child)->FirstLeafChild();
   return leaf;
 }
 
@@ -1495,7 +1508,7 @@ InlineBox* InlineFlowBox::LastLeafChild() const {
   InlineBox* leaf = nullptr;
   for (InlineBox* child = LastChild(); child && !leaf;
        child = child->PrevOnLine())
-    leaf = child->IsLeaf() ? child : ToInlineFlowBox(child)->LastLeafChild();
+    leaf = child->IsLeaf() ? child : To<InlineFlowBox>(child)->LastLeafChild();
   return leaf;
 }
 
@@ -1567,10 +1580,11 @@ LayoutUnit InlineFlowBox::ComputeOverAnnotationAdjustment(
     if (curr->GetLineLayoutItem().IsOutOfFlowPositioned())
       continue;  // Positioned placeholders don't affect calculations.
 
-    if (curr->IsInlineFlowBox())
-      result = std::max(result,
-                        ToInlineFlowBox(curr)->ComputeOverAnnotationAdjustment(
-                            allowed_position));
+    if (curr->IsInlineFlowBox()) {
+      result = std::max(
+          result, To<InlineFlowBox>(curr)->ComputeOverAnnotationAdjustment(
+                      allowed_position));
+    }
 
     if (curr->GetLineLayoutItem().IsAtomicInlineLevel() &&
         curr->GetLineLayoutItem().IsRubyRun() &&
@@ -1609,9 +1623,9 @@ LayoutUnit InlineFlowBox::ComputeOverAnnotationAdjustment(
           curr->GetLineLayoutItem().StyleRef(IsFirstLineStyle());
       TextEmphasisPosition emphasis_mark_position;
       if (style.GetTextEmphasisMark() != TextEmphasisMark::kNone &&
-          ToInlineTextBox(curr)->GetEmphasisMarkPosition(
+          To<InlineTextBox>(curr)->GetEmphasisMarkPosition(
               style, emphasis_mark_position) &&
-          HasEmphasisMarkOver(ToInlineTextBox(curr))) {
+          HasEmphasisMarkOver(To<InlineTextBox>(curr))) {
         if (!style.IsFlippedLinesWritingMode()) {
           int top_of_emphasis_mark =
               (curr->LogicalTop() - style.GetFont().EmphasisMarkHeight(
@@ -1638,10 +1652,11 @@ LayoutUnit InlineFlowBox::ComputeUnderAnnotationAdjustment(
     if (curr->GetLineLayoutItem().IsOutOfFlowPositioned())
       continue;  // Positioned placeholders don't affect calculations.
 
-    if (curr->IsInlineFlowBox())
-      result = std::max(result,
-                        ToInlineFlowBox(curr)->ComputeUnderAnnotationAdjustment(
-                            allowed_position));
+    if (curr->IsInlineFlowBox()) {
+      result = std::max(
+          result, To<InlineFlowBox>(curr)->ComputeUnderAnnotationAdjustment(
+                      allowed_position));
+    }
 
     if (curr->GetLineLayoutItem().IsAtomicInlineLevel() &&
         curr->GetLineLayoutItem().IsRubyRun() &&
@@ -1679,7 +1694,7 @@ LayoutUnit InlineFlowBox::ComputeUnderAnnotationAdjustment(
       const ComputedStyle& style =
           curr->GetLineLayoutItem().StyleRef(IsFirstLineStyle());
       if (style.GetTextEmphasisMark() != TextEmphasisMark::kNone &&
-          HasEmphasisMarkUnder(ToInlineTextBox(curr))) {
+          HasEmphasisMarkUnder(To<InlineTextBox>(curr))) {
         if (!style.IsFlippedLinesWritingMode()) {
           LayoutUnit bottom_of_emphasis_mark =
               curr->LogicalBottom() + style.GetFont().EmphasisMarkHeight(

@@ -50,10 +50,7 @@ namespace blink {
 void CanvasPath::closePath() {
   if (path_.IsEmpty())
     return;
-
-  FloatRect bound_rect = path_.BoundingRect();
-  if (bound_rect.Width() || bound_rect.Height())
-    path_.CloseSubpath();
+  path_.CloseSubpath();
 }
 
 void CanvasPath::moveTo(double double_x, double double_y) {
@@ -62,7 +59,7 @@ void CanvasPath::moveTo(double double_x, double double_y) {
   if (!std::isfinite(x) || !std::isfinite(y))
     return;
   if (!IsTransformInvertible()) {
-    path_.MoveTo(Transform().MapPoint(FloatPoint(x, y)));
+    path_.MoveTo(GetTransform().MapPoint(FloatPoint(x, y)));
     return;
   }
   path_.MoveTo(FloatPoint(x, y));
@@ -76,7 +73,7 @@ void CanvasPath::lineTo(double double_x, double double_y) {
   FloatPoint p1 = FloatPoint(x, y);
 
   if (!IsTransformInvertible()) {
-    p1 = Transform().MapPoint(p1);
+    p1 = GetTransform().MapPoint(p1);
   }
 
   if (!path_.HasCurrentPoint())
@@ -101,8 +98,8 @@ void CanvasPath::quadraticCurveTo(double double_cpx,
   FloatPoint cp = FloatPoint(cpx, cpy);
 
   if (!IsTransformInvertible()) {
-    p1 = Transform().MapPoint(p1);
-    cp = Transform().MapPoint(cp);
+    p1 = GetTransform().MapPoint(p1);
+    cp = GetTransform().MapPoint(cp);
   }
 
   if (!path_.HasCurrentPoint())
@@ -132,9 +129,9 @@ void CanvasPath::bezierCurveTo(double double_cp1x,
   FloatPoint cp2 = FloatPoint(cp2x, cp2y);
 
   if (!IsTransformInvertible()) {
-    p1 = Transform().MapPoint(p1);
-    cp1 = Transform().MapPoint(cp1);
-    cp2 = Transform().MapPoint(cp2);
+    p1 = GetTransform().MapPoint(p1);
+    cp1 = GetTransform().MapPoint(cp1);
+    cp2 = GetTransform().MapPoint(cp2);
   }
   if (!path_.HasCurrentPoint())
     path_.MoveTo(FloatPoint(cp1x, cp1y));
@@ -168,8 +165,8 @@ void CanvasPath::arcTo(double double_x1,
   FloatPoint p2 = FloatPoint(x2, y2);
 
   if (!IsTransformInvertible()) {
-    p1 = Transform().MapPoint(p1);
-    p2 = Transform().MapPoint(p2);
+    p1 = GetTransform().MapPoint(p1);
+    p2 = GetTransform().MapPoint(p2);
   }
 
   if (!path_.HasCurrentPoint())
@@ -450,12 +447,13 @@ void CanvasPath::rect(double double_x,
   path_.AddRect(FloatRect(x, y, width, height));
 }
 
-void CanvasPath::roundRect(double double_x,
-                           double double_y,
-                           double double_width,
-                           double double_height,
-                           const HeapVector<DoubleOrDOMPoint, 0> radii,
-                           ExceptionState& exception_state) {
+void CanvasPath::roundRect(
+    double double_x,
+    double double_y,
+    double double_width,
+    double double_height,
+    const HeapVector<UnrestrictedDoubleOrDOMPoint, 0> radii,
+    ExceptionState& exception_state) {
   const int num_radii = radii.size();
   if (num_radii < 1 || num_radii > 4) {
     exception_state.ThrowDOMException(
@@ -475,34 +473,99 @@ void CanvasPath::roundRect(double double_x,
       !std::isfinite(height))
     return;
 
-  FloatRect rect = FloatRect(x, y, width, height);
-
   FloatSize r[num_radii];
   for (int i = 0; i < num_radii; ++i) {
-    if (radii[i].IsDouble()) {
-      float a = base::saturated_cast<float>(radii[i].GetAsDouble());
+    if (radii[i].IsUnrestrictedDouble()) {
+      float a = base::saturated_cast<float>(radii[i].GetAsUnrestrictedDouble());
+      if (UNLIKELY(!std::isfinite(a)))
+        return;
+      if (UNLIKELY(a < 0.0f)) {
+        exception_state.ThrowDOMException(
+            DOMExceptionCode::kIndexSizeError,
+            "Radius value " + String::Number(a) + " is negative.");
+      }
       r[i] = FloatSize(a, a);
     } else {  // This radius is a DOMPoint
       DOMPoint* p = radii[i].GetAsDOMPoint();
+      float r_x = base::saturated_cast<float>(p->x());
+      float r_y = base::saturated_cast<float>(p->y());
+      if (UNLIKELY(!std::isfinite(r_x)) || UNLIKELY(!std::isfinite(r_y)))
+        return;
+      if (UNLIKELY(r_x < 0.0f)) {
+        exception_state.ThrowDOMException(
+            DOMExceptionCode::kIndexSizeError,
+            "X-radius value " + String::Number(r_x) + " is negative.");
+      }
+      if (UNLIKELY(r_y < 0.0f)) {
+        exception_state.ThrowDOMException(
+            DOMExceptionCode::kIndexSizeError,
+            "Y-radius value " + String::Number(r_y) + " is negative.");
+      }
       r[i] = FloatSize(base::saturated_cast<float>(p->x()),
                        base::saturated_cast<float>(p->y()));
     }
   }
 
-  // Order of arguments here is so that this function behaves the same as the
-  // CSS border-radius property
+  if (UNLIKELY(width == 0) || UNLIKELY(height == 0)) {
+    // AddRoundRect does not handle flat rects, correctly.  But since there are
+    // no rounded corners on a flat rect, we can just use AddRect.
+    path_.AddRect(FloatRect(x, y, width, height));
+    return;
+  }
+
+  FloatSize corner_radii[4];  // row-wise ordering
   switch (num_radii) {
     case 1:
-      path_.AddRoundedRect(rect, r[0]);
+      corner_radii[0] = corner_radii[1] = corner_radii[2] = corner_radii[3] =
+          r[0];
       break;
     case 2:
-      path_.AddRoundedRect(rect, r[0], r[1], r[1], r[0]);
+      corner_radii[0] = corner_radii[3] = r[0];
+      corner_radii[1] = corner_radii[2] = r[1];
       break;
     case 3:
-      path_.AddRoundedRect(rect, r[0], r[1], r[1], r[2]);
+      corner_radii[0] = r[0];
+      corner_radii[1] = corner_radii[2] = r[1];
+      corner_radii[3] = r[2];
       break;
     case 4:
-      path_.AddRoundedRect(rect, r[0], r[1], r[3], r[2]);
+      corner_radii[0] = r[0];
+      corner_radii[1] = r[1];
+      corner_radii[2] = r[3];
+      corner_radii[3] = r[2];
   }
+
+  bool clockwise = true;
+  if (UNLIKELY(width < 0)) {
+    // Horizontal flip
+    clockwise = false;
+    x += width;
+    width = -width;
+    FloatSize tmp = corner_radii[1];
+    corner_radii[1] = corner_radii[0];
+    corner_radii[0] = tmp;
+    tmp = corner_radii[3];
+    corner_radii[3] = corner_radii[2];
+    corner_radii[2] = tmp;
+  }
+
+  if (UNLIKELY(height < 0)) {
+    // Vertical flip
+    clockwise = !clockwise;
+    y += height;
+    height = -height;
+    FloatSize tmp = corner_radii[2];
+    corner_radii[2] = corner_radii[0];
+    corner_radii[0] = tmp;
+    tmp = corner_radii[3];
+    corner_radii[3] = corner_radii[1];
+    corner_radii[1] = tmp;
+  }
+
+  FloatRect rect(x, y, width, height);
+  path_.AddPathForRoundedRect(rect, corner_radii[0], corner_radii[1],
+                              corner_radii[2], corner_radii[3], clockwise);
+  path_.MoveTo(FloatPoint(x, y));
 }
+
 }  // namespace blink

@@ -6,11 +6,10 @@
 
 #include <memory>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/public/browser/render_frame_host.h"
@@ -44,7 +43,8 @@ class WebTestDevToolsBindings::SecondaryObserver : public WebContentsObserver {
         bindings_(bindings) {}
 
   // WebContentsObserver implementation.
-  void DocumentAvailableInMainFrame() override {
+  void DocumentAvailableInMainFrame(
+      RenderFrameHost* render_frame_host) override {
     if (bindings_)
       bindings_->NavigateDevToolsFrontend();
     bindings_ = nullptr;
@@ -79,8 +79,6 @@ GURL WebTestDevToolsBindings::MapTestURLIfNeeded(const GURL& test_url,
       switches::kDebugDevTools);
   // The test runner hosts DevTools resources at this path.
   std::string url_string = "http://localhost:8000/inspector-sources/";
-  if (is_debug_dev_tools)
-    url_string += "debug/";
   url_string += "integration_test_runner.html?experiments=true";
   if (is_debug_dev_tools)
     url_string += "&debugFrontend=true";
@@ -112,7 +110,8 @@ WebTestDevToolsBindings::WebTestDevToolsBindings(
 
 WebTestDevToolsBindings::~WebTestDevToolsBindings() {}
 
-void WebTestDevToolsBindings::DocumentAvailableInMainFrame() {
+void WebTestDevToolsBindings::DocumentAvailableInMainFrame(
+    RenderFrameHost* render_frame_host) {
   ShellDevToolsBindings::Attach();
 }
 

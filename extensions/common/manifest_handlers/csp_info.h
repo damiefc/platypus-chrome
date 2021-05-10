@@ -25,9 +25,6 @@ struct CSPInfo : public Extension::ManifestData {
   // cross-site scripting and other vulnerabilities.
   std::string extension_pages_csp;
 
-  // Content security policy to be used for extension isolated worlds.
-  std::string isolated_world_csp;
-
   // Content Security Policy that should be used to enforce the sandbox used
   // by sandboxed pages (guaranteed to have the "sandbox" directive without the
   // "allow-same-origin" token).
@@ -41,9 +38,7 @@ struct CSPInfo : public Extension::ManifestData {
   static const std::string& GetExtensionPagesCSP(const Extension* extension);
 
   // Returns the Content Security Policy to be used for extension isolated
-  // worlds or null if there is no defined CSP. Note that for extensions,
-  // platform apps and legacy packaged apps, a default CSP is used even if the
-  // manifest didn't specify one, so null shouldn't be returned for those cases.
+  // worlds or null if there is no defined CSP.
   static const std::string* GetIsolatedWorldCSP(const Extension& extension);
 
   // Returns the extension's Content Security Policy for the sandboxed pages.
@@ -65,28 +60,24 @@ class CSPHandler : public ManifestHandler {
   ~CSPHandler() override;
 
   // ManifestHandler override:
-  bool Parse(Extension* extension, base::string16* error) override;
+  bool Parse(Extension* extension, std::u16string* error) override;
 
  private:
   // Parses the "content_security_policy" dictionary in the manifest.
-  bool ParseCSPDictionary(Extension* extension, base::string16* error);
+  bool ParseCSPDictionary(Extension* extension, std::u16string* error);
 
   // Parses the content security policy specified in the manifest for extension
   // pages.
   bool ParseExtensionPagesCSP(Extension* extension,
-                              base::string16* error,
+                              std::u16string* error,
                               base::StringPiece manifest_key,
                               bool secure_only,
                               const base::Value* content_security_policy);
 
-  // Parses the content security policy specified in the manifest for isolated
-  // worlds.
-  bool ParseIsolatedWorldCSP(Extension* extension, base::string16* error);
-
   // Parses the content security policy specified in the manifest for sandboxed
   // pages. This should be called after ParseExtensionPagesCSP.
   bool ParseSandboxCSP(Extension* extension,
-                       base::string16* error,
+                       std::u16string* error,
                        base::StringPiece manifest_key,
                        const base::Value* sandbox_csp);
 
@@ -95,10 +86,6 @@ class CSPHandler : public ManifestHandler {
                             base::StringPiece manifest_key,
                             bool secure_only,
                             std::string content_security_policy);
-
-  // Helper to set the isolated world content security policy manifest data.
-  void SetIsolatedWorldCSP(Extension* extension,
-                           std::string isolated_world_csp);
 
   // Helper to set the sandbox content security policy manifest data.
   void SetSandboxCSP(Extension* extension, std::string sandbox_csp);

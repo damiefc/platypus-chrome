@@ -6,8 +6,6 @@
 
 #include <utility>
 
-#include "ash/home_screen/home_launcher_gesture_handler.h"
-#include "ash/home_screen/home_screen_controller.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
@@ -34,6 +32,7 @@
 #include "base/no_destructor.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/transform_util.h"
@@ -44,17 +43,6 @@
 #include "ui/wm/core/window_animations.h"
 
 namespace ash {
-
-namespace {
-
-// The transform applied to an overview item when animating to or from the home
-// launcher.
-const gfx::Transform& GetShiftTransform() {
-  static const base::NoDestructor<gfx::Transform> matrix(1, 0, 0, 1, 0, -100);
-  return *matrix;
-}
-
-}  // namespace
 
 bool CanCoverAvailableWorkspace(aura::Window* window) {
   SplitViewController* split_view_controller = SplitViewController::Get(window);
@@ -97,32 +85,19 @@ bool ShouldAnimateWallpaper(aura::Window* root_window) {
   return true;
 }
 
-void FadeInWidgetAndMaybeSlideOnEnter(views::Widget* widget,
-                                      OverviewAnimationType animation_type,
-                                      bool slide,
-                                      bool observe) {
+void FadeInWidgetToOverview(views::Widget* widget,
+                            OverviewAnimationType animation_type,
+                            bool observe) {
   aura::Window* window = widget->GetNativeWindow();
-  if (window->layer()->GetTargetOpacity() == 1.f && !slide)
+  if (window->layer()->GetTargetOpacity() == 1.f)
     return;
 
   gfx::Transform original_transform = window->transform();
-  if (slide) {
-    // Translate the window up before sliding down to |original_transform|.
-    gfx::Transform new_transform = original_transform;
-    new_transform.ConcatTransform(GetShiftTransform());
-    if (window->layer()->GetTargetOpacity() == 1.f &&
-        window->layer()->GetTargetTransform() == new_transform) {
-      return;
-    }
-    window->SetTransform(new_transform);
-  }
 
   // Fade in the widget from its current opacity.
   ScopedOverviewAnimationSettings scoped_overview_animation_settings(
       animation_type, window);
   window->layer()->SetOpacity(1.0f);
-  if (slide)
-    window->SetTransform(original_transform);
 
   if (observe) {
     auto enter_observer = std::make_unique<EnterAnimationObserver>();
@@ -132,9 +107,8 @@ void FadeInWidgetAndMaybeSlideOnEnter(views::Widget* widget,
   }
 }
 
-void FadeOutWidgetAndMaybeSlideOnExit(std::unique_ptr<views::Widget> widget,
-                                      OverviewAnimationType animation_type,
-                                      bool slide) {
+void FadeOutWidgetFromOverview(std::unique_ptr<views::Widget> widget,
+                               OverviewAnimationType animation_type) {
   // The overview controller may be nullptr on shutdown.
   OverviewController* controller = Shell::Get()->overview_controller();
   if (!controller) {
@@ -155,12 +129,6 @@ void FadeOutWidgetAndMaybeSlideOnExit(std::unique_ptr<views::Widget> widget,
   animation_settings.AddObserver(observer.get());
   controller->AddExitAnimationObserver(std::move(observer));
   widget_ptr->SetOpacity(0.f);
-
-  if (slide) {
-    gfx::Transform new_transform = widget_ptr->GetNativeWindow()->transform();
-    new_transform.ConcatTransform(GetShiftTransform());
-    widget_ptr->GetNativeWindow()->SetTransform(new_transform);
-  }
 }
 
 void ImmediatelyCloseWidgetOnExit(std::unique_ptr<views::Widget> widget) {
@@ -200,20 +168,6 @@ void SetTransform(aura::Window* window, const gfx::Transform& transform) {
                             transform);
     window_iter->SetTransform(new_transform);
   }
-}
-
-bool IsSlidingOutOverviewFromShelf() {
-  if (!Shell::Get()->overview_controller()->InOverviewSession())
-    return false;
-
-  if (Shell::Get()
-          ->home_screen_controller()
-          ->home_launcher_gesture_handler()
-          ->mode() == HomeLauncherGestureHandler::Mode::kSlideUpToShow) {
-    return true;
-  }
-
-  return false;
 }
 
 void MaximizeIfSnapped(aura::Window* window) {

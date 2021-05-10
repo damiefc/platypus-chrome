@@ -8,7 +8,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
-#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/workers/worker_or_worklet_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worker_reporting_proxy.h"
 
@@ -26,41 +25,63 @@ void ClassicScript::Trace(Visitor* visitor) const {
   visitor->Trace(script_source_code_);
 }
 
-void ClassicScript::RunScript(LocalFrame* frame) {
-  return RunScript(frame,
-                   ScriptController::kDoNotExecuteScriptWhenScriptsDisabled);
+ScriptEvaluationResult ClassicScript::RunScriptOnScriptStateAndReturnValue(
+    ScriptState* script_state,
+    ExecuteScriptPolicy policy,
+    V8ScriptRunner::RethrowErrorsOption rethrow_errors) {
+  return V8ScriptRunner::CompileAndRunScript(script_state, this, policy,
+                                             std::move(rethrow_errors));
 }
 
-void ClassicScript::RunScript(LocalFrame* frame,
-                              ScriptController::ExecuteScriptPolicy policy) {
-  v8::HandleScope handle_scope(frame->DomWindow()->GetIsolate());
-  RunScriptAndReturnValue(frame, policy);
+void ClassicScript::RunScript(LocalDOMWindow* window) {
+  return RunScript(window,
+                   ExecuteScriptPolicy::kDoNotExecuteScriptWhenScriptsDisabled);
+}
+
+void ClassicScript::RunScript(LocalDOMWindow* window,
+                              ExecuteScriptPolicy policy) {
+  v8::HandleScope handle_scope(window->GetIsolate());
+  RunScriptAndReturnValue(window, policy);
 }
 
 v8::Local<v8::Value> ClassicScript::RunScriptAndReturnValue(
-    LocalFrame* frame,
-    ScriptController::ExecuteScriptPolicy policy) {
-  return frame->DomWindow()->GetScriptController().EvaluateScriptInMainWorld(
-      GetScriptSourceCode(), BaseURL(), sanitize_script_errors_, FetchOptions(),
-      policy);
+    LocalDOMWindow* window,
+    ExecuteScriptPolicy policy) {
+  ScriptEvaluationResult result = RunScriptOnScriptStateAndReturnValue(
+      ToScriptStateForMainWorld(window->GetFrame()), policy);
+
+  if (result.GetResultType() == ScriptEvaluationResult::ResultType::kSuccess)
+    return result.GetSuccessValue();
+  return v8::Local<v8::Value>();
 }
 
 v8::Local<v8::Value> ClassicScript::RunScriptInIsolatedWorldAndReturnValue(
-    LocalFrame* frame,
+    LocalDOMWindow* window,
     int32_t world_id) {
-  return frame->DomWindow()->GetScriptController().ExecuteScriptInIsolatedWorld(
-      world_id, GetScriptSourceCode(), BaseURL(), sanitize_script_errors_);
+  DCHECK_GT(world_id, 0);
+
+  // Unlike other methods, RunScriptInIsolatedWorldAndReturnValue()'s
+  // default policy is kExecuteScriptWhenScriptsDisabled, to keep existing
+  // behavior.
+  ScriptEvaluationResult result = RunScriptOnScriptStateAndReturnValue(
+      ToScriptState(window->GetFrame(),
+                    *DOMWrapperWorld::EnsureIsolatedWorld(
+                        ToIsolate(window->GetFrame()), world_id)),
+      ExecuteScriptPolicy::kExecuteScriptWhenScriptsDisabled);
+
+  if (result.GetResultType() == ScriptEvaluationResult::ResultType::kSuccess)
+    return result.GetSuccessValue();
+  return v8::Local<v8::Value>();
 }
 
 bool ClassicScript::RunScriptOnWorkerOrWorklet(
     WorkerOrWorkletGlobalScope& global_scope) {
   DCHECK(global_scope.IsContextThread());
 
-  ScriptState::Scope scope(global_scope.ScriptController()->GetScriptState());
-  ScriptEvaluationResult result =
-      global_scope.ScriptController()->EvaluateAndReturnValue(
-          GetScriptSourceCode(), sanitize_script_errors_,
-          global_scope.GetV8CacheOptions());
+  v8::HandleScope handle_scope(
+      global_scope.ScriptController()->GetScriptState()->GetIsolate());
+  ScriptEvaluationResult result = RunScriptOnScriptStateAndReturnValue(
+      global_scope.ScriptController()->GetScriptState());
   return result.GetResultType() == ScriptEvaluationResult::ResultType::kSuccess;
 }
 

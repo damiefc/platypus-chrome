@@ -925,6 +925,9 @@
 "jis-b5"
 "jis-b4"
 "hidden-matchable"
+"more"
+"less"
+"forced"
 
 # at-rules
 "@charset"
@@ -956,6 +959,7 @@
 "border-color"
 "border-image"
 "color"
+"accent-color"
 "align-content"
 "align-items"
 "align-self"

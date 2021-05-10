@@ -31,9 +31,14 @@
 
 #include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/common/css/navigation_controls.h"
-#include "third_party/blink/public/common/css/preferred_color_scheme.h"
-#include "third_party/blink/public/common/css/screen_spanning.h"
+#include "third_party/blink/renderer/core/css/media_values.h"
+
+#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_token_builder.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
+#include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom-blink.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_resolution_units.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
@@ -42,7 +47,6 @@
 #include "third_party/blink/renderer/core/css/media_list.h"
 #include "third_party/blink/renderer/core/css/media_query.h"
 #include "third_party/blink/renderer/core/css/media_values_dynamic.h"
-#include "third_party/blink/renderer/core/css/media_values_initial_viewport.h"
 #include "third_party/blink/renderer/core/css/resolver/media_query_result.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -54,10 +58,32 @@
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/graphics/color_space_gamut.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/privacy_budget/identifiability_digest_helpers.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
-#include "ui/base/pointer/pointer_device.h"
 
 namespace blink {
+
+using mojom::blink::HoverType;
+using mojom::blink::PointerType;
+
+namespace {
+
+void RecordMediaQueryResult(Document* doc,
+                            const MediaQueryExp& expr,
+                            bool result) {
+  IdentifiableTokenBuilder input_builder;
+  input_builder.AddToken(IdentifiabilityBenignStringToken(expr.MediaFeature()));
+  input_builder.AddToken(
+      IdentifiabilityBenignStringToken(expr.ExpValue().CssText()));
+  IdentifiableSurface surface = IdentifiableSurface::FromTypeAndToken(
+      IdentifiableSurface::Type::kMediaQuery, input_builder.GetToken());
+
+  IdentifiabilityMetricBuilder(doc->UkmSourceID())
+      .Set(surface, result)
+      .Record(doc->UkmRecorder());
+}
+
+}  // namespace
 
 enum MediaFeaturePrefix { kMinPrefix, kMaxPrefix, kNoPrefix };
 
@@ -75,12 +101,6 @@ MediaQueryEvaluator::MediaQueryEvaluator(LocalFrame* frame)
 
 MediaQueryEvaluator::MediaQueryEvaluator(const MediaValues& media_values)
     : media_values_(media_values.Copy()) {}
-
-MediaQueryEvaluator::MediaQueryEvaluator(
-    MediaValuesInitialViewport* media_values)
-    : media_values_(media_values) {
-  DCHECK(media_values);
-}
 
 MediaQueryEvaluator::~MediaQueryEvaluator() = default;
 
@@ -159,8 +179,19 @@ bool MediaQueryEvaluator::Eval(
 
 bool MediaQueryEvaluator::DidResultsChange(
     const MediaQueryResultList& results) const {
+  base::AutoReset<bool> skip(&skip_ukm_reporting_, true);
   for (auto& result : results) {
     if (Eval(result.Expression()) != result.Result())
+      return true;
+  }
+  return false;
+}
+
+bool MediaQueryEvaluator::DidResultsChange(
+    const Vector<MediaQuerySetResult>& results) const {
+  base::AutoReset<bool> skip(&skip_ukm_reporting_, true);
+  for (const auto& result : results) {
+    if (result.Result() != Eval(result.MediaQueries()))
       return true;
   }
   return false;
@@ -661,16 +692,17 @@ static bool ImmersiveMediaFeatureEval(const MediaQueryExpValue& value,
 static bool HoverMediaFeatureEval(const MediaQueryExpValue& value,
                                   MediaFeaturePrefix,
                                   const MediaValues& media_values) {
-  ui::HoverType hover = media_values.PrimaryHoverType();
+  HoverType hover = media_values.PrimaryHoverType();
 
   if (!value.IsValid())
-    return hover != ui::HOVER_TYPE_NONE;
+    return hover != HoverType::kHoverNone;
 
   if (!value.is_id)
     return false;
 
-  return (hover == ui::HOVER_TYPE_NONE && value.id == CSSValueID::kNone) ||
-         (hover == ui::HOVER_TYPE_HOVER && value.id == CSSValueID::kHover);
+  return (hover == HoverType::kHoverNone && value.id == CSSValueID::kNone) ||
+         (hover == HoverType::kHoverHoverType &&
+          value.id == CSSValueID::kHover);
 }
 
 static bool AnyHoverMediaFeatureEval(const MediaQueryExpValue& value,
@@ -679,16 +711,17 @@ static bool AnyHoverMediaFeatureEval(const MediaQueryExpValue& value,
   int available_hover_types = media_values.AvailableHoverTypes();
 
   if (!value.IsValid())
-    return available_hover_types & ~ui::HOVER_TYPE_NONE;
+    return available_hover_types & ~static_cast<int>(HoverType::kHoverNone);
 
   if (!value.is_id)
     return false;
 
   switch (value.id) {
     case CSSValueID::kNone:
-      return available_hover_types & ui::HOVER_TYPE_NONE;
+      return available_hover_types & static_cast<int>(HoverType::kHoverNone);
     case CSSValueID::kHover:
-      return available_hover_types & ui::HOVER_TYPE_HOVER;
+      return available_hover_types &
+             static_cast<int>(HoverType::kHoverHoverType);
     default:
       NOTREACHED();
       return false;
@@ -707,18 +740,20 @@ static bool OriginTrialTestMediaFeatureEval(const MediaQueryExpValue& value,
 static bool PointerMediaFeatureEval(const MediaQueryExpValue& value,
                                     MediaFeaturePrefix,
                                     const MediaValues& media_values) {
-  ui::PointerType pointer = media_values.PrimaryPointerType();
+  PointerType pointer = media_values.PrimaryPointerType();
 
   if (!value.IsValid())
-    return pointer != ui::POINTER_TYPE_NONE;
+    return pointer != PointerType::kPointerNone;
 
   if (!value.is_id)
     return false;
 
-  return (pointer == ui::POINTER_TYPE_NONE && value.id == CSSValueID::kNone) ||
-         (pointer == ui::POINTER_TYPE_COARSE &&
+  return (pointer == PointerType::kPointerNone &&
+          value.id == CSSValueID::kNone) ||
+         (pointer == PointerType::kPointerCoarseType &&
           value.id == CSSValueID::kCoarse) ||
-         (pointer == ui::POINTER_TYPE_FINE && value.id == CSSValueID::kFine);
+         (pointer == PointerType::kPointerFineType &&
+          value.id == CSSValueID::kFine);
 }
 
 static bool PrefersReducedMotionMediaFeatureEval(
@@ -756,19 +791,22 @@ static bool AnyPointerMediaFeatureEval(const MediaQueryExpValue& value,
                                        const MediaValues& media_values) {
   int available_pointers = media_values.AvailablePointerTypes();
 
-  if (!value.IsValid())
-    return available_pointers & ~ui::POINTER_TYPE_NONE;
+  if (!value.IsValid()) {
+    return available_pointers & ~static_cast<int>(PointerType::kPointerNone);
+  }
 
   if (!value.is_id)
     return false;
 
   switch (value.id) {
     case CSSValueID::kCoarse:
-      return available_pointers & ui::POINTER_TYPE_COARSE;
+      return available_pointers &
+             static_cast<int>(PointerType::kPointerCoarseType);
     case CSSValueID::kFine:
-      return available_pointers & ui::POINTER_TYPE_FINE;
+      return available_pointers &
+             static_cast<int>(PointerType::kPointerFineType);
     case CSSValueID::kNone:
-      return available_pointers & ui::POINTER_TYPE_NONE;
+      return available_pointers & static_cast<int>(PointerType::kPointerNone);
     default:
       NOTREACHED();
       return false;
@@ -840,8 +878,10 @@ static bool PrefersColorSchemeMediaFeatureEval(
     const MediaQueryExpValue& value,
     MediaFeaturePrefix,
     const MediaValues& media_values) {
-  PreferredColorScheme preferred_scheme =
-      media_values.GetPreferredColorScheme();
+  UseCounter::Count(media_values.GetDocument(),
+                    WebFeature::kPrefersColorSchemeMediaFeature);
+
+  auto preferred_scheme = media_values.GetPreferredColorScheme();
 
   if (!value.IsValid())
     return true;
@@ -849,15 +889,52 @@ static bool PrefersColorSchemeMediaFeatureEval(
   if (!value.is_id)
     return false;
 
-  return (preferred_scheme == PreferredColorScheme::kDark &&
+  return (preferred_scheme == mojom::blink::PreferredColorScheme::kDark &&
           value.id == CSSValueID::kDark) ||
-         (preferred_scheme == PreferredColorScheme::kLight &&
+         (preferred_scheme == mojom::blink::PreferredColorScheme::kLight &&
           value.id == CSSValueID::kLight);
+}
+
+static bool PrefersContrastMediaFeatureEval(const MediaQueryExpValue& value,
+                                            MediaFeaturePrefix,
+                                            const MediaValues& media_values) {
+  UseCounter::Count(media_values.GetDocument(),
+                    WebFeature::kPrefersContrastMediaFeature);
+
+  auto preferred_contrast = media_values.GetPreferredContrast();
+  ForcedColors forced_colors = media_values.GetForcedColors();
+
+  if (!value.IsValid()) {
+    return forced_colors != ForcedColors::kNone ||
+           preferred_contrast != mojom::blink::PreferredContrast::kNoPreference;
+  }
+
+  if (!value.is_id)
+    return false;
+
+  switch (value.id) {
+    case CSSValueID::kForced:
+      return forced_colors == ForcedColors::kActive;
+    case CSSValueID::kMore:
+      return preferred_contrast == mojom::blink::PreferredContrast::kMore;
+    case CSSValueID::kLess:
+      return preferred_contrast == mojom::blink::PreferredContrast::kLess;
+    case CSSValueID::kNoPreference:
+      return forced_colors != ForcedColors::kActive &&
+             preferred_contrast ==
+                 mojom::blink::PreferredContrast::kNoPreference;
+    default:
+      NOTREACHED();
+      return false;
+  }
 }
 
 static bool ForcedColorsMediaFeatureEval(const MediaQueryExpValue& value,
                                          MediaFeaturePrefix,
                                          const MediaValues& media_values) {
+  UseCounter::Count(media_values.GetDocument(),
+                    WebFeature::kForcedColorsMediaFeature);
+
   ForcedColors forced_colors = media_values.GetForcedColors();
 
   if (!value.IsValid())
@@ -912,6 +989,37 @@ static bool ScreenSpanningMediaFeatureEval(const MediaQueryExpValue& value,
           value.id == CSSValueID::kSingleFoldHorizontal);
 }
 
+static bool DevicePostureMediaFeatureEval(const MediaQueryExpValue& value,
+                                          MediaFeaturePrefix,
+                                          const MediaValues& media_values) {
+  // isValid() is false if there is no parameter. Without parameter we should
+  // return true to indicate that device posture is enabled in the
+  // browser.
+  if (!value.IsValid())
+    return true;
+
+  DCHECK(value.is_id);
+
+  DevicePosture device_posture = media_values.GetDevicePosture();
+  switch (value.id) {
+    case CSSValueID::kNoFold:
+      return device_posture == DevicePosture::kNoFold;
+    case CSSValueID::kLaptop:
+      return device_posture == DevicePosture::kLaptop;
+    case CSSValueID::kFlat:
+      return device_posture == DevicePosture::kFlat;
+    case CSSValueID::kTent:
+      return device_posture == DevicePosture::kTent;
+    case CSSValueID::kTablet:
+      return device_posture == DevicePosture::kTablet;
+    case CSSValueID::kBook:
+      return device_posture == DevicePosture::kBook;
+    default:
+      NOTREACHED();
+      return false;
+  }
+}
+
 void MediaQueryEvaluator::Init() {
   // Create the table.
   g_function_map = new FunctionMap;
@@ -936,8 +1044,17 @@ bool MediaQueryEvaluator::Eval(const MediaQueryExp& expr) const {
   // Call the media feature evaluation function. Assume no prefix and let
   // trampoline functions override the prefix if prefix is used.
   EvalFunc func = g_function_map->at(expr.MediaFeature().Impl());
-  if (func)
-    return func(expr.ExpValue(), kNoPrefix, *media_values_);
+  if (func) {
+    bool result = func(expr.ExpValue(), kNoPrefix, *media_values_);
+    Document* doc = nullptr;
+    if (!skip_ukm_reporting_ && (doc = media_values_->GetDocument()) &&
+        (IdentifiabilityStudySettings::Get()->ShouldSample(
+            IdentifiableSurface::Type::kMediaQuery))) {
+      RecordMediaQueryResult(doc, expr, result);
+    }
+
+    return result;
+  }
 
   return false;
 }

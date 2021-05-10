@@ -4,8 +4,10 @@
 
 #import "ios/chrome/browser/external_files/external_file_remover_impl.h"
 
+#include <utility>
+
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
@@ -227,7 +229,7 @@ void ExternalFileRemoverImpl::RemoveFiles(
   base::ThreadPool::PostTaskAndReply(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&RemoveFilesWithOptions, referenced_files, age_in_days),
-      base::Bind(&RunCallback, base::Passed(&closure_runner)));
+      base::BindOnce(&RunCallback, std::move(closure_runner)));
 }
 
 NSSet* ExternalFileRemoverImpl::GetReferencedExternalFiles() {

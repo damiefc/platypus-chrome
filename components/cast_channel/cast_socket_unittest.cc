@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -21,7 +22,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_byteorder.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/mock_timer.h"
 #include "build/build_config.h"
@@ -202,8 +203,8 @@ class MockTestCastSocket : public TestCastSocketBase {
       network::mojom::NetworkContext* network_context,
       const CastSocketOpenParams& open_params,
       Logger* logger) {
-    return std::unique_ptr<MockTestCastSocket>(
-        new MockTestCastSocket(network_context, open_params, logger));
+    return std::make_unique<MockTestCastSocket>(network_context, open_params,
+                                                logger);
   }
 
   using TestCastSocketBase::TestCastSocketBase;
@@ -245,10 +246,10 @@ class TestSocketFactory : public net::ClientSocketFactory {
 
   // Socket connection helpers.
   void SetupTcpConnect(net::IoMode mode, int result) {
-    tcp_connect_data_.reset(new net::MockConnect(mode, result, ip_));
+    tcp_connect_data_ = std::make_unique<net::MockConnect>(mode, result, ip_);
   }
   void SetupSslConnect(net::IoMode mode, int result) {
-    ssl_connect_data_.reset(new net::MockConnect(mode, result, ip_));
+    ssl_connect_data_ = std::make_unique<net::MockConnect>(mode, result, ip_);
   }
 
   // Socket I/O helpers.
@@ -483,15 +484,15 @@ class SslCastSocketTest : public CastSocketTestBase {
     server_context_ = CreateSSLServerContext(
         server_cert_.get(), *server_private_key_, server_ssl_config_);
 
-    tcp_server_socket_.reset(
-        new net::TCPServerSocket(nullptr, net::NetLogSource()));
+    tcp_server_socket_ =
+        std::make_unique<net::TCPServerSocket>(nullptr, net::NetLogSource());
     ASSERT_EQ(net::OK,
               tcp_server_socket_->ListenWithAddressAndPort("127.0.0.1", 0, 1));
     net::IPEndPoint server_address;
     ASSERT_EQ(net::OK, tcp_server_socket_->GetLocalAddress(&server_address));
-    tcp_client_socket_.reset(
-        new net::TCPClientSocket(net::AddressList(server_address), nullptr,
-                                 nullptr, nullptr, net::NetLogSource()));
+    tcp_client_socket_ = std::make_unique<net::TCPClientSocket>(
+        net::AddressList(server_address), nullptr, nullptr, nullptr,
+        net::NetLogSource());
 
     std::unique_ptr<net::StreamSocket> accepted_socket;
     accept_result_ = tcp_server_socket_->Accept(
@@ -534,11 +535,12 @@ class SslCastSocketTest : public CastSocketTestBase {
   std::unique_ptr<crypto::RSAPrivateKey> ReadTestKeyFromPEM(
       const base::StringPiece& name) {
     base::FilePath key_path = GetTestCertsDirectory().AppendASCII(name);
-    std::vector<std::string> headers({"PRIVATE KEY"});
     std::string pem_data;
     if (!base::ReadFileToString(key_path, &pem_data)) {
       return nullptr;
     }
+
+    const std::vector<std::string> headers({"PRIVATE KEY"});
     net::PEMTokenizer pem_tokenizer(pem_data, headers);
     if (!pem_tokenizer.GetNext()) {
       return nullptr;

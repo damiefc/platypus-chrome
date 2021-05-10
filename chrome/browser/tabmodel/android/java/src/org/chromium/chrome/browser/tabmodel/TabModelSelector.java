@@ -163,11 +163,6 @@ public interface TabModelSelector {
     boolean isTabStateInitialized();
 
     /**
-     * Merges the tab states from two tab models.
-     */
-    void mergeState();
-
-    /**
      * Prevents the TabModelSelector from destroying its tabs to allow for reparenting.
      *
      * This is only safe to be called immediately before destruction. After entering reparenting
@@ -186,6 +181,11 @@ public interface TabModelSelector {
      * @param incognitoObserver The observer to subscribe.
      */
     void addIncognitoTabModelObserver(IncognitoTabModelObserver incognitoObserver);
+
+    /**
+     * Unsubscribe from {@link IncognitoTabModelObserver}.
+     */
+    void removeIncognitoTabModelObserver(IncognitoTabModelObserver incognitoObserver);
 
     /**
      * Destroy all owned {@link TabModel}s and {@link Tab}s referenced by this selector.

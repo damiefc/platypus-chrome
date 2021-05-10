@@ -44,16 +44,16 @@ class MockTranslateRanker : public TranslateRanker {
     is_logging_enabled_ = logging_enabled;
   }
   bool ShouldOfferTranslation(
-      metrics::TranslateEventProto* translate_events) override;
+      metrics::TranslateEventProto* translate_events,
+      TranslateMetricsLogger* translate_metrics_logger) override;
   void FlushTranslateEvents(
       std::vector<metrics::TranslateEventProto>* events) override;
   MOCK_METHOD3(RecordTranslateEvent,
                void(int event_type,
                     ukm::SourceId ukm_source_id,
                     metrics::TranslateEventProto* translate_event));
-  MOCK_METHOD3(ShouldOverrideDecision,
-               bool(int event_type,
-                    ukm::SourceId ukm_source_id,
+  MOCK_METHOD2(ShouldOverrideMatchesPreviousLanguageDecision,
+               bool(ukm::SourceId ukm_source_id,
                     metrics::TranslateEventProto* translate_event));
 
  private:

@@ -7,11 +7,13 @@
 #include <limits>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "media/mojo/mojom/media_player.mojom-blink.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
-#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
+#include "third_party/blink/public/common/media/display_type.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_picture_in_picture_options.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
@@ -73,13 +75,13 @@ PictureInPictureControllerImpl::IsDocumentAllowed(bool report_failure) const {
     return Status::kDisabledBySystem;
 
   // If document is not allowed to use the policy-controlled feature named
-  // "picture-in-picture", return kDisabledByFeaturePolicy status.
+  // "picture-in-picture", return kDisabledByPermissionsPolicy status.
   if (RuntimeEnabledFeatures::PictureInPictureAPIEnabled() &&
       !GetSupplementable()->GetExecutionContext()->IsFeatureEnabled(
-          blink::mojom::blink::FeaturePolicyFeature::kPictureInPicture,
+          blink::mojom::blink::PermissionsPolicyFeature::kPictureInPicture,
           report_failure ? ReportOptions::kReportOnFailure
                          : ReportOptions::kDoNotReport)) {
-    return Status::kDisabledByFeaturePolicy;
+    return Status::kDisabledByPermissionsPolicy;
   }
 
   return Status::kEnabled;
@@ -162,7 +164,7 @@ void PictureInPictureControllerImpl::EnterPictureInPicture(
   if (!EnsureService())
     return;
 
-  if (video_element->DisplayType() == WebMediaPlayer::DisplayType::kFullscreen)
+  if (video_element->GetDisplayType() == DisplayType::kFullscreen)
     Fullscreen::ExitFullscreen(*GetSupplementable());
 
   video_element->GetWebMediaPlayer()->OnRequestPictureInPicture();
@@ -176,8 +178,14 @@ void PictureInPictureControllerImpl::EnterPictureInPicture(
   session_observer_receiver_.Bind(
       session_observer.InitWithNewPipeAndPassReceiver(), task_runner);
 
+  mojo::PendingAssociatedRemote<media::mojom::blink::MediaPlayer>
+      media_player_remote;
+  video_element->BindMediaPlayerReceiver(
+      media_player_remote.InitWithNewEndpointAndPassReceiver());
+
   picture_in_picture_service_->StartSession(
       video_element->GetWebMediaPlayer()->GetDelegateId(),
+      std::move(media_player_remote),
       video_element->GetWebMediaPlayer()->GetSurfaceId(),
       video_element->GetWebMediaPlayer()->NaturalSize(),
       ShouldShowPlayPauseButton(*video_element), std::move(session_observer),
@@ -242,7 +250,9 @@ void PictureInPictureControllerImpl::ExitPictureInPicture(
   if (!EnsureService())
     return;
 
-  DCHECK(picture_in_picture_session_.is_bound());
+  if (!picture_in_picture_session_.is_bound())
+    return;
+
   picture_in_picture_session_->Stop(
       WTF::Bind(&PictureInPictureControllerImpl::OnExitedPictureInPicture,
                 WrapPersistent(this), WrapPersistent(resolver)));
@@ -387,8 +397,18 @@ void PictureInPictureControllerImpl::OnPictureInPictureStateChange() {
   DCHECK(picture_in_picture_element_);
   DCHECK(picture_in_picture_element_->GetWebMediaPlayer());
 
+  // The lifetime of the MediaPlayer mojo endpoint in the renderer is tied to
+  // WebMediaPlayer, which is recreated by |picture_in_picture_element_| on
+  // src= change. Since src= change is one of the reasons we get here, we need
+  // to give the browser a newly bound remote.
+  mojo::PendingAssociatedRemote<media::mojom::blink::MediaPlayer>
+      media_player_remote;
+  picture_in_picture_element_->BindMediaPlayerReceiver(
+      media_player_remote.InitWithNewEndpointAndPassReceiver());
+
   picture_in_picture_session_->Update(
       picture_in_picture_element_->GetWebMediaPlayer()->GetDelegateId(),
+      std::move(media_player_remote),
       picture_in_picture_element_->GetWebMediaPlayer()->GetSurfaceId(),
       picture_in_picture_element_->GetWebMediaPlayer()->NaturalSize(),
       ShouldShowPlayPauseButton(*picture_in_picture_element_));

@@ -23,6 +23,7 @@
 #include "components/network_session_configurator/common/network_features.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/variations/variations_associated_data.h"
+#include "components/variations/variations_switches.h"
 #include "net/base/host_mapping_rules.h"
 #include "net/http/http_stream_factory.h"
 #include "net/quic/platform/impl/quic_flags_impl.h"
@@ -97,17 +98,6 @@ spdy::SettingsMap GetHttp2Settings(
   return http2_settings;
 }
 
-bool ConfigureWebsocketOverHttp2(
-    const base::CommandLine& command_line,
-    const VariationParameters& http2_trial_params) {
-  if (command_line.HasSwitch(switches::kEnableWebsocketOverHttp2))
-    return true;
-
-  const std::string websocket_value =
-      GetVariationParam(http2_trial_params, "websocket_over_http2");
-  return websocket_value == "true";
-}
-
 int ConfigureSpdySessionMaxQueuedCappedFrames(
     const base::CommandLine& /*command_line*/,
     const VariationParameters& http2_trial_params) {
@@ -169,9 +159,6 @@ void ConfigureHttp2Params(const base::CommandLine& command_line,
                         "http2_end_stream_with_data_frame") == "true") {
     params->http2_end_stream_with_data_frame = true;
   }
-
-  params->enable_websocket_over_http2 =
-      ConfigureWebsocketOverHttp2(command_line, http2_trial_params);
 
   params->spdy_session_max_queued_capped_frames =
       ConfigureSpdySessionMaxQueuedCappedFrames(command_line,
@@ -458,9 +445,10 @@ size_t GetQuicMaxPacketLength(const VariationParameters& quic_trial_params) {
 
 quic::ParsedQuicVersionVector GetQuicVersions(
     const VariationParameters& quic_trial_params) {
+  std::string trial_versions_str =
+      GetVariationParam(quic_trial_params, "quic_version");
   quic::ParsedQuicVersionVector trial_versions =
-      quic::ParseQuicVersionVectorString(
-          GetVariationParam(quic_trial_params, "quic_version"));
+      quic::ParseQuicVersionVectorString(trial_versions_str);
   const bool obsolete_versions_allowed = base::LowerCaseEqualsASCII(
       GetVariationParam(quic_trial_params, "obsolete_versions_allowed"),
       "true");
@@ -468,11 +456,17 @@ quic::ParsedQuicVersionVector GetQuicVersions(
     quic::ParsedQuicVersionVector filtered_versions;
     quic::ParsedQuicVersionVector obsolete_versions =
         net::ObsoleteQuicVersions();
+    bool found_obsolete_version = false;
     for (const quic::ParsedQuicVersion& version : trial_versions) {
       if (std::find(obsolete_versions.begin(), obsolete_versions.end(),
                     version) == obsolete_versions.end()) {
         filtered_versions.push_back(version);
+      } else {
+        found_obsolete_version = true;
       }
+    }
+    if (found_obsolete_version) {
+      UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.FinchObsoleteVersion", true);
     }
     trial_versions = filtered_versions;
   }
@@ -486,7 +480,44 @@ bool ShouldEnableServerPushCancelation(
       "true");
 }
 
-void ConfigureQuicParams(base::StringPiece quic_trial_group,
+bool AreQuicParamsValid(const base::CommandLine& command_line,
+                        base::StringPiece quic_trial_group,
+                        const VariationParameters& quic_trial_params) {
+  if (command_line.HasSwitch(variations::switches::kForceFieldTrialParams)) {
+    // Skip validation of params from the command line.
+    return true;
+  }
+  if (!base::LowerCaseEqualsASCII(
+          GetVariationParam(quic_trial_params, "enable_quic"), "true")) {
+    // Params that don't explicitly enable QUIC do not carry channel or epoch.
+    return true;
+  }
+  const std::string channel_string =
+      GetVariationParam(quic_trial_params, "channel");
+  if (channel_string.length() != 1) {
+    // Params without a valid channel are invalid.
+    return false;
+  }
+  const std::string epoch_string =
+      GetVariationParam(quic_trial_params, "epoch");
+  if (epoch_string.length() != 8) {
+    // Params without a valid epoch are invalid.
+    return false;
+  }
+  int epoch;
+  if (!base::StringToInt(epoch_string, &epoch)) {
+    // Failed to parse epoch as int.
+    return false;
+  }
+  if (epoch < 20201019) {
+    // All channels currently have an epoch of at least 20201019.
+    return false;
+  }
+  return true;
+}
+
+void ConfigureQuicParams(const base::CommandLine& command_line,
+                         base::StringPiece quic_trial_group,
                          const VariationParameters& quic_trial_params,
                          bool is_quic_force_disabled,
                          const std::string& quic_user_agent_id,
@@ -495,6 +526,14 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
   if (ShouldDisableQuic(quic_trial_group, quic_trial_params,
                         is_quic_force_disabled)) {
     params->enable_quic = false;
+  }
+
+  const bool params_are_valid =
+      AreQuicParamsValid(command_line, quic_trial_group, quic_trial_params);
+  UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.FinchConfigIsValid", params_are_valid);
+  if (!params_are_valid) {
+    // Skip parsing of invalid params.
+    return;
   }
 
   params->enable_server_push_cancellation =
@@ -638,7 +677,7 @@ void ParseCommandLineAndFieldTrials(const base::CommandLine& command_line,
   VariationParameters quic_trial_params;
   if (!variations::GetVariationParams(kQuicFieldTrialName, &quic_trial_params))
     quic_trial_params.clear();
-  ConfigureQuicParams(quic_trial_group, quic_trial_params,
+  ConfigureQuicParams(command_line, quic_trial_group, quic_trial_params,
                       is_quic_force_disabled, quic_user_agent_id, params,
                       quic_params);
 

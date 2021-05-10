@@ -13,6 +13,8 @@
 #include "components/guest_view/browser/guest_view_message_filter.h"
 #include "components/nacl/common/buildflags.h"
 #include "content/public/browser/browser_main_runner.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
@@ -25,6 +27,7 @@
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_devtools_manager_delegate.h"
 #include "extensions/browser/api/web_request/web_request_api.h"
+#include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_message_filter.h"
 #include "extensions/browser/extension_navigation_throttle.h"
 #include "extensions/browser/extension_navigation_ui_data.h"
@@ -43,6 +46,8 @@
 #include "extensions/shell/browser/shell_navigation_ui_data.h"
 #include "extensions/shell/browser/shell_speech_recognition_manager_delegate.h"
 #include "extensions/shell/common/version.h"  // Generated file.
+#include "services/metrics/public/cpp/ukm_source_id.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_NACL)
@@ -215,9 +220,18 @@ void ShellContentBrowserClient::GetAdditionalAllowedSchemesForFileSystem(
   additional_allowed_schemes->push_back(kExtensionScheme);
 }
 
-content::DevToolsManagerDelegate*
-ShellContentBrowserClient::GetDevToolsManagerDelegate() {
-  return new content::ShellDevToolsManagerDelegate(GetBrowserContext());
+std::unique_ptr<content::DevToolsManagerDelegate>
+ShellContentBrowserClient::CreateDevToolsManagerDelegate() {
+  return std::make_unique<content::ShellDevToolsManagerDelegate>(
+      GetBrowserContext());
+}
+
+void ShellContentBrowserClient::ExposeInterfacesToRenderer(
+    service_manager::BinderRegistry* registry,
+    blink::AssociatedInterfaceRegistry* associated_registry,
+    content::RenderProcessHost* render_process_host) {
+  associated_registry->AddInterface(base::BindRepeating(
+      &EventRouter::BindForRenderer, render_process_host->GetID()));
 }
 
 std::vector<std::unique_ptr<content::NavigationThrottle>>
@@ -237,10 +251,8 @@ ShellContentBrowserClient::GetNavigationUIData(
 
 void ShellContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
     int frame_tree_node_id,
-    base::UkmSourceId ukm_source_id,
-    NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
+    ukm::SourceIdObj ukm_source_id,
     NonNetworkURLLoaderFactoryMap* factories) {
-  DCHECK(uniquely_owned_factories);
   DCHECK(factories);
 
   content::WebContents* web_contents =
@@ -281,9 +293,7 @@ void ShellContentBrowserClient::
 void ShellContentBrowserClient::RegisterNonNetworkSubresourceURLLoaderFactories(
     int render_process_id,
     int render_frame_id,
-    NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
     NonNetworkURLLoaderFactoryMap* factories) {
-  DCHECK(uniquely_owned_factories);
   DCHECK(factories);
 
   factories->emplace(extensions::kExtensionScheme,
@@ -298,7 +308,7 @@ bool ShellContentBrowserClient::WillCreateURLLoaderFactory(
     URLLoaderFactoryType type,
     const url::Origin& request_initiator,
     base::Optional<int64_t> navigation_id,
-    base::UkmSourceId ukm_source_id,
+    ukm::SourceIdObj ukm_source_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
@@ -320,6 +330,7 @@ bool ShellContentBrowserClient::HandleExternalProtocol(
     const GURL& url,
     content::WebContents::OnceGetter web_contents_getter,
     int child_id,
+    int frame_tree_node_id,
     content::NavigationUIData* navigation_data,
     bool is_main_frame,
     ui::PageTransition page_transition,

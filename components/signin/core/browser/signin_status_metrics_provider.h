@@ -12,7 +12,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_multi_source_observation.h"
 #include "build/build_config.h"
 #include "components/signin/core/browser/signin_status_metrics_provider_base.h"
 #include "components/signin/core/browser/signin_status_metrics_provider_delegate.h"
@@ -43,9 +43,6 @@ class SigninStatusMetricsProvider : public SigninStatusMetricsProviderBase,
   // Update the sign-in status when a IdentityManager is created.
   void OnIdentityManagerCreated(signin::IdentityManager* identity_manager);
 
-  // Update the sign-in status when a IdentityManager is shut down.
-  void OnIdentityManagerShutdown(signin::IdentityManager* identity_manager);
-
   // Updates the initial sign-in status. For testing purpose only.
   void UpdateInitialSigninStatusForTesting(size_t total_count,
                                            size_t signed_in_count);
@@ -70,8 +67,10 @@ class SigninStatusMetricsProvider : public SigninStatusMetricsProviderBase,
       bool is_test);
 
   // IdentityManager::Observer:
-  void OnPrimaryAccountSet(const CoreAccountInfo& account_info) override;
-  void OnPrimaryAccountCleared(const CoreAccountInfo& account_info) override;
+  void OnPrimaryAccountChanged(
+      const signin::PrimaryAccountChangeEvent& event) override;
+  void OnIdentityManagerShutdown(
+      signin::IdentityManager* identity_manager) override;
 
   // Obtain sign-in status and add observers.
   void Initialize();
@@ -90,8 +89,9 @@ class SigninStatusMetricsProvider : public SigninStatusMetricsProviderBase,
 
   // Used to track the IdentityManagers that this instance is observing so that
   // this instance can be removed as an observer on its destruction.
-  ScopedObserver<signin::IdentityManager, signin::IdentityManager::Observer>
-      scoped_observer_;
+  base::ScopedMultiSourceObservation<signin::IdentityManager,
+                                     signin::IdentityManager::Observer>
+      scoped_observations_{this};
 
   // Whether the instance is for testing or not.
   bool is_test_;

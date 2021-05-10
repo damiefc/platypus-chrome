@@ -20,12 +20,12 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_data.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_service_factory.h"
 #include "chrome/browser/ui/search/ntp_user_data_logger.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/new_tab_page_resources.h"
+#include "components/search/ntp_features.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/url_util.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
@@ -71,7 +71,7 @@ UntrustedSource::UntrustedSource(Profile* profile)
   // |one_google_bar_service_| is null in incognito, or when the feature is
   // disabled.
   if (one_google_bar_service_) {
-    one_google_bar_service_observer_.Add(one_google_bar_service_);
+    one_google_bar_service_observation_.Observe(one_google_bar_service_);
   }
 }
 
@@ -117,23 +117,20 @@ void UntrustedSource::StartDataRequest(
         one_google_bar_service_->SetAdditionalQueryParams(query_params);
     one_google_bar_callbacks_.push_back(std::move(callback));
     if (one_google_bar_service_->one_google_bar_data().has_value() &&
-        !wait_for_refresh) {
+        !wait_for_refresh &&
+        base::FeatureList::IsEnabled(ntp_features::kCacheOneGoogleBar)) {
       OnOneGoogleBarDataUpdated();
     }
-    one_google_bar_load_start_time_ = base::TimeTicks::Now();
-    one_google_bar_service_->Refresh();
+    if (one_google_bar_callbacks_.size() == 1) {
+      one_google_bar_load_start_time_ = base::TimeTicks::Now();
+      one_google_bar_service_->Refresh();
+    }
     return;
   }
   if (path == "one_google_bar.js") {
     ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
     std::move(callback).Run(bundle.LoadDataResourceBytes(
         IDR_NEW_TAB_PAGE_UNTRUSTED_ONE_GOOGLE_BAR_JS));
-    return;
-  }
-  if (path == "one_google_bar_api.js") {
-    ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-    std::move(callback).Run(
-        bundle.LoadDataResourceBytes(IDR_NEW_TAB_PAGE_ONE_GOOGLE_BAR_API_JS));
     return;
   }
   if (path == "image" && url_param.is_valid() &&
@@ -164,7 +161,7 @@ void UntrustedSource::StartDataRequest(
           url::DecodeURLMode::kUTF8OrIsomorphic, &output);
       params.insert(
           {url.query().substr(key.begin, key.len),
-           base::UTF16ToUTF8(base::string16(output.data(), output.length()))});
+           base::UTF16ToUTF8(std::u16string(output.data(), output.length()))});
     }
     // Extract desired values.
     ServeBackgroundImage(
@@ -231,7 +228,7 @@ bool UntrustedSource::ShouldServiceRequest(
   return path == "one-google-bar" || path == "one_google_bar.js" ||
          path == "image" || path == "background_image" ||
          path == "custom_background_image" || path == "background_image.js" ||
-         path == "background.jpg" || path == "one_google_bar_api.js";
+         path == "background.jpg";
 }
 
 void UntrustedSource::OnOneGoogleBarDataUpdated() {
@@ -249,10 +246,6 @@ void UntrustedSource::OnOneGoogleBarDataUpdated() {
   if (data.has_value()) {
     ui::TemplateReplacements replacements;
     replacements["textdirection"] = base::i18n::IsRTL() ? "rtl" : "ltr";
-    replacements["modalOverlays"] =
-        base::FeatureList::IsEnabled(ntp_features::kOneGoogleBarModalOverlays)
-            ? "modal-overlays"
-            : "";
     replacements["barHtml"] = data->bar_html;
     replacements["inHeadScript"] = data->in_head_script;
     replacements["inHeadStyle"] = data->in_head_style;
@@ -262,14 +255,15 @@ void UntrustedSource::OnOneGoogleBarDataUpdated() {
     html = FormatTemplate(IDR_NEW_TAB_PAGE_UNTRUSTED_ONE_GOOGLE_BAR_HTML,
                           replacements);
   }
+  auto html_ref_counted = base::RefCountedString::TakeString(&html);
   for (auto& callback : one_google_bar_callbacks_) {
-    std::move(callback).Run(base::RefCountedString::TakeString(&html));
+    std::move(callback).Run(html_ref_counted);
   }
   one_google_bar_callbacks_.clear();
 }
 
 void UntrustedSource::OnOneGoogleBarServiceShuttingDown() {
-  one_google_bar_service_observer_.RemoveAll();
+  one_google_bar_service_observation_.Reset();
   one_google_bar_service_ = nullptr;
 }
 

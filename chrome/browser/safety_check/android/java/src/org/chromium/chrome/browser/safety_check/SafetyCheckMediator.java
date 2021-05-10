@@ -15,12 +15,11 @@ import androidx.annotation.IntDef;
 import androidx.annotation.VisibleForTesting;
 import androidx.preference.Preference;
 
-import org.chromium.base.BuildConfig;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.password_check.CompromisedCredential;
 import org.chromium.chrome.browser.password_check.PasswordCheck;
 import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
@@ -31,13 +30,12 @@ import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.safe_browsing.metrics.SettingsAccessPoint;
-import org.chromium.chrome.browser.safe_browsing.settings.SecuritySettingsFragment;
-import org.chromium.chrome.browser.safety_check.SafetyCheckBridge.SafetyCheckCommonObserver;
+import org.chromium.chrome.browser.safe_browsing.settings.SafeBrowsingSettingsFragment;
 import org.chromium.chrome.browser.safety_check.SafetyCheckProperties.PasswordsState;
 import org.chromium.chrome.browser.safety_check.SafetyCheckProperties.SafeBrowsingState;
 import org.chromium.chrome.browser.safety_check.SafetyCheckProperties.UpdatesState;
-import org.chromium.chrome.browser.settings.SettingsLauncher;
-import org.chromium.chrome.browser.signin.SigninActivityLauncher;
+import org.chromium.chrome.browser.signin.ui.SyncConsentActivityLauncher;
+import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -46,19 +44,18 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
 
-class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonObserver {
+class SafetyCheckMediator implements PasswordCheck.Observer {
     /**
      * The minimal amount of time to show the checking state.
-     * This is different from the standard guideline of 500ms because of the UX guidance for
-     * Safety check on mobile and to be consistent with the Desktop counterpart (also 1s there).
+     * This needs to be non-zero to make it seem like the browser is doing work. This is different
+     * from the standard guideline of 500ms because of the UX guidance for Safety check on mobile
+     * and to be consistent with the Desktop counterpart (also 1s there).
      */
     private static final int CHECKING_MIN_DURATION_MS = 1000;
     /** Time after which the null-states will be shown: 10 minutes. */
     private static final long RESET_TO_NULL_AFTER_MS = 10 * DateUtils.MINUTE_IN_MILLIS;
     private static final String SAFETY_CHECK_INTERACTIONS = "Settings.SafetyCheck.Interactions";
 
-    /** Bridge to the C++ side for the Safe Browsing and passwords checks. */
-    private SafetyCheckBridge mSafetyCheckBridge;
     /** Model representing the current state of the checks. */
     private PropertyModel mModel;
     /** Client to interact with Omaha for the updates check. */
@@ -66,7 +63,7 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
     /** An instance of SettingsLauncher to start other activities. */
     private SettingsLauncher mSettingsLauncher;
     /** Client to launch a SigninActivity. */
-    private SigninActivityLauncher mSigninLauncher;
+    private SyncConsentActivityLauncher mSigninLauncher;
     /** Async logic for password check. */
     private boolean mShowSafePasswordState;
     private boolean mPasswordsLoaded;
@@ -130,17 +127,16 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
      * because a {@link WeakReference} needs to be passed (the check is asynchronous).
      */
     private final Callback<Integer> mUpdatesCheckCallback = (status) -> {
-        mRunnableUpdates = () -> {
+        if (mHandler == null) return;
+
+        setRunnableUpdates(() -> {
             if (mModel != null) {
                 RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.UpdatesResult",
-                        SafetyCheckProperties.updatesStateToNative(status), UpdateStatus.MAX_VALUE);
+                        SafetyCheckProperties.updatesStateToNative(status),
+                        UpdateStatus.MAX_VALUE + 1);
                 mModel.set(SafetyCheckProperties.UPDATES_STATE, status);
             }
-        };
-        if (mHandler != null) {
-            // Show the checking state for at least 1 second for a smoother UX.
-            mHandler.postDelayed(mRunnableUpdates, getModelUpdateDelay());
-        }
+        });
     };
 
     /**
@@ -152,21 +148,18 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
      * @param signinLauncher An instance implementing {@SigninActivityLauncher}.
      */
     public SafetyCheckMediator(PropertyModel model, SafetyCheckUpdatesDelegate client,
-            SettingsLauncher settingsLauncher, SigninActivityLauncher signinLauncher) {
-        this(model, client, settingsLauncher, signinLauncher, null, new Handler());
-        // Have to initialize this after the constructor call, since a "this" instance is needed.
-        mSafetyCheckBridge = new SafetyCheckBridge(SafetyCheckMediator.this);
+            SettingsLauncher settingsLauncher, SyncConsentActivityLauncher signinLauncher) {
+        this(model, client, settingsLauncher, signinLauncher, new Handler());
     }
 
     @VisibleForTesting
     SafetyCheckMediator(PropertyModel model, SafetyCheckUpdatesDelegate client,
-            SettingsLauncher settingsLauncher, SigninActivityLauncher signinLauncher,
-            SafetyCheckBridge bridge, Handler handler) {
+            SettingsLauncher settingsLauncher, SyncConsentActivityLauncher signinLauncher,
+            Handler handler) {
         mModel = model;
         mUpdatesClient = client;
         mSettingsLauncher = settingsLauncher;
         mSigninLauncher = signinLauncher;
-        mSafetyCheckBridge = bridge;
         mHandler = handler;
         mPreferenceManager = SharedPreferencesManager.getInstance();
         // Set the listener for clicking the updates element.
@@ -188,26 +181,14 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
                     RecordUserAction.record("Settings.SafetyCheck.ManageSafeBrowsing");
                     RecordHistogram.recordEnumeratedHistogram(SAFETY_CHECK_INTERACTIONS,
                             SafetyCheckInteractions.SAFE_BROWSING_MANAGE,
-                            SafetyCheckInteractions.MAX_VALUE);
+                            SafetyCheckInteractions.MAX_VALUE + 1);
                     String safeBrowsingSettingsClassName;
-                    if (ChromeFeatureList.isEnabled(
-                                ChromeFeatureList.SAFE_BROWSING_SECURITY_SECTION_UI)) {
-                        // Open the Security settings since the flag for them is enabled.
-                        safeBrowsingSettingsClassName = SecuritySettingsFragment.class.getName();
-                        p.getContext().startActivity(settingsLauncher.createSettingsActivityIntent(
-                                p.getContext(), safeBrowsingSettingsClassName,
-                                SecuritySettingsFragment.createArguments(
-                                        SettingsAccessPoint.SAFETY_CHECK)));
-                    } else {
-                        // Open the Sync and Services settings.
-                        // TODO(crbug.com/1070620): replace the hardcoded class name with an import
-                        // and ".class.getName()" once SyncAndServicesSettings is moved out of
-                        // //chrome/android.
-                        safeBrowsingSettingsClassName =
-                                "org.chromium.chrome.browser.sync.settings.SyncAndServicesSettings";
-                        p.getContext().startActivity(settingsLauncher.createSettingsActivityIntent(
-                                p.getContext(), safeBrowsingSettingsClassName));
-                    }
+                    // Open the Safe Browsing settings.
+                    safeBrowsingSettingsClassName = SafeBrowsingSettingsFragment.class.getName();
+                    p.getContext().startActivity(settingsLauncher.createSettingsActivityIntent(
+                            p.getContext(), safeBrowsingSettingsClassName,
+                            SafeBrowsingSettingsFragment.createArguments(
+                                    SettingsAccessPoint.SAFETY_CHECK)));
                     return true;
                 });
         // Set the listener for clicking the passwords element.
@@ -234,7 +215,7 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
             // Rerun the updates and Safe Browsing checks.
             mModel.set(SafetyCheckProperties.SAFE_BROWSING_STATE, SafeBrowsingState.CHECKING);
             mModel.set(SafetyCheckProperties.UPDATES_STATE, UpdatesState.CHECKING);
-            mSafetyCheckBridge.checkSafeBrowsing();
+            checkSafeBrowsing();
             mUpdatesClient.checkForUpdates(new WeakReference(mUpdatesCheckCallback));
         } else {
             mShowSafePasswordState = false;
@@ -248,12 +229,15 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         mPasswordsLoaded = false;
         mLeaksLoaded = false;
         // If the user is not signed in, immediately set the state and do not block on disk loads.
-        if (!mSafetyCheckBridge.userSignedIn()) {
+        if (!SafetyCheckBridge.userSignedIn()) {
             mLoadStage = PasswordCheckLoadStage.IDLE;
             mModel.set(SafetyCheckProperties.PASSWORDS_STATE, PasswordsState.SIGNED_OUT);
+            // Record the value in UMA.
+            RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.PasswordsResult",
+                    PasswordsStatus.SIGNED_OUT, PasswordsStatus.MAX_VALUE + 1);
             updatePasswordElementClickDestination();
         }
-        PasswordCheckFactory.getOrCreate().addObserver(this, true);
+        PasswordCheckFactory.getOrCreate(mSettingsLauncher).addObserver(this, true);
         if (mPasswordsLoaded && mLeaksLoaded) {
             determinePasswordStateOnLoadComplete();
         }
@@ -266,6 +250,9 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         cancelCallbacks();
         // Record the start action in UMA.
         RecordUserAction.record("Settings.SafetyCheck.Start");
+        // Record the start interaction in the histogram.
+        RecordHistogram.recordEnumeratedHistogram(SAFETY_CHECK_INTERACTIONS,
+                SafetyCheckInteractions.STARTED, SafetyCheckInteractions.MAX_VALUE + 1);
         // Record the start time for tracking 1 second checking delay in the UI.
         mCheckStartTime = SystemClock.elapsedRealtime();
         // Record the absolute start time for showing when the last Safety check was performed.
@@ -280,34 +267,14 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         mModel.set(SafetyCheckProperties.SAFE_BROWSING_STATE, SafeBrowsingState.CHECKING);
         mModel.set(SafetyCheckProperties.UPDATES_STATE, UpdatesState.CHECKING);
         // Start all the checks.
-        mSafetyCheckBridge.checkSafeBrowsing();
+        checkSafeBrowsing();
         // Start observing the password check events (including data loads).
-        PasswordCheckFactory.getOrCreate().addObserver(this, false);
+        PasswordCheckFactory.getOrCreate(mSettingsLauncher).addObserver(this, false);
         // This indicates that the results of the initial data load should not be applied even if
         // they become available during the check.
         mLoadStage = PasswordCheckLoadStage.IDLE;
-        PasswordCheckFactory.getOrCreate().startCheck();
+        PasswordCheckFactory.getOrCreate(mSettingsLauncher).startCheck();
         mUpdatesClient.checkForUpdates(new WeakReference(mUpdatesCheckCallback));
-    }
-
-    /**
-     * Gets invoked once the Safe Browsing check is completed.
-     *
-     * @param status SafetyCheck::SafeBrowsingStatus enum value representing the Safe Browsing state
-     *     (see //components/safety_check/safety_check.h).
-     */
-    @Override
-    public void onSafeBrowsingCheckResult(@SafeBrowsingStatus int status) {
-        mRunnableSafeBrowsing = () -> {
-            if (mModel != null) {
-                RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.SafeBrowsingResult",
-                        status, SafeBrowsingStatus.MAX_VALUE);
-                mModel.set(SafetyCheckProperties.SAFE_BROWSING_STATE,
-                        SafetyCheckProperties.safeBrowsingStateFromNative(status));
-            }
-        };
-        // Show the checking state for at least 1 second for a smoother UX.
-        mHandler.postDelayed(mRunnableSafeBrowsing, getModelUpdateDelay());
     }
 
     /**
@@ -345,20 +312,18 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         }
         // Handle error state.
         if (status != PasswordCheckUIStatus.IDLE) {
-            mRunnablePasswords = () -> {
+            setRunnablePasswords(() -> {
                 if (mModel != null) {
                     @SafetyCheckProperties.PasswordsState
                     int state = SafetyCheckProperties.passwordsStatefromErrorState(status);
                     RecordHistogram.recordEnumeratedHistogram(
                             "Settings.SafetyCheck.PasswordsResult",
                             SafetyCheckProperties.passwordsStateToNative(state),
-                            PasswordsStatus.MAX_VALUE);
+                            PasswordsStatus.MAX_VALUE + 1);
                     mModel.set(SafetyCheckProperties.PASSWORDS_STATE, state);
                     updatePasswordElementClickDestination();
                 }
-            };
-            // Show the checking state for at least 1 second for a smoother UX.
-            mHandler.postDelayed(mRunnablePasswords, getModelUpdateDelay());
+            });
             return;
         }
         // Hand off the completed state to the method for handling loaded passwords data.
@@ -384,8 +349,6 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
             passwordCheck.stopCheck();
             passwordCheck.removeObserver(this);
         }
-        mSafetyCheckBridge.destroy();
-        mSafetyCheckBridge = null;
         mUpdatesClient = null;
         mModel = null;
         mHandler = null;
@@ -393,18 +356,64 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
 
     /** Cancels any delayed show callbacks. */
     private void cancelCallbacks() {
+        setRunnablePasswords(null);
+        setRunnableSafeBrowsing(null);
+        setRunnableUpdates(null);
+    }
+
+    /**
+     * Sets {@link mRunnablePasswords} and, if non-null, runs it with a delay.
+     * Will cancel any outstanding callbacks set by previous calls to this method.
+     */
+    private void setRunnablePasswords(Runnable r) {
         if (mRunnablePasswords != null) {
             mHandler.removeCallbacks(mRunnablePasswords);
-            mRunnablePasswords = null;
         }
+        mRunnablePasswords = r;
+        if (mRunnablePasswords != null) {
+            mHandler.postDelayed(mRunnablePasswords, getModelUpdateDelay());
+        }
+    }
+
+    /**
+     * Sets {@link mRunnableSafeBrowsing} and, if non-null, runs it with a delay.
+     * Will cancel any outstanding callbacks set by previous calls to this method.
+     */
+    private void setRunnableSafeBrowsing(Runnable r) {
         if (mRunnableSafeBrowsing != null) {
             mHandler.removeCallbacks(mRunnableSafeBrowsing);
-            mRunnableSafeBrowsing = null;
         }
+        mRunnableSafeBrowsing = r;
+        if (mRunnableSafeBrowsing != null) {
+            mHandler.postDelayed(mRunnableSafeBrowsing, getModelUpdateDelay());
+        }
+    }
+
+    /**
+     * Sets {@link mRunnableUpdates} and, if non-null, runs it with a delay.
+     * Will cancel any outstanding callbacks set by previous calls to this method.
+     */
+    private void setRunnableUpdates(Runnable r) {
         if (mRunnableUpdates != null) {
             mHandler.removeCallbacks(mRunnableUpdates);
-            mRunnableUpdates = null;
         }
+        mRunnableUpdates = r;
+        if (mRunnableUpdates != null) {
+            mHandler.postDelayed(mRunnableUpdates, getModelUpdateDelay());
+        }
+    }
+
+    private void checkSafeBrowsing() {
+        setRunnableSafeBrowsing(() -> {
+            if (mModel != null) {
+                @SafeBrowsingStatus
+                int status = SafetyCheckBridge.checkSafeBrowsing();
+                RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.SafeBrowsingResult",
+                        status, SafeBrowsingStatus.MAX_VALUE + 1);
+                mModel.set(SafetyCheckProperties.SAFE_BROWSING_STATE,
+                        SafetyCheckProperties.safeBrowsingStateFromNative(status));
+            }
+        });
     }
 
     /** Called when all data is loaded. Determines if it needs to update the model. */
@@ -413,34 +422,43 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         if (mLoadStage == PasswordCheckLoadStage.IDLE) return;
         // If something is blocked, that means the passwords check is being observed. At this point,
         // no further events need to be observed.
-        PasswordCheckFactory.getOrCreate().removeObserver(this);
+        PasswordCheckFactory.getOrCreate(mSettingsLauncher).removeObserver(this);
         // Only delay updating the UI on the user-triggered check and not initially.
         if (mLoadStage == PasswordCheckLoadStage.INITIAL_WAIT_FOR_LOAD) {
             updatePasswordsStateOnDataLoaded();
         } else {
-            // Show the checking state for at least 1 second for a smoother UX.
-            mRunnablePasswords = this::updatePasswordsStateOnDataLoaded;
-            mHandler.postDelayed(mRunnablePasswords, getModelUpdateDelay());
+            setRunnablePasswords(this::updatePasswordsStateOnDataLoaded);
         }
     }
 
     /** Applies the results of the password check to the model. Only called when data is loaded. */
     private void updatePasswordsStateOnDataLoaded() {
         // Always display the compromised state.
-        int compromised = PasswordCheckFactory.getOrCreate().getCompromisedCredentialsCount();
+        int compromised = PasswordCheckFactory.getOrCreate(mSettingsLauncher)
+                                  .getCompromisedCredentialsCount();
         if (compromised != 0) {
             mModel.set(SafetyCheckProperties.COMPROMISED_PASSWORDS, compromised);
             mModel.set(SafetyCheckProperties.PASSWORDS_STATE, PasswordsState.COMPROMISED_EXIST);
+            // Record the value in UMA.
+            RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.PasswordsResult",
+                    PasswordsStatus.COMPROMISED_EXIST, PasswordsStatus.MAX_VALUE + 1);
         } else if (mLoadStage == PasswordCheckLoadStage.INITIAL_WAIT_FOR_LOAD
                 && !mShowSafePasswordState) {
             // Cannot show the safe state at the initial load if last run is older than 10 mins.
             mModel.set(SafetyCheckProperties.PASSWORDS_STATE, PasswordsState.UNCHECKED);
-        } else if (PasswordCheckFactory.getOrCreate().getSavedPasswordsCount() == 0) {
+        } else if (PasswordCheckFactory.getOrCreate(mSettingsLauncher).getSavedPasswordsCount()
+                == 0) {
             // Can show safe state: display no passwords.
             mModel.set(SafetyCheckProperties.PASSWORDS_STATE, PasswordsState.NO_PASSWORDS);
+            // Record the value in UMA.
+            RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.PasswordsResult",
+                    PasswordsStatus.NO_PASSWORDS, PasswordsStatus.MAX_VALUE + 1);
         } else {
             // Can show safe state: display no compromises.
             mModel.set(SafetyCheckProperties.PASSWORDS_STATE, PasswordsState.SAFE);
+            // Record the value in UMA.
+            RecordHistogram.recordEnumeratedHistogram("Settings.SafetyCheck.PasswordsResult",
+                    PasswordsStatus.SAFE, PasswordsStatus.MAX_VALUE + 1);
         }
         // Nothing is blocked on this any longer.
         mLoadStage = PasswordCheckLoadStage.IDLE;
@@ -463,7 +481,8 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         if (state == PasswordsState.SIGNED_OUT) {
             listener = (p) -> {
                 // Open the sign in page.
-                mSigninLauncher.launchActivity(p.getContext(), SigninAccessPoint.SAFETY_CHECK);
+                mSigninLauncher.launchActivityIfAllowed(
+                        p.getContext(), SigninAccessPoint.SAFETY_CHECK);
                 return true;
             };
         } else if (state == PasswordsState.COMPROMISED_EXIST || state == PasswordsState.SAFE) {
@@ -472,10 +491,10 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
                 RecordUserAction.record("Settings.SafetyCheck.ManagePasswords");
                 RecordHistogram.recordEnumeratedHistogram(SAFETY_CHECK_INTERACTIONS,
                         SafetyCheckInteractions.PASSWORDS_MANAGE,
-                        SafetyCheckInteractions.MAX_VALUE);
+                        SafetyCheckInteractions.MAX_VALUE + 1);
                 // Open the Password Check UI.
-                PasswordCheckFactory.getOrCreate().showUi(
-                        p.getContext(), PasswordCheckReferrer.SAFETY_CHECK);
+                PasswordCheckFactory.getOrCreate(mSettingsLauncher)
+                        .showUi(p.getContext(), PasswordCheckReferrer.SAFETY_CHECK);
                 return true;
             };
         } else {

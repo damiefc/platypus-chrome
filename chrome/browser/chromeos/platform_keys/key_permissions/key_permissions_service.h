@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/optional.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "components/keyed_service/core/keyed_service.h"
 
@@ -19,13 +20,17 @@ namespace platform_keys {
 using CanUserGrantPermissionForKeyCallback =
     base::OnceCallback<void(bool allowed)>;
 
-using IsCorporateKeyCallback = base::OnceCallback<void(bool corporate)>;
+// If an error occurs, |corporate| will be a nullopt.
+using IsCorporateKeyCallback =
+    base::OnceCallback<void(base::Optional<bool> corporate, Status status)>;
 
 using SetCorporateKeyCallback = base::OnceCallback<void(Status status)>;
 
 // ** KeyPermissionService Responsibility **
 // A KeyPermissionService instance is responsible for answering queries
 // regarding platform keys permissions with respect to a specific profile.
+// Note: KeyPermissionsService instances can be used for sign-in profile to
+// answer queries for system-wide keys.
 //
 // ** Corporate Usage **
 // As not every key is meant for corporate usage but probably for the user's
@@ -46,17 +51,17 @@ class KeyPermissionsService : public KeyedService {
   // to extensions. |callback| will be invoked with the result.
   virtual void CanUserGrantPermissionForKey(
       const std::string& public_key_spki_der,
-      CanUserGrantPermissionForKeyCallback callback) const = 0;
+      CanUserGrantPermissionForKeyCallback callback) = 0;
 
   // Determines if the key identified by |public_key_spki_der|is marked for
   // corporate usage. |callback| will be invoked with the result.
   virtual void IsCorporateKey(const std::string& public_key_spki_der,
-                              IsCorporateKeyCallback callback) const = 0;
+                              IsCorporateKeyCallback callback) = 0;
 
   // Marks the key identified by |public_key_spki_der| as corporate usage.
   // |callback| will be invoked with the resulting status.
   virtual void SetCorporateKey(const std::string& public_key_spki_der,
-                               SetCorporateKeyCallback callback) const = 0;
+                               SetCorporateKeyCallback callback) = 0;
 };
 
 }  // namespace platform_keys

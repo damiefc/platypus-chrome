@@ -11,11 +11,10 @@
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/chromeos/crostini/crostini_export_import.h"
-#include "chrome/browser/chromeos/crostini/crostini_export_import_status_tracker.h"
-#include "chrome/browser/chromeos/crostini/crostini_manager.h"
-#include "chrome/browser/chromeos/crostini/crostini_manager_factory.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/crostini/crostini_export_import.h"
+#include "chrome/browser/ash/crostini/crostini_export_import_status_tracker.h"
+#include "chrome/browser/ash/crostini/crostini_manager.h"
+#include "chrome/browser/ash/crostini/crostini_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
@@ -69,7 +68,6 @@ CrostiniUpgrader* CrostiniUpgrader::GetForProfile(Profile* profile) {
 CrostiniUpgrader::CrostiniUpgrader(Profile* profile)
     : profile_(profile),
       container_id_("", ""),
-      pmc_observer_(this),
       backup_path_(base::nullopt) {
   CrostiniManager::GetForProfile(profile_)->AddUpgradeContainerProgressObserver(
       this);
@@ -136,7 +134,7 @@ void CrostiniUpgrader::StatusTracker::SetStatusCancelledUI() {
 
 void CrostiniUpgrader::StatusTracker::SetStatusFailedWithMessageUI(
     Status status,
-    const base::string16& message) {
+    const std::u16string& message) {
   CrostiniResult result = CrostiniResult::CONTAINER_EXPORT_IMPORT_FAILED;
   if (status == Status::FAILED_INSUFFICIENT_SPACE) {
     result = CrostiniResult::CONTAINER_EXPORT_IMPORT_FAILED_SPACE;
@@ -201,7 +199,7 @@ void CrostiniUpgrader::OnBackupProgress(int progress_percent) {
 
 void CrostiniUpgrader::StartPrechecks() {
   auto* pmc = chromeos::PowerManagerClient::Get();
-  if (pmc_observer_.IsObserving(pmc)) {
+  if (pmc_observation_.IsObservingSource(pmc)) {
     // This could happen if two StartPrechecks were run at the same time. If it
     // does, drop the second call.
     return;
@@ -212,7 +210,7 @@ void CrostiniUpgrader::StartPrechecks() {
                            base::BindOnce(&CrostiniUpgrader::DoPrechecks,
                                           weak_ptr_factory_.GetWeakPtr()));
 
-  pmc_observer_.Add(pmc);
+  pmc_observation_.Observe(pmc);
   pmc->RequestStatusUpdate();
 
   base::ThreadPool::PostTaskAndReplyWithResult(
@@ -236,7 +234,8 @@ void CrostiniUpgrader::PowerChanged(
                            power_manager::PowerSupplyProperties::DISCONNECTED;
 
   auto* pmc = chromeos::PowerManagerClient::Get();
-  pmc_observer_.Remove(pmc);
+  DCHECK(pmc_observation_.IsObservingSource(pmc));
+  pmc_observation_.Reset();
 
   prechecks_callback_.Run();
 }

@@ -21,8 +21,7 @@ namespace concierge = vm_tools::concierge;
 namespace {
 
 // TODO(nverne): revert to TIMEOUT_USE_DEFAULT when StartVm no longer requires
-// unnecessary long running crypto calculations _and_ b/143499148 is fixed.
-// TODO(yusukes): Fix b/143499148.
+// unnecessary long running crypto calculations.
 constexpr int kConciergeDBusTimeoutMs = 160 * 1000;
 
 }  // namespace
@@ -239,6 +238,13 @@ class ConciergeClientImpl : public ConciergeClient {
     CallMethod(concierge::kSetVmIdMethod, request, std::move(callback));
   }
 
+  void ReclaimVmMemory(
+      const vm_tools::concierge::ReclaimVmMemoryRequest& request,
+      DBusMethodCallback<vm_tools::concierge::ReclaimVmMemoryResponse> callback)
+      override {
+    CallMethod(concierge::kReclaimVmMemoryMethod, request, std::move(callback));
+  }
+
  protected:
   void Init(dbus::Bus* bus) override {
     concierge_proxy_ = bus->GetObjectProxy(
@@ -428,13 +434,13 @@ class ConciergeClientImpl : public ConciergeClient {
   dbus::ObjectProxy* concierge_proxy_ = nullptr;
 
   base::ObserverList<Observer> observer_list_{
-      base::ObserverListPolicy::EXISTING_ONLY};
+      ConciergeClient::kObserverListPolicy};
   base::ObserverList<VmObserver>::Unchecked vm_observer_list_{
-      base::ObserverListPolicy::EXISTING_ONLY};
+      ConciergeClient::kObserverListPolicy};
   base::ObserverList<ContainerObserver>::Unchecked container_observer_list_{
-      base::ObserverListPolicy::EXISTING_ONLY};
+      ConciergeClient::kObserverListPolicy};
   base::ObserverList<DiskImageObserver>::Unchecked disk_image_observer_list_{
-      base::ObserverListPolicy::EXISTING_ONLY};
+      ConciergeClient::kObserverListPolicy};
 
   bool is_vm_started_signal_connected_ = false;
   bool is_vm_stopped_signal_connected_ = false;

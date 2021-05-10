@@ -10,7 +10,7 @@
 
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
-#include "base/metrics/ukm_source_id.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 
 namespace base {
@@ -29,8 +29,8 @@ class HttpResponseHeaders;
 namespace extensions {
 
 using ExtensionProtocolTestHandler =
-    base::Callback<void(base::FilePath* directory_path,
-                        base::FilePath* relative_path)>;
+    base::RepeatingCallback<void(base::FilePath* directory_path,
+                                 base::FilePath* relative_path)>;
 
 // Builds HTTP headers for an extension request. Hashes the time to avoid
 // exposing the exact user installation time of the extension.
@@ -49,7 +49,7 @@ void SetExtensionProtocolTestHandler(ExtensionProtocolTestHandler* handler);
 mojo::PendingRemote<network::mojom::URLLoaderFactory>
 CreateExtensionNavigationURLLoaderFactory(
     content::BrowserContext* browser_context,
-    base::UkmSourceId ukm_source_id,
+    ukm::SourceIdObj ukm_source_id,
     bool is_web_view_request);
 
 // Creates a new network::mojom::URLLoaderFactory implementation suitable for
@@ -76,6 +76,8 @@ CreateExtensionServiceWorkerScriptURLLoaderFactory(
 // MSG_ROUTING_NONE.
 mojo::PendingRemote<network::mojom::URLLoaderFactory>
 CreateExtensionURLLoaderFactory(int render_process_id, int render_frame_id);
+
+void EnsureExtensionURLLoaderFactoryShutdownNotifierFactoryBuilt();
 
 }  // namespace extensions
 

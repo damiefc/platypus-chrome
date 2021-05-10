@@ -10,33 +10,19 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
 #include "base/optional.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace web_app {
-
-// Icon bitmaps for each IconPurpose.
-struct IconBitmaps {
-  IconBitmaps();
-  ~IconBitmaps();
-  IconBitmaps(const IconBitmaps&);
-  IconBitmaps(IconBitmaps&&) noexcept;
-  void SetBitmapsForPurpose(IconPurpose purpose,
-                            std::map<SquareSizePx, SkBitmap> bitmaps);
-  bool empty();
-
-  std::map<SquareSizePx, SkBitmap> any;
-  std::map<SquareSizePx, SkBitmap> maskable;
-  // TODO (crbug.com/1114638): Monochrome support.
-};
 
 // Exclusively used from the UI thread.
 class AppIconManager {
  public:
   AppIconManager() = default;
+  AppIconManager(const AppIconManager&) = delete;
+  AppIconManager& operator=(const AppIconManager&) = delete;
   virtual ~AppIconManager() = default;
 
   virtual void Start() = 0;
@@ -73,7 +59,7 @@ class AppIconManager {
                          ReadIconsCallback callback) const = 0;
 
   using ReadShortcutsMenuIconsCallback = base::OnceCallback<void(
-      ShortcutsMenuIconsBitmaps shortcuts_menu_icons_bitmaps)>;
+      ShortcutsMenuIconBitmaps shortcuts_menu_icon_bitmaps)>;
 
   // Reads bitmaps for all shortcuts menu icons for an app. Returns a vector of
   // map<SquareSizePx, SkBitmap>. The index of a map in the vector is the same
@@ -126,6 +112,8 @@ class AppIconManager {
                                      SquareSizePx min_icon_size,
                                      ReadCompressedIconCallback callback) const;
 
+  // Returns a square icon of gfx::kFaviconSize px, or an empty bitmap if not
+  // found.
   virtual SkBitmap GetFavicon(const AppId& app_id) const = 0;
 
  protected:
@@ -134,8 +122,6 @@ class AppIconManager {
       IconPurpose purpose,
       const SkBitmap& bitmap);
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(AppIconManager);
 };
 
 }  // namespace web_app

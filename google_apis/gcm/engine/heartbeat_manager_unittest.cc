@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -181,26 +181,6 @@ TEST_F(HeartbeatManagerTest, StartThenUpdateInterval) {
   EXPECT_LE(manager()->GetNextHeartbeatTime() - base::TimeTicks::Now(),
             base::TimeDelta::FromMilliseconds(kIntervalMs));
   EXPECT_NE(heartbeat, manager()->GetNextHeartbeatTime());
-}
-
-// Updating the timer used for heartbeats before starting should not start the
-// timer.
-TEST_F(HeartbeatManagerTest, UpdateTimerBeforeStart) {
-  manager()->UpdateHeartbeatTimer(
-      std::make_unique<base::RetainingOneShotTimer>());
-  EXPECT_TRUE(manager()->GetNextHeartbeatTime().is_null());
-}
-
-// Updating the timer used for heartbeats after starting should restart the
-// timer but not increase the heartbeat time by more than a millisecond.
-TEST_F(HeartbeatManagerTest, UpdateTimerAfterStart) {
-  StartManager();
-  base::TimeTicks heartbeat = manager()->GetNextHeartbeatTime();
-
-  manager()->UpdateHeartbeatTimer(
-      std::make_unique<base::RetainingOneShotTimer>());
-  EXPECT_LT(manager()->GetNextHeartbeatTime() - heartbeat,
-            base::TimeDelta::FromMilliseconds(5));
 }
 
 // Stopping the manager should reset the heartbeat timer.

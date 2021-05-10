@@ -10,11 +10,13 @@
 #include <vector>
 
 #include "base/strings/strcat.h"
+#include "chromecast/browser/extensions/cast_extension_system_factory.h"
 #include "chromecast/common/cast_redirect_manifest_handler.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_registry_factory.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
@@ -29,7 +31,6 @@ class CastExtensionURLLoader : public network::mojom::URLLoader,
  public:
   static void CreateAndStart(
       mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
-      int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& request,
@@ -41,9 +42,8 @@ class CastExtensionURLLoader : public network::mojom::URLLoader,
     // data has been sent to it.
     auto* cast_extension_url_loader = new CastExtensionURLLoader(
         std::move(loader_receiver), std::move(client));
-    cast_extension_url_loader->Start(routing_id, request_id, options,
-                                     std::move(request), traffic_annotation,
-                                     network_factory);
+    cast_extension_url_loader->Start(request_id, options, std::move(request),
+                                     traffic_annotation, network_factory);
   }
 
  private:
@@ -60,8 +60,7 @@ class CastExtensionURLLoader : public network::mojom::URLLoader,
 
   ~CastExtensionURLLoader() override = default;
 
-  void Start(int32_t routing_id,
-             int32_t request_id,
+  void Start(int32_t request_id,
              uint32_t options,
              const network::ResourceRequest& request,
              const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
@@ -69,8 +68,8 @@ class CastExtensionURLLoader : public network::mojom::URLLoader,
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
     network_factory->CreateLoaderAndStart(
-        network_loader_.BindNewPipeAndPassReceiver(), routing_id, request_id,
-        options, request, network_client_receiver_.BindNewPipeAndPassRemote(),
+        network_loader_.BindNewPipeAndPassReceiver(), request_id, options,
+        request, network_client_receiver_.BindNewPipeAndPassRemote(),
         traffic_annotation);
 
     network_client_receiver_.set_disconnect_handler(base::BindOnce(
@@ -110,6 +109,10 @@ class CastExtensionURLLoader : public network::mojom::URLLoader,
   }
 
   // network::mojom::URLLoaderClient:
+  void OnReceiveEarlyHints(network::mojom::EarlyHintsPtr early_hints) override {
+    original_client_->OnReceiveEarlyHints(std::move(early_hints));
+  }
+
   void OnReceiveResponse(network::mojom::URLResponseHeadPtr head) override {
     original_client_->OnReceiveResponse(std::move(head));
   }
@@ -174,20 +177,28 @@ CastExtensionURLLoaderFactory::CastExtensionURLLoaderFactory(
     content::BrowserContext* browser_context,
     mojo::PendingRemote<network::mojom::URLLoaderFactory> extension_factory,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver)
-    : content::NonNetworkURLLoaderFactoryBase(std::move(factory_receiver)),
+    : network::SelfDeletingURLLoaderFactory(std::move(factory_receiver)),
       extension_registry_(extensions::ExtensionRegistry::Get(browser_context)),
       extension_factory_(std::move(extension_factory)),
-      network_factory_(
-          content::BrowserContext::GetDefaultStoragePartition(browser_context)
-              ->GetURLLoaderFactoryForBrowserProcess()) {
+      network_factory_(browser_context->GetDefaultStoragePartition()
+                           ->GetURLLoaderFactoryForBrowserProcess()) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // base::Unretained is safe below, because lifetime of
+  // |browser_context_shutdown_subscription_| guarantees that
+  // OnBrowserContextDestroyed won't be called after |this| is destroyed.
+  browser_context_shutdown_subscription_ =
+      BrowserContextShutdownNotifierFactory::GetInstance()
+          ->Get(browser_context)
+          ->Subscribe(base::BindRepeating(
+              &CastExtensionURLLoaderFactory::OnBrowserContextDestroyed,
+              base::Unretained(this)));
 }
 
 CastExtensionURLLoaderFactory::~CastExtensionURLLoaderFactory() = default;
 
 void CastExtensionURLLoaderFactory::CreateLoaderAndStart(
     mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
-    int32_t routing_id,
     int32_t request_id,
     uint32_t options,
     const network::ResourceRequest& request,
@@ -207,7 +218,7 @@ void CastExtensionURLLoaderFactory::CreateLoaderAndStart(
   if (!CastRedirectHandler::ParseUrl(&cast_url, extension, url)) {
     // Defer to the default handler to load from disk.
     extension_factory_->CreateLoaderAndStart(
-        std::move(loader_receiver), routing_id, request_id, options, request,
+        std::move(loader_receiver), request_id, options, request,
         std::move(client), traffic_annotation);
     return;
   }
@@ -229,9 +240,31 @@ void CastExtensionURLLoaderFactory::CreateLoaderAndStart(
   // Force a redirect to the new URL but without changing where the webpage
   // thinks it is.
   CastExtensionURLLoader::CreateAndStart(
-      std::move(loader_receiver), routing_id, request_id, options,
-      std::move(new_request), std::move(client), traffic_annotation,
-      network_factory_);
+      std::move(loader_receiver), request_id, options, std::move(new_request),
+      std::move(client), traffic_annotation, network_factory_);
+}
+
+void CastExtensionURLLoaderFactory::OnBrowserContextDestroyed() {
+  // When the BrowserContext gets destroyed, |this| factory is not able to serve
+  // any more requests.
+  DisconnectReceiversAndDestroy();
+}
+
+// static
+CastExtensionURLLoaderFactory::BrowserContextShutdownNotifierFactory*
+CastExtensionURLLoaderFactory::BrowserContextShutdownNotifierFactory::
+    GetInstance() {
+  static base::NoDestructor<BrowserContextShutdownNotifierFactory> s_factory;
+  return s_factory.get();
+}
+
+CastExtensionURLLoaderFactory::BrowserContextShutdownNotifierFactory::
+    BrowserContextShutdownNotifierFactory()
+    : BrowserContextKeyedServiceShutdownNotifierFactory(
+          "CastExtensionURLLoaderFactory::"
+          "BrowserContextShutdownNotifierFactory") {
+  DependsOn(extensions::ExtensionRegistryFactory::GetInstance());
+  DependsOn(extensions::CastExtensionSystemFactory::GetInstance());
 }
 
 // static
@@ -239,15 +272,28 @@ mojo::PendingRemote<network::mojom::URLLoaderFactory>
 CastExtensionURLLoaderFactory::Create(
     content::BrowserContext* browser_context,
     mojo::PendingRemote<network::mojom::URLLoaderFactory> extension_factory) {
+  DCHECK(browser_context);
+
   mojo::PendingRemote<network::mojom::URLLoaderFactory> pending_remote;
 
+  // Return an unbound |pending_remote| if the |browser_context| has already
+  // started shutting down.
+  if (browser_context->ShutdownStarted())
+    return pending_remote;
+
   // The CastExtensionURLLoaderFactory will delete itself when there are no more
-  // receivers - see the NonNetworkURLLoaderFactoryBase::OnDisconnect method.
+  // receivers - see the network::SelfDeletingURLLoaderFactory::OnDisconnect
+  // method.
   new CastExtensionURLLoaderFactory(
       browser_context, std::move(extension_factory),
       pending_remote.InitWithNewPipeAndPassReceiver());
 
   return pending_remote;
+}
+
+// static
+void CastExtensionURLLoaderFactory::EnsureShutdownNotifierFactoryBuilt() {
+  BrowserContextShutdownNotifierFactory::GetInstance();
 }
 
 }  // namespace shell

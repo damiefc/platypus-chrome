@@ -6,10 +6,26 @@
  * @fileoverview 'settings-captions' is a component for showing captions
  * settings subpage (chrome://settings/captions).
  */
-(function() {
+
+import '//resources/cr_elements/shared_style_css.m.js';
+import '../controls/settings_slider.js';
+import '../settings_shared_css.js';
+import './live_caption_section.js';
+
+import {I18nBehavior} from '//resources/js/i18n_behavior.m.js';
+import {WebUIListenerBehavior} from '//resources/js/web_ui_listener_behavior.m.js';
+import {html, Polymer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {FontsBrowserProxy, FontsBrowserProxyImpl, FontsData} from '../appearance_page/fonts_browser_proxy.js';
+import {DropdownMenuOptionList} from '../controls/settings_dropdown_menu.js';
+import {loadTimeData} from '../i18n_setup.js';
+import {PrefsBehavior} from '../prefs/prefs_behavior.js';
+
 
 Polymer({
   is: 'settings-captions',
+
+  _template: html`{__html_template__}`,
 
   behaviors: [
     I18nBehavior,
@@ -167,19 +183,37 @@ Polymer({
         ];
       },
     },
+
+    /** @private */
+    enableLiveCaption_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableLiveCaption');
+      },
+    },
   },
 
-  /** @private {?settings.FontsBrowserProxy} */
+  /** @private {?FontsBrowserProxy} */
   browserProxy_: null,
 
   /** @override */
   created() {
-    this.browserProxy_ = settings.FontsBrowserProxyImpl.getInstance();
+    this.browserProxy_ = FontsBrowserProxyImpl.getInstance();
   },
 
   /** @override */
   ready() {
     this.browserProxy_.fetchFontsData().then(this.setFontsData_.bind(this));
+  },
+
+  /**
+   * Returns the Live Caption toggle element.
+   * @return {?CrToggleElement}
+   */
+  getLiveCaptionToggle() {
+    const liveCaptionSection = this.$$('settings-live-caption');
+    return liveCaptionSection ? liveCaptionSection.getLiveCaptionToggle() :
+                                null;
   },
 
   /**
@@ -269,6 +303,5 @@ Polymer({
     }
 
     return `${+ size.slice(0, -1) / 100}%`;
-  }
+  },
 });
-})();

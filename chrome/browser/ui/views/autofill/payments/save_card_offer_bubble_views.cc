@@ -71,13 +71,13 @@ bool SaveCardOfferBubbleViews::Accept() {
   if (controller()) {
     controller()->OnSaveButton(
         {cardholder_name_textfield_ ? cardholder_name_textfield_->GetText()
-                                    : base::string16(),
-         month_input_dropdown_ ? month_input_dropdown_->model()->GetItemAt(
+                                    : std::u16string(),
+         month_input_dropdown_ ? month_input_dropdown_->GetModel()->GetItemAt(
                                      month_input_dropdown_->GetSelectedIndex())
-                               : base::string16(),
-         year_input_dropdown_ ? year_input_dropdown_->model()->GetItemAt(
+                               : std::u16string(),
+         year_input_dropdown_ ? year_input_dropdown_->GetModel()->GetItemAt(
                                     year_input_dropdown_->GetSelectedIndex())
-                              : base::string16()});
+                              : std::u16string()});
   }
   return true;
 }
@@ -93,7 +93,7 @@ bool SaveCardOfferBubbleViews::IsDialogButtonEnabled(
     // the same time.
     DCHECK(!month_input_dropdown_ && !year_input_dropdown_);
     // If requesting the user confirm the name, it cannot be blank.
-    base::string16 trimmed_text;
+    std::u16string trimmed_text;
     base::TrimWhitespace(cardholder_name_textfield_->GetText(), base::TRIM_ALL,
                          &trimmed_text);
     return !trimmed_text.empty();
@@ -105,10 +105,10 @@ bool SaveCardOfferBubbleViews::IsDialogButtonEnabled(
     // the same time.
     DCHECK(!cardholder_name_textfield_);
     int month_value = 0, year_value = 0;
-    if (!base::StringToInt(month_input_dropdown_->model()->GetItemAt(
+    if (!base::StringToInt(month_input_dropdown_->GetModel()->GetItemAt(
                                month_input_dropdown_->GetSelectedIndex()),
                            &month_value) ||
-        !base::StringToInt(year_input_dropdown_->model()->GetItemAt(
+        !base::StringToInt(year_input_dropdown_->GetModel()->GetItemAt(
                                year_input_dropdown_->GetSelectedIndex()),
                            &year_value)) {
       return false;
@@ -122,7 +122,7 @@ bool SaveCardOfferBubbleViews::IsDialogButtonEnabled(
 
 void SaveCardOfferBubbleViews::ContentsChanged(
     views::Textfield* sender,
-    const base::string16& new_contents) {
+    const std::u16string& new_contents) {
   DCHECK_EQ(cardholder_name_textfield_, sender);
   DialogModelChanged();
 }
@@ -162,7 +162,7 @@ std::unique_ptr<views::View> SaveCardOfferBubbleViews::CreateMainContentView() {
     cardholder_name_label_row->AddChildView(cardholder_name_label.release());
 
     // Prepare the prefilled cardholder name.
-    base::string16 prefilled_name =
+    std::u16string prefilled_name =
         base::UTF8ToUTF16(controller()->GetAccountInfo().full_name);
 
     // Set up cardholder name label tooltip ONLY if the cardholder name
@@ -226,7 +226,7 @@ SaveCardOfferBubbleViews::CreateRequestExpirationDateView() {
 
   // Set up the month and year comboboxes.
   month_input_dropdown_ = new views::Combobox(&month_combobox_model_);
-  month_input_dropdown_->set_callback(base::BindRepeating(
+  month_input_dropdown_->SetCallback(base::BindRepeating(
       &SaveCardOfferBubbleViews::DialogModelChanged, base::Unretained(this)));
   month_input_dropdown_->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_DIALOG_PLACEHOLDER_EXPIRY_MONTH));
@@ -241,7 +241,7 @@ SaveCardOfferBubbleViews::CreateRequestExpirationDateView() {
   }
 
   year_input_dropdown_ = new views::Combobox(&year_combobox_model_);
-  year_input_dropdown_->set_callback(base::BindRepeating(
+  year_input_dropdown_->SetCallback(base::BindRepeating(
       &SaveCardOfferBubbleViews::DialogModelChanged, base::Unretained(this)));
   year_input_dropdown_->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_DIALOG_PLACEHOLDER_EXPIRY_YEAR));
@@ -294,7 +294,7 @@ SaveCardOfferBubbleViews::CreateUploadExplanationView() {
           : IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_TOOLTIP));
   upload_explanation_tooltip->set_bubble_width(
       ChromeLayoutProvider::Get()->GetDistanceMetric(
-          DISTANCE_BUBBLE_PREFERRED_WIDTH));
+          views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
   upload_explanation_tooltip->set_anchor_point_arrow(
       views::BubbleBorder::Arrow::TOP_RIGHT);
   upload_explanation_tooltip->SetID(DialogViewId::UPLOAD_EXPLANATION_TOOLTIP);

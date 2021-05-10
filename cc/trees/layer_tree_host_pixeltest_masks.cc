@@ -58,12 +58,10 @@ class MaskContentLayerClient : public ContentLayerClient {
   ~MaskContentLayerClient() override = default;
 
   bool FillsBoundsCompletely() const override { return false; }
-  size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
 
-  gfx::Rect PaintableRegion() override { return gfx::Rect(bounds_); }
+  gfx::Rect PaintableRegion() const override { return gfx::Rect(bounds_); }
 
-  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      PaintingControlSetting picture_control) override {
+  scoped_refptr<DisplayItemList> PaintContentsToDisplayList() override {
     auto display_list = base::MakeRefCounted<DisplayItemList>();
     display_list->StartPaint();
 
@@ -193,12 +191,10 @@ class SolidColorEmptyMaskContentLayerClient : public ContentLayerClient {
   ~SolidColorEmptyMaskContentLayerClient() override = default;
 
   bool FillsBoundsCompletely() const override { return false; }
-  size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
 
-  gfx::Rect PaintableRegion() override { return gfx::Rect(bounds_); }
+  gfx::Rect PaintableRegion() const override { return gfx::Rect(bounds_); }
 
-  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      PaintingControlSetting picture_control) override {
+  scoped_refptr<DisplayItemList> PaintContentsToDisplayList() override {
     // Intentionally return a solid color, empty mask display list. This
     // is a situation where all content should be masked out.
     auto display_list = base::MakeRefCounted<DisplayItemList>();
@@ -332,14 +328,12 @@ TEST_P(LayerTreeHostMaskPixelTestWithLayerList, ImageMaskWithEffect) {
   sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(50, 50);
   SkCanvas* canvas = surface->getCanvas();
   scoped_refptr<DisplayItemList> mask_display_list =
-      mask_client.PaintContentsToDisplayList(
-          ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+      mask_client.PaintContentsToDisplayList();
   mask_display_list->Raster(canvas);
 
   FakeContentLayerClient layer_client;
   layer_client.set_bounds(mask_bounds_);
-  layer_client.add_draw_image(surface->makeImageSnapshot(), gfx::Point(),
-                              PaintFlags());
+  layer_client.add_draw_image(surface->makeImageSnapshot(), gfx::Point());
   mask_layer_ = FakePictureLayer::Create(&layer_client);
 
   pixel_comparator_ =
@@ -361,14 +355,12 @@ TEST_P(LayerTreeHostMasksPixelTest, ImageMaskOfLayer) {
   SkCanvas* canvas = surface->getCanvas();
   MaskContentLayerClient client(mask_bounds);
   scoped_refptr<DisplayItemList> mask_display_list =
-      client.PaintContentsToDisplayList(
-          ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+      client.PaintContentsToDisplayList();
   mask_display_list->Raster(canvas);
 
   FakeContentLayerClient mask_client;
   mask_client.set_bounds(mask_bounds);
-  mask_client.add_draw_image(surface->makeImageSnapshot(), gfx::Point(),
-                             PaintFlags());
+  mask_client.add_draw_image(surface->makeImageSnapshot(), gfx::Point());
   scoped_refptr<FakePictureLayer> mask = FakePictureLayer::Create(&mask_client);
   mask->SetIsDrawable(true);
   mask->SetBounds(mask_bounds);
@@ -447,10 +439,8 @@ class CheckerContentLayerClient : public ContentLayerClient {
       : bounds_(bounds), color_(color), vertical_(vertical) {}
   ~CheckerContentLayerClient() override = default;
   bool FillsBoundsCompletely() const override { return false; }
-  size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
-  gfx::Rect PaintableRegion() override { return gfx::Rect(bounds_); }
-  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      PaintingControlSetting picture_control) override {
+  gfx::Rect PaintableRegion() const override { return gfx::Rect(bounds_); }
+  scoped_refptr<DisplayItemList> PaintContentsToDisplayList() override {
     auto display_list = base::MakeRefCounted<DisplayItemList>();
     display_list->StartPaint();
 
@@ -496,10 +486,8 @@ class CircleContentLayerClient : public ContentLayerClient {
       : bounds_(bounds) {}
   ~CircleContentLayerClient() override = default;
   bool FillsBoundsCompletely() const override { return false; }
-  size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
-  gfx::Rect PaintableRegion() override { return gfx::Rect(bounds_); }
-  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      PaintingControlSetting picture_control) override {
+  gfx::Rect PaintableRegion() const override { return gfx::Rect(bounds_); }
+  scoped_refptr<DisplayItemList> PaintContentsToDisplayList() override {
     auto display_list = base::MakeRefCounted<DisplayItemList>();
     display_list->StartPaint();
 
@@ -723,13 +711,11 @@ class StaticPictureLayer : private ContentLayerClient, public PictureLayer {
         new StaticPictureLayer(std::move(display_list)));
   }
 
-  gfx::Rect PaintableRegion() override { return gfx::Rect(bounds()); }
-  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      PaintingControlSetting) override {
+  gfx::Rect PaintableRegion() const override { return gfx::Rect(bounds()); }
+  scoped_refptr<DisplayItemList> PaintContentsToDisplayList() override {
     return display_list_;
   }
   bool FillsBoundsCompletely() const override { return false; }
-  size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
 
  protected:
   explicit StaticPictureLayer(scoped_refptr<DisplayItemList> display_list)

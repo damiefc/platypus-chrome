@@ -26,12 +26,9 @@
 #include "chrome/browser/predictors/autocomplete_action_predictor.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/search/chrome_colors/chrome_colors_factory.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
-#include "chrome/browser/search/local_ntp_source.h"
-#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search/promos/promo_service.h"
 #include "chrome/browser/search/promos/promo_service_factory.h"
 #include "chrome/browser/search/search.h"
@@ -76,6 +73,8 @@
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/omnibox/common/omnibox_features.h"
+#include "components/profile_metrics/browser_profile_type.h"
+#include "components/search/ntp_features.h"
 #include "components/search/search.h"
 #include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url_service.h"
@@ -112,8 +111,7 @@ std::string GetBitmapDataUrl(const char* data, size_t size) {
 bool IsCacheableNTP(content::WebContents* contents) {
   content::NavigationEntry* entry =
       contents->GetController().GetLastCommittedEntry();
-  return search::NavEntryIsInstantNTP(contents, entry) &&
-         entry->GetURL() != chrome::kChromeSearchLocalNtpUrl;
+  return search::NavEntryIsInstantNTP(contents, entry);
 }
 
 // Returns true if |contents| are rendered inside an Instant process.
@@ -194,16 +192,8 @@ SearchTabHelper::~SearchTabHelper() {
 void SearchTabHelper::OnTabActivated() {
   ipc_router_.OnTabActivated();
 
-  if (search::IsInstantNTP(web_contents_)) {
-    if (instant_service_)
-      instant_service_->OnNewTabPageOpened();
-
-    // Force creation of NTPUserDataLogger, if we loaded an NTP. The
-    // NTPUserDataLogger tries to detect whether the NTP is being created at
-    // startup or from the user opening a new tab, and if we wait until later,
-    // it won't correctly detect this case.
-    NTPUserDataLogger::GetOrCreateFromWebContents(web_contents_);
-  }
+  if (search::IsInstantNTP(web_contents_) && instant_service_)
+    instant_service_->OnNewTabPageOpened();
 }
 
 void SearchTabHelper::OnTabDeactivated() {
@@ -275,8 +265,23 @@ void SearchTabHelper::NavigationEntryCommitted(
   if (!load_details.is_main_frame)
     return;
 
-  if (search::IsInstantNTP(web_contents_))
+  if (search::IsInstantNTP(web_contents_)) {
+    // We (re)create the logger here because
+    // 1. The logger tries to detect whether the NTP is being created at startup
+    //    or from the user opening a new tab, and if we wait until later, it
+    //    won't correctly detect this case.
+    // 2. There can be multiple navigations to NTPs in a single web contents.
+    //    The navigations can be user-triggered or automatic, e.g. we fall back
+    //    to the local NTP if a remote NTP fails to load. Since logging should
+    //    be scoped to the life time of a single NTP we reset the logger every
+    //    time we reach a new NTP.
+    logger_ = std::make_unique<NTPUserDataLogger>(
+        Profile::FromBrowserContext(web_contents_->GetBrowserContext()),
+        // We use the NavigationController's URL since it might differ from the
+        // WebContents URL which is usually chrome://newtab/.
+        web_contents_->GetController().GetVisibleEntry()->GetURL());
     ipc_router_.SetInputInProgress(IsInputInProgress());
+  }
 
   if (InInstantProcess(instant_service_, web_contents_))
     ipc_router_.OnNavigationEntryCommitted();
@@ -365,31 +370,31 @@ void SearchTabHelper::OnToggleShortcutsVisibility(bool do_notify) {
 
 void SearchTabHelper::OnLogEvent(NTPLoggingEventType event,
                                  base::TimeDelta time) {
-  NTPUserDataLogger::GetOrCreateFromWebContents(web_contents())
-      ->LogEvent(event, time);
+  if (logger_)
+    logger_->LogEvent(event, time);
 }
 
 void SearchTabHelper::OnLogSuggestionEventWithValue(
     NTPSuggestionsLoggingEventType event,
     int data,
     base::TimeDelta time) {
-  NTPUserDataLogger::GetOrCreateFromWebContents(web_contents())
-      ->LogSuggestionEventWithValue(event, data, time);
+  if (logger_)
+    logger_->LogSuggestionEventWithValue(event, data, time);
 }
 
 void SearchTabHelper::OnLogMostVisitedImpression(
     const ntp_tiles::NTPTileImpression& impression) {
-  NTPUserDataLogger::GetOrCreateFromWebContents(web_contents())
-      ->LogMostVisitedImpression(impression);
+  if (logger_)
+    logger_->LogMostVisitedImpression(impression);
 }
 
 void SearchTabHelper::OnLogMostVisitedNavigation(
     const ntp_tiles::NTPTileImpression& impression) {
-  NTPUserDataLogger::GetOrCreateFromWebContents(web_contents())
-      ->LogMostVisitedNavigation(impression);
+  if (logger_)
+    logger_->LogMostVisitedNavigation(impression);
 }
 
-void SearchTabHelper::PasteIntoOmnibox(const base::string16& text) {
+void SearchTabHelper::PasteIntoOmnibox(const std::u16string& text) {
   search::PasteIntoOmnibox(text, web_contents_);
 }
 
@@ -417,11 +422,12 @@ void SearchTabHelper::FileSelected(const base::FilePath& path,
   select_file_dialog_ = nullptr;
   // File selection can happen at any time after NTP load, and is not logged
   // with the event.
-  NTPUserDataLogger::GetOrCreateFromWebContents(web_contents())
-      ->LogEvent(NTP_CUSTOMIZE_LOCAL_IMAGE_DONE,
-                 base::TimeDelta::FromSeconds(0));
-  NTPUserDataLogger::GetOrCreateFromWebContents(web_contents())
-      ->LogEvent(NTP_BACKGROUND_UPLOAD_DONE, base::TimeDelta::FromSeconds(0));
+  if (logger_) {
+    logger_->LogEvent(NTP_CUSTOMIZE_LOCAL_IMAGE_DONE,
+                      base::TimeDelta::FromSeconds(0));
+    logger_->LogEvent(NTP_BACKGROUND_UPLOAD_DONE,
+                      base::TimeDelta::FromSeconds(0));
+  }
 
   ipc_router_.SendLocalBackgroundSelected();
 }
@@ -430,11 +436,12 @@ void SearchTabHelper::FileSelectionCanceled(void* params) {
   select_file_dialog_ = nullptr;
   // File selection can happen at any time after NTP load, and is not logged
   // with the event.
-  NTPUserDataLogger::GetOrCreateFromWebContents(web_contents())
-      ->LogEvent(NTP_CUSTOMIZE_LOCAL_IMAGE_CANCEL,
-                 base::TimeDelta::FromSeconds(0));
-  NTPUserDataLogger::GetOrCreateFromWebContents(web_contents())
-      ->LogEvent(NTP_BACKGROUND_UPLOAD_CANCEL, base::TimeDelta::FromSeconds(0));
+  if (logger_) {
+    logger_->LogEvent(NTP_CUSTOMIZE_LOCAL_IMAGE_CANCEL,
+                      base::TimeDelta::FromSeconds(0));
+    logger_->LogEvent(NTP_BACKGROUND_UPLOAD_CANCEL,
+                      base::TimeDelta::FromSeconds(0));
+  }
 }
 
 void SearchTabHelper::OnResultChanged(AutocompleteController* controller,
@@ -452,7 +459,9 @@ void SearchTabHelper::OnResultChanged(AutocompleteController* controller,
 
   ipc_router_.AutocompleteResultChanged(omnibox::CreateAutocompleteResult(
       autocomplete_controller_->input().text(),
-      autocomplete_controller_->result(), profile()->GetPrefs()));
+      autocomplete_controller_->result(),
+      BookmarkModelFactory::GetForBrowserContext(profile()),
+      profile()->GetPrefs()));
 
   BitmapFetcherService* bitmap_fetcher_service =
       BitmapFetcherServiceFactory::GetForBrowserContext(profile());
@@ -539,7 +548,7 @@ void SearchTabHelper::OnSelectLocalBackgroundImage() {
       l10n_util::GetStringUTF16(IDS_UPLOAD_IMAGE_FORMAT));
 
   select_file_dialog_->SelectFile(
-      ui::SelectFileDialog::SELECT_OPEN_FILE, base::string16(), directory,
+      ui::SelectFileDialog::SELECT_OPEN_FILE, std::u16string(), directory,
       &file_types, 0, base::FilePath::StringType(), parent_window, nullptr);
 }
 
@@ -599,7 +608,7 @@ void SearchTabHelper::OnConfirmThemeChanges() {
   }
 }
 
-void SearchTabHelper::QueryAutocomplete(const base::string16& input,
+void SearchTabHelper::QueryAutocomplete(const std::u16string& input,
                                         bool prevent_inline_autocomplete) {
   if (!search::DefaultSearchProviderIsGoogle(profile()))
     return;
@@ -644,7 +653,7 @@ class DeleteAutocompleteMatchConfirmDelegate
  public:
   DeleteAutocompleteMatchConfirmDelegate(
       content::WebContents* contents,
-      base::string16 search_provider_name,
+      std::u16string search_provider_name,
       base::OnceCallback<void(bool)> dialog_callback)
       : TabModalConfirmDialogDelegate(contents),
         search_provider_name_(search_provider_name),
@@ -656,18 +665,18 @@ class DeleteAutocompleteMatchConfirmDelegate
     DCHECK(!dialog_callback_);
   }
 
-  base::string16 GetTitle() override {
+  std::u16string GetTitle() override {
     return l10n_util::GetStringUTF16(
         IDS_OMNIBOX_REMOVE_SUGGESTION_BUBBLE_TITLE);
   }
 
-  base::string16 GetDialogMessage() override {
+  std::u16string GetDialogMessage() override {
     return l10n_util::GetStringFUTF16(
         IDS_OMNIBOX_REMOVE_SUGGESTION_BUBBLE_DESCRIPTION,
         search_provider_name_);
   }
 
-  base::string16 GetAcceptButtonTitle() override {
+  std::u16string GetAcceptButtonTitle() override {
     return l10n_util::GetStringUTF16(IDS_REMOVE);
   }
 
@@ -681,7 +690,7 @@ class DeleteAutocompleteMatchConfirmDelegate
   }
 
  private:
-  base::string16 search_provider_name_;
+  std::u16string search_provider_name_;
   base::OnceCallback<void(bool)> dialog_callback_;
 };
 
@@ -710,7 +719,7 @@ void SearchTabHelper::DeleteAutocompleteMatch(uint8_t line) {
       TemplateURLServiceFactory::GetForProfile(profile);
   const auto& match = autocomplete_controller_->result().match_at(line);
 
-  base::string16 search_provider_name;
+  std::u16string search_provider_name;
   const TemplateURL* template_url =
       match.GetTemplateURL(template_url_service, false);
   if (!template_url)
@@ -741,7 +750,8 @@ void SearchTabHelper::OnDeleteAutocompleteMatchConfirm(
       autocomplete_controller_->Stop(false);
       autocomplete_controller_->DeleteMatch(match);
       matches = omnibox::CreateAutocompleteMatches(
-          autocomplete_controller_->result());
+          autocomplete_controller_->result(),
+          BookmarkModelFactory::GetForBrowserContext(profile()));
     }
   }
 }
@@ -875,7 +885,7 @@ void SearchTabHelper::OpenAutocompleteMatch(
   auto* bookmark_model = BookmarkModelFactory::GetForBrowserContext(profile());
   if (bookmark_model->IsBookmarked(match.destination_url)) {
     RecordBookmarkLaunch(BOOKMARK_LAUNCH_LOCATION_OMNIBOX,
-                         ProfileMetrics::GetBrowserProfileType(profile()));
+                         profile_metrics::GetBrowserProfileType(profile()));
   }
 
   const AutocompleteInput& input = autocomplete_controller_->input();
@@ -894,7 +904,7 @@ void SearchTabHelper::OpenAutocompleteMatch(
 
   OmniboxLog log(
       /*text=*/input.focus_type() != OmniboxFocusType::DEFAULT
-          ? base::string16()
+          ? std::u16string()
           : input.text(),
       /*just_deleted_text=*/input.prevent_inline_autocomplete(),
       /*input_type=*/input.type(),
@@ -910,11 +920,11 @@ void SearchTabHelper::OpenAutocompleteMatch(
       elapsed_time_since_first_autocomplete_query,
       /*completed_length=*/match.allowed_to_be_default_match
           ? match.inline_autocompletion.length()
-          : base::string16::npos,
+          : std::u16string::npos,
       /*elapsed_time_since_last_change_to_default_match=*/
       elapsed_time_since_last_change_to_default_match,
       /*result=*/autocomplete_controller_->result());
-  autocomplete_controller_->AddProvidersInfo(&log.providers_info);
+  autocomplete_controller_->AddProviderAndTriggeringLogs(&log);
 
   OmniboxEventGlobalTracker::GetInstance()->OnURLOpened(&log);
 

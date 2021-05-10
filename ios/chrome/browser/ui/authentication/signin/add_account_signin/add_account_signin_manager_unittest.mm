@@ -70,7 +70,7 @@ class AddAccountSigninManagerTest : public PlatformTest {
     FakeChromeIdentityInteractionManager* identity_interaction_manager =
         ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()
             ->CreateFakeChromeIdentityInteractionManager(
-                browser_state_.get(), identity_interaction_manager_delegate_);
+                identity_interaction_manager_delegate_);
     fake_identity_ = [FakeChromeIdentity
         identityWithEmail:[NSString stringWithUTF8String:kTestEmail]
                    gaiaID:[NSString stringWithUTF8String:kTestGaiaID]
@@ -172,8 +172,7 @@ TEST_F(AddAccountSigninManagerTest,
   // Verify that completion was called with canceled result state and an error
   // is shown.
   OCMExpect([signin_manager_delegate_
-      addAccountSigninManagerFailedWithError:[OCMArg any]
-                                    identity:fake_identity_]);
+      addAccountSigninManagerFailedWithError:[OCMArg any]]);
 
   [signin_manager_
       showSigninWithIntent:AddAccountSigninIntentAddSecondaryAccount];
@@ -241,8 +240,7 @@ TEST_F(AddAccountSigninManagerTest,
   // Verify that completion was called with canceled result state and an error
   // is shown.
   OCMExpect([signin_manager_delegate_
-      addAccountSigninManagerFailedWithError:[OCMArg any]
-                                    identity:fake_identity_]);
+      addAccountSigninManagerFailedWithError:[OCMArg any]]);
 
   [signin_manager_
       showSigninWithIntent:AddAccountSigninIntentReauthPrimaryAccount];

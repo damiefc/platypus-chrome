@@ -30,7 +30,7 @@
 #include "content/public/browser/web_contents.h"
 #include "device/base/features.h"
 #include "services/device/public/mojom/usb_device.mojom.h"
-#include "third_party/blink/public/common/loader/network_utils.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -125,7 +125,7 @@ class WebUsbNotificationDelegate : public TabStripModelObserver,
   }
 
   void Click(const base::Optional<int>& button_index,
-             const base::Optional<base::string16>& reply) override {
+             const base::Optional<std::u16string>& reply) override {
     disposition_ = WEBUSB_NOTIFICATION_CLOSED_CLICKED;
 
     // If the URL is already open, activate that tab.
@@ -210,13 +210,13 @@ void WebUsbDetector::OnDeviceAdded(
   if (!device_info->product_name || !device_info->webusb_landing_page)
     return;
 
-  const base::string16& product_name = *device_info->product_name;
+  const std::u16string& product_name = *device_info->product_name;
   if (product_name.empty())
     return;
 
   const GURL& landing_page = *device_info->webusb_landing_page;
   if (!landing_page.is_valid() ||
-      !blink::network_utils::IsOriginSecure(landing_page))
+      !network::IsUrlPotentiallyTrustworthy(landing_page))
     return;
 
   if (base::StartsWith(GetActiveTabURL().spec(), landing_page.spec(),
@@ -240,7 +240,7 @@ void WebUsbDetector::OnDeviceAdded(
               landing_page, url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC)),
       gfx::Image(gfx::CreateVectorIcon(vector_icons::kUsbIcon, 64,
                                        gfx::kChromeIconGrey)),
-      base::string16(), GURL(),
+      std::u16string(), GURL(),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
                                  kNotifierWebUsb),
       rich_notification_data,

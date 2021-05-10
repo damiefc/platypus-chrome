@@ -22,6 +22,7 @@
 #include "remoting/protocol/frame_stats.h"
 #include "remoting/protocol/video_renderer.h"
 #include "remoting/protocol/webrtc_transport.h"
+#include "third_party/libyuv/include/libyuv/convert.h"
 #include "third_party/libyuv/include/libyuv/convert_from.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
 
@@ -93,7 +94,8 @@ void WebrtcVideoRendererAdapter::SetMediaStream(
 void WebrtcVideoRendererAdapter::SetVideoStatsChannel(
     std::unique_ptr<MessagePipe> message_pipe) {
   // Expect that the host also creates video_stats data channel.
-  video_stats_dispatcher_.reset(new ClientVideoStatsDispatcher(label_, this));
+  video_stats_dispatcher_ =
+      std::make_unique<ClientVideoStatsDispatcher>(label_, this);
   video_stats_dispatcher_->Init(std::move(message_pipe), this);
 }
 

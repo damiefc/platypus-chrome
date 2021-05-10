@@ -24,7 +24,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_BLOCK_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_BLOCK_H_
 
-#include <memory>
+#include "base/dcheck_is_on.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
@@ -37,11 +37,12 @@ class LineLayoutBox;
 class NGBlockNode;
 class WordMeasurement;
 
-typedef WTF::ListHashSet<LayoutBox*, 16> TrackedLayoutBoxListHashSet;
-typedef WTF::HashMap<const LayoutBlock*,
-                     std::unique_ptr<TrackedLayoutBoxListHashSet>>
+typedef HeapListHashSet<Member<LayoutBox>, 16> TrackedLayoutBoxListHashSet;
+typedef HeapHashMap<WeakMember<const LayoutBlock>,
+                    Member<TrackedLayoutBoxListHashSet>>
     TrackedDescendantsMap;
-typedef WTF::HashMap<const LayoutBox*, LayoutBlock*> TrackedContainerMap;
+typedef HeapHashMap<WeakMember<const LayoutBox>, Member<LayoutBlock>>
+    TrackedContainerMap;
 typedef Vector<WordMeasurement, 64> WordMeasurements;
 
 enum ContainingBlockState { kNewContainingBlock, kSameContainingBlock };
@@ -106,9 +107,10 @@ enum ContainingBlockState { kNewContainingBlock, kSameContainingBlock };
 class CORE_EXPORT LayoutBlock : public LayoutBox {
  protected:
   explicit LayoutBlock(ContainerNode*);
-  ~LayoutBlock() override;
 
  public:
+  void Trace(Visitor*) const override;
+
   LayoutObject* FirstChild() const {
     NOT_DESTROYED();
     DCHECK_EQ(Children(), VirtualChildren());
@@ -376,14 +378,15 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   LayoutUnit AvailableLogicalHeightForPercentageComputation() const;
   bool HasDefiniteLogicalHeight() const;
 
+  void RebuildFragmentTreeSpine();
+
  protected:
   RecalcLayoutOverflowResult RecalcPositionedDescendantsLayoutOverflow();
-  void RecalcPositionedDescendantsVisualOverflow();
   bool RecalcSelfLayoutOverflow();
   void RecalcSelfVisualOverflow();
 
  public:
-  RecalcLayoutOverflowResult RecalcChildLayoutOverflow();
+  virtual RecalcLayoutOverflowResult RecalcChildLayoutOverflow();
   RecalcLayoutOverflowResult RecalcLayoutOverflow() override;
   void RecalcChildVisualOverflow();
   void RecalcVisualOverflow() override;
@@ -476,6 +479,9 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
 
   LayoutUnit FirstLineBoxBaseline() const override;
   LayoutUnit InlineBlockBaseline(LineDirectionMode) const override;
+  base::Optional<LayoutUnit> FirstLineBoxBaselineOverride() const;
+  base::Optional<LayoutUnit> InlineBlockBaselineOverride(
+      LineDirectionMode) const;
 
   bool HitTestOverflowControl(
       HitTestResult&,
@@ -500,11 +506,11 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   virtual void SimplifiedNormalFlowLayout();
 
  private:
-  void AddVisualOverflowFromBlockChildren();
   void AddLayoutOverflowFromPositionedObjects();
   void AddLayoutOverflowFromBlockChildren();
 
  protected:
+  OverflowClipAxes ComputeOverflowClipAxes() const override;
   virtual void ComputeVisualOverflow(
       bool recompute_floats);
   virtual void ComputeLayoutOverflow(LayoutUnit old_client_after_edge,
@@ -512,6 +518,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
 
   virtual void AddLayoutOverflowFromChildren();
   void AddVisualOverflowFromChildren();
+  virtual void AddVisualOverflowFromBlockChildren();
 
   void AddOutlineRects(Vector<PhysicalRect>&,
                        const PhysicalOffset& additional_offset,
@@ -571,14 +578,6 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
 
   void ComputeBlockPreferredLogicalWidths(LayoutUnit& min_logical_width,
                                           LayoutUnit& max_logical_width) const;
-
- public:
-  bool ShouldPaintCursorCaret() const;
-  bool ShouldPaintDragCaret() const;
-  bool ShouldPaintCarets() const {
-    NOT_DESTROYED();
-    return ShouldPaintCursorCaret() || ShouldPaintDragCaret();
-  }
 
  protected:
   void InvalidatePaint(const PaintInvalidatorContext&) const override;

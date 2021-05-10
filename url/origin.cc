@@ -11,12 +11,14 @@
 
 #include "base/base64.h"
 #include "base/check_op.h"
+#include "base/containers/contains.h"
 #include "base/containers/span.h"
 #include "base/pickle.h"
-#include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 #include "url/gurl.h"
 #include "url/url_canon.h"
 #include "url/url_canon_stdstring.h"
@@ -76,7 +78,7 @@ base::Optional<Origin> Origin::UnsafelyCreateTupleOriginWithoutNormalization(
     base::StringPiece scheme,
     base::StringPiece host,
     uint16_t port) {
-  SchemeHostPort tuple(scheme.as_string(), host.as_string(), port,
+  SchemeHostPort tuple(std::string(scheme), std::string(host), port,
                        SchemeHostPort::CHECK_CANONICALIZATION);
   if (!tuple.IsValid())
     return base::nullopt;
@@ -89,8 +91,8 @@ base::Optional<Origin> Origin::UnsafelyCreateOpaqueOriginWithoutNormalization(
     base::StringPiece precursor_host,
     uint16_t precursor_port,
     const Origin::Nonce& nonce) {
-  SchemeHostPort precursor(precursor_scheme.as_string(),
-                           precursor_host.as_string(), precursor_port,
+  SchemeHostPort precursor(std::string(precursor_scheme),
+                           std::string(precursor_host), precursor_port,
                            SchemeHostPort::CHECK_CANONICALIZATION);
   // For opaque origins, it is okay for the SchemeHostPort to be invalid;
   // however, this should only arise when the arguments indicate the
@@ -287,11 +289,20 @@ Origin::Origin(const Nonce& nonce, SchemeHostPort precursor)
   DCHECK_EQ(0U, port());
 }
 
+base::Optional<std::string> Origin::SerializeWithNonce() const {
+  return SerializeWithNonceImpl();
+}
+
+base::Optional<std::string> Origin::SerializeWithNonceAndInitIfNeeded() {
+  GetNonceForSerialization();
+  return SerializeWithNonceImpl();
+}
+
 // The pickle is saved in the following format, in order:
 // string - tuple_.GetURL().spec().
 // uint64_t (if opaque) - high bits of nonce if opaque. 0 if not initialized.
 // uint64_t (if opaque) - low bits of nonce if opaque. 0 if not initialized.
-base::Optional<std::string> Origin::SerializeWithNonce() const {
+base::Optional<std::string> Origin::SerializeWithNonceImpl() const {
   if (!opaque() && !tuple_.IsValid())
     return base::nullopt;
 
@@ -361,6 +372,10 @@ base::Optional<Origin> Origin::Deserialize(const std::string& value) {
   origin.nonce_ = std::move(nonce);
   origin.tuple_ = tuple;
   return origin;
+}
+
+void Origin::WriteIntoTrace(perfetto::TracedValue context) const {
+  std::move(context).WriteString(GetDebugString());
 }
 
 std::ostream& operator<<(std::ostream& out, const url::Origin& origin) {

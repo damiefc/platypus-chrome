@@ -122,7 +122,6 @@ ADDITIONAL_PATHS = (
     os.path.join('chrome', 'common', 'extensions', 'docs', 'examples'),
     os.path.join('chrome', 'test', 'chromeos', 'autotest'),
     os.path.join('chrome', 'test', 'data'),
-    os.path.join('clank', 'third_party', 'elements'),
     os.path.join('native_client'),
     os.path.join('testing', 'gmock'),
     os.path.join('testing', 'gtest'),
@@ -163,12 +162,6 @@ SPECIAL_CASES = {
         "URL": "http://code.google.com/p/angleproject/",
         "License": "BSD",
     },
-    os.path.join('third_party', 'angle', 'third_party', 'vulkan-headers'): {
-        "Name": "Vulkan-Headers",
-        "URL": "https://github.com/KhronosGroup/Vulkan-Headers",
-        "License": "Apache 2.0",
-        "License File": "src/LICENSE.txt",
-    },
     os.path.join('third_party', 'cros_system_api'): {
         "Name": "Chromium OS system API",
         "URL": "http://www.chromium.org/chromium-os",
@@ -176,11 +169,46 @@ SPECIAL_CASES = {
         # Absolute path here is resolved as relative to the source root.
         "License File": "/LICENSE.chromium_os",
     },
+    os.path.join('third_party', 'devtools-frontend'): {
+        # TODO(crbug.com/1151057): Remove this special case when issue is fixed.
+        "Name": "Devtools-Frontend",
+        "URL": "https://chromium.googlesource.com/devtools/devtools-frontend",
+        "License": "BSD",
+        "License File": "src/LICENSE",
+    },
     os.path.join('third_party', 'lss'): {
         "Name": "linux-syscall-support",
         "URL": "http://code.google.com/p/linux-syscall-support/",
         "License": "BSD",
         "License File": "/LICENSE",
+    },
+    os.path.join('third_party', 'openscreen', 'src', 'third_party', 'abseil'): {
+        "Name": "abseil",
+        "URL": "https://github.com/abseil/abseil-cpp/",
+        "License": "Apache 2.0",
+        "License File": "/third_party/abseil-cpp/LICENSE",
+    },
+    os.path.join('third_party', 'openscreen', 'src', 'third_party',
+                 'boringssl'):
+    {
+        "Name": "BoringSSL",
+        "URL": "https://boringssl.googlesource.com/boringssl/",
+        "License": "BSDish",
+        "License File": "/third_party/boringssl/src/LICENSE",
+    },
+    os.path.join('third_party', 'openscreen', 'src', 'third_party', 'jsoncpp'):
+    {
+        "Name": "jsoncpp",
+        "URL": "https://github.com/open-source-parsers/jsoncpp",
+        "License": "MIT",
+        "License File": "/third_party/jsoncpp/LICENSE",
+    },
+    os.path.join('third_party', 'openscreen', 'src', 'third_party', 'mozilla'):
+    {
+        "Name": "mozilla",
+        "URL": "https://github.com/mozilla",
+        "License": "MPL 1.1/GPL 2.0/LGPL 2.1",
+        "License File": "LICENSE.txt",
     },
     os.path.join('third_party', 'pdfium'): {
         "Name": "PDFium",
@@ -203,15 +231,15 @@ SPECIAL_CASES = {
         "License": "BSD",
         "License File": "NOT_SHIPPED",
     },
-    os.path.join('third_party', 'crashpad', 'crashpad', 'third_party',
-                 'lss'): {
+    os.path.join('third_party', 'crashpad', 'crashpad', 'third_party', 'lss'): {
         "Name": "linux-syscall-support",
         "URL": "https://chromium.googlesource.com/linux-syscall-support/",
         "License": "BSD",
         "License File": "NOT_SHIPPED",
     },
     os.path.join('third_party', 'crashpad', 'crashpad', 'third_party',
-                 'mini_chromium'): {
+                 'mini_chromium'):
+    {
         "Name": "mini_chromium",
         "URL": "https://chromium.googlesource.com/chromium/mini_chromium/",
         "License": "BSD",
@@ -223,8 +251,8 @@ SPECIAL_CASES = {
         "License": "Apple Public Source License 2.0",
         "License File": "APPLE_LICENSE",
     },
-    os.path.join('third_party', 'crashpad', 'crashpad', 'third_party',
-                 'zlib'): {
+    os.path.join('third_party', 'crashpad', 'crashpad', 'third_party', 'zlib'):
+    {
         "Name": "zlib",
         "URL": "https://zlib.net/",
         "License": "zlib",
@@ -275,8 +303,8 @@ SPECIAL_CASES = {
         "URL": "http://www.netlib.org/fdlibm/",
         "License": "Freely Distributable",
         # Absolute path here is resolved as relative to the source root.
-        "License File" : "/v8/LICENSE.fdlibm",
-        "License Android Compatible" : "yes",
+        "License File": "/v8/LICENSE.fdlibm",
+        "License Android Compatible": "yes",
     },
     os.path.join('third_party', 'khronos_glcts'): {
         # These sources are not shipped, are not public, and it isn't
@@ -320,7 +348,6 @@ KNOWN_NON_IOS_LIBRARIES = set([
     os.path.join('chrome', 'installer', 'mac', 'third_party', 'xz'),
     os.path.join('chrome', 'test', 'data', 'third_party', 'kraken'),
     os.path.join('chrome', 'test', 'data', 'third_party', 'spaceport'),
-    os.path.join('chrome', 'third_party', 'mock4js'),
     os.path.join('chrome', 'third_party', 'mozilla_security_manager'),
     os.path.join('third_party', 'angle'),
     os.path.join('third_party', 'apple_apsl'),
@@ -339,7 +366,6 @@ KNOWN_NON_IOS_LIBRARIES = set([
     os.path.join('third_party', 'libXNVCtrl'),
     os.path.join('third_party', 'libevent'),
     os.path.join('third_party', 'libjpeg'),
-    os.path.join('third_party', 'libovr'),
     os.path.join('third_party', 'libusb'),
     os.path.join('third_party', 'libxslt'),
     os.path.join('third_party', 'lss'),
@@ -479,7 +505,7 @@ def ProcessAdditionalReadmePathsJson(root, dirname, third_party_dirs):
       third_party_dirs.update([os.path.join(dirname, p) for p in extra_paths])
 
 
-def FindThirdPartyDirs(prune_paths, root):
+def FindThirdPartyDirs(prune_paths, root, extra_third_party_dirs=None):
   """Find all third_party directories underneath the source root."""
   third_party_dirs = set()
   for path, dirs, files in os.walk(root):
@@ -515,7 +541,11 @@ def FindThirdPartyDirs(prune_paths, root):
     if path in ADDITIONAL_PATHS:
       dirs[:] = []
 
-  for dir in ADDITIONAL_PATHS:
+  extra_paths = set(ADDITIONAL_PATHS)
+  if extra_third_party_dirs:
+    extra_paths.update(extra_third_party_dirs)
+
+  for dir in extra_paths:
     if dir not in prune_paths:
       third_party_dirs.add(dir)
       ProcessAdditionalReadmePathsJson(root, dir, third_party_dirs)
@@ -620,9 +650,14 @@ def ScanThirdPartyDirs(root=None):
   return len(errors) == 0
 
 
-def GenerateCredits(
-        file_template_file, entry_template_file, output_file, target_os,
-        gn_out_dir, gn_target, depfile=None):
+def GenerateCredits(file_template_file,
+                    entry_template_file,
+                    output_file,
+                    target_os,
+                    gn_out_dir,
+                    gn_target,
+                    extra_third_party_dirs=None,
+                    depfile=None):
   """Generate about:credits."""
 
   def EvaluateTemplate(template, env, escape=True):
@@ -654,7 +689,8 @@ def GenerateCredits(
     if not third_party_dirs:
       raise RuntimeError("No deps found.")
   else:
-    third_party_dirs = FindThirdPartyDirs(PRUNE_PATHS, _REPOSITORY_ROOT)
+    third_party_dirs = FindThirdPartyDirs(PRUNE_PATHS, _REPOSITORY_ROOT,
+                                          extra_third_party_dirs)
 
   if not file_template_file:
     file_template_file = os.path.join(_REPOSITORY_ROOT, 'components',
@@ -794,6 +830,9 @@ def main():
       '--file-template', help='Template HTML to use for the license page.')
   parser.add_argument(
       '--entry-template', help='Template HTML to use for each license.')
+  parser.add_argument(
+      '--extra-third-party-dirs',
+      help='Gn list of additional third_party dirs to look through.')
   parser.add_argument('--target-os', help='OS that this build is targeting.')
   parser.add_argument(
       '--gn-out-dir', help='GN output directory for scanning dependencies.')
@@ -803,6 +842,8 @@ def main():
   parser.add_argument('output_file', nargs='?')
   build_utils.AddDepfileOption(parser)
   args = parser.parse_args()
+  args.extra_third_party_dirs = build_utils.ParseGnList(
+      args.extra_third_party_dirs)
 
   if args.command == 'scan':
     if not ScanThirdPartyDirs():
@@ -810,7 +851,8 @@ def main():
   elif args.command == 'credits':
     if not GenerateCredits(args.file_template, args.entry_template,
                            args.output_file, args.target_os, args.gn_out_dir,
-                           args.gn_target, args.depfile):
+                           args.gn_target, args.extra_third_party_dirs,
+                           args.depfile):
       return 1
   elif args.command == 'license_file':
     try:

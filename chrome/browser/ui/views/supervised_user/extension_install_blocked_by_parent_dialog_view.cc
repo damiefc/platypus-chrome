@@ -23,6 +23,7 @@
 #include "extensions/common/extension.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/border.h"
@@ -65,6 +66,10 @@ ExtensionInstallBlockedByParentDialogView::
   SetButtonLabel(ui::DIALOG_BUTTON_CANCEL, l10n_util::GetStringUTF16(IDS_OK));
   set_draggable(true);
 
+  SetModalType(ui::MODAL_TYPE_WINDOW);
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
+
   SetIcon(gfx::CreateVectorIcon(chromeos::kNotificationSupervisedUserIcon,
                                 SK_ColorDKGRAY));
   SetShowIcon(true);
@@ -78,20 +83,8 @@ ExtensionInstallBlockedByParentDialogView::
     std::move(done_callback_).Run();
 }
 
-gfx::Size ExtensionInstallBlockedByParentDialogView::CalculatePreferredSize()
-    const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
-}
-
-ui::ModalType ExtensionInstallBlockedByParentDialogView::GetModalType() const {
-  return ui::MODAL_TYPE_WINDOW;
-}
-
 void ExtensionInstallBlockedByParentDialogView::ConfigureTitle() {
-  base::string16 title_string;
+  std::u16string title_string;
   switch (action_) {
     case chrome::ExtensionInstalledBlockedByParentDialogAction::kAdd:
       // The user is trying to add/install the extension/app
@@ -112,7 +105,7 @@ void ExtensionInstallBlockedByParentDialogView::ConfigureTitle() {
 void ExtensionInstallBlockedByParentDialogView::CreateContents() {
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
-  base::string16 body_string;
+  std::u16string body_string;
   switch (action_) {
     case chrome::ExtensionInstalledBlockedByParentDialogAction::kAdd:
       // The user is trying to add/install the extension/app
@@ -132,8 +125,8 @@ void ExtensionInstallBlockedByParentDialogView::CreateContents() {
                                 SK_ColorDKGRAY);
 
   const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
-  const gfx::Insets content_insets =
-      provider->GetDialogInsetsForContentType(views::TEXT, views::TEXT);
+  const gfx::Insets content_insets = provider->GetDialogInsetsForContentType(
+      views::DialogContentType::kText, views::DialogContentType::kText);
 
   set_margins(gfx::Insets(content_insets.top(), content_insets.left(),
                           content_insets.bottom(), content_insets.right()));
@@ -144,10 +137,15 @@ void ExtensionInstallBlockedByParentDialogView::CreateContents() {
   message_body_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 }
 
-base::string16
-ExtensionInstallBlockedByParentDialogView::GetExtensionTypeString() {
+std::u16string
+ExtensionInstallBlockedByParentDialogView::GetExtensionTypeString() const {
   return l10n_util::GetStringUTF16(
       extension_->is_app()
           ? IDS_PARENT_PERMISSION_PROMPT_EXTENSION_TYPE_APP
           : IDS_PARENT_PERMISSION_PROMPT_EXTENSION_TYPE_EXTENSION);
 }
+
+BEGIN_METADATA(ExtensionInstallBlockedByParentDialogView,
+               views::DialogDelegateView)
+ADD_READONLY_PROPERTY_METADATA(std::u16string, ExtensionTypeString)
+END_METADATA

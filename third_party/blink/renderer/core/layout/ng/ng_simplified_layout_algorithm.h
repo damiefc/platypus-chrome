@@ -14,7 +14,7 @@ namespace blink {
 
 class NGBlockBreakToken;
 struct NGLink;
-class NGPhysicalContainerFragment;
+class NGPhysicalFragment;
 
 // The "simplified" layout algorithm will run in the following circumstances:
 //  - An OOF-positioned descendant of this node (this node is its containing
@@ -42,17 +42,20 @@ class CORE_EXPORT NGSimplifiedLayoutAlgorithm
   NGSimplifiedLayoutAlgorithm(const NGLayoutAlgorithmParams&,
                               const NGLayoutResult&);
 
-  scoped_refptr<const NGLayoutResult> Layout() override;
-  MinMaxSizesResult ComputeMinMaxSizes(const MinMaxSizesInput&) const override {
+  const NGLayoutResult* Layout() override;
+  MinMaxSizesResult ComputeMinMaxSizes(
+      const MinMaxSizesFloatInput&) const override {
     NOTREACHED();
-    return {MinMaxSizes(), /* depends_on_percentage_block_size */ true};
+    return MinMaxSizesResult();
   }
 
-  NOINLINE scoped_refptr<const NGLayoutResult> LayoutWithItemsBuilder();
+  NOINLINE const NGLayoutResult* LayoutWithItemsBuilder();
 
  private:
   void AddChildFragment(const NGLink& old_fragment,
-                        const NGPhysicalContainerFragment& new_fragment);
+                        const NGPhysicalFragment& new_fragment,
+                        const NGMarginStrut* margin_strut = nullptr,
+                        bool is_self_collapsing = false);
 
   const NGLayoutResult& previous_result_;
   NGBoxStrut border_scrollbar_padding_;

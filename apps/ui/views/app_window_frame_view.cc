@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/grit/theme_resources.h"
 #include "extensions/browser/app_window/native_app_window.h"
@@ -16,6 +17,7 @@
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
@@ -33,9 +35,6 @@ const int kCaptionHeight = 25;
 }  // namespace
 
 namespace apps {
-
-const char AppWindowFrameView::kViewClassName[] =
-    "browser/ui/views/extensions/AppWindowFrameView";
 
 AppWindowFrameView::AppWindowFrameView(views::Widget* widget,
                                        extensions::NativeAppWindow* window,
@@ -64,6 +63,7 @@ void AppWindowFrameView::Init() {
     close_button->SetImage(
         views::Button::STATE_PRESSED,
         rb.GetNativeImageNamed(IDR_APP_WINDOW_CLOSE_P).ToImageSkia());
+    close_button->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     close_button->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_APP_ACCNAME_CLOSE));
     close_button_ = AddChildView(std::move(close_button));
@@ -80,6 +80,7 @@ void AppWindowFrameView::Init() {
     maximize_button->SetImage(
         views::Button::STATE_DISABLED,
         rb.GetNativeImageNamed(IDR_APP_WINDOW_MAXIMIZE_D).ToImageSkia());
+    maximize_button->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     maximize_button->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_APP_ACCNAME_MAXIMIZE));
     maximize_button_ = AddChildView(std::move(maximize_button));
@@ -92,6 +93,7 @@ void AppWindowFrameView::Init() {
     restore_button->SetImage(
         views::Button::STATE_PRESSED,
         rb.GetNativeImageNamed(IDR_APP_WINDOW_RESTORE_P).ToImageSkia());
+    restore_button->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     restore_button->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_APP_ACCNAME_RESTORE));
     restore_button_ = AddChildView(std::move(restore_button));
@@ -104,6 +106,7 @@ void AppWindowFrameView::Init() {
     minimize_button->SetImage(
         views::Button::STATE_PRESSED,
         rb.GetNativeImageNamed(IDR_APP_WINDOW_MINIMIZE_P).ToImageSkia());
+    minimize_button->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     minimize_button->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_APP_ACCNAME_MINIMIZE));
     minimize_button_ = AddChildView(std::move(minimize_button));
@@ -132,7 +135,9 @@ gfx::Rect AppWindowFrameView::GetBoundsForClientView() const {
 gfx::Rect AppWindowFrameView::GetWindowBoundsForClientBounds(
     const gfx::Rect& client_bounds) const {
   gfx::Rect window_bounds = client_bounds;
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // Get the difference between the widget's client area bounds and window
   // bounds, and grow |window_bounds| by that amount.
   gfx::Insets native_frame_insets =
@@ -244,8 +249,11 @@ gfx::Size AppWindowFrameView::CalculatePreferredSize() const {
 }
 
 void AppWindowFrameView::Layout() {
+  NonClientFrameView::Layout();
+
   if (!draw_frame_)
     return;
+
   gfx::Size close_size = close_button_->GetPreferredSize();
   const int kButtonOffsetY = 0;
   const int kButtonSpacing = 1;
@@ -318,8 +326,6 @@ void AppWindowFrameView::OnPaint(gfx::Canvas* canvas) {
   canvas->DrawPath(path, flags);
 }
 
-const char* AppWindowFrameView::GetClassName() const { return kViewClassName; }
-
 gfx::Size AppWindowFrameView::GetMinimumSize() const {
   gfx::Size min_size = widget_->client_view()->GetMinimumSize();
   if (!draw_frame_) {
@@ -384,5 +390,8 @@ void AppWindowFrameView::SetButtonImagesForFrame() {
         rb.GetNativeImageNamed(IDR_APP_WINDOW_MINIMIZE).ToImageSkia());
   }
 }
+
+BEGIN_METADATA(AppWindowFrameView, views::NonClientFrameView)
+END_METADATA
 
 }  // namespace apps

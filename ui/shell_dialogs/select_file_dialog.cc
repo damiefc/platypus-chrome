@@ -26,8 +26,7 @@ ui::SelectFileDialogFactory* dialog_factory_ = NULL;
 
 namespace ui {
 
-SelectFileDialog::FileTypeInfo::FileTypeInfo()
-    : include_all_files(false), allowed_paths(NATIVE_PATH) {}
+SelectFileDialog::FileTypeInfo::FileTypeInfo() = default;
 
 SelectFileDialog::FileTypeInfo::FileTypeInfo(const FileTypeInfo& other) =
     default;
@@ -97,7 +96,7 @@ base::FilePath SelectFileDialog::GetShortenedFilePath(
 
 void SelectFileDialog::SelectFile(
     Type type,
-    const base::string16& title,
+    const std::u16string& title,
     const base::FilePath& default_path,
     const FileTypeInfo* file_types,
     int file_type_index,

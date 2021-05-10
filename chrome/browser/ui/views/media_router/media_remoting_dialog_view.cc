@@ -14,6 +14,7 @@
 #include "components/media_router/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/style/typography.h"
@@ -74,13 +75,6 @@ bool MediaRemotingDialogView::IsShowing() {
   return instance_ != nullptr;
 }
 
-gfx::Size MediaRemotingDialogView::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
-}
-
 MediaRemotingDialogView::MediaRemotingDialogView(
     views::View* anchor_view,
     PrefService* pref_service,
@@ -104,6 +98,9 @@ MediaRemotingDialogView::MediaRemotingDialogView(
                                    base::Unretained(this), true));
   SetCancelCallback(base::BindOnce(&MediaRemotingDialogView::ReportPermission,
                                    base::Unretained(this), false));
+
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
 
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
@@ -144,5 +141,8 @@ void MediaRemotingDialogView::ReportPermission(bool allowed) {
 
 // static
 MediaRemotingDialogView* MediaRemotingDialogView::instance_ = nullptr;
+
+BEGIN_METADATA(MediaRemotingDialogView, views::BubbleDialogDelegateView)
+END_METADATA
 
 }  // namespace media_router

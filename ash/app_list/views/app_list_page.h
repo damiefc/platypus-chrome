@@ -5,8 +5,8 @@
 #ifndef ASH_APP_LIST_VIEWS_APP_LIST_PAGE_H_
 #define ASH_APP_LIST_VIEWS_APP_LIST_PAGE_H_
 
-#include "ash/app_list/app_list_export.h"
 #include "ash/app_list/model/app_list_model.h"
+#include "ash/ash_export.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "ui/views/view.h"
@@ -15,7 +15,7 @@ namespace ash {
 
 class ContentsView;
 
-class APP_LIST_EXPORT AppListPage : public views::View {
+class ASH_EXPORT AppListPage : public views::View {
  public:
   AppListPage();
   ~AppListPage() override;
@@ -101,9 +101,6 @@ class APP_LIST_EXPORT AppListPage : public views::View {
     contents_view_ = contents_view;
   }
 
-  // Returns selected view in this page.
-  virtual views::View* GetSelectedView() const;
-
   // Returns the first focusable view in this page.
   virtual views::View* GetFirstFocusableView();
 
@@ -123,14 +120,11 @@ class APP_LIST_EXPORT AppListPage : public views::View {
   // Called when the app list view state changes to |target_view_state| to
   // animate the app list page vertical offset from the app list view top.
   // |animator| - The callback that runs the transform animation to update the
-  // page's vertical position. (The layer is required argument, while view is
-  // optional, and should be used with layers associated with views - the
-  // animator will send out a11y position change notification for the view when
-  // the animation finishes).
+  // page's vertical position.
   // |default_offset| - the default transform offset that can be passed to
   //     |animator| to follow the search box position animation.
-  using TransformAnimator = base::RepeatingCallback<
-      void(float offset, ui::Layer* layer, views::View* view)>;
+  using TransformAnimator =
+      base::RepeatingCallback<void(float offset, ui::Layer* layer)>;
   virtual void AnimateYPosition(AppListViewState target_view_state,
                                 const TransformAnimator& animator,
                                 float default_offset);

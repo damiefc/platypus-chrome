@@ -11,10 +11,14 @@ GEN_INCLUDE([
  * Test fixture for Live Regions.
  */
 ChromeVoxLiveRegionsTest = class extends ChromeVoxNextE2ETest {
-  /** @override */
   setUp() {
-    window.RoleType = chrome.automation.RoleType;
     window.TreeChangeType = chrome.automation.TreeChangeType;
+    const runTest = this.deferRunTest(WhenTestDone.EXPECT);
+    (async function() {
+      await importModule(
+          'LiveRegions', '/chromevox/background/live_regions.js');
+      runTest();
+    })();
   }
 
   /**
@@ -169,12 +173,12 @@ TEST_F('ChromeVoxLiveRegionsTest', 'LiveRegionThenFocus', function() {
         let sawFocus = false;
         let sawLive = false;
         const focusOrLive = function(candidate) {
-          sawFocus = candidate.text == 'Focus' || sawFocus;
-          sawLive = candidate.text == 'Live' || sawLive;
+          sawFocus = candidate.text === 'Focus' || sawFocus;
+          sawLive = candidate.text === 'Live' || sawLive;
           if (sawFocus && sawLive) {
-            return candidate.queueMode != QueueMode.FLUSH;
+            return candidate.queueMode !== QueueMode.FLUSH;
           } else if (sawFocus || sawLive) {
-            return candidate.queueMode == QueueMode.FLUSH;
+            return candidate.queueMode === QueueMode.FLUSH;
           }
         };
         const go = rootNode.find({role: RoleType.BUTTON});

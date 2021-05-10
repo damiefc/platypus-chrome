@@ -4,12 +4,12 @@
 
 (async function() {
   TestRunner.addResult(`Tests how SourceFormatter handles JS sources\n`);
-  await TestRunner.loadModule('sources_test_runner');
+  await TestRunner.loadModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
   await TestRunner.showPanel('sources');
   await TestRunner.addScriptTag('debugger/resources/obfuscated.js');
 
   var uiSourceCode = await TestRunner.waitForUISourceCode('obfuscated.js');
-  var formatData = await Formatter.sourceFormatter.format(uiSourceCode);
+  var formatData = await Formatter.SourceFormatter.instance().format(uiSourceCode);
   var targetContent = (await formatData.formattedSourceCode.requestContent()).content;
 
   TestRunner.addResult(`Formatted:\n${targetContent}`);
@@ -24,7 +24,7 @@
   TestRunner.addResult('Location mapping with formatted source:');
   await dumpLocations(positions);
 
-  await Formatter.sourceFormatter.discardFormattedUISourceCode(formatData.formattedSourceCode);
+  await Formatter.SourceFormatter.instance().discardFormattedUISourceCode(formatData.formattedSourceCode);
 
   TestRunner.addResult('Location mapping without formatted source:');
   await dumpLocations(positions);

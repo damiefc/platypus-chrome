@@ -6,49 +6,29 @@
 
 #include <algorithm>
 
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_role_properties.h"
 
 namespace ui {
+
 namespace {
-
-bool IsActiveLiveRegion(const AXTreeObserver::Change& change) {
-  return change.node->data().HasStringAttribute(
-             ax::mojom::StringAttribute::kLiveStatus) &&
-         change.node->data().GetStringAttribute(
-             ax::mojom::StringAttribute::kLiveStatus) != "off";
-}
-
-bool IsContainedInLiveRegion(const AXTreeObserver::Change& change) {
-  return change.node->data().HasStringAttribute(
-             ax::mojom::StringAttribute::kContainerLiveStatus) &&
-         change.node->data().HasStringAttribute(
-             ax::mojom::StringAttribute::kName);
-}
 
 bool HasEvent(const std::set<AXEventGenerator::EventParams>& node_events,
               AXEventGenerator::Event event) {
-  for (auto& iter : node_events) {
-    if (iter.event == event)
-      return true;
-  }
-  return false;
+  return node_events.count(AXEventGenerator::EventParams(event));
 }
 
 void RemoveEvent(std::set<AXEventGenerator::EventParams>* node_events,
                  AXEventGenerator::Event event) {
-  for (auto& iter : *node_events) {
-    if (iter.event == event) {
-      node_events->erase(iter);
-      return;
-    }
-  }
+  node_events->erase(AXEventGenerator::EventParams(event));
 }
 
 // If a node toggled its ignored state, don't also fire children-changed because
-// platforms likely will do that in response to ignored-changed.
+// platforms likely will do that in response to ignored-changed. Also do not
+// fire parent-changed on ignored nodes because functionally the parent did not
+// change as far as platform assistive technologies are concerned.
 // Suppress name- and description-changed because those can be emitted as a side
 // effect of calculating alternative text values for a newly-displayed object.
 // Ditto for text attributes such as foreground and background colors, or
@@ -61,6 +41,7 @@ void RemoveEventsDueToIgnoredChanged(
   RemoveEvent(node_events, AXEventGenerator::Event::DESCRIPTION_CHANGED);
   RemoveEvent(node_events, AXEventGenerator::Event::NAME_CHANGED);
   RemoveEvent(node_events, AXEventGenerator::Event::OBJECT_ATTRIBUTE_CHANGED);
+  RemoveEvent(node_events, AXEventGenerator::Event::PARENT_CHANGED);
   RemoveEvent(node_events, AXEventGenerator::Event::SORT_CHANGED);
   RemoveEvent(node_events, AXEventGenerator::Event::TEXT_ATTRIBUTE_CHANGED);
   RemoveEvent(node_events,
@@ -70,38 +51,45 @@ void RemoveEventsDueToIgnoredChanged(
 // Add a particular AXEventGenerator::IgnoredChangedState to
 // |ignored_changed_states|.
 void AddIgnoredChangedState(
-    AXEventGenerator::IgnoredChangedStatesBitset& ignored_changed_states,
-    AXEventGenerator::IgnoredChangedState state) {
-  ignored_changed_states.set(static_cast<size_t>(state));
+    const AXEventGenerator::IgnoredChangedState& state,
+    AXEventGenerator::IgnoredChangedStatesBitset* ignored_changed_states) {
+  ignored_changed_states->set(static_cast<size_t>(state));
 }
 
 // Returns true if |ignored_changed_states| contains a particular
 // AXEventGenerator::IgnoredChangedState.
 bool HasIgnoredChangedState(
-    AXEventGenerator::IgnoredChangedStatesBitset& ignored_changed_states,
-    AXEventGenerator::IgnoredChangedState state) {
+    const AXEventGenerator::IgnoredChangedStatesBitset& ignored_changed_states,
+    const AXEventGenerator::IgnoredChangedState& state) {
   return ignored_changed_states[static_cast<size_t>(state)];
 }
 
 }  // namespace
 
+//
+// AXEventGenerator::EventParams
+//
+
+AXEventGenerator::EventParams::EventParams(const Event event) : event(event) {}
+
 AXEventGenerator::EventParams::EventParams(
-    Event event,
-    ax::mojom::EventFrom event_from,
+    const Event event,
+    const ax::mojom::EventFrom event_from,
+    const ax::mojom::Action event_from_action,
     const std::vector<AXEventIntent>& event_intents)
-    : event(event), event_from(event_from), event_intents(event_intents) {}
+    : event(event),
+      event_from(event_from),
+      event_from_action(event_from_action),
+      event_intents(event_intents) {}
 
 AXEventGenerator::EventParams::EventParams(const EventParams& other) = default;
 
 AXEventGenerator::EventParams::~EventParams() = default;
 
-AXEventGenerator::TargetedEvent::TargetedEvent(AXNode* node,
-                                               const EventParams& event_params)
-    : node(node), event_params(event_params) {
-  DCHECK(node);
-}
+AXEventGenerator::EventParams& AXEventGenerator::EventParams::operator=(
+    const EventParams& other) = default;
 
-bool AXEventGenerator::EventParams::operator==(const EventParams& rhs) {
+bool AXEventGenerator::EventParams::operator==(const EventParams& rhs) const {
   return rhs.event == event;
 }
 
@@ -109,11 +97,27 @@ bool AXEventGenerator::EventParams::operator<(const EventParams& rhs) const {
   return event < rhs.event;
 }
 
+//
+// AXEventGenerator::TargetedEvent
+//
+
+AXEventGenerator::TargetedEvent::TargetedEvent(AXNode* node,
+                                               const EventParams& event_params)
+    : node(node), event_params(event_params) {
+  DCHECK(node);
+}
+
+AXEventGenerator::TargetedEvent::~TargetedEvent() = default;
+
+//
+// AXEventGenerator::Iterator
+//
+
 AXEventGenerator::Iterator::Iterator(
-    const std::map<AXNode*, std::set<EventParams>>& map,
-    const std::map<AXNode*, std::set<EventParams>>::const_iterator& head)
-    : map_(map), map_iter_(head) {
-  if (map_iter_ != map.end())
+    std::map<AXNode*, std::set<EventParams>>::const_iterator map_start_iter,
+    std::map<AXNode*, std::set<EventParams>>::const_iterator map_end_iter)
+    : map_iter_(map_start_iter), map_end_iter_(map_end_iter) {
+  if (map_iter_ != map_end_iter_)
     set_iter_ = map_iter_->second.begin();
 }
 
@@ -122,56 +126,107 @@ AXEventGenerator::Iterator::Iterator(const AXEventGenerator::Iterator& other) =
 
 AXEventGenerator::Iterator::~Iterator() = default;
 
-bool AXEventGenerator::Iterator::operator!=(
-    const AXEventGenerator::Iterator& rhs) const {
-  return map_iter_ != rhs.map_iter_ ||
-         (map_iter_ != map_.end() && set_iter_ != rhs.set_iter_);
-}
+AXEventGenerator::Iterator& AXEventGenerator::Iterator::operator=(
+    const Iterator& other) = default;
 
 AXEventGenerator::Iterator& AXEventGenerator::Iterator::operator++() {
-  if (map_iter_ == map_.end())
+  if (map_iter_ == map_end_iter_)
     return *this;
 
   DCHECK(set_iter_ != map_iter_->second.end());
   set_iter_++;
 
-  // |map_| may contain empty sets of events in its entries (i.e. |set_iter_| is
-  // at the iterator's end). In this case, we want to increment |map_iter_| to
-  // point to the next entry of |map_| that contains non-empty set of events.
-  while (map_iter_ != map_.end() && set_iter_ == map_iter_->second.end()) {
+  // The map pointed to by |map_end_iter_| may contain empty sets of events in
+  // its entries (i.e. |set_iter_| is at the iterator's end). In this case, we
+  // want to increment |map_iter_| to point to the next entry of the map that
+  // contains a non-empty set of events.
+  while (map_iter_ != map_end_iter_ && set_iter_ == map_iter_->second.end()) {
     map_iter_++;
-    if (map_iter_ != map_.end())
+    if (map_iter_ != map_end_iter_)
       set_iter_ = map_iter_->second.begin();
   }
 
   return *this;
 }
 
+AXEventGenerator::Iterator AXEventGenerator::Iterator::operator++(int) {
+  if (map_iter_ == map_end_iter_)
+    return *this;
+  Iterator iter = *this;
+  ++(*this);
+  return iter;
+}
+
 AXEventGenerator::TargetedEvent AXEventGenerator::Iterator::operator*() const {
-  DCHECK(map_iter_ != map_.end() && set_iter_ != map_iter_->second.end());
+  DCHECK(map_iter_ != map_end_iter_);
+  DCHECK(set_iter_ != map_iter_->second.end());
   return AXEventGenerator::TargetedEvent(map_iter_->first, *set_iter_);
 }
+
+bool operator==(const AXEventGenerator::Iterator& lhs,
+                const AXEventGenerator::Iterator& rhs) {
+  if (lhs.map_iter_ == lhs.map_end_iter_ && rhs.map_iter_ == rhs.map_end_iter_)
+    return true;
+  return lhs.map_iter_ == rhs.map_iter_ && lhs.set_iter_ == rhs.set_iter_;
+}
+
+bool operator!=(const AXEventGenerator::Iterator& lhs,
+                const AXEventGenerator::Iterator& rhs) {
+  return !(lhs == rhs);
+}
+
+void swap(AXEventGenerator::Iterator& lhs, AXEventGenerator::Iterator& rhs) {
+  if (lhs == rhs)
+    return;
+
+  std::map<AXNode*, std::set<AXEventGenerator::EventParams>>::const_iterator
+      map_iter = lhs.map_iter_;
+  lhs.map_iter_ = rhs.map_iter_;
+  rhs.map_iter_ = map_iter;
+  std::map<AXNode*, std::set<AXEventGenerator::EventParams>>::const_iterator
+      map_end_iter = lhs.map_end_iter_;
+  lhs.map_end_iter_ = rhs.map_end_iter_;
+  rhs.map_end_iter_ = map_end_iter;
+  std::set<AXEventGenerator::EventParams>::const_iterator set_iter =
+      lhs.set_iter_;
+  lhs.set_iter_ = rhs.set_iter_;
+  rhs.set_iter_ = set_iter;
+}
+
+//
+// AXEventGenerator
+//
 
 AXEventGenerator::AXEventGenerator() = default;
 
 AXEventGenerator::AXEventGenerator(AXTree* tree) : tree_(tree) {
   if (tree_)
-    tree_event_observer_.Add(tree_);
+    tree_event_observation_.Observe(tree_);
 }
 
 AXEventGenerator::~AXEventGenerator() = default;
 
 void AXEventGenerator::SetTree(AXTree* new_tree) {
-  if (tree_)
-    tree_event_observer_.Remove(tree_);
+  if (tree_) {
+    DCHECK(tree_event_observation_.IsObservingSource(tree_));
+    tree_event_observation_.Reset();
+  }
   tree_ = new_tree;
   if (tree_)
-    tree_event_observer_.Add(tree_);
+    tree_event_observation_.Observe(tree_);
 }
 
 void AXEventGenerator::ReleaseTree() {
-  tree_event_observer_.RemoveAll();
+  tree_event_observation_.Reset();
   tree_ = nullptr;
+}
+
+bool AXEventGenerator::empty() const {
+  return tree_events_.empty();
+}
+
+size_t AXEventGenerator::size() const {
+  return tree_events_.size();
 }
 
 AXEventGenerator::Iterator AXEventGenerator::begin() const {
@@ -182,7 +237,7 @@ AXEventGenerator::Iterator AXEventGenerator::begin() const {
     // |tree_events_| may contain empty sets of events in its first entry
     // (i.e. |set_iter| is at the iterator's end). In this case, we want to
     // increment |map_iter| to point to the next entry of |tree_events_| that
-    // contains non-empty set of events.
+    // contains a non-empty set of events.
     while (map_iter != tree_events_.end() &&
            set_iter == map_iter->second.end()) {
       map_iter++;
@@ -191,11 +246,11 @@ AXEventGenerator::Iterator AXEventGenerator::begin() const {
     }
   }
 
-  return AXEventGenerator::Iterator(tree_events_, map_iter);
+  return AXEventGenerator::Iterator(map_iter, tree_events_.end());
 }
 
 AXEventGenerator::Iterator AXEventGenerator::end() const {
-  return AXEventGenerator::Iterator(tree_events_, tree_events_.end());
+  return AXEventGenerator::Iterator(tree_events_.end(), tree_events_.end());
 }
 
 void AXEventGenerator::ClearEvents() {
@@ -210,7 +265,7 @@ void AXEventGenerator::AddEvent(AXNode* node, AXEventGenerator::Event event) {
 
   std::set<EventParams>& node_events = tree_events_[node];
   node_events.emplace(event, ax::mojom::EventFrom::kNone,
-                      tree_->event_intents());
+                      ax::mojom::Action::kNone, tree_->event_intents());
 }
 
 void AXEventGenerator::OnNodeDataChanged(AXTree* tree,
@@ -225,9 +280,26 @@ void AXEventGenerator::OnNodeDataChanged(AXTree* tree,
   if (new_node_data.child_ids != old_node_data.child_ids &&
       !ui::IsText(new_node_data.role)) {
     AXNode* node = tree_->GetFromId(new_node_data.id);
-    tree_events_[node].emplace(Event::CHILDREN_CHANGED,
-                               ax::mojom::EventFrom::kNone,
-                               tree_->event_intents());
+    if (node)
+      AddEvent(node, Event::CHILDREN_CHANGED);
+  }
+
+  // If the ignored state of a node has changed, the inclusion/exclusion of that
+  // node in platform accessibility trees will change. Fire PARENT_CHANGED on
+  // the children of a node whose ignored state changed in order to notify ATs
+  // that existing children may have been reparented.
+  //
+  // We don't fire parent-changed if the invisible state of the node has changed
+  // because when invisibility changes, the entire subtree is being inserted /
+  // removed. For example if the 'hidden' property is changed on list item, we
+  // should not fire parent-changed on the list marker or static text.
+  if (old_node_data.IsIgnored() != new_node_data.IsIgnored() &&
+      !old_node_data.IsInvisible() && !new_node_data.IsInvisible()) {
+    AXNode* node = tree_->GetFromId(new_node_data.id);
+    for (size_t i = 0; i < node->GetUnignoredChildCount(); ++i) {
+      AXNode* child = node->GetUnignoredChildAtIndex(i);
+      AddEvent(child, Event::PARENT_CHANGED);
+    }
   }
 }
 
@@ -270,6 +342,10 @@ void AXEventGenerator::OnStateChanged(AXTree* tree,
       AddEvent(node, Event::IGNORED_CHANGED);
       if (!new_value)
         AddEvent(node, Event::SUBTREE_CREATED);
+      if (node->data().role == ax::mojom::Role::kMenu) {
+        new_value ? AddEvent(node, Event::MENU_POPUP_END)
+                  : AddEvent(node, Event::MENU_POPUP_START);
+      }
       break;
     }
     case ax::mojom::State::kMultiline:
@@ -309,6 +385,13 @@ void AXEventGenerator::OnStringAttributeChanged(AXTree* tree,
     case ax::mojom::StringAttribute::kDescription:
       AddEvent(node, Event::DESCRIPTION_CHANGED);
       break;
+    case ax::mojom::StringAttribute::kFontFamily:
+      AddEvent(node, Event::TEXT_ATTRIBUTE_CHANGED);
+      break;
+    case ax::mojom::StringAttribute::kImageAnnotation:
+      // The image annotation is reported as part of the accessible name.
+      AddEvent(node, Event::IMAGE_ANNOTATION_CHANGED);
+      break;
     case ax::mojom::StringAttribute::kKeyShortcuts:
       AddEvent(node, Event::KEY_SHORTCUTS_CHANGED);
       break;
@@ -336,23 +419,31 @@ void AXEventGenerator::OnStringAttributeChanged(AXTree* tree,
       if (node != tree->root())
         AddEvent(node, Event::NAME_CHANGED);
 
+      // If it's in a live region, fire live region events.
       if (node->data().HasStringAttribute(
               ax::mojom::StringAttribute::kContainerLiveStatus)) {
         FireLiveRegionEvents(node);
+      }
+
+      // If it's a change to static text, and it's in an editable text field,
+      // fire an event on the editable root.
+      if (IsText(node->data().role)) {
+        AXNode* text_field = node->GetTextFieldAncestor();
+        if (text_field)
+          AddEvent(text_field, Event::EDITABLE_TEXT_CHANGED);
       }
       break;
     case ax::mojom::StringAttribute::kPlaceholder:
       AddEvent(node, Event::PLACEHOLDER_CHANGED);
       break;
     case ax::mojom::StringAttribute::kValue:
-      AddEvent(node, Event::VALUE_CHANGED);
-      break;
-    case ax::mojom::StringAttribute::kImageAnnotation:
-      // The image annotation is reported as part of the accessible name.
-      AddEvent(node, Event::IMAGE_ANNOTATION_CHANGED);
-      break;
-    case ax::mojom::StringAttribute::kFontFamily:
-      AddEvent(node, Event::TEXT_ATTRIBUTE_CHANGED);
+      if (node->data().IsRangeValueSupported()) {
+        AddEvent(node, Event::RANGE_VALUE_CHANGED);
+      } else if (IsSelectElement(node->data().role)) {
+        AddEvent(node, Event::SELECTED_VALUE_CHANGED);
+      } else if (node->data().IsTextField()) {
+        AddEvent(node, Event::VALUE_IN_TEXT_FIELD_CHANGED);
+      }
       break;
     default:
       AddEvent(node, Event::OTHER_ATTRIBUTE_CHANGED);
@@ -379,6 +470,9 @@ void AXEventGenerator::OnIntAttributeChanged(AXTree* tree,
     case ax::mojom::IntAttribute::kCheckedState:
       AddEvent(node, Event::CHECKED_STATE_CHANGED);
       AddEvent(node, Event::WIN_IACCESSIBLE_STATE_CHANGED);
+      break;
+    case ax::mojom::IntAttribute::kAriaCurrentState:
+      AddEvent(node, Event::ARIA_CURRENT_CHANGED);
       break;
     case ax::mojom::IntAttribute::kDropeffect:
       AddEvent(node, Event::DROPEFFECT_CHANGED);
@@ -468,16 +562,16 @@ void AXEventGenerator::OnFloatAttributeChanged(AXTree* tree,
 
   switch (attr) {
     case ax::mojom::FloatAttribute::kMaxValueForRange:
-      AddEvent(node, Event::VALUE_MAX_CHANGED);
+      AddEvent(node, Event::RANGE_VALUE_MAX_CHANGED);
       break;
     case ax::mojom::FloatAttribute::kMinValueForRange:
-      AddEvent(node, Event::VALUE_MIN_CHANGED);
+      AddEvent(node, Event::RANGE_VALUE_MIN_CHANGED);
       break;
     case ax::mojom::FloatAttribute::kStepValueForRange:
-      AddEvent(node, Event::VALUE_STEP_CHANGED);
+      AddEvent(node, Event::RANGE_VALUE_STEP_CHANGED);
       break;
     case ax::mojom::FloatAttribute::kValueForRange:
-      AddEvent(node, Event::VALUE_CHANGED);
+      AddEvent(node, Event::RANGE_VALUE_CHANGED);
       break;
     case ax::mojom::FloatAttribute::kFontSize:
     case ax::mojom::FloatAttribute::kFontWeight:
@@ -553,8 +647,8 @@ void AXEventGenerator::OnIntListAttributeChanged(
       AddEvent(node, Event::FLOW_TO_CHANGED);
 
       // Fire FLOW_FROM_CHANGED for all nodes added or removed
-      for (int32_t id : ComputeIntListDifference(old_value, new_value)) {
-        if (auto* target_node = tree->GetFromId(id))
+      for (AXNodeID id : ComputeIntListDifference(old_value, new_value)) {
+        if (AXNode* target_node = tree->GetFromId(id))
           AddEvent(target_node, Event::FLOW_FROM_CHANGED);
       }
       break;
@@ -568,10 +662,11 @@ void AXEventGenerator::OnIntListAttributeChanged(
       // On a native text field, the spelling- and grammar-error markers are
       // associated with children not exposed on any platform. Therefore, we
       // adjust the node we fire that event on here.
-      if (AXNode* text_field = node->GetTextFieldAncestor())
+      if (AXNode* text_field = node->GetTextFieldAncestor()) {
         AddEvent(text_field, Event::TEXT_ATTRIBUTE_CHANGED);
-      else
+      } else {
         AddEvent(node, Event::TEXT_ATTRIBUTE_CHANGED);
+      }
       break;
     default:
       AddEvent(node, Event::OTHER_ATTRIBUTE_CHANGED);
@@ -583,11 +678,15 @@ void AXEventGenerator::OnTreeDataChanged(AXTree* tree,
                                          const AXTreeData& old_tree_data,
                                          const AXTreeData& new_tree_data) {
   DCHECK_EQ(tree_, tree);
+  DCHECK(tree->root());
 
   if (new_tree_data.loaded && !old_tree_data.loaded &&
       ShouldFireLoadEvents(tree->root())) {
     AddEvent(tree->root(), Event::LOAD_COMPLETE);
   }
+
+  if (new_tree_data.title != old_tree_data.title)
+    AddEvent(tree->root(), Event::DOCUMENT_TITLE_CHANGED);
 
   if (new_tree_data.sel_is_backward != old_tree_data.sel_is_backward ||
       new_tree_data.sel_anchor_object_id !=
@@ -598,9 +697,22 @@ void AXEventGenerator::OnTreeDataChanged(AXTree* tree,
       new_tree_data.sel_focus_offset != old_tree_data.sel_focus_offset ||
       new_tree_data.sel_focus_affinity != old_tree_data.sel_focus_affinity) {
     AddEvent(tree->root(), Event::DOCUMENT_SELECTION_CHANGED);
+
+    // A special event is also fired internally for selection changes in text
+    // fields. The reasons are both historical and in order to have a unified
+    // way of handling selection changes between Web and Views. Views don't have
+    // the concept of a document selection but some individual Views controls
+    // have the ability for the user to select text inside them.
+    const AXNode* selection_focus =
+        tree_->GetFromId(new_tree_data.sel_focus_object_id);
+    if (selection_focus) {
+      // Even if it is possible for the document selection to span multiple text
+      // fields, an event should still fire on the field where the selection
+      // ends.
+      if (AXNode* text_field = selection_focus->GetTextFieldAncestor())
+        AddEvent(text_field, Event::SELECTION_IN_TEXT_FIELD_CHANGED);
+    }
   }
-  if (new_tree_data.title != old_tree_data.title)
-    AddEvent(tree->root(), Event::DOCUMENT_TITLE_CHANGED);
 }
 
 void AXEventGenerator::OnNodeWillBeDeleted(AXTree* tree, AXNode* node) {
@@ -621,11 +733,17 @@ void AXEventGenerator::OnSubtreeWillBeReparented(AXTree* tree, AXNode* node) {
   DCHECK_EQ(tree_, tree);
 }
 
+void AXEventGenerator::OnNodeReparented(AXTree* tree, AXNode* node) {
+  DCHECK_EQ(tree_, tree);
+  AddEvent(node, Event::PARENT_CHANGED);
+}
+
 void AXEventGenerator::OnAtomicUpdateFinished(
     AXTree* tree,
     bool root_changed,
     const std::vector<Change>& changes) {
   DCHECK_EQ(tree_, tree);
+  DCHECK(tree->root());
 
   if (root_changed && ShouldFireLoadEvents(tree->root())) {
     if (tree->data().loaded)
@@ -635,18 +753,20 @@ void AXEventGenerator::OnAtomicUpdateFinished(
   }
 
   for (const auto& change : changes) {
+    DCHECK(change.node);
     if (change.type == SUBTREE_CREATED) {
       AddEvent(change.node, Event::SUBTREE_CREATED);
     } else if (change.type != NODE_CREATED) {
+      FireValueInTextFieldChangedEvent(tree, change.node);
       FireRelationSourceEvents(tree, change.node);
       continue;
     }
 
     if (IsAlert(change.node->data().role))
       AddEvent(change.node, Event::ALERT);
-    else if (IsActiveLiveRegion(change))
+    else if (change.node->data().IsActiveLiveRegionRoot())
       AddEvent(change.node, Event::LIVE_REGION_CREATED);
-    else if (IsContainedInLiveRegion(change))
+    else if (change.node->data().IsContainedInActiveLiveRegion())
       FireLiveRegionEvents(change.node);
   }
 
@@ -658,6 +778,7 @@ void AXEventGenerator::OnAtomicUpdateFinished(
 void AXEventGenerator::AddEventsForTesting(
     AXNode* node,
     const std::set<EventParams>& events) {
+  DCHECK(node);
   tree_events_[node] = events;
 }
 
@@ -701,9 +822,19 @@ void AXEventGenerator::FireActiveDescendantEvents() {
   active_descendant_changed_.clear();
 }
 
+void AXEventGenerator::FireValueInTextFieldChangedEvent(AXTree* tree,
+                                                        AXNode* target_node) {
+  if (!target_node->IsText())
+    return;
+  AXNode* text_field_ancestor = target_node->GetTextFieldAncestor();
+  if (!text_field_ancestor)
+    return;
+  AddEvent(text_field_ancestor, Event::VALUE_IN_TEXT_FIELD_CHANGED);
+}
+
 void AXEventGenerator::FireRelationSourceEvents(AXTree* tree,
                                                 AXNode* target_node) {
-  int32_t target_id = target_node->id();
+  AXNodeID target_id = target_node->id();
   std::set<AXNode*> source_nodes;
   auto callback = [&](const auto& entry) {
     const auto& target_to_sources = entry.second;
@@ -712,7 +843,7 @@ void AXEventGenerator::FireRelationSourceEvents(AXTree* tree,
       return;
 
     auto sources = sources_it->second;
-    std::for_each(sources.begin(), sources.end(), [&](int32_t source_id) {
+    std::for_each(sources.begin(), sources.end(), [&](AXNodeID source_id) {
       AXNode* source_node = tree->GetFromId(source_id);
 
       if (!source_node || source_nodes.count(source_node) > 0)
@@ -790,13 +921,13 @@ void AXEventGenerator::TrimEventsDueToAncestorIgnoredChanged(
     // Propagate ancestor's show/hide states to |node|'s entry in the map.
     if (HasIgnoredChangedState(parent_map_iter->second,
                                IgnoredChangedState::kHide)) {
-      AddIgnoredChangedState(ancestor_ignored_changed_states,
-                             IgnoredChangedState::kHide);
+      AddIgnoredChangedState(IgnoredChangedState::kHide,
+                             &ancestor_ignored_changed_states);
     }
     if (HasIgnoredChangedState(parent_map_iter->second,
                                IgnoredChangedState::kShow)) {
-      AddIgnoredChangedState(ancestor_ignored_changed_states,
-                             IgnoredChangedState::kShow);
+      AddIgnoredChangedState(IgnoredChangedState::kShow,
+                             &ancestor_ignored_changed_states);
     }
 
     // If |node| has IGNORED changed with show/hide state that matches one of
@@ -815,11 +946,11 @@ void AXEventGenerator::TrimEventsDueToAncestorIgnoredChanged(
       }
 
       if (node->IsIgnored()) {
-        AddIgnoredChangedState(ancestor_ignored_changed_states,
-                               IgnoredChangedState::kHide);
+        AddIgnoredChangedState(IgnoredChangedState::kHide,
+                               &ancestor_ignored_changed_states);
       } else {
-        AddIgnoredChangedState(ancestor_ignored_changed_states,
-                               IgnoredChangedState::kShow);
+        AddIgnoredChangedState(IgnoredChangedState::kShow,
+                               &ancestor_ignored_changed_states);
       }
     }
 
@@ -832,11 +963,11 @@ void AXEventGenerator::TrimEventsDueToAncestorIgnoredChanged(
   if (curr_events_iter != tree_events_.end() &&
       HasEvent(curr_events_iter->second, Event::IGNORED_CHANGED)) {
     if (node->IsIgnored()) {
-      AddIgnoredChangedState(ancestor_ignored_changed_states,
-                             IgnoredChangedState::kHide);
+      AddIgnoredChangedState(IgnoredChangedState::kHide,
+                             &ancestor_ignored_changed_states);
     } else {
-      AddIgnoredChangedState(ancestor_ignored_changed_states,
-                             IgnoredChangedState::kShow);
+      AddIgnoredChangedState(IgnoredChangedState::kShow,
+                             &ancestor_ignored_changed_states);
     }
 
     return;
@@ -846,10 +977,18 @@ void AXEventGenerator::TrimEventsDueToAncestorIgnoredChanged(
 void AXEventGenerator::PostprocessEvents() {
   std::map<AXNode*, IgnoredChangedStatesBitset> ancestor_ignored_changed_map;
   std::set<AXNode*> removed_subtree_created_nodes;
+  std::set<AXNode*> removed_parent_changed_nodes;
 
   // First pass through |tree_events_|, remove events that we do not need.
   for (auto& iter : tree_events_) {
     AXNode* node = iter.first;
+
+    // TODO(http://crbug.com/2279799): remove all of the cases that could
+    // add a null node to |tree_events|.
+    DCHECK(node);
+    if (!node)
+      continue;
+
     std::set<EventParams>& node_events = iter.second;
 
     // A newly created live region or alert should not *also* fire a
@@ -887,8 +1026,28 @@ void AXEventGenerator::PostprocessEvents() {
       RemoveEvent(&node_events, Event::TEXT_ATTRIBUTE_CHANGED);
     }
 
+    // Don't fire parent changed on this node if any of its ancestors also has
+    // parent changed. However, if the ancestor also has subtree created, it is
+    // possible that the created subtree is actually a newly unignored parent
+    // of an existing node. In that instance, we need to inform ATs that the
+    // existing node's parent has changed on the platform.
+    if (HasEvent(node_events, Event::PARENT_CHANGED)) {
+      while (parent && (tree_events_.find(parent) != tree_events_.end() ||
+                        base::Contains(removed_parent_changed_nodes, parent))) {
+        if ((base::Contains(removed_parent_changed_nodes, parent) ||
+             HasEvent(tree_events_[parent], Event::PARENT_CHANGED)) &&
+            !HasEvent(tree_events_[parent], Event::SUBTREE_CREATED)) {
+          RemoveEvent(&node_events, Event::PARENT_CHANGED);
+          removed_parent_changed_nodes.insert(node);
+          break;
+        }
+        parent = parent->GetUnignoredParent();
+      }
+    }
+
     // Don't fire subtree created on this node if any of its ancestors also has
     // subtree created.
+    parent = node->GetUnignoredParent();
     if (HasEvent(node_events, Event::SUBTREE_CREATED)) {
       while (parent &&
              (tree_events_.find(parent) != tree_events_.end() ||
@@ -958,14 +1117,18 @@ const char* ToString(AXEventGenerator::Event event) {
   switch (event) {
     case AXEventGenerator::Event::ACCESS_KEY_CHANGED:
       return "accessKeyChanged";
-    case AXEventGenerator::Event::ATOMIC_CHANGED:
-      return "atomicChanged";
     case AXEventGenerator::Event::ACTIVE_DESCENDANT_CHANGED:
       return "activeDescendantChanged";
     case AXEventGenerator::Event::ALERT:
       return "alert";
+    case AXEventGenerator::Event::ARIA_CURRENT_CHANGED:
+      return "ariaCurrentChanged";
     case AXEventGenerator::Event::ATK_TEXT_OBJECT_ATTRIBUTE_CHANGED:
       return "atkTextObjectAttributeChanged";
+    case AXEventGenerator::Event::ATOMIC_CHANGED:
+      return "atomicChanged";
+    case AXEventGenerator::Event::AUTO_COMPLETE_CHANGED:
+      return "autoCompleteChanged";
     case AXEventGenerator::Event::BUSY_CHANGED:
       return "busyChanged";
     case AXEventGenerator::Event::CHECKED_STATE_CHANGED:
@@ -988,10 +1151,14 @@ const char* ToString(AXEventGenerator::Event event) {
       return "documentTitleChanged";
     case AXEventGenerator::Event::DROPEFFECT_CHANGED:
       return "dropeffectChanged";
+    case ui::AXEventGenerator::Event::EDITABLE_TEXT_CHANGED:
+      return "editableTextChanged";
     case AXEventGenerator::Event::ENABLED_CHANGED:
       return "enabledChanged";
     case AXEventGenerator::Event::EXPANDED:
       return "expanded";
+    case AXEventGenerator::Event::FOCUS_CHANGED:
+      return "focusChanged";
     case AXEventGenerator::Event::FLOW_FROM_CHANGED:
       return "flowFromChanged";
     case AXEventGenerator::Event::FLOW_TO_CHANGED:
@@ -1032,6 +1199,10 @@ const char* ToString(AXEventGenerator::Event event) {
       return "loadStart";
     case AXEventGenerator::Event::MENU_ITEM_SELECTED:
       return "menuItemSelected";
+    case ui::AXEventGenerator::Event::MENU_POPUP_END:
+      return "menuPopupEnd";
+    case ui::AXEventGenerator::Event::MENU_POPUP_START:
+      return "menuPopupStart";
     case AXEventGenerator::Event::MULTILINE_STATE_CHANGED:
       return "multilineStateChanged";
     case AXEventGenerator::Event::MULTISELECTABLE_STATE_CHANGED:
@@ -1042,12 +1213,22 @@ const char* ToString(AXEventGenerator::Event event) {
       return "objectAttributeChanged";
     case AXEventGenerator::Event::OTHER_ATTRIBUTE_CHANGED:
       return "otherAttributeChanged";
+    case AXEventGenerator::Event::PARENT_CHANGED:
+      return "parentChanged";
     case AXEventGenerator::Event::PLACEHOLDER_CHANGED:
       return "placeholderChanged";
     case AXEventGenerator::Event::PORTAL_ACTIVATED:
       return "portalActivated";
     case AXEventGenerator::Event::POSITION_IN_SET_CHANGED:
       return "positionInSetChanged";
+    case AXEventGenerator::Event::RANGE_VALUE_CHANGED:
+      return "rangeValueChanged";
+    case AXEventGenerator::Event::RANGE_VALUE_MAX_CHANGED:
+      return "rangeValueMaxChanged";
+    case AXEventGenerator::Event::RANGE_VALUE_MIN_CHANGED:
+      return "rangeValueMinChanged";
+    case AXEventGenerator::Event::RANGE_VALUE_STEP_CHANGED:
+      return "rangeValueStepChanged";
     case AXEventGenerator::Event::READONLY_CHANGED:
       return "readonlyChanged";
     case AXEventGenerator::Event::RELATED_NODE_CHANGED:
@@ -1066,32 +1247,25 @@ const char* ToString(AXEventGenerator::Event event) {
       return "selectedChanged";
     case AXEventGenerator::Event::SELECTED_CHILDREN_CHANGED:
       return "selectedChildrenChanged";
+    case AXEventGenerator::Event::SELECTED_VALUE_CHANGED:
+      return "selectedValueChanged";
+    case AXEventGenerator::Event::SELECTION_IN_TEXT_FIELD_CHANGED:
+      return "selectionInTextFieldChanged";
     case AXEventGenerator::Event::SET_SIZE_CHANGED:
       return "setSizeChanged";
+    case AXEventGenerator::Event::SORT_CHANGED:
+      return "sortChanged";
     case AXEventGenerator::Event::STATE_CHANGED:
       return "stateChanged";
     case AXEventGenerator::Event::SUBTREE_CREATED:
       return "subtreeCreated";
     case AXEventGenerator::Event::TEXT_ATTRIBUTE_CHANGED:
       return "textAttributeChanged";
-    case AXEventGenerator::Event::VALUE_CHANGED:
-      return "valueChanged";
-    case AXEventGenerator::Event::VALUE_MAX_CHANGED:
-      return "valueMaxChanged";
-    case AXEventGenerator::Event::VALUE_MIN_CHANGED:
-      return "valueMinChanged";
-    case AXEventGenerator::Event::VALUE_STEP_CHANGED:
-      return "valueStepChanged";
-    case AXEventGenerator::Event::AUTO_COMPLETE_CHANGED:
-      return "autoCompleteChanged";
-    case AXEventGenerator::Event::FOCUS_CHANGED:
-      return "focusChanged";
-    case AXEventGenerator::Event::SORT_CHANGED:
-      return "sortChanged";
+    case AXEventGenerator::Event::VALUE_IN_TEXT_FIELD_CHANGED:
+      return "valueInTextFieldChanged";
     case AXEventGenerator::Event::WIN_IACCESSIBLE_STATE_CHANGED:
       return "winIaccessibleStateChanged";
   }
-  NOTREACHED();
 }
 
 }  // namespace ui

@@ -4,11 +4,15 @@
 
 #include "content/public/browser/picture_in_picture_window_controller.h"
 
+#include "base/barrier_closure.h"
 #include "base/bind.h"
+#include "base/files/file_util.h"
 #include "base/path_service.h"
+#include "base/scoped_observation.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
@@ -23,8 +27,7 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
-#include "chrome/browser/web_applications/test/web_app_test.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
@@ -40,6 +43,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/media_start_stop_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "media/base/media_switches.h"
 #include "net/dns/mock_host_resolver.h"
@@ -48,23 +52,20 @@
 #include "skia/ext/image_operations.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
+#include "ui/compositor/layer.h"
+#include "ui/compositor/test/draw_waiter_for_test.h"
+#include "ui/display/display_switches.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/views/controls/button/image_button.h"
+#include "ui/views/view_observer.h"
 #include "ui/views/widget/widget_observer.h"
 
-#if defined(OS_CHROMEOS)
-#include "ash/public/cpp/accelerators.h"
-#include "ui/base/accelerators/accelerator.h"
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ui/base/hit_test.h"
 #endif
 
-#if defined(TOOLKIT_VIEWS)
-#include "chrome/browser/ui/views/overlay/overlay_window_views.h"
-#endif
-
 using ::testing::_;
-using web_app::ProviderType;
 
 namespace {
 
@@ -75,9 +76,10 @@ class MockPictureInPictureWindowController
 
   // PictureInPictureWindowController:
   MOCK_METHOD0(Show, void());
+  MOCK_METHOD0(FocusInitiator, void());
   MOCK_METHOD1(Close, void(bool));
   MOCK_METHOD0(CloseAndFocusInitiator, void());
-  MOCK_METHOD0(OnWindowDestroyed, void());
+  MOCK_METHOD1(OnWindowDestroyed, void(bool));
   MOCK_METHOD0(GetWindowForTesting, content::OverlayWindow*());
   MOCK_METHOD0(UpdateLayerBounds, void());
   MOCK_METHOD0(IsPlayerActive, bool());
@@ -87,6 +89,9 @@ class MockPictureInPictureWindowController
   MOCK_METHOD0(SkipAd, void());
   MOCK_METHOD0(NextTrack, void());
   MOCK_METHOD0(PreviousTrack, void());
+  MOCK_METHOD0(ToggleMicrophone, void());
+  MOCK_METHOD0(ToggleCamera, void());
+  MOCK_METHOD0(HangUp, void());
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockPictureInPictureWindowController);
@@ -94,6 +99,82 @@ class MockPictureInPictureWindowController
 
 const base::FilePath::CharType kPictureInPictureWindowSizePage[] =
     FILE_PATH_LITERAL("media/picture-in-picture/window-size.html");
+
+// Determines whether |control| is visible taking into account OverlayWindow's
+// custom control hiding that includes setting the size to 0x0.
+bool IsOverlayWindowControlVisible(views::View* control) {
+  return control->GetVisible() && !control->size().IsEmpty();
+}
+
+// An observer used to notify about control visibility changes.
+class ControlVisibilityObserver : views::ViewObserver {
+ public:
+  explicit ControlVisibilityObserver(views::View* observed_view,
+                                     bool expected_visible,
+                                     base::OnceClosure callback)
+      : expected_visible_(expected_visible),
+        visibility_change_callback_(std::move(callback)) {
+    observation_.Observe(observed_view);
+
+    MaybeNotifyOfVisibilityChange(observed_view);
+  }
+
+  // views::ViewObserver overrides.
+  void OnViewVisibilityChanged(views::View* observed_view,
+                               views::View* starting_view) override {
+    MaybeNotifyOfVisibilityChange(observed_view);
+  }
+  void OnViewBoundsChanged(views::View* observed_view) override {
+    MaybeNotifyOfVisibilityChange(observed_view);
+  }
+
+ private:
+  void MaybeNotifyOfVisibilityChange(views::View* observed_view) {
+    if (visibility_change_callback_ &&
+        IsOverlayWindowControlVisible(observed_view) == expected_visible_) {
+      std::move(visibility_change_callback_).Run();
+    }
+  }
+
+  base::ScopedObservation<views::View, views::ViewObserver> observation_{this};
+  bool expected_visible_;
+  base::OnceClosure visibility_change_callback_;
+};
+
+// A helper class to wait for widget size to change to the desired value.
+class WidgetSizeChangeWaiter final : public views::WidgetObserver {
+ public:
+  WidgetSizeChangeWaiter(views::Widget* widget, const gfx::Size& expected_size)
+      : widget_(widget), expected_size_(expected_size) {
+    widget_->AddObserver(this);
+  }
+  ~WidgetSizeChangeWaiter() override { widget_->RemoveObserver(this); }
+
+  WidgetSizeChangeWaiter(const WidgetSizeChangeWaiter&) = delete;
+  WidgetSizeChangeWaiter& operator=(const WidgetSizeChangeWaiter&) = delete;
+
+  // views::WidgetObserver:
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& new_bounds) override {
+    bounds_change_count_++;
+    if (new_bounds.size() == expected_size_)
+      run_loop_.Quit();
+  }
+
+  // Wait for changes to occur, or return immediately if they already have.
+  void WaitForSize() {
+    if (widget_->GetWindowBoundsInScreen().size() != expected_size_)
+      run_loop_.Run();
+  }
+
+  int bounds_change_count() const { return bounds_change_count_; }
+
+ private:
+  views::Widget* const widget_;
+  const gfx::Size expected_size_;
+  int bounds_change_count_ = 0;
+  base::RunLoop run_loop_;
+};
 
 }  // namespace
 
@@ -122,6 +203,11 @@ class PictureInPictureWindowControllerBrowserTest
     return mock_controller_;
   }
 
+  OverlayWindowViews* GetOverlayWindow() {
+    return static_cast<OverlayWindowViews*>(
+        window_controller()->GetWindowForTesting());
+  }
+
   void LoadTabAndEnterPictureInPicture(Browser* browser,
                                        const base::FilePath& file_path) {
     GURL test_page_url = ui_test_utils::GetTestUrl(
@@ -147,8 +233,7 @@ class PictureInPictureWindowControllerBrowserTest
   void ExpectLeavePictureInPicture(content::WebContents* web_contents) {
     // 'leavepictureinpicture' is the title of the tab when the event is
     // received.
-    const base::string16 expected_title =
-        base::ASCIIToUTF16("leavepictureinpicture");
+    const std::u16string expected_title = u"leavepictureinpicture";
     EXPECT_EQ(
         expected_title,
         content::TitleWatcher(web_contents, expected_title).WaitAndGetTitle());
@@ -159,33 +244,40 @@ class PictureInPictureWindowControllerBrowserTest
     EXPECT_FALSE(in_picture_in_picture);
   }
 
-  class WidgetBoundsChangeWaiter : public views::WidgetObserver {
-   public:
-    explicit WidgetBoundsChangeWaiter(views::Widget* widget)
-        : widget_(widget), initial_bounds_(widget->GetWindowBoundsInScreen()) {
-      widget_->AddObserver(this);
+  void WaitForPlaybackState(content::WebContents* web_contents,
+                            OverlayWindowViews::PlaybackState playback_state) {
+    // Make sure to wait if not yet in the |playback_state| state.
+    if (GetOverlayWindow()->playback_state_for_testing() != playback_state) {
+      content::MediaStartStopObserver observer(
+          web_contents,
+          playback_state == OverlayWindowViews::PlaybackState::kPlaying
+              ? content::MediaStartStopObserver::Type::kStart
+              : content::MediaStartStopObserver::Type::kStop);
+      observer.Wait();
     }
+  }
 
-    ~WidgetBoundsChangeWaiter() final { widget_->RemoveObserver(this); }
-
-    void OnWidgetBoundsChanged(views::Widget* widget, const gfx::Rect&) final {
-      run_loop_.Quit();
+  // Makes sure all |controls| have the expected visibility state, waiting if
+  // necessary.
+  void AssertControlsVisible(std::vector<views::View*> controls,
+                             bool expected_visible) {
+    base::RunLoop run_loop;
+    const auto barrier =
+        base::BarrierClosure(controls.size(), run_loop.QuitClosure());
+    std::vector<std::unique_ptr<ControlVisibilityObserver>> observers;
+    for (views::View* control : controls) {
+      observers.push_back(std::make_unique<ControlVisibilityObserver>(
+          control, expected_visible, barrier));
     }
+    run_loop.Run();
 
-    void Wait() {
-      if (widget_->GetWindowBoundsInScreen() != initial_bounds_)
-        return;
-      run_loop_.Run();
-    }
+    for (views::View* control : controls)
+      ASSERT_EQ(IsOverlayWindowControlVisible(control), expected_visible);
+  }
 
-   private:
-    views::Widget* widget_;
-    gfx::Rect initial_bounds_;
-    base::RunLoop run_loop_;
-  };
-
-  void MoveMouseOver(OverlayWindowViews* window) {
-    gfx::Point p(window->GetBounds().x(), window->GetBounds().y());
+  void MoveMouseOverOverlayWindow() {
+    auto* const window = GetOverlayWindow();
+    const gfx::Point p(window->GetBounds().origin());
     ui::MouseEvent moved_over(ui::ET_MOUSE_MOVED, p, p, ui::EventTimeForNow(),
                               ui::EF_NONE, ui::EF_NONE);
     window->OnMouseEvent(&moved_over);
@@ -224,10 +316,8 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
 
 #if defined(TOOLKIT_VIEWS)
-  auto* overlay_window = window_controller()->GetWindowForTesting();
-  gfx::NativeWindow native_window =
-      static_cast<OverlayWindowViews*>(overlay_window)->GetNativeWindow();
-#if defined(OS_CHROMEOS) || defined(OS_MAC)
+  gfx::NativeWindow native_window = GetOverlayWindow()->GetNativeWindow();
+#if BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_MAC)
   EXPECT_FALSE(platform_util::IsWindowActive(native_window));
 #else
   EXPECT_TRUE(platform_util::IsWindowActive(native_window));
@@ -235,7 +325,17 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 #endif
 }
 
-#if !defined(OS_CHROMEOS)
+IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
+                       ControlsVisibility) {
+  LoadTabAndEnterPictureInPicture(
+      browser(), base::FilePath(kPictureInPictureWindowSizePage));
+
+  EXPECT_FALSE(GetOverlayWindow()->AreControlsVisible());
+  MoveMouseOverOverlayWindow();
+  EXPECT_TRUE(GetOverlayWindow()->AreControlsVisible());
+}
+
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 class PictureInPicturePixelComparisonBrowserTest
     : public PictureInPictureWindowControllerBrowserTest {
  public:
@@ -244,6 +344,11 @@ class PictureInPicturePixelComparisonBrowserTest
     command_line->AppendSwitch(
         switches::kEnableExperimentalWebPlatformFeatures);
     command_line->AppendSwitch(switches::kDisableGpu);
+    command_line->AppendSwitchASCII(switches::kForceDeviceScaleFactor, "1");
+
+    // TODO(https://crbug.com/1201311): Refactor these pixel tests to use Skia
+    // Gold and turn this feature back on.
+    feature_list_.InitAndDisableFeature(media::kMediaSessionWebRTC);
   }
 
   base::FilePath GetFilePath(base::FilePath::StringPieceType relative_path) {
@@ -261,12 +366,15 @@ class PictureInPicturePixelComparisonBrowserTest
                       std::unique_ptr<viz::CopyOutputResult> result) {
     ASSERT_FALSE(result->IsEmpty());
     EXPECT_EQ(viz::CopyOutputResult::Format::RGBA_BITMAP, result->format());
-    result_bitmap_ = std::make_unique<SkBitmap>(result->AsSkBitmap());
+    auto scoped_sk_bitmap = result->ScopedAccessSkBitmap();
+    result_bitmap_ =
+        std::make_unique<SkBitmap>(scoped_sk_bitmap.GetOutScopedBitmap());
     EXPECT_TRUE(result_bitmap_->readyToDraw());
     quit_run_loop.Run();
   }
 
   bool ReadImageFile(const base::FilePath& file_path, SkBitmap* read_image) {
+    base::ScopedAllowBlockingForTesting allow_blocking;
     std::string png_string;
     base::ReadFileToString(file_path, &png_string);
     return gfx::PNGCodec::Decode(
@@ -274,17 +382,45 @@ class PictureInPicturePixelComparisonBrowserTest
         png_string.length(), read_image);
   }
 
-  void TakeOverlayWindowScreenshot(OverlayWindowViews* overlay_window_views) {
-    base::RunLoop run_loop;
-    std::unique_ptr<viz::CopyOutputRequest> request =
-        std::make_unique<viz::CopyOutputRequest>(
-            viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
-            base::BindOnce(
-                &PictureInPicturePixelComparisonBrowserTest::ReadbackResult,
-                base::Unretained(this), run_loop.QuitClosure()));
-    overlay_window_views->GetLayerForTesting()->RequestCopyOfOutput(
-        std::move(request));
-    run_loop.Run();
+  void TakeOverlayWindowScreenshot(const gfx::Size& window_size,
+                                   bool controls_visible) {
+    for (int i = 0; i < 2; ++i) {
+      WidgetSizeChangeWaiter bounds_change_waiter(GetOverlayWindow(),
+                                                  window_size);
+      // Also move to the center to avoid spurious moves later on, which happen
+      // on some platforms when the window is enlarged beyond the screen bounds.
+      GetOverlayWindow()->CenterWindow(window_size);
+      bounds_change_waiter.WaitForSize();
+      const auto initial_count = bounds_change_waiter.bounds_change_count();
+
+      // Make sure native widget events won't unexpectedly hide or show the
+      // controls.
+      GetOverlayWindow()->ForceControlsVisibleForTesting(controls_visible);
+
+      ui::Layer* const layer = GetOverlayWindow()->GetRootView()->layer();
+      layer->CompleteAllAnimations();
+      layer->GetCompositor()->ScheduleFullRedraw();
+      ui::DrawWaiterForTest::WaitForCompositingEnded(layer->GetCompositor());
+
+      base::RunLoop run_loop;
+      std::unique_ptr<viz::CopyOutputRequest> request =
+          std::make_unique<viz::CopyOutputRequest>(
+              viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
+              base::BindOnce(
+                  &PictureInPicturePixelComparisonBrowserTest::ReadbackResult,
+                  base::Unretained(this), run_loop.QuitClosure()));
+      layer->RequestCopyOfOutput(std::move(request));
+      run_loop.Run();
+
+      if (bounds_change_waiter.bounds_change_count() == initial_count)
+        break;
+
+      // We get here on Linux/Wayland (maybe elsewhere too?) sometimes. The
+      // native widget goes back to the previous bounds for an instant and then
+      // reverts.
+      LOG(INFO) << "The native widget bounds have changed while taking the "
+                   "screenshot, retrying";
+    }
   }
 
   bool CompareImages(const SkBitmap& actual_bmp, const SkBitmap& expected_bmp) {
@@ -297,14 +433,20 @@ class PictureInPicturePixelComparisonBrowserTest
 
     for (int x = 0; x < actual_bmp.width(); ++x) {
       for (int y = 0; y < actual_bmp.height(); ++y) {
-        SkColor actual_color = actual_bmp.getColor(x, y);
-        SkColor expected_color = expected_bmp.getColor(x, y);
-        if ((fabs(SkColorGetR(actual_color) - SkColorGetR(expected_color)) >
-             kAllowableError) ||
-            (fabs(SkColorGetG(actual_color) - SkColorGetG(expected_color)) >
-             kAllowableError) ||
-            (fabs(SkColorGetB(actual_color) - SkColorGetB(expected_color))) >
-                kAllowableError) {
+        bool pixel_matches = false;
+        if (x < expected_bmp.width() && y < expected_bmp.height()) {
+          SkColor actual_color = actual_bmp.getColor(x, y);
+          SkColor expected_color = expected_bmp.getColor(x, y);
+          if ((fabs(SkColorGetR(actual_color) - SkColorGetR(expected_color)) <=
+               kAllowableError) &&
+              (fabs(SkColorGetG(actual_color) - SkColorGetG(expected_color)) <=
+               kAllowableError) &&
+              (fabs(SkColorGetB(actual_color) - SkColorGetB(expected_color))) <=
+                  kAllowableError) {
+            pixel_matches = true;
+          }
+        }
+        if (!pixel_matches) {
           ++error_pixels_count;
           error_bounding_rect.Union(gfx::Rect(x, y, 1, 1));
         }
@@ -318,50 +460,31 @@ class PictureInPicturePixelComparisonBrowserTest
     return true;
   }
 
-  void Wait(base::TimeDelta timeout) {
-    base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), timeout);
-    run_loop.Run();
-  }
-
   SkBitmap& GetResultBitmap() { return *result_bitmap_; }
 
  private:
   std::unique_ptr<SkBitmap> result_bitmap_;
+
+  base::test::ScopedFeatureList feature_list_;
 };
 
-// TODO(cliffordcheng): enable on Windows when compile errors are resolved.
-// Plays a video and then trigger Picture-in-Picture. Grabs a screenshot of
-// Picture-in-Picture window and verifies it's as expected.
+// Plays a video in PiP. Grabs a screenshot of Picture-in-Picture window and
+// verifies it's as expected.
 IN_PROC_BROWSER_TEST_F(PictureInPicturePixelComparisonBrowserTest, VideoPlay) {
-  base::ScopedAllowBlockingForTesting allow_blocking;
   LoadTabAndEnterPictureInPicture(
       browser(), base::FilePath(FILE_PATH_LITERAL(
                      "media/picture-in-picture/pixel_test.html")));
+  ASSERT_TRUE(GetOverlayWindow()->IsVisible());
 
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
-  bool in_picture_in_picture = false;
-  ASSERT_TRUE(ExecuteScriptAndExtractBool(
-      active_web_contents, "isInPictureInPicture();", &in_picture_in_picture));
-  EXPECT_TRUE(in_picture_in_picture);
+  bool result = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      active_web_contents, "ensureVideoIsPlaying();", &result));
+  ASSERT_TRUE(result);
 
-  EXPECT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
-  SetUpWindowController(active_web_contents);
-  ASSERT_NE(nullptr, window_controller());
-  EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
-
-  OverlayWindowViews* overlay_window_views = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  overlay_window_views->SetSize(gfx::Size(402, 268));
-  base::string16 expected_title = base::ASCIIToUTF16("resized");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
-  Wait(base::TimeDelta::FromSeconds(3));
-  TakeOverlayWindowScreenshot(overlay_window_views);
+  TakeOverlayWindowScreenshot({402, 268}, /*controls_visible=*/false);
 
   SkBitmap expected_image;
   base::FilePath expected_image_path =
@@ -371,54 +494,41 @@ IN_PROC_BROWSER_TEST_F(PictureInPicturePixelComparisonBrowserTest, VideoPlay) {
 }
 
 // Plays a video in PiP. Trigger the play and pause control in PiP by using a
-// mouse move. Capture the images and verift they are expected.
+// mouse move. Capture the images and verify they are expected.
 IN_PROC_BROWSER_TEST_F(PictureInPicturePixelComparisonBrowserTest,
                        PlayAndPauseControls) {
-  base::ScopedAllowBlockingForTesting allow_blocking;
   LoadTabAndEnterPictureInPicture(
       browser(), base::FilePath(FILE_PATH_LITERAL(
                      "media/picture-in-picture/pixel_test.html")));
+  ASSERT_TRUE(GetOverlayWindow()->IsVisible());
+
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
-  bool in_picture_in_picture = false;
-  ASSERT_TRUE(ExecuteScriptAndExtractBool(
-      active_web_contents, "isInPictureInPicture();", &in_picture_in_picture));
-  EXPECT_TRUE(in_picture_in_picture);
-  EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
-
-  OverlayWindowViews* overlay_window_views = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-
   bool result = false;
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      active_web_contents, "changeVideoSrc();", &result));
+      active_web_contents, "ensureVideoIsPlaying();", &result));
+  ASSERT_TRUE(result);
 
-  const int resize_width = 402, resize_height = 268;
-  overlay_window_views->SetSize(gfx::Size(resize_width, resize_height));
-  base::string16 expected_title = base::ASCIIToUTF16("resized");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
+  WaitForPlaybackState(active_web_contents,
+                       OverlayWindowViews::PlaybackState::kPlaying);
 
-  EXPECT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
-  Wait(base::TimeDelta::FromSeconds(3));
-  MoveMouseOver(overlay_window_views);
-  TakeOverlayWindowScreenshot(overlay_window_views);
+  constexpr gfx::Size kSize = {402, 268};
+  TakeOverlayWindowScreenshot(kSize, /*controls_visible=*/true);
 
   base::FilePath expected_pause_image_path =
       GetFilePath(FILE_PATH_LITERAL("pixel_expected_pause_control.png"));
   base::FilePath expected_play_image_path =
       GetFilePath(FILE_PATH_LITERAL("pixel_expected_play_control.png"));
   // If the test image is cropped, usually off by 1 pixel, use another image.
-  if (GetResultBitmap().width() < resize_width ||
-      GetResultBitmap().height() < resize_height) {
+  if (GetResultBitmap().width() < kSize.width() ||
+      GetResultBitmap().height() < kSize.height()) {
     LOG(INFO) << "Actual image is cropped and backup images are used. "
               << "Test image dimension: "
               << "(" << GetResultBitmap().width() << "x"
               << GetResultBitmap().height() << "). "
               << "Expected image dimension: "
-              << "(" << resize_width << "x" << resize_height << ")";
+              << "(" << kSize.ToString() << ")";
     expected_pause_image_path =
         GetFilePath(FILE_PATH_LITERAL("pixel_expected_pause_control_crop.png"));
     expected_play_image_path =
@@ -429,14 +539,14 @@ IN_PROC_BROWSER_TEST_F(PictureInPicturePixelComparisonBrowserTest,
   ASSERT_TRUE(ReadImageFile(expected_pause_image_path, &expected_image));
   EXPECT_TRUE(CompareImages(GetResultBitmap(), expected_image));
 
-  EXPECT_TRUE(content::ExecuteScript(active_web_contents, "video.pause();"));
-  Wait(base::TimeDelta::FromSeconds(3));
-  MoveMouseOver(overlay_window_views);
-  TakeOverlayWindowScreenshot(overlay_window_views);
+  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "video.pause();"));
+  WaitForPlaybackState(active_web_contents,
+                       OverlayWindowViews::PlaybackState::kPaused);
+  TakeOverlayWindowScreenshot(kSize, /*controls_visible=*/true);
   ASSERT_TRUE(ReadImageFile(expected_play_image_path, &expected_image));
   EXPECT_TRUE(CompareImages(GetResultBitmap(), expected_image));
 }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Tests that when an active WebContents accurately tracks whether a video
 // is in Picture-in-Picture.
@@ -490,20 +600,17 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   SetUpWindowController(active_web_contents);
   ASSERT_TRUE(window_controller());
 
-  content::OverlayWindow* overlay_window =
-      window_controller()->GetWindowForTesting();
-  ASSERT_TRUE(overlay_window);
-  ASSERT_FALSE(overlay_window->IsVisible());
+  ASSERT_NE(GetOverlayWindow(), nullptr);
+  ASSERT_FALSE(GetOverlayWindow()->IsVisible());
 
   bool result = false;
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
       active_web_contents, "enterPictureInPicture();", &result));
   EXPECT_TRUE(result);
 
-  static_cast<OverlayWindowViews*>(overlay_window)
-      ->SetSize(gfx::Size(400, 400));
+  GetOverlayWindow()->SetSize(gfx::Size(400, 400));
 
-  base::string16 expected_title = base::ASCIIToUTF16("resized");
+  std::u16string expected_title = u"resized";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -525,9 +632,11 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   SetUpWindowController(active_web_contents);
   ASSERT_TRUE(window_controller());
 
-  EXPECT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
-
   bool result = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      active_web_contents, "ensureVideoIsPlaying();", &result));
+  ASSERT_TRUE(result);
+
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
       active_web_contents, "enterPictureInPicture();", &result));
   EXPECT_TRUE(result);
@@ -539,7 +648,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
   window_controller()->Close(true /* should_pause_video */);
 
-  base::string16 expected_title = base::ASCIIToUTF16("leavepictureinpicture");
+  std::u16string expected_title = u"leavepictureinpicture";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -577,7 +686,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   ASSERT_TRUE(window_controller());
   window_controller()->Close(true /* should_pause_video */);
 
-  base::string16 expected_title = base::ASCIIToUTF16("leavepictureinpicture");
+  std::u16string expected_title = u"leavepictureinpicture";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -614,8 +723,8 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   ASSERT_TRUE(window_controller());
   window_controller()->Close(true /* should_pause_video */);
 
-  base::string16 expected_title =
-      base::ASCIIToUTF16("failed to enter Picture-in-Picture after leaving");
+  std::u16string expected_title =
+      u"failed to enter Picture-in-Picture after leaving";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -623,9 +732,8 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
 // Tests that when closing a Picture-in-Picture window from the Web API, the
 // video element is not paused.
-// Flaky on Linux and Windows: http://crbug.com/1001538
 IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       DISABLED_CloseWindowFromWebAPIWhilePlaying) {
+                       CloseWindowFromWebAPIWhilePlaying) {
   GURL test_page_url = ui_test_utils::GetTestUrl(
       base::FilePath(base::FilePath::kCurrentDirectory),
       base::FilePath(kPictureInPictureWindowSizePage));
@@ -638,9 +746,11 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   SetUpWindowController(active_web_contents);
   ASSERT_TRUE(window_controller());
 
-  EXPECT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
-
   bool result = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      active_web_contents, "ensureVideoIsPlaying();", &result));
+  ASSERT_TRUE(result);
+
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
       active_web_contents, "enterPictureInPicture();", &result));
   EXPECT_TRUE(result);
@@ -649,7 +759,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
       content::ExecuteScript(active_web_contents, "exitPictureInPicture();"));
 
   // 'left' is sent when the first video leaves Picture-in-Picture.
-  base::string16 expected_title = base::ASCIIToUTF16("leavepictureinpicture");
+  std::u16string expected_title = u"leavepictureinpicture";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -694,7 +804,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
       content::ExecuteScript(active_web_contents, "exitPictureInPicture();"));
 
   // 'left' is sent when the video leaves Picture-in-Picture.
-  base::string16 expected_title = base::ASCIIToUTF16("leavepictureinpicture");
+  std::u16string expected_title = u"leavepictureinpicture";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -755,12 +865,9 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
                                           &is_paused));
   EXPECT_FALSE(is_paused);
 
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
+  EXPECT_TRUE(GetOverlayWindow()->IsVisible());
 
-  EXPECT_TRUE(overlay_window->IsVisible());
-
-  EXPECT_EQ(overlay_window->playback_state_for_testing(),
+  EXPECT_EQ(GetOverlayWindow()->playback_state_for_testing(),
             OverlayWindowViews::PlaybackState::kPaused);
 }
 
@@ -773,10 +880,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
   EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
 
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-
-  EXPECT_TRUE(overlay_window->video_layer_for_testing()->visible());
+  EXPECT_TRUE(GetOverlayWindow()->video_layer_for_testing()->visible());
 
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -788,7 +892,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   EXPECT_TRUE(in_picture_in_picture);
 
   EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
-  EXPECT_TRUE(overlay_window->video_layer_for_testing()->visible());
+  EXPECT_TRUE(GetOverlayWindow()->video_layer_for_testing()->visible());
 }
 
 // Tests that updating video src when video is in Picture-in-Picture session
@@ -800,10 +904,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
   EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
 
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-
-  EXPECT_TRUE(overlay_window->video_layer_for_testing()->visible());
+  EXPECT_TRUE(GetOverlayWindow()->video_layer_for_testing()->visible());
 
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -818,7 +919,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   EXPECT_TRUE(in_picture_in_picture);
 
   EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
-  EXPECT_TRUE(overlay_window->video_layer_for_testing()->visible());
+  EXPECT_TRUE(GetOverlayWindow()->video_layer_for_testing()->visible());
 }
 
 // Tests that changing video src to media stream when video is in
@@ -831,10 +932,7 @@ IN_PROC_BROWSER_TEST_F(
 
   EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
 
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-
-  EXPECT_TRUE(overlay_window->video_layer_for_testing()->visible());
+  EXPECT_TRUE(GetOverlayWindow()->video_layer_for_testing()->visible());
 
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -849,16 +947,12 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(in_picture_in_picture);
 
   EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
-  EXPECT_TRUE(overlay_window->video_layer_for_testing()->visible());
-  EXPECT_FALSE(overlay_window->previous_track_controls_view_for_testing()
-                   ->layer()
-                   ->visible());
-  EXPECT_FALSE(overlay_window->play_pause_controls_view_for_testing()
-                   ->layer()
-                   ->visible());
-  EXPECT_FALSE(overlay_window->next_track_controls_view_for_testing()
-                   ->layer()
-                   ->visible());
+  EXPECT_TRUE(GetOverlayWindow()->video_layer_for_testing()->visible());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->previous_track_controls_view_for_testing(),
+       GetOverlayWindow()->play_pause_controls_view_for_testing(),
+       GetOverlayWindow()->next_track_controls_view_for_testing()},
+      false));
 }
 
 // Tests that we can enter Picture-in-Picture when a video is not preloaded,
@@ -908,7 +1002,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   window_controller()->Close(true /* should_pause_video */);
 
   // Wait for the window to close.
-  base::string16 expected_title = base::ASCIIToUTF16("leavepictureinpicture");
+  std::u16string expected_title = u"leavepictureinpicture";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -1031,7 +1125,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
     EXPECT_TRUE(pip_window_controller->GetWindowForTesting()->IsVisible());
 
     // 'left' is sent when the first tab leaves Picture-in-Picture.
-    base::string16 expected_title = base::ASCIIToUTF16("leavepictureinpicture");
+    std::u16string expected_title = u"leavepictureinpicture";
     EXPECT_EQ(expected_title,
               content::TitleWatcher(initial_web_contents, expected_title)
                   .WaitAndGetTitle());
@@ -1172,7 +1266,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
           : render_frame_hosts[0];
 
   // Wait for video metadata to load.
-  base::string16 expected_title = base::ASCIIToUTF16("loadedmetadata");
+  std::u16string expected_title = u"loadedmetadata";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -1216,7 +1310,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
           : render_frame_hosts[0];
 
   // Wait for video metadata to load.
-  base::string16 expected_title = base::ASCIIToUTF16("loadedmetadata");
+  std::u16string expected_title = u"loadedmetadata";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -1254,53 +1348,6 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       EnterPictureInPictureThenFullscreen) {
-  LoadTabAndEnterPictureInPicture(
-      browser(), base::FilePath(kPictureInPictureWindowSizePage));
-
-  content::WebContents* active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "enterFullscreen()"));
-
-  base::string16 expected_title = base::ASCIIToUTF16("fullscreen");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
-
-  EXPECT_TRUE(active_web_contents->IsFullscreen());
-  EXPECT_FALSE(window_controller()->GetWindowForTesting()->IsVisible());
-}
-
-IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       EnterFullscreenThenPictureInPicture) {
-  GURL test_page_url = ui_test_utils::GetTestUrl(
-      base::FilePath(base::FilePath::kCurrentDirectory),
-      base::FilePath(kPictureInPictureWindowSizePage));
-  ui_test_utils::NavigateToURL(browser(), test_page_url);
-
-  content::WebContents* active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(active_web_contents != nullptr);
-
-  SetUpWindowController(active_web_contents);
-
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "enterFullscreen()"));
-
-  base::string16 expected_title = base::ASCIIToUTF16("fullscreen");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
-
-  bool result = false;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      active_web_contents, "enterPictureInPicture();", &result));
-  EXPECT_TRUE(result);
-
-  EXPECT_FALSE(active_web_contents->IsFullscreen());
-  EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
-}
-
-IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
                        EnterPictureInPictureThenNavigateAwayCloseWindow) {
   GURL test_page_url = ui_test_utils::GetTestUrl(
       base::FilePath(base::FilePath::kCurrentDirectory),
@@ -1335,57 +1382,6 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   EXPECT_FALSE(window_controller()->GetWindowForTesting()->IsVisible());
 }
 
-// Tests that when a new surface id is sent to the Picture-in-Picture window, it
-// doesn't move back to its default position.
-// crbug.com/1002489: disabled due to flakiness.
-IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       DISABLED_SurfaceIdChangeDoesNotMoveWindow) {
-  LoadTabAndEnterPictureInPicture(
-      browser(), base::FilePath(kPictureInPictureWindowSizePage));
-
-  content::WebContents* active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_TRUE(overlay_window);
-  ASSERT_TRUE(overlay_window->IsVisible());
-
-  // Move and resize the window to the top left corner and wait for ack.
-  {
-    WidgetBoundsChangeWaiter waiter(overlay_window);
-
-    overlay_window->SetBounds(gfx::Rect(0, 0, 400, 400));
-
-    waiter.Wait();
-  }
-
-  // Wait for signal that the window was resized.
-  base::string16 expected_title = base::ASCIIToUTF16("resized");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
-
-  // Simulate a new surface layer and a change in aspect ratio then wait for
-  // ack.
-  {
-    WidgetBoundsChangeWaiter waiter(overlay_window);
-
-    overlay_window->SetSurfaceId(viz::SurfaceId(
-        viz::FrameSinkId(1, 1),
-        viz::LocalSurfaceId(9, base::UnguessableToken::Create())));
-    overlay_window->UpdateVideoSize(gfx::Size(200, 100));
-
-    waiter.Wait();
-  }
-
-  // The position should be closer to the (0, 0) than the default one (bottom
-  // right corner). This will be reflected by checking that the position is
-  // below (100, 100).
-  EXPECT_LT(overlay_window->GetBounds().x(), 100);
-  EXPECT_LT(overlay_window->GetBounds().y(), 100);
-}
-
 // Tests that the Picture-in-Picture state is properly updated when the window
 // is closed at a system level.
 IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
@@ -1396,13 +1392,11 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_TRUE(overlay_window);
-  ASSERT_TRUE(overlay_window->IsVisible());
+  ASSERT_NE(GetOverlayWindow(), nullptr);
+  ASSERT_TRUE(GetOverlayWindow()->IsVisible());
 
   // Simulate closing from the system.
-  overlay_window->OnNativeWidgetDestroyed();
+  GetOverlayWindow()->OnNativeWidgetDestroyed();
 
   ExpectLeavePictureInPicture(active_web_contents);
 }
@@ -1425,13 +1419,10 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
   EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
 
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-
-  EXPECT_EQ(overlay_window->playback_state_for_testing(),
+  EXPECT_EQ(GetOverlayWindow()->playback_state_for_testing(),
             OverlayWindowViews::PlaybackState::kPlaying);
 
-  EXPECT_TRUE(overlay_window->video_layer_for_testing()->visible());
+  EXPECT_TRUE(GetOverlayWindow()->video_layer_for_testing()->visible());
 
   ASSERT_TRUE(
       content::ExecuteScript(active_web_contents, "exitPictureInPicture();"));
@@ -1454,10 +1445,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
                                             &is_paused));
     EXPECT_TRUE(is_paused);
 
-    OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-        window_controller()->GetWindowForTesting());
-
-    EXPECT_EQ(overlay_window->playback_state_for_testing(),
+    EXPECT_EQ(GetOverlayWindow()->playback_state_for_testing(),
               OverlayWindowViews::PlaybackState::kPaused);
   }
 }
@@ -1478,10 +1466,8 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   LoadTabAndEnterPictureInPicture(
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
 
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_NE(nullptr, overlay_window);
-  EXPECT_TRUE(overlay_window->IsVisible());
+  ASSERT_NE(nullptr, GetOverlayWindow());
+  EXPECT_TRUE(GetOverlayWindow()->IsVisible());
 
   auto* pip_window_manager = PictureInPictureWindowManager::GetInstance();
   ASSERT_NE(nullptr, pip_window_manager);
@@ -1512,10 +1498,8 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   LoadTabAndEnterPictureInPicture(
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
 
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_TRUE(overlay_window);
-  EXPECT_TRUE(overlay_window->IsVisible());
+  ASSERT_TRUE(GetOverlayWindow());
+  EXPECT_TRUE(GetOverlayWindow()->IsVisible());
 }
 
 // This checks that a video in Picture-in-Picture with preload none, when
@@ -1583,7 +1567,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
           : render_frame_hosts[0];
 
   // Wait for video metadata to load.
-  base::string16 expected_title = base::ASCIIToUTF16("loadedmetadata");
+  std::u16string expected_title = u"loadedmetadata";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -1619,54 +1603,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   DevToolsWindowTesting::CloseDevToolsWindowSync(window);
 }
 
-#if defined(OS_CHROMEOS)
-// Tests that video in Picture-in-Picture is paused when user presses
-// VKEY_MEDIA_PLAY_PAUSE key even if there's another media playing in a
-// foreground tab.
-// TODO(https://crbug.com/1070810) flaky test
-IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       DISABLED_HandleMediaKeyPlayPause) {
-  GURL test_page_url = ui_test_utils::GetTestUrl(
-      base::FilePath(base::FilePath::kCurrentDirectory),
-      base::FilePath(kPictureInPictureWindowSizePage));
-  ui_test_utils::NavigateToURL(browser(), test_page_url);
-
-  content::WebContents* first_active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(first_active_web_contents);
-  EXPECT_TRUE(
-      content::ExecuteScript(first_active_web_contents, "video.play();"));
-
-  bool result = false;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      first_active_web_contents, "enterPictureInPicture();", &result));
-  EXPECT_TRUE(result);
-
-  Browser* second_browser = CreateBrowser(browser()->profile());
-  ui_test_utils::NavigateToURL(second_browser, test_page_url);
-
-  content::WebContents* second_active_web_contents =
-      second_browser->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(second_active_web_contents);
-  EXPECT_TRUE(
-      content::ExecuteScript(second_active_web_contents, "video.play();"));
-
-  ash::AcceleratorController::Get()->Process(
-      ui::Accelerator(ui::VKEY_MEDIA_PLAY_PAUSE, ui::EF_NONE));
-  base::RunLoop().RunUntilIdle();
-
-  bool is_paused = false;
-  // Picture-in-Picture video in first browser window is paused.
-  EXPECT_TRUE(ExecuteScriptAndExtractBool(first_active_web_contents,
-                                          "isPaused();", &is_paused));
-  EXPECT_TRUE(is_paused);
-
-  // Video in second browser window is not paused.
-  EXPECT_TRUE(ExecuteScriptAndExtractBool(second_active_web_contents,
-                                          "isPaused();", &is_paused));
-  EXPECT_FALSE(is_paused);
-}
-
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Tests that the back-to-tab, close, and resize controls move properly as
 // the window changes quadrants.
 IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
@@ -1683,28 +1620,23 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   SetUpWindowController(active_web_contents);
   ASSERT_TRUE(window_controller());
 
-  content::OverlayWindow* overlay_window =
-      window_controller()->GetWindowForTesting();
-  ASSERT_TRUE(overlay_window);
-  ASSERT_FALSE(overlay_window->IsVisible());
+  ASSERT_NE(GetOverlayWindow(), nullptr);
+  ASSERT_FALSE(GetOverlayWindow()->IsVisible());
 
   bool result = false;
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
       active_web_contents, "enterPictureInPicture();", &result));
   ASSERT_TRUE(result);
 
-  OverlayWindowViews* overlay_window_views =
-      static_cast<OverlayWindowViews*>(overlay_window);
-
   // The PiP window starts in the bottom-right quadrant of the screen.
-  gfx::Rect bottom_right_bounds = overlay_window_views->GetBounds();
+  gfx::Rect bottom_right_bounds = GetOverlayWindow()->GetBounds();
   // The relative center point of the window.
   gfx::Point center(bottom_right_bounds.width() / 2,
                     bottom_right_bounds.height() / 2);
   gfx::Point close_button_position =
-      overlay_window_views->close_image_position_for_testing();
+      GetOverlayWindow()->close_image_position_for_testing();
   gfx::Point resize_button_position =
-      overlay_window_views->resize_handle_position_for_testing();
+      GetOverlayWindow()->resize_handle_position_for_testing();
 
   // The close button should be in the top right corner.
   EXPECT_LT(center.x(), close_button_position.x());
@@ -1713,17 +1645,17 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   EXPECT_GT(center.x(), resize_button_position.x());
   EXPECT_GT(center.y(), resize_button_position.y());
   // The resize button hit test should start a top left resizing drag.
-  EXPECT_EQ(HTTOPLEFT, overlay_window_views->GetResizeHTComponent());
+  EXPECT_EQ(HTTOPLEFT, GetOverlayWindow()->GetResizeHTComponent());
 
   // Move the window to the bottom left corner.
   gfx::Rect bottom_left_bounds(0, bottom_right_bounds.y(),
                                bottom_right_bounds.width(),
                                bottom_right_bounds.height());
-  overlay_window_views->SetBounds(bottom_left_bounds);
+  GetOverlayWindow()->SetBounds(bottom_left_bounds);
   close_button_position =
-      overlay_window_views->close_image_position_for_testing();
+      GetOverlayWindow()->close_image_position_for_testing();
   resize_button_position =
-      overlay_window_views->resize_handle_position_for_testing();
+      GetOverlayWindow()->resize_handle_position_for_testing();
 
   // The close button should be in the top left corner.
   EXPECT_GT(center.x(), close_button_position.x());
@@ -1732,17 +1664,17 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   EXPECT_LT(center.x(), resize_button_position.x());
   EXPECT_GT(center.y(), resize_button_position.y());
   // The resize button hit test should start a top right resizing drag.
-  EXPECT_EQ(HTTOPRIGHT, overlay_window_views->GetResizeHTComponent());
+  EXPECT_EQ(HTTOPRIGHT, GetOverlayWindow()->GetResizeHTComponent());
 
   // Move the window to the top right corner.
   gfx::Rect top_right_bounds(bottom_right_bounds.x(), 0,
                              bottom_right_bounds.width(),
                              bottom_right_bounds.height());
-  overlay_window_views->SetBounds(top_right_bounds);
+  GetOverlayWindow()->SetBounds(top_right_bounds);
   close_button_position =
-      overlay_window_views->close_image_position_for_testing();
+      GetOverlayWindow()->close_image_position_for_testing();
   resize_button_position =
-      overlay_window_views->resize_handle_position_for_testing();
+      GetOverlayWindow()->resize_handle_position_for_testing();
 
   // The close button should be in the top right corner.
   EXPECT_LT(center.x(), close_button_position.x());
@@ -1751,16 +1683,16 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   EXPECT_GT(center.x(), resize_button_position.x());
   EXPECT_LT(center.y(), resize_button_position.y());
   // The resize button hit test should start a bottom left resizing drag.
-  EXPECT_EQ(HTBOTTOMLEFT, overlay_window_views->GetResizeHTComponent());
+  EXPECT_EQ(HTBOTTOMLEFT, GetOverlayWindow()->GetResizeHTComponent());
 
   // Move the window to the top left corner.
   gfx::Rect top_left_bounds(0, 0, bottom_right_bounds.width(),
                             bottom_right_bounds.height());
-  overlay_window_views->SetBounds(top_left_bounds);
+  GetOverlayWindow()->SetBounds(top_left_bounds);
   close_button_position =
-      overlay_window_views->close_image_position_for_testing();
+      GetOverlayWindow()->close_image_position_for_testing();
   resize_button_position =
-      overlay_window_views->resize_handle_position_for_testing();
+      GetOverlayWindow()->resize_handle_position_for_testing();
 
   // The close button should be in the top right corner.
   EXPECT_LT(center.x(), close_button_position.x());
@@ -1769,10 +1701,9 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   EXPECT_LT(center.x(), resize_button_position.x());
   EXPECT_LT(center.y(), resize_button_position.y());
   // The resize button hit test should start a bottom right resizing drag.
-  EXPECT_EQ(HTBOTTOMRIGHT, overlay_window_views->GetResizeHTComponent());
+  EXPECT_EQ(HTBOTTOMRIGHT, GetOverlayWindow()->GetResizeHTComponent());
 }
-
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Tests that the Play/Pause button is displayed appropriately in the
 // Picture-in-Picture window.
@@ -1785,31 +1716,26 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_NE(nullptr, active_web_contents);
 
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_TRUE(overlay_window);
+  ASSERT_NE(nullptr, GetOverlayWindow());
 
   // Play/Pause button is displayed if video is not a mediastream.
-  MoveMouseOver(overlay_window);
-  EXPECT_TRUE(
-      overlay_window->play_pause_controls_view_for_testing()->IsDrawn());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->play_pause_controls_view_for_testing()}, true));
 
   // Play/Pause button is hidden if video is a mediastream.
   bool result = false;
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
       active_web_contents, "changeVideoSrcToMediaStream();", &result));
   EXPECT_TRUE(result);
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->play_pause_controls_view_for_testing()->IsDrawn());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->play_pause_controls_view_for_testing()}, false));
 
   // Play/Pause button is not hidden anymore when video is not a mediastream.
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
       active_web_contents, "changeVideoSrc();", &result));
   EXPECT_TRUE(result);
-  MoveMouseOver(overlay_window);
-  EXPECT_TRUE(
-      overlay_window->play_pause_controls_view_for_testing()->IsDrawn());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->play_pause_controls_view_for_testing()}, true));
 }
 
 // Check that page visibility API events are fired when tab is hidden, shown,
@@ -1830,21 +1756,21 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
   // Hide page and check that the document visibility is hidden.
   active_web_contents->WasHidden();
-  base::string16 expected_title = base::ASCIIToUTF16("hidden");
+  std::u16string expected_title = u"hidden";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
 
   // Show page and check that the document visibility is visible.
   active_web_contents->WasShown();
-  expected_title = base::ASCIIToUTF16("visible");
+  expected_title = u"visible";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
 
   // Occlude page and check that the document visibility is hidden.
   active_web_contents->WasOccluded();
-  expected_title = base::ASCIIToUTF16("hidden");
+  expected_title = u"hidden";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -1874,7 +1800,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
   // Hide page and check that the document visibility is hidden.
   active_web_contents->WasHidden();
-  base::string16 expected_title = base::ASCIIToUTF16("hidden");
+  std::u16string expected_title = u"hidden";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -1890,7 +1816,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
   // Show page and check that the document visibility is visible.
   active_web_contents->WasShown();
-  expected_title = base::ASCIIToUTF16("visible");
+  expected_title = u"visible";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -1905,7 +1831,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
   // Occlude page and check that the document visibility is hidden.
   active_web_contents->WasOccluded();
-  expected_title = base::ASCIIToUTF16("hidden");
+  expected_title = u"hidden";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -1940,44 +1866,36 @@ IN_PROC_BROWSER_TEST_F(MediaSessionPictureInPictureWindowControllerBrowserTest,
                        SkipAdButtonVisibility) {
   LoadTabAndEnterPictureInPicture(
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_TRUE(overlay_window);
+  ASSERT_NE(GetOverlayWindow(), nullptr);
 
-  // Skip Ad button is not displayed initially when mouse is hovering over the
-  // window.
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->skip_ad_controls_view_for_testing()->layer()->visible());
+  // Skip Ad button is not displayed initially.
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->skip_ad_controls_view_for_testing()}, false));
 
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
-  // Skip Ad button is not displayed if video is not playing even if mouse is
-  // hovering over the window and media session action handler has been set.
+  // Skip Ad button is not displayed if video is not playing even if media
+  // session action handler has been set.
   ASSERT_TRUE(content::ExecuteScript(
       active_web_contents, "setMediaSessionActionHandler('skipad');"));
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->skip_ad_controls_view_for_testing()->layer()->visible());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->skip_ad_controls_view_for_testing()}, false));
 
-  // Play video and check that Skip Ad button is now displayed when
-  // video plays and mouse is hovering over the window.
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_TRUE(
-      overlay_window->skip_ad_controls_view_for_testing()->layer()->visible());
+  // Play video and check that Skip Ad button is now displayed when video plays.
+  bool result = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      active_web_contents, "ensureVideoIsPlaying();", &result));
+  ASSERT_TRUE(result);
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->skip_ad_controls_view_for_testing()}, true));
 
   // Unset action handler and check that Skip Ad button is not displayed when
-  // video plays and mouse is hovering over the window.
+  // video plays.
   ASSERT_TRUE(content::ExecuteScript(
       active_web_contents, "unsetMediaSessionActionHandler('skipad');"));
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->skip_ad_controls_view_for_testing()->layer()->visible());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->skip_ad_controls_view_for_testing()}, false));
 }
 
 // Tests that the Play/Plause button is displayed in the Picture-in-Picture
@@ -1988,71 +1906,56 @@ IN_PROC_BROWSER_TEST_F(MediaSessionPictureInPictureWindowControllerBrowserTest,
   LoadTabAndEnterPictureInPicture(
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
 
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_TRUE(overlay_window);
+  ASSERT_NE(GetOverlayWindow(), nullptr);
 
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
-  // Play/Pause button is hidden if playing video is a mediastream and mouse is
-  // hovering over the window.
+  // Play/Pause button is hidden if playing video is a mediastream.
   bool result = false;
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
       active_web_contents, "changeVideoSrcToMediaStream();", &result));
   EXPECT_TRUE(result);
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->play_pause_controls_view_for_testing()->IsDrawn());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->play_pause_controls_view_for_testing()}, false));
 
   // Play second video (non-muted) so that Media Session becomes active.
   ASSERT_TRUE(
       content::ExecuteScript(active_web_contents, "secondVideo.play();"));
 
   // Set Media Session action "play" handler and check that Play/Pause button
-  // is still hidden when mouse is hovering over the window.
+  // is still hidden.
   ASSERT_TRUE(content::ExecuteScript(active_web_contents,
                                      "setMediaSessionActionHandler('play');"));
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->play_pause_controls_view_for_testing()->IsDrawn());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->play_pause_controls_view_for_testing()}, false));
 
   // Set Media Session action "pause" handler and check that Play/Pause button
-  // is now displayed when mouse is hovering over the window.
+  // is now displayed.
   ASSERT_TRUE(content::ExecuteScript(active_web_contents,
                                      "setMediaSessionActionHandler('pause');"));
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_TRUE(
-      overlay_window->play_pause_controls_view_for_testing()->IsDrawn());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->play_pause_controls_view_for_testing()}, true));
 
   // Unset Media Session action "pause" handler and check that Play/Pause button
-  // is hidden when mouse is hovering over the window.
+  // is hidden.
   ASSERT_TRUE(content::ExecuteScript(
       active_web_contents, "unsetMediaSessionActionHandler('pause');"));
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->play_pause_controls_view_for_testing()->IsDrawn());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->play_pause_controls_view_for_testing()}, false));
 
   ASSERT_TRUE(
       content::ExecuteScript(active_web_contents, "exitPictureInPicture();"));
 
-  // Reset Media Session action "pause" handler and check that Play/Pause button
-  // is now displayed when mouse is hovering over the window when it enters
-  // Picture-in-Picture again.
-  base::RunLoop().RunUntilIdle();
+  // Reset Media Session action "pause" handler and check that Play/Pause
+  // button is now displayed Picture-in-Picture is entered again.
   ASSERT_TRUE(content::ExecuteScript(active_web_contents,
                                      "setMediaSessionActionHandler('pause');"));
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
       active_web_contents, "enterPictureInPicture();", &result));
   EXPECT_TRUE(result);
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_TRUE(
-      overlay_window->play_pause_controls_view_for_testing()->IsDrawn());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->play_pause_controls_view_for_testing()}, true));
 }
 
 // Tests that a Next Track button is displayed in the Picture-in-Picture window
@@ -2061,80 +1964,37 @@ IN_PROC_BROWSER_TEST_F(MediaSessionPictureInPictureWindowControllerBrowserTest,
                        NextTrackButtonVisibility) {
   LoadTabAndEnterPictureInPicture(
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_TRUE(overlay_window);
+  ASSERT_NE(GetOverlayWindow(), nullptr);
 
-  // Next Track button is not displayed initially when mouse is hovering over
-  // the window.
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->next_track_controls_view_for_testing()->IsDrawn());
+  // Next Track button is not displayed initially.
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->next_track_controls_view_for_testing()}, false));
 
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
-  // Next Track button is not displayed if video is not playing even if mouse is
-  // hovering over the window and media session action handler has been set.
+  // Next Track button is not displayed if video is not playing even if media
+  // session action handler has been set.
   ASSERT_TRUE(content::ExecuteScript(
       active_web_contents, "setMediaSessionActionHandler('nexttrack');"));
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->next_track_controls_view_for_testing()->IsDrawn());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->next_track_controls_view_for_testing()}, false));
 
-  // Play video and check that Next Track button is now displayed when
-  // video plays and mouse is hovering over the window.
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_TRUE(
-      overlay_window->next_track_controls_view_for_testing()->IsDrawn());
+  // Play video and check that Next Track button is now displayed when video
+  // plays.
+  bool result = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      active_web_contents, "ensureVideoIsPlaying();", &result));
+  ASSERT_TRUE(result);
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->next_track_controls_view_for_testing()}, true));
 
-  gfx::Rect next_track_bounds =
-      overlay_window->next_track_controls_view_for_testing()
-          ->GetBoundsInScreen();
-
-  // Unset action handler and check that Next Track button is not displayed when
-  // video plays and mouse is hovering over the window.
+  // Unset action handler and check that Next Track button is not displayed
+  // when video plays.
   ASSERT_TRUE(content::ExecuteScript(
       active_web_contents, "unsetMediaSessionActionHandler('nexttrack');"));
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->next_track_controls_view_for_testing()->IsDrawn());
-
-  // Next Track button is still at the same previous location.
-  EXPECT_EQ(next_track_bounds,
-            overlay_window->next_track_controls_view_for_testing()
-                ->GetBoundsInScreen());
-}
-
-// Tests that Next Track button bounds are updated right away when
-// Picture-in-Picture window controls are hidden.
-IN_PROC_BROWSER_TEST_F(MediaSessionPictureInPictureWindowControllerBrowserTest,
-                       NextTrackButtonBounds) {
-  LoadTabAndEnterPictureInPicture(
-      browser(), base::FilePath(kPictureInPictureWindowSizePage));
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_TRUE(overlay_window);
-
-  content::WebContents* active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-
-  gfx::Rect next_track_bounds =
-      overlay_window->next_track_controls_view_for_testing()
-          ->GetBoundsInScreen();
-
-  ASSERT_TRUE(content::ExecuteScript(
-      active_web_contents, "setMediaSessionActionHandler('nexttrack');"));
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_NE(next_track_bounds,
-            overlay_window->next_track_controls_view_for_testing()
-                ->GetBoundsInScreen());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->next_track_controls_view_for_testing()}, false));
 }
 
 // Tests that a Previous Track button is displayed in the Picture-in-Picture
@@ -2143,80 +2003,36 @@ IN_PROC_BROWSER_TEST_F(MediaSessionPictureInPictureWindowControllerBrowserTest,
                        PreviousTrackButtonVisibility) {
   LoadTabAndEnterPictureInPicture(
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_TRUE(overlay_window);
 
-  // Previous Track button is not displayed initially when mouse is hovering
-  // over the window.
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->previous_track_controls_view_for_testing()->IsDrawn());
+  // Previous Track button is not displayed initially.
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->previous_track_controls_view_for_testing()}, false));
 
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
   // Previous Track button is not displayed if video is not playing even if
-  // mouse is hovering over the window and media session action handler has been
-  // set.
+  // media session action handler has been set.
   ASSERT_TRUE(content::ExecuteScript(
       active_web_contents, "setMediaSessionActionHandler('previoustrack');"));
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->previous_track_controls_view_for_testing()->IsDrawn());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->previous_track_controls_view_for_testing()}, false));
 
   // Play video and check that Previous Track button is now displayed when
-  // video plays and mouse is hovering over the window.
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_TRUE(
-      overlay_window->previous_track_controls_view_for_testing()->IsDrawn());
-
-  gfx::Rect previous_track_bounds =
-      overlay_window->previous_track_controls_view_for_testing()
-          ->GetBoundsInScreen();
+  // video plays.
+  bool result = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      active_web_contents, "ensureVideoIsPlaying();", &result));
+  ASSERT_TRUE(result);
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->previous_track_controls_view_for_testing()}, true));
 
   // Unset action handler and check that Previous Track button is not displayed
-  // when video plays and mouse is hovering over the window.
+  // when video plays.
   ASSERT_TRUE(content::ExecuteScript(
       active_web_contents, "unsetMediaSessionActionHandler('previoustrack');"));
-  base::RunLoop().RunUntilIdle();
-  MoveMouseOver(overlay_window);
-  EXPECT_FALSE(
-      overlay_window->previous_track_controls_view_for_testing()->IsDrawn());
-  // Previous Track button is still at the same previous location.
-  EXPECT_EQ(previous_track_bounds,
-            overlay_window->previous_track_controls_view_for_testing()
-                ->GetBoundsInScreen());
-}
-
-// Tests that Previous Track button bounds are updated right away when
-// Picture-in-Picture window controls are hidden.
-IN_PROC_BROWSER_TEST_F(MediaSessionPictureInPictureWindowControllerBrowserTest,
-                       PreviousTrackButtonBounds) {
-  LoadTabAndEnterPictureInPicture(
-      browser(), base::FilePath(kPictureInPictureWindowSizePage));
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_TRUE(overlay_window);
-
-  content::WebContents* active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-
-  gfx::Rect previous_track_bounds =
-      overlay_window->previous_track_controls_view_for_testing()
-          ->GetBoundsInScreen();
-
-  ASSERT_TRUE(content::ExecuteScript(
-      active_web_contents, "setMediaSessionActionHandler('previoustrack');"));
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_NE(previous_track_bounds,
-            overlay_window->previous_track_controls_view_for_testing()
-                ->GetBoundsInScreen());
+  EXPECT_NO_FATAL_FAILURE(AssertControlsVisible(
+      {GetOverlayWindow()->previous_track_controls_view_for_testing()}, false));
 }
 
 // Tests that clicking the Skip Ad button in the Picture-in-Picture window
@@ -2227,14 +2043,18 @@ IN_PROC_BROWSER_TEST_F(MediaSessionPictureInPictureWindowControllerBrowserTest,
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
   ASSERT_TRUE(content::ExecuteScript(
       active_web_contents, "setMediaSessionActionHandler('skipad');"));
-  base::RunLoop().RunUntilIdle();
+  bool result = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      active_web_contents, "ensureVideoIsPlaying();", &result));
+  ASSERT_TRUE(result);
+  WaitForPlaybackState(active_web_contents,
+                       OverlayWindowViews::PlaybackState::kPlaying);
 
   // Simulates user clicking "Skip Ad" and check the handler function is called.
   window_controller()->SkipAd();
-  base::string16 expected_title = base::ASCIIToUTF16("skipad");
+  std::u16string expected_title = u"skipad";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -2248,27 +2068,33 @@ IN_PROC_BROWSER_TEST_F(MediaSessionPictureInPictureWindowControllerBrowserTest,
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
   ASSERT_TRUE(content::ExecuteScript(active_web_contents,
                                      "setMediaSessionActionHandler('play');"));
   ASSERT_TRUE(content::ExecuteScript(active_web_contents,
                                      "setMediaSessionActionHandler('pause');"));
-  base::RunLoop().RunUntilIdle();
+  bool result = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      active_web_contents, "ensureVideoIsPlaying();", &result));
+  ASSERT_TRUE(result);
+  WaitForPlaybackState(active_web_contents,
+                       OverlayWindowViews::PlaybackState::kPlaying);
 
   // Simulates user clicking "Play/Pause" and check that the "pause" handler
   // function is called.
   window_controller()->TogglePlayPause();
-  base::string16 expected_title = base::ASCIIToUTF16("pause");
+  std::u16string expected_title = u"pause";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
 
   EXPECT_TRUE(content::ExecuteScript(active_web_contents, "video.pause();"));
+  WaitForPlaybackState(active_web_contents,
+                       OverlayWindowViews::PlaybackState::kPaused);
 
   // Simulates user clicking "Play/Pause" and check that the "play" handler
   // function is called.
   window_controller()->TogglePlayPause();
-  expected_title = base::ASCIIToUTF16("play");
+  expected_title = u"play";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -2282,15 +2108,19 @@ IN_PROC_BROWSER_TEST_F(MediaSessionPictureInPictureWindowControllerBrowserTest,
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
   ASSERT_TRUE(content::ExecuteScript(
       active_web_contents, "setMediaSessionActionHandler('nexttrack');"));
-  base::RunLoop().RunUntilIdle();
+  bool result = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      active_web_contents, "ensureVideoIsPlaying();", &result));
+  ASSERT_TRUE(result);
+  WaitForPlaybackState(active_web_contents,
+                       OverlayWindowViews::PlaybackState::kPlaying);
 
   // Simulates user clicking "Next Track" and check the handler function is
   // called.
   window_controller()->NextTrack();
-  base::string16 expected_title = base::ASCIIToUTF16("nexttrack");
+  std::u16string expected_title = u"nexttrack";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -2304,15 +2134,19 @@ IN_PROC_BROWSER_TEST_F(MediaSessionPictureInPictureWindowControllerBrowserTest,
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
   ASSERT_TRUE(content::ExecuteScript(
       active_web_contents, "setMediaSessionActionHandler('previoustrack');"));
-  base::RunLoop().RunUntilIdle();
+  bool result = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      active_web_contents, "ensureVideoIsPlaying();", &result));
+  ASSERT_TRUE(result);
+  WaitForPlaybackState(active_web_contents,
+                       OverlayWindowViews::PlaybackState::kPlaying);
 
   // Simulates user clicking "Previous Track" and check the handler function is
   // called.
   window_controller()->PreviousTrack();
-  base::string16 expected_title = base::ASCIIToUTF16("previoustrack");
+  std::u16string expected_title = u"previoustrack";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -2325,12 +2159,16 @@ IN_PROC_BROWSER_TEST_F(MediaSessionPictureInPictureWindowControllerBrowserTest,
       browser(), base::FilePath(kPictureInPictureWindowSizePage));
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
-  base::RunLoop().RunUntilIdle();
+  bool result = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      active_web_contents, "ensureVideoIsPlaying();", &result));
+  ASSERT_TRUE(result);
+  WaitForPlaybackState(active_web_contents,
+                       OverlayWindowViews::PlaybackState::kPlaying);
 
   content::MediaSession::Get(active_web_contents)
       ->Stop(content::MediaSession::SuspendType::kUI);
-  base::string16 expected_title = base::ASCIIToUTF16("leavepictureinpicture");
+  std::u16string expected_title = u"leavepictureinpicture";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -2369,7 +2207,7 @@ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWindowControllerBrowserTest,
   // Hide page and check that there is no video that enters Picture-in-Picture
   // automatically.
   active_web_contents->WasHidden();
-  base::string16 expected_title = base::ASCIIToUTF16("hidden");
+  std::u16string expected_title = u"hidden";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -2402,7 +2240,7 @@ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWindowControllerBrowserTest,
 
   // Hide page.
   active_web_contents->WasHidden();
-  base::string16 expected_title = base::ASCIIToUTF16("hidden");
+  std::u16string expected_title = u"hidden";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -2415,7 +2253,7 @@ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWindowControllerBrowserTest,
 
   // Show page and check that video left Picture-in-Picture automatically.
   active_web_contents->WasShown();
-  expected_title = base::ASCIIToUTF16("visible");
+  expected_title = u"visible";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -2423,60 +2261,6 @@ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWindowControllerBrowserTest,
   ASSERT_TRUE(ExecuteScriptAndExtractBool(
       active_web_contents, "isInPictureInPicture();", &in_picture_in_picture));
   EXPECT_FALSE(in_picture_in_picture);
-}
-
-// Show/hide fullscreen page and check that Auto Picture-in-Picture is
-// triggered.
-
-// Crashes on Mac only.  http://crbug.com/1058087
-#if defined(OS_MAC)
-#define MAYBE_AutoPictureInPictureTriggeredWhenFullscreen \
-  DISABLED_AutoPictureInPictureTriggeredWhenFullscreen
-#else
-#define MAYBE_AutoPictureInPictureTriggeredWhenFullscreen \
-  AutoPictureInPictureTriggeredWhenFullscreen
-#endif
-IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWindowControllerBrowserTest,
-                       MAYBE_AutoPictureInPictureTriggeredWhenFullscreen) {
-  GURL test_page_url = ui_test_utils::GetTestUrl(
-      base::FilePath(base::FilePath::kCurrentDirectory),
-      base::FilePath(kPictureInPictureWindowSizePage));
-  ui_test_utils::NavigateToURL(browser(), test_page_url);
-
-  content::WebContents* active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_NE(nullptr, active_web_contents);
-
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents, "enterFullscreen()"));
-  base::string16 expected_title = base::ASCIIToUTF16("fullscreen");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
-
-  EXPECT_TRUE(content::ExecuteScript(active_web_contents,
-                                     "addPictureInPictureEventListeners();"));
-  EXPECT_TRUE(content::ExecuteScript(active_web_contents, "video.play();"));
-  ASSERT_TRUE(content::ExecuteScript(active_web_contents,
-                                     "video.autoPictureInPicture = true;"));
-
-  SetUpWindowController(active_web_contents);
-  EXPECT_FALSE(window_controller()->GetWindowForTesting()->IsVisible());
-
-  // Hide page and check that video entered Picture-in-Picture automatically.
-  active_web_contents->WasHidden();
-  expected_title = base::ASCIIToUTF16("enterpictureinpicture");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
-  EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
-
-  // Show page and check that video left Picture-in-Picture automatically.
-  active_web_contents->WasShown();
-  expected_title = base::ASCIIToUTF16("leavepictureinpicture");
-  EXPECT_EQ(expected_title,
-            content::TitleWatcher(active_web_contents, expected_title)
-                .WaitAndGetTitle());
-  EXPECT_FALSE(window_controller()->GetWindowForTesting()->IsVisible());
 }
 
 namespace {
@@ -2488,9 +2272,9 @@ class ChromeContentBrowserClientOverrideWebAppScope
   ~ChromeContentBrowserClientOverrideWebAppScope() override = default;
 
   void OverrideWebkitPrefs(
-      content::RenderViewHost* rvh,
+      content::WebContents* web_contents,
       blink::web_pref::WebPreferences* web_prefs) override {
-    ChromeContentBrowserClient::OverrideWebkitPrefs(rvh, web_prefs);
+    ChromeContentBrowserClient::OverrideWebkitPrefs(web_contents, web_prefs);
 
     web_prefs->web_app_scope = web_app_scope_;
   }
@@ -2544,7 +2328,7 @@ class WebAppPictureInPictureWindowControllerBrowserTest
 };
 
 // Show/hide pwa page and check that Auto Picture-in-Picture is triggered.
-IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
+IN_PROC_BROWSER_TEST_F(WebAppPictureInPictureWindowControllerBrowserTest,
                        AutoPictureInPicture) {
   InstallAndLaunchPWA(main_url());
   bool result = false;
@@ -2556,15 +2340,14 @@ IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
 
   // Hide page and check that video entered Picture-in-Picture automatically.
   web_contents()->WasHidden();
-  base::string16 expected_title =
-      base::ASCIIToUTF16("video.enterpictureinpicture");
+  std::u16string expected_title = u"video.enterpictureinpicture";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
 
   // Show page and check that video left Picture-in-Picture automatically.
   web_contents()->WasShown();
-  expected_title = base::ASCIIToUTF16("video.leavepictureinpicture");
+  expected_title = u"video.leavepictureinpicture";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
@@ -2572,7 +2355,7 @@ IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
 
 // Show pwa page and check that Auto Picture-in-Picture is not triggered if
 // document is not inside the scope specified in the Web App Manifest.
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     WebAppPictureInPictureWindowControllerBrowserTest,
     AutoPictureInPictureNotTriggeredIfDocumentNotInWebAppScope) {
   // We open a web app with a different scope
@@ -2592,7 +2375,7 @@ IN_PROC_BROWSER_TEST_P(
   // Hide page and check that the video did not entered
   // Picture-in-Picture automatically.
   web_contents()->WasHidden();
-  base::string16 expected_title = base::ASCIIToUTF16("hidden");
+  std::u16string expected_title = u"hidden";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
@@ -2605,7 +2388,7 @@ IN_PROC_BROWSER_TEST_P(
 
 // Show pwa page and check that Auto Picture-in-Picture is not triggered if
 // video is not playing.
-IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
+IN_PROC_BROWSER_TEST_F(WebAppPictureInPictureWindowControllerBrowserTest,
                        AutoPictureInPictureNotTriggeredIfVideoNotPlaying) {
   InstallAndLaunchPWA(main_url());
   ASSERT_TRUE(content::ExecuteScript(web_contents(),
@@ -2618,7 +2401,7 @@ IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
   // Hide page and check that the video did not entered
   // Picture-in-Picture automatically.
   web_contents()->WasHidden();
-  base::string16 expected_title = base::ASCIIToUTF16("hidden");
+  std::u16string expected_title = u"hidden";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
@@ -2631,7 +2414,7 @@ IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
 
 // Check that Auto Picture-in-Picture is not triggered if there's already a
 // video in Picture-in-Picture.
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     WebAppPictureInPictureWindowControllerBrowserTest,
     AutoPictureInPictureWhenPictureInPictureWindowAlreadyVisible) {
   InstallAndLaunchPWA(main_url());
@@ -2654,7 +2437,7 @@ IN_PROC_BROWSER_TEST_P(
   // Hide page and check that the second video did not entered
   // Picture-in-Picture automatically.
   web_contents()->WasHidden();
-  base::string16 expected_title = base::ASCIIToUTF16("hidden");
+  std::u16string expected_title = u"hidden";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
@@ -2668,33 +2451,28 @@ IN_PROC_BROWSER_TEST_P(
 
 // Check that video does not leave Picture-in-Picture automatically when it
 // doesn't have the Auto Picture-in-Picture attribute set.
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     WebAppPictureInPictureWindowControllerBrowserTest,
     AutoPictureInPictureNotTriggeredOnPageShownIfNoAttribute) {
   InstallAndLaunchPWA(main_url());
+  ASSERT_TRUE(content::ExecuteScript(web_contents(),
+                                     "video.autoPictureInPicture = false;"));
+
   bool result = false;
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(web_contents(),
                                                    "playVideo();", &result));
   ASSERT_TRUE(result);
-  ASSERT_TRUE(content::ExecuteScript(web_contents(),
-                                     "video.autoPictureInPicture = true;"));
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      web_contents(), "enterPictureInPicture();", &result));
+  ASSERT_TRUE(result);
 
-  // Hide page and check that video entered Picture-in-Picture automatically.
   web_contents()->WasHidden();
-  base::string16 expected_title =
-      base::ASCIIToUTF16("video.enterpictureinpicture");
-  EXPECT_EQ(
-      expected_title,
-      content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
-
-  ASSERT_TRUE(content::ExecuteScript(web_contents(),
-                                     "video.autoPictureInPicture = false;"));
 
   // Show page and check that video did not leave Picture-in-Picture
-  // automatically as it doesn't have the Auto Picture-in-Picture attribute set
-  // anymore.
+  // automatically as it doesn't have the Auto Picture-in-Picture attribute
+  // set.
   web_contents()->WasShown();
-  expected_title = base::ASCIIToUTF16("visible");
+  const std::u16string expected_title = u"visible";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
@@ -2706,11 +2484,10 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_TRUE(in_picture_in_picture);
 }
 
-// TODO(http://crbug/1001249): flaky.
 // Check that Auto Picture-in-Picture applies only to the video element whose
 // autoPictureInPicture attribute was set most recently
-IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
-                       DISABLED_AutoPictureInPictureAttributeApplies) {
+IN_PROC_BROWSER_TEST_F(WebAppPictureInPictureWindowControllerBrowserTest,
+                       AutoPictureInPictureAttributeApplies) {
   InstallAndLaunchPWA(main_url());
   bool result = false;
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(web_contents(),
@@ -2727,15 +2504,14 @@ IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
   // Hide page and check that second video is the video that enters
   // Picture-in-Picture automatically.
   web_contents()->WasHidden();
-  base::string16 expected_title =
-      base::ASCIIToUTF16("secondVideo.enterpictureinpicture");
+  std::u16string expected_title = u"secondVideo.enterpictureinpicture";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
 
   // Show page and unset Auto Picture-in-Picture attribute on second video.
   web_contents()->WasShown();
-  expected_title = base::ASCIIToUTF16("visible");
+  expected_title = u"visible";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
@@ -2745,14 +2521,14 @@ IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
   // Hide page and check that first video is the video that enters
   // Picture-in-Picture automatically.
   web_contents()->WasHidden();
-  expected_title = base::ASCIIToUTF16("video.enterpictureinpicture");
+  expected_title = u"video.enterpictureinpicture";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
 
   // Show page and unset Auto Picture-in-Picture attribute on first video.
   web_contents()->WasShown();
-  expected_title = base::ASCIIToUTF16("visible");
+  expected_title = u"visible";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
@@ -2762,14 +2538,14 @@ IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
   // Hide page and check that there is no video that enters Picture-in-Picture
   // automatically.
   web_contents()->WasHidden();
-  expected_title = base::ASCIIToUTF16("hidden");
+  expected_title = u"hidden";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
 
   // Show page and append a video with Auto Picture-in-Picture attribute.
   web_contents()->WasShown();
-  expected_title = base::ASCIIToUTF16("visible");
+  expected_title = u"visible";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
@@ -2780,7 +2556,7 @@ IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
   // Hide page and check that the html video is the video that enters
   // Picture-in-Picture automatically.
   web_contents()->WasHidden();
-  expected_title = base::ASCIIToUTF16("htmlVideo.enterpictureinpicture");
+  expected_title = u"htmlVideo.enterpictureinpicture";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
@@ -2788,7 +2564,7 @@ IN_PROC_BROWSER_TEST_P(WebAppPictureInPictureWindowControllerBrowserTest,
 
 // Check that video does not leave Picture-in-Picture automatically when it
 // not the most recent element with the Auto Picture-in-Picture attribute set.
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     WebAppPictureInPictureWindowControllerBrowserTest,
     AutoPictureInPictureNotTriggeredOnPageShownIfNotEnteredAutoPictureInPicture) {
   InstallAndLaunchPWA(main_url());
@@ -2801,8 +2577,7 @@ IN_PROC_BROWSER_TEST_P(
 
   // Hide page and check that video entered Picture-in-Picture automatically.
   web_contents()->WasHidden();
-  base::string16 expected_title =
-      base::ASCIIToUTF16("video.enterpictureinpicture");
+  std::u16string expected_title = u"video.enterpictureinpicture";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
@@ -2817,7 +2592,7 @@ IN_PROC_BROWSER_TEST_P(
   // automatically as it's not the most recent element with the Auto
   // Picture-in-Picture attribute set anymore.
   web_contents()->WasShown();
-  expected_title = base::ASCIIToUTF16("visible");
+  expected_title = u"visible";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
@@ -2831,7 +2606,7 @@ IN_PROC_BROWSER_TEST_P(
 
 // Check that video with no audio that is paused when hidden is still eligible
 // to enter Auto Picture-in-Picture and resumes playback.
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     WebAppPictureInPictureWindowControllerBrowserTest,
     AutoPictureInPictureTriggeredOnPageHiddenIfVideoPausedWhenHidden) {
   InstallAndLaunchPWA(main_url());
@@ -2846,8 +2621,7 @@ IN_PROC_BROWSER_TEST_P(
   // Hide page and check that video entered Picture-in-Picture automatically
   // and is playing.
   web_contents()->WasHidden();
-  base::string16 expected_title =
-      base::ASCIIToUTF16("video.enterpictureinpicture");
+  std::u16string expected_title = u"video.enterpictureinpicture";
   EXPECT_EQ(
       expected_title,
       content::TitleWatcher(web_contents(), expected_title).WaitAndGetTitle());
@@ -2882,7 +2656,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
   // Hide page and check that the video is paused first.
   active_web_contents->WasHidden();
-  base::string16 expected_title = base::ASCIIToUTF16("pause");
+  std::u16string expected_title = u"pause";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -2896,7 +2670,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   EXPECT_TRUE(result);
 
   // Check that video playback has resumed.
-  expected_title = base::ASCIIToUTF16("play");
+  expected_title = u"play";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -2915,7 +2689,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
                                      "video.src=''; exitPictureInPicture();"));
 
   // 'left' is sent when the first video leaves Picture-in-Picture.
-  base::string16 expected_title = base::ASCIIToUTF16("leavepictureinpicture");
+  std::u16string expected_title = u"leavepictureinpicture";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -2941,7 +2715,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
   // Reset video source and wait for the notification.
   ASSERT_TRUE(content::ExecuteScript(active_web_contents, "resetVideo();"));
-  base::string16 expected_title = base::ASCIIToUTF16("emptied");
+  std::u16string expected_title = u"emptied";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
@@ -2950,42 +2724,6 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
   // Video should no longer be in Picture-in-Picture.
   ExpectLeavePictureInPicture(active_web_contents);
-}
-
-// TODO(crbug.com/1002489): Test is flaky on Linux.
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
-#define MAYBE_UpdateMaxSize DISABLED_UpdateMaxSize
-#else
-#define MAYBE_UpdateMaxSize UpdateMaxSize
-#endif
-IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
-                       MAYBE_UpdateMaxSize) {
-  LoadTabAndEnterPictureInPicture(
-      browser(), base::FilePath(kPictureInPictureWindowSizePage));
-
-  content::WebContents* active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_NE(nullptr, active_web_contents);
-
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_TRUE(overlay_window);
-
-  // Size should be half the work area.
-  gfx::Size window_size(100, 100);
-  window_size = overlay_window->UpdateMaxSize(gfx::Rect(100, 100), window_size);
-  EXPECT_EQ(gfx::Size(50, 50), window_size);
-  EXPECT_EQ(gfx::Size(50, 50), overlay_window->GetMaximumSize());
-
-  // If the max size increases then we should keep the existing window size.
-  window_size = overlay_window->UpdateMaxSize(gfx::Rect(200, 200), window_size);
-  EXPECT_EQ(gfx::Size(50, 50), window_size);
-  EXPECT_EQ(gfx::Size(100, 100), overlay_window->GetMaximumSize());
-
-  // If the max size decreases then we should shrink to fit.
-  window_size = overlay_window->UpdateMaxSize(gfx::Rect(50, 50), window_size);
-  EXPECT_EQ(gfx::Size(25, 25), window_size);
-  EXPECT_EQ(gfx::Size(25, 25), overlay_window->GetMaximumSize());
 }
 
 // Tests that play/pause video playback is toggled if there are no focus
@@ -3002,23 +2740,15 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
   ASSERT_TRUE(
       content::ExecuteScript(active_web_contents, "addPauseEventListener();"));
 
-  OverlayWindowViews* overlay_window = static_cast<OverlayWindowViews*>(
-      window_controller()->GetWindowForTesting());
-  ASSERT_TRUE(overlay_window);
-  ASSERT_FALSE(overlay_window->GetFocusManager()->GetFocusedView());
+  ASSERT_NE(GetOverlayWindow(), nullptr);
+  ASSERT_FALSE(GetOverlayWindow()->GetFocusManager()->GetFocusedView());
 
   ui::KeyEvent space_key_pressed(ui::ET_KEY_PRESSED, ui::VKEY_SPACE,
                                  ui::DomCode::SPACE, ui::EF_NONE);
-  overlay_window->OnKeyEvent(&space_key_pressed);
+  GetOverlayWindow()->OnKeyEvent(&space_key_pressed);
 
-  base::string16 expected_title = base::ASCIIToUTF16("pause");
+  std::u16string expected_title = u"pause";
   EXPECT_EQ(expected_title,
             content::TitleWatcher(active_web_contents, expected_title)
                 .WaitAndGetTitle());
 }
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         WebAppPictureInPictureWindowControllerBrowserTest,
-                         ::testing::Values(ProviderType::kBookmarkApps,
-                                           ProviderType::kWebApps),
-                         web_app::ProviderTypeParamToString);

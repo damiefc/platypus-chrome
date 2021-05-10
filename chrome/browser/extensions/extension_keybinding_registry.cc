@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/active_tab_permission_granter.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
@@ -20,7 +21,7 @@
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest_constants.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ui/ash/media_client_impl.h"
 #endif
 
@@ -40,8 +41,9 @@ ExtensionKeybindingRegistry::ExtensionKeybindingRegistry(
       extension_filter_(extension_filter),
       delegate_(delegate),
       shortcut_handling_suspended_(false) {
-  extension_registry_observer_.Add(ExtensionRegistry::Get(browser_context_));
-  command_service_observer_.Add(CommandService::Get(browser_context_));
+  extension_registry_observation_.Observe(
+      ExtensionRegistry::Get(browser_context_));
+  command_service_observation_.Observe(CommandService::Get(browser_context_));
   media_keys_listener_ = ui::MediaKeysListener::Create(
       this, ui::MediaKeysListener::Scope::kFocused);
 }
@@ -101,7 +103,7 @@ void ExtensionKeybindingRegistry::RemoveExtensionKeybinding(
 
       media_keys_listener_manager->EnableInternalMediaKeyHandling();
     } else {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       MediaClientImpl::Get()->DisableCustomMediaKeyHandler(browser_context_,
                                                            this);
 #endif
@@ -217,7 +219,7 @@ void ExtensionKeybindingRegistry::AddEventTarget(
 
       media_keys_listener_manager->DisableInternalMediaKeyHandling();
     } else {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       MediaClientImpl::Get()->EnableCustomMediaKeyHandler(browser_context_,
                                                           this);
 #endif
@@ -242,12 +244,6 @@ bool ExtensionKeybindingRegistry::GetFirstTarget(
 
 bool ExtensionKeybindingRegistry::IsEventTargetsEmpty() const {
   return event_targets_.empty();
-}
-
-void ExtensionKeybindingRegistry::ExecuteCommand(
-    const std::string& extension_id,
-    const ui::Accelerator& accelerator) {
-  ExecuteCommands(accelerator, extension_id);
 }
 
 void ExtensionKeybindingRegistry::OnExtensionLoaded(
@@ -280,7 +276,7 @@ void ExtensionKeybindingRegistry::OnExtensionCommandAdded(
   // Component extensions trigger OnExtensionLoaded() for extension
   // installs as well as loads. This can cause adding of multiple key
   // targets.
-  if (extension->location() == Manifest::COMPONENT)
+  if (extension->location() == mojom::ManifestLocation::kComponent)
     return;
 
   AddExtensionKeybindings(extension, command.command_name());
@@ -302,7 +298,7 @@ void ExtensionKeybindingRegistry::OnExtensionCommandRemoved(
 }
 
 void ExtensionKeybindingRegistry::OnCommandServiceDestroying() {
-  command_service_observer_.RemoveAll();
+  command_service_observation_.Reset();
 }
 
 void ExtensionKeybindingRegistry::OnMediaKeysAccelerator(

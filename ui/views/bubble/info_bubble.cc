@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -47,7 +48,7 @@ class InfoBubbleFrame : public BubbleFrameView {
   DISALLOW_COPY_AND_ASSIGN(InfoBubbleFrame);
 };
 
-InfoBubble::InfoBubble(View* anchor, const base::string16& message)
+InfoBubble::InfoBubble(View* anchor, const std::u16string& message)
     : anchor_(anchor), frame_(nullptr), preferred_width_(0) {
   DCHECK(anchor_);
   SetAnchorView(anchor_);

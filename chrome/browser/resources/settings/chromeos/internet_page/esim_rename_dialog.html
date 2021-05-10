@@ -1,0 +1,123 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/cr_components/chromeos/cellular_setup/cellular_setup_icons.html">
+<link rel="import" href="chrome://resources/cr_components/chromeos/cellular_setup/esim_manager_utils.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_input/cr_input.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+
+<dom-module id="esim-rename-dialog">
+  <template>
+    <style include="iron-positioning">
+      :host {
+        --cr-dialog-width: 324px;
+      }
+
+      #body {
+        overflow: hidden;
+        padding: 0 20px 2px 20px;
+      }
+
+      #warningMessage {
+        --iron-icon-fill-color: #5F6368;
+        --iron-icon-height: 16px;
+        --iron-icon-width: 16px;
+        font-size: smaller;
+        margin-bottom: 24px;
+      }
+
+      #warningMessage iron-icon {
+        padding-inline-end: 4px;
+      }
+
+      #inputInfo {
+        background-color: white;
+        font-size: var(--cr-form-field-label-font-size);
+        font-weight: 500;
+        height: 30px;
+        line-height: var(--cr-form-field-label-line-height);
+        position: absolute;
+        top: 40px;
+        width: 100%;
+      }
+
+      #inputInfo.error {
+        color: var(--google-red-600);
+        font-weight: 400;
+      }
+
+      #inputSubtitle {
+        display: block;
+        width: 260px;
+      }
+
+      #inputCount {
+        position: absolute;
+        right: 0;
+        top: 0;
+      }
+
+      #cancel {
+        margin-inline-end: 8px;
+      }
+    </style>
+    <cr-dialog id="profileRenameDialog" show-on-attach>
+      <div slot="title">$i18n{eSimRenameProfileDialogLabel}</div>
+      <div id="body" slot="body">
+        <div id="warningMessage" hidden$="[[!showCellularDisconnectWarning]]">
+          <iron-icon icon="cellular-setup:warning"></iron-icon>
+          $i18n{eSimDialogConnectionWarning}
+        </div>
+        <template is="dom-if" if="[[!errorMessage_]]" restamp>
+          <div class="relative">
+            <!-- Set error-message so then it is read out by ChromeVox
+              when cr-input is invalid. Since we already display the error
+              message in #inputInfo, this is visually hidden by #inputInfo. -->
+            <cr-input id="eSimprofileName"
+                value="{{esimProfileName_}}"
+                spellcheck="false"
+                disabled="[[isRenameInProgress_]]"
+                invalid="[[isInputInvalid_]]"
+                aria-label="[[i18n('eSimRenameProfileDialogLabel')]]"
+                aria-description="[[i18n('eSimRenameProfileInputA11yLabel',
+                    MAX_INPUT_LENGTH)]]"
+                error-message="[[i18n('eSimRenameProfileInputA11yLabel',
+                    MAX_INPUT_LENGTH)]]">
+            </cr-input>
+            <div id="inputInfo"
+                class$="[[getInputInfoClass_(isInputInvalid_)]]"
+                aria-hidden="true">
+              <span id="inputSubtitle">$i18n{eSimRenameProfileInputSubtitle}</span>
+              <span id="inputCount">
+                [[getInputCountString_(esimProfileName_)]]
+              </span>
+            </div>
+          </div>
+        </template>
+        <div id="errorMessage" aria-live="polite" hidden$="[[!errorMessage_]]">
+          [[errorMessage_]]
+        </div>
+      </div>
+      <div slot="button-container">
+        <template is="dom-if" if="[[!errorMessage_]]" restamp>
+          <cr-button id="cancel"
+              on-click="onCancelTap_"
+              disabled="[[isRenameInProgress_]]"
+              class="cancel-button">
+            $i18n{eSimRenameProfileDialogCancel}
+          </cr-button>
+        </template>
+        <cr-button id="done"
+            on-click="onRenameDialogDoneTap_"
+            disabled="[[isRenameInProgress_]]"
+            aria-label$="[[getDoneBtnA11yLabel_(esimProfileName_)]]"
+            aria-describedby="warningMessage"
+            class="action-button">
+          $i18n{eSimRenameProfileDialogDone}
+        </cr-button>
+      </div>
+    </cr-dialog>
+  </template>
+  <script src="esim_rename_dialog.js"></script>
+</dom-module>

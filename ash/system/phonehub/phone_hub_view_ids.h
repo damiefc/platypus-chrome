@@ -14,9 +14,34 @@ namespace ash {
 enum PhoneHubViewID {
   // We start from 1 because 0 is the default view ID.
   kPhoneStatusView = 1,
-  kNotificationOptInView,
   kQuickActionsView,
   kTaskContinuationView,
+
+  // Notification opt in view and its components.
+  kNotificationOptInView,
+  kNotificationOptInSetUpButton,
+  kNotificationOptInDismissButton,
+
+  // Onboarding view and its components.
+  kOnboardingView,
+  kOnboardingMainView,
+  kOnboardingGetStartedButton,
+  kOnboardingDismissButton,
+  kOnboardingDismissPromptView,
+  kOnboardingDismissAckButton,
+
+  // Phone disconnected view and its components.
+  kDisconnectedView,
+  kDisconnectedLearnMoreButton,
+  kDisconnectedRefreshButton,
+
+  // Bluetooth disabled view and its components.
+  kBluetoothDisabledView,
+  kBluetoothDisabledLearnMoreButton,
+
+  kPhoneConnectedView,
+  kPhoneConnectingView,
+  kTetherConnectionPendingView,
 };
 
 }  // namespace ash

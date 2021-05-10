@@ -76,32 +76,32 @@ bool NGLayoutInputNode::IsSliderThumb() const {
   return IsBlock() && blink::IsSliderThumb(GetDOMNode());
 }
 
+bool NGLayoutInputNode::IsSVGText() const {
+  return box_ && box_->IsNGSVGText();
+}
+
 bool NGLayoutInputNode::IsEmptyTableSection() const {
-  return box_->IsTableSection() && To<LayoutNGTableSection>(box_)->IsEmpty();
+  return box_->IsTableSection() &&
+         To<LayoutNGTableSection>(box_.Get())->IsEmpty();
 }
 
 wtf_size_t NGLayoutInputNode::TableColumnSpan() const {
   DCHECK(IsTableCol() || IsTableColgroup());
-  return To<LayoutNGTableColumn>(box_)->Span();
+  return To<LayoutNGTableColumn>(box_.Get())->Span();
 }
 
 wtf_size_t NGLayoutInputNode::TableCellColspan() const {
   DCHECK(box_->IsTableCell());
-  return To<LayoutNGTableCell>(box_)->ColSpan();
+  return To<LayoutNGTableCell>(box_.Get())->ColSpan();
 }
 
 wtf_size_t NGLayoutInputNode::TableCellRowspan() const {
   DCHECK(box_->IsTableCell());
-  return To<LayoutNGTableCell>(box_)->ComputedRowSpan();
+  return To<LayoutNGTableCell>(box_.Get())->ComputedRowSpan();
 }
 
-MinMaxSizesResult NGLayoutInputNode::ComputeMinMaxSizes(
-    WritingMode writing_mode,
-    const MinMaxSizesInput& input,
-    const NGConstraintSpace* space) const {
-  if (auto* inline_node = DynamicTo<NGInlineNode>(this))
-    return inline_node->ComputeMinMaxSizes(writing_mode, input, space);
-  return To<NGBlockNode>(*this).ComputeMinMaxSizes(writing_mode, input, space);
+bool NGLayoutInputNode::IsTextControlPlaceholder() const {
+  return IsBlock() && blink::IsTextControlPlaceholder(GetDOMNode());
 }
 
 void NGLayoutInputNode::IntrinsicSize(
@@ -115,7 +115,8 @@ void NGLayoutInputNode::IntrinsicSize(
 
   IntrinsicSizingInfo legacy_sizing_info;
 
-  ToLayoutReplaced(box_)->ComputeIntrinsicSizingInfo(legacy_sizing_info);
+  To<LayoutReplaced>(box_.Get())
+      ->ComputeIntrinsicSizingInfo(legacy_sizing_info);
   if (!*computed_inline_size && legacy_sizing_info.has_width)
     *computed_inline_size = LayoutUnit(legacy_sizing_info.size.Width());
   if (!*computed_block_size && legacy_sizing_info.has_height)
@@ -134,10 +135,6 @@ PhysicalSize NGLayoutInputNode::InitialContainingBlockSize() const {
   return PhysicalSize(icb_size);
 }
 
-const NGPaintFragment* NGLayoutInputNode::PaintFragment() const {
-  return GetLayoutBox()->PaintFragment();
-}
-
 String NGLayoutInputNode::ToString() const {
   auto* inline_node = DynamicTo<NGInlineNode>(this);
   return inline_node ? inline_node->ToString()
@@ -146,6 +143,16 @@ String NGLayoutInputNode::ToString() const {
 
 #if DCHECK_IS_ON()
 void NGLayoutInputNode::ShowNodeTree() const {
+  if (getenv("RUNNING_UNDER_RR")) {
+    // Printing timestamps requires an IPC to get the local time, which
+    // does not work in an rr replay session. Just disable timestamp printing
+    // globally, since we don't need them. Affecting global state isn't a
+    // problem because invoking this from a rr session creates a temporary
+    // program environment that will be destroyed as soon as the invocation
+    // completes.
+    logging::SetLogItems(true, true, false, false);
+  }
+
   StringBuilder string_builder;
   string_builder.Append(".:: LayoutNG Node Tree ::.\n");
   AppendNodeToString(*this, &string_builder);
@@ -176,6 +183,7 @@ void NGLayoutInputNode::GetOverrideIntrinsicSize(
       *computed_block_size = default_block_size;
   }
 
+  // TODO(mstensho): Update for contain:inline-size / contain:block-size.
   if (ShouldApplySizeContainment()) {
     if (!*computed_inline_size)
       *computed_inline_size = LayoutUnit();

@@ -14,6 +14,7 @@
 #include "chrome/browser/android/android_theme_resources.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permission_request_manager.h"
+#include "components/permissions/request_type.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_thread.h"
@@ -78,11 +79,11 @@ class PerDeviceProvisioningPermissionRequest
       base::OnceCallback<void(bool)> callback)
       : origin_(origin), callback_(std::move(callback)) {}
 
-  permissions::PermissionRequest::IconId GetIconId() const final {
-    return IDR_ANDROID_INFOBAR_PROTECTED_MEDIA_IDENTIFIER;
+  permissions::RequestType GetRequestType() const final {
+    return permissions::RequestType::kProtectedMediaIdentifier;
   }
 
-  base::string16 GetMessageText() const final {
+  std::u16string GetMessageText() const final {
     // Note that the string is specific to per-device provisioning.
     return l10n_util::GetStringFUTF16(
         IDS_PROTECTED_MEDIA_IDENTIFIER_PER_DEVICE_PROVISIONING_INFOBAR_TEXT,
@@ -90,14 +91,10 @@ class PerDeviceProvisioningPermissionRequest
             GetOrigin(), url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
   }
 
-  base::string16 GetMessageTextFragment() const final {
-    return l10n_util::GetStringUTF16(
-        IDS_PROTECTED_MEDIA_IDENTIFIER_PERMISSION_FRAGMENT);
-  }
-
   GURL GetOrigin() const final { return origin_.GetURL(); }
 
-  void PermissionGranted() final {
+  void PermissionGranted(bool is_one_time) final {
+    DCHECK(!is_one_time);
     UpdateLastResponse(true);
     std::move(callback_).Run(true);
   }
@@ -120,11 +117,6 @@ class PerDeviceProvisioningPermissionRequest
       std::move(callback_).Run(false);
 
     delete this;
-  }
-
-  permissions::PermissionRequestType GetPermissionRequestType() const final {
-    return permissions::PermissionRequestType::
-        PERMISSION_PROTECTED_MEDIA_IDENTIFIER;
   }
 
  private:

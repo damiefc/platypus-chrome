@@ -9,7 +9,6 @@
 
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
@@ -17,6 +16,10 @@
 #include "headless/lib/browser/headless_devtools_manager_delegate.h"
 #include "headless/public/headless_devtools_target.h"
 #include "headless/public/headless_export.h"
+
+#if defined(HEADLESS_USE_PREFS)
+class PrefService;
+#endif
 
 namespace ui {
 class Compositor;
@@ -93,6 +96,10 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser,
   void PlatformSetWebContentsBounds(HeadlessWebContentsImpl* web_contents,
                                     const gfx::Rect& bounds);
   ui::Compositor* PlatformGetCompositor(HeadlessWebContentsImpl* web_contents);
+
+#if defined(HEADLESS_USE_PREFS)
+  PrefService* GetPrefs();
+#endif
 
  protected:
   base::OnceCallback<void(HeadlessBrowser*)> on_start_callback_;

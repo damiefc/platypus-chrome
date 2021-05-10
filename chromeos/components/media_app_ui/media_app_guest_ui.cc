@@ -3,9 +3,8 @@
 // found in the LICENSE file.
 
 #include "chromeos/components/media_app_ui/media_app_guest_ui.h"
-
-#include "chromeos/components/media_app_ui/media_app_ui_delegate.h"
 #include "chromeos/components/media_app_ui/url_constants.h"
+#include "chromeos/components/web_applications/webui_test_prod_util.h"
 #include "chromeos/grit/chromeos_media_app_bundle_resources.h"
 #include "chromeos/grit/chromeos_media_app_bundle_resources_map.h"
 #include "chromeos/grit/chromeos_media_app_resources.h"
@@ -13,17 +12,24 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
+#include "ui/file_manager/grit/file_manager_resources.h"
 
 namespace chromeos {
 
+namespace {
+
 content::WebUIDataSource* CreateMediaAppUntrustedDataSource(
-    MediaAppUIDelegate* delegate) {
+    MediaAppGuestUIDelegate* delegate) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(kChromeUIMediaAppGuestURL);
   // Add resources from chromeos_media_app_resources.pak.
   source->AddResourcePath("app.html", IDR_MEDIA_APP_APP_HTML);
-  source->AddResourcePath("media_app_app_scripts.js",
-                          IDR_MEDIA_APP_APP_SCRIPTS_JS);
+  source->AddResourcePath("receiver.js", IDR_MEDIA_APP_RECEIVER_JS);
+  source->AddResourcePath("piex_module.js", IDR_MEDIA_APP_PIEX_MODULE_JS);
+
+  // Add shared resources from chromeos_file_manager_resources.pak.
+  source->AddResourcePath("piex/piex.js.wasm", IDR_IMAGE_LOADER_PIEX_WASM_JS);
+  source->AddResourcePath("piex/piex.out.wasm", IDR_IMAGE_LOADER_PIEX_WASM);
 
   // Add resources from chromeos_media_app_bundle_resources.pak that are also
   // needed for mocks. If enable_cros_media_app = true, then these calls will
@@ -34,12 +40,13 @@ content::WebUIDataSource* CreateMediaAppUntrustedDataSource(
   source->AddResourcePath("js/app_image_handler_module.js",
                           IDR_MEDIA_APP_APP_IMAGE_HANDLER_MODULE_JS);
 
-  // Add all resources from chromeos_media_app_bundle_resources.pak.
-  for (size_t i = 0; i < kChromeosMediaAppBundleResourcesSize; i++) {
-    source->AddResourcePath(kChromeosMediaAppBundleResources[i].name,
-                            kChromeosMediaAppBundleResources[i].value);
-  }
+  MaybeConfigureTestableDataSource(source);
 
+  // Add all resources from chromeos_media_app_bundle_resources.pak.
+  source->AddResourcePaths(base::make_span(
+      kChromeosMediaAppBundleResources, kChromeosMediaAppBundleResourcesSize));
+
+  // Note: go/bbsrc/flags.ts processes this.
   delegate->PopulateLoadTimeData(source);
   source->UseStringsJs();
 
@@ -59,9 +66,45 @@ content::WebUIDataSource* CreateMediaAppUntrustedDataSource(
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::StyleSrc,
       "style-src 'self' 'unsafe-inline';");
+  // Allow loading PDFs as blob URLs.
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ObjectSrc, "object-src blob:;");
+  // Required to successfully load PDFs in the `<embed>` element.
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::FrameSrc, "frame-src blob:;");
+  // Allow wasm.
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ScriptSrc,
+      "script-src 'self' 'wasm-eval';");
+  // Allow calls to Maps reverse geocoding API for loading metadata.
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ConnectSrc,
+      "connect-src 'self' https://maps.googleapis.com/maps/api/geocode/json;");
+
+  // Allow use of SharedArrayBuffer (required by the wasm).
+  source->OverrideCrossOriginOpenerPolicy("same-origin");
+  source->OverrideCrossOriginEmbedderPolicy("require-corp");
+  // chrome://media-app and chrome-untrusted://media-app are different origins,
+  // so allow resources in the guest to be loaded cross-origin.
+  source->OverrideCrossOriginResourcePolicy("cross-origin");
+
   // TODO(crbug.com/1098685): Trusted Type remaining WebUI.
   source->DisableTrustedTypesCSP();
   return source;
 }
+
+}  // namespace
+
+MediaAppGuestUI::MediaAppGuestUI(content::WebUI* web_ui,
+                                 MediaAppGuestUIDelegate* delegate)
+    : ui::UntrustedWebUIController(web_ui) {
+  content::WebUIDataSource* untrusted_source =
+      CreateMediaAppUntrustedDataSource(delegate);
+
+  auto* browser_context = web_ui->GetWebContents()->GetBrowserContext();
+  content::WebUIDataSource::Add(browser_context, untrusted_source);
+}
+
+MediaAppGuestUI::~MediaAppGuestUI() = default;
 
 }  // namespace chromeos

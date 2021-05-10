@@ -15,9 +15,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "components/leveldb_proto/public/proto_database_provider.h"
-#include "components/optimization_guide/optimization_guide_prefs.h"
-#include "components/optimization_guide/optimization_guide_service.h"
+#include "components/optimization_guide/core/optimization_guide_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "content/public/test/browser_task_environment.h"
@@ -35,19 +33,12 @@ namespace android {
 
 class MockOptimizationGuideHintsManager : public OptimizationGuideHintsManager {
  public:
-  MockOptimizationGuideHintsManager(
-      optimization_guide::OptimizationGuideService* optimization_guide_service,
-      Profile* profile,
-      base::FilePath file_path,
-      leveldb_proto::ProtoDatabaseProvider* db_provider,
-      PrefService* pref_service)
-      : OptimizationGuideHintsManager({},
-                                      optimization_guide_service,
-                                      profile,
-                                      file_path,
+  MockOptimizationGuideHintsManager(Profile* profile, PrefService* pref_service)
+      : OptimizationGuideHintsManager(profile,
                                       pref_service,
-                                      db_provider,
+                                      /*hint_store=*/nullptr,
                                       /*top_host_provider=*/nullptr,
+                                      /*tab_url_provider=*/nullptr,
                                       /*url_loader_factory=*/nullptr) {}
   ~MockOptimizationGuideHintsManager() override = default;
   MOCK_METHOD4(CanApplyOptimizationAsync,
@@ -96,21 +87,14 @@ class OptimizationGuideBridgeTest : public testing::Test {
                       return std::make_unique<
                           MockOptimizationGuideKeyedService>(context);
                     })));
-    optimization_guide_service_ =
-        std::make_unique<optimization_guide::OptimizationGuideService>(
-            task_environment_.GetMainThreadTaskRunner());
-    db_provider_ = std::make_unique<leveldb_proto::ProtoDatabaseProvider>(
-        temp_dir_.GetPath());
     optimization_guide_hints_manager_ =
         std::make_unique<MockOptimizationGuideHintsManager>(
-            optimization_guide_service_.get(), profile_, temp_dir_.GetPath(),
-            db_provider_.get(), pref_service_.get());
+            profile_, pref_service_.get());
   }
 
   void TearDown() override {
+    optimization_guide_hints_manager_->Shutdown();
     optimization_guide_hints_manager_.reset();
-    db_provider_.reset();
-    optimization_guide_service_.reset();
   }
 
   void RegisterOptimizationTypes() {
@@ -131,9 +115,6 @@ class OptimizationGuideBridgeTest : public testing::Test {
       base::test::TaskEnvironment::MainThreadType::UI};
   TestingProfileManager profile_manager_;
   TestingProfile* profile_;
-  std::unique_ptr<optimization_guide::OptimizationGuideService>
-      optimization_guide_service_;
-  std::unique_ptr<leveldb_proto::ProtoDatabaseProvider> db_provider_;
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<TestingPrefServiceSimple> pref_service_;
 };
@@ -167,7 +148,7 @@ TEST_F(OptimizationGuideBridgeTest, CanApplyOptimizationHasHint) {
   hint->set_wildcard_pattern("test.com");
   hint->set_performance_class(optimization_guide::proto::PERFORMANCE_SLOW);
   optimization_guide::OptimizationMetadata metadata;
-  metadata.set_performance_hints_metadata(hints_metadata);
+  metadata.SetAnyMetadataForTesting(hints_metadata);
   EXPECT_CALL(
       *optimization_guide_hints_manager_,
       CanApplyOptimizationAsync(GURL("https://example.com/"), Eq(base::nullopt),

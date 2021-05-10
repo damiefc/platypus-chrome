@@ -9,6 +9,7 @@
 #if defined(OS_ANDROID)
 #include "chrome/android/chrome_jni_headers/ChromeAutocompleteSchemeClassifier_jni.h"
 #endif
+#include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #if defined(OS_ANDROID)
@@ -95,7 +96,7 @@ ChromeAutocompleteSchemeClassifier::GetInputTypeForScheme(
       // If block state is unknown, check if there is an application registered
       // for the url scheme.
       GURL url(scheme + "://");
-      base::string16 application_name =
+      std::u16string application_name =
           shell_integration::GetApplicationNameForProtocol(url);
       return application_name.empty() ? metrics::OmniboxInputType::EMPTY
                                       : metrics::OmniboxInputType::URL;

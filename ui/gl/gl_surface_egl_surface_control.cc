@@ -64,8 +64,10 @@ GLSurfaceEGLSurfaceControl::GLSurfaceEGLSurfaceControl(
                    ANativeWindow_getWidth(window),
                    ANativeWindow_getHeight(window)),
       root_surface_(
-          new SurfaceControl::Surface(window, root_surface_name_.c_str())),
-      gpu_task_runner_(std::move(task_runner)) {}
+          new gfx::SurfaceControl::Surface(window, root_surface_name_.c_str())),
+      transaction_ack_timeout_manager_(task_runner),
+      gpu_task_runner_(std::move(task_runner)),
+      using_on_commit_callback_(gfx::SurfaceControl::SupportsOnCommit()) {}
 
 GLSurfaceEGLSurfaceControl::~GLSurfaceEGLSurfaceControl() {
   Destroy();
@@ -112,7 +114,24 @@ void GLSurfaceEGLSurfaceControl::PrepareToDestroy(bool have_context) {
   weak_factory_.InvalidateWeakPtrs();
 }
 
+void GLSurfaceEGLSurfaceControl::PreserveChildSurfaceControls() {
+  TRACE_EVENT_INSTANT0(
+      "gpu", "GLSurfaceEGLSurfaceControl::PreserveChildSurfaceControls",
+      TRACE_EVENT_SCOPE_THREAD);
+  preserve_children_ = true;
+}
+
 void GLSurfaceEGLSurfaceControl::Destroy() {
+  TRACE_EVENT0("gpu", "GLSurfaceEGLSurfaceControl::Destroy");
+  // Detach all child layers to prevent leaking unless browser asked us not too.
+  if (!preserve_children_) {
+    gfx::SurfaceControl::Transaction transaction;
+    for (auto& surface : surface_list_) {
+      transaction.SetParent(*surface.surface, nullptr);
+    }
+    transaction.Apply();
+  }
+
   pending_transaction_.reset();
   surface_list_.clear();
   root_surface_.reset();
@@ -244,13 +263,21 @@ void GLSurfaceEGLSurfaceControl::CommitPendingTransaction(
   current_frame_resources_.swap(pending_frame_resources_);
   pending_frame_resources_.clear();
 
-  SurfaceControl::Transaction::OnCompleteCb callback = base::BindOnce(
+  gfx::SurfaceControl::Transaction::OnCompleteCb callback = base::BindOnce(
       &GLSurfaceEGLSurfaceControl::OnTransactionAckOnGpuThread,
       weak_factory_.GetWeakPtr(), std::move(completion_callback),
       std::move(present_callback), std::move(resources_to_release),
       std::move(primary_plane_fences_));
   primary_plane_fences_.reset();
   pending_transaction_->SetOnCompleteCb(std::move(callback), gpu_task_runner_);
+
+  if (using_on_commit_callback_) {
+    gfx::SurfaceControl::Transaction::OnCommitCb callback = base::BindOnce(
+        &GLSurfaceEGLSurfaceControl::OnTransactionCommittedOnGpuThread,
+        weak_factory_.GetWeakPtr());
+    pending_transaction_->SetOnCommitCb(std::move(callback), gpu_task_runner_);
+  }
+
   pending_surfaces_count_ = 0u;
   frame_rate_update_pending_ = false;
 
@@ -259,6 +286,7 @@ void GLSurfaceEGLSurfaceControl::CommitPendingTransaction(
   } else {
     transaction_ack_pending_ = true;
     pending_transaction_->Apply();
+    transaction_ack_timeout_manager_.ScheduleHangDetection();
   }
 
   pending_transaction_.reset();
@@ -287,7 +315,7 @@ bool GLSurfaceEGLSurfaceControl::ScheduleOverlayPlane(
   }
 
   const auto& image_color_space = GetNearestSupportedImageColorSpace(image);
-  if (!SurfaceControl::SupportsColorSpace(image_color_space)) {
+  if (!gfx::SurfaceControl::SupportsColorSpace(image_color_space)) {
     LOG(ERROR) << "Not supported color space used with overlay : "
                << image_color_space.ToString();
   }
@@ -368,8 +396,33 @@ bool GLSurfaceEGLSurfaceControl::ScheduleOverlayPlane(
     gfx::RectF scaled_rect =
         gfx::ScaleRect(crop_rect, buffer_size.width(), buffer_size.height());
 
-    gfx::Rect src = gfx::ToEnclosedRect(scaled_rect);
     gfx::Rect dst = bounds_rect;
+    gfx::Rect src = gfx::ToEnclosedRect(scaled_rect);
+
+    // When the video is being scrolled offscreen DisplayCompositor will crop it
+    // to only visible portion and adjust crop_rect accordingly. When the video
+    // is smaller than the surface is can lead to the crop rect being less than
+    // a pixel in size. This adjusts the crop rect size to at least 1 pixel as
+    // we want to stretch last visible pixel line/column in this case.
+    // Note: We will do it even if crop_rect width/height is exact 0.0f. In
+    // reality this should never happen and there is no way to display video
+    // with empty crop rect, so display compositor should not request this.
+
+    if (src.width() == 0) {
+      src.set_width(1);
+      if (src.right() > buffer_size.width())
+        src.set_x(buffer_size.width() - 1);
+    }
+    if (src.height() == 0) {
+      src.set_height(1);
+      if (src.bottom() > buffer_size.height())
+        src.set_y(buffer_size.height() - 1);
+    }
+
+    // When display compositor rounds up destination rect to integer coordinates
+    // it becomes slightly bigger. After we adjust source rect accordingly, it
+    // can become larger then a buffer so we clip it here. See crbug.com/1083412
+    src.Intersect(gfx::Rect(buffer_size));
 
     if (uninitialized || surface_state.src != src || surface_state.dst != dst ||
         surface_state.transform != transform) {
@@ -428,14 +481,12 @@ void GLSurfaceEGLSurfaceControl::OnTransactionAckOnGpuThread(
     PresentationCallback presentation_callback,
     ResourceRefs released_resources,
     base::Optional<PrimaryPlaneFences> primary_plane_fences,
-    SurfaceControl::TransactionStats transaction_stats) {
+    gfx::SurfaceControl::TransactionStats transaction_stats) {
   TRACE_EVENT0("gpu",
                "GLSurfaceEGLSurfaceControl::OnTransactionAckOnGpuThread");
 
   DCHECK(gpu_task_runner_->BelongsToCurrentThread());
-  DCHECK(transaction_ack_pending_);
-
-  transaction_ack_pending_ = false;
+  transaction_ack_timeout_manager_.OnTransactionAck();
 
   const bool has_context = context_->MakeCurrent(this);
   for (auto& surface_stat : transaction_stats.surface_stats) {
@@ -481,10 +532,28 @@ void GLSurfaceEGLSurfaceControl::OnTransactionAckOnGpuThread(
 
   CheckPendingPresentationCallbacks();
 
+  // If we don't use OnCommit, we advance transaction queue after we received
+  // OnComplete.
+  if (!using_on_commit_callback_)
+    AdvanceTransactionQueue();
+}
+
+void GLSurfaceEGLSurfaceControl::OnTransactionCommittedOnGpuThread() {
+  TRACE_EVENT0("gpu",
+               "GLSurfaceEGLSurfaceControl::OnTransactionCommittedOnGpuThread");
+  DCHECK(using_on_commit_callback_);
+  AdvanceTransactionQueue();
+}
+
+void GLSurfaceEGLSurfaceControl::AdvanceTransactionQueue() {
+  DCHECK(transaction_ack_pending_);
+  transaction_ack_pending_ = false;
+
   if (!pending_transaction_queue_.empty()) {
     transaction_ack_pending_ = true;
     pending_transaction_queue_.front().Apply();
     pending_transaction_queue_.pop();
+    transaction_ack_timeout_manager_.ScheduleHangDetection();
   }
 }
 
@@ -586,9 +655,9 @@ GLSurfaceEGLSurfaceControl::GetNearestSupportedImageColorSpace(
 }
 
 GLSurfaceEGLSurfaceControl::SurfaceState::SurfaceState(
-    const SurfaceControl::Surface& parent,
+    const gfx::SurfaceControl::Surface& parent,
     const std::string& name)
-    : surface(new SurfaceControl::Surface(parent, name.c_str())) {}
+    : surface(new gfx::SurfaceControl::Surface(parent, name.c_str())) {}
 
 GLSurfaceEGLSurfaceControl::SurfaceState::SurfaceState() = default;
 GLSurfaceEGLSurfaceControl::SurfaceState::SurfaceState(SurfaceState&& other) =
@@ -624,5 +693,61 @@ GLSurfaceEGLSurfaceControl::PrimaryPlaneFences::PrimaryPlaneFences(
 GLSurfaceEGLSurfaceControl::PrimaryPlaneFences&
 GLSurfaceEGLSurfaceControl::PrimaryPlaneFences::operator=(
     PrimaryPlaneFences&& other) = default;
+
+GLSurfaceEGLSurfaceControl::TransactionAckTimeoutManager::
+    TransactionAckTimeoutManager(
+        scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+    : gpu_task_runner_(std::move(task_runner)) {}
+GLSurfaceEGLSurfaceControl::TransactionAckTimeoutManager::
+    ~TransactionAckTimeoutManager() = default;
+
+void GLSurfaceEGLSurfaceControl::TransactionAckTimeoutManager::
+    ScheduleHangDetection() {
+  DCHECK(gpu_task_runner_->BelongsToCurrentThread());
+
+  ++current_transaction_id_;
+  if (!hang_detection_cb_.IsCancelled())
+    return;
+
+  constexpr int kIdleDelaySeconds = 5;
+  hang_detection_cb_.Reset(
+      base::BindOnce(&GLSurfaceEGLSurfaceControl::TransactionAckTimeoutManager::
+                         OnTransactionTimeout,
+                     base::Unretained(this), current_transaction_id_));
+  gpu_task_runner_->PostDelayedTask(
+      FROM_HERE, hang_detection_cb_.callback(),
+      base::TimeDelta::FromSeconds(kIdleDelaySeconds));
+}
+
+void GLSurfaceEGLSurfaceControl::TransactionAckTimeoutManager::
+    OnTransactionAck() {
+  // Since only one transaction is in flight at a time, an ack is for the latest
+  // transaction.
+  last_acked_transaction_id_ = current_transaction_id_;
+}
+
+void GLSurfaceEGLSurfaceControl::TransactionAckTimeoutManager::
+    OnTransactionTimeout(TransactionId transaction_id) {
+  hang_detection_cb_.Cancel();
+
+  // If the last transaction was already acked, we do not need to schedule
+  // any checks until a new transaction comes.
+  if (current_transaction_id_ == last_acked_transaction_id_)
+    return;
+
+  // If more transactions have happened since the last task, schedule another
+  // hang detection check.
+  if (transaction_id < current_transaction_id_) {
+    // Decrement the |current_transaction_id_| since ScheduleHangDetection()
+    // will increment it again.
+    --current_transaction_id_;
+    ScheduleHangDetection();
+    return;
+  }
+
+  LOG(ERROR) << "Transaction id " << transaction_id
+             << " haven't received any ack from past 5 second which indicates "
+                "it hanged";
+}
 
 }  // namespace gl

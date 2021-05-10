@@ -7,25 +7,38 @@
 #include "ash/public/cpp/holding_space/holding_space_constants.h"
 #include "ash/public/cpp/holding_space/holding_space_image.h"
 #include "ash/public/cpp/holding_space/holding_space_item.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/ash/holding_space/holding_space_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
 
 namespace ash {
 
+namespace {
+
+// Returns whether the item should be ignored by the holding space model. This
+// returns true if the item is not supported in the current context, but may
+// be otherwise supported. For example, returns true for ARC file system
+// backed items in a secondary user profile.
+bool ShouldIgnoreItem(Profile* profile, const HoldingSpaceItem* item) {
+  return file_manager::util::GetAndroidFilesPath().IsParent(
+             item->file_path()) &&
+         !chromeos::ProfileHelper::IsPrimaryProfile(profile);
+}
+
+}  // namespace
+
 // static
 constexpr char HoldingSpacePersistenceDelegate::kPersistencePath[];
 
 HoldingSpacePersistenceDelegate::HoldingSpacePersistenceDelegate(
-    Profile* profile,
+    HoldingSpaceKeyedService* service,
     HoldingSpaceModel* model,
-    HoldingSpaceThumbnailLoader* thumbnail_loader,
-    ItemRestoredCallback item_restored_callback,
+    ThumbnailLoader* thumbnail_loader,
     PersistenceRestoredCallback persistence_restored_callback)
-    : HoldingSpaceKeyedServiceDelegate(profile, model),
+    : HoldingSpaceKeyedServiceDelegate(service, model),
       thumbnail_loader_(thumbnail_loader),
-      item_restored_callback_(item_restored_callback),
       persistence_restored_callback_(std::move(persistence_restored_callback)) {
 }
 
@@ -44,35 +57,52 @@ void HoldingSpacePersistenceDelegate::Init() {
   RestoreModelFromPersistence();
 }
 
-void HoldingSpacePersistenceDelegate::OnHoldingSpaceItemAdded(
-    const HoldingSpaceItem* item) {
+// TODO(crbug.com/1184438): Do not persist in-progress `items`.
+void HoldingSpacePersistenceDelegate::OnHoldingSpaceItemsAdded(
+    const std::vector<const HoldingSpaceItem*>& items) {
   if (is_restoring_persistence())
     return;
 
-  // `kDownload` type holding space items have their own persistence mechanism.
-  if (item->type() == HoldingSpaceItem::Type::kDownload)
-    return;
-
-  // Write the new |item| to persistent storage.
+  // Write the new `items` to persistent storage.
   ListPrefUpdate update(profile()->GetPrefs(), kPersistencePath);
-  update->Append(item->Serialize());
+  for (const HoldingSpaceItem* item : items)
+    update->Append(item->Serialize());
 }
 
-void HoldingSpacePersistenceDelegate::OnHoldingSpaceItemRemoved(
+void HoldingSpacePersistenceDelegate::OnHoldingSpaceItemsRemoved(
+    const std::vector<const HoldingSpaceItem*>& items) {
+  if (is_restoring_persistence())
+    return;
+
+  // Remove the `items` from persistent storage.
+  ListPrefUpdate update(profile()->GetPrefs(), kPersistencePath);
+  update->EraseListValueIf([&items](const base::Value& persisted_item) {
+    const std::string& persisted_item_id = HoldingSpaceItem::DeserializeId(
+        base::Value::AsDictionaryValue(persisted_item));
+    return std::any_of(items.begin(), items.end(),
+                       [&persisted_item_id](const HoldingSpaceItem* item) {
+                         return persisted_item_id == item->id();
+                       });
+  });
+}
+
+// TODO(crbug.com/1184438): Persist `items` no longer in-progress.
+void HoldingSpacePersistenceDelegate::OnHoldingSpaceItemUpdated(
     const HoldingSpaceItem* item) {
   if (is_restoring_persistence())
     return;
 
-  // `kDownload` type holding space items have their own persistence mechanism.
-  if (item->type() == HoldingSpaceItem::Type::kDownload)
-    return;
-
-  // Remove the |item| from persistent storage.
+  // Update the `item` in persistent storage.
   ListPrefUpdate update(profile()->GetPrefs(), kPersistencePath);
-  update->EraseListValueIf([&item](const base::Value& persisted_item) {
-    return HoldingSpaceItem::DeserializeId(
-               base::Value::AsDictionaryValue(persisted_item)) == item->id();
-  });
+  auto item_it = std::find_if(
+      update->GetList().begin(), update->GetList().end(),
+      [&item](const base::Value& persisted_item) {
+        return HoldingSpaceItem::DeserializeId(base::Value::AsDictionaryValue(
+                   persisted_item)) == item->id();
+      });
+
+  DCHECK(item_it != update->GetList().end());
+  *item_it = item->Serialize();
 }
 
 void HoldingSpacePersistenceDelegate::RestoreModelFromPersistence() {
@@ -88,55 +118,16 @@ void HoldingSpacePersistenceDelegate::RestoreModelFromPersistence() {
     return;
   }
 
-  std::vector<HoldingSpaceItemPtr> holding_space_items;
-  holding_space_util::FilePathsWithValidityRequirements
-      file_paths_with_requirements;
-
   for (const auto& persisted_holding_space_item :
        persisted_holding_space_items->GetList()) {
-    holding_space_items.push_back(HoldingSpaceItem::Deserialize(
-        base::Value::AsDictionaryValue(persisted_holding_space_item),
-        base::BindOnce(&holding_space_util::ResolveFileSystemUrl,
-                       base::Unretained(profile())),
-        base::BindOnce(&holding_space_util::ResolveImage,
-                       base::Unretained(thumbnail_loader_))));
-    holding_space_util::ValidityRequirement requirements;
-    HoldingSpaceItem* holding_space_item = holding_space_items.back().get();
-    if (holding_space_item->type() != HoldingSpaceItem::Type::kPinnedFile)
-      requirements.must_be_newer_than = kMaxFileAge;
-    file_paths_with_requirements.push_back(
-        {holding_space_item->file_path(), requirements});
-  }
+    std::unique_ptr<HoldingSpaceItem> holding_space_item =
+        HoldingSpaceItem::Deserialize(
+            base::Value::AsDictionaryValue(persisted_holding_space_item),
+            base::BindOnce(&holding_space_util::ResolveImage,
+                           base::Unretained(thumbnail_loader_)));
 
-  holding_space_util::PartitionFilePathsByValidity(
-      profile(), std::move(file_paths_with_requirements),
-      base::BindOnce(&HoldingSpacePersistenceDelegate::RestoreModelByValidity,
-                     weak_factory_.GetWeakPtr(),
-                     std::move(holding_space_items)));
-}
-
-void HoldingSpacePersistenceDelegate::RestoreModelByValidity(
-    std::vector<HoldingSpaceItemPtr> holding_space_items,
-    std::vector<base::FilePath> valid_file_paths,
-    std::vector<base::FilePath> invalid_file_paths) {
-  DCHECK(model()->items().empty());
-
-  // Restore valid holding space items.
-  for (auto& holding_space_item : holding_space_items) {
-    if (base::Contains(valid_file_paths, holding_space_item->file_path()))
-      item_restored_callback_.Run(std::move(holding_space_item));
-  }
-
-  // Clean up invalid holding space items from persistence.
-  if (!invalid_file_paths.empty()) {
-    ListPrefUpdate update(profile()->GetPrefs(), kPersistencePath);
-    update->EraseListValueIf(
-        [&invalid_file_paths](const base::Value& persisted_item) {
-          base::FilePath persisted_file_path =
-              HoldingSpaceItem::DeserializeFilePath(
-                  base::Value::AsDictionaryValue(persisted_item));
-          return base::Contains(invalid_file_paths, persisted_file_path);
-        });
+    if (!ShouldIgnoreItem(profile(), holding_space_item.get()))
+      service()->AddItem(std::move(holding_space_item));
   }
 
   // Notify completion of persistence restoration.

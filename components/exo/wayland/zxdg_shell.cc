@@ -10,9 +10,9 @@
 
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
-#include "ash/public/cpp/window_state_type.h"
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chromeos/ui/base/window_state_type.h"
 #include "components/exo/display.h"
 #include "components/exo/wayland/serial_tracker.h"
 #include "components/exo/wayland/server_util.h"
@@ -144,7 +144,7 @@ int XdgToplevelV6ResizeComponent(uint32_t edges) {
 
 using XdgSurfaceConfigureCallback =
     base::RepeatingCallback<void(const gfx::Size& size,
-                                 ash::WindowStateType state_type,
+                                 chromeos::WindowStateType state_type,
                                  bool resizing,
                                  bool activated)>;
 
@@ -153,7 +153,7 @@ uint32_t HandleXdgSurfaceV6ConfigureCallback(
     SerialTracker* serial_tracker,
     const XdgSurfaceConfigureCallback& callback,
     const gfx::Size& size,
-    ash::WindowStateType state_type,
+    chromeos::WindowStateType state_type,
     bool resizing,
     bool activated,
     const gfx::Vector2d& origin_offset) {
@@ -223,7 +223,7 @@ class WaylandToplevel : public aura::WindowObserver {
           parent->shell_surface_data_->shell_surface.get());
   }
 
-  void SetTitle(const base::string16& title) {
+  void SetTitle(const std::u16string& title) {
     if (shell_surface_data_)
       shell_surface_data_->shell_surface->SetTitle(title);
   }
@@ -290,14 +290,14 @@ class WaylandToplevel : public aura::WindowObserver {
   }
 
   void OnConfigure(const gfx::Size& size,
-                   ash::WindowStateType state_type,
+                   chromeos::WindowStateType state_type,
                    bool resizing,
                    bool activated) {
     wl_array states;
     wl_array_init(&states);
-    if (state_type == ash::WindowStateType::kMaximized)
+    if (state_type == chromeos::WindowStateType::kMaximized)
       AddState(&states, ZXDG_TOPLEVEL_V6_STATE_MAXIMIZED);
-    if (state_type == ash::WindowStateType::kFullscreen)
+    if (state_type == chromeos::WindowStateType::kFullscreen)
       AddState(&states, ZXDG_TOPLEVEL_V6_STATE_FULLSCREEN);
     if (resizing)
       AddState(&states, ZXDG_TOPLEVEL_V6_STATE_RESIZING);
@@ -333,7 +333,7 @@ void xdg_toplevel_v6_set_title(wl_client* client,
                                wl_resource* resource,
                                const char* title) {
   GetUserDataAs<WaylandToplevel>(resource)->SetTitle(
-      base::string16(base::UTF8ToUTF16(title)));
+      std::u16string(base::UTF8ToUTF16(title)));
 }
 
 void xdg_toplevel_v6_set_app_id(wl_client* client,
@@ -467,7 +467,7 @@ class WaylandPopup : aura::WindowObserver {
   }
 
   void OnConfigure(const gfx::Size& size,
-                   ash::WindowStateType state_type,
+                   chromeos::WindowStateType state_type,
                    bool resizing,
                    bool activated) {
     // Nothing to do here as popups don't have additional configure state.
@@ -557,7 +557,7 @@ void xdg_surface_v6_get_popup(wl_client* client,
   // Try layout using parent's flip state.
   WaylandPositioner* positioner =
       GetUserDataAs<WaylandPositioner>(positioner_resource);
-  WaylandPositioner::Result position = positioner->CalculatePosition(
+  WaylandPositioner::Result position = positioner->CalculateBounds(
       work_area, parent_data->shell_surface->x_flipped(),
       parent_data->shell_surface->y_flipped());
 

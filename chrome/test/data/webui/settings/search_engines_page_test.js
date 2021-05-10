@@ -9,7 +9,7 @@ import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {ExtensionControlBrowserProxyImpl, SearchEnginesBrowserProxyImpl} from 'chrome://settings/settings.js';
 import {TestExtensionControlBrowserProxy} from 'chrome://test/settings/test_extension_control_browser_proxy.js';
-import {TestSearchEnginesBrowserProxy} from 'chrome://test/settings/test_search_engines_browser_proxy.m.js';
+import {TestSearchEnginesBrowserProxy} from 'chrome://test/settings/test_search_engines_browser_proxy.js';
 import {eventToPromise} from 'chrome://test/test_util.m.js';
 // clang-format on
 
@@ -340,8 +340,8 @@ suite('SearchEnginePageTests', function() {
 
     // Ensure that the search engines have reverse alphabetical order in the
     // model.
-    assertGT(
-        searchEnginesInfo.others[0].name, searchEnginesInfo.others[1].name);
+    assertTrue(
+        searchEnginesInfo.others[0].name > searchEnginesInfo.others[1].name);
 
     // Ensure that they are displayed in alphabetical order.
     assertEquals(searchEnginesInfo.others[1].name, othersEntries[0].name);

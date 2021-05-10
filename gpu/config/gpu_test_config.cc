@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_test_expectations_parser.h"
@@ -25,9 +26,10 @@ namespace gpu {
 namespace {
 
 GPUTestConfig::OS GetCurrentOS() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   return GPUTestConfig::kOsChromeOS;
-#elif defined(OS_LINUX) || defined(OS_OPENBSD)
+#elif (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) || \
+    defined(OS_OPENBSD)
   return GPUTestConfig::kOsLinux;
 #elif defined(OS_WIN)
   int32_t major_version = 0;
@@ -80,11 +82,7 @@ GPUTestConfig::OS GetCurrentOS() {
       }
       break;
     case 11:
-      switch (minor_version) {
-        case 0:
-          return GPUTestConfig::kOsMacBigSur;
-      }
-      break;
+      return GPUTestConfig::kOsMacBigSur;
   }
   return GPUTestConfig::kOsUnknown;
 #elif defined(OS_ANDROID)

@@ -7,6 +7,7 @@
 
 #include <list>
 #include <memory>
+#include <set>
 #include <unordered_map>
 
 #include "base/feature_list.h"
@@ -17,11 +18,15 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/renderer_host/back_forward_cache_can_store_document_result.h"
+#include "content/browser/renderer_host/render_process_host_internal_observer.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_process_host_observer.h"
 #include "content/public/common/content_features.h"
 #include "third_party/blink/public/mojom/page/page.mojom.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -45,7 +50,9 @@ constexpr base::Feature kRecordBackForwardCacheMetricsWithoutEnabling{
 // frozen state and is kept in this object. They can potentially be reused
 // after an history navigation. Reusing a document means swapping it back with
 // the current_frame_host.
-class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
+class CONTENT_EXPORT BackForwardCacheImpl
+    : public BackForwardCache,
+      public RenderProcessHostInternalObserver {
  public:
   enum MessageHandlingPolicyWhenCached {
     kMessagePolicyNone,
@@ -56,7 +63,7 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
   static MessageHandlingPolicyWhenCached
   GetChannelAssociatedMessageHandlingPolicy();
 
-  struct Entry {
+  struct CONTENT_EXPORT Entry {
     using RenderFrameProxyHostMap =
         std::unordered_map<int32_t /* SiteInstance ID */,
                            std::unique_ptr<RenderFrameProxyHost>>;
@@ -65,6 +72,8 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
           RenderFrameProxyHostMap proxy_hosts,
           std::set<RenderViewHostImpl*> render_view_hosts);
     ~Entry();
+
+    void WriteIntoTrace(perfetto::TracedValue context);
 
     // The main document being stored.
     std::unique_ptr<RenderFrameHostImpl> render_frame_host;
@@ -93,8 +102,12 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
     DISALLOW_COPY_AND_ASSIGN(Entry);
   };
 
+  // Returns whether MediaSessionImpl::OnServiceCreated is allowed for the
+  // BackForwardCache.
+  static bool IsMediaSessionImplOnServiceCreatedAllowed();
+
   BackForwardCacheImpl();
-  ~BackForwardCacheImpl();
+  ~BackForwardCacheImpl() override;
 
   // Returns whether a RenderFrameHost can be stored into the BackForwardCache
   // right now. Depends on the |render_frame_host| and its children's state.
@@ -121,6 +134,11 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
   // Precondition: CanStoreDocument(*(entry->render_frame_host)).
   void StoreEntry(std::unique_ptr<Entry> entry);
 
+  // Ensures that the cache is within its size limits. This should be called
+  // whenever events occur that could put the cache outside its limits. What
+  // those events are depends on the cache limit policy.
+  void EnforceCacheSizeLimit();
+
   // Returns a pointer to a cached BackForwardCache entry matching
   // |navigation_entry_id| if it exists in the BackForwardCache. Returns nullptr
   // if no matching entry is found.
@@ -142,9 +160,6 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
       int navigation_entry_id,
       blink::mojom::PageRestoreParamsPtr page_restore_params);
 
-  // Evict all entries from the BackForwardCache.
-  void Flush();
-
   // Evict all cached pages in the same BrowsingInstance as
   // |site_instance|.
   void EvictFramesInRelatedSiteInstances(SiteInstance* site_instance);
@@ -163,6 +178,9 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
   // via experiment.
   static base::TimeDelta GetTimeToLiveInBackForwardCache();
 
+  // Gets the maximum number of entries the BackForwardCache can hold per tab.
+  static size_t GetCacheSize();
+
   // The back-forward cache is experimented on a limited set of URLs. This
   // method returns true if the |url| matches one of those. URL not matching
   // this won't enter the back-forward cache.
@@ -174,6 +192,20 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
   // If no param is set all websites are allowed by default. This can still
   // return true even when BackForwardCache is disabled for metrics purposes.
   bool IsAllowed(const GURL& current_url);
+
+  // This is a wrapper around the flag that indicates whether or not the
+  // feature usage should be checked only after receiving an ack from the
+  // renderer process to ensure that the features cleaned up in pagehide and
+  // other event handlers are acoounted for.
+  // TODO(crbug.com/1129331): Remove this when we implement the logic to
+  // consider cache size limit.
+  bool CheckFeatureUsageOnlyAfterAck();
+
+  // Called just before commit for a navigation that's served out of the back
+  // forward cache. This method will disable eviction in renderers and invoke
+  // |done_callback| when they are ready for the navigation to be committed.
+  void WillCommitNavigationToCachedEntry(Entry& bfcache_entry,
+                                         base::OnceClosure done_callback);
 
   // Returns the task runner that should be used by the eviction timer.
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() {
@@ -187,30 +219,50 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
     task_runner_for_testing_ = task_runner;
   }
 
-  // Sets the number of documents that can be stored in the cache. This is meant
-  // for use from within tests only.
-  // If |cache_size_limit_for_testing| is 0 (the default), the normal cache
-  // size limit will be used.
-  void set_cache_size_limit_for_testing(size_t cache_size_limit_for_testing) {
-    cache_size_limit_for_testing_ = cache_size_limit_for_testing;
-  }
-
   const std::list<std::unique_ptr<Entry>>& GetEntries();
 
+  // BackForwardCache overrides:
+  void Flush() override;
   void DisableForTesting(DisableForTestingReason reason) override;
+
+  // RenderProcessHostInternalObserver methods
+  void RenderProcessBackgroundedChanged(RenderProcessHostImpl* host) override;
+
+  // Returns true if we are managing the cache size using foreground and
+  // background limits (if finch parameter "foreground_cache_size" > 0).
+  static bool UsingForegroundBackgroundCacheSizeLimit();
 
  private:
   // Destroys all evicted frames in the BackForwardCache.
   void DestroyEvictedFrames();
 
-  // Helper for recursively checking each child. See CanStorePageNow() and
-  // CanPotentiallyStorePageLater().
-  void CheckDynamicStatesOnSubtree(
+  // Helper for recursively checking each child's usage of blocklisted features.
+  // See CanStorePageNow() and CanPotentiallyStorePageLater().
+  void CheckDynamicBlocklistedFeaturesOnSubtree(
       BackForwardCacheCanStoreDocumentResult* result,
       RenderFrameHostImpl* render_frame_host);
+
   void CanStoreRenderFrameHostLater(
       BackForwardCacheCanStoreDocumentResult* result,
       RenderFrameHostImpl* render_frame_host);
+
+  // If non-zero, the cache may contain at most this many entries with involving
+  // foregrounded processes and the remaining space can only be used by entries
+  // with no foregrounded processes. We can be less strict on memory usage of
+  // background processes because Android will kill the process if memory
+  // becomes scarce.
+  static size_t GetForegroundedEntriesCacheSize();
+
+  // Enforces a limit on the number of entries. Which entries are counted
+  // towards the limit depends on the values of |foregrounded_only|. If it's
+  // true it only considers entries that are associated with a foregrounded
+  // process. Otherwise all entries are considered.
+  size_t EnforceCacheSizeLimitInternal(size_t limit, bool foregrounded_only);
+
+  // Updates |process_to_entry_map_| with processes from |entry|. These must
+  // be called after adding or removing an entry in |entries_|.
+  void AddProcessesForEntry(Entry& entry);
+  void RemoveProcessesForEntry(Entry& entry);
 
   // Contains the set of stored Entries.
   // Invariant:
@@ -218,13 +270,16 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
   // - Once the list is full, the least recently used document is evicted.
   std::list<std::unique_ptr<Entry>> entries_;
 
+  // Keeps track of the observed RenderProcessHosts. This is populated
+  // from and kept in sync with |entries_|. The RenderProcessHosts are collected
+  // from each Entry's RenderViewHosts. Every RenderProcessHost in here is
+  // observed by |this|. Every RenderProcessHost in this is referenced by a
+  // RenderViewHost in the Entry and so will be valid.
+  std::multiset<RenderProcessHost*> observed_processes_;
+
   // Only used in tests. Whether the BackforwardCached has been disabled for
   // testing.
   bool is_disabled_for_testing_ = false;
-
-  // Only used in tests. If non-zero, this value will be used as the cache size
-  // limit.
-  size_t cache_size_limit_for_testing_ = 0;
 
   // Only used for tests. This task runner is used for precise injection in
   // browser tests and for timing control.
@@ -232,11 +287,21 @@ class CONTENT_EXPORT BackForwardCacheImpl : public BackForwardCache {
 
   // To enter the back-forward cache, the main document URL's must match one of
   // the field trial parameter "allowed_websites". This is represented here by a
-  // set of host and path prefix.
+  // set of host and path prefix. When |allowed_urls_| is empty, it means there
+  // are no restrictions on URLs.
   std::map<std::string,              // URL's host,
            std::vector<std::string>  // URL's path prefix
            >
       allowed_urls_;
+
+  // This is an emergency kill switch per url to stop BFCache. The data will be
+  // provided via the field trial parameter "blocked_websites".
+  // "blocked_websites" have priority over "allowed_websites". This is
+  // represented here by a set of host and path prefix.
+  std::map<std::string,              // URL's host,
+           std::vector<std::string>  // URL's path prefix
+           >
+      blocked_urls_;
 
   base::WeakPtrFactory<BackForwardCacheImpl> weak_factory_;
 
@@ -252,8 +317,9 @@ class CONTENT_EXPORT BackForwardCacheTestDelegate {
   BackForwardCacheTestDelegate();
   virtual ~BackForwardCacheTestDelegate();
 
-  virtual void OnDisabledForFrameWithReason(GlobalFrameRoutingId id,
-                                            base::StringPiece reason) = 0;
+  virtual void OnDisabledForFrameWithReason(
+      GlobalFrameRoutingId id,
+      BackForwardCache::DisabledReason reason) = 0;
 };
 
 }  // namespace content

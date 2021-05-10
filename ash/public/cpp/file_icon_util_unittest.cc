@@ -11,21 +11,19 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
 
 TEST(FileIconUtilTest, GetIconTypeForPath) {
-  const std::vector<std::pair<std::string, internal::IconType>>
-      file_path_to_icon_type = {
-          {"/my/test/file.pdf", internal::IconType::kPdf},
-          {"/my/test/file.Pdf", internal::IconType::kPdf},
-          {"/my/test/file.tar.gz", internal::IconType::kArchive},
-          {"/my/test/.gslides", internal::IconType::kGslide},
-          {"/my/test/noextension", internal::IconType::kGeneric},
-          {"/my/test/file.missing", internal::IconType::kGeneric}};
+  const std::vector<std::pair<std::string, IconType>> file_path_to_icon_type = {
+      {"/my/test/file.pdf", IconType::kPdf},
+      {"/my/test/file.Pdf", IconType::kPdf},
+      {"/my/test/file.tar.gz", IconType::kArchive},
+      {"/my/test/.gslides", IconType::kGslide},
+      {"/my/test/noextension", IconType::kGeneric},
+      {"/my/test/file.missing", IconType::kGeneric}};
 
   for (const auto& pair : file_path_to_icon_type) {
     EXPECT_EQ(internal::GetIconTypeForPath(base::FilePath(pair.first)),

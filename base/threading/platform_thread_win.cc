@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/allocator/buildflags.h"
 #include "base/debug/activity_tracker.h"
 #include "base/debug/alias.h"
 #include "base/debug/crash_logging.h"
@@ -25,6 +26,11 @@
 #include "build/build_config.h"
 
 #include <windows.h>
+
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#include "base/allocator/partition_allocator/starscan/pcscan.h"
+#include "base/allocator/partition_allocator/starscan/stack/stack.h"
+#endif
 
 namespace base {
 
@@ -98,6 +104,10 @@ DWORD __stdcall ThreadFunc(void* params) {
                                 FALSE,
                                 DUPLICATE_SAME_ACCESS);
 
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  internal::PCScan::NotifyThreadCreated(internal::GetStackPointer());
+#endif
+
   win::ScopedHandle scoped_platform_handle;
 
   if (did_dup) {
@@ -115,6 +125,10 @@ DWORD __stdcall ThreadFunc(void* params) {
         scoped_platform_handle.Get(),
         PlatformThread::CurrentId());
   }
+
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  internal::PCScan::NotifyThreadDestroyed();
+#endif
 
   // Ensure thread priority is at least NORMAL before initiating thread
   // destruction. Thread destruction on Windows holds the LdrLock while
@@ -142,7 +156,18 @@ bool CreateThreadInternal(size_t stack_size,
     // |chrome/BUILD.gn|, but keep the default stack size of other threads to
     // 1MB for the address space pressure.
     flags = STACK_SIZE_PARAM_IS_A_RESERVATION;
-    stack_size = 1024 * 1024;
+    static BOOL is_wow64 = -1;
+    if (is_wow64 == -1 && !IsWow64Process(GetCurrentProcess(), &is_wow64))
+      is_wow64 = FALSE;
+    // When is_wow64 is set that means we are running on 64-bit Windows and we
+    // get 4 GiB of address space. In that situation we can afford to use 1 MiB
+    // of address space for stacks. When running on 32-bit Windows we only get
+    // 2 GiB of address space so we need to conserve. Typically stack usage on
+    // these threads is only about 100 KiB.
+    if (is_wow64)
+      stack_size = 1024 * 1024;
+    else
+      stack_size = 512 * 1024;
 #endif
   }
 

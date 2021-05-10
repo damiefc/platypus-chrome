@@ -16,12 +16,12 @@
 #define SERVICES_DEVICE_GEOLOCATION_WIFI_DATA_PROVIDER_MANAGER_H_
 
 #include <set>
+#include <string>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "services/device/geolocation/wifi_data.h"
 
@@ -64,6 +64,8 @@ class WifiDataProviderManager {
   // value indicates whether this is all the data the provider could ever
   // obtain.
   bool GetData(WifiData* data);
+
+  void ForceRescan();
 
  private:
   // Private constructor and destructor, callers access singleton through

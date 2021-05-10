@@ -23,6 +23,7 @@
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
+#include "third_party/blink/public/common/navigation/navigation_policy.h"
 
 namespace net {
 struct RedirectInfo;
@@ -31,6 +32,7 @@ struct RedirectInfo;
 namespace content {
 
 class BrowserContext;
+class NavigationEarlyHintsManager;
 class NavigationLoaderInterceptor;
 class PrefetchedSignedExchangeCache;
 class SignedExchangePrefetchMetricRecorder;
@@ -56,6 +58,9 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
           prefetched_signed_exchange_cache,
       NavigationURLLoaderDelegate* delegate,
       mojo::PendingRemote<network::mojom::CookieAccessObserver> cookie_observer,
+      mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>
+          url_loader_network_observer,
+      mojo::PendingRemote<network::mojom::DevToolsObserver> devtools_observer,
       std::vector<std::unique_ptr<NavigationLoaderInterceptor>>
           initial_interceptors);
   ~NavigationURLLoaderImpl() override;
@@ -115,6 +120,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
       base::Time ui_post_time);
 
   // network::mojom::URLLoaderClient implementation:
+  void OnReceiveEarlyHints(network::mojom::EarlyHintsPtr early_hints) override;
   void OnReceiveResponse(network::mojom::URLResponseHeadPtr head) override;
   void OnStartLoadingResponseBody(
       mojo::ScopedDataPipeConsumerHandle response_body) override;
@@ -161,7 +167,6 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
       const net::HttpRequestHeaders& modified_cors_exempt_headers,
       blink::PreviewsState new_previews_state) override;
 
-  void NotifyRequestStarted(base::TimeTicks timestamp);
   void NotifyResponseStarted(
       network::mojom::URLResponseHeadPtr response_head,
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
@@ -191,9 +196,6 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
       StoragePartitionImpl* partition);
 
  private:
-  // TODO(kinuko): This can be a file-local private anonymous function.
-  static uint32_t GetURLLoaderOptions(bool is_main_frame);
-
   void BindNonNetworkURLLoaderFactoryReceiver(
       const GURL& url,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver);
@@ -291,17 +293,11 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   network::mojom::URLResponseHeadPtr head_;
   mojo::ScopedDataPipeConsumerHandle response_body_;
 
-  NavigationDownloadPolicy download_policy_;
+  blink::NavigationDownloadPolicy download_policy_;
 
   // Factories to handle navigation requests for non-network resources.
   ContentBrowserClient::NonNetworkURLLoaderFactoryMap
       non_network_url_loader_factories_;
-
-  // Like |non_network_url_loader_factories_|, but with factories owned by
-  // |this| NavigationURLLoaderImpl. (This ownership mode is deprecated - see
-  // https://crbug.com/1106995)
-  ContentBrowserClient::NonNetworkURLLoaderFactoryDeprecatedMap
-      non_network_uniquely_owned_factories_;
 
   // Lazily initialized and used in the case of non-network resource
   // navigations. Keyed by URL scheme.
@@ -313,6 +309,8 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
 
   // Counts the time overhead of all the hops from the IO to the UI threads.
   base::TimeDelta io_to_ui_time_;
+
+  std::unique_ptr<NavigationEarlyHintsManager> early_hints_manager_;
 
   base::WeakPtrFactory<NavigationURLLoaderImpl> weak_factory_{this};
 

@@ -6,7 +6,9 @@
 
 #include <algorithm>
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -24,12 +26,15 @@
 #include "chromeos/network/network_event_log.h"
 #include "chromeos/network/network_metadata_store.h"
 #include "components/device_event_log/device_event_log.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "components/sync/model/entity_change.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/metadata_change_list.h"
 #include "components/sync/model/model_type_change_processor.h"
 #include "components/sync/model/mutable_data_batch.h"
 #include "components/sync/protocol/model_type_state.pb.h"
+#include "components/sync/protocol/wifi_configuration_specifics.pb.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
 namespace chromeos {
@@ -60,6 +65,7 @@ WifiConfigurationBridge::WifiConfigurationBridge(
     NetworkConfigurationHandler* network_configuration_handler,
     SyncedNetworkMetricsLogger* metrics_recorder,
     TimerFactory* timer_factory,
+    PrefService* pref_service,
     std::unique_ptr<syncer::ModelTypeChangeProcessor> change_processor,
     syncer::OnceModelTypeStoreFactory create_store_callback)
     : ModelTypeSyncBridge(std::move(change_processor)),
@@ -68,6 +74,7 @@ WifiConfigurationBridge::WifiConfigurationBridge(
       network_configuration_handler_(network_configuration_handler),
       metrics_recorder_(metrics_recorder),
       timer_factory_(timer_factory),
+      pref_service_(pref_service),
       network_metadata_store_(nullptr) {
   std::move(create_store_callback)
       .Run(syncer::WIFI_CONFIGURATIONS,
@@ -80,6 +87,12 @@ WifiConfigurationBridge::WifiConfigurationBridge(
 
 WifiConfigurationBridge::~WifiConfigurationBridge() {
   OnShuttingDown();
+}
+
+// static
+void WifiConfigurationBridge::RegisterPrefs(PrefRegistrySimple* registry) {
+  registry->RegisterBooleanPref(kIsFirstRun, true);
+  registry->RegisterBooleanPref(kHasFixedAutoconnect, false);
 }
 
 void WifiConfigurationBridge::OnShuttingDown() {
@@ -196,6 +209,10 @@ void WifiConfigurationBridge::OnGetAllSyncableNetworksResult(
   batch->TakeMetadataChangesFrom(std::move(metadata_change_list));
   Commit(std::move(batch));
   metrics_recorder_->RecordTotalCount(entries_.size());
+  // If zero networks are synced log the reason.
+  if (entries_.size() == 0) {
+    local_network_collector_->RecordZeroNetworksEligibleForSync();
+  }
 }
 
 base::Optional<syncer::ModelError> WifiConfigurationBridge::ApplySyncChanges(
@@ -215,6 +232,11 @@ base::Optional<syncer::ModelError> WifiConfigurationBridge::ApplySyncChanges(
       if (it != entries_.end()) {
         entries_.erase(it);
         batch->DeleteData(change->storage_key());
+        if (!base::FeatureList::IsEnabled(features::kWifiSyncAllowDeletes)) {
+          // Don't apply deletes to the local device.
+          NET_LOG(EVENT) << "Ignoring delete request from sync server.";
+          continue;
+        }
         synced_network_updater_->RemoveNetwork(
             NetworkIdentifier::DeserializeFromString(change->storage_key()));
       } else {
@@ -234,6 +256,10 @@ base::Optional<syncer::ModelError> WifiConfigurationBridge::ApplySyncChanges(
   batch->TakeMetadataChangesFrom(std::move(metadata_change_list));
   Commit(std::move(batch));
   metrics_recorder_->RecordTotalCount(entries_.size());
+  // If zero networks are synced log the reason.
+  if (entries_.size() == 0) {
+    local_network_collector_->RecordZeroNetworksEligibleForSync();
+  }
 
   return base::nullopt;
 }
@@ -302,11 +328,51 @@ void WifiConfigurationBridge::OnReadAllData(
     }
     entries_[record.id] = std::move(data);
   }
-
-  metrics_recorder_->RecordTotalCount(entries_.size());
   store_->ReadAllMetadata(
       base::BindOnce(&WifiConfigurationBridge::OnReadAllMetadata,
                      weak_ptr_factory_.GetWeakPtr()));
+
+  // Temporary fix for networks which accidentally had autoconnect disabled.
+  if (!pref_service_->GetBoolean(kHasFixedAutoconnect)) {
+    local_network_collector_->ExecuteAfterNetworksLoaded(
+        base::BindOnce(&WifiConfigurationBridge::FixAutoconnect,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  int entries_size = entries_.size();
+  // Do not log the total network count during OOBE. It returns 0 even if there
+  // are networks synced since MergeSyncData has not executed yet.
+  if (pref_service_->GetBoolean(kIsFirstRun)) {
+    pref_service_->SetBoolean(kIsFirstRun, false);
+    // This is only meant to filter out 0's that are logged during OOBE. If the
+    // entries_size is greater than zero it should be logged.
+    if (entries_size == 0) {
+      return;
+    }
+  }
+  metrics_recorder_->RecordTotalCount(entries_size);
+  // If zero networks are synced log the reason.
+  if (entries_size == 0) {
+    local_network_collector_->RecordZeroNetworksEligibleForSync();
+  }
+}
+
+void WifiConfigurationBridge::FixAutoconnect() {
+  // Temporary fix for networks which accidentally had autoconnect disabled.
+  if (!pref_service_->GetBoolean(kHasFixedAutoconnect)) {
+    std::vector<sync_pb::WifiConfigurationSpecifics> protos;
+    for (const auto& entry : entries_) {
+      protos.push_back(entry.second);
+    }
+    local_network_collector_->FixAutoconnect(
+        protos,
+        base::BindOnce(&WifiConfigurationBridge::OnFixAutoconnectComplete,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
+}
+
+void WifiConfigurationBridge::OnFixAutoconnectComplete() {
+  pref_service_->SetBoolean(kHasFixedAutoconnect, true);
 }
 
 void WifiConfigurationBridge::OnReadAllMetadata(
@@ -317,6 +383,20 @@ void WifiConfigurationBridge::OnReadAllMetadata(
     return;
   }
   change_processor()->ModelReadyToSync(std::move(metadata_batch));
+
+  // Make a copy in case the map is modified while iterating over the pending
+  // updates.  This could happen if sync is disabled while iterating.
+  base::flat_map<std::string,
+                 base::Optional<sync_pb::WifiConfigurationSpecifics>>
+      updates = networks_to_sync_when_ready_;
+  for (auto const& it : updates) {
+    if (it.second) {
+      SaveNetworkToSync(it.second);
+      continue;
+    }
+    RemoveNetworkFromSync(it.first);
+  }
+  networks_to_sync_when_ready_.clear();
 }
 
 void WifiConfigurationBridge::OnCommit(
@@ -399,6 +479,14 @@ void WifiConfigurationBridge::SaveNetworkToSync(
     return;
   }
 
+  // If the sync backend hasn't finished initializing the bridge, then store
+  // this update to be processed later.
+  if (!store_ || !change_processor()->IsTrackingMetadata()) {
+    networks_to_sync_when_ready_.insert_or_assign(
+        NetworkIdentifier::FromProto(*proto).SerializeToString(), proto);
+    return;
+  }
+
   std::unique_ptr<syncer::EntityData> entity_data =
       GenerateWifiEntityData(*proto);
   auto id = NetworkIdentifier::FromProto(*proto);
@@ -415,6 +503,10 @@ void WifiConfigurationBridge::SaveNetworkToSync(
                  << NetworkId(NetworkStateFromNetworkIdentifier(id))
                  << " to sync.";
   metrics_recorder_->RecordTotalCount(entries_.size());
+  // If zero networks are synced log the reason.
+  if (entries_.size() == 0) {
+    local_network_collector_->RecordZeroNetworksEligibleForSync();
+  }
 }
 
 void WifiConfigurationBridge::OnNetworkCreated(const std::string& guid) {
@@ -448,6 +540,10 @@ void WifiConfigurationBridge::OnNetworkConfiguredDelayComplete(
 void WifiConfigurationBridge::OnBeforeConfigurationRemoved(
     const std::string& service_path,
     const std::string& guid) {
+  if (!base::FeatureList::IsEnabled(features::kWifiSyncAllowDeletes)) {
+    return;
+  }
+
   base::Optional<NetworkIdentifier> id =
       local_network_collector_->GetNetworkIdentifierFromGuid(guid);
   if (!id) {
@@ -456,21 +552,40 @@ void WifiConfigurationBridge::OnBeforeConfigurationRemoved(
 
   NET_LOG(EVENT) << "Storing metadata for " << NetworkPathId(service_path)
                  << " in preparation for removal.";
-  std::string storage_key = id->SerializeToString();
-  if (entries_.contains(storage_key))
-    pending_deletes_[guid] = storage_key;
+  pending_deletes_[guid] = id->SerializeToString();
 }
 
 void WifiConfigurationBridge::OnConfigurationRemoved(
     const std::string& service_path,
     const std::string& network_guid) {
+  if (!base::FeatureList::IsEnabled(features::kWifiSyncAllowDeletes)) {
+    return;
+  }
+
   if (!pending_deletes_.contains(network_guid)) {
     NET_LOG(EVENT) << "Configuration " << network_guid
                    << " removed with no matching saved metadata.";
     return;
   }
 
-  std::string storage_key = pending_deletes_[network_guid];
+  const std::string& storage_key = pending_deletes_[network_guid];
+  if (!store_ || !change_processor()->IsTrackingMetadata()) {
+    networks_to_sync_when_ready_.insert_or_assign(storage_key, base::nullopt);
+    return;
+  }
+
+  RemoveNetworkFromSync(storage_key);
+}
+
+void WifiConfigurationBridge::RemoveNetworkFromSync(
+    const std::string& storage_key) {
+  if (!base::FeatureList::IsEnabled(features::kWifiSyncAllowDeletes)) {
+    return;
+  }
+  if (!entries_.contains(storage_key)) {
+    return;  // Network is not synced.
+  }
+
   std::unique_ptr<syncer::ModelTypeStore::WriteBatch> batch =
       store_->CreateWriteBatch();
   batch->DeleteData(storage_key);

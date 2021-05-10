@@ -20,7 +20,7 @@
 #include "ash/wm/pip/pip_test_utils.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "ui/aura/window.h"
 #include "ui/display/scoped_display_for_new_windows.h"
@@ -171,5 +171,15 @@ TEST_P(PipPositionerDisplayTest, PipDismissedPositionPrefersHorizontal) {
                 display, ConvertToScreen(gfx::Rect(300, 300, 100, 100))));
 }
 
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    PipPositionerDisplayTest,
+    testing::Values(std::make_tuple("400x400", 0u),
+                    std::make_tuple("400x400/r", 0u),
+                    std::make_tuple("400x400/u", 0u),
+                    std::make_tuple("400x400/l", 0u),
+                    std::make_tuple("800x800*2", 0u),
+                    std::make_tuple("400x400,400x400", 0u),
+                    std::make_tuple("400x400,400x400", 1u)));
 
 }  // namespace ash

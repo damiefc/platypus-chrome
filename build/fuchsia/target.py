@@ -36,12 +36,13 @@ def _GetPackageInfo(package_path):
 
 
 class _MapIsolatedPathsForPackage:
-  """Callable object which remaps /data and /tmp paths to their package-specific
-     locations."""
+  """Callable object which remaps /data and /tmp paths to their component-
+     specific locations, based on the package name and test realm path."""
 
-  def __init__(self, package_name, package_version):
-    package_sub_path = 'r/sys/fuchsia.com:{0}:{1}#meta:{0}.cmx/'.format(
-            package_name, package_version)
+  def __init__(self, package_name, package_version, realms):
+    realms_path_fragment = '/r/'.join(['r/sys'] + realms)
+    package_sub_path = '{2}/fuchsia.com:{0}:{1}#meta:{0}.cmx/'.format(
+        package_name, package_version, realms_path_fragment)
     self.isolated_format = '{0}' + package_sub_path + '{1}'
 
   def __call__(self, path):
@@ -68,23 +69,18 @@ class Target(object):
     self._command_runner = None
 
   @staticmethod
+  def CreateFromArgs(args):
+    raise NotImplementedError()
+
+  @staticmethod
   def RegisterArgs(arg_parser):
-    common_args = arg_parser.add_argument_group(
-        'target', 'Arguments that apply to all targets.')
-    common_args.add_argument(
-        '--out-dir',
-        type=os.path.realpath,
-        help=('Path to the directory in which build files are located. '
-              'Defaults to current directory.'))
-    common_args.add_argument('--system-log-file',
-                             help='File to write system logs to. Specify '
-                             '- to log to stdout.')
+    pass
 
   # Functions used by the Python context manager for teardown.
   def __enter__(self):
     return self
   def __exit__(self, exc_type, exc_val, exc_tb):
-    return self
+    return
 
   def Start(self):
     """Handles the instantiation and connection process for the Fuchsia
@@ -142,14 +138,21 @@ class Target(object):
     return self.GetCommandRunner().RunCommand(command, silent,
                                               timeout_secs=timeout_secs)
 
-  def EnsureIsolatedPathsExist(self, for_package):
+  def EnsureIsolatedPathsExist(self, for_package, for_realms):
     """Ensures that the package's isolated /data and /tmp exist."""
     for isolated_directory in ['/data', '/tmp']:
-      self.RunCommand(
-          ['mkdir','-p',
-           _MapIsolatedPathsForPackage(for_package, 0)(isolated_directory)])
+      self.RunCommand([
+          'mkdir', '-p',
+          _MapIsolatedPathsForPackage(for_package, 0,
+                                      for_realms)(isolated_directory)
+      ])
 
-  def PutFile(self, source, dest, recursive=False, for_package=None):
+  def PutFile(self,
+              source,
+              dest,
+              recursive=False,
+              for_package=None,
+              for_realms=[]):
     """Copies a file from the local filesystem to the target filesystem.
 
     source: The path of the file being copied.
@@ -158,12 +161,19 @@ class Target(object):
     for_package: If specified, isolated paths in the |dest| are mapped to their
                  obsolute paths for the package, on the target. This currently
                  affects the /data and /tmp directories.
+    for_realms: If specified, identifies the sub-realm of 'sys' under which
+                isolated paths (see |for_package|) are stored.
     """
 
     assert type(source) is str
-    self.PutFiles([source], dest, recursive, for_package)
+    self.PutFiles([source], dest, recursive, for_package, for_realms)
 
-  def PutFiles(self, sources, dest, recursive=False, for_package=None):
+  def PutFiles(self,
+               sources,
+               dest,
+               recursive=False,
+               for_package=None,
+               for_realms=[]):
     """Copies files from the local filesystem to the target filesystem.
 
     sources: List of local file paths to copy from, or a single path.
@@ -171,42 +181,62 @@ class Target(object):
     recursive: If true, performs a recursive copy.
     for_package: If specified, /data in the |dest| is mapped to the package's
                  isolated /data location.
+    for_realms: If specified, identifies the sub-realm of 'sys' under which
+                isolated paths (see |for_package|) are stored.
     """
 
     assert type(sources) is tuple or type(sources) is list
     if for_package:
-      self.EnsureIsolatedPathsExist(for_package)
-      dest = _MapIsolatedPathsForPackage(for_package, 0)(dest)
+      self.EnsureIsolatedPathsExist(for_package, for_realms)
+      dest = _MapIsolatedPathsForPackage(for_package, 0, for_realms)(dest)
     logging.debug('copy local:%s => remote:%s' % (sources, dest))
     self.GetCommandRunner().RunScp(sources, dest, remote_cmd.COPY_TO_TARGET,
                                    recursive)
 
-  def GetFile(self, source, dest, for_package=None):
+  def GetFile(self,
+              source,
+              dest,
+              for_package=None,
+              for_realms=[],
+              recursive=False):
     """Copies a file from the target filesystem to the local filesystem.
 
     source: The path of the file being copied.
     dest: The path on the local filesystem which will be copied to.
     for_package: If specified, /data in paths in |sources| is mapped to the
                  package's isolated /data location.
+    for_realms: If specified, identifies the sub-realm of 'sys' under which
+                isolated paths (see |for_package|) are stored.
+    recursive: If true, performs a recursive copy.
     """
     assert type(source) is str
-    self.GetFiles([source], dest, for_package)
+    self.GetFiles([source], dest, for_package, for_realms, recursive)
 
-  def GetFiles(self, sources, dest, for_package=None):
+  def GetFiles(self,
+               sources,
+               dest,
+               for_package=None,
+               for_realms=[],
+               recursive=False):
     """Copies files from the target filesystem to the local filesystem.
 
     sources: List of remote file paths to copy.
     dest: The path on the local filesystem which will be copied to.
     for_package: If specified, /data in paths in |sources| is mapped to the
                  package's isolated /data location.
+    for_realms: If specified, identifies the sub-realm of 'sys' under which
+                isolated paths (see |for_package|) are stored.
+    recursive: If true, performs a recursive copy.
     """
     assert type(sources) is tuple or type(sources) is list
     self._AssertIsStarted()
     if for_package:
-      sources = map(_MapIsolatedPathsForPackage(for_package, 0), sources)
+      sources = map(_MapIsolatedPathsForPackage(for_package, 0, for_realms),
+                    sources)
     logging.debug('copy remote:%s => local:%s' % (sources, dest))
     return self.GetCommandRunner().RunScp(sources, dest,
-                                          remote_cmd.COPY_FROM_TARGET)
+                                          remote_cmd.COPY_FROM_TARGET,
+                                          recursive)
 
   def _GetEndpoint(self):
     """Returns a (host, port) tuple for the SSH connection to the target."""
@@ -274,7 +304,8 @@ class Target(object):
              _GetPackageUri(package_name), '>/dev/null'],
             timeout_secs=_INSTALL_TIMEOUT_SECS)
         if return_code != 0:
-          raise Exception('Error while resolving %s.' % package_name)
+          raise Exception(
+              'Error {} while resolving {}.'.format(return_code, package_name))
 
       # Verify that the newly resolved versions of packages are reported.
       for package_path in package_paths:

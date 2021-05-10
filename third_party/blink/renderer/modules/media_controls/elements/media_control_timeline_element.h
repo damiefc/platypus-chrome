@@ -6,7 +6,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_MEDIA_CONTROLS_ELEMENTS_MEDIA_CONTROL_TIMELINE_ELEMENT_H_
 
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_slider_element.h"
-#include "third_party/blink/renderer/modules/media_controls/elements/media_control_timeline_metrics.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 
 namespace blink {
@@ -53,8 +52,6 @@ class MediaControlTimelineElement : public MediaControlSliderElement {
 
   void UpdateAria();
 
-  MediaControlTimelineMetrics metrics_;
-
   bool is_touching_ = false;
 
   bool controls_hidden_ = false;
@@ -62,4 +59,4 @@ class MediaControlTimelineElement : public MediaControlSliderElement {
 
 }  // namespace blink
 
-#endif  // MediaControlTimelineElement
+#endif  // THIRD_PARTY_BLINK_RENDERER_MODULES_MEDIA_CONTROLS_ELEMENTS_MEDIA_CONTROL_TIMELINE_ELEMENT_H_

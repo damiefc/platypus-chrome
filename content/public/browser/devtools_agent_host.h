@@ -25,7 +25,7 @@
 namespace base {
 class RefCountedMemory;
 class SingleThreadTaskRunner;
-}
+}  // namespace base
 
 namespace net {
 class ServerSocket;
@@ -68,7 +68,8 @@ class CONTENT_EXPORT DevToolsAgentHost
       WebContents* web_contents);
 
   // Returns true iff an instance of DevToolsAgentHost for the |web_contents|
-  // does exist.
+  // exists. This is equivalent to if a DevToolsAgentHost has ever been
+  // created for the |web_contents|.
   static bool HasFor(WebContents* web_contents);
 
   // Creates DevToolsAgentHost that communicates to the target by means of
@@ -112,7 +113,7 @@ class CONTENT_EXPORT DevToolsAgentHost
 
   // Starts remote debugging for browser target for the given fd=3
   // for reading and fd=4 for writing remote debugging messages.
-  static void StartRemoteDebuggingPipeHandler();
+  static void StartRemoteDebuggingPipeHandler(base::OnceClosure on_disconnect);
   static void StopRemoteDebuggingPipeHandler();
 
   // Observer is notified about changes in DevToolsAgentHosts.

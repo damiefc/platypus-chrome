@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -60,7 +60,7 @@ class BrowsingHistoryHandlerWithWebUIForTesting
     test_clock_.SetNow(PretendNow());
   }
 
-  void SendHistoryQuery(int count, const base::string16& query) override {
+  void SendHistoryQuery(int count, const std::u16string& query) override {
     if (postpone_query_results_) {
       return;
     }
@@ -155,7 +155,7 @@ class BrowsingHistoryHandlerTest : public ChromeRenderViewHostTestHarness {
 // Tests that BrowsingHistoryHandler is informed about WebHistoryService
 // deletions.
 TEST_F(BrowsingHistoryHandlerTest, ObservingWebHistoryDeletions) {
-  base::Callback<void(bool)> callback = base::DoNothing();
+  base::RepeatingCallback<void(bool)> callback = base::DoNothing();
 
   // BrowsingHistoryHandler is informed about WebHistoryService history
   // deletions.

@@ -7,56 +7,88 @@
 
 #import <Cocoa/Cocoa.h>
 
-#include "base/callback.h"
-#include "content/public/browser/accessibility_tree_formatter.h"
+#include "base/callback_forward.h"
+#include "content/common/content_export.h"
+#include "ui/accessibility/platform/inspect/ax_inspect.h"
+
+using ui::AXTreeSelector;
 
 namespace content {
 namespace a11y {
 
-/**
- * Return true if the given object is internal BrowserAccessibilityCocoa.
- */
-bool IsBrowserAccessibilityCocoa(const id node);
+//
+// Return true if the given object is internal BrowserAccessibilityCocoa.
+//
+CONTENT_EXPORT bool IsBrowserAccessibilityCocoa(const id node);
 
-/**
- * Returns true if the given object is AXUIElement.
- */
-bool IsAXUIElement(const id node);
+//
+// Returns true if the given object is AXUIElement.
+//
+CONTENT_EXPORT bool IsAXUIElement(const id node);
 
-/**
- * Returns children of an accessible object, either AXUIElement or
- * BrowserAccessibilityCocoa.
- */
-NSArray* ChildrenOf(const id node);
+//
+// Returns children of an accessible object, either AXUIElement or
+// BrowserAccessibilityCocoa.
+//
+CONTENT_EXPORT NSArray* ChildrenOf(const id node);
 
-/**
- * Returns (parameterized) attributes of an accessible object, (either
- * AXUIElement or BrowserAccessibilityCocoa).
- */
-NSArray* AttributeNamesOf(const id node);
-NSArray* ParameterizedAttributeNamesOf(const id node);
+//
+// Returns AXSize and AXPosition attributes for an accessible object.
+//
+CONTENT_EXPORT NSSize SizeOf(const id node);
+CONTENT_EXPORT NSPoint PositionOf(const id node);
 
-/**
- * Returns (parameterized) attribute value on a given node (either AXUIElement
- * or BrowserAccessibilityCocoa)
- */
-id AttributeValueOf(const id node, NSString* attribute);
-id ParameterizedAttributeValueOf(const id node,
-                                 NSString* attribute,
-                                 id parameter);
+//
+// Returns (parameterized) attributes of an accessible object, (either
+// AXUIElement or BrowserAccessibilityCocoa).
+//
+CONTENT_EXPORT NSArray* AttributeNamesOf(const id node);
+CONTENT_EXPORT NSArray* ParameterizedAttributeNamesOf(const id node);
 
-/**
- * Return AXElement in a tree by a given criteria.
- */
+//
+// Returns (parameterized) attribute value on a given node (either AXUIElement
+// or BrowserAccessibilityCocoa).
+//
+CONTENT_EXPORT id AttributeValueOf(const id node, NSString* attribute);
+CONTENT_EXPORT id ParameterizedAttributeValueOf(const id node,
+                                                NSString* attribute,
+                                                id parameter);
+
+//
+// Returns true if an attribute value can be changed on a given node
+// (either AXUIElement or BrowserAccessibilityCocoa).
+//
+CONTENT_EXPORT bool IsAttributeSettable(const id node, NSString* attribute);
+
+//
+// Sets attribute value on a given node (either AXUIElement or
+// BrowserAccessibilityCocoa).
+//
+CONTENT_EXPORT void SetAttributeValueOf(const id node,
+                                        NSString* attribute,
+                                        id value);
+
+//
+// Returns DOM id of a given node (either AXUIElement or
+// BrowserAccessibilityCocoa).
+//
+CONTENT_EXPORT std::string GetDOMId(const id node);
+
+//
+// Return AXElement in a tree by a given criteria.
+//
 using FindCriteria = base::RepeatingCallback<bool(const AXUIElementRef)>;
-AXUIElementRef FindAXUIElement(const AXUIElementRef node,
-                               const FindCriteria& criteria);
+CONTENT_EXPORT AXUIElementRef FindAXUIElement(const AXUIElementRef node,
+                                              const FindCriteria& criteria);
 
-/**
- * Returns AXUIElement and its application process id by a given tree selector.
- */
-std::pair<AXUIElementRef, int> FindAXUIElement(
-    const AccessibilityTreeFormatter::TreeSelector&);
+//
+// Returns AXUIElement and its application process id by a given tree selector.
+//
+CONTENT_EXPORT std::pair<AXUIElementRef, int> FindAXUIElement(
+    const AXTreeSelector&);
+
+AXUIElementRef FindAXWindowChild(AXUIElementRef parent,
+                                 const std::string& pattern);
 
 }  // namespace a11y
 }  // namespace content

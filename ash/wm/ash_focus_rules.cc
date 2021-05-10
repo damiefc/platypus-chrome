@@ -12,7 +12,8 @@
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_state.h"
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
+#include "components/full_restore/full_restore_utils.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/events/event.h"
@@ -48,7 +49,8 @@ bool IsInactiveDeskContainerId(int id) {
 ////////////////////////////////////////////////////////////////////////////////
 // AshFocusRules, public:
 
-AshFocusRules::AshFocusRules() = default;
+AshFocusRules::AshFocusRules()
+    : activatable_container_ids_(GetActivatableShellWindowIds()) {}
 
 AshFocusRules::~AshFocusRules() = default;
 
@@ -63,11 +65,11 @@ bool AshFocusRules::IsToplevelWindow(const aura::Window* window) const {
 
   // The window must exist within a container that supports activation.
   // The window cannot be blocked by a modal transient.
-  return IsActivatableShellWindowId(window->parent()->id());
+  return base::Contains(activatable_container_ids_, window->parent()->id());
 }
 
 bool AshFocusRules::SupportsChildActivation(const aura::Window* window) const {
-  return IsActivatableShellWindowId(window->id());
+  return base::Contains(activatable_container_ids_, window->id());
 }
 
 bool AshFocusRules::IsWindowConsideredVisibleForActivation(
@@ -98,6 +100,9 @@ bool AshFocusRules::CanActivateWindow(const aura::Window* window) const {
   // Clearing activation is always permissible.
   if (!window)
     return true;
+
+  if (window->GetProperty(full_restore::kLaunchedFromFullRestoreKey))
+    return false;
 
   if (!BaseFocusRules::CanActivateWindow(window))
     return false;
@@ -157,10 +162,10 @@ aura::Window* AshFocusRules::GetNextActivatableWindow(
   aura::Window* root = starting_window->GetRootWindow();
   if (!root)
     root = Shell::GetRootWindowForNewWindows();
-  const auto& container_ids = GetActivatableShellWindowIds();
-  const int container_count = container_ids.size();
+  const int container_count = activatable_container_ids_.size();
   for (int i = 0; i < container_count; i++) {
-    aura::Window* container = Shell::GetContainer(root, container_ids[i]);
+    aura::Window* container =
+        Shell::GetContainer(root, activatable_container_ids_[i]);
     if (container && container->Contains(starting_window)) {
       starting_container_index = i;
       break;
@@ -183,7 +188,7 @@ aura::Window* AshFocusRules::GetNextActivatableWindow(
 aura::Window* AshFocusRules::GetTopmostWindowToActivateForContainerIndex(
     int index,
     aura::Window* ignore) const {
-  const int container_id = GetActivatableShellWindowIds()[index];
+  const int container_id = activatable_container_ids_[index];
   // Inactive desk containers should be ignored, since windows in them should
   // never be returned as a next activatable window.
   if (IsInactiveDeskContainerId(container_id))

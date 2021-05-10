@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_PAINT_RASTER_INVALIDATOR_H_
 
 #include "base/callback.h"
+#include "base/dcheck_is_on.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/chunk_to_layer_mapper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/float_clip_rect.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_chunk.h"
@@ -36,18 +37,9 @@ class PLATFORM_EXPORT RasterInvalidator {
 
   RasterInvalidationTracking& EnsureTracking();
 
-  // Generate raster invalidations for all of the changed paint chunks and
-  // display items in the paint artifact.
-  void Generate(RasterInvalidationFunction,
-                scoped_refptr<const PaintArtifact>,
-                const gfx::Rect& layer_bounds,
-                const PropertyTreeState& layer_state,
-                const DisplayItemClient* layer_client = nullptr);
-
   // Generate raster invalidations for a subset of the paint chunks in the
   // paint artifact.
   void Generate(RasterInvalidationFunction,
-                scoped_refptr<const PaintArtifact>,
                 const PaintChunkSubset&,
                 const gfx::Rect& layer_bounds,
                 const PropertyTreeState& layer_state,
@@ -63,13 +55,13 @@ class PLATFORM_EXPORT RasterInvalidator {
   friend class DisplayItemRasterInvalidator;
   friend class RasterInvalidatorTest;
 
-  void UpdateClientDebugNames(const PaintArtifact&, const PaintChunkSubset&);
+  void UpdateClientDebugNames();
 
   struct PaintChunkInfo {
     PaintChunkInfo(const RasterInvalidator& invalidator,
                    const ChunkToLayerMapper& mapper,
-                   PaintChunkSubset::Iterator chunk_it)
-        : index_in_paint_artifact(chunk_it.OriginalIndex()),
+                   const PaintChunkIterator& chunk_it)
+        : index_in_paint_artifact(chunk_it.IndexInPaintArtifact()),
 #if DCHECK_IS_ON()
           id(chunk_it->id),
 #endif
@@ -94,7 +86,6 @@ class PLATFORM_EXPORT RasterInvalidator {
   };
 
   void GenerateRasterInvalidations(RasterInvalidationFunction,
-                                   const PaintArtifact&,
                                    const PaintChunkSubset&,
                                    const PropertyTreeState& layer_state,
                                    Vector<PaintChunkInfo>& new_chunks_info);
@@ -142,8 +133,6 @@ class PLATFORM_EXPORT RasterInvalidator {
     return Intersection(
         r, Rect(0, 0, layer_bounds_.width(), layer_bounds_.height()));
   }
-
-  void TrackImplicitFullLayerInvalidation(const DisplayItemClient&);
 
   gfx::Rect layer_bounds_;
   Vector<PaintChunkInfo> old_paint_chunks_info_;

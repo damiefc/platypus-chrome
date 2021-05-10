@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
-#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_hid_device_filter.h"
@@ -15,7 +15,9 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/hid/hid_connection_event.h"
 #include "third_party/blink/renderer/modules/hid/hid_device.h"
@@ -27,7 +29,7 @@ namespace {
 
 const char kContextGone[] = "Script context has shut down.";
 const char kFeaturePolicyBlocked[] =
-    "Access to the feature \"hid\" is disallowed by feature policy.";
+    "Access to the feature \"hid\" is disallowed by permissions policy.";
 
 void RejectWithTypeError(const String& message,
                          ScriptPromiseResolver* resolver) {
@@ -82,12 +84,27 @@ mojom::blink::HidDeviceFilterPtr ConvertDeviceFilter(
 
 }  // namespace
 
-HID::HID(ExecutionContext& context)
-    : ExecutionContextClient(&context),
-      service_(&context),
-      feature_handle_for_scheduler_(context.GetScheduler()->RegisterFeature(
-          SchedulingPolicy::Feature::kWebHID,
-          {SchedulingPolicy::RecordMetricsForBackForwardCache()})) {}
+const char HID::kSupplementName[] = "HID";
+
+HID* HID::hid(Navigator& navigator) {
+  if (!navigator.DomWindow())
+    return nullptr;
+
+  HID* hid = Supplement<Navigator>::From<HID>(navigator);
+  if (!hid) {
+    hid = MakeGarbageCollected<HID>(navigator);
+    ProvideTo(navigator, hid);
+  }
+  return hid;
+}
+
+HID::HID(Navigator& navigator)
+    : Supplement<Navigator>(navigator),
+      service_(navigator.DomWindow()),
+      feature_handle_for_scheduler_(
+          navigator.DomWindow()->GetScheduler()->RegisterFeature(
+              SchedulingPolicy::Feature::kWebHID,
+              {SchedulingPolicy::DisableBackForwardCache()})) {}
 
 HID::~HID() {
   DCHECK(get_devices_promises_.IsEmpty());
@@ -95,7 +112,7 @@ HID::~HID() {
 }
 
 ExecutionContext* HID::GetExecutionContext() const {
-  return ExecutionContextClient::GetExecutionContext();
+  return GetSupplementable()->DomWindow();
 }
 
 const AtomicString& HID::InterfaceName() const {
@@ -113,14 +130,12 @@ void HID::AddedEventListener(const AtomicString& event_type,
 
   auto* context = GetExecutionContext();
   if (!context ||
-      !context->IsFeatureEnabled(mojom::blink::FeaturePolicyFeature::kHid,
+      !context->IsFeatureEnabled(mojom::blink::PermissionsPolicyFeature::kHid,
                                  ReportOptions::kDoNotReport)) {
     return;
   }
 
   EnsureServiceConnection();
-  if (!receiver_.is_bound())
-    service_->RegisterClient(receiver_.BindNewEndpointAndPassRemote());
 }
 
 void HID::DeviceAdded(device::mojom::blink::HidDeviceInfoPtr device_info) {
@@ -137,6 +152,18 @@ void HID::DeviceRemoved(device::mojom::blink::HidDeviceInfoPtr device_info) {
       event_type_names::kDisconnect, device));
 }
 
+void HID::DeviceChanged(device::mojom::blink::HidDeviceInfoPtr device_info) {
+  auto* device = device_cache_.at(device_info->guid);
+  if (!device) {
+    // If the GUID is not in the |device_cache_| then this is the first time we
+    // have been notified for this device.
+    DeviceAdded(std::move(device_info));
+    return;
+  }
+
+  device->UpdateDeviceInfo(std::move(device_info));
+}
+
 ScriptPromise HID::getDevices(ScriptState* script_state,
                               ExceptionState& exception_state) {
   auto* context = GetExecutionContext();
@@ -146,7 +173,7 @@ ScriptPromise HID::getDevices(ScriptState* script_state,
     return ScriptPromise();
   }
 
-  if (!context->IsFeatureEnabled(mojom::blink::FeaturePolicyFeature::kHid,
+  if (!context->IsFeatureEnabled(mojom::blink::PermissionsPolicyFeature::kHid,
                                  ReportOptions::kReportOnFailure)) {
     exception_state.ThrowSecurityError(kFeaturePolicyBlocked);
     return ScriptPromise();
@@ -164,21 +191,21 @@ ScriptPromise HID::getDevices(ScriptState* script_state,
 ScriptPromise HID::requestDevice(ScriptState* script_state,
                                  const HIDDeviceRequestOptions* options,
                                  ExceptionState& exception_state) {
-  auto* frame = GetFrame();
-  if (!frame || !frame->GetDocument()) {
+  if (!GetExecutionContext()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                       kContextGone);
     return ScriptPromise();
   }
 
   if (!GetExecutionContext()->IsFeatureEnabled(
-          mojom::blink::FeaturePolicyFeature::kHid,
+          mojom::blink::PermissionsPolicyFeature::kHid,
           ReportOptions::kReportOnFailure)) {
     exception_state.ThrowSecurityError(kFeaturePolicyBlocked);
     return ScriptPromise();
   }
 
-  if (!LocalFrame::HasTransientUserActivation(frame)) {
+  if (!LocalFrame::HasTransientUserActivation(
+          GetSupplementable()->DomWindow()->GetFrame())) {
     exception_state.ThrowSecurityError(
         "Must be handling a user gesture to show a permission request.");
     return ScriptPromise();
@@ -265,10 +292,13 @@ void HID::EnsureServiceConnection() {
       service_.BindNewPipeAndPassReceiver(task_runner));
   service_.set_disconnect_handler(
       WTF::Bind(&HID::OnServiceConnectionError, WrapWeakPersistent(this)));
+  DCHECK(!receiver_.is_bound());
+  service_->RegisterClient(receiver_.BindNewEndpointAndPassRemote());
 }
 
 void HID::OnServiceConnectionError() {
   service_.reset();
+  receiver_.reset();
 
   // Script may execute during a call to Resolve(). Swap these sets to prevent
   // concurrent modification.
@@ -289,7 +319,7 @@ void HID::Trace(Visitor* visitor) const {
   visitor->Trace(request_device_promises_);
   visitor->Trace(device_cache_);
   EventTargetWithInlineData::Trace(visitor);
-  ExecutionContextClient::Trace(visitor);
+  Supplement<Navigator>::Trace(visitor);
 }
 
 }  // namespace blink

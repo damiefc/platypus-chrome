@@ -4,6 +4,7 @@
 
 #include "components/policy/core/common/registry_dict.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/json/json_reader.h"
@@ -132,10 +133,6 @@ base::Optional<base::Value> ConvertRegistryValue(const base::Value& value,
     case base::Value::Type::BINARY:
       // No conversion possible.
       break;
-    // TODO(crbug.com/859477): Remove after root cause is found.
-    case base::Value::Type::DEAD:
-      CHECK(false);
-      return base::nullopt;
   }
 
   LOG(WARNING) << "Failed to convert " << value.type() << " to "
@@ -234,7 +231,8 @@ void RegistryDict::Merge(const RegistryDict& other) {
 
   for (auto entry(other.values_.begin()); entry != other.values_.end();
        ++entry) {
-    SetValue(entry->first, entry->second->CreateDeepCopy());
+    SetValue(entry->first,
+             base::Value::ToUniquePtrValue(entry->second->Clone()));
   }
 }
 
@@ -244,18 +242,18 @@ void RegistryDict::Swap(RegistryDict* other) {
 }
 
 #if defined(OS_WIN)
-void RegistryDict::ReadRegistry(HKEY hive, const base::string16& root) {
+void RegistryDict::ReadRegistry(HKEY hive, const std::wstring& root) {
   ClearKeys();
   ClearValues();
 
   // First, read all the values of the key.
   for (RegistryValueIterator it(hive, root.c_str()); it.Valid(); ++it) {
-    const std::string name = base::UTF16ToUTF8(it.Name());
+    const std::string name = base::WideToUTF8(it.Name());
     switch (it.Type()) {
       case REG_SZ:
       case REG_EXPAND_SZ:
-        SetValue(name, std::unique_ptr<base::Value>(
-                           new base::Value(base::UTF16ToUTF8(it.Value()))));
+        SetValue(name,
+                 std::make_unique<base::Value>(base::WideToUTF8(it.Value())));
         continue;
       case REG_DWORD_LITTLE_ENDIAN:
       case REG_DWORD_BIG_ENDIAN:
@@ -265,8 +263,8 @@ void RegistryDict::ReadRegistry(HKEY hive, const base::string16& root) {
             dword_value = base::NetToHost32(dword_value);
           else
             dword_value = base::ByteSwapToLE32(dword_value);
-          SetValue(name, std::unique_ptr<base::Value>(
-                             new base::Value(static_cast<int>(dword_value))));
+          SetValue(name, std::make_unique<base::Value>(
+                             static_cast<int>(dword_value)));
           continue;
         }
         FALLTHROUGH;
@@ -287,7 +285,7 @@ void RegistryDict::ReadRegistry(HKEY hive, const base::string16& root) {
 
   // Recurse for all subkeys.
   for (RegistryKeyIterator it(hive, root.c_str()); it.Valid(); ++it) {
-    std::string name(base::UTF16ToUTF8(it.Name()));
+    std::string name(base::WideToUTF8(it.Name()));
     std::unique_ptr<RegistryDict> subdict(new RegistryDict());
     subdict->ReadRegistry(hive, root + L"\\" + it.Name());
     SetKey(name, std::move(subdict));

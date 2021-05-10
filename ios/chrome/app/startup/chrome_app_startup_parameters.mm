@@ -5,12 +5,14 @@
 #import "ios/chrome/app/startup/chrome_app_startup_parameters.h"
 
 #include "base/mac/foundation_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
-#import "ios/chrome/browser/ui/whats_new/default_browser_utils.h"
+#import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
 #include "ios/chrome/common/app_group/app_group_constants.h"
 #include "ios/chrome/common/x_callback_url.h"
 #include "ios/components/webui/web_ui_url_constants.h"
@@ -20,6 +22,8 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+using base::UmaHistogramEnumeration;
 
 namespace {
 
@@ -33,6 +37,31 @@ const char kApplicationGroupCommandDelay[] =
 // URL Query String parameter to indicate that this openURL: request arrived
 // here due to a Smart App Banner presentation on a Google.com page.
 NSString* const kSmartAppBannerKey = @"safarisab";
+
+// TODO(crbug.com/1138702): When swift is supported move WidgetKit constants to
+// a file where they can be shared with the extension. Currently these are also
+// declared as URLs in ios/c/widget_kit_extension/widget_constants.swift.
+//
+// Scheme used by the widget extension actions. It's important that this scheme
+// is never defined as Custom URL Scheme for Chrome so only the widgets can use
+// the actions on it.
+NSString* const kWidgetKitSchemeChrome = @"chromewidgetkit";
+// Host used to identify Search (small) widget.
+NSString* const kWidgetKitHostSearchWidget = @"search-widget";
+// Host used to identify Quick Actions (medium) widget.
+NSString* const kWidgetKitHostQuickActionsWidget = @"quick-actions-widget";
+// Host used to identify Dino Game (small) widget.
+NSString* const kWidgetKitHostDinoGameWidget = @"dino-game-widget";
+// Path for search action.
+NSString* const kWidgetKitActionSearch = @"/search";
+// Path for incognito action.
+NSString* const kWidgetKitActionIncognito = @"/incognito";
+// Path for Voice Search action.
+NSString* const kWidgetKitActionVoiceSearch = @"/voicesearch";
+// Path for QR Reader action.
+NSString* const kWidgetKitActionQRReader = @"/qrreader";
+// Path for Game action.
+NSString* const kWidgetKitActionGame = @"/game";
 
 const CGFloat kAppGroupTriggersVoiceSearchTimeout = 15.0;
 
@@ -61,7 +90,8 @@ enum MobileSessionStartAction {
   // browser on iOS 14+ as http openURL calls will be directed to Chrome by the
   // system from all other apps.
   START_ACTION_OPEN_HTTPS_FROM_OS = 8,
-  MOBILE_SESSION_START_ACTION_COUNT,
+  START_ACTION_WIDGET_KIT_COMMAND = 9,
+  MOBILE_SESSION_START_ACTION_COUNT
 };
 
 // Values of the UMA iOS.SearchExtension.Action histogram.
@@ -76,6 +106,25 @@ enum SearchExtensionAction {
   ACTION_SEARCH_IMAGE,
   SEARCH_EXTENSION_ACTION_COUNT,
 };
+
+// Values of the UMA IOS.WidgetKit.Action histogram.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class WidgetKitExtensionAction {
+  ACTION_DINO_WIDGET_GAME = 0,
+  ACTION_SEARCH_WIDGET_SEARCH = 1,
+  ACTION_QUICK_ACTIONS_SEARCH = 2,
+  ACTION_QUICK_ACTIONS_INCOGNITO = 3,
+  ACTION_QUICK_ACTIONS_VOICE_SEARCH = 4,
+  ACTION_QUICK_ACTIONS_QR_READER = 5,
+  kMaxValue = ACTION_QUICK_ACTIONS_QR_READER,
+};
+
+// Histogram helper to log the UMA IOS.WidgetKit.Action histogram.
+void LogWidgetKitAction(WidgetKitExtensionAction action) {
+  UmaHistogramEnumeration("IOS.WidgetKit.Action", action);
+  LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeMadeForIOS);
+}
 
 }  // namespace
 
@@ -104,8 +153,47 @@ enum SearchExtensionAction {
   if (!gurl.is_valid() || gurl.scheme().length() == 0)
     return nil;
 
-  // TODO(crbug.com/228098): Temporary fix.
-  if (IsXCallbackURL(gurl)) {
+  if ([completeURL.scheme isEqual:kWidgetKitSchemeChrome]) {
+    UMA_HISTOGRAM_ENUMERATION(kUMAMobileSessionStartActionHistogram,
+                              START_ACTION_WIDGET_KIT_COMMAND,
+                              MOBILE_SESSION_START_ACTION_COUNT);
+
+    const char* command = "";
+    NSString* sourceWidget = completeURL.host;
+
+    if ([completeURL.path isEqual:kWidgetKitActionSearch]) {
+      command = app_group::kChromeAppGroupFocusOmniboxCommand;
+    } else if ([completeURL.path isEqual:kWidgetKitActionIncognito]) {
+      command = app_group::kChromeAppGroupIncognitoSearchCommand;
+    } else if ([completeURL.path isEqual:kWidgetKitActionVoiceSearch]) {
+      command = app_group::kChromeAppGroupVoiceSearchCommand;
+    } else if ([completeURL.path isEqual:kWidgetKitActionQRReader]) {
+      command = app_group::kChromeAppGroupQRScannerCommand;
+    } else if ([completeURL.path isEqual:kWidgetKitActionGame]) {
+      LogWidgetKitAction(WidgetKitExtensionAction::ACTION_DINO_WIDGET_GAME);
+
+      LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeGeneral);
+
+      GURL URL(
+          base::StringPrintf("%s://%s", kChromeUIScheme, kChromeUIDinoHost));
+      return
+          [[ChromeAppStartupParameters alloc] initWithExternalURL:URL
+                                                declaredSourceApp:appId
+                                                  secureSourceApp:sourceWidget
+                                                      completeURL:completeURL];
+    }
+
+    NSString* commandString = base::SysUTF8ToNSString(command);
+    return [self newAppStartupParametersForCommand:commandString
+                                  withExternalText:nil
+                                  withExternalData:nil
+                                         withIndex:0
+                                           withURL:nil
+                             fromSourceApplication:appId
+                       fromSecureSourceApplication:sourceWidget];
+
+  } else if (IsXCallbackURL(gurl)) {
+    // TODO(crbug.com/228098): Temporary fix.
     NSString* action = [completeURL path];
     // Currently only "open" and "extension-command" are supported.
     // Other actions are being considered (see b/6914153).
@@ -195,7 +283,7 @@ enum SearchExtensionAction {
     // be logged as siginficnat activity for a potential user that would want
     // Chrome as their default browser in case the user changes away from
     // Chrome. This will leave a trace of this activity for re-prompting.
-    LogLikelyInterestedDefaultBrowserUserActivity();
+    LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeGeneral);
 
     if (action == START_ACTION_OPEN_HTTP_FROM_OS ||
         action == START_ACTION_OPEN_HTTPS_FROM_OS) {
@@ -406,7 +494,7 @@ enum SearchExtensionAction {
     // An external action that opened Chrome (i.e. GrowthKit link open, open
     // Search, search clipboard content) is activity that should indicate a user
     // that would be interested in setting Chrome as the default browser.
-    LogLikelyInterestedDefaultBrowserUserActivity();
+    LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeGeneral);
   }
 
   if ([secureSourceApp
@@ -419,6 +507,36 @@ enum SearchExtensionAction {
       index) {
     UMA_HISTOGRAM_COUNTS_100("IOS.ContentExtension.Index",
                              [index integerValue]);
+  }
+  if ([secureSourceApp isEqualToString:kWidgetKitHostSearchWidget]) {
+    LogWidgetKitAction(WidgetKitExtensionAction::ACTION_SEARCH_WIDGET_SEARCH);
+  }
+  if ([secureSourceApp isEqualToString:kWidgetKitHostQuickActionsWidget]) {
+    switch (action) {
+      case ACTION_NEW_VOICE_SEARCH:
+        LogWidgetKitAction(
+            WidgetKitExtensionAction::ACTION_QUICK_ACTIONS_VOICE_SEARCH);
+        break;
+
+      case ACTION_NEW_SEARCH:
+        LogWidgetKitAction(
+            WidgetKitExtensionAction::ACTION_QUICK_ACTIONS_SEARCH);
+        break;
+
+      case ACTION_NEW_QR_CODE_SEARCH:
+        LogWidgetKitAction(
+            WidgetKitExtensionAction::ACTION_QUICK_ACTIONS_QR_READER);
+        break;
+
+      case ACTION_NEW_INCOGNITO_SEARCH:
+        LogWidgetKitAction(
+            WidgetKitExtensionAction::ACTION_QUICK_ACTIONS_INCOGNITO);
+        break;
+
+      default:
+        NOTREACHED();
+        break;
+    }
   }
   return params;
 }
@@ -439,7 +557,7 @@ enum SearchExtensionAction {
 
   if (![_declaredSourceApp length]) {
     if (self.completeURL.SchemeIs(url::kHttpScheme) ||
-        self.completeURL.SchemeIs(url::kHttpScheme)) {
+        self.completeURL.SchemeIs(url::kHttpsScheme)) {
       // If Chrome is opened via the system default browser mechanism, the
       // action should be differentiated from the case where the source is
       // unknown.

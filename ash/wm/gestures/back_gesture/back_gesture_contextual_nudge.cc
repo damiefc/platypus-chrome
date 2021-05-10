@@ -9,10 +9,14 @@
 #include "ash/shelf/contextual_tooltip.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_provider.h"
+#include "ash/style/default_color_constants.h"
+#include "ash/style/default_colors.h"
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
 #include "base/timer/timer.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/canvas.h"
@@ -32,20 +36,11 @@ constexpr int kBackgroundWidth = 320;
 // Radius of the circle in the middle of the contextual nudge.
 constexpr int kCircleRadius = 20;
 
-// Color of the circle in the middle of the contextual nudge.
-constexpr SkColor kCircleColor = SK_ColorWHITE;
-
 // Width of the circle that inside the screen at the beginning.
 constexpr int kCircleInsideScreenWidth = 12;
 
 // Padding between the circle and the label.
 constexpr int kPaddingBetweenCircleAndLabel = 8;
-
-// Color of the label.
-constexpr SkColor kLabelColor = gfx::kGoogleGrey200;
-
-// Color of the label background.
-constexpr SkColor kLabelBackgroundColor = SkColorSetA(SK_ColorBLACK, 0xDE);
 
 // Line height of the label.
 constexpr int kLabelLineHeight = 18;
@@ -95,7 +90,7 @@ std::unique_ptr<views::Widget> CreateWidget() {
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.z_order = ui::ZOrderLevel::kFloatingWindow;
   params.accept_events = false;
-  params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
+  params.activatable = views::Widget::InitParams::Activatable::kNo;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.name = "BackGestureContextualNudge";
   params.layer_type = ui::LAYER_NOT_DRAWN;
@@ -193,7 +188,8 @@ class BackGestureContextualNudge::ContextualNudgeView
 
       label_ = AddChildView(std::make_unique<views::Label>());
       label_->SetBackgroundColor(SK_ColorTRANSPARENT);
-      label_->SetEnabledColor(kLabelColor);
+      label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kTextColorPrimary));
       label_->SetText(l10n_util::GetStringUTF16(
           base::i18n::IsRTL() ? IDS_ASH_BACK_GESTURE_CONTEXTUAL_NUDGE_RTL
                               : IDS_ASH_BACK_GESTURE_CONTEXTUAL_NUDGE));
@@ -255,7 +251,8 @@ class BackGestureContextualNudge::ContextualNudgeView
       cc::PaintFlags circle_flags;
       circle_flags.setAntiAlias(true);
       circle_flags.setStyle(cc::PaintFlags::kFill_Style);
-      circle_flags.setColor(kCircleColor);
+      circle_flags.setColor(DeprecatedGetBaseLayerColor(
+          AshColorProvider::BaseLayerType::kOpaque, kCircleColor));
       gfx::ShadowValues shadows;
       shadows.push_back(gfx::ShadowValue(
           gfx::Vector2d(0, kBackNudgeShadowOffsetY1),
@@ -280,7 +277,8 @@ class BackGestureContextualNudge::ContextualNudgeView
       cc::PaintFlags round_rect_flags;
       round_rect_flags.setStyle(cc::PaintFlags::kFill_Style);
       round_rect_flags.setAntiAlias(true);
-      round_rect_flags.setColor(kLabelBackgroundColor);
+      round_rect_flags.setColor(DeprecatedGetBaseLayerColor(
+          AshColorProvider::BaseLayerType::kOpaque, kLabelBackgroundColor));
       gfx::Rect label_bounds(label_->GetMirroredBounds());
       label_bounds.Inset(/*horizontal=*/-kLabelCornerRadius,
                          /*vertical=*/-kLabelTopBottomInset);

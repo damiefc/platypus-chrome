@@ -17,11 +17,30 @@ AuthenticatorTransportSelectorSheetView::
 AuthenticatorTransportSelectorSheetView::
     ~AuthenticatorTransportSelectorSheetView() = default;
 
-std::unique_ptr<views::View>
+std::pair<std::unique_ptr<views::View>,
+          AuthenticatorRequestSheetView::AutoFocus>
 AuthenticatorTransportSelectorSheetView::BuildStepSpecificContent() {
   AuthenticatorRequestDialogModel* const dialog_model = model()->dialog_model();
-  return std::make_unique<HoverListView>(
+  base::flat_set<AuthenticatorTransport> transports =
+      dialog_model->available_transports();
+
+  std::vector<std::string> phone_names;
+  if (base::Contains(
+          transports,
+          device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy)) {
+    phone_names = dialog_model->paired_phone_names();
+  }
+
+  if (!dialog_model->cable_extension_provided()) {
+    // The generic phone option is not shown unless a caBLE extension was
+    // provided because it's the extension which denotes what a "default" phone
+    // is.
+    transports.erase(
+        device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy);
+  }
+
+  return std::make_pair(std::make_unique<HoverListView>(
       std::make_unique<TransportHoverListModel>(
-          dialog_model->available_transports(),
-          dialog_model->win_native_api_enabled(), model()));
+          transports, dialog_model->win_native_api_enabled(),
+          std::move(phone_names), model())), AutoFocus::kYes);
 }

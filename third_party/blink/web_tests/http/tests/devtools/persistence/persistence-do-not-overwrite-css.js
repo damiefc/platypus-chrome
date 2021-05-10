@@ -5,8 +5,8 @@
 (async function() {
   TestRunner.addResult(
       `Verify that persistence does not overwrite CSS files when CSS model reports error on getStyleSheetText.\n`);
-  await TestRunner.loadModule('bindings_test_runner');
-  await TestRunner.loadModule('sources_test_runner');
+  await TestRunner.loadTestModule('bindings_test_runner');
+  await TestRunner.loadModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
   await TestRunner.loadHTML(`
       <style>
       body {
@@ -57,7 +57,7 @@
       var styleSheet =
           TestRunner.cssModel.styleSheetHeaders().find(header => header.contentURL().endsWith('simple.css'));
       // Make CSSModel constantly return errors on all getStyleSheetText requests.
-      TestRunner.override(TestRunner.cssModel._agent, 'getStyleSheetText', throwProtocolError, true);
+      TestRunner.override(TestRunner.cssModel._agent, 'invoke_getStyleSheetText', throwProtocolError, true);
       // Set a new stylesheet text
       TestRunner.cssModel.setStyleSheetText(styleSheet.id, 'body {color: blue}');
       // Expect StylesSourceMapping to sync styleSheet with network UISourceCode.

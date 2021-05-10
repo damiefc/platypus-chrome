@@ -4,11 +4,11 @@
 
 #include "net/proxy_resolution/multi_threaded_proxy_resolver.h"
 
+#include <memory>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/location.h"
@@ -357,8 +357,8 @@ Executor::Executor(Executor::Coordinator* coordinator, int thread_number)
     : coordinator_(coordinator), thread_number_(thread_number) {
   DCHECK(coordinator);
   // Start up the thread.
-  thread_.reset(new base::Thread(base::StringPrintf("PAC thread #%d",
-                                                    thread_number)));
+  thread_ = std::make_unique<base::Thread>(
+      base::StringPrintf("PAC thread #%d", thread_number));
   CHECK(thread_->Start());
 }
 
@@ -459,7 +459,7 @@ int MultiThreadedProxyResolver::GetProxyForURL(
   // Completion will be notified through |callback|, unless the caller cancels
   // the request using |request|.
   if (request)
-    request->reset(new RequestImpl(job));
+    *request = std::make_unique<RequestImpl>(job);
 
   // If there is an executor that is ready to run this request, submit it!
   Executor* executor = FindIdleExecutor();
@@ -555,9 +555,9 @@ class MultiThreadedProxyResolverFactory::Job
   void OnExecutorReady(Executor* executor) override {
     int error = OK;
     if (executor->resolver()) {
-      resolver_out_->reset(new MultiThreadedProxyResolver(
+      *resolver_out_ = std::make_unique<MultiThreadedProxyResolver>(
           std::move(resolver_factory_), max_num_threads_,
-          std::move(script_data_), executor_));
+          std::move(script_data_), executor_);
     } else {
       error = ERR_PAC_SCRIPT_FAILED;
       executor_->Destroy();

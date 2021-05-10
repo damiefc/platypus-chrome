@@ -10,8 +10,12 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
+// TODO(https://crbug.com/1164001): use forward declaration when moving to
+// chrome/browser/ash/.
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/power/ml/boot_clock.h"
 #include "chrome/browser/chromeos/power/ml/screen_brightness_event.pb.h"
 #include "chromeos/dbus/power/power_manager_client.h"
@@ -27,10 +31,6 @@ class RepeatingTimer;
 }  // namespace base
 
 namespace chromeos {
-
-class AccessibilityManager;
-class MagnificationManager;
-
 namespace power {
 namespace ml {
 
@@ -74,9 +74,9 @@ class AdaptiveScreenBrightnessManager
       const power_manager::BacklightBrightnessChange& change) override;
   void PowerChanged(const power_manager::PowerSupplyProperties& proto) override;
   void LidEventReceived(chromeos::PowerManagerClient::LidState state,
-                        const base::TimeTicks& timestamp) override;
+                        base::TimeTicks timestamp) override;
   void TabletModeEventReceived(chromeos::PowerManagerClient::TabletMode mode,
-                               const base::TimeTicks& timestamp) override;
+                               base::TimeTicks timestamp) override;
 
   // viz::mojom::VideoDetectorObserver overrides:
   void OnVideoActivityStarted() override;
@@ -109,11 +109,11 @@ class AdaptiveScreenBrightnessManager
 
   const std::unique_ptr<AdaptiveScreenBrightnessUkmLogger> ukm_logger_;
 
-  ScopedObserver<ui::UserActivityDetector, ui::UserActivityObserver>
-      user_activity_observer_{this};
-  ScopedObserver<chromeos::PowerManagerClient,
-                 chromeos::PowerManagerClient::Observer>
-      power_manager_client_observer_{this};
+  base::ScopedObservation<ui::UserActivityDetector, ui::UserActivityObserver>
+      user_activity_observation_{this};
+  base::ScopedObservation<chromeos::PowerManagerClient,
+                          chromeos::PowerManagerClient::Observer>
+      power_manager_client_observation_{this};
 
   AccessibilityManager* const accessibility_manager_;
   MagnificationManager* const magnification_manager_;

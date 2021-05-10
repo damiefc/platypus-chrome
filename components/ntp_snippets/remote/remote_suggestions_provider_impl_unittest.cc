@@ -124,7 +124,7 @@ const char kImageUrl[] = "http://image/image.png";
 
 const char kSuggestionUrl2[] = "http://foo.com/bar";
 
-const char kTestJsonDefaultCategoryTitle[] = "Some title";
+const char16_t kTestJsonDefaultCategoryTitle[] = u"Some title";
 
 const int kOtherCategoryId = 2;
 const int kUnknownRemoteCategoryId = 1234;
@@ -284,7 +284,8 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
     } else {
       remote_suggestions_status_service =
           std::make_unique<RemoteSuggestionsStatusServiceImpl>(
-              /*has_signed_in=*/false, utils_.pref_service(), std::string());
+              /*has_signed_in=*/false, utils_.pref_service(),
+              std::vector<std::string>());
     }
     remote_suggestions_status_service_ =
         remote_suggestions_status_service.get();
@@ -591,8 +592,7 @@ TEST_F(RemoteSuggestionsProviderImplTest, Full) {
 }
 
 TEST_F(RemoteSuggestionsProviderImplTest, CategoryTitle) {
-  const base::string16 test_default_title =
-      base::UTF8ToUTF16(kTestJsonDefaultCategoryTitle);
+  const std::u16string test_default_title = kTestJsonDefaultCategoryTitle;
 
   // Don't send an initial response -- we want to test what happens without any
   // server status.
@@ -1291,7 +1291,7 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   std::vector<FetchedCategory> fetched_categories;
   fetched_categories.push_back(FetchedCategory(
       articles_category(),
-      BuildRemoteCategoryInfo(base::UTF8ToUTF16("title"),
+      BuildRemoteCategoryInfo(u"title",
                               /*allow_fetching_more_results=*/true)));
   fetched_categories[0].suggestions.push_back(
       CreateTestRemoteSuggestion("http://fetched-more.com/"));
@@ -1319,7 +1319,7 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   fetched_categories.clear();
   fetched_categories.push_back(FetchedCategory(
       articles_category(),
-      BuildRemoteCategoryInfo(base::UTF8ToUTF16("title"),
+      BuildRemoteCategoryInfo(u"title",
                               /*allow_fetching_more_results=*/true)));
   fetched_categories[0].suggestions.push_back(
       CreateTestRemoteSuggestion("http://fetched-more.com/"));
@@ -1500,7 +1500,7 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   std::vector<FetchedCategory> fetched_categories;
   fetched_categories.push_back(FetchedCategory(
       articles_category(),
-      BuildRemoteCategoryInfo(base::UTF8ToUTF16("title"),
+      BuildRemoteCategoryInfo(u"title",
                               /*allow_fetching_more_results=*/true)));
   fetched_categories[0].suggestions.push_back(
       CreateTestRemoteSuggestion(base::StringPrintf("http://abc.com/")));
@@ -2541,7 +2541,7 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   std::vector<FetchedCategory> fetched_categories;
   fetched_categories.push_back(FetchedCategory(
       articles_category(),
-      BuildRemoteCategoryInfo(base::UTF8ToUTF16("title"),
+      BuildRemoteCategoryInfo(u"title",
                               /*allow_fetching_more_results=*/true)));
 
   for (int i = 0; i < kMaxExcludedDismissedIds; ++i) {
@@ -2551,7 +2551,7 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   // Add other category suggestion.
   fetched_categories.push_back(FetchedCategory(
       Category::FromRemoteCategory(kOtherCategoryId),
-      BuildRemoteCategoryInfo(base::UTF8ToUTF16("title"),
+      BuildRemoteCategoryInfo(u"title",
                               /*allow_fetching_more_results=*/true)));
   fetched_categories[1].suggestions.push_back(
       CreateTestRemoteSuggestion("http://other.com/"));

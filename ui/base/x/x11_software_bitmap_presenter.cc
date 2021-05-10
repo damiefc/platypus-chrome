@@ -16,6 +16,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
+#include "skia/ext/legacy_display_globals.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -23,11 +24,10 @@
 #include "ui/base/x/x11_util.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/x/connection.h"
-#include "ui/gfx/x/x11.h"
-#include "ui/gfx/x/x11_error_tracker.h"
-#include "ui/gfx/x/x11_types.h"
+#include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/gfx/x/xproto_types.h"
+#include "ui/gfx/x/xproto_util.h"
 
 namespace ui {
 
@@ -78,11 +78,11 @@ bool X11SoftwareBitmapPresenter::CompositeBitmap(x11::Connection* connection,
     connection->CreatePixmap({depth, pixmap_id, widget, width, height});
     ScopedPixmap pixmap(connection, pixmap_id);
 
-    connection->ChangeGC(
-        {.gc = gc, .subwindow_mode = x11::SubwindowMode::IncludeInferiors});
+    connection->ChangeGC(x11::ChangeGCRequest{
+        .gc = gc, .subwindow_mode = x11::SubwindowMode::IncludeInferiors});
     connection->CopyArea({widget, pixmap_id, gc, x, y, 0, 0, width, height});
-    connection->ChangeGC(
-        {.gc = gc, .subwindow_mode = x11::SubwindowMode::ClipByChildren});
+    connection->ChangeGC(x11::ChangeGCRequest{
+        .gc = gc, .subwindow_mode = x11::SubwindowMode::ClipByChildren});
 
     auto req = connection->GetImage({x11::ImageFormat::ZPixmap, pixmap_id, 0, 0,
                                      width, height, kAllPlanes});
@@ -106,7 +106,7 @@ bool X11SoftwareBitmapPresenter::CompositeBitmap(x11::Connection* connection,
                                  kPremul_SkAlphaType);
   if (!fg_bitmap.installPixels(image_info, const_cast<void*>(data), 4 * width))
     return false;
-  canvas.drawBitmap(fg_bitmap, 0, 0);
+  canvas.drawImage(fg_bitmap.asImage(), 0, 0);
   canvas.flush();
 
   connection->PutImage({x11::ImageFormat::ZPixmap, widget, gc, width, height, x,
@@ -142,7 +142,7 @@ X11SoftwareBitmapPresenter::X11SoftwareBitmapPresenter(
 
   // TODO(thomasanderson): Avoid going through the X11 server to plumb this
   // property in.
-  ui::GetIntProperty(widget_, "CHROMIUM_COMPOSITE_WINDOW", &composite_);
+  GetProperty(widget_, x11::GetAtom("CHROMIUM_COMPOSITE_WINDOW"), &composite_);
 }
 
 X11SoftwareBitmapPresenter::~X11SoftwareBitmapPresenter() {
@@ -174,7 +174,8 @@ void X11SoftwareBitmapPresenter::Resize(const gfx::Size& pixel_size) {
     SkImageInfo info = SkImageInfo::Make(viewport_pixel_size_.width(),
                                          viewport_pixel_size_.height(),
                                          color_type, kOpaque_SkAlphaType);
-    surface_ = SkSurface::MakeRaster(info);
+    SkSurfaceProps props = skia::LegacyDisplayGlobals::GetSkSurfaceProps();
+    surface_ = SkSurface::MakeRaster(info, &props);
   }
 }
 

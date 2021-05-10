@@ -12,6 +12,7 @@
 #include "base/observer_list.h"
 #include "chromeos/dbus/hermes/hermes_response_status.h"
 #include "dbus/property.h"
+#include "third_party/cros_system_api/dbus/hermes/dbus-constants.h"
 
 namespace dbus {
 class Bus;
@@ -28,6 +29,8 @@ class COMPONENT_EXPORT(HERMES_CLIENT) HermesProfileClient {
    public:
     // Clears the Profile properties for the given path.
     virtual void ClearProfile(const dbus::ObjectPath& carrier_profile_path) = 0;
+    // Sets service state to connected after eSIM profiles are enabled.
+    virtual void SetConnectedAfterEnable(bool connected_after_enable) = 0;
   };
 
   // Hermes profile properties.
@@ -45,8 +48,10 @@ class COMPONENT_EXPORT(HERMES_CLIENT) HermesProfileClient {
     dbus::Property<std::string>& activation_code() { return activation_code_; }
     dbus::Property<std::string>& name() { return name_; }
     dbus::Property<std::string>& nick_name() { return nick_name_; }
-    dbus::Property<int32_t>& state() { return state_; }
-    dbus::Property<int32_t>& profile_class() { return profile_class_; }
+    dbus::Property<hermes::profile::State>& state() { return state_; }
+    dbus::Property<hermes::profile::ProfileClass>& profile_class() {
+      return profile_class_;
+    }
 
    private:
     dbus::Property<std::string> iccid_;
@@ -55,8 +60,8 @@ class COMPONENT_EXPORT(HERMES_CLIENT) HermesProfileClient {
     dbus::Property<std::string> activation_code_;
     dbus::Property<std::string> name_;
     dbus::Property<std::string> nick_name_;
-    dbus::Property<int32_t> state_;
-    dbus::Property<int32_t> profile_class_;
+    dbus::Property<hermes::profile::State> state_;
+    dbus::Property<hermes::profile::ProfileClass> profile_class_;
   };
 
   // Interface for observing changes to profile objects.

@@ -4,15 +4,12 @@
 
 package org.chromium.chrome.browser.customtabs;
 
-import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_LIGHT;
-import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_SYSTEM;
-
+import android.app.Activity;
 import android.app.PendingIntent;
 import android.app.PendingIntent.CanceledException;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
@@ -26,7 +23,6 @@ import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-import androidx.browser.customtabs.CustomTabColorSchemeParams;
 import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.browser.customtabs.CustomTabsSessionToken;
 import androidx.browser.customtabs.TrustedWebUtils;
@@ -38,18 +34,19 @@ import androidx.browser.trusted.sharing.ShareTarget;
 
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.app.ChromeActivity;
-import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.browserservices.intents.CustomButtonParams;
 import org.chromium.chrome.browser.flags.ActivityType;
-import org.chromium.components.browser_ui.styles.ChromeColors;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.gsa.GSAState;
+import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.device.mojom.ScreenOrientationLockType;
-import org.chromium.ui.util.ColorUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -71,6 +68,22 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     public @interface LaunchSourceType {
         int OTHER = -1;
         int MEDIA_LAUNCHER_ACTIVITY = 3;
+    }
+
+    // These values are persisted to logs. Entries should not be renumbered and numeric values
+    // should never be reused.
+    @IntDef({ShareOptionLocation.TOOLBAR, ShareOptionLocation.MENU,
+            ShareOptionLocation.TOOLBAR_FULL_MENU_FALLBACK, ShareOptionLocation.NO_SPACE,
+            ShareOptionLocation.SHARE_DISABLED, ShareOptionLocation.NUM_ENTRIES})
+    private @interface ShareOptionLocation {
+        int TOOLBAR = 0;
+        int MENU = 1;
+        int TOOLBAR_FULL_MENU_FALLBACK = 2;
+        int NO_SPACE = 3;
+        int SHARE_DISABLED = 4;
+
+        // Must be the last one.
+        int NUM_ENTRIES = 5;
     }
 
     /**
@@ -138,11 +151,39 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
             "androidx.browser.customtabs.extra.TRANSLATE_LANGUAGE";
 
     /**
-     * Extra used to provide a PendingIntent that we can launch to focus the client.
-     * TODO(peconn): Move to AndroidX.
+     * Extra that, if set, results in blocking new notification requests while in CCT.
      */
-    private static final String EXTRA_FOCUS_INTENT =
-            "androidx.browser.customtabs.extra.FOCUS_INTENT";
+    public static final String EXTRA_BLOCK_NEW_NOTIFICATION_REQUESTS_IN_CCT =
+            "androidx.browser.customtabs.extra.BLOCK_NEW_NOTIFICATION_REQUESTS_IN_CCT";
+
+    /**
+     * Extra that, if set, results in hiding omnibox suggestions for visits from cct. The value is
+     * a boolean, and is only considered if the feature kSuggestVisitsWithPageTransitionFromApi2 is
+     * enabled.
+     */
+    public static final String EXTRA_HIDE_OMNIBOX_SUGGESTIONS_FROM_CCT =
+            "androidx.browser.customtabs.extra.HIDE_OMNIBOX_SUGGESTIONS_FROM_CCT";
+
+    /**
+     * Extra that determines whether the 'open in chrome' menu item should be shown in the context
+     * menu. The value is a boolean. Default value is false, meaning the item is shown.
+     */
+    public static final String EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM_IN_CONTEXT_MENU =
+            "androidx.browser.customtabs.extra.HIDE_OPEN_IN_CHROME_MENU_ITEM_IN_CONTEXT_MENU";
+
+    /**
+     * Extra that determines whether the 'open in chrome' menu item should be shown in the menu. The
+     * value is a boolean. Default value is false, meaning the item is shown.
+     */
+    public static final String EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM =
+            "androidx.browser.customtabs.extra.HIDE_OPEN_IN_CHROME_MENU_ITEM";
+
+    /**
+     * Extra that, if set, results in marking visits from cct as hidden. The value is
+     * a boolean, and is only considered if the feature kCCTHideVisits is enabled.
+     */
+    public static final String EXTRA_HIDE_VISITS_FROM_CCT =
+            "androidx.browser.customtabs.extra.HIDE_VISITS_FROM_CCT";
 
     private static final String EXTRA_TWA_DISCLOSURE_UI =
             "androidx.browser.trusted.extra.DISCLOSURE_VERSION";
@@ -156,7 +197,9 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
             + "To make locally-built Chrome a first-party app, sign with release-test "
             + "signing keys and run on userdebug devices. See use_signing_keys GN arg.";
 
-    private static final String EXPERIMENT_IDS =
+    // Extra whose value is an array of ints that is supplied to
+    // SyntheticTrialRegistry::RegisterExternalExperiments().
+    public static final String EXPERIMENT_IDS =
             "org.chromium.chrome.browser.customtabs.AGA_EXPERIMENT_IDS";
 
     private final Intent mIntent;
@@ -170,14 +213,9 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     private final String mMediaViewerUrl;
     private final boolean mEnableEmbeddedMediaExperience;
     private final boolean mIsFromMediaLauncherActivity;
-    private final int mInitialBackgroundColor;
     private final boolean mDisableStar;
     private final boolean mDisableDownload;
     private final @ActivityType int mActivityType;
-    @Nullable
-    private final Integer mNavigationBarColor;
-    @Nullable
-    private final Integer mNavigationBarDividerColor;
     @Nullable
     private final List<String> mTrustedWebActivityAdditionalOrigins;
     @Nullable
@@ -185,14 +223,11 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     @Nullable
     private String mUrlToLoad;
 
-    private boolean mHasCustomToolbarColor;
-    private int mToolbarColor;
-    private int mBottomBarColor;
     private boolean mEnableUrlBarHiding;
     private List<CustomButtonParams> mCustomButtonParams;
     private Drawable mCloseButtonIcon;
     private List<Pair<String, PendingIntent>> mMenuEntries = new ArrayList<>();
-    private boolean mShowShareItem;
+    private boolean mShowShareItemInMenu;
     private List<CustomButtonParams> mToolbarButtons = new ArrayList<>(1);
     private List<CustomButtonParams> mBottombarButtons = new ArrayList<>(2);
     private RemoteViews mRemoteViews;
@@ -200,7 +235,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     private PendingIntent mRemoteViewsPendingIntent;
     // OnFinished listener for PendingIntents. Used for testing only.
     private PendingIntent.OnFinished mOnFinished;
-    private PendingIntent mFocusIntent;
 
     /** Whether this CustomTabActivity was explicitly started by another Chrome Activity. */
     private final boolean mIsOpenedByChrome;
@@ -213,14 +247,8 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     @Nullable
     private final int[] mGsaExperimentIds;
 
-    /**
-     * Add extras to customize menu items for opening payment request UI custom tab from Chrome.
-     */
-    public static void addPaymentRequestUIExtras(Intent intent) {
-        intent.putExtra(EXTRA_UI_TYPE, CustomTabsUiType.PAYMENT_REQUEST);
-        intent.putExtra(EXTRA_IS_OPENED_BY_CHROME, true);
-        IntentHandler.addTrustedIntentExtras(intent);
-    }
+    @NonNull
+    private final CustomTabColorProvider mColorProvider;
 
     /**
      * Add extras to customize menu items for opening Reader Mode UI custom tab from Chrome.
@@ -274,15 +302,9 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
                 IntentUtils.safeGetIntExtra(intent, EXTRA_UI_TYPE, CustomTabsUiType.DEFAULT);
         mUiType = verifiedUiType(requestedUiType);
 
-        CustomTabColorSchemeParams params = getColorSchemeParams(intent, colorScheme);
+        mColorProvider = new CustomTabColorProviderImpl(intent, context, colorScheme);
+
         retrieveCustomButtons(intent, context);
-        mToolbarColor = retrieveToolbarColor(params, context);
-        mBottomBarColor = retrieveBottomBarColor(params);
-        mNavigationBarColor = params.navigationBarColor == null
-                ? null
-                : ColorUtils.getOpaqueColor(params.navigationBarColor);
-        mNavigationBarDividerColor = params.navigationBarDividerColor;
-        mInitialBackgroundColor = retrieveInitialBackgroundColor(intent);
 
         mEnableUrlBarHiding = IntentUtils.safeGetBooleanExtra(
                 intent, CustomTabsIntent.EXTRA_ENABLE_URLBAR_HIDING, true);
@@ -303,8 +325,8 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
         List<Bundle> menuItems =
                 IntentUtils.getParcelableArrayListExtra(intent, CustomTabsIntent.EXTRA_MENU_ITEMS);
-
         updateExtraMenuItems(menuItems);
+        addShareOption(intent, context);
 
         mActivityType = IntentUtils.safeGetBooleanExtra(
                                 intent, TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, false)
@@ -315,9 +337,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
         mTrustedWebActivityDisplayMode = resolveTwaDisplayMode();
         mTitleVisibilityState = IntentUtils.safeGetIntExtra(
                 intent, CustomTabsIntent.EXTRA_TITLE_VISIBILITY_STATE, CustomTabsIntent.NO_TITLE);
-        mShowShareItem = IntentUtils.safeGetBooleanExtra(intent,
-                CustomTabsIntent.EXTRA_DEFAULT_SHARE_MENU_ITEM,
-                mIsOpenedByChrome && mUiType == CustomTabsUiType.DEFAULT);
         mRemoteViews =
                 IntentUtils.safeGetParcelableExtra(intent, CustomTabsIntent.EXTRA_REMOTEVIEWS);
         mClickableViewIds = IntentUtils.safeGetIntArrayExtra(
@@ -339,7 +358,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
                 IntentUtils.safeGetBooleanExtra(intent, EXTRA_DISABLE_DOWNLOAD_BUTTON, false);
 
         mTranslateLanguage = IntentUtils.safeGetStringExtra(intent, EXTRA_TRANSLATE_LANGUAGE);
-        mFocusIntent = IntentUtils.safeGetParcelableExtra(intent, EXTRA_FOCUS_INTENT);
         // Import the {@link ScreenOrientation}.
         mDefaultOrientation = convertOrientationType(IntentUtils.safeGetIntExtra(intent,
                 TrustedWebActivityIntentBuilder.EXTRA_SCREEN_ORIENTATION,
@@ -362,14 +380,14 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
     /**
      * Triggers the client-defined action when the user clicks a custom menu item.
-     * @param activity The {@link ChromeActivity} to use for sending the {@link PendingIntent}.
+     * @param activity The {@link Activity} to use for sending the {@link PendingIntent}.
      * @param menuIndex The index that the menu item is shown in the result of
      *                  {@link #getMenuTitles()}.
      * @param url The URL to attach as additional data to the {@link PendingIntent}.
      * @param title The title to attach as additional data to the {@link PendingIntent}.
      */
     public void clickMenuItemWithUrlAndTitle(
-            ChromeActivity activity, int menuIndex, String url, String title) {
+            Activity activity, int menuIndex, String url, String title) {
         Intent addedIntent = new Intent();
         addedIntent.setData(Uri.parse(url));
         addedIntent.putExtra(Intent.EXTRA_SUBJECT, title);
@@ -396,22 +414,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
         return false;
     }
 
-    @NonNull
-    private CustomTabColorSchemeParams getColorSchemeParams(Intent intent, int colorScheme) {
-        if (colorScheme == COLOR_SCHEME_SYSTEM) {
-            assert false : "Color scheme passed to IntentDataProvider should not be "
-                    + "COLOR_SCHEME_SYSTEM";
-            colorScheme = COLOR_SCHEME_LIGHT;
-        }
-        try {
-            return CustomTabsIntent.getColorSchemeParams(intent, colorScheme);
-        } catch (Throwable e) {
-            // Catch any un-parceling exceptions, like in IntentUtils#safe* methods
-            Log.e(TAG, "Failed to parse CustomTabColorSchemeParams");
-            return new CustomTabColorSchemeParams.Builder().build(); // Empty params
-        }
-    }
-
     /**
      * Get the verified UI type, according to the intent extras, and whether the intent is trusted.
      * @param requestedUiType requested UI type in the intent, unqualified
@@ -423,12 +425,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
             return CustomTabsUiType.DEFAULT;
         }
 
-        if (requestedUiType == CustomTabsUiType.PAYMENT_REQUEST) {
-            if (!mIsOpenedByChrome) {
-                return CustomTabsUiType.DEFAULT;
-            }
-        }
-
         return requestedUiType;
     }
 
@@ -438,7 +434,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
      */
     private void retrieveCustomButtons(Intent intent, Context context) {
         assert mCustomButtonParams == null;
-        mCustomButtonParams = CustomButtonParams.fromIntent(context, intent);
+        mCustomButtonParams = CustomButtonParamsImpl.fromIntent(context, intent);
         for (CustomButtonParams params : mCustomButtonParams) {
             if (!params.showOnToolbar()) {
                 mBottombarButtons.add(params);
@@ -455,35 +451,49 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     }
 
     /**
-     * Returns the color passed from the client app.
+     * Adds a share option to the custom tab according to the {@link
+     * CustomTabsIntent#EXTRA_SHARE_STATE} stored in the intent.
+     *
+     * <p>Shows share options according to the following rules:
+     *
+     * <ul>
+     *   <li>If {@link CustomTabsIntent#SHARE_STATE_ON} or
+     *   {@link CustomTabsIntent#SHARE_STATE_DEFAULT}, add to the top toolbar if empty, otherwise
+     *   add to the overflow menu if it is not customized.
+     *   <li>If {@link CustomTabsIntent#SHARE_STATE_OFF}, add to the overflow menu depending on
+     *   {@link CustomTabsIntent#EXTRA_DEFAULT_SHARE_MENU_ITEM}.
+     * </ul>
      */
-    private int retrieveToolbarColor(CustomTabColorSchemeParams schemeParams, Context context) {
-        int defaultColor = ChromeColors.getDefaultThemeColor(
-                context.getResources(), /*forceDarkBgColor*/ false);
-        mHasCustomToolbarColor = (schemeParams.toolbarColor != null);
-        int color = mHasCustomToolbarColor ? schemeParams.toolbarColor : defaultColor;
-        return ColorUtils.getOpaqueColor(color);
+    private void addShareOption(Intent intent, Context context) {
+        int shareState = IntentUtils.safeGetIntExtra(
+                intent, CustomTabsIntent.EXTRA_SHARE_STATE, CustomTabsIntent.SHARE_STATE_DEFAULT);
+        if (shareState == CustomTabsIntent.SHARE_STATE_ON
+                || shareState == CustomTabsIntent.SHARE_STATE_DEFAULT) {
+            if (mToolbarButtons.isEmpty()) {
+                mToolbarButtons.add(
+                        CustomButtonParamsImpl.createShareButton(context, getToolbarColor()));
+                logShareOptionLocation(ShareOptionLocation.TOOLBAR);
+            } else if (mMenuEntries.isEmpty()) {
+                mShowShareItemInMenu = true;
+                logShareOptionLocation(ShareOptionLocation.TOOLBAR_FULL_MENU_FALLBACK);
+            } else {
+                logShareOptionLocation(ShareOptionLocation.NO_SPACE);
+            }
+        } else {
+            mShowShareItemInMenu = IntentUtils.safeGetBooleanExtra(intent,
+                    CustomTabsIntent.EXTRA_DEFAULT_SHARE_MENU_ITEM,
+                    mIsOpenedByChrome && mUiType == CustomTabsUiType.DEFAULT);
+            if (mShowShareItemInMenu) {
+                logShareOptionLocation(ShareOptionLocation.MENU);
+            } else {
+                logShareOptionLocation(ShareOptionLocation.SHARE_DISABLED);
+            }
+        }
     }
 
-    /**
-     * Must be called after calling {@link #retrieveToolbarColor}.
-     */
-    private int retrieveBottomBarColor(CustomTabColorSchemeParams schemeParams) {
-        int defaultColor = mToolbarColor;
-        int color = schemeParams.secondaryToolbarColor != null ? schemeParams.secondaryToolbarColor
-                : defaultColor;
-        return ColorUtils.getOpaqueColor(color);
-    }
-
-    /**
-     * Returns the color to initialize the background of the Custom Tab with.
-     * If no valid color is set, Color.TRANSPARENT is returned.
-     */
-    private int retrieveInitialBackgroundColor(Intent intent) {
-        int defaultColor = Color.TRANSPARENT;
-        int color =
-                IntentUtils.safeGetIntExtra(intent, EXTRA_INITIAL_BACKGROUND_COLOR, defaultColor);
-        return color == Color.TRANSPARENT ? color : ColorUtils.getOpaqueColor(color);
+    private static void logShareOptionLocation(@ShareOptionLocation int shareOptionLocation) {
+        RecordHistogram.recordEnumeratedHistogram("CustomTabs.ShareOptionLocation",
+                shareOptionLocation, ShareOptionLocation.NUM_ENTRIES);
     }
 
     private String resolveUrlToLoad(Intent intent) {
@@ -561,7 +571,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     }
 
     @Override
-    @Nullable
     public Intent getIntent() {
         return mIntent;
     }
@@ -618,29 +627,29 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
     @Override
     public boolean shouldEnableUrlBarHiding() {
-        return mEnableUrlBarHiding && !isForPaymentRequest();
+        return mEnableUrlBarHiding;
     }
 
     @Override
     public int getToolbarColor() {
-        return mToolbarColor;
+        return mColorProvider.getToolbarColor();
     }
 
     @Override
     public boolean hasCustomToolbarColor() {
-        return mHasCustomToolbarColor;
+        return mColorProvider.hasCustomToolbarColor();
     }
 
     @Override
     @Nullable
     public Integer getNavigationBarColor() {
-        return mNavigationBarColor;
+        return mColorProvider.getNavigationBarColor();
     }
 
     @Override
     @Nullable
     public Integer getNavigationBarDividerColor() {
-        return mNavigationBarDividerColor;
+        return mColorProvider.getNavigationBarDividerColor();
     }
 
     @Override
@@ -656,7 +665,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
     @Override
     public boolean shouldShowShareMenuItem() {
-        return mShowShareItem;
+        return mShowShareItemInMenu;
     }
 
     @Override
@@ -671,7 +680,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
     @Override
     public int getBottomBarColor() {
-        return mBottomBarColor;
+        return mColorProvider.getBottomBarColor();
     }
 
     @Override
@@ -748,7 +757,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
     @Override
     public int getInitialBackgroundColor() {
-        return mInitialBackgroundColor;
+        return mColorProvider.getInitialBackgroundColor();
     }
 
     @Override
@@ -812,12 +821,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
         }
     }
 
-    @Override
-    @Nullable
-    public PendingIntent getFocusIntent() {
-        return mFocusIntent;
-    }
-
     @TwaDisclosureUi
     @Override
     public int getTwaDisclosureUi() {
@@ -835,5 +838,59 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     @Nullable
     public int[] getGsaExperimentIds() {
         return mGsaExperimentIds;
+    }
+
+    public static boolean shouldHideOmniboxSuggestionsForCctVisits(Intent intent) {
+        return intent.getBooleanExtra(EXTRA_HIDE_OMNIBOX_SUGGESTIONS_FROM_CCT, false)
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.OMNIBOX_HIDE_VISITS_FROM_CCT);
+    }
+
+    @Override
+    public boolean shouldHideOmniboxSuggestionsForCctVisits() {
+        return shouldHideOmniboxSuggestionsForCctVisits(mIntent);
+    }
+
+    @Override
+    public boolean shouldHideCctVisits() {
+        if (!ChromeFeatureList.isEnabled(
+                    ChromeFeatureList.HIDE_FROM_API_3_TRANSITIONS_FROM_HISTORY)) {
+            return false;
+        }
+
+        // Only 1p apps are allowed to hide visits.
+        String clientPackageName =
+                CustomTabsConnection.getInstance().getClientPackageNameForSession(getSession());
+        if (!GSAState.isGsaPackageName(clientPackageName)) return false;
+        return IntentUtils.safeGetBooleanExtra(mIntent, EXTRA_HIDE_VISITS_FROM_CCT, false);
+    }
+
+    @Override
+    public boolean shouldBlockNewNotificationRequests() {
+        // Only 1p apps are allowed to hide visits.
+        String clientPackageName =
+                CustomTabsConnection.getInstance().getClientPackageNameForSession(getSession());
+        if (!GSAState.isGsaPackageName(clientPackageName)) return false;
+        return IntentUtils.safeGetBooleanExtra(
+                mIntent, EXTRA_BLOCK_NEW_NOTIFICATION_REQUESTS_IN_CCT, false);
+    }
+
+    @Override
+    public boolean shouldShowOpenInChromeMenuItemInContextMenu() {
+        // Only 1p apps are allowed to hide visits.
+        String clientPackageName =
+                CustomTabsConnection.getInstance().getClientPackageNameForSession(getSession());
+        if (!GSAState.isGsaPackageName(clientPackageName)) return true;
+        return !IntentUtils.safeGetBooleanExtra(
+                mIntent, EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM_IN_CONTEXT_MENU, false);
+    }
+
+    @Override
+    public boolean shouldShowOpenInChromeMenuItem() {
+        // Only 1p apps are allowed to hide visits.
+        String clientPackageName =
+                CustomTabsConnection.getInstance().getClientPackageNameForSession(getSession());
+        if (!GSAState.isGsaPackageName(clientPackageName)) return true;
+        return !IntentUtils.safeGetBooleanExtra(
+                mIntent, EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM, false);
     }
 }

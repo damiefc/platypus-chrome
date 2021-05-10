@@ -46,9 +46,9 @@ const unsigned RealtimeAnalyser::kMaxFFTSize = 32768;
 const unsigned RealtimeAnalyser::kInputBufferSize =
     RealtimeAnalyser::kMaxFFTSize * 2;
 
-RealtimeAnalyser::RealtimeAnalyser()
+RealtimeAnalyser::RealtimeAnalyser(unsigned render_quantum_frames)
     : input_buffer_(kInputBufferSize),
-      down_mix_bus_(AudioBus::Create(1, audio_utilities::kRenderQuantumFrames)),
+      down_mix_bus_(AudioBus::Create(1, render_quantum_frames)),
       fft_size_(kDefaultFFTSize),
       magnitude_buffer_(kDefaultFFTSize / 2),
       smoothing_time_constant_(kDefaultSmoothingTimeConstant),
@@ -129,7 +129,7 @@ void RealtimeAnalyser::DoFFTAnalysis() {
 
   // Unroll the input buffer into a temporary buffer, where we'll apply an
   // analysis window followed by an FFT.
-  uint32_t fft_size = this->FftSize();
+  uint32_t fft_size = FftSize();
 
   AudioFloatArray temporary_buffer(fft_size);
   float* input_buffer = input_buffer_.Data();
@@ -188,7 +188,7 @@ void RealtimeAnalyser::DoFFTAnalysis() {
 void RealtimeAnalyser::ConvertFloatToDb(DOMFloat32Array* destination_array) {
   // Convert from linear magnitude to floating-point decibels.
   size_t source_length = MagnitudeBuffer().size();
-  size_t len = std::min(source_length, destination_array->lengthAsSizeT());
+  size_t len = std::min(source_length, destination_array->length());
   if (len > 0) {
     const float* source = MagnitudeBuffer().Data();
     float* destination = destination_array->Data();
@@ -221,7 +221,7 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
 void RealtimeAnalyser::ConvertToByteData(DOMUint8Array* destination_array) {
   // Convert from linear magnitude to unsigned-byte decibels.
   size_t source_length = MagnitudeBuffer().size();
-  size_t len = std::min(source_length, destination_array->lengthAsSizeT());
+  size_t len = std::min(source_length, destination_array->length());
   if (len > 0) {
     const double range_scale_factor = max_decibels_ == min_decibels_
                                           ? 1
@@ -276,9 +276,9 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
   DCHECK(IsMainThread());
   DCHECK(destination_array);
 
-  unsigned fft_size = this->FftSize();
-  size_t len = std::min(static_cast<size_t>(fft_size),
-                        destination_array->lengthAsSizeT());
+  unsigned fft_size = FftSize();
+  size_t len =
+      std::min(static_cast<size_t>(fft_size), destination_array->length());
   if (len > 0) {
     DCHECK_EQ(input_buffer_.size(), kInputBufferSize);
     DCHECK_GT(input_buffer_.size(), fft_size);
@@ -303,9 +303,9 @@ void RealtimeAnalyser::GetByteTimeDomainData(DOMUint8Array* destination_array) {
   DCHECK(IsMainThread());
   DCHECK(destination_array);
 
-  unsigned fft_size = this->FftSize();
-  size_t len = std::min(static_cast<size_t>(fft_size),
-                        destination_array->lengthAsSizeT());
+  unsigned fft_size = FftSize();
+  size_t len =
+      std::min(static_cast<size_t>(fft_size), destination_array->length());
   if (len > 0) {
     DCHECK_EQ(input_buffer_.size(), kInputBufferSize);
     DCHECK_GT(input_buffer_.size(), fft_size);

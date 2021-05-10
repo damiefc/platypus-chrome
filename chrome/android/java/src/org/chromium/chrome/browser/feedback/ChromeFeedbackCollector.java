@@ -35,10 +35,10 @@ public class ChromeFeedbackCollector
     }
 
     public ChromeFeedbackCollector(Activity activity, @Nullable String categoryTag,
-            @Nullable String description, boolean takeScreenshot, InitParams initParams,
-            Callback<FeedbackCollector> callback) {
+            @Nullable String description, @Nullable ScreenshotSource screenshotSource,
+            InitParams initParams, Callback<FeedbackCollector> callback) {
         super(categoryTag, description, callback);
-        init(activity, takeScreenshot, initParams);
+        init(activity, screenshotSource, initParams);
     }
 
     @VisibleForTesting
@@ -48,6 +48,7 @@ public class ChromeFeedbackCollector
 
         // This is the list of all synchronous sources of feedback.  Please add new synchronous
         // entries here.
+        sources.add(new DeviceInfoFeedbackSource());
         sources.add(new UrlFeedbackSource(initParams.url));
         sources.add(new VariationsFeedbackSource(initParams.profile));
         sources.add(new DataReductionProxyFeedbackSource(initParams.profile));

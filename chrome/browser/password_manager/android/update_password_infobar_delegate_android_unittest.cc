@@ -5,15 +5,15 @@
 #include "chrome/browser/password_manager/android/update_password_infobar_delegate_android.h"
 
 #include <memory>
+#include <string>
 
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/fake_form_fetcher.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_save_manager_impl.h"
 #include "components/password_manager/core/browser/stub_form_saver.h"
@@ -53,7 +53,7 @@ class UpdatePasswordInfoBarDelegateTest
   void SetUp() override;
   void TearDown() override;
 
-  const autofill::PasswordForm& test_form() { return test_form_; }
+  const password_manager::PasswordForm& test_form() { return test_form_; }
 
   // TODO(crbug.com/1048107): Replace real PasswordFormManager instance with the
   // mock.
@@ -69,7 +69,7 @@ class UpdatePasswordInfoBarDelegateTest
   password_manager::StubPasswordManagerClient client_;
   password_manager::StubPasswordManagerDriver driver_;
 
-  autofill::PasswordForm test_form_;
+  password_manager::PasswordForm test_form_;
   autofill::FormData observed_form_;
 
  private:
@@ -80,8 +80,8 @@ class UpdatePasswordInfoBarDelegateTest
 
 UpdatePasswordInfoBarDelegateTest::UpdatePasswordInfoBarDelegateTest() {
   test_form_.url = GURL("https://example.com");
-  test_form_.username_value = base::ASCIIToUTF16("username");
-  test_form_.password_value = base::ASCIIToUTF16("12345");
+  test_form_.username_value = u"username";
+  test_form_.password_value = u"12345";
 
   // Create a simple sign-in form.
   observed_form_.url = test_form_.url;
@@ -153,9 +153,9 @@ TEST_F(UpdatePasswordInfoBarDelegateTest, EmptyDetailsMessageForNotSignedIn) {
 }
 
 TEST_F(UpdatePasswordInfoBarDelegateTest, NoCurrentForms) {
-  std::vector<base::string16> usernames;
-  std::vector<std::unique_ptr<autofill::PasswordForm>> current_forms;
-  base::string16 default_username = base::ASCIIToUTF16("username");
+  std::vector<std::u16string> usernames;
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> current_forms;
+  std::u16string default_username = u"username";
   unsigned int selected_username =
       UpdatePasswordInfoBarDelegate::GetDisplayUsernames(
           current_forms, default_username, &usernames);
@@ -164,16 +164,17 @@ TEST_F(UpdatePasswordInfoBarDelegateTest, NoCurrentForms) {
 }
 
 TEST_F(UpdatePasswordInfoBarDelegateTest, MultipleCurrentForms) {
-  std::vector<std::unique_ptr<autofill::PasswordForm>> current_forms;
-  autofill::PasswordForm additional_form;
-  additional_form.username_value = base::ASCIIToUTF16("another username");
-  current_forms.push_back(std::make_unique<autofill::PasswordForm>(test_form_));
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> current_forms;
+  password_manager::PasswordForm additional_form;
+  additional_form.username_value = u"another username";
   current_forms.push_back(
-      std::make_unique<autofill::PasswordForm>(additional_form));
+      std::make_unique<password_manager::PasswordForm>(test_form_));
+  current_forms.push_back(
+      std::make_unique<password_manager::PasswordForm>(additional_form));
 
-  base::string16 default_username = base::ASCIIToUTF16("another username");
+  std::u16string default_username = u"another username";
 
-  std::vector<base::string16> usernames;
+  std::vector<std::u16string> usernames;
   unsigned int selected_username =
       UpdatePasswordInfoBarDelegate::GetDisplayUsernames(
           current_forms, default_username, &usernames);
@@ -183,19 +184,20 @@ TEST_F(UpdatePasswordInfoBarDelegateTest, MultipleCurrentForms) {
 }
 
 TEST_F(UpdatePasswordInfoBarDelegateTest, EmptyUsername) {
-  std::vector<std::unique_ptr<autofill::PasswordForm>> current_forms;
-  autofill::PasswordForm additional_form;
-  current_forms.push_back(std::make_unique<autofill::PasswordForm>(test_form_));
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> current_forms;
+  password_manager::PasswordForm additional_form;
   current_forms.push_back(
-      std::make_unique<autofill::PasswordForm>(additional_form));
+      std::make_unique<password_manager::PasswordForm>(test_form_));
+  current_forms.push_back(
+      std::make_unique<password_manager::PasswordForm>(additional_form));
 
-  base::string16 default_username = test_form_.username_value;
+  std::u16string default_username = test_form_.username_value;
 
-  std::vector<base::string16> usernames;
+  std::vector<std::u16string> usernames;
   unsigned int selected_username =
       UpdatePasswordInfoBarDelegate::GetDisplayUsernames(
           current_forms, default_username, &usernames);
-  base::string16 empty_username =
+  std::u16string empty_username =
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_EMPTY_LOGIN);
 
   EXPECT_EQ(default_username, usernames[selected_username]);

@@ -237,8 +237,8 @@ void PrefetchManager::PrefetchUrl(
 
   request.trusted_params = network::ResourceRequest::TrustedParams();
   request.trusted_params->isolation_info = net::IsolationInfo::Create(
-      net::IsolationInfo::RedirectMode::kUpdateNothing, top_frame_origin,
-      frame_origin, net::SiteForCookies::FromUrl(info.url));
+      net::IsolationInfo::RequestType::kOther, top_frame_origin, frame_origin,
+      net::SiteForCookies::FromUrl(info.url));
 
   // TODO(crbug.com/1092329): Ensure the request is seen by extensions.
 
@@ -269,7 +269,6 @@ void PrefetchManager::PrefetchUrl(
   std::unique_ptr<blink::ThrottlingURLLoader> loader =
       blink::ThrottlingURLLoader::CreateLoaderAndStart(
           std::move(factory), std::move(throttles),
-          /*routing_id is not needed*/ -1,
           content::GlobalRequestID::MakeBrowserInitiated().request_id, options,
           &request, client.get(), kPrefetchTrafficAnnotation,
           base::ThreadTaskRunnerHandle::Get(),
@@ -319,7 +318,7 @@ void PrefetchManager::TryToLaunchPrefetchJobs() {
   // partition here, e.g., from WebContentsObserver. And make a similar change
   // in PreconnectManager.
   content::StoragePartition* storage_partition =
-      content::BrowserContext::GetDefaultStoragePartition(profile_);
+      profile_->GetDefaultStoragePartition();
   scoped_refptr<network::SharedURLLoaderFactory> factory =
       storage_partition->GetURLLoaderFactoryForBrowserProcess();
 

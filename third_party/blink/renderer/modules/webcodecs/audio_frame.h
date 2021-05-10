@@ -26,15 +26,27 @@ class MODULES_EXPORT AudioFrame final : public ScriptWrappable {
 
   // audio_frame.idl implementation.
   explicit AudioFrame(AudioFrameInit*);
+
+  // Creates a clone of |this|, taking on a new reference on |data_|. The cloned
+  // frame will not be closed when |this| is, and its lifetime should be
+  // independently managed.
+  AudioFrame* clone(ExceptionState&);
+
   void close();
-  uint64_t timestamp() const;
-  AudioBuffer* buffer() const;
+  int64_t timestamp() const;
+  AudioBuffer* buffer();
+
+  scoped_refptr<media::AudioBuffer> data() const { return data_; }
 
   // GarbageCollected override.
   void Trace(Visitor*) const override;
 
  private:
-  uint64_t timestamp_;
+  void CopyDataToBuffer();
+
+  scoped_refptr<media::AudioBuffer> data_;
+
+  int64_t timestamp_;
   Member<AudioBuffer> buffer_;
 };
 

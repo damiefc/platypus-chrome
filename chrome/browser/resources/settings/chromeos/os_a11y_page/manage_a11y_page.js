@@ -15,6 +15,7 @@ Polymer({
 
   behaviors: [
     DeepLinkingBehavior,
+    I18nBehavior,
     settings.RouteObserverBehavior,
     settings.RouteOriginBehavior,
     WebUIListenerBehavior,
@@ -27,6 +28,23 @@ Polymer({
     prefs: {
       type: Object,
       notify: true,
+    },
+
+    /**
+     * Enum values for the 'settings.a11y.screen_magnifier_mouse_following_mode'
+     * preference. These values map to
+     * AccessibilityController::MagnifierMouseFollowingMode, and are written to
+     * prefs and metrics, so order should not be changed.
+     * @private {!Object<string, number>}
+     */
+    screenMagnifierMouseFollowingModePrefValues_: {
+      readOnly: true,
+      type: Object,
+      value: {
+        CONTINUOUS: 0,
+        CENTERED: 1,
+        EDGE: 2,
+      },
     },
 
     screenMagnifierZoomOptions_: {
@@ -150,11 +168,19 @@ Polymer({
     },
 
     /** @private */
-    shouldShowExperimentalCursorColor_: {
+    isMagnifierPanningImprovementsEnabled_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('isMagnifierPanningImprovementsEnabled');
+      },
+    },
+
+    /** @private */
+    isMagnifierContinuousMouseFollowingModeSettingEnabled_: {
       type: Boolean,
       value() {
         return loadTimeData.getBoolean(
-            'showExperimentalAccessibilityCursorColor');
+            'isMagnifierContinuousMouseFollowingModeSettingEnabled');
       },
     },
 
@@ -167,14 +193,6 @@ Polymer({
       value() {
         return loadTimeData.getBoolean('isKioskModeActive');
       }
-    },
-
-    /** @private */
-    enableLiveCaption_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('enableLiveCaption');
-      },
     },
 
     /**
@@ -194,6 +212,22 @@ Polymer({
       value() {
         return loadTimeData.getBoolean('isGuest');
       }
+    },
+
+    /** @private */
+    screenMagnifierHintLabel_: {
+      type: String,
+      value() {
+        return this.i18n(
+            'screenMagnifierHintLabel',
+            this.i18n('screenMagnifierHintSearchKey'));
+      }
+    },
+
+    /** @private */
+    dictationSubtitle_: {
+      type: String,
+      value: loadTimeData.getString('dictationDescription'),
     },
 
     /**
@@ -252,6 +286,8 @@ Polymer({
         chromeos.settings.mojom.Setting.kSelectToSpeak,
         chromeos.settings.mojom.Setting.kHighContrastMode,
         chromeos.settings.mojom.Setting.kFullscreenMagnifier,
+        chromeos.settings.mojom.Setting.kFullscreenMagnifierMouseFollowingMode,
+        chromeos.settings.mojom.Setting.kFullscreenMagnifierFocusFollowing,
         chromeos.settings.mojom.Setting.kDockedMagnifier,
         chromeos.settings.mojom.Setting.kStickyKeys,
         chromeos.settings.mojom.Setting.kOnScreenKeyboard,
@@ -265,7 +301,6 @@ Polymer({
         chromeos.settings.mojom.Setting.kMonoAudio,
         chromeos.settings.mojom.Setting.kStartupSound,
         chromeos.settings.mojom.Setting.kEnableSwitchAccess,
-        chromeos.settings.mojom.Setting.kLiveCaptions,
         chromeos.settings.mojom.Setting.kEnableCursorColor,
       ]),
     },
@@ -311,6 +346,9 @@ Polymer({
   ready() {
     this.addWebUIListener(
         'initial-data-ready', this.onManageAllyPageReady_.bind(this));
+    this.addWebUIListener(
+        'dictation-setting-subtitle-changed',
+        this.onDictationSettingSubtitleChanged_.bind(this));
     this.manageBrowserProxy_.manageA11yPageReady();
 
     const r = settings.routes;
@@ -383,6 +421,11 @@ Polymer({
   /** @private */
   onChromeVoxSettingsTap_() {
     this.manageBrowserProxy_.showChromeVoxSettings();
+  },
+
+  /** @private */
+  onChromeVoxTutorialTap_() {
+    this.manageBrowserProxy_.showChromeVoxTutorial();
   },
 
   /** @private */
@@ -505,7 +548,7 @@ Polymer({
       return;
     }
 
-    const enabled = this.$.shelfNavigationButtonsEnabledControl.checked;
+    const enabled = this.$$('#shelfNavigationButtonsEnabledControl').checked;
     this.set(
         'prefs.settings.a11y.tablet_mode_shelf_nav_buttons_enabled.value',
         enabled);
@@ -513,21 +556,11 @@ Polymer({
         enabled);
   },
 
-  /**
-   * @param {!Event} event
-   * @private
-   */
-  onA11yLiveCaptionChange_(event) {
-    const a11yLiveCaptionOn = event.target.checked;
-    chrome.metricsPrivate.recordBoolean(
-        'Accessibility.LiveCaption.ToggleEnabled', a11yLiveCaptionOn);
-  },
-
   /** @private */
   onA11yCursorColorChange_() {
     // Custom cursor color is enabled when the color is not set to black.
     const a11yCursorColorOn =
-        this.get('prefs.settings.a11y.cursor_color.value') !=
+        this.get('prefs.settings.a11y.cursor_color.value') !==
         DEFAULT_BLACK_CURSOR_COLOR;
     this.set(
         'prefs.settings.a11y.cursor_color_enabled.value', a11yCursorColorOn);
@@ -559,5 +592,13 @@ Polymer({
    */
   shouldShowAdditionalFeaturesLink_(isKiosk, isGuest) {
     return !isKiosk && !isGuest;
+  },
+
+  /**
+   * @param {string} subtitle
+   * @private
+   */
+  onDictationSettingSubtitleChanged_(subtitle) {
+    this.dictationSubtitle_ = subtitle;
   },
 });

@@ -27,11 +27,14 @@
 #import "ios/chrome/browser/ui/activity_services/activity_type_util.h"
 #import "ios/chrome/browser/ui/activity_services/data/chrome_activity_image_source.h"
 #import "ios/chrome/browser/ui/activity_services/data/chrome_activity_item_source.h"
+#import "ios/chrome/browser/ui/activity_services/data/chrome_activity_text_source.h"
 #import "ios/chrome/browser/ui/activity_services/data/chrome_activity_url_source.h"
 #import "ios/chrome/browser/ui/activity_services/data/share_image_data.h"
 #import "ios/chrome/browser/ui/activity_services/data/share_to_data.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
+#import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/ui/commands/qr_generation_commands.h"
+#import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -41,6 +44,8 @@
 @interface ActivityServiceMediator ()
 
 @property(nonatomic, weak) id<BrowserCommands, FindInPageCommands> handler;
+
+@property(nonatomic, weak) id<BookmarksCommands> bookmarksHandler;
 
 @property(nonatomic, weak) id<QRGenerationCommands> qrGenerationHandler;
 
@@ -55,11 +60,13 @@
 #pragma mark - Public
 
 - (instancetype)initWithHandler:(id<BrowserCommands, FindInPageCommands>)handler
+               bookmarksHandler:(id<BookmarksCommands>)bookmarksHandler
             qrGenerationHandler:(id<QRGenerationCommands>)qrGenerationHandler
                     prefService:(PrefService*)prefService
                   bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel {
   if (self = [super init]) {
     _handler = handler;
+    _bookmarksHandler = bookmarksHandler;
     _qrGenerationHandler = qrGenerationHandler;
     _prefService = prefService;
     _bookmarkModel = bookmarkModel;
@@ -67,21 +74,28 @@
   return self;
 }
 
-- (NSArray<ChromeActivityURLSource*>*)activityItemsForData:(ShareToData*)data {
-  // The provider object ChromeActivityURLSource supports the public.url UTType
-  // for Share Extensions (e.g. Facebook, Twitter).
+- (NSArray<id<ChromeActivityItemSource>>*)activityItemsForData:
+    (ShareToData*)data {
+  NSMutableArray* items = [[NSMutableArray alloc] init];
+
+  if (data.additionalText) {
+    [items addObject:[[ChromeActivityTextSource alloc]
+                         initWithText:data.additionalText]];
+  }
+
   ChromeActivityURLSource* activityURLSource =
       [[ChromeActivityURLSource alloc] initWithShareURL:data.shareNSURL
                                                 subject:data.title];
   activityURLSource.thumbnailGenerator = data.thumbnailGenerator;
-  return @[ activityURLSource ];
+  [items addObject:activityURLSource];
+
+  return items;
 }
 
 - (NSArray*)applicationActivitiesForData:(ShareToData*)data {
   NSMutableArray* applicationActivities = [NSMutableArray array];
 
-  [applicationActivities
-      addObject:[[CopyActivity alloc] initWithURL:data.shareURL]];
+  [applicationActivities addObject:[[CopyActivity alloc] initWithData:data]];
 
   if (data.shareURL.SchemeIsHTTPOrHTTPS()) {
     SendTabToSelfActivity* sendTabToSelfActivity =
@@ -96,8 +110,9 @@
 
     BookmarkActivity* bookmarkActivity =
         [[BookmarkActivity alloc] initWithURL:data.visibleURL
+                                        title:data.title
                                 bookmarkModel:self.bookmarkModel
-                                      handler:self.handler
+                                      handler:self.bookmarksHandler
                                   prefService:self.prefService];
     [applicationActivities addObject:bookmarkActivity];
 
@@ -159,6 +174,7 @@
         activity_type_util::TypeFromString(activityType);
     activity_type_util::RecordMetricForActivity(type);
     RecordActivityForScenario(type, scenario);
+    [self.promoScheduler logUserFinishedActivityFlow];
   } else {
     // Share action was cancelled.
     base::RecordAction(base::UserMetricsAction("MobileShareMenuCancel"));

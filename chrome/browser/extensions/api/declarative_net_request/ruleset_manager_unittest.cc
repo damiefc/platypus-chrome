@@ -15,9 +15,9 @@
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "extensions/browser/api/declarative_net_request/composite_matcher.h"
+#include "extensions/browser/api/declarative_net_request/file_backed_ruleset_source.h"
 #include "extensions/browser/api/declarative_net_request/request_action.h"
 #include "extensions/browser/api/declarative_net_request/ruleset_matcher.h"
-#include "extensions/browser/api/declarative_net_request/ruleset_source.h"
 #include "extensions/browser/api/declarative_net_request/test_utils.h"
 #include "extensions/browser/api/web_request/web_request_info.h"
 #include "extensions/browser/extension_prefs.h"
@@ -30,6 +30,7 @@
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/url_pattern.h"
+#include "net/http/http_request_headers.h"
 #include "net/http/http_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -83,8 +84,8 @@ class RulesetManagerTest : public DNRTestBase {
     ExtensionRegistry::Get(browser_context())
         ->AddEnabled(last_loaded_extension_);
 
-    std::vector<RulesetSource> sources =
-        RulesetSource::CreateStatic(*last_loaded_extension_);
+    std::vector<FileBackedRulesetSource> sources =
+        FileBackedRulesetSource::CreateStatic(*last_loaded_extension_);
     ASSERT_EQ(1u, sources.size());
 
     int expected_checksum;
@@ -94,9 +95,9 @@ class RulesetManagerTest : public DNRTestBase {
                                                   &expected_checksum));
 
     std::vector<std::unique_ptr<RulesetMatcher>> matchers(1);
-    EXPECT_EQ(LoadRulesetResult::kSuccess,
-              RulesetMatcher::CreateVerifiedMatcher(
-                  std::move(sources[0]), expected_checksum, &matchers[0]));
+    EXPECT_EQ(
+        LoadRulesetResult::kSuccess,
+        sources[0].CreateVerifiedMatcher(expected_checksum, &matchers[0]));
 
     *matcher = std::make_unique<CompositeMatcher>(std::move(matchers));
   }
@@ -118,6 +119,7 @@ class RulesetManagerTest : public DNRTestBase {
     const int kRendererId = 1;
     WebRequestInfoInitParams info;
     info.url = GURL(url);
+    info.method = net::HttpRequestHeaders::kGetMethod;
     info.render_process_id = kRendererId;
     info.initiator = std::move(initiator);
     return info;
@@ -131,6 +133,7 @@ class RulesetManagerTest : public DNRTestBase {
     const int kRendererId = 1;
     WebRequestInfoInitParams info;
     info.url = GURL(url);
+    info.method = net::HttpRequestHeaders::kGetMethod;
     info.render_process_id = kRendererId;
 
     net::HttpRequestHeaders extra_request_headers;

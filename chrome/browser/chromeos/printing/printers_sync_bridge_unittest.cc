@@ -8,10 +8,9 @@
 
 #include "base/bind.h"
 #include "base/debug/dump_without_crashing.h"
-#include "base/strings/stringprintf.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/chromeos/printing/printers_sync_bridge.h"
-#include "components/sync/model/model_type_store_test_util.h"
+#include "components/sync/test/model/model_type_store_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {

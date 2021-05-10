@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/memory/scoped_refptr.h"
-#include "base/util/type_safety/pass_key.h"
+#include "base/types/pass_key.h"
 #include "components/viz/common/gpu/vulkan_context_provider.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/external_semaphore.h"
@@ -60,7 +60,7 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
       uint32_t usage,
       const VulkanImageUsageCache* image_usage_cache);
 
-  ExternalVkImageBacking(util::PassKey<ExternalVkImageBacking>,
+  ExternalVkImageBacking(base::PassKey<ExternalVkImageBacking>,
                          const Mailbox& mailbox,
                          viz::ResourceFormat format,
                          const gfx::Size& size,
@@ -130,6 +130,7 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
   // SharedImageBacking implementation.
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override;
   bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) override;
+  scoped_refptr<gfx::NativePixmap> GetNativePixmap() override;
 
   // Add semaphores to a pending list for reusing or being released immediately.
   void AddSemaphoresToPendingListOrRelease(
@@ -160,6 +161,9 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,
       scoped_refptr<SharedContextState> context_state) override;
+  std::unique_ptr<SharedImageRepresentationOverlay> ProduceOverlay(
+      SharedImageManager* manager,
+      MemoryTypeTracker* tracker) override;
 
  private:
   // Install a shared memory GMB to the backing.

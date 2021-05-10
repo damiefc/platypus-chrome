@@ -7,10 +7,10 @@
 
 #include "base/callback_forward.h"
 #include "base/optional.h"
-#include "base/scoped_observer.h"
-#include "chrome/browser/chromeos/crostini/crostini_export_import.h"
-#include "chrome/browser/chromeos/crostini/crostini_export_import_status_tracker.h"
-#include "chrome/browser/chromeos/crostini/crostini_manager.h"
+#include "base/scoped_observation.h"
+#include "chrome/browser/ash/crostini/crostini_export_import.h"
+#include "chrome/browser/ash/crostini/crostini_export_import_status_tracker.h"
+#include "chrome/browser/ash/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_upgrader_ui_delegate.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -101,7 +101,7 @@ class CrostiniUpgrader : public KeyedService,
     void SetStatusDoneUI() override;
     void SetStatusCancelledUI() override;
     void SetStatusFailedWithMessageUI(Status status,
-                                      const base::string16& message) override;
+                                      const std::u16string& message) override;
 
    private:
     bool has_notified_start_ = false;
@@ -117,9 +117,9 @@ class CrostiniUpgrader : public KeyedService,
   bool power_status_good_ = false;
   int64_t free_disk_space_ = -1;
 
-  ScopedObserver<chromeos::PowerManagerClient,
-                 chromeos::PowerManagerClient::Observer>
-      pmc_observer_;
+  base::ScopedObservation<chromeos::PowerManagerClient,
+                          chromeos::PowerManagerClient::Observer>
+      pmc_observation_{this};
 
   // When restoring after a failed upgrade, if the user successfully completed a
   // backup, we will auto-restore from that (if the file still exists),

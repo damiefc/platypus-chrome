@@ -18,6 +18,7 @@ const char kFileKey[] = "file";
 const char kFocusedKey[] = "focused";
 const char kFormatKey[] = "format";
 const char kFromIndexKey[] = "fromIndex";
+const char kGroupIdKey[] = "groupId";
 const char kHeightKey[] = "height";
 const char kIdKey[] = "id";
 const char kIncognitoKey[] = "incognito";
@@ -104,6 +105,9 @@ const char kSupportedInWindowsOnlyError[] = "Supported in Windows only";
 const char kInvalidWindowTypeError[] = "Invalid value for type";
 const char kInvalidWindowStateError[] = "Invalid value for state";
 const char kScreenshotsDisabled[] = "Taking screenshots has been disabled";
+const char kScreenshotsDisabledByDlp[] =
+    "Administrator policy disables screen capture when confidential content is "
+    "visible";
 const char kCannotUpdateMuteCaptured[] =
     "Cannot update mute state for tab *, tab has audio or video currently "
     "being captured";
@@ -118,6 +122,14 @@ const char kJavaScriptUrlsNotAllowedInTabsUpdate[] =
 const char kBrowserWindowNotAllowed[] = "Browser windows not allowed.";
 const char kLockedFullscreenModeNewTabError[] =
     "You cannot create new tabs while in locked fullscreen mode.";
+const char kGroupParamsError[] =
+    "Cannot specify 'createProperties' along with a 'groupId'.";
+const char kCannotNavigateToDevtools[] =
+    "Cannot navigate to a devtools:// page without either the devtools or "
+    "debugger permission.";
+const char kCannotHighlightTabs[] =
+    "Cannot change tab highlight. This may be due to user dragging in "
+    "progress.";
 
 }  // namespace tabs_constants
 }  // namespace extensions

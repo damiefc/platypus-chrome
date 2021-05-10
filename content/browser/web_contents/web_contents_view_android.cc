@@ -26,11 +26,11 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/drop_data.h"
 #include "ui/android/overscroll_refresh_handler.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_constants.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/display/screen.h"
 #include "ui/events/android/drag_event_android.h"
 #include "ui/events/android/gesture_event_android.h"
@@ -53,7 +53,6 @@ namespace {
 // compositor event queue.
 bool ShouldRequestUnbufferedDispatch() {
   static bool should_request_unbuffered_dispatch =
-      base::FeatureList::IsEnabled(features::kRequestUnbufferedDispatch) &&
       base::android::BuildInfo::GetInstance()->sdk_int() >=
           base::android::SDK_VERSION_LOLLIPOP &&
       !content::GetContentClient()->UsingSynchronousCompositing();
@@ -152,7 +151,7 @@ gfx::Rect WebContentsViewAndroid::GetContainerBounds() const {
   return GetViewBounds();
 }
 
-void WebContentsViewAndroid::SetPageTitle(const base::string16& title) {
+void WebContentsViewAndroid::SetPageTitle(const std::u16string& title) {
   // Do nothing.
 }
 
@@ -178,12 +177,6 @@ void WebContentsViewAndroid::RestoreFocus() {
 }
 
 void WebContentsViewAndroid::FocusThroughTabTraversal(bool reverse) {
-  content::RenderWidgetHostView* fullscreen_view =
-      web_contents_->GetFullscreenRenderWidgetHostView();
-  if (fullscreen_view) {
-    fullscreen_view->Focus();
-    return;
-  }
   web_contents_->GetRenderViewHost()->SetInitialFocus(reverse);
 }
 
@@ -339,7 +332,8 @@ void WebContentsViewAndroid::StartDragging(
   ScopedJavaLocalRef<jstring> jtext =
       ConvertUTF16ToJavaString(env, *drop_data.text);
 
-  if (!native_view->StartDragAndDrop(jtext, gfx::ConvertToJavaBitmap(bitmap))) {
+  if (!native_view->StartDragAndDrop(jtext,
+                                     gfx::ConvertToJavaBitmap(*bitmap))) {
     // Need to clear drag and drop state in blink.
     OnSystemDragEnded();
     return;
@@ -354,7 +348,7 @@ void WebContentsViewAndroid::StartDragging(
   }
 }
 
-void WebContentsViewAndroid::UpdateDragCursor(blink::DragOperation op) {
+void WebContentsViewAndroid::UpdateDragCursor(ui::mojom::DragOperation op) {
   // Intentional no-op because Android does not have cursor.
 }
 
@@ -362,7 +356,7 @@ bool WebContentsViewAndroid::OnDragEvent(const ui::DragEventAndroid& event) {
   switch (event.action()) {
     case JNI_DragEvent::ACTION_DRAG_ENTERED: {
       std::vector<DropData::Metadata> metadata;
-      for (const base::string16& mime_type : event.mime_types()) {
+      for (const std::u16string& mime_type : event.mime_types()) {
         metadata.push_back(DropData::Metadata::CreateForMimeType(
             DropData::Kind::STRING, mime_type));
       }
@@ -376,9 +370,9 @@ bool WebContentsViewAndroid::OnDragEvent(const ui::DragEventAndroid& event) {
       DropData drop_data;
       drop_data.did_originate_from_renderer = false;
       JNIEnv* env = AttachCurrentThread();
-      base::string16 drop_content =
+      std::u16string drop_content =
           ConvertJavaStringToUTF16(env, event.GetJavaContent());
-      for (const base::string16& mime_type : event.mime_types()) {
+      for (const std::u16string& mime_type : event.mime_types()) {
         if (base::EqualsASCII(mime_type, ui::kMimeTypeURIList)) {
           drop_data.url = GURL(drop_content);
         } else if (base::EqualsASCII(mime_type, ui::kMimeTypeText)) {
@@ -415,9 +409,10 @@ void WebContentsViewAndroid::OnDragEntered(
   blink::DragOperationsMask allowed_ops =
       static_cast<blink::DragOperationsMask>(blink::kDragOperationCopy |
                                              blink::kDragOperationMove);
-  web_contents_->GetRenderViewHost()->GetWidget()->
-      DragTargetDragEnterWithMetaData(metadata, location, screen_location,
-                                      allowed_ops, 0);
+  web_contents_->GetRenderViewHost()
+      ->GetWidget()
+      ->DragTargetDragEnterWithMetaData(metadata, location, screen_location,
+                                        allowed_ops, 0, base::DoNothing());
 }
 
 void WebContentsViewAndroid::OnDragUpdated(const gfx::PointF& location,
@@ -429,7 +424,7 @@ void WebContentsViewAndroid::OnDragUpdated(const gfx::PointF& location,
       static_cast<blink::DragOperationsMask>(blink::kDragOperationCopy |
                                              blink::kDragOperationMove);
   web_contents_->GetRenderViewHost()->GetWidget()->DragTargetDragOver(
-      location, screen_location, allowed_ops, 0);
+      location, screen_location, allowed_ops, 0, base::DoNothing());
 }
 
 void WebContentsViewAndroid::OnDragExited() {
@@ -443,7 +438,7 @@ void WebContentsViewAndroid::OnPerformDrop(DropData* drop_data,
   web_contents_->Focus();
   web_contents_->GetRenderViewHost()->GetWidget()->FilterDropData(drop_data);
   web_contents_->GetRenderViewHost()->GetWidget()->DragTargetDrop(
-      *drop_data, location, screen_location, 0);
+      *drop_data, location, screen_location, 0, base::DoNothing());
 }
 
 void WebContentsViewAndroid::OnSystemDragEnded() {
@@ -460,7 +455,8 @@ void WebContentsViewAndroid::OnSystemDragEnded() {
 
 void WebContentsViewAndroid::OnDragEnded() {
   web_contents_->GetRenderViewHost()->GetWidget()->DragSourceEndedAt(
-      drag_location_, drag_screen_location_, blink::kDragOperationNone);
+      drag_location_, drag_screen_location_, ui::mojom::DragOperation::kNone,
+      base::DoNothing());
   OnSystemDragEnded();
 
   drag_location_ = gfx::PointF();
@@ -602,6 +598,13 @@ void WebContentsViewAndroid::OnControlsResizeViewChanged() {
   if (rwhv)
     rwhv->SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
                                       base::nullopt);
+}
+
+void WebContentsViewAndroid::NotifyVirtualKeyboardOverlayRect(
+    const gfx::Rect& keyboard_rect) {
+  auto* rwhv = GetRenderWidgetHostViewAndroid();
+  if (rwhv)
+    rwhv->NotifyVirtualKeyboardOverlayRect(keyboard_rect);
 }
 
 } // namespace content

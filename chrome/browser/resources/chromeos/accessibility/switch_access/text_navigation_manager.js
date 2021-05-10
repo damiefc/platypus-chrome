@@ -2,11 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {ActionManager} from './action_manager.js';
+import {Navigator} from './navigator.js';
+import {SwitchAccess} from './switch_access.js';
+import {SAConstants, SwitchAccessMenuAction} from './switch_access_constants.js';
+
+const AutomationNode = chrome.automation.AutomationNode;
+
 /**
  * Class to handle navigating text. Currently, only
  * navigation and selection in editable text fields is supported.
  */
-class TextNavigationManager {
+export class TextNavigationManager {
   /** @private */
   constructor() {
     /** @private {number} */
@@ -325,8 +332,8 @@ class TextNavigationManager {
    * @private
    */
   saveSelection_() {
-    if (this.selectionStartIndex_ == TextNavigationManager.NO_SELECT_INDEX ||
-        this.selectionEndIndex_ == TextNavigationManager.NO_SELECT_INDEX) {
+    if (this.selectionStartIndex_ === TextNavigationManager.NO_SELECT_INDEX ||
+        this.selectionEndIndex_ === TextNavigationManager.NO_SELECT_INDEX) {
       console.error(SwitchAccess.error(
           SAConstants.ErrorType.INVALID_SELECTION_BOUNDS,
           'Selection bounds are not set properly: ' +
@@ -351,7 +358,7 @@ class TextNavigationManager {
      */
     if (needToResetCursor) {
       if (TextNavigationManager.currentlySelecting() &&
-          this.selectionEndIndex_ != TextNavigationManager.NO_SELECT_INDEX) {
+          this.selectionEndIndex_ !== TextNavigationManager.NO_SELECT_INDEX) {
         // Move the cursor to the end of the existing selection.
         this.setSelection_();
       }
@@ -386,9 +393,9 @@ class TextNavigationManager {
    */
   updateClipboardHasData_() {
     this.clipboardHasData_ = true;
-    const node = NavigationManager.currentNode;
+    const node = Navigator.byItem.currentNode;
     if (node.hasAction(SwitchAccessMenuAction.PASTE)) {
-      MenuManager.reloadActionsForNode(node);
+      ActionManager.refreshMenuForNode(node);
     }
   }
 }

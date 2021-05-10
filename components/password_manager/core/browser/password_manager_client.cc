@@ -5,6 +5,8 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "components/autofill/core/common/password_generation_util.h"
+#include "components/password_manager/core/browser/biometric_authenticator.h"
 #include "components/password_manager/core/browser/http_auth_manager.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
@@ -31,16 +33,20 @@ bool PasswordManagerClient::RequiresReauthToFill() {
 
 void PasswordManagerClient::ShowTouchToFill(PasswordManagerDriver* driver) {}
 
-BiometricAuthenticator* PasswordManagerClient::GetBiometricAuthenticator() {
+void PasswordManagerClient::OnPasswordSelected(const std::u16string& text) {}
+
+scoped_refptr<BiometricAuthenticator>
+PasswordManagerClient::GetBiometricAuthenticator() {
   return nullptr;
 }
 
-void PasswordManagerClient::GeneratePassword() {}
+void PasswordManagerClient::GeneratePassword(
+    autofill::password_generation::PasswordGenerationType type) {}
 
 void PasswordManagerClient::UpdateCredentialCache(
     const url::Origin& origin,
     const std::vector<const PasswordForm*>& best_matches,
-    bool is_blacklisted) {}
+    bool is_blocklisted) {}
 
 void PasswordManagerClient::PasswordWasAutofilled(
     const std::vector<const PasswordForm*>& best_matches,
@@ -53,9 +59,8 @@ void PasswordManagerClient::AutofillHttpAuth(
 
 void PasswordManagerClient::NotifyUserCredentialsWereLeaked(
     password_manager::CredentialLeakType leak_type,
-    password_manager::CompromisedSitesCount saved_sites,
     const GURL& origin,
-    const base::string16& username) {}
+    const std::u16string& username) {}
 
 void PasswordManagerClient::TriggerReauthForPrimaryAccount(
     signin_metrics::ReauthAccessPoint access_point,
@@ -66,7 +71,7 @@ void PasswordManagerClient::TriggerReauthForPrimaryAccount(
 void PasswordManagerClient::TriggerSignIn(signin_metrics::AccessPoint) {}
 
 SyncState PasswordManagerClient::GetPasswordSyncState() const {
-  return NOT_SYNCING;
+  return SyncState::kNotSyncing;
 }
 
 bool PasswordManagerClient::WasLastNavigationHTTPError() const {
@@ -85,6 +90,13 @@ void PasswordManagerClient::PromptUserToEnableAutosignin() {}
 
 bool PasswordManagerClient::IsIncognito() const {
   return false;
+}
+
+profile_metrics::BrowserProfileType PasswordManagerClient::GetProfileType()
+    const {
+  // This is an abstract interface and thus never instantiated directly,
+  // therefore it is safe to always return |kRegular| here.
+  return profile_metrics::BrowserProfileType::kRegular;
 }
 
 const PasswordManager* PasswordManagerClient::GetPasswordManager() const {
@@ -126,8 +138,8 @@ const autofill::LogManager* PasswordManagerClient::GetLogManager() const {
 
 void PasswordManagerClient::AnnotateNavigationEntry(bool has_password_field) {}
 
-std::string PasswordManagerClient::GetPageLanguage() const {
-  return std::string();
+autofill::LanguageCode PasswordManagerClient::GetPageLanguage() const {
+  return autofill::LanguageCode();
 }
 
 PasswordRequirementsService*
@@ -149,9 +161,4 @@ network::mojom::NetworkContext* PasswordManagerClient::GetNetworkContext()
 bool PasswordManagerClient::IsUnderAdvancedProtection() const {
   return false;
 }
-
-AutofillAssistantMode PasswordManagerClient::GetAutofillAssistantMode() const {
-  return GetPasswordManager()->GetAutofillAssistantMode();
-}
-
 }  // namespace password_manager

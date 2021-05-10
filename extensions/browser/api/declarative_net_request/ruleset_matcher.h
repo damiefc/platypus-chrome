@@ -15,14 +15,15 @@
 #include "extensions/common/api/declarative_net_request/constants.h"
 
 namespace content {
+class NavigationHandle;
 class RenderFrameHost;
 }  // namespace content
 
 namespace extensions {
 
 namespace declarative_net_request {
-class RulesetSource;
-enum class LoadRulesetResult;
+
+struct RulesCountPair;
 
 namespace flat {
 struct ExtensionIndexedRuleset;
@@ -36,14 +37,9 @@ struct UrlRuleMetadata;
 // inherits from RulesetMatcherBase.
 class RulesetMatcher {
  public:
-  // Factory function to create a verified RulesetMatcher for |source|. Must be
-  // called on a sequence where file IO is allowed. Returns kSuccess on
-  // success along with the ruleset |matcher|.
-  static LoadRulesetResult CreateVerifiedMatcher(
-      const RulesetSource& source,
-      int expected_ruleset_checksum,
-      std::unique_ptr<RulesetMatcher>* matcher);
-
+  RulesetMatcher(std::string ruleset_data,
+                 RulesetID id,
+                 const ExtensionId& extension_id);
   ~RulesetMatcher();
 
   base::Optional<RequestAction> GetBeforeRequestAction(
@@ -58,10 +54,11 @@ class RulesetMatcher {
   bool IsExtraHeadersMatcher() const;
   size_t GetRulesCount() const;
   size_t GetRegexRulesCount() const;
+  RulesCountPair GetRulesCountPair() const;
 
   void OnRenderFrameCreated(content::RenderFrameHost* host);
   void OnRenderFrameDeleted(content::RenderFrameHost* host);
-  void OnDidFinishNavigation(content::RenderFrameHost* host);
+  void OnDidFinishNavigation(content::NavigationHandle* navigation_handle);
 
   // ID of the ruleset. Each extension can have multiple rulesets with
   // their own unique ids.
@@ -73,10 +70,6 @@ class RulesetMatcher {
       content::RenderFrameHost* host) const;
 
  private:
-  explicit RulesetMatcher(std::string ruleset_data,
-                          RulesetID id,
-                          const ExtensionId& extension_id);
-
   const std::string ruleset_data_;
 
   const flat::ExtensionIndexedRuleset* const root_;

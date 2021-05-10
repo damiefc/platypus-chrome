@@ -74,6 +74,8 @@ class CORE_EXPORT AbstractInlineTextBox
   virtual unsigned TextOffsetInFormattingContext(unsigned) const = 0;
   virtual Direction GetDirection() const = 0;
   Node* GetNode() const;
+  LayoutObject* GetLayoutObject() const;
+  AXObjectCache* ExistingAXObjectCache() const;
   virtual void CharacterWidths(Vector<float>&) const = 0;
   void GetWordBoundaries(Vector<WordBoundaries>&) const;
   virtual String GetText() const = 0;
@@ -130,12 +132,7 @@ class CORE_EXPORT LegacyAbstractInlineTextBox final
   bool IsLineBreak() const final;
   bool NeedsTrailingSpace() const final;
 
-  InlineTextBox* inline_text_box_;
-
-  typedef HashMap<InlineTextBox*, scoped_refptr<AbstractInlineTextBox>>
-      InlineToLegacyAbstractInlineTextBoxHashMap;
-  static InlineToLegacyAbstractInlineTextBoxHashMap*
-      g_abstract_inline_text_box_map_;
+  Persistent<InlineTextBox> inline_text_box_;
 };
 
 }  // namespace blink

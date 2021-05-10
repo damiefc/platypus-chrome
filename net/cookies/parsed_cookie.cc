@@ -60,6 +60,7 @@ const char kSecureTokenName[] = "secure";
 const char kHttpOnlyTokenName[] = "httponly";
 const char kSameSiteTokenName[] = "samesite";
 const char kPriorityTokenName[] = "priority";
+const char kSamePartyTokenName[] = "sameparty";
 
 const char kTerminator[] = "\n\r\0";
 const int kTerminatorLen = sizeof(kTerminator) - 1;
@@ -121,23 +122,11 @@ bool IsValidCookieValue(const std::string& value) {
   return true;
 }
 
-bool IsControlCharacter(unsigned char c) {
-  return c <= 31;
-}
-
 }  // namespace
 
 namespace net {
 
-ParsedCookie::ParsedCookie(const std::string& cookie_line)
-    : path_index_(0),
-      domain_index_(0),
-      expires_index_(0),
-      maxage_index_(0),
-      secure_index_(0),
-      httponly_index_(0),
-      same_site_index_(0),
-      priority_index_(0) {
+ParsedCookie::ParsedCookie(const std::string& cookie_line) {
   if (cookie_line.size() > kMaxCookieSize) {
     DVLOG(1) << "Not parsing cookie, too large: " << cookie_line.size();
     return;
@@ -232,6 +221,10 @@ bool ParsedCookie::SetPriority(const std::string& priority) {
   return SetString(&priority_index_, kPriorityTokenName, priority);
 }
 
+bool ParsedCookie::SetIsSameParty(bool is_same_party) {
+  return SetBool(&same_party_index_, kSamePartyTokenName, is_same_party);
+}
+
 std::string ParsedCookie::ToCookieLine() const {
   std::string out;
   for (auto it = pairs_.begin(); it != pairs_.end(); ++it) {
@@ -242,7 +235,8 @@ std::string ParsedCookie::ToCookieLine() const {
     // print it for the first pair(see crbug.com/977619). After the first pair,
     // we need to consider whether the name component is a special token.
     if (it == pairs_.begin() ||
-        (it->first != kSecureTokenName && it->first != kHttpOnlyTokenName)) {
+        (it->first != kSecureTokenName && it->first != kHttpOnlyTokenName &&
+         it->first != kSamePartyTokenName)) {
       out.append("=");
       out.append(it->second);
     }
@@ -352,7 +346,7 @@ bool ParsedCookie::IsValidCookieAttributeValue(const std::string& value) {
   // The greatest common denominator of cookie attribute values is
   // <any CHAR except CTLs or ";"> according to RFC 6265.
   for (std::string::const_iterator i = value.begin(); i != value.end(); ++i) {
-    if (IsControlCharacter(*i) || *i == ';')
+    if (HttpUtil::IsControlChar(*i) || *i == ';')
       return false;
   }
   return true;
@@ -464,6 +458,8 @@ void ParsedCookie::SetupAttributes() {
       same_site_index_ = i;
     } else if (pairs_[i].first == kPriorityTokenName) {
       priority_index_ = i;
+    } else if (pairs_[i].first == kSamePartyTokenName) {
+      same_party_index_ = i;
     } else {
       /* some attribute we don't know or don't care about. */
     }
@@ -529,9 +525,9 @@ void ParsedCookie::ClearAttributePair(size_t index) {
   if (index == 0)
     return;
 
-  size_t* indexes[] = {&path_index_,      &domain_index_,  &expires_index_,
-                       &maxage_index_,    &secure_index_,  &httponly_index_,
-                       &same_site_index_, &priority_index_};
+  size_t* indexes[] = {&path_index_,      &domain_index_,   &expires_index_,
+                       &maxage_index_,    &secure_index_,   &httponly_index_,
+                       &same_site_index_, &priority_index_, &same_party_index_};
   for (size_t* attribute_index : indexes) {
     if (*attribute_index == index)
       *attribute_index = 0;

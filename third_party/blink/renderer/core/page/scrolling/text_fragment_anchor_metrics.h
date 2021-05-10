@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_PAGE_SCROLLING_TEXT_FRAGMENT_ANCHOR_METRICS_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAGE_SCROLLING_TEXT_FRAGMENT_ANCHOR_METRICS_H_
 
+#include "base/time/tick_clock.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/page/scrolling/text_fragment_selector.h"
@@ -24,6 +25,7 @@ class CORE_EXPORT TextFragmentAnchorMetrics final
     TextFragmentSelector selector;
     bool is_list_item = false;
     bool is_table_cell = false;
+    bool spans_multiple_blocks = false;
   };
 
   // An enum to indicate which parameters were specified in the text fragment.
@@ -40,7 +42,18 @@ class CORE_EXPORT TextFragmentAnchorMetrics final
     kMaxValue = kTextRangeWithContext,
   };
 
+  // Update corresponding |TextFragmentLinkOpenSource| in enums.xml.
+  enum class TextFragmentLinkOpenSource {
+    kUnknown,
+    kSearchEngine,
+
+    kMaxValue = kSearchEngine,
+  };
+
   explicit TextFragmentAnchorMetrics(Document* document);
+
+  static TextFragmentAnchorParameters GetParametersForSelector(
+      const TextFragmentSelector& selector);
 
   void DidCreateAnchor(int selector_count, int directive_length);
 
@@ -65,10 +78,12 @@ class CORE_EXPORT TextFragmentAnchorMetrics final
 
   void SetTickClockForTesting(const base::TickClock* tick_clock);
 
+  void SetSearchEngineSource(bool has_search_engine_source);
+
   void Trace(Visitor*) const;
 
  private:
-  TextFragmentAnchorParameters GetParametersForMatch(const Match& match);
+  std::string GetPrefixForHistograms() const;
 
   Member<Document> document_;
 
@@ -85,6 +100,7 @@ class CORE_EXPORT TextFragmentAnchorMetrics final
   base::TimeTicks first_scroll_into_view_time_;
   bool did_non_zero_scroll_ = false;
   bool did_scroll_to_top_ = false;
+  bool has_search_engine_source_ = false;
 
   const base::TickClock* tick_clock_;
 };

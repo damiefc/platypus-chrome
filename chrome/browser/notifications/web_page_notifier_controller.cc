@@ -4,6 +4,8 @@
 
 #include "chrome/browser/notifications/web_page_notifier_controller.h"
 
+#include <memory>
+
 #include "ash/public/cpp/notifier_metadata.h"
 #include "base/bind.h"
 #include "base/logging.h"
@@ -30,13 +32,12 @@ std::vector<ash::NotifierMetadata> WebPageNotifierController::GetNotifierList(
 
   ContentSettingsForOneType settings;
   HostContentSettingsMapFactory::GetForProfile(profile)->GetSettingsForOneType(
-      ContentSettingsType::NOTIFICATIONS,
-      content_settings::ResourceIdentifier(), &settings);
+      ContentSettingsType::NOTIFICATIONS, &settings);
 
   favicon::FaviconService* const favicon_service =
       FaviconServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::EXPLICIT_ACCESS);
-  favicon_tracker_.reset(new base::CancelableTaskTracker());
+  favicon_tracker_ = std::make_unique<base::CancelableTaskTracker>();
   patterns_.clear();
   for (ContentSettingsForOneType::const_iterator iter = settings.begin();
        iter != settings.end(); ++iter) {
@@ -47,14 +48,14 @@ std::vector<ash::NotifierMetadata> WebPageNotifierController::GetNotifierList(
     }
 
     std::string url_pattern = iter->primary_pattern.ToString();
-    base::string16 name = base::UTF8ToUTF16(url_pattern);
+    std::u16string name = base::UTF8ToUTF16(url_pattern);
     GURL url(url_pattern);
     message_center::NotifierId notifier_id(url);
     NotifierStateTracker* const notifier_state_tracker =
         NotifierStateTrackerFactory::GetForProfile(profile);
     content_settings::SettingInfo info;
     HostContentSettingsMapFactory::GetForProfile(profile)->GetWebsiteSetting(
-        url, GURL(), ContentSettingsType::NOTIFICATIONS, std::string(), &info);
+        url, GURL(), ContentSettingsType::NOTIFICATIONS, &info);
     notifiers.emplace_back(
         notifier_id, name,
         notifier_state_tracker->IsNotifierEnabled(notifier_id),
@@ -126,8 +127,7 @@ void WebPageNotifierController::SetNotifierEnabled(
       HostContentSettingsMapFactory::GetForProfile(profile)
           ->SetContentSettingCustomScope(
               pattern, ContentSettingsPattern::Wildcard(),
-              ContentSettingsType::NOTIFICATIONS,
-              content_settings::ResourceIdentifier(), CONTENT_SETTING_DEFAULT);
+              ContentSettingsType::NOTIFICATIONS, CONTENT_SETTING_DEFAULT);
     }
   }
 

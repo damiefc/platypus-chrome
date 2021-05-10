@@ -14,17 +14,43 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/speech/extension_api/tts_engine_extension_api.h"
-#include "chrome/browser/speech/extension_api/tts_engine_extension_observer.h"
 #include "chrome/browser/speech/extension_api/tts_extension_api_constants.h"
 #include "content/public/browser/tts_controller.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function_registry.h"
+#include "extensions/browser/extension_host.h"
+#include "extensions/browser/process_manager.h"
 #include "third_party/blink/public/mojom/speech/speech_synthesis.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/speech/extension_api/tts_engine_extension_observer_chromeos.h"
+#include "chrome/common/extensions/extension_constants.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 namespace constants = tts_extension_api_constants;
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+namespace {
+
+// ChromeOS source that triggered text-to-speech utterance.
+//
+// These values are logged to UMA. Entries should not be renumbered and
+// numeric values should never be reused. Please keep in sync with
+// "TextToSpeechSource" in src/tools/metrics/histograms/enums.xml.
+enum class UMATextToSpeechSource {
+  kOther = 0,
+  kChromeVox = 1,
+  kSelectToSpeak = 2,
+
+  kMaxValue = kSelectToSpeak,
+};
+
+}  // namespace
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace events {
 const char kOnEvent[] = "tts.onEvent";
@@ -261,26 +287,49 @@ ExtensionFunction::ResponseAction TtsSpeakFunction::Run() {
         options->GetInteger(constants::kSrcIdKey, &src_id));
   }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  UMATextToSpeechSource source = UMATextToSpeechSource::kOther;
+  const std::string host = source_url().host();
+  if (host == extension_misc::kSelectToSpeakExtensionId) {
+    source = UMATextToSpeechSource::kSelectToSpeak;
+  } else if (host == extension_misc::kChromeVoxExtensionId) {
+    source = UMATextToSpeechSource::kChromeVox;
+  }
+  UMA_HISTOGRAM_ENUMERATION("TextToSpeech.Utterance.Source", source);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
   // If we got this far, the arguments were all in the valid format, so
   // send the success response to the callback now - this ensures that
   // the callback response always arrives before events, which makes
   // the behavior more predictable and easier to write unit tests for too.
   Respond(NoArguments());
 
-  std::unique_ptr<content::TtsUtterance> utterance =
-      content::TtsUtterance::Create(browser_context());
+  std::unique_ptr<content::TtsUtterance> utterance;
+  if (extension()) {
+    extensions::ExtensionHost* host =
+        extensions::ProcessManager::Get(browser_context())
+            ->GetBackgroundHostForExtension(extension()->id());
+
+    if (host && host->host_contents())
+      utterance = content::TtsUtterance::Create(host->host_contents());
+  }
+
+  if (!utterance)
+    utterance = content::TtsUtterance::Create(browser_context());
+
   utterance->SetText(text);
   utterance->SetVoiceName(voice_name);
   utterance->SetSrcId(src_id);
   utterance->SetSrcUrl(source_url());
   utterance->SetLang(lang);
   utterance->SetContinuousParameters(rate, pitch, volume);
-  utterance->SetCanEnqueue(can_enqueue);
+  utterance->SetShouldClearQueue(!can_enqueue);
   utterance->SetRequiredEventTypes(required_event_types);
   utterance->SetDesiredEventTypes(desired_event_types);
   utterance->SetEngineId(voice_extension_id);
   utterance->SetOptions(options.get());
-  utterance->SetEventDelegate(new TtsExtensionEventHandler(extension_id()));
+  if (extension())
+    utterance->SetEventDelegate(new TtsExtensionEventHandler(extension_id()));
 
   content::TtsController* controller = content::TtsController::GetInstance();
   controller->SpeakOrEnqueue(std::move(utterance));
@@ -303,8 +352,8 @@ ExtensionFunction::ResponseAction TtsResumeFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction TtsIsSpeakingFunction::Run() {
-  return RespondNow(OneArgument(std::make_unique<base::Value>(
-      content::TtsController::GetInstance()->IsSpeaking())));
+  return RespondNow(OneArgument(
+      base::Value(content::TtsController::GetInstance()->IsSpeaking())));
 }
 
 ExtensionFunction::ResponseAction TtsGetVoicesFunction::Run() {
@@ -333,7 +382,8 @@ ExtensionFunction::ResponseAction TtsGetVoicesFunction::Run() {
     result_voices->Append(std::move(result_voice));
   }
 
-  return RespondNow(OneArgument(std::move(result_voices)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(result_voices))));
 }
 
 TtsAPI::TtsAPI(content::BrowserContext* context) {
@@ -341,6 +391,7 @@ TtsAPI::TtsAPI(content::BrowserContext* context) {
       ExtensionFunctionRegistry::GetInstance();
   registry.RegisterFunction<ExtensionTtsEngineUpdateVoicesFunction>();
   registry.RegisterFunction<ExtensionTtsEngineSendTtsEventFunction>();
+  registry.RegisterFunction<ExtensionTtsEngineSendTtsAudioFunction>();
   registry.RegisterFunction<TtsGetVoicesFunction>();
   registry.RegisterFunction<TtsIsSpeakingFunction>();
   registry.RegisterFunction<TtsSpeakFunction>();
@@ -348,8 +399,11 @@ TtsAPI::TtsAPI(content::BrowserContext* context) {
   registry.RegisterFunction<TtsPauseFunction>();
   registry.RegisterFunction<TtsResumeFunction>();
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Ensure we're observing newly added engines for the given context.
-  TtsEngineExtensionObserver::GetInstance(Profile::FromBrowserContext(context));
+  TtsEngineExtensionObserverChromeOS::GetInstance(
+      Profile::FromBrowserContext(context));
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 TtsAPI::~TtsAPI() {

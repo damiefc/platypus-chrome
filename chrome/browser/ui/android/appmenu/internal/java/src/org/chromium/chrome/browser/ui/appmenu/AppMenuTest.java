@@ -25,16 +25,18 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.LifecycleObserver;
 import org.chromium.chrome.browser.ui.appmenu.test.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighterTestUtils;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.DummyUiActivity;
 import org.chromium.ui.test.util.DummyUiActivityTestCase;
@@ -51,6 +53,7 @@ import java.util.concurrent.TimeoutException;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@Batch(Batch.PER_CLASS)
 public class AppMenuTest extends DummyUiActivityTestCase {
     private AppMenuCoordinatorImpl mAppMenuCoordinator;
     private AppMenuHandlerImpl mAppMenuHandler;
@@ -144,6 +147,8 @@ public class AppMenuTest extends DummyUiActivityTestCase {
         Assert.assertEquals("Popup should be aligned with right of anchor. Anchor rect: " + viewRect
                         + ", popup rect: " + popupRect,
                 viewRect.right, popupRect.right);
+
+        AppMenuCoordinatorImpl.setHasPermanentMenuKeyForTesting(null);
     }
 
     @Test
@@ -160,6 +165,7 @@ public class AppMenuTest extends DummyUiActivityTestCase {
         Assert.assertNotEquals("Popup should be offset from right of anchor."
                         + "Anchor rect: " + viewRect + ", popup rect: " + popupRect,
                 viewRect.right, popupRect.right);
+        AppMenuCoordinatorImpl.setHasPermanentMenuKeyForTesting(null);
     }
 
     @Test
@@ -292,7 +298,7 @@ public class AppMenuTest extends DummyUiActivityTestCase {
         Assert.assertFalse(mMenuObserver.menuHighlighting);
 
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> mAppMenuHandler.setMenuHighlight(R.id.menu_item_one, false));
+                () -> mAppMenuHandler.setMenuHighlight(R.id.menu_item_one));
         mMenuObserver.menuHighlightChangedCallback.waitForCallback(0);
         Assert.assertTrue(mMenuObserver.menuHighlighting);
 
@@ -315,7 +321,7 @@ public class AppMenuTest extends DummyUiActivityTestCase {
         Assert.assertFalse(mMenuObserver.menuHighlighting);
 
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> mAppMenuHandler.setMenuHighlight(R.id.icon_one, false));
+                () -> mAppMenuHandler.setMenuHighlight(R.id.icon_one));
         mMenuObserver.menuHighlightChangedCallback.waitForCallback(0);
         Assert.assertTrue(mMenuObserver.menuHighlighting);
 
@@ -597,6 +603,7 @@ public class AppMenuTest extends DummyUiActivityTestCase {
     @Test
     @MediumTest
     @DisableIf.Device(type = {UiDisableIf.TABLET})
+    @DisabledTest(message = "crbug.com/1186468")
     public void testDragHelper_ClickItem() throws Exception {
         AppMenuButtonHelperImpl buttonHelper =
                 (AppMenuButtonHelperImpl) mAppMenuHandler.createAppMenuButtonHelper();
@@ -802,6 +809,11 @@ public class AppMenuTest extends DummyUiActivityTestCase {
         public boolean isNativeInitializationFinished() {
             return false;
         }
+
+        @Override
+        public boolean isActivityFinishingOrDestroyed() {
+            return false;
+        }
     }
 
     private class TestMenuButtonDelegate implements MenuButtonDelegate {
@@ -824,16 +836,14 @@ public class AppMenuTest extends DummyUiActivityTestCase {
     private Rect getPopupLocationRect() {
         View contentView = mAppMenuHandler.getAppMenu().getPopup().getContentView();
         CriteriaHelper.pollUiThread(() -> contentView.getHeight() != 0);
-        Rect bgPadding = new Rect();
-        mAppMenuHandler.getAppMenu().getPopup().getBackground().getPadding(bgPadding);
 
         Rect popupRect = new Rect();
         int[] popupLocation = new int[2];
         contentView.getLocationOnScreen(popupLocation);
-        popupRect.left = popupLocation[0] - bgPadding.left;
-        popupRect.top = popupLocation[1] - bgPadding.top;
-        popupRect.right = popupLocation[0] + contentView.getWidth() + bgPadding.right;
-        popupRect.bottom = popupLocation[1] + contentView.getHeight() + bgPadding.bottom;
+        popupRect.left = popupLocation[0];
+        popupRect.top = popupLocation[1];
+        popupRect.right = popupLocation[0] + contentView.getWidth();
+        popupRect.bottom = popupLocation[1] + contentView.getHeight();
         return popupRect;
     }
 

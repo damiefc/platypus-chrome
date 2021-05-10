@@ -96,7 +96,6 @@ void OfflineAudioDestinationHandler::Uninitialize() {
   if (render_thread_)
     render_thread_.reset();
 
-  DisablePullingAudioGraph();
   AudioHandler::Uninitialize();
 }
 
@@ -116,7 +115,6 @@ void OfflineAudioDestinationHandler::StartRendering() {
   // Rendering was not started. Starting now.
   if (!is_rendering_started_) {
     is_rendering_started_ = true;
-    EnablePullingAudioGraph();
     PostCrossThreadTask(
         *render_thread_task_runner_, FROM_HERE,
         CrossThreadBindOnce(
@@ -151,8 +149,9 @@ void OfflineAudioDestinationHandler::InitializeOfflineRenderThread(
   DCHECK(IsMainThread());
 
   shared_render_target_ = render_target->CreateSharedAudioBuffer();
-  render_bus_ = AudioBus::Create(render_target->numberOfChannels(),
-                                 audio_utilities::kRenderQuantumFrames);
+  render_bus_ =
+      AudioBus::Create(render_target->numberOfChannels(),
+                       GetDeferredTaskHandler().RenderQuantumFrames());
   DCHECK(render_bus_);
 
   PrepareTaskRunnerForRendering();
@@ -167,7 +166,8 @@ void OfflineAudioDestinationHandler::StartOfflineRendering() {
 
   DCHECK_EQ(render_bus_->NumberOfChannels(),
             shared_render_target_->numberOfChannels());
-  DCHECK_GE(render_bus_->length(), audio_utilities::kRenderQuantumFrames);
+  DCHECK_GE(render_bus_->length(),
+            GetDeferredTaskHandler().RenderQuantumFrames());
 
   // Start rendering.
   DoOfflineRendering();
@@ -191,11 +191,11 @@ void OfflineAudioDestinationHandler::DoOfflineRendering() {
     // Suspend the rendering if a scheduled suspend found at the current
     // sample frame. Otherwise render one quantum.
     if (RenderIfNotSuspended(nullptr, render_bus_.get(),
-                             audio_utilities::kRenderQuantumFrames))
+                             GetDeferredTaskHandler().RenderQuantumFrames()))
       return;
 
-    uint32_t frames_available_to_copy =
-        std::min(frames_to_process_, audio_utilities::kRenderQuantumFrames);
+    uint32_t frames_available_to_copy = std::min(
+        frames_to_process_, GetDeferredTaskHandler().RenderQuantumFrames());
 
     for (unsigned channel_index = 0; channel_index < number_of_channels;
          ++channel_index) {
@@ -298,34 +298,20 @@ bool OfflineAudioDestinationHandler::RenderIfNotSuspended(
 
   DCHECK_GE(NumberOfInputs(), 1u);
 
-  {
-    // The entire block that relies on |IsPullingAudioGraphAllowed| needs
-    // locking to prevent pulling audio graph being disallowed (i.e. a
-    // destruction started) in the middle of processing
-    MutexTryLocker try_locker(allow_pulling_audio_graph_mutex_);
+  // This will cause the node(s) connected to us to process, which in turn will
+  // pull on their input(s), all the way backwards through the rendering graph.
+  scoped_refptr<AudioBus> rendered_bus =
+      Input(0).Pull(destination_bus, number_of_frames);
 
-    if (IsPullingAudioGraphAllowed() && try_locker.Locked()) {
-      // This will cause the node(s) connected to us to process, which in turn
-      // will pull on their input(s), all the way backwards through the
-      // rendering graph.
-      scoped_refptr<AudioBus> rendered_bus =
-          Input(0).Pull(destination_bus, number_of_frames);
-
-      if (!rendered_bus) {
-        destination_bus->Zero();
-      } else if (rendered_bus != destination_bus) {
-        // in-place processing was not possible - so copy
-        destination_bus->CopyFrom(*rendered_bus);
-      }
-
-    } else {
-      // Not allowed to pull on the graph or couldn't get the lock.
-      destination_bus->Zero();
-    }
+  if (!rendered_bus) {
+    destination_bus->Zero();
+  } else if (rendered_bus != destination_bus) {
+    // in-place processing was not possible - so copy
+    destination_bus->CopyFrom(*rendered_bus);
   }
 
-  // Process nodes which need a little extra help because they are not
-  // connected to anything, but still need to process.
+  // Process nodes which need a little extra help because they are not connected
+  // to anything, but still need to process.
   Context()->GetDeferredTaskHandler().ProcessAutomaticPullNodes(
       number_of_frames);
 

@@ -3,11 +3,16 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//build/config/mac/base_rules.gni")
+import("//build/config/mac/mac_sdk.gni")
 import("//build/util/branding.gni")
 import("//build/util/version.gni")
 import("//chrome/process_version_rc_template.gni")
+import("//testing/test.gni")
 import("mac_signing_sources.gni")
+
+if (is_chrome_branded) {
+  import("//third_party/widevine/scripts/widevine_signing_sources.gni")
+}
 
 group("mac") {
   public_deps = [ ":copies" ]
@@ -54,6 +59,18 @@ copy("copy_signing") {
   outputs = [ "$_packaging_dir/signing/{{source_file_part}}" ]
 }
 
+if (is_chrome_branded) {
+  copy("copy_widevine_signing") {
+    visibility = [ ":copies" ]
+
+    sources = rebase_path(widevine_signing_sources,
+                          "",
+                          "//third_party/widevine/scripts")
+
+    outputs = [ "$_packaging_dir/widevine/{{source_file_part}}" ]
+  }
+}
+
 copy("copies") {
   visibility = [ ":mac" ]
 
@@ -84,13 +101,11 @@ copy("copies") {
     "pkg-dmg",
     "pkg_postinstall.in",
     "sign_chrome.py",
+    "universalizer.py",
   ]
 
   if (is_chrome_branded) {
-    sources += [ "keystone_install.sh" ]
-  }
-
-  if (is_chrome_branded) {
+    deps += [ ":copy_widevine_signing" ]
     sources += [
       "//chrome/app/theme/google_chrome/mac/app_beta.icns",
       "//chrome/app/theme/google_chrome/mac/app_canary.icns",
@@ -111,13 +126,21 @@ copy("copies") {
       "internal/chrome_dmg_background.png",
       "internal/chrome_dmg_dsstore",
       "internal/chrome_dmg_icon.icns",
+      "keystone_install.sh",
     ]
   }
 
   outputs = [ "$_packaging_dir/{{source_file_part}}" ]
 }
 
-group("mac_signing_tests") {
+script_test("mac_signing_tests") {
+  run_under_python2 = true
+  script = "//testing/scripts/run_isolated_script_test.py"
+
+  args = [ "@WrappedPath(" + rebase_path(
+               "//chrome/installer/mac/signing/run_mac_signing_tests.py",
+               root_build_dir) + ")" ]
+
   data = mac_signing_sources + [
            "signing/commands_test.py",
            "signing/model_test.py",
@@ -129,12 +152,28 @@ group("mac_signing_tests") {
            "signing/signing_test.py",
            "signing/test_common.py",
            "signing/test_config.py",
-
-           # The run_isolated_script_test.py script and its dependencies.
-           "//testing/scripts/run_isolated_script_test.py",
-           "//testing/scripts/common.py",
-           "//testing/xvfb.py",
-           "//testing/test_env.py",
            "//third_party/catapult/third_party/typ/",
          ]
+}
+
+config("fat_binary_config") {
+  visibility = [ "./*" ]
+
+  # Always build arm64 targets as universal (fat) binaries, since these need to
+  # run on both the install machine and the machine where the diff installers
+  # are created, and the latter is probably not arm64.
+  if (current_cpu == "arm64") {
+    fat_binary_flags = [
+      # Help the compiler find lipo for creating fat binaries.
+      "-B",
+      mac_bin_path,
+
+      "-arch",
+      "x86_64",
+      "-arch",
+      "arm64",
+    ]
+    cflags = fat_binary_flags
+    ldflags = fat_binary_flags
+  }
 }

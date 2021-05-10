@@ -5,6 +5,7 @@
 #include "ash/system/tray/actionable_view.h"
 
 #include "ash/system/tray/tray_popup_utils.h"
+#include "base/bind.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -22,8 +23,8 @@ namespace ash {
 const char ActionableView::kViewClassName[] = "tray/ActionableView";
 
 ActionableView::ActionableView(TrayPopupInkDropStyle ink_drop_style)
-    : views::Button(this),
-      destroyed_(nullptr),
+    : views::Button(base::BindRepeating(&ActionableView::ButtonPressed,
+                                        base::Unretained(this))),
       ink_drop_style_(ink_drop_style) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
   SetHasInkDropActionOnClick(false);
@@ -33,6 +34,16 @@ ActionableView::ActionableView(TrayPopupInkDropStyle ink_drop_style)
   SetInstallFocusRingOnFocus(false);
   SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
   TrayPopupUtils::InstallHighlightPathGenerator(this, ink_drop_style_);
+  ink_drop()->SetCreateInkDropCallback(base::BindRepeating(
+      [](InkDropHostView* host) { return TrayPopupUtils::CreateInkDrop(host); },
+      this));
+  ink_drop()->SetCreateHighlightCallback(base::BindRepeating(
+      &TrayPopupUtils::CreateInkDropHighlight, base::Unretained(this)));
+  ink_drop()->SetCreateRippleCallback(base::BindRepeating(
+      [](ActionableView* host) {
+        return TrayPopupUtils::CreateInkDropRipple(host->ink_drop_style_, host);
+      },
+      this));
 }
 
 ActionableView::~ActionableView() {
@@ -42,9 +53,10 @@ ActionableView::~ActionableView() {
 
 void ActionableView::HandlePerformActionResult(bool action_performed,
                                                const ui::Event& event) {
-  AnimateInkDrop(action_performed ? views::InkDropState::ACTION_TRIGGERED
-                                  : views::InkDropState::HIDDEN,
-                 ui::LocatedEvent::FromIfValid(&event));
+  ink_drop()->AnimateToState(action_performed
+                                 ? views::InkDropState::ACTION_TRIGGERED
+                                 : views::InkDropState::HIDDEN,
+                             ui::LocatedEvent::FromIfValid(&event));
 }
 
 const char* ActionableView::GetClassName() const {
@@ -64,22 +76,8 @@ void ActionableView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->SetName(GetAccessibleName());
 }
 
-std::unique_ptr<views::InkDrop> ActionableView::CreateInkDrop() {
-  return TrayPopupUtils::CreateInkDrop(this);
-}
 
-std::unique_ptr<views::InkDropRipple> ActionableView::CreateInkDropRipple()
-    const {
-  return TrayPopupUtils::CreateInkDropRipple(
-      ink_drop_style_, this, GetInkDropCenterBasedOnLastEvent());
-}
-
-std::unique_ptr<views::InkDropHighlight>
-ActionableView::CreateInkDropHighlight() const {
-  return TrayPopupUtils::CreateInkDropHighlight(this);
-}
-
-void ActionableView::ButtonPressed(Button* sender, const ui::Event& event) {
+void ActionableView::ButtonPressed(const ui::Event& event) {
   bool destroyed = false;
   destroyed_ = &destroyed;
   const bool action_performed = PerformAction(event);

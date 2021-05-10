@@ -7,12 +7,12 @@
 #include <memory>
 #include <string>
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/components/quick_answers/utils/quick_answers_utils.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/machine_learning/public/cpp/fake_service_connection.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/text_classifier.mojom.h"
@@ -50,6 +50,8 @@ class IntentGeneratorTest : public testing::Test {
         base::BindOnce(&IntentGeneratorTest::IntentGeneratorTestCallback,
                        base::Unretained(this)));
 
+    intent_generator_->UseTextAnnotatorForTesting();
+
     scoped_feature_list_.InitWithFeatures(
         {chromeos::features::kQuickAnswersTextAnnotator,
          chromeos::features::kQuickAnswersTranslation},
@@ -70,6 +72,8 @@ class IntentGeneratorTest : public testing::Test {
           std::vector<TextLanguagePtr>()) {
     chromeos::machine_learning::ServiceConnection::
         UseFakeServiceConnectionForTesting(&fake_service_connection_);
+    chromeos::machine_learning::ServiceConnection::GetInstance()->Initialize();
+
     fake_service_connection_.SetOutputAnnotation(annotations);
     fake_service_connection_.SetOutputLanguages(languages);
   }
@@ -90,10 +94,12 @@ TEST_F(IntentGeneratorTest, TranslationIntent) {
   QuickAnswersRequest request;
   request.selected_text = "quick answers";
   request.context.device_properties.language = "es";
+  request.context.device_properties.preferred_languages = "es";
   intent_generator_->GenerateIntent(request);
 
   task_environment_.RunUntilIdle();
 
+  // Should generate translation intent.
   EXPECT_EQ(IntentType::kTranslation, intent_info_.intent_type);
   EXPECT_EQ("quick answers", intent_info_.intent_text);
   EXPECT_EQ("en", intent_info_.source_language);
@@ -108,10 +114,51 @@ TEST_F(IntentGeneratorTest, TranslationIntentSameLanguage) {
   QuickAnswersRequest request;
   request.selected_text = "quick answers";
   request.context.device_properties.language = "en";
+  request.context.device_properties.preferred_languages = "en";
   intent_generator_->GenerateIntent(request);
 
   task_environment_.RunUntilIdle();
 
+  // Should not generate translation intent since the detected language is the
+  // same as system language.
+  EXPECT_EQ(IntentType::kUnknown, intent_info_.intent_type);
+  EXPECT_EQ("quick answers", intent_info_.intent_text);
+}
+
+TEST_F(IntentGeneratorTest, TranslationIntentPreferredLocale) {
+  std::vector<TextLanguagePtr> languages;
+  languages.push_back(DefaultLanguage());
+  UseFakeServiceConnection({}, languages);
+
+  QuickAnswersRequest request;
+  request.selected_text = "quick answers";
+  request.context.device_properties.language = "es";
+  request.context.device_properties.preferred_languages = "es,en,zh";
+  intent_generator_->GenerateIntent(request);
+
+  task_environment_.RunUntilIdle();
+
+  // Should not generate translation intent since the detected language is in
+  // the preferred languages list.
+  EXPECT_EQ(IntentType::kUnknown, intent_info_.intent_type);
+  EXPECT_EQ("quick answers", intent_info_.intent_text);
+}
+
+TEST_F(IntentGeneratorTest, TranslationIntentPreferredLanguage) {
+  std::vector<TextLanguagePtr> languages;
+  languages.push_back(DefaultLanguage());
+  UseFakeServiceConnection({}, languages);
+
+  QuickAnswersRequest request;
+  request.selected_text = "quick answers";
+  request.context.device_properties.language = "es";
+  request.context.device_properties.preferred_languages = "es-MX,en-US,zh-CN";
+  intent_generator_->GenerateIntent(request);
+
+  task_environment_.RunUntilIdle();
+
+  // Should not generate translation intent since the detected language is in
+  // the preferred languages list.
   EXPECT_EQ(IntentType::kUnknown, intent_info_.intent_type);
   EXPECT_EQ("quick answers", intent_info_.intent_text);
 }
@@ -124,17 +171,55 @@ TEST_F(IntentGeneratorTest, TranslationIntentTextLengthAboveThreshold) {
   QuickAnswersRequest request;
   request.selected_text =
       "Search the world's information, including webpages, images, videos and "
-      "more.";
+      "more. Google has many special features to help you find exactly what "
+      "you're looking ...";
   request.context.device_properties.language = "es";
+  request.context.device_properties.preferred_languages = "es";
   intent_generator_->GenerateIntent(request);
 
   task_environment_.RunUntilIdle();
 
+  // Should not generate translation intent since the length of the selected
+  // text is above the threshold.
   EXPECT_EQ(IntentType::kUnknown, intent_info_.intent_type);
   EXPECT_EQ(
       "Search the world's information, including webpages, images, videos and "
-      "more.",
+      "more. Google has many special features to help you find exactly what "
+      "you're looking ...",
       intent_info_.intent_text);
+}
+
+TEST_F(IntentGeneratorTest, TranslationIntentWithAnnotation) {
+  QuickAnswersRequest request;
+  request.selected_text = "unfathomable";
+  request.context.device_properties.language = "es";
+  request.context.device_properties.preferred_languages = "es";
+
+  // Create the test annotations.
+  std::vector<TextEntityPtr> entities;
+  entities.emplace_back(
+      TextEntity::New("dictionary",             // Entity name.
+                      1.0,                      // Confidence score.
+                      TextEntityData::New()));  // Data extracted.
+
+  auto dictionary_annotation = TextAnnotation::New(0,   // Start offset.
+                                                   12,  // End offset.
+                                                   std::move(entities));
+
+  std::vector<TextAnnotationPtr> annotations;
+  annotations.push_back(dictionary_annotation->Clone());
+  std::vector<TextLanguagePtr> languages;
+  languages.push_back(DefaultLanguage());
+  UseFakeServiceConnection(annotations, languages);
+
+  intent_generator_->GenerateIntent(request);
+
+  task_environment_.RunUntilIdle();
+
+  // Should generate dictionary intent which is prioritized against
+  // translation.
+  EXPECT_EQ(IntentType::kDictionary, intent_info_.intent_type);
+  EXPECT_EQ("unfathomable", intent_info_.intent_text);
 }
 
 TEST_F(IntentGeneratorTest, TranslationIntentNotEnabled) {
@@ -149,10 +234,12 @@ TEST_F(IntentGeneratorTest, TranslationIntentNotEnabled) {
   QuickAnswersRequest request;
   request.selected_text = "quick answers";
   request.context.device_properties.language = "es";
+  request.context.device_properties.preferred_languages = "es";
   intent_generator_->GenerateIntent(request);
 
   task_environment_.RunUntilIdle();
 
+  // Should not generate translation intent since the feature is not enabled.
   EXPECT_EQ(IntentType::kUnknown, intent_info_.intent_type);
   EXPECT_EQ("quick answers", intent_info_.intent_text);
 }
@@ -168,6 +255,8 @@ TEST_F(IntentGeneratorTest, TranslationIntentDeviceLanguageNotSet) {
 
   task_environment_.RunUntilIdle();
 
+  // Should not generate translation intent since the device language is not
+  // set.
   EXPECT_EQ(IntentType::kUnknown, intent_info_.intent_type);
   EXPECT_EQ("quick answers", intent_info_.intent_text);
 }
@@ -197,6 +286,7 @@ TEST_F(IntentGeneratorTest, TextAnnotationDefinitionIntent) {
 
   task_environment_.RunUntilIdle();
 
+  // Should generate dictionary intent.
   EXPECT_EQ(IntentType::kDictionary, intent_info_.intent_type);
   EXPECT_EQ("unfathomable", intent_info_.intent_text);
 }
@@ -227,6 +317,8 @@ TEST_F(IntentGeneratorTest,
 
   task_environment_.RunUntilIdle();
 
+  // Should generate dictionary intent since the extra characters is below the
+  // threshold.
   EXPECT_EQ(IntentType::kDictionary, intent_info_.intent_type);
   EXPECT_EQ("unfathomable", intent_info_.intent_text);
 }
@@ -257,6 +349,8 @@ TEST_F(IntentGeneratorTest,
 
   task_environment_.RunUntilIdle();
 
+  // Should not generate dictionary intent since the extra characters is above
+  // the threshold.
   EXPECT_EQ(IntentType::kUnknown, intent_info_.intent_type);
   EXPECT_EQ("unfathomable", intent_info_.intent_text);
 }
@@ -286,6 +380,7 @@ TEST_F(IntentGeneratorTest, TextAnnotationUnitIntentExtraChars) {
 
   task_environment_.RunUntilIdle();
 
+  // Should generate unit conversion intent.
   EXPECT_EQ(IntentType::kUnit, intent_info_.intent_type);
   EXPECT_EQ("23 cm", intent_info_.intent_text);
 }
@@ -315,6 +410,7 @@ TEST_F(IntentGeneratorTest, TextAnnotationUnitIntentUtf16Char) {
 
   task_environment_.RunUntilIdle();
 
+  // Should generate unit conversion intent.
   EXPECT_EQ(IntentType::kUnit, intent_info_.intent_type);
   EXPECT_EQ("350°F", intent_info_.intent_text);
 }
@@ -344,6 +440,8 @@ TEST_F(IntentGeneratorTest, TextAnnotationUnitIntentExtraCharsAboveThreshold) {
 
   task_environment_.RunUntilIdle();
 
+  // Should not generate unit conversion intent since the extra characters is
+  // above the threshold.
   EXPECT_EQ(IntentType::kUnknown, intent_info_.intent_type);
   EXPECT_EQ("23 cm", intent_info_.intent_text);
 }
@@ -359,6 +457,7 @@ TEST_F(IntentGeneratorTest, TextAnnotationIntentNoAnnotation) {
   intent_generator_->GenerateIntent(*quick_answers_request);
   task_environment_.RunUntilIdle();
 
+  // Should generate unknown intent since no annotation found.
   EXPECT_EQ(IntentType::kUnknown, intent_info_.intent_type);
   EXPECT_EQ("the unfathomable reaches of space", intent_info_.intent_text);
 }
@@ -380,6 +479,7 @@ TEST_F(IntentGeneratorTest, TextAnnotationIntentNoEntity) {
   intent_generator_->GenerateIntent(*quick_answers_request);
   task_environment_.RunUntilIdle();
 
+  // Should generate unknown intent since no entity found.
   EXPECT_EQ(IntentType::kUnknown, intent_info_.intent_type);
   EXPECT_EQ("the unfathomable reaches of space", intent_info_.intent_text);
 }
@@ -407,6 +507,7 @@ TEST_F(IntentGeneratorTest, TextAnnotationIntentUnSupportedEntity) {
   intent_generator_->GenerateIntent(*quick_answers_request);
   task_environment_.RunUntilIdle();
 
+  // Should generate unknown intent unsupported entity is provided.
   EXPECT_EQ(IntentType::kUnknown, intent_info_.intent_type);
   EXPECT_EQ("the unfathomable reaches of space", intent_info_.intent_text);
 }

@@ -17,9 +17,9 @@
 #include "chrome/browser/ui/app_icon_loader.h"
 #include "ui/gfx/image/image.h"
 
-#if BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/notifications/notification_platform_bridge_lacros.h"
-#include "chromeos/lacros/lacros_chrome_service_impl.h"
+#include "chromeos/lacros/lacros_service.h"
 #else
 #include "chrome/browser/notifications/chrome_ash_message_center_client.h"
 #endif
@@ -37,11 +37,11 @@ bool NotificationPlatformBridge::CanHandleType(
 }
 
 NotificationPlatformBridgeChromeOs::NotificationPlatformBridgeChromeOs() {
-#if BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
   mojo::Remote<crosapi::mojom::MessageCenter>* remote = nullptr;
-  auto* service = chromeos::LacrosChromeServiceImpl::Get();
-  if (service->IsMessageCenterAvailable())
-    remote = &service->message_center_remote();
+  auto* service = chromeos::LacrosService::Get();
+  if (service->IsAvailable<crosapi::mojom::MessageCenter>())
+    remote = &service->GetRemote<crosapi::mojom::MessageCenter>();
   impl_ = std::make_unique<NotificationPlatformBridgeLacros>(this, remote);
 #else
   impl_ = std::make_unique<ChromeAshMessageCenterClient>(this);
@@ -151,7 +151,7 @@ void NotificationPlatformBridgeChromeOs::HandleNotificationClicked(
 void NotificationPlatformBridgeChromeOs::HandleNotificationButtonClicked(
     const std::string& id,
     int button_index,
-    const base::Optional<base::string16>& reply) {
+    const base::Optional<std::u16string>& reply) {
   ProfileNotification* notification = GetProfileNotification(id);
   if (!notification)
     return;

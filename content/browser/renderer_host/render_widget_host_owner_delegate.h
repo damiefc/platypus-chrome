@@ -16,10 +16,6 @@ struct WebPreferences;
 class WebMouseEvent;
 }
 
-namespace gfx {
-class Rect;
-}
-
 namespace content {
 struct NativeWebKeyboardEvent;
 
@@ -32,12 +28,6 @@ struct NativeWebKeyboardEvent;
 //  and http://crbug.com/478281.
 class CONTENT_EXPORT RenderWidgetHostOwnerDelegate {
  public:
-  // The RenderWidgetHost has been initialized.
-  virtual void RenderWidgetDidInit() = 0;
-
-  // The RenderWidget was closed. Only swapped-in RenderWidgets receive this.
-  virtual void RenderWidgetDidClose() = 0;
-
   // The RenderWidget finished the first visually non-empty paint.
   virtual void RenderWidgetDidFirstVisuallyNonEmptyPaint() = 0;
 
@@ -59,10 +49,6 @@ class CONTENT_EXPORT RenderWidgetHostOwnerDelegate {
   // Allow OwnerDelegate to control whether its RenderWidgetHost contributes
   // priority to the RenderProcessHost.
   virtual bool ShouldContributePriorityToProcess() = 0;
-
-  // Notify the OwnerDelegate that the renderer has requested a change in
-  // the bounds of the content area.
-  virtual void RequestSetBounds(const gfx::Rect& bounds) = 0;
 
   // When false, this allows the renderer's output to be transparent. By default
   // the renderer's background is forced to be opaque.

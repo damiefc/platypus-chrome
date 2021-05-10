@@ -11,15 +11,15 @@
 namespace base {
 namespace i18n {
 
-// Compares the character data stored in two different string16 strings by
+// Compares the character data stored in two different std::u16string strings by
 // specified Collator instance.
 UCollationResult CompareString16WithCollator(const icu::Collator& collator,
                                              StringPiece16 lhs,
                                              StringPiece16 rhs) {
   UErrorCode error = U_ZERO_ERROR;
   UCollationResult result = collator.compare(
-      icu::UnicodeString(FALSE, lhs.data(), static_cast<int>(lhs.length())),
-      icu::UnicodeString(FALSE, rhs.data(), static_cast<int>(rhs.length())),
+      icu::UnicodeString(false, lhs.data(), static_cast<int>(lhs.length())),
+      icu::UnicodeString(false, rhs.data(), static_cast<int>(rhs.length())),
       error);
   DCHECK(U_SUCCESS(error));
   return result;

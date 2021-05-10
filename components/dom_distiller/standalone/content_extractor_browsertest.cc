@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/id_map.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
@@ -135,7 +136,7 @@ std::unique_ptr<DomDistillerService> CreateDomDistillerService(
       std::make_unique<DistillerPageWebContentsFactory>(context);
   auto distiller_url_fetcher_factory =
       std::make_unique<DistillerURLFetcherFactory>(
-          content::BrowserContext::GetDefaultStoragePartition(context)
+          context->GetDefaultStoragePartition()
               ->GetURLLoaderFactoryForBrowserProcess());
 
   dom_distiller::proto::DomDistillerOptions options;

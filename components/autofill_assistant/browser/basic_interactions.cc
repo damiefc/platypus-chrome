@@ -4,7 +4,7 @@
 
 #include "components/autofill_assistant/browser/basic_interactions.h"
 #include <algorithm>
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/i18n/time_formatting.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -385,6 +385,27 @@ bool CreateLoginOptionResponse(UserModel* user_model,
   return true;
 }
 
+bool StringEmpty(UserModel* user_model,
+                 const std::string& result_model_identifier,
+                 const StringEmptyProto& proto) {
+  auto value = user_model->GetValue(proto.value());
+  if (!value.has_value()) {
+    DVLOG(2) << "Failed to find value in user model";
+    return false;
+  }
+
+  if (value->strings().values().size() != 1) {
+    DVLOG(2) << "Error evaluating " << __func__
+             << ": expected single string, but got " << *value;
+    return false;
+  }
+
+  user_model->SetValue(result_model_identifier,
+                       SimpleValue(value->strings().values(0).empty(),
+                                   ContainsClientOnlyValue({*value})));
+  return true;
+}
+
 }  // namespace
 
 base::WeakPtr<BasicInteractions> BasicInteractions::GetWeakPtr() {
@@ -479,6 +500,14 @@ bool BasicInteractions::ComputeValue(const ComputeValueProto& proto) {
                                        proto.result_model_identifier(),
                                        proto.create_login_option_response());
       break;
+    case ComputeValueProto::kStringEmpty:
+      if (!proto.string_empty().has_value()) {
+        DVLOG(2)
+            << "Error computing ComputeValue::StringEmpty: no value specified";
+        return false;
+      }
+      return StringEmpty(delegate_->GetUserModel(),
+                         proto.result_model_identifier(), proto.string_empty());
     case ComputeValueProto::KIND_NOT_SET:
       DVLOG(2) << "Error computing value: kind not set";
       return false;
@@ -591,9 +620,22 @@ bool BasicInteractions::NotifyViewInflationFinished(
   return true;
 }
 
+bool BasicInteractions::NotifyPersistentViewInflationFinished(
+    const ClientStatus& status) {
+  if (!persistent_view_inflation_finished_callback_) {
+    return false;
+  }
+  std::move(persistent_view_inflation_finished_callback_).Run(status);
+  return true;
+}
+
 void BasicInteractions::ClearCallbacks() {
   end_action_callback_.Reset();
   view_inflation_finished_callback_.Reset();
+}
+
+void BasicInteractions::ClearPersistentUiCallbacks() {
+  persistent_view_inflation_finished_callback_.Reset();
 }
 
 void BasicInteractions::SetEndActionCallback(
@@ -606,6 +648,13 @@ void BasicInteractions::SetViewInflationFinishedCallback(
         view_inflation_finished_callback) {
   view_inflation_finished_callback_ =
       std::move(view_inflation_finished_callback);
+}
+
+void BasicInteractions::SetPersistentViewInflationFinishedCallback(
+    base::OnceCallback<void(const ClientStatus&)>
+        persistent_view_inflation_finished_callback) {
+  persistent_view_inflation_finished_callback_ =
+      std::move(persistent_view_inflation_finished_callback);
 }
 
 bool BasicInteractions::RunConditionalCallback(

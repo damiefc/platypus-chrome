@@ -494,7 +494,8 @@ bool MergeOnAuthRequiredResponses(const EventResponseDeltas& deltas,
                                   net::AuthCredentials* auth_credentials,
                                   IgnoredActions* ignored_actions);
 
-// Triggers clearing each renderer's in-memory cache the next time it navigates.
+// Triggers clearing any back-forward caches and each renderer's in-memory cache
+// the next time it navigates.
 void ClearCacheOnNavigation();
 
 // Converts the |name|, |value| pair of a http header to a HttpHeaders
@@ -510,6 +511,9 @@ bool ShouldHideRequestHeader(content::BrowserContext* browser_context,
 
 // Returns whether a response header should be hidden from listeners.
 bool ShouldHideResponseHeader(int extra_info_spec, const std::string& name);
+
+// Returns true if we're in a Public Session and restrictions are enabled.
+bool ArePublicSessionRestrictionsEnabled();
 
 }  // namespace extension_web_request_api_helpers
 

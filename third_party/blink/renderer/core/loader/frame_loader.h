@@ -35,13 +35,14 @@
 
 #include <memory>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/page_state/page_state.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
+#include "third_party/blink/public/platform/web_url_loader.h"
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
@@ -49,6 +50,7 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/frame_types.h"
+#include "third_party/blink/renderer/core/frame/policy_container.h"
 #include "third_party/blink/renderer/core/loader/frame_loader_types.h"
 #include "third_party/blink/renderer/core/loader/history_item.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -58,7 +60,6 @@
 
 namespace blink {
 
-class ContentSecurityPolicy;
 class DocumentLoader;
 class LocalFrame;
 class Frame;
@@ -80,7 +81,7 @@ class CORE_EXPORT FrameLoader final {
   explicit FrameLoader(LocalFrame*);
   ~FrameLoader();
 
-  void Init();
+  void Init(std::unique_ptr<PolicyContainer> policy_container);
 
   ResourceRequest ResourceRequestForReload(
       WebFrameLoadType,
@@ -132,7 +133,7 @@ class CORE_EXPORT FrameLoader final {
 
   DocumentLoader* GetDocumentLoader() const { return document_loader_.Get(); }
 
-  void SetDefersLoading(bool);
+  void SetDefersLoading(WebURLLoader::DeferType defer);
 
   void DidExplicitOpen();
 
@@ -144,18 +145,11 @@ class CORE_EXPORT FrameLoader final {
   void DispatchDocumentElementAvailable();
   void RunScriptsAtDocumentElementAvailable();
 
-  // The following sandbox flags will be forced, regardless of changes to the
-  // sandbox attribute of any parent frames.
-  void ForceSandboxFlags(network::mojom::blink::WebSandboxFlags flags);
-
-  network::mojom::blink::WebSandboxFlags GetForcedSandboxFlags() const {
-    return forced_sandbox_flags_;
-  }
-
-  // Includes the collection of forced, inherited, and FrameOwner's sandbox
-  // flags. Note: with FeaturePolicyForSandbox the frame owner's sandbox flags
-  // only includes the flags which are *not* implemented as feature policies
-  // already present in the FrameOwner's ContainerPolicy.
+  // See content/browser/renderer_host/sandbox_flags.md
+  // This contains the sandbox flags to commit for new documents.
+  // - For main documents, it contains the sandbox inherited from the opener.
+  // - For nested documents, it contains the sandbox flags inherited from the
+  //   parent and the one defined in the <iframe>'s sandbox attribute.
   network::mojom::blink::WebSandboxFlags PendingEffectiveSandboxFlags() const;
 
   // Modifying itself is done based on |fetch_client_settings_object|.
@@ -172,9 +166,6 @@ class CORE_EXPORT FrameLoader final {
 
   Frame* Opener();
   void SetOpener(LocalFrame*);
-
-  const AtomicString& RequiredCSP() const { return required_csp_; }
-  void RecordLatestRequiredCSP();
 
   void Detach();
 
@@ -205,7 +196,7 @@ class CORE_EXPORT FrameLoader final {
   void DispatchUnloadEvent(SecurityOrigin* committing_origin,
                            base::Optional<Document::UnloadEventTiming>*);
 
-  bool AllowPlugins(ReasonForCallingAllowPlugins);
+  bool AllowPlugins();
 
   void SaveScrollAnchor();
   void SaveScrollState();
@@ -214,8 +205,6 @@ class CORE_EXPORT FrameLoader final {
   bool HasProvisionalNavigation() const {
     return committing_navigation_ || client_navigation_.get();
   }
-
-  bool MaybeRenderFallbackContent();
 
   // Like ClearClientNavigation, but also notifies the client to actually cancel
   // the navigation.
@@ -236,11 +225,14 @@ class CORE_EXPORT FrameLoader final {
 
   static bool NeedsHistoryItemRestore(WebFrameLoadType type);
 
+  void WriteIntoTrace(perfetto::TracedValue context) const;
+
  private:
   bool AllowRequestForThisFrame(const FrameLoadRequest&);
   WebFrameLoadType DetermineFrameLoadType(const KURL& url,
                                           const AtomicString& http_method,
                                           bool has_origin_window,
+                                          bool is_client_reload,
                                           const KURL& failing_url,
                                           WebFrameLoadType);
 
@@ -263,7 +255,6 @@ class CORE_EXPORT FrameLoader final {
   void DetachDocumentLoader(Member<DocumentLoader>&,
                             bool flush_microtask_queue = false);
 
-  std::unique_ptr<TracedValue> ToTracedValue() const;
   void TakeObjectSnapshot() const;
 
   // Commits the given |document_loader|.
@@ -271,19 +262,6 @@ class CORE_EXPORT FrameLoader final {
                             const base::Optional<Document::UnloadEventTiming>&,
                             HistoryItem* previous_history_item,
                             CommitReason);
-
-  // Creates CSP for the initial empty document. They are inherited from the
-  // owner document (parent or opener).
-  ContentSecurityPolicy* CreateCSPForInitialEmptyDocument() const;
-
-  // Creates CSP based on |response| and checks that they allow loading |url|.
-  // Returns nullptr if the check fails.
-  ContentSecurityPolicy* CreateCSP(
-      const KURL& url,
-      const ResourceResponse& response,
-      const base::Optional<WebOriginPolicy>& origin_policy,
-      ContentSecurityPolicy* initiator_csp,
-      CommitReason);
 
   LocalFrameClient* Client() const;
 
@@ -302,8 +280,6 @@ class CORE_EXPORT FrameLoader final {
   };
   std::unique_ptr<ClientNavigationState> client_navigation_;
 
-  network::mojom::blink::WebSandboxFlags forced_sandbox_flags_;
-
   // The state is set to kInitialized when Init() completes, and kDetached
   // during teardown in Detach().
   enum class State { kUninitialized, kInitialized, kDetached };
@@ -321,13 +297,6 @@ class CORE_EXPORT FrameLoader final {
   EmptyDocumentStatus empty_document_status_ = EmptyDocumentStatus::kOnlyEmpty;
 
   WebScopedVirtualTimePauser virtual_time_pauser_;
-
-  // The CSP of the latest document that has initiated a navigation in this
-  // frame. TODO(arthursonzogni): This looks fragile. The FrameLoader might be
-  // confused by several navigations submitted in a row.
-  Member<ContentSecurityPolicy> last_origin_window_csp_;
-
-  AtomicString required_csp_;
 
   // The origins for which a legacy TLS version warning has been printed. The
   // size of this set is capped, after which no more warnings are printed.

@@ -5,7 +5,6 @@
 #include "base/bind.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#import "ios/chrome/browser/ui/util/multi_window_support.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -22,7 +21,7 @@
 #endif
 
 using chrome_test_util::OmniboxText;
-using chrome_test_util::ContentSuggestionCollectionView;
+using chrome_test_util::NTPCollectionView;
 using chrome_test_util::BackButton;
 using chrome_test_util::ForwardButton;
 
@@ -191,10 +190,6 @@ bool WaitForOmniboxContaining(std::string text) {
 // Tests that only the selected web state is loaded Restore-after-Crash.  This
 // is only possible in EG2.
 - (void)testRestoreOneWebstateOnlyAfterCrash {
-  if (IsSceneStartupSupported()) {
-    // TODO(crbug.com/1108433): Session restoration not available yet in MW.
-    EARL_GREY_TEST_DISABLED(@"Disabled in Multiwindow.");
-  }
   // Visit the background page.
   int visitCounter = 0;
   self.testServer->RegisterRequestHandler(
@@ -239,16 +234,10 @@ bool WaitForOmniboxContaining(std::string text) {
 }
 
 - (void)triggerRestore {
-// TODO(crbug.com/1067821):|AppLaunchManager| relaunching with
-// |ForceRelaunchByCleanShutdown| policy won't work on real device.
-#if !TARGET_IPHONE_SIMULATOR
-  [ChromeEarlGrey triggerRestoreViaTabGridRemoveAllUndo];
-#else
   [ChromeEarlGrey saveSessionImmediately];
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithFeaturesEnabled:{}
       disabled:{}
       relaunchPolicy:ForceRelaunchByCleanShutdown];
-#endif
 }
 
 - (void)loadTestPages {
@@ -356,10 +345,10 @@ bool WaitForOmniboxContaining(std::string text) {
   [ChromeEarlGrey waitForPageToFinishLoading];
 
   // Confirm the NTP is still at the start.
-  [[EarlGrey selectElementWithMatcher:ContentSuggestionCollectionView()]
+  [[EarlGrey selectElementWithMatcher:NTPCollectionView()]
       assertWithMatcher:grey_notNil()];
   [self triggerRestore];
-  [[EarlGrey selectElementWithMatcher:ContentSuggestionCollectionView()]
+  [[EarlGrey selectElementWithMatcher:NTPCollectionView()]
       assertWithMatcher:grey_notNil()];
 }
 

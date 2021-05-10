@@ -4,6 +4,8 @@
 
 #include "weblayer/browser/webrtc/media_stream_manager.h"
 
+#include <utility>
+
 #include "base/supports_user_data.h"
 #include "components/webrtc/media_stream_devices_controller.h"
 #include "content/public/browser/media_stream_request.h"
@@ -41,7 +43,7 @@ void FindStreamTypes(const blink::MediaStreamDevices& devices,
 // is passed off to MediaResponseCallback.
 class MediaStreamManager::StreamUi : public content::MediaStreamUI {
  public:
-  StreamUi(MediaStreamManager* manager,
+  StreamUi(base::WeakPtr<MediaStreamManager> manager,
            const blink::MediaStreamDevices& devices)
       : manager_(manager) {
     DCHECK(manager_);
@@ -56,24 +58,33 @@ class MediaStreamManager::StreamUi : public content::MediaStreamUI {
   }
 
   // content::MediaStreamUi:
-  gfx::NativeViewId OnStarted(base::OnceClosure stop,
-                              SourceCallback source) override {
+  gfx::NativeViewId OnStarted(
+      base::OnceClosure stop,
+      SourceCallback source,
+      const std::string& label,
+      std::vector<content::DesktopMediaID> screen_capture_ids,
+      StateChangeCallback state_change) override {
     stop_ = std::move(stop);
     if (manager_)
       manager_->RegisterStream(this);
     return 0;
   }
-
-  void OnManagerGone() { manager_ = nullptr; }
+  void OnDeviceStopped(const std::string& label,
+                       const content::DesktopMediaID& media_id) override {}
 
   bool streaming_audio() const { return streaming_audio_; }
 
   bool streaming_video() const { return streaming_video_; }
 
-  void Stop() { std::move(stop_).Run(); }
+  void Stop() {
+    // The `stop_` callback does async processing. This means Stop() may be
+    // called multiple times.
+    if (stop_)
+      std::move(stop_).Run();
+  }
 
  private:
-  MediaStreamManager* manager_;
+  base::WeakPtr<MediaStreamManager> manager_;
   bool streaming_audio_ = false;
   bool streaming_video_ = false;
   base::OnceClosure stop_;
@@ -89,10 +100,7 @@ MediaStreamManager::MediaStreamManager(
       ->SetUserData(&kWebContentsUserDataKey, std::move(user_data));
 }
 
-MediaStreamManager::~MediaStreamManager() {
-  for (auto* stream : active_streams_)
-    stream->OnManagerGone();
-}
+MediaStreamManager::~MediaStreamManager() = default;
 
 // static
 MediaStreamManager* MediaStreamManager::FromWebContents(
@@ -109,8 +117,7 @@ void MediaStreamManager::RequestMediaAccessPermission(
   webrtc::MediaStreamDevicesController::RequestPermissions(
       request, nullptr,
       base::BindOnce(&MediaStreamManager::OnMediaAccessPermissionResult,
-                     weak_factory_.GetWeakPtr(),
-                     base::Passed(std::move(callback))));
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void MediaStreamManager::OnClientReadyToStream(JNIEnv* env,
@@ -121,7 +128,8 @@ void MediaStreamManager::OnClientReadyToStream(JNIEnv* env,
   if (allowed) {
     std::move(request->second.callback)
         .Run(request->second.devices, request->second.result,
-             std::make_unique<StreamUi>(this, request->second.devices));
+             std::make_unique<StreamUi>(weak_factory_.GetWeakPtr(),
+                                        request->second.devices));
   } else {
     std::move(request->second.callback)
         .Run({}, blink::mojom::MediaStreamRequestResult::NO_HARDWARE, {});
@@ -139,7 +147,7 @@ void MediaStreamManager::OnMediaAccessPermissionResult(
     content::MediaResponseCallback callback,
     const blink::MediaStreamDevices& devices,
     blink::mojom::MediaStreamRequestResult result,
-    bool blocked_by_feature_policy,
+    bool blocked_by_permissions_policy,
     ContentSetting audio_setting,
     ContentSetting video_setting) {
   if (result != blink::mojom::MediaStreamRequestResult::OK) {

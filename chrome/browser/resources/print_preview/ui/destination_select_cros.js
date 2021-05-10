@@ -46,11 +46,6 @@ Polymer({
 
     driveDestinationKey: String,
 
-    isDriveMounted: {
-      type: Boolean,
-      value: true,
-    },
-
     loaded: Boolean,
 
     noDestinations: Boolean,
@@ -106,22 +101,6 @@ Polymer({
       computed: 'computeIsCurrentDestinationCrosLocal_(destination)',
       reflectToAttribute: true,
     },
-
-    /** @private */
-    saveToDriveFlagEnabled_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean('printSaveToDrive');
-      },
-      readOnly: true,
-    },
-
-    /** @private */
-    driveDestinationKeyCros_: {
-      type: String,
-      computed: 'computeDriveDestinationKeyCros_(' +
-          'driveDestinationKey, saveToDriveFlagEnabled_, isDriveMounted)',
-    },
   },
 
   /** @private {!IronMetaElement} */
@@ -133,6 +112,7 @@ Polymer({
       this.$$('#dropdown').$$('#destination-dropdown').focus();
       return;
     }
+
     this.$$('.md-select').focus();
   },
 
@@ -158,7 +138,9 @@ Polymer({
     if (this.destination && this.destination.key === this.selectedValue) {
       if (this.printerStatusFlagEnabled_ &&
           this.isCurrentDestinationCrosLocal_) {
-        return getPrinterStatusIcon(this.destination.printerStatusReason);
+        return getPrinterStatusIcon(
+            this.destination.printerStatusReason,
+            this.destination.isEnterprisePrinter);
       }
 
       return this.destination.icon;
@@ -166,14 +148,14 @@ Polymer({
 
     // Check for the Docs or Save as PDF ids first.
     const keyParams = this.selectedValue.split('/');
-    // <if expr="chromeos">
     if (keyParams[0] === Destination.GooglePromotedId.SAVE_TO_DRIVE_CROS) {
       return 'print-preview:save-to-drive';
     }
-    // </if>
+
     if (keyParams[0] === Destination.GooglePromotedId.DOCS) {
       return 'print-preview:save-to-drive';
     }
+
     if (keyParams[0] === Destination.GooglePromotedId.SAVE_AS_PDF) {
       return 'cr:insert-drive-file';
     }
@@ -299,15 +281,10 @@ Polymer({
       }
     }
 
-    if (this.destination.origin !== DestinationOrigin.CROS) {
-      return this.destination.shouldShowDeprecatedPrinterWarning ?
-          this.i18nAdvanced('printerNotSupportedWarning') :
-          '';
-    }
-
     // Only when the flag is enabled do we need to fetch a local printer status
     // error string.
-    if (!this.printerStatusFlagEnabled_) {
+    if (this.destination.origin !== DestinationOrigin.CROS ||
+        !this.printerStatusFlagEnabled_) {
       return '';
     }
 
@@ -355,17 +332,5 @@ Polymer({
         this.$$('#dropdown')
             .shadowRoot.querySelectorAll('.list-item:not([hidden])') :
         this.shadowRoot.querySelectorAll('option:not([hidden])');
-  },
-
-  /**
-   * @return {string}
-   * @private
-   */
-  computeDriveDestinationKeyCros_: function() {
-    if (!this.saveToDriveFlagEnabled_) {
-      return this.driveDestinationKey;
-    }
-
-    return this.isDriveMounted ? SAVE_TO_DRIVE_CROS_DESTINATION_KEY : '';
   },
 });

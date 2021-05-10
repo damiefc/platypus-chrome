@@ -22,8 +22,8 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/color_palette.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
@@ -35,32 +35,25 @@ constexpr int kLabelPreviewSpacing = 8;
 
 constexpr int kCloseButtonMargin = 8;
 
-constexpr int kMinDeskNameViewWidth = 20;
-
-constexpr SkColor kDarkModeActiveColor = SK_ColorWHITE;
-constexpr SkColor kLightModeActiveColor = SK_ColorBLACK;
-constexpr SkColor kInactiveColor = SK_ColorTRANSPARENT;
-
-constexpr SkColor kDraggedOverColor = SkColorSetARGB(0xFF, 0x5B, 0xBC, 0xFF);
-
-// Returns the width of the desk preview based on its |preview_height| and the
-// aspect ratio of the root window taken from |root_window_size|.
-int GetPreviewWidth(const gfx::Size& root_window_size, int preview_height) {
-  return preview_height * root_window_size.width() / root_window_size.height();
-}
-
-// The desk preview bounds are proportional to the bounds of the display on
-// which it resides, and whether the |compact| layout is used.
-gfx::Rect GetDeskPreviewBounds(aura::Window* root_window, bool compact) {
-  const int preview_height = DeskPreviewView::GetHeight(root_window, compact);
-  const auto root_size = root_window->bounds().size();
-  return gfx::Rect(GetPreviewWidth(root_size, preview_height), preview_height);
-}
+constexpr int kMinDeskNameViewWidth = 56;
 
 }  // namespace
 
 // -----------------------------------------------------------------------------
 // DeskMiniView
+
+// static
+int DeskMiniView::GetPreviewWidth(const gfx::Size& root_window_size,
+                                  int preview_height) {
+  return preview_height * root_window_size.width() / root_window_size.height();
+}
+
+// static
+gfx::Rect DeskMiniView::GetDeskPreviewBounds(aura::Window* root_window) {
+  const int preview_height = DeskPreviewView::GetHeight(root_window);
+  const auto root_size = root_window->bounds().size();
+  return gfx::Rect(GetPreviewWidth(root_size, preview_height), preview_height);
+}
 
 DeskMiniView::DeskMiniView(DesksBarView* owner_bar,
                            aura::Window* root_window,
@@ -71,7 +64,7 @@ DeskMiniView::DeskMiniView(DesksBarView* owner_bar,
 
   desk_->AddObserver(this);
 
-  auto desk_name_view = std::make_unique<DeskNameView>();
+  auto desk_name_view = std::make_unique<DeskNameView>(this);
   desk_name_view->AddObserver(this);
   desk_name_view->set_controller(this);
   desk_name_view->SetText(desk_->name());
@@ -81,9 +74,14 @@ DeskMiniView::DeskMiniView(DesksBarView* owner_bar,
 
   // TODO(afakhry): Tooltips.
 
-  desk_preview_ = AddChildView(std::make_unique<DeskPreviewView>(this));
+  desk_preview_ = AddChildView(std::make_unique<DeskPreviewView>(
+      base::BindRepeating(&DeskMiniView::OnDeskPreviewPressed,
+                          base::Unretained(this)),
+      this));
   desk_name_view_ = AddChildView(std::move(desk_name_view));
-  close_desk_button_ = AddChildView(std::make_unique<CloseDeskButton>(this));
+  close_desk_button_ =
+      AddChildView(std::make_unique<CloseDeskButton>(base::BindRepeating(
+          &DeskMiniView::OnCloseButtonPressed, base::Unretained(this))));
 
   UpdateCloseButtonVisibility();
   UpdateBorderColor();
@@ -95,6 +93,11 @@ DeskMiniView::~DeskMiniView() {
   // before the desk.
   if (desk_)
     desk_->RemoveObserver(this);
+}
+
+gfx::Rect DeskMiniView::GetPreviewBoundsInScreen() const {
+  DCHECK(desk_preview_);
+  return desk_preview_->GetBoundsInScreen();
 }
 
 aura::Window* DeskMiniView::GetDeskContainer() const {
@@ -113,7 +116,7 @@ void DeskMiniView::UpdateCloseButtonVisibility() {
   // navigate to it.
   close_desk_button_->SetVisible(
       DesksController::Get()->CanRemoveDesks() &&
-      !owner_bar_->dragged_item_over_bar() &&
+      !owner_bar_->dragged_item_over_bar() && !owner_bar_->IsDraggingDesk() &&
       (IsMouseHovered() || force_show_close_button_ ||
        Shell::Get()->accessibility_controller()->IsSwitchAccessRunning()));
 }
@@ -135,20 +138,21 @@ void DeskMiniView::OnWidgetGestureTap(const gfx::Rect& screen_rect,
 void DeskMiniView::UpdateBorderColor() {
   DCHECK(desk_);
   auto* color_provider = AshColorProvider::Get();
-  if (owner_bar_->dragged_item_over_bar() &&
-      IsPointOnMiniView(owner_bar_->last_dragged_item_screen_location())) {
-    desk_preview_->SetBorderColor(kDraggedOverColor);
-  } else if (IsViewHighlighted()) {
+  if ((owner_bar_->dragged_item_over_bar() &&
+       IsPointOnMiniView(owner_bar_->last_dragged_item_screen_location())) ||
+      IsViewHighlighted()) {
     desk_preview_->SetBorderColor(color_provider->GetControlsLayerColor(
         AshColorProvider::ControlsLayerType::kFocusRingColor));
   } else if (!desk_->is_active()) {
-    desk_preview_->SetBorderColor(kInactiveColor);
+    desk_preview_->SetBorderColor(SK_ColorTRANSPARENT);
   } else {
-    // Default theme for desks is dark mode.
-    desk_preview_->SetBorderColor(color_provider->IsDarkModeEnabled()
-                                      ? kDarkModeActiveColor
-                                      : kLightModeActiveColor);
+    desk_preview_->SetBorderColor(color_provider->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kCurrentDeskColor));
   }
+}
+
+gfx::Insets DeskMiniView::GetPreviewBorderInsets() const {
+  return desk_preview_->border()->GetInsets();
 }
 
 const char* DeskMiniView::GetClassName() const {
@@ -156,15 +160,10 @@ const char* DeskMiniView::GetClassName() const {
 }
 
 void DeskMiniView::Layout() {
-  const bool compact = owner_bar_->UsesCompactLayout();
-  const gfx::Rect preview_bounds = GetDeskPreviewBounds(root_window_, compact);
+  const gfx::Rect preview_bounds = GetDeskPreviewBounds(root_window_);
   desk_preview_->SetBoundsRect(preview_bounds);
 
-  desk_name_view_->SetVisible(!compact);
-
-  if (!compact)
-    LayoutDeskNameView(preview_bounds);
-
+  LayoutDeskNameView(preview_bounds);
   close_desk_button_->SetBounds(
       preview_bounds.right() - CloseDeskButton::kCloseButtonSize -
           kCloseButtonMargin,
@@ -173,15 +172,14 @@ void DeskMiniView::Layout() {
 }
 
 gfx::Size DeskMiniView::CalculatePreferredSize() const {
-  const bool compact = owner_bar_->UsesCompactLayout();
-  const gfx::Rect preview_bounds = GetDeskPreviewBounds(root_window_, compact);
-  if (compact)
-    return preview_bounds.size();
+  const gfx::Rect preview_bounds = GetDeskPreviewBounds(root_window_);
 
   // The preferred size takes into account only the width of the preview
-  // view.
+  // view. Desk preview's bottom inset should be excluded to maintain
+  // |kLabelPreviewSpacing| between preview and desk name view.
   return gfx::Size{preview_bounds.width(),
-                   preview_bounds.height() + 2 * kLabelPreviewSpacing +
+                   preview_bounds.height() - GetPreviewBorderInsets().bottom() +
+                       2 * kLabelPreviewSpacing +
                        desk_name_view_->GetPreferredSize().height()};
 }
 
@@ -212,13 +210,9 @@ void DeskMiniView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   }
 }
 
-void DeskMiniView::ButtonPressed(views::Button* sender,
-                                 const ui::Event& event) {
-  DCHECK(desk_);
-  if (sender == close_desk_button_)
-    OnCloseButtonPressed();
-  else if (sender == desk_preview_)
-    OnDeskPreviewPressed();
+void DeskMiniView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  UpdateBorderColor();
 }
 
 void DeskMiniView::OnContentChanged() {
@@ -245,11 +239,12 @@ void DeskMiniView::OnDeskDestroyed(const Desk* desk) {
   // No need to remove `this` as an observer; it's done automatically.
 }
 
-void DeskMiniView::OnDeskNameChanged(const base::string16& new_name) {
+void DeskMiniView::OnDeskNameChanged(const std::u16string& new_name) {
   if (is_desk_name_being_modified_)
     return;
 
   desk_name_view_->SetTextAndElideIfNeeded(new_name);
+  desk_name_view_->SetAccessibleName(new_name);
   desk_preview_->SetAccessibleName(new_name);
 
   Layout();
@@ -268,8 +263,32 @@ void DeskMiniView::MaybeCloseHighlightedView() {
   OnCloseButtonPressed();
 }
 
+void DeskMiniView::MaybeSwapHighlightedView(bool right) {
+  const int old_index = owner_bar_->GetMiniViewIndex(this);
+  DCHECK_NE(old_index, -1);
+
+  const bool mirrored = owner_bar_->GetMirrored();
+  // If mirrored, flip the swap direction.
+  int new_index = mirrored ^ right ? old_index + 1 : old_index - 1;
+  if (new_index < 0 ||
+      new_index == static_cast<int>(owner_bar_->mini_views().size())) {
+    return;
+  }
+
+  auto* desks_controller = DesksController::Get();
+  desks_controller->ReorderDesk(old_index, new_index);
+  desks_controller->UpdateDesksDefaultNames();
+}
+
+bool DeskMiniView::MaybeActivateHighlightedViewOnOverviewExit(
+    OverviewSession* overview_session) {
+  MaybeActivateHighlightedView();
+  return true;
+}
+
 void DeskMiniView::OnViewHighlighted() {
   UpdateBorderColor();
+  owner_bar_->ScrollToShowMiniViewIfNecessary(this);
 }
 
 void DeskMiniView::OnViewUnhighlighted() {
@@ -277,19 +296,19 @@ void DeskMiniView::OnViewUnhighlighted() {
 }
 
 void DeskMiniView::ContentsChanged(views::Textfield* sender,
-                                   const base::string16& new_contents) {
+                                   const std::u16string& new_contents) {
   DCHECK_EQ(sender, desk_name_view_);
   DCHECK(is_desk_name_being_modified_);
   if (!desk_)
     return;
 
   // Avoid copying new_contents if we don't need to trim it below.
-  const base::string16* new_text = &new_contents;
+  const std::u16string* new_text = &new_contents;
 
   // To avoid potential security and memory issues, we don't allow desk names to
   // have an unbounded length. Therefore we trim if needed at kMaxLength UTF-16
   // boundary. Note that we don't care about code point boundaries in this case.
-  base::string16 trimmed_new_contents;
+  std::u16string trimmed_new_contents;
   if (new_contents.size() > DeskNameView::kMaxLength) {
     trimmed_new_contents = new_contents;
     trimmed_new_contents.resize(DeskNameView::kMaxLength);
@@ -382,13 +401,13 @@ void DeskMiniView::OnViewBlurred(views::View* observed_view) {
   desk_name_view_->UpdateViewAppearance();
 
   // When committing the name, do not allow an empty desk name. Revert back to
-  // the default name.
+  // the default name if the desk is not being removed.
   // TODO(afakhry): Make this more robust. What if user renames a previously
   // user-modified desk name, say from "code" to "Desk 2", and that desk
   // happened to be in the second position. Since the new name matches the
   // default one for this position, should we revert it (i.e. consider it
   // `set_by_user = false`?
-  if (desk_->name().empty()) {
+  if (!desk_->is_desk_being_removed() && desk_->name().empty()) {
     DesksController::Get()->RevertDeskNameToDefault(desk_);
     return;
   }
@@ -397,20 +416,13 @@ void DeskMiniView::OnViewBlurred(views::View* observed_view) {
 
   // Only when the new desk name has been committed is when we can update the
   // desks restore prefs.
-  desks_restore_util::UpdatePrimaryUserDesksPrefs();
+  desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
 }
 
 bool DeskMiniView::IsPointOnMiniView(const gfx::Point& screen_location) const {
   gfx::Point point_in_view = screen_location;
   ConvertPointFromScreen(this, &point_in_view);
   return HitTestPoint(point_in_view);
-}
-
-int DeskMiniView::GetMinWidthForDefaultLayout() const {
-  const auto& root_size = root_window_->bounds().size();
-  return GetPreviewWidth(root_size,
-                         DeskPreviewView::GetHeight(root_window_,
-                                                    /*compact=*/false));
 }
 
 bool DeskMiniView::IsDeskNameViewVisibleForTesting() const {
@@ -445,9 +457,11 @@ void DeskMiniView::LayoutDeskNameView(const gfx::Rect& preview_bounds) {
 
   const int desk_name_view_x =
       preview_bounds.x() + (preview_bounds.width() - text_width) / 2;
-  gfx::Rect desk_name_view_bounds{
-      desk_name_view_x, preview_bounds.bottom() + kLabelPreviewSpacing,
-      text_width, desk_name_view_size.height()};
+  gfx::Rect desk_name_view_bounds{desk_name_view_x,
+                                  preview_bounds.bottom() -
+                                      GetPreviewBorderInsets().bottom() +
+                                      kLabelPreviewSpacing,
+                                  text_width, desk_name_view_size.height()};
   desk_name_view_->SetBoundsRect(desk_name_view_bounds);
 
   // A change in the DeskNameView's width might mean the need

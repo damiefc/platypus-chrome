@@ -8,7 +8,7 @@
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/branding_buildflags.h"
-#include "chrome/browser/chromeos/crostini/crostini_manager.h"
+#include "chrome/browser/ash/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_test_helper.h"
 #include "chrome/browser/chromeos/crostini/crostini_upgrade_available_notification.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
@@ -23,6 +23,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/dbus/cicerone/cicerone_service.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/seneschal/seneschal_client.h"
 #include "components/session_manager/core/session_manager.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/test/browser_task_environment.h"
@@ -44,6 +45,7 @@ class CrostiniUpgradeAvailableNotificationTest
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
     chromeos::DBusThreadManager::Initialize();
+    chromeos::SeneschalClient::InitializeFake();
 
     TestingBrowserProcess::GetGlobal()->SetSystemNotificationHelper(
         std::make_unique<SystemNotificationHelper>());
@@ -55,6 +57,7 @@ class CrostiniUpgradeAvailableNotificationTest
     RunUntilIdle();
     display_service_.reset();
     BrowserWithTestWindowTest::TearDown();
+    chromeos::SeneschalClient::Shutdown();
     chromeos::DBusThreadManager::Shutdown();
   }
 

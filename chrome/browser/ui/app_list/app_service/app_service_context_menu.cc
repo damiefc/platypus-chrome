@@ -6,32 +6,29 @@
 
 #include "ash/public/cpp/app_menu_constants.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
-#include "chrome/browser/chromeos/crosapi/browser_manager.h"
-#include "chrome/browser/chromeos/crostini/crostini_manager.h"
+#include "chrome/browser/ash/crosapi/browser_manager.h"
+#include "chrome/browser/ash/crostini/crostini_manager.h"
+#include "chrome/browser/ash/plugin_vm/plugin_vm_manager.h"
+#include "chrome/browser/ash/plugin_vm/plugin_vm_manager_factory.h"
+#include "chrome/browser/ash/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/chromeos/crostini/crostini_terminal.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
-#include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager.h"
-#include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager_factory.h"
-#include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/menu_manager.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_context_menu_delegate.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/app_list/extension_app_utils.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/webui/settings/chromeos/app_management/app_management_uma.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/context_menu_params.h"
 #include "ui/display/scoped_display_for_new_windows.h"
@@ -67,10 +64,9 @@ AppServiceContextMenu::AppServiceContextMenu(
     const std::string& app_id,
     AppListControllerDelegate* controller)
     : AppContextMenu(delegate, profile, app_id, controller) {
-  apps::AppServiceProxy* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile);
-  proxy->AppRegistryCache().ForOneApp(
-      app_id, [this](const apps::AppUpdate& update) {
+  apps::AppServiceProxyFactory::GetForProfile(profile)
+      ->AppRegistryCache()
+      .ForOneApp(app_id, [this](const apps::AppUpdate& update) {
         app_type_ =
             update.Readiness() == apps::mojom::Readiness::kUninstalledByUser
                 ? apps::mojom::AppType::kUnknown
@@ -81,7 +77,7 @@ AppServiceContextMenu::AppServiceContextMenu(
 AppServiceContextMenu::~AppServiceContextMenu() = default;
 
 void AppServiceContextMenu::GetMenuModel(GetMenuModelCallback callback) {
-  apps::AppServiceProxy* proxy =
+  apps::AppServiceProxyChromeOs* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile());
   if (proxy->AppRegistryCache().GetAppType(app_id()) ==
       apps::mojom::AppType::kUnknown) {
@@ -124,16 +120,15 @@ void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
       break;
 
     case ash::APP_CONTEXT_MENU_NEW_WINDOW:
-      if (app_type_ == apps::mojom::AppType::kLacros)
-        crosapi::BrowserManager::Get()->NewWindow();
+    case ash::APP_CONTEXT_MENU_NEW_INCOGNITO_WINDOW: {
+      const bool is_incognito =
+          command_id == ash::APP_CONTEXT_MENU_NEW_INCOGNITO_WINDOW;
+      if (app_type_ == apps::mojom::AppType::kStandaloneBrowser)
+        crosapi::BrowserManager::Get()->NewWindow(is_incognito);
       else
-        controller()->CreateNewWindow(/*incognito=*/false);
+        controller()->CreateNewWindow(is_incognito);
       break;
-
-    case ash::APP_CONTEXT_MENU_NEW_INCOGNITO_WINDOW:
-      controller()->CreateNewWindow(/*incognito=*/true);
-      break;
-
+    }
     case ash::SHUTDOWN_GUEST_OS:
       if (app_id() == crostini::kCrostiniTerminalSystemAppId) {
         crostini::CrostiniManager::GetForProfile(profile())->StopVm(
@@ -155,7 +150,7 @@ void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
           auto* provider = web_app::WebAppProvider::Get(profile());
           DCHECK(provider);
           provider->registry_controller().SetExperimentalTabbedWindowMode(
-              app_id(), true);
+              app_id(), true, /*is_user_action=*/true);
           return;
         }
 
@@ -172,7 +167,7 @@ void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
 
       if (command_id >= ash::LAUNCH_APP_SHORTCUT_FIRST &&
           command_id <= ash::LAUNCH_APP_SHORTCUT_LAST) {
-        ExecuteArcShortcutCommand(command_id);
+        ExecutePublisherContextMenuCommand(command_id);
         return;
       }
 
@@ -267,7 +262,7 @@ void AppServiceContextMenu::OnGetMenuModel(
   if (!build_extension_menu_before_default)
     BuildExtensionAppShortcutsMenu(menu_model.get());
 
-  app_shortcut_items_ = std::make_unique<arc::ArcAppShortcutItems>();
+  app_shortcut_items_ = std::make_unique<apps::AppShortcutItems>();
   for (size_t i = index; i < menu_items->items.size(); i++) {
     if (menu_items->items[i]->type == apps::mojom::MenuItemType::kCommand) {
       AddContextMenuOption(
@@ -275,7 +270,6 @@ void AppServiceContextMenu::OnGetMenuModel(
           static_cast<ash::CommandId>(menu_items->items[i]->command_id),
           menu_items->items[i]->string_id);
     } else {
-      DCHECK_EQ(apps::mojom::AppType::kArc, app_type_);
       apps::PopulateItemFromMojoMenuItems(std::move(menu_items->items[i]),
                                           menu_model.get(),
                                           app_shortcut_items_.get());
@@ -288,12 +282,13 @@ void AppServiceContextMenu::OnGetMenuModel(
 void AppServiceContextMenu::BuildExtensionAppShortcutsMenu(
     ui::SimpleMenuModel* menu_model) {
   extension_menu_items_ = std::make_unique<extensions::ContextMenuMatcher>(
-      profile(), this, menu_model, base::Bind(MenuItemHasLauncherContext));
+      profile(), this, menu_model,
+      base::BindRepeating(MenuItemHasLauncherContext));
 
   // Assign unique IDs to commands added by the app itself.
   int index = ash::USE_LAUNCH_TYPE_COMMAND_END;
   extension_menu_items_->AppendExtensionItems(
-      extensions::MenuItem::ExtensionKey(app_id()), base::string16(), &index,
+      extensions::MenuItem::ExtensionKey(app_id()), std::u16string(), &index,
       false /*is_action_menu*/);
 
   const int appended_count = index - ash::USE_LAUNCH_TYPE_COMMAND_END;
@@ -323,9 +318,9 @@ void AppServiceContextMenu::SetLaunchType(int command_id) {
         auto* provider = web_app::WebAppProvider::Get(profile());
         DCHECK(provider);
         provider->registry_controller().SetExperimentalTabbedWindowMode(
-            app_id(), false);
+            app_id(), false, /*is_user_action=*/true);
         provider->registry_controller().SetAppUserDisplayMode(
-            app_id(), user_display_mode);
+            app_id(), user_display_mode, /*is_user_action=*/true);
       }
       return;
     }
@@ -355,14 +350,15 @@ void AppServiceContextMenu::SetLaunchType(int command_id) {
   }
 }
 
-void AppServiceContextMenu::ExecuteArcShortcutCommand(int command_id) {
+void AppServiceContextMenu::ExecutePublisherContextMenuCommand(int command_id) {
   DCHECK(command_id >= ash::LAUNCH_APP_SHORTCUT_FIRST &&
          command_id <= ash::LAUNCH_APP_SHORTCUT_LAST);
   const size_t index = command_id - ash::LAUNCH_APP_SHORTCUT_FIRST;
   DCHECK(app_shortcut_items_);
   DCHECK_LT(index, app_shortcut_items_->size());
 
-  arc::ExecuteArcShortcutCommand(profile(), app_id(),
-                                 app_shortcut_items_->at(index).shortcut_id,
-                                 controller()->GetAppListDisplayId());
+  apps::AppServiceProxyFactory::GetForProfile(profile())
+      ->ExecuteContextMenuCommand(app_id(), command_id,
+                                  app_shortcut_items_->at(index).shortcut_id,
+                                  controller()->GetAppListDisplayId());
 }

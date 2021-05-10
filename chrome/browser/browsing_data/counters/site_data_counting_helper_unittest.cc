@@ -11,7 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "base/task/post_task.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/browsing_data/counters/site_data_counting_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/test/base/testing_profile.h"
@@ -28,7 +28,12 @@ class SiteDataCountingHelperTest : public testing::Test {
   const int64_t kTimeoutMs = 10;
 
   void SetUp() override {
-    profile_.reset(new TestingProfile());
+    profile_ = std::make_unique<TestingProfile>();
+    // Let the storage system finish setting up, to avoid test flakiness caused
+    // by the quota storage system shutting down at test end, while still being
+    // set up. TODO(crbug.com/1182630) Remove when crbug.com/1182630 is fixed.
+    profile()->GetDefaultStoragePartition();
+    task_environment_.RunUntilIdle();
   }
 
   void TearDown() override {
@@ -39,7 +44,7 @@ class SiteDataCountingHelperTest : public testing::Test {
   void CreateCookies(base::Time creation_time,
                      const std::vector<std::string>& urls) {
     content::StoragePartition* partition =
-        content::BrowserContext::GetDefaultStoragePartition(profile());
+        profile()->GetDefaultStoragePartition();
     network::mojom::CookieManager* cookie_manager =
         partition->GetCookieManagerForBrowserProcess();
 
@@ -52,8 +57,8 @@ class SiteDataCountingHelperTest : public testing::Test {
           net::CanonicalCookie::CreateSanitizedCookie(
               url, "name", "A=1", url.host(), url.path(), creation_time,
               base::Time(), creation_time, url.SchemeIsCryptographic(), false,
-              net::CookieSameSite::NO_RESTRICTION,
-              net::COOKIE_PRIORITY_DEFAULT);
+              net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT,
+              false);
       net::CookieOptions options;
       options.set_include_httponly();
       cookie_manager->SetCanonicalCookie(

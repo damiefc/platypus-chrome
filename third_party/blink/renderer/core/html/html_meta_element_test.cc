@@ -11,31 +11,28 @@
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/viewport_data.h"
 #include "third_party/blink/renderer/core/html/html_head_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/testing/color_scheme_helper.h"
+#include "third_party/blink/renderer/core/testing/mock_policy_container_host.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_compositor.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
 namespace blink {
 
 class HTMLMetaElementTest : public PageTestBase,
-                            private ScopedDisplayCutoutAPIForTest,
-                            private ScopedMetaColorSchemeForTest,
-                            private ScopedCSSColorSchemeForTest {
+                            private ScopedDisplayCutoutAPIForTest {
  public:
-  HTMLMetaElementTest()
-      : ScopedDisplayCutoutAPIForTest(true),
-        ScopedMetaColorSchemeForTest(true),
-        ScopedCSSColorSchemeForTest(true) {}
+  HTMLMetaElementTest() : ScopedDisplayCutoutAPIForTest(true) {}
   void SetUp() override {
     PageTestBase::SetUp();
     GetDocument().GetSettings()->SetViewportMetaEnabled(true);
@@ -226,7 +223,8 @@ TEST_F(HTMLMetaElementTest, ColorSchemeParsing) {
 
 TEST_F(HTMLMetaElementTest, ColorSchemeForcedDarkeningAndMQ) {
   ColorSchemeHelper color_scheme_helper(GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
 
   auto* media_query = GetDocument().GetMediaQueryMatcher().MatchMedia(
       "(prefers-color-scheme: dark)");
@@ -250,7 +248,19 @@ TEST_F(HTMLMetaElementTest, ReferrerPolicyWithoutContent) {
     <meta name="referrer" >
   )HTML");
   EXPECT_EQ(network::mojom::ReferrerPolicy::kStrictOrigin,
-            GetDocument().GetReferrerPolicy());
+            GetFrame().DomWindow()->GetReferrerPolicy());
+  EXPECT_EQ(network::mojom::ReferrerPolicy::kStrictOrigin,
+            GetFrame().DomWindow()->GetPolicyContainer()->GetReferrerPolicy());
+}
+
+TEST_F(HTMLMetaElementTest, ReferrerPolicyUpdatesPolicyContainer) {
+  GetDocument().head()->setInnerHTML(R"HTML(
+    <meta name="referrer" content="strict-origin">
+  )HTML");
+  EXPECT_EQ(network::mojom::ReferrerPolicy::kStrictOrigin,
+            GetFrame().DomWindow()->GetReferrerPolicy());
+  EXPECT_EQ(network::mojom::ReferrerPolicy::kStrictOrigin,
+            GetFrame().DomWindow()->GetPolicyContainer()->GetReferrerPolicy());
 }
 
 // This tests whether Web Monetization counter is properly triggered.

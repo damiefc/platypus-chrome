@@ -8,15 +8,14 @@
 #include "base/metrics/histogram_base.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "chrome/browser/chromeos/crostini/crostini_manager.h"
-#include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
+#include "chrome/browser/ash/crostini/crostini_manager.h"
+#include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/app_list/test/chrome_app_list_test_support.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/views/crostini/crostini_browser_test_util.h"
-#include "chrome/common/chrome_features.h"
+#include "chrome/browser/ui/views/crostini/crostini_dialogue_browser_test_util.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_concierge_client.h"
@@ -44,7 +43,7 @@ class CrostiniUninstallerViewBrowserTest : public CrostiniDialogBrowserTest {
       base::RunLoop loop;
       closure_ = loop.QuitClosure();
       loop.Run();
-      EXPECT_TRUE(stop_vm_called());
+      EXPECT_GE(stop_vm_call_count(), 1);
     }
 
    private:

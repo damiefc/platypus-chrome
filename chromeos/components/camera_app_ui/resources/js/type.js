@@ -65,7 +65,8 @@ export class Resolution {
    * @return {!Resolution}
    */
   static fromString(s) {
-    return new Resolution(...s.split('x').map(Number));
+    const [width, height] = s.split('x').map((x) => Number(x));
+    return new Resolution(width, height);
   }
 
   /**
@@ -95,6 +96,11 @@ export const Facing = {
   USER: 'user',
   ENVIRONMENT: 'environment',
   EXTERNAL: 'external',
+  // VIRTUAL_{facing} is for labeling video device for configuring extra stream
+  // from corresponding {facing} video device.
+  VIRTUAL_USER: 'virtual_user',
+  VIRTUAL_ENV: 'virtual_environment',
+  VIRTUAL_EXT: 'virtual_external',
   NOT_SET: '(not set)',
   UNKNOWN: 'unknown',
 };
@@ -108,6 +114,7 @@ export const ViewName = {
   GRID_SETTINGS: 'view-grid-settings',
   MESSAGE_DIALOG: 'view-message-dialog',
   PHOTO_RESOLUTION_SETTINGS: 'view-photo-resolution-settings',
+  PTZ_PANEL: 'view-ptz-panel',
   RESOLUTION_SETTINGS: 'view-resolution-settings',
   SETTINGS: 'view-settings',
   SPLASH: 'view-splash',
@@ -121,14 +128,6 @@ export const ViewName = {
 // TODO(inker): Exports/Imports these jsdoc only types by closure compiler
 // comment syntax. The implementation of syntax is tracked here:
 // https://github.com/google/closure-compiler/issues/3041
-
-/**
- * @typedef {{
- *   hasError: (boolean|undefined),
- *   resolution: (!Resolution|undefined),
- * }}
- */
-export let PerfInformation;
 
 /**
  * @typedef {{
@@ -166,3 +165,160 @@ export let MaxFpsInfo;
  * @typedef {!Array<!FpsRange>}
  */
 export let FpsRangeList;
+
+/**
+ * Type for performance event.
+ * @enum {string}
+ */
+export const PerfEvent = {
+  PHOTO_TAKING: 'photo-taking',
+  PHOTO_CAPTURE_SHUTTER: 'photo-capture-shutter',
+  PHOTO_CAPTURE_POST_PROCESSING: 'photo-capture-post-processing',
+  VIDEO_CAPTURE_POST_PROCESSING: 'video-capture-post-processing',
+  PORTRAIT_MODE_CAPTURE_POST_PROCESSING:
+      'portrait-mode-capture-post-processing',
+  MODE_SWITCHING: 'mode-switching',
+  CAMERA_SWITCHING: 'camera-switching',
+  LAUNCHING_FROM_WINDOW_CREATION: 'launching-from-window-creation',
+  LAUNCHING_FROM_LAUNCH_APP_COLD: 'launching-from-launch-app-cold',
+  LAUNCHING_FROM_LAUNCH_APP_WARM: 'launching-from-launch-app-warm',
+};
+
+/**
+ * @typedef {{
+ *   hasError: (boolean|undefined),
+ *   resolution: (!Resolution|undefined),
+ * }}
+ */
+export let PerfInformation;
+
+/**
+ * @typedef {{
+ *   event: !PerfEvent,
+ *   duration: number,
+ *   perfInfo: (!PerfInformation|undefined),
+ * }}
+ */
+export let PerfEntry;
+
+/**
+ * Error reported in testing run.
+ * @typedef {{
+ *   type: !ErrorType,
+ *   level: !ErrorLevel,
+ *   stack: string,
+ *   time: number,
+ *   name: string,
+ * }}
+ */
+export let ErrorInfo;
+
+/**
+ * Types of error used in ERROR metrics.
+ * @enum {string}
+ */
+export const ErrorType = {
+  BROKEN_THUMBNAIL: 'broken-thumbnail',
+  EMPTY_FILE: 'empty-file',
+  IDLE_DETECTOR_FAILURE: 'idle-detector-failure',
+  PRELOAD_IMAGE_FAILURE: 'preload-image-failure',
+  SET_FPS_RANGE_FAILURE: 'set-fps-range-failure',
+  START_CAMERA_FAILURE: 'start-camera-failure',
+  START_CAPTURE_FAILURE: 'start-capture-failure',
+  STOP_CAPTURE_FAILURE: 'stop-capture-failure',
+  UNCAUGHT_PROMISE: 'uncaught-promise',
+  MULTIPLE_STREAMS_FAILURE: 'multiple-streams-failure',
+};
+
+/**
+ * Error level used in ERROR metrics.
+ * @enum {string}
+ */
+export const ErrorLevel = {
+  WARNING: 'WARNING',
+  ERROR: 'ERROR',
+};
+
+/**
+ * Throws when a method is not implemented.
+ */
+export class NotImplementedError extends Error {
+  /**
+   * @param {string=} message
+   * @public
+   */
+  constructor(message = 'Method is not implemented') {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
+/**
+ * Throws when an action is canceled.
+ */
+export class CanceledError extends Error {
+  /**
+   * @param {string=} message
+   * @public
+   */
+  constructor(message = 'The action is canceled') {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
+/**
+ * Throws when an element fails to load a source.
+ */
+export class LoadError extends Error {
+  /**
+   * @param {string=} message
+   * @public
+   */
+  constructor(message = 'Source failed to load') {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
+/**
+ * Throws when an media element fails to play.
+ */
+export class PlayError extends Error {
+  /**
+   * @param {string=} message
+   * @public
+   */
+  constructor(message = 'Media element failed to play') {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
+/**
+ * Throws when an media element play a malformed file.
+ */
+export class PlayMalformedError extends Error {
+  /**
+   * @param {string=} message
+   * @public
+   */
+  constructor(message = 'Media element failed to play a malformed file') {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
+/**
+ * Throws when the data to generate thumbnail is totally empty.
+ */
+export class EmptyThumbnailError extends Error {
+  /**
+   * @param {string=} message
+   * @public
+   */
+  constructor(message = 'The thumbnail is empty') {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}

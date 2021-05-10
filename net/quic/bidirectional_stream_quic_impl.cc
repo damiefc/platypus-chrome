@@ -15,7 +15,6 @@
 #include "net/http/http_util.h"
 #include "net/socket/next_proto.h"
 #include "net/spdy/spdy_http_utils.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 #include "net/third_party/quiche/src/quic/core/quic_connection.h"
 #include "net/third_party/quiche/src/spdy/core/spdy_header_block.h"
 #include "quic_http_stream.h"
@@ -124,7 +123,7 @@ void BidirectionalStreamQuicImpl::SendRequestHeaders() {
 int BidirectionalStreamQuicImpl::WriteHeaders() {
   DCHECK(!has_sent_headers_);
 
-  spdy::SpdyHeaderBlock headers;
+  spdy::Http2HeaderBlock headers;
   HttpRequestInfo http_request_info;
   http_request_info.url = request_info_->url;
   http_request_info.method = request_info_->method;

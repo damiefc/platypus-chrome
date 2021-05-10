@@ -7,8 +7,6 @@
 
 #include <stddef.h>
 
-#include <memory>
-
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/discardable_memory.h"
@@ -24,7 +22,7 @@
 namespace content {
 
 CONTENT_EXPORT
-std::unique_ptr<discardable_memory::ClientDiscardableSharedMemoryManager>
+scoped_refptr<discardable_memory::ClientDiscardableSharedMemoryManager>
 CreateDiscardableMemoryAllocator();
 
 }  // namespace content

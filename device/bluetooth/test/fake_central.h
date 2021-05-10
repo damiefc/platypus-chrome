@@ -37,6 +37,7 @@ class FakeCentral final : public mojom::FakeCentral,
   void SimulatePreconnectedPeripheral(
       const std::string& address,
       const std::string& name,
+      const base::flat_map<uint16_t, std::vector<uint8_t>>& manufacturer_data,
       const std::vector<device::BluetoothUUID>& known_service_uuids,
       SimulatePreconnectedPeripheralCallback callback) override;
   void SimulateAdvertisementReceived(
@@ -179,9 +180,19 @@ class FakeCentral final : public mojom::FakeCentral,
       AdvertisementErrorCallback error_callback) override;
   void ResetAdvertising(base::OnceClosure callback,
                         AdvertisementErrorCallback error_callback) override;
+  void ConnectDevice(
+      const std::string& address,
+      const base::Optional<device::BluetoothDevice::AddressType>& address_type,
+      ConnectDeviceCallback callback,
+      ErrorCallback error_callback) override;
 #endif
   device::BluetoothLocalGattService* GetGattService(
       const std::string& identifier) const override;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  void SetServiceAllowList(const UUIDList& uuids,
+                           base::OnceClosure callback,
+                           ErrorCallback error_callback) override;
+#endif
   base::WeakPtr<BluetoothAdapter> GetWeakPtr() override;
   bool SetPoweredImpl(bool powered) override;
   void UpdateFilter(

@@ -8,6 +8,7 @@
 #include "base/time/time.h"
 #include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/callback_layer_animation_observer.h"
+#include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_element.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/layer_animation_sequence.h"
@@ -86,7 +87,7 @@ ui::CallbackLayerAnimationObserver* BuildObserverToHideView(views::View* view) {
   if (d)
     layer_animation_sequence->AddElement(std::move(d));
 
-  layer_animation_sequence->set_is_cyclic(params.is_cyclic);
+  layer_animation_sequence->set_is_repeating(params.is_cyclic);
 
   return layer_animation_sequence;
 }

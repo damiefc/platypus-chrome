@@ -10,15 +10,16 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "printing/backend/cups_connection.h"
 #include "printing/backend/cups_ipp_constants.h"
 #include "printing/backend/cups_printer.h"
 #include "printing/backend/print_backend_consts.h"
+#include "printing/backend/print_backend_utils.h"
 #include "printing/mojom/print.mojom.h"
 #include "printing/printing_utils.h"
 #include "printing/units.h"
@@ -183,7 +184,7 @@ void ExtractCopies(const CupsOptionProvider& printer,
       (lower_bound != -1 && upper_bound >= 2) ? upper_bound : 1;
 }
 
-// Reads resolution from |attr| and puts into |size| in dots per inch.
+// Reads resolution from `attr` and puts into `size` in dots per inch.
 base::Optional<gfx::Size> GetResolution(ipp_attribute_t* attr, int i) {
   ipp_res_t units;
   int yres;
@@ -200,8 +201,8 @@ base::Optional<gfx::Size> GetResolution(ipp_attribute_t* attr, int i) {
   return {};
 }
 
-// Initializes |printer_info.dpis| with available resolutions and
-// |printer_info.default_dpi| with default resolution provided by |printer|.
+// Initializes `printer_info.dpis` with available resolutions and
+// `printer_info.default_dpi` with default resolution provided by `printer`.
 void ExtractResolutions(const CupsOptionProvider& printer,
                         PrinterSemanticCapsAndDefaults* printer_info) {
   ipp_attribute_t* attr = printer.GetSupportedOptionValues(kIppResolution);
@@ -269,7 +270,7 @@ bool PinSupported(const CupsOptionProvider& printer) {
   return base::Contains(values, kPinEncryptionNone);
 }
 
-// Returns the number of IPP attributes added to |caps| (not necessarily in
+// Returns the number of IPP attributes added to `caps` (not necessarily in
 // 1-to-1 correspondence).
 size_t AddAttributes(const CupsOptionProvider& printer,
                      const char* attr_group_name,
@@ -291,7 +292,7 @@ size_t AddAttributes(const CupsOptionProvider& printer,
     }
 
     size_t previous_size = caps->size();
-    // Run the handler that adds items to |caps| based on option type.
+    // Run the handler that adds items to `caps` based on option type.
     it->second.Run(printer, option_name, caps);
     if (caps->size() > previous_size)
       attr_count++;
@@ -335,8 +336,7 @@ void CapsAndDefaultsFromPrinter(const CupsOptionProvider& printer,
 
 #if defined(OS_CHROMEOS)
   printer_info->pin_supported = PinSupported(printer);
-  if (base::FeatureList::IsEnabled(printing::features::kAdvancedPpdAttributes))
-    ExtractAdvancedCapabilities(printer, printer_info);
+  ExtractAdvancedCapabilities(printer, printer_info);
 #endif  // defined(OS_CHROMEOS)
 
   ExtractCopies(printer, printer_info);

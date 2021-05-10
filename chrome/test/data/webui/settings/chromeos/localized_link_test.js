@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
 // #import {assertEquals, assertFalse, assertNotEquals, assertTrue} from '../../chai_assert.js';
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {eventToPromise, flushTasks, waitAfterNextRender} from 'chrome://test/test_util.m.js';
 // #import 'chrome://os-settings/chromeos/os_settings.js';
+// clang-format on
 
 suite('localized_link', function() {
   let localizedStringWithLink;
@@ -13,6 +17,12 @@ suite('localized_link', function() {
         ` link-url="${linkUrl}"></settings-localized-link>`;
   }
 
+  function flushAsync() {
+    Polymer.dom.flush();
+    // Use setTimeout to wait for the next macrotask.
+    return new Promise(resolve => setTimeout(resolve));
+  }
+
   test('LinkFirst', function() {
     document.body.innerHTML =
         GetLocalizedStringWithLinkElementHtml(`<a>first link</a>then text`, ``);
@@ -20,7 +30,7 @@ suite('localized_link', function() {
         document.body.querySelector('settings-localized-link');
     assertEquals(
         localizedStringWithLink.$.container.innerHTML,
-        `<a id="id0" aria-labelledby="id0 id1">first link</a>` +
+        `<a id="id0" aria-labelledby="id0 id1" tabindex="0">first link</a>` +
             `<span id="id1" aria-hidden="true">then text</span>`);
   });
 
@@ -32,7 +42,7 @@ suite('localized_link', function() {
     assertEquals(
         localizedStringWithLink.$.container.innerHTML,
         `<span id="id0" aria-hidden="true">first text </span>` +
-            `<a id="id1" aria-labelledby="id0 id1 id2">then link</a>` +
+            `<a id="id1" aria-labelledby="id0 id1 id2" tabindex="0">then link</a>` +
             `<span id="id2" aria-hidden="true"> then more text</span>`);
   });
 
@@ -44,7 +54,7 @@ suite('localized_link', function() {
     assertEquals(
         localizedStringWithLink.$.container.innerHTML,
         `<span id="id0" aria-hidden="true">first text</span>` +
-            `<a id="id1" aria-labelledby="id0 id1">then link</a>`);
+            `<a id="id1" aria-labelledby="id0 id1" tabindex="0">then link</a>`);
   });
 
   test('PopulatedLink', function() {
@@ -55,7 +65,7 @@ suite('localized_link', function() {
     assertEquals(
         localizedStringWithLink.$.container.innerHTML,
         `<a id="id0" aria-labelledby="id0" href="http://google.com" ` +
-            `target="_blank">populated link</a>`);
+            `target="_blank" tabindex="0">populated link</a>`);
   });
 
   test('PrepopulatedLink', function() {
@@ -65,7 +75,7 @@ suite('localized_link', function() {
         document.body.querySelector('settings-localized-link');
     assertEquals(
         localizedStringWithLink.$.container.innerHTML,
-        `<a href="http://google.com" id="id0" aria-labelledby="id0">` +
+        `<a href="http://google.com" id="id0" aria-labelledby="id0" tabindex="0">` +
             `pre-populated link</a>`);
   });
 
@@ -77,5 +87,39 @@ suite('localized_link', function() {
     assertEquals(
         localizedStringWithLink.$.container.innerHTML,
         `No anchor tags in this sentence.`);
+  });
+
+  test('LinkClick', function() {
+    document.body.innerHTML = GetLocalizedStringWithLinkElementHtml(
+        `Text with a <a href='#'>link</a>`, ``);
+
+    return flushAsync().then(async () => {
+      const localizedLink =
+        document.body.querySelector('settings-localized-link');
+      assertTrue(!!localizedLink);
+      const anchorTag = localizedLink.$$('a');
+      assertTrue(!!anchorTag);
+      const localizedLinkPromise = test_util.eventToPromise(
+        'link-clicked', localizedLink);
+
+      anchorTag.click();
+      await Promise.all([localizedLinkPromise, test_util.flushTasks()]);
+    });
+  });
+
+  test('link disabled', async function() {
+    document.body.innerHTML = GetLocalizedStringWithLinkElementHtml(
+        `Text with a <a href='#'>link</a>`, ``);
+
+    await flushAsync();
+    const localizedLink =
+        document.body.querySelector('settings-localized-link');
+    assertTrue(!!localizedLink);
+    const anchorTag = localizedLink.$$('a');
+    assertTrue(!!anchorTag);
+    assertEquals(anchorTag.getAttribute('tabindex'), '0');
+    localizedLink.linkDisabled = true;
+    await flushAsync();
+    assertEquals(anchorTag.getAttribute('tabindex'), '-1');
   });
 });

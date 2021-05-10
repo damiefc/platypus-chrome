@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env vpython
 #
 # Copyright 2013 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
@@ -251,15 +251,14 @@ def main():
                       help='Path to the adb binary.')
   args = parser.parse_args()
 
-  devil_chromium.Initialize(adb_path=args.adb_path)
+  if args.output_directory:
+    constants.SetOutputDirectory(args.output_directory)
+
+  devil_chromium.Initialize(output_directory=constants.GetOutDirectory(),
+                            adb_path=args.adb_path)
 
   denylist = (device_denylist.Denylist(args.denylist_file)
               if args.denylist_file else None)
-
-  if args.output_directory:
-    constants.SetOutputDirectory(args.output_directory)
-  # Do an up-front test that the output directory is known.
-  constants.CheckOutputDirectory()
 
   if args.device:
     devices = [device_utils.DeviceUtils(args.device)]

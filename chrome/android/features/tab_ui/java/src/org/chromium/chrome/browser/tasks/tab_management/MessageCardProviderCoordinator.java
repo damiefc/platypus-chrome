@@ -8,6 +8,8 @@ import android.content.Context;
 
 import androidx.annotation.Nullable;
 
+import org.chromium.base.supplier.Supplier;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,9 +23,10 @@ public class MessageCardProviderCoordinator {
     private final MessageCardProviderMediator mMediator;
     private final List<MessageService> mMessageServices = new ArrayList<>();
 
-    MessageCardProviderCoordinator(
-            Context context, MessageCardView.DismissActionProvider uiDismissActionProvider) {
-        mMediator = new MessageCardProviderMediator(context, uiDismissActionProvider);
+    MessageCardProviderCoordinator(Context context, Supplier<Boolean> isIncognitoSupplier,
+            MessageCardView.DismissActionProvider uiDismissActionProvider) {
+        mMediator = new MessageCardProviderMediator(
+                context, isIncognitoSupplier, uiDismissActionProvider);
     }
 
     /**
@@ -53,6 +56,15 @@ public class MessageCardProviderCoordinator {
     public MessageCardProviderMediator.Message getNextMessageItemForType(
             @MessageService.MessageType int messageType) {
         return mMediator.getNextMessageItemForType(messageType);
+    }
+
+    /**
+     * @param messageType The {@link MessageService.MessageType} associated with the message.
+     * @param identifier The identifier associated with the message.
+     * @return Whether the given message is shown.
+     */
+    boolean isMessageShown(@MessageService.MessageType int messageType, int identifier) {
+        return mMediator.isMessageShown(messageType, identifier);
     }
 
     /**

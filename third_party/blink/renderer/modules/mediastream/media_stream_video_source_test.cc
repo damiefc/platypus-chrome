@@ -52,6 +52,8 @@ class MediaStreamVideoSourceTest : public testing::Test {
         String::FromUTF8("dummy_source_name"), false /* remote */);
     stream_source_->SetPlatformSource(
         base::WrapUnique(mock_stream_video_source_));
+    ON_CALL(*mock_stream_video_source_, SetCanDiscardAlpha)
+        .WillByDefault(Return());
     ON_CALL(*mock_stream_video_source_, SupportsEncodedOutput)
         .WillByDefault(Return(true));
   }
@@ -449,8 +451,7 @@ TEST_F(MediaStreamVideoSourceTest, ReconfigureTrack) {
   EXPECT_EQ(track.Source().GetReadyState(),
             WebMediaStreamSource::kReadyStateLive);
 
-  MediaStreamVideoTrack* native_track =
-      MediaStreamVideoTrack::GetVideoTrack(track);
+  MediaStreamVideoTrack* native_track = MediaStreamVideoTrack::From(track);
   MediaStreamTrackPlatform::Settings settings;
   native_track->GetSettings(settings);
   EXPECT_EQ(settings.width, 640);
@@ -480,8 +481,7 @@ TEST_F(MediaStreamVideoSourceTest, ReconfigureStoppedTrack) {
   EXPECT_EQ(track.Source().GetReadyState(),
             WebMediaStreamSource::kReadyStateLive);
 
-  MediaStreamVideoTrack* native_track =
-      MediaStreamVideoTrack::GetVideoTrack(track);
+  MediaStreamVideoTrack* native_track = MediaStreamVideoTrack::From(track);
   MediaStreamTrackPlatform::Settings settings;
   native_track->GetSettings(settings);
   EXPECT_EQ(settings.width, 640);
@@ -683,15 +683,13 @@ TEST_F(MediaStreamVideoSourceTest, StopSuspendedTrack) {
 
   // Simulate assigning |track1| to a sink, then removing it from the sink, and
   // then stopping it.
-  MediaStreamVideoTrack* track1 =
-      MediaStreamVideoTrack::GetVideoTrack(web_track1);
+  MediaStreamVideoTrack* track1 = MediaStreamVideoTrack::From(web_track1);
   mock_source()->UpdateHasConsumers(track1, true);
   mock_source()->UpdateHasConsumers(track1, false);
   track1->Stop();
 
   // Simulate assigning |track2| to a sink. The source should not be suspended.
-  MediaStreamVideoTrack* track2 =
-      MediaStreamVideoTrack::GetVideoTrack(web_track2);
+  MediaStreamVideoTrack* track2 = MediaStreamVideoTrack::From(web_track2);
   mock_source()->UpdateHasConsumers(track2, true);
   EXPECT_FALSE(mock_source()->is_suspended());
 }
@@ -702,8 +700,7 @@ TEST_F(MediaStreamVideoSourceTest, AddTrackAfterStoppingSource) {
   EXPECT_EQ(1, NumberOfSuccessConstraintsCallbacks());
   EXPECT_EQ(0, NumberOfFailedConstraintsCallbacks());
 
-  MediaStreamVideoTrack* track1 =
-      MediaStreamVideoTrack::GetVideoTrack(web_track1);
+  MediaStreamVideoTrack* track1 = MediaStreamVideoTrack::From(web_track1);
   EXPECT_CALL(*this, MockNotification());
   // This is equivalent to track.stop() in JavaScript.
   track1->StopAndNotify(WTF::Bind(&MediaStreamVideoSourceTest::MockNotification,
@@ -779,8 +776,8 @@ TEST_F(MediaStreamVideoSourceTest, CapturingLinkSecureTracksAndEncodedSinks) {
   InSequence s;
   EXPECT_CALL(*mock_source(), OnCapturingLinkSecured(true));
   WebMediaStreamTrack track = CreateTrack();
-  mock_source()->UpdateCapturingLinkSecure(
-      MediaStreamVideoTrack::GetVideoTrack(track), true);
+  mock_source()->UpdateCapturingLinkSecure(MediaStreamVideoTrack::From(track),
+                                           true);
 
   EXPECT_CALL(*mock_source(), OnCapturingLinkSecured(false));
   MockMediaStreamVideoSink sink;
@@ -788,8 +785,30 @@ TEST_F(MediaStreamVideoSourceTest, CapturingLinkSecureTracksAndEncodedSinks) {
   EXPECT_CALL(*mock_source(), OnCapturingLinkSecured(true));
   sink.DisconnectEncodedFromTrack();
   EXPECT_CALL(*mock_source(), OnCapturingLinkSecured(false));
-  mock_source()->UpdateCapturingLinkSecure(
-      MediaStreamVideoTrack::GetVideoTrack(track), false);
+  mock_source()->UpdateCapturingLinkSecure(MediaStreamVideoTrack::From(track),
+                                           false);
+}
+
+TEST_F(MediaStreamVideoSourceTest, CanDiscardAlpha) {
+  InSequence s;
+  WebMediaStreamTrack track = CreateTrack();
+
+  MockMediaStreamVideoSink sink_no_alpha;
+  sink_no_alpha.SetUsesAlpha(MediaStreamVideoSink::UsesAlpha::kNo);
+  MockMediaStreamVideoSink sink_alpha;
+  sink_alpha.SetUsesAlpha(MediaStreamVideoSink::UsesAlpha::kDefault);
+
+  EXPECT_CALL(*mock_source(), SetCanDiscardAlpha(true));
+  sink_no_alpha.ConnectToTrack(track);
+
+  EXPECT_CALL(*mock_source(), SetCanDiscardAlpha(false));
+  sink_alpha.ConnectToTrack(track);
+
+  EXPECT_CALL(*mock_source(), SetCanDiscardAlpha(false));
+  sink_no_alpha.DisconnectFromTrack();
+
+  EXPECT_CALL(*mock_source(), SetCanDiscardAlpha(true));
+  sink_alpha.DisconnectFromTrack();
 }
 
 }  // namespace blink

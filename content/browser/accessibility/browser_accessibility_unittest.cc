@@ -4,11 +4,12 @@
 
 #include "content/browser/accessibility/browser_accessibility.h"
 
-#include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/test_browser_accessibility_delegate.h"
+#include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/accessibility/ax_node_position.h"
 
 namespace content {
 
@@ -24,16 +25,18 @@ class BrowserAccessibilityTest : public testing::Test {
  private:
   void SetUp() override;
 
-  base::test::TaskEnvironment task_environment_;
+  BrowserTaskEnvironment task_environment_;
+  ui::testing::ScopedAxModeSetter ax_mode_setter_;
+
   DISALLOW_COPY_AND_ASSIGN(BrowserAccessibilityTest);
 };
 
-BrowserAccessibilityTest::BrowserAccessibilityTest() = default;
+BrowserAccessibilityTest::BrowserAccessibilityTest()
+    : ax_mode_setter_(ui::kAXModeComplete) {}
 
 BrowserAccessibilityTest::~BrowserAccessibilityTest() = default;
 
 void BrowserAccessibilityTest::SetUp() {
-  ui::AXPlatformNode::NotifyAddAXModeFlags(ui::kAXModeComplete);
   test_browser_accessibility_delegate_ =
       std::make_unique<TestBrowserAccessibilityDelegate>();
 }
@@ -127,8 +130,7 @@ TEST_F(BrowserAccessibilityTest, PlatformChildIterator) {
   parent_tree_update.nodes[3].id = 4;
 
   parent_tree_update.nodes[4].id = 5;
-  parent_tree_update.nodes[4].AddStringAttribute(
-      ax::mojom::StringAttribute::kChildTreeId, child_tree_id.ToString());
+  parent_tree_update.nodes[4].AddChildTreeId(child_tree_id);
 
   parent_tree_update.nodes[5].id = 6;
   parent_tree_update.nodes[5].child_ids = {9};
@@ -390,6 +392,69 @@ TEST_F(BrowserAccessibilityTest, GetInnerTextRangeBoundsRect) {
                     ui::AXClippingBehavior::kUnclipped)
                 .ToString());
 #endif
+}
+
+TEST_F(BrowserAccessibilityTest, GetInnerTextRangeBoundsRectPlainTextField) {
+  // Text area with 'Hello' text
+  // rootWebArea
+  // ++textField
+  // ++++genericContainer
+  // ++++++staticText
+  // ++++++++inlineTextBox
+  ui::AXNodeData root;
+  root.id = 1;
+  root.role = ax::mojom::Role::kRootWebArea;
+  root.relative_bounds.bounds = gfx::RectF(0, 0, 800, 600);
+
+  ui::AXNodeData textarea;
+  textarea.id = 2;
+  textarea.role = ax::mojom::Role::kTextField;
+  textarea.SetValue("Hello");
+  textarea.relative_bounds.bounds = gfx::RectF(100, 100, 150, 20);
+  root.child_ids.push_back(2);
+
+  ui::AXNodeData container;
+  container.id = 3;
+  container.role = ax::mojom::Role::kGenericContainer;
+  container.relative_bounds.bounds = textarea.relative_bounds.bounds;
+  textarea.child_ids.push_back(3);
+
+  ui::AXNodeData static_text;
+  static_text.id = 4;
+  static_text.role = ax::mojom::Role::kStaticText;
+  static_text.SetName("Hello");
+  static_text.relative_bounds.bounds = gfx::RectF(100, 100, 50, 10);
+  container.child_ids.push_back(4);
+
+  ui::AXNodeData inline_text1;
+  inline_text1.id = 5;
+  inline_text1.role = ax::mojom::Role::kInlineTextBox;
+  inline_text1.SetName("Hello");
+  inline_text1.relative_bounds.bounds = gfx::RectF(100, 100, 50, 10);
+  inline_text1.AddIntListAttribute(
+      ax::mojom::IntListAttribute::kCharacterOffsets, {10, 20, 30, 40, 50});
+
+  inline_text1.SetTextDirection(ax::mojom::WritingDirection::kLtr);
+  static_text.child_ids.push_back(5);
+
+  std::unique_ptr<BrowserAccessibilityManager> browser_accessibility_manager(
+      BrowserAccessibilityManager::Create(
+          MakeAXTreeUpdate(root, textarea, container, static_text,
+                           inline_text1),
+          test_browser_accessibility_delegate_.get()));
+
+  BrowserAccessibility* root_accessible =
+      browser_accessibility_manager->GetRoot();
+  ASSERT_NE(nullptr, root_accessible);
+  BrowserAccessibility* textarea_accessible =
+      root_accessible->PlatformGetChild(0);
+  ASSERT_NE(nullptr, textarea_accessible);
+
+  // Validate the bounds of 'ell'.
+  EXPECT_EQ(gfx::Rect(110, 100, 30, 10),
+            textarea_accessible->GetInnerTextRangeBoundsRect(
+                1, 4, ui::AXCoordinateSystem::kRootFrame,
+                ui::AXClippingBehavior::kUnclipped));
 }
 
 TEST_F(BrowserAccessibilityTest, GetInnerTextRangeBoundsRectMultiElement) {
@@ -694,31 +759,37 @@ TEST_F(BrowserAccessibilityTest, GetAuthorUniqueId) {
       browser_accessibility_manager->GetRoot();
   ASSERT_NE(nullptr, root_accessible);
 
-  ASSERT_EQ(base::WideToUTF16(L"my_html_id"),
-            root_accessible->GetAuthorUniqueId());
+  ASSERT_EQ(u"my_html_id", root_accessible->GetAuthorUniqueId());
 }
 
 TEST_F(BrowserAccessibilityTest, NextWordPositionWithHypertext) {
   // Build a tree simulating an INPUT control with placeholder text.
   ui::AXNodeData root;
   root.id = 1;
-  root.role = ax::mojom::Role::kRootWebArea;
-  root.child_ids = {2};
-
   ui::AXNodeData input;
   input.id = 2;
-  input.role = ax::mojom::Role::kTextField;
-  input.SetName("Search the web");
-  input.child_ids = {3};
-
+  ui::AXNodeData text_container;
+  text_container.id = 3;
   ui::AXNodeData static_text;
-  static_text.id = 3;
+  static_text.id = 4;
+  ui::AXNodeData inline_text;
+  inline_text.id = 5;
+
+  root.role = ax::mojom::Role::kRootWebArea;
+  root.child_ids = {input.id};
+
+  input.role = ax::mojom::Role::kTextField;
+  input.AddState(ax::mojom::State::kEditable);
+  input.SetName("Search the web");
+  input.child_ids = {text_container.id};
+
+  text_container.role = ax::mojom::Role::kGenericContainer;
+  text_container.child_ids = {static_text.id};
+
   static_text.role = ax::mojom::Role::kStaticText;
   static_text.SetName("Search the web");
-  static_text.child_ids = {4};
+  static_text.child_ids = {inline_text.id};
 
-  ui::AXNodeData inline_text;
-  inline_text.id = 4;
   inline_text.role = ax::mojom::Role::kInlineTextBox;
   inline_text.SetName("Search the web");
   inline_text.AddIntListAttribute(ax::mojom::IntListAttribute::kWordStarts,
@@ -728,7 +799,8 @@ TEST_F(BrowserAccessibilityTest, NextWordPositionWithHypertext) {
 
   std::unique_ptr<BrowserAccessibilityManager> browser_accessibility_manager(
       BrowserAccessibilityManager::Create(
-          MakeAXTreeUpdate(root, input, static_text, inline_text),
+          MakeAXTreeUpdate(root, input, text_container, static_text,
+                           inline_text),
           test_browser_accessibility_delegate_.get()));
   ASSERT_NE(nullptr, browser_accessibility_manager.get());
 
@@ -740,8 +812,9 @@ TEST_F(BrowserAccessibilityTest, NextWordPositionWithHypertext) {
   ASSERT_NE(nullptr, input_accessible);
 
   // Create a text position at offset 0 in the input control
-  auto position = input_accessible->CreatePositionAt(
-      0, ax::mojom::TextAffinity::kDownstream);
+  BrowserAccessibility::AXPosition position =
+      input_accessible->CreatePositionAt(0,
+                                         ax::mojom::TextAffinity::kDownstream);
 
   // On platforms that expose IA2 or ATK hypertext, moving by word should work
   // the same as if the value of the text field is equal to the placeholder
@@ -753,8 +826,9 @@ TEST_F(BrowserAccessibilityTest, NextWordPositionWithHypertext) {
   // "read current line". Only once the user starts typing should the
   // placeholder disappear.
 
-  auto next_word_start = position->CreateNextWordStartPosition(
-      ui::AXBoundaryBehavior::CrossBoundary);
+  BrowserAccessibility::AXPosition next_word_start =
+      position->CreateNextWordStartPosition(
+          ui::AXBoundaryBehavior::CrossBoundary);
   if (position->MaxTextOffset() == 0) {
     EXPECT_TRUE(next_word_start->IsNullPosition());
   } else {
@@ -764,8 +838,9 @@ TEST_F(BrowserAccessibilityTest, NextWordPositionWithHypertext) {
         next_word_start->ToString());
   }
 
-  auto next_word_end = position->CreateNextWordEndPosition(
-      ui::AXBoundaryBehavior::CrossBoundary);
+  BrowserAccessibility::AXPosition next_word_end =
+      position->CreateNextWordEndPosition(
+          ui::AXBoundaryBehavior::CrossBoundary);
   if (position->MaxTextOffset() == 0) {
     EXPECT_TRUE(next_word_end->IsNullPosition());
   } else {
@@ -790,8 +865,7 @@ TEST_F(BrowserAccessibilityTest, PortalName) {
 
   parent_tree_update.nodes[0].id = 1;
   parent_tree_update.nodes[0].role = ax::mojom::Role::kPortal;
-  parent_tree_update.nodes[0].AddStringAttribute(
-      ax::mojom::StringAttribute::kChildTreeId, child_tree_id.ToString());
+  parent_tree_update.nodes[0].AddChildTreeId(child_tree_id);
 
   ui::AXTreeUpdate child_tree_update;
   child_tree_update.tree_data.tree_id = child_tree_id;

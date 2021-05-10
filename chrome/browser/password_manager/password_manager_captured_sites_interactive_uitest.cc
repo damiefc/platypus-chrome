@@ -7,7 +7,6 @@
 
 #include "base/files/file_enumerator.h"
 #include "base/path_service.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/automated_tests/cache_replayer.h"
 #include "chrome/browser/autofill/captured_sites_test_utils.h"
@@ -16,7 +15,7 @@
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "components/autofill/core/common/autofill_features.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -77,7 +76,7 @@ class CapturedSitesPasswordManagerBrowserTest
             PasswordStoreFactory::GetForProfile(
                 browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
                 .get());
-    autofill::PasswordForm signin_form;
+    password_manager::PasswordForm signin_form;
     signin_form.url = GURL(origin);
     signin_form.signon_realm = origin;
     signin_form.password_value = base::ASCIIToUTF16(password);
@@ -141,7 +140,8 @@ class CapturedSitesPasswordManagerBrowserTest
       return false;
     }
 
-    const std::vector<autofill::PasswordForm>& passwords_vector = found->second;
+    const std::vector<password_manager::PasswordForm>& passwords_vector =
+        found->second;
     for (const auto& found_password : passwords_vector) {
       if (base::ASCIIToUTF16(username) == found_password.username_value &&
           base::ASCIIToUTF16(password) == found_password.password_value) {
@@ -222,23 +222,30 @@ class CapturedSitesPasswordManagerBrowserTest
   content::WebContents* web_contents_ = nullptr;
   std::unique_ptr<ServerUrlLoader> server_url_loader_;
 
-  std::unique_ptr<
-      BrowserContextDependencyManager::CreateServicesCallbackList::Subscription>
-      create_services_subscription_;
+  base::CallbackListSubscription create_services_subscription_;
 
   DISALLOW_COPY_AND_ASSIGN(CapturedSitesPasswordManagerBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_P(CapturedSitesPasswordManagerBrowserTest, Recipe) {
+  captured_sites_test_utils::PrintInstructions(
+      "password_manager_captured_sites_interactive_uitest");
+
   base::FilePath src_dir;
   ASSERT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &src_dir));
 
   bool test_completed = recipe_replayer()->ReplayTest(
-      GetParam().capture_file_path, GetParam().recipe_file_path);
+      GetParam().capture_file_path, GetParam().recipe_file_path,
+      captured_sites_test_utils::GetCommandFilePath());
   if (!test_completed)
     ADD_FAILURE() << "Full execution was unable to complete.";
 }
 
+// This test is called with a dynamic list and may be empty during the Autofill
+// run instance, so adding GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST a la
+// crbug/1192206
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    CapturedSitesPasswordManagerBrowserTest);
 INSTANTIATE_TEST_SUITE_P(
     All,
     CapturedSitesPasswordManagerBrowserTest,

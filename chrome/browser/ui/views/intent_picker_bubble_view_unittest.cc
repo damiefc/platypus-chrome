@@ -7,16 +7,20 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/optional.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/intent_helper/apps_navigation_types.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/test_with_browser_view.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/views/chrome_views_test_base.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/image/image.h"
@@ -28,8 +32,7 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/arc/intent_helper/arc_intent_picker_app_fetcher.h"
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #endif
 
@@ -43,7 +46,7 @@ using content::Referrer;
 // ChromeOS-only, so for this unit test to match the behavior of
 // IntentPickerBubbleView on non-ChromeOS platforms, if needs to not filter any
 // packages.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 const char* kArcIntentHelperPackageName =
     arc::ArcIntentHelperBridge::kArcIntentHelperPackageName;
 bool (*IsIntentHelperPackage)(const std::string&) =
@@ -55,15 +58,15 @@ bool IsIntentHelperPackage(const std::string& package_name) {
 }
 #endif
 
-class IntentPickerBubbleViewTest : public BrowserWithTestWindowTest {
+class IntentPickerBubbleViewTest : public TestWithBrowserView {
  public:
   IntentPickerBubbleViewTest() = default;
 
   void TearDown() override {
     // Make sure the bubble is destroyed before the profile to avoid a crash.
-    bubble_.reset();
+    bubble_->GetWidget()->CloseNow();
 
-    BrowserWithTestWindowTest::TearDown();
+    TestWithBrowserView::TearDown();
   }
 
  protected:
@@ -71,16 +74,19 @@ class IntentPickerBubbleViewTest : public BrowserWithTestWindowTest {
                         bool show_stay_in_chrome,
                         PageActionIconType icon_type,
                         const base::Optional<url::Origin>& initiating_origin) {
-    anchor_view_ = std::make_unique<views::View>();
+    BrowserView* browser_view =
+        BrowserView::GetBrowserViewForBrowser(browser());
+    anchor_view_ =
+        browser_view->toolbar()->AddChildView(std::make_unique<views::View>());
 
     // Pushing a couple of fake apps just to check they are created on the UI.
-    app_info_.emplace_back(apps::PickerEntryType::kArc, gfx::Image(),
+    app_info_.emplace_back(apps::PickerEntryType::kArc, ui::ImageModel(),
                            "package_1", "dank app 1");
-    app_info_.emplace_back(apps::PickerEntryType::kArc, gfx::Image(),
+    app_info_.emplace_back(apps::PickerEntryType::kArc, ui::ImageModel(),
                            "package_2", "dank_app_2");
     // Also adding the corresponding Chrome's package name on ARC, even if this
     // is given to the picker UI as input it should be ignored.
-    app_info_.emplace_back(apps::PickerEntryType::kArc, gfx::Image(),
+    app_info_.emplace_back(apps::PickerEntryType::kArc, ui::ImageModel(),
                            kArcIntentHelperPackageName, "legit_chrome");
 
     if (use_icons)
@@ -99,24 +105,27 @@ class IntentPickerBubbleViewTest : public BrowserWithTestWindowTest {
     // AppInfo is move only. Manually create a new app_info array to pass into
     // the bubble constructor.
     for (const auto& app : app_info_) {
-      app_info.emplace_back(app.type, app.icon, app.launch_name,
+      app_info.emplace_back(app.type, app.icon_model, app.launch_name,
                             app.display_name);
     }
 
-    bubble_ = IntentPickerBubbleView::CreateBubbleViewForTesting(
-        anchor_view_.get(), /*icon_view=*/nullptr, icon_type,
-        std::move(app_info), show_stay_in_chrome,
+    auto bubble = IntentPickerBubbleView::CreateBubbleViewForTesting(
+        anchor_view_, /*icon_view=*/nullptr, icon_type, std::move(app_info),
+        show_stay_in_chrome,
         /*show_remember_selection=*/true, initiating_origin,
         base::BindOnce(&IntentPickerBubbleViewTest::OnBubbleClosed,
                        base::Unretained(this)),
         web_contents);
+    bubble_ = bubble.get();
+    views::BubbleDialogDelegateView::CreateBubble(std::move(bubble));
   }
 
   void FillAppListWithDummyIcons() {
     ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-    gfx::Image dummy_icon = rb.GetImageNamed(IDR_CLOSE);
+    ui::ImageModel dummy_icon_model =
+        ui::ImageModel::FromImage(rb.GetImageNamed(IDR_CLOSE));
     for (auto& app : app_info_)
-      app.icon = dummy_icon;
+      app.icon_model = dummy_icon_model;
   }
 
   // Dummy method to be called upon bubble closing.
@@ -125,8 +134,8 @@ class IntentPickerBubbleViewTest : public BrowserWithTestWindowTest {
                       apps::IntentPickerCloseReason close_reason,
                       bool should_persist) {}
 
-  std::unique_ptr<IntentPickerBubbleView> bubble_;
-  std::unique_ptr<views::View> anchor_view_;
+  IntentPickerBubbleView* bubble_;
+  views::View* anchor_view_;
   std::vector<AppInfo> app_info_;
 
  private:

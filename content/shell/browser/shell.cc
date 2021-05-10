@@ -7,9 +7,11 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -18,7 +20,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -40,7 +41,7 @@
 #include "content/shell/common/shell_switches.h"
 #include "media/media_buildflags.h"
 #include "third_party/blink/public/common/peerconnection/webrtc_ip_handling_policy.h"
-#include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 
 namespace content {
 
@@ -144,6 +145,12 @@ Shell* Shell::CreateShell(std::unique_ptr<WebContents> web_contents,
 
   g_platform->SetContents(shell);
   g_platform->DidCreateOrAttachWebContents(shell, raw_web_contents);
+  // If the RenderFrame was created during WebContents construction (as happens
+  // for windows opened from the renderer) then the Shell won't hear about the
+  // main frame being created as a WebContentsObservers. This gives the delegate
+  // a chance to act on the main frame accordingly.
+  if (raw_web_contents->GetMainFrame()->IsRenderFrameCreated())
+    g_platform->MainFrameCreated(shell);
 
   return shell;
 }
@@ -222,8 +229,9 @@ Shell* Shell::CreateNewWindow(BrowserContext* browser_context,
   return shell;
 }
 
-void Shell::RenderViewReady() {
-  g_platform->RenderViewReady(this);
+void Shell::RenderFrameCreated(RenderFrameHost* frame_host) {
+  if (frame_host == web_contents_->GetMainFrame())
+    g_platform->MainFrameCreated(this);
 }
 
 void Shell::LoadURL(const GURL& url) {
@@ -329,8 +337,8 @@ void Shell::UpdateNavigationControls(bool to_different_document) {
 void Shell::ShowDevTools() {
   if (!devtools_frontend_) {
     devtools_frontend_ = ShellDevToolsFrontend::Show(web_contents());
-    devtools_observer_.reset(new DevToolsWebContentsObserver(
-        this, devtools_frontend_->frontend_shell()->web_contents()));
+    devtools_observer_ = std::make_unique<DevToolsWebContentsObserver>(
+        this, devtools_frontend_->frontend_shell()->web_contents());
   }
 
   devtools_frontend_->Activate();
@@ -467,7 +475,8 @@ void Shell::ToggleFullscreenModeForTab(WebContents* web_contents,
 #endif
   if (is_fullscreen_ != enter_fullscreen) {
     is_fullscreen_ = enter_fullscreen;
-    web_contents->GetRenderViewHost()
+    web_contents->GetMainFrame()
+        ->GetRenderViewHost()
         ->GetWidget()
         ->SynchronizeVisualProperties();
   }
@@ -494,8 +503,13 @@ blink::mojom::DisplayMode Shell::GetDisplayMode(
 void Shell::RequestToLockMouse(WebContents* web_contents,
                                bool user_gesture,
                                bool last_unlocked_by_target) {
-  web_contents->GotResponseToLockMouseRequest(
-      blink::mojom::PointerLockResult::kSuccess);
+  // Give the platform a chance to handle the lock request, if it doesn't
+  // indicate it handled it, allow the request.
+  if (!g_platform->HandleRequestToLockMouse(this, web_contents, user_gesture,
+                                            last_unlocked_by_target)) {
+    web_contents->GotResponseToLockMouseRequest(
+        blink::mojom::PointerLockResult::kSuccess);
+  }
 }
 
 void Shell::Close() {
@@ -532,25 +546,6 @@ JavaScriptDialogManager* Shell::GetJavaScriptDialogManager(
   return dialog_manager_.get();
 }
 
-std::unique_ptr<BluetoothChooser> Shell::RunBluetoothChooser(
-    RenderFrameHost* frame,
-    const BluetoothChooser::EventHandler& event_handler) {
-  return g_platform->RunBluetoothChooser(this, frame, event_handler);
-}
-
-class AlwaysAllowBluetoothScanning : public BluetoothScanningPrompt {
- public:
-  explicit AlwaysAllowBluetoothScanning(const EventHandler& event_handler) {
-    event_handler.Run(content::BluetoothScanningPrompt::Event::kAllow);
-  }
-};
-
-std::unique_ptr<BluetoothScanningPrompt> Shell::ShowBluetoothScanningPrompt(
-    RenderFrameHost* frame,
-    const BluetoothScanningPrompt::EventHandler& event_handler) {
-  return std::make_unique<AlwaysAllowBluetoothScanning>(event_handler);
-}
-
 #if defined(OS_MAC)
 void Shell::DidNavigateMainFramePostCommit(WebContents* contents) {
   g_platform->DidNavigateMainFramePostCommit(this, contents);
@@ -564,9 +559,9 @@ bool Shell::HandleKeyboardEvent(WebContents* source,
 
 bool Shell::DidAddMessageToConsole(WebContents* source,
                                    blink::mojom::ConsoleMessageLevel log_level,
-                                   const base::string16& message,
+                                   const std::u16string& message,
                                    int32_t line_no,
-                                   const base::string16& source_id) {
+                                   const std::u16string& source_id) {
   return switches::IsRunWebTestsSwitchPresent();
 }
 
@@ -592,6 +587,10 @@ void Shell::ActivateContents(WebContents* contents) {
   // normal path and have to fake it out in the browser process.
   g_platform->ActivateContents(this, contents);
 #endif
+}
+
+bool Shell::IsBackForwardCacheSupported() {
+  return true;
 }
 
 std::unique_ptr<WebContents> Shell::ActivatePortalWebContents(

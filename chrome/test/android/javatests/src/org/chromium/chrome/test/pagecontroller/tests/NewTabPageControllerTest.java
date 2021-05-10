@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.test.pagecontroller.tests;
 
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import android.os.Build.VERSION_CODES;
@@ -22,7 +21,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.DisableIf;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.test.pagecontroller.controllers.ntp.ChromeMenu;
 import org.chromium.chrome.test.pagecontroller.controllers.ntp.NewTabPageController;
 import org.chromium.chrome.test.pagecontroller.controllers.urlpage.UrlPage;
@@ -50,16 +48,11 @@ public class NewTabPageControllerTest {
     }
 
     @Test
-    public void testIsCurrentPageThis() {
+    @DisableIf.Build(sdk_is_greater_than = VERSION_CODES.O_MR1,
+            message = "https://crbug.com/1130617 https://crbug.com/1141179")
+    public void
+    testIsCurrentPageThis() {
         Assert.assertTrue(mController.isCurrentPageThis());
-    }
-
-    @Test
-    @DisabledTest(message = "https://crbug.com/1091640")
-    public void testHideArticles() {
-        boolean isHidden = mController.areArticlesHidden();
-        mController.toggleHideArticles();
-        assertNotEquals(isHidden, mController.areArticlesHidden());
     }
 
     @LargeTest
@@ -69,18 +62,22 @@ public class NewTabPageControllerTest {
     public void testScrollPage() {
         mController.scrollToTop();
         assertTrue(mController.hasScrolledToTop());
-        mController.scrollToBottom();
-        assertTrue(mController.hasScrolledToBottom());
     }
 
     @Test
-    public void testOpenChromeMenu() {
+    @DisableIf.Build(sdk_is_greater_than = VERSION_CODES.O_MR1,
+            message = "https://crbug.com/1130617 https://crbug.com/1141179")
+    public void
+    testOpenChromeMenu() {
         ChromeMenu menu = mController.openChromeMenu();
         Assert.assertTrue(menu.isCurrentPageThis());
     }
 
     @Test
-    public void testOmniboxSearch() {
+    @DisableIf.Build(sdk_is_greater_than = VERSION_CODES.O_MR1,
+            message = "https://crbug.com/1130617 https://crbug.com/1141179")
+    public void
+    testOmniboxSearch() {
         UrlPage urlPage = mController.omniboxSearch("www.google.com");
         Assert.assertTrue(urlPage.isCurrentPageThis());
     }

@@ -135,7 +135,7 @@ ScriptPromise FontFaceSetDocument::ready(ScriptState* script_state) {
 
 const HeapLinkedHashSet<Member<FontFace>>&
 FontFaceSetDocument::CSSConnectedFontFaceList() const {
-  Document* document = this->GetDocument();
+  Document* document = GetDocument();
   document->GetStyleEngine().UpdateActiveStyle();
   return GetFontSelector()->GetFontFaceCache()->CssConnectedFontFaces();
 }
@@ -166,8 +166,7 @@ bool FontFaceSetDocument::ResolveFontStyle(const String& font_string,
 
   // Interpret fontString in the same way as the 'font' attribute of
   // CanvasRenderingContext2D.
-  auto* parsed_style = CSSParser::ParseFont(
-      font_string, GetExecutionContext()->GetSecureContextMode());
+  auto* parsed_style = CSSParser::ParseFont(font_string, GetExecutionContext());
   if (!parsed_style)
     return false;
 
@@ -179,7 +178,8 @@ bool FontFaceSetDocument::ResolveFontStyle(const String& font_string,
     return true;
   }
 
-  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+  ComputedStyle* style =
+      GetDocument()->GetStyleResolver().CreateComputedStyle();
 
   FontFamily font_family;
   font_family.SetFamily(FontFaceSet::kDefaultFontFamily);
@@ -192,7 +192,7 @@ bool FontFaceSetDocument::ResolveFontStyle(const String& font_string,
   style->SetFontDescription(default_font_description);
 
   GetDocument()->GetStyleEngine().ComputeFont(*GetDocument()->documentElement(),
-                                              style.get(), *parsed_style);
+                                              style, *parsed_style);
 
   font = style->GetFont();
 
@@ -266,6 +266,7 @@ void FontFaceSetDocument::LCPLimitReached(TimerBase*) {
 }
 
 void FontFaceSetDocument::Trace(Visitor* visitor) const {
+  visitor->Trace(lcp_limit_timer_);
   Supplement<Document>::Trace(visitor);
   FontFaceSet::Trace(visitor);
 }

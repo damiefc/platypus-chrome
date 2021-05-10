@@ -6,24 +6,38 @@
 
 #include "ash/clipboard/clipboard_history_util.h"
 #include "ash/clipboard/clipboard_nudge_controller.h"
-#include "ash/session/session_controller_impl.h"
-#include "ash/shell.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/stl_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "ui/base/clipboard/clipboard_data_endpoint.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/clipboard_non_backed.h"
+#include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 
 namespace ash {
 
-ClipboardHistory::ScopedPause::ScopedPause(ClipboardHistory* clipboard_history)
-    : clipboard_history_(clipboard_history) {
-  clipboard_history_->Pause();
+namespace {
+
+// The different operations ClipboardHistory sees. These values are written to
+// logs. New enum values can be added, but existing enums must never be
+// renumbered, deleted, or reused. Keep this up to date with the
+// ClipboardHistoryOperation enum in enums.xml.
+enum class ClipboardHistoryOperation {
+  // Copy, initiated through any method which triggers the clipboard to be
+  // written to.
+  kCopy = 0,
+
+  // Paste, detected when the clipboard is read.
+  kPaste = 1,
+
+  // Insert new types above this line.
+  kMaxValue = kPaste
+};
+
+void RecordClipboardHistoryOperation(ClipboardHistoryOperation operation) {
+  base::UmaHistogramEnumeration("Ash.ClipboardHistory.Operation", operation);
 }
 
-ClipboardHistory::ScopedPause::~ScopedPause() {
-  clipboard_history_->Resume();
-}
+}  // namespace
 
 ClipboardHistory::ClipboardHistory() {
   ui::ClipboardMonitor::GetInstance()->AddObserver(this);
@@ -67,24 +81,47 @@ void ClipboardHistory::RemoveItemForId(const base::UnguessableToken& id) {
   if (iter == history_list_.cend())
     return;
 
+  auto removed = std::move(*iter);
   history_list_.erase(iter);
+  for (auto& observer : observers_)
+    observer.OnClipboardHistoryItemRemoved(removed);
 }
 
 void ClipboardHistory::OnClipboardDataChanged() {
-  if (!IsEnabledInCurrentMode())
+  if (!ClipboardHistoryUtil::IsEnabledInCurrentMode())
     return;
 
-  // TODO(newcomer): Prevent Clipboard from recording metrics when pausing
-  // observation.
   if (num_pause_ > 0)
     return;
 
   auto* clipboard = ui::ClipboardNonBacked::GetForCurrentThread();
-  CHECK(clipboard);
+  // Clipboard may not exist in tests.
+  if (!clipboard)
+    return;
 
-  ui::ClipboardDataEndpoint data_dst(ui::EndpointType::kClipboardHistory);
+  ui::DataTransferEndpoint data_dst(ui::EndpointType::kClipboardHistory);
   const auto* clipboard_data = clipboard->GetClipboardData(&data_dst);
-  CHECK(clipboard_data);
+  if (!clipboard_data) {
+    // |clipboard_data| is only empty when the Clipboard is cleared. This is
+    // done to prevent data leakage into or from locked forms(Locked Fullscreen
+    // state). Clear ClipboardHistory.
+    commit_data_weak_factory_.InvalidateWeakPtrs();
+    Clear();
+    return;
+  }
+
+  // Debounce calls to `OnClipboardOperation()`. Certain surfaces
+  // (Omnibox) may Read/Write to the clipboard multiple times in one user
+  // initiated operation. Add a delay because PostTask is too fast to debounce
+  // multiple operations through the async web clipboard API. See
+  // https://crbug.com/1167403.
+  clipboard_histogram_weak_factory_.InvalidateWeakPtrs();
+  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&ClipboardHistory::OnClipboardOperation,
+                     clipboard_histogram_weak_factory_.GetWeakPtr(),
+                     /*copy=*/true),
+      base::TimeDelta::FromMilliseconds(100));
 
   // We post commit |clipboard_data| at the end of the current task sequence to
   // debounce the case where multiple copies are programmatically performed.
@@ -101,27 +138,73 @@ void ClipboardHistory::OnClipboardDataChanged() {
                      commit_data_weak_factory_.GetWeakPtr(), *clipboard_data));
 }
 
-bool ClipboardHistory::IsEnabledInCurrentMode() const {
-  switch (Shell::Get()->session_controller()->login_status()) {
-    case LoginStatus::NOT_LOGGED_IN:
-    case LoginStatus::LOCKED:
-    case LoginStatus::KIOSK_APP:
-    case LoginStatus::PUBLIC:
-      return false;
-    case LoginStatus::USER:
-    case LoginStatus::GUEST:
-    case LoginStatus::SUPERVISED:
-      return true;
+void ClipboardHistory::OnClipboardDataRead() {
+  if (num_pause_ > 0)
+    return;
+
+  // Debounce calls to `OnClipboardOperation()`. Certain surfaces
+  // (Omnibox) may Read/Write to the clipboard multiple times in one user
+  // initiated operation. Add a delay because PostTask is too fast to debounce
+  // multiple operations through the async web clipboard API. See
+  // https://crbug.com/1167403.
+  clipboard_histogram_weak_factory_.InvalidateWeakPtrs();
+  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&ClipboardHistory::OnClipboardOperation,
+                     clipboard_histogram_weak_factory_.GetWeakPtr(),
+                     /*copy=*/false),
+      base::TimeDelta::FromMilliseconds(100));
+}
+
+void ClipboardHistory::OnClipboardOperation(bool copy) {
+  for (auto& observer : observers_)
+    observer.OnOperationConfirmed(copy);
+
+  if (copy) {
+    RecordClipboardHistoryOperation(ClipboardHistoryOperation::kCopy);
+    consecutive_copies_++;
+    if (consecutive_pastes_ > 0) {
+      base::UmaHistogramCounts100("Ash.Clipboard.ConsecutivePastes",
+                                  consecutive_pastes_);
+      consecutive_pastes_ = 0;
+    }
+    return;
   }
+
+  consecutive_pastes_++;
+  // NOTE: this includes pastes by the ClipboardHistory menu.
+
+  RecordClipboardHistoryOperation(ClipboardHistoryOperation::kPaste);
+  if (consecutive_copies_ > 0) {
+    base::UmaHistogramCounts100("Ash.Clipboard.ConsecutiveCopies",
+                                consecutive_copies_);
+    consecutive_copies_ = 0;
+  }
+}
+
+base::WeakPtr<ClipboardHistory> ClipboardHistory::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 void ClipboardHistory::MaybeCommitData(ui::ClipboardData data) {
   if (!ClipboardHistoryUtil::IsSupported(data))
     return;
 
-  history_list_.emplace_front(std::move(data));
+  auto iter =
+      std::find_if(history_list_.cbegin(), history_list_.cend(),
+                   [&data](const auto& item) { return item.data() == data; });
+  bool is_duplicate = iter != history_list_.cend();
+  if (is_duplicate) {
+    // If |data| already exists in |history_list_| then move it to the front
+    // instead of creating a new one because creating a new one will result in a
+    // new unique identifier.
+    history_list_.splice(history_list_.begin(), history_list_, iter);
+  } else {
+    history_list_.emplace_front(std::move(data));
+  }
+
   for (auto& observer : observers_)
-    observer.OnClipboardHistoryItemAdded(history_list_.front());
+    observer.OnClipboardHistoryItemAdded(history_list_.front(), is_duplicate);
 
   if (history_list_.size() > ClipboardHistoryUtil::kMaxClipboardItemsShared) {
     auto removed = std::move(history_list_.back());

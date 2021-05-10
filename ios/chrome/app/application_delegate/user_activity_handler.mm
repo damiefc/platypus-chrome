@@ -31,6 +31,7 @@
 #import "ios/chrome/browser/main/browser_list.h"
 #import "ios/chrome/browser/main/browser_list_factory.h"
 #include "ios/chrome/browser/metrics/first_user_action_recorder.h"
+#import "ios/chrome/browser/policy/policy_util.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/u2f/u2f_tab_helper.h"
 #import "ios/chrome/browser/ui/main/browser_interface_provider.h"
@@ -61,12 +62,35 @@ NSString* const kSiriShortcutOpenInChrome = @"OpenInChromeIntent";
 NSString* const kSiriShortcutSearchInChrome = @"SearchInChromeIntent";
 NSString* const kSiriShortcutOpenInIncognito = @"OpenInChromeIncognitoIntent";
 
+// Constants for compatible mode for user activities.
+NSString* const kRegularMode = @"RegularMode";
+NSString* const kIncognitoMode = @"IncognitoMode";
+
 std::vector<GURL> createGURLVectorFromIntentURLs(NSArray<NSURL*>* intentURLs) {
   std::vector<GURL> URLs;
   for (NSURL* URL in intentURLs) {
     URLs.push_back(net::GURLWithNSURL(URL));
   }
   return URLs;
+}
+
+// Returns the compatible mode array for an user activity.
+NSArray* CompatibleModeForActivityType(NSString* activityType) {
+  if ([activityType isEqualToString:CSSearchableItemActionType] ||
+      [activityType isEqualToString:kShortcutNewSearch] ||
+      [activityType isEqualToString:kShortcutVoiceSearch] ||
+      [activityType isEqualToString:kShortcutQRScanner] ||
+      [activityType isEqualToString:kSiriShortcutSearchInChrome]) {
+    return @[ kRegularMode, kIncognitoMode ];
+  } else if ([activityType isEqualToString:kSiriShortcutOpenInChrome]) {
+    return @[ kRegularMode ];
+  } else if ([activityType isEqualToString:kShortcutNewIncognitoSearch] ||
+             [activityType isEqualToString:kSiriShortcutOpenInIncognito]) {
+    return @[ kIncognitoMode ];
+  } else {
+    NOTREACHED();
+  }
+  return nil;
 }
 
 }  // namespace
@@ -94,24 +118,15 @@ std::vector<GURL> createGURLVectorFromIntentURLs(NSArray<NSURL*>* intentURLs) {
   NSURL* webpageURL = userActivity.webpageURL;
 
   if ([userActivity.activityType
-          isEqualToString:handoff::kChromeHandoffActivityType]) {
+          isEqualToString:handoff::kChromeHandoffActivityType] ||
+      [userActivity.activityType
+          isEqualToString:NSUserActivityTypeBrowsingWeb]) {
     // App was launched by iOS as a result of Handoff.
     NSString* originString = base::mac::ObjCCast<NSString>(
         userActivity.userInfo[handoff::kOriginKey]);
     handoff::Origin origin = handoff::OriginFromString(originString);
     UMA_HISTOGRAM_ENUMERATION("IOS.Handoff.Origin", origin,
                               handoff::ORIGIN_COUNT);
-  } else if ([userActivity.activityType
-                 isEqualToString:NSUserActivityTypeBrowsingWeb]) {
-    // App was launched as the result of a Universal Link navigation.
-    GURL gurl = net::GURLWithNSURL(webpageURL);
-    AppStartupParameters* startupParams =
-        [[AppStartupParameters alloc] initWithUniversalLink:gurl];
-    [connectionInformation setStartupParameters:startupParams];
-    base::RecordAction(base::UserMetricsAction("IOSLaunchedByUniversalLink"));
-
-    if (startupParams)
-      webpageURL = net::NSURLWithGURL([startupParams externalURL]);
   } else if (spotlight::IsSpotlightAvailable() &&
              [userActivity.activityType
                  isEqualToString:CSSearchableItemActionType]) {
@@ -166,13 +181,26 @@ std::vector<GURL> createGURLVectorFromIntentURLs(NSArray<NSURL*>* intentURLs) {
         initWithExternalURL:GURL(kChromeUINewTabURL)
                 completeURL:GURL(kChromeUINewTabURL)];
 
+    if (IsIncognitoModeForced(browserState->GetPrefs())) {
+      // Set incognito mode to yes if only incognito mode is available.
+      startupParams.launchInIncognito = YES;
+    }
+
     SearchInChromeIntent* intent =
         base::mac::ObjCCastStrict<SearchInChromeIntent>(
             userActivity.interaction.intent);
 
-    NSString* searchPhrase = intent.searchPhrase;
+    if (!intent) {
+      return NO;
+    }
 
-    if ([searchPhrase length]) {
+    id searchPhrase = [intent valueForKey:@"searchPhrase"];
+
+    if ([searchPhrase isKindOfClass:[NSString class]] &&
+        [searchPhrase
+            stringByTrimmingCharactersInSet:[NSCharacterSet
+                                                whitespaceCharacterSet]]
+                .length > 0) {
       startupParams.textQuery = searchPhrase;
     } else {
       startupParams.postOpeningAction = FOCUS_OMNIBOX;
@@ -188,11 +216,27 @@ std::vector<GURL> createGURLVectorFromIntentURLs(NSArray<NSURL*>* intentURLs) {
     OpenInChromeIntent* intent = base::mac::ObjCCastStrict<OpenInChromeIntent>(
         userActivity.interaction.intent);
 
-    if (!intent.url || intent.url.count == 0) {
+    if (!intent.url) {
       return NO;
     }
 
-    std::vector<GURL> URLs = createGURLVectorFromIntentURLs(intent.url);
+    std::vector<GURL> URLs;
+
+    if ([intent.url isKindOfClass:[NSURL class]]) {
+      // Old intent version where |url| is of type NSURL rather than an array.
+      GURL webpageGURL(
+          net::GURLWithNSURL(base::mac::ObjCCastStrict<NSURL>(intent.url)));
+      if (!webpageGURL.is_valid())
+        return NO;
+      URLs.push_back(webpageGURL);
+    } else if ([intent.url isKindOfClass:[NSArray class]] &&
+               intent.url.count > 0) {
+      URLs = createGURLVectorFromIntentURLs(intent.url);
+    } else {
+      // Unknown or invalid intent object.
+      return NO;
+    }
+
     AppStartupParameters* startupParams =
         [[AppStartupParameters alloc] initWithURLs:URLs];
 
@@ -400,7 +444,7 @@ std::vector<GURL> createGURLVectorFromIntentURLs(NSArray<NSURL*>* intentURLs) {
   DCHECK(!defaultURL->url().empty());
   DCHECK(
       defaultURL->url_ref().IsValid(templateURLService->search_terms_data()));
-  base::string16 queryString = base::SysNSStringToUTF16(searchQuery);
+  std::u16string queryString = base::SysNSStringToUTF16(searchQuery);
   TemplateURLRef::SearchTermsArgs search_args(queryString);
 
   GURL result(defaultURL->url_ref().ReplaceSearchTerms(
@@ -422,13 +466,29 @@ std::vector<GURL> createGURLVectorFromIntentURLs(NSArray<NSURL*>* intentURLs) {
     return;
   }
 
-  if (!connectionInformation.startupParameters.URLs.empty()) {
+  // Do not handle the parameters that are/were already handled.
+  if (connectionInformation.startupParametersAreBeingHandled) {
+    return;
+  }
+
+  connectionInformation.startupParametersAreBeingHandled = YES;
+
+  if (!connectionInformation.startupParameters.URLs.empty() &&
+      !connectionInformation.startupParameters.isUnexpectedMode) {
     [self openMultipleTabsWithConnectionInformation:connectionInformation
                                           tabOpener:tabOpener];
     return;
   }
 
   GURL externalURL = connectionInformation.startupParameters.externalURL;
+
+  // If the user intent to open a url in a unavailable mode, don't fulfill the
+  // request.
+  if (externalURL != kChromeUINewTabURL &&
+      connectionInformation.startupParameters.isUnexpectedMode) {
+    return;
+  }
+
   // Check if it's an U2F call. If so, route it to correct tab.
   // If not, open or reuse tab in main BVC.
   if (U2FTabHelper::IsU2FUrl(externalURL)) {
@@ -496,6 +556,20 @@ std::vector<GURL> createGURLVectorFromIntentURLs(NSArray<NSURL*>* intentURLs) {
                                                 setStartupParameters:nil];
                                           }];
   }
+}
+
++ (BOOL)canProceedWithUserActivity:(NSUserActivity*)userActivity
+                       prefService:(PrefService*)prefService {
+  NSArray* array = CompatibleModeForActivityType(userActivity.activityType);
+
+  if (IsIncognitoModeDisabled(prefService)) {
+    return [array containsObject:kRegularMode];
+  } else if (IsIncognitoModeForced(prefService)) {
+    return [array containsObject:kIncognitoMode];
+  }
+
+  // Return YES if the compatible mode array is not nil.
+  return array != nil;
 }
 
 #pragma mark - Internal methods.

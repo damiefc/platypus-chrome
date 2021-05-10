@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "chrome/browser/web_applications/components/web_app_id.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 
 namespace base {
 class FilePath;
@@ -28,7 +28,7 @@ void RegisterShortcutsMenuWithOs(
     const base::FilePath& shortcut_data_dir,
     const std::vector<WebApplicationShortcutsMenuItemInfo>&
         shortcuts_menu_item_infos,
-    const ShortcutsMenuIconsBitmaps& shortcuts_menu_icons_bitmaps);
+    const ShortcutsMenuIconBitmaps& shortcuts_menu_icon_bitmaps);
 
 // Deletes the ShortcutsMenu from the OS. This should be called during the
 // uninstallation process. Returns true on successful deletion.

@@ -12,7 +12,6 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/views/webauthn/authenticator_request_sheet_view.h"
 #include "chrome/browser/ui/webauthn/sheet_models.h"
-#include "device/fido/cable/v2_constants.h"
 
 class AuthenticatorQRViewCentered;
 
@@ -28,11 +27,12 @@ class AuthenticatorQRSheetView : public AuthenticatorRequestSheetView {
 
  private:
   // AuthenticatorRequestSheetView:
-  std::unique_ptr<views::View> BuildStepSpecificContent() override;
+  std::pair<std::unique_ptr<views::View>, AutoFocus> BuildStepSpecificContent()
+      override;
   void Update();
 
   AuthenticatorQRViewCentered* qr_view_ = nullptr;
-  base::span<const uint8_t, device::cablev2::kQRKeySize> qr_generator_key_;
+  const std::string qr_string_;
   base::RepeatingTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(AuthenticatorQRSheetView);

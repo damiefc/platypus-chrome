@@ -4,10 +4,13 @@
 
 #include "device/fido/cable/websocket_adapter.h"
 
+#include "base/callback_helpers.h"
+#include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/fido/fido_constants.h"
+#include "net/http/http_status_code.h"
 
 namespace device {
 namespace cablev2 {
@@ -57,6 +60,24 @@ void WebSocketAdapter::OnOpeningHandshakeStarted(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
+void WebSocketAdapter::OnFailure(const std::string& message,
+                                 int net_error,
+                                 int response_code) {
+  LOG(ERROR) << "Tunnel server connection failed: " << message << " "
+             << net_error << " " << response_code;
+
+  if (response_code != net::HTTP_GONE) {
+    // The callback will be cleaned up when the pipe disconnects.
+    return;
+  }
+
+  // This contact ID has been marked as inactive. The pairing information for
+  // this device should be dropped.
+  if (on_tunnel_ready_) {
+    std::move(on_tunnel_ready_).Run(Result::GONE, base::nullopt);
+  }
+}
+
 void WebSocketAdapter::OnConnectionEstablished(
     mojo::PendingRemote<network::mojom::WebSocket> socket,
     mojo::PendingReceiver<network::mojom::WebSocketClient> client_receiver,
@@ -101,7 +122,7 @@ void WebSocketAdapter::OnConnectionEstablished(
 
   socket_remote_->StartReceiving();
 
-  std::move(on_tunnel_ready_).Run(true, routing_id);
+  std::move(on_tunnel_ready_).Run(Result::OK, routing_id);
 }
 
 void WebSocketAdapter::OnDataFrame(bool finish,
@@ -120,7 +141,8 @@ void WebSocketAdapter::OnDataFrame(bool finish,
 
   const size_t old_size = pending_message_.size();
   const size_t new_size = old_size + data_len;
-  if (type != network::mojom::WebSocketMessageType::BINARY ||
+  if ((type != network::mojom::WebSocketMessageType::BINARY &&
+       type != network::mojom::WebSocketMessageType::CONTINUATION) ||
       data_len > std::numeric_limits<uint32_t>::max() || new_size < old_size ||
       new_size > kMaxIncomingMessageSize) {
     FIDO_LOG(ERROR) << "invalid WebSocket frame (type: "
@@ -197,7 +219,7 @@ void WebSocketAdapter::OnMojoPipeDisconnect() {
   // If disconnection happens before |OnConnectionEstablished| then report a
   // failure to establish the tunnel.
   if (on_tunnel_ready_) {
-    std::move(on_tunnel_ready_).Run(false, base::nullopt);
+    std::move(on_tunnel_ready_).Run(Result::FAILED, base::nullopt);
     return;
   }
 

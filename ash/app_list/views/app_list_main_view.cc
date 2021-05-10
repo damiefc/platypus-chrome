@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 #include "ash/app_list/app_list_metrics.h"
 #include "ash/app_list/app_list_view_delegate.h"
@@ -30,8 +31,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "ui/aura/window.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
@@ -143,7 +144,7 @@ void AppListMainView::ActivateApp(AppListItem* item, int event_flags) {
   // TODO(jennyz): Activate the folder via AppListModel notification.
   if (item->GetItemType() == AppListFolderItem::kItemType) {
     contents_view_->ShowFolderContent(static_cast<AppListFolderItem*>(item));
-    UMA_HISTOGRAM_ENUMERATION(kAppListFolderOpenedHistogram,
+    UMA_HISTOGRAM_ENUMERATION("Apps.AppListFolderOpened",
                               kFullscreenAppListFolders, kMaxFolderOpened);
   } else {
     base::RecordAction(base::UserMetricsAction("AppList_ClickOnApp"));
@@ -182,21 +183,16 @@ void AppListMainView::OnAppListStateChanged(AppListState new_state,
 }
 
 void AppListMainView::QueryChanged(SearchBoxViewBase* sender) {
-  base::string16 raw_query = search_model_->search_box()->text();
-  base::string16 query;
+  std::u16string raw_query = search_model_->search_box()->text();
+  std::u16string query;
   base::TrimWhitespace(raw_query, base::TRIM_ALL, &query);
-  bool should_show_search =
-      app_list_features::IsZeroStateSuggestionsEnabled()
-          ? search_box_view_->is_search_box_active() || !query.empty()
-          : !query.empty();
-  contents_view_->ShowSearchResults(should_show_search);
+  contents_view_->ShowSearchResults(search_box_view_->is_search_box_active() ||
+                                    !query.empty());
 
   delegate_->StartSearch(raw_query);
 }
 
 void AppListMainView::ActiveChanged(SearchBoxViewBase* sender) {
-  if (!app_list_features::IsZeroStateSuggestionsEnabled())
-    return;
   // Do not update views on closing.
   if (app_list_view_->app_list_state() == AppListViewState::kClosed)
     return;
@@ -204,8 +200,8 @@ void AppListMainView::ActiveChanged(SearchBoxViewBase* sender) {
   if (search_box_view_->is_search_box_active()) {
     // Show zero state suggestions when search box is activated with an empty
     // query.
-    base::string16 raw_query = search_model_->search_box()->text();
-    base::string16 query;
+    std::u16string raw_query = search_model_->search_box()->text();
+    std::u16string query;
     base::TrimWhitespace(raw_query, base::TRIM_ALL, &query);
     if (query.empty())
       search_box_view_->ShowZeroStateSuggestions();
@@ -223,7 +219,7 @@ void AppListMainView::SearchBoxFocusChanged(SearchBoxViewBase* sender) {
     return;
 
   SearchResultBaseView* first_result_view =
-      contents_view_->search_results_page_view()->first_result_view();
+      contents_view_->search_result_page_view()->first_result_view();
   if (!first_result_view || !first_result_view->selected())
     return;
   first_result_view->SetSelected(false, base::nullopt);

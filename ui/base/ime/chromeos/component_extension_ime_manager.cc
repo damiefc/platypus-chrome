@@ -10,8 +10,6 @@
 #include "base/command_line.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "chromeos/constants/chromeos_switches.h"
-#include "chromeos/ime/input_methods.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 
 namespace chromeos {
@@ -55,24 +53,10 @@ ComponentExtensionIME::ComponentExtensionIME(
 
 ComponentExtensionIME::~ComponentExtensionIME() = default;
 
-ComponentExtensionIMEManagerDelegate::ComponentExtensionIMEManagerDelegate() =
-    default;
-
-ComponentExtensionIMEManagerDelegate::~ComponentExtensionIMEManagerDelegate() =
-    default;
-
-ComponentExtensionIMEManager::ComponentExtensionIMEManager() {
-  for (const auto& input_method : input_method::kInputMethods) {
-    if (input_method.is_login_keyboard)
-      login_layout_set_.insert(input_method.xkb_layout_id);
-  }
-}
-
-ComponentExtensionIMEManager::~ComponentExtensionIMEManager() = default;
-
-void ComponentExtensionIMEManager::Initialize(
-    std::unique_ptr<ComponentExtensionIMEManagerDelegate> delegate) {
-  delegate_ = std::move(delegate);
+ComponentExtensionIMEManager::ComponentExtensionIMEManager(
+    std::unique_ptr<ComponentExtensionIMEManagerDelegate> delegate)
+    : delegate_(std::move(delegate)) {
+  // Creates internal mapping between input method id and engine components.
   std::vector<ComponentExtensionIME> ext_list = delegate_->ListIME();
   for (const auto& ext : ext_list) {
     bool extension_exists = IsAllowlistedExtension(ext.id);
@@ -88,6 +72,8 @@ void ComponentExtensionIMEManager::Initialize(
   }
 }
 
+ComponentExtensionIMEManager::~ComponentExtensionIMEManager() = default;
+
 bool ComponentExtensionIMEManager::LoadComponentExtensionIME(
     Profile* profile,
     const std::string& input_method_id) {
@@ -97,16 +83,6 @@ bool ComponentExtensionIMEManager::LoadComponentExtensionIME(
     return true;
   }
   return false;
-}
-
-bool ComponentExtensionIMEManager::UnloadComponentExtensionIME(
-    Profile* profile,
-    const std::string& input_method_id) {
-  ComponentExtensionIME ime;
-  if (!FindEngineEntry(input_method_id, &ime))
-    return false;
-  delegate_->Unload(profile, ime.id, ime.path);
-  return true;
 }
 
 bool ComponentExtensionIMEManager::IsAllowlisted(
@@ -133,13 +109,12 @@ input_method::InputMethodDescriptors
       const std::string input_method_id =
           extension_ime_util::GetComponentInputMethodID(
               ext.id, ime.engine_id);
-      const std::vector<std::string>& layouts = ime.layouts;
       result.push_back(input_method::InputMethodDescriptor(
-          input_method_id, ime.display_name, ime.indicator, layouts,
+          input_method_id, ime.display_name, ime.indicator, ime.layout,
           ime.language_codes,
           // Enables extension based xkb keyboards on login screen.
           extension_ime_util::IsKeyboardLayoutExtension(input_method_id) &&
-              IsInLoginLayoutAllowlist(layouts),
+              delegate_->IsInLoginLayoutAllowlist(ime.layout),
           ime.options_page_url, ime.input_view_url));
     }
   }
@@ -174,15 +149,6 @@ bool ComponentExtensionIMEManager::FindEngineEntry(
   if (out_extension)
     *out_extension = it->second;
   return true;
-}
-
-bool ComponentExtensionIMEManager::IsInLoginLayoutAllowlist(
-    const std::vector<std::string>& layouts) {
-  for (const auto& layout : layouts) {
-    if (login_layout_set_.find(layout) != login_layout_set_.end())
-      return true;
-  }
-  return false;
 }
 
 }  // namespace chromeos

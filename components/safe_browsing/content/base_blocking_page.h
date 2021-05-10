@@ -17,6 +17,10 @@
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "url/gurl.h"
 
+namespace security_interstitials {
+class SettingsPageHelper;
+}
+
 namespace safe_browsing {
 
 // Base class for managing the SafeBrowsing interstitial pages.
@@ -102,18 +106,17 @@ class BaseBlockingPage
   static security_interstitials::MetricsHelper::ReportDetails GetReportingInfo(
       const UnsafeResourceList& unsafe_resources);
 
-  // Called after OnProceed(). Does nothing in this class, but can be overridden
-  // to handle malicious subresources.
-  virtual void HandleSubresourcesAfterProceed();
-
   void SetThreatDetailsProceedDelayForTesting(int64_t delay);
 
   static std::unique_ptr<
       security_interstitials::SecurityInterstitialControllerClient>
-  CreateControllerClient(content::WebContents* web_contents,
-                         const UnsafeResourceList& unsafe_resources,
-                         BaseUIManager* ui_manager,
-                         PrefService* pref_service);
+  CreateControllerClient(
+      content::WebContents* web_contents,
+      const UnsafeResourceList& unsafe_resources,
+      BaseUIManager* ui_manager,
+      PrefService* pref_service,
+      std::unique_ptr<security_interstitials::SettingsPageHelper>
+          settings_page_helper);
 
   int GetHTMLTemplateId() override;
 

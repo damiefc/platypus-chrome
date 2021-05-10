@@ -27,6 +27,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HTML_PARSER_HTML_TREE_BUILDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_PARSER_HTML_TREE_BUILDER_H_
 
+#include "base/dcheck_is_on.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/core/html/parser/html_construction_site.h"
@@ -54,12 +55,14 @@ class HTMLTreeBuilder final : public GarbageCollected<HTMLTreeBuilder> {
   HTMLTreeBuilder(HTMLDocumentParser*,
                   Document&,
                   ParserContentPolicy,
-                  const HTMLParserOptions&);
+                  const HTMLParserOptions&,
+                  bool include_shadow_roots);
   HTMLTreeBuilder(HTMLDocumentParser*,
                   DocumentFragment*,
                   Element* context_element,
                   ParserContentPolicy,
-                  const HTMLParserOptions&);
+                  const HTMLParserOptions&,
+                  bool include_shadow_roots);
   ~HTMLTreeBuilder();
   void Trace(Visitor*) const;
 
@@ -246,6 +249,8 @@ class HTMLTreeBuilder final : public GarbageCollected<HTMLTreeBuilder> {
 
   bool should_skip_leading_newline_;
 
+  const bool include_shadow_roots_;
+
   // We access parser because HTML5 spec requires that we be able to change the
   // state of the tokenizer from within parser actions. We also need it to track
   // the current position.
@@ -264,4 +269,4 @@ class HTMLTreeBuilder final : public GarbageCollected<HTMLTreeBuilder> {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_HTML_PARSER_HTML_TREE_BUILDER_H_

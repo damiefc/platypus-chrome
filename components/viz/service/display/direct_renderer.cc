@@ -16,6 +16,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/base/math_util.h"
@@ -26,52 +27,19 @@
 #include "components/viz/common/quads/aggregated_render_pass_draw_quad.h"
 #include "components/viz/common/quads/compositor_render_pass_draw_quad.h"
 #include "components/viz/common/quads/draw_quad.h"
+#include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/service/display/bsp_tree.h"
 #include "components/viz/service/display/bsp_walk_action.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/skia_output_surface.h"
 #include "ui/gfx/geometry/quad_f.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/transform.h"
+#include "ui/gfx/transform_util.h"
 
 namespace {
-
-static gfx::Transform OrthoProjectionMatrix(float left,
-                                            float right,
-                                            float bottom,
-                                            float top) {
-  // Use the standard formula to map the clipping frustum to the cube from
-  // [-1, -1, -1] to [1, 1, 1].
-  float delta_x = right - left;
-  float delta_y = top - bottom;
-  gfx::Transform proj;
-  if (!delta_x || !delta_y)
-    return proj;
-  proj.matrix().set(0, 0, 2.0f / delta_x);
-  proj.matrix().set(0, 3, -(right + left) / delta_x);
-  proj.matrix().set(1, 1, 2.0f / delta_y);
-  proj.matrix().set(1, 3, -(top + bottom) / delta_y);
-
-  // Z component of vertices is always set to zero as we don't use the depth
-  // buffer while drawing.
-  proj.matrix().set(2, 2, 0);
-
-  return proj;
-}
-
-static gfx::Transform window_matrix(int x, int y, int width, int height) {
-  gfx::Transform canvas;
-
-  // Map to window position and scale up to pixel coordinates.
-  canvas.Translate3d(x, y, 0);
-  canvas.Scale3d(width, height, 0);
-
-  // Map from ([-1, -1] to [1, 1]) -> ([0, 0] to [1, 1])
-  canvas.Translate3d(0.5, 0.5, 0.5);
-  canvas.Scale3d(0.5, 0.5, 0.5);
-
-  return canvas;
-}
 
 // Returns the bounding box that contains the specified rounded corner.
 gfx::RectF ComputeRoundedCornerBoundingBox(const gfx::RRectF& rrect,
@@ -169,10 +137,10 @@ void DirectRenderer::InitializeViewport(DrawingFrame* frame,
   DCHECK_LE(viewport_rect.bottom(), surface_size.height());
   bool flip_y = FlippedFramebuffer();
   if (flip_y) {
-    frame->projection_matrix = OrthoProjectionMatrix(
+    frame->projection_matrix = gfx::OrthoProjectionMatrix(
         draw_rect.x(), draw_rect.right(), draw_rect.bottom(), draw_rect.y());
   } else {
-    frame->projection_matrix = OrthoProjectionMatrix(
+    frame->projection_matrix = gfx::OrthoProjectionMatrix(
         draw_rect.x(), draw_rect.right(), draw_rect.y(), draw_rect.bottom());
   }
 
@@ -180,8 +148,8 @@ void DirectRenderer::InitializeViewport(DrawingFrame* frame,
   if (flip_y)
     window_rect.set_y(surface_size.height() - viewport_rect.bottom());
   frame->window_matrix =
-      window_matrix(window_rect.x(), window_rect.y(), window_rect.width(),
-                    window_rect.height());
+      gfx::WindowMatrix(window_rect.x(), window_rect.y(), window_rect.width(),
+                        window_rect.height());
   current_draw_rect_ = draw_rect;
   current_viewport_rect_ = viewport_rect;
   current_surface_size_ = surface_size;
@@ -244,7 +212,8 @@ void DirectRenderer::DrawFrame(
     AggregatedRenderPassList* render_passes_in_draw_order,
     float device_scale_factor,
     const gfx::Size& device_viewport_size,
-    const gfx::DisplayColorSpaces& display_color_spaces) {
+    const gfx::DisplayColorSpaces& display_color_spaces,
+    SurfaceDamageRectList surface_damage_rect_list) {
   DCHECK(visible_);
   TRACE_EVENT0("viz,benchmark", "DirectRenderer::DrawFrame");
   UMA_HISTOGRAM_COUNTS_1M(
@@ -285,6 +254,21 @@ void DirectRenderer::DrawFrame(
     current_frame()->root_damage_rect.Union(
         overlay_processor_->GetAndResetOverlayDamage());
   }
+  if (auto* ink_renderer =
+          GetDelegatedInkPointRenderer(/*create_if_necessary=*/false)) {
+    // The path must be finalized before GetDamageRect() can return an accurate
+    // rect that will allow the old trail to be removed and the new trail to
+    // be drawn at the same time.
+    ink_renderer->FinalizePathForDraw();
+    gfx::Rect delegated_ink_damage_rect = ink_renderer->GetDamageRect();
+
+    // The viewport could have changed size since the presentation area was
+    // created and propagated, such as if is window was resized. Intersect the
+    // viewport here to ensure the damage rect doesn't extend beyond the current
+    // viewport.
+    delegated_ink_damage_rect.Intersect(gfx::Rect(device_viewport_size));
+    current_frame()->root_damage_rect.Union(delegated_ink_damage_rect);
+  }
   current_frame()->root_damage_rect.Intersect(gfx::Rect(device_viewport_size));
   current_frame()->device_viewport_size = device_viewport_size;
   current_frame()->display_color_spaces = display_color_spaces;
@@ -316,6 +300,8 @@ void DirectRenderer::DrawFrame(
       current_frame()->display_color_spaces.GetOutputBufferFormat(
           current_frame()->root_render_pass->content_color_usage,
           frame_has_alpha);
+  gfx::Size surface_resource_size =
+      CalculateSizeForOutputSurface(device_viewport_size);
   if (overlay_processor_) {
     // Display transform and viewport size are needed for overlay validator on
     // Android SurfaceControl, and viewport size is need on Windows. These need
@@ -336,27 +322,39 @@ void DirectRenderer::DrawFrame(
       // enough because they're all created with identical properties.
       current_frame()->output_surface_plane =
           overlay_processor_->ProcessOutputSurfaceAsOverlay(
-              device_viewport_size, frame_buffer_format, frame_color_space,
-              frame_has_alpha, output_surface_->GetOverlayMailbox());
+              device_viewport_size, surface_resource_size, frame_buffer_format,
+              frame_color_space, frame_has_alpha,
+              output_surface_->GetOverlayMailbox());
       primary_plane = &(current_frame()->output_surface_plane.value());
     }
 
     // Attempt to replace some or all of the quads of the root render pass with
     // overlays.
+    base::ElapsedTimer overlay_processing_timer;
     overlay_processor_->ProcessForOverlays(
         resource_provider_, render_passes_in_draw_order,
         output_surface_->color_matrix(), render_pass_filters_,
-        render_pass_backdrop_filters_, primary_plane,
-        &current_frame()->overlay_list, &current_frame()->root_damage_rect,
+        render_pass_backdrop_filters_, std::move(surface_damage_rect_list),
+        primary_plane, &current_frame()->overlay_list,
+        &current_frame()->root_damage_rect,
         &current_frame()->root_content_bounds);
+    auto overlay_processing_time = overlay_processing_timer.Elapsed();
+
+    constexpr auto kMinTime = base::TimeDelta::FromMicroseconds(5);
+    constexpr auto kMaxTime = base::TimeDelta::FromMilliseconds(10);
+    constexpr int kTimeBuckets = 50;
+    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+        "Compositing.DirectRenderer.OverlayProcessingUs",
+        overlay_processing_time, kMinTime, kMaxTime, kTimeBuckets);
 
     // If we promote any quad to an underlay then the main plane must support
     // alpha.
-    // TODO(ccameron): We should update
-    // |root_render_pass->has_transparent_background|, |frame_color_space|, and
+    // TODO(ccameron): We should update |frame_color_space|, and
     // |frame_buffer_format| based on the change in |frame_has_alpha|.
-    if (current_frame()->output_surface_plane)
+    if (current_frame()->output_surface_plane) {
       frame_has_alpha |= current_frame()->output_surface_plane->enable_blending;
+      root_render_pass->has_transparent_background = frame_has_alpha;
+    }
 
     overlay_processor_->AdjustOutputSurfaceOverlay(
         &(current_frame()->output_surface_plane));
@@ -367,12 +365,12 @@ void DirectRenderer::DrawFrame(
   // viewport size is never set.
   bool use_stencil = overdraw_feedback_;
   bool needs_full_frame_redraw = false;
-  if (device_viewport_size != reshape_surface_size_ ||
+  if (surface_resource_size != reshape_surface_size_ ||
       device_scale_factor != reshape_device_scale_factor_ ||
       frame_color_space != reshape_color_space_ ||
       frame_buffer_format != reshape_buffer_format_ ||
       use_stencil != reshape_use_stencil_) {
-    reshape_surface_size_ = device_viewport_size;
+    reshape_surface_size_ = surface_resource_size;
     reshape_device_scale_factor_ = device_scale_factor;
     reshape_color_space_ = frame_color_space;
     reshape_buffer_format_ = frame_buffer_format;
@@ -479,8 +477,8 @@ bool DirectRenderer::ShouldSkipQuad(const DrawQuad& quad,
 
   gfx::Rect target_rect = cc::MathUtil::MapEnclosingClippedRect(
       quad.shared_quad_state->quad_to_target_transform, quad.visible_rect);
-  if (quad.shared_quad_state->is_clipped)
-    target_rect.Intersect(quad.shared_quad_state->clip_rect);
+  if (quad.shared_quad_state->clip_rect)
+    target_rect.Intersect(*quad.shared_quad_state->clip_rect);
 
   target_rect.Intersect(render_pass_scissor);
   return target_rect.IsEmpty();
@@ -492,12 +490,12 @@ void DirectRenderer::SetScissorStateForQuad(
     bool use_render_pass_scissor) {
   if (use_render_pass_scissor) {
     gfx::Rect quad_scissor_rect = render_pass_scissor;
-    if (quad.shared_quad_state->is_clipped)
-      quad_scissor_rect.Intersect(quad.shared_quad_state->clip_rect);
+    if (quad.shared_quad_state->clip_rect)
+      quad_scissor_rect.Intersect(*quad.shared_quad_state->clip_rect);
     SetScissorTestRectInDrawSpace(quad_scissor_rect);
     return;
-  } else if (quad.shared_quad_state->is_clipped) {
-    SetScissorTestRectInDrawSpace(quad.shared_quad_state->clip_rect);
+  } else if (quad.shared_quad_state->clip_rect) {
+    SetScissorTestRectInDrawSpace(*quad.shared_quad_state->clip_rect);
     return;
   }
 
@@ -715,11 +713,18 @@ void DirectRenderer::DrawRenderPass(const AggregatedRenderPass* render_pass) {
     SetScissorStateForQuad(quad, render_pass_scissor_in_draw_space,
                            render_pass_requires_scissor);
 
+    if (OverlayCandidate::RequiresOverlay(&quad)) {
+      // We cannot composite this quad properly, replace it with solid black.
+      SolidColorDrawQuad solid_black;
+      solid_black.SetAll(quad.shared_quad_state, quad.rect, quad.rect,
+                         /*needs_blending=*/false, SK_ColorBLACK,
+                         /*force_anti_aliasing_off=*/true);
+      DoDrawQuad(&solid_black, nullptr);
+      continue;
+    }
+
     DoDrawQuad(&quad, nullptr);
   }
-  if (is_root_render_pass && delegated_ink_point_renderer_)
-    delegated_ink_point_renderer_->DrawDelegatedInkTrail();
-
   FlushPolygons(&poly_list, render_pass_scissor_in_draw_space,
                 render_pass_requires_scissor);
   FinishDrawingQuadList();
@@ -736,18 +741,6 @@ bool DirectRenderer::CanSkipRenderPass(
   if (render_pass == current_frame()->root_render_pass)
     return false;
 
-  // TODO(crbug.com/783275): It's possible to skip a child RenderPass if damage
-  // does not overlap it, since that means nothing has changed:
-  //   ComputeScissorRectForRenderPass(render_pass).IsEmpty()
-  // However that caused crashes where the RenderPass' texture was not present
-  // (never seen the RenderPass before, or the texture was deleted when not used
-  // for a frame). It could avoid skipping if there is no texture present, which
-  // is what was done for a while, but this seems to papering over a missing
-  // damage problem, or we're failing to understand the system wholey.
-  // If attempted again this should probably CHECK() that the texture exists,
-  // and attempt to figure out where the new RenderPass texture without damage
-  // is coming from.
-
   // If the RenderPass wants to be cached, then we only draw it if we need to.
   // When damage is present, then we can't skip the RenderPass. Or if the
   // texture does not exist (first frame, or was deleted) then we can't skip
@@ -756,6 +749,13 @@ bool DirectRenderer::CanSkipRenderPass(
     if (render_pass->has_damage_from_contributing_content)
       return false;
     return IsRenderPassResourceAllocated(render_pass->id);
+  }
+
+  // Only render what is damaged. If there are copy requests associated with
+  // this pass the damage should always be the full |output_rect|.
+  if (use_partial_swap_ &&
+      ComputeScissorRectForRenderPass(render_pass).IsEmpty()) {
+    return true;
   }
 
   return false;
@@ -798,30 +798,33 @@ gfx::Rect DirectRenderer::ComputeScissorRectForRenderPass(
   const AggregatedRenderPass* root_render_pass =
       current_frame()->root_render_pass;
   gfx::Rect root_damage_rect = current_frame()->root_damage_rect;
+  // If |frame_buffer_damage|, which is carried over from the previous frame
+  // when we want to preserve buffer content, is not empty, we should add it
+  // to both root and non-root render passes.
+  gfx::Rect frame_buffer_damage =
+      output_surface_->GetCurrentFramebufferDamage();
 
   if (render_pass == root_render_pass) {
-    base::CheckedNumeric<int> display_area =
+    base::CheckedNumeric<int64_t> display_area =
         current_frame()->device_viewport_size.GetCheckedArea();
-    gfx::Rect frame_buffer_damage =
-        output_surface_->GetCurrentFramebufferDamage();
-    base::CheckedNumeric<int> root_damage_area =
+    base::CheckedNumeric<int64_t> root_damage_area =
         root_damage_rect.size().GetCheckedArea();
     if (display_area.IsValid() && root_damage_area.IsValid()) {
-      DCHECK_GT(static_cast<int>(display_area.ValueOrDie()), 0);
+      DCHECK_GT(static_cast<int64_t>(display_area.ValueOrDie()), 0);
       {
-        base::CheckedNumeric<int> frame_buffer_damage_area =
+        base::CheckedNumeric<int64_t> frame_buffer_damage_area =
             frame_buffer_damage.size().GetCheckedArea();
-        int ratio =
-            (frame_buffer_damage_area / display_area).ValueOrDefault(INT_MAX);
+        int64_t percentage = ((frame_buffer_damage_area * 100ll) / display_area)
+                                 .ValueOrDefault(INT_MAX);
         UMA_HISTOGRAM_PERCENTAGE(
             "Compositing.DirectRenderer.PartialSwap.FrameBufferDamage",
-            100ull * ratio);
+            percentage);
       }
       {
-        int ratio = (root_damage_area / display_area).ValueOrDie();
+        int64_t percentage =
+            ((root_damage_area * 100ll) / display_area).ValueOrDie();
         UMA_HISTOGRAM_PERCENTAGE(
-            "Compositing.DirectRenderer.PartialSwap.RootDamage",
-            100ull * ratio);
+            "Compositing.DirectRenderer.PartialSwap.RootDamage", percentage);
       }
 
       root_damage_rect.Union(frame_buffer_damage);
@@ -849,20 +852,20 @@ gfx::Rect DirectRenderer::ComputeScissorRectForRenderPass(
       }
 
       // Total damage after all adjustments.
-      base::CheckedNumeric<int> total_damage_area =
+      base::CheckedNumeric<int64_t> total_damage_area =
           root_damage_rect.size().GetCheckedArea();
       {
-        int ratio = (total_damage_area / display_area).ValueOrDefault(INT_MAX);
+        int64_t percentage = ((total_damage_area * 100ll) / display_area)
+                                 .ValueOrDefault(INT_MAX);
         UMA_HISTOGRAM_PERCENTAGE(
-            "Compositing.DirectRenderer.PartialSwap.TotalDamage",
-            100ull * ratio);
+            "Compositing.DirectRenderer.PartialSwap.TotalDamage", percentage);
       }
       {
-        int ratio = ((total_damage_area - root_damage_area) / display_area)
-                        .ValueOrDefault(INT_MAX);
+        int64_t percentage =
+            (((total_damage_area - root_damage_area) * 100ll) / display_area)
+                .ValueOrDefault(INT_MAX);
         UMA_HISTOGRAM_PERCENTAGE(
-            "Compositing.DirectRenderer.PartialSwap.ExtraDamage",
-            100ull * ratio);
+            "Compositing.DirectRenderer.PartialSwap.ExtraDamage", percentage);
       }
     }
 
@@ -871,12 +874,29 @@ gfx::Rect DirectRenderer::ComputeScissorRectForRenderPass(
 
   // If the root damage rect has been expanded due to overlays, all the other
   // damage rect calculations are incorrect.
-  if (!root_render_pass->damage_rect.Contains(root_damage_rect))
+  if (!root_damage_rect.IsEmpty() &&
+      !root_render_pass->damage_rect.Contains(root_damage_rect)) {
     return render_pass->output_rect;
+  }
 
   DCHECK(render_pass->copy_requests.empty() ||
          (render_pass->damage_rect == render_pass->output_rect));
-  return render_pass->damage_rect;
+
+  // For the non-root render pass.
+  gfx::Rect damage_rect = render_pass->damage_rect;
+  if (!frame_buffer_damage.IsEmpty()) {
+    gfx::Transform inverse_transform(gfx::Transform::kSkipInitialization);
+    if (render_pass->transform_to_root_target.GetInverse(&inverse_transform)) {
+      // |frame_buffer_damage| is in the root target space. Transform the damage
+      // from the root to the non-root space before it's added.
+      gfx::Rect frame_buffer_damage_in_render_pass_space =
+          cc::MathUtil::MapEnclosingClippedRect(inverse_transform,
+                                                frame_buffer_damage);
+      damage_rect.Union(frame_buffer_damage_in_render_pass_space);
+    }
+  }
+
+  return damage_rect;
 }
 
 gfx::Size DirectRenderer::CalculateTextureSizeForRenderPass(
@@ -887,11 +907,57 @@ gfx::Size DirectRenderer::CalculateTextureSizeForRenderPass(
   int width = render_pass->output_rect.width();
   int height = render_pass->output_rect.height();
   if (!settings_->dont_round_texture_sizes_for_pixel_tests) {
-    int multiple = 64;
+    constexpr int multiple = 64;
     width = cc::MathUtil::CheckedRoundUp(width, multiple);
     height = cc::MathUtil::CheckedRoundUp(height, multiple);
   }
   return gfx::Size(width, height);
+}
+
+// TODO(fangzhoug): There should be metrics recording the amount of unused
+// buffer area and number of reallocations to quantify the trade-off.
+gfx::Size DirectRenderer::CalculateSizeForOutputSurface(
+    const gfx::Size& requested_viewport_size) {
+  // We're not able to clip back buffers if output surface does not support
+  // clipping.
+  if (requested_viewport_size == surface_size_for_swap_buffers() ||
+      !output_surface_->capabilities().supports_viewporter ||
+      settings_->dont_round_texture_sizes_for_pixel_tests) {
+    device_viewport_size_ = requested_viewport_size;
+    return requested_viewport_size;
+  }
+
+  // If 1 second has passed since last |device_viewport_size_| change, shrink
+  // OutputSurface size to |device_viewport_size_|.
+  if (device_viewport_size_ == requested_viewport_size &&
+      (base::TimeTicks::Now() - last_viewport_resize_time_) >=
+          base::TimeDelta::FromSeconds(1)) {
+    return requested_viewport_size;
+  }
+
+  // Round the size of the output surface to a multiple of 256 pixels. This
+  // allows backings to be more easily reused during a resize operation.
+  const int request_width = requested_viewport_size.width();
+  const int request_height = requested_viewport_size.height();
+  int surface_width = surface_size_for_swap_buffers().width();
+  int surface_height = surface_size_for_swap_buffers().height();
+  constexpr int multiple = 256;
+
+  // If |request_width| or |request_height| is already a multiple of |multiple|,
+  // round up extra |multiple| pixels s.t. we always have some amount of
+  // padding.
+  if (request_width > surface_width)
+    surface_width =
+        cc::MathUtil::CheckedRoundUp(request_width + multiple - 1, multiple);
+  if (request_height > surface_height)
+    surface_height =
+        cc::MathUtil::CheckedRoundUp(request_height + multiple - 1, multiple);
+
+  if (requested_viewport_size != device_viewport_size_)
+    last_viewport_resize_time_ = base::TimeTicks::Now();
+
+  device_viewport_size_ = requested_viewport_size;
+  return gfx::Size(surface_width, surface_height);
 }
 
 void DirectRenderer::SetCurrentFrameForTesting(const DrawingFrame& frame) {
@@ -906,11 +972,14 @@ bool DirectRenderer::HasAllocatedResourcesForTesting(
 
 bool DirectRenderer::ShouldApplyRoundedCorner(const DrawQuad* quad) const {
   const SharedQuadState* sqs = quad->shared_quad_state;
-  const gfx::RRectF& rounded_corner_bounds = sqs->rounded_corner_bounds;
+  const gfx::MaskFilterInfo& mask_filter_info = sqs->mask_filter_info;
 
   // There is no rounded corner set.
-  if (rounded_corner_bounds.IsEmpty())
+  if (!mask_filter_info.HasRoundedCorners())
     return false;
+
+  const gfx::RRectF& rounded_corner_bounds =
+      mask_filter_info.rounded_corner_bounds();
 
   const gfx::RectF target_quad = cc::MathUtil::MapClippedRect(
       sqs->quad_to_target_transform, gfx::RectF(quad->visible_rect));
@@ -943,23 +1012,13 @@ gfx::ColorSpace DirectRenderer::CurrentRenderPassColorSpace() const {
       current_frame()->current_render_pass->content_color_usage);
 }
 
-bool DirectRenderer::CreateDelegatedInkPointRenderer() {
-  return false;
+DelegatedInkPointRendererBase* DirectRenderer::GetDelegatedInkPointRenderer(
+    bool create_if_necessary) {
+  return nullptr;
 }
 
-DelegatedInkPointRendererBase* DirectRenderer::GetDelegatedInkPointRenderer() {
-  if (!delegated_ink_point_renderer_ && !CreateDelegatedInkPointRenderer())
-    return nullptr;
-
-  return delegated_ink_point_renderer_.get();
-}
-
-void DirectRenderer::SetDelegatedInkMetadata(
-    std::unique_ptr<DelegatedInkMetadata> metadata) {
-  if (!delegated_ink_point_renderer_ && !CreateDelegatedInkPointRenderer())
-    return;
-
-  delegated_ink_point_renderer_->SetDelegatedInkMetadata(std::move(metadata));
+void DirectRenderer::DrawDelegatedInkTrail() {
+  NOTREACHED();
 }
 
 bool DirectRenderer::CompositeTimeTracingEnabled() {
@@ -967,5 +1026,14 @@ bool DirectRenderer::CompositeTimeTracingEnabled() {
 }
 
 void DirectRenderer::AddCompositeTimeTraces(base::TimeTicks ready_timestamp) {}
+
+gfx::Rect DirectRenderer::GetDelegatedInkTrailDamageRect() {
+  if (auto* ink_renderer =
+          GetDelegatedInkPointRenderer(/*create_if_necessary=*/false)) {
+    return ink_renderer->GetDamageRect();
+  }
+
+  return gfx::Rect();
+}
 
 }  // namespace viz

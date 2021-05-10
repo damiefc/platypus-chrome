@@ -19,15 +19,6 @@ class AccountReconcilor;
 
 namespace signin {
 
-// Possible revoke token actions taken by the AccountReconcilor.
-enum class RevokeTokenAction {
-  kNone,
-  kInvalidatePrimaryAccountToken,
-  kRevokeSecondaryAccountsTokens,
-  kRevokeTokensForPrimaryAndSecondaryAccounts,
-  kMaxValue = kRevokeTokensForPrimaryAndSecondaryAccounts
-};
-
 // Base class for AccountReconcilorDelegate.
 class AccountReconcilorDelegate {
  public:
@@ -42,21 +33,12 @@ class AccountReconcilorDelegate {
     kRevoke
   };
 
-  virtual ~AccountReconcilorDelegate() {}
+  AccountReconcilorDelegate();
+  virtual ~AccountReconcilorDelegate();
 
   // Returns true if the reconcilor should reconcile the profile. Defaults to
   // false.
   virtual bool IsReconcileEnabled() const;
-
-  // Returns whether the OAuth multilogin endpoint can be used to build the Gaia
-  // cookies.
-  // Default implementation returns true.
-  virtual bool IsMultiloginEndpointEnabled() const;
-
-  // Returns true if account consistency is enforced (Mirror or Dice).
-  // If this is false, reconcile is done, but its results are discarded and no
-  // changes to the accounts are made. Defaults to false.
-  virtual bool IsAccountConsistencyEnforced() const;
 
   // Returns the value to set in the "source" parameter for Gaia API calls.
   virtual gaia::GaiaSource GetGaiaApiSource() const;
@@ -110,8 +92,7 @@ class AccountReconcilorDelegate {
   virtual bool ShouldRevokeTokensNotInCookies() const;
 
   // Called when |RevokeTokensNotInCookies| is finished.
-  virtual void OnRevokeTokensNotInCookiesCompleted(
-      RevokeTokenAction revoke_token_action) {}
+  virtual void OnRevokeTokensNotInCookiesCompleted() {}
 
   // Returns whether tokens should be revoked when the Gaia cookie has been
   // explicitly deleted by the user.

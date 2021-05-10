@@ -98,7 +98,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityIpcErrorBrowserTest,
     AccessibilityNotificationWaiter waiter(shell()->web_contents(),
                                            ui::kAXModeComplete,
                                            ax::mojom::Event::kChildrenChanged);
-    ASSERT_TRUE(ExecuteScript(
+    ASSERT_TRUE(ExecJs(
         shell(), "document.getElementById('p1').style.display = 'none';"));
     waiter.WaitForNotification();
   }
@@ -115,8 +115,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityIpcErrorBrowserTest,
     // Because we missed one IPC message, AXTree::Unserialize() will fail.
     AccessibilityNotificationWaiter waiter(
         shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kFocus);
-    ASSERT_TRUE(
-        ExecuteScript(shell(), "document.getElementById('button').focus();"));
+    ASSERT_TRUE(ExecJs(shell(), "document.getElementById('button').focus();"));
     waiter.WaitForNotification();
     tree = &waiter.GetAXTree();
   }
@@ -186,7 +185,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityIpcErrorBrowserTest,
   bad_accessibility_event.updates[0].root_id = 1;
   bad_accessibility_event.updates[0].nodes.resize(1);
   bad_accessibility_event.updates[0].nodes[0].id = 1;
-  bad_accessibility_event.updates[0].nodes[0].child_ids.push_back(2);
+  bad_accessibility_event.updates[0].nodes[0].child_ids.push_back(999);
 
   for (int iteration = 0; iteration < max_iterations; iteration++) {
     // Make sure the manager has been created.

@@ -24,6 +24,7 @@
 #include "base/notreached.h"
 #include "base/pickle.h"
 #include "base/stl_util.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_hdc.h"
 #include "base/win/scoped_hglobal.h"
@@ -33,8 +34,10 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/clipboard_util_win.h"
-#include "ui/base/dragdrop/file_info/file_info.h"
+#include "ui/base/clipboard/file_info.h"
+#include "ui/base/data_transfer_policy/data_transfer_policy_controller.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/l10n/l10n_util_win.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/skbitmap_operations.h"
@@ -53,8 +56,6 @@ constexpr STGMEDIUM kNullStorageMedium = {.tymed = TYMED_NULL,
 STGMEDIUM CreateStorageForBytes(const void* data, size_t bytes);
 template <typename T>
 STGMEDIUM CreateStorageForString(const std::basic_string<T>& data);
-// Creates a new STGMEDIUM object to hold files.
-STGMEDIUM CreateStorageForFileNames(const std::vector<FileInfo>& filenames);
 STGMEDIUM CreateIdListStorageForFileName(const base::FilePath& path);
 // Creates a File Descriptor for the creation of a file to the given URL and
 // returns a handle to it.
@@ -64,8 +65,8 @@ const ClipboardFormatType& GetRendererTaintFormatType();
 // Creates the contents of an Internet Shortcut file for the given URL.
 std::string GetInternetShortcutFileContents(const GURL& url);
 // Creates a valid file name given a suggested title and URL.
-base::string16 CreateValidFileNameFromTitle(const GURL& url,
-                                            const base::string16& title);
+std::wstring CreateValidFileNameFromTitle(const GURL& url,
+                                          const std::wstring& title);
 
 }  // namespace
 
@@ -239,7 +240,7 @@ FormatEtcEnumerator* FormatEtcEnumerator::CloneFromOther(
 
 // static
 bool OSExchangeDataProviderWin::HasPlainTextURL(IDataObject* source) {
-  base::string16 plain_text;
+  std::u16string plain_text;
   return (ClipboardUtil::GetPlainText(source, &plain_text) &&
           !plain_text.empty() && GURL(plain_text).is_valid());
 }
@@ -247,7 +248,7 @@ bool OSExchangeDataProviderWin::HasPlainTextURL(IDataObject* source) {
 // static
 bool OSExchangeDataProviderWin::GetPlainTextURL(IDataObject* source,
                                                 GURL* url) {
-  base::string16 plain_text;
+  std::u16string plain_text;
   if (ClipboardUtil::GetPlainText(source, &plain_text) &&
       !plain_text.empty()) {
     GURL gurl(plain_text);
@@ -301,7 +302,7 @@ bool OSExchangeDataProviderWin::DidOriginateFromRenderer() const {
   return HasCustomFormat(GetRendererTaintFormatType());
 }
 
-void OSExchangeDataProviderWin::SetString(const base::string16& data) {
+void OSExchangeDataProviderWin::SetString(const std::u16string& data) {
   STGMEDIUM storage = CreateStorageForString(data);
   data_->contents_.push_back(DataObjectImpl::StoredDataInfo::TakeStorageMedium(
       ClipboardFormatType::GetPlainTextType().ToFormatEtc(), storage));
@@ -313,7 +314,7 @@ void OSExchangeDataProviderWin::SetString(const base::string16& data) {
 }
 
 void OSExchangeDataProviderWin::SetURL(const GURL& url,
-                                       const base::string16& title) {
+                                       const std::u16string& title) {
   // NOTE WELL:
   // Every time you change the order of the first two CLIPFORMATS that get
   // added here, you need to update the EnumerationViaCOM test case in
@@ -321,7 +322,7 @@ void OSExchangeDataProviderWin::SetURL(const GURL& url,
   // will fail! It assumes an insertion order.
 
   // Add text/x-moz-url for drags from Firefox
-  base::string16 x_moz_url_str = base::UTF8ToUTF16(url.spec());
+  std::u16string x_moz_url_str = base::UTF8ToUTF16(url.spec());
   x_moz_url_str += '\n';
   x_moz_url_str += title;
   STGMEDIUM storage = CreateStorageForString(x_moz_url_str);
@@ -329,7 +330,8 @@ void OSExchangeDataProviderWin::SetURL(const GURL& url,
       ClipboardFormatType::GetMozUrlType().ToFormatEtc(), storage));
 
   // Add a .URL shortcut file for dragging to Explorer.
-  base::string16 valid_file_name = CreateValidFileNameFromTitle(url, title);
+  std::wstring valid_file_name =
+      CreateValidFileNameFromTitle(url, base::AsWString(title));
   std::string shortcut_url_file_contents = GetInternetShortcutFileContents(url);
   SetFileContents(base::FilePath(valid_file_name), shortcut_url_file_contents);
 
@@ -360,7 +362,7 @@ void OSExchangeDataProviderWin::SetFilename(const base::FilePath& path) {
 
 void OSExchangeDataProviderWin::SetFilenames(
     const std::vector<FileInfo>& filenames) {
-  STGMEDIUM storage = CreateStorageForFileNames(filenames);
+  STGMEDIUM storage = ClipboardUtil::CreateStorageForFileNames(filenames);
   if (storage.tymed == TYMED_NULL)
     return;
 
@@ -400,7 +402,7 @@ void OSExchangeDataProviderWin::SetVirtualFileContentsForTesting(
   for (size_t i = 0; i < num_files; i++) {
     // Fill in each FILEDESCRIPTORW with file name.
     descriptor->fgd[i].dwFlags |= FD_UNICODE;
-    base::string16 file_name = filenames_and_contents[i].first.value();
+    std::wstring file_name = filenames_and_contents[i].first.value();
     wcsncpy_s(descriptor->fgd[i].cFileName, MAX_PATH, file_name.c_str(),
               std::min(file_name.size(), static_cast<size_t>(MAX_PATH - 1u)));
 
@@ -502,7 +504,7 @@ void OSExchangeDataProviderWin::SetFileContents(
       storage_contents));
 }
 
-void OSExchangeDataProviderWin::SetHtml(const base::string16& html,
+void OSExchangeDataProviderWin::SetHtml(const std::u16string& html,
                                         const GURL& base_url) {
   // Add both MS CF_HTML and text/html format.  CF_HTML should be in utf-8.
   std::string utf8_html = base::UTF16ToUTF8(html);
@@ -519,14 +521,14 @@ void OSExchangeDataProviderWin::SetHtml(const base::string16& html,
       ClipboardFormatType::GetTextHtmlType().ToFormatEtc(), storage_plain));
 }
 
-bool OSExchangeDataProviderWin::GetString(base::string16* data) const {
+bool OSExchangeDataProviderWin::GetString(std::u16string* data) const {
   return ClipboardUtil::GetPlainText(source_object_.Get(), data);
 }
 
 bool OSExchangeDataProviderWin::GetURLAndTitle(FilenameToURLPolicy policy,
                                                GURL* url,
-                                               base::string16* title) const {
-  base::string16 url_str;
+                                               std::u16string* title) const {
+  std::u16string url_str;
   bool success = ClipboardUtil::GetUrl(
       source_object_.Get(), url, title,
       policy == FilenameToURLPolicy::CONVERT_FILENAMES ? true : false);
@@ -544,7 +546,7 @@ bool OSExchangeDataProviderWin::GetURLAndTitle(FilenameToURLPolicy policy,
 }
 
 bool OSExchangeDataProviderWin::GetFilename(base::FilePath* path) const {
-  std::vector<base::string16> filenames;
+  std::vector<std::wstring> filenames;
   bool success = ClipboardUtil::GetFilenames(source_object_.Get(), &filenames);
   if (success)
     *path = base::FilePath(filenames[0]);
@@ -553,11 +555,11 @@ bool OSExchangeDataProviderWin::GetFilename(base::FilePath* path) const {
 
 bool OSExchangeDataProviderWin::GetFilenames(
     std::vector<FileInfo>* filenames) const {
-  std::vector<base::string16> filenames_local;
+  std::vector<std::wstring> filenames_local;
   bool success =
       ClipboardUtil::GetFilenames(source_object_.Get(), &filenames_local);
   if (success) {
-    for (const base::string16& filename_local : filenames_local)
+    for (const std::wstring& filename_local : filenames_local)
       filenames->push_back(
           FileInfo(base::FilePath(filename_local), base::FilePath()));
   }
@@ -619,7 +621,7 @@ bool OSExchangeDataProviderWin::GetPickledData(
 bool OSExchangeDataProviderWin::GetFileContents(
     base::FilePath* filename,
     std::string* file_contents) const {
-  base::string16 filename_str;
+  std::wstring filename_str;
   if (!ClipboardUtil::GetFileContents(source_object_.Get(), &filename_str,
                                       file_contents)) {
     return false;
@@ -628,7 +630,7 @@ bool OSExchangeDataProviderWin::GetFileContents(
   return true;
 }
 
-bool OSExchangeDataProviderWin::GetHtml(base::string16* html,
+bool OSExchangeDataProviderWin::GetHtml(std::u16string* html,
                                         GURL* base_url) const {
   std::string url;
   bool success = ClipboardUtil::GetHtml(source_object_.Get(), html, &url);
@@ -674,8 +676,10 @@ void OSExchangeDataProviderWin::SetDownloadFileInfo(
   // TODO(dcheng): Is it actually possible for filename to be empty here? I
   // think we always synthesize one in WebContentsDragWin.
   STGMEDIUM storage = kNullStorageMedium;
-  if (!download->filename.empty())
-    CreateStorageForFileNames({FileInfo(download->filename, base::FilePath())});
+  if (!download->filename.empty()) {
+    ClipboardUtil::CreateStorageForFileNames(
+        {FileInfo(download->filename, base::FilePath())});
+  }
 
   // Add CF_HDROP.
   auto info = DataObjectImpl::StoredDataInfo::TakeStorageMedium(
@@ -696,28 +700,6 @@ void OSExchangeDataProviderWin::SetDragImage(
   // by premultiplied colors, so unpremultiply the bitmap.
   SkBitmap unpremul_bitmap =
       SkBitmapOperations::UnPreMultiply(*image_skia.bitmap());
-  int width = unpremul_bitmap.width();
-  int height = unpremul_bitmap.height();
-  size_t rowbytes = unpremul_bitmap.rowBytes();
-  DCHECK_EQ(rowbytes, static_cast<size_t>(width) * 4u);
-
-  void* bits;
-  HBITMAP hbitmap;
-  {
-    BITMAPINFOHEADER header;
-    skia::CreateBitmapHeader(width, height, &header);
-
-    base::win::ScopedGetDC screen_dc(NULL);
-    // By giving a null hSection, the |bits| will be destroyed when the
-    // |hbitmap| is destroyed.
-    hbitmap =
-        CreateDIBSection(screen_dc, reinterpret_cast<BITMAPINFO*>(&header),
-                         DIB_RGB_COLORS, &bits, NULL, 0);
-  }
-  if (!hbitmap)
-    return;
-
-  memcpy(bits, unpremul_bitmap.getPixels(), height * rowbytes);
 
   Microsoft::WRL::ComPtr<IDragSourceHelper> helper;
   HRESULT rv = CoCreateInstance(CLSID_DragDropHelper, 0, CLSCTX_INPROC_SERVER,
@@ -725,12 +707,17 @@ void OSExchangeDataProviderWin::SetDragImage(
   if (!SUCCEEDED(rv))
     return;
 
+  base::win::ScopedBitmap hbitmap =
+      skia::CreateHBitmapFromN32SkBitmap(unpremul_bitmap);
+  if (!hbitmap.is_valid())
+    return;
+
   // InitializeFromBitmap() takes ownership of |hbitmap|.
   SHDRAGIMAGE sdi;
-  sdi.sizeDragImage.cx = width;
-  sdi.sizeDragImage.cy = height;
+  sdi.sizeDragImage.cx = unpremul_bitmap.width();
+  sdi.sizeDragImage.cy = unpremul_bitmap.height();
   sdi.crColorKey = 0xFFFFFFFF;
-  sdi.hbmpDragImage = hbitmap;
+  sdi.hbmpDragImage = hbitmap.release();
   sdi.ptOffset = gfx::PointAtOffsetFromOrigin(cursor_offset).ToPOINT();
   helper->InitializeFromBitmap(&sdi, data_object());
 }
@@ -749,6 +736,13 @@ gfx::Vector2d OSExchangeDataProviderWin::GetDragImageOffset() const {
   // OSExchangeDataProvider should be used.
   NOTREACHED();
   return gfx::Vector2d();
+}
+
+void OSExchangeDataProviderWin::SetSource(
+    std::unique_ptr<DataTransferEndpoint> data_source) {}
+
+DataTransferEndpoint* OSExchangeDataProviderWin::GetSource() const {
+  return nullptr;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -886,8 +880,8 @@ void DataObjectImpl::OnDownloadCompleted(const base::FilePath& file_path) {
       if (downloader)
         downloader->Stop();
       // Replace stored data.
-      STGMEDIUM storage =
-          CreateStorageForFileNames({FileInfo(file_path, base::FilePath())});
+      STGMEDIUM storage = ClipboardUtil::CreateStorageForFileNames(
+          {FileInfo(file_path, base::FilePath())});
       content = StoredDataInfo::TakeStorageMedium(
           ClipboardFormatType::GetCFHDropType().ToFormatEtc(), storage);
       content->downloader = std::move(downloader);
@@ -1090,52 +1084,6 @@ STGMEDIUM CreateStorageForString(const std::basic_string<T>& data) {
       (data.size() + 1) * sizeof(typename std::basic_string<T>::value_type));
 }
 
-STGMEDIUM CreateStorageForFileNames(const std::vector<FileInfo>& filenames) {
-  // CF_HDROP clipboard format consists of DROPFILES structure, a series of file
-  // names including the terminating null character and the additional null
-  // character at the tail to terminate the array.
-  // For example,
-  //| DROPFILES | FILENAME 1 | NULL | ... | FILENAME n | NULL | NULL |
-  // For more details, please refer to
-  // https://docs.microsoft.com/en-us/windows/desktop/shell/clipboard#cf_hdrop
-
-  if (filenames.empty())
-    return kNullStorageMedium;
-
-  const size_t kDropFilesHeaderSizeInBytes = sizeof(DROPFILES);
-  size_t total_bytes = kDropFilesHeaderSizeInBytes;
-  for (const auto& filename : filenames) {
-    // Allocate memory of the filename's length including the null
-    // character.
-    total_bytes += (filename.path.value().length() + 1) * sizeof(wchar_t);
-  }
-  // |data| needs to be terminated by an additional null character.
-  total_bytes += sizeof(wchar_t);
-
-  // GHND combines GMEM_MOVEABLE and GMEM_ZEROINIT, and GMEM_ZEROINIT
-  // initializes memory contents to zero.
-  HANDLE hdata = GlobalAlloc(GHND, total_bytes);
-
-  base::win::ScopedHGlobal<DROPFILES*> locked_mem(hdata);
-  DROPFILES* drop_files = locked_mem.get();
-  drop_files->pFiles = sizeof(DROPFILES);
-  drop_files->fWide = TRUE;
-
-  wchar_t* data = reinterpret_cast<wchar_t*>(
-      reinterpret_cast<BYTE*>(drop_files) + kDropFilesHeaderSizeInBytes);
-
-  size_t next_filename_offset = 0;
-  for (const auto& filename : filenames) {
-    wcscpy(data + next_filename_offset, filename.path.value().c_str());
-    // Skip the terminating null character of the filename.
-    next_filename_offset += filename.path.value().length() + 1;
-  }
-
-  STGMEDIUM storage = {
-      .tymed = TYMED_HGLOBAL, .hGlobal = hdata, .pUnkForRelease = nullptr};
-  return storage;
-}
-
 LPITEMIDLIST PIDLNext(LPITEMIDLIST pidl) {
   return reinterpret_cast<LPITEMIDLIST>(
       reinterpret_cast<BYTE*>(pidl) + pidl->mkid.cb);
@@ -1212,7 +1160,7 @@ STGMEDIUM CreateIdListStorageForFileName(const base::FilePath& path) {
 }
 
 STGMEDIUM CreateStorageForFileDescriptor(const base::FilePath& path) {
-  base::string16 file_name = path.value();
+  std::wstring file_name = path.value();
   DCHECK(!file_name.empty());
   HANDLE hdata = GlobalAlloc(GPTR, sizeof(FILEGROUPDESCRIPTORW));
   base::win::ScopedHGlobal<FILEGROUPDESCRIPTORW*> locked_mem(hdata);
@@ -1241,16 +1189,16 @@ std::string GetInternetShortcutFileContents(const GURL& url) {
   return kInternetShortcutFileStart + url.spec() + kInternetShortcutFileEnd;
 }
 
-base::string16 CreateValidFileNameFromTitle(const GURL& url,
-                                            const base::string16& title) {
-  base::string16 validated;
+std::wstring CreateValidFileNameFromTitle(const GURL& url,
+                                          const std::wstring& title) {
+  std::wstring validated;
   if (title.empty()) {
     if (url.is_valid()) {
-      validated = net::GetSuggestedFilename(url, "", "", "", "", std::string());
+      validated = base::AsWString(
+          net::GetSuggestedFilename(url, "", "", "", "", std::string()));
     } else {
       // Nothing else can be done, just use a default.
-      validated =
-          l10n_util::GetStringUTF16(IDS_APP_UNTITLED_SHORTCUT_FILE_NAME);
+      validated = l10n_util::GetWideString(IDS_APP_UNTITLED_SHORTCUT_FILE_NAME);
     }
   } else {
     validated = title;

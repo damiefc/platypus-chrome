@@ -6,7 +6,6 @@
 
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/tray/tray_popup_utils.h"
-#include "ash/system/unified/unified_system_tray_view.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -19,49 +18,16 @@
 
 namespace ash {
 
-TopShortcutButton::TopShortcutButton(const gfx::VectorIcon& icon,
-                                     int accessible_name_id)
-    : TopShortcutButton(nullptr /* listener */, accessible_name_id) {
-  SetImage(views::Button::STATE_DISABLED,
-           gfx::CreateVectorIcon(
-               icon, kTrayTopShortcutButtonIconSize,
-               AshColorProvider::Get()->GetContentLayerColor(
-                   AshColorProvider::ContentLayerType::kIconColorPrimary)));
-  SetEnabled(false);
-
-  focus_ring()->SetColor(UnifiedSystemTrayView::GetFocusRingColor());
-}
-
-TopShortcutButton::TopShortcutButton(views::ButtonListener* listener,
+TopShortcutButton::TopShortcutButton(PressedCallback callback,
                                      const gfx::VectorIcon& icon,
                                      int accessible_name_id)
-    : TopShortcutButton(listener, accessible_name_id) {
-  const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kIconColorPrimary);
-  SetImage(
-      views::Button::STATE_NORMAL,
-      gfx::CreateVectorIcon(icon, kTrayTopShortcutButtonIconSize, icon_color));
-  SetImage(
-      views::Button::STATE_DISABLED,
-      gfx::CreateVectorIcon(icon, kTrayTopShortcutButtonIconSize,
-                            AshColorProvider::GetDisabledColor(icon_color)));
-
-  focus_ring()->SetColor(UnifiedSystemTrayView::GetFocusRingColor());
-}
-
-TopShortcutButton::TopShortcutButton(views::ButtonListener* listener,
-                                     int accessible_name_id)
-    : views::ImageButton(listener) {
+    : views::ImageButton(std::move(callback)), icon_(icon) {
   SetImageHorizontalAlignment(ALIGN_CENTER);
   SetImageVerticalAlignment(ALIGN_MIDDLE);
   if (accessible_name_id)
     SetTooltipText(l10n_util::GetStringUTF16(accessible_name_id));
-
   TrayPopupUtils::ConfigureTrayPopupButton(this);
-
   views::InstallCircleHighlightPathGenerator(this);
-
-  focus_ring()->SetColor(UnifiedSystemTrayView::GetFocusRingColor());
 }
 
 TopShortcutButton::~TopShortcutButton() = default;
@@ -81,24 +47,19 @@ void TopShortcutButton::PaintButtonContents(gfx::Canvas* canvas) {
   views::ImageButton::PaintButtonContents(canvas);
 }
 
-std::unique_ptr<views::InkDrop> TopShortcutButton::CreateInkDrop() {
-  return TrayPopupUtils::CreateInkDrop(this);
-}
-
-std::unique_ptr<views::InkDropRipple> TopShortcutButton::CreateInkDropRipple()
-    const {
-  return TrayPopupUtils::CreateInkDropRipple(
-      TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      GetInkDropCenterBasedOnLastEvent());
-}
-
-std::unique_ptr<views::InkDropHighlight>
-TopShortcutButton::CreateInkDropHighlight() const {
-  return TrayPopupUtils::CreateInkDropHighlight(this);
-}
-
 const char* TopShortcutButton::GetClassName() const {
   return "TopShortcutButton";
+}
+
+void TopShortcutButton::OnThemeChanged() {
+  views::ImageButton::OnThemeChanged();
+  auto* color_provider = AshColorProvider::Get();
+  color_provider->DecorateIconButton(this, icon_,
+                                     /*toggled_=*/false,
+                                     kTrayTopShortcutButtonIconSize);
+  focus_ring()->SetColor(color_provider->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kFocusRingColor));
+  SchedulePaint();
 }
 
 }  // namespace ash

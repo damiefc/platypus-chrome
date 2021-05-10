@@ -601,18 +601,6 @@ void RecordParallelDownloadRequestCount(int request_count) {
                               request_count, 1, 10, 11);
 }
 
-void RecordParallelDownloadAddStreamSuccess(bool success,
-                                            bool support_range_request) {
-  if (support_range_request) {
-    base::UmaHistogramBoolean("Download.ParallelDownloadAddStreamSuccess",
-                              success);
-  } else {
-    base::UmaHistogramBoolean(
-        "Download.ParallelDownloadAddStreamSuccess.NoAcceptRangesHeader",
-        success);
-  }
-}
-
 void RecordParallelRequestCreationFailure(DownloadInterruptReason reason) {
   base::UmaHistogramSparse("Download.ParallelDownload.CreationFailureReason",
                            reason);
@@ -671,22 +659,13 @@ void RecordParallelizableDownloadAverageStats(
   int64_t file_size_kb = bytes_downloaded / 1024;
   RecordBandwidthMetric("Download.ParallelizableDownloadBandwidth",
                         average_bandwidth);
-  UMA_HISTOGRAM_LONG_TIMES("Download.Parallelizable.DownloadTime", time_span);
   UMA_HISTOGRAM_CUSTOM_COUNTS("Download.Parallelizable.FileSize", file_size_kb,
                               1, kMaxFileSizeKb, 50);
   if (average_bandwidth > kHighBandwidthBytesPerSecond) {
-    UMA_HISTOGRAM_LONG_TIMES(
-        "Download.Parallelizable.DownloadTime.HighDownloadBandwidth",
-        time_span);
     UMA_HISTOGRAM_CUSTOM_COUNTS(
         "Download.Parallelizable.FileSize.HighDownloadBandwidth", file_size_kb,
         1, kMaxFileSizeKb, 50);
   }
-}
-
-void RecordParallelDownloadCreationEvent(ParallelDownloadCreationEvent event) {
-  UMA_HISTOGRAM_ENUMERATION("Download.ParallelDownload.CreationEvent", event,
-                            ParallelDownloadCreationEvent::COUNT);
 }
 
 void RecordSavePackageEvent(SavePackageEvent event) {

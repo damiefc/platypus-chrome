@@ -12,7 +12,6 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "components/password_manager/core/browser/form_parsing/password_field_prediction.h"
-#include "components/password_manager/core/browser/password_form_forward.h"
 #include "url/gurl.h"
 
 namespace autofill {
@@ -20,6 +19,8 @@ struct FormData;
 }  // namespace autofill
 
 namespace password_manager {
+
+struct PasswordForm;
 
 // The susbset of autocomplete flags related to passwords.
 enum class AutocompleteFlag {
@@ -123,6 +124,8 @@ class FormDataParser {
     predictions_ = std::move(predictions);
   }
 
+  void reset_predictions() { predictions_.reset(); }
+
   const base::Optional<FormPredictions>& predictions() { return predictions_; }
 
   ReadonlyPasswordFields readonly_status() { return readonly_status_; }
@@ -159,4 +162,4 @@ const autofill::FormFieldData* FindUsernameInPredictions(
 
 }  // namespace password_manager
 
-#endif  // COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_FORM_PARSING_IOS_FORM_PARSER_H_
+#endif  // COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_FORM_PARSING_FORM_PARSER_H_

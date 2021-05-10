@@ -9,47 +9,53 @@
 
 #include "base/bind.h"
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "chrome/browser/engagement/site_engagement_score.h"
-#include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/history_test_utils.h"
 #include "chrome/browser/reputation/reputation_service.h"
 #include "chrome/browser/reputation/reputation_web_contents_observer.h"
-#include "chrome/browser/reputation/safety_tip_test_utils.h"
 #include "chrome/browser/reputation/safety_tip_ui_helper.h"
-#include "chrome/browser/reputation/safety_tips.pb.h"
-#include "chrome/browser/reputation/safety_tips_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
+#include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view_base.h"
 #include "chrome/browser/ui/views/page_info/safety_tip_page_info_bubble_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "components/lookalikes/core/features.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
+#include "components/reputation/core/safety_tip_test_utils.h"
+#include "components/reputation/core/safety_tips.pb.h"
+#include "components/reputation/core/safety_tips_config.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "components/security_interstitials/core/common_string_util.h"
 #include "components/security_state/core/features.h"
 #include "components/security_state/core/security_state.h"
+#include "components/site_engagement/content/site_engagement_score.h"
+#include "components/site_engagement/content/site_engagement_service.h"
 #include "components/strings/grit/components_chromium_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "content/public/test/url_loader_interceptor.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "third_party/blink/public/common/features.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -169,7 +175,7 @@ void CloseWarningIgnore(views::Widget::ClosedReason reason) {
 
 // Sets the absolute Site Engagement |score| for the testing origin.
 void SetEngagementScore(Browser* browser, const GURL& url, double score) {
-  SiteEngagementService::Get(browser->profile())
+  site_engagement::SiteEngagementService::Get(browser->profile())
       ->ResetBaseScoreForURL(url, score);
 }
 
@@ -203,7 +209,7 @@ void TriggerWarningFromBlocklist(Browser* browser,
   safe_browsing::V4ProtocolManagerUtil::CanonicalizeUrl(url, &host, &path,
                                                         &query);
   // For simplicity, ignore query
-  SetSafetyTipBadRepPatterns({host + path});
+  reputation::SetSafetyTipBadRepPatterns({host + path});
   SetEngagementScore(browser, url, kLowEngagement);
   NavigateToURL(browser, url, disposition);
 }
@@ -232,6 +238,7 @@ class SafetyTipPageInfoBubbleViewBrowserTest
       public testing::WithParamInterface<UIStatus> {
  protected:
   UIStatus ui_status() const { return GetParam(); }
+  virtual bool digital_asset_links_enabled() const { return false; }
 
   bool IsSuspiciousSiteWarningEnabled() const {
     return ui_status() == UIStatus::kEnabledWithDefaultFeatures ||
@@ -246,39 +253,53 @@ class SafetyTipPageInfoBubbleViewBrowserTest
   }
 
   void SetUp() override {
+    std::vector<base::test::ScopedFeatureList::FeatureAndParams>
+        enabled_features;
+    std::vector<base::Feature> disabled_features;
+
     switch (ui_status()) {
       case UIStatus::kDisabled:
-        feature_list_.InitAndDisableFeature(
-            security_state::features::kSafetyTipUI);
+        disabled_features.push_back(security_state::features::kSafetyTipUI);
         break;
       case UIStatus::kEnabledWithDefaultFeatures:
-        feature_list_.InitAndEnableFeature(
-            security_state::features::kSafetyTipUI);
+        enabled_features.emplace_back(security_state::features::kSafetyTipUI,
+                                      base::FieldTrialParams());
         break;
       case UIStatus::kEnabledWithSuspiciousSites:
-        feature_list_.InitWithFeaturesAndParameters(
-            {{security_state::features::kSafetyTipUI,
-              {{"suspicioussites", "true"},
-               {"topsites", "false"},
-               {"editdistance", "false"},
-               {"editdistance_siteengagement", "false"},
-               {"targetembedding", "false"}}}},
-            {});
+        enabled_features.emplace_back(
+            security_state::features::kSafetyTipUI,
+            base::FieldTrialParams({{"suspicioussites", "true"},
+                                    {"topsites", "false"},
+                                    {"editdistance", "false"},
+                                    {"editdistance_siteengagement", "false"},
+                                    {"targetembedding", "false"}}));
         break;
       case UIStatus::kEnabledWithAllFeatures:
-        feature_list_.InitWithFeaturesAndParameters(
-            {{security_state::features::kSafetyTipUI,
-              {{"suspicioussites", "true"},
-               {"topsites", "true"},
-               {"editdistance", "true"},
-               {"editdistance_siteengagement", "true"},
-               {"targetembedding", "true"}}},
-             {lookalikes::features::kDetectTargetEmbeddingLookalikes, {}}},
-            {});
+        enabled_features.emplace_back(
+            security_state::features::kSafetyTipUI,
+            base::FieldTrialParams({{"suspicioussites", "true"},
+                                    {"topsites", "true"},
+                                    {"editdistance", "true"},
+                                    {"editdistance_siteengagement", "true"},
+                                    {"targetembedding", "true"}}));
+        enabled_features.emplace_back(
+            lookalikes::features::kDetectTargetEmbeddingLookalikes,
+            base::FieldTrialParams());
         break;
     }
 
-    InitializeSafetyTipConfig();
+    if (digital_asset_links_enabled()) {
+      enabled_features.emplace_back(
+          lookalikes::features::kLookalikeDigitalAssetLinks,
+          base::FieldTrialParams());
+    } else {
+      disabled_features.push_back(
+          lookalikes::features::kLookalikeDigitalAssetLinks);
+    }
+    feature_list_.InitWithFeaturesAndParameters(enabled_features,
+                                                disabled_features);
+
+    reputation::InitializeSafetyTipConfig();
     InProcessBrowserTest::SetUp();
   }
 
@@ -309,6 +330,14 @@ class SafetyTipPageInfoBubbleViewBrowserTest
     auto* bubble = static_cast<SafetyTipPageInfoBubbleView*>(
         PageInfoBubbleViewBase::GetPageInfoBubbleForTesting());
     bubble->OpenHelpCenter();
+  }
+
+  void CheckNoButtons() {
+    auto* bubble = static_cast<SafetyTipPageInfoBubbleView*>(
+        PageInfoBubbleViewBase::GetPageInfoBubbleForTesting());
+    EXPECT_FALSE(bubble->info_button_);
+    EXPECT_FALSE(bubble->ignore_button_);
+    EXPECT_FALSE(bubble->leave_button_);
   }
 
   void CloseWarningLeaveSite(Browser* browser) {
@@ -342,7 +371,9 @@ class SafetyTipPageInfoBubbleViewBrowserTest
     }
 
     OpenPageInfoBubble(browser);
-    auto* page_info = static_cast<PageInfoBubbleViewBase*>(
+    ASSERT_EQ(PageInfoBubbleViewBase::GetShownBubbleType(),
+              PageInfoBubbleViewBase::BubbleType::BUBBLE_PAGE_INFO);
+    auto* page_info = static_cast<PageInfoBubbleView*>(
         PageInfoBubbleViewBase::GetPageInfoBubbleForTesting());
     ASSERT_TRUE(page_info);
 
@@ -363,6 +394,7 @@ class SafetyTipPageInfoBubbleViewBrowserTest
                           GetFormattedHostName(expected_safe_url)));
         break;
 
+      case security_state::SafetyTipStatus::kDigitalAssetLinkMatch:
       case security_state::SafetyTipStatus::kBadKeyword:
       case security_state::SafetyTipStatus::kUnknown:
       case security_state::SafetyTipStatus::kNone:
@@ -383,8 +415,12 @@ class SafetyTipPageInfoBubbleViewBrowserTest
             l10n_util::GetStringUTF16(IDS_PAGE_INFO_NOT_SECURE_SUMMARY) ||
         page_info->GetWindowTitle() ==
             l10n_util::GetStringUTF16(IDS_PAGE_INFO_INTERNAL_PAGE));
-    EXPECT_NE(page_info->GetSecurityDescriptionType(),
-              PageInfoUI::SecurityDescriptionType::SAFETY_TIP);
+    if (PageInfoBubbleViewBase::GetShownBubbleType() ==
+        PageInfoBubbleViewBase::BubbleType::BUBBLE_PAGE_INFO) {
+      EXPECT_NE(static_cast<PageInfoBubbleView*>(page_info)
+                    ->GetSecurityDescriptionType(),
+                PageInfoUI::SecurityDescriptionType::SAFETY_TIP);
+    }
   }
 
   // Checks that a certain amount of safety tip heuristics UKM events have been
@@ -449,8 +485,9 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 // Ensure normal sites with low engagement are not blocked in incognito.
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        NoShowOnLowEngagementIncognito) {
-  Browser* incognito_browser = new Browser(Browser::CreateParams(
-      browser()->profile()->GetPrimaryOTRProfile(), true));
+  Browser* incognito_browser = Browser::Create(Browser::CreateParams(
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true),
+      true));
   auto kNavigatedUrl = GetURL("site1.com");
   SetEngagementScore(incognito_browser, kNavigatedUrl, kLowEngagement);
   NavigateToURL(incognito_browser, kNavigatedUrl,
@@ -465,7 +502,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        NoShowOnHighEngagement) {
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
 
   SetEngagementScore(browser(), kNavigatedUrl, kHighEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
@@ -477,10 +514,11 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 // Ensure blocked sites with high engagement are not blocked in incognito.
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        NoShowOnHighEngagementIncognito) {
-  Browser* incognito_browser = new Browser(Browser::CreateParams(
-      browser()->profile()->GetPrimaryOTRProfile(), true));
+  Browser* incognito_browser = Browser::Create(Browser::CreateParams(
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true),
+      true));
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
 
   SetEngagementScore(incognito_browser, kNavigatedUrl, kHighEngagement);
   NavigateToURL(incognito_browser, kNavigatedUrl,
@@ -494,7 +532,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 // Ensure blocked sites get blocked.
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest, ShowOnBlock) {
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
 
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_TRUE(IsUIShowingOrSuspiciousSitesDisabled());
@@ -507,7 +545,8 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest, ShowOnBlock) {
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest, NoShowOnError) {
   auto kNavigatedUrl =
       embedded_test_server()->GetURL("site1.com", "/close-socket");
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
 
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_FALSE(IsUIShowing());
@@ -518,10 +557,11 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest, NoShowOnError) {
 // Ensure blocked sites get blocked in incognito.
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        ShowOnBlockIncognito) {
-  Browser* incognito_browser = new Browser(Browser::CreateParams(
-      browser()->profile()->GetPrimaryOTRProfile(), true));
+  Browser* incognito_browser = Browser::Create(Browser::CreateParams(
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true),
+      true));
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
 
   NavigateToURL(incognito_browser, kNavigatedUrl,
                 WindowOpenDisposition::CURRENT_TAB);
@@ -532,6 +572,26 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
       GURL()));
 }
 
+// Ensure same-document navigations don't close the Safety Tip.
+// Regression test for crbug.com/1137661
+IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
+                       StillShowAfterSameDocNav) {
+  auto kNavigatedUrl = GetURL("site1.com");
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
+
+  // Generate a Safety Tip.
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_TRUE(IsUIShowingOrSuspiciousSitesDisabled());
+
+  // Now generate a same-document navigation and verify the tip is still there.
+  NavigateToURL(browser(), GURL(kNavigatedUrl.spec() + "#fragment"),
+                WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_TRUE(IsUIShowingOrSuspiciousSitesDisabled());
+
+  ASSERT_NO_FATAL_FAILURE(CheckPageInfoShowsSafetyTipInfo(
+      browser(), security_state::SafetyTipStatus::kBadReputation, GURL()));
+}
+
 // Ensure explicitly-allowed sites don't get blocked when the site is otherwise
 // blocked server-side.
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
@@ -539,14 +599,14 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   auto kNavigatedUrl = GetURL("site1.com");
 
   // Ensure a Safety Tip is triggered initially...
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_TRUE(IsUIShowingOrSuspiciousSitesDisabled());
   ASSERT_NO_FATAL_FAILURE(CheckPageInfoShowsSafetyTipInfo(
       browser(), security_state::SafetyTipStatus::kBadReputation, GURL()));
 
   // ...but suppressed by the allowlist.
-  SetSafetyTipAllowlistPatterns({"site1.com/"}, {});
+  reputation::SetSafetyTipAllowlistPatterns({"site1.com/"}, {});
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_FALSE(IsUIShowing());
   ASSERT_NO_FATAL_FAILURE(CheckPageInfoDoesNotShowSafetyTipInfo(browser()));
@@ -558,7 +618,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   const std::vector<const char*> kUrls = {"site1.com", "bla.site2.com",
                                           "bla.site3.com"};
 
-  SetSafetyTipBadRepPatterns({"site1.com/", "site2.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/", "site2.com/"});
   SetEnterpriseAllowlistForTesting(browser()->profile()->GetPrefs(),
                                    {"site1.com", "bla.site2.com", "site3.com"});
 
@@ -572,13 +632,17 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 // After the user clicks 'leave site', the user should end up on a safe domain.
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        LeaveSiteLeavesSite) {
-  auto kNavigatedUrl = GetURL("site1.com");
-  if (!IsSuspiciousSiteWarningEnabled()) {
+  // The suspicious site warning doesn't have call-to-action buttons, so this
+  // test only applies to lookalike warnings.
+  if (!AreLookalikeWarningsEnabled()) {
     return;
   }
 
-  TriggerWarningFromBlocklist(browser(), kNavigatedUrl,
-                              WindowOpenDisposition::CURRENT_TAB);
+  // This domain is a lookalike of a top domain not in the top 500.
+  const GURL kNavigatedUrl = GetURL("googlé.sk");
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+  ASSERT_TRUE(IsUIShowing());
 
   CloseWarningLeaveSite(browser());
   EXPECT_FALSE(IsUIShowing());
@@ -604,10 +668,30 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   EXPECT_NE(kNavigatedUrl, new_tab_observer.GetWebContents()->GetURL());
 }
 
+// Test that the Suspicious Site Safety Tip has no buttons and has the correct
+// strings.
+IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
+                       SuspiciousSiteUI) {
+  if (!IsSuspiciousSiteWarningEnabled()) {
+    return;
+  }
+
+  auto kNavigatedUrl = GetURL("site1.com");
+  TriggerWarningFromBlocklist(browser(), kNavigatedUrl,
+                              WindowOpenDisposition::CURRENT_TAB);
+  ASSERT_NO_FATAL_FAILURE(CheckNoButtons());
+  auto* page_info = PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
+  EXPECT_EQ(
+      page_info->GetWindowTitle(),
+      l10n_util::GetStringUTF16(IDS_PAGE_INFO_SAFETY_TIP_BAD_REPUTATION_TITLE));
+}
+
 // If the user clicks 'leave site', the warning should re-appear when the user
 // re-visits the page.
+// Flaky on Mac: https://crbug.com/1139955
+// Flaky in general, test depends on subtle timing, https://crbug.com/1142769
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
-                       LeaveSiteStillWarnsAfter) {
+                       DISABLED_LeaveSiteStillWarnsAfter) {
   auto kNavigatedUrl = GetURL("site1.com");
 
   if (!IsSuspiciousSiteWarningEnabled()) {
@@ -705,7 +789,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   const GURL kFrameUrl =
       embedded_test_server()->GetURL("b.com", "/title1.html");
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
-  SetSafetyTipBadRepPatterns({"a.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"a.com/"});
 
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_TRUE(IsUIShowingOrSuspiciousSitesDisabled());
@@ -727,6 +811,8 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   SwitchToTabAndWait(browser(),
                      browser()->tab_strip_model()->active_index() + 1);
   EXPECT_TRUE(IsUIShowingOrSuspiciousSitesDisabled());
+  ASSERT_NO_FATAL_FAILURE(CheckPageInfoShowsSafetyTipInfo(
+      browser(), security_state::SafetyTipStatus::kBadReputation, GURL()));
 }
 
 // Background tabs that are errors shouldn't open a tip initially, and shouldn't
@@ -743,6 +829,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   SwitchToTabAndWait(browser(),
                      browser()->tab_strip_model()->active_index() + 1);
   EXPECT_FALSE(IsUIShowing());
+  ASSERT_NO_FATAL_FAILURE(CheckPageInfoDoesNotShowSafetyTipInfo(browser()));
 }
 
 // Tests that Safety Tips do NOT trigger on lookalike domains that trigger an
@@ -787,7 +874,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   EXPECT_TRUE(IsUIShowingOrAllFeaturesEnabled());
 
   // ...but suppressed by the allowlist.
-  SetSafetyTipAllowlistPatterns({"xn--googl-fsa.sk/"}, {});
+  reputation::SetSafetyTipAllowlistPatterns({"xn--googl-fsa.sk/"}, {});
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_FALSE(IsUIShowing());
@@ -804,7 +891,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   // This domain is one edit distance from one of a top 500 domain.
   const GURL kNavigatedUrl = GetURL("gooogle.com");
 
-  SetSafetyTipAllowlistPatterns({}, {"google\\.com"});
+  reputation::SetSafetyTipAllowlistPatterns({}, {"google\\.com"});
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
 
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
@@ -825,8 +912,9 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 }
 
 // Tests that the SafetyTipShown histogram triggers correctly.
+// Flaky on all platforms: https://crbug.com/1139955
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
-                       SafetyTipShownHistogram) {
+                       DISABLED_SafetyTipShownHistogram) {
   const char kHistogramName[] = "Security.SafetyTips.SafetyTipShown";
   base::HistogramTester histograms;
 
@@ -932,12 +1020,68 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
         kHistogramPrefix + "SafetyTip_BadReputation",
         SafetyTipInteraction::kDismissWithEsc, 1);
   }
+
+  // Test that tab close is recorded properly.
+  {
+    base::HistogramTester histogram_tester;
+    auto kNavigatedUrl = GetURL("site2.com");
+
+    // Prep the web contents for later observing.
+    NavigateToURL(browser(), GURL("about:blank"),
+                  WindowOpenDisposition::NEW_FOREGROUND_TAB);
+    ReputationWebContentsObserver* rep_observer =
+        ReputationWebContentsObserver::FromWebContents(
+            browser()->tab_strip_model()->GetActiveWebContents());
+
+    // Trigger the warning in the prepped web contents.
+    TriggerWarningFromBlocklist(browser(), kNavigatedUrl,
+                                WindowOpenDisposition::CURRENT_TAB);
+
+    // Close all tabs and wait for that to happen.
+    base::RunLoop loop;
+    rep_observer->RegisterSafetyTipCloseCallbackForTesting(loop.QuitClosure());
+    browser()->tab_strip_model()->CloseAllTabs();
+    loop.Run();
+
+    // Verify histograms.
+    histogram_tester.ExpectBucketCount(
+        kHistogramPrefix + "SafetyTip_BadReputation",
+        SafetyTipInteraction::kCloseTab, 1);
+  }
+
+  // Test that tab switch is recorded properly.
+  {
+    base::HistogramTester histogram_tester;
+    auto kNavigatedUrl = GetURL("site2.com");
+    TriggerWarningFromBlocklist(browser(), kNavigatedUrl,
+                                WindowOpenDisposition::CURRENT_TAB);
+    NavigateToURL(browser(), GURL("about:blank"),
+                  WindowOpenDisposition::NEW_FOREGROUND_TAB);
+    histogram_tester.ExpectBucketCount(
+        kHistogramPrefix + "SafetyTip_BadReputation",
+        SafetyTipInteraction::kSwitchTab, 1);
+  }
+
+  // Test that navigating away is recorded properly.
+  {
+    base::HistogramTester histogram_tester;
+    auto kNavigatedUrl = GetURL("site2.com");
+    TriggerWarningFromBlocklist(browser(), kNavigatedUrl,
+                                WindowOpenDisposition::CURRENT_TAB);
+    NavigateToURL(browser(), GURL("about:blank"),
+                  WindowOpenDisposition::CURRENT_TAB);
+    histogram_tester.ExpectBucketCount(
+        kHistogramPrefix + "SafetyTip_BadReputation",
+        SafetyTipInteraction::kStartNewNavigation, 1);
+  }
 }
 
 // Tests that the histograms recording how long the Safety Tip is open are
 // recorded properly.
+// Flaky on Mac: https://crbug.com/1139955
+// Flaky in general, test depends on subtle timing, https://crbug.com/1142769
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
-                       TimeOpenHistogram) {
+                       DISABLED_TimeOpenHistogram) {
   if (!IsSuspiciousSiteWarningEnabled()) {
     return;
   }
@@ -955,7 +1099,8 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
     NavigateToURL(browser(), GURL("about:blank"),
                   WindowOpenDisposition::CURRENT_TAB);
     auto samples = histograms.GetAllSamples(
-        "Security.SafetyTips.OpenTime.NoAction.SafetyTip_BadReputation");
+        "Security.SafetyTips.OpenTime.StartNewNavigation.SafetyTip_"
+        "BadReputation");
     ASSERT_EQ(1u, samples.size());
     EXPECT_LE(kMinWarningTime.InMilliseconds(), samples.front().min);
   }
@@ -1020,8 +1165,8 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        NotShownOnUnknownFlag) {
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipPatternsWithFlagType(
-      {"site1.com/"}, chrome_browser_safety_tips::FlaggedPage::UNKNOWN);
+  reputation::SetSafetyTipPatternsWithFlagType(
+      {"site1.com/"}, reputation::FlaggedPage::UNKNOWN);
 
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
@@ -1036,8 +1181,8 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        NotShownOnYoungDomain) {
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipPatternsWithFlagType(
-      {"site1.com/"}, chrome_browser_safety_tips::FlaggedPage::YOUNG_DOMAIN);
+  reputation::SetSafetyTipPatternsWithFlagType(
+      {"site1.com/"}, reputation::FlaggedPage::YOUNG_DOMAIN);
 
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
@@ -1179,8 +1324,10 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 
 // Tests that UKM data is only recorded after the safety tip warning is
 // dismissed or accepted, for the blocklist heuristic.
-IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
-                       WarningDismissalCausesUkmRecordingForBlocklist) {
+// Flaky on all platforms: https://crbug.com/1139955
+IN_PROC_BROWSER_TEST_P(
+    SafetyTipPageInfoBubbleViewBrowserTest,
+    DISABLED_WarningDismissalCausesUkmRecordingForBlocklist) {
   // Only test when any UI is actually enabled.
   if (!IsSuspiciousSiteWarningEnabled()) {
     return;
@@ -1219,4 +1366,288 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   CheckRecordedHeuristicsUkmCount(2);
   CheckHeuristicsUkmRecord({kNavigatedUrl, {true, false, false}}, 0);
   CheckHeuristicsUkmRecord({kNavigatedUrl, {true, false, false}}, 1);
+}
+
+// Test fixture that enables the |kSafetyTipUIForSimplifiedDomainDisplay|
+// feature and disables other Safety Tips features.
+class SafetyTipSimplifiedDomainPageInfoBubbleViewBrowserTest
+    : public InProcessBrowserTest {
+ protected:
+  void SetUp() override {
+    feature_list_.InitWithFeatures(
+        {security_state::features::kSafetyTipUIForSimplifiedDomainDisplay},
+        {security_state::features::kSafetyTipUI,
+         security_state::features::kSafetyTipUIOnDelayedWarning});
+    reputation::InitializeSafetyTipConfig();
+    InProcessBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Tests that the Safety Tips for simplified domains feature enables lookalike
+// Safety Tips.
+IN_PROC_BROWSER_TEST_F(SafetyTipSimplifiedDomainPageInfoBubbleViewBrowserTest,
+                       SafetyTipForSimplifiedDomain) {
+  // This domain is a lookalike of a top domain not in the top 500.
+  const GURL url = embedded_test_server()->GetURL("googlé.sk", "/title1.html");
+  SetEngagementScore(browser(), url, kLowEngagement);
+  NavigateToURL(browser(), url, WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_TRUE(IsUIShowing());
+}
+
+// Tests that the Safety Tips for simplified domains feature does not enable the
+// bad reputation Safety Tip.
+IN_PROC_BROWSER_TEST_F(SafetyTipSimplifiedDomainPageInfoBubbleViewBrowserTest,
+                       SafetyTipForSimplifiedDomainNoBadRep) {
+  GURL url = embedded_test_server()->GetURL("site1.com", "/title1.html");
+  reputation::SetSafetyTipPatternsWithFlagType(
+      {"site1.com/"}, reputation::FlaggedPage::BAD_REP);
+  SetEngagementScore(browser(), url, kLowEngagement);
+  NavigateToURL(browser(), url, WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_FALSE(IsUIShowing());
+}
+
+// Tests for Digital Asset Links for lookalike checks.
+// TODO(meacer): Refactor the DAL code in LookalikeNavigationThrottle tests and
+// reuse here.
+class SafetyTipPageInfoBubbleViewDigitalAssetLinksBrowserTest
+    : public SafetyTipPageInfoBubbleViewBrowserTest {
+ protected:
+  struct TestSite {
+    std::string hostname;
+    std::string manifest;
+  };
+
+  bool digital_asset_links_enabled() const override { return true; }
+
+  void TearDownOnMainThread() override { url_loader_interceptor_.reset(); }
+
+  void SetUpManifests(const std::vector<TestSite>& sites) {
+    url_loader_interceptor_ = std::make_unique<
+        content::URLLoaderInterceptor>(base::BindRepeating(
+        &SafetyTipPageInfoBubbleViewDigitalAssetLinksBrowserTest::OnIntercept,
+        base::Unretained(this), sites));
+  }
+
+  static std::string MakeManifestWithTarget(const char* target_domain,
+                                            bool invalid = false) {
+    const char* const format = R"([{
+        "relation": ["%s"],
+        "target": {
+          "namespace": "web",
+          "site": "https://%s"
+        }
+      }])";
+    // Go through MakeURL to convert target_domain to punycode.
+    return base::StringPrintf(format,
+                              (invalid ? "junkvalue" : "lookalikes/allowlist"),
+                              MakeURL(target_domain).host().c_str());
+  }
+
+ private:
+  bool OnIntercept(const std::vector<TestSite>& sites,
+                   content::URLLoaderInterceptor::RequestParams* params) {
+    for (const TestSite& site : sites) {
+      if (params->url_request.url == MakeManifestURL(site.hostname)) {
+        DCHECK(!site.manifest.empty());
+        // Serve manifest contents:
+        std::string headers =
+            "HTTP/1.1 200 OK\nContent-Type: application/json; "
+            "charset=utf-8\n";
+        content::URLLoaderInterceptor::WriteResponse(headers, site.manifest,
+                                                     params->client.get());
+        return true;
+      }
+      // Serve site's contents:
+      if (params->url_request.url == MakeURL(site.hostname)) {
+        content::URLLoaderInterceptor::WriteResponse(
+            "HTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\n",
+            "<html>Test page</html>", params->client.get());
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static GURL MakeManifestURL(const std::string& hostname) {
+    return GURL("https://" + hostname + "/.well-known/assetlinks.json");
+  }
+
+  static GURL MakeURL(const std::string& hostname) {
+    return GURL("https://" + hostname);
+  }
+
+  std::unique_ptr<content::URLLoaderInterceptor> url_loader_interceptor_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SafetyTipPageInfoBubbleViewDigitalAssetLinksBrowserTest,
+    ::testing::Values(UIStatus::kEnabledWithAllFeatures));
+
+// Lookalike and target sites' manifests don't match each other. Show the UI.
+// TODO(crbug.com/1191216): Check if there is already an existing manifest
+// validation happening and ignore new validation requests.
+IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewDigitalAssetLinksBrowserTest,
+                       ShowOnDigitalAssetLinkMismatch) {
+  if (!AreLookalikeWarningsEnabled()) {
+    return;
+  }
+
+  const GURL kNavigatedUrl("https://gooogle.com");
+  const GURL kTargetUrl("https://google.com");
+  const std::vector<TestSite> sites{
+      {kNavigatedUrl.host().c_str(), MakeManifestWithTarget("invalid.host")},
+      {kTargetUrl.host().c_str(), MakeManifestWithTarget("invalid.host")},
+  };
+  SetUpManifests(sites);
+
+  base::HistogramTester histograms;
+
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+  SetEngagementScore(browser(), kTargetUrl, kHighEngagement);
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+  ASSERT_TRUE(IsUIShowing());
+
+  histograms.ExpectTotalCount(
+      DigitalAssetLinkCrossValidator::kEventHistogramName, 2);
+  histograms.ExpectBucketCount(
+      DigitalAssetLinkCrossValidator::kEventHistogramName,
+      DigitalAssetLinkCrossValidator::Event::kStarted, 1);
+  histograms.ExpectBucketCount(
+      DigitalAssetLinkCrossValidator::kEventHistogramName,
+      DigitalAssetLinkCrossValidator::Event::kLookalikeManifestFailed, 1);
+}
+
+// Same as ShowOnDigitalAssetLinkMismatch but with valid manifests.
+// An edit distance match would normally display a Safety Tip, but the lookalike
+// site properly allowlisted the target site so the Safety Tip is suppressed.
+// TODO(crbug.com/1191216): Check if there is already an existing manifest
+// validation happening and ignore new validation requests.
+IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewDigitalAssetLinksBrowserTest,
+                       NoShowOnDigitalAssetLinkMatch) {
+  if (!AreLookalikeWarningsEnabled()) {
+    return;
+  }
+
+  const GURL kNavigatedUrl("https://gooogle.com");
+  const GURL kTargetUrl("https://google.com");
+  const std::vector<TestSite> sites{
+      {kNavigatedUrl.host().c_str(),
+       MakeManifestWithTarget(kTargetUrl.host().c_str())},
+      {kTargetUrl.host().c_str(),
+       MakeManifestWithTarget(kNavigatedUrl.host().c_str())},
+  };
+  SetUpManifests(sites);
+
+  base::HistogramTester histograms;
+
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+  SetEngagementScore(browser(), kTargetUrl, kHighEngagement);
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+
+  ASSERT_FALSE(IsUIShowing());
+
+  histograms.ExpectTotalCount(
+      DigitalAssetLinkCrossValidator::kEventHistogramName, 2);
+  histograms.ExpectBucketCount(
+      DigitalAssetLinkCrossValidator::kEventHistogramName,
+      DigitalAssetLinkCrossValidator::Event::kStarted, 1);
+  histograms.ExpectBucketCount(
+      DigitalAssetLinkCrossValidator::kEventHistogramName,
+      DigitalAssetLinkCrossValidator::Event::kValidationSucceeded, 1);
+}
+
+class SafetyTipPageInfoBubbleViewPrerenderBrowserTest
+    : public InProcessBrowserTest {
+ public:
+  SafetyTipPageInfoBubbleViewPrerenderBrowserTest()
+      : prerender_helper_(base::BindRepeating(
+            &SafetyTipPageInfoBubbleViewPrerenderBrowserTest::web_contents,
+            base::Unretained(this))) {}
+  ~SafetyTipPageInfoBubbleViewPrerenderBrowserTest() override = default;
+  SafetyTipPageInfoBubbleViewPrerenderBrowserTest(
+      const SafetyTipPageInfoBubbleViewPrerenderBrowserTest&) = delete;
+  SafetyTipPageInfoBubbleViewPrerenderBrowserTest& operator=(
+      const SafetyTipPageInfoBubbleViewPrerenderBrowserTest&) = delete;
+
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(blink::features::kPrerender2);
+    reputation::InitializeSafetyTipConfig();
+    InProcessBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    web_contents_ = browser()->tab_strip_model()->GetActiveWebContents();
+    prerender_helper_.SetUpOnMainThread(embedded_test_server());
+    host_resolver()->AddRule("*", "127.0.0.1");
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
+
+  content::WebContents* web_contents() { return web_contents_; }
+  content::test::PrerenderTestHelper* prerender_helper() {
+    return &prerender_helper_;
+  }
+
+ private:
+  content::WebContents* web_contents_ = nullptr;
+  content::test::PrerenderTestHelper prerender_helper_;
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Tests that ReputationWebContentsObserver only checks heuristics when the
+// primary page navigates. It loads a page in the prerenderer, verifies that
+// heuristics were not run, then navigates to the prerendered site, and verifies
+// that heuristics are then run.
+IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewPrerenderBrowserTest,
+                       SafetyTipOnPrerender) {
+  // Start test server.
+  GURL url = embedded_test_server()->GetURL("/prerender/add_prerender.html");
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  base::RunLoop run_loop_for_prerenderer;
+  auto* rep_observer =
+      ReputationWebContentsObserver::FromWebContents(web_contents());
+  ASSERT_TRUE(rep_observer);
+  rep_observer->reset_reputation_check_pending_for_testing();
+  rep_observer->RegisterReputationCheckCallbackForTesting(
+      run_loop_for_prerenderer.QuitClosure());
+
+  ASSERT_TRUE(rep_observer->reputation_check_pending_for_testing());
+  auto prerender_url = embedded_test_server()->GetURL("/simple.html");
+  // Loads |prerender_url| in the prerenderer.
+  auto prerender_id = prerender_helper()->AddPrerender(prerender_url);
+  ASSERT_NE(content::RenderFrameHost::kNoFrameTreeNodeId, prerender_id);
+  content::test::PrerenderHostObserver host_observer(*web_contents(),
+                                                     prerender_id);
+  // Waits until ReputationWebContentsObserver calls the callback.
+  run_loop_for_prerenderer.Run();
+  // |reputation_check_pending_for_testing_| is not updated since
+  // ReputationWebContentsObserver ignores the prerenderer.
+  ASSERT_TRUE(rep_observer->reputation_check_pending_for_testing());
+
+  base::RunLoop run_loop_for_primary;
+  rep_observer->reset_reputation_check_pending_for_testing();
+  rep_observer->RegisterReputationCheckCallbackForTesting(
+      run_loop_for_primary.QuitClosure());
+  ASSERT_TRUE(rep_observer->reputation_check_pending_for_testing());
+  // Navigates the primary page to the URL.
+  prerender_helper()->NavigatePrimaryPage(prerender_url);
+  // Waits until ReputationWebContentsObserver calls the callback.
+  run_loop_for_primary.Run();
+
+  // |reputation_check_pending_for_testing_| is updated to false as
+  // ReputationWebContentsObserver works with the primary page.
+  ASSERT_FALSE(rep_observer->reputation_check_pending_for_testing());
+
+  // Make sure that the prerender was activated when the main frame was
+  // navigated to the prerender_url.
+  ASSERT_TRUE(host_observer.was_activated());
 }

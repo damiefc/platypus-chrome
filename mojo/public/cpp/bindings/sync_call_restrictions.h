@@ -21,14 +21,21 @@ class CastCdmOriginProvider;
 
 namespace content {
 class DesktopCapturerLacros;
+class AndroidOverlaySyncHelper;
 }  // namespace content
+
+namespace crosapi {
+class ScopedAllowSyncCall;
+}  // namespace crosapi
 
 namespace ui {
 class Compositor;
 }  // namespace ui
 
 namespace viz {
+class GpuHostImpl;
 class HostFrameSinkManager;
+class HostGpuMemoryBufferManager;
 }
 
 namespace mojo {
@@ -74,10 +81,13 @@ class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) SyncCallRestrictions {
   // Lacros-chrome is allowed to make sync calls to ash-chrome to mimic
   // cross-platform sync APIs.
   friend class content::DesktopCapturerLacros;
+  friend class crosapi::ScopedAllowSyncCall;
   friend class mojo::ScopedAllowSyncCallForTesting;
+  friend class viz::GpuHostImpl;
   // For destroying the GL context/surface that draw to a platform window before
   // the platform window is destroyed.
   friend class viz::HostFrameSinkManager;
+  friend class viz::HostGpuMemoryBufferManager;
   // For preventing frame swaps of wrong size during resize on Windows.
   // (https://crbug.com/811945)
   friend class ui::Compositor;
@@ -86,6 +96,11 @@ class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) SyncCallRestrictions {
   // TODO(159346933) Remove once the origin isolation logic is moved outside of
   // cast media service.
   friend class chromecast::CastCdmOriginProvider;
+  // Android requires synchronous processing when overlay surfaces are
+  // destroyed, else behavior is undefined.
+  friend class content::AndroidOverlaySyncHelper;
+  // GpuChannelHost uses a few sync IPCs, grandfathered in from legacy IPC.
+  friend class gpu::GpuChannelHost;
   // END ALLOWED USAGE.
 
 #if ENABLE_SYNC_CALL_RESTRICTIONS

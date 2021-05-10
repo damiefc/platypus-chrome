@@ -6,8 +6,10 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -167,10 +169,10 @@ void DaemonProcessTest::SetUp() {
       task_environment_.GetMainThreadTaskRunner(),
       base::BindOnce(&DaemonProcessTest::QuitMessageLoop,
                      base::Unretained(this)));
-  daemon_process_.reset(new MockDaemonProcess(
+  daemon_process_ = std::make_unique<MockDaemonProcess>(
       task_runner, task_runner,
       base::BindOnce(&DaemonProcessTest::DeleteDaemonProcess,
-                     base::Unretained(this))));
+                     base::Unretained(this)));
 
   // Set up daemon process mocks.
   EXPECT_CALL(*daemon_process_, DoCreateDesktopSessionPtr(_))

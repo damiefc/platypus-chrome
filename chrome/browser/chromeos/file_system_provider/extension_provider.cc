@@ -34,8 +34,9 @@ bool GetProvidingExtensionInfo(const extensions::ExtensionId& extension_id,
 
   const extensions::Extension* const extension = registry->GetExtensionById(
       extension_id, extensions::ExtensionRegistry::ENABLED);
-  if (!extension || !extension->permissions_data()->HasAPIPermission(
-                        extensions::APIPermission::kFileSystemProvider)) {
+  if (!extension ||
+      !extension->permissions_data()->HasAPIPermission(
+          extensions::mojom::APIPermissionID::kFileSystemProvider)) {
     return false;
   }
 
@@ -109,7 +110,7 @@ bool ExtensionProvider::RequestMount(Profile* profile) {
       std::make_unique<extensions::Event>(
           extensions::events::FILE_SYSTEM_PROVIDER_ON_MOUNT_REQUESTED,
           extensions::api::file_system_provider::OnMountRequested::kEventName,
-          std::unique_ptr<base::ListValue>(new base::ListValue())));
+          std::make_unique<base::ListValue>()));
 
   return true;
 }

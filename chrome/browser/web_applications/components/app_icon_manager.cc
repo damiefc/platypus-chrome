@@ -5,7 +5,7 @@
 #include "chrome/browser/web_applications/components/app_icon_manager.h"
 
 #include <map>
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace web_app {
@@ -26,36 +26,6 @@ void WrapReadCompressedIconCallback(
 }
 
 }  // namespace
-
-IconBitmaps::IconBitmaps() = default;
-
-IconBitmaps::~IconBitmaps() = default;
-
-IconBitmaps::IconBitmaps(const IconBitmaps&) = default;
-
-IconBitmaps::IconBitmaps(IconBitmaps&&) = default;
-
-void IconBitmaps::SetBitmapsForPurpose(
-    IconPurpose purpose,
-    std::map<SquareSizePx, SkBitmap> bitmaps) {
-  switch (purpose) {
-    case IconPurpose::ANY:
-      any = std::move(bitmaps);
-      return;
-    case IconPurpose::MONOCHROME:
-      // TODO (crbug.com/1114638): Monochrome support.
-      NOTREACHED();
-      return;
-    case IconPurpose::MASKABLE:
-      maskable = std::move(bitmaps);
-      return;
-  }
-}
-
-bool IconBitmaps::empty() {
-  // TODO (crbug.com/1114638): Check Monochrome if supported.
-  return any.empty() && maskable.empty();
-}
 
 void AppIconManager::ReadSmallestIconAny(const AppId& app_id,
                                          SquareSizePx min_icon_size,

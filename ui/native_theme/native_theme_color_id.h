@@ -5,6 +5,8 @@
 #ifndef UI_NATIVE_THEME_NATIVE_THEME_COLOR_ID_H_
 #define UI_NATIVE_THEME_NATIVE_THEME_COLOR_ID_H_
 
+#include "build/chromeos_buildflags.h"
+
 // Clang format mangles sectioned lists like the below badly.
 // clang-format off
 #define NATIVE_THEME_CROSS_PLATFORM_COLOR_IDS                                  \
@@ -14,8 +16,11 @@
   OP(kColorId_DialogBackground),                                               \
   OP(kColorId_DialogForeground),                                               \
   OP(kColorId_BubbleBackground),                                               \
-  OP(kColorId_BubbleForeground),                                               \
   OP(kColorId_BubbleFooterBackground),                                         \
+  /* Avatar and Header Asset */                                                \
+  OP(kColorId_AvatarHeaderArt),                                                \
+  OP(kColorId_AvatarIconGuest),                                                \
+  OP(kColorId_AvatarIconIncognito),                                            \
   /* FocusableBorder */                                                        \
   OP(kColorId_FocusedBorderColor),                                             \
   OP(kColorId_UnfocusedBorderColor),                                           \
@@ -27,19 +32,14 @@
   OP(kColorId_ButtonUncheckedColor),                                           \
   OP(kColorId_ButtonEnabledColor),                                             \
   OP(kColorId_ButtonDisabledColor),                                            \
-  OP(kColorId_ButtonHoverColor),                                               \
-  OP(kColorId_ButtonInkDropFillColor),                                         \
-  OP(kColorId_ButtonInkDropShadowColor),                                       \
   OP(kColorId_ProminentButtonColor),                                           \
   OP(kColorId_ProminentButtonDisabledColor),                                   \
   OP(kColorId_ProminentButtonFocusedColor),                                    \
-  OP(kColorId_ProminentButtonHoverColor),                                      \
-  OP(kColorId_ProminentButtonInkDropShadowColor),                              \
-  OP(kColorId_ProminentButtonInkDropFillColor),                                \
   OP(kColorId_TextOnProminentButtonColor),                                     \
-  OP(kColorId_PaddedButtonInkDropColor),                                       \
   /* ToggleButton */                                                           \
   OP(kColorId_ToggleButtonShadowColor),                                        \
+  OP(kColorId_ToggleButtonThumbColorOff),                                      \
+  OP(kColorId_ToggleButtonThumbColorOn),                                       \
   OP(kColorId_ToggleButtonTrackColorOff),                                      \
   OP(kColorId_ToggleButtonTrackColorOn),                                       \
   /* MenuItem */                                                               \
@@ -83,16 +83,21 @@
   OP(kColorId_LinkDisabled),                                                   \
   OP(kColorId_LinkEnabled),                                                    \
   OP(kColorId_LinkPressed),                                                    \
-  OP(kColorId_OverlayScrollbarThumbBackground),                                \
-  OP(kColorId_OverlayScrollbarThumbForeground),                                \
+  /* Overlay scrollbar */                                                      \
+  OP(kColorId_OverlayScrollbarThumbFill),                                      \
+  OP(kColorId_OverlayScrollbarThumbHoveredFill),                               \
+  OP(kColorId_OverlayScrollbarThumbHoveredStroke),                             \
+  OP(kColorId_OverlayScrollbarThumbStroke),                                    \
+  /* Message Center */ \
+  OP(kColorId_MessageCenterSmallImageMaskBackground),                          \
+  OP(kColorId_MessageCenterSmallImageMaskForeground),                          \
   /* Notification view */                                                      \
-  OP(kColorId_NotificationDefaultBackground),                                  \
+  OP(kColorId_NotificationBackground),                                         \
+  OP(kColorId_NotificationBackgroundActive),                                   \
   OP(kColorId_NotificationActionsRowBackground),                               \
-  OP(kColorId_NotificationInlineSettingsBackground),                           \
   OP(kColorId_NotificationLargeImageBackground),                               \
-  OP(kColorId_NotificationPlaceholderIconColor),                               \
-  OP(kColorId_NotificationEmptyPlaceholderIconColor),                          \
-  OP(kColorId_NotificationEmptyPlaceholderTextColor),                          \
+  OP(kColorId_NotificationColor),                                              \
+  OP(kColorId_NotificationPlaceholderColor),                                   \
   OP(kColorId_NotificationDefaultAccentColor),                                 \
   OP(kColorId_NotificationInkDropBase),                                        \
   /* Slider */                                                                 \
@@ -149,9 +154,12 @@
   /* Colors for the material spinner (aka throbber). */                        \
   OP(kColorId_ThrobberSpinningColor),                                          \
   OP(kColorId_ThrobberWaitingColor),                                           \
-  OP(kColorId_ThrobberLightColor),                                             \
   /* Colors for Bubble Border */                                               \
   OP(kColorId_BubbleBorder),                                                   \
+  OP(kColorId_BubbleBorderShadowBase),                                         \
+  OP(kColorId_BubbleBorderShadowLarge),                                        \
+  OP(kColorId_BubbleBorderShadowSmall),                                        \
+  OP(kColorId_BubbleBorderWhenShadowPresent),                                  \
   /* Colors for Footnote Container. */                                         \
   OP(kColorId_FootnoteContainerBorder),                                        \
   /* Colors for icons that alert, e.g. upgrade reminders. */                   \
@@ -160,15 +168,16 @@
   OP(kColorId_AlertSeverityHigh),                                              \
   /* Colors for icons in non-menu contexts. */                                 \
   OP(kColorId_DefaultIconColor),                                               \
-  OP(kColorId_DisabledIconColor)
+  OP(kColorId_DisabledIconColor),                                              \
+  OP(kColorId_SecondaryIconColor)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #define NATIVE_THEME_CHROMEOS_COLOR_IDS                                        \
   /* Notification view */                                                      \
   OP(kColorId_NotificationButtonBackground)
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #define NATIVE_THEME_COLOR_IDS                                                 \
   NATIVE_THEME_CROSS_PLATFORM_COLOR_IDS,                                       \
   NATIVE_THEME_CHROMEOS_COLOR_IDS

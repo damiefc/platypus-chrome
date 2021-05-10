@@ -126,7 +126,7 @@ import java.util.concurrent.TimeoutException;
  */
 public class CallbackHelper {
     /** The default timeout (in seconds) for a callback to wait. */
-    public static final long WAIT_TIMEOUT_SECONDS = ScalableTimeout.scaleTimeout(5L);
+    public static final long WAIT_TIMEOUT_SECONDS = 5L;
 
     private final Object mLock = new Object();
     private int mCallCount;
@@ -225,6 +225,20 @@ public class CallbackHelper {
      */
     public void waitForCallback(int currentCallCount) throws TimeoutException {
         waitForCallback(null, currentCallCount, 1, WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Blocks until the next time the callback is called.
+     * @param msg The error message to use if the callback times out.
+     * @throws TimeoutException
+     */
+    public void waitForNext(String msg) throws TimeoutException {
+        waitForCallback(msg, mCallCount, 1, WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /** @see #waitForNext(String) */
+    public void waitForNext() throws TimeoutException {
+        waitForNext(null);
     }
 
     /**

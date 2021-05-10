@@ -47,8 +47,8 @@ class ContentSettingsAgentImpl
    public:
     virtual ~Delegate();
 
-    // Return true if this scheme should be whitelisted for content settings.
-    virtual bool IsSchemeWhitelisted(const std::string& scheme);
+    // Return true if this scheme should be allowlisted for content settings.
+    virtual bool IsSchemeAllowlisted(const std::string& scheme);
 
     // Allows the delegate to override logic for various
     // blink::WebContentSettingsClient methods. If an optional value is
@@ -59,10 +59,10 @@ class ContentSettingsAgentImpl
     virtual void PassiveInsecureContentFound(const blink::WebURL& resource_url);
   };
 
-  // Set |should_whitelist| to true if |render_frame()| contains content that
-  // should be whitelisted for content settings.
+  // Set |should_allowlist| to true if |render_frame()| contains content that
+  // should be allowlisted for content settings.
   ContentSettingsAgentImpl(content::RenderFrame* render_frame,
-                           bool should_whitelist,
+                           bool should_allowlist,
                            std::unique_ptr<Delegate> delegate);
   ~ContentSettingsAgentImpl() override;
 
@@ -92,7 +92,6 @@ class ContentSettingsAgentImpl
   bool AllowReadFromClipboard(bool default_value) override;
   bool AllowWriteToClipboard(bool default_value) override;
   bool AllowMutationEvents(bool default_value) override;
-  void DidNotAllowPlugins() override;
   void DidNotAllowScript() override;
   bool AllowRunningInsecureContent(bool allowed_per_settings,
                                    const blink::WebURL& url) override;
@@ -122,7 +121,7 @@ class ContentSettingsAgentImpl
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ContentSettingsAgentImplBrowserTest,
-                           WhitelistedSchemes);
+                           AllowlistedSchemes);
   FRIEND_TEST_ALL_PREFIXES(ContentSettingsAgentImplBrowserTest,
                            ContentSettingsInterstitialPages);
 
@@ -132,7 +131,6 @@ class ContentSettingsAgentImpl
 
   // mojom::ContentSettingsAgent:
   void SetAllowRunningInsecureContent() override;
-  void SetAsInterstitial() override;
   void SetDisabledMixedContentUpgrades() override;
 
   void OnContentSettingsAgentRequest(
@@ -142,9 +140,9 @@ class ContentSettingsAgentImpl
   void ClearBlockedContentSettings();
 
   // Helpers.
-  // True if |render_frame()| contains content that is white-listed for content
+  // True if |render_frame()| contains content that is allowlisted for content
   // settings.
-  bool IsWhitelistedForContentSettings() const;
+  bool IsAllowlistedForContentSettings() const;
 
   // A getter for |content_settings_manager_| that ensures it is bound.
   mojom::ContentSettingsManager& GetContentSettingsManager();
@@ -170,11 +168,10 @@ class ContentSettingsAgentImpl
   // Caches the result of AllowScript.
   base::flat_map<blink::WebFrame*, bool> cached_script_permissions_;
 
-  bool is_interstitial_page_ = false;
   bool mixed_content_autoupgrades_disabled_ = false;
 
-  // If true, IsWhitelistedForContentSettings will always return true.
-  const bool should_whitelist_;
+  // If true, IsAllowlistedForContentSettings will always return true.
+  const bool should_allowlist_;
 
   std::unique_ptr<Delegate> delegate_;
 

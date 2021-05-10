@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_ink_overflow.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
 #include "third_party/blink/renderer/core/paint/object_paint_invalidator.h"
 #include "third_party/blink/renderer/core/paint/paint_invalidator.h"
@@ -130,13 +131,14 @@ PaintInvalidationReason BoxPaintInvalidator::ComputePaintInvalidationReason() {
       box_.PreviousPhysicalContentBoxRect() != box_.PhysicalContentBoxRect())
     return PaintInvalidationReason::kGeometry;
 
+#if DCHECK_IS_ON()
+  // TODO(crbug.com/1205708): Audit this.
+  NGInkOverflow::ReadUnsetAsNoneScope read_unset_as_none;
+#endif
   if (box_.PreviousSize() == box_.Size() &&
       box_.PreviousPhysicalSelfVisualOverflowRect() ==
-          box_.PhysicalSelfVisualOverflowRect()) {
-    return box_.HasPartialInvalidationRect()
-               ? PaintInvalidationReason::kRectangle
-               : PaintInvalidationReason::kNone;
-  }
+          box_.PhysicalSelfVisualOverflowRect())
+    return PaintInvalidationReason::kNone;
 
   // Incremental invalidation is not applicable if there is visual overflow.
   if (box_.PreviousPhysicalSelfVisualOverflowRect().size !=
@@ -160,7 +162,8 @@ PaintInvalidationReason BoxPaintInvalidator::ComputePaintInvalidationReason() {
     return PaintInvalidationReason::kGeometry;
 
   if (style.HasVisualOverflowingEffect() || style.HasEffectiveAppearance() ||
-      style.HasFilterInducingProperty() || style.HasMask() || style.ClipPath())
+      style.HasFilterInducingProperty() || style.HasMask() ||
+      style.HasClipPath())
     return PaintInvalidationReason::kGeometry;
 
   if (style.HasBorderRadius() || style.CanRenderBorderImage())
@@ -232,19 +235,22 @@ BoxPaintInvalidator::ComputeViewBackgroundInvalidation() {
   bool background_size_changed =
       new_background_rect.size != old_background_rect.size;
   if (background_location_changed || background_size_changed) {
-    for (auto* object :
+    for (const auto& object :
          layout_view.GetFrameView()->BackgroundAttachmentFixedObjects())
       object->SetBackgroundNeedsFullPaintInvalidation();
   }
 
   if (background_location_changed ||
-      layout_view.BackgroundNeedsFullPaintInvalidation())
+      layout_view.BackgroundNeedsFullPaintInvalidation() ||
+      (context_.subtree_flags &
+       PaintInvalidatorContext::kSubtreeFullInvalidation)) {
     return BackgroundInvalidationType::kFull;
+  }
 
   if (Element* root_element = box_.GetDocument().documentElement()) {
     if (const auto* root_object = root_element->GetLayoutObject()) {
       if (root_object->IsBox()) {
-        const auto* root_box = ToLayoutBox(root_object);
+        const auto* root_box = To<LayoutBox>(root_object);
         // LayoutView's non-fixed-attachment background is positioned in the
         // root element and needs to invalidate if the size changes.
         // See: https://drafts.csswg.org/css-backgrounds-3/#root-background.
@@ -287,7 +293,9 @@ BoxPaintInvalidator::ComputeBackgroundInvalidation(
     bool& should_invalidate_all_layers) {
   // If background changed, we may paint the background on different graphics
   // layer, so we need to fully invalidate the background on all layers.
-  if (box_.BackgroundNeedsFullPaintInvalidation()) {
+  if (box_.BackgroundNeedsFullPaintInvalidation() ||
+      (context_.subtree_flags &
+       PaintInvalidatorContext::kSubtreeFullInvalidation)) {
     should_invalidate_all_layers = true;
     return BackgroundInvalidationType::kFull;
   }
@@ -414,6 +422,10 @@ void BoxPaintInvalidator::SavePreviousBoxGeometriesIfNeeded() {
   auto mutable_box = box_.GetMutableForPainting();
   mutable_box.SavePreviousSize();
 
+#if DCHECK_IS_ON()
+  // TODO(crbug.com/1205708): Audit this.
+  NGInkOverflow::ReadUnsetAsNoneScope read_unset_as_none;
+#endif
   if (NeedsToSavePreviousOverflowData())
     mutable_box.SavePreviousOverflowData();
   else

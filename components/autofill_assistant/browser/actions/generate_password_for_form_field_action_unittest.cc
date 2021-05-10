@@ -60,14 +60,13 @@ class GeneratePasswordForFormFieldActionTest : public testing::Test {
 };
 
 TEST_F(GeneratePasswordForFormFieldActionTest, GeneratedPassword) {
-  ON_CALL(mock_action_delegate_, OnRetrieveElementFormAndFieldData)
+  ON_CALL(mock_action_delegate_, RetrieveElementFormAndFieldData)
       .WillByDefault(RunOnceCallback<1>(ClientStatus(ACTION_APPLIED),
                                         autofill::FormData(),
                                         autofill::FormFieldData()));
   GeneratePasswordForFormFieldProto* generate_password_proto =
       proto_.mutable_generate_password_for_form_field();
-  *generate_password_proto->mutable_element() =
-      Selector({kFakeSelector}).MustBeVisible().proto;
+  *generate_password_proto->mutable_element() = Selector({kFakeSelector}).proto;
   generate_password_proto->set_memory_key(kMemoryKeyForGeneratedPassword);
 
   GeneratePasswordForFormFieldAction action(&mock_action_delegate_, proto_);
@@ -83,7 +82,7 @@ TEST_F(GeneratePasswordForFormFieldActionTest, GeneratedPassword) {
 }
 
 TEST_F(GeneratePasswordForFormFieldActionTest, FormDataIsNotRetrieved) {
-  ON_CALL(mock_action_delegate_, OnRetrieveElementFormAndFieldData)
+  ON_CALL(mock_action_delegate_, RetrieveElementFormAndFieldData)
       .WillByDefault(RunOnceCallback<1>(ClientStatus(INVALID_SELECTOR),
                                         autofill::FormData(),
                                         autofill::FormFieldData()));

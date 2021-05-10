@@ -13,11 +13,10 @@
 #include "base/bind.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "base/test/values_test_util.h"
 #include "base/values.h"
-#include "chrome/browser/media/router/data_decoder_util.h"
 #include "chrome/browser/media/router/providers/cast/cast_activity_manager.h"
 #include "chrome/browser/media/router/providers/cast/cast_activity_test_base.h"
 #include "chrome/browser/media/router/providers/cast/cast_session_client.h"
@@ -28,7 +27,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_task_environment.h"
-#include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -66,10 +64,8 @@ class AppActivityTest : public CastActivityTestBase {
   MediaRoute& route() const { return activity_->route_; }
 
   MockCastSessionClient* AddMockClient(const std::string& client_id) {
-    CastMediaSource source("dummySourceId", std::vector<CastAppInfo>());
-    source.set_client_id(client_id);
-    activity_->AddClient(source, url::Origin(), tab_id_counter_++);
-    return MockCastSessionClient::instances().back();
+    return CastActivityTestBase::AddMockClient(activity_.get(), client_id,
+                                               tab_id_counter_++);
   }
 
   int tab_id_counter_ = 239;  // Arbitrary number.

@@ -25,14 +25,22 @@ ErrorMessageViewController::ErrorMessageViewController(
 
 ErrorMessageViewController::~ErrorMessageViewController() {}
 
-std::unique_ptr<views::Button>
-ErrorMessageViewController::CreatePrimaryButton() {
-  auto button = std::make_unique<views::MdTextButton>(
-      this, l10n_util::GetStringUTF16(IDS_CLOSE));
-  button->SetProminent(true);
-  button->set_tag(static_cast<int>(PaymentRequestCommonTags::CLOSE_BUTTON_TAG));
-  button->SetID(static_cast<int>(DialogViewID::CANCEL_BUTTON));
-  return button;
+std::u16string ErrorMessageViewController::GetPrimaryButtonLabel() {
+  return l10n_util::GetStringUTF16(IDS_CLOSE);
+}
+
+PaymentRequestSheetController::ButtonCallback
+ErrorMessageViewController::GetPrimaryButtonCallback() {
+  return base::BindRepeating(&ErrorMessageViewController::CloseButtonPressed,
+                             base::Unretained(this));
+}
+
+int ErrorMessageViewController::GetPrimaryButtonId() {
+  return static_cast<int>(DialogViewID::CANCEL_BUTTON);
+}
+
+bool ErrorMessageViewController::GetPrimaryButtonEnabled() {
+  return true;
 }
 
 bool ErrorMessageViewController::ShouldShowHeaderBackArrow() {
@@ -43,7 +51,7 @@ bool ErrorMessageViewController::ShouldShowSecondaryButton() {
   return false;
 }
 
-base::string16 ErrorMessageViewController::GetSheetTitle() {
+std::u16string ErrorMessageViewController::GetSheetTitle() {
   return l10n_util::GetStringUTF16(IDS_PAYMENTS_ERROR_MESSAGE_DIALOG_TITLE);
 }
 

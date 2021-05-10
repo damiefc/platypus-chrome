@@ -10,6 +10,7 @@
 
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "components/sync/protocol/sync_enums.pb.h"
 #include "components/sync_device_info/device_info.h"
 
 namespace syncer {
@@ -25,6 +26,7 @@ std::unique_ptr<syncer::DeviceInfo> CreateFakeDeviceInfo(
         sync_pb::SyncEnums_DeviceType_TYPE_LINUX,
     const std::string& manufacturer_name = "manufacturer",
     const std::string& model_name = "model",
+    const std::string& full_hardware_class = std::string(),
     base::Time last_updated_timestamp = base::Time::Now());
 
 #endif  // CHROME_BROWSER_SHARING_FAKE_DEVICE_INFO_H_

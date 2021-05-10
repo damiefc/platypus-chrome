@@ -5,7 +5,7 @@
 #include "chrome/browser/nearby_sharing/nearby_receive_manager.h"
 
 #include "base/optional.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "chrome/browser/nearby_sharing/mock_nearby_sharing_service.h"
 #include "chrome/browser/nearby_sharing/share_target.h"
@@ -23,16 +23,26 @@ class FakeReceiveObserver : public nearby_share::mojom::ReceiveObserver {
     in_high_visibility_ = in_high_visibility;
   }
 
-  void OnIncomingShare(
+  void OnTransferUpdate(
       const ShareTarget& share_target,
-      const base::Optional<std::string>& connection_token) override {
+      nearby_share::mojom::TransferMetadataPtr metadata) override {
     last_share_target_ = share_target;
-    last_connection_token_ = connection_token;
+    last_metadata_ = *metadata;
   }
 
-  base::Optional<std::string> last_connection_token_;
+  void OnNearbyProcessStopped() override {
+    on_nearby_process_stopped_called_ = true;
+  }
+
+  void OnStartAdvertisingFailure() override {
+    on_start_advertising_failure_called_ = true;
+  }
+
+  base::Optional<nearby_share::mojom::TransferMetadata> last_metadata_;
   base::Optional<bool> in_high_visibility_;
   ShareTarget last_share_target_;
+  bool on_nearby_process_stopped_called_ = false;
+  bool on_start_advertising_failure_called_ = false;
   mojo::Receiver<nearby_share::mojom::ReceiveObserver> receiver_{this};
 };
 
@@ -40,6 +50,8 @@ class NearbyReceiveManagerTest : public testing::Test {
  public:
   using ReceiveSurfaceState = NearbySharingService::ReceiveSurfaceState;
   using StatusCodes = NearbySharingService::StatusCodes;
+  using RegisterReceiveSurfaceResult =
+      nearby_share::mojom::RegisterReceiveSurfaceResult;
 
   NearbyReceiveManagerTest()
       : transfer_metadata_(TransferMetadata::Status::kAwaitingLocalConfirmation,
@@ -73,6 +85,11 @@ class NearbyReceiveManagerTest : public testing::Test {
             [=](TransferUpdateCallback* transfer_callback) { return code; });
   }
 
+  void ExpectIsInHighVisibility(bool in_high_visibility) {
+    EXPECT_CALL(sharing_service_, IsInHighVisibility())
+        .WillOnce(testing::Return(in_high_visibility));
+  }
+
   void ExpectAccept(StatusCodes code = StatusCodes::kOk) {
     EXPECT_CALL(sharing_service_, Accept(testing::_, testing::_))
         .WillOnce([=](const ShareTarget& share_target,
@@ -103,99 +120,54 @@ class NearbyReceiveManagerTest : public testing::Test {
 
 }  // namespace
 
-TEST_F(NearbyReceiveManagerTest, Default_State) {
-  bool on = false;
-  receive_manager_waiter_.IsInHighVisibility(&on);
-  EXPECT_FALSE(on);
-  ExpectUnregister();
-}
-
 TEST_F(NearbyReceiveManagerTest, Enter_Exit_Success) {
   ExpectRegister();
-  bool success = false;
-  receive_manager_waiter_.EnterHighVisibility(&success);
-  EXPECT_TRUE(success);
-  FlushMojoMessages();
-  ASSERT_TRUE(observer_.in_high_visibility_.has_value());
-  EXPECT_TRUE(*observer_.in_high_visibility_);
-
-  bool on = false;
-  receive_manager_waiter_.IsInHighVisibility(&on);
-  EXPECT_TRUE(on);
+  RegisterReceiveSurfaceResult result = RegisterReceiveSurfaceResult::kFailure;
+  receive_manager_waiter_.RegisterForegroundReceiveSurface(&result);
+  EXPECT_EQ(RegisterReceiveSurfaceResult::kSuccess, result);
 
   ExpectUnregister();
   bool exited = false;
-  receive_manager_waiter_.ExitHighVisibility(&exited);
+  receive_manager_waiter_.UnregisterForegroundReceiveSurface(&exited);
   EXPECT_TRUE(exited);
-
-  FlushMojoMessages();
-  ASSERT_TRUE(observer_.in_high_visibility_.has_value());
-  EXPECT_FALSE(*observer_.in_high_visibility_);
 
   ExpectUnregister();
 }
 
 TEST_F(NearbyReceiveManagerTest, Enter_Failed) {
-  bool success = true;
+  RegisterReceiveSurfaceResult result = RegisterReceiveSurfaceResult::kSuccess;
   ExpectRegister(StatusCodes::kError);
-  receive_manager_waiter_.EnterHighVisibility(&success);
-  EXPECT_FALSE(success);
-  bool on = true;
-  receive_manager_waiter_.IsInHighVisibility(&on);
-  EXPECT_FALSE(on);
+  receive_manager_waiter_.RegisterForegroundReceiveSurface(&result);
+  EXPECT_EQ(RegisterReceiveSurfaceResult::kFailure, result);
   ExpectUnregister();
 }
 
 TEST_F(NearbyReceiveManagerTest, Multiple_Enter_Successful) {
-  bool success = false;
+  RegisterReceiveSurfaceResult result = RegisterReceiveSurfaceResult::kFailure;
   ExpectRegister(StatusCodes::kOk);
-  receive_manager_waiter_.EnterHighVisibility(&success);
+  receive_manager_waiter_.RegisterForegroundReceiveSurface(&result);
   FlushMojoMessages();
-  EXPECT_TRUE(success);
+  EXPECT_EQ(RegisterReceiveSurfaceResult::kSuccess, result);
 
-  bool on = false;
-  receive_manager_waiter_.IsInHighVisibility(&on);
-  EXPECT_TRUE(on);
-
-  ASSERT_TRUE(observer_.in_high_visibility_.has_value());
-  EXPECT_TRUE(*observer_.in_high_visibility_);
-
-  // Reset this so we validate the we don't get duplicate events
-  observer_.in_high_visibility_ = base::nullopt;
-
+  result = RegisterReceiveSurfaceResult::kFailure;
   ExpectRegister(StatusCodes::kOk);
-  receive_manager_waiter_.EnterHighVisibility(&success);
+  receive_manager_waiter_.RegisterForegroundReceiveSurface(&result);
   FlushMojoMessages();
-  EXPECT_TRUE(success);
-  // Verify we did not get notified twice.
-  EXPECT_FALSE(observer_.in_high_visibility_.has_value());
-
-  on = false;
-  receive_manager_waiter_.IsInHighVisibility(&on);
-  EXPECT_TRUE(on);
+  EXPECT_EQ(RegisterReceiveSurfaceResult::kSuccess, result);
 
   ExpectUnregister();
 }
 
 TEST_F(NearbyReceiveManagerTest, Exit_Failed) {
-  bool success = false;
+  RegisterReceiveSurfaceResult result = RegisterReceiveSurfaceResult::kFailure;
   ExpectRegister();
-  receive_manager_waiter_.EnterHighVisibility(&success);
-  EXPECT_TRUE(success);
+  receive_manager_waiter_.RegisterForegroundReceiveSurface(&result);
+  EXPECT_EQ(RegisterReceiveSurfaceResult::kSuccess, result);
 
   ExpectUnregister(StatusCodes::kError);
-  success = false;
-  receive_manager_waiter_.ExitHighVisibility(&success);
-  EXPECT_FALSE(success);
-
-  // If exit failed, we are still in high visibility.
-  bool on = false;
-  receive_manager_waiter_.IsInHighVisibility(&on);
-  EXPECT_TRUE(on);
-
-  FlushMojoMessages();
-  ASSERT_TRUE(observer_.in_high_visibility_.has_value());
-  EXPECT_TRUE(*observer_.in_high_visibility_);
+  bool exited = false;
+  receive_manager_waiter_.UnregisterForegroundReceiveSurface(&exited);
+  EXPECT_FALSE(exited);
 
   ExpectUnregister();
 }
@@ -204,8 +176,8 @@ TEST_F(NearbyReceiveManagerTest, ShareTargetNotifies_Accept) {
   receive_manager_.OnTransferUpdate(share_target_, transfer_metadata_);
   FlushMojoMessages();
   EXPECT_EQ(share_target_.id, observer_.last_share_target_.id);
-  ASSERT_TRUE(observer_.last_connection_token_.has_value());
-  EXPECT_EQ("1234", observer_.last_connection_token_);
+  ASSERT_TRUE(observer_.last_metadata_.has_value());
+  EXPECT_EQ("1234", observer_.last_metadata_->token);
 
   ExpectAccept();
   bool success = false;
@@ -219,8 +191,8 @@ TEST_F(NearbyReceiveManagerTest, ShareTargetNotifies_Reject) {
   receive_manager_.OnTransferUpdate(share_target_, transfer_metadata_);
   FlushMojoMessages();
   EXPECT_EQ(share_target_.id, observer_.last_share_target_.id);
-  ASSERT_TRUE(observer_.last_connection_token_.has_value());
-  EXPECT_EQ("1234", observer_.last_connection_token_);
+  ASSERT_TRUE(observer_.last_metadata_.has_value());
+  EXPECT_EQ("1234", observer_.last_metadata_->token);
 
   ExpectReject();
   bool success = false;
@@ -235,8 +207,8 @@ TEST_F(NearbyReceiveManagerTest,
   receive_manager_.OnTransferUpdate(share_target_, transfer_metadata_);
   FlushMojoMessages();
   EXPECT_EQ(share_target_.id, observer_.last_share_target_.id);
-  ASSERT_TRUE(observer_.last_connection_token_.has_value());
-  EXPECT_EQ("1234", observer_.last_connection_token_);
+  ASSERT_TRUE(observer_.last_metadata_.has_value());
+  EXPECT_EQ("1234", observer_.last_metadata_->token);
 
   // Simulate the sender canceling before we accept the share target and causing
   // the accept to fail before hitting the service.
@@ -257,8 +229,8 @@ TEST_F(NearbyReceiveManagerTest,
   receive_manager_.OnTransferUpdate(share_target_, transfer_metadata_);
   FlushMojoMessages();
   EXPECT_EQ(share_target_.id, observer_.last_share_target_.id);
-  ASSERT_TRUE(observer_.last_connection_token_.has_value());
-  EXPECT_EQ("1234", observer_.last_connection_token_);
+  ASSERT_TRUE(observer_.last_metadata_.has_value());
+  EXPECT_EQ("1234", observer_.last_metadata_->token);
 
   // Simulate the sender canceling before we reject the share target and causing
   // the reject to fail before hitting the service.
@@ -270,6 +242,47 @@ TEST_F(NearbyReceiveManagerTest,
   bool success = true;
   receive_manager_waiter_.Reject(share_target_.id, &success);
   EXPECT_FALSE(success);
+
+  ExpectUnregister();
+}
+
+TEST_F(NearbyReceiveManagerTest, IsInHighVisibility) {
+  ExpectIsInHighVisibility(true);
+  bool on = false;
+  receive_manager_waiter_.IsInHighVisibility(&on);
+  FlushMojoMessages();
+  EXPECT_TRUE(on);
+
+  ExpectIsInHighVisibility(false);
+  on = true;
+  receive_manager_waiter_.IsInHighVisibility(&on);
+  FlushMojoMessages();
+  EXPECT_FALSE(on);
+
+  ExpectUnregister();
+}
+
+TEST_F(NearbyReceiveManagerTest, OnHighVisibilityChangedObserver) {
+  receive_manager_.OnHighVisibilityChanged(false);
+  FlushMojoMessages();
+  ASSERT_TRUE(observer_.in_high_visibility_.has_value());
+  EXPECT_FALSE(*observer_.in_high_visibility_);
+
+  observer_.in_high_visibility_ = base::nullopt;
+
+  receive_manager_.OnHighVisibilityChanged(true);
+  FlushMojoMessages();
+  ASSERT_TRUE(observer_.in_high_visibility_.has_value());
+  EXPECT_TRUE(*observer_.in_high_visibility_);
+
+  ExpectUnregister();
+}
+
+TEST_F(NearbyReceiveManagerTest, OnStartAdvertisingFailureObserver) {
+  EXPECT_FALSE(observer_.on_start_advertising_failure_called_);
+  receive_manager_.OnStartAdvertisingFailure();
+  FlushMojoMessages();
+  EXPECT_TRUE(observer_.on_start_advertising_failure_called_);
 
   ExpectUnregister();
 }

@@ -8,12 +8,11 @@
 #include <string>
 #include <vector>
 
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "content/browser/service_worker/service_worker_context_core_observer.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "services/network/public/mojom/cookie_manager.mojom.h"
 
 namespace content {
 class StoragePartition;
@@ -41,8 +40,9 @@ class ServiceWorkerActivationObserver
                              ServiceWorkerVersion::Status) override;
 
   ServiceWorkerContextWrapper* context_;
-  ScopedObserver<ServiceWorkerContextWrapper, ServiceWorkerContextCoreObserver>
-      scoped_observer_;
+  base::ScopedObservation<ServiceWorkerContextWrapper,
+                          ServiceWorkerContextCoreObserver>
+      scoped_observation_{this};
   base::OnceClosure callback_;
 };
 

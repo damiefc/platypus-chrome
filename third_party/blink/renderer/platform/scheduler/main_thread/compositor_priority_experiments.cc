@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/platform/scheduler/main_thread/compositor_priority_experiments.h"
 
+#include <memory>
+
 #include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_task_queue.h"
@@ -74,12 +76,12 @@ QueuePriority CompositorPriorityExperiments::GetCompositorPriority() const {
 
 void CompositorPriorityExperiments::OnMainThreadSchedulerInitialized() {
   if (experiment_ == Experiment::kVeryHighPriorityForCompositingBudget) {
-    budget_pool_controller_.reset(new CompositorBudgetPoolController(
+    budget_pool_controller_ = std::make_unique<CompositorBudgetPoolController>(
         this, scheduler_, scheduler_->CompositorTaskQueue().get(),
         &scheduler_->tracing_controller_,
         base::TimeDelta::FromMilliseconds(
             kInitialCompositorBudgetInMilliseconds.Get()),
-        kCompositorBudgetRecoveryRate.Get()));
+        kCompositorBudgetRecoveryRate.Get());
   }
 }
 
@@ -94,7 +96,7 @@ void CompositorPriorityExperiments::OnWillBeginMainFrame() {
 void CompositorPriorityExperiments::OnTaskCompleted(
     MainThreadTaskQueue* queue,
     QueuePriority current_compositor_priority,
-    MainThreadTaskQueue::TaskTiming* task_timing) {
+    TaskQueue::TaskTiming* task_timing) {
   if (!queue)
     return;
 
@@ -178,11 +180,11 @@ CompositorPriorityExperiments::CompositorBudgetPoolController::
             MainThreadTaskQueue::QueueType::kCompositor);
   base::TimeTicks now = scheduler->GetTickClock()->NowTicks();
 
-  compositor_budget_pool_.reset(new CPUTimeBudgetPool(
-      "CompositorBudgetPool", this, tracing_controller, now));
+  compositor_budget_pool_ = std::make_unique<CPUTimeBudgetPool>(
+      "CompositorBudgetPool", this, tracing_controller, now);
   compositor_budget_pool_->SetMinBudgetLevelToRun(now, min_budget);
   compositor_budget_pool_->SetTimeBudgetRecoveryRate(now, budget_recovery_rate);
-  compositor_budget_pool_->AddQueue(now, compositor_queue);
+  compositor_queue->AddToBudgetPool(now, compositor_budget_pool_.get());
 }
 
 CompositorPriorityExperiments::CompositorBudgetPoolController::
@@ -210,11 +212,11 @@ void CompositorPriorityExperiments::CompositorBudgetPoolController::
 
 void CompositorPriorityExperiments::CompositorBudgetPoolController::
     OnTaskCompleted(MainThreadTaskQueue* queue,
-                    MainThreadTaskQueue::TaskTiming* task_timing,
+                    TaskQueue::TaskTiming* task_timing,
                     bool have_seen_stop_signal) {
   if (have_seen_stop_signal) {
-    compositor_budget_pool_->RecordTaskRunTime(queue, task_timing->start_time(),
-                                               task_timing->end_time());
+    compositor_budget_pool_->RecordTaskRunTime(
+        nullptr, task_timing->start_time(), task_timing->end_time());
   }
   UpdateCompositorBudgetState(task_timing->end_time());
 }

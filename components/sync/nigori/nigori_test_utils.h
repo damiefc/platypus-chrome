@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "components/sync/engine/nigori/key_derivation_params.h"
 #include "components/sync/nigori/nigori.h"
 
 namespace sync_pb {

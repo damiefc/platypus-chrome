@@ -17,7 +17,6 @@
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/ui/fullscreen/animated_scoped_fullscreen_disabler.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/fullscreen/scoped_fullscreen_disabler.h"
 #import "ios/chrome/browser/ui/side_swipe/card_side_swipe_view.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_gesture_recognizer.h"
@@ -187,12 +186,7 @@ class SideSwipeControllerBrowserRemover : public BrowserObserver {
     _scopedWebStateObserver =
         std::make_unique<ScopedObserver<web::WebState, web::WebStateObserver>>(
             _webStateObserverBridge.get());
-    if (fullscreen::features::ShouldScopeFullscreenControllerToBrowser()) {
       _fullscreenController = FullscreenController::FromBrowser(self.browser);
-    } else {
-      _fullscreenController =
-          FullscreenController::FromBrowserState(self.browserState);
-    }
     if (self.activeWebState)
       _scopedWebStateObserver->Add(self.activeWebState);
   }
@@ -525,34 +519,48 @@ class SideSwipeControllerBrowserRemover : public BrowserObserver {
     _animatedFullscreenDisabler = nullptr;
   }
 
+  __weak SideSwipeController* weakSelf = self;
   [_pageSideSwipeView handleHorizontalPan:gesture
       onOverThresholdCompletion:^{
-        web::WebState* webState = self.activeWebState;
-        BOOL wantsBack = IsSwipingBack(gesture.direction);
-        if (webState) {
-          if (wantsBack) {
-            web_navigation_util::GoBack(webState);
-          } else {
-            web_navigation_util::GoForward(webState);
-          }
-        }
-        // Checking -IsLoading() is likely incorrect, but to narrow the scope of
-        // fixes for slim navigation manager, only ignore this state when
-        // slim is disabled.  With slim navigation enabled, this false when
-        // pages can be served from WKWebView's page cache.
-        if (webState) {
-          [self addCurtainWithCompletionHandler:^{
-            _inSwipe = NO;
-          }];
-        } else {
-          _inSwipe = NO;
-        }
-        [_swipeDelegate updateAccessoryViewsForSideSwipeWithVisibility:YES];
+        [weakSelf handleOverThresholdCompletion:gesture];
       }
       onUnderThresholdCompletion:^{
-        [_swipeDelegate updateAccessoryViewsForSideSwipeWithVisibility:YES];
-        _inSwipe = NO;
+        [weakSelf handleUnderThresholdCompletion];
       }];
+}
+
+- (void)handleOverThresholdCompletion:(SideSwipeGestureRecognizer*)gesture {
+  web::WebState* webState = self.activeWebState;
+  BOOL wantsBack = IsSwipingBack(gesture.direction);
+  if (webState) {
+    if (wantsBack) {
+      web_navigation_util::GoBack(webState);
+    } else {
+      web_navigation_util::GoForward(webState);
+    }
+  }
+  __weak SideSwipeController* weakSelf = self;
+  // Checking -IsLoading() is likely incorrect, but to narrow the scope of
+  // fixes for slim navigation manager, only ignore this state when
+  // slim is disabled.  With slim navigation enabled, this false when
+  // pages can be served from WKWebView's page cache.
+  if (webState) {
+    [self addCurtainWithCompletionHandler:^{
+      [weakSelf handleCurtainCompletion];
+    }];
+  } else {
+    _inSwipe = NO;
+  }
+  [_swipeDelegate updateAccessoryViewsForSideSwipeWithVisibility:YES];
+}
+
+- (void)handleCurtainCompletion {
+  _inSwipe = NO;
+}
+
+- (void)handleUnderThresholdCompletion {
+  [_swipeDelegate updateAccessoryViewsForSideSwipeWithVisibility:YES];
+  _inSwipe = NO;
 }
 
 // Show horizontal swipe stack view for iPhone.
@@ -637,8 +645,9 @@ class SideSwipeControllerBrowserRemover : public BrowserObserver {
 - (void)dismissCurtain {
   if (!_inSwipe)
     return;
+  __weak SideSwipeController* weakSelf = self;
   [self dismissCurtainWithCompletionHandler:^{
-    _inSwipe = NO;
+    [weakSelf handleCurtainCompletion];
   }];
 }
 

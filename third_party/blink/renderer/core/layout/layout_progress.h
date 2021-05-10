@@ -33,6 +33,11 @@ class CORE_EXPORT LayoutProgress : public LayoutBlockFlow {
   explicit LayoutProgress(Element* element);
   ~LayoutProgress() override;
 
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(animation_timer_);
+    LayoutBlockFlow::Trace(visitor);
+  }
+
   double GetPosition() const {
     NOT_DESTROYED();
     return position_;
@@ -66,12 +71,17 @@ class CORE_EXPORT LayoutProgress : public LayoutBlockFlow {
   double position_;
   base::TimeTicks animation_start_time_;
   bool animating_;
-  TaskRunnerTimer<LayoutProgress> animation_timer_;
+  HeapTaskRunnerTimer<LayoutProgress> animation_timer_;
 
   friend class LayoutProgressTest;
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutProgress, IsProgress());
+template <>
+struct DowncastTraits<LayoutProgress> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsProgress();
+  }
+};
 
 }  // namespace blink
 

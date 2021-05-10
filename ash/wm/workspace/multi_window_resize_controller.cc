@@ -4,6 +4,8 @@
 
 #include "ash/wm/workspace/multi_window_resize_controller.h"
 
+#include <memory>
+
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
@@ -287,7 +289,7 @@ void MultiWindowResizeController::OnWindowDestroying(aura::Window* window) {
 
 void MultiWindowResizeController::OnPostWindowStateTypeChange(
     WindowState* window_state,
-    WindowStateType old_type) {
+    chromeos::WindowStateType old_type) {
   if (window_state->IsMaximized() || window_state->IsFullscreen() ||
       window_state->IsMinimized()) {
     ResetResizer();
@@ -467,7 +469,7 @@ void MultiWindowResizeController::ShowNow() {
   DCHECK(!resize_widget_.get());
   DCHECK(windows_.is_valid());
   show_timer_.Stop();
-  resize_widget_.reset(new views::Widget);
+  resize_widget_ = std::make_unique<views::Widget>();
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_POPUP);
   params.name = "MultiWindowResizeController";
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;

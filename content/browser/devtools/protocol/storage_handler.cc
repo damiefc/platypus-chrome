@@ -10,20 +10,23 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/optional.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
-#include "content/browser/cache_storage/cache_storage_context_impl.h"
+#include "components/services/storage/public/mojom/cache_storage_control.mojom.h"
 #include "content/browser/devtools/protocol/browser_handler.h"
 #include "content/browser/devtools/protocol/network.h"
 #include "content/browser/devtools/protocol/network_handler.h"
+#include "content/browser/devtools/protocol/storage.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
-#include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager.h"
+#include "storage/browser/quota/quota_manager_proxy.h"
+#include "storage/browser/quota/quota_override_handle.h"
 #include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -61,6 +64,7 @@ void ReportUsageAndQuotaDataOnUIThread(
     blink::mojom::QuotaStatusCode code,
     int64_t usage,
     int64_t quota,
+    bool is_override_enabled,
     blink::mojom::UsageBreakdownPtr usage_breakdown) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (code != blink::mojom::QuotaStatusCode::kOk) {
@@ -80,7 +84,8 @@ void ReportUsageAndQuotaDataOnUIThread(
     usageList->emplace_back(std::move(entry));
   }
 
-  callback->sendSuccess(usage, quota, std::move(usageList));
+  callback->sendSuccess(usage, quota, is_override_enabled,
+                        std::move(usageList));
 }
 
 void GotUsageAndQuotaDataCallback(
@@ -88,12 +93,14 @@ void GotUsageAndQuotaDataCallback(
     blink::mojom::QuotaStatusCode code,
     int64_t usage,
     int64_t quota,
+    bool is_override_enabled,
     blink::mojom::UsageBreakdownPtr usage_breakdown) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(ReportUsageAndQuotaDataOnUIThread, std::move(callback),
-                     code, usage, quota, std::move(usage_breakdown)));
+                     code, usage, quota, is_override_enabled,
+                     std::move(usage_breakdown)));
 }
 
 void GetUsageAndQuotaOnIOThread(
@@ -101,30 +108,28 @@ void GetUsageAndQuotaOnIOThread(
     const url::Origin& origin,
     std::unique_ptr<StorageHandler::GetUsageAndQuotaCallback> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  manager->GetUsageAndQuotaWithBreakdown(
+  manager->GetUsageAndQuotaForDevtools(
       origin, blink::mojom::StorageType::kTemporary,
       base::BindOnce(&GotUsageAndQuotaDataCallback, std::move(callback)));
 }
 
 }  // namespace
 
-// Observer that listens on the IO thread for cache storage notifications and
+// Observer that listens on the UI thread for cache storage notifications and
 // informs the StorageHandler on the UI thread for origins of interest.
-// Created on the UI thread but predominantly used and deleted on the IO thread.
-// Registered on creation as an observer in CacheStorageContextImpl,
-// unregistered on destruction.
-class StorageHandler::CacheStorageObserver : CacheStorageContextImpl::Observer {
+// Created and used exclusively on the UI thread.
+class StorageHandler::CacheStorageObserver
+    : storage::mojom::CacheStorageObserver {
  public:
-  CacheStorageObserver(base::WeakPtr<StorageHandler> owner_storage_handler,
-                       CacheStorageContextImpl* cache_storage_context)
-      : owner_(owner_storage_handler), context_(cache_storage_context) {
+  CacheStorageObserver(
+      base::WeakPtr<StorageHandler> owner_storage_handler,
+      mojo::PendingReceiver<storage::mojom::CacheStorageObserver> observer)
+      : owner_(owner_storage_handler), receiver_(this, std::move(observer)) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    context_->AddObserver(this);
   }
 
   ~CacheStorageObserver() override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    context_->RemoveObserver(this);
   }
 
   void TrackOrigin(const url::Origin& origin) {
@@ -160,7 +165,7 @@ class StorageHandler::CacheStorageObserver : CacheStorageContextImpl::Observer {
   base::flat_set<url::Origin> origins_;
 
   base::WeakPtr<StorageHandler> owner_;
-  scoped_refptr<CacheStorageContextImpl> context_;
+  mojo::Receiver<storage::mojom::CacheStorageObserver> receiver_;
 
   DISALLOW_COPY_AND_ASSIGN(CacheStorageObserver);
 };
@@ -206,8 +211,8 @@ class StorageHandler::IndexedDBObserver
 
   void OnIndexedDBContentChanged(
       const url::Origin& origin,
-      const base::string16& database_name,
-      const base::string16& object_store_name) override {
+      const std::u16string& database_name,
+      const std::u16string& object_store_name) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     if (!owner_)
       return;
@@ -267,6 +272,7 @@ void StorageHandler::SetRenderer(int process_host_id,
 Response StorageHandler::Disable() {
   cache_storage_observer_.reset();
   indexed_db_observer_.reset();
+  quota_override_handle_.reset();
   return Response::Success();
 }
 
@@ -346,8 +352,12 @@ void StorageHandler::ClearDataForOrigin(
   uint32_t remove_mask = 0;
   if (set.count(Storage::StorageTypeEnum::Appcache))
     remove_mask |= StoragePartition::REMOVE_DATA_MASK_APPCACHE;
-  if (set.count(Storage::StorageTypeEnum::Cookies))
+  if (set.count(Storage::StorageTypeEnum::Cookies)) {
     remove_mask |= StoragePartition::REMOVE_DATA_MASK_COOKIES;
+    // Interest groups should be cleared with cookies for its origin trial as
+    // they have the same privacy characteristics
+    remove_mask |= StoragePartition::REMOVE_DATA_MASK_INTEREST_GROUPS;
+  }
   if (set.count(Storage::StorageTypeEnum::File_systems))
     remove_mask |= StoragePartition::REMOVE_DATA_MASK_FILE_SYSTEMS;
   if (set.count(Storage::StorageTypeEnum::Indexeddb))
@@ -394,6 +404,37 @@ void StorageHandler::GetUsageAndQuota(
       FROM_HERE,
       base::BindOnce(&GetUsageAndQuotaOnIOThread, base::RetainedRef(manager),
                      url::Origin::Create(origin_url), std::move(callback)));
+}
+
+void StorageHandler::OverrideQuotaForOrigin(
+    const String& origin_string,
+    Maybe<double> quota_size,
+    std::unique_ptr<OverrideQuotaForOriginCallback> callback) {
+  if (!storage_partition_) {
+    callback->sendFailure(Response::InternalError());
+    return;
+  }
+
+  GURL url(origin_string);
+  url::Origin origin = url::Origin::Create(url);
+  if (!url.is_valid() || origin.opaque()) {
+    callback->sendFailure(
+        Response::InvalidParams(origin_string + " is not a valid URL"));
+    return;
+  }
+
+  if (!quota_override_handle_) {
+    scoped_refptr<storage::QuotaManagerProxy> manager_proxy =
+        storage_partition_->GetQuotaManager()->proxy();
+    quota_override_handle_ = manager_proxy->GetQuotaOverrideHandle();
+  }
+
+  quota_override_handle_->OverrideQuotaForOrigin(
+      origin,
+      quota_size.isJust() ? base::make_optional(quota_size.fromJust())
+                          : base::nullopt,
+      base::BindOnce(&OverrideQuotaForOriginCallback::sendSuccess,
+                     std::move(callback)));
 }
 
 Response StorageHandler::TrackCacheStorageForOrigin(const std::string& origin) {
@@ -449,10 +490,12 @@ StorageHandler::CacheStorageObserver*
 StorageHandler::GetCacheStorageObserver() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!cache_storage_observer_) {
+    mojo::PendingRemote<storage::mojom::CacheStorageObserver> observer;
     cache_storage_observer_ = std::make_unique<CacheStorageObserver>(
         weak_ptr_factory_.GetWeakPtr(),
-        static_cast<CacheStorageContextImpl*>(
-            storage_partition_->GetCacheStorageContext()));
+        observer.InitWithNewPipeAndPassReceiver());
+    storage_partition_->GetCacheStorageControl()->AddObserver(
+        std::move(observer));
   }
   return cache_storage_observer_.get();
 }
@@ -484,8 +527,8 @@ void StorageHandler::NotifyIndexedDBListChanged(const std::string& origin) {
 
 void StorageHandler::NotifyIndexedDBContentChanged(
     const std::string& origin,
-    const base::string16& database_name,
-    const base::string16& object_store_name) {
+    const std::u16string& database_name,
+    const std::u16string& object_store_name) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   frontend_->IndexedDBContentUpdated(origin, base::UTF16ToUTF8(database_name),
                                      base::UTF16ToUTF8(object_store_name));
@@ -499,11 +542,80 @@ Response StorageHandler::FindStoragePartition(
       BrowserHandler::FindBrowserContext(browser_context_id, &browser_context);
   if (!response.IsSuccess())
     return response;
-  *storage_partition =
-      BrowserContext::GetDefaultStoragePartition(browser_context);
+  *storage_partition = browser_context->GetDefaultStoragePartition();
   if (!*storage_partition)
     return Response::InternalError();
   return Response::Success();
+}
+
+namespace {
+
+void SendTrustTokens(
+    std::unique_ptr<StorageHandler::GetTrustTokensCallback> callback,
+    std::vector<::network::mojom::StoredTrustTokensForIssuerPtr> tokens) {
+  auto result =
+      std::make_unique<protocol::Array<protocol::Storage::TrustTokens>>();
+  for (auto const& token : tokens) {
+    auto protocol_token = protocol::Storage::TrustTokens::Create()
+                              .SetIssuerOrigin(token->issuer.Serialize())
+                              .SetCount(token->count)
+                              .Build();
+    result->push_back(std::move(protocol_token));
+  }
+
+  callback->sendSuccess(std::move(result));
+}
+
+}  // namespace
+
+void StorageHandler::GetTrustTokens(
+    std::unique_ptr<GetTrustTokensCallback> callback) {
+  if (!storage_partition_) {
+    callback->sendFailure(Response::InternalError());
+    return;
+  }
+
+  storage_partition_->GetNetworkContext()->GetStoredTrustTokenCounts(
+      base::BindOnce(&SendTrustTokens, std::move(callback)));
+}
+
+namespace {
+
+void SendClearTrustTokensStatus(
+    std::unique_ptr<StorageHandler::ClearTrustTokensCallback> callback,
+    network::mojom::DeleteStoredTrustTokensStatus status) {
+  switch (status) {
+    case network::mojom::DeleteStoredTrustTokensStatus::kSuccessTokensDeleted:
+      callback->sendSuccess(/* didDeleteTokens */ true);
+      break;
+    case network::mojom::DeleteStoredTrustTokensStatus::kSuccessNoTokensDeleted:
+      callback->sendSuccess(/* didDeleteTokens */ false);
+      break;
+    case network::mojom::DeleteStoredTrustTokensStatus::kFailureFeatureDisabled:
+      callback->sendFailure(
+          Response::ServerError("The Trust Tokens feature is disabled."));
+      break;
+    case network::mojom::DeleteStoredTrustTokensStatus::kFailureInvalidOrigin:
+      callback->sendFailure(
+          Response::InvalidParams("The provided issuerOrigin is invalid. It "
+                                  "must be a HTTP/HTTPS trustworthy origin."));
+      break;
+  }
+}
+
+}  // namespace
+
+void StorageHandler::ClearTrustTokens(
+    const std::string& issuerOrigin,
+    std::unique_ptr<ClearTrustTokensCallback> callback) {
+  if (!storage_partition_) {
+    callback->sendFailure(Response::InternalError());
+    return;
+  }
+
+  storage_partition_->GetNetworkContext()->DeleteStoredTrustTokens(
+      url::Origin::Create(GURL(issuerOrigin)),
+      base::BindOnce(&SendClearTrustTokensStatus, std::move(callback)));
 }
 
 }  // namespace protocol

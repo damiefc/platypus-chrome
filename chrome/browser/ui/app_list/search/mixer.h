@@ -13,7 +13,6 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/app_launch_data.h"
 
 class AppListModelUpdater;
@@ -50,7 +49,7 @@ class Mixer {
   void AddProviderToGroup(size_t group_id, SearchProvider* provider);
 
   // Collects the results, sorts and publishes them.
-  void MixAndPublish(size_t num_max_results, const base::string16& query);
+  void MixAndPublish(size_t num_max_results, const std::u16string& query);
 
   // Sets a SearchResultRanker to re-rank non-app search results before they are
   // published.
@@ -88,13 +87,7 @@ class Mixer {
   class Group;
   typedef std::vector<std::unique_ptr<Group>> Groups;
 
-  // Removes entries from |results| with duplicate IDs. When two or more results
-  // have the same ID, the earliest one in the |results| list is kept.
-  // NOTE: This is not necessarily the one with the highest *score*, as
-  // |results| may not have been sorted yet.
-  static void RemoveDuplicates(SortedResults* results);
-
-  void FetchResults(const base::string16& query);
+  void FetchResults(const std::u16string& query);
 
   AppListModelUpdater* const model_updater_;  // Not owned.
 

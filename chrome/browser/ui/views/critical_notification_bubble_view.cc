@@ -21,6 +21,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/label.h"
@@ -84,7 +85,7 @@ void CriticalNotificationBubbleView::OnCountdown() {
   GetBubbleFrameView()->UpdateWindowTitle();
 }
 
-base::string16 CriticalNotificationBubbleView::GetWindowTitle() const {
+std::u16string CriticalNotificationBubbleView::GetWindowTitle() const {
   const auto remaining_time = GetRemainingTime();
   return remaining_time > base::TimeDelta()
              ? l10n_util::GetPluralStringFUTF16(IDS_CRITICAL_NOTIFICATION_TITLE,
@@ -117,17 +118,16 @@ void CriticalNotificationBubbleView::OnDialogAccepted() {
 void CriticalNotificationBubbleView::Init() {
   bubble_created_ = base::TimeTicks::Now();
 
-  SetLayoutManager(std::make_unique<views::FillLayout>());
+  SetUseDefaultFillLayout(true);
 
   auto message = std::make_unique<views::Label>(
       l10n_util::GetStringUTF16(IDS_CRITICAL_NOTIFICATION_TEXT),
       views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_SECONDARY);
   message->SetMultiLine(true);
   message->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  message->SizeToFit(
-      ChromeLayoutProvider::Get()->GetDistanceMetric(
-          ChromeDistanceMetric::DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-      margins().width());
+  message->SizeToFit(ChromeLayoutProvider::Get()->GetDistanceMetric(
+                         views::DISTANCE_BUBBLE_PREFERRED_WIDTH) -
+                     margins().width());
   AddChildView(std::move(message));
 
   refresh_timer_.Start(FROM_HERE, base::TimeDelta::FromSeconds(1), this,
@@ -146,3 +146,6 @@ void CriticalNotificationBubbleView::ViewHierarchyChanged(
   if (details.is_add && details.child == this)
     NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
 }
+
+BEGIN_METADATA(CriticalNotificationBubbleView, views::BubbleDialogDelegateView)
+END_METADATA

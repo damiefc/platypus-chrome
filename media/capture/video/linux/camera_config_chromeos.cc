@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "camera_config_chromeos.h"
+#include "media/capture/video/linux/camera_config_chromeos.h"
 
-#include <base/files/file_util.h>
-#include <base/logging.h>
-#include <base/strings/stringprintf.h>
-#include <base/strings/string_number_conversions.h>
-#include <base/strings/string_piece.h>
-#include <base/strings/string_split.h>
-#include <base/strings/string_util.h>
+#include "base/files/file_util.h"
+#include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
+#include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 
 namespace media {
 
@@ -129,7 +129,7 @@ std::string CameraConfigChromeOS::GetUsbId(const std::string& device_id) const {
     DLOG(ERROR) << "Error after split: " << usb_part;
     return std::string();
   }
-  return usb_id_pieces[0].as_string();
+  return std::string(usb_id_pieces[0]);
 }
 
 void CameraConfigChromeOS::InitializeDeviceInfo(
@@ -203,7 +203,7 @@ void CameraConfigChromeOS::InitializeDeviceInfo(
         DLOG(ERROR) << "model_id is empty";
         continue;
       }
-      std::string model_id = value.as_string();
+      std::string model_id(value);
       std::transform(model_id.begin(), model_id.end(), model_id.begin(),
                      ::tolower);
       model_id_to_camera_id_[model_id] = camera_id;
@@ -212,7 +212,7 @@ void CameraConfigChromeOS::InitializeDeviceInfo(
         DLOG(ERROR) << "usb_path is empty";
         continue;
       }
-      usb_id_to_camera_id_[value.as_string()] = camera_id;
+      usb_id_to_camera_id_[std::string(value)] = camera_id;
     }
     // Ignore unknown or unutilized attributes.
   }

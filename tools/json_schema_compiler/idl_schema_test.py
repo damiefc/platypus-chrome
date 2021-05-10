@@ -127,12 +127,6 @@ class IdlSchemaTest(unittest.TestCase):
     self.assertTrue(func is not None)
     self.assertTrue(func['nocompile'])
 
-  def testNoDefine(self):
-    schema = self.idl_basics
-    func = getFunction(schema, 'function31')
-    self.assertTrue(func is not None)
-    self.assertTrue(func['nodefine'])
-
   def testNoDocOnEnum(self):
     schema = self.idl_basics
     enum_with_nodoc = getType(schema, 'EnumTypeWithNoDoc')
@@ -197,7 +191,7 @@ class IdlSchemaTest(unittest.TestCase):
   def testAllPlatformsNamespace(self):
     schema = idl_schema.Load('test/idl_namespace_all_platforms.idl')[0]
     self.assertEquals('idl_namespace_all_platforms', schema['namespace'])
-    expected = ['chromeos', 'chromeos_touch', 'linux', 'mac', 'win']
+    expected = ['chromeos', 'linux', 'mac', 'win']
     self.assertEquals(expected, schema['platforms'])
 
   def testNonSpecificPlatformsNamespace(self):
@@ -387,6 +381,23 @@ class IdlSchemaTest(unittest.TestCase):
 
     self.assertEquals(expected, union_type)
 
+  def testSerializableFunctionType(self):
+    schema = idl_schema.Load('test/idl_object_types.idl')[0]
+    object_type = getType(schema, 'SerializableFunctionObject')
+    expected = {
+                 'type': 'object',
+                 'id': 'SerializableFunctionObject',
+                 'properties': {
+                   'func': {
+                     'name': 'func',
+                     'serializableFunction': True,
+                     'type': 'function',
+                     'parameters': []
+                   }
+                 }
+               }
+    self.assertEquals(expected, object_type)
+
   def testUnionsWithFunctions(self):
     schema = idl_schema.Load('test/idl_function_types.idl')[0]
 
@@ -427,6 +438,44 @@ class IdlSchemaTest(unittest.TestCase):
                }]
 
     self.assertEquals(expected, badabish_params)
+
+  def testFunctionWithPromise(self):
+    schema = idl_schema.Load('test/idl_function_types.idl')[0]
+
+    promise_function = getFunction(schema, 'promise_supporting')
+    expected = OrderedDict([
+        ('parameters', []),
+        ('returns_async', {
+            'name': 'callback',
+            'parameters': [{'name': 'x', 'type': 'integer'}]
+        }),
+        ('name', 'promise_supporting'),
+        ('type', 'function')
+    ])
+    self.assertEquals(expected, promise_function)
+
+  def testFunctionWithPromiseAndParams(self):
+    schema = idl_schema.Load('test/idl_function_types.idl')[0]
+
+    promise_function = getFunction(schema, 'promise_supporting_with_params')
+    expected = OrderedDict([
+        ('parameters', [
+            {
+               'name': 'z',
+               'type': 'integer'
+            }, {
+                'name':'y',
+                'choices': [{'type': 'integer'}, {'type': 'string'}]
+            }
+        ]),
+        ('returns_async', {
+            'name': 'callback',
+            'parameters': [{'name': 'x', 'type': 'integer'}]
+        }),
+        ('name', 'promise_supporting_with_params'),
+        ('type', 'function')
+    ])
+    self.assertEquals(expected, promise_function)
 
   def testProperties(self):
     schema = idl_schema.Load('test/idl_properties.idl')[0]

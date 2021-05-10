@@ -113,7 +113,7 @@ class ServicePdfToEmfConverterClientImpl
   // mojom::PdfToEmfConverterClient:
   void PreCacheFontCharacters(
       const std::vector<uint8_t>& logfont_data,
-      const base::string16& characters,
+      const std::u16string& characters,
       PreCacheFontCharactersCallback callback) override {
     std::move(callback).Run();
   }
@@ -328,6 +328,7 @@ bool ServiceUtilityProcessHost::Launch(base::CommandLine* cmd_line,
     switches::kVModule,
 #if defined(OS_WIN)
     switches::kDisableHighResTimer,
+    switches::kRaiseTimerFrequency,
 #endif
   };
   cmd_line->CopySwitchesFrom(service_command_line, kForwardSwitches,

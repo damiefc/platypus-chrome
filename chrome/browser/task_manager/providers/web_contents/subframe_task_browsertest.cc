@@ -5,7 +5,6 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/task_manager/mock_web_contents_task_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -34,12 +33,12 @@ const char kCrossSitePageUrl[] = "/cross-site/a.com/iframe_cross_site.html";
 // URL of a test page on a.com that has no cross-site iframes.
 const char kSimplePageUrl[] = "/cross-site/a.com/title2.html";
 
-base::string16 GetExpectedSubframeTitlePrefix() {
+std::u16string GetExpectedSubframeTitlePrefix() {
   return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_SUBFRAME_PREFIX,
-                                    base::string16());
+                                    std::u16string());
 }
 
-base::string16 PrefixExpectedTabTitle(const std::string& title) {
+std::u16string PrefixExpectedTabTitle(const std::string& title) {
   return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_TAB_PREFIX,
                                     base::UTF8ToUTF16(title));
 }

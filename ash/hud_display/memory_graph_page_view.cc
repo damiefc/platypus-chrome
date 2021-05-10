@@ -6,11 +6,13 @@
 
 #include <algorithm>
 #include <numeric>
+#include <string>
 
 #include "ash/hud_display/grid.h"
 #include "ash/hud_display/hud_constants.h"
-#include "base/strings/string16.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/canvas.h"
 
 namespace ash {
@@ -23,39 +25,60 @@ BEGIN_METADATA(MemoryGraphPageView, GraphPageViewBase)
 END_METADATA
 
 MemoryGraphPageView::MemoryGraphPageView(const base::TimeDelta refresh_interval)
-    : graph_chrome_rss_private_(Graph::Baseline::BASELINE_BOTTOM,
+    : graph_chrome_rss_private_(kDefaultGraphWidth,
+                                Graph::Baseline::BASELINE_BOTTOM,
                                 Graph::Fill::SOLID,
+                                Graph::Style::LINES,
                                 SkColorSetA(SK_ColorRED, kHUDAlpha)),
-      graph_mem_free_(Graph::Baseline::BASELINE_BOTTOM,
+      graph_mem_free_(kDefaultGraphWidth,
+                      Graph::Baseline::BASELINE_BOTTOM,
                       Graph::Fill::NONE,
+                      Graph::Style::LINES,
                       SkColorSetA(SK_ColorDKGRAY, kHUDAlpha)),
-      graph_mem_used_unknown_(Graph::Baseline::BASELINE_BOTTOM,
+      graph_mem_used_unknown_(kDefaultGraphWidth,
+                              Graph::Baseline::BASELINE_BOTTOM,
                               Graph::Fill::SOLID,
+                              Graph::Style::LINES,
                               SkColorSetA(SK_ColorLTGRAY, kHUDAlpha)),
-      graph_renderers_rss_private_(Graph::Baseline::BASELINE_BOTTOM,
+      graph_renderers_rss_private_(kDefaultGraphWidth,
+                                   Graph::Baseline::BASELINE_BOTTOM,
                                    Graph::Fill::SOLID,
+                                   Graph::Style::LINES,
                                    SkColorSetA(SK_ColorCYAN, kHUDAlpha)),
-      graph_arc_rss_private_(Graph::Baseline::BASELINE_BOTTOM,
+      graph_arc_rss_private_(kDefaultGraphWidth,
+                             Graph::Baseline::BASELINE_BOTTOM,
                              Graph::Fill::SOLID,
+                             Graph::Style::LINES,
                              SkColorSetA(SK_ColorMAGENTA, kHUDAlpha)),
-      graph_gpu_rss_private_(Graph::Baseline::BASELINE_BOTTOM,
+      graph_gpu_rss_private_(kDefaultGraphWidth,
+                             Graph::Baseline::BASELINE_BOTTOM,
                              Graph::Fill::SOLID,
+                             Graph::Style::LINES,
                              SkColorSetA(SK_ColorRED, kHUDAlpha)),
-      graph_gpu_kernel_(Graph::Baseline::BASELINE_BOTTOM,
+      graph_gpu_kernel_(kDefaultGraphWidth,
+                        Graph::Baseline::BASELINE_BOTTOM,
                         Graph::Fill::SOLID,
+                        Graph::Style::LINES,
                         SkColorSetA(SK_ColorYELLOW, kHUDAlpha)),
-      graph_chrome_rss_shared_(Graph::Baseline::BASELINE_BOTTOM,
+      graph_chrome_rss_shared_(kDefaultGraphWidth,
+                               Graph::Baseline::BASELINE_BOTTOM,
                                Graph::Fill::NONE,
+                               Graph::Style::LINES,
                                SkColorSetA(SK_ColorBLUE, kHUDAlpha)) {
-  const int data_width = graph_arc_rss_private_.GetDataBufferSize();
+  const int data_width = graph_arc_rss_private_.max_data_points();
+  // Verical ticks are drawn every 10% (10/100 interval).
+  constexpr float vertical_ticks_interval = 10 / 100.0;
   // -XX seconds on the left, 0Gb top (will be updated later), 0 seconds on the
-  // right, 0 Gb on the bottom. Seconds and Gigabytes are dimentions. Number of
+  // right, 0 Gb on the bottom. Seconds and Gigabytes are dimensions. Number of
   // data points is data_width. horizontal grid ticks are drawn every 10
   // seconds.
   grid_ = CreateGrid(
       static_cast<int>(/*left=*/-data_width * refresh_interval.InSecondsF()),
-      /*top=*/0, /*right=*/0, /*bottom=*/0, base::ASCIIToUTF16("s"),
-      base::ASCIIToUTF16("Gb"), data_width, 10 / refresh_interval.InSecondsF());
+      /*top=*/0, /*right=*/0, /*bottom=*/0, /*x_unit=*/u"s",
+      /*y_unit=*/u"Gb",
+      /*horizontal_points_number=*/data_width,
+      /*horizontal_ticks_interval=*/10 / refresh_interval.InSecondsF(),
+      vertical_ticks_interval);
   // Hide grid until we know total memory size.
   grid_->SetVisible(false);
 
@@ -65,28 +88,23 @@ MemoryGraphPageView::MemoryGraphPageView(const base::TimeDelta refresh_interval)
   });
 
   const std::vector<Legend::Entry> legend({
-      {graph_gpu_kernel_, base::ASCIIToUTF16("GPU Driver"),
-       base::ASCIIToUTF16("Kernel GPU buffers as reported\nby "
-                          "base::SystemMemoryInfo::gem_size."),
+      {graph_gpu_kernel_, u"GPU Driver",
+       u"Kernel GPU buffers as reported\nby base::SystemMemoryInfo::gem_size.",
        formatter},
-      {graph_gpu_rss_private_, base::ASCIIToUTF16("Chrome GPU"),
-       base::ASCIIToUTF16(
-           "RSS private memory of\n --type=gpu-process Chrome process."),
+      {graph_gpu_rss_private_, u"Chrome GPU",
+       u"RSS private memory of\n --type=gpu-process Chrome process.",
        formatter},
       // ARC memory is not usually visible (skipped)
-      {graph_renderers_rss_private_, base::ASCIIToUTF16("Renderers"),
-       base::ASCIIToUTF16(
-           "Sum of RSS private memory of\n--type=renderer Chrome process."),
+      {graph_renderers_rss_private_, u"Renderers",
+       u"Sum of RSS private memory of\n--type=renderer Chrome process.",
        formatter},
-      {graph_mem_used_unknown_, base::ASCIIToUTF16("Other"),
-       base::ASCIIToUTF16(
-           "Amount of other used memory.\nEquals to total used minus known."),
+      {graph_mem_used_unknown_, u"Other",
+       u"Amount of other used memory.\nEquals to total used minus known.",
        formatter},
-      {graph_mem_free_, base::ASCIIToUTF16("Free"),
-       base::ASCIIToUTF16("Free memory as reported by kernel."), formatter},
-      {graph_chrome_rss_private_, base::ASCIIToUTF16("Browser"),
-       base::ASCIIToUTF16("RSS private memory of the\nmain Chrome process."),
-       formatter}
+      {graph_mem_free_, u"Free", u"Free memory as reported by kernel.",
+       formatter},
+      {graph_chrome_rss_private_, u"Browser",
+       u"RSS private memory of the\nmain Chrome process.", formatter}
       // Browser RSS hairline skipped.
   });
   CreateLegend(legend);

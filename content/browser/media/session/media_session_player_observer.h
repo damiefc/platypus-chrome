@@ -33,6 +33,9 @@ class MediaSessionPlayerObserver {
   // The given |player_id| has been seeked backward by the MediaSession.
   virtual void OnSeekBackward(int player_id, base::TimeDelta seek_time) = 0;
 
+  // The given |player_id| has been seeked to by the MediaSession.
+  virtual void OnSeekTo(int player_id, base::TimeDelta seek_time) = 0;
+
   // The given |player_id| has been set a new volume multiplier by
   // the MediaSession.
   virtual void OnSetVolumeMultiplier(int player_id,
@@ -55,6 +58,9 @@ class MediaSessionPlayerObserver {
 
   // Returns if picture-in-picture is available for |player_id|.
   virtual bool IsPictureInPictureAvailable(int player_id) const = 0;
+
+  // Returns true if the |player_id| has audio tracks.
+  virtual bool HasAudio(int player_id) const = 0;
 
   // Returns true if the |player_id| has video tracks.
   virtual bool HasVideo(int player_id) const = 0;

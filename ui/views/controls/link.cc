@@ -11,6 +11,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/cursor/cursor.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
@@ -22,7 +23,7 @@
 
 namespace views {
 
-Link::Link(const base::string16& title, int text_context, int text_style)
+Link::Link(const std::u16string& title, int text_context, int text_style)
     : Label(title, text_context, text_style) {
   RecalculateFont();
 
@@ -69,6 +70,14 @@ bool Link::GetCanProcessEventsWithinSubtree() const {
   // Links need to be able to accept events (e.g., clicking) even though
   // in general Labels do not.
   return View::GetCanProcessEventsWithinSubtree();
+}
+
+void Link::OnMouseEntered(const ui::MouseEvent& event) {
+  RecalculateFont();
+}
+
+void Link::OnMouseExited(const ui::MouseEvent& event) {
+  RecalculateFont();
 }
 
 bool Link::OnMousePressed(const ui::MouseEvent& event) {
@@ -140,7 +149,7 @@ void Link::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   Label::GetAccessibleNodeData(node_data);
   // Prevent invisible links from being announced by screen reader.
   node_data->role =
-      GetText().empty() ? ax::mojom::Role::kIgnored : ax::mojom::Role::kLink;
+      GetText().empty() ? ax::mojom::Role::kNone : ax::mojom::Role::kLink;
 }
 
 void Link::OnFocus() {
@@ -162,7 +171,7 @@ void Link::SetFontList(const gfx::FontList& font_list) {
   RecalculateFont();
 }
 
-void Link::SetText(const base::string16& text) {
+void Link::SetText(const std::u16string& text) {
   Label::SetText(text);
   ConfigureFocus();
 }
@@ -198,9 +207,10 @@ void Link::OnClick(const ui::Event& event) {
 
 void Link::RecalculateFont() {
   const int style = font_list().GetFontStyle();
-  const int intended_style = ((GetEnabled() && HasFocus()) || force_underline_)
-                                 ? (style | gfx::Font::UNDERLINE)
-                                 : (style & ~gfx::Font::UNDERLINE);
+  const int intended_style =
+      ((GetEnabled() && (HasFocus() || IsMouseHovered())) || force_underline_)
+          ? (style | gfx::Font::UNDERLINE)
+          : (style & ~gfx::Font::UNDERLINE);
 
   if (style != intended_style)
     Label::SetFontList(font_list().DeriveWithStyle(intended_style));
@@ -211,7 +221,7 @@ void Link::ConfigureFocus() {
   if (GetText().empty()) {
     SetFocusBehavior(FocusBehavior::NEVER);
   } else {
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
     SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 #else
     SetFocusBehavior(FocusBehavior::ALWAYS);
@@ -220,7 +230,7 @@ void Link::ConfigureFocus() {
 }
 
 BEGIN_METADATA(Link, Label)
-ADD_READONLY_PROPERTY_METADATA(SkColor, Color)
+ADD_READONLY_PROPERTY_METADATA(SkColor, Color, ui::metadata::SkColorConverter)
 END_METADATA
 
 }  // namespace views

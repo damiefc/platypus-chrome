@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/debug/leak_annotations.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -137,8 +137,9 @@ std::unique_ptr<Response> ObjectProxy::CallMethodAndBlockWithErrorDetails(
   bus_->AssertOnDBusThread();
 
   if (!bus_->Connect() || !method_call->SetDestination(service_name_) ||
-      !method_call->SetPath(object_path_))
-    return std::unique_ptr<Response>();
+      !method_call->SetPath(object_path_)) {
+    return nullptr;
+  }
 
   DBusMessage* request_message = method_call->raw_message();
 
@@ -157,7 +158,7 @@ std::unique_ptr<Response> ObjectProxy::CallMethodAndBlockWithErrorDetails(
     LogMethodCallFailure(method_call->GetInterface(), method_call->GetMember(),
                          error->is_set() ? error->name() : "unknown error type",
                          error->is_set() ? error->message() : "");
-    return std::unique_ptr<Response>();
+    return nullptr;
   }
   // Record time spent for the method call. Don't include failures.
   UMA_HISTOGRAM_TIMES("DBus.SyncMethodCallTime",

@@ -6,13 +6,13 @@
 #define COMPONENTS_AUTOFILL_CONTENT_RENDERER_AUTOFILL_AGENT_H_
 
 #include <set>
+#include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/autofill/content/common/mojom/autofill_agent.mojom.h"
@@ -34,6 +34,7 @@ namespace blink {
 class WebNode;
 class WebView;
 class WebFormControlElement;
+class WebFormElement;
 template <typename T>
 class WebVector;
 }  // namespace blink
@@ -83,22 +84,30 @@ class AutofillAgent : public content::RenderFrameObserver,
       const std::vector<FormDataPredictions>& forms) override;
   void ClearSection() override;
   void ClearPreviewedForm() override;
-  void FillFieldWithValue(const base::string16& value) override;
-  void PreviewFieldWithValue(const base::string16& value) override;
-  void SetSuggestionAvailability(const mojom::AutofillState state) override;
-  void AcceptDataListSuggestion(const base::string16& value) override;
-  void FillPasswordSuggestion(const base::string16& username,
-                              const base::string16& password) override;
-  void PreviewPasswordSuggestion(const base::string16& username,
-                                 const base::string16& password) override;
+  void FillFieldWithValue(FieldRendererId field_id,
+                          const std::u16string& value) override;
+  void PreviewFieldWithValue(FieldRendererId field_id,
+                             const std::u16string& value) override;
+  void SetSuggestionAvailability(FieldRendererId field_id,
+                                 const mojom::AutofillState state) override;
+  void AcceptDataListSuggestion(FieldRendererId field_id,
+                                const std::u16string& suggested_value) override;
+  void FillPasswordSuggestion(const std::u16string& username,
+                              const std::u16string& password) override;
+  void PreviewPasswordSuggestion(const std::u16string& username,
+                                 const std::u16string& password) override;
   void SetUserGestureRequired(bool required) override;
   void SetSecureContextRequired(bool required) override;
   void SetFocusRequiresScroll(bool require) override;
   void SetQueryPasswordSuggestion(bool required) override;
-  void GetElementFormAndFieldData(
-      const std::vector<std::string>& selectors,
-      GetElementFormAndFieldDataCallback callback) override;
+  void GetElementFormAndFieldDataAtIndex(
+      const std::string& selector,
+      int index,
+      GetElementFormAndFieldDataAtIndexCallback callback) override;
   void SetAssistantActionState(bool running) override;
+  void EnableHeavyFormDataScraping() override;
+  void SetFieldsEligibleForManualFilling(
+      const std::vector<FieldRendererId>& fields) override;
 
   void FormControlElementClicked(const blink::WebFormControlElement& element,
                                  bool was_focused);
@@ -118,7 +127,14 @@ class AutofillAgent : public content::RenderFrameObserver,
   void AddFormObserver(Observer* observer);
   void RemoveFormObserver(Observer* observer);
 
+  // Instructs `form_tracker_` to track the autofilled `element`.
+  void TrackAutofilledElement(const blink::WebFormControlElement& element);
+
   FormTracker* form_tracker_for_testing() { return &form_tracker_; }
+
+  bool is_heavy_form_data_scraping_enabled() {
+    return is_heavy_form_data_scraping_enabled_;
+  }
 
   void SelectWasUpdated(const blink::WebFormControlElement& element);
 
@@ -191,6 +207,8 @@ class AutofillAgent : public content::RenderFrameObserver,
       const blink::WebFormControlElement& element) override;
   bool ShouldSuppressKeyboard(
       const blink::WebFormControlElement& element) override;
+  void FormElementReset(const blink::WebFormElement& form) override;
+  void PasswordFieldReset(const blink::WebInputElement& element) override;
 
   void HandleFocusChangeComplete();
 
@@ -214,17 +232,19 @@ class AutofillAgent : public content::RenderFrameObserver,
   void QueryAutofillSuggestions(const blink::WebFormControlElement& element,
                                 bool autoselect_first_suggestion);
 
-  // Sets the element value to reflect the selected |suggested_value|.
-  void DoAcceptDataListSuggestion(const base::string16& suggested_value);
+  // Sets the selected value of the the field identified by |field_id| to
+  // |suggested_value|.
+  void DoAcceptDataListSuggestion(FieldRendererId field_id,
+                                  const std::u16string& suggested_value);
 
   // Set |node| to display the given |value|.
-  void DoFillFieldWithValue(const base::string16& value,
+  void DoFillFieldWithValue(const std::u16string& value,
                             blink::WebInputElement* node);
 
   // Set |node| to display the given |value| as a preview.  The preview is
   // visible on screen to the user, but not visible to the page via the DOM or
   // JavaScript.
-  void DoPreviewFieldWithValue(const base::string16& value,
+  void DoPreviewFieldWithValue(const std::u16string& value,
                                blink::WebInputElement* node);
 
   // Notifies browser of new fillable forms in |render_frame|.
@@ -270,12 +290,6 @@ class AutofillAgent : public content::RenderFrameObserver,
   // label, visibility, control type) have changed after an autofill.
   void TriggerRefillIfNeeded(const FormData& form);
 
-  // Find the unique element given by |selectors| in the associated web frame.
-  // Empty blink::WebElement is returned if there is no matching element or
-  // there are multiple matching elements.
-  blink::WebElement FindUniqueWebElement(
-      const std::vector<std::string>& selectors);
-
   // Formerly cached forms for all frames, now only caches forms for the current
   // frame.
   FormCache form_cache_;
@@ -291,6 +305,9 @@ class AutofillAgent : public content::RenderFrameObserver,
   // The element corresponding to the last request sent for form field Autofill.
   blink::WebFormControlElement element_;
 
+  // The elements that currently are being previewed.
+  std::vector<blink::WebFormControlElement> previewed_elements_;
+
   // The form element currently requesting an interactive autocomplete.
   blink::WebFormElement in_flight_request_form_;
 
@@ -299,7 +316,7 @@ class AutofillAgent : public content::RenderFrameObserver,
 
   // When dealing with forms that don't use a <form> tag, we keep track of the
   // elements the user has modified so we can determine when submission occurs.
-  std::set<blink::WebFormControlElement> formless_elements_user_edited_;
+  std::set<FieldRendererId> formless_elements_user_edited_;
 
   // The form user interacted, it is used if last_interacted_form_ or formless
   // form can't be converted to FormData at the time of form submission.
@@ -360,6 +377,10 @@ class AutofillAgent : public content::RenderFrameObserver,
   // Will be set when accessibility mode changes, depending on what the new mode
   // is.
   bool is_screen_reader_enabled_ = false;
+
+  // Whether agents should enable heavy scraping of form data (e.g., button
+  // titles for unowned forms).
+  bool is_heavy_form_data_scraping_enabled_ = false;
 
   const scoped_refptr<FieldDataManager> field_data_manager_;
 

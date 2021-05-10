@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
@@ -32,6 +32,15 @@
 #include <dawn/webgpu_cpp.h>
 #include <dawn_native/DawnNative.h>
 #endif  // BUILDFLAG(USE_DAWN)
+
+#define SCOPED_GL_CLEANUP_VAR(api, func, var)            \
+  base::ScopedClosureRunner delete_##var(base::BindOnce( \
+      [](gl::GLApi* api, GLuint var) { api->gl##func##Fn(var); }, api, var))
+
+#define SCOPED_GL_CLEANUP_PTR(api, func, n, var)                           \
+  base::ScopedClosureRunner delete_##var(base::BindOnce(                   \
+      [](gl::GLApi* api, GLuint var) { api->gl##func##Fn(n, &var); }, api, \
+      var))
 
 namespace gpu {
 namespace {
@@ -178,8 +187,11 @@ TEST_F(SharedImageBackingFactoryD3DTestSwapChain, CreateAndPresentSwapChain) {
   auto backings = shared_image_factory_->CreateSwapChain(
       front_buffer_mailbox, back_buffer_mailbox, format, size, color_space,
       surface_origin, alpha_type, usage);
-  EXPECT_TRUE(backings.front_buffer);
-  EXPECT_TRUE(backings.back_buffer);
+  ASSERT_TRUE(backings.front_buffer);
+  EXPECT_TRUE(backings.front_buffer->IsCleared());
+
+  ASSERT_TRUE(backings.back_buffer);
+  EXPECT_TRUE(backings.back_buffer->IsCleared());
 
   std::unique_ptr<SharedImageRepresentationFactoryRef> back_factory_ref =
       shared_image_manager_.Register(std::move(backings.back_buffer),
@@ -188,19 +200,16 @@ TEST_F(SharedImageBackingFactoryD3DTestSwapChain, CreateAndPresentSwapChain) {
       shared_image_manager_.Register(std::move(backings.front_buffer),
                                      memory_type_tracker_.get());
 
-  GLuint back_texture_id, front_texture_id = 0u;
-  gl::GLImageD3D *back_image, *front_image = 0u;
-
   auto back_texture = shared_image_representation_factory_
                           ->ProduceGLTexturePassthrough(back_buffer_mailbox)
                           ->GetTexturePassthrough();
   ASSERT_TRUE(back_texture);
   EXPECT_EQ(back_texture->target(), static_cast<unsigned>(GL_TEXTURE_2D));
 
-  back_texture_id = back_texture->service_id();
+  GLuint back_texture_id = back_texture->service_id();
   EXPECT_NE(back_texture_id, 0u);
 
-  back_image = gl::GLImageD3D::FromGLImage(
+  auto* back_image = gl::GLImageD3D::FromGLImage(
       back_texture->GetLevelImage(GL_TEXTURE_2D, 0));
 
   auto front_texture = shared_image_representation_factory_
@@ -209,10 +218,10 @@ TEST_F(SharedImageBackingFactoryD3DTestSwapChain, CreateAndPresentSwapChain) {
   ASSERT_TRUE(front_texture);
   EXPECT_EQ(front_texture->target(), static_cast<unsigned>(GL_TEXTURE_2D));
 
-  front_texture_id = front_texture->service_id();
+  GLuint front_texture_id = front_texture->service_id();
   EXPECT_NE(front_texture_id, 0u);
 
-  front_image = gl::GLImageD3D::FromGLImage(
+  auto* front_image = gl::GLImageD3D::FromGLImage(
       front_texture->GetLevelImage(GL_TEXTURE_2D, 0));
 
   ASSERT_TRUE(back_image);
@@ -452,6 +461,8 @@ class SharedImageBackingFactoryD3DTest
     }
   }
 
+  void RunVideoTest(bool use_shared_handle);
+
   scoped_refptr<SharedContextState> context_state_;
 };
 
@@ -569,7 +580,7 @@ TEST_F(SharedImageBackingFactoryD3DTest, Dawn_SkiaGL) {
         SharedImageRepresentation::AllowUnclearedAccess::kYes);
     ASSERT_TRUE(scoped_access);
 
-    wgpu::Texture texture = wgpu::Texture::Acquire(scoped_access->texture());
+    wgpu::Texture texture(scoped_access->texture());
 
     wgpu::RenderPassColorAttachmentDescriptor color_desc;
     color_desc.attachment = texture.CreateView();
@@ -686,8 +697,7 @@ TEST_F(SharedImageBackingFactoryD3DTest, GL_Dawn_Skia_UnclearTexture) {
         SharedImageRepresentation::AllowUnclearedAccess::kYes);
     ASSERT_TRUE(dawn_scoped_access);
 
-    wgpu::Texture texture =
-        wgpu::Texture::Acquire(dawn_scoped_access->texture());
+    wgpu::Texture texture(dawn_scoped_access->texture());
     wgpu::RenderPassColorAttachmentDescriptor color_desc;
     color_desc.attachment = texture.CreateView();
     color_desc.resolveTarget = nullptr;
@@ -771,8 +781,7 @@ TEST_F(SharedImageBackingFactoryD3DTest, UnclearDawn_SkiaFails) {
         SharedImageRepresentation::AllowUnclearedAccess::kYes);
     ASSERT_TRUE(dawn_scoped_access);
 
-    wgpu::Texture texture =
-        wgpu::Texture::Acquire(dawn_scoped_access->texture());
+    wgpu::Texture texture(dawn_scoped_access->texture());
     wgpu::RenderPassColorAttachmentDescriptor color_desc;
     color_desc.attachment = texture.CreateView();
     color_desc.resolveTarget = nullptr;
@@ -892,14 +901,15 @@ TEST_F(SharedImageBackingFactoryD3DTest, CreateSharedImageFromHandle) {
 
   auto mailbox = Mailbox::GenerateForSharedImage();
   const auto format = gfx::BufferFormat::RGBA_8888;
+  const auto plane = gfx::BufferPlane::DEFAULT;
   const auto color_space = gfx::ColorSpace::CreateSRGB();
   const uint32_t usage = SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_DISPLAY;
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
   const GrSurfaceOrigin surface_origin = kTopLeft_GrSurfaceOrigin;
   const SkAlphaType alpha_type = kPremul_SkAlphaType;
   auto backing = shared_image_factory_->CreateSharedImage(
-      mailbox, 0, std::move(gpu_memory_buffer_handle), format, surface_handle,
-      size, color_space, surface_origin, alpha_type, usage);
+      mailbox, 0, std::move(gpu_memory_buffer_handle), format, plane,
+      surface_handle, size, color_space, surface_origin, alpha_type, usage);
   ASSERT_NE(backing, nullptr);
 
   EXPECT_EQ(backing->format(), viz::RGBA_8888);
@@ -908,10 +918,378 @@ TEST_F(SharedImageBackingFactoryD3DTest, CreateSharedImageFromHandle) {
   EXPECT_EQ(backing->surface_origin(), surface_origin);
   EXPECT_EQ(backing->alpha_type(), alpha_type);
   EXPECT_EQ(backing->mailbox(), mailbox);
+  EXPECT_TRUE(backing->IsCleared());
 
   SharedImageBackingD3D* backing_d3d =
       static_cast<SharedImageBackingD3D*>(backing.get());
   EXPECT_EQ(backing_d3d->GetSharedHandle(), shared_handle);
+}
+
+#if BUILDFLAG(USE_DAWN)
+// Test to check external image stored in the backing can be reused
+TEST_F(SharedImageBackingFactoryD3DTest, Dawn_ReuseExternalImage) {
+  if (!IsD3DSharedImageSupported())
+    return;
+
+  // Create a backing using mailbox.
+  auto mailbox = Mailbox::GenerateForSharedImage();
+  const auto format = viz::ResourceFormat::RGBA_8888;
+  const gfx::Size size(1, 1);
+  const auto color_space = gfx::ColorSpace::CreateSRGB();
+  const uint32_t usage = SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_DISPLAY |
+                         SHARED_IMAGE_USAGE_WEBGPU;
+  const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
+  auto backing = shared_image_factory_->CreateSharedImage(
+      mailbox, format, surface_handle, size, color_space,
+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
+      false /* is_thread_safe */);
+  ASSERT_NE(backing, nullptr);
+
+  std::unique_ptr<SharedImageRepresentationFactoryRef> factory_ref =
+      shared_image_manager_.Register(std::move(backing),
+                                     memory_type_tracker_.get());
+
+  // Create a Dawn D3D12 device
+  dawn_native::Instance instance;
+  instance.DiscoverDefaultAdapters();
+
+  std::vector<dawn_native::Adapter> adapters = instance.GetAdapters();
+  auto adapter_it = std::find_if(
+      adapters.begin(), adapters.end(), [](dawn_native::Adapter adapter) {
+        return adapter.GetBackendType() == dawn_native::BackendType::D3D12;
+      });
+  ASSERT_NE(adapter_it, adapters.end());
+
+  wgpu::Device device = wgpu::Device::Acquire(adapter_it->CreateDevice());
+  DawnProcTable procs = dawn_native::GetProcs();
+  dawnProcSetProcs(&procs);
+
+  const WGPUTextureUsage texture_usage = WGPUTextureUsage_OutputAttachment;
+
+  // Create the first Dawn texture then clear it to green.
+  {
+    auto dawn_representation =
+        shared_image_representation_factory_->ProduceDawn(mailbox,
+                                                          device.Get());
+    ASSERT_TRUE(dawn_representation);
+
+    auto scoped_access = dawn_representation->BeginScopedAccess(
+        texture_usage, SharedImageRepresentation::AllowUnclearedAccess::kYes);
+    ASSERT_TRUE(scoped_access);
+
+    wgpu::Texture texture(scoped_access->texture());
+
+    wgpu::RenderPassColorAttachmentDescriptor color_desc;
+    color_desc.attachment = texture.CreateView();
+    color_desc.resolveTarget = nullptr;
+    color_desc.loadOp = wgpu::LoadOp::Clear;
+    color_desc.storeOp = wgpu::StoreOp::Store;
+    color_desc.clearColor = {0, 255, 0, 255};
+
+    wgpu::RenderPassDescriptor renderPassDesc = {};
+    renderPassDesc.colorAttachmentCount = 1;
+    renderPassDesc.colorAttachments = &color_desc;
+    renderPassDesc.depthStencilAttachment = nullptr;
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPassDesc);
+    pass.EndPass();
+    wgpu::CommandBuffer commands = encoder.Finish();
+
+    wgpu::Queue queue = device.GetDefaultQueue();
+    queue.Submit(1, &commands);
+  }
+
+  CheckSkiaPixels(mailbox, size, {0, 255, 0, 255});
+
+  // Create another Dawn texture then clear it with another color.
+  {
+    auto dawn_representation =
+        shared_image_representation_factory_->ProduceDawn(mailbox,
+                                                          device.Get());
+    ASSERT_TRUE(dawn_representation);
+
+    // Check again that the texture is still green
+    CheckSkiaPixels(mailbox, size, {0, 255, 0, 255});
+
+    auto scoped_access = dawn_representation->BeginScopedAccess(
+        texture_usage, SharedImageRepresentation::AllowUnclearedAccess::kYes);
+    ASSERT_TRUE(scoped_access);
+
+    wgpu::Texture texture(scoped_access->texture());
+
+    wgpu::RenderPassColorAttachmentDescriptor color_desc;
+    color_desc.attachment = texture.CreateView();
+    color_desc.resolveTarget = nullptr;
+    color_desc.loadOp = wgpu::LoadOp::Clear;
+    color_desc.storeOp = wgpu::StoreOp::Store;
+    color_desc.clearColor = {255, 0, 0, 255};
+
+    wgpu::RenderPassDescriptor renderPassDesc = {};
+    renderPassDesc.colorAttachmentCount = 1;
+    renderPassDesc.colorAttachments = &color_desc;
+    renderPassDesc.depthStencilAttachment = nullptr;
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPassDesc);
+    pass.EndPass();
+    wgpu::CommandBuffer commands = encoder.Finish();
+
+    wgpu::Queue queue = device.GetDefaultQueue();
+    queue.Submit(1, &commands);
+  }
+
+  CheckSkiaPixels(mailbox, size, {255, 0, 0, 255});
+
+  // Shut down Dawn
+  device = wgpu::Device();
+  dawnProcSetProcs(nullptr);
+
+  factory_ref.reset();
+}
+#endif  // BUILDFLAG(USE_DAWN)
+
+void SharedImageBackingFactoryD3DTest::RunVideoTest(bool use_shared_handle) {
+  if (!IsD3DSharedImageSupported())
+    return;
+
+  Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device =
+      shared_image_factory_->GetDeviceForTesting();
+
+  const gfx::Size size(32, 32);
+
+  const unsigned kYFillValue = 0x12;
+  const unsigned kUFillValue = 0x23;
+  const unsigned kVFillValue = 0x34;
+
+  const size_t kYPlaneSize = size.width() * size.height();
+
+  std::vector<unsigned char> video_data;
+  video_data.resize(kYPlaneSize * 3 / 2);
+  memset(video_data.data(), kYFillValue, kYPlaneSize);
+  for (size_t i = 0; i < kYPlaneSize / 2; i += 2) {
+    video_data[kYPlaneSize + i] = kUFillValue;
+    video_data[kYPlaneSize + i + 1] = kVFillValue;
+  }
+
+  D3D11_SUBRESOURCE_DATA data = {};
+  data.pSysMem = static_cast<const void*>(video_data.data());
+  data.SysMemPitch = static_cast<UINT>(size.width());
+
+  CD3D11_TEXTURE2D_DESC desc(DXGI_FORMAT_NV12, size.width(), size.height(), 1,
+                             1, D3D11_BIND_SHADER_RESOURCE);
+  if (use_shared_handle) {
+    desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_NTHANDLE |
+                     D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
+  }
+
+  Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture;
+  HRESULT hr = d3d11_device->CreateTexture2D(&desc, &data, &d3d11_texture);
+  ASSERT_TRUE(SUCCEEDED(hr));
+
+  uint32_t usage =
+      gpu::SHARED_IMAGE_USAGE_VIDEO_DECODE | gpu::SHARED_IMAGE_USAGE_GLES2 |
+      gpu::SHARED_IMAGE_USAGE_RASTER | gpu::SHARED_IMAGE_USAGE_DISPLAY |
+      gpu::SHARED_IMAGE_USAGE_SCANOUT;
+
+  base::win::ScopedHandle shared_handle;
+  if (use_shared_handle) {
+    Microsoft::WRL::ComPtr<IDXGIResource1> dxgi_resource;
+    hr = d3d11_texture.As(&dxgi_resource);
+    ASSERT_TRUE(SUCCEEDED(hr));
+
+    HANDLE handle;
+    hr = dxgi_resource->CreateSharedHandle(
+        nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
+        nullptr, &handle);
+    ASSERT_TRUE(SUCCEEDED(hr));
+
+    shared_handle.Set(handle);
+    ASSERT_TRUE(shared_handle.IsValid());
+
+    usage |= gpu::SHARED_IMAGE_USAGE_WEBGPU;
+  }
+
+  const gpu::Mailbox mailboxes[] = {gpu::Mailbox::GenerateForSharedImage(),
+                                    gpu::Mailbox::GenerateForSharedImage()};
+
+  auto shared_image_backings = SharedImageBackingD3D::CreateFromVideoTexture(
+      mailboxes, DXGI_FORMAT_NV12, size, usage, d3d11_texture,
+      /*array_slice=*/0, std::move(shared_handle));
+  ASSERT_EQ(shared_image_backings.size(), 2u);
+
+  const gfx::Size plane_sizes[] = {
+      size, gfx::Size(size.width() / 2, size.height() / 2)};
+  const viz::ResourceFormat plane_formats[] = {viz::RED_8, viz::RG_88};
+
+  std::vector<std::unique_ptr<SharedImageRepresentationFactoryRef>>
+      shared_image_refs;
+  for (size_t i = 0; i < shared_image_backings.size(); i++) {
+    auto& backing = shared_image_backings[i];
+
+    EXPECT_EQ(backing->mailbox(), mailboxes[i]);
+    EXPECT_EQ(backing->size(), plane_sizes[i]);
+    EXPECT_EQ(backing->format(), plane_formats[i]);
+    EXPECT_EQ(backing->color_space(), gfx::ColorSpace());
+    EXPECT_EQ(backing->surface_origin(), kTopLeft_GrSurfaceOrigin);
+    EXPECT_EQ(backing->alpha_type(), kPremul_SkAlphaType);
+    EXPECT_EQ(backing->usage(), usage);
+    EXPECT_TRUE(backing->IsCleared());
+
+    shared_image_refs.push_back(shared_image_manager_.Register(
+        std::move(backing), memory_type_tracker_.get()));
+  }
+
+  // Setup GL shaders, framebuffers, uniforms, etc.
+  static const char* kVideoFragmentShaderSrc =
+      "#extension GL_OES_EGL_image_external : require\n"
+      "precision mediump float;\n"
+      "uniform samplerExternalOES u_texture_y;\n"
+      "uniform samplerExternalOES u_texture_uv;\n"
+      "varying vec2 v_texCoord;\n"
+      "void main() {\n"
+      "  gl_FragColor.r = texture2D(u_texture_y, v_texCoord).r;\n"
+      "  gl_FragColor.gb = texture2D(u_texture_uv, v_texCoord).rg;\n"
+      "  gl_FragColor.a = 1.0;\n"
+      "}\n";
+
+  gl::GLApi* api = gl::g_current_gl_context;
+
+  GLint status = 0;
+  GLuint vertex_shader = api->glCreateShaderFn(GL_VERTEX_SHADER);
+  SCOPED_GL_CLEANUP_VAR(api, DeleteShader, vertex_shader);
+  ASSERT_NE(vertex_shader, 0u);
+  api->glShaderSourceFn(vertex_shader, 1, &kVertexShaderSrc, nullptr);
+  api->glCompileShaderFn(vertex_shader);
+  api->glGetShaderivFn(vertex_shader, GL_COMPILE_STATUS, &status);
+  ASSERT_NE(status, 0);
+
+  GLuint fragment_shader = api->glCreateShaderFn(GL_FRAGMENT_SHADER);
+  SCOPED_GL_CLEANUP_VAR(api, DeleteShader, fragment_shader);
+  ASSERT_NE(fragment_shader, 0u);
+  api->glShaderSourceFn(fragment_shader, 1, &kVideoFragmentShaderSrc, nullptr);
+  api->glCompileShaderFn(fragment_shader);
+  api->glGetShaderivFn(fragment_shader, GL_COMPILE_STATUS, &status);
+  ASSERT_NE(status, 0);
+
+  GLuint program = api->glCreateProgramFn();
+  ASSERT_NE(program, 0u);
+  SCOPED_GL_CLEANUP_VAR(api, DeleteProgram, program);
+  api->glAttachShaderFn(program, vertex_shader);
+  api->glAttachShaderFn(program, fragment_shader);
+  api->glLinkProgramFn(program);
+  api->glGetProgramivFn(program, GL_LINK_STATUS, &status);
+  ASSERT_NE(status, 0);
+
+  GLint vertex_location = api->glGetAttribLocationFn(program, "a_position");
+  ASSERT_NE(vertex_location, -1);
+
+  GLint y_texture_location =
+      api->glGetUniformLocationFn(program, "u_texture_y");
+  ASSERT_NE(y_texture_location, -1);
+
+  GLint uv_texture_location =
+      api->glGetUniformLocationFn(program, "u_texture_uv");
+  ASSERT_NE(uv_texture_location, -1);
+
+  GLuint fbo, renderbuffer = 0u;
+  api->glGenFramebuffersEXTFn(1, &fbo);
+  ASSERT_NE(fbo, 0u);
+  SCOPED_GL_CLEANUP_PTR(api, DeleteFramebuffersEXT, 1, fbo);
+  api->glBindFramebufferEXTFn(GL_FRAMEBUFFER, fbo);
+
+  api->glGenRenderbuffersEXTFn(1, &renderbuffer);
+  ASSERT_NE(renderbuffer, 0u);
+  SCOPED_GL_CLEANUP_PTR(api, DeleteRenderbuffersEXT, 1, renderbuffer);
+  api->glBindRenderbufferEXTFn(GL_RENDERBUFFER, renderbuffer);
+
+  api->glRenderbufferStorageEXTFn(GL_RENDERBUFFER, GL_RGBA8_OES, size.width(),
+                                  size.height());
+  api->glFramebufferRenderbufferEXTFn(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                      GL_RENDERBUFFER, renderbuffer);
+  ASSERT_EQ(api->glCheckFramebufferStatusEXTFn(GL_FRAMEBUFFER),
+            static_cast<unsigned>(GL_FRAMEBUFFER_COMPLETE));
+
+  // Set the clear color to green.
+  api->glViewportFn(0, 0, size.width(), size.height());
+  api->glClearColorFn(0.0f, 1.0f, 0.0f, 1.0f);
+  api->glClearFn(GL_COLOR_BUFFER_BIT);
+
+  GLuint vbo = 0u;
+  api->glGenBuffersARBFn(1, &vbo);
+  ASSERT_NE(vbo, 0u);
+  SCOPED_GL_CLEANUP_PTR(api, DeleteBuffersARB, 1, vbo);
+  api->glBindBufferFn(GL_ARRAY_BUFFER, vbo);
+  static const float vertices[] = {
+      1.0f, 1.0f, -1.0f, 1.0f,  -1.0f, -1.0f,
+      1.0f, 1.0f, -1.0f, -1.0f, 1.0f,  -1.0f,
+  };
+  api->glBufferDataFn(GL_ARRAY_BUFFER, sizeof(vertices), vertices,
+                      GL_STATIC_DRAW);
+
+  ASSERT_EQ(api->glGetErrorFn(), static_cast<GLenum>(GL_NO_ERROR));
+
+  // Create the representations for the planes, get the texture ids, bind to
+  // samplers, and draw.
+  {
+    auto y_texture =
+        shared_image_representation_factory_->ProduceGLTexturePassthrough(
+            mailboxes[0]);
+    ASSERT_NE(y_texture, nullptr);
+
+    auto uv_texture =
+        shared_image_representation_factory_->ProduceGLTexturePassthrough(
+            mailboxes[1]);
+    ASSERT_NE(uv_texture, nullptr);
+
+    auto y_texture_access = y_texture->BeginScopedAccess(
+        GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM,
+        SharedImageRepresentation::AllowUnclearedAccess::kNo);
+    ASSERT_NE(y_texture_access, nullptr);
+
+    auto uv_texture_access = uv_texture->BeginScopedAccess(
+        GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM,
+        SharedImageRepresentation::AllowUnclearedAccess::kNo);
+    ASSERT_NE(uv_texture_access, nullptr);
+
+    api->glActiveTextureFn(GL_TEXTURE0);
+    api->glBindTextureFn(GL_TEXTURE_EXTERNAL_OES,
+                         y_texture->GetTextureBase()->service_id());
+    ASSERT_EQ(api->glGetErrorFn(), static_cast<GLenum>(GL_NO_ERROR));
+
+    api->glActiveTextureFn(GL_TEXTURE1);
+    api->glBindTextureFn(GL_TEXTURE_EXTERNAL_OES,
+                         uv_texture->GetTextureBase()->service_id());
+    ASSERT_EQ(api->glGetErrorFn(), static_cast<GLenum>(GL_NO_ERROR));
+
+    api->glUseProgramFn(program);
+
+    api->glEnableVertexAttribArrayFn(vertex_location);
+    api->glVertexAttribPointerFn(vertex_location, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+    api->glUniform1iFn(y_texture_location, 0);
+    api->glUniform1iFn(uv_texture_location, 1);
+
+    api->glDrawArraysFn(GL_TRIANGLES, 0, 6);
+    ASSERT_EQ(api->glGetErrorFn(), static_cast<GLenum>(GL_NO_ERROR));
+
+    GLubyte pixel_color[4];
+    api->glReadPixelsFn(size.width() / 2, size.height() / 2, 1, 1, GL_RGBA,
+                        GL_UNSIGNED_BYTE, pixel_color);
+    EXPECT_EQ(kYFillValue, pixel_color[0]);
+    EXPECT_EQ(kUFillValue, pixel_color[1]);
+    EXPECT_EQ(kVFillValue, pixel_color[2]);
+    EXPECT_EQ(0xff, pixel_color[3]);
+  }
+  // TODO(dawn:551): Test Dawn access after multi-planar support lands in Dawn.
+}
+
+TEST_F(SharedImageBackingFactoryD3DTest, CreateFromVideoTexture) {
+  RunVideoTest(/*use_shared_handle=*/false);
+}
+
+TEST_F(SharedImageBackingFactoryD3DTest, CreateFromVideoTextureSharedHandle) {
+  RunVideoTest(/*use_shared_handle=*/true);
 }
 
 }  // anonymous namespace

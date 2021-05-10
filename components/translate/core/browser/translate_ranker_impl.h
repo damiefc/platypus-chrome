@@ -26,6 +26,10 @@ namespace assist_ranker {
 class RankerModel;
 }  // namespace assist_ranker
 
+namespace base {
+class FilePath;
+}
+
 namespace ukm {
 class UkmRecorder;
 }  // namespace ukm
@@ -35,6 +39,8 @@ class TranslateEventProto;
 }  // namespace metrics
 
 namespace translate {
+
+class TranslateMetricsLogger;
 
 extern const char kDefaultTranslateRankerModelURL[];
 
@@ -98,15 +104,15 @@ class TranslateRankerImpl : public TranslateRanker {
   void EnableLogging(bool value) override;
   uint32_t GetModelVersion() const override;
   bool ShouldOfferTranslation(
-      metrics::TranslateEventProto* translate_event) override;
+      metrics::TranslateEventProto* translate_event,
+      TranslateMetricsLogger* translate_metrics_logger) override;
   void FlushTranslateEvents(
       std::vector<metrics::TranslateEventProto>* events) override;
   void RecordTranslateEvent(
       int event_type,
       ukm::SourceId ukm_source_id,
       metrics::TranslateEventProto* translate_event) override;
-  bool ShouldOverrideDecision(
-      int event_type,
+  bool ShouldOverrideMatchesPreviousLanguageDecision(
       ukm::SourceId ukm_source_id,
       metrics::TranslateEventProto* translate_event) override;
 

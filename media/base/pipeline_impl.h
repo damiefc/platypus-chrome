@@ -25,13 +25,13 @@ namespace media {
 
 class MediaLog;
 
-// Callbacks used for Renderer creation. When the FactoryType is nullopt, the
+// Callbacks used for Renderer creation. When the RendererType is nullopt, the
 // current base one will be created.
 using CreateRendererCB = base::RepeatingCallback<std::unique_ptr<Renderer>(
-    base::Optional<RendererFactoryType>)>;
+    base::Optional<RendererType>)>;
 using RendererCreatedCB = base::OnceCallback<void(std::unique_ptr<Renderer>)>;
 using AsyncCreateRendererCB =
-    base::RepeatingCallback<void(base::Optional<RendererFactoryType>,
+    base::RepeatingCallback<void(base::Optional<RendererType>,
                                  RendererCreatedCB)>;
 
 // Pipeline runs the media pipeline.  Filters are created and called on the
@@ -105,6 +105,7 @@ class MEDIA_EXPORT PipelineImpl : public Pipeline {
   void SetVolume(float volume) override;
   void SetLatencyHint(base::Optional<base::TimeDelta> latency_hint) override;
   void SetPreservesPitch(bool preserves_pitch) override;
+  void SetAutoplayInitiated(bool autoplay_initiated) override;
   base::TimeDelta GetMediaTime() const override;
   Ranges<base::TimeDelta> GetBufferedTimeRanges() const override;
   base::TimeDelta GetMediaDuration() const override;
@@ -145,7 +146,7 @@ class MEDIA_EXPORT PipelineImpl : public Pipeline {
 
   // Create a Renderer asynchronously. Must be called on the main task runner
   // and the callback will be called on the main task runner as well.
-  void AsyncCreateRenderer(base::Optional<RendererFactoryType> factory_type,
+  void AsyncCreateRenderer(base::Optional<RendererType> renderer_type,
                            RendererCreatedCB renderer_created_cb);
 
   // Notifications from RendererWrapper.
@@ -161,8 +162,8 @@ class MEDIA_EXPORT PipelineImpl : public Pipeline {
   void OnVideoNaturalSizeChange(const gfx::Size& size);
   void OnVideoOpacityChange(bool opaque);
   void OnVideoAverageKeyframeDistanceUpdate();
-  void OnAudioDecoderChange(const PipelineDecoderInfo& info);
-  void OnVideoDecoderChange(const PipelineDecoderInfo& info);
+  void OnAudioDecoderChange(const AudioDecoderInfo& info);
+  void OnVideoDecoderChange(const VideoDecoderInfo& info);
   void OnRemotePlayStateChange(MediaStatus::State state);
   void OnVideoFrameRateChange(base::Optional<int> fps);
 

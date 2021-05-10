@@ -14,8 +14,21 @@ namespace features {
 const base::Feature kAcceptLanguageHeader{"AcceptLanguageHeader",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kAlpsForHttp2{"AlpsForHttp2",
+                                  base::FEATURE_ENABLED_BY_DEFAULT};
+
 const base::Feature kCapReferrerToOriginOnCrossOrigin{
     "CapReferrerToOriginOnCrossOrigin", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kDnsTransactionDynamicTimeouts{
+    "DnsTransactionDynamicTimeouts", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::FeatureParam<double> kDnsTransactionTimeoutMultiplier{
+    &kDnsTransactionDynamicTimeouts, "DnsTransactionTimeoutMultiplier", 7.5};
+
+const base::FeatureParam<base::TimeDelta> kDnsMinTransactionTimeout{
+    &kDnsTransactionDynamicTimeouts, "DnsMinTransactionTimeout",
+    base::TimeDelta::FromSeconds(12)};
 
 const base::Feature kDnsHttpssvc{"DnsHttpssvc",
                                  base::FEATURE_DISABLED_BY_DEFAULT};
@@ -82,6 +95,10 @@ const base::Feature kPartitionExpectCTStateByNetworkIsolationKey{
     "PartitionExpectCTStateByNetworkIsolationKey",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kPartitionNelAndReportingByNetworkIsolationKey{
+    "PartitionNelAndReportingByNetworkIsolationKey",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kExpectCTPruning{"ExpectCTPruning",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -105,6 +122,10 @@ const base::Feature kTLS13KeyUpdate{"TLS13KeyUpdate",
 
 const base::Feature kPostQuantumCECPQ2{"PostQuantumCECPQ2",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kPostQuantumCECPQ2SomeDomains{
+    "PostQuantumCECPQ2SomeDomains", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::FeatureParam<std::string>
+    kPostQuantumCECPQ2Prefix(&kPostQuantumCECPQ2SomeDomains, "prefix", "a");
 
 const base::Feature kNetUnusedIdleSocketTimeout{
     "NetUnusedIdleSocketTimeout", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -121,29 +142,29 @@ const base::Feature kShortLaxAllowUnsafeThreshold{
 const base::Feature kSameSiteDefaultChecksMethodRigorously{
     "SameSiteDefaultChecksMethodRigorously", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kRecentHttpSameSiteAccessGrantsLegacyCookieSemantics{
-    "RecentHttpSameSiteAccessGrantsLegacyCookieSemantics",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-const base::FeatureParam<int>
-    kRecentHttpSameSiteAccessGrantsLegacyCookieSemanticsMilliseconds{
-        &kRecentHttpSameSiteAccessGrantsLegacyCookieSemantics,
-        "RecentHttpSameSiteAccessGrantsLegacyCookieSemanticsMilliseconds", 0};
-
-const base::Feature kRecentCreationTimeGrantsLegacyCookieSemantics{
-    "RecentCreationTimeGrantsLegacyCookieSemantics",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-const base::FeatureParam<int>
-    kRecentCreationTimeGrantsLegacyCookieSemanticsMilliseconds{
-        &kRecentCreationTimeGrantsLegacyCookieSemantics,
-        "RecentCreationTimeGrantsLegacyCookieSemanticsMilliseconds", 0};
-
 #if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
 const base::Feature kCertVerifierBuiltinFeature{
     "CertVerifierBuiltin", base::FEATURE_DISABLED_BY_DEFAULT};
+#if defined(OS_MAC)
+const base::FeatureParam<int> kCertVerifierBuiltinImpl{
+    &kCertVerifierBuiltinFeature, "impl", 0};
+const base::FeatureParam<int> kCertVerifierBuiltinCacheSize{
+    &kCertVerifierBuiltinFeature, "cachesize", 0};
+#endif /* defined(OS_MAC) */
 #endif
 
-const base::Feature kAppendFrameOriginToNetworkIsolationKey{
-    "AppendFrameOriginToNetworkIsolationKey", base::FEATURE_ENABLED_BY_DEFAULT};
+#if BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
+// Enables the dual certificate verification trial feature.
+// https://crbug.com/649026
+const base::Feature kCertDualVerificationTrialFeature{
+    "CertDualVerificationTrial", base::FEATURE_DISABLED_BY_DEFAULT};
+#if defined(OS_MAC)
+const base::FeatureParam<int> kCertDualVerificationTrialImpl{
+    &kCertDualVerificationTrialFeature, "impl", 0};
+const base::FeatureParam<int> kCertDualVerificationTrialCacheSize{
+    &kCertDualVerificationTrialFeature, "cachesize", 0};
+#endif /* defined(OS_MAC) */
+#endif
 
 const base::Feature kTurnOffStreamingMediaCachingOnBattery{
     "TurnOffStreamingMediaCachingOnBattery", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -152,10 +173,10 @@ const base::Feature kTurnOffStreamingMediaCachingAlways{
     "TurnOffStreamingMediaCachingAlways", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kLegacyTLSEnforced{"LegacyTLSEnforced",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSchemefulSameSite{"SchemefulSameSite",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kTLSLegacyCryptoFallbackForMetrics{
     "TLSLegacyCryptoFallbackForMetrics", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -194,6 +215,29 @@ extern const base::FeatureParam<base::TimeDelta> kTimeoutTcpConnectAttemptMax(
     &kTimeoutTcpConnectAttempt,
     "TimeoutTcpConnectAttemptMax",
     base::TimeDelta::FromSeconds(30));
+
+constexpr base::Feature kFirstPartySets{"FirstPartySets",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::FeatureParam<bool> kFirstPartySetsIsDogfooder{
+    &kFirstPartySets, "FirstPartySetsIsDogfooder", false};
+
+const base::Feature kSameSiteCookiesBugfix1166211{
+    "SameSiteCookiesBugfix1166211", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kNoCookieChangeNotificationOnLoad{
+    "NoCookieChangeNotificationOnLoad", base::FEATURE_ENABLED_BY_DEFAULT};
+
+#if BUILDFLAG(ENABLE_REPORTING)
+const base::Feature kDocumentReporting{"DocumentReporting",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // BUILDFLAG(ENABLE_REPORTING)
+
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
+const base::Feature kUdpSocketPosixAlwaysUpdateBytesReceived{
+    "UdpSocketPosixAlwaysUpdateBytesReceived",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_POSIX) || defined(OS_FUCHSIA)
 
 }  // namespace features
 }  // namespace net

@@ -7,8 +7,8 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/values.h"
 #include "chromeos/login/login_state/login_state.h"
@@ -145,7 +145,7 @@ void AppendDeviceState(
   properties->type = private_api::ParseNetworkType(type);
   properties->state = state;
   if (device && state == private_api::DEVICE_STATE_TYPE_ENABLED)
-    properties->scanning.reset(new bool(device->scanning()));
+    properties->scanning = std::make_unique<bool>(device->scanning());
   if (device && type == ::onc::network_config::kCellular) {
     bool sim_present = !device->IsSimAbsent();
     properties->sim_present = std::make_unique<bool>(sim_present);
@@ -153,7 +153,8 @@ void AppendDeviceState(
       auto sim_lock_status = std::make_unique<private_api::SIMLockStatus>();
       sim_lock_status->lock_enabled = device->sim_lock_enabled();
       sim_lock_status->lock_type = device->sim_lock_type();
-      sim_lock_status->retries_left.reset(new int(device->sim_retries_left()));
+      sim_lock_status->retries_left =
+          std::make_unique<int>(device->sim_retries_left());
       properties->sim_lock_status = std::move(sim_lock_status);
     }
   }
@@ -231,6 +232,33 @@ private_api::Certificate GetCertDictionary(
   if (!cert.pkcs11_id.empty())
     api_cert.pkcs11_id = std::make_unique<std::string>(cert.pkcs11_id);
   return api_cert;
+}
+
+// This returns the strings provided by NetworkPortalDetector for backwards
+// compatibility, even though the implementation no longer queries
+// NetworkPortalDetector directly.
+// static
+std::string PortalStatusString(
+    chromeos::NetworkState::PortalState portal_state) {
+  using PortalState = chromeos::NetworkState::PortalState;
+  switch (portal_state) {
+    case PortalState::kUnknown:
+      return chromeos::NetworkPortalDetector::CaptivePortalStatusString(
+          chromeos::NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_UNKNOWN);
+    case PortalState::kOnline:
+      return chromeos::NetworkPortalDetector::CaptivePortalStatusString(
+          chromeos::NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE);
+    case PortalState::kPortalSuspected:
+    case PortalState::kPortal:
+    case PortalState::kNoInternet:
+      return chromeos::NetworkPortalDetector::CaptivePortalStatusString(
+          chromeos::NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL);
+    case PortalState::kProxyAuthRequired:
+      return chromeos::NetworkPortalDetector::CaptivePortalStatusString(
+          chromeos::NetworkPortalDetector::
+              CAPTIVE_PORTAL_STATUS_PROXY_AUTH_REQUIRED);
+  }
+  return "Unrecognized";
 }
 
 }  // namespace
@@ -468,7 +496,7 @@ void NetworkingPrivateChromeOS::GetNetworks(
       chromeos::network_util::TranslateNetworkListToONC(
           pattern, configured_only, visible_only, limit);
 
-  for (auto& value : *network_properties_list) {
+  for (auto& value : network_properties_list->GetList()) {
     base::DictionaryValue* network_dict = nullptr;
     value.GetAsDictionary(&network_dict);
     DCHECK(network_dict);
@@ -533,16 +561,21 @@ void NetworkingPrivateChromeOS::GetCaptivePortalStatus(
     const std::string& guid,
     StringCallback success_callback,
     FailureCallback failure_callback) {
-  if (!chromeos::network_portal_detector::IsInitialized()) {
-    std::move(failure_callback).Run(networking_private::kErrorNotReady);
+  const chromeos::NetworkState* network =
+      GetStateHandler()->GetNetworkStateFromGuid(guid);
+  if (!network) {
+    std::move(failure_callback)
+        .Run(extensions::networking_private::kErrorInvalidNetworkGuid);
     return;
   }
-
-  std::move(success_callback)
-      .Run(chromeos::NetworkPortalDetector::CaptivePortalStatusString(
-          chromeos::network_portal_detector::GetInstance()
-              ->GetCaptivePortalState(guid)
-              .status));
+  if (!network->IsConnectedState()) {
+    std::move(success_callback)
+        .Run(chromeos::NetworkPortalDetector::CaptivePortalStatusString(
+            chromeos::NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_OFFLINE));
+    return;
+  }
+  chromeos::NetworkState::PortalState portal_state = network->portal_state();
+  std::move(success_callback).Run(PortalStatusString(portal_state));
 }
 
 void NetworkingPrivateChromeOS::UnlockCellularSim(
@@ -772,7 +805,7 @@ void NetworkingPrivateChromeOS::AppendThirdPartyProviderName(
       ExtensionRegistry::Get(browser_context_)->enabled_extensions();
   for (const auto& extension : extensions) {
     if (extension->permissions_data()->HasAPIPermission(
-            APIPermission::kVpnProvider) &&
+            mojom::APIPermissionID::kVpnProvider) &&
         extension->id() == extension_id) {
       third_party_vpn->SetKey(::onc::third_party_vpn::kProviderName,
                               base::Value(extension->name()));

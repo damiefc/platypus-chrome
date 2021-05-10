@@ -9,7 +9,7 @@
 #include "third_party/blink/renderer/core/streams/promise_handler.h"
 #include "third_party/blink/renderer/core/streams/queue_with_sizes.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
-#include "third_party/blink/renderer/core/streams/readable_stream_reader.h"
+#include "third_party/blink/renderer/core/streams/readable_stream_default_reader.h"
 #include "third_party/blink/renderer/core/streams/stream_algorithms.h"
 #include "third_party/blink/renderer/core/streams/stream_promise_resolver.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -31,12 +31,12 @@ void ReadableStreamDefaultController::close(ScriptState* script_state,
   if (!CanCloseOrEnqueue(this)) {
     // The following code is just to provide a nice exception message.
     const char* errorDescription = nullptr;
-    if (this->is_close_requested_) {
+    if (is_close_requested_) {
       errorDescription =
           "Cannot close a readable stream that has already been requested to "
           "be closed";
     } else {
-      const ReadableStream* stream = this->controlled_readable_stream_;
+      const ReadableStream* stream = controlled_readable_stream_;
       switch (stream->state_) {
         case ReadableStream::kErrored:
           errorDescription = "Cannot close an errored readable stream";
@@ -314,10 +314,12 @@ StreamPromiseResolver* ReadableStreamDefaultController::PullSteps(
     // d. Return a promise resolved with !
     //    ReadableStreamCreateReadResult(chunk, false,
     //    stream.[[reader]].[[forAuthorCode]]).
+    ReadableStreamGenericReader* reader = stream->reader_;
     return StreamPromiseResolver::CreateResolved(
         script_state,
-        ReadableStream::CreateReadResult(script_state, chunk, false,
-                                         stream->reader_->for_author_code_));
+        ReadableStream::CreateReadResult(
+            script_state, chunk, false,
+            To<ReadableStreamDefaultReader>(reader)->for_author_code_));
   }
 
   // 3. Let pendingPromise be ! ReadableStreamAddReadRequest(stream).

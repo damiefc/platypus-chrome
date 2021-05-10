@@ -7,6 +7,7 @@
 #import <UIKit/UIKit.h>
 
 #include <stdint.h>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -23,7 +24,6 @@
 #include "base/path_service.h"
 #include "base/process/process_metrics.h"
 #include "base/rand_util.h"
-#include "base/strings/string16.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/platform_thread.h"
@@ -32,8 +32,9 @@
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "components/metrics/cpu_metrics_provider.h"
-#include "components/metrics/demographic_metrics_provider.h"
+#include "components/metrics/demographics/demographic_metrics_provider.h"
 #include "components/metrics/drive_metrics_provider.h"
+#include "components/metrics/entropy_state_provider.h"
 #include "components/metrics/field_trials_provider.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -204,6 +205,10 @@ IOSChromeMetricsServiceClient::GetChannel() {
   return metrics::AsProtobufChannel(::GetChannel());
 }
 
+bool IOSChromeMetricsServiceClient::IsExtendedStableChannel() {
+  return false;  // Not supported on iOS.
+}
+
 std::string IOSChromeMetricsServiceClient::GetVersionString() {
   return metrics::GetVersionString();
 }
@@ -264,6 +269,8 @@ void IOSChromeMetricsServiceClient::Initialize() {
 }
 
 void IOSChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
+  PrefService* local_state = GetApplicationContext()->GetLocalState();
+
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::NetworkMetricsProvider>(
           base::BindRepeating(&GetNetworkConnectionTrackerAsync)));
@@ -272,20 +279,23 @@ void IOSChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::make_unique<OmniboxMetricsProvider>());
 
   auto stability_metrics_provider =
-      std::make_unique<IOSChromeStabilityMetricsProvider>(
-          GetApplicationContext()->GetLocalState());
+      std::make_unique<IOSChromeStabilityMetricsProvider>(local_state);
   stability_metrics_provider_ = stability_metrics_provider.get();
   metrics_service_->RegisterMetricsProvider(
       std::move(stability_metrics_provider));
 
   metrics_service_->RegisterMetricsProvider(
-      std::make_unique<IOSChromeDefaultBrowserMetricsProvider>());
+      std::make_unique<IOSChromeDefaultBrowserMetricsProvider>(
+          metrics::MetricsLogUploader::MetricServiceType::UMA));
 
   // NOTE: metrics_state_manager_->IsMetricsReportingEnabled() returns false
   // during local testing. To test locally, modify
   // MetricsServiceAccessor::IsMetricsReportingEnabled() to return true.
   metrics_service_->RegisterMetricsProvider(CreateFileMetricsProvider(
       metrics_state_manager_->IsMetricsReportingEnabled()));
+
+  metrics_service_->RegisterMetricsProvider(
+        std::make_unique<metrics::EntropyStateProvider>(local_state));
 
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::ScreenInfoMetricsProvider>());
@@ -328,6 +338,10 @@ void IOSChromeMetricsServiceClient::RegisterUKMProviders() {
   ukm_service_->RegisterMetricsProvider(
       std::make_unique<variations::FieldTrialsProvider>(nullptr,
                                                         kUKMFieldTrialSuffix));
+
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<IOSChromeDefaultBrowserMetricsProvider>(
+          metrics::MetricsLogUploader::MetricServiceType::UKM));
 }
 
 void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
@@ -339,9 +353,6 @@ void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
       task_info(mach_task_self(), TASK_VM_INFO,
                 reinterpret_cast<task_info_t>(&task_info_data), &count);
   if (kr == KERN_SUCCESS) {
-    base::UmaHistogramMemoryKB(
-        "Memory.Browser",
-        (task_info_data.resident_size - task_info_data.reusable) / 1024);
     mach_vm_size_t footprint_mb = task_info_data.phys_footprint / 1024 / 1024;
     base::UmaHistogramMemoryLargeMB("Memory.Browser.MemoryFootprint",
                                     footprint_mb);
@@ -401,12 +412,13 @@ void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
 bool IOSChromeMetricsServiceClient::RegisterForNotifications() {
   tab_parented_subscription_ =
       TabParentingGlobalObserver::GetInstance()->RegisterCallback(
-          base::Bind(&IOSChromeMetricsServiceClient::OnTabParented,
-                     base::Unretained(this)));
+          base::BindRepeating(&IOSChromeMetricsServiceClient::OnTabParented,
+                              base::Unretained(this)));
   omnibox_url_opened_subscription_ =
       OmniboxEventGlobalTracker::GetInstance()->RegisterCallback(
-          base::Bind(&IOSChromeMetricsServiceClient::OnURLOpenedFromOmnibox,
-                     base::Unretained(this)));
+          base::BindRepeating(
+              &IOSChromeMetricsServiceClient::OnURLOpenedFromOmnibox,
+              base::Unretained(this)));
 
   std::vector<ChromeBrowserState*> loaded_browser_states =
       GetApplicationContext()

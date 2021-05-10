@@ -8,9 +8,11 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/logging.h"
 #include "base/win/registry.h"
 
@@ -285,7 +287,7 @@ bool RegistryKeyBackup::Initialize(HKEY root,
   // Does the key exist?
   LONG result = key.Open(root, key_path, kKeyReadNoNotify | wow64_access);
   if (result == ERROR_SUCCESS) {
-    key_data.reset(new KeyData());
+    key_data = std::make_unique<KeyData>();
     if (!key_data->Initialize(key)) {
       LOG(ERROR) << "Failed to backup key at " << key_path;
       return false;

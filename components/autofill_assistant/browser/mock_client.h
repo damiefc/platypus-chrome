@@ -10,6 +10,7 @@
 #include "components/autofill_assistant/browser/device_context.h"
 #include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/mock_personal_data_manager.h"
+#include "components/autofill_assistant/browser/service/service.h"
 #include "components/autofill_assistant/browser/website_login_manager.h"
 #include "components/version_info/channel.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -25,20 +26,22 @@ class MockClient : public Client {
   MOCK_CONST_METHOD0(GetLocale, std::string());
   MOCK_CONST_METHOD0(GetCountryCode, std::string());
   MOCK_CONST_METHOD0(GetDeviceContext, DeviceContext());
+  MOCK_CONST_METHOD0(GetWindowSize, base::Optional<std::pair<int, int>>());
+  MOCK_CONST_METHOD0(GetScreenOrientation,
+                     ClientContextProto::ScreenOrientation());
   MOCK_CONST_METHOD0(IsAccessibilityEnabled, bool());
   MOCK_CONST_METHOD0(GetEmailAddressForAccessTokenAccount, std::string());
   MOCK_CONST_METHOD0(GetChromeSignedInEmailAddress, std::string());
   MOCK_CONST_METHOD0(GetWebContents, content::WebContents*());
   MOCK_CONST_METHOD0(GetPersonalDataManager, autofill::PersonalDataManager*());
   MOCK_CONST_METHOD0(GetWebsiteLoginManager, WebsiteLoginManager*());
-  MOCK_CONST_METHOD0(GetPasswordManagerClient,
-                     password_manager::PasswordManagerClient*());
   MOCK_METHOD0(GetAccessTokenFetcher, AccessTokenFetcher*());
   MOCK_METHOD1(Shutdown, void(Metrics::DropOutReason reason));
   MOCK_METHOD1(RecordDropOut, void(Metrics::DropOutReason reason));
   MOCK_METHOD0(AttachUI, void());
   MOCK_METHOD0(DestroyUI, void());
   MOCK_CONST_METHOD0(HasHadUI, bool());
+  MOCK_CONST_METHOD0(IsFirstTimeTriggerScriptUser, bool());
 
  private:
   std::unique_ptr<MockPersonalDataManager> mock_personal_data_manager_;

@@ -7,11 +7,10 @@
 #include "cc/paint/display_item_list.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
+#include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkData.h"
-
-#include "third_party/blink/renderer/platform/graphics/logging_canvas.h"
 
 namespace blink {
 
@@ -51,19 +50,18 @@ static bool BitmapsEqual(sk_sp<const PaintRecord> record1,
   return !mismatch_count;
 }
 
-bool DrawingDisplayItem::Equals(const DisplayItem& other) const {
-  if (!DisplayItem::Equals(other))
-    return false;
+bool DrawingDisplayItem::EqualsForUnderInvalidationImpl(
+    const DrawingDisplayItem& other) const {
+  DCHECK(RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled());
 
   const auto& record = GetPaintRecord();
-  const auto& other_record =
-      static_cast<const DrawingDisplayItem&>(other).GetPaintRecord();
+  const auto& other_record = other.GetPaintRecord();
   if (!record && !other_record)
     return true;
   if (!record || !other_record)
     return false;
 
-  auto bounds = this->VisualRect();
+  auto bounds = VisualRect();
   const auto& other_bounds = other.VisualRect();
   if (bounds != other_bounds)
     return false;
@@ -78,7 +76,9 @@ bool DrawingDisplayItem::Equals(const DisplayItem& other) const {
   return BitmapsEqual(std::move(record), std::move(other_record), bounds);
 }
 
-SkColor DrawingDisplayItem::BackgroundColor(uint64_t& area) const {
+SkColor DrawingDisplayItem::BackgroundColor(float& area) const {
+  DCHECK(!IsTombstone());
+
   if (GetType() != DisplayItem::kBoxDecorationBackground &&
       GetType() != DisplayItem::kDocumentBackground &&
       GetType() != DisplayItem::kDocumentRootBackdrop)
@@ -111,8 +111,7 @@ SkColor DrawingDisplayItem::BackgroundColor(uint64_t& area) const {
       default:
         continue;
     }
-    area =
-        base::saturated_cast<uint64_t>(item_rect.width() * item_rect.height());
+    area = item_rect.width() * item_rect.height();
     return flags.getColor();
   }
   return SK_ColorTRANSPARENT;

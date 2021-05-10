@@ -64,6 +64,7 @@
 #undef IPC_MESSAGE_EXTRA
 #define IPC_MESSAGE_IMPL
 #include "ipc/ipc_message_macros.h"
+#include "ipc/ipc_message_start.h"
 #include "ipc/ipc_message_templates_impl.h"
 
 #undef IPC_MESSAGE_START
@@ -150,11 +151,11 @@ class RenderThreadImplBrowserTest : public testing::Test,
   RenderThreadImplBrowserTest() {}
 
   void SetUp() override {
-    content_renderer_client_.reset(new ContentRendererClient());
+    content_renderer_client_ = std::make_unique<ContentRendererClient>();
     SetRendererClientForTesting(content_renderer_client_.get());
 
-    browser_threads_.reset(
-        new BrowserTaskEnvironment(BrowserTaskEnvironment::REAL_IO_THREAD));
+    browser_threads_ = std::make_unique<BrowserTaskEnvironment>(
+        BrowserTaskEnvironment::REAL_IO_THREAD);
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
         GetIOThreadTaskRunner({});
 
@@ -163,7 +164,7 @@ class RenderThreadImplBrowserTest : public testing::Test,
         ChildProcessHost::Create(this, ChildProcessHost::IpcMode::kNormal);
     process_host_->CreateChannelMojo();
 
-    process_.reset(new RenderProcess);
+    process_ = std::make_unique<RenderProcess>();
     test_task_counter_ = base::MakeRefCounted<TestTaskCounter>();
 
     // RenderThreadImpl expects the browser to pass these flags.
@@ -265,18 +266,6 @@ class RenderThreadImplBrowserTest : public testing::Test,
  private:
   DISALLOW_COPY_AND_ASSIGN(RenderThreadImplBrowserTest);
 };
-
-// Check that InputHandlerManager outlives compositor thread because it uses
-// raw pointers to post tasks.
-// Disabled under LeakSanitizer due to memory leaks. http://crbug.com/348994
-// Disabled on Windows due to flakiness: http://crbug.com/728034.
-#if defined(OS_WIN)
-#define MAYBE_InputHandlerManagerDestroyedAfterCompositorThread \
-  DISABLED_InputHandlerManagerDestroyedAfterCompositorThread
-#else
-#define MAYBE_InputHandlerManagerDestroyedAfterCompositorThread \
-  InputHandlerManagerDestroyedAfterCompositorThread
-#endif
 
 // Disabled under LeakSanitizer due to memory leaks.
 TEST_F(RenderThreadImplBrowserTest,
@@ -446,7 +435,7 @@ IN_PROC_BROWSER_TEST_P(RenderThreadImplGpuMemoryBufferBrowserTest,
   std::unique_ptr<gfx::GpuMemoryBuffer> buffer =
       memory_buffer_manager()->CreateGpuMemoryBuffer(
           buffer_size, format, gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
-          gpu::kNullSurfaceHandle);
+          gpu::kNullSurfaceHandle, nullptr);
   ASSERT_TRUE(buffer);
   EXPECT_EQ(format, buffer->GetFormat());
 

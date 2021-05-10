@@ -7,14 +7,15 @@
 #include <cmath>
 #include <utility>
 
+#include "ash/constants/devicetype.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "base/bind.h"
 #include "base/process/launch.h"
 #include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
-#include "chrome/browser/chromeos/accessibility/magnification_manager.h"
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/power/ml/adaptive_screen_brightness_ukm_logger.h"
 #include "chrome/browser/chromeos/power/ml/adaptive_screen_brightness_ukm_logger_impl.h"
 #include "chrome/browser/chromeos/power/ml/recent_events_counter.h"
@@ -24,7 +25,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chromeos/constants/devicetype.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager/backlight.pb.h"
 #include "components/prefs/pref_service.h"
@@ -35,6 +35,7 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/viz/public/mojom/compositing/video_detector_observer.mojom.h"
 #include "ui/aura/env.h"
+#include "ui/compositor/compositor.h"
 
 namespace chromeos {
 namespace power {
@@ -127,10 +128,10 @@ AdaptiveScreenBrightnessManager::AdaptiveScreenBrightnessManager(
                                                 kNumUserInputEventsBuckets)) {
   DCHECK(ukm_logger_);
   DCHECK(detector);
-  user_activity_observer_.Add(detector);
+  user_activity_observation_.Observe(detector);
 
   DCHECK(power_manager_client);
-  power_manager_client_observer_.Add(power_manager_client);
+  power_manager_client_observation_.Observe(power_manager_client);
   power_manager_client->RequestStatusUpdate();
   power_manager_client->GetSwitchStates(
       base::BindOnce(&AdaptiveScreenBrightnessManager::OnReceiveSwitchStates,
@@ -271,13 +272,13 @@ void AdaptiveScreenBrightnessManager::PowerChanged(
 
 void AdaptiveScreenBrightnessManager::LidEventReceived(
     const chromeos::PowerManagerClient::LidState state,
-    const base::TimeTicks& /* timestamp */) {
+    base::TimeTicks /* timestamp */) {
   lid_state_ = state;
 }
 
 void AdaptiveScreenBrightnessManager::TabletModeEventReceived(
     const chromeos::PowerManagerClient::TabletMode mode,
-    const base::TimeTicks& /* timestamp */) {
+    base::TimeTicks /* timestamp */) {
   tablet_mode_ = mode;
 }
 

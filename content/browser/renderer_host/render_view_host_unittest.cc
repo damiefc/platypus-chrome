@@ -11,12 +11,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
-#include "content/browser/renderer_host/render_frame_message_filter.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/renderer_host/render_widget_helper.h"
-#include "content/common/frame_messages.h"
-#include "content/common/input_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/storage_partition.h"
@@ -32,8 +28,11 @@
 #include "content/test/test_web_contents.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/filename_util.h"
+#include "skia/ext/skia_utils_base.h"
 #include "third_party/blink/public/common/page/drag_operation.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/skia_util.h"
 
 namespace content {
 
@@ -84,8 +83,8 @@ TEST_F(RenderViewHostTest, FilterAbout) {
 // Ensure we do not grant bindings to a process shared with unprivileged views.
 TEST_F(RenderViewHostTest, DontGrantBindingsToSharedProcess) {
   // Create another view in the same process.
-  std::unique_ptr<TestWebContents> new_web_contents(
-      TestWebContents::Create(browser_context(), rvh()->GetSiteInstance()));
+  std::unique_ptr<TestWebContents> new_web_contents(TestWebContents::Create(
+      browser_context(), main_rfh()->GetSiteInstance()));
 
   main_rfh()->AllowBindings(BINDINGS_POLICY_WEB_UI);
   EXPECT_FALSE(main_rfh()->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI);
@@ -126,7 +125,7 @@ TEST_F(RenderViewHostTest, StartDragging) {
   DropData drop_data;
   // If `html` is not populated, `html_base_url` won't be populated when
   // converting to `DragData` with `DropDataToDragData`.
-  drop_data.html = base::string16();
+  drop_data.html = std::u16string();
 
   GURL blocked_url = GURL(kBlockedURL);
   GURL file_url = GURL("file:///home/user/secrets.txt");
@@ -178,7 +177,8 @@ TEST_F(RenderViewHostTest, DragEnteredFileURLsStillBlocked) {
   // RenderWidgetHost to work with OOPIFs. See crbug.com/647249.
   rvh()->GetWidget()->FilterDropData(&dropped_data);
   rvh()->GetWidget()->DragTargetDragEnter(
-      dropped_data, client_point, screen_point, blink::kDragOperationNone, 0);
+      dropped_data, client_point, screen_point, blink::kDragOperationNone, 0,
+      base::DoNothing());
 
   int id = process()->GetID();
   ChildProcessSecurityPolicyImpl* policy =
@@ -217,7 +217,7 @@ TEST_F(RenderViewHostTest, NavigationWithBadHistoryItemFiles) {
   auto navigation1 =
       NavigationSimulatorImpl::CreateRendererInitiated(url, main_test_rfh());
   navigation1->set_page_state(
-      PageState::CreateForTesting(url, false, "data", &file_path));
+      blink::PageState::CreateForTesting(url, false, "data", &file_path));
   navigation1->Commit();
   EXPECT_EQ(1, process()->bad_msg_count());
 
@@ -226,7 +226,7 @@ TEST_F(RenderViewHostTest, NavigationWithBadHistoryItemFiles) {
   auto navigation2 =
       NavigationSimulatorImpl::CreateRendererInitiated(url, main_test_rfh());
   navigation2->set_page_state(
-      PageState::CreateForTesting(url, false, "data", &file_path));
+      blink::PageState::CreateForTesting(url, false, "data", &file_path));
   navigation2->Commit();
   EXPECT_EQ(1, process()->bad_msg_count());
 }

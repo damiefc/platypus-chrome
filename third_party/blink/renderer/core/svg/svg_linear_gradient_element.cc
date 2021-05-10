@@ -72,7 +72,8 @@ void SVGLinearGradientElement::Trace(Visitor* visitor) const {
 }
 
 void SVGLinearGradientElement::SvgAttributeChanged(
-    const QualifiedName& attr_name) {
+    const SvgAttributeChangedParams& params) {
+  const QualifiedName& attr_name = params.name;
   if (attr_name == svg_names::kX1Attr || attr_name == svg_names::kX2Attr ||
       attr_name == svg_names::kY1Attr || attr_name == svg_names::kY2Attr) {
     SVGElement::InvalidationGuard invalidation_guard(this);
@@ -81,12 +82,12 @@ void SVGLinearGradientElement::SvgAttributeChanged(
     return;
   }
 
-  SVGGradientElement::SvgAttributeChanged(attr_name);
+  SVGGradientElement::SvgAttributeChanged(params);
 }
 
 LayoutObject* SVGLinearGradientElement::CreateLayoutObject(const ComputedStyle&,
                                                            LegacyLayout) {
-  return new LayoutSVGResourceLinearGradient(this);
+  return MakeGarbageCollected<LayoutSVGResourceLinearGradient>(this);
 }
 
 static void SetGradientAttributes(const SVGGradientElement& element,

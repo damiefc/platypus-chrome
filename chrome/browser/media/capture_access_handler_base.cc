@@ -8,7 +8,10 @@
 #include <utility>
 
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/ui/ui_features.h"
+#include "chrome/common/webui_url_constants.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -20,10 +23,10 @@
 #include "ui/aura/window.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "base/hash/sha1.h"
 #include "base/strings/string_number_conversions.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 using content::BrowserThread;
 
@@ -131,12 +134,15 @@ void CaptureAccessHandlerBase::UpdateMediaRequestState(
     blink::mojom::MediaStreamType stream_type,
     content::MediaRequestState state) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if ((stream_type !=
-       blink::mojom::MediaStreamType::GUM_DESKTOP_VIDEO_CAPTURE) &&
-      (stream_type != blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE) &&
-      (stream_type != blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE) &&
-      (stream_type != blink::mojom::MediaStreamType::DISPLAY_AUDIO_CAPTURE)) {
-    return;
+  switch (stream_type) {
+    case blink::mojom::MediaStreamType::GUM_DESKTOP_VIDEO_CAPTURE:
+    case blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE:
+    case blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE:
+    case blink::mojom::MediaStreamType::DISPLAY_AUDIO_CAPTURE:
+    case blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB:
+      break;
+    default:
+      return;
   }
 
   if (state == content::MEDIA_REQUEST_STATE_DONE) {
@@ -164,7 +170,7 @@ void CaptureAccessHandlerBase::UpdateExtensionTrusted(
   const bool is_trusted = MediaCaptureDevicesDispatcher::IsOriginForCasting(
                               request.security_origin) ||
                           IsExtensionAllowedForScreenCapture(extension) ||
-                          IsBuiltInExtension(request.security_origin);
+                          IsBuiltInFeedbackUI(request.security_origin);
   UpdateTrusted(request, is_trusted);
 }
 
@@ -309,7 +315,7 @@ bool CaptureAccessHandlerBase::IsExtensionAllowedForScreenCapture(
   if (!extension)
     return false;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   std::string hash = base::SHA1HashString(extension->id());
   std::string hex_hash = base::HexEncode(hash.c_str(), hash.length());
 
@@ -320,11 +326,13 @@ bool CaptureAccessHandlerBase::IsExtensionAllowedForScreenCapture(
          hex_hash == "81986D4F846CEDDDB962643FA501D1780DD441BB";
 #else
   return false;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
-bool CaptureAccessHandlerBase::IsBuiltInExtension(const GURL& origin) {
+bool CaptureAccessHandlerBase::IsBuiltInFeedbackUI(const GURL& origin) {
   return
       // Feedback Extension.
-      origin.spec() == "chrome-extension://gfdkimpbcpahaombhbimeihdjnejgicl/";
+      origin.spec() == "chrome-extension://gfdkimpbcpahaombhbimeihdjnejgicl/" ||
+      (origin.spec() == chrome::kChromeUIFeedbackURL &&
+       base::FeatureList::IsEnabled(features::kWebUIFeedback));
 }

@@ -11,11 +11,11 @@
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
-#include "chrome/browser/chromeos/arc/arc_util.h"
-#include "chrome/browser/chromeos/arc/fileapi/arc_content_file_system_url_util.h"
-#include "chrome/browser/chromeos/arc/fileapi/arc_file_system_operation_runner.h"
-#include "chrome/browser/chromeos/drive/drive_integration_service.h"
-#include "chrome/browser/chromeos/drive/file_system_util.h"
+#include "chrome/browser/ash/arc/arc_util.h"
+#include "chrome/browser/ash/arc/fileapi/arc_content_file_system_url_util.h"
+#include "chrome/browser/ash/arc/fileapi/arc_file_system_operation_runner.h"
+#include "chrome/browser/ash/drive/drive_integration_service.h"
+#include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_system_provider/mount_path_util.h"
@@ -115,7 +115,8 @@ void PrepareFileOnIOThread(
     base::OnceCallback<void(bool)> callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  file_system_context->operation_runner()->FileExists(
+  auto* const operation_runner = file_system_context->operation_runner();
+  operation_runner->FileExists(
       url, base::BindOnce(&PrepareFileAfterCheckExistOnIOThread,
                           std::move(file_system_context), url,
                           base::BindOnce(&BoolCallbackAsFileErrorCallback,
@@ -126,8 +127,8 @@ void PrepareFileOnIOThread(
 
 bool IsNonNativeFileSystemType(storage::FileSystemType type) {
   switch (type) {
-    case storage::kFileSystemTypeNativeLocal:
-    case storage::kFileSystemTypeRestrictedNativeLocal:
+    case storage::kFileSystemTypeLocal:
+    case storage::kFileSystemTypeRestrictedLocal:
     case storage::kFileSystemTypeDriveFs:
     case storage::kFileSystemTypeSmbFs:
       return false;

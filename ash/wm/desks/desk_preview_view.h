@@ -10,6 +10,7 @@
 #include "ash/ash_export.h"
 #include "base/macros.h"
 #include "ui/aura/window_occlusion_tracker.h"
+#include "ui/compositor/layer.h"
 #include "ui/views/controls/button/button.h"
 
 namespace ui {
@@ -61,13 +62,12 @@ class WmHighlightItemBorder;
 // descendant of the other. Otherwise, this will trigger a render surface.
 class ASH_EXPORT DeskPreviewView : public views::Button {
  public:
-  explicit DeskPreviewView(DeskMiniView* mini_view);
+  DeskPreviewView(PressedCallback callback, DeskMiniView* mini_view);
   ~DeskPreviewView() override;
 
-  // Returns the height of the DeskPreviewView based on whether the |compact|
-  // small screens layout is used or not. In non-compact layouts, the height of
-  // the preview is a function of the |root| window's height.
-  static int GetHeight(aura::Window* root, bool compact);
+  // Returns the height of the DeskPreviewView, which is a function of the
+  // |root| window's height.
+  static int GetHeight(aura::Window* root);
 
   void SetBorderColor(SkColor color);
 
@@ -82,6 +82,10 @@ class ASH_EXPORT DeskPreviewView : public views::Button {
   // views::View:
   const char* GetClassName() const override;
   void Layout() override;
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+  bool OnMouseDragged(const ui::MouseEvent& event) override;
+  void OnMouseReleased(const ui::MouseEvent& event) override;
+  void OnGestureEvent(ui::GestureEvent* event) override;
 
  private:
   class ShadowRenderer;

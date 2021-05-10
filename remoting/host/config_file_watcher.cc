@@ -8,7 +8,7 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -135,14 +135,14 @@ void ConfigFileWatcherImpl::WatchOnIoThread() {
 
   // Create the timer that will be used for delayed-reading the configuration
   // file.
-  config_updated_timer_.reset(
-      new base::DelayTimer(FROM_HERE, base::TimeDelta::FromSeconds(2), this,
-                           &ConfigFileWatcherImpl::ReloadConfig));
+  config_updated_timer_ = std::make_unique<base::DelayTimer>(
+      FROM_HERE, base::TimeDelta::FromSeconds(2), this,
+      &ConfigFileWatcherImpl::ReloadConfig);
 
   // Start watching the configuration file.
-  config_watcher_.reset(new base::FilePathWatcher());
+  config_watcher_ = std::make_unique<base::FilePathWatcher>();
   if (!config_watcher_->Watch(
-          config_path_, false,
+          config_path_, base::FilePathWatcher::Type::kNonRecursive,
           base::BindRepeating(&ConfigFileWatcherImpl::OnConfigUpdated, this))) {
     PLOG(ERROR) << "Couldn't watch file '" << config_path_.value() << "'";
     main_task_runner_->PostTask(

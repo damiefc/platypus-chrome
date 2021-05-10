@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
+#include "media/capture/video/video_capture_feedback.h"
 #include "media/cast/cast_config.h"
 #include "media/cast/cast_sender.h"
 #include "media/cast/common/rtp_time.h"
@@ -43,9 +44,9 @@ class VideoSender : public FrameSender {
               const FrameSenderConfig& video_config,
               StatusChangeCallback status_change_cb,
               const CreateVideoEncodeAcceleratorCallback& create_vea_cb,
-              const CreateVideoEncodeMemoryCallback& create_video_encode_mem_cb,
               CastTransport* const transport_sender,
-              PlayoutDelayChangeCB playout_delay_change_cb);
+              PlayoutDelayChangeCB playout_delay_change_cb,
+              media::VideoCaptureFeedbackCB feedback_callback);
 
   ~VideoSender() override;
 
@@ -92,6 +93,8 @@ class VideoSender : public FrameSender {
   int last_bitrate_;
 
   PlayoutDelayChangeCB playout_delay_change_cb_;
+
+  media::VideoCaptureFeedbackCB feedback_cb_;
 
   // Indicates we are operating in a mode where the target playout latency is
   // low for best user experience. When operating in low latency mode, we

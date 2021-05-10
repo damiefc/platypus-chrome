@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/constants/ash_switches.h"
 #include "ash/display/event_transformation_handler.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/shell.h"
@@ -22,7 +23,6 @@
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
@@ -75,7 +75,7 @@ class ImmersiveRevealEndedWaiter : public ImmersiveModeController::Observer {
   }
 
   ImmersiveModeController* immersive_controller_;
-  base::Closure quit_closure_;
+  base::OnceClosure quit_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(ImmersiveRevealEndedWaiter);
 };
@@ -250,6 +250,10 @@ class TabScrubberTest : public InProcessBrowserTest,
     ASSERT_EQ(num_tabs, browser->tab_strip_model()->active_index());
     tab_strip->StopAnimating(true);
     ASSERT_FALSE(tab_strip->IsAnimating());
+    // Perform any scheduled layouts so the tabstrip is in a steady state.
+    BrowserView::GetBrowserViewForBrowser(browser)
+        ->GetWidget()
+        ->LayoutRootViewIfNecessary();
   }
 
   // TabStripModelObserver overrides.

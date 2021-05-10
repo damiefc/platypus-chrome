@@ -6,16 +6,19 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/platform_util.h"
@@ -43,7 +46,7 @@
 #include "chrome/browser/file_select_helper_contacts_android.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "content/public/browser/site_instance.h"
 #endif
@@ -67,7 +70,7 @@ namespace {
 
 #if defined(OS_ANDROID)
 // The MIME type for selecting contacts.
-constexpr char kContactsMimeType[] = "text/json+contacts";
+constexpr char16_t kContactsMimeType[] = u"text/json+contacts";
 #endif
 
 void DeleteFiles(std::vector<base::FilePath> paths) {
@@ -94,7 +97,7 @@ bool IsDownloadAllowedBySafeBrowsing(
     // failed safe browsing ping.
     case Result::UNKNOWN:
     case Result::SAFE:
-    case Result::WHITELISTED_BY_POLICY:
+    case Result::ALLOWLISTED_BY_POLICY:
       return true;
 
     case Result::DANGEROUS:
@@ -229,7 +232,7 @@ void FileSelectHelper::FileSelectionCanceled(void* params) {
 void FileSelectHelper::StartNewEnumeration(const base::FilePath& path) {
   base_dir_ = path;
   auto entry = std::make_unique<ActiveDirectoryEnumeration>(path);
-  entry->lister_.reset(new net::DirectoryLister(
+  entry->lister_ = base::WrapUnique(new net::DirectoryLister(
       path, net::DirectoryLister::NO_SORT_RECURSIVE, this));
   entry->lister_->Start();
   directory_enumeration_ = std::move(entry);
@@ -279,7 +282,7 @@ void FileSelectHelper::OnListDone(int error) {
     std::vector<FileChooserFileInfoPtr> chooser_files;
     for (const auto& file_path : entry->results_) {
       chooser_files.push_back(FileChooserFileInfo::NewNativeFile(
-          blink::mojom::NativeFileInfo::New(file_path, base::string16())));
+          blink::mojom::NativeFileInfo::New(file_path, std::u16string())));
     }
 
     listener_->FileSelected(std::move(chooser_files), base_dir_,
@@ -294,7 +297,7 @@ void FileSelectHelper::ConvertToFileChooserFileInfoList(
   if (AbortIfWebContentsDestroyed())
     return;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (!files.empty()) {
     if (!IsValidProfile(profile_)) {
       RunFileChooserEnd();
@@ -305,15 +308,14 @@ void FileSelectHelper::ConvertToFileChooserFileInfoList(
     content::SiteInstance* site_instance =
         render_frame_host_->GetSiteInstance();
     storage::FileSystemContext* file_system_context =
-        content::BrowserContext::GetStoragePartition(profile_, site_instance)
-            ->GetFileSystemContext();
+        profile_->GetStoragePartition(site_instance)->GetFileSystemContext();
     file_manager::util::ConvertSelectedFileInfoListToFileChooserFileInfoList(
         file_system_context, site_instance->GetSiteURL(), files,
-        base::BindOnce(&FileSelectHelper::PerformSafeBrowsingDeepScanIfNeeded,
+        base::BindOnce(&FileSelectHelper::PerformContentAnalysisIfNeeded,
                        this));
     return;
   }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   std::vector<FileChooserFileInfoPtr> chooser_files;
   for (const auto& file : files) {
@@ -323,27 +325,27 @@ void FileSelectHelper::ConvertToFileChooserFileInfoList(
             base::FilePath(file.display_name).AsUTF16Unsafe())));
   }
 
-  PerformSafeBrowsingDeepScanIfNeeded(std::move(chooser_files));
+  PerformContentAnalysisIfNeeded(std::move(chooser_files));
 }
 
-void FileSelectHelper::PerformSafeBrowsingDeepScanIfNeeded(
+void FileSelectHelper::PerformContentAnalysisIfNeeded(
     std::vector<FileChooserFileInfoPtr> list) {
   if (AbortIfWebContentsDestroyed())
     return;
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
-  safe_browsing::DeepScanningDialogDelegate::Data data;
-  if (safe_browsing::DeepScanningDialogDelegate::IsEnabled(
+  enterprise_connectors::ContentAnalysisDelegate::Data data;
+  if (enterprise_connectors::ContentAnalysisDelegate::IsEnabled(
           profile_, render_frame_host_->GetLastCommittedURL(), &data,
           enterprise_connectors::AnalysisConnector::FILE_ATTACHED)) {
     data.paths.reserve(list.size());
     for (const auto& file : list)
       data.paths.push_back(file->get_native_file()->file_path);
 
-    safe_browsing::DeepScanningDialogDelegate::ShowForWebContents(
+    enterprise_connectors::ContentAnalysisDelegate::CreateForWebContents(
         web_contents_, std::move(data),
-        base::BindOnce(&FileSelectHelper::DeepScanCompletionCallback, this,
-                       std::move(list)),
+        base::BindOnce(&FileSelectHelper::ContentAnalysisCompletionCallback,
+                       this, std::move(list)),
         safe_browsing::DeepScanAccessPoint::UPLOAD);
   } else {
     NotifyListenerAndEnd(std::move(list));
@@ -354,10 +356,10 @@ void FileSelectHelper::PerformSafeBrowsingDeepScanIfNeeded(
 }
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
-void FileSelectHelper::DeepScanCompletionCallback(
+void FileSelectHelper::ContentAnalysisCompletionCallback(
     std::vector<blink::mojom::FileChooserFileInfoPtr> list,
-    const safe_browsing::DeepScanningDialogDelegate::Data& data,
-    const safe_browsing::DeepScanningDialogDelegate::Result& result) {
+    const enterprise_connectors::ContentAnalysisDelegate::Data& data,
+    const enterprise_connectors::ContentAnalysisDelegate::Result& result) {
   if (AbortIfWebContentsDestroyed())
     return;
 
@@ -429,7 +431,7 @@ void FileSelectHelper::DontAbortOnMissingWebContentsForTesting() {
 
 std::unique_ptr<ui::SelectFileDialog::FileTypeInfo>
 FileSelectHelper::GetFileTypesFromAcceptType(
-    const std::vector<base::string16>& accept_types) {
+    const std::vector<std::u16string>& accept_types) {
   std::unique_ptr<ui::SelectFileDialog::FileTypeInfo> base_file_type(
       new ui::SelectFileDialog::FileTypeInfo());
   if (accept_types.empty())
@@ -505,8 +507,7 @@ void FileSelectHelper::RunFileChooser(
 
 #if defined(OS_ANDROID)
   if (params.accept_types.size() == 1 &&
-      params.accept_types[0].compare(base::ASCIIToUTF16(kContactsMimeType)) ==
-          0) {
+      params.accept_types[0] == kContactsMimeType) {
     scoped_refptr<FileSelectHelperContactsAndroid> file_select_helper_android(
         new FileSelectHelperContactsAndroid(profile));
     file_select_helper_android->RunFileChooser(
@@ -635,7 +636,7 @@ void FileSelectHelper::CheckDownloadRequestWithSafeBrowsing(
       base::BindOnce(
           &InterpretSafeBrowsingVerdict,
           base::BindOnce(&FileSelectHelper::ProceedWithSafeBrowsingVerdict,
-                         this, default_file_path, base::Passed(&params))));
+                         this, default_file_path, std::move(params))));
 #endif
 }
 
@@ -688,7 +689,7 @@ void FileSelectHelper::RunFileChooserOnUIThread(
 
 #if defined(OS_ANDROID)
   // Android needs the original MIME types and an additional capture value.
-  std::pair<std::vector<base::string16>, bool> accept_types =
+  std::pair<std::vector<std::u16string>, bool> accept_types =
       std::make_pair(params->accept_types, params->use_media_capture);
 #endif
 

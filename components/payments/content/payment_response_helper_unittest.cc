@@ -10,7 +10,9 @@
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_executor.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
@@ -27,7 +29,9 @@ class PaymentResponseHelperTest : public testing::Test,
                                   public PaymentResponseHelper::Delegate {
  protected:
   PaymentResponseHelperTest()
-      : test_payment_request_delegate_(&test_personal_data_manager_),
+      : test_payment_request_delegate_(
+            std::make_unique<base::SingleThreadTaskExecutor>(),
+            &test_personal_data_manager_),
         address_(autofill::test::GetFullProfile()),
         billing_addresses_({&address_}) {
     test_personal_data_manager_.AddProfile(address_);
@@ -91,7 +95,7 @@ class PaymentResponseHelperTest : public testing::Test,
   const mojom::PaymentResponsePtr& response() { return payment_response_; }
   autofill::AutofillProfile* test_address() { return &address_; }
   const autofill::CreditCard& test_credit_card() { return visa_card_; }
-  PaymentApp* test_app() { return autofill_app_.get(); }
+  base::WeakPtr<PaymentApp> test_app() { return autofill_app_->AsWeakPtr(); }
   PaymentRequestDelegate* test_payment_request_delegate() {
     return &test_payment_request_delegate_;
   }
@@ -274,7 +278,7 @@ TEST_F(PaymentResponseHelperTest,
   mojom::PaymentOptionsPtr options = mojom::PaymentOptions::New();
   options->request_payer_phone = true;
   test_address()->SetRawInfo(autofill::PHONE_HOME_WHOLE_NUMBER,
-                             base::UTF8ToUTF16("(515) 223-1234"));
+                             u"(515) 223-1234");
   RecreateSpecWithOptions(std::move(options));
 
   PaymentResponseHelper helper("en-US", spec(), test_app(),
@@ -293,7 +297,7 @@ TEST_F(PaymentResponseHelperTest,
   mojom::PaymentOptionsPtr options = mojom::PaymentOptions::New();
   options->request_payer_phone = true;
   test_address()->SetRawInfo(autofill::PHONE_HOME_WHOLE_NUMBER,
-                             base::UTF8ToUTF16("(515) 123-1234"));
+                             u"(515) 123-1234");
   RecreateSpecWithOptions(std::move(options));
 
   PaymentResponseHelper helper("en-US", spec(), test_app(),

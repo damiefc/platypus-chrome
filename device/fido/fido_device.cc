@@ -7,9 +7,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "components/device_event_log/device_event_log.h"
-#include "device/fido/ctap_empty_authenticator_request.h"
 #include "device/fido/device_response_converter.h"
 #include "device/fido/fido_constants.h"
 
@@ -22,9 +21,20 @@ void FidoDevice::TryWink(base::OnceClosure callback) {
   std::move(callback).Run();
 }
 
-base::string16 FidoDevice::GetDisplayName() const {
-  const auto id = GetId();
-  return base::string16(id.begin(), id.end());
+std::string FidoDevice::GetDisplayName() const {
+  return GetId();
+}
+
+bool FidoDevice::SupportsCredentialProbing() const {
+  switch (DeviceTransport()) {
+    // caBLE devices might not support silent probing so always send singular
+    // requests.
+    case FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy:
+    case FidoTransportProtocol::kAndroidAccessory:
+      return false;
+    default:
+      return true;
+  }
 }
 
 bool FidoDevice::IsInPairingMode() const {
@@ -50,9 +60,10 @@ void FidoDevice::DiscoverSupportedProtocolAndDeviceInfo(
   supported_protocol_ = ProtocolVersion::kCtap2;
   FIDO_LOG(DEBUG)
       << "Sending CTAP2 AuthenticatorGetInfo request to authenticator.";
-  DeviceTransact(AuthenticatorGetInfoRequest().Serialize(),
-                 base::BindOnce(&FidoDevice::OnDeviceInfoReceived, GetWeakPtr(),
-                                std::move(done)));
+  DeviceTransact(
+      {static_cast<uint8_t>(CtapRequestCommand::kAuthenticatorGetInfo)},
+      base::BindOnce(&FidoDevice::OnDeviceInfoReceived, GetWeakPtr(),
+                     std::move(done)));
 }
 
 bool FidoDevice::SupportedProtocolIsInitialized() {

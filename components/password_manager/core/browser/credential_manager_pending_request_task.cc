@@ -17,6 +17,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/stl_util.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliated_match_helper.h"
+#include "components/password_manager/core/browser/credential_manager_utils.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
@@ -38,6 +39,27 @@ bool IsBetterMatch(const PasswordForm& form1, const PasswordForm& form2) {
   if (form1.date_last_used > form2.date_last_used)
     return true;
   return form1.date_created > form2.date_created;
+}
+
+// Inserts `form` into `set` if no equally comparing element exists yet, or
+// replaces an existing `old_form` if `pred(old_form, form)` evaluates to true.
+// Returns whether `set` contains `form` following this operation.
+template <typename Comp, typename Predicate>
+bool InsertOrReplaceIf(base::flat_set<std::unique_ptr<PasswordForm>, Comp>& set,
+                       std::unique_ptr<PasswordForm> form,
+                       Predicate pred) {
+  auto lower = set.lower_bound(form);
+  if (lower == set.end() || set.key_comp()(form, *lower)) {
+    set.insert(lower, std::move(form));
+    return true;
+  }
+
+  if (pred(*lower, form)) {
+    *lower = std::move(form);
+    return true;
+  }
+
+  return false;
 }
 
 // Creates a base::flat_set of std::unique_ptr<PasswordForm> that uses
@@ -71,14 +93,15 @@ void FilterDuplicates(std::vector<std::unique_ptr<PasswordForm>>* forms) {
       // |forms| contains credentials from both the profile and account stores.
       // Therefore, it could potentially contains duplicate federated
       // credentials. In case of duplicates, favor the account store version.
-      auto result =
-          federated_forms_with_unique_username.insert(std::move(form));
-      if (!result.second && form->IsUsingAccountStore())
-        *result.first = std::move(form);
+      InsertOrReplaceIf(federated_forms_with_unique_username, std::move(form),
+                        [](const auto& old_form, const auto& new_form) {
+                          return new_form->IsUsingAccountStore();
+                        });
     } else {
-      auto result = credentials.insert(std::move(form));
-      if (!result.second && IsBetterMatch(*form, **result.first))
-        *result.first = std::move(form);
+      InsertOrReplaceIf(credentials, std::move(form),
+                        [](const auto& old_form, const auto& new_form) {
+                          return IsBetterMatch(*new_form, *old_form);
+                        });
     }
   }
   // |credentials| contains credentials from both profile and account stores.
@@ -95,9 +118,10 @@ void FilterDuplicates(std::vector<std::unique_ptr<PasswordForm>>* forms) {
       });
 
   for (auto& form : std::move(credentials).extract()) {
-    auto result = credentials_with_unique_passwords.insert(std::move(form));
-    if (!result.second && form->IsUsingAccountStore())
-      *result.first = std::move(form);
+    InsertOrReplaceIf(credentials_with_unique_passwords, std::move(form),
+                      [](const auto& old_form, const auto& new_form) {
+                        return new_form->IsUsingAccountStore();
+                      });
   }
   *forms = std::move(credentials_with_unique_passwords).extract();
 
@@ -241,10 +265,7 @@ void CredentialManagerPendingRequestTask::ProcessForms(
   if (can_use_autosignin && !local_results[0]->skip_zero_click &&
       !password_bubble_experiment::ShouldShowAutoSignInPromptFirstRunExperience(
           delegate_->client()->GetPrefs())) {
-    CredentialInfo info(*local_results[0],
-                        local_results[0]->federation_origin.opaque()
-                            ? CredentialType::CREDENTIAL_TYPE_PASSWORD
-                            : CredentialType::CREDENTIAL_TYPE_FEDERATED);
+    auto info = PasswordFormToCredentialInfo(*local_results[0]);
     delegate_->client()->NotifyUserAutoSignin(std::move(local_results),
                                               origin_);
     base::RecordAction(base::UserMetricsAction("CredentialManager_Autosignin"));

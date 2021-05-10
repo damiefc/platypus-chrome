@@ -51,7 +51,7 @@ IpcNetworkManager::IpcNetworkManager(
     std::unique_ptr<webrtc::MdnsResponderInterface> mdns_responder)
     : network_list_manager_(network_list_manager),
       mdns_responder_(std::move(mdns_responder)) {
-  network_list_manager_->AddNetworkListObserver(this);
+  network_list_manager->AddNetworkListObserver(this);
 }
 
 IpcNetworkManager::~IpcNetworkManager() {

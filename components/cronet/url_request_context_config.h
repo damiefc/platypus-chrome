@@ -180,8 +180,7 @@ struct URLRequestContextConfig {
   int host_cache_persistence_delay_ms = 60000;
 
   // Experimental options that are recognized by the config parser.
-  std::unique_ptr<base::DictionaryValue> effective_experimental_options =
-      nullptr;
+  std::unique_ptr<base::DictionaryValue> effective_experimental_options;
 
   // If set, forces NQE to return the set value as the effective connection
   // type.
@@ -262,7 +261,7 @@ struct URLRequestContextConfigBuilder {
   std::string experimental_options = "{}";
 
   // Certificate verifier for testing.
-  std::unique_ptr<net::CertVerifier> mock_cert_verifier = nullptr;
+  std::unique_ptr<net::CertVerifier> mock_cert_verifier;
 
   // Enable network quality estimator.
   bool enable_network_quality_estimator = false;

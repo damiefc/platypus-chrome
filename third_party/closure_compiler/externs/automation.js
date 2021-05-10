@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,7 @@ chrome.automation.EventType = {
   ACTIVE_DESCENDANT_CHANGED: 'activeDescendantChanged',
   ALERT: 'alert',
   ARIA_ATTRIBUTE_CHANGED: 'ariaAttributeChanged',
+  ARIA_CURRENT_CHANGED: 'ariaCurrentChanged',
   ATOMIC_CHANGED: 'atomicChanged',
   AUTO_COMPLETE_CHANGED: 'autoCompleteChanged',
   AUTOCORRECTION_OCCURED: 'autocorrectionOccured',
@@ -39,6 +40,7 @@ chrome.automation.EventType = {
   DOCUMENT_SELECTION_CHANGED: 'documentSelectionChanged',
   DOCUMENT_TITLE_CHANGED: 'documentTitleChanged',
   DROPEFFECT_CHANGED: 'dropeffectChanged',
+  EDITABLE_TEXT_CHANGED: 'editableTextChanged',
   ENABLED_CHANGED: 'enabledChanged',
   END_OF_TEST: 'endOfTest',
   EXPANDED: 'expanded',
@@ -91,9 +93,14 @@ chrome.automation.EventType = {
   NAME_CHANGED: 'nameChanged',
   OBJECT_ATTRIBUTE_CHANGED: 'objectAttributeChanged',
   OTHER_ATTRIBUTE_CHANGED: 'otherAttributeChanged',
+  PARENT_CHANGED: 'parentChanged',
   PLACEHOLDER_CHANGED: 'placeholderChanged',
   PORTAL_ACTIVATED: 'portalActivated',
   POSITION_IN_SET_CHANGED: 'positionInSetChanged',
+  RANGE_VALUE_CHANGED: 'rangeValueChanged',
+  RANGE_VALUE_MAX_CHANGED: 'rangeValueMaxChanged',
+  RANGE_VALUE_MIN_CHANGED: 'rangeValueMinChanged',
+  RANGE_VALUE_STEP_CHANGED: 'rangeValueStepChanged',
   READONLY_CHANGED: 'readonlyChanged',
   RELATED_NODE_CHANGED: 'relatedNodeChanged',
   REQUIRED_STATE_CHANGED: 'requiredStateChanged',
@@ -107,8 +114,10 @@ chrome.automation.EventType = {
   SCROLLED_TO_ANCHOR: 'scrolledToAnchor',
   SELECTED_CHANGED: 'selectedChanged',
   SELECTED_CHILDREN_CHANGED: 'selectedChildrenChanged',
+  SELECTED_VALUE_CHANGED: 'selectedValueChanged',
   SELECTION: 'selection',
   SELECTION_ADD: 'selectionAdd',
+  SELECTION_IN_TEXT_FIELD_CHANGED: 'selectionInTextFieldChanged',
   SELECTION_REMOVE: 'selectionRemove',
   SET_SIZE_CHANGED: 'setSizeChanged',
   SHOW: 'show',
@@ -116,15 +125,13 @@ chrome.automation.EventType = {
   STATE_CHANGED: 'stateChanged',
   SUBTREE_CREATED: 'subtreeCreated',
   TEXT_ATTRIBUTE_CHANGED: 'textAttributeChanged',
-  TEXT_CHANGED: 'textChanged',
   TEXT_SELECTION_CHANGED: 'textSelectionChanged',
+  TEXT_CHANGED: 'textChanged',
   TOOLTIP_CLOSED: 'tooltipClosed',
   TOOLTIP_OPENED: 'tooltipOpened',
   TREE_CHANGED: 'treeChanged',
+  VALUE_IN_TEXT_FIELD_CHANGED: 'valueInTextFieldChanged',
   VALUE_CHANGED: 'valueChanged',
-  VALUE_MAX_CHANGED: 'valueMaxChanged',
-  VALUE_MIN_CHANGED: 'valueMinChanged',
-  VALUE_STEP_CHANGED: 'valueStepChanged',
   WINDOW_ACTIVATED: 'windowActivated',
   WINDOW_DEACTIVATED: 'windowDeactivated',
   WINDOW_VISIBILITY_CHANGED: 'windowVisibilityChanged',
@@ -203,6 +210,8 @@ chrome.automation.RoleType = {
   DOC_NOTE_REF: 'docNoteRef',
   DOC_NOTICE: 'docNotice',
   DOC_PAGE_BREAK: 'docPageBreak',
+  DOC_PAGE_FOOTER: 'docPageFooter',
+  DOC_PAGE_HEADER: 'docPageHeader',
   DOC_PAGE_LIST: 'docPageList',
   DOC_PART: 'docPart',
   DOC_PREFACE: 'docPreface',
@@ -232,9 +241,7 @@ chrome.automation.RoleType = {
   HEADING: 'heading',
   IFRAME: 'iframe',
   IFRAME_PRESENTATIONAL: 'iframePresentational',
-  IGNORED: 'ignored',
   IMAGE: 'image',
-  IMAGE_MAP: 'imageMap',
   IME_CANDIDATE: 'imeCandidate',
   INLINE_TEXT_BOX: 'inlineTextBox',
   INPUT_TIME: 'inputTime',
@@ -270,11 +277,11 @@ chrome.automation.RoleType = {
   PANE: 'pane',
   PARAGRAPH: 'paragraph',
   PDF_ACTIONABLE_HIGHLIGHT: 'pdfActionableHighlight',
+  PDF_ROOT: 'pdfRoot',
   PLUGIN_OBJECT: 'pluginObject',
   POP_UP_BUTTON: 'popUpButton',
   PORTAL: 'portal',
   PRE: 'pre',
-  PRESENTATIONAL: 'presentational',
   PROGRESS_INDICATOR: 'progressIndicator',
   RADIO_BUTTON: 'radioButton',
   RADIO_GROUP: 'radioGroup',
@@ -291,7 +298,6 @@ chrome.automation.RoleType = {
   SEARCH_BOX: 'searchBox',
   SECTION: 'section',
   SLIDER: 'slider',
-  SLIDER_THUMB: 'sliderThumb',
   SPIN_BUTTON: 'spinButton',
   SPLITTER: 'splitter',
   STATIC_TEXT: 'staticText',
@@ -319,7 +325,6 @@ chrome.automation.RoleType = {
   TREE_ITEM: 'treeItem',
   UNKNOWN: 'unknown',
   VIDEO: 'video',
-  WEB_AREA: 'webArea',
   WEB_VIEW: 'webView',
   WINDOW: 'window',
 };
@@ -425,10 +430,12 @@ chrome.automation.NameFromType = {
  * @see https://developer.chrome.com/extensions/automation#type-DescriptionFromType
  */
 chrome.automation.DescriptionFromType = {
-  UNINITIALIZED: 'uninitialized',
-  ATTRIBUTE: 'attribute',
-  CONTENTS: 'contents',
+  ARIA_DESCRIPTION: 'ariaDescription',
+  BUTTON_LABEL: 'buttonLabel',
   RELATED_ELEMENT: 'relatedElement',
+  RUBY_ANNOTATION: 'rubyAnnotation',
+  SUMMARY: 'summary',
+  TABLE_CAPTION: 'tableCaption',
   TITLE: 'title',
 };
 
@@ -446,12 +453,27 @@ chrome.automation.Restriction = {
  * @see https://developer.chrome.com/extensions/automation#type-HasPopup
  */
 chrome.automation.HasPopup = {
+  FALSE: 'false',
   TRUE: 'true',
   MENU: 'menu',
   LISTBOX: 'listbox',
   TREE: 'tree',
   GRID: 'grid',
   DIALOG: 'dialog',
+};
+
+/**
+ * @enum {string}
+ * @see https://developer.chrome.com/extensions/automation#type-AriaCurrentState
+ */
+chrome.automation.AriaCurrentState = {
+  FALSE: 'false',
+  TRUE: 'true',
+  PAGE: 'page',
+  STEP: 'step',
+  LOCATION: 'location',
+  DATE: 'date',
+  TIME: 'time',
 };
 
 /**
@@ -1165,6 +1187,13 @@ chrome.automation.AutomationNode.prototype.unclippedLocation;
 chrome.automation.AutomationNode.prototype.description;
 
 /**
+ * Description of the state of the checkbox. Used only when the node is checkable.
+ * @type {(string|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-checkedStateDescription
+ */
+chrome.automation.AutomationNode.prototype.checkedStateDescription;
+
+/**
  * The placeholder for this text field, if any.
  * @type {(string|undefined)}
  * @see https://developer.chrome.com/extensions/automation#type-placeholder
@@ -1239,6 +1268,20 @@ chrome.automation.AutomationNode.prototype.wordStarts;
  * @see https://developer.chrome.com/extensions/automation#type-wordEnds
  */
 chrome.automation.AutomationNode.prototype.wordEnds;
+
+/**
+ * The start indexes of each sentence within the node's name.
+ * @type {(!Array<number>|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-sentenceStarts
+ */
+chrome.automation.AutomationNode.prototype.sentenceStarts;
+
+/**
+ * The end indexes of each sentence within the node's name. For most nodes, the size of sentenceStarts array should be equal to the size of sentenceEnds array. Two exceptions are (1) node at the begining of a paragraph but the end of the node's sentences is in its following node. Such a node has one more start index. (2) Node at the end of a paragraph but the start of the node's sentences is in its previous node. Such a node has one more end index. For example, <p><b>Hello</b> world.</p> has two nodes. The first one has one start index (i.e., 0) but no end index. The second node has one end index (i.e., 7) but no start index.
+ * @type {(!Array<number>|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-sentenceEnds
+ */
+chrome.automation.AutomationNode.prototype.sentenceEnds;
 
 /**
  * The start index of each word within the node's name. This is different from wordStarts because it is not restricted to inline text boxes and can be used for any type of element.
@@ -1593,6 +1636,13 @@ chrome.automation.AutomationNode.prototype.selectionEndOffset;
 chrome.automation.AutomationNode.prototype.selectionEndAffinity;
 
 /**
+ * Indicates that the node is marked user-select:none
+ * @type {(boolean|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-notUserSelectableStyle
+ */
+chrome.automation.AutomationNode.prototype.notUserSelectableStyle;
+
+/**
  * The current value for this range.
  * @type {(number|undefined)}
  * @see https://developer.chrome.com/extensions/automation#type-valueForRange
@@ -1859,8 +1909,8 @@ chrome.automation.AutomationNode.prototype.language;
 chrome.automation.AutomationNode.prototype.detectedLanguage;
 
 /**
- * Indicates the availability and type of interactive popup element true - the popup is a menu menu - the popup is a menu listbox - the popup is a listbox tree - the popup is a tree grid - the popup is a grid dialog - the popup is a dialog
- * @type {(string|undefined)}
+ * Indicates the availability and type of an interactive popup element.
+ * @type {(!chrome.automation.HasPopup|undefined)}
  * @see https://developer.chrome.com/extensions/automation#type-hasPopup
  */
 chrome.automation.AutomationNode.prototype.hasPopup;
@@ -1971,11 +2021,19 @@ chrome.automation.AutomationNode.prototype.fontSize;
 chrome.automation.AutomationNode.prototype.fontFamily;
 
 /**
- * Indicates whether this is a root of an editable subtree.
+ * Indicates whether the object is at the root of a content editable region, or
+ * at a <body> element that has "design-mode" set to "on".
  * @type {boolean}
- * @see https://developer.chrome.com/extensions/automation#type-editableRoot
+ * @see https://developer.chrome.com/extensions/automation#type-contentEditableRoot
  */
-chrome.automation.AutomationNode.prototype.editableRoot;
+chrome.automation.AutomationNode.prototype.contentEditableRoot;
+
+/**
+ * Indicates aria-current state.
+ * @type {(!chrome.automation.AriaCurrentState|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-ariaCurrentState
+ */
+chrome.automation.AutomationNode.prototype.ariaCurrentState;
 
 /**
  * Walking the tree.

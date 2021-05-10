@@ -21,6 +21,7 @@
 #if defined(OS_ANDROID)
 #include "base/android/jni_string.h"
 #include "weblayer/browser/java/jni/UrlBarControllerImpl_jni.h"
+#include "weblayer/browser/url_bar/trusted_cdn_observer.h"
 #endif
 
 namespace weblayer {
@@ -62,17 +63,27 @@ UrlBarControllerImpl::GetUrlForDisplay(JNIEnv* env) {
       base::android::ConvertUTF16ToJavaString(env, GetUrlForDisplay()));
 }
 
+base::android::ScopedJavaLocalRef<jstring>
+UrlBarControllerImpl::GetPublisherUrl(JNIEnv* env) {
+  GURL url;
+
+  auto* active_web_contents = GetActiveWebContents();
+  if (active_web_contents) {
+    auto* trusted_cdn_observer =
+        TrustedCDNObserver::FromWebContents(active_web_contents);
+    if (trusted_cdn_observer)
+      url = trusted_cdn_observer->publisher_url();
+  }
+  return base::android::ScopedJavaLocalRef<jstring>(
+      base::android::ConvertUTF8ToJavaString(env, url.spec()));
+}
+
 jint UrlBarControllerImpl::GetConnectionSecurityLevel(JNIEnv* env) {
   return GetConnectionSecurityLevel();
 }
-
-jboolean UrlBarControllerImpl::ShouldShowDangerTriangleForWarningLevel(
-    JNIEnv* env) {
-  return ShouldShowDangerTriangleForWarningLevel();
-}
 #endif
 
-base::string16 UrlBarControllerImpl::GetUrlForDisplay() {
+std::u16string UrlBarControllerImpl::GetUrlForDisplay() {
   return location_bar_model_->GetURLForDisplay();
 }
 
@@ -86,10 +97,6 @@ UrlBarControllerImpl::GetConnectionSecurityLevel() {
   DCHECK(state);
   return security_state::GetSecurityLevel(
       *state, /* used_policy_installed_certificate= */ false);
-}
-
-bool UrlBarControllerImpl::ShouldShowDangerTriangleForWarningLevel() {
-  return security_state::ShouldShowDangerTriangleForWarningLevel();
 }
 
 bool UrlBarControllerImpl::GetURL(GURL* url) const {
@@ -106,9 +113,9 @@ bool UrlBarControllerImpl::ShouldTrimDisplayUrlAfterHostName() const {
   return true;
 }
 
-base::string16 UrlBarControllerImpl::FormattedStringWithEquivalentMeaning(
+std::u16string UrlBarControllerImpl::FormattedStringWithEquivalentMeaning(
     const GURL& url,
-    const base::string16& formatted_url) const {
+    const std::u16string& formatted_url) const {
   return AutocompleteInput::FormattedStringWithEquivalentMeaning(
       url, formatted_url, AutocompleteSchemeClassifierImpl(), nullptr);
 }

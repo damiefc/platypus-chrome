@@ -6,13 +6,14 @@
 #define THIRD_PARTY_BLINK_PUBLIC_PLATFORM_SCHEDULER_WEB_THREAD_SCHEDULER_H_
 
 #include <memory>
+
 #include "base/macros.h"
 #include "base/message_loop/message_pump.h"
-#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/scheduler/web_rail_mode_observer.h"
 #include "third_party/blink/public/platform/scheduler/web_render_widget_scheduling_state.h"
 #include "third_party/blink/public/platform/web_common.h"
@@ -60,12 +61,8 @@ class BLINK_PLATFORM_EXPORT WebThreadScheduler {
 
   // If |message_pump| is null caller must have registered one using
   // base::MessageLoop.
-  // If |initial_virtual_time| is specified then the
-  // scheduler will be created with virtual time enabled and paused, and
-  // base::Time will be overridden to start at |initial_virtual_time|.
   static std::unique_ptr<WebThreadScheduler> CreateMainThreadScheduler(
-      std::unique_ptr<base::MessagePump> message_pump = nullptr,
-      base::Optional<base::Time> initial_virtual_time = base::nullopt);
+      std::unique_ptr<base::MessagePump> message_pump = nullptr);
 
   // Returns compositor thread scheduler for the compositor thread
   // of the current process.
@@ -89,9 +86,24 @@ class BLINK_PLATFORM_EXPORT WebThreadScheduler {
   // Creates a WebThread implementation for the renderer main thread.
   virtual std::unique_ptr<Thread> CreateMainThread();
 
+  // Creates a WebAgentGroupScheduler implementation. Must be called from the
+  // main thread.
+  virtual std::unique_ptr<WebAgentGroupScheduler>
+  CreateAgentGroupScheduler() = 0;
+
   // Creates a WebWidgetScheduler implementation. Must be called from the main
   // thread.
   virtual std::unique_ptr<WebWidgetScheduler> CreateWidgetScheduler();
+
+  // Return the current active AgentGroupScheduler.
+  // When a task which belongs to a specific AgentGroupScheduler is going to be
+  // run, this AgentGroupScheduler becomes the current active
+  // AgentGroupScheduler. And when the task is finished, the current active
+  // AgentGroupScheduler becomes nullptr. So if there is no active
+  // AgentGroupScheduler, this function returns nullptr. This behaviour is
+  // implemented by MainThreadSchedulerImpl’s OnTaskStarted and OnTaskCompleted
+  // hook points. So you can’t use this functionality in task observers.
+  virtual WebAgentGroupScheduler* GetCurrentAgentGroupScheduler() = 0;
 
   // Returns a new WebRenderWidgetSchedulingState.  The signals from this will
   // be used to make scheduling decisions.

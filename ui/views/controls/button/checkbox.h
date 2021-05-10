@@ -10,10 +10,10 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "cc/paint/paint_flags.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/focus_ring.h"
+#include "ui/views/metadata/view_factory.h"
 
 namespace gfx {
 struct VectorIcon;
@@ -27,16 +27,15 @@ class VIEWS_EXPORT Checkbox : public LabelButton {
  public:
   METADATA_HEADER(Checkbox);
 
-  explicit Checkbox(const base::string16& label = base::string16(),
+  explicit Checkbox(const std::u16string& label = std::u16string(),
                     PressedCallback callback = PressedCallback());
-  Checkbox(const base::string16& label, ButtonListener* listener);
   ~Checkbox() override;
 
   // Sets/Gets whether or not the checkbox is checked.
   virtual void SetChecked(bool checked);
   bool GetChecked() const;
 
-  PropertyChangedSubscription AddCheckedChangedCallback(
+  base::CallbackListSubscription AddCheckedChangedCallback(
       PropertyChangedCallback callback) WARN_UNUSED_RESULT;
 
   void SetMultiLine(bool multi_line);
@@ -59,9 +58,6 @@ class VIEWS_EXPORT Checkbox : public LabelButton {
 
   // LabelButton:
   void OnThemeChanged() override;
-  std::unique_ptr<InkDrop> CreateInkDrop() override;
-  std::unique_ptr<InkDropRipple> CreateInkDropRipple() const override;
-  SkColor GetInkDropBaseColor() const override;
 
   // Returns the path to draw the focus ring around for this Checkbox.
   virtual SkPath GetFocusRingPath() const;
@@ -82,14 +78,18 @@ class VIEWS_EXPORT Checkbox : public LabelButton {
   void GetExtraParams(ui::NativeTheme::ExtraParams* params) const override;
 
   // True if the checkbox is checked.
-  bool checked_;
-
-  // The unique id for the associated label's accessible object.
-  int32_t label_ax_id_;
+  bool checked_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(Checkbox);
 };
 
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, Checkbox, LabelButton)
+VIEW_BUILDER_PROPERTY(bool, Checked)
+VIEW_BUILDER_PROPERTY(bool, MultiLine)
+END_VIEW_BUILDER
+
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, Checkbox)
 
 #endif  // UI_VIEWS_CONTROLS_BUTTON_CHECKBOX_H_

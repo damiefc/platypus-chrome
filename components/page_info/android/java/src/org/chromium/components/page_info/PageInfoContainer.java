@@ -9,6 +9,8 @@ import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
@@ -24,20 +26,21 @@ public class PageInfoContainer extends FrameLayout {
 
     /**  Parameters to configure the view of page info subpage. */
     public static class Params {
-        // Whether the URL title should be shown.
-        public boolean urlTitleShown;
         // The URL to be shown at the top of the page.
         public CharSequence url;
         // The length of the URL's origin in number of characters.
         public int urlOriginLength;
         // The URL to show in truncated state.
         public String truncatedUrl;
+        // Whether the close button is displayed.
+        public boolean showCloseButton;
 
         public Runnable urlTitleClickCallback;
         public Runnable urlTitleLongClickCallback;
         public Runnable backButtonClickCallback;
+        public Runnable closeButtonClickCallback;
     }
-    private PageInfoView.ElidedUrlTextView mUrlTitle;
+    private ElidedUrlTextView mExpandedUrlTitle;
     private TextView mTruncatedUrlTitle;
 
     private final ViewGroup mWrapper;
@@ -57,11 +60,11 @@ public class PageInfoContainer extends FrameLayout {
     }
 
     public void setParams(Params params) {
-        mUrlTitle = findViewById(R.id.page_info_url);
-        initializeUrlView(mUrlTitle, params);
-        mUrlTitle.setUrl(params.url, params.urlOriginLength);
-        // Adjust the mUrlTitle for displaying the non-truncated URL.
-        mUrlTitle.toggleTruncation();
+        mExpandedUrlTitle = findViewById(R.id.page_info_url);
+        initializeUrlView(mExpandedUrlTitle, params);
+        mExpandedUrlTitle.setUrl(params.url, params.urlOriginLength);
+        // Adjust mExpandedUrlTitle for displaying the non-truncated URL.
+        mExpandedUrlTitle.toggleTruncation();
 
         mTruncatedUrlTitle = findViewById(R.id.page_info_truncated_url);
         // Use a separate view for truncated URL display.
@@ -69,14 +72,15 @@ public class PageInfoContainer extends FrameLayout {
         mTruncatedUrlTitle = findViewById(R.id.page_info_truncated_url);
         mTruncatedUrlTitle.setText(params.truncatedUrl);
 
+        ChromeImageButton closeButton = findViewById(R.id.page_info_close);
+        closeButton.setVisibility(params.showCloseButton ? VISIBLE : GONE);
+        closeButton.setOnClickListener(v -> params.closeButtonClickCallback.run());
+
         ChromeImageButton backButton = findViewById(R.id.subpage_back_button);
         backButton.setOnClickListener(v -> params.backButtonClickCallback.run());
     }
 
     private void initializeUrlView(View view, Params params) {
-        if (!params.urlTitleShown) {
-            view.setVisibility(GONE);
-        }
         if (params.urlTitleClickCallback != null) {
             view.setOnClickListener(v -> { params.urlTitleClickCallback.run(); });
         }
@@ -89,17 +93,14 @@ public class PageInfoContainer extends FrameLayout {
     }
 
     public void toggleUrlTruncation() {
-        mUrlTitle.setVisibility(mTruncatedUrlTitle.getVisibility());
-        mTruncatedUrlTitle.setVisibility(mUrlTitle.getVisibility() == VISIBLE ? GONE : VISIBLE);
+        boolean showExpanded = mExpandedUrlTitle.getVisibility() != VISIBLE;
+        mExpandedUrlTitle.setVisibility(showExpanded ? VISIBLE : GONE);
+        mTruncatedUrlTitle.setVisibility(showExpanded ? GONE : VISIBLE);
+        announceForAccessibility(getResources().getString(
+                showExpanded ? R.string.page_info_url_expanded : R.string.page_info_url_truncated));
     }
 
     public void setFavicon(Drawable favicon) {
-        int padding =
-                getResources().getDimensionPixelSize(R.dimen.page_info_popup_button_padding_sides);
-        int size = getResources().getDimensionPixelSize(R.dimen.page_info_favicon_size);
-
-        favicon.setBounds(0, 0, size, size);
-        mTruncatedUrlTitle.setCompoundDrawablePadding(padding);
         mTruncatedUrlTitle.setCompoundDrawablesRelative(favicon, null, null, null);
     }
 
@@ -112,18 +113,23 @@ public class PageInfoContainer extends FrameLayout {
         }
         // Create "fade-through" animation.
         // TODO(crbug.com/1077766): Animate height change and set correct interpolator.
-        mWrapper.animate().setDuration(sOutDuration).alpha(0).withEndAction(() -> {
-            replaceContentView(view, subPageTitle);
-            mWrapper.setScaleX(sScale);
-            mWrapper.setScaleY(sScale);
-            mWrapper.setAlpha(0);
-            mWrapper.animate()
-                    .setDuration(sInDuration)
-                    .scaleX(1)
-                    .scaleY(1)
-                    .alpha(1)
-                    .withEndAction(onPreviousPageRemoved);
-        });
+        mWrapper.animate()
+                .setDuration(sOutDuration)
+                .alpha(0)
+                .setInterpolator(new AccelerateInterpolator())
+                .withEndAction(() -> {
+                    replaceContentView(view, subPageTitle);
+                    mWrapper.setScaleX(sScale);
+                    mWrapper.setScaleY(sScale);
+                    mWrapper.setAlpha(0);
+                    mWrapper.animate()
+                            .setDuration(sInDuration)
+                            .scaleX(1)
+                            .scaleY(1)
+                            .alpha(1)
+                            .setInterpolator(new DecelerateInterpolator())
+                            .withEndAction(onPreviousPageRemoved);
+                });
     }
 
     /**
@@ -135,5 +141,8 @@ public class PageInfoContainer extends FrameLayout {
         mSubpageHeader.setVisibility(subPageTitle != null ? VISIBLE : GONE);
         mSubpageTitle.setText(subPageTitle);
         mContent.addView(view);
+        announceForAccessibility(subPageTitle != null
+                        ? subPageTitle
+                        : getResources().getString(R.string.accessibility_toolbar_btn_site_info));
     }
 }

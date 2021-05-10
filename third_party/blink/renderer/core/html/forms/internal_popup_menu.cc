@@ -10,8 +10,8 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/css/css_font_selector.h"
 #include "third_party/blink/renderer/core/css/css_value_id_mappings.h"
-#include "third_party/blink/renderer/core/css/pseudo_style_request.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
+#include "third_party/blink/renderer/core/css/style_request.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
@@ -78,19 +78,16 @@ ScrollbarPart ScrollbarPartFromPseudoId(PseudoId id) {
   return kNoPart;
 }
 
-scoped_refptr<const ComputedStyle> StyleForHoveredScrollbarPart(
-    HTMLSelectElement& element,
-    const ComputedStyle* style,
-    Scrollbar* scrollbar,
-    PseudoId target_id) {
+const ComputedStyle* StyleForHoveredScrollbarPart(HTMLSelectElement& element,
+                                                  const ComputedStyle* style,
+                                                  Scrollbar* scrollbar,
+                                                  PseudoId target_id) {
   ScrollbarPart part = ScrollbarPartFromPseudoId(target_id);
   if (part == kNoPart)
     return nullptr;
   scrollbar->SetHoveredPart(part);
-  scoped_refptr<const ComputedStyle> part_style = element.StyleForPseudoElement(
-      PseudoElementStyleRequest(target_id, To<CustomScrollbar>(scrollbar),
-                                part),
-      style);
+  const ComputedStyle* part_style = element.UncachedStyleForPseudoElement(
+      StyleRequest(target_id, To<CustomScrollbar>(scrollbar), part, style));
   return part_style;
 }
 
@@ -99,7 +96,7 @@ scoped_refptr<const ComputedStyle> StyleForHoveredScrollbarPart(
 class PopupMenuCSSFontSelector : public CSSFontSelector,
                                  private FontSelectorClient {
  public:
-  PopupMenuCSSFontSelector(Document*, CSSFontSelector*);
+  PopupMenuCSSFontSelector(Document&, CSSFontSelector*);
   ~PopupMenuCSSFontSelector() override;
 
   // We don't override willUseFontData() for now because the old PopupListBox
@@ -116,7 +113,7 @@ class PopupMenuCSSFontSelector : public CSSFontSelector,
 };
 
 PopupMenuCSSFontSelector::PopupMenuCSSFontSelector(
-    Document* document,
+    Document& document,
     CSSFontSelector* owner_font_selector)
     : CSSFontSelector(document), owner_font_selector_(owner_font_selector) {
   owner_font_selector_->RegisterForInvalidationCallbacks(this);
@@ -294,10 +291,9 @@ void InternalPopupMenu::WriteDocument(SharedBuffer* data) {
     }
     // For Pseudo-class styles, Style should be calculated via that status.
     if (temp_scrollbar) {
-      scoped_refptr<const ComputedStyle> part_style =
-          StyleForHoveredScrollbarPart(owner_element,
-                                       owner_element.GetComputedStyle(),
-                                       temp_scrollbar, target.first);
+      const ComputedStyle* part_style = StyleForHoveredScrollbarPart(
+          owner_element, owner_element.GetComputedStyle(), temp_scrollbar,
+          target.first);
       if (part_style) {
         AppendOwnerElementPseudoStyles(target.second + ":hover", data,
                                        *part_style);
@@ -492,11 +488,11 @@ void InternalPopupMenu::AppendOwnerElementPseudoStyles(
   PagePopupClient::AddString(target + "{ \n", data);
 
   const CSSPropertyID serialize_targets[] = {
-      CSSPropertyID::kDisplay,    CSSPropertyID::kBackgroundColor,
-      CSSPropertyID::kWidth,      CSSPropertyID::kBorderBottom,
-      CSSPropertyID::kBorderLeft, CSSPropertyID::kBorderRight,
-      CSSPropertyID::kBorderTop,  CSSPropertyID::kBorderRadius,
-      CSSPropertyID::kBoxShadow};
+      CSSPropertyID::kDisplay,        CSSPropertyID::kBackgroundColor,
+      CSSPropertyID::kWidth,          CSSPropertyID::kBorderBottom,
+      CSSPropertyID::kBorderLeft,     CSSPropertyID::kBorderRight,
+      CSSPropertyID::kBorderTop,      CSSPropertyID::kBorderRadius,
+      CSSPropertyID::kBackgroundClip, CSSPropertyID::kBoxShadow};
 
   for (CSSPropertyID id : serialize_targets) {
     PagePopupClient::AddString(SerializeComputedStyleForProperty(style, id),
@@ -510,7 +506,7 @@ CSSFontSelector* InternalPopupMenu::CreateCSSFontSelector(
     Document& popup_document) {
   Document& owner_document = OwnerElement().GetDocument();
   return MakeGarbageCollected<PopupMenuCSSFontSelector>(
-      &popup_document, owner_document.GetStyleEngine().GetFontSelector());
+      popup_document, owner_document.GetStyleEngine().GetFontSelector());
 }
 
 void InternalPopupMenu::SetValueAndClosePopup(int num_value,

@@ -7,7 +7,7 @@
 #include <algorithm>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
@@ -98,7 +98,7 @@ SendTabToSelfBridge::SendTabToSelfBridge(
   DCHECK(clock_);
   DCHECK(device_info_tracker_);
   if (history_service) {
-    history_service->AddObserver(this);
+    history_service_observation_.Observe(history_service);
   }
 
   std::move(create_store_callback)
@@ -109,7 +109,7 @@ SendTabToSelfBridge::SendTabToSelfBridge(
 
 SendTabToSelfBridge::~SendTabToSelfBridge() {
   if (history_service_) {
-    history_service_->RemoveObserver(this);
+    history_service_observation_.Reset();
   }
 }
 
@@ -368,10 +368,17 @@ void SendTabToSelfBridge::DismissEntry(const std::string& guid) {
     return;
   }
 
+  DCHECK(change_processor()->IsTrackingMetadata());
+
   entry->SetNotificationDismissed(true);
 
   std::unique_ptr<ModelTypeStore::WriteBatch> batch =
       store_->CreateWriteBatch();
+
+  auto entity_data = CopyToEntityData(entry->AsLocalProto().specifics());
+
+  change_processor()->Put(guid, std::move(entity_data),
+                          batch->GetMetadataChangeList());
 
   batch->WriteData(guid, entry->AsLocalProto().SerializeAsString());
   Commit(std::move(batch));
@@ -630,11 +637,6 @@ bool SendTabToSelfBridge::ShouldUpdateTargetDeviceInfoList() const {
 
 void SendTabToSelfBridge::SetTargetDeviceInfoList() {
   DCHECK(device_info_tracker_->IsSyncing());
-  // Verify that the current TrackedCacheGuid() is the local GUID without
-  // enforcing that tracked cache GUID is set.
-  DCHECK(device_info_tracker_->IsRecentLocalCacheGuid(
-             change_processor()->TrackedCacheGuid()) ||
-         change_processor()->TrackedCacheGuid().empty());
 
   std::vector<std::unique_ptr<syncer::DeviceInfo>> all_devices =
       device_info_tracker_->GetAllDeviceInfo();

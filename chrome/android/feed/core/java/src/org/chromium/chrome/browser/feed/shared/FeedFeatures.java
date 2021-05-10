@@ -4,10 +4,9 @@
 
 package org.chromium.chrome.browser.feed.shared;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.Log;
-import org.chromium.chrome.browser.feed.FeedV1;
-import org.chromium.chrome.browser.feed.FeedV2;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
@@ -28,35 +27,7 @@ public final class FeedFeatures {
 
     private static PrefChangeRegistrar sPrefChangeRegistrar;
 
-    /**
-     * @return Whether implicit Feed user actions are being reported based on feature states. Can be
-     *         used for both Feed v1 and v2.
-     */
-    public static boolean isReportingUserActions() {
-        return isV2Enabled()
-                || ChromeFeatureList.isEnabled(ChromeFeatureList.REPORT_FEED_USER_ACTIONS);
-    }
-
-    /**
-     * Identical to {@link isReportingUserActions} but uses {@link CachedFeatureFlags} for checking
-     * feature states.
-     */
-    public static boolean cachedIsReportingUserActions() {
-        return cachedIsV2Enabled()
-                || CachedFeatureFlags.isEnabled(ChromeFeatureList.REPORT_FEED_USER_ACTIONS);
-    }
-
-    public static boolean isV2Enabled() {
-        if (!FeedV1.IS_AVAILABLE) return true;
-        if (!FeedV2.IS_AVAILABLE) return false;
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.INTEREST_FEED_V2);
-    }
-
-    public static boolean cachedIsV2Enabled() {
-        if (!FeedV1.IS_AVAILABLE) return true;
-        if (!FeedV2.IS_AVAILABLE) return false;
-        return CachedFeatureFlags.isEnabled(ChromeFeatureList.INTEREST_FEED_V2);
-    }
+    private static PrefService sFakePrefServiceForTest;
 
     /**
      * @return Whether the feed is allowed to be used. The feed is disabled if supervised user or
@@ -72,9 +43,7 @@ public final class FeedFeatures {
         if (sEverDisabledForPolicy) return false;
 
         if (sPrefChangeRegistrar == null) {
-            sPrefChangeRegistrar = new PrefChangeRegistrar();
-            sPrefChangeRegistrar.addObserver(
-                    Pref.ENABLE_SNIPPETS, FeedFeatures::articlesEnabledPrefChange);
+            setPrefChangeRegistrar(new PrefChangeRegistrar());
         }
 
         if (!sEverDisabledForPolicy) {
@@ -82,6 +51,14 @@ public final class FeedFeatures {
         }
 
         return !sEverDisabledForPolicy;
+    }
+
+    /**
+     * @return Whether the WebFeed UI is enabled.
+     */
+    public static boolean isWebFeedUIEnabled() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_FEED)
+                && getPrefService().getBoolean(Pref.ENABLE_WEB_FEED_UI);
     }
 
     private static void articlesEnabledPrefChange() {
@@ -93,13 +70,27 @@ public final class FeedFeatures {
             // logcat.
             Log.w(TAG, "Disabling Feed because of policy.");
             sEverDisabledForPolicy = true;
-            if (FeedV1.IS_AVAILABLE) {
-                FeedV1.destroy();
-            }
         }
     }
 
     private static PrefService getPrefService() {
+        if (sFakePrefServiceForTest != null) {
+            return sFakePrefServiceForTest;
+        }
         return UserPrefs.get(Profile.getLastUsedRegularProfile());
+    }
+
+    private static void setPrefChangeRegistrar(PrefChangeRegistrar registrar) {
+        sPrefChangeRegistrar = registrar;
+        if (sPrefChangeRegistrar != null) {
+            sPrefChangeRegistrar.addObserver(
+                    Pref.ENABLE_SNIPPETS, FeedFeatures::articlesEnabledPrefChange);
+        }
+    }
+
+    @VisibleForTesting
+    public static void setFakePrefsForTest(PrefService fakePref, PrefChangeRegistrar fakeRegistar) {
+        sFakePrefServiceForTest = fakePref;
+        setPrefChangeRegistrar(fakeRegistar);
     }
 }

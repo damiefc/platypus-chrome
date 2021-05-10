@@ -54,10 +54,9 @@ void MarkRecommendedFieldnames(const base::DictionaryValue& policy,
   if (!policy.GetListWithoutPathExpansion(::onc::kRecommended,
                                           &recommended_value))
     return;
-  for (base::ListValue::const_iterator it = recommended_value->begin();
-       it != recommended_value->end(); ++it) {
+  for (const auto& value : recommended_value->GetList()) {
     std::string entry;
-    if (it->GetAsString(&entry))
+    if (value.GetAsString(&entry))
       result->SetKey(entry, base::Value(true));
   }
 }
@@ -123,7 +122,7 @@ class MergeListOfDictionaries {
             nested_dicts.push_back(nested_dict);
           }
           DictionaryPtr merged_dict(MergeNestedDictionaries(key, nested_dicts));
-          if (!merged_dict->empty())
+          if (!merged_dict->DictEmpty())
             merged_value = std::move(merged_dict);
         } else {
           std::vector<const base::Value*> values;
@@ -232,12 +231,12 @@ class MergeSettingsAndPolicies : public MergeListOfDictionaries {
       const std::string& key,
       const std::vector<const base::Value*>& values) override {
     bool user_editable = !HasUserPolicy();
-    if (values[kUserEditableIndex])
-      values[kUserEditableIndex]->GetAsBoolean(&user_editable);
+    if (values[kUserEditableIndex] && values[kUserEditableIndex]->is_bool())
+      user_editable = values[kUserEditableIndex]->GetBool();
 
     bool device_editable = !HasDevicePolicy();
-    if (values[kDeviceEditableIndex])
-      values[kDeviceEditableIndex]->GetAsBoolean(&device_editable);
+    if (values[kDeviceEditableIndex] && values[kDeviceEditableIndex]->is_bool())
+      device_editable = values[kDeviceEditableIndex]->GetBool();
 
     ValueParams params;
     params.user_policy = values[kUserPolicyIndex];
@@ -312,7 +311,7 @@ class MergeToEffective : public MergeSettingsAndPolicies {
     }
     if (result)
       return base::WrapUnique(result->DeepCopy());
-    return std::unique_ptr<base::Value>();
+    return nullptr;
   }
 
   // MergeSettingsAndPolicies override.
@@ -331,15 +330,15 @@ namespace {
 // Returns true if all not-null values in |values| are equal to |value|.
 bool AllPresentValuesEqual(const MergeSettingsAndPolicies::ValueParams& values,
                            const base::Value& value) {
-  if (values.user_policy && !value.Equals(values.user_policy))
+  if (values.user_policy && value != *values.user_policy)
     return false;
-  if (values.device_policy && !value.Equals(values.device_policy))
+  if (values.device_policy && value != *values.device_policy)
     return false;
-  if (values.user_setting && !value.Equals(values.user_setting))
+  if (values.user_setting && value != *values.user_setting)
     return false;
-  if (values.shared_setting && !value.Equals(values.shared_setting))
+  if (values.shared_setting && value != *values.shared_setting)
     return false;
-  if (values.active_setting && !value.Equals(values.active_setting))
+  if (values.active_setting && value != *values.active_setting)
     return false;
   return true;
 }
@@ -470,7 +469,7 @@ class MergeToAugmented : public MergeToEffective {
       augmented_value->SetKey(::onc::kAugmentationDeviceEditable,
                               base::Value(true));
     }
-    if (augmented_value->empty())
+    if (augmented_value->DictEmpty())
       augmented_value.reset();
     return std::move(augmented_value);
   }

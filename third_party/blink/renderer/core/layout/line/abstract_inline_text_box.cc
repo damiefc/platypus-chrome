@@ -40,6 +40,17 @@
 
 namespace blink {
 
+typedef HeapHashMap<Member<InlineTextBox>, scoped_refptr<AbstractInlineTextBox>>
+    InlineToLegacyAbstractInlineTextBoxHashMap;
+
+InlineToLegacyAbstractInlineTextBoxHashMap& GetAbstractInlineTextBoxMap() {
+  DEFINE_STATIC_LOCAL(
+      Persistent<InlineToLegacyAbstractInlineTextBoxHashMap>,
+      abstract_inline_text_box_map,
+      (MakeGarbageCollected<InlineToLegacyAbstractInlineTextBoxHashMap>()));
+  return *abstract_inline_text_box_map;
+}
+
 AbstractInlineTextBox::AbstractInlineTextBox(LineLayoutText line_layout_item)
     : line_layout_item_(line_layout_item) {}
 
@@ -56,17 +67,12 @@ LayoutText* AbstractInlineTextBox::GetFirstLetterPseudoLayoutText() const {
   Node* node = GetLineLayoutItem().GetNode();
   if (!node)
     return nullptr;
-
-  LayoutObject* layout_object = node->GetLayoutObject();
-  if (!layout_object || !layout_object->IsText())
-    return nullptr;
-  return ToLayoutText(layout_object)->GetFirstLetterPart();
+  if (auto* layout_text = DynamicTo<LayoutText>(node->GetLayoutObject()))
+    return layout_text->GetFirstLetterPart();
+  return nullptr;
 }
 
 // ----
-
-LegacyAbstractInlineTextBox::InlineToLegacyAbstractInlineTextBoxHashMap*
-    LegacyAbstractInlineTextBox::g_abstract_inline_text_box_map_ = nullptr;
 
 scoped_refptr<AbstractInlineTextBox> LegacyAbstractInlineTextBox::GetOrCreate(
     LineLayoutText line_layout_text,
@@ -74,31 +80,23 @@ scoped_refptr<AbstractInlineTextBox> LegacyAbstractInlineTextBox::GetOrCreate(
   if (!inline_text_box)
     return nullptr;
 
-  if (!g_abstract_inline_text_box_map_) {
-    g_abstract_inline_text_box_map_ =
-        new InlineToLegacyAbstractInlineTextBoxHashMap();
-  }
-
   InlineToLegacyAbstractInlineTextBoxHashMap::const_iterator it =
-      g_abstract_inline_text_box_map_->find(inline_text_box);
-  if (it != g_abstract_inline_text_box_map_->end())
+      GetAbstractInlineTextBoxMap().find(inline_text_box);
+  if (it != GetAbstractInlineTextBoxMap().end())
     return it->value;
 
   scoped_refptr<AbstractInlineTextBox> obj = base::AdoptRef(
       new LegacyAbstractInlineTextBox(line_layout_text, inline_text_box));
-  g_abstract_inline_text_box_map_->Set(inline_text_box, obj);
+  GetAbstractInlineTextBoxMap().Set(inline_text_box, obj);
   return obj;
 }
 
 void LegacyAbstractInlineTextBox::WillDestroy(InlineTextBox* inline_text_box) {
-  if (!g_abstract_inline_text_box_map_)
-    return;
-
   InlineToLegacyAbstractInlineTextBoxHashMap::const_iterator it =
-      g_abstract_inline_text_box_map_->find(inline_text_box);
-  if (it != g_abstract_inline_text_box_map_->end()) {
+      GetAbstractInlineTextBoxMap().find(inline_text_box);
+  if (it != GetAbstractInlineTextBoxMap().end()) {
     it->value->Detach();
-    g_abstract_inline_text_box_map_->erase(inline_text_box);
+    GetAbstractInlineTextBoxMap().erase(inline_text_box);
   }
 }
 
@@ -114,10 +112,8 @@ LegacyAbstractInlineTextBox::~LegacyAbstractInlineTextBox() {
 
 void AbstractInlineTextBox::Detach() {
   DCHECK(GetLineLayoutItem());
-  if (Node* node = GetNode()) {
-    if (AXObjectCache* cache = node->GetDocument().ExistingAXObjectCache())
-      cache->Remove(this);
-  }
+  if (AXObjectCache* cache = ExistingAXObjectCache())
+    cache->Remove(this);
 
   line_layout_item_ = LineLayoutText(nullptr);
 }
@@ -227,6 +223,18 @@ Node* AbstractInlineTextBox::GetNode() const {
   if (!GetLineLayoutItem())
     return nullptr;
   return GetLineLayoutItem().GetNode();
+}
+
+LayoutObject* AbstractInlineTextBox::GetLayoutObject() const {
+  if (!GetLineLayoutItem())
+    return nullptr;
+  return GetLineLayoutItem().GetLayoutObject();
+}
+
+AXObjectCache* AbstractInlineTextBox::ExistingAXObjectCache() const {
+  if (LayoutObject* layout_object = GetLayoutObject())
+    return layout_object->GetDocument().ExistingAXObjectCache();
+  return nullptr;
 }
 
 void LegacyAbstractInlineTextBox::CharacterWidths(Vector<float>& widths) const {
@@ -353,9 +361,8 @@ scoped_refptr<AbstractInlineTextBox> LegacyAbstractInlineTextBox::NextOnLine()
     return nullptr;
 
   InlineBox* next = inline_text_box_->NextOnLine();
-  if (next && next->IsInlineTextBox())
-    return GetOrCreate(ToInlineTextBox(next)->GetLineLayoutItem(),
-                       ToInlineTextBox(next));
+  if (auto* text_box = DynamicTo<InlineTextBox>(next))
+    return GetOrCreate(text_box->GetLineLayoutItem(), text_box);
 
   return nullptr;
 }
@@ -368,9 +375,8 @@ LegacyAbstractInlineTextBox::PreviousOnLine() const {
     return nullptr;
 
   InlineBox* previous = inline_text_box_->PrevOnLine();
-  if (previous && previous->IsInlineTextBox())
-    return GetOrCreate(ToInlineTextBox(previous)->GetLineLayoutItem(),
-                       ToInlineTextBox(previous));
+  if (auto* text_box = DynamicTo<InlineTextBox>(previous))
+    return GetOrCreate(text_box->GetLineLayoutItem(), text_box);
 
   return nullptr;
 }

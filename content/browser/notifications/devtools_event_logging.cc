@@ -32,8 +32,7 @@ using DevToolsCallback =
 DevToolsBackgroundServicesContext* GetDevToolsContext(
     BrowserContext* browser_context,
     const GURL& origin) {
-  auto* storage_partition =
-      BrowserContext::GetStoragePartitionForSite(browser_context, origin);
+  auto* storage_partition = browser_context->GetStoragePartitionForUrl(origin);
   if (!storage_partition)
     return nullptr;
 
@@ -125,7 +124,7 @@ void LogNotificationClickedEventToDevTools(
     BrowserContext* browser_context,
     const NotificationDatabaseData& data,
     const base::Optional<int>& action_index,
-    const base::Optional<base::string16>& reply) {
+    const base::Optional<std::u16string>& reply) {
   DevToolsCallback callback = GetDevToolsCallback(browser_context, data);
   if (!callback)
     return;

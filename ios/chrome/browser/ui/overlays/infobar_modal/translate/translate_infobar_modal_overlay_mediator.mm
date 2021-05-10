@@ -9,6 +9,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "components/metrics/metrics_log.h"
 #include "components/translate/core/browser/translate_step.h"
+#include "components/translate/core/common/translate_constants.h"
 #import "ios/chrome/browser/overlays/public/infobar_modal/infobar_modal_overlay_responses.h"
 #import "ios/chrome/browser/overlays/public/infobar_modal/translate_infobar_modal_overlay_request_config.h"
 #import "ios/chrome/browser/overlays/public/infobar_modal/translate_infobar_modal_overlay_responses.h"
@@ -108,8 +109,8 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
 
 #pragma mark - InfobarTranslateModalDelegate
 
-- (void)showOriginalLanguage {
-  [self recordInfobarEvent:InfobarEvent::INFOBAR_REVERT];
+- (void)showSourceLanguage {
+  [self recordInfobarEvent:translate::InfobarEvent::INFOBAR_REVERT];
   [self dispatchResponse:
             OverlayResponse::CreateWithInfo<
                 translate_infobar_modal_responses::RevertTranslation>()];
@@ -120,7 +121,8 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
 
 - (void)translateWithNewLanguages {
   [self updateLanguagesIfNecessary];
-  [self recordInfobarEvent:InfobarEvent::INFOBAR_TARGET_TAB_TRANSLATE];
+  [self
+      recordInfobarEvent:translate::InfobarEvent::INFOBAR_TARGET_TAB_TRANSLATE];
 
   [self dispatchResponse:OverlayResponse::CreateWithInfo<
                              InfobarModalMainActionResponse>()];
@@ -128,7 +130,7 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
 }
 
 - (void)showChangeSourceLanguageOptions {
-  [self recordInfobarEvent:InfobarEvent::INFOBAR_PAGE_NOT_IN];
+  [self recordInfobarEvent:translate::InfobarEvent::INFOBAR_PAGE_NOT_IN];
   [TranslateInfobarMetricsRecorder
       recordModalEvent:MobileMessagesTranslateModalEvent::ChangeSourceLanguage];
 
@@ -136,7 +138,7 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
 }
 
 - (void)showChangeTargetLanguageOptions {
-  [self recordInfobarEvent:InfobarEvent::INFOBAR_MORE_LANGUAGES];
+  [self recordInfobarEvent:translate::InfobarEvent::INFOBAR_MORE_LANGUAGES];
   [TranslateInfobarMetricsRecorder
       recordModalEvent:MobileMessagesTranslateModalEvent::ChangeTargetLanguage];
 
@@ -144,7 +146,7 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
 }
 
 - (void)alwaysTranslateSourceLanguage {
-  [self recordInfobarEvent:InfobarEvent::INFOBAR_ALWAYS_TRANSLATE];
+  [self recordInfobarEvent:translate::InfobarEvent::INFOBAR_ALWAYS_TRANSLATE];
   [TranslateInfobarMetricsRecorder
       recordModalEvent:MobileMessagesTranslateModalEvent::
                            TappedAlwaysTranslate];
@@ -166,7 +168,8 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
 
 - (void)undoAlwaysTranslateSourceLanguage {
   DCHECK(self.config->is_translatable_language());
-  [self recordInfobarEvent:InfobarEvent::INFOBAR_ALWAYS_TRANSLATE_UNDO];
+  [self recordInfobarEvent:translate::InfobarEvent::
+                               INFOBAR_ALWAYS_TRANSLATE_UNDO];
   [self dispatchResponse:
             OverlayResponse::CreateWithInfo<
                 translate_infobar_modal_responses::ToggleAlwaysTranslate>()];
@@ -175,7 +178,7 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
 
 - (void)neverTranslateSourceLanguage {
   DCHECK(self.config->is_translatable_language());
-  [self recordInfobarEvent:InfobarEvent::INFOBAR_NEVER_TRANSLATE];
+  [self recordInfobarEvent:translate::InfobarEvent::INFOBAR_NEVER_TRANSLATE];
   [TranslateInfobarMetricsRecorder
       recordModalEvent:MobileMessagesTranslateModalEvent::
                            TappedNeverForSourceLanguage];
@@ -195,22 +198,23 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
 }
 
 - (void)neverTranslateSite {
-  DCHECK(!self.config->is_site_blacklisted());
-  [self recordInfobarEvent:InfobarEvent::INFOBAR_NEVER_TRANSLATE_SITE];
+  DCHECK(!self.config->is_site_on_never_prompt_list());
+  [self
+      recordInfobarEvent:translate::InfobarEvent::INFOBAR_NEVER_TRANSLATE_SITE];
   [TranslateInfobarMetricsRecorder
       recordModalEvent:MobileMessagesTranslateModalEvent::
                            TappedNeverForThisSite];
   [self dispatchResponse:
             OverlayResponse::CreateWithInfo<
-                translate_infobar_modal_responses::ToggleBlacklistSite>()];
+                translate_infobar_modal_responses::ToggleNeverPromptSite>()];
   [self dismissOverlay];
 }
 
 - (void)undoNeverTranslateSite {
-  DCHECK(self.config->is_site_blacklisted());
+  DCHECK(self.config->is_site_on_never_prompt_list());
   [self dispatchResponse:
             OverlayResponse::CreateWithInfo<
-                translate_infobar_modal_responses::ToggleBlacklistSite>()];
+                translate_infobar_modal_responses::ToggleNeverPromptSite>()];
   [self dismissOverlay];
 }
 
@@ -224,10 +228,10 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
                           self.config->language_names().at(languageIndex))]);
 
   self.newSourceLanguageIndex = languageIndex;
-  base::string16 sourceLanguage =
+  std::u16string sourceLanguage =
       self.config->language_names().at(languageIndex);
 
-  base::string16 targetLanguage = self.config->target_language_name();
+  std::u16string targetLanguage = self.config->target_language_name();
   if (self.newTargetLanguageIndex != kInvalidLanguageIndex) {
     targetLanguage =
         self.config->language_names().at(self.newTargetLanguageIndex);
@@ -249,10 +253,10 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
                           self.config->language_names().at(languageIndex))]);
 
   self.newTargetLanguageIndex = languageIndex;
-  base::string16 targetLanguage =
+  std::u16string targetLanguage =
       self.config->language_names().at(languageIndex);
 
-  base::string16 sourceLanguage = self.config->source_language_name();
+  std::u16string sourceLanguage = self.config->source_language_name();
   if (self.newSourceLanguageIndex != kInvalidLanguageIndex) {
     sourceLanguage =
         self.config->language_names().at(self.newSourceLanguageIndex);
@@ -270,17 +274,17 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
 
 - (NSArray<TableViewTextItem*>*)loadTranslateLanguageItemsForSelectingLanguage:
     (BOOL)sourceLanguage {
-  // In the instance that the user has already selected a different original
+  // In the instance that the user has already selected a different source
   // language, then we should be using that language as the one to potentially
   // check or not show.
-  base::string16 originalLanguageName =
+  std::u16string sourceLanguageName =
       self.newSourceLanguageIndex != kInvalidLanguageIndex
           ? self.config->language_names().at(self.newSourceLanguageIndex)
           : self.config->source_language_name();
   // In the instance that the user has already selected a different target
   // language, then we should be using that language as the one to potentially
   // check or not show.
-  base::string16 targetLanguageName =
+  std::u16string targetLanguageName =
       self.newTargetLanguageIndex != kInvalidLanguageIndex
           ? self.config->language_names().at(self.newTargetLanguageIndex)
           : self.config->target_language_name();
@@ -292,7 +296,7 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
     item.text =
         base::SysUTF16ToNSString(self.config->language_names().at((int)i));
 
-    if (self.config->language_names().at((int)i) == originalLanguageName) {
+    if (self.config->language_names().at((int)i) == sourceLanguageName) {
       if (!sourceLanguage) {
         // Disable for source language if selecting the target
         // language to prevent same language translation. Need to add item,
@@ -312,7 +316,7 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
     }
 
     if ((sourceLanguage &&
-         originalLanguageName == self.config->language_names().at((int)i)) ||
+         sourceLanguageName == self.config->language_names().at((int)i)) ||
         (!sourceLanguage &&
          targetLanguageName == self.config->language_names().at((int)i))) {
       item.checked = YES;
@@ -324,7 +328,7 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
 }
 
 // Records a histogram for |event|.
-- (void)recordInfobarEvent:(InfobarEvent)event {
+- (void)recordInfobarEvent:(translate::InfobarEvent)event {
   UMA_HISTOGRAM_ENUMERATION(kEventHistogram, event);
 }
 // Records a histogram of |histogram| for |langCode|. This is used to log the
@@ -373,11 +377,13 @@ using translate_infobar_overlays::TranslateModalRequestConfig;
     kEnableTranslateButtonPrefKey : @(translateButtonEnabled),
     kUpdateLanguageBeforeTranslatePrefKey : @(updateLanguageBeforeTranslate),
     kEnableAndDisplayShowOriginalButtonPrefKey : @(currentStepAfterTranslate),
-    kShouldAlwaysTranslatePrefKey : @(self.config->is_translatable_language()),
+    kShouldAlwaysTranslatePrefKey :
+        @(self.config->is_always_translate_enabled()),
     kDisplayNeverTranslateLanguagePrefKey : @(currentStepBeforeTranslate),
     kDisplayNeverTranslateSiteButtonPrefKey : @(currentStepBeforeTranslate),
     kIsTranslatableLanguagePrefKey : @(self.config->is_translatable_language()),
-    kIsSiteBlacklistedPrefKey : @(self.config->is_site_blacklisted()),
+    kIsSiteOnNeverPromptListPrefKey :
+        @(self.config->is_site_on_never_prompt_list()),
   };
 }
 

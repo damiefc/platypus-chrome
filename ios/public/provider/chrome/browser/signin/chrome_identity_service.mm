@@ -56,7 +56,6 @@ ChromeIdentityService::PresentWebAndAppSettingDetailsController(
 
 ChromeIdentityInteractionManager*
 ChromeIdentityService::CreateChromeIdentityInteractionManager(
-    ChromeBrowserState* browser_state,
     id<ChromeIdentityInteractionManagerDelegate> delegate) const {
   return nil;
 }
@@ -65,19 +64,9 @@ bool ChromeIdentityService::IsValidIdentity(ChromeIdentity* identity) {
   return false;
 }
 
-ChromeIdentity* ChromeIdentityService::GetIdentityWithEmail(
-    const std::string& email) {
-  return nil;
-}
-
 ChromeIdentity* ChromeIdentityService::GetIdentityWithGaiaID(
     const std::string& gaia_id) {
   return nil;
-}
-
-std::vector<std::string>
-ChromeIdentityService::GetCanonicalizeEmailsForAllIdentities() {
-  return std::vector<std::string>();
 }
 
 bool ChromeIdentityService::HasIdentities() {
@@ -85,10 +74,15 @@ bool ChromeIdentityService::HasIdentities() {
 }
 
 NSArray* ChromeIdentityService::GetAllIdentities() {
+  return GetAllIdentities(nullptr);
+}
+
+NSArray* ChromeIdentityService::GetAllIdentities(PrefService* pref_service) {
   return nil;
 }
 
-NSArray* ChromeIdentityService::GetAllIdentitiesSortedForDisplay() {
+NSArray* ChromeIdentityService::GetAllIdentitiesSortedForDisplay(
+    PrefService* pref_service) {
   return nil;
 }
 
@@ -158,9 +152,9 @@ bool ChromeIdentityService::IsInvalidGrantError(NSDictionary* user_info) {
   return false;
 }
 
-void ChromeIdentityService::FireIdentityListChanged() {
+void ChromeIdentityService::FireIdentityListChanged(bool keychainReload) {
   for (auto& observer : observer_list_)
-    observer.OnIdentityListChanged();
+    observer.OnIdentityListChanged(keychainReload);
 }
 
 void ChromeIdentityService::FireAccessTokenRefreshFailed(

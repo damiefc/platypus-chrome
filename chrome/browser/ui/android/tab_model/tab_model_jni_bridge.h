@@ -12,6 +12,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "chrome/browser/flags/android/chrome_session_state.h"
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
 
 class TabAndroid;
@@ -29,7 +30,7 @@ class TabModelJniBridge : public TabModel {
   TabModelJniBridge(JNIEnv* env,
                     jobject obj,
                     Profile* profile,
-                    bool is_tabbed_activity);
+                    chrome::android::ActivityType activity_type);
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
   ~TabModelJniBridge() override;
 
@@ -46,6 +47,7 @@ class TabModelJniBridge : public TabModel {
   int GetActiveIndex() const override;
   content::WebContents* GetWebContentsAt(int index) const override;
   TabAndroid* GetTabAt(int index) const override;
+  base::android::ScopedJavaLocalRef<jobject> GetJavaObject() const override;
 
   void SetActiveIndex(int index) override;
   void CloseTabAt(int index) override;
@@ -62,7 +64,10 @@ class TabModelJniBridge : public TabModel {
 
   // Return true if this class is the currently selected in the correspond
   // tab model selector.
-  bool IsCurrentModel() const override;
+  bool IsActiveModel() const override;
+
+  // Return whether |tab| is grouped together with other Tab objects.
+  static bool HasOtherRelatedTabs(TabAndroid* tab);
 
   void AddObserver(TabModelObserver* observer) override;
   void RemoveObserver(TabModelObserver* observer) override;
@@ -72,6 +77,9 @@ class TabModelJniBridge : public TabModel {
   void BroadcastSessionRestoreComplete(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+
+  // Returns a corresponding Java Class object.
+  static jclass GetClazz(JNIEnv* env);
 
  protected:
   JavaObjectWeakGlobalRef java_object_;

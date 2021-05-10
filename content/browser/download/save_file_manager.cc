@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "components/download/public/common/download_task_runner.h"
@@ -118,7 +119,7 @@ class SaveFileManager::SimpleURLLoaderHelper
     download::GetDownloadTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(&SaveFileManager::UpdateSaveProgress, save_file_manager_,
-                       save_item_id_, string_piece.as_string()));
+                       save_item_id_, std::string(string_piece)));
     std::move(resume).Run();
   }
 
@@ -265,7 +266,8 @@ void SaveFileManager::SaveURL(SaveItemId save_item_id,
       factory = factory_remote.get();
     } else if (url.SchemeIsFile()) {
       factory_remote.Bind(FileURLLoaderFactory::Create(
-          context->GetPath(), context->GetSharedCorsOriginAccessList(),
+          context->GetPath(),
+          BrowserContext::GetSharedCorsOriginAccessList(context),
           base::TaskPriority::USER_VISIBLE));
       factory = factory_remote.get();
     } else if (url.SchemeIsFileSystem() && rfh) {

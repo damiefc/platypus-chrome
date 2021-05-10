@@ -6,6 +6,7 @@
 
 #include "base/numerics/ranges.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/trace_event/trace_event.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -95,10 +96,11 @@ XRWebGLLayer* XRWebGLLayer::Create(XRSession* session,
                                               ignore_depth_values);
   }
 
-  bool want_antialiasing = initializer->antialias();
-  bool want_depth_buffer = initializer->depth();
-  bool want_stencil_buffer = initializer->stencil();
-  bool want_alpha_channel = initializer->alpha();
+  const bool want_antialiasing =
+      initializer->antialias() && session->CanEnableAntiAliasing();
+  const bool want_depth_buffer = initializer->depth();
+  const bool want_stencil_buffer = initializer->stencil();
+  const bool want_alpha_channel = initializer->alpha();
 
   // Allocate a drawing buffer to back the framebuffer if needed.
   if (initializer->hasFramebufferScaleFactor()) {
@@ -209,6 +211,8 @@ XRViewport* XRWebGLLayer::getViewport(XRView* view) {
     view_data->SetCurrentViewportScale(view_data->RequestedViewportScale());
     viewports_dirty_ = true;
   }
+  TRACE_COUNTER1("xr", "XR viewport scale (%)",
+                 view_data->CurrentViewportScale() * 100);
   view_data->SetViewportModifiable(false);
 
   return GetViewportForEye(view->EyeValue());

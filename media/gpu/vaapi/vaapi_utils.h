@@ -7,8 +7,8 @@
 
 #include <va/va.h>
 
-#include "base/bind_helpers.h"
 #include "base/callback_forward.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/thread_annotations.h"
 #include "ui/gfx/geometry/size.h"
@@ -181,6 +181,9 @@ void FillVP8DataStructures(const Vp8FrameHeader& frame_header,
                            VAProbabilityDataBufferVP8* prob_buf,
                            VAPictureParameterBufferVP8* pic_param,
                            VASliceParameterBufferVP8* slice_param);
+
+bool IsValidVABufferType(VABufferType type);
+
 }  // namespace media
 
 #endif  // MEDIA_GPU_VAAPI_VAAPI_UTILS_H_

@@ -7,10 +7,10 @@
 #include <memory>
 
 #include "base/metrics/histogram_macros.h"
-#include "third_party/blink/public/common/feature_policy/policy_value.h"
-#include "third_party/blink/public/mojom/feature_policy/document_policy_feature.mojom-blink.h"
-#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
-#include "third_party/blink/public/mojom/feature_policy/policy_value.mojom-blink.h"
+#include "third_party/blink/public/common/permissions_policy/policy_value.h"
+#include "third_party/blink/public/mojom/permissions_policy/document_policy_feature.mojom-blink.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
+#include "third_party/blink/public/mojom/permissions_policy/policy_value.mojom-blink.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_info.h"
@@ -65,6 +65,10 @@ class NullImageResourceInfo final
   void LoadDeferredImage(ResourceFetcher* fetcher) override {}
 
   bool IsAdResource() const override { return false; }
+
+  const HashSet<String>* GetUnsupportedImageMimeTypes() const override {
+    return nullptr;
+  }
 
   const KURL url_;
   const ResourceResponse response_;
@@ -226,7 +230,16 @@ IntSize ImageResourceContent::IntrinsicSize(
     RespectImageOrientationEnum should_respect_image_orientation) const {
   if (!image_)
     return IntSize();
-  return image_->Size(should_respect_image_orientation);
+  RespectImageOrientationEnum respect_orientation =
+      ForceOrientationIfNecessary(should_respect_image_orientation);
+  return image_->Size(respect_orientation);
+}
+
+RespectImageOrientationEnum ImageResourceContent::ForceOrientationIfNecessary(
+    RespectImageOrientationEnum default_orientation) const {
+  if (image_ && image_->IsBitmapImage() && !IsAccessAllowed())
+    return kRespectImageOrientation;
+  return default_orientation;
 }
 
 void ImageResourceContent::NotifyObservers(
@@ -409,6 +422,16 @@ ImageResourceContent::UpdateImageResult ImageResourceContent::UpdateImage(
       if (size_available_ == Image::kSizeUnavailable && !all_data_received)
         return UpdateImageResult::kNoDecodeError;
 
+      if (image_ && info_->GetUnsupportedImageMimeTypes()) {
+        // Filename extension is set by the image decoder based on the actual
+        // image content.
+        String file_extension = image_->FilenameExtension();
+        if (info_->GetUnsupportedImageMimeTypes()->Contains(
+                String("image/" + file_extension))) {
+          return UpdateImageResult::kShouldDecodeError;
+        }
+      }
+
       // As per spec, zero intrinsic size SVG is a valid image so do not
       // consider such an image as DecodeError.
       // https://www.w3.org/TR/SVG/struct.html#SVGElementWidthAttribute
@@ -542,8 +565,8 @@ void ImageResourceContent::UpdateImageAnimationPolicy() {
   if (!image_)
     return;
 
-  web_pref::ImageAnimationPolicy new_policy =
-      web_pref::kImageAnimationPolicyAllowed;
+  mojom::blink::ImageAnimationPolicy new_policy =
+      mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyAllowed;
   {
     ProhibitAddRemoveObserverInScope prohibit_add_remove_observer_in_scope(
         this);
@@ -566,7 +589,7 @@ void ImageResourceContent::Changed(const blink::Image* image) {
   NotifyObservers(kDoNotNotifyFinish, CanDeferInvalidation::kYes);
 }
 
-bool ImageResourceContent::IsAccessAllowed() {
+bool ImageResourceContent::IsAccessAllowed() const {
   return info_->IsAccessAllowed(
       GetImage()->CurrentFrameHasSingleSecurityOrigin()
           ? ImageResourceInfo::kHasSingleSecurityOrigin
@@ -641,6 +664,11 @@ void ImageResourceContent::LoadDeferredImage(ResourceFetcher* fetcher) {
 
 bool ImageResourceContent::IsAdResource() const {
   return info_->IsAdResource();
+}
+
+void ImageResourceContent::RecordDecodedImageType(UseCounter* use_counter) {
+  if (auto* bitmap_image = DynamicTo<BitmapImage>(image_.get()))
+    bitmap_image->RecordDecodedImageType(use_counter);
 }
 
 }  // namespace blink

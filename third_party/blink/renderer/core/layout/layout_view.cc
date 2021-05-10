@@ -42,14 +42,14 @@
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_counter.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
-#include "third_party/blink/renderer/core/layout/layout_geometry_map.h"
+#include "third_party/blink/renderer/core/layout/layout_list_item.h"
+#include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_item.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_root.h"
 #include "third_party/blink/renderer/core/layout/view_fragmentation_context.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/named_pages_mapper.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/scrolling/root_scroller_controller.h"
-#include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator_context.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
@@ -102,7 +102,7 @@ LayoutView::LayoutView(Document* document)
       layout_state_(nullptr),
       compositor_(RuntimeEnabledFeatures::CompositeAfterPaintEnabled()
                       ? nullptr
-                      : std::make_unique<PaintLayerCompositor>(*this)),
+                      : MakeGarbageCollected<PaintLayerCompositor>(*this)),
       layout_quote_head_(nullptr),
       layout_counter_count_(0),
       hit_test_count_(0),
@@ -127,6 +127,14 @@ LayoutView::LayoutView(Document* document)
 
 LayoutView::~LayoutView() = default;
 
+void LayoutView::Trace(Visitor* visitor) const {
+  visitor->Trace(frame_view_);
+  visitor->Trace(compositor_);
+  visitor->Trace(layout_quote_head_);
+  visitor->Trace(hit_test_cache_);
+  LayoutBlockFlow::Trace(visitor);
+}
+
 bool LayoutView::HitTest(const HitTestLocation& location,
                          HitTestResult& result) {
   NOT_DESTROYED();
@@ -138,15 +146,9 @@ bool LayoutView::HitTest(const HitTestLocation& location,
   // Note that if an iframe has its render pipeline throttled, it will not
   // update layout here, and it will also not propagate the hit test into the
   // iframe's inner document.
-  if (RuntimeEnabledFeatures::CompositingOptimizationsEnabled()) {
-    if (!GetFrameView()->UpdateLifecycleToPrePaintClean(
-            DocumentUpdateReason::kHitTest))
-      return false;
-  } else {
-    if (!GetFrameView()->UpdateAllLifecyclePhasesExceptPaint(
-            DocumentUpdateReason::kHitTest))
-      return false;
-  }
+  if (!GetFrameView()->UpdateLifecycleToPrePaintClean(
+          DocumentUpdateReason::kHitTest))
+    return false;
   HitTestLatencyRecorder hit_test_latency_recorder(
       result.GetHitTestRequest().AllowsChildFrameContent());
   return HitTestNoLifecycleUpdate(location, result);
@@ -210,8 +212,11 @@ bool LayoutView::HitTestNoLifecycleUpdate(const HitTestLocation& location,
   }
 
   TRACE_EVENT_END1("blink,devtools.timeline", "HitTest", "endData",
-                   inspector_hit_test_event::EndData(result.GetHitTestRequest(),
-                                                     location, result));
+                   [&](perfetto::TracedValue context) {
+                     inspector_hit_test_event::EndData(
+                         std::move(context), result.GetHitTestRequest(),
+                         location, result);
+                   });
   return hit_layer;
 }
 
@@ -304,7 +309,8 @@ void LayoutView::UpdateBlockLayout(bool relayout_children) {
       if (child->IsSVGRoot())
         continue;
 
-      if ((child->IsBox() && ToLayoutBox(child)->HasRelativeLogicalHeight()) ||
+      if ((child->IsBox() &&
+           To<LayoutBox>(child)->HasRelativeLogicalHeight()) ||
           child->StyleRef().LogicalHeight().IsPercentOrCalc() ||
           child->StyleRef().LogicalMinHeight().IsPercentOrCalc() ||
           child->StyleRef().LogicalMaxHeight().IsPercentOrCalc())
@@ -420,37 +426,6 @@ void LayoutView::MapLocalToAncestor(const LayoutBoxModelObject* ancestor,
   }
 }
 
-const LayoutObject* LayoutView::PushMappingToContainer(
-    const LayoutBoxModelObject* ancestor_to_stop_at,
-    LayoutGeometryMap& geometry_map) const {
-  NOT_DESTROYED();
-  PhysicalOffset offset;
-  LayoutObject* container = nullptr;
-
-  if (geometry_map.GetMapCoordinatesFlags() & kTraverseDocumentBoundaries) {
-    if (auto* parent_doc_layout_object = GetFrame()->OwnerLayoutObject()) {
-      offset += parent_doc_layout_object->PhysicalContentBoxOffset();
-      container = parent_doc_layout_object;
-    }
-  }
-
-  // If a container was specified, and was not 0 or the LayoutView, then we
-  // should have found it by now unless we're traversing to a parent document.
-  DCHECK(!ancestor_to_stop_at || ancestor_to_stop_at == this || container);
-
-  if ((!ancestor_to_stop_at || container) &&
-      ShouldUseTransformFromContainer(container)) {
-    TransformationMatrix t;
-    GetTransformFromContainer(container, PhysicalOffset(), t);
-    geometry_map.Push(this, t, kContainsFixedPosition,
-                      OffsetForFixedPosition());
-  } else {
-    geometry_map.Push(this, offset, 0, OffsetForFixedPosition());
-  }
-
-  return container;
-}
-
 void LayoutView::MapAncestorToLocal(const LayoutBoxModelObject* ancestor,
                                     TransformState& transform_state,
                                     MapCoordinatesFlags mode) const {
@@ -490,32 +465,19 @@ void LayoutView::PaintBoxDecorationBackground(const PaintInfo& paint_info,
   ViewPainter(*this).PaintBoxDecorationBackground(paint_info);
 }
 
-static void SetShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(
-    LayoutObject* object) {
-  object->SetShouldDoFullPaintInvalidation();
-  for (LayoutObject* child = object->SlowFirstChild(); child;
-       child = child->NextSibling()) {
-    SetShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(child);
-  }
+static void InvalidatePaintForViewAndDescendantsRecursively(PaintLayer& layer) {
+  layer.GetLayoutObject().SetSubtreeShouldDoFullPaintInvalidation();
+  for (PaintLayer* child = layer.FirstChild(); child;
+       child = child->NextSibling())
+    InvalidatePaintForViewAndDescendantsRecursively(*child);
 }
 
-void LayoutView::SetShouldDoFullPaintInvalidationForViewAndAllDescendants() {
+void LayoutView::InvalidatePaintForViewAndDescendants() {
   NOT_DESTROYED();
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
     SetSubtreeShouldDoFullPaintInvalidation();
   else
-    SetShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(this);
-}
-
-void LayoutView::InvalidatePaintForViewAndCompositedLayers() {
-  NOT_DESTROYED();
-  SetSubtreeShouldDoFullPaintInvalidation();
-
-  if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
-    DisableCompositingQueryAsserts disabler;
-    if (Compositor()->InCompositingMode())
-      Compositor()->FullyInvalidatePaint();
-  }
+    InvalidatePaintForViewAndDescendantsRecursively(*Layer());
 }
 
 bool LayoutView::MapToVisualRectInAncestorSpace(
@@ -662,7 +624,7 @@ PhysicalRect LayoutView::OverflowClipRect(
                                        overlay_scrollbar_clip_behavior);
   }
 
-  rect.offset = location;
+  rect.offset += location;
   if (IsScrollContainer())
     ExcludeScrollbars(rect, overlay_scrollbar_clip_behavior);
 
@@ -714,8 +676,8 @@ void LayoutView::CalculateScrollbarModes(
       RETURN_SCROLLBAR_MODE(mojom::blink::ScrollbarMode::kAlwaysOff);
   }
 
-  if (document.IsCapturingLayout()) {
-    // When capturing layout (e.g. printing), frame-level scrollbars are never
+  if (document.IsPrintingOrPaintingPreview()) {
+    // When printing or painting preview, frame-level scrollbars are never
     // displayed.
     // TODO(szager): Figure out the right behavior when printing an overflowing
     // iframe.  https://bugs.chromium.org/p/chromium/issues/detail?id=777528
@@ -742,12 +704,12 @@ void LayoutView::CalculateScrollbarModes(
 
   if (viewport->IsSVGRoot()) {
     // Don't allow overflow to affect <img> and css backgrounds
-    if (ToLayoutSVGRoot(viewport)->IsEmbeddedThroughSVGImage())
+    if (To<LayoutSVGRoot>(viewport)->IsEmbeddedThroughSVGImage())
       RETURN_SCROLLBAR_MODE(mojom::blink::ScrollbarMode::kAuto);
 
     // FIXME: evaluate if we can allow overflow for these cases too.
     // Overflow is always hidden when stand-alone SVG documents are embedded.
-    if (ToLayoutSVGRoot(viewport)
+    if (To<LayoutSVGRoot>(viewport)
             ->IsEmbeddedThroughFrameContainingSVGDocument())
       RETURN_SCROLLBAR_MODE(mojom::blink::ScrollbarMode::kAlwaysOff);
   }
@@ -836,8 +798,7 @@ const LayoutBox& LayoutView::RootBox() const {
   Element* document_element = GetDocument().documentElement();
   DCHECK(document_element);
   DCHECK(document_element->GetLayoutObject());
-  DCHECK(document_element->GetLayoutObject()->IsBox());
-  return ToLayoutBox(*document_element->GetLayoutObject());
+  return To<LayoutBox>(*document_element->GetLayoutObject());
 }
 
 void LayoutView::UpdateAfterLayout() {
@@ -874,14 +835,9 @@ void LayoutView::UpdateHitTestResult(HitTestResult& result,
   }
 }
 
-bool LayoutView::UsesCompositing() const {
-  NOT_DESTROYED();
-  return compositor_ && compositor_->StaleInCompositingMode();
-}
-
 PaintLayerCompositor* LayoutView::Compositor() {
   NOT_DESTROYED();
-  return compositor_.get();
+  return compositor_;
 }
 
 void LayoutView::CleanUpCompositor() {
@@ -917,7 +873,7 @@ void LayoutView::WillBeDestroyed() {
   if (PaintLayer* layer = Layer())
     layer->SetNeedsRepaint();
   LayoutBlockFlow::WillBeDestroyed();
-  compositor_.reset();
+  compositor_.Clear();
 }
 
 void LayoutView::UpdateFromStyle() {
@@ -936,13 +892,6 @@ RecalcLayoutOverflowResult LayoutView::RecalcLayoutOverflow() {
 
   auto result = LayoutBlockFlow::RecalcLayoutOverflow();
   if (result.layout_overflow_changed) {
-    // Changing overflow should notify scrolling coordinator to ensures that it
-    // updates non-fast scroll rects even if there is no layout.
-    if (ScrollingCoordinator* scrolling_coordinator =
-            GetDocument().GetPage()->GetScrollingCoordinator()) {
-      GetFrameView()->GetScrollingContext()->SetScrollGestureRegionIsDirty(
-          true);
-    }
     if (NeedsLayout())
       return result;
     if (GetFrameView()->VisualViewportSuppliesScrollbars())
@@ -971,62 +920,59 @@ CompositingReasons LayoutView::AdditionalCompositingReasons() const {
   NOT_DESTROYED();
   // TODO(lfg): Audit for portals
   const LocalFrame& frame = frame_view_->GetFrame();
-  if (frame.OwnerLayoutObject() &&
-      base::FeatureList::IsEnabled(
-          blink::features::kCompositeCrossOriginIframes) &&
-      frame.IsCrossOriginToParentFrame()) {
+  if (frame.OwnerLayoutObject() && frame.IsCrossOriginToParentFrame())
     return CompositingReason::kIFrame;
-  }
   return CompositingReason::kNone;
 }
 
-void LayoutView::UpdateCounters() {
+void LayoutView::UpdateMarkersAndCountersAfterStyleChange(
+    LayoutObject* container) {
   NOT_DESTROYED();
-  if (!needs_counter_update_)
+  if (!needs_marker_counter_update_)
     return;
 
-  needs_counter_update_ = false;
-  if (!HasLayoutCounters())
+  DCHECK(!container ||
+         (container->View() == this && container->IsDescendantOf(this) &&
+          GetDocument().GetStyleEngine().InContainerQueryStyleRecalc()))
+      << "The container parameter is currently only for scoping updates for "
+         "container query style recalcs";
+
+  needs_marker_counter_update_ = false;
+  if (!HasLayoutCounters() && !HasLayoutListItems())
     return;
 
-  for (LayoutObject* layout_object = this; layout_object;
-       layout_object = layout_object->NextInPreOrder()) {
-    if (!layout_object->IsCounter())
-      continue;
+  // For container queries style recalc, we know the counter styles didn't
+  // change outside the container. Hence, we can start the update traversal from
+  // the container.
+  LayoutObject* start = container ? container : this;
+  // Additionally, if the container contains style, we know counters inside the
+  // container cannot affect counters outside the container, which means we can
+  // limit the traversal to the container subtree.
+  LayoutObject* stay_within =
+      container && container->ShouldApplyStyleContainment() ? container
+                                                            : nullptr;
 
-    ToLayoutCounter(layout_object)->UpdateCounter();
+  for (LayoutObject* layout_object = start; layout_object;
+       layout_object = layout_object->NextInPreOrder(stay_within)) {
+    if (auto* list_item = DynamicTo<LayoutListItem>(layout_object)) {
+      list_item->UpdateCounterStyle();
+    } else if (auto* ng_list_item =
+                   DynamicTo<LayoutNGListItem>(layout_object)) {
+      ng_list_item->UpdateCounterStyle();
+    } else if (auto* counter = DynamicTo<LayoutCounter>(layout_object)) {
+      counter->UpdateCounter();
+    }
   }
 }
 
 bool LayoutView::HasTickmarks() const {
   NOT_DESTROYED();
-  return !tickmarks_override_.IsEmpty() ||
-         GetDocument().Markers().PossiblyHasTextMatchMarkers();
+  return GetDocument().Markers().PossiblyHasTextMatchMarkers();
 }
 
 Vector<IntRect> LayoutView::GetTickmarks() const {
   NOT_DESTROYED();
-  if (!tickmarks_override_.IsEmpty())
-    return tickmarks_override_;
-
   return GetDocument().Markers().LayoutRectsForTextMatchMarkers();
-}
-
-void LayoutView::OverrideTickmarks(const Vector<IntRect>& tickmarks) {
-  NOT_DESTROYED();
-  tickmarks_override_ = tickmarks;
-  InvalidatePaintForTickmarks();
-}
-
-void LayoutView::InvalidatePaintForTickmarks() {
-  NOT_DESTROYED();
-  ScrollableArea* scrollable_area = GetScrollableArea();
-  if (!scrollable_area)
-    return;
-  Scrollbar* scrollbar = scrollable_area->VerticalScrollbar();
-  if (!scrollbar)
-    return;
-  scrollbar->SetNeedsPaintInvalidation(static_cast<ScrollbarPart>(~kThumbPart));
 }
 
 }  // namespace blink

@@ -11,6 +11,9 @@ import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
 import {eventToPromise, fakeDataBind, waitBeforeNextRender} from '../test_util.m.js';
 
 import {CloudPrintInterfaceStub} from './cloud_print_interface_stub.js';
+// <if expr="chromeos">
+import {setNativeLayerCrosInstance} from './native_layer_cros_stub.js';
+// </if>
 import {NativeLayerStub} from './native_layer_stub.js';
 import {getDestinations, getGoogleDriveDestination, getSaveAsPdfDestination, setupTestListenerElement} from './print_preview_test_utils.js';
 
@@ -32,10 +35,8 @@ destination_settings_test.TestNames = {
   OpenDialog: 'open dialog',
   TwoAccountsRecentDestinations: 'two accounts recent destinations',
   UpdateRecentDestinations: 'update recent destinations',
-  ResetDestinationOnSignOut: 'reset destination on sign out',
   DisabledSaveAsPdf: 'disabled save as pdf',
   NoDestinations: 'no destinations',
-  EulaIsRetrieved: 'eula is retrieved'
 };
 
 suite(destination_settings_test.suiteName, function() {
@@ -60,14 +61,19 @@ suite(destination_settings_test.suiteName, function() {
   /** @type {!Array<!Destination>} */
   const extraDestinations = [];
 
-  /** @type {!Array<string>} */
-  let initialAccounts = [];
-
   /** @type {boolean} */
   let pdfPrinterDisabled = false;
 
+  /** @type {boolean} */
+  let isDriveMounted = true;
+
   /** @type {string} */
   const defaultUser = 'foo@chromium.org';
+
+  /** @type {string} */
+  const driveDestinationKey = isChromeOS ?
+      'Save to Drive CrOS/local/' :
+      '__google__docs/cookies/foo@chromium.org';
 
   /** @override */
   suiteSetup(function() {
@@ -81,6 +87,9 @@ suite(destination_settings_test.suiteName, function() {
     // Stub out native layer and cloud print interface.
     nativeLayer = new NativeLayerStub();
     NativeLayerImpl.instance_ = nativeLayer;
+    // <if expr="chromeos">
+    setNativeLayerCrosInstance();
+    // </if>
     localDestinations = [];
     destinations = getDestinations(localDestinations);
     // Add some extra destinations.
@@ -125,8 +134,8 @@ suite(destination_settings_test.suiteName, function() {
         // still not loaded.
         destinationSettings.init(
             'FooDevice' /* printerName */, false /* pdfPrinterDisabled */,
-            '' /* serializedDefaultDestinationSelectionRulesStr */,
-            [] /* userAccounts */, true /* syncAvailable */);
+            isDriveMounted,
+            '' /* serializedDefaultDestinationSelectionRulesStr */);
         assertFalse(dropdown.loaded);
 
         return eventToPromise(
@@ -198,22 +207,10 @@ suite(destination_settings_test.suiteName, function() {
     destinationSettings.setSetting('recentDestinations', recentDestinations);
     destinationSettings.appKioskMode = false;
     destinationSettings.init(
-        '' /* printerName */, pdfPrinterDisabled,
-        '' /* serializedDefaultDestinationSelectionRulesStr */, initialAccounts,
-        true /* syncAvailable */);
+        '' /* printerName */, pdfPrinterDisabled, isDriveMounted,
+        '' /* serializedDefaultDestinationSelectionRulesStr */);
     destinationSettings.state = State.READY;
     destinationSettings.disabled = false;
-  }
-
-  /** Simulates a user signing in to Chrome. */
-  function signIn() {
-    cloudPrintInterface.resetResolver('printer');
-    cloudPrintInterface.setPrinter(getGoogleDriveDestination(defaultUser));
-    webUIListenerCallback('user-accounts-updated', [defaultUser]);
-    return eventToPromise(
-               CloudPrintInterfaceEventType.PRINTER_DONE,
-               cloudPrintInterface.getEventTarget())
-        .then(() => waitBeforeNextRender(destinationSettings));
   }
 
   /**
@@ -245,26 +242,19 @@ suite(destination_settings_test.suiteName, function() {
       assert(destination_settings_test.TestNames.NoRecentDestinations),
       function() {
         initialize();
-        return nativeLayer.whenCalled('getPrinterCapabilities')
-            .then(() => {
-              // This will result in the destination store setting the Save as
-              // PDF destination.
-              assertEquals(
-                  Destination.GooglePromotedId.SAVE_AS_PDF,
-                  destinationSettings.destination.id);
-              assertFalse(
-                  destinationSettings.$$('#destinationSelect').disabled);
-              assertDropdownItems(['Save as PDF/local/']);
-
-              // If the user is signed in, Save to Drive should be displayed.
-              return signIn();
-            })
-            .then(() => {
-              assertDropdownItems([
-                'Save as PDF/local/',
-                '__google__docs/cookies/foo@chromium.org',
-              ]);
-            });
+        return nativeLayer.whenCalled('getPrinterCapabilities').then(() => {
+          // This will result in the destination store setting the Save as
+          // PDF destination.
+          assertEquals(
+              Destination.GooglePromotedId.SAVE_AS_PDF,
+              destinationSettings.destination.id);
+          assertFalse(destinationSettings.$$('#destinationSelect').disabled);
+          const dropdownItems = ['Save as PDF/local/'];
+          if (isChromeOS) {
+            dropdownItems.push(driveDestinationKey);
+          }
+          assertDropdownItems(dropdownItems);
+        });
       });
 
   // Tests that the dropdown contains the appropriate destinations when there
@@ -275,7 +265,8 @@ suite(destination_settings_test.suiteName, function() {
         recentDestinations = destinations.slice(0, 5).map(
             destination => makeRecentDestination(destination));
 
-        const whenCapabilitiesDone = nativeLayer.waitForMultipleCapabilities(3);
+        const whenCapabilitiesDone =
+            nativeLayer.whenCalled('getPrinterCapabilities');
         initialize();
 
         // Wait for the destinations to be inserted into the store.
@@ -289,24 +280,16 @@ suite(destination_settings_test.suiteName, function() {
               assertEquals('ID1', destinationSettings.destination.id);
               assertFalse(
                   destinationSettings.$$('#destinationSelect').disabled);
-              assertDropdownItems([
+              const dropdownItems = [
                 makeLocalDestinationKey('ID1'),
                 makeLocalDestinationKey('ID2'),
                 makeLocalDestinationKey('ID3'),
                 'Save as PDF/local/',
-              ]);
-
-              // If the user is signed in, Save to Drive should be displayed.
-              return signIn();
-            })
-            .then(() => {
-              assertDropdownItems([
-                makeLocalDestinationKey('ID1'),
-                makeLocalDestinationKey('ID2'),
-                makeLocalDestinationKey('ID3'),
-                'Save as PDF/local/',
-                '__google__docs/cookies/foo@chromium.org',
-              ]);
+              ];
+              if (isChromeOS) {
+                dropdownItems.push(driveDestinationKey);
+              }
+              assertDropdownItems(dropdownItems);
             });
       });
 
@@ -319,13 +302,8 @@ suite(destination_settings_test.suiteName, function() {
             destination => makeRecentDestination(destination));
         const missing = localDestinations.splice(1, 1)[0];
         nativeLayer.setLocalDestinations(localDestinations);
-        nativeLayer.setLocalDestinationCapabilities(
-            {
-              printer: missing,
-              capabilities: null,
-            },
-            true);
-        const whenCapabilitiesDone = nativeLayer.waitForMultipleCapabilities(3);
+        const whenCapabilitiesDone =
+            nativeLayer.whenCalled('getPrinterCapabilities');
 
         initialize();
 
@@ -340,22 +318,15 @@ suite(destination_settings_test.suiteName, function() {
               assertEquals('ID1', destinationSettings.destination.id);
               assertFalse(
                   destinationSettings.$$('#destinationSelect').disabled);
-              assertDropdownItems([
+              const dropdownItems = [
                 makeLocalDestinationKey('ID1'),
                 makeLocalDestinationKey('ID3'),
                 'Save as PDF/local/',
-              ]);
-
-              // If the user is signed in, Save to Drive should be displayed.
-              return signIn();
-            })
-            .then(() => {
-              assertDropdownItems([
-                makeLocalDestinationKey('ID1'),
-                makeLocalDestinationKey('ID3'),
-                'Save as PDF/local/',
-                '__google__docs/cookies/foo@chromium.org',
-              ]);
+              ];
+              if (isChromeOS) {
+                dropdownItems.push(driveDestinationKey);
+              }
+              assertDropdownItems(dropdownItems);
             });
       });
 
@@ -366,7 +337,8 @@ suite(destination_settings_test.suiteName, function() {
         destination => makeRecentDestination(destination));
     recentDestinations.splice(
         1, 1, makeRecentDestination(getSaveAsPdfDestination()));
-    const whenCapabilitiesDone = nativeLayer.waitForMultipleCapabilities(3);
+    const whenCapabilitiesDone =
+        nativeLayer.whenCalled('getPrinterCapabilities');
     initialize();
 
     return whenCapabilitiesDone
@@ -378,24 +350,16 @@ suite(destination_settings_test.suiteName, function() {
           // destination.
           assertEquals('ID1', destinationSettings.destination.id);
           assertFalse(destinationSettings.$$('#destinationSelect').disabled);
-          assertDropdownItems([
+          const dropdownItems = [
             makeLocalDestinationKey('ID1'),
             makeLocalDestinationKey('ID3'),
             makeLocalDestinationKey('ID4'),
             'Save as PDF/local/',
-          ]);
-
-          // If the user is signed in, Save to Drive should be displayed.
-          return signIn();
-        })
-        .then(() => {
-          assertDropdownItems([
-            makeLocalDestinationKey('ID1'),
-            makeLocalDestinationKey('ID3'),
-            makeLocalDestinationKey('ID4'),
-            'Save as PDF/local/',
-            '__google__docs/cookies/foo@chromium.org',
-          ]);
+          ];
+          if (isChromeOS) {
+            dropdownItems.push(driveDestinationKey);
+          }
+          assertDropdownItems(dropdownItems);
         });
   });
 
@@ -409,7 +373,9 @@ suite(destination_settings_test.suiteName, function() {
         recentDestinations.splice(
             1, 1,
             makeRecentDestination(getGoogleDriveDestination(defaultUser)));
-        const whenCapabilitiesDone = nativeLayer.waitForMultipleCapabilities(3);
+        cloudPrintInterface.setPrinter(getGoogleDriveDestination(defaultUser));
+        const whenCapabilitiesDone =
+            nativeLayer.whenCalled('getPrinterCapabilities');
         initialize();
 
         return whenCapabilitiesDone
@@ -423,26 +389,24 @@ suite(destination_settings_test.suiteName, function() {
               assertFalse(
                   destinationSettings.$$('#destinationSelect').disabled);
 
-              // Google Drive does not show up even though it is recent, since
-              // the user is not signed in and the destination is not available.
-              assertDropdownItems([
-                makeLocalDestinationKey('ID1'),
-                makeLocalDestinationKey('ID3'),
-                makeLocalDestinationKey('ID4'),
-                'Save as PDF/local/',
-              ]);
-
-              // If the user is signed in, Save to Drive should be displayed.
-              return signIn();
-            })
-            .then(() => {
-              assertDropdownItems([
-                makeLocalDestinationKey('ID1'),
-                makeLocalDestinationKey('ID3'),
-                makeLocalDestinationKey('ID4'),
-                'Save as PDF/local/',
-                '__google__docs/cookies/foo@chromium.org',
-              ]);
+              let dropdownItems;
+              if (isChromeOS) {
+                dropdownItems = [
+                  makeLocalDestinationKey('ID1'),
+                  makeLocalDestinationKey('ID3'),
+                  makeLocalDestinationKey('ID4'),
+                  'Save as PDF/local/',
+                  driveDestinationKey,
+                ];
+              } else {
+                dropdownItems = [
+                  makeLocalDestinationKey('ID1'),
+                  driveDestinationKey,
+                  makeLocalDestinationKey('ID3'),
+                  'Save as PDF/local/',
+                ];
+              }
+              assertDropdownItems(dropdownItems);
             });
       });
 
@@ -460,7 +424,6 @@ suite(destination_settings_test.suiteName, function() {
         const whenSelected = eventToPromise(
             DestinationStore.EventType.DESTINATION_SELECT,
             destinationSettings.getDestinationStoreForTest());
-        initialAccounts = [defaultUser];
         cloudPrintInterface.setPrinter(getGoogleDriveDestination(defaultUser));
         initialize();
 
@@ -472,17 +435,26 @@ suite(destination_settings_test.suiteName, function() {
               // This will result in the destination store setting the most
               // recent destination.
               assertEquals(
-                  '__google__docs', destinationSettings.destination.id);
+                  isChromeOS ? 'ID2' : '__google__docs',
+                  destinationSettings.destination.id);
               assertFalse(
                   destinationSettings.$$('#destinationSelect').disabled);
 
-              assertDropdownItems([
-                makeLocalDestinationKey('ID2'),
-                makeLocalDestinationKey('ID3'),
-                makeLocalDestinationKey('ID4'),
-                'Save as PDF/local/',
-                '__google__docs/cookies/foo@chromium.org',
-              ]);
+              const dropdownItems = isChromeOS ?
+                  [
+                    makeLocalDestinationKey('ID2'),
+                    makeLocalDestinationKey('ID3'),
+                    makeLocalDestinationKey('ID4'),
+                    'Save as PDF/local/',
+                    driveDestinationKey,
+                  ] :
+                  [
+                    driveDestinationKey,
+                    makeLocalDestinationKey('ID2'),
+                    makeLocalDestinationKey('ID3'),
+                    'Save as PDF/local/',
+                  ];
+              assertDropdownItems(dropdownItems);
             });
       });
 
@@ -494,7 +466,8 @@ suite(destination_settings_test.suiteName, function() {
         destination => makeRecentDestination(destination));
     recentDestinations.splice(
         1, 1, makeRecentDestination(getSaveAsPdfDestination()));
-    const whenCapabilitiesDone = nativeLayer.waitForMultipleCapabilities(3);
+    const whenCapabilitiesDone =
+        nativeLayer.whenCalled('getPrinterCapabilities');
     initialize();
 
     const dropdown = destinationSettings.$$('#destinationSelect');
@@ -508,12 +481,16 @@ suite(destination_settings_test.suiteName, function() {
           // destination.
           assertEquals('ID1', destinationSettings.destination.id);
           assertFalse(dropdown.disabled);
-          assertDropdownItems([
+          const dropdownItems = [
             makeLocalDestinationKey('ID1'),
             makeLocalDestinationKey('ID3'),
             makeLocalDestinationKey('ID4'),
             'Save as PDF/local/',
-          ]);
+          ];
+          if (isChromeOS) {
+            dropdownItems.push(driveDestinationKey);
+          }
+          assertDropdownItems(dropdownItems);
           // Most recent destination is selected by default.
           assertEquals('ID1', destinationSettings.destination.id);
 
@@ -544,7 +521,9 @@ suite(destination_settings_test.suiteName, function() {
         recentDestinations.splice(
             1, 1,
             makeRecentDestination(getGoogleDriveDestination(defaultUser)));
-        const whenCapabilitiesDone = nativeLayer.waitForMultipleCapabilities(3);
+        cloudPrintInterface.setPrinter(getGoogleDriveDestination(defaultUser));
+        const whenCapabilitiesDone =
+            nativeLayer.whenCalled('getPrinterCapabilities');
         initialize();
         const dropdown = destinationSettings.$$('#destinationSelect');
 
@@ -556,41 +535,37 @@ suite(destination_settings_test.suiteName, function() {
               // This will result in the destination store setting the most
               // recent destination.
               assertEquals('ID1', destinationSettings.destination.id);
-              assertDropdownItems([
-                makeLocalDestinationKey('ID1'),
-                makeLocalDestinationKey('ID3'),
-                makeLocalDestinationKey('ID4'),
-                'Save as PDF/local/',
-              ]);
+              let dropdownItems;
+              if (isChromeOS) {
+                dropdownItems = [
+                  makeLocalDestinationKey('ID1'),
+                  makeLocalDestinationKey('ID3'),
+                  makeLocalDestinationKey('ID4'),
+                  'Save as PDF/local/',
+                  driveDestinationKey,
+                ];
+              } else {
+                dropdownItems = [
+                  makeLocalDestinationKey('ID1'),
+                  driveDestinationKey,
+                  makeLocalDestinationKey('ID3'),
+                  'Save as PDF/local/',
+                ];
+              }
+              assertDropdownItems(dropdownItems);
               assertFalse(dropdown.disabled);
-
-              // If the user is signed in, Save to Drive should be displayed.
-              return signIn();
-            })
-            .then(() => {
-              assertDropdownItems([
-                makeLocalDestinationKey('ID1'),
-                makeLocalDestinationKey('ID3'),
-                makeLocalDestinationKey('ID4'),
-                'Save as PDF/local/',
-                '__google__docs/cookies/foo@chromium.org',
-              ]);
-
-              // Most recent destination is still selected.
-              assertEquals('ID1', destinationSettings.destination.id);
 
               // Simulate selection of Google Drive printer.
               const whenDestinationSelect = eventToPromise(
                   DestinationStore.EventType.DESTINATION_SELECT,
                   destinationSettings.getDestinationStoreForTest());
-              dropdown.fire(
-                  'selected-option-change',
-                  '__google__docs/cookies/foo@chromium.org');
+              dropdown.fire('selected-option-change', driveDestinationKey);
               return whenDestinationSelect;
             })
             .then(() => {
               assertEquals(
-                  Destination.GooglePromotedId.DOCS,
+                  isChromeOS ? Destination.GooglePromotedId.SAVE_TO_DRIVE_CROS :
+                               Destination.GooglePromotedId.DOCS,
                   destinationSettings.destination.id);
             });
       });
@@ -603,7 +578,8 @@ suite(destination_settings_test.suiteName, function() {
       function() {
         recentDestinations = destinations.slice(0, 5).map(
             destination => makeRecentDestination(destination));
-        const whenCapabilitiesDone = nativeLayer.waitForMultipleCapabilities(3);
+        const whenCapabilitiesDone =
+            nativeLayer.whenCalled('getPrinterCapabilities');
         initialize();
         const dropdown = destinationSettings.$$('#destinationSelect');
 
@@ -616,12 +592,16 @@ suite(destination_settings_test.suiteName, function() {
               // recent destination.
               assertEquals('ID1', destinationSettings.destination.id);
               assertFalse(dropdown.disabled);
-              assertDropdownItems([
+              const dropdownItems = [
                 makeLocalDestinationKey('ID1'),
                 makeLocalDestinationKey('ID2'),
                 makeLocalDestinationKey('ID3'),
                 'Save as PDF/local/',
-              ]);
+              ];
+              if (isChromeOS) {
+                dropdownItems.push(driveDestinationKey);
+              }
+              assertDropdownItems(dropdownItems);
 
               // Simulate selection of Save as PDF printer.
               const whenDestinationSelect = eventToPromise(
@@ -640,7 +620,8 @@ suite(destination_settings_test.suiteName, function() {
   test(assert(destination_settings_test.TestNames.OpenDialog), function() {
     recentDestinations = destinations.slice(0, 5).map(
         destination => makeRecentDestination(destination));
-    const whenCapabilitiesDone = nativeLayer.waitForMultipleCapabilities(3);
+    const whenCapabilitiesDone =
+        nativeLayer.whenCalled('getPrinterCapabilities');
     initialize();
     const dropdown = destinationSettings.$$('#destinationSelect');
 
@@ -653,19 +634,30 @@ suite(destination_settings_test.suiteName, function() {
           // destination.
           assertEquals('ID1', destinationSettings.destination.id);
           assertFalse(dropdown.disabled);
-          assertDropdownItems([
+          const dropdownItems = [
             makeLocalDestinationKey('ID1'),
             makeLocalDestinationKey('ID2'),
             makeLocalDestinationKey('ID3'),
             'Save as PDF/local/',
-          ]);
+          ];
+          if (isChromeOS) {
+            dropdownItems.push(driveDestinationKey);
+          }
+          assertDropdownItems(dropdownItems);
 
           dropdown.fire('selected-option-change', 'seeMore');
           return waitBeforeNextRender(destinationSettings);
         })
         .then(() => {
-          assertTrue(destinationSettings.$$('print-preview-destination-dialog')
-                         .isOpen());
+          if (isChromeOS) {
+            assertTrue(
+                destinationSettings.$$('print-preview-destination-dialog-cros')
+                    .isOpen());
+          } else {
+            assertTrue(
+                destinationSettings.$$('print-preview-destination-dialog')
+                    .isOpen());
+          }
         });
   });
 
@@ -692,7 +684,6 @@ suite(destination_settings_test.suiteName, function() {
           cloudPrinterUser1, cloudPrinterUser2, destinations[0]
         ].map(destination => makeRecentDestination(destination));
 
-        initialAccounts = [defaultUser, account2];
         initialize();
         flush();
 
@@ -708,18 +699,23 @@ suite(destination_settings_test.suiteName, function() {
               // recent destination.
               assertEquals('FooCloud', destinationSettings.destination.id);
               assertFalse(dropdown.disabled);
-              assertDropdownItems([
+              const dropdownItems = [
                 'FooCloud/cookies/foo@chromium.org',
                 makeLocalDestinationKey('ID1'),
                 'Save as PDF/local/',
-                '__google__docs/cookies/foo@chromium.org',
-              ]);
+              ];
+              if (isChromeOS) {
+                dropdownItems.push(driveDestinationKey);
+              }
 
+              assertDropdownItems(dropdownItems);
               dropdown.fire('selected-option-change', 'seeMore');
               return waitBeforeNextRender(destinationSettings);
             })
             .then(() => {
-              const dialog =
+              const dialog = isChromeOS ?
+                  destinationSettings.$$(
+                      'print-preview-destination-dialog-cros') :
                   destinationSettings.$$('print-preview-destination-dialog');
               assertTrue(dialog.isOpen());
               const whenAdded = eventToPromise(
@@ -731,12 +727,15 @@ suite(destination_settings_test.suiteName, function() {
               return whenAdded;
             })
             .then(() => {
-              assertDropdownItems([
+              const dropdownItems = [
                 'BarCloud/cookies/bar@chromium.org',
                 makeLocalDestinationKey('ID1'),
                 'Save as PDF/local/',
-                '__google__docs/cookies/bar@chromium.org',
-              ]);
+              ];
+              if (isChromeOS) {
+                dropdownItems.push(driveDestinationKey);
+              }
+              assertDropdownItems(dropdownItems);
             });
       });
 
@@ -840,65 +839,6 @@ suite(destination_settings_test.suiteName, function() {
             });
       });
 
-  // Tests that the dropdown resets the destination if the user signs out of
-  // the account associated with the curret one.
-  test(
-      assert(destination_settings_test.TestNames.ResetDestinationOnSignOut),
-      function() {
-        recentDestinations = destinations.slice(0, 5).map(
-            destination => makeRecentDestination(destination));
-        const whenCapabilitiesDone = nativeLayer.waitForMultipleCapabilities(3);
-        const driveDestination = getGoogleDriveDestination(defaultUser);
-        recentDestinations.splice(
-            0, 1, makeRecentDestination(driveDestination));
-        cloudPrintInterface.setPrinter(getGoogleDriveDestination(defaultUser));
-        initialAccounts = [defaultUser];
-        initialize();
-
-        return Promise
-            .all([
-              whenCapabilitiesDone, cloudPrintInterface.whenCalled('printer')
-            ])
-            .then(() => {
-              assertEquals(
-                  Destination.GooglePromotedId.DOCS,
-                  destinationSettings.destination.id);
-              assertFalse(
-                  destinationSettings.$$('#destinationSelect').disabled);
-              assertDropdownItems([
-                makeLocalDestinationKey('ID2'),
-                makeLocalDestinationKey('ID3'),
-                makeLocalDestinationKey('ID4'),
-                'Save as PDF/local/',
-                '__google__docs/cookies/foo@chromium.org',
-              ]);
-
-              // Sign out.
-              webUIListenerCallback('user-accounts-updated', []);
-              flush();
-
-              assertEquals('ID2', destinationSettings.destination.id);
-              assertFalse(
-                  destinationSettings.$$('#destinationSelect').disabled);
-              assertDropdownItems([
-                makeLocalDestinationKey('ID2'),
-                makeLocalDestinationKey('ID3'),
-                makeLocalDestinationKey('ID4'),
-                'Save as PDF/local/',
-              ]);
-
-              // Now that the selected destination is local, signing in and out
-              // shouldn't impact it.
-              webUIListenerCallback('user-accounts-updated', [defaultUser]);
-              flush();
-              assertEquals('ID2', destinationSettings.destination.id);
-
-              webUIListenerCallback('user-accounts-updated', []);
-              flush();
-              assertEquals('ID2', destinationSettings.destination.id);
-            });
-      });
-
   // Tests that disabling the Save as PDF destination hides the corresponding
   // dropdown item.
   test(
@@ -915,7 +855,10 @@ suite(destination_settings_test.suiteName, function() {
             .then(() => {
               // Because the 'Save as PDF' fallback is unavailable, the first
               // destination is selected.
-              assertDropdownItems([makeLocalDestinationKey('ID1')]);
+              const expectedDestination = isChromeOS ?
+                  'Save to Drive CrOS/local/' :
+                  makeLocalDestinationKey('ID1');
+              assertDropdownItems([expectedDestination]);
             });
       });
 
@@ -927,82 +870,19 @@ suite(destination_settings_test.suiteName, function() {
 
     // Initialize destination settings with the PDF printer disabled.
     pdfPrinterDisabled = true;
+    isDriveMounted = false;
     initialize();
 
     // 'getPrinters' will be called because there are no printers known to
     // the destination store and the 'Save as PDF' fallback is
     // unavailable.
-    return nativeLayer.whenCalled('getPrinters').then(() => {
-      assertDropdownItems(['noDestinations']);
-    });
+    return Promise
+        .all([
+          nativeLayer.whenCalled('getPrinters'),
+          // TODO (rbpotter): remove this wait once user manager is fully
+          // removed.
+          waitBeforeNextRender(destinationSettings),
+        ])
+        .then(() => assertDropdownItems(['noDestinations']));
   });
-
-  if (isChromeOS) {
-    /**
-     * Tests that destinations with a EULA will fetch the EULA URL when
-     * selected.
-     */
-    test(
-        assert(destination_settings_test.TestNames.EulaIsRetrieved),
-        function() {
-          // Recent destinations start out empty.
-          assertRecentDestinations([]);
-
-          const expectedUrl = 'chrome://os-credits/eula';
-
-          assertEquals(0, nativeLayer.getCallCount('getEulaUrl'));
-
-          initialize();
-
-          return nativeLayer.whenCalled('getEulaUrl')
-              .then(() => {
-                assertEquals(1, nativeLayer.getCallCount('getEulaUrl'));
-                nativeLayer.resetResolver('getEulaUrl');
-
-                // Add printers to the store.
-                destinationSettings.getDestinationStoreForTest()
-                    .startLoadAllDestinations();
-                return nativeLayer.whenCalled('getPrinters');
-              })
-              .then(() => {
-                nativeLayer.setEulaUrl('chrome://os-credits/eula');
-                // Simulate selecting a destination that has a EULA URL from the
-                // dialog.
-                selectDestination(destinations[0]);
-                return nativeLayer.whenCalled('getEulaUrl');
-              })
-              .then(() => {
-                assertEquals(1, nativeLayer.getCallCount('getEulaUrl'));
-                nativeLayer.resetResolver('getEulaUrl');
-                assertEquals(
-                    expectedUrl, destinationSettings.destination.eulaUrl);
-
-                nativeLayer.setEulaUrl('');
-                // Select a destination without a EULA URL.
-                selectDestination(destinations[1]);
-                return nativeLayer.whenCalled('getEulaUrl');
-              })
-              .then(() => {
-                assertEquals(1, nativeLayer.getCallCount('getEulaUrl'));
-                nativeLayer.resetResolver('getEulaUrl');
-                assertEquals('', destinationSettings.destination.eulaUrl);
-
-                // Reselect a destination with a EULA URL. This destination
-                // already had its EULA URL set, so expect that it still retains
-                // it. Since capabilities for this destination are already set,
-                // we don't try to fetch the license again.
-                nativeLayer.resetResolver('getPrinterCapabilities');
-                destinationSettings.$$('#destinationSelect')
-                    .fire('selected-option-change', 'ID1/chrome_os/');
-              })
-              .then(() => {
-                assertEquals(
-                    0, nativeLayer.getCallCount('getPrinterCapabilities'));
-                assertEquals(0, nativeLayer.getCallCount('getEulaUrl'));
-                assertRecentDestinations(['ID1', 'ID2', 'Save as PDF']);
-                assertEquals(
-                    expectedUrl, destinationSettings.destination.eulaUrl);
-              });
-        });
-  }
 });

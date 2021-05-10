@@ -45,8 +45,6 @@ namespace ash {
 
 namespace {
 
-using chromeos::assistant::features::IsResponseProcessingV2Enabled;
-using chromeos::assistant::features::IsTimersV2Enabled;
 using chromeos::assistant::features::IsWaitSchedulingEnabled;
 
 // Android.
@@ -91,9 +89,10 @@ AssistantInteractionControllerImpl::AssistantInteractionControllerImpl(
     : assistant_controller_(assistant_controller) {
   model_.AddObserver(this);
 
-  assistant_controller_observer_.Add(AssistantController::Get());
-  highlighter_controller_observer_.Add(Shell::Get()->highlighter_controller());
-  tablet_mode_controller_observer_.Add(GetTabletModeController());
+  assistant_controller_observation_.Observe(AssistantController::Get());
+  highlighter_controller_observation_.Observe(
+      Shell::Get()->highlighter_controller());
+  tablet_mode_controller_observation_.Observe(GetTabletModeController());
 }
 
 AssistantInteractionControllerImpl::~AssistantInteractionControllerImpl() {
@@ -147,24 +146,6 @@ void AssistantInteractionControllerImpl::StartTextInteraction(
       std::make_unique<AssistantTextQuery>(text, query_source));
 
   assistant_->StartTextInteraction(text, query_source, allow_tts);
-}
-
-void AssistantInteractionControllerImpl::StartBloomInteraction() {
-  // TODO(jeroendh): Test.
-  StopActiveInteraction(false);
-
-  AssistantUiController::Get()->ShowUi(AssistantEntryPoint::kBloom);
-
-  OnInteractionStarted(AssistantInteractionMetadata(
-      AssistantInteractionType::kText, AssistantQuerySource::kBloom,
-      /*query=*/"processing query"));
-}
-
-void AssistantInteractionControllerImpl::ShowBloomResult(
-    const std::string& html) {
-  // TODO(jeroendh) ensure we're in a bloom interaction
-
-  OnHtmlResponse(html, /*fallback=*/"");
 }
 
 void AssistantInteractionControllerImpl::OnAssistantControllerConstructed() {
@@ -384,6 +365,8 @@ void AssistantInteractionControllerImpl::OnCommittedQueryChanged(
 // pending query that occur outside of this method.
 void AssistantInteractionControllerImpl::OnInteractionStarted(
     const AssistantInteractionMetadata& metadata) {
+  VLOG(1) << __func__;
+
   // Abort any request in progress.
   screen_context_request_factory_.InvalidateWeakPtrs();
 
@@ -435,14 +418,18 @@ void AssistantInteractionControllerImpl::OnInteractionStarted(
 
 void AssistantInteractionControllerImpl::OnInteractionFinished(
     AssistantInteractionResolution resolution) {
+  VLOG(1) << __func__;
+
   base::UmaHistogramEnumeration("Assistant.Interaction.Resolution", resolution);
   model_.SetMicState(MicState::kClosed);
 
   // If we don't have an active interaction, that indicates that this
   // interaction was explicitly stopped outside of LibAssistant. In this case,
   // we ensure that the mic is closed but otherwise ignore this event.
-  if (IsResponseProcessingV2Enabled() && !HasActiveInteraction())
+  if (!HasActiveInteraction()) {
+    DVLOG(1) << "Assistant: Dropping response outside of active interaction";
     return;
+  }
 
   model_.SetInteractionState(InteractionState::kInactive);
 
@@ -470,12 +457,6 @@ void AssistantInteractionControllerImpl::OnInteractionFinished(
   // this is a prerequisite step to being able to commit the pending response.
   if (model_.pending_query().type() != AssistantQueryType::kNull)
     model_.CommitPendingQuery();
-
-  // It's possible that the pending response has already been committed. This
-  // occurs if the response contained TTS, as we flush the response to the UI
-  // when TTS is started to reduce latency.
-  if (!IsResponseProcessingV2Enabled() && !model_.pending_response())
-    return;
 
   AssistantResponse* response = GetResponseForActiveInteraction();
 
@@ -511,45 +492,30 @@ void AssistantInteractionControllerImpl::OnInteractionFinished(
       break;
   }
 
-  if (IsResponseProcessingV2Enabled()) {
-    // If |response| is pending, commit it to cause the response for the
-    // previous interaction, if one exists, to be animated off stage and the new
-    // |response| to begin rendering.
-    if (response == model_.pending_response())
-      model_.CommitPendingResponse();
-    return;
-  }
-
-  // Perform processing on the pending response before flushing to UI.
-  OnProcessPendingResponse();
+  // If |response| is pending, commit it to cause the response for the
+  // previous interaction, if one exists, to be animated off stage and the new
+  // |response| to begin rendering.
+  if (response == model_.pending_response())
+    model_.CommitPendingResponse();
 }
 
 void AssistantInteractionControllerImpl::OnHtmlResponse(
     const std::string& html,
     const std::string& fallback) {
-  if (!HasActiveInteraction())
+  if (!HasActiveInteraction()) {
+    DVLOG(1) << "Assistant: Dropping response outside of active interaction";
     return;
-
-  if (!IsResponseProcessingV2Enabled()) {
-    // If this occurs, the server has broken our response ordering agreement. We
-    // should not crash but we cannot handle the response so we ignore it.
-    if (!HasUnprocessedPendingResponse()) {
-      NOTREACHED();
-      return;
-    }
   }
 
   AssistantResponse* response = GetResponseForActiveInteraction();
   response->AddUiElement(
       std::make_unique<AssistantCardElement>(html, fallback));
 
-  if (IsResponseProcessingV2Enabled()) {
-    // If |response| is pending, commit it to cause the response for the
-    // previous interaction, if one exists, to be animated off stage and the new
-    // |response| to begin rendering.
-    if (response == model_.pending_response())
-      model_.CommitPendingResponse();
-  }
+  // If |response| is pending, commit it to cause the response for the
+  // previous interaction, if one exists, to be animated off stage and the new
+  // |response| to begin rendering.
+  if (response == model_.pending_response())
+    model_.CommitPendingResponse();
 }
 
 void AssistantInteractionControllerImpl::OnSuggestionPressed(
@@ -628,54 +594,36 @@ void AssistantInteractionControllerImpl::OnTabletModeChanged() {
 
 void AssistantInteractionControllerImpl::OnSuggestionsResponse(
     const std::vector<AssistantSuggestion>& suggestions) {
-  if (!HasActiveInteraction())
+  if (!HasActiveInteraction()) {
+    DVLOG(1) << "Assistant: Dropping response outside of active interaction";
     return;
-
-  if (!IsResponseProcessingV2Enabled()) {
-    // If this occurs, the server has broken our response ordering agreement. We
-    // should not crash but we cannot handle the response so we ignore it.
-    if (!HasUnprocessedPendingResponse()) {
-      NOTREACHED();
-      return;
-    }
   }
 
   AssistantResponse* response = GetResponseForActiveInteraction();
   response->AddSuggestions(suggestions);
 
-  if (IsResponseProcessingV2Enabled()) {
-    // If |response| is pending, commit it to cause the response for the
-    // previous interaction, if one exists, to be animated off stage and the new
-    // |response| to begin rendering.
-    if (response == model_.pending_response())
-      model_.CommitPendingResponse();
-  }
+  // If |response| is pending, commit it to cause the response for the
+  // previous interaction, if one exists, to be animated off stage and the new
+  // |response| to begin rendering.
+  if (response == model_.pending_response())
+    model_.CommitPendingResponse();
 }
 
 void AssistantInteractionControllerImpl::OnTextResponse(
     const std::string& text) {
-  if (!HasActiveInteraction())
+  if (!HasActiveInteraction()) {
+    DVLOG(1) << "Assistant: Dropping response outside of active interaction";
     return;
-
-  if (!IsResponseProcessingV2Enabled()) {
-    // If this occurs, the server has broken our response ordering agreement. We
-    // should not crash but we cannot handle the response so we ignore it.
-    if (!HasUnprocessedPendingResponse()) {
-      NOTREACHED();
-      return;
-    }
   }
 
   AssistantResponse* response = GetResponseForActiveInteraction();
   response->AddUiElement(std::make_unique<AssistantTextElement>(text));
 
-  if (IsResponseProcessingV2Enabled()) {
-    // If |response| is pending, commit it to cause the response for the
-    // previous interaction, if one exists, to be animated off stage and the new
-    // |response| to begin rendering.
-    if (response == model_.pending_response())
-      model_.CommitPendingResponse();
-  }
+  // If |response| is pending, commit it to cause the response for the
+  // previous interaction, if one exists, to be animated off stage and the new
+  // |response| to begin rendering.
+  if (response == model_.pending_response())
+    model_.CommitPendingResponse();
 }
 
 void AssistantInteractionControllerImpl::OnSpeechRecognitionStarted() {}
@@ -712,8 +660,10 @@ void AssistantInteractionControllerImpl::OnTtsStarted(bool due_to_error) {
   // When Assistant is talking, ChromeVox should not be.
   Shell::Get()->accessibility_controller()->SilenceSpokenFeedback();
 
-  if (!HasActiveInteraction())
+  if (!HasActiveInteraction()) {
+    DVLOG(1) << "Assistant: Dropping response outside of active interaction";
     return;
+  }
 
   // Commit the pending query in whatever state it's in. In most cases the
   // pending query is already committed, but we must always commit the pending
@@ -728,15 +678,6 @@ void AssistantInteractionControllerImpl::OnTtsStarted(bool due_to_error) {
     // earliest indication that the mic has closed.
     model_.SetMicState(MicState::kClosed);
 
-    if (!IsResponseProcessingV2Enabled()) {
-      // It is possible that an error Tts could be sent in addition to server
-      // Tts. In that case the pending_response may have already been committed.
-      if (!model_.pending_response()) {
-        model_.SetPendingResponse(base::MakeRefCounted<AssistantResponse>());
-        response = model_.pending_response();
-      }
-    }
-
     // Create an error and add it to response. Do not add it if another
     // identical error already exists in response.
     auto err = std::make_unique<AssistantErrorElement>(
@@ -748,49 +689,38 @@ void AssistantInteractionControllerImpl::OnTtsStarted(bool due_to_error) {
 
   response->set_has_tts(true);
 
-  if (IsResponseProcessingV2Enabled()) {
-    // If |response| is pending, commit it to cause the response for the
-    // previous interaction, if one exists, to be animated off stage and the new
-    // |response| to begin rendering.
-    if (response == model_.pending_response())
-      model_.CommitPendingResponse();
-    return;
-  }
-
-  // We have an agreement with the server that TTS will always be the last part
-  // of an interaction to be processed. To be timely in updating UI, we use this
-  // as an opportunity to begin processing the Assistant response.
-  OnProcessPendingResponse();
+  // If |response| is pending, commit it to cause the response for the
+  // previous interaction, if one exists, to be animated off stage and the new
+  // |response| to begin rendering.
+  if (response == model_.pending_response())
+    model_.CommitPendingResponse();
 }
 
 void AssistantInteractionControllerImpl::OnWaitStarted() {
   DCHECK(IsWaitSchedulingEnabled());
-  if (!HasActiveInteraction())
+  if (!HasActiveInteraction()) {
+    DVLOG(1) << "Assistant: Dropping response outside of active interaction";
     return;
+  }
 
   // If necessary, commit the pending query in whatever state it's in. This is
   // prerequisite to being able to commit a response.
   if (model_.pending_query().type() != AssistantQueryType::kNull)
     model_.CommitPendingQuery();
 
-  if (IsResponseProcessingV2Enabled()) {
-    // If our response is pending, commit it to cause the response for the
-    // previous interaction, if one exists, to be animated off stage and the new
-    // |response| to begin rendering.
-    if (model_.pending_response())
-      model_.CommitPendingResponse();
-    return;
-  }
-
-  // Commit the pending response so that the UI is flushed to the screen while
-  // the wait occurs, giving the user time to digest the current response.
-  OnProcessPendingResponse();
+  // If our response is pending, commit it to cause the response for the
+  // previous interaction, if one exists, to be animated off stage and the new
+  // |response| to begin rendering.
+  if (model_.pending_response())
+    model_.CommitPendingResponse();
 }
 
 void AssistantInteractionControllerImpl::OnOpenUrlResponse(const GURL& url,
                                                            bool in_background) {
-  if (!HasActiveInteraction())
+  if (!HasActiveInteraction()) {
+    DVLOG(1) << "Assistant: Dropping response outside of active interaction";
     return;
+  }
 
   // We need to indicate that the navigation attempt is occurring as a result of
   // a server response so that we can differentiate from navigation attempts
@@ -798,18 +728,20 @@ void AssistantInteractionControllerImpl::OnOpenUrlResponse(const GURL& url,
   AssistantController::Get()->OpenUrl(url, in_background, /*from_server=*/true);
 }
 
-bool AssistantInteractionControllerImpl::OnOpenAppResponse(
+void AssistantInteractionControllerImpl::OnOpenAppResponse(
     const chromeos::assistant::AndroidAppInfo& app_info) {
-  if (!HasActiveInteraction())
-    return false;
+  if (!HasActiveInteraction()) {
+    DVLOG(1) << "Assistant: Dropping response outside of active interaction";
+    return;
+  }
 
   auto* android_helper = AndroidIntentHelper::GetInstance();
   if (!android_helper)
-    return false;
+    return;
 
   auto intent = android_helper->GetAndroidAppLaunchIntent(app_info);
   if (!intent.has_value())
-    return false;
+    return;
 
   // Common Android intent might starts with intent scheme "intent://" or
   // Android app scheme "android-app://". But it might also only contains
@@ -824,7 +756,6 @@ bool AssistantInteractionControllerImpl::OnOpenAppResponse(
   }
   AssistantController::Get()->OpenUrl(GURL(intent_str), /*in_background=*/false,
                                       /*from_server=*/true);
-  return true;
 }
 
 void AssistantInteractionControllerImpl::OnDialogPlateButtonPressed(
@@ -855,48 +786,8 @@ void AssistantInteractionControllerImpl::OnDialogPlateContentsCommitted(
       /*query_source=*/AssistantQuerySource::kDialogPlateTextField);
 }
 
-bool AssistantInteractionControllerImpl::HasUnprocessedPendingResponse() {
-  DCHECK(!IsResponseProcessingV2Enabled());
-  return model_.pending_response() &&
-         model_.pending_response()->processing_state() ==
-             AssistantResponse::ProcessingState::kUnprocessed;
-}
-
 bool AssistantInteractionControllerImpl::HasActiveInteraction() const {
   return model_.interaction_state() == InteractionState::kActive;
-}
-
-void AssistantInteractionControllerImpl::OnProcessPendingResponse() {
-  DCHECK(!IsResponseProcessingV2Enabled());
-
-  // It's possible that the pending response is already being processed. This
-  // can occur if the response contains TTS, as we begin processing before the
-  // interaction is finished in such cases to reduce UI latency.
-  if (model_.pending_response()->processing_state() !=
-      AssistantResponse::ProcessingState::kUnprocessed) {
-    return;
-  }
-
-  // Start processing.
-  model_.pending_response()->Process(base::BindOnce(
-      &AssistantInteractionControllerImpl::OnPendingResponseProcessed,
-      weak_factory_.GetWeakPtr()));
-}
-
-void AssistantInteractionControllerImpl::OnPendingResponseProcessed(
-    bool is_completed) {
-  DCHECK(!IsResponseProcessingV2Enabled());
-
-  // If the response processing has been interrupted and not completed, we will
-  // ignore it and don't flush to the UI. This can happen if two queries were
-  // sent close enough, and the interaction started by the second query arrived
-  // before the first query's response even finished processing.
-  if (!is_completed)
-    return;
-
-  // Once the pending response has been processed it is safe to flush to the UI.
-  // We accomplish this by committing the pending response.
-  model_.CommitPendingResponse();
 }
 
 void AssistantInteractionControllerImpl::OnUiVisible(
@@ -976,12 +867,8 @@ AssistantInteractionControllerImpl::GetResponseForActiveInteraction() {
   // Returns the response for the active interaction. In response processing v2,
   // this may be the pending response (if no client ops have yet been received)
   // or else is the committed response.
-  if (IsResponseProcessingV2Enabled()) {
-    return model_.pending_response() ? model_.pending_response()
-                                     : model_.response();
-  }
-  // In response processing v1, this is always the pending response.
-  return model_.pending_response();
+  return model_.pending_response() ? model_.pending_response()
+                                   : model_.response();
 }
 
 AssistantVisibility AssistantInteractionControllerImpl::GetVisibility() const {

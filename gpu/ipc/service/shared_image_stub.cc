@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "components/viz/common/features.h"
@@ -20,6 +21,7 @@
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
+#include "ui/gfx/buffer_format_util.h"
 #include "ui/gl/gl_context.h"
 
 namespace gpu {
@@ -102,6 +104,7 @@ bool SharedImageStub::CreateSharedImage(const Mailbox& mailbox,
                                         int client_id,
                                         gfx::GpuMemoryBufferHandle handle,
                                         gfx::BufferFormat format,
+                                        gfx::BufferPlane plane,
                                         SurfaceHandle surface_handle,
                                         const gfx::Size& size,
                                         const gfx::ColorSpace& color_space,
@@ -120,9 +123,9 @@ bool SharedImageStub::CreateSharedImage(const Mailbox& mailbox,
     OnError();
     return false;
   }
-  if (!factory_->CreateSharedImage(mailbox, client_id, std::move(handle),
-                                   format, surface_handle, size, color_space,
-                                   surface_origin, alpha_type, usage)) {
+  if (!factory_->CreateSharedImage(
+          mailbox, client_id, std::move(handle), format, plane, surface_handle,
+          size, color_space, surface_origin, alpha_type, usage)) {
     LOG(ERROR) << "SharedImageStub: Unable to create shared image";
     OnError();
     return false;
@@ -171,7 +174,6 @@ bool SharedImageStub::CreateSharedImageWithAHB(const Mailbox& out_mailbox,
   }
   if (!factory_->CreateSharedImageWithAHB(out_mailbox, in_mailbox, usage)) {
     LOG(ERROR) << "SharedImageStub: Unable to update shared image";
-    OnError();
     return false;
   }
   return true;
@@ -197,7 +199,6 @@ void SharedImageStub::OnCreateSharedImage(
   if (!factory_->CreateSharedImage(params.mailbox, params.format, params.size,
                                    params.color_space, params.surface_origin,
                                    params.alpha_type, gpu::kNullSurfaceHandle,
-
                                    params.usage)) {
     LOG(ERROR) << "SharedImageStub: Unable to create shared image";
     OnError();
@@ -207,8 +208,6 @@ void SharedImageStub::OnCreateSharedImage(
   SyncToken sync_token(sync_point_client_state_->namespace_id(),
                        sync_point_client_state_->command_buffer_id(),
                        params.release_id);
-  auto* mailbox_manager = channel_->gpu_channel_manager()->mailbox_manager();
-  mailbox_manager->PushTextureUpdates(sync_token);
   sync_point_client_state_->ReleaseFenceSync(params.release_id);
 }
 
@@ -266,8 +265,6 @@ void SharedImageStub::OnCreateSharedImageWithData(
   SyncToken sync_token(sync_point_client_state_->namespace_id(),
                        sync_point_client_state_->command_buffer_id(),
                        params.release_id);
-  auto* mailbox_manager = channel_->gpu_channel_manager()->mailbox_manager();
-  mailbox_manager->PushTextureUpdates(sync_token);
   sync_point_client_state_->ReleaseFenceSync(params.release_id);
 }
 
@@ -277,18 +274,17 @@ void SharedImageStub::OnCreateGMBSharedImage(
                params.size.width(), "height", params.size.height());
   // TODO(piman): add support for SurfaceHandle (for backbuffers for ozone/drm).
   constexpr SurfaceHandle surface_handle = kNullSurfaceHandle;
-  if (!CreateSharedImage(
-          params.mailbox, channel_->client_id(), std::move(params.handle),
-          params.format, surface_handle, params.size, params.color_space,
-          params.surface_origin, params.alpha_type, params.usage)) {
+  if (!CreateSharedImage(params.mailbox, channel_->client_id(),
+                         std::move(params.handle), params.format, params.plane,
+                         surface_handle, params.size, params.color_space,
+                         params.surface_origin, params.alpha_type,
+                         params.usage)) {
     return;
   }
 
   SyncToken sync_token(sync_point_client_state_->namespace_id(),
                        sync_point_client_state_->command_buffer_id(),
                        params.release_id);
-  auto* mailbox_manager = channel_->gpu_channel_manager()->mailbox_manager();
-  mailbox_manager->PushTextureUpdates(sync_token);
   sync_point_client_state_->ReleaseFenceSync(params.release_id);
 }
 
@@ -303,8 +299,6 @@ void SharedImageStub::OnUpdateSharedImage(const Mailbox& mailbox,
   SyncToken sync_token(sync_point_client_state_->namespace_id(),
                        sync_point_client_state_->command_buffer_id(),
                        release_id);
-  auto* mailbox_manager = channel_->gpu_channel_manager()->mailbox_manager();
-  mailbox_manager->PushTextureUpdates(sync_token);
   sync_point_client_state_->ReleaseFenceSync(release_id);
 }
 
@@ -321,8 +315,6 @@ void SharedImageStub::OnCreateSharedImageWithAHB(const Mailbox& out_mailbox,
   SyncToken sync_token(sync_point_client_state_->namespace_id(),
                        sync_point_client_state_->command_buffer_id(),
                        release_id);
-  auto* mailbox_manager = channel_->gpu_channel_manager()->mailbox_manager();
-  mailbox_manager->PushTextureUpdates(sync_token);
   sync_point_client_state_->ReleaseFenceSync(release_id);
 }
 #endif

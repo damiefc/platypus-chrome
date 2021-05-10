@@ -9,7 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -103,7 +103,6 @@ class TestURLLoaderFactory : public network::mojom::URLLoaderFactory,
   // network::mojom::URLLoaderFactory implementation.
   void CreateLoaderAndStart(
       mojo::PendingReceiver<network::mojom::URLLoader> receiver,
-      int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& url_request,
@@ -194,6 +193,9 @@ class TestURLLoaderClient : public network::mojom::URLLoaderClient {
 
  private:
   // network::mojom::URLLoaderClient implementation:
+  void OnReceiveEarlyHints(network::mojom::EarlyHintsPtr early_hints) override {
+  }
+
   void OnReceiveResponse(
       network::mojom::URLResponseHeadPtr response_head) override {
     on_received_response_called_++;
@@ -380,8 +382,8 @@ class ThrottlingURLLoaderTest : public testing::Test {
     network::ResourceRequest request;
     request.url = request_url;
     loader_ = ThrottlingURLLoader::CreateLoaderAndStart(
-        factory_.shared_factory(), std::move(throttles_), 0, 0, options,
-        &request, &client_, TRAFFIC_ANNOTATION_FOR_TESTS,
+        factory_.shared_factory(), std::move(throttles_), 0, options, &request,
+        &client_, TRAFFIC_ANNOTATION_FOR_TESTS,
         base::ThreadTaskRunnerHandle::Get());
     factory_.factory_remote().FlushForTesting();
   }
@@ -581,7 +583,7 @@ TEST_F(ThrottlingURLLoaderTest,
   network::ResourceRequest request;
   request.url = request_url;
   loader_ = ThrottlingURLLoader::CreateLoaderAndStart(
-      factory_.shared_factory(), std::move(throttles_), 0, 0, 0, &request,
+      factory_.shared_factory(), std::move(throttles_), 0, 0, &request,
       &client_, TRAFFIC_ANNOTATION_FOR_TESTS,
       base::ThreadTaskRunnerHandle::Get());
 
@@ -1896,6 +1898,51 @@ TEST_F(ThrottlingURLLoaderTest, RestartWithURLResetAndFlags) {
   EXPECT_EQ(2u, throttle_->before_will_process_response_called());
   EXPECT_EQ(1u, throttle_->will_process_response_called());
   EXPECT_EQ(throttle_->observed_response_url(), request_url);
+}
+
+// Ensure that RestartWithModifiedHeadersNow executes and internal redirect and
+// actually modifies the headers.
+TEST_F(ThrottlingURLLoaderTest, RestartWithModifiedHeadersNow) {
+  base::RunLoop run_loop1;
+  base::RunLoop run_loop2;
+
+  // Check that the initial loader uses the default load flags (0).
+  factory_.set_on_create_loader_and_start(base::BindRepeating(
+      [](const base::RepeatingClosure& quit_closure,
+         const network::ResourceRequest& url_request) {
+        EXPECT_FALSE(url_request.headers.HasHeader("X-Foo"));
+        quit_closure.Run();
+      },
+      run_loop1.QuitClosure()));
+
+  // Restart the request when processing BeforeWillProcessResponse(), using
+  // different load flags (1), and an URL reset.
+  throttle_->set_before_will_process_response_callback(base::BindRepeating(
+      [](blink::URLLoaderThrottle::Delegate* delegate, bool* defer) {
+        net::HttpRequestHeaders modified_headers;
+        modified_headers.SetHeader("X-Foo", "bar");
+        delegate->RestartWithModifiedHeadersNow(modified_headers);
+      }));
+
+  CreateLoaderAndStart();
+
+  run_loop1.Run();
+
+  // The next time we intercept CreateLoaderAndStart() should be for the
+  // restarted request (load flags of 1).
+  factory_.set_on_create_loader_and_start(base::BindRepeating(
+      [](const base::RepeatingClosure& quit_closure,
+         const network::ResourceRequest& url_request) {
+        std::string value;
+        EXPECT_TRUE(url_request.headers.GetHeader("X-Foo", &value));
+        EXPECT_EQ("bar", value);
+        quit_closure.Run();
+      },
+      run_loop2.QuitClosure()));
+
+  factory_.NotifyClientOnReceiveResponse();
+
+  run_loop2.Run();
 }
 
 // Call RestartWithURLResetAndFlags() from a single throttle after having

@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "components/arc/mojom/crash_collector.mojom.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "mojo/public/mojom/base/time.mojom.h"
 
 namespace content {
 class BrowserContext;
@@ -28,6 +29,8 @@ class ArcCrashCollectorBridge
   // or nullptr if the browser |context| is not allowed to use ARC.
   static ArcCrashCollectorBridge* GetForBrowserContext(
       content::BrowserContext* context);
+  static ArcCrashCollectorBridge* GetForBrowserContextForTesting(
+      content::BrowserContext* context);
 
   ArcCrashCollectorBridge(content::BrowserContext* context,
                           ArcBridgeService* bridge);
@@ -38,11 +41,14 @@ class ArcCrashCollectorBridge
   ~ArcCrashCollectorBridge() override;
 
   // mojom::CrashCollectorHost overrides.
-  void DumpCrash(const std::string& type, mojo::ScopedHandle pipe) override;
+  void DumpCrash(const std::string& type,
+                 mojo::ScopedHandle pipe,
+                 base::Optional<base::TimeDelta> uptime) override;
   void DumpNativeCrash(const std::string& exec_name,
                        int32_t pid,
                        int64_t timestamp,
                        mojo::ScopedHandle minidump_fd) override;
+  void DumpKernelCrash(mojo::ScopedHandle ramoops_handle) override;
   void SetBuildProperties(
       const std::string& device,
       const std::string& board,

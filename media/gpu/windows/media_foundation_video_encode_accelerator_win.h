@@ -18,7 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
-#include "media/base/win/mf_initializer.h"
+#include "media/base/win/dxgi_device_manager.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/video/video_encode_accelerator.h"
 
@@ -89,6 +89,9 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   // Processes the input video frame for the encoder.
   HRESULT ProcessInput(scoped_refptr<VideoFrame> frame, bool force_keyframe);
 
+  // Populates input sample buffer with contents of a video frame
+  HRESULT PopulateInputSampleBuffer(scoped_refptr<VideoFrame> frame);
+
   // Checks for and copies encoded output on |encoder_thread_|.
   void ProcessOutputAsync();
   void ProcessOutputSync();
@@ -134,6 +137,10 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   uint32_t frame_rate_;
   uint32_t target_bitrate_;
 
+  // Group of picture length for encoded output stream, indicates the
+  // distance between two key frames.
+  base::Optional<uint32_t> gop_length_;
+
   Microsoft::WRL::ComPtr<IMFActivate> activate_;
   Microsoft::WRL::ComPtr<IMFTransform> encoder_;
   Microsoft::WRL::ComPtr<ICodecAPI> codec_api_;
@@ -149,9 +156,6 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   Microsoft::WRL::ComPtr<IMFSample> input_sample_;
   Microsoft::WRL::ComPtr<IMFSample> output_sample_;
 
-  // MediaFoundation session.
-  MFSessionLifetime session_;
-
   // To expose client callbacks from VideoEncodeAccelerator.
   // NOTE: all calls to this object *MUST* be executed on
   // |main_client_task_runner_|.
@@ -163,6 +167,9 @@ class MEDIA_GPU_EXPORT MediaFoundationVideoEncodeAccelerator
   // GPU child thread and CompressionCallback() posted from device thread.
   base::Thread encoder_thread_;
   scoped_refptr<base::SingleThreadTaskRunner> encoder_thread_task_runner_;
+
+  // DXGI device manager for handling hardware input textures
+  scoped_refptr<DXGIDeviceManager> dxgi_device_manager_;
 
   // Declared last to ensure that all weak pointers are invalidated before
   // other destructors run.

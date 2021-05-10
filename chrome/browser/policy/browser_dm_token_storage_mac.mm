@@ -8,8 +8,8 @@
 
 #include "base/base64url.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/hash/sha1.h"
@@ -21,7 +21,6 @@
 #include "base/notreached.h"
 #include "base/optional.h"
 #include "base/path_service.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -118,7 +117,7 @@ bool GetEnrollmentTokenFromFile(std::string* enrollment_token) {
     return false;
   }
   *enrollment_token =
-      base::TrimWhitespaceASCII(*enrollment_token, base::TRIM_ALL).as_string();
+      std::string(base::TrimWhitespaceASCII(*enrollment_token, base::TRIM_ALL));
   return true;
 }
 
@@ -143,7 +142,7 @@ base::Optional<bool> IsEnrollmentMandatoryByFile() {
                               &options)) {
     return base::Optional<bool>();
   }
-  return base::TrimWhitespaceASCII(options, base::TRIM_ALL).as_string() ==
+  return std::string(base::TrimWhitespaceASCII(options, base::TRIM_ALL)) ==
          kEnrollmentMandatoryOption;
 }
 
@@ -182,7 +181,7 @@ std::string BrowserDMTokenStorageMac::InitDMToken() {
   if (!base::ReadFileToString(token_file_path, &token))
     return std::string();
 
-  return base::TrimWhitespaceASCII(token, base::TRIM_ALL).as_string();
+  return std::string(base::TrimWhitespaceASCII(token, base::TRIM_ALL));
 }
 
 bool BrowserDMTokenStorageMac::InitEnrollmentErrorOption() {

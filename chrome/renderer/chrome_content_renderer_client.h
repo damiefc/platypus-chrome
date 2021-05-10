@@ -16,7 +16,6 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "chrome/common/media/webrtc_logging.mojom.h"
 #include "chrome/renderer/media/chrome_key_systems_provider.h"
@@ -55,6 +54,7 @@ class ThreadProfiler;
 
 namespace blink {
 class WebServiceWorkerContextProxy;
+enum class ProtocolHandlerSecurityLevel;
 }
 
 namespace chrome {
@@ -103,14 +103,12 @@ class ChromeContentRendererClient
   blink::WebPlugin* CreatePluginReplacement(
       content::RenderFrame* render_frame,
       const base::FilePath& plugin_path) override;
-  bool HasErrorPage(int http_status_code) override;
-  bool ShouldTrackUseCounter(const GURL& url) override;
   void PrepareErrorPage(content::RenderFrame* render_frame,
                         const blink::WebURLError& error,
                         const std::string& http_method,
                         std::string* error_html) override;
   void PrepareErrorPageForHttpStatusError(content::RenderFrame* render_frame,
-                                          const GURL& unreachable_url,
+                                          const blink::WebURLError& error,
                                           const std::string& http_method,
                                           int http_status,
                                           std::string* error_html) override;
@@ -123,25 +121,25 @@ class ChromeContentRendererClient
       base::SingleThreadTaskRunner* compositor_thread_task_runner) override;
   bool RunIdleHandlerWhenWidgetsHidden() override;
   bool AllowPopup() override;
+  blink::ProtocolHandlerSecurityLevel GetProtocolHandlerSecurityLevel()
+      override;
   void WillSendRequest(blink::WebLocalFrame* frame,
                        ui::PageTransition transition_type,
                        const blink::WebURL& url,
                        const net::SiteForCookies& site_for_cookies,
                        const url::Origin* initiator_origin,
-                       GURL* new_url,
-                       bool* force_ignore_site_for_cookies) override;
-  bool IsPrefetchOnly(content::RenderFrame* render_frame,
-                      const blink::WebURLRequest& request) override;
+                       GURL* new_url) override;
+  bool IsPrefetchOnly(content::RenderFrame* render_frame) override;
   uint64_t VisitedLinkHash(const char* canonical_url, size_t length) override;
   bool IsLinkVisited(uint64_t link_hash) override;
   std::unique_ptr<blink::WebPrescientNetworking> CreatePrescientNetworking(
       content::RenderFrame* render_frame) override;
   bool IsExternalPepperPlugin(const std::string& module_name) override;
   bool IsOriginIsolatedPepperPlugin(const base::FilePath& plugin_path) override;
-  std::unique_ptr<content::WebSocketHandshakeThrottleProvider>
+  std::unique_ptr<blink::WebSocketHandshakeThrottleProvider>
   CreateWebSocketHandshakeThrottleProvider() override;
   bool ShouldReportDetailedMessageForSource(
-      const base::string16& source) override;
+      const std::u16string& source) override;
   std::unique_ptr<blink::WebContentSettingsClient>
   CreateWorkerContentSettingsClient(
       content::RenderFrame* render_frame) override;
@@ -185,20 +183,13 @@ class ChromeContentRendererClient
       const std::string& header_name) override;
   bool ShouldEnforceWebRTCRoutingPreferences() override;
   GURL OverrideFlashEmbedWithHTML(const GURL& url) override;
-  std::unique_ptr<content::URLLoaderThrottleProvider>
+  std::unique_ptr<blink::URLLoaderThrottleProvider>
   CreateURLLoaderThrottleProvider(
-      content::URLLoaderThrottleProviderType provider_type) override;
+      blink::URLLoaderThrottleProviderType provider_type) override;
   blink::WebFrame* FindFrame(blink::WebLocalFrame* relative_to_frame,
                              const std::string& name) override;
   bool IsSafeRedirectTarget(const GURL& url) override;
   void DidSetUserAgent(const std::string& user_agent) override;
-  bool RequiresWebComponentsV0(const GURL& url) override;
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  void MaybeProxyURLLoaderFactory(
-      content::RenderFrame* render_frame,
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver)
-      override;
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
   static mojo::AssociatedRemote<chrome::mojom::PluginInfoHost>&

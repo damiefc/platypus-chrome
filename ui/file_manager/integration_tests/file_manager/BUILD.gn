@@ -5,8 +5,10 @@
 import("//third_party/closure_compiler/compile_js.gni")
 
 js_type_check("closure_compile") {
+  uses_legacy_modules = true
   testonly = true
   deps = [
+    ":android_photos",
     ":background",
     ":breadcrumbs",
     ":context_menu",
@@ -31,7 +33,7 @@ js_type_check("closure_compile") {
     ":metrics",
     ":my_files",
     ":open_audio_files",
-    ":open_image_files",
+    ":open_image_media_app",
     ":open_video_files",
     ":providers",
     ":quick_view",
@@ -41,11 +43,11 @@ js_type_check("closure_compile") {
     ":search",
     ":share_and_manage_dialog",
     ":sort_columns",
-    ":suggest_app_dialog",
     ":tab_index",
     ":tasks",
     ":toolbar",
     ":transfer",
+    ":trash",
     ":traverse",
     ":zip_files",
   ]
@@ -54,10 +56,15 @@ js_type_check("closure_compile") {
 js_library("background") {
   testonly = true
   deps = [
-    "//ui/file_manager/base/js:volume_manager_types",
+    "//ui/file_manager/file_manager/common/js:volume_manager_types",
     "//ui/file_manager/integration_tests:remote_call",
     "//ui/file_manager/integration_tests:test_util",
   ]
+}
+
+js_library("android_photos") {
+  testonly = true
+  deps = [ ":background" ]
 }
 
 js_library("breadcrumbs") {
@@ -175,7 +182,7 @@ js_library("open_audio_files") {
   deps = []
 }
 
-js_library("open_image_files") {
+js_library("open_image_media_app") {
   testonly = true
   deps = []
 }
@@ -230,11 +237,6 @@ js_library("sort_columns") {
   deps = []
 }
 
-js_library("suggest_app_dialog") {
-  testonly = true
-  deps = []
-}
-
 js_library("tab_index") {
   testonly = true
   deps = []
@@ -251,6 +253,11 @@ js_library("toolbar") {
 }
 
 js_library("transfer") {
+  testonly = true
+  deps = []
+}
+
+js_library("trash") {
   testonly = true
   deps = []
 }

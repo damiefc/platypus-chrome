@@ -18,6 +18,7 @@ namespace switches {
 
 // Please keep alphabetized.
 // TODO(sky): fix order!
+ASH_PUBLIC_EXPORT extern const char kAshClearFastInkBuffer[];
 ASH_PUBLIC_EXPORT extern const char kAshConstrainPointerToRoot[];
 ASH_PUBLIC_EXPORT extern const char kAshContextualNudgesInterval[];
 ASH_PUBLIC_EXPORT extern const char kAshContextualNudgesResetShownCount[];
@@ -46,10 +47,13 @@ ASH_PUBLIC_EXPORT extern const char kHasInternalStylus[];
 ASH_PUBLIC_EXPORT extern const char kShowTaps[];
 ASH_PUBLIC_EXPORT extern const char kSuppressMessageCenterPopups[];
 ASH_PUBLIC_EXPORT extern const char kTouchscreenUsableWhileScreenOff[];
+ASH_PUBLIC_EXPORT extern const char kSupportsClamshellAutoRotation[];
 
 ASH_PUBLIC_EXPORT base::Optional<base::TimeDelta> ContextualNudgesInterval();
 ASH_PUBLIC_EXPORT bool ContextualNudgesResetShownCount();
 ASH_PUBLIC_EXPORT bool IsUsingShelfAutoDim();
+ASH_PUBLIC_EXPORT bool IsCompositingBasedThrottlingEnabled();
+ASH_PUBLIC_EXPORT bool ShouldClearFastInkBuffer();
 
 }  // namespace switches
 }  // namespace ash

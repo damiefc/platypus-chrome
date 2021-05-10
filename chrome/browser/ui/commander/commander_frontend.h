@@ -6,8 +6,8 @@
 #define CHROME_BROWSER_UI_COMMANDER_COMMANDER_FRONTEND_H_
 
 #include <memory>
+#include <string>
 
-#include "base/strings/string16.h"
 
 class Browser;
 
@@ -21,6 +21,11 @@ class CommanderFrontend {
   CommanderFrontend() = default;
   virtual ~CommanderFrontend() = default;
 
+  // If the UI is currently showing for |browser|, hides it.
+  // If the UI is currently showing for a different browser,
+  // hides it, then shows it for |browser|.
+  // If the UI is not showing, shows it for |browser|.
+  virtual void ToggleForBrowser(Browser* browser) = 0;
   // Show the UI, anchored to |browser|'s window.
   virtual void Show(Browser* browser) = 0;
   // Hide the UI, if showing.

@@ -11,14 +11,16 @@ WebTestTtsPlatform* WebTestTtsPlatform::GetInstance() {
   return base::Singleton<WebTestTtsPlatform>::get();
 }
 
-bool WebTestTtsPlatform::PlatformImplAvailable() {
+bool WebTestTtsPlatform::PlatformImplSupported() {
   return true;
 }
 
-bool WebTestTtsPlatform::LoadBuiltInTtsEngine(
-    content::BrowserContext* browser_context) {
-  return false;
+bool WebTestTtsPlatform::PlatformImplInitialized() {
+  return true;
 }
+
+void WebTestTtsPlatform::LoadBuiltInTtsEngine(
+    content::BrowserContext* browser_context) {}
 
 void WebTestTtsPlatform::Speak(
     int utterance_id,
@@ -62,6 +64,8 @@ std::string WebTestTtsPlatform::GetError() {
 void WebTestTtsPlatform::ClearError() {}
 
 void WebTestTtsPlatform::SetError(const std::string& error) {}
+
+void WebTestTtsPlatform::Shutdown() {}
 
 WebTestTtsPlatform::WebTestTtsPlatform() {}
 

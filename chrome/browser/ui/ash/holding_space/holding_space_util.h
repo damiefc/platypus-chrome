@@ -22,7 +22,7 @@ class FilePath;
 namespace ash {
 
 class HoldingSpaceImage;
-class HoldingSpaceThumbnailLoader;
+class ThumbnailLoader;
 
 // A utility for holding space.
 namespace holding_space_util {
@@ -47,6 +47,15 @@ void FilePathValid(Profile*,
                    FilePathWithValidityRequirement,
                    FilePathValidCallback);
 
+// Partitions `file_paths` into `existing_file_paths` and
+// `non_existing_file_paths`, returning the result via `callback`.
+using PartitionFilePathsByExistenceCallback =
+    base::OnceCallback<void(FilePathList existing_file_paths,
+                            FilePathList invalid_file_paths)>;
+void PartitionFilePathsByExistence(Profile*,
+                                   FilePathList,
+                                   PartitionFilePathsByExistenceCallback);
+
 // Partitions `file_paths` into `valid_file_paths` and
 // `invalid_file_paths`, returning the result via `callback`.
 using PartitionFilePathsByValidityCallback =
@@ -61,7 +70,7 @@ GURL ResolveFileSystemUrl(Profile* profile, const base::FilePath& file_path);
 
 // Resolves the image associated with the specified `file_path`.
 std::unique_ptr<HoldingSpaceImage> ResolveImage(
-    HoldingSpaceThumbnailLoader* thumbnail_loader,
+    ThumbnailLoader* thumbnail_loader,
     HoldingSpaceItem::Type type,
     const base::FilePath& file_path);
 

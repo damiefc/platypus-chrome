@@ -33,7 +33,8 @@ void MenuRunner::RunMenuAt(Widget* parent,
                            MenuButtonController* button_controller,
                            const gfx::Rect& bounds,
                            MenuAnchorPosition anchor,
-                           ui::MenuSourceType source_type) {
+                           ui::MenuSourceType source_type,
+                           gfx::NativeView native_view_for_gestures) {
   // Do not attempt to show the menu if the application is currently shutting
   // down. MenuDelegate::OnMenuClosed would not be called.
   if (ViewsDelegate::GetInstance() &&
@@ -45,7 +46,7 @@ void MenuRunner::RunMenuAt(Widget* parent,
   // the parent widget will not be able to reset its state (it might have mouse
   // capture from the mouse down). So we clear its state here.
   if (parent && parent->GetRootView())
-    parent->GetRootView()->SetMouseHandler(nullptr);
+    parent->GetRootView()->SetMouseAndGestureHandler(nullptr);
 
   if (runner_handler_.get()) {
     runner_handler_->RunMenuAt(parent, button_controller, bounds, anchor,
@@ -69,7 +70,8 @@ void MenuRunner::RunMenuAt(Widget* parent,
     }
   }
 
-  impl_->RunMenuAt(parent, button_controller, bounds, anchor, run_types_);
+  impl_->RunMenuAt(parent, button_controller, bounds, anchor, run_types_,
+                   native_view_for_gestures);
 }
 
 bool MenuRunner::IsRunning() const {

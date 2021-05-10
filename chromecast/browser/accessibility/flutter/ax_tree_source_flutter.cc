@@ -8,7 +8,9 @@
 
 #include "base/check_op.h"
 #include "base/strings/string_number_conversions.h"
+#include "chromecast/browser/accessibility/accessibility_manager.h"
 #include "chromecast/browser/accessibility/flutter/flutter_semantics_node_wrapper.h"
+#include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "content/public/browser/tts_controller.h"
 #include "content/public/browser/tts_utterance.h"
@@ -63,6 +65,11 @@ void AXTreeSourceFlutter::AXTreeWebContentsObserver::RenderFrameHostChanged(
   ax_tree_source_->UpdateTree();
 }
 
+void AXTreeSourceFlutter::AXTreeWebContentsObserver::
+    AXTreeIDForMainFrameHasChanged() {
+  ax_tree_source_->UpdateTree();
+}
+
 constexpr int kInvalidId = -1;
 
 AXTreeSourceFlutter::AXTreeSourceFlutter(
@@ -77,7 +84,8 @@ AXTreeSourceFlutter::AXTreeSourceFlutter(
       browser_context_(browser_context),
       event_router_(event_router
                         ? event_router
-                        : extensions::AutomationEventRouter::GetInstance()) {
+                        : extensions::AutomationEventRouter::GetInstance()),
+      accessibility_enabled_(false) {
   DCHECK(delegate_);
 }
 
@@ -97,6 +105,15 @@ void AXTreeSourceFlutter::NotifyAccessibilityEvent(
   }
 
   // First find out if we know what to do with this event type from flutter.
+  if (event_data->event_type() ==
+      gallium::castos::OnAccessibilityEventRequest_EventType_ANNOUNCEMENT) {
+    if (!event_data->has_text())
+      return;
+
+    SubmitTTS(event_data->text());
+    return;
+  }
+
   ax::mojom::Event translated_event = ToAXEvent(event_data->event_type());
   if (translated_event == ax::mojom::Event::kNone) {
     LOG(INFO) << "Ignoring unknown flutter ax event "
@@ -247,19 +264,19 @@ void AXTreeSourceFlutter::NotifyAccessibilityEvent(
     focused_id_ = root_id_;
   }
 
-  ExtensionMsg_AccessibilityEventBundleParams event_bundle;
-  event_bundle.tree_id = ax_tree_id();
-
-  event_bundle.events.emplace_back();
-  ui::AXEvent& event = event_bundle.events.back();
+  std::vector<ui::AXEvent> events;
+  ui::AXEvent event;
   event.event_type = translated_event;
   event.id = event_data->source_id();
+  events.push_back(std::move(event));
 
   if (event_data->event_type() ==
       gallium::castos::OnAccessibilityEventRequest_EventType_CONTENT_CHANGED) {
-    current_tree_serializer_->InvalidateSubtree(GetFromId(event.id));
+    current_tree_serializer_->InvalidateSubtree(
+        GetFromId(event_data->source_id()));
   }
 
+  std::vector<ui::AXTreeUpdate> updates;
   if (event_data->event_type() !=
           gallium::castos::OnAccessibilityEventRequest_EventType_HOVER_ENTER &&
       event_data->event_type() !=
@@ -267,9 +284,9 @@ void AXTreeSourceFlutter::NotifyAccessibilityEvent(
     // For every parent whose child has been moved, serialize an update.
     // This update will filter all the children that have moved.
     for (int32_t nid : parents_with_deleted_children) {
-      event_bundle.updates.emplace_back();
-      current_tree_serializer_->SerializeChanges(GetFromId(nid),
-                                                 &event_bundle.updates.back());
+      ui::AXTreeUpdate update;
+      current_tree_serializer_->SerializeChanges(GetFromId(nid), &update);
+      updates.push_back(std::move(update));
     }
 
     // If there were any children that were reparented, invalidate the entire
@@ -282,31 +299,37 @@ void AXTreeSourceFlutter::NotifyAccessibilityEvent(
     reparented_children_.clear();
 
     // Handle routes added/removed from the tree.
-    HandleRoutes(&event_bundle.events);
+    HandleRoutes(&events);
 
-    event_bundle.updates.emplace_back();
-    current_tree_serializer_->SerializeChanges(GetFromId(event.id),
-                                               &event_bundle.updates.back());
+    ui::AXTreeUpdate update;
+    current_tree_serializer_->SerializeChanges(
+        GetFromId(event_data->source_id()), &update);
+    updates.push_back(std::move(update));
 
-    HandleLiveRegions(&event_bundle.events);
+    HandleLiveRegions(&events);
 
     // b/162311902: For nodes that have scroll extents, rapidly changing the
     // value will result in queueing up the values and speak out one by one.
     // Here we handle the tts natively.
     HandleNativeTTS();
+
+    HandleVirtualKeyboardNodes();
   }
 
   // Need to refocus
   if (need_focus_clear) {
-    event_bundle.events.emplace_back();
-    ui::AXEvent& focus_event = event_bundle.events.back();
+    ui::AXEvent focus_event;
     focus_event.event_type = ax::mojom::Event::kFocus;
     focus_event.id = focused_id_;
     focus_event.event_from = ax::mojom::EventFrom::kNone;
+    focus_event.event_from_action = ax::mojom::Action::kNone;
+    events.push_back(std::move(focus_event));
   }
 
-  if (event_router_)
-    event_router_->DispatchAccessibilityEvents(event_bundle);
+  if (event_router_) {
+    event_router_->DispatchAccessibilityEvents(ax_tree_id(), std::move(updates),
+                                               gfx::Point(), std::move(events));
+  }
 }
 
 void AXTreeSourceFlutter::NotifyActionResult(const ui::AXActionData& data,
@@ -365,55 +388,6 @@ void AXTreeSourceFlutter::GetChildren(
       ++it;
     }
   }
-
-  std::map<int32_t, size_t> id_to_index;
-  for (size_t i = 0; i < out_children->size(); i++)
-    id_to_index[(*out_children)[i]->GetId()] = i;
-
-  // Sort children based on their enclosing bounding rectangles, based on their
-  // descendants.
-  std::sort(
-      out_children->begin(), out_children->end(),
-      [this, id_to_index](auto left, auto right) {
-        auto left_bounds = ComputeEnclosingBounds(left);
-        auto right_bounds = ComputeEnclosingBounds(right);
-
-        if (left_bounds.IsEmpty() || right_bounds.IsEmpty()) {
-          return id_to_index.at(left->GetId()) < id_to_index.at(right->GetId());
-        }
-
-        // Left to right sort (non-overlapping).
-        if (!left_bounds.Intersects(right_bounds)) {
-          return left_bounds.x() < right_bounds.x();
-        }
-
-        // Overlapping
-        // Left to right.
-        int left_difference = left_bounds.x() - right_bounds.x();
-        if (left_difference != 0) {
-          return left_difference < 0;
-        }
-
-        // Top to bottom.
-        int top_difference = left_bounds.y() - right_bounds.y();
-        if (top_difference != 0) {
-          return top_difference < 0;
-        }
-
-        // Larger to smaller.
-        int height_difference = left_bounds.height() - right_bounds.height();
-        if (height_difference != 0) {
-          return height_difference > 0;
-        }
-
-        int width_difference = left_bounds.width() - right_bounds.width();
-        if (width_difference != 0) {
-          return width_difference > 0;
-        }
-
-        // The rects are equal.
-        return id_to_index.at(left->GetId()) < id_to_index.at(right->GetId());
-      });
 }
 
 FlutterSemanticsNode* AXTreeSourceFlutter::GetParent(
@@ -459,30 +433,6 @@ void AXTreeSourceFlutter::SerializeNode(FlutterSemanticsNode* info_data,
   }
 
   info_data->Serialize(out_data);
-}
-
-const gfx::Rect AXTreeSourceFlutter::GetBounds(
-    FlutterSemanticsNode* info_data) const {
-  DCHECK(info_data);
-  DCHECK_NE(root_id_, kInvalidId);
-
-  gfx::Rect node_bounds = info_data->GetBounds();
-
-  // TODO(rmrossi): If embedded flutter is ever not full screen, we will have
-  // to pass in the embedded object tag's screen coordinates to this function
-  // and set the offset of the root node here separately from other nodes.
-  // The bounds of the root node are supposed to be relative to its container
-  // but since we are full screen, we leave them alone.  See
-  // ax_tree_source_arc.cc for an example.
-  if (info_data->GetId() == root_id_) {
-    gfx::Rect root_bounds = GetFromId(root_id_)->GetBounds();
-    // No offset applied since we are full screen.  See TODO above.
-    return root_bounds;
-  }
-  // Bounds of non-root node is relative to its tree's root.
-  gfx::Rect root_bounds = GetFromId(root_id_)->GetBounds();
-  node_bounds.Offset(-1 * root_bounds.x(), -1 * root_bounds.y());
-  return node_bounds;
 }
 
 gfx::Rect AXTreeSourceFlutter::ComputeEnclosingBounds(
@@ -539,6 +489,21 @@ void AXTreeSourceFlutter::Reset() {
   event_router_->DispatchTreeDestroyedEvent(ax_tree_id(), browser_context_);
 }
 
+void AXTreeSourceFlutter::HandleVirtualKeyboardNodes() {
+  gfx::Rect bounds;
+  for (const auto& it : tree_map_) {
+    FlutterSemanticsNode* node_info = it.second.get();
+    if (!node_info->IsKeyboardNode())
+      continue;
+    bounds.Union(node_info->GetBounds());
+  }
+
+  if (bounds != keyboard_bounds_) {
+    keyboard_bounds_ = bounds;
+    delegate_->OnVirtualKeyboardBoundsChange(keyboard_bounds_);
+  }
+}
+
 void AXTreeSourceFlutter::HandleNativeTTS() {
   std::map<int32_t, std::string> new_native_tts_name_cache;
 
@@ -566,13 +531,7 @@ void AXTreeSourceFlutter::HandleNativeTTS() {
     if (prev_it != native_tts_name_cache_.end() &&
         prev_it->second != it.second) {
       // Send to TTS controller.
-      std::unique_ptr<content::TtsUtterance> utterance =
-          content::TtsUtterance::Create(browser_context_);
-      utterance->SetText(it.second);
-
-      auto* tts_controller = content::TtsController::GetInstance();
-      tts_controller->Stop();
-      tts_controller->SpeakOrEnqueue(std::move(utterance));
+      SubmitTTS(it.second);
     }
   }
 
@@ -639,11 +598,13 @@ void AXTreeSourceFlutter::HandleRoutes(std::vector<ui::AXEvent>* events) {
       continue;
     }
 
-    scopes_route_cache_.push_back(node->GetId());
-
     // Find a node in the sub-tree with names route flag set.
     FlutterSemanticsNode* sub_node = FindRoutesNode(node);
     if (sub_node) {
+      // Only register the scopes route node in our cache
+      // if a names route is found.
+      scopes_route_cache_.push_back(node->GetId());
+
       ui::AXNodeData data;
       SerializeNode(sub_node, &data);
       std::string name;
@@ -658,25 +619,21 @@ void AXTreeSourceFlutter::HandleRoutes(std::vector<ui::AXEvent>* events) {
         focus_event.event_type = ax::mojom::Event::kFocus;
         focus_event.id = focused_id_;
         focus_event.event_from = ax::mojom::EventFrom::kNone;
-
-        // Speak it.
-        std::unique_ptr<content::TtsUtterance> utterance =
-            content::TtsUtterance::Create(browser_context_);
-        utterance->SetText(name);
-        auto* tts_controller = content::TtsController::GetInstance();
-        tts_controller->Stop();
-        tts_controller->SpeakOrEnqueue(std::move(utterance));
+        focus_event.event_from_action = ax::mojom::Action::kNone;
       }
     }
   }
 
-  // Detect any removed nodes with scopes_route flag.
+  // Clean up the cache for those nodes that should not be in the cache anymore.
   bool need_refocus = false;
   for (std::vector<int32_t>::iterator it = scopes_route_cache_.begin();
        it != scopes_route_cache_.end();) {
     int32_t id = *it;
-    if (GetFromId(id) == nullptr) {
-      // This was removed.
+    FlutterSemanticsNode* scopes_route_node = GetFromId(id);
+    if (scopes_route_node == nullptr || !scopes_route_node->HasScopesRoute() ||
+        FindRoutesNode(scopes_route_node) == nullptr) {
+      // This was removed in the latest tree update or there are no more
+      // RoutesNode child.
       it = scopes_route_cache_.erase(it++);
       need_refocus = true;
     } else {
@@ -702,6 +659,7 @@ void AXTreeSourceFlutter::HandleRoutes(std::vector<ui::AXEvent>* events) {
     focus_event.event_type = ax::mojom::Event::kFocus;
     focus_event.id = focused_id_;
     focus_event.event_from = ax::mojom::EventFrom::kNone;
+    focus_event.event_from_action = ax::mojom::Action::kNone;
   }
 }
 
@@ -754,6 +712,20 @@ int32_t AXTreeSourceFlutter::FindFirstFocusableNodeId() {
   return root_id_;
 }
 
+void AXTreeSourceFlutter::SubmitTTS(const std::string& text) {
+  if (!accessibility_enabled_)
+    return;
+
+  std::unique_ptr<content::TtsUtterance> utterance =
+      content::TtsUtterance::Create(browser_context_);
+
+  utterance->SetText(text);
+
+  auto* tts_controller = content::TtsController::GetInstance();
+  tts_controller->Stop();
+  tts_controller->SpeakOrEnqueue(std::move(utterance));
+}
+
 void AXTreeSourceFlutter::UpdateTree() {
   // Update the tree with last known flutter nodes.
   // TODO: A more efficient update would be to isolate just the parent node
@@ -767,6 +739,10 @@ void AXTreeSourceFlutter::OnPageStopped(CastWebContents* cast_web_contents,
   // Webview is gone. Stop observing.
   cast_web_contents->RemoveObserver(this);
   child_tree_observers_.erase(cast_web_contents->id());
+}
+
+void AXTreeSourceFlutter::SetAccessibilityEnabled(bool value) {
+  accessibility_enabled_ = value;
 }
 
 }  // namespace accessibility

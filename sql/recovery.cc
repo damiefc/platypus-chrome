@@ -151,7 +151,7 @@ std::unique_ptr<Recovery> Recovery::Begin(Database* database,
     // Warn about API mis-use.
     DCHECK(database->poisoned(InternalApiToken()))
         << "Illegal to recover with closed Database";
-    return std::unique_ptr<Recovery>();
+    return nullptr;
   }
 
   // Using `new` to access a non-public constructor
@@ -159,7 +159,7 @@ std::unique_ptr<Recovery> Recovery::Begin(Database* database,
   if (!recovery->Init(db_path)) {
     // TODO(shess): Should Init() failure result in Raze()?
     recovery->Shutdown(POISON);
-    return std::unique_ptr<Recovery>();
+    return nullptr;
   }
 
   return recovery;
@@ -183,10 +183,9 @@ void Recovery::Rollback(std::unique_ptr<Recovery> r) {
   r->Shutdown(POISON);
 }
 
-Recovery::Recovery(Database* connection) : db_(connection), recover_db_() {
-  // Result should keep the page size specified earlier.
-  recover_db_.set_page_size(db_->page_size());
-
+Recovery::Recovery(Database* connection)
+    : db_(connection),
+      recover_db_({.exclusive_locking = false, .page_size = db_->page_size()}) {
   // Files with I/O errors cannot be safely memory-mapped.
   recover_db_.set_mmap_disabled();
 

@@ -19,7 +19,6 @@
 #include "base/process/memory.h"
 #include "base/process/process_metrics.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/system/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -94,6 +93,8 @@ void DeletedDiscardableSharedMemoryOnIO(
 
 constexpr base::TimeDelta
     ClientDiscardableSharedMemoryManager::kMinAgeForScheduledPurge;
+constexpr base::TimeDelta
+    ClientDiscardableSharedMemoryManager::kScheduledPurgeInterval;
 
 ClientDiscardableSharedMemoryManager::DiscardableMemoryImpl::
     DiscardableMemoryImpl(
@@ -105,19 +106,17 @@ ClientDiscardableSharedMemoryManager::DiscardableMemoryImpl::
 
 ClientDiscardableSharedMemoryManager::DiscardableMemoryImpl::
     ~DiscardableMemoryImpl() {
-  base::AutoLock lock(manager_->GetLock());
+  base::AutoLock lock(manager_->lock_);
   if (!span_) {
     DCHECK(!is_locked());
     return;
   }
-  if (is_locked())
-    manager_->UnlockSpan(span_.get());
 
-  manager_->ReleaseMemory(this, std::move(span_));
+  manager_->UnlockAndReleaseMemory(this, std::move(span_));
 }
 
 bool ClientDiscardableSharedMemoryManager::DiscardableMemoryImpl::Lock() {
-  base::AutoLock lock(manager_->GetLock());
+  base::AutoLock lock(manager_->lock_);
   DCHECK(!is_locked());
 
   if (span_ && manager_->LockSpan(span_.get()))
@@ -130,7 +129,7 @@ bool ClientDiscardableSharedMemoryManager::DiscardableMemoryImpl::Lock() {
 }
 
 void ClientDiscardableSharedMemoryManager::DiscardableMemoryImpl::Unlock() {
-  base::AutoLock lock(manager_->GetLock());
+  base::AutoLock lock(manager_->lock_);
   DCHECK(is_locked());
   DCHECK(span_);
 
@@ -156,7 +155,7 @@ void* ClientDiscardableSharedMemoryManager::DiscardableMemoryImpl::data()
     const {
 #if DCHECK_IS_ON()
   {
-    base::AutoLock lock(manager_->GetLock());
+    base::AutoLock lock(manager_->lock_);
     DCHECK(is_locked());
   }
 #endif
@@ -172,7 +171,7 @@ void ClientDiscardableSharedMemoryManager::DiscardableMemoryImpl::
     DiscardForTesting() {
 #if DCHECK_IS_ON()
   {
-    base::AutoLock lock(manager_->GetLock());
+    base::AutoLock lock(manager_->lock_);
     DCHECK(!is_locked());
   }
 #endif
@@ -183,38 +182,45 @@ base::trace_event::MemoryAllocatorDump* ClientDiscardableSharedMemoryManager::
     DiscardableMemoryImpl::CreateMemoryAllocatorDump(
         const char* name,
         base::trace_event::ProcessMemoryDump* pmd) const {
+  base::AutoLock lock(manager_->lock_);
   return manager_->CreateMemoryAllocatorDump(span_.get(), name, pmd);
 }
 
 ClientDiscardableSharedMemoryManager::ClientDiscardableSharedMemoryManager(
     mojo::PendingRemote<mojom::DiscardableSharedMemoryManager> manager,
-    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> periodic_purge_task_runner)
-    : heap_(std::make_unique<DiscardableSharedMemoryHeap>()),
-      periodic_purge_task_runner_(std::move(periodic_purge_task_runner)),
-      io_task_runner_(std::move(io_task_runner)),
-      manager_mojo_(std::make_unique<
-                    mojo::Remote<mojom::DiscardableSharedMemoryManager>>()) {
-  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
-      this, "ClientDiscardableSharedMemoryManager",
-      base::ThreadTaskRunnerHandle::Get());
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
+    : ClientDiscardableSharedMemoryManager(io_task_runner) {
+  manager_mojo_ =
+      std::make_unique<mojo::Remote<mojom::DiscardableSharedMemoryManager>>();
   io_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&InitManagerMojoOnIO, manager_mojo_.get(),
                                 std::move(manager)));
 }
 
 ClientDiscardableSharedMemoryManager::ClientDiscardableSharedMemoryManager(
-    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> periodic_purge_task_runner)
-    : heap_(std::make_unique<DiscardableSharedMemoryHeap>()),
-      periodic_purge_task_runner_(std::move(periodic_purge_task_runner)),
-      io_task_runner_(std::move(io_task_runner)) {}
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
+    : RefCountedDeleteOnSequence<ClientDiscardableSharedMemoryManager>(
+          base::ThreadTaskRunnerHandle::Get()),
+      task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      heap_(std::make_unique<DiscardableSharedMemoryHeap>()),
+      io_task_runner_(std::move(io_task_runner)),
+      manager_mojo_(nullptr),
+      may_schedule_periodic_purge_(
+          base::FeatureList::IsEnabled(kSchedulePeriodicPurge)) {
+  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+      this, "ClientDiscardableSharedMemoryManager",
+      base::ThreadTaskRunnerHandle::Get());
+}
 
 ClientDiscardableSharedMemoryManager::~ClientDiscardableSharedMemoryManager() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
       this);
-  // TODO(reveman): Determine if this DCHECK can be enabled. crbug.com/430533
-  // DCHECK_EQ(heap_->GetSize(), heap_->GetSizeOfFreeLists());
+  // Any memory allocated by a ClientDiscardableSharedMemoryManager must not be
+  // touched after it is destroyed, or it will cause a use-after-free. This
+  // check ensures that we stop before that can happen, instead of continuing
+  // with dangling pointers.
+  CHECK_EQ(heap_->GetSize(), heap_->GetFreelistSize());
   if (heap_->GetSize())
     MemoryUsageChanged(0, 0);
 
@@ -231,10 +237,12 @@ ClientDiscardableSharedMemoryManager::~ClientDiscardableSharedMemoryManager() {
 }
 
 void ClientDiscardableSharedMemoryManager::OnForegrounded() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   foregrounded_ = true;
 }
 
 void ClientDiscardableSharedMemoryManager::OnBackgrounded() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   foregrounded_ = false;
 }
 
@@ -243,8 +251,14 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
     size_t size) {
   base::AutoLock lock(lock_);
 
-  if (timer_ == nullptr && periodic_purge_task_runner_)
-    StartScheduledPurging(periodic_purge_task_runner_);
+  if (may_schedule_periodic_purge_ && !is_purge_scheduled_) {
+    task_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&ClientDiscardableSharedMemoryManager::ScheduledPurge,
+                       this),
+        kScheduledPurgeInterval);
+    is_purge_scheduled_ = true;
+  }
 
   DCHECK_NE(size, 0u);
 
@@ -298,9 +312,14 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
 
     free_span->set_is_locked(true);
 
+    if (pages >= allocation_pages) {
+      UMA_HISTOGRAM_BOOLEAN("Memory.Discardable.LargeAllocationFromFreelist",
+                            true);
+    }
+
     // Memory usage is guaranteed to have changed after having removed
     // at least one span from the free lists.
-    MemoryUsageChanged(heap_->GetSize(), heap_->GetSizeOfFreeLists());
+    MemoryUsageChanged(heap_->GetSize(), heap_->GetFreelistSize());
 
     auto discardable_memory =
         std::make_unique<DiscardableMemoryImpl>(this, std::move(free_span));
@@ -314,7 +333,7 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
 
   // Make sure crash keys are up to date in case allocation fails.
   if (heap_->GetSize() != heap_size_prior_to_releasing_purged_memory)
-    MemoryUsageChanged(heap_->GetSize(), heap_->GetSizeOfFreeLists());
+    MemoryUsageChanged(heap_->GetSize(), heap_->GetFreelistSize());
 
   size_t pages_to_allocate =
       std::max(allocation_size / base::GetPageSize(), pages);
@@ -357,7 +376,12 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
     heap_->MergeIntoFreeLists(std::move(leftover));
   }
 
-  MemoryUsageChanged(heap_->GetSize(), heap_->GetSizeOfFreeLists());
+  if (pages >= allocation_pages) {
+    UMA_HISTOGRAM_BOOLEAN("Memory.Discardable.LargeAllocationFromFreelist",
+                          false);
+  }
+
+  MemoryUsageChanged(heap_->GetSize(), heap_->GetFreelistSize());
 
   auto discardable_memory =
       std::make_unique<DiscardableMemoryImpl>(this, std::move(new_span));
@@ -365,33 +389,14 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
   return std::move(discardable_memory);
 }
 
-void ClientDiscardableSharedMemoryManager::StartScheduledPurging(
-    scoped_refptr<base::SequencedTaskRunner> task_runner) {
-  DCHECK(task_runner);
-  if (base::FeatureList::IsEnabled(kSchedulePeriodicPurge)) {
-    // The expected cost of purging should be very small (< 1ms), so it can be
-    // scheduled frequently. However, we don't purge memory that has been
-    // touched recently (see: |BackgroundPurge| and |kMinAgeForScheduledPurge|),
-    // so there is no benefit to running this more than once per minute.
-    constexpr base::TimeDelta kInterval = base::TimeDelta::FromMinutes(1);
-
-    timer_ = std::make_unique<base::RepeatingTimer>();
-    timer_->SetTaskRunner(task_runner);
-
-    timer_->Start(FROM_HERE, kInterval,
-                  base::BindRepeating(
-                      &ClientDiscardableSharedMemoryManager::ScheduledPurge,
-                      base::Unretained(this)));
-  }
-}
-
 bool ClientDiscardableSharedMemoryManager::OnMemoryDump(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   base::AutoLock lock(lock_);
   if (foregrounded_) {
     const size_t total_size = heap_->GetSize() / 1024;                // in KiB
-    const size_t freelist_size = heap_->GetSizeOfFreeLists() / 1024;  // in KiB
+    const size_t freelist_size = heap_->GetFreelistSize() / 1024;     // in KiB
 
     base::UmaHistogramCounts1M("Memory.Discardable.FreelistSize.Foreground",
                                freelist_size);
@@ -405,7 +410,11 @@ bool ClientDiscardableSharedMemoryManager::OnMemoryDump(
 
 size_t ClientDiscardableSharedMemoryManager::GetBytesAllocated() const {
   base::AutoLock lock(lock_);
-  return heap_->GetSize() - heap_->GetSizeOfFreeLists();
+  return GetBytesAllocatedLocked();
+}
+
+size_t ClientDiscardableSharedMemoryManager::GetBytesAllocatedLocked() const {
+  return heap_->GetSize() - heap_->GetFreelistSize();
 }
 
 void ClientDiscardableSharedMemoryManager::BackgroundPurge() {
@@ -413,6 +422,7 @@ void ClientDiscardableSharedMemoryManager::BackgroundPurge() {
 }
 
 void ClientDiscardableSharedMemoryManager::ScheduledPurge() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   // From local testing and UMA, memory usually accumulates slowly in renderers,
   // and can sit idle for hours. We purge only the old memory, as this should
   // recover the memory without adverse latency effects.
@@ -420,6 +430,21 @@ void ClientDiscardableSharedMemoryManager::ScheduledPurge() {
   // constant from |ScheduledPurge| need to be tuned.
   PurgeUnlockedMemory(
       ClientDiscardableSharedMemoryManager::kMinAgeForScheduledPurge);
+
+  bool should_schedule = false;
+  {
+    base::AutoLock lock(lock_);
+    should_schedule = GetBytesAllocatedLocked() != 0;
+    is_purge_scheduled_ = should_schedule;
+  }
+
+  if (should_schedule) {
+    task_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&ClientDiscardableSharedMemoryManager::ScheduledPurge,
+                       this),
+        kScheduledPurgeInterval);
+  }
 }
 
 void ClientDiscardableSharedMemoryManager::PurgeUnlockedMemory(
@@ -437,10 +462,10 @@ void ClientDiscardableSharedMemoryManager::PurgeUnlockedMemory(
       DiscardableMemoryImpl* mem = *prev;
 
       // This assert is only required because the static checker can't figure
-      // out that |mem->manager_->GetLock()| is the same as |this->lock_|, as
+      // out that |mem->manager_->lock_| is the same as |this->lock_|, as
       // verified by the DCHECK.
-      DCHECK_EQ(&lock_, &mem->manager_->GetLock());
-      mem->manager_->GetLock().AssertAcquired();
+      DCHECK_EQ(&lock_, &mem->manager_->lock_);
+      mem->manager_->lock_.AssertAcquired();
 
       auto span = mem->Purge(now - min_age);
       if (span) {
@@ -454,14 +479,10 @@ void ClientDiscardableSharedMemoryManager::PurgeUnlockedMemory(
 }
 
 void ClientDiscardableSharedMemoryManager::ReleaseFreeMemory() {
-  if (base::FeatureList::IsEnabled(kPurgeUnlockedMemory)) {
+  if (base::FeatureList::IsEnabled(kPurgeUnlockedMemory))
     BackgroundPurge();
-  } else {
+  else
     ReleaseFreeMemoryImpl();
-  }
-
-  if (GetBytesAllocated() == 0)
-    timer_ = nullptr;
 }
 
 void ClientDiscardableSharedMemoryManager::ReleaseFreeMemoryImpl() {
@@ -475,7 +496,7 @@ void ClientDiscardableSharedMemoryManager::ReleaseFreeMemoryImpl() {
   heap_->ReleaseFreeMemory();
 
   if (heap_->GetSize() != heap_size_prior_to_releasing_memory)
-    MemoryUsageChanged(heap_->GetSize(), heap_->GetSizeOfFreeLists());
+    MemoryUsageChanged(heap_->GetSize(), heap_->GetFreelistSize());
 }
 
 bool ClientDiscardableSharedMemoryManager::LockSpan(
@@ -514,9 +535,15 @@ void ClientDiscardableSharedMemoryManager::UnlockSpan(
   return span->shared_memory()->Unlock(offset, length);
 }
 
-void ClientDiscardableSharedMemoryManager::ReleaseMemory(
+void ClientDiscardableSharedMemoryManager::UnlockAndReleaseMemory(
     DiscardableMemoryImpl* memory,
     std::unique_ptr<DiscardableSharedMemoryHeap::Span> span) {
+  memory->manager_->lock_.AssertAcquired();
+  // lock_.AssertAcquired();
+  if (memory->is_locked()) {
+    UnlockSpan(span.get());
+  }
+
   DCHECK(span);
   auto removed = allocated_memory_.erase(memory);
   DCHECK_EQ(removed, 1u);
@@ -534,7 +561,7 @@ void ClientDiscardableSharedMemoryManager::ReleaseSpan(
   heap_->MergeIntoFreeLists(std::move(span));
 
   // Bytes of free memory changed.
-  MemoryUsageChanged(heap_->GetSize(), heap_->GetSizeOfFreeLists());
+  MemoryUsageChanged(heap_->GetSize(), heap_->GetFreelistSize());
 }
 
 base::trace_event::MemoryAllocatorDump*
@@ -542,7 +569,6 @@ ClientDiscardableSharedMemoryManager::CreateMemoryAllocatorDump(
     DiscardableSharedMemoryHeap::Span* span,
     const char* name,
     base::trace_event::ProcessMemoryDump* pmd) const {
-  base::AutoLock lock(lock_);
   return heap_->CreateMemoryAllocatorDump(span, name, pmd);
 }
 

@@ -8,13 +8,17 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/controls/focusable_border.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/view_utils.h"
 
 namespace views {
 
@@ -56,6 +60,12 @@ SkPath GetHighlightPathInternal(const View* view) {
 
 // static
 FocusRing* FocusRing::Install(View* parent) {
+  if (IsViewClass<Button>(parent)) {
+    // Ensure we don't install dual focus rings on a button.
+    Button* button = static_cast<Button*>(parent);
+    if (button->GetInstallFocusRingOnFocus())
+      button->SetInstallFocusRingOnFocus(false);
+  }
   auto ring = base::WrapUnique<FocusRing>(new FocusRing());
   ring->InvalidateLayout();
   ring->SchedulePaint();
@@ -94,7 +104,7 @@ void FocusRing::Layout() {
 
   // Need to match canvas direction with the parent. This is required to ensure
   // asymmetric focus ring shapes match their respective buttons in RTL mode.
-  EnableCanvasFlippingForRTLUI(parent()->flip_canvas_on_paint_for_rtl_ui());
+  SetFlipCanvasOnPaintForRTLUI(parent()->GetFlipCanvasOnPaintForRTLUI());
 }
 
 void FocusRing::ViewHierarchyChanged(
@@ -104,13 +114,13 @@ void FocusRing::ViewHierarchyChanged(
 
   if (details.is_add) {
     // Need to start observing the parent.
-    view_observer_.Add(details.parent);
+    view_observation_.Observe(details.parent);
     RefreshLayer();
-  } else if (view_observer_.IsObserving(details.parent)) {
+  } else if (view_observation_.IsObservingSource(details.parent)) {
     // This view is being removed from its parent. It needs to remove itself
     // from its parent's observer list in the case where the FocusView is
     // removed from its parent but not deleted.
-    view_observer_.Remove(details.parent);
+    view_observation_.Reset();
   }
 }
 
@@ -141,8 +151,8 @@ void FocusRing::OnPaint(gfx::Canvas* canvas) {
     path = GetHighlightPathInternal(parent());
 
   DCHECK(IsPathUsable(path));
-  DCHECK_EQ(flip_canvas_on_paint_for_rtl_ui(),
-            parent()->flip_canvas_on_paint_for_rtl_ui());
+  DCHECK_EQ(GetFlipCanvasOnPaintForRTLUI(),
+            parent()->GetFlipCanvasOnPaintForRTLUI());
   SkRect bounds;
   SkRRect rbounds;
   if (path.isRect(&bounds)) {
@@ -221,7 +231,7 @@ SkRRect FocusRing::RingRectFromPathRect(const SkRRect& rrect) const {
 
 SkPath GetHighlightPath(const View* view) {
   SkPath path = GetHighlightPathInternal(view);
-  if (view->flip_canvas_on_paint_for_rtl_ui() && base::i18n::IsRTL()) {
+  if (view->GetFlipCanvasOnPaintForRTLUI() && base::i18n::IsRTL()) {
     gfx::Point center = view->GetLocalBounds().CenterPoint();
     SkMatrix flip;
     flip.setScale(-1, 1, center.x(), center.y());

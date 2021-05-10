@@ -83,6 +83,7 @@ _TARGETS_REQUIRE_ASH_CHROME = [
     'content_unittests',
     'dbus_unittests',
     'extensions_unittests',
+    'media_unittests',
     'message_center_unittests',
     'snapshot_unittests',
     'sync_integration_tests',
@@ -90,9 +91,18 @@ _TARGETS_REQUIRE_ASH_CHROME = [
     'views_unittests',
     'wm_unittests',
 
-    # regex patters.
+    # regex patterns.
     '.*_browsertests',
     '.*interactive_ui_tests'
+]
+
+# List of targets that require ash-chrome to support crosapi mojo APIs.
+_TARGETS_REQUIRE_MOJO_CROSAPI = [
+    # TODO(jamescook): Add 'browser_tests' after multiple crosapi connections
+    # are allowed. For now we only enable crosapi in targets that run tests
+    # serially.
+    'interactive_ui_tests',
+    'lacros_chrome_browsertests'
 ]
 
 
@@ -158,23 +168,9 @@ def _GsutilCopyWithRetry(gs_path, local_name, retry_times=3):
   if exit_code:
     raise RuntimeError('Failed to download: "%s"' % gs_path)
 
-def _DownloadAshChromeIfNecessary(version, is_download_for_bots=False):
-  """Download a given version of ash-chrome if not already exists.
 
-  Currently, a special constant version value is support: "for_bots", the reason
-  is that version number is still not pinned to chromium/src, so a constant
-  value is needed to make sure that after the builder who downloads and isolates
-  ash-chrome, the tester knows where to look for the binary to use.
-  Additionally, a is_download_for_bots boolean argument is introduced to
-  indicate whether this function is downloading for bots specifically or
-  downloading while running tests, and it is needed because when version is
-  "for_bots", the expected behavior is different in the 2 scenarios: when
-  downloading for bots to isolate, we always want to update for_bots/ to reflect
-  the latest version; however, when downloading while running tests, we want to
-  skip updating to latest because swarming testers aren't supposed to have
-  external network access.
-  TODO(crbug.com/1107010): remove the support once ash-chrome version is pinned
-  to chromium/src.
+def _DownloadAshChromeIfNecessary(version):
+  """Download a given version of ash-chrome if not already exists.
 
   Args:
     version: A string representing the version, such as "793554".
@@ -193,16 +189,14 @@ def _DownloadAshChromeIfNecessary(version, is_download_for_bots=False):
         os.path.join(ash_chrome_dir, 'chrome'))
 
   ash_chrome_dir = _GetAshChromeDirPath(version)
-  if not is_download_for_bots and IsAshChromeDirValid(ash_chrome_dir):
+  if IsAshChromeDirValid(ash_chrome_dir):
     return
 
   shutil.rmtree(ash_chrome_dir, ignore_errors=True)
   os.makedirs(ash_chrome_dir)
   with tempfile.NamedTemporaryFile() as tmp:
-    gs_version = (_GetLatestVersionOfAshChrome()
-                  if is_download_for_bots else version)
-    logging.info('Ash-chrome version: %s', gs_version)
-    gs_path = _GS_URL_BASE + '/' + gs_version + '/' + _GS_ASH_CHROME_PATH
+    logging.info('Ash-chrome version: %s', version)
+    gs_path = _GS_URL_BASE + '/' + version + '/' + _GS_ASH_CHROME_PATH
     _GsutilCopyWithRetry(gs_path, tmp.name)
 
     # https://bugs.python.org/issue15795. ZipFile doesn't preserve permissions.
@@ -233,40 +227,41 @@ def _GetLatestVersionOfAshChrome():
 
 
 def _WaitForAshChromeToStart(tmp_xdg_dir, lacros_mojo_socket_file,
-                             is_lacros_chrome_browsertests):
+                             enable_mojo_crosapi):
   """Waits for Ash-Chrome to be up and running and returns a boolean indicator.
 
   Determine whether ash-chrome is up and running by checking whether two files
   (lock file + socket) have been created in the |XDG_RUNTIME_DIR| and the lacros
-  mojo socket file has been created if running lacros_chrome_browsertests.
+  mojo socket file has been created if enabling the mojo "crosapi" interface.
   TODO(crbug.com/1107966): Figure out a more reliable hook to determine the
   status of ash-chrome, likely through mojo connection.
 
   Args:
     tmp_xdg_dir (str): Path to the XDG_RUNTIME_DIR.
     lacros_mojo_socket_file (str): Path to the lacros mojo socket file.
-    is_lacros_chrome_browsertests (bool): is running lacros_chrome_browsertests.
+    enable_mojo_crosapi (bool): Whether to bootstrap the crosapi mojo interface
+        between ash and the lacros test binary.
 
   Returns:
     A boolean indicating whether Ash-chrome is up and running.
   """
 
   def IsAshChromeReady(tmp_xdg_dir, lacros_mojo_socket_file,
-                       is_lacros_chrome_browsertests):
+                       enable_mojo_crosapi):
     return (len(os.listdir(tmp_xdg_dir)) >= 2
-            and (not is_lacros_chrome_browsertests
+            and (not enable_mojo_crosapi
                  or os.path.exists(lacros_mojo_socket_file)))
 
   time_counter = 0
   while not IsAshChromeReady(tmp_xdg_dir, lacros_mojo_socket_file,
-                             is_lacros_chrome_browsertests):
+                             enable_mojo_crosapi):
     time.sleep(0.5)
     time_counter += 0.5
     if time_counter > ASH_CHROME_TIMEOUT_SECONDS:
       break
 
   return IsAshChromeReady(tmp_xdg_dir, lacros_mojo_socket_file,
-                          is_lacros_chrome_browsertests)
+                          enable_mojo_crosapi)
 
 
 def _RunTestWithAshChrome(args, forward_args):
@@ -292,12 +287,12 @@ def _RunTestWithAshChrome(args, forward_args):
     tmp_ash_data_dir_name = tempfile.mkdtemp()
 
     # Please refer to below file for how mojo connection is set up in testing.
-    # //chrome/browser/chromeos/crosapi/test_mojo_connection_manager.h
+    # //chrome/browser/ash/crosapi/test_mojo_connection_manager.h
     lacros_mojo_socket_file = '%s/lacros.sock' % tmp_ash_data_dir_name
     lacros_mojo_socket_arg = ('--lacros-mojo-socket-for-testing=%s' %
                               lacros_mojo_socket_file)
-    is_lacros_chrome_browsertests = (os.path.basename(
-        args.command) == 'lacros_chrome_browsertests')
+    enable_mojo_crosapi = any(t == os.path.basename(args.command)
+                              for t in _TARGETS_REQUIRE_MOJO_CROSAPI)
 
     ash_process = None
     ash_env = os.environ.copy()
@@ -307,8 +302,9 @@ def _RunTestWithAshChrome(args, forward_args):
         '--user-data-dir=%s' % tmp_ash_data_dir_name,
         '--enable-wayland-server',
         '--no-startup-window',
+        '--use-fake-ml-service-for-test',
     ]
-    if is_lacros_chrome_browsertests:
+    if enable_mojo_crosapi:
       ash_cmd.append(lacros_mojo_socket_arg)
 
     ash_process_has_started = False
@@ -318,8 +314,7 @@ def _RunTestWithAshChrome(args, forward_args):
       num_tries += 1
       ash_process = subprocess.Popen(ash_cmd, env=ash_env)
       ash_process_has_started = _WaitForAshChromeToStart(
-          tmp_xdg_dir_name, lacros_mojo_socket_file,
-          is_lacros_chrome_browsertests)
+          tmp_xdg_dir_name, lacros_mojo_socket_file, enable_mojo_crosapi)
       if ash_process_has_started:
         break
 
@@ -334,7 +329,7 @@ def _RunTestWithAshChrome(args, forward_args):
       raise RuntimeError('Timed out waiting for ash-chrome to start')
 
     # Starts tests.
-    if is_lacros_chrome_browsertests:
+    if enable_mojo_crosapi:
       forward_args.append(lacros_mojo_socket_arg)
 
       reason_of_jobs_1 = (
@@ -440,13 +435,6 @@ def Main():
   arg_parser.usage = __doc__
 
   subparsers = arg_parser.add_subparsers()
-
-  download_parser = subparsers.add_parser(
-      'download_for_bots',
-      help='Download prebuilt ash-chrome for bots so that tests are hermetic '
-      'during execution')
-  download_parser.set_defaults(
-      func=lambda *_: _DownloadAshChromeIfNecessary('for_bots', True))
 
   test_parser = subparsers.add_parser('test', help='Run tests')
   test_parser.set_defaults(func=_RunTest)

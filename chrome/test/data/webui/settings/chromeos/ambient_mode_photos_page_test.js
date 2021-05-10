@@ -5,10 +5,11 @@
 // clang-format off
 // #import 'chrome://os-settings/chromeos/os_settings.js';
 
-// #import {AmbientModeBrowserProxyImpl} from 'chrome://os-settings/chromeos/os_settings.js';
+// #import {AmbientModeTopicSource, AmbientModeBrowserProxyImpl} from 'chrome://os-settings/chromeos/os_settings.js';
 // #import {TestBrowserProxy} from '../../test_browser_proxy.m.js';
 // #import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
 // #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {waitAfterNextRender} from 'chrome://test/test_util.m.js';
 // clang-format on
 
 /**
@@ -67,18 +68,14 @@ suite('AmbientModeHandler', function() {
    * @private
    */
   function assertCheckPosition(topicSource) {
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0', url: 'url'},
-      {albumId: 'id1', checked: true, title: 'album1', url: 'url'}
-    ];
-    ambientModePhotosPage.topicSource = topicSource;
-    Polymer.dom.flush();
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0', url: 'url'},
+          {albumId: 'id1', checked: true, title: 'album1', url: 'url'}
+        ],
+        topicSource);
 
-    const albumList = ambientModePhotosPage.$$('album-list');
-    const ironList = albumList.$$('iron-list');
-    const albumItems = ironList.querySelectorAll('album-item:not([hidden])');
-
-    albumItems.forEach((album) => {
+    getAlbumItems_().forEach((album) => {
       const check = album.$$('.check');
       const image = album.$$('#image');
       const boundingWidth = image.getBoundingClientRect().width;
@@ -95,6 +92,122 @@ suite('AmbientModeHandler', function() {
     });
   }
 
+  /**
+   * Retrieve the title element for the albumItem at the position.
+   * @param {number} position
+   * @return {Element}
+   * @private
+   */
+  function getTitleElement_(position) {
+    return getAlbumItems_()[position].$$('#albumTitle');
+  }
+
+  /**
+   * Retrieve the description element for the albumItem at the position.
+   * @param {number} position
+   * @return {Element}
+   * @private
+   */
+  function getDescriptionElement_(position) {
+    return getAlbumItems_()[position].$$('#albumDescription');
+  }
+
+  /**
+   * Setup the photos page and flush the DOM.
+   * @param {Array<!AmbientModeAlbum>} albums
+   * @param {!AmbientModeTopicSource} topicSource
+   * @private
+   */
+  function displayPhotosPage_(albums, topicSource) {
+    ambientModePhotosPage.albums = albums;
+    ambientModePhotosPage.topicSource = topicSource;
+    Polymer.dom.flush();
+  }
+
+  /**
+   * Get all displayed album item elements.
+   * @return {Array<Element>}
+   * @private
+   */
+  function getAlbumItems_() {
+    const albumList = ambientModePhotosPage.$$('album-list');
+    const ironList = albumList.$$('iron-list');
+    return ironList.querySelectorAll('album-item:not([hidden])');
+  }
+
+  /**
+   * @param {Element} element
+   * @return {number}
+   * @private
+   */
+  function getZIndex_(element) {
+    const zIndex = parseInt(getComputedStyle(element).zIndex);
+    return zIndex === NaN ? 0 : zIndex;
+  }
+
+  /**
+   * Asserts the title and the description elements are limited to 1 and 2 lines
+   * respectively.
+   * @param {number} albumIndex
+   * @private
+   */
+  function assertAllTextClamped_(albumIndex) {
+    assertTextClamped(getTitleElement_(albumIndex), 1);
+    assertTextClamped(getDescriptionElement_(albumIndex), 2);
+  }
+
+  /**
+   * Asserts that the textWithTooltip element is limited to the specified number
+   * of lines.
+   * @param {Element} textWithTooltip
+   * @param {number} lineCount
+   * @private
+   */
+  function assertTextClamped(textWithTooltip, lineCount) {
+    const element = textWithTooltip.$$('#textDiv');
+    const height = element.offsetHeight;
+    const lineHeight = parseInt(getComputedStyle(element).lineHeight);
+    assertTrue(
+        height / lineHeight <= lineCount,
+        'Actual Height: ' + height.toString() + ' Line height:  ' +
+            lineHeight.toString() + ' Content: ' + element.innerHTML);
+  }
+
+  /**
+   * Generate a random UTF16 String of specified length.
+   * @param {number} length The length of the string
+   * @return {String}
+   * @private
+   */
+  function createRandomString_(length) {
+    let randomString = '';
+    for (let i = 0; i < length; i++) {
+      randomString = randomString.concat(getRandomUTF16Char_());
+    }
+    return randomString;
+  }
+
+  /**
+   * Generate a random UTF16 character.
+   * @return {String} The character
+   * @private
+   */
+  function getRandomUTF16Char_() {
+    const utf16Max = 65535;
+    return String.fromCharCode(Math.floor(Math.random() * utf16Max));
+  }
+
+  /**
+   * Determines if a tooltip is visible for the parameter.
+   * @param {Element} parentElement The element containing the tooltip.
+   * @return {boolean} If a tooltip element is within an animate in delay or is
+   * already visible/animating.
+   */
+  function isTooltipAvailable_(parentElement) {
+    const tooltip = parentElement.$$('paper-tooltip');
+    return tooltip !== null && getComputedStyle(tooltip).display !== 'none';
+  }
+
   test('hasAlbumsWithoutPhotoPreview', function() {
     // Disable photo preview feature and reload the |ambientModePhotosPage|.
     loadTimeData.overrideValues({isAmbientModePhotoPreviewEnabled: false});
@@ -105,11 +218,12 @@ suite('AmbientModeHandler', function() {
         document.createElement('settings-ambient-mode-photos-page');
     document.body.appendChild(ambientModePhotosPage);
 
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0'},
-      {albumId: 'id1', checked: false, title: 'album1'}
-    ];
-    Polymer.dom.flush();
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0'},
+          {albumId: 'id1', checked: false, title: 'album1'}
+        ],
+        null);
 
     const ironList = ambientModePhotosPage.$$('iron-list');
     const checkboxes = ironList.querySelectorAll('cr-checkbox');
@@ -130,15 +244,14 @@ suite('AmbientModeHandler', function() {
   });
 
   test('hasAlbumsWithPhotoPreview', function() {
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0'},
-      {albumId: 'id1', checked: false, title: 'album1'}
-    ];
-    Polymer.dom.flush();
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0'},
+          {albumId: 'id1', checked: false, title: 'album1'}
+        ],
+        null);
 
-    const albumList = ambientModePhotosPage.$$('album-list');
-    const ironList = albumList.$$('iron-list');
-    const albumItems = ironList.querySelectorAll('album-item:not([hidden])');
+    const albumItems = getAlbumItems_();
     assertEquals(2, albumItems.length);
 
     const album0 = albumItems[0];
@@ -151,14 +264,33 @@ suite('AmbientModeHandler', function() {
     assertEquals('album1', album1.album.title);
   });
 
+  test('spinnerVisibility', function() {
+    const albumList = ambientModePhotosPage.$$('album-list');
+    const spinner = albumList.$$('paper-spinner-lite');
+    assertTrue(!!spinner);
+    assertTrue(spinner.active);
+    assertFalse(spinner.hidden);
+
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0'},
+          {albumId: 'id1', checked: false, title: 'album1'}
+        ],
+        null);
+
+    // Spinner is not active and not visible.
+    assertFalse(spinner.active);
+    assertTrue(spinner.hidden);
+  });
+
   test('personalPhotosImageContainerHasCorrectSize', function() {
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0'},
-      {albumId: 'id1', checked: false, title: 'album1'},
-      {albumId: 'id2', checked: false, title: 'album2'}
-    ];
-    ambientModePhotosPage.topicSource = AmbientModeTopicSource.GOOGLE_PHOTOS;
-    Polymer.dom.flush();
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0'},
+          {albumId: 'id1', checked: false, title: 'album1'},
+          {albumId: 'id2', checked: false, title: 'album2'}
+        ],
+        AmbientModeTopicSource.GOOGLE_PHOTOS);
 
     const albumList = ambientModePhotosPage.$$('album-list');
     const ironList = albumList.$$('iron-list');
@@ -174,13 +306,13 @@ suite('AmbientModeHandler', function() {
   });
 
   test('artImageContainerHasCorrectSize', function() {
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0'},
-      {albumId: 'id1', checked: false, title: 'album1'},
-      {albumId: 'id2', checked: false, title: 'album2'}
-    ];
-    ambientModePhotosPage.topicSource = AmbientModeTopicSource.ART_GALLERY;
-    Polymer.dom.flush();
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0'},
+          {albumId: 'id1', checked: false, title: 'album1'},
+          {albumId: 'id2', checked: false, title: 'album2'}
+        ],
+        AmbientModeTopicSource.ART_GALLERY);
 
     const albumList = ambientModePhotosPage.$$('album-list');
     const ironList = albumList.$$('iron-list');
@@ -196,11 +328,12 @@ suite('AmbientModeHandler', function() {
   });
 
   test('toggleAlbumSelectionByClick', function() {
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0', url: 'url'},
-      {albumId: 'id1', checked: false, title: 'album1', url: 'url'}
-    ];
-    Polymer.dom.flush();
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0', url: 'url'},
+          {albumId: 'id1', checked: false, title: 'album1', url: 'url'}
+        ],
+        null);
 
     const albumList = ambientModePhotosPage.$$('album-list');
     const ironList = albumList.$$('iron-list');
@@ -242,18 +375,48 @@ suite('AmbientModeHandler', function() {
     assertEquals(4, selectedAlbumsChangedEventCalls);
   });
 
-  test('showCheckIconOnSelectedAlbum', function() {
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0', url: 'url'},
-      {albumId: 'id1', checked: false, title: 'album1', url: 'url'}
-    ];
-    Polymer.dom.flush();
+  test('notDeselectLastArtAlbum', async () => {
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0', url: 'url'},
+          {albumId: 'id1', checked: true, title: 'album1', url: 'url'}
+        ],
+        AmbientModeTopicSource.ART_GALLERY);
 
-    const albumList = ambientModePhotosPage.$$('album-list');
-    const ironList = albumList.$$('iron-list');
-    const albumItems = ironList.querySelectorAll('album-item:not([hidden])');
+    const albumItems = getAlbumItems_();
+    assertEquals(2, albumItems.length);
 
     const album0 = albumItems[0];
+    const album1 = albumItems[1];
+    assertTrue(album0.checked);
+    assertTrue(album1.checked);
+
+    // Click album item image will toggle the check.
+    const image0 = album0.$$('#image');
+    image0.click();
+    assertFalse(album0.checked);
+
+    // Click the last art album item image will not toggle the check and will
+    // show a dialog.
+    const image1 = album1.$$('#image');
+    image1.click();
+    assertTrue(album1.checked);
+    Polymer.dom.flush();
+
+    const artAlbumDialog = ambientModePhotosPage.$$('art-album-dialog');
+    await test_util.waitAfterNextRender(artAlbumDialog);
+    assertTrue(artAlbumDialog.$$('#dialog').open);
+  });
+
+  test('showCheckIconOnSelectedAlbum', function() {
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0', url: 'url'},
+          {albumId: 'id1', checked: false, title: 'album1', url: 'url'}
+        ],
+        null);
+
+    const album0 = getAlbumItems_()[0];
     const check0 = album0.$$('.check');
     assertTrue(album0.checked);
     assertFalse(check0.hidden);
@@ -263,7 +426,7 @@ suite('AmbientModeHandler', function() {
     assertFalse(album0.checked);
     assertTrue(check0.hidden);
 
-    const album1 = albumItems[1];
+    const album1 = getAlbumItems_()[1];
     const check1 = album1.$$('.check');
     assertFalse(album1.checked);
     assertTrue(check1.hidden);
@@ -282,19 +445,18 @@ suite('AmbientModeHandler', function() {
   });
 
   test('artPhotosCheckIconHasCorrectPosition', function() {
-    assertCheckPosition(AmbientModeTopicSource.GOOGLE_PHOTOS);
+    assertCheckPosition(AmbientModeTopicSource.ART_GALLERY);
   });
 
   test('setSelectedAlbums', async () => {
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0', url: 'url'},
-      {albumId: 'id1', checked: false, title: 'album1', url: 'url'}
-    ];
-    Polymer.dom.flush();
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0', url: 'url'},
+          {albumId: 'id1', checked: false, title: 'album1', url: 'url'}
+        ],
+        null);
 
-    const albumList = ambientModePhotosPage.$$('album-list');
-    const ironList = albumList.$$('iron-list');
-    const albumItems = ironList.querySelectorAll('album-item:not([hidden])');
+    const albumItems = getAlbumItems_();
     assertEquals(2, albumItems.length);
 
     const album0 = albumItems[0];
@@ -325,10 +487,11 @@ suite('AmbientModeHandler', function() {
   });
 
   test('notToggleAlbumSelection', function() {
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0'},
-    ];
-    Polymer.dom.flush();
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0'},
+        ],
+        null);
 
     const albumList = ambientModePhotosPage.$$('album-list');
     const ironList = albumList.$$('iron-list');
@@ -352,10 +515,11 @@ suite('AmbientModeHandler', function() {
   });
 
   test('toggleAlbumSelectionByKeypress', function() {
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0'},
-    ];
-    Polymer.dom.flush();
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0'},
+        ],
+        null);
 
     const albumList = ambientModePhotosPage.$$('album-list');
     const ironList = albumList.$$('iron-list');
@@ -386,22 +550,19 @@ suite('AmbientModeHandler', function() {
   });
 
   test('updateAlbumURL', function() {
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0', url: ''},
-    ];
-    ambientModePhotosPage.topicSource = AmbientModeTopicSource.ART_GALLERY;
-    Polymer.dom.flush();
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0'},
+        ],
+        AmbientModeTopicSource.ART_GALLERY);
 
-    const albumList = ambientModePhotosPage.$$('album-list');
-    const ironList = albumList.$$('iron-list');
-    const albumItems = ironList.querySelectorAll('album-item:not([hidden])');
+    const albumItems = getAlbumItems_();
     assertEquals(1, albumItems.length);
 
     const album0 = albumItems[0];
-    assertEquals('', album0.album.url);
 
     // Update album URL.
-    const url = 'chrome://ambient';
+    const url = 'url';
     cr.webUIListenerCallback('album-preview-changed', {
       topicSource: AmbientModeTopicSource.ART_GALLERY,
       albumId: 'id0',
@@ -411,19 +572,16 @@ suite('AmbientModeHandler', function() {
   });
 
   test('notUpdateAlbumURL', function() {
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0', url: ''},
-    ];
-    ambientModePhotosPage.topicSource = AmbientModeTopicSource.ART_GALLERY;
-    Polymer.dom.flush();
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0'},
+        ],
+        AmbientModeTopicSource.ART_GALLERY);
 
-    const albumList = ambientModePhotosPage.$$('album-list');
-    const ironList = albumList.$$('iron-list');
-    const albumItems = ironList.querySelectorAll('album-item:not([hidden])');
+    const albumItems = getAlbumItems_();
     assertEquals(1, albumItems.length);
 
     const album0 = albumItems[0];
-    assertEquals('', album0.album.url);
 
     // Different topic source will no update album URL.
     const url = 'chrome://ambient';
@@ -432,29 +590,26 @@ suite('AmbientModeHandler', function() {
       albumId: 'id0',
       url: url
     });
-    assertEquals('', album0.album.url);
+    assertFalse(!!album0.album.url);
   });
 
   test('updateImgVisibility', function() {
-    ambientModePhotosPage.albums = [
-      {albumId: 'id0', checked: true, title: 'album0', url: ''},
-    ];
-    ambientModePhotosPage.topicSource = AmbientModeTopicSource.ART_GALLERY;
-    Polymer.dom.flush();
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0'},
+        ],
+        AmbientModeTopicSource.ART_GALLERY);
 
-    const albumList = ambientModePhotosPage.$$('album-list');
-    const ironList = albumList.$$('iron-list');
-    const albumItems = ironList.querySelectorAll('album-item:not([hidden])');
+    const albumItems = getAlbumItems_();
     assertEquals(1, albumItems.length);
 
     const album0 = albumItems[0];
-    assertEquals('', album0.album.url);
 
     let img = album0.$$('#image');
     assertFalse(!!img);
 
     // Update album URL.
-    const url = 'https://ambient-art-gallery-preview-url';
+    const url = 'url';
     cr.webUIListenerCallback('album-preview-changed', {
       topicSource: AmbientModeTopicSource.ART_GALLERY,
       albumId: 'id0',
@@ -465,5 +620,284 @@ suite('AmbientModeHandler', function() {
     img = album0.$$('#image');
     assertTrue(!!img);
     assertFalse(img.hidden);
+
+    const images = album0.$$('#rhImages');
+    assertFalse(!!images);
+  });
+
+  test('updateRecentHighlightsImagesVisibility', function() {
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0'},
+        ],
+        AmbientModeTopicSource.GOOGLE_PHOTOS);
+
+    const albumItems = getAlbumItems_();
+    assertEquals(1, albumItems.length);
+
+    const album0 = albumItems[0];
+    let images = album0.$$('#rhImages');
+    assertFalse(!!images);
+
+    // Update Recent Highlights album URLs.
+    const url = 'url';
+    cr.webUIListenerCallback('album-preview-changed', {
+      topicSource: AmbientModeTopicSource.GOOGLE_PHOTOS,
+      albumId: 'id0',
+      recentHighlightsUrls: [url, url, url, url]
+    });
+    assertEquals(url, album0.album.recentHighlightsUrls[0]);
+    assertEquals(url, album0.album.recentHighlightsUrls[1]);
+    assertEquals(url, album0.album.recentHighlightsUrls[2]);
+    assertEquals(url, album0.album.recentHighlightsUrls[3]);
+    images = album0.$$('#rhImages');
+    assertTrue(!!images);
+    assertFalse(images.hidden);
+    const image_top_left = album0.$$('.image-rh.top-left');
+    const image_top_right = album0.$$('.image-rh.top-right');
+    const image_bottom_left = album0.$$('.image-rh.bottom-left');
+    const image_bottom_right = album0.$$('.image-rh.bottom-right');
+    assertTrue(!!image_top_left);
+    assertFalse(image_top_left.hidden);
+    assertTrue(!!image_top_right);
+    assertFalse(image_top_right.hidden);
+    assertTrue(!!image_bottom_left);
+    assertFalse(image_bottom_left.hidden);
+    assertTrue(!!image_bottom_right);
+    assertFalse(image_bottom_right.hidden);
+
+    const img = album0.$$('#image');
+    assertFalse(!!img);
+  });
+
+  test('updateRecentHighlightsImagesVisibilityWithThreeImages', function() {
+    displayPhotosPage_(
+        [
+          {albumId: 'id0', checked: true, title: 'album0'},
+        ],
+        AmbientModeTopicSource.GOOGLE_PHOTOS);
+
+    const albumItems = getAlbumItems_();
+    assertEquals(1, albumItems.length);
+
+    const album0 = albumItems[0];
+    let images = album0.$$('#rhImages');
+    assertFalse(!!images);
+
+    // Only update 3 images.
+    const url = 'url';
+    cr.webUIListenerCallback('album-preview-changed', {
+      topicSource: AmbientModeTopicSource.GOOGLE_PHOTOS,
+      albumId: 'id0',
+      recentHighlightsUrls: [url, url, url]
+    });
+    assertEquals(url, album0.album.recentHighlightsUrls[0]);
+    assertEquals(url, album0.album.recentHighlightsUrls[1]);
+    assertEquals(url, album0.album.recentHighlightsUrls[2]);
+    assertFalse(!!album0.album.recentHighlightsUrls[3]);
+    images = album0.$$('#rhImages');
+    assertTrue(!!images);
+    assertFalse(images.hidden);
+    const image_top_left = album0.$$('.image-rh.top-left');
+    const image_top_right = album0.$$('.image-rh.top-right');
+    const image_bottom_left = album0.$$('.image-rh.bottom-left');
+    const image_bottom_right = album0.$$('.image-rh.bottom-right');
+    assertTrue(!!image_top_left);
+    assertFalse(image_top_left.hidden);
+    assertTrue(!!image_top_right);
+    assertFalse(image_top_right.hidden);
+    assertTrue(!!image_bottom_left);
+    assertFalse(image_bottom_left.hidden);
+    assertTrue(!!image_bottom_right);
+    assertTrue(image_bottom_right.hidden);
+
+    const img = album0.$$('#image');
+    assertFalse(!!img);
+  });
+
+  test('albumSizeIsConsistent', function() {
+    displayPhotosPage_(
+        [
+          {
+            albumId: 'id0',
+            checked: false,
+            title: createRandomString_(1),
+            description: createRandomString_(1),
+            url: 'url'
+          },
+          {
+            albumId: 'id1',
+            checked: false,
+            title: createRandomString_(500),
+            description: createRandomString_(500),
+            url: 'url'
+          },
+        ],
+        AmbientModeTopicSource.GOOGLE_PHOTOS);
+
+    const album0 = getAlbumItems_()[0];
+    const album1 = getAlbumItems_()[1];
+    assertEquals(
+        album0.offsetHeight, album1.offsetHeight,
+        'grids in iron-list require height to be consistent across items');
+  });
+
+  test('linesAreClamped', function() {
+    displayPhotosPage_(
+        [
+          {
+            albumId: 'id0',
+            checked: false,
+            title: createRandomString_(1),
+            description: createRandomString_(1),
+            url: 'url'
+          },
+          {
+            albumId: 'id1',
+            checked: false,
+            title: createRandomString_(500),
+            description: createRandomString_(500),
+            url: 'url'
+          },
+        ],
+        AmbientModeTopicSource.GOOGLE_PHOTOS);
+
+    assertAllTextClamped_(0);
+    assertAllTextClamped_(1);
+  });
+
+  test('tooltipVisibilityAdjustsZIndex', function() {
+    displayPhotosPage_(
+        [
+          {
+            albumId: 'id0',
+            checked: false,
+            title: createRandomString_(500),
+            description: createRandomString_(500),
+            url: 'url'
+          },
+          {
+            albumId: 'id1',
+            checked: false,
+            title: createRandomString_(500),
+            description: createRandomString_(500),
+            url: 'url'
+          },
+        ],
+        AmbientModeTopicSource.GOOGLE_PHOTOS);
+    const album0 = getAlbumItems_()[0];
+    const album1 = getAlbumItems_()[1];
+
+    album0.titleTooltipIsVisible = true;
+    assertTrue(getZIndex_(album0) > getZIndex_(album1));
+
+    album0.titleTooltipIsVisible = false;
+    album1.titleTooltipIsVisible = true;
+    assertTrue(getZIndex_(album0) < getZIndex_(album1));
+    album1.titleTooltipIsVisible = false;
+
+    album1.descriptionTooltipIsVisible = true;
+    assertTrue(getZIndex_(album0) < getZIndex_(album1));
+
+    album0.descriptionTooltipIsVisible = true;
+    album1.descriptionTooltipIsVisible = false;
+    assertTrue(getZIndex_(album0) > getZIndex_(album1));
+  });
+
+  test('textWithTooltip_hasTooltipWhenTextOverflows', function() {
+    displayPhotosPage_(
+        [
+          {
+            albumId: 'id0',
+            checked: false,
+            title: createRandomString_(1),
+            description: createRandomString_(1),
+            url: 'url'
+          },
+          {
+            albumId: 'id1',
+            checked: false,
+            title: createRandomString_(500),
+            description: createRandomString_(500),
+            url: 'url'
+          },
+        ],
+        AmbientModeTopicSource.GOOGLE_PHOTOS);
+    assertFalse(
+        isTooltipAvailable_(getTitleElement_(0)),
+        'There shouldn\'t be a tooltip for non-overflowing text.');
+    assertFalse(
+        isTooltipAvailable_(getDescriptionElement_(0)),
+        'There shouldn\'t be a tooltip for non-overflowing text.');
+
+    assertTrue(
+        isTooltipAvailable_(getTitleElement_(1)),
+        'There should be a tooltip for overflowing text.');
+    assertTrue(
+        isTooltipAvailable_(getDescriptionElement_(1)),
+        'There should be a tooltip for overflowing text.');
+  });
+
+  test('textWithTooltip_tooltipVisibilityWhenTextChanges', function() {
+    displayPhotosPage_(
+        [
+          {
+            albumId: 'id0',
+            checked: false,
+            title: createRandomString_(1),
+            description: createRandomString_(1),
+            url: 'url'
+          },
+        ],
+        AmbientModeTopicSource.GOOGLE_PHOTOS);
+
+    assertFalse(
+        isTooltipAvailable_(getTitleElement_(0)),
+        'There shouldn\'t be a tooltip for non-overflowing text.');
+
+    getTitleElement_(0).text = createRandomString_(300);
+    Polymer.dom.flush();
+    assertTrue(
+        isTooltipAvailable_(getTitleElement_(0)),
+        'There should be a tooltip for overflowing text.');
+
+    getTitleElement_(0).text = createRandomString_(1);
+    Polymer.dom.flush();
+    assertFalse(
+        isTooltipAvailable_(getTitleElement_(0)),
+        'There shouldn\'t be a tooltip for non-overflowing text.');
+  });
+
+  test('textWithTooltip_tooltipVisibilityCallbacks', function() {
+    displayPhotosPage_(
+        [
+          {
+            albumId: 'id0',
+            checked: false,
+            title: createRandomString_(500),
+            description: createRandomString_(1),
+            url: 'url'
+          },
+        ],
+        AmbientModeTopicSource.GOOGLE_PHOTOS);
+    getTitleElement_(0).dispatchEvent(new MouseEvent('mouseenter', null));
+    assertFalse(
+        getTitleElement_(0).tooltipIsVisible,
+        'Tooltip should have an animate in delay');
+    // Delay animate in delay and animate out duration is currently 500.
+    setTimeout(() => {
+      assertTrue(
+          getTitleElement_(0).tooltipIsVisible, 'Tooltip should be visible');
+
+      getTitleElement_(0).dispatchEvent(new MouseEvent('mouseleave', null));
+      assertTrue(
+          getTitleElement_(0).tooltipIsVisible,
+          'Tooltip should have an animate out duration');
+      setTimeout(() => {
+        assertFalse(
+            getTitleElement_(0).tooltipIsVisible,
+            'Tooltip shouldn\'t be visible after it\'s finished animating out');
+      }, 1000);
+    }, 1000);
   });
 });

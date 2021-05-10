@@ -261,7 +261,7 @@ void PendingScript::ExecuteScriptBlockInternal(
     //
     // <spec step="4.B.2">Run the module script given by the script's
     // script.</spec>
-    script->RunScript(context_document->GetFrame());
+    script->RunScript(context_document->domWindow());
 
     // <spec step="4.A.4">Set the script element's node document's currentScript
     // attribute to old script element.</spec>
@@ -307,7 +307,10 @@ bool PendingScript::IsControlledByScriptRunner() const {
     case ScriptSchedulingType::kParserBlocking:
     case ScriptSchedulingType::kParserBlockingInline:
     case ScriptSchedulingType::kImmediate:
-    case ScriptSchedulingType::kForceDefer:
+      return false;
+    case ScriptSchedulingType::kDeprecatedForceDefer:
+      NOTREACHED()
+          << "kDeprecatedForceDefer is deprecated and should not be in use";
       return false;
 
     case ScriptSchedulingType::kInOrder:

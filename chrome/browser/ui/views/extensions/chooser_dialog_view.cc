@@ -16,6 +16,7 @@
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -51,9 +52,11 @@ ChooserDialogView::ChooserDialogView(
       new DeviceChooserContentView(this, std::move(chooser_controller));
   device_chooser_content_view_->SetBorder(views::CreateEmptyBorder(
       ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
-          views::CONTROL, views::CONTROL)));
+          views::DialogContentType::kControl,
+          views::DialogContentType::kControl)));
 
   SetExtraView(device_chooser_content_view_->CreateExtraView());
+  SetModalType(ui::MODAL_TYPE_CHILD);
   SetShowCloseButton(false);
   SetTitle(device_chooser_content_view_->GetWindowTitle());
 
@@ -71,10 +74,6 @@ ChooserDialogView::ChooserDialogView(
 }
 
 ChooserDialogView::~ChooserDialogView() = default;
-
-ui::ModalType ChooserDialogView::GetModalType() const {
-  return ui::MODAL_TYPE_CHILD;
-}
 
 bool ChooserDialogView::IsDialogButtonEnabled(ui::DialogButton button) const {
   return device_chooser_content_view_->IsDialogButtonEnabled(button);
@@ -99,6 +98,9 @@ const views::Widget* ChooserDialogView::GetWidget() const {
 void ChooserDialogView::OnSelectionChanged() {
   DialogModelChanged();
 }
+
+BEGIN_METADATA(ChooserDialogView, views::DialogDelegateView)
+END_METADATA
 
 void ChromeExtensionChooserDialog::ShowDialogImpl(
     std::unique_ptr<ChooserController> chooser_controller) const {

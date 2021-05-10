@@ -139,7 +139,7 @@ IN_PROC_BROWSER_TEST_F(TabletModePageBehaviorTest, ExcludeHostedApps) {
       "test_browser_app", true /* trusted_source */, gfx::Rect(),
       browser()->profile(), true);
   params.initial_show_state = ui::SHOW_STATE_DEFAULT;
-  Browser* browser = new Browser(params);
+  Browser* browser = Browser::Create(params);
   AddBlankTabAndShow(browser);
 
   ASSERT_TRUE(browser->is_type_app());
@@ -154,13 +154,13 @@ IN_PROC_BROWSER_TEST_F(TabletModePageBehaviorTest, ExcludeHostedApps) {
 }
 
 IN_PROC_BROWSER_TEST_F(TabletModePageBehaviorTest, ExcludeNTPs) {
-  AddTabAtIndexToBrowser(browser(), 0, GURL(chrome::kChromeSearchLocalNtpUrl),
+  AddTabAtIndexToBrowser(browser(), 0, GURL(chrome::kChromeUINewTabPageURL),
                          ui::PAGE_TRANSITION_LINK,
                          false /* check_navigation_success */);
   auto* web_contents = GetActiveWebContents(browser());
   ASSERT_TRUE(web_contents);
   EXPECT_STREQ(web_contents->GetLastCommittedURL().spec().c_str(),
-               chrome::kChromeSearchLocalNtpUrl);
+               chrome::kChromeUINewTabPageURL);
 
   // NTPs should not be affected in tablet mode.
   ToggleTabletMode();

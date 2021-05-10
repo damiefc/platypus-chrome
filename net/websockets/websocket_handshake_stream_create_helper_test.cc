@@ -18,6 +18,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/privacy_mode.h"
 #include "net/base/proxy_server.h"
+#include "net/dns/public/secure_dns_policy.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_request_info.h"
@@ -93,7 +94,7 @@ class MockClientSocketHandleFactory {
         ClientSocketPool::GroupId(
             HostPortPair("a", 80), ClientSocketPool::SocketType::kHttp,
             PrivacyMode::PRIVACY_MODE_DISABLED, NetworkIsolationKey(),
-            false /* disable_secure_dns */),
+            SecureDnsPolicy::kAllow),
         scoped_refptr<ClientSocketPool::SocketParams>(),
         base::nullopt /* proxy_annotation_tag */, MEDIUM, SocketTag(),
         ClientSocketPool::RespectLimits::ENABLED, CompletionOnceCallback(),
@@ -117,7 +118,9 @@ class TestConnectDelegate : public WebSocketStream::ConnectDelegate {
   void OnSuccess(
       std::unique_ptr<WebSocketStream> stream,
       std::unique_ptr<WebSocketHandshakeResponseInfo> response) override {}
-  void OnFailure(const std::string& failure_message) override {}
+  void OnFailure(const std::string& failure_message,
+                 int net_error,
+                 base::Optional<int> response_code) override {}
   void OnStartOpeningHandshake(
       std::unique_ptr<WebSocketHandshakeRequestInfo> request) override {}
   void OnSSLCertificateError(
@@ -144,7 +147,10 @@ class MockWebSocketStreamRequestAPI : public WebSocketStreamRequestAPI {
                void(WebSocketBasicHandshakeStream* handshake_stream));
   MOCK_METHOD1(OnHttp2HandshakeStreamCreated,
                void(WebSocketHttp2HandshakeStream* handshake_stream));
-  MOCK_METHOD1(OnFailure, void(const std::string& message));
+  MOCK_METHOD3(OnFailure,
+               void(const std::string& message,
+                    int net_error,
+                    base::Optional<int> response_code));
 };
 
 class WebSocketHandshakeStreamCreateHelperTest
@@ -176,7 +182,7 @@ class WebSocketHandshakeStreamCreateHelperTest
         NOTREACHED();
     }
 
-    EXPECT_CALL(stream_request_, OnFailure(_)).Times(0);
+    EXPECT_CALL(stream_request_, OnFailure(_, _, _)).Times(0);
 
     HttpRequestInfo request_info;
     request_info.url = url;
@@ -229,14 +235,14 @@ class WebSocketHandshakeStreamCreateHelperTest
       }
       case HTTP2_HANDSHAKE_STREAM: {
         SpdyTestUtil spdy_util;
-        spdy::SpdyHeaderBlock request_header_block = WebSocketHttp2Request(
+        spdy::Http2HeaderBlock request_header_block = WebSocketHttp2Request(
             kPath, "www.example.org", kOrigin, extra_request_headers);
         spdy::SpdySerializedFrame request_headers(
             spdy_util.ConstructSpdyHeaders(1, std::move(request_header_block),
                                            DEFAULT_PRIORITY, false));
         MockWrite writes[] = {CreateMockWrite(request_headers, 0)};
 
-        spdy::SpdyHeaderBlock response_header_block =
+        spdy::Http2HeaderBlock response_header_block =
             WebSocketHttp2Response(extra_response_headers);
         spdy::SpdySerializedFrame response_headers(
             spdy_util.ConstructSpdyResponseHeaders(
@@ -259,11 +265,11 @@ class WebSocketHandshakeStreamCreateHelperTest
         const SpdySessionKey key(
             HostPortPair::FromURL(url), ProxyServer::Direct(),
             PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
-            SocketTag(), NetworkIsolationKey(), false /* disable_secure_dns */);
+            SocketTag(), NetworkIsolationKey(), SecureDnsPolicy::kAllow);
         base::WeakPtr<SpdySession> spdy_session =
             CreateSpdySession(http_network_session.get(), key, net_log);
         std::unique_ptr<WebSocketHandshakeStreamBase> handshake =
-            create_helper.CreateHttp2Stream(spdy_session);
+            create_helper.CreateHttp2Stream(spdy_session, {} /* dns_aliases */);
 
         int rv = handshake->InitializeStream(
             &request_info, true, DEFAULT_PRIORITY, NetLogWithSource(),

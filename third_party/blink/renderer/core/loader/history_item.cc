@@ -33,7 +33,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/network/encoded_form_data.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
+#include "third_party/blink/renderer/platform/wtf/uuid.h"
 
 namespace blink {
 
@@ -47,7 +47,9 @@ static int64_t GenerateSequenceNumber() {
 
 HistoryItem::HistoryItem()
     : item_sequence_number_(GenerateSequenceNumber()),
-      document_sequence_number_(GenerateSequenceNumber()) {}
+      document_sequence_number_(GenerateSequenceNumber()),
+      app_history_key_(WTF::CreateCanonicalUUIDString()),
+      app_history_id_(WTF::CreateCanonicalUUIDString()) {}
 
 HistoryItem::~HistoryItem() = default;
 
@@ -145,6 +147,11 @@ void HistoryItem::SetFormContentType(const AtomicString& form_content_type) {
 
 EncodedFormData* HistoryItem::FormData() {
   return form_data_.get();
+}
+
+void HistoryItem::SetAppHistoryState(
+    scoped_refptr<SerializedScriptValue> value) {
+  app_history_state_ = std::move(value);
 }
 
 ResourceRequest HistoryItem::GenerateResourceRequest(

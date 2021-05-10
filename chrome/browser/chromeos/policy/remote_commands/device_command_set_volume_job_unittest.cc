@@ -6,14 +6,14 @@
 
 #include <memory>
 
+#include "ash/components/audio/cras_audio_handler.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/values.h"
 #include "chrome/test/base/chrome_ash_test_base.h"
-#include "chromeos/audio/cras_audio_handler.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace policy {

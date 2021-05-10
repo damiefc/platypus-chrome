@@ -4,7 +4,7 @@
 
 #include "gpu/command_buffer/service/gr_cache_controller.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
@@ -26,7 +26,7 @@ namespace raster {
 class GrCacheControllerTest : public testing::Test {
  public:
   void SetUp() override {
-    gl::GLSurfaceTestSupport::InitializeOneOff();
+    gl::GLSurfaceTestSupport::InitializeOneOffWithStubBindings();
     gpu::GpuDriverBugWorkarounds workarounds;
 
     scoped_refptr<gl::GLShareGroup> share_group = new gl::GLShareGroup();

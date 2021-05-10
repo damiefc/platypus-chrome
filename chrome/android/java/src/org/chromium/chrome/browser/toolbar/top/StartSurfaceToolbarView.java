@@ -12,6 +12,7 @@ import android.os.Build;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewPropertyAnimator;
+import android.view.ViewStub;
 import android.widget.ImageButton;
 import android.widget.RelativeLayout;
 
@@ -19,19 +20,29 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.content.res.AppCompatResources;
 
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
-import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.toolbar.HomeButton;
+import org.chromium.chrome.browser.toolbar.IncognitoToggleTabLayout;
 import org.chromium.chrome.browser.toolbar.NewTabButton;
+import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightParams;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightShape;
 
 /** View of the StartSurfaceToolbar */
 class StartSurfaceToolbarView extends RelativeLayout {
     private NewTabButton mNewTabButton;
-    private View mIncognitoSwitch;
+    private HomeButton mHomeButton;
     private View mLogo;
+    private View mTabSwitcherButtonView;
+    @Nullable
+    private IncognitoToggleTabLayout mIncognitoToggleTabLayout;
     @Nullable
     private ImageButton mIdentityDiscButton;
     private int mPrimaryColor;
@@ -46,6 +57,10 @@ class StartSurfaceToolbarView extends RelativeLayout {
     private boolean mInStartSurfaceMode;
     private boolean mIsShowing;
 
+    private ObservableSupplier<Boolean> mHomepageEnabledSupplier;
+    private ObservableSupplier<Boolean> mHomepageManagedByPolicySupplier;
+    private boolean mIsHomeButtonInitialized;
+
     public StartSurfaceToolbarView(Context context, AttributeSet attrs) {
         super(context, attrs);
     }
@@ -54,10 +69,14 @@ class StartSurfaceToolbarView extends RelativeLayout {
     protected void onFinishInflate() {
         super.onFinishInflate();
         mNewTabButton = findViewById(R.id.new_tab_button);
-        mIncognitoSwitch = findViewById(R.id.incognito_switch);
+        mHomeButton = findViewById(R.id.home_button_on_tab_switcher);
+        ViewStub incognitoToggleTabsStub = findViewById(R.id.incognito_tabs_stub);
+        mIncognitoToggleTabLayout = (IncognitoToggleTabLayout) incognitoToggleTabsStub.inflate();
         mLogo = findViewById(R.id.logo);
         mIdentityDiscButton = findViewById(R.id.identity_disc_button);
+        mTabSwitcherButtonView = findViewById(R.id.start_tab_switcher_button);
         updatePrimaryColorAndTint(false);
+        mNewTabButton.setStartSurfaceEnabled(true);
     }
 
     @Override
@@ -80,6 +99,10 @@ class StartSurfaceToolbarView extends RelativeLayout {
                 break;
             }
         }
+    }
+
+    void setGridTabSwitcherEnabled(boolean isGridTabSwitcherEnabled) {
+        mNewTabButton.setGridTabSwitcherEnabled(isGridTabSwitcherEnabled);
     }
 
     /**
@@ -126,31 +149,78 @@ class StartSurfaceToolbarView extends RelativeLayout {
     }
 
     /**
+     * @param isVisible Whether the home button is visible.
+     */
+    void setHomeButtonVisibility(boolean isVisible) {
+        mayInitializeHomeButton();
+        mHomeButton.setVisibility(isVisible ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * @param homepageEnabledSupplier Supplier of whether homepage is enabled.
+     */
+    void setHomepageEnabledSupplier(ObservableSupplier<Boolean> homepageEnabledSupplier) {
+        assert mHomepageEnabledSupplier == null;
+        mHomepageEnabledSupplier = homepageEnabledSupplier;
+    }
+
+    /**
+     * @param homepageManagedByPolicySupplier Supplier of whether the homepage is managed by policy.
+     */
+    void setHomepageManagedByPolicySupplier(
+            ObservableSupplier<Boolean> homepageManagedByPolicySupplier) {
+        assert mHomepageManagedByPolicySupplier == null;
+        mHomepageManagedByPolicySupplier = homepageManagedByPolicySupplier;
+    }
+
+    /**
+     * Initializes the home button if not yet.
+     */
+    private void mayInitializeHomeButton() {
+        if (mIsHomeButtonInitialized || mHomepageEnabledSupplier == null
+                || mHomepageManagedByPolicySupplier == null) {
+            return;
+        }
+
+        // The long click which shows the change homepage settings is disabled when the Start
+        // surface is enabled.
+        mHomeButton.init(mHomepageEnabledSupplier, null, mHomepageManagedByPolicySupplier);
+        mIsHomeButtonInitialized = true;
+    }
+
+    /**
+     * @param homeButtonClickHandler The callback that will be notified when the home button is
+     *                               pressed.
+     */
+    void setHomeButtonClickHandler(OnClickListener homeButtonClickHandler) {
+        mHomeButton.setOnClickListener(homeButtonClickHandler);
+    }
+
+    /**
      * @param isClickable Whether the buttons are clickable.
      */
     void setButtonClickableState(boolean isClickable) {
         mNewTabButton.setClickable(isClickable);
-        mIncognitoSwitch.setClickable(isClickable);
+        mIncognitoToggleTabLayout.setClickable(isClickable);
     }
 
     /**
-     * @param isVisible Whether the Incognito switcher is visible.
+     * @param isVisible Whether the Incognito toggle tab layout is visible.
      */
-    void setIncognitoSwitcherVisibility(boolean isVisible) {
-        mIncognitoSwitch.setVisibility(isVisible ? VISIBLE : GONE);
+    void setIncognitoToggleTabVisibility(boolean isVisible) {
+        mIncognitoToggleTabLayout.setVisibility(isVisible ? VISIBLE : GONE);
     }
 
     /**
-     * @param isAtStart Whether the new tab button is at start.
+     * @param highlight If the new tab button should be highlighted.
      */
-    void setNewTabButtonAtStart(boolean isAtStart) {
-        assert isAtStart;
-        if (isAtStart) {
-            ((LayoutParams) mNewTabButton.getLayoutParams()).removeRule(RelativeLayout.START_OF);
-
-            LayoutParams params = (LayoutParams) mIncognitoSwitch.getLayoutParams();
-            params.removeRule(RelativeLayout.ALIGN_PARENT_START);
-            params.addRule(RelativeLayout.CENTER_HORIZONTAL);
+    void setNewTabButtonHighlight(boolean highlight) {
+        if (mNewTabButton == null) return;
+        if (highlight) {
+            ViewHighlighter.turnOnHighlight(
+                    mNewTabButton, new HighlightParams(HighlightShape.CIRCLE));
+        } else {
+            ViewHighlighter.turnOffHighlight(mNewTabButton);
         }
     }
 
@@ -222,7 +292,9 @@ class StartSurfaceToolbarView extends RelativeLayout {
      * */
     void setStartSurfaceMode(boolean inStartSurfaceMode) {
         mInStartSurfaceMode = inStartSurfaceMode;
-        showStartSurfaceToolbar(mInStartSurfaceMode && mShouldShow, true);
+        // When showing or hiding toolbar from a tab, the fade-in and fade-out animations are not
+        // needed. (eg: cold start, changing theme, changing incognito status...)
+        showStartSurfaceToolbar(mInStartSurfaceMode && mShouldShow, false);
     }
 
     /**
@@ -231,20 +303,49 @@ class StartSurfaceToolbarView extends RelativeLayout {
      * */
     void setToolbarVisibility(boolean shouldShowStartSurfaceToolbar) {
         mShouldShow = shouldShowStartSurfaceToolbar;
-        showStartSurfaceToolbar(mInStartSurfaceMode && mShouldShow, false);
+        // When simply setting visibility, the animations should be shown. (eg: search box has
+        // focus)
+        showStartSurfaceToolbar(mInStartSurfaceMode && mShouldShow, true);
+    }
+
+    /**
+     * @param isVisible Whether the tab switcher button is visible.
+     */
+    void setTabSwitcherButtonVisibility(boolean isVisible) {
+        mTabSwitcherButtonView.setVisibility(isVisible ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * Set TabCountProvider for incognito toggle view.
+     * @param tabCountProvider The {@link TabCountProvider} to update the incognito toggle view.
+     */
+    void setTabCountProvider(TabCountProvider tabCountProvider) {
+        if (mIncognitoToggleTabLayout != null) {
+            mIncognitoToggleTabLayout.setTabCountProvider(tabCountProvider);
+        }
+    }
+
+    /**
+     * Set TabModelSelector for incognito toggle view.
+     * @param selector  A {@link TabModelSelector} to provide information about open tabs.
+     */
+    void setTabModelSelector(TabModelSelector selector) {
+        if (mIncognitoToggleTabLayout != null) {
+            mIncognitoToggleTabLayout.setTabModelSelector(selector);
+        }
     }
 
     /**
      * Start animation to show or hide toolbar.
      * @param showStartSurfaceToolbar Whether or not toolbar should be shown or hidden.
-     * @param animateToTab Whether or not animation is from or to tab.
+     * @param showAnimation Whether or not to show the animation.
      */
-    private void showStartSurfaceToolbar(boolean showStartSurfaceToolbar, boolean animateToTab) {
+    private void showStartSurfaceToolbar(boolean showStartSurfaceToolbar, boolean showAnimation) {
         if (showStartSurfaceToolbar == mIsShowing) return;
 
         if (mVisibilityAnimator != null) {
             mVisibilityAnimator.cancel();
-            mVisibilityAnimator = null;
+            finishAnimation(showStartSurfaceToolbar);
         }
 
         mIsShowing = showStartSurfaceToolbar;
@@ -254,21 +355,24 @@ class StartSurfaceToolbarView extends RelativeLayout {
             return;
         }
 
-        setAlpha(showStartSurfaceToolbar ? 0.0f : 1.0f);
-        setVisibility(View.VISIBLE);
+        // TODO(https://crbug.com/1139024): Show the fade-in animation when
+        // TabUiFeatureUtilities#isTabToGtsAnimationEnabled is true.
+        if (!showAnimation) {
+            setVisibility(showStartSurfaceToolbar ? View.VISIBLE : View.GONE);
+            return;
+        }
 
-        boolean showZoomingAnimation =
-                animateToTab && TabUiFeatureUtilities.isTabToGtsAnimationEnabled();
-        final long duration = showZoomingAnimation
-                ? TopToolbarCoordinator.TAB_SWITCHER_MODE_GTS_ANIMATION_DURATION_MS
-                : TopToolbarCoordinator.TAB_SWITCHER_MODE_NORMAL_ANIMATION_DURATION_MS;
+        // Show the fade-in and fade-out animation. Set visibility as VISIBLE here to show the
+        // animation. The visibility will be finally set in finishAnimation().
+        setVisibility(View.VISIBLE);
+        setAlpha(showStartSurfaceToolbar ? 0.0f : 1.0f);
+
+        final long duration = TopToolbarCoordinator.TAB_SWITCHER_MODE_NORMAL_ANIMATION_DURATION_MS;
 
         mVisibilityAnimator =
                 animate()
                         .alpha(showStartSurfaceToolbar ? 1.0f : 0.0f)
                         .setDuration(duration)
-                        .setStartDelay(
-                                showZoomingAnimation && showStartSurfaceToolbar ? duration : 0)
                         .setInterpolator(Interpolators.LINEAR_INTERPOLATOR)
                         .withEndAction(() -> { finishAnimation(showStartSurfaceToolbar); });
     }

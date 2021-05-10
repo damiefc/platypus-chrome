@@ -37,20 +37,21 @@ class NATIVE_THEME_EXPORT NativeThemeMac : public NativeThemeBase {
   // an appropriate gray.
   static SkColor ApplySystemControlTint(SkColor color);
 
-  // Overridden from NativeTheme:
-  SkColor GetSystemColor(ColorId color_id,
-                         ColorScheme color_scheme) const override;
-
-  // Overridden from NativeTheme:
+  // NativeTheme:
+  SkColor GetSystemColorDeprecated(ColorId color_id,
+                                   ColorScheme color_scheme,
+                                   bool apply_processing) const override;
   SkColor GetSystemButtonPressedColor(SkColor base_color) const override;
+  PreferredContrast CalculatePreferredContrast() const override;
 
-  // Overridden from NativeThemeBase:
+  // NativeThemeBase:
   void Paint(cc::PaintCanvas* canvas,
              Part part,
              State state,
              const gfx::Rect& rect,
              const ExtraParams& extra,
-             ColorScheme color_scheme) const override;
+             ColorScheme color_scheme,
+             const base::Optional<SkColor>& accent_color) const override;
   void PaintMenuPopupBackground(
       cc::PaintCanvas* canvas,
       const gfx::Size& size,
@@ -92,10 +93,10 @@ class NATIVE_THEME_EXPORT NativeThemeMac : public NativeThemeBase {
   friend class base::NoDestructor<NativeThemeMac>;
   static NativeThemeMac* instance();
 
- private:
   NativeThemeMac(bool configure_web_instance, bool should_only_use_dark_colors);
   ~NativeThemeMac() override;
 
+ private:
   // Paint the selected menu item background, and a border for emphasis when in
   // high contrast.
   void PaintSelectedMenuItem(cc::PaintCanvas* canvas,

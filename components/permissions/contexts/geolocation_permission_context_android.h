@@ -28,7 +28,7 @@
 #include "components/location/android/location_settings.h"
 #include "components/location/android/location_settings_dialog_context.h"
 #include "components/location/android/location_settings_dialog_outcome.h"
-#include "components/permissions/contexts//geolocation_permission_context.h"
+#include "components/permissions/contexts/geolocation_permission_context.h"
 #include "components/permissions/permission_request_id.h"
 
 namespace content {
@@ -82,7 +82,8 @@ class GeolocationPermissionContextAndroid
                            const GURL& embedding_origin,
                            BrowserPermissionCallback callback,
                            bool persist,
-                           ContentSetting content_setting) override;
+                           ContentSetting content_setting,
+                           bool is_one_time) override;
   PermissionResult UpdatePermissionStatusWithDeviceStatus(
       PermissionResult result,
       const GURL& requesting_origin,

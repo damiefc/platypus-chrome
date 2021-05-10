@@ -7,9 +7,10 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
-#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -27,20 +28,13 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/arc/arc_util.h"
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
-#include "components/arc/arc_prefs.h"
 #endif
 
 using apps::mojom::OptionalBool;
 
 namespace {
-
-#if defined(OS_CHROMEOS)
-constexpr char kArcFrameworkPackage[] = "android";
-constexpr int kMinAndroidFrameworkVersion = 28;  // Android P
-#endif
 
 constexpr char const* kAppIdsWithHiddenMoreSettings[] = {
     extensions::kWebStoreAppId,
@@ -51,11 +45,11 @@ constexpr char const* kAppIdsWithHiddenPinToShelf[] = {
   extension_misc::kChromeAppId,
 };
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 constexpr char const* kAppIdsWithHiddenStoragePermission[] = {
     arc::kPlayStoreAppId,
 };
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 app_management::mojom::ExtensionAppPermissionMessagePtr
 CreateExtensionAppPermissionMessage(
@@ -77,7 +71,7 @@ bool ShouldHidePinToShelf(const std::string app_id) {
 }
 
 bool ShouldHideStoragePermission(const std::string app_id) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   return base::Contains(kAppIdsWithHiddenStoragePermission, app_id);
 #else
   return false;
@@ -92,30 +86,25 @@ AppManagementPageHandler::AppManagementPageHandler(
     Profile* profile)
     : receiver_(this, std::move(receiver)),
       page_(std::move(page)),
-      profile_(profile) {
-  apps::AppServiceProxy* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile_);
-
-  Observe(&proxy->AppRegistryCache());
-
-#if defined(OS_CHROMEOS)
-  if (arc::IsArcAllowedForProfile(profile_)) {
-    arc_app_list_prefs_observer_.Add(ArcAppListPrefs::Get(profile_));
-  }
-#endif  // OS_CHROMEOS
+      profile_(profile)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      ,
+      shelf_delegate_(this, profile)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+{
+  Observe(&apps::AppServiceProxyFactory::GetForProfile(profile_)
+               ->AppRegistryCache());
 }
 
 AppManagementPageHandler::~AppManagementPageHandler() {}
 
 void AppManagementPageHandler::OnPinnedChanged(const std::string& app_id,
                                                bool pinned) {
-  apps::AppServiceProxy* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile_);
-
   app_management::mojom::AppPtr app;
 
-  proxy->AppRegistryCache().ForOneApp(
-      app_id, [this, &app](const apps::AppUpdate& update) {
+  apps::AppServiceProxyFactory::GetForProfile(profile_)
+      ->AppRegistryCache()
+      .ForOneApp(app_id, [this, &app](const apps::AppUpdate& update) {
         if (update.Readiness() == apps::mojom::Readiness::kReady)
           app = CreateUIAppPtr(update);
       });
@@ -130,12 +119,10 @@ void AppManagementPageHandler::OnPinnedChanged(const std::string& app_id,
 }
 
 void AppManagementPageHandler::GetApps(GetAppsCallback callback) {
-  apps::AppServiceProxy* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile_);
-
   std::vector<app_management::mojom::AppPtr> apps;
-  proxy->AppRegistryCache().ForEachApp(
-      [this, &apps](const apps::AppUpdate& update) {
+  apps::AppServiceProxyFactory::GetForProfile(profile_)
+      ->AppRegistryCache()
+      .ForEachApp([this, &apps](const apps::AppUpdate& update) {
         if (update.ShowInManagement() == apps::mojom::OptionalBool::kTrue &&
             update.Readiness() != apps::mojom::Readiness::kUninstalledByUser) {
           apps.push_back(CreateUIAppPtr(update));
@@ -166,7 +153,7 @@ void AppManagementPageHandler::GetExtensionAppPermissionMessages(
 
 void AppManagementPageHandler::SetPinned(const std::string& app_id,
                                          OptionalBool pinned) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   shelf_delegate_.SetPinned(app_id, pinned);
 #else
   NOTREACHED();
@@ -176,24 +163,19 @@ void AppManagementPageHandler::SetPinned(const std::string& app_id,
 void AppManagementPageHandler::SetPermission(
     const std::string& app_id,
     apps::mojom::PermissionPtr permission) {
-  apps::AppServiceProxy* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile_);
-
-  proxy->SetPermission(app_id, std::move(permission));
+  apps::AppServiceProxyFactory::GetForProfile(profile_)->SetPermission(
+      app_id, std::move(permission));
 }
 
 void AppManagementPageHandler::Uninstall(const std::string& app_id) {
-  apps::AppServiceProxy* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile_);
-
-  proxy->Uninstall(app_id, nullptr /* parent_window */);
+  apps::AppServiceProxyFactory::GetForProfile(profile_)->Uninstall(
+      app_id, apps::mojom::UninstallSource::kAppManagement,
+      nullptr /* parent_window */);
 }
 
 void AppManagementPageHandler::OpenNativeSettings(const std::string& app_id) {
-  apps::AppServiceProxy* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile_);
-
-  proxy->OpenNativeSettings(app_id);
+  apps::AppServiceProxyFactory::GetForProfile(profile_)->OpenNativeSettings(
+      app_id);
 }
 
 app_management::mojom::AppPtr AppManagementPageHandler::CreateUIAppPtr(
@@ -220,7 +202,7 @@ app_management::mojom::AppPtr AppManagementPageHandler::CreateUIAppPtr(
 
   // On other OS's, is_pinned defaults to OptionalBool::kUnknown, which is
   // used to represent the fact that there is no concept of being pinned.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   app->is_pinned = shelf_delegate_.IsPinned(update.AppId())
                        ? OptionalBool::kTrue
                        : OptionalBool::kFalse;
@@ -257,32 +239,3 @@ void AppManagementPageHandler::OnAppRegistryCacheWillBeDestroyed(
     apps::AppRegistryCache* cache) {
   Observe(nullptr);
 }
-
-#if defined(OS_CHROMEOS)
-// static
-bool AppManagementPageHandler::IsCurrentArcVersionSupported(Profile* profile) {
-  if (arc::IsArcAllowedForProfile(profile)) {
-    auto package =
-        ArcAppListPrefs::Get(profile)->GetPackage(kArcFrameworkPackage);
-    return package && (package->package_version >= kMinAndroidFrameworkVersion);
-  }
-  return false;
-}
-
-void AppManagementPageHandler::OnArcVersionChanged(int androidVersion) {
-  page_->OnArcSupportChanged(androidVersion >= kMinAndroidFrameworkVersion);
-}
-
-void AppManagementPageHandler::OnPackageInstalled(
-    const arc::mojom::ArcPackageInfo& package_info) {
-  OnPackageModified(package_info);
-}
-
-void AppManagementPageHandler::OnPackageModified(
-    const arc::mojom::ArcPackageInfo& package_info) {
-  if (package_info.package_name != kArcFrameworkPackage) {
-    return;
-  }
-  OnArcVersionChanged(package_info.package_version);
-}
-#endif  // OS_CHROMEOS

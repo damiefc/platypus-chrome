@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
 #include "base/path_service.h"
 #include "base/posix/global_descriptors.h"
@@ -16,7 +15,6 @@
 #include "content/grit/content_resources.h"
 #include "content/public/browser/child_process_launcher_utils.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
@@ -75,13 +73,9 @@ bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
       command_line_->HasSwitch(sandbox::policy::switches::kNoSandbox) ||
       sandbox::policy::IsUnsandboxedSandboxType(sandbox_type);
 
-  bool use_v2 = (sandbox_type != sandbox::policy::SandboxType::kGpu) ||
-                base::FeatureList::IsEnabled(features::kMacV2GPUSandbox);
-
-  if (use_v2 && !no_sandbox) {
+  if (!no_sandbox) {
     // Generate the profile string.
-    std::string profile =
-        sandbox::policy::SandboxMac::GetSandboxProfile(sandbox_type);
+    std::string profile = sandbox::policy::GetSandboxProfile(sandbox_type);
 
     // Disable os logging to com.apple.diagnosticd which is a performance
     // problem.

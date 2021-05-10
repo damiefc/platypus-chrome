@@ -11,12 +11,13 @@
 
 #include "base/macros.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliated_match_helper.h"
-#include "components/password_manager/core/browser/password_form_forward.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 namespace password_manager {
+
+struct PasswordForm;
 
 class MockAffiliatedMatchHelper : public AffiliatedMatchHelper {
  public:
@@ -31,9 +32,9 @@ class MockAffiliatedMatchHelper : public AffiliatedMatchHelper {
   MockAffiliatedMatchHelper();
   ~MockAffiliatedMatchHelper() override;
 
-  // Expects GetAffiliatedAndroidRealms() to be called with the
+  // Expects GetAffiliatedAndroidAndWebRealms() to be called with the
   // |expected_observed_form|, and will cause the result callback supplied to
-  // GetAffiliatedAndroidRealms() to be invoked with |results_to_return|.
+  // GetAffiliatedAndroidAndWebRealms() to be invoked with |results_to_return|.
   void ExpectCallToGetAffiliatedAndroidRealms(
       const PasswordStore::FormDigest& expected_observed_form,
       const std::vector<std::string>& results_to_return);
@@ -56,7 +57,7 @@ class MockAffiliatedMatchHelper : public AffiliatedMatchHelper {
   MOCK_METHOD0(OnInjectAffiliationAndBrandingInformationCalled,
                std::vector<AffiliationAndBrandingInformation>());
 
-  void GetAffiliatedAndroidRealms(
+  void GetAffiliatedAndroidAndWebRealms(
       const PasswordStore::FormDigest& observed_form,
       AffiliatedRealmsCallback result_callback) override;
   void GetAffiliatedWebRealms(

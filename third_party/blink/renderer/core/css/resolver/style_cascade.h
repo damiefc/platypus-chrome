@@ -36,7 +36,6 @@ class CSSVariableData;
 class CSSVariableReferenceValue;
 class CustomProperty;
 class MatchResult;
-class StyleColor;
 class StyleResolverState;
 
 namespace cssvalue {
@@ -71,8 +70,10 @@ class CORE_EXPORT StyleCascade {
   const MatchResult& GetMatchResult() { return match_result_; }
 
   // Access the MatchResult in order to add declarations to it.
-  // The modifications made will be taken into account during the next call to
-  // Apply.
+  // The modifications made will be taken into account during Apply().
+  //
+  // It is invalid to modify the MatchResult after Apply has been called
+  // (unless Reset is called first).
   //
   // TODO(andruud): ElementRuleCollector could emit MatchedProperties
   // directly to the cascade.
@@ -80,6 +81,9 @@ class CORE_EXPORT StyleCascade {
 
   // Add ActiveInterpolationsMap to the cascade. The interpolations present
   // in the map will be taken into account during the next call to Apply.
+  //
+  // It is valid to add interpolations to the StyleCascade even after Apply
+  // has been called.
   //
   // Note that it's assumed that the incoming ActiveInterpolationsMap outlives
   // the StyleCascade object.
@@ -108,11 +112,18 @@ class CORE_EXPORT StyleCascade {
   // applying a keyframe from e.g. "color: var(--x)" to "color: var(--y)".
   // Hence that code needs an entry point to the resolving process.
   //
+  // This function handles IACVT [1] as follows:
+  //
+  //  - If a cycle was detected, returns nullptr.
+  //  - If IACVT for other reasons, returns a 'CSSUnsetValue'.
+  //
   // TODO(crbug.com/985023): This function has an associated const
   // violation, which isn't great. (This vilation was not introduced with
   // StyleCascade, however).
   //
   // See documentation the other Resolve* functions for what resolve means.
+  //
+  // [1] https://drafts.csswg.org/css-variables/#invalid-at-computed-value-time
   const CSSValue* Resolve(const CSSPropertyName&,
                           const CSSValue&,
                           CascadeOrigin,
@@ -207,12 +218,6 @@ class CORE_EXPORT StyleCascade {
                                    CascadePriority,
                                    CascadeResolver&);
 
-  // Update the ComputedStyle to use the colors specified in Forced Colors Mode.
-  // https://www.w3.org/TR/css-color-adjust-1/#forced
-  void ForceColors();
-  void MaybeForceColor(const CSSProperty& property, const StyleColor& color);
-  const CSSValue* GetForcedColorValue(CSSPropertyName name);
-
   // Whether or not we are calculating the style for the root element.
   // We need to know this to detect cycles with 'rem' units.
   // https://drafts.css-houdini.org/css-properties-values-api-1/#dependency-cycles
@@ -283,11 +288,10 @@ class CORE_EXPORT StyleCascade {
 
   const CSSValue* Resolve(const CSSProperty&,
                           const CSSValue&,
-                          CascadeOrigin,
+                          CascadeOrigin&,
                           CascadeResolver&);
   const CSSValue* ResolveCustomProperty(const CSSProperty&,
                                         const CSSCustomPropertyDeclaration&,
-                                        CascadeOrigin,
                                         CascadeResolver&);
   const CSSValue* ResolveVariableReference(const CSSProperty&,
                                            const CSSVariableReferenceValue&,
@@ -297,7 +301,7 @@ class CORE_EXPORT StyleCascade {
                                              CascadeResolver&);
   const CSSValue* ResolveRevert(const CSSProperty&,
                                 const CSSValue&,
-                                CascadeOrigin,
+                                CascadeOrigin&,
                                 CascadeResolver&);
 
   scoped_refptr<CSSVariableData> ResolveVariableData(CSSVariableData*,
@@ -336,13 +340,6 @@ class CORE_EXPORT StyleCascade {
   // Marks a CSSProperty as having a reference to a custom property. Needed to
   // disable the matched property cache in some cases.
   void MarkHasVariableReference(const CSSProperty&);
-  // The resulting ComputedStyle may depend on values from the parent style,
-  // for example, explicit inheritance or var() references means we hold a
-  // dependency on the relevant property. We maintain a set of these
-  // dependencies on StyleResolverState, which is later used by the
-  // MatchedPropertiesCache to figure out if a given cache lookup is a hit or a
-  // miss.
-  void MarkDependency(const CSSProperty&);
 
   const Document& GetDocument() const;
   const CSSProperty& ResolveSurrogate(const CSSProperty& surrogate);
@@ -350,7 +347,6 @@ class CORE_EXPORT StyleCascade {
   void CountUse(WebFeature);
   void MaybeUseCountRevert(const CSSValue&);
   void MaybeUseCountSummaryDisplayBlock();
-  void MaybeUseCountInvalidVariableUnset(const CustomProperty&);
 
   StyleResolverState& state_;
   MatchResult match_result_;

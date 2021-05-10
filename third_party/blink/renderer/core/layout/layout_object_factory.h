@@ -98,10 +98,21 @@ class LayoutObjectFactory {
   static LayoutRubyAsBlock* CreateRubyAsBlock(Node* node,
                                               const ComputedStyle& style,
                                               LegacyLayout legacy);
+  static LayoutObject* CreateRubyText(Node* node,
+                                      const ComputedStyle& style,
+                                      LegacyLayout legacy);
+
+  static LayoutObject* CreateSVGText(Node& node,
+                                     const ComputedStyle& style,
+                                     LegacyLayout legacy);
 
   // Anonoymous creation methods
 
-  static LayoutBox* CreateAnonymousTableWithParent(const LayoutObject& parent);
+  // |child_forces_legacy| true if creating parents boxes for legacy child.
+  // Table must match child's type.
+  static LayoutBox* CreateAnonymousTableWithParent(
+      const LayoutObject& parent,
+      bool child_forces_legacy = false);
 
   static LayoutBox* CreateAnonymousTableSectionWithParent(
       const LayoutObject& parent);

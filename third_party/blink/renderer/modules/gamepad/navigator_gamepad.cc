@@ -67,7 +67,7 @@ const char NavigatorGamepad::kSupplementName[] = "NavigatorGamepad";
 const char kSecureContextBlocked[] =
     "Access to the feature \"gamepad\" requires a secure context";
 const char kFeaturePolicyBlocked[] =
-    "Access to the feature \"gamepad\" is disallowed by feature policy.";
+    "Access to the feature \"gamepad\" is disallowed by permissions policy.";
 
 NavigatorGamepad& NavigatorGamepad::From(Navigator& navigator) {
   NavigatorGamepad* supplement =
@@ -83,7 +83,7 @@ namespace {
 
 void RecordGamepadsForIdentifiabilityStudy(ExecutionContext* context,
                                            GamepadList* gamepads) {
-  if (!context || !IdentifiabilityStudySettings::Get()->IsSurfaceAllowed(
+  if (!context || !IdentifiabilityStudySettings::Get()->ShouldSample(
                       IdentifiableSurface::FromTypeAndToken(
                           IdentifiableSurface::Type::kWebFeature,
                           WebFeature::kGetGamepads)))
@@ -148,7 +148,7 @@ GamepadList* NavigatorGamepad::getGamepads(Navigator& navigator,
   }
 
   if (!context->IsFeatureEnabled(
-          mojom::blink::FeaturePolicyFeature::kGamepad)) {
+          mojom::blink::PermissionsPolicyFeature::kGamepad)) {
     if (base::FeatureList::IsEnabled(features::kRestrictGamepadAccess)) {
       exception_state.ThrowSecurityError(kFeaturePolicyBlocked);
       return nullptr;
@@ -179,16 +179,17 @@ GamepadList* NavigatorGamepad::Gamepads() {
 
   // Allow gamepad button presses to qualify as user activations if the page is
   // visible.
-  if (GetFrame() && GetPage() && GetPage()->IsPageVisible() &&
+  if (DomWindow() && DomWindow()->GetFrame()->GetPage()->IsPageVisible() &&
       GamepadComparisons::HasUserActivation(gamepads_)) {
     LocalFrame::NotifyUserActivation(
-        GetFrame(), mojom::blink::UserActivationNotificationType::kInteraction);
+        DomWindow()->GetFrame(),
+        mojom::blink::UserActivationNotificationType::kInteraction);
   }
   is_gamepads_exposed_ = true;
 
   ExecutionContext* context = DomWindow();
 
-  if (GetFrame() && GetFrame()->IsCrossOriginToMainFrame()) {
+  if (DomWindow() && DomWindow()->GetFrame()->IsCrossOriginToMainFrame()) {
     UseCounter::Count(context, WebFeature::kGetGamepadsFromCrossOriginSubframe);
   }
 
@@ -215,7 +216,10 @@ void NavigatorGamepad::SampleGamepads() {
         gamepad = MakeGarbageCollected<Gamepad>(this, i, navigation_start_,
                                                 gamepads_start_);
       }
-      gamepad->UpdateFromDeviceState(device_gamepad);
+      bool cross_origin_isolated_capability =
+          DomWindow() ? DomWindow()->CrossOriginIsolatedCapability() : false;
+      gamepad->UpdateFromDeviceState(device_gamepad,
+                                     cross_origin_isolated_capability);
       gamepads_back_->Set(i, gamepad);
     } else {
       gamepads_back_->Set(i, nullptr);
@@ -256,7 +260,7 @@ void NavigatorGamepad::Trace(Visitor* visitor) const {
 
 bool NavigatorGamepad::StartUpdatingIfAttached() {
   // The frame must be attached to start updating.
-  if (GetFrame()) {
+  if (DomWindow()) {
     StartUpdating();
     return true;
   }
@@ -265,7 +269,6 @@ bool NavigatorGamepad::StartUpdatingIfAttached() {
 
 void NavigatorGamepad::DidUpdateData() {
   // We should stop listening once we detached.
-  DCHECK(GetFrame());
   DCHECK(DomWindow());
 
   // Record when gamepad data was first made available to the page.
@@ -287,9 +290,8 @@ NavigatorGamepad::NavigatorGamepad(Navigator& navigator)
 
   // Fetch |window.performance.timing.navigationStart|. Gamepad timestamps are
   // reported relative to this value.
-  DocumentLoader* loader = GetFrame()->Loader().GetDocumentLoader();
-  if (loader)
-    navigation_start_ = loader->GetTiming().NavigationStart();
+  auto& timing = DomWindow()->document()->Loader()->GetTiming();
+  navigation_start_ = timing.NavigationStart();
 
   vibration_actuators_.resize(device::Gamepads::kItemsLengthCap);
 }
@@ -297,7 +299,7 @@ NavigatorGamepad::NavigatorGamepad(Navigator& navigator)
 NavigatorGamepad::~NavigatorGamepad() = default;
 
 void NavigatorGamepad::RegisterWithDispatcher() {
-  gamepad_dispatcher_->AddController(this, GetFrame());
+  gamepad_dispatcher_->AddController(this, DomWindow());
 }
 
 void NavigatorGamepad::UnregisterWithDispatcher() {

@@ -10,9 +10,10 @@
 #include "base/android/jni_android.h"
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/location.h"
-#include "chrome/android/chrome_jni_headers/BiometricAuthenticatorBridge_jni.h"
+#include "chrome/browser/password_manager/android/jni_headers/BiometricAuthenticatorBridge_jni.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/password_manager/core/browser/biometric_authenticator.h"
 #include "components/password_manager/core/browser/origin_credential_store.h"
@@ -28,11 +29,8 @@ using password_manager::BiometricsAvailability;
 using password_manager::UiCredential;
 
 // static
-std::unique_ptr<ChromeBiometricAuthenticator>
+scoped_refptr<password_manager::BiometricAuthenticator>
 ChromeBiometricAuthenticator::Create(WebContents* web_contents) {
-  if (!base::FeatureList::IsEnabled(autofill::features::kAutofillTouchToFill))
-    return nullptr;
-
   if (!base::FeatureList::IsEnabled(
           password_manager::features::kBiometricTouchToFill)) {
     return nullptr;
@@ -44,16 +42,21 @@ ChromeBiometricAuthenticator::Create(WebContents* web_contents) {
     return nullptr;
   }
 
-  return std::make_unique<BiometricAuthenticatorAndroid>(window_android);
+  return base::WrapRefCounted(
+      new BiometricAuthenticatorAndroid(window_android));
 }
 
 BiometricAuthenticatorAndroid::BiometricAuthenticatorAndroid(
     ui::WindowAndroid* window_android) {
   java_object_ = Java_BiometricAuthenticatorBridge_create(
-      AttachCurrentThread(), window_android->GetJavaObject());
+      AttachCurrentThread(), reinterpret_cast<intptr_t>(this),
+      window_android->GetJavaObject());
 }
 
-BiometricAuthenticatorAndroid::~BiometricAuthenticatorAndroid() = default;
+BiometricAuthenticatorAndroid::~BiometricAuthenticatorAndroid() {
+  Java_BiometricAuthenticatorBridge_destroy(AttachCurrentThread(),
+                                            java_object_);
+}
 
 BiometricsAvailability BiometricAuthenticatorAndroid::CanAuthenticate() {
   return static_cast<BiometricsAvailability>(
@@ -64,7 +67,20 @@ BiometricsAvailability BiometricAuthenticatorAndroid::CanAuthenticate() {
 void BiometricAuthenticatorAndroid::Authenticate(
     const UiCredential& credential,
     AuthenticateCallback callback) {
-  // TODO(crbug.com/1031483): Implement.
-  content::GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), true));
+  callback_ = std::move(callback);
+  Java_BiometricAuthenticatorBridge_authenticate(AttachCurrentThread(),
+                                                 java_object_);
+}
+
+void BiometricAuthenticatorAndroid::Cancel() {
+  callback_.Reset();
+  Java_BiometricAuthenticatorBridge_cancel(AttachCurrentThread(), java_object_);
+}
+
+void BiometricAuthenticatorAndroid::OnAuthenticationCompleted(
+    JNIEnv* env,
+    jboolean success) {
+  if (callback_.is_null())
+    return;
+  std::move(callback_).Run(success);
 }

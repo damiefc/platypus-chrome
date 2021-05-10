@@ -54,7 +54,7 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
     }
 
     public boolean isCurrentlySelectedFilter() {
-        return getTabModel().isCurrentModel();
+        return getTabModel().isActiveModel();
     }
 
     /**
@@ -214,6 +214,13 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
         closeTab(tab);
         for (TabModelObserver observer : mFilteredObservers) {
             observer.willCloseTab(tab, animate);
+        }
+    }
+
+    @Override
+    public void didCloseTab(Tab tab) {
+        for (TabModelObserver observer : mFilteredObservers) {
+            observer.didCloseTab(tab);
         }
     }
 

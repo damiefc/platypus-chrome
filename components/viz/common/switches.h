@@ -6,9 +6,9 @@
 #define COMPONENTS_VIZ_COMMON_SWITCHES_H_
 
 #include <stdint.h>
-#include <string>
 
 #include "base/optional.h"
+#include "build/chromeos_buildflags.h"
 #include "components/viz/common/viz_common_export.h"
 
 namespace switches {
@@ -18,12 +18,30 @@ VIZ_COMMON_EXPORT extern const char kDeJellyScreenWidth[];
 VIZ_COMMON_EXPORT extern const char kDeadlineToSynchronizeSurfaces[];
 VIZ_COMMON_EXPORT extern const char kDisableFrameRateLimit[];
 VIZ_COMMON_EXPORT extern const char kDoubleBufferCompositing[];
+VIZ_COMMON_EXPORT extern const char kDraw1Point12Ms[];
+VIZ_COMMON_EXPORT extern const char kDraw2Points6Ms[];
+VIZ_COMMON_EXPORT extern const char kDraw1Point6Ms[];
+VIZ_COMMON_EXPORT extern const char kDraw2Points3Ms[];
+VIZ_COMMON_EXPORT extern const char kDrawPredictedInkPoint[];
 VIZ_COMMON_EXPORT extern const char kEnableDeJelly[];
 VIZ_COMMON_EXPORT extern const char kEnableHardwareOverlays[];
 VIZ_COMMON_EXPORT extern const char kEnableVizDevTools[];
 VIZ_COMMON_EXPORT extern const char kEnableVizHitTestDebug[];
+
+#if defined(OS_CHROMEOS)
+VIZ_COMMON_EXPORT extern const char
+    kPlatformDisallowsChromeOSDirectVideoDecoder[];
+#endif
+
 VIZ_COMMON_EXPORT extern const char kRunAllCompositorStagesBeforeDraw[];
 VIZ_COMMON_EXPORT extern const char kShowAggregatedDamage[];
+VIZ_COMMON_EXPORT extern const char kTintCompositedContentModulate[];
+
+// kShowDCLayerDebugBorders shows the debug borders of the overlays and the
+// damage rect after using overlays on Windows. Do not use
+// kShowDCLayerDebugBorders and kShowAggregatedDamage together because
+// kShowAggregatedDamage sets the entire frame as damaged and this causes
+// incorrect damage rect borders after using overlays.
 VIZ_COMMON_EXPORT extern const char kShowDCLayerDebugBorders[];
 
 VIZ_COMMON_EXPORT base::Optional<uint32_t> GetDeadlineToSynchronizeSurfaces();

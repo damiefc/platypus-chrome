@@ -137,6 +137,7 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
                   base::Value("MAP * 127.0.0.1"));
   // See http://crbug.com/696569.
   options.SetKey("disable_ipv6_on_wifi", base::Value(true));
+  options.SetPath({"QUIC", "ios_network_service_type"}, base::Value(2));
   std::string options_json;
   EXPECT_TRUE(base::JSONWriter::Write(options, &options_json));
 
@@ -215,6 +216,10 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
   EXPECT_FALSE(quic_params->retry_on_alternate_network_before_handshake);
   EXPECT_FALSE(quic_params->race_stale_dns_on_connection);
   EXPECT_FALSE(quic_params->go_away_on_path_degrading);
+  EXPECT_FALSE(quic_params->allow_port_migration);
+
+  // Check network_service_type for iOS.
+  EXPECT_EQ(2, quic_params->ios_network_service_type);
 
 #if defined(ENABLE_BUILT_IN_DNS)
   // Check AsyncDNS resolver is enabled (not supported on iOS).
@@ -858,6 +863,8 @@ TEST(URLRequestContextConfigTest, SetQuicConnectionMigrationV2Options) {
             quic_params->max_migrations_to_non_default_network_on_write_error);
   EXPECT_EQ(
       4, quic_params->max_migrations_to_non_default_network_on_path_degrading);
+  EXPECT_EQ(quic::ParsedQuicVersionVector{quic::ParsedQuicVersion::Q050()},
+            quic_params->supported_versions);
 }
 
 TEST(URLRequestContextConfigTest, SetQuicStaleDNSracing) {
@@ -907,6 +914,54 @@ TEST(URLRequestContextConfigTest, SetQuicStaleDNSracing) {
   const net::QuicParams* quic_params = context->quic_context()->params();
 
   EXPECT_TRUE(quic_params->race_stale_dns_on_connection);
+}
+
+TEST(URLRequestContextConfigTest, SetQuicAllowPortMigration) {
+  base::test::TaskEnvironment task_environment_(
+      base::test::TaskEnvironment::MainThreadType::IO);
+  URLRequestContextConfig config(
+      // Enable QUIC.
+      true,
+      // QUIC User Agent ID.
+      "Default QUIC User Agent ID",
+      // Enable SPDY.
+      true,
+      // Enable Brotli.
+      false,
+      // Type of http cache.
+      URLRequestContextConfig::HttpCacheType::DISK,
+      // Max size of http cache in bytes.
+      1024000,
+      // Disable caching for HTTP responses. Other information may be stored in
+      // the cache.
+      false,
+      // Storage path for http cache and cookie storage.
+      "/data/data/org.chromium.net/app_cronet_test/test_storage",
+      // Accept-Language request header field.
+      "foreign-language",
+      // User-Agent request header field.
+      "fake agent",
+      // JSON encoded experimental options.
+      "{\"QUIC\":{\"allow_port_migration\":true}}",
+      // MockCertVerifier to use for testing purposes.
+      std::unique_ptr<net::CertVerifier>(),
+      // Enable network quality estimator.
+      false,
+      // Enable Public Key Pinning bypass for local trust anchors.
+      true,
+      // Optional network thread priority.
+      base::Optional<double>());
+
+  net::URLRequestContextBuilder builder;
+  config.ConfigureURLRequestContextBuilder(&builder);
+  // Set a ProxyConfigService to avoid DCHECK failure when building.
+  builder.set_proxy_config_service(
+      std::make_unique<net::ProxyConfigServiceFixed>(
+          net::ProxyConfigWithAnnotation::CreateDirect()));
+  std::unique_ptr<net::URLRequestContext> context(builder.Build());
+  const net::QuicParams* quic_params = context->quic_context()->params();
+
+  EXPECT_TRUE(quic_params->allow_port_migration);
 }
 
 TEST(URLRequestContextConfigTest, SetQuicGoawayOnPathDegrading) {

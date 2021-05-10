@@ -34,7 +34,8 @@ class UI_TOUCH_SELECTION_EXPORT TouchSelectionControllerClient {
   virtual void SelectBetweenCoordinates(const gfx::PointF& base,
                                         const gfx::PointF& extent) = 0;
   virtual void OnSelectionEvent(SelectionEventType event) = 0;
-  virtual void OnDragUpdate(const gfx::PointF& position) = 0;
+  virtual void OnDragUpdate(const TouchSelectionDraggable::Type type,
+                            const gfx::PointF& position) = 0;
   virtual std::unique_ptr<TouchHandleDrawable> CreateDrawable() = 0;
   virtual void DidScroll() = 0;
   virtual void ShowTouchSelectionContextMenu(const gfx::Point& location) {}
@@ -138,6 +139,11 @@ class UI_TOUCH_SELECTION_EXPORT TouchSelectionController
   // their bottom coordinate.
   const gfx::PointF& GetStartPosition() const;
   const gfx::PointF& GetEndPosition() const;
+
+  // To be called when swipe-to-move-cursor motion begins.
+  void OnSwipeToMoveCursorBegin();
+  // To be called when swipe-to-move-cursor motion ends.
+  void OnSwipeToMoveCursorEnd();
 
   const gfx::SelectionBound& start() const { return start_; }
   const gfx::SelectionBound& end() const { return end_; }

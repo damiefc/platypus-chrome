@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "dbus/bus.h"
 #include "dbus/object_manager.h"
 #include "dbus/values_util.h"
@@ -182,7 +183,7 @@ class BluetoothGattCharacteristicClientImpl
   // BluetoothGattCharacteristicClient override.
   void StartNotify(
       const dbus::ObjectPath& object_path,
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       device::BluetoothGattCharacteristic::NotificationType notification_type,
 #endif
       base::OnceClosure callback,
@@ -197,7 +198,7 @@ class BluetoothGattCharacteristicClientImpl
     dbus::MethodCall method_call(
         bluetooth_gatt_characteristic::kBluetoothGattCharacteristicInterface,
         bluetooth_gatt_characteristic::kStartNotify);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     dbus::MessageWriter writer(&method_call);
     writer.AppendByte(static_cast<uint8_t>(notification_type));
 #endif
@@ -311,7 +312,7 @@ class BluetoothGattCharacteristicClientImpl
     if (bytes)
       value.assign(bytes, bytes + length);
 
-    std::move(callback).Run(value);
+    std::move(callback).Run(/*error_code=*/base::nullopt, value);
   }
 
   // Called when a response for a failed method call is received.

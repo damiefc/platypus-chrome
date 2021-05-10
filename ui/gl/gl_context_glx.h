@@ -5,12 +5,10 @@
 #ifndef UI_GL_GL_CONTEXT_GLX_H_
 #define UI_GL_GL_CONTEXT_GLX_H_
 
-#include <string>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "ui/gfx/x/x11.h"
-#include "ui/gfx/x/x11_types.h"
+#include "ui/gfx/x/connection.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_export.h"
 
@@ -22,8 +20,6 @@ class GLSurface;
 class GL_EXPORT GLContextGLX : public GLContextReal {
  public:
   explicit GLContextGLX(GLShareGroup* share_group);
-
-  XDisplay* display();
 
   // Implement GLContext.
   bool Initialize(GLSurface* compatible_surface,

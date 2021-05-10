@@ -82,12 +82,12 @@ class NearbyShareApiCallFlowImplTest : public testing::Test {
 
   void StartPostRequestApiCallFlowWithSerializedRequest(
       const std::string& serialized_request) {
-    flow_.StartPostRequest(GURL(kRequestUrl), serialized_request,
-                           shared_factory_, kAccessToken,
-                           base::Bind(&NearbyShareApiCallFlowImplTest::OnResult,
-                                      base::Unretained(this)),
-                           base::Bind(&NearbyShareApiCallFlowImplTest::OnError,
-                                      base::Unretained(this)));
+    flow_.StartPostRequest(
+        GURL(kRequestUrl), serialized_request, shared_factory_, kAccessToken,
+        base::BindOnce(&NearbyShareApiCallFlowImplTest::OnResult,
+                       base::Unretained(this)),
+        base::BindOnce(&NearbyShareApiCallFlowImplTest::OnError,
+                       base::Unretained(this)));
     // A pending fetch for the API request should be created.
     CheckNearbySharingClientHttpPostRequest(serialized_request);
   }
@@ -100,10 +100,10 @@ class NearbyShareApiCallFlowImplTest : public testing::Test {
       const std::string& serialized_request) {
     flow_.StartPatchRequest(
         GURL(kRequestUrl), serialized_request, shared_factory_, kAccessToken,
-        base::Bind(&NearbyShareApiCallFlowImplTest::OnResult,
-                   base::Unretained(this)),
-        base::Bind(&NearbyShareApiCallFlowImplTest::OnError,
-                   base::Unretained(this)));
+        base::BindOnce(&NearbyShareApiCallFlowImplTest::OnResult,
+                       base::Unretained(this)),
+        base::BindOnce(&NearbyShareApiCallFlowImplTest::OnError,
+                       base::Unretained(this)));
     // A pending fetch for the API request should be created.
     CheckNearbySharingClientHttpPatchRequest(serialized_request);
   }
@@ -116,12 +116,13 @@ class NearbyShareApiCallFlowImplTest : public testing::Test {
   void StartGetRequestApiCallFlowWithRequestAsQueryParameters(
       const NearbyShareApiCallFlow::QueryParameters&
           request_as_query_parameters) {
-    flow_.StartGetRequest(GURL(kRequestUrl), request_as_query_parameters,
-                          shared_factory_, kAccessToken,
-                          base::Bind(&NearbyShareApiCallFlowImplTest::OnResult,
-                                     base::Unretained(this)),
-                          base::Bind(&NearbyShareApiCallFlowImplTest::OnError,
-                                     base::Unretained(this)));
+    flow_.StartGetRequest(
+        GURL(kRequestUrl), request_as_query_parameters, shared_factory_,
+        kAccessToken,
+        base::BindOnce(&NearbyShareApiCallFlowImplTest::OnResult,
+                       base::Unretained(this)),
+        base::BindOnce(&NearbyShareApiCallFlowImplTest::OnError,
+                       base::Unretained(this)));
     // A pending fetch for the API request should be created.
     CheckNearbySharingClientHttpGetRequest(request_as_query_parameters);
   }
@@ -136,12 +137,20 @@ class NearbyShareApiCallFlowImplTest : public testing::Test {
     network_error_ = std::make_unique<NearbyShareHttpError>(network_error);
   }
 
+  void CheckPlatformTypeHeader(const net::HttpRequestHeaders& headers) {
+    std::string platform_type;
+    EXPECT_TRUE(headers.GetHeader("X-Sharing-Platform-Type", &platform_type));
+    EXPECT_EQ("OSType.CHROME_OS", platform_type);
+  }
+
   void CheckNearbySharingClientHttpPostRequest(
       const std::string& serialized_request) {
     const std::vector<network::TestURLLoaderFactory::PendingRequest>& pending =
         *test_url_loader_factory_.pending_requests();
     ASSERT_EQ(1u, pending.size());
     const network::ResourceRequest& request = pending[0].request;
+
+    CheckPlatformTypeHeader(request.headers);
 
     EXPECT_EQ(UrlWithQueryParameters(
                   kRequestUrl, base::nullopt /* request_as_query_parameters */),
@@ -164,6 +173,8 @@ class NearbyShareApiCallFlowImplTest : public testing::Test {
     ASSERT_EQ(1u, pending.size());
     const network::ResourceRequest& request = pending[0].request;
 
+    CheckPlatformTypeHeader(request.headers);
+
     EXPECT_EQ(UrlWithQueryParameters(
                   kRequestUrl, base::nullopt /* request_as_query_parameters */),
               request.url);
@@ -185,6 +196,8 @@ class NearbyShareApiCallFlowImplTest : public testing::Test {
         *test_url_loader_factory_.pending_requests();
     ASSERT_EQ(1u, pending.size());
     const network::ResourceRequest& request = pending[0].request;
+
+    CheckPlatformTypeHeader(request.headers);
 
     EXPECT_EQ(UrlWithQueryParameters(kRequestUrl, request_as_query_parameters),
               request.url);

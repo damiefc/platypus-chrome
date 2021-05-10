@@ -17,6 +17,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
+#include "content/public/common/content_features.h"
 
 namespace metrics {
 namespace {
@@ -125,17 +126,22 @@ void SubprocessMetricsProvider::BrowserChildProcessHostConnected(
     const content::ChildProcessData& data) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  // It's necessary to access the BrowserChildProcessHost object that is
-  // managing the child in order to extract the metrics memory from it.
-  // Unfortunately, the required lookup can only be performed on the IO
-  // thread so do the necessary dance.
-  content::GetIOThreadTaskRunner({})->PostTaskAndReplyWithResult(
-      FROM_HERE,
-      base::BindOnce(
-          &SubprocessMetricsProvider::GetSubprocessHistogramAllocatorOnIOThread,
-          data.id),
-      base::BindOnce(&SubprocessMetricsProvider::RegisterSubprocessAllocator,
-                     weak_ptr_factory_.GetWeakPtr(), data.id));
+  if (base::FeatureList::IsEnabled(features::kProcessHostOnUI)) {
+    RegisterSubprocessAllocator(
+        data.id, GetSubprocessHistogramAllocatorOnProcessThread(data.id));
+  } else {
+    // It's necessary to access the BrowserChildProcessHost object that is
+    // managing the child in order to extract the metrics memory from it.
+    // Unfortunately, the required lookup can only be performed on the IO
+    // thread so do the necessary dance.
+    content::GetIOThreadTaskRunner({})->PostTaskAndReplyWithResult(
+        FROM_HERE,
+        base::BindOnce(&SubprocessMetricsProvider::
+                           GetSubprocessHistogramAllocatorOnProcessThread,
+                       data.id),
+        base::BindOnce(&SubprocessMetricsProvider::RegisterSubprocessAllocator,
+                       weak_ptr_factory_.GetWeakPtr(), data.id));
+  }
 }
 
 void SubprocessMetricsProvider::BrowserChildProcessHostDisconnected(
@@ -162,8 +168,8 @@ void SubprocessMetricsProvider::OnRenderProcessHostCreated(
     content::RenderProcessHost* host) {
   // Sometimes, the same host will cause multiple notifications in tests so
   // could possibly do the same in a release build.
-  if (!scoped_observer_.IsObserving(host))
-    scoped_observer_.Add(host);
+  if (!scoped_observations_.IsObservingSource(host))
+    scoped_observations_.AddObservation(host);
 }
 
 void SubprocessMetricsProvider::RenderProcessReady(
@@ -198,12 +204,13 @@ void SubprocessMetricsProvider::RenderProcessHostDestroyed(
   // destruction of the host. If both get called, no harm is done.
 
   DeregisterSubprocessAllocator(host->GetID());
-  scoped_observer_.Remove(host);
+  scoped_observations_.RemoveObservation(host);
 }
 
 // static
 std::unique_ptr<base::PersistentHistogramAllocator>
-SubprocessMetricsProvider::GetSubprocessHistogramAllocatorOnIOThread(int id) {
+SubprocessMetricsProvider::GetSubprocessHistogramAllocatorOnProcessThread(
+    int id) {
   // See if the new process has a memory allocator and take control of it if so.
   // This call can only be made on the browser's IO thread.
   content::BrowserChildProcessHost* host =

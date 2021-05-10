@@ -106,7 +106,7 @@ ISearch = class {
 
       do {
         // Ask native to search the underlying data for a performance boost.
-        result = result.getNextTextMatch(searchStr, dir == Dir.BACKWARD);
+        result = result.getNextTextMatch(searchStr, dir === Dir.BACKWARD);
       } while (result && !AutomationPredicate.object(result));
 
       if (result) {
@@ -252,7 +252,7 @@ ISearchUI = class {
       o.format('$role', node);
     } else {
       o.withRichSpeechAndBraille(
-          cursors.Range.fromNode(node), null, Output.EventType.NAVIGATE);
+          cursors.Range.fromNode(node), null, OutputEventType.NAVIGATE);
     }
     o.go();
 

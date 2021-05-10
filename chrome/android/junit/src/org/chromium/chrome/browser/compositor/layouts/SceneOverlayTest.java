@@ -5,6 +5,8 @@
 package org.chromium.chrome.browser.compositor.layouts;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 
 import android.content.Context;
@@ -21,12 +23,15 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
-import org.chromium.chrome.browser.compositor.overlays.toolbar.TopToolbarOverlayCoordinator;
-import org.chromium.chrome.browser.compositor.scene_layer.ScrollingBottomViewSceneLayer;
+import org.chromium.chrome.browser.layouts.LayoutStateProvider;
+import org.chromium.chrome.browser.layouts.SceneOverlay;
+import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
+import org.chromium.chrome.browser.toolbar.bottom.ScrollingBottomViewSceneLayer;
+import org.chromium.chrome.browser.toolbar.top.TopToolbarOverlayCoordinator;
 
 import java.util.HashMap;
 import java.util.List;
@@ -53,7 +58,13 @@ public class SceneOverlayTest {
     @Mock
     private ObservableSupplier<TabContentManager> mTabContentManagerSupplier;
 
-    private LayoutManager mLayoutManager;
+    @Mock
+    private OneshotSupplierImpl<LayoutStateProvider> mLayoutStateProviderOneshotSupplier;
+
+    @Mock
+    private TopUiThemeColorProvider mTopUiThemeColorProvider;
+
+    private LayoutManagerImpl mLayoutManager;
 
     @Before
     public void setup() {
@@ -62,9 +73,11 @@ public class SceneOverlayTest {
         when(mLayoutManagerHost.getContext()).thenReturn(mContext);
         when(mContext.getResources()).thenReturn(mResources);
         when(mResources.getDisplayMetrics()).thenReturn(mDisplayMetrics);
+        doNothing().when(mLayoutStateProviderOneshotSupplier).set(any());
 
-        mLayoutManager =
-                new LayoutManager(mLayoutManagerHost, mContainerView, mTabContentManagerSupplier);
+        mLayoutManager = new LayoutManagerImpl(mLayoutManagerHost, mContainerView,
+                mTabContentManagerSupplier, null, mLayoutStateProviderOneshotSupplier,
+                () -> mTopUiThemeColorProvider);
     }
 
     @Test

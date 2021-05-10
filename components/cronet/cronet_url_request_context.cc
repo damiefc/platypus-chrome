@@ -10,6 +10,7 @@
 
 #include <limits>
 #include <map>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -85,7 +86,8 @@ class NetLogWithNetworkChangeEvents {
     DCHECK(cronet::OnInitThread());
     if (net_change_logger_)
       return;
-    net_change_logger_.reset(new net::LoggingNetworkChangeObserver(net_log_));
+    net_change_logger_ =
+        std::make_unique<net::LoggingNetworkChangeObserver>(net_log_);
   }
 
  private:
@@ -419,15 +421,17 @@ void CronetURLRequestContext::NetworkTasks::Initialize(
 #if BUILDFLAG(ENABLE_REPORTING)
   if (context_->reporting_service()) {
     for (const auto& preloaded_header : config->preloaded_report_to_headers) {
-      context_->reporting_service()->ProcessHeader(
-          preloaded_header.origin.GetURL(), preloaded_header.value);
+      context_->reporting_service()->ProcessReportToHeader(
+          preloaded_header.origin.GetURL(), net::NetworkIsolationKey(),
+          preloaded_header.value);
     }
   }
 
   if (context_->network_error_logging_service()) {
     for (const auto& preloaded_header : config->preloaded_nel_headers) {
       context_->network_error_logging_service()->OnHeader(
-          preloaded_header.origin, net::IPAddress(), preloaded_header.value);
+          net::NetworkIsolationKey(), preloaded_header.origin, net::IPAddress(),
+          preloaded_header.value);
     }
   }
 #endif  // BUILDFLAG(ENABLE_REPORTING)
@@ -560,7 +564,7 @@ int CronetURLRequestContext::default_load_flags() const {
 base::Thread* CronetURLRequestContext::GetFileThread() {
   DCHECK(OnInitThread());
   if (!file_thread_) {
-    file_thread_.reset(new base::Thread("Network File Thread"));
+    file_thread_ = std::make_unique<base::Thread>("Network File Thread");
     file_thread_->Start();
   }
   return file_thread_.get();
@@ -620,15 +624,15 @@ void CronetURLRequestContext::NetworkTasks::StartNetLog(
   // Do nothing if already logging to a file.
   if (net_log_file_observer_)
     return;
-  net_log_file_observer_ = net::FileNetLogObserver::CreateUnbounded(
-      file_path, /*constants=*/nullptr);
-  CreateNetLogEntriesForActiveObjects({context_.get()},
-                                      net_log_file_observer_.get());
+
   net::NetLogCaptureMode capture_mode =
       include_socket_bytes ? net::NetLogCaptureMode::kEverything
                            : net::NetLogCaptureMode::kDefault;
-  net_log_file_observer_->StartObserving(g_net_log.Get().net_log(),
-                                         capture_mode);
+  net_log_file_observer_ = net::FileNetLogObserver::CreateUnbounded(
+      file_path, capture_mode, /*constants=*/nullptr);
+  CreateNetLogEntriesForActiveObjects({context_.get()},
+                                      net_log_file_observer_.get());
+  net_log_file_observer_->StartObserving(g_net_log.Get().net_log());
 }
 
 void CronetURLRequestContext::NetworkTasks::StartNetLogToBoundedFile(
@@ -657,17 +661,16 @@ void CronetURLRequestContext::NetworkTasks::StartNetLogToBoundedFile(
     }
   }
 
+  net::NetLogCaptureMode capture_mode =
+      include_socket_bytes ? net::NetLogCaptureMode::kEverything
+                           : net::NetLogCaptureMode::kDefault;
   net_log_file_observer_ = net::FileNetLogObserver::CreateBounded(
-      file_path, size, /*constants=*/nullptr);
+      file_path, size, capture_mode, /*constants=*/nullptr);
 
   CreateNetLogEntriesForActiveObjects({context_.get()},
                                       net_log_file_observer_.get());
 
-  net::NetLogCaptureMode capture_mode =
-      include_socket_bytes ? net::NetLogCaptureMode::kEverything
-                           : net::NetLogCaptureMode::kDefault;
-  net_log_file_observer_->StartObserving(g_net_log.Get().net_log(),
-                                         capture_mode);
+  net_log_file_observer_->StartObserving(g_net_log.Get().net_log());
 }
 
 void CronetURLRequestContext::NetworkTasks::StopNetLog() {
@@ -689,8 +692,7 @@ void CronetURLRequestContext::NetworkTasks::StopNetLogCompleted() {
 }
 
 base::Value CronetURLRequestContext::NetworkTasks::GetNetLogInfo() const {
-  base::Value net_info =
-      net::GetNetInfo(context_.get(), net::NET_INFO_ALL_SOURCES);
+  base::Value net_info = net::GetNetInfo(context_.get());
   if (effective_experimental_options_) {
     net_info.SetKey("cronetExperimentalParams",
                     effective_experimental_options_->Clone());

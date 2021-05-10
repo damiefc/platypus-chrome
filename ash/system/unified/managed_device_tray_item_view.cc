@@ -16,6 +16,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/chromeos/devicetype_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/image_view.h"
 
@@ -42,6 +43,8 @@ void ManagedDeviceTrayItemView::OnEnterpriseDomainChanged() {
   Update();
 }
 
+void ManagedDeviceTrayItemView::OnEnterpriseAccountDomainChanged() {}
+
 const char* ManagedDeviceTrayItemView::GetClassName() const {
   return "ManagedDeviceTrayItemView";
 }
@@ -56,17 +59,17 @@ void ManagedDeviceTrayItemView::Update() {
     image_view()->SetImage(gfx::CreateVectorIcon(
         kSystemTrayManagedIcon,
         TrayIconColor(Shell::Get()->session_controller()->GetSessionState())));
-    std::string enterprise_domain_name = Shell::Get()
-                                             ->system_tray_model()
-                                             ->enterprise_domain()
-                                             ->enterprise_display_domain();
+    std::string enterprise_domain_manager = Shell::Get()
+                                                ->system_tray_model()
+                                                ->enterprise_domain()
+                                                ->enterprise_domain_manager();
     SetVisible(true);
-    if (!enterprise_domain_name.empty()) {
+    if (!enterprise_domain_manager.empty()) {
       image_view()->SetTooltipText(l10n_util::GetStringFUTF16(
-          IDS_ASH_ENTERPRISE_DEVICE_MANAGED_BY,
-          base::UTF8ToUTF16(enterprise_domain_name)));
+          IDS_ASH_ENTERPRISE_DEVICE_MANAGED_BY, ui::GetChromeOSDeviceName(),
+          base::UTF8ToUTF16(enterprise_domain_manager)));
     } else {
-      image_view()->SetTooltipText(base::string16());
+      image_view()->SetTooltipText(std::u16string());
       LOG(WARNING)
           << "Public account user, but device not enterprise-enrolled.";
     }

@@ -8,6 +8,7 @@
 #import <Foundation/Foundation.h>
 
 #include <map>
+#include <string>
 
 enum class ApplicationModeForTabOpening { NORMAL, INCOGNITO, CURRENT };
 
@@ -59,14 +60,18 @@ class GURL;
 @property(nonatomic, readwrite, copy) NSString* textQuery;
 // Data for UIImage for image query that should be executed on startup.
 @property(nonatomic, readwrite, strong) NSData* imageSearchData;
+// Boolean to track if the app is open in an user unexpected mode.
+// When a certain enterprise policy has been set, it's possible that one browser
+// mode is disabled. When the user intends to open an unavailable mode of
+// Chrome, the browser won't proceed in that disabled mode, and it will signal
+// to the user that a different mode is opened.
+@property(nonatomic, readwrite, getter=isUnexpectedMode) BOOL unexpectedMode;
 
 - (instancetype)init NS_UNAVAILABLE;
 
 - (instancetype)initWithExternalURL:(const GURL&)externalURL
                         completeURL:(const GURL&)completeURL
     NS_DESIGNATED_INITIALIZER;
-
-- (instancetype)initWithUniversalLink:(const GURL&)universalLink;
 
 - (instancetype)initWithURLs:(const std::vector<GURL>&)URLs;
 

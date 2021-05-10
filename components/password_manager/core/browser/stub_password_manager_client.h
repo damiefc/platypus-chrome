@@ -39,6 +39,7 @@ class StubPasswordManagerClient : public PasswordManagerClient {
   void HideManualFallbackForSaving() override;
   void FocusedInputChanged(
       password_manager::PasswordManagerDriver* driver,
+      autofill::FieldRendererId focused_field_id,
       autofill::mojom::FocusedFieldType focused_field_type) override;
   bool PromptUserToChooseCredentials(
       std::vector<std::unique_ptr<PasswordForm>> local_forms,
@@ -62,28 +63,23 @@ class StubPasswordManagerClient : public PasswordManagerClient {
   const autofill::LogManager* GetLogManager() const override;
   const MockPasswordFeatureManager* GetPasswordFeatureManager() const override;
   MockPasswordFeatureManager* GetPasswordFeatureManager();
+  bool IsAutofillAssistantUIVisible() const override;
 
-#if defined(ON_FOCUS_PING_ENABLED) || defined(PASSWORD_REUSE_DETECTION_ENABLED)
   safe_browsing::PasswordProtectionService* GetPasswordProtectionService()
       const override;
-#endif
 
 #if defined(ON_FOCUS_PING_ENABLED)
   void CheckSafeBrowsingReputation(const GURL& form_action,
                                    const GURL& frame_url) override;
 #endif
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   void CheckProtectedPasswordEntry(
       metrics_util::PasswordType reused_password_type,
       const std::string& username,
       const std::vector<MatchingReusedCredential>& matching_reused_credentials,
       bool password_field_exists) override;
-#endif
 
-#if defined(PASSWORD_REUSE_WARNING_ENABLED)
   void LogPasswordReuseDetectedEvent() override;
-#endif
 
   ukm::SourceId GetUkmSourceId() override;
   PasswordManagerMetricsRecorder* GetMetricsRecorder() override;

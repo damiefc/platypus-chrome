@@ -201,8 +201,7 @@ TEST_F(VerdictCacheManagerTest, TestParseInvalidVerdictEntry) {
 
   content_setting_map_->SetWebsiteSettingDefaultScope(
       GURL("http://www.google.com/"), GURL(),
-      ContentSettingsType::PASSWORD_PROTECTION, std::string(),
-      std::move(cache_dictionary));
+      ContentSettingsType::PASSWORD_PROTECTION, std::move(cache_dictionary));
 
   ReusedPasswordAccountType password_type;
   password_type.set_account_type(ReusedPasswordAccountType::GSUITE);
@@ -428,8 +427,7 @@ TEST_F(VerdictCacheManagerTest, TestCleanUpExpiredVerdictWithInvalidEntry) {
 
   content_setting_map_->SetWebsiteSettingDefaultScope(
       GURL("http://www.google.com/"), GURL(),
-      ContentSettingsType::PASSWORD_PROTECTION, std::string(),
-      std::move(cache_dictionary));
+      ContentSettingsType::PASSWORD_PROTECTION, std::move(cache_dictionary));
 
   ReusedPasswordAccountType password_type;
   password_type.set_account_type(ReusedPasswordAccountType::GSUITE);
@@ -439,24 +437,22 @@ TEST_F(VerdictCacheManagerTest, TestCleanUpExpiredVerdictWithInvalidEntry) {
                          "www.google.com/", base::Time::Now());
 
   // Verify we saved two entries under PasswordType PRIMARY_ACCOUNT_PASSWORD
-  EXPECT_EQ(2U,
-            content_setting_map_
-                ->GetWebsiteSetting(GURL("http://www.google.com/"), GURL(),
-                                    ContentSettingsType::PASSWORD_PROTECTION,
-                                    std::string(), nullptr)
-                ->FindDictKey("1")
-                ->DictSize());
+  EXPECT_EQ(2U, content_setting_map_
+                    ->GetWebsiteSetting(
+                        GURL("http://www.google.com/"), GURL(),
+                        ContentSettingsType::PASSWORD_PROTECTION, nullptr)
+                    ->FindDictKey("1")
+                    ->DictSize());
 
   cache_manager_->CleanUpExpiredVerdicts();
 
   // One should have been cleaned up
-  EXPECT_EQ(1U,
-            content_setting_map_
-                ->GetWebsiteSetting(GURL("http://www.google.com/"), GURL(),
-                                    ContentSettingsType::PASSWORD_PROTECTION,
-                                    std::string(), nullptr)
-                ->FindDictKey("1")
-                ->DictSize());
+  EXPECT_EQ(1U, content_setting_map_
+                    ->GetWebsiteSetting(
+                        GURL("http://www.google.com/"), GURL(),
+                        ContentSettingsType::PASSWORD_PROTECTION, nullptr)
+                    ->FindDictKey("1")
+                    ->DictSize());
 }
 
 TEST_F(VerdictCacheManagerTest, TestCanRetrieveCachedRealTimeUrlCheckVerdict) {
@@ -751,6 +747,27 @@ TEST_F(VerdictCacheManagerTest, TestCleanUpExpiredVerdictInBackground) {
   // The third cleanup task should happen at 120 + 1800 + 1800 seconds after
   // construction.
   task_environment_->FastForwardBy(base::TimeDelta::FromSeconds(2));
+  ASSERT_EQ(0u, cache_manager_->GetStoredRealTimeUrlCheckVerdictCount());
+}
+
+TEST_F(VerdictCacheManagerTest, TestCleanUpVerdictOlderThanUpperBound) {
+  RTLookupResponse response;
+  // Set the cache duration to 20 days.
+  AddThreatInfoToResponse(response, RTLookupResponse::ThreatInfo::DANGEROUS,
+                          RTLookupResponse::ThreatInfo::SOCIAL_ENGINEERING,
+                          /* cache_duration_sec */ 20 * 24 * 60 * 60,
+                          "www.example.com/",
+                          RTLookupResponse::ThreatInfo::EXACT_MATCH);
+
+  cache_manager_->CacheRealTimeUrlVerdict(GURL("https://www.example.com/"),
+                                          response, base::Time::Now(),
+                                          /* store_old_cache */ false);
+  ASSERT_EQ(1u, cache_manager_->GetStoredRealTimeUrlCheckVerdictCount());
+  // Fast forward by 8 days.
+  task_environment_->FastForwardBy(
+      base::TimeDelta::FromSeconds(8 * 24 * 60 * 60));
+  // Although the cache duration is set to 20 days, it is stored longer than the
+  // upper bound(7 days). The cache should be cleaned up.
   ASSERT_EQ(0u, cache_manager_->GetStoredRealTimeUrlCheckVerdictCount());
 }
 

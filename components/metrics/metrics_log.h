@@ -14,11 +14,14 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_base.h"
+#include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
-#include "components/metrics/metrics_service_client.h"
+#include "components/metrics/metrics_reporting_default_state.h"
 #include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
+#include "third_party/metrics_proto/system_profile.pb.h"
 
 class PrefService;
 
@@ -31,12 +34,16 @@ class HistogramSnapshotManager;
 namespace metrics {
 
 class MetricsProvider;
+class MetricsServiceClient;
 class DelegatingProvider;
 
 namespace internal {
 // Maximum number of events before truncation.
 constexpr int kOmniboxEventLimit = 5000;
 constexpr int kUserActionEventLimit = 5000;
+
+SystemProfileProto::InstallerPackage ToInstallerPackage(
+    base::StringPiece installer_package_name);
 }  // namespace internal
 
 class MetricsLog {
@@ -106,14 +113,15 @@ class MetricsLog {
   // always incrementing for use in measuring time durations.
   static int64_t GetCurrentTime();
 
-  // Record core profile settings into the SystemProfileProto.
+  // Records core profile settings into the SystemProfileProto.
   static void RecordCoreSystemProfile(MetricsServiceClient* client,
                                       SystemProfileProto* system_profile);
 
-  // Record core profile settings into the SystemProfileProto without a client.
+  // Records core profile settings into the SystemProfileProto without a client.
   static void RecordCoreSystemProfile(
       const std::string& version,
       metrics::SystemProfileProto::Channel channel,
+      bool is_extended_stable_channel,
       const std::string& application_locale,
       const std::string& package_name,
       SystemProfileProto* system_profile);
@@ -160,10 +168,6 @@ class MetricsLog {
   // record.  Must only be called after CloseLog() has been called.
   void GetEncodedLog(std::string* encoded_log);
 
-  const base::TimeTicks& creation_time() const {
-    return creation_time_;
-  }
-
   LogType log_type() const { return log_type_; }
 
   // Returns the number of samples in this log, it is only valid after the
@@ -180,9 +184,7 @@ class MetricsLog {
 
   // Exposed to allow subclass to access to export the uma_proto. Can be used
   // by external components to export logs to Chrome.
-  const ChromeUserMetricsExtension* uma_proto() const {
-    return &uma_proto_;
-  }
+  const ChromeUserMetricsExtension* uma_proto() const { return &uma_proto_; }
 
  private:
   // Write the default state of the enable metrics checkbox.

@@ -13,6 +13,7 @@
 #include "extensions/browser/extension_navigation_ui_data.h"
 #include "net/base/ip_endpoint.h"
 #include "net/http/http_util.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 
 namespace extensions {
 namespace {
@@ -51,7 +52,7 @@ WebRequestProxyingWebSocket::WebRequestProxyingWebSocket(
     bool has_extra_headers,
     int process_id,
     int render_frame_id,
-    base::UkmSourceId ukm_source_id,
+    ukm::SourceIdObj ukm_source_id,
     content::BrowserContext* browser_context,
     WebRequestAPI::RequestIDGenerator* request_id_generator,
     WebRequestAPI::ProxySet* proxies)
@@ -75,8 +76,8 @@ WebRequestProxyingWebSocket::WebRequestProxyingWebSocket(
           ukm_source_id)),
       proxies_(proxies) {
   // base::Unretained is safe here because the callback will be canceled when
-  // |shutdown_notifier_| is destroyed, and |proxies_| owns this.
-  shutdown_notifier_ =
+  // |shutdown_notifier_subscription_| is destroyed, and |proxies_| owns this.
+  shutdown_notifier_subscription_ =
       ShutdownNotifierFactory::GetInstance()
           ->Get(browser_context)
           ->Subscribe(base::BindRepeating(&WebRequestAPI::ProxySet::RemoveProxy,
@@ -142,6 +143,10 @@ void WebRequestProxyingWebSocket::OnOpeningHandshakeStarted(
   DCHECK(forwarding_handshake_client_);
   forwarding_handshake_client_->OnOpeningHandshakeStarted(std::move(request));
 }
+
+void WebRequestProxyingWebSocket::OnFailure(const std::string&,
+                                            int net_error,
+                                            int response_code) {}
 
 void WebRequestProxyingWebSocket::ContinueToHeadersReceived() {
   auto continuation = base::BindRepeating(
@@ -280,7 +285,7 @@ void WebRequestProxyingWebSocket::StartProxying(
     bool has_extra_headers,
     int process_id,
     int render_frame_id,
-    base::UkmSourceId ukm_source_id,
+    ukm::SourceIdObj ukm_source_id,
     WebRequestAPI::RequestIDGenerator* request_id_generator,
     const url::Origin& origin,
     content::BrowserContext* browser_context,

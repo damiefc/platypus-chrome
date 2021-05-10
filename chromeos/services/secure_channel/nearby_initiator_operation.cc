@@ -6,12 +6,46 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/no_destructor.h"
 #include "chromeos/services/secure_channel/authenticated_channel.h"
+#include "chromeos/services/secure_channel/connection_metrics_logger.h"
 #include "chromeos/services/secure_channel/nearby_connection_manager.h"
+#include "chromeos/services/secure_channel/nearby_connection_metrics_recorder.h"
 
 namespace chromeos {
 
 namespace secure_channel {
+
+namespace {
+
+NearbyInitiatorConnectionResult GetMetricsConnectionResult(
+    NearbyInitiatorFailureType failure_type) {
+  switch (failure_type) {
+    case NearbyInitiatorFailureType::kTimeoutDiscoveringDevice:
+      return NearbyInitiatorConnectionResult::kTimeoutDiscoveringDevice;
+    case NearbyInitiatorFailureType::kNearbyApiError:
+      return NearbyInitiatorConnectionResult::kNearbyApiError;
+    case NearbyInitiatorFailureType::kConnectionRejected:
+      return NearbyInitiatorConnectionResult::kConnectionRejected;
+    case NearbyInitiatorFailureType::kConnectivityError:
+      return NearbyInitiatorConnectionResult::kConnectivityError;
+    case NearbyInitiatorFailureType::kAuthenticationError:
+      return NearbyInitiatorConnectionResult::kAuthenticationError;
+  }
+}
+
+void RecordConnectionMetrics(const DeviceIdPair& device_id_pair,
+                             NearbyInitiatorConnectionResult result) {
+  LogNearbyInitiatorConnectionResult(result);
+
+  static base::NoDestructor<NearbyConnectionMetricsRecorder> recorder;
+  if (result == NearbyInitiatorConnectionResult::kConnectionSuccess)
+    recorder->HandleConnectionSuccess(device_id_pair);
+  else
+    recorder->HandleConnectionFailure(device_id_pair);
+}
+
+}  // namespace
 
 // static
 NearbyInitiatorOperation::Factory*
@@ -91,11 +125,15 @@ void NearbyInitiatorOperation::PerformUpdateConnectionPriority(
 
 void NearbyInitiatorOperation::OnSuccessfulConnection(
     std::unique_ptr<AuthenticatedChannel> authenticated_channel) {
+  RecordConnectionMetrics(device_id_pair(),
+                          NearbyInitiatorConnectionResult::kConnectionSuccess);
   OnSuccessfulConnectionAttempt(std::move(authenticated_channel));
 }
 
 void NearbyInitiatorOperation::OnConnectionFailure(
     NearbyInitiatorFailureType failure_type) {
+  RecordConnectionMetrics(device_id_pair(),
+                          GetMetricsConnectionResult(failure_type));
   OnFailedConnectionAttempt(failure_type);
 }
 

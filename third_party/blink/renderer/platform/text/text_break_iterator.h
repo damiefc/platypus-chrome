@@ -29,6 +29,7 @@
 #include "base/containers/span.h"
 #include "base/macros.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
+#include "third_party/blink/renderer/platform/text/character.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
 #include "third_party/blink/renderer/platform/wtf/text/unicode.h"
@@ -314,6 +315,15 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
     return iterator_;
   }
 
+  template <typename CharacterType>
+  bool IsOtherSpaceSeparator(UChar ch) const {
+    return Character::IsOtherSpaceSeparator(ch);
+  }
+  template <LChar>
+  bool IsOtherSpaceSeparator(UChar ch) const {
+    return false;
+  }
+
   template <typename CharacterType, LineBreakType, BreakSpaceType>
   int NextBreakablePosition(int pos, const CharacterType* str, int len) const;
   template <typename CharacterType, LineBreakType>
@@ -406,4 +416,4 @@ PLATFORM_EXPORT void GraphemesClusterList(const StringView& text,
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_TEXT_TEXT_BREAK_ITERATOR_H_

@@ -31,8 +31,8 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "services/network/public/cpp/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 
 namespace {
@@ -45,7 +45,7 @@ class FtpBrowserTest : public InProcessBrowserTest {
   explicit FtpBrowserTest(FtpState ftp_state = FtpState::ENABLED)
       : ftp_server_(net::SpawnedTestServer::TYPE_FTP,
                     base::FilePath(FILE_PATH_LITERAL("chrome/test/data/ftp"))) {
-    scoped_feature_list_.InitWithFeatureState(blink::features::kFtpProtocol,
+    scoped_feature_list_.InitWithFeatureState(network::features::kFtpProtocol,
                                               ftp_state == FtpState::ENABLED);
   }
 
@@ -184,7 +184,7 @@ IN_PROC_BROWSER_TEST_F(FtpBrowserTest, DirectoryListingNavigation) {
       ftp_server_.GetURLWithUserAndPassword("", "chrome", "chrome"));
 
   // Navigate to directory dir1/ without needing to re-authenticate
-  EXPECT_TRUE(content::ExecuteScript(
+  EXPECT_TRUE(content::ExecJs(
       browser()->tab_strip_model()->GetActiveWebContents(),
       "(function() {"
       "  function navigate() {"
@@ -209,7 +209,7 @@ IN_PROC_BROWSER_TEST_F(FtpBrowserTest, DirectoryListingNavigation) {
       content::BrowserContext::GetDownloadManager(browser()->profile()), 1,
       content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_IGNORE);
 
-  EXPECT_TRUE(content::ExecuteScript(
+  EXPECT_TRUE(content::ExecJs(
       browser()->tab_strip_model()->GetActiveWebContents(),
       "(function() {"
       "  function navigate() {"
@@ -250,6 +250,6 @@ IN_PROC_BROWSER_TEST_F(FtpDisabledFeatureBrowserTest, ExternalProtocolHandler) {
 IN_PROC_BROWSER_TEST_F(FtpEnabledBySwitchBrowserTest, SwitchWorks) {
   ASSERT_TRUE(
       base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
-          blink::features::kFtpProtocol.name,
+          network::features::kFtpProtocol.name,
           base::FeatureList::OVERRIDE_ENABLE_FEATURE));
 }

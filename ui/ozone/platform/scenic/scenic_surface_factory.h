@@ -43,7 +43,7 @@ class ScenicSurfaceFactory : public SurfaceFactoryOzone {
 
   // SurfaceFactoryOzone implementation.
   std::vector<gl::GLImplementation> GetAllowedGLImplementations() override;
-  GLOzone* GetGLOzone(gl::GLImplementation implementation) override;
+  GLOzone* GetGLOzone(const gl::GLImplementationParts& implementation) override;
   std::unique_ptr<PlatformWindowSurface> CreatePlatformWindowSurface(
       gfx::AcceleratedWidget widget) override;
   std::unique_ptr<SurfaceOzoneCanvas> CreateCanvasForWidget(
@@ -63,8 +63,8 @@ class ScenicSurfaceFactory : public SurfaceFactoryOzone {
                                NativePixmapCallback callback) override;
 #if BUILDFLAG(ENABLE_VULKAN)
   std::unique_ptr<gpu::VulkanImplementation> CreateVulkanImplementation(
-      bool allow_protected_memory,
-      bool enforce_protected_memory) override;
+      bool use_swiftshader,
+      bool allow_protected_memory) override;
 #endif
 
   // Registers a surface for a |widget|.

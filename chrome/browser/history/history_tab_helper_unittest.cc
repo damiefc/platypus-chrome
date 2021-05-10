@@ -8,7 +8,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
@@ -39,7 +39,7 @@ class HistoryTabHelperTest : public ChromeRenderViewHostTestHarness {
         /*nav_entry_id=*/0,
         /*referrer=*/GURL(), history::RedirectList(), ui::PAGE_TRANSITION_TYPED,
         history::SOURCE_BROWSED, /*did_replace_entry=*/false,
-        /*publicly_routable=*/true);
+        /*floc_allowed=*/true);
     HistoryTabHelper::CreateForWebContents(web_contents());
   }
 
@@ -82,7 +82,7 @@ TEST_F(HistoryTabHelperTest, ShouldUpdateTitleInHistory) {
       web_contents()->GetController().GetLastCommittedEntry();
   ASSERT_NE(nullptr, entry);
 
-  web_contents()->UpdateTitleForEntry(entry, base::UTF8ToUTF16("title1"));
+  web_contents()->UpdateTitleForEntry(entry, u"title1");
   EXPECT_EQ("title1", QueryPageTitleFromHistory(page_url_));
 }
 
@@ -102,8 +102,8 @@ TEST_F(HistoryTabHelperTest, ShouldLimitTitleUpdatesPerPage) {
 
   ASSERT_EQ("title10", QueryPageTitleFromHistory(page_url_));
 
-  // Furhter updates should be ignored.
-  web_contents()->UpdateTitleForEntry(entry, base::UTF8ToUTF16("title11"));
+  // Further updates should be ignored.
+  web_contents()->UpdateTitleForEntry(entry, u"title11");
   EXPECT_EQ("title10", QueryPageTitleFromHistory(page_url_));
 }
 

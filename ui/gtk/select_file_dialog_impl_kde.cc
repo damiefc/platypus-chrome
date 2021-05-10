@@ -7,7 +7,7 @@
 #include <set>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -25,7 +25,6 @@
 #include "base/version.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/gfx/x/x11.h"
 #include "ui/gtk/select_file_dialog_impl.h"
 #include "ui/strings/grit/ui_strings.h"
 
@@ -59,7 +58,7 @@ class SelectFileDialogImplKDE : public SelectFileDialogImpl {
   // SelectFileDialog implementation.
   // |params| is user data we pass back via the Listener interface.
   void SelectFileImpl(Type type,
-                      const base::string16& title,
+                      const std::u16string& title,
                       const base::FilePath& default_path,
                       const FileTypeInfo* file_types,
                       int file_type_index,
@@ -253,7 +252,7 @@ bool SelectFileDialogImplKDE::IsRunning(gfx::NativeWindow parent_window) const {
 // We ignore |default_extension|.
 void SelectFileDialogImplKDE::SelectFileImpl(
     Type type,
-    const base::string16& title,
+    const std::u16string& title,
     const base::FilePath& default_path,
     const FileTypeInfo* file_types,
     int file_type_index,

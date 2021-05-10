@@ -25,6 +25,11 @@ export const PasswordCheckBehavior = {
     compromisedPasswordsCount: String,
 
     /**
+     * The number of weak passwords as a formatted string.
+     */
+    weakPasswordsCount: String,
+
+    /**
      * The number of insecure passwords as a formatted string.
      */
     insecurePasswordsCount: String,
@@ -64,17 +69,6 @@ export const PasswordCheckBehavior = {
       type: Boolean,
       value: true,
     },
-
-    /**
-     * Returns true if passwords weakness check is enabled.
-     * @type {boolean}
-     */
-    passwordsWeaknessCheckEnabled: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean('passwordsWeaknessCheck');
-      }
-    },
   },
 
   /**
@@ -101,33 +95,15 @@ export const PasswordCheckBehavior = {
       this.status = status;
       this.isInitialStatus = false;
     };
+
     this.leakedCredentialsListener_ = compromisedCredentials => {
       this.updateCompromisedPasswordList(compromisedCredentials);
-
-      PluralStringProxyImpl.getInstance()
-          .getPluralString('compromisedPasswords', this.leakedPasswords.length)
-          .then(count => {
-            this.compromisedPasswordsCount = count;
-          });
-      PluralStringProxyImpl.getInstance()
-          .getPluralString(
-              'insecurePasswords',
-              this.leakedPasswords.length + this.weakPasswords.length)
-          .then(count => {
-            this.insecurePasswordsCount = count;
-          });
+      this.fetchPluralizedStrings_();
     };
 
     this.weakCredentialsListener_ = weakCredentials => {
       this.weakPasswords = weakCredentials;
-
-      PluralStringProxyImpl.getInstance()
-          .getPluralString(
-              'insecurePasswords',
-              this.leakedPasswords.length + this.weakPasswords.length)
-          .then(count => {
-            this.insecurePasswordsCount = count;
-          });
+      this.fetchPluralizedStrings_();
     };
 
     this.passwordManager = PasswordManagerImpl.getInstance();
@@ -157,6 +133,56 @@ export const PasswordCheckBehavior = {
     this.passwordManager.removeWeakCredentialsListener(
         assert(this.weakCredentialsListener_));
     this.weakCredentialsListener_ = null;
+  },
+
+  /**
+   * True if weak passwords are shown in SC, in which case the PW check UI
+   * adapts a bit to show the information in the same form as SC.
+   * @return {boolean}
+   * @private
+   */
+  safetyCheckWeakPasswordsEnabled_() {
+    return loadTimeData.getBoolean('safetyCheckWeakPasswordsEnabled');
+  },
+
+  /**
+   * Helper that fetches pluralized strings corresponding to the number of
+   * compromised, weak and insecure credentials.
+   * @private
+   */
+  fetchPluralizedStrings_() {
+    const proxy = PluralStringProxyImpl.getInstance();
+    const compromised = this.leakedPasswords.length;
+    const weak = this.weakPasswords.length;
+
+    proxy.getPluralString('compromisedPasswords', compromised)
+        .then(count => this.compromisedPasswordsCount = count);
+
+    proxy.getPluralString('weakPasswords', weak)
+        .then(count => this.weakPasswordsCount = count);
+
+    (() => {
+      if (!this.safetyCheckWeakPasswordsEnabled_()) {
+        // Old code path: adds up compromised and weak passwords.
+        return proxy.getPluralString('insecurePasswords', compromised + weak);
+      }
+      if (compromised > 0 && weak > 0) {
+        return proxy.getPluralStringTupleWithComma(
+            'safetyCheckPasswordsCompromised', compromised,
+            'safetyCheckPasswordsWeak', weak);
+      }
+      if (compromised > 0) {
+        // Only compromised and no weak passwords.
+        return proxy.getPluralString(
+            'safetyCheckPasswordsCompromised', compromised);
+      }
+      if (weak > 0) {
+        // Only weak and no compromised passwords.
+        return proxy.getPluralString('safetyCheckPasswordsWeak', weak);
+      }
+      // No security issues.
+      return proxy.getPluralString('compromisedPasswords', 0);
+    })().then(count => this.insecurePasswordsCount = count);
   },
 
   /**

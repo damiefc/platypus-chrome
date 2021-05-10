@@ -51,13 +51,14 @@ struct ShapeResultView::RunInfoPart {
   bool HasGlyphOffsets() const { return range_.offsets; }
   // The end character index of |this| without considering offsets in
   // |ShapeResultView|. This is analogous to:
-  //   GlyphAt(Rtl() ? -1 : NumGlyphs()).character_index
+  //   GlyphAt(IsRtl() ? -1 : NumGlyphs()).character_index
   // if such |HarfBuzzRunGlyphData| is available.
   unsigned CharacterIndexOfEndGlyph() const {
     return num_characters_ + offset_;
   }
 
-  bool Rtl() const { return run_->Rtl(); }
+  bool IsLtr() const { return run_->IsLtr(); }
+  bool IsRtl() const { return run_->IsRtl(); }
   bool IsHorizontal() const { return run_->IsHorizontal(); }
   unsigned NumCharacters() const { return num_characters_; }
   unsigned NumGlyphs() const { return range_.end - range_.begin; }
@@ -73,8 +74,8 @@ struct ShapeResultView::RunInfoPart {
   ShapeResult::RunInfo::GlyphDataRange FindGlyphDataRange(
       unsigned start_character_index,
       unsigned end_character_index) const {
-    return GetGlyphDataRange().FindGlyphDataRange(Rtl(), start_character_index,
-                                                  end_character_index);
+    return GetGlyphDataRange().FindGlyphDataRange(
+        IsRtl(), start_character_index, end_character_index);
   }
   unsigned OffsetToRunStartIndex() const { return offset_; }
 
@@ -109,15 +110,16 @@ unsigned ShapeResultView::RunInfoPart::PreviousSafeToBreakOffset(
     unsigned offset) const {
   if (offset >= NumCharacters())
     return NumCharacters();
-  if (!Rtl()) {
+  offset += offset_;
+  if (IsLtr()) {
     for (const auto& glyph : base::Reversed(*this)) {
       if (glyph.safe_to_break_before && glyph.character_index <= offset)
-        return glyph.character_index;
+        return glyph.character_index - offset_;
     }
   } else {
     for (const auto& glyph : *this) {
       if (glyph.safe_to_break_before && glyph.character_index <= offset)
-        return glyph.character_index;
+        return glyph.character_index - offset_;
     }
   }
 
@@ -194,6 +196,12 @@ void ShapeResultView::CreateViewsForResult(const ShapeResultType* other,
       continue;
     // Compute start/end of the run, or of the part if ShapeResultView.
     unsigned part_start = run->start_index_ + other->StartIndexOffsetForRun();
+    if (other->IsRtl()) {
+      // Under RTL and multiple parts, A RunInfoPart may have an
+      // offset_ greater than start_index. In this case, run_start
+      // would result in an invalid negative value.
+      part_start = std::max(part_start, run->OffsetToRunStartIndex());
+    }
     unsigned run_end = part_start + run->num_characters_;
     if (start_index < run_end && end_index > part_start) {
       ShapeResult::RunInfo::GlyphDataRange range;
@@ -202,10 +210,6 @@ void ShapeResultView::CreateViewsForResult(const ShapeResultType* other,
       // of |RunInfo| could be different from |part_start| for ShapeResultView.
       DCHECK_GE(part_start, run->OffsetToRunStartIndex());
       unsigned run_start = part_start - run->OffsetToRunStartIndex();
-      // TODO(jfernandez): Give a first part of 1 char (offset=2), a
-      // second part, with part_start=3 (1 + 2), this run_start will
-      // be 0. Hence, the way we are computing the adjusted_start
-      // seems incorrect.
       unsigned adjusted_start =
           start_index > run_start
               ? std::max(start_index, part_start) - run_start
@@ -296,7 +300,7 @@ scoped_refptr<ShapeResultView> ShapeResultView::Create(
       byte_size, ::WTF::GetStringWithTypeName<ShapeResultView>());
   ShapeResultView* out = new (buffer) ShapeResultView(result);
   out->char_index_offset_ = result->StartIndex();
-  if (!out->Rtl()) {
+  if (out->IsLtr()) {
     out->start_index_ = 0;
   } else {
     out->start_index_ = out->char_index_offset_;
@@ -322,7 +326,7 @@ void ShapeResultView::AddSegments(const Segment* segments,
   char_index_offset_ = segments[0].result ? segments[0].result->StartIndex()
                                           : segments[0].view->StartIndex();
   char_index_offset_ = std::max(char_index_offset_, segments[0].start_index);
-  if (!Rtl()) {  // Left-to-right
+  if (IsLtr()) {  // Left-to-right
     start_index_ = 0;
   } else {  // Right to left
     start_index_ = char_index_offset_;
@@ -330,7 +334,7 @@ void ShapeResultView::AddSegments(const Segment* segments,
   }
 
   for (unsigned i = 0; i < segment_count; i++) {
-    const Segment& segment = segments[Rtl() ? last_segment_index - i : i];
+    const Segment& segment = segments[IsRtl() ? last_segment_index - i : i];
     if (segment.result) {
       DCHECK_EQ(segment.result->Direction(), Direction());
       CreateViewsForResult(segment.result, segment.start_index,
@@ -356,10 +360,10 @@ unsigned ShapeResultView::PreviousSafeToBreakOffset(unsigned index) const {
       if (offset <= part.num_characters_) {
         return part.PreviousSafeToBreakOffset(offset) + run_start;
       }
-      if (!Rtl()) {
+      if (IsLtr()) {
         return run_start + part.num_characters_;
       }
-    } else if (Rtl()) {
+    } else if (IsRtl()) {
       if (it == RunsOrParts().rbegin())
         return part.start_index_;
       const auto& previous_run = *--it;
@@ -444,7 +448,7 @@ float ShapeResultView::ForEachGlyphImpl(float initial_advance,
   const SimpleFontData* font_data = run->font_data_.get();
   const unsigned character_index_offset_for_glyph_data =
       CharacterIndexOffsetForGlyphData(part);
-  if (!run->Rtl()) {  // Left-to-right
+  if (run->IsLtr()) {  // Left-to-right
     for (const auto& glyph_data : part) {
       unsigned character_index =
           glyph_data.character_index + character_index_offset_for_glyph_data;

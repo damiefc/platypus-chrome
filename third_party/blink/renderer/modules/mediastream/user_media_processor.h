@@ -86,6 +86,9 @@ class MODULES_EXPORT UserMediaProcessor
   void OnDeviceStopped(const blink::MediaStreamDevice& device);
   void OnDeviceChanged(const blink::MediaStreamDevice& old_device,
                        const blink::MediaStreamDevice& new_device);
+  void OnDeviceRequestStateChange(
+      const MediaStreamDevice& device,
+      const mojom::blink::MediaStreamStateChange new_state);
 
   void set_media_stream_dispatcher_host_for_testing(
       mojo::PendingRemote<blink::mojom::blink::MediaStreamDispatcherHost>
@@ -282,8 +285,7 @@ class MODULES_EXPORT UserMediaProcessor
   LocalStreamSources local_sources_;
   LocalStreamSources pending_local_sources_;
 
-  HeapMojoRemote<blink::mojom::blink::MediaStreamDispatcherHost,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
+  HeapMojoRemote<blink::mojom::blink::MediaStreamDispatcherHost>
       dispatcher_host_;
 
   // UserMedia requests are processed sequentially. |current_request_info_|

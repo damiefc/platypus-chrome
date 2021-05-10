@@ -14,6 +14,7 @@
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -27,8 +28,10 @@
 #include "net/base/proxy_delegate.h"
 #include "net/base/proxy_server.h"
 #include "net/base/request_priority.h"
+#include "net/base/schemeful_site.h"
 #include "net/base/test_data_stream.h"
 #include "net/cert/ct_policy_status.h"
+#include "net/dns/public/secure_dns_policy.h"
 #include "net/http/http_request_info.h"
 #include "net/http/transport_security_state_test_util.h"
 #include "net/log/net_log_event_type.h"
@@ -41,6 +44,7 @@
 #include "net/socket/socket_tag.h"
 #include "net/socket/socket_test_util.h"
 #include "net/socket/transport_connect_job.h"
+#include "net/spdy/alps_decoder.h"
 #include "net/spdy/spdy_http_utils.h"
 #include "net/spdy/spdy_session_pool.h"
 #include "net/spdy/spdy_session_test_util.h"
@@ -55,6 +59,7 @@
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/platform_test.h"
+#include "url/gurl.h"
 
 using net::test::IsError;
 using net::test::IsOk;
@@ -170,7 +175,7 @@ class SpdySessionTest : public PlatformTest, public WithTaskEnvironment {
              SpdySessionKey::IsProxySession::kFalse,
              SocketTag(),
              NetworkIsolationKey(),
-             false /* disable_secure_dns */),
+             SecureDnsPolicy::kAllow),
         ssl_(SYNCHRONOUS, OK) {}
 
   ~SpdySessionTest() override {
@@ -396,10 +401,15 @@ class SpdySessionTestWithMockTime : public SpdySessionTest {
 // Try to create a SPDY session that will fail during
 // initialization. Nothing should blow up.
 TEST_F(SpdySessionTest, InitialReadError) {
-  CreateNetworkSession();
+  MockRead reads[] = {MockRead(ASYNC, ERR_CONNECTION_CLOSED, 0)};
+  SequencedSocketData data(reads, base::span<MockWrite>());
+  session_deps_.socket_factory->AddSocketDataProvider(&data);
 
-  session_ = TryCreateFakeSpdySessionExpectingFailure(spdy_session_pool_, key_,
-                                                      ERR_CONNECTION_CLOSED);
+  AddSSLSocketData();
+
+  CreateNetworkSession();
+  CreateSpdySession();
+
   EXPECT_TRUE(session_);
   // Flush the read.
   base::RunLoop().RunUntilIdle();
@@ -562,9 +572,9 @@ TEST_F(SpdySessionTest, GoAwayWithActiveStreams) {
   test::StreamDelegateDoNothing delegate2(spdy_stream2);
   spdy_stream2->SetDelegate(&delegate2);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
-  spdy::SpdyHeaderBlock headers2(headers.Clone());
+  spdy::Http2HeaderBlock headers2(headers.Clone());
 
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
   spdy_stream2->SendRequestHeaders(std::move(headers2), NO_MORE_DATA_TO_SEND);
@@ -624,7 +634,7 @@ TEST_F(SpdySessionTest, GoAwayWithActiveAndCreatedStream) {
                                 test_url_, MEDIUM, NetLogWithSource());
   test::StreamDelegateDoNothing delegate1(spdy_stream1);
   spdy_stream1->SetDelegate(&delegate1);
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers1), NO_MORE_DATA_TO_SEND);
 
@@ -691,9 +701,9 @@ TEST_F(SpdySessionTest, GoAwayTwice) {
   test::StreamDelegateDoNothing delegate2(spdy_stream2);
   spdy_stream2->SetDelegate(&delegate2);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
-  spdy::SpdyHeaderBlock headers2(headers.Clone());
+  spdy::Http2HeaderBlock headers2(headers.Clone());
 
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
   spdy_stream2->SendRequestHeaders(std::move(headers2), NO_MORE_DATA_TO_SEND);
@@ -759,9 +769,9 @@ TEST_F(SpdySessionTest, GoAwayWithActiveStreamsThenClose) {
   test::StreamDelegateDoNothing delegate2(spdy_stream2);
   spdy_stream2->SetDelegate(&delegate2);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
-  spdy::SpdyHeaderBlock headers2(headers.Clone());
+  spdy::Http2HeaderBlock headers2(headers.Clone());
 
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
   spdy_stream2->SendRequestHeaders(std::move(headers2), NO_MORE_DATA_TO_SEND);
@@ -841,7 +851,7 @@ TEST_F(SpdySessionTest, GoAwayWhileDraining) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -881,7 +891,7 @@ TEST_F(SpdySessionTest, CreateStreamAfterGoAway) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -943,7 +953,7 @@ TEST_F(SpdySessionTest, HeadersAfterGoAway) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -977,14 +987,14 @@ TEST_F(SpdySessionTest, HeadersAfterGoAway) {
 TEST_F(SpdySessionTest, UnsupportedPushedStatusCode) {
   base::HistogramTester histogram_tester;
 
-  spdy::SpdyHeaderBlock push_promise_header_block;
+  spdy::Http2HeaderBlock push_promise_header_block;
   push_promise_header_block[spdy::kHttp2MethodHeader] = "GET";
   spdy_util_.AddUrlToHeaderBlock(kPushedUrl, &push_promise_header_block);
   spdy::SpdySerializedFrame push_promise_frame(
       spdy_util_.ConstructSpdyPushPromise(
           1, 2, std::move(push_promise_header_block)));
 
-  spdy::SpdyHeaderBlock response_header_block;
+  spdy::Http2HeaderBlock response_header_block;
   response_header_block[spdy::kHttp2StatusHeader] = "401";
   spdy::SpdySerializedFrame response_headers_frame(
       spdy_util_.ConstructSpdyResponseHeaders(
@@ -1018,7 +1028,7 @@ TEST_F(SpdySessionTest, UnsupportedPushedStatusCode) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -1062,7 +1072,7 @@ TEST_F(SpdySessionTest, NetworkChangeWithActiveStreams) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
 
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
@@ -1240,7 +1250,7 @@ TEST_F(SpdySessionTest, PingAndWriteLoop) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -1457,7 +1467,7 @@ TEST_F(SpdySessionTest, MaxConcurrentStreamsZero) {
   base::WeakPtr<SpdyStream> stream = request.ReleaseStream();
   test::StreamDelegateDoNothing delegate(stream);
   stream->SetDelegate(&delegate);
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -1569,7 +1579,7 @@ TEST_F(SpdySessionTest, CancelPushAfterSessionGoesAway) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -1635,7 +1645,7 @@ TEST_F(SpdySessionTestWithMockTime, CancelPushAfterExpired) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -1715,7 +1725,7 @@ TEST_F(SpdySessionTestWithMockTime, ClaimPushedStreamBeforeExpires) {
   test::StreamDelegateDoNothing delegate1(spdy_stream1);
   spdy_stream1->SetDelegate(&delegate1);
 
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers1), NO_MORE_DATA_TO_SEND);
 
@@ -1806,7 +1816,7 @@ TEST_F(SpdySessionTest, CancelPushBeforeClaimed) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -2306,7 +2316,7 @@ TEST_F(SpdySessionTest, HeadersCompressionHistograms) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -2378,12 +2388,12 @@ TEST_F(SpdySessionTest, OutOfOrderHeaders) {
 
   // Queue the lower priority one first.
 
-  spdy::SpdyHeaderBlock headers_lowest(
+  spdy::Http2HeaderBlock headers_lowest(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream_lowest->SendRequestHeaders(std::move(headers_lowest),
                                          NO_MORE_DATA_TO_SEND);
 
-  spdy::SpdyHeaderBlock headers_highest(
+  spdy::Http2HeaderBlock headers_highest(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream_highest->SendRequestHeaders(std::move(headers_highest),
                                           NO_MORE_DATA_TO_SEND);
@@ -2437,11 +2447,11 @@ TEST_F(SpdySessionTest, CancelStream) {
   test::StreamDelegateDoNothing delegate2(spdy_stream2);
   spdy_stream2->SetDelegate(&delegate2);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
-  spdy::SpdyHeaderBlock headers2(
+  spdy::Http2HeaderBlock headers2(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream2->SendRequestHeaders(std::move(headers2), NO_MORE_DATA_TO_SEND);
 
@@ -2499,11 +2509,11 @@ TEST_F(SpdySessionTest, CloseSessionWithTwoCreatedSelfClosingStreams) {
   test::ClosingDelegate delegate2(spdy_stream2);
   spdy_stream2->SetDelegate(&delegate2);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
-  spdy::SpdyHeaderBlock headers2(
+  spdy::Http2HeaderBlock headers2(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream2->SendRequestHeaders(std::move(headers2), NO_MORE_DATA_TO_SEND);
 
@@ -2555,11 +2565,11 @@ TEST_F(SpdySessionTest, CloseSessionWithTwoCreatedMutuallyClosingStreams) {
   test::ClosingDelegate delegate2(spdy_stream1);
   spdy_stream2->SetDelegate(&delegate2);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
-  spdy::SpdyHeaderBlock headers2(
+  spdy::Http2HeaderBlock headers2(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream2->SendRequestHeaders(std::move(headers2), NO_MORE_DATA_TO_SEND);
 
@@ -2621,11 +2631,11 @@ TEST_F(SpdySessionTest, CloseSessionWithTwoActivatedSelfClosingStreams) {
   test::ClosingDelegate delegate2(spdy_stream2);
   spdy_stream2->SetDelegate(&delegate2);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
-  spdy::SpdyHeaderBlock headers2(
+  spdy::Http2HeaderBlock headers2(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream2->SendRequestHeaders(std::move(headers2), NO_MORE_DATA_TO_SEND);
 
@@ -2696,11 +2706,11 @@ TEST_F(SpdySessionTest, CloseSessionWithTwoActivatedMutuallyClosingStreams) {
   test::ClosingDelegate delegate2(spdy_stream1);
   spdy_stream2->SetDelegate(&delegate2);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
-  spdy::SpdyHeaderBlock headers2(
+  spdy::Http2HeaderBlock headers2(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream2->SendRequestHeaders(std::move(headers2), NO_MORE_DATA_TO_SEND);
 
@@ -2782,7 +2792,7 @@ TEST_F(SpdySessionTest, CloseActivatedStreamThatClosesSession) {
   SessionClosingDelegate delegate(spdy_stream, session_);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -2837,7 +2847,7 @@ TEST_F(SpdySessionTest, VerifyDomainAuthenticationExpectCT) {
                         PRIVACY_MODE_DISABLED,
                         SpdySessionKey::IsProxySession::kFalse, SocketTag(),
                         NetworkIsolationKey::CreateTransient(),
-                        false /* disable_secure_dns */);
+                        SecureDnsPolicy::kAllow);
   ssl_.ssl_info.ct_policy_compliance =
       ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS;
   ssl_.ssl_info.is_issued_by_known_root = true;
@@ -2968,7 +2978,7 @@ TEST_F(SpdySessionTest, CloseTwoStalledCreateStream) {
   EXPECT_EQ(1u, num_created_streams());
   EXPECT_EQ(2u, pending_create_stream_queue_size(LOWEST));
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -2992,7 +3002,7 @@ TEST_F(SpdySessionTest, CloseTwoStalledCreateStream) {
   base::WeakPtr<SpdyStream> stream2 = request2.ReleaseStream();
   test::StreamDelegateDoNothing delegate2(stream2);
   stream2->SetDelegate(&delegate2);
-  spdy::SpdyHeaderBlock headers2(
+  spdy::Http2HeaderBlock headers2(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   stream2->SendRequestHeaders(std::move(headers2), NO_MORE_DATA_TO_SEND);
 
@@ -3016,7 +3026,7 @@ TEST_F(SpdySessionTest, CloseTwoStalledCreateStream) {
   base::WeakPtr<SpdyStream> stream3 = request3.ReleaseStream();
   test::StreamDelegateDoNothing delegate3(stream3);
   stream3->SetDelegate(&delegate3);
-  spdy::SpdyHeaderBlock headers3(
+  spdy::Http2HeaderBlock headers3(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   stream3->SendRequestHeaders(std::move(headers3), NO_MORE_DATA_TO_SEND);
 
@@ -3171,7 +3181,7 @@ TEST_F(SpdySessionTest, ReadDataWithoutYielding) {
   test::StreamDelegateDoNothing delegate1(spdy_stream1);
   spdy_stream1->SetDelegate(&delegate1);
 
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers1), NO_MORE_DATA_TO_SEND);
 
@@ -3234,7 +3244,7 @@ TEST_F(SpdySessionTest, TestYieldingSlowReads) {
   test::StreamDelegateDoNothing delegate1(spdy_stream1);
   spdy_stream1->SetDelegate(&delegate1);
 
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers1), NO_MORE_DATA_TO_SEND);
 
@@ -3305,7 +3315,7 @@ TEST_F(SpdySessionTest, TestYieldingSlowSynchronousReads) {
   test::StreamDelegateDoNothing delegate1(spdy_stream1);
   spdy_stream1->SetDelegate(&delegate1);
 
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers1), NO_MORE_DATA_TO_SEND);
 
@@ -3386,7 +3396,7 @@ TEST_F(SpdySessionTest, TestYieldingDuringReadData) {
   test::StreamDelegateDoNothing delegate1(spdy_stream1);
   spdy_stream1->SetDelegate(&delegate1);
 
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers1), NO_MORE_DATA_TO_SEND);
 
@@ -3496,7 +3506,7 @@ TEST_F(SpdySessionTest, TestYieldingDuringAsyncReadData) {
   test::StreamDelegateDoNothing delegate1(spdy_stream1);
   spdy_stream1->SetDelegate(&delegate1);
 
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers1), NO_MORE_DATA_TO_SEND);
 
@@ -3560,7 +3570,7 @@ TEST_F(SpdySessionTest, GoAwayWhileInDoReadLoop) {
   ASSERT_TRUE(spdy_stream1);
   EXPECT_EQ(0u, spdy_stream1->stream_id());
 
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers1), NO_MORE_DATA_TO_SEND);
 
@@ -3633,7 +3643,7 @@ TEST_F(SpdySessionTest, CloseOneIdleConnection) {
                 ClientSocketPool::GroupId(
                     host_port2, ClientSocketPool::SocketType::kHttp,
                     PrivacyMode::PRIVACY_MODE_DISABLED, NetworkIsolationKey(),
-                    false /* disable_secure_dns */),
+                    SecureDnsPolicy::kAllow),
                 ClientSocketPool::SocketParams::CreateForHttpForTesting(),
                 base::nullopt /* proxy_annotation_tag */, DEFAULT_PRIORITY,
                 SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
@@ -3678,7 +3688,7 @@ TEST_F(SpdySessionTest, CloseOneIdleConnectionWithAlias) {
   SpdySessionKey key1(HostPortPair("www.example.org", 80),
                       ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
                       SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-                      NetworkIsolationKey(), false /* disable_secure_dns */);
+                      NetworkIsolationKey(), SecureDnsPolicy::kAllow);
   base::WeakPtr<SpdySession> session1 =
       ::net::CreateSpdySession(http_session_.get(), key1, NetLogWithSource());
   EXPECT_FALSE(pool->IsStalled());
@@ -3687,7 +3697,7 @@ TEST_F(SpdySessionTest, CloseOneIdleConnectionWithAlias) {
   SpdySessionKey key2(HostPortPair("mail.example.org", 80),
                       ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
                       SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-                      NetworkIsolationKey(), false /* disable_secure_dns */);
+                      NetworkIsolationKey(), SecureDnsPolicy::kAllow);
   std::unique_ptr<SpdySessionPool::SpdySessionRequest> request;
   bool is_blocking_request_for_session = false;
   SpdySessionRequestDelegate request_delegate;
@@ -3723,7 +3733,7 @@ TEST_F(SpdySessionTest, CloseOneIdleConnectionWithAlias) {
                 ClientSocketPool::GroupId(
                     host_port3, ClientSocketPool::SocketType::kHttp,
                     PrivacyMode::PRIVACY_MODE_DISABLED, NetworkIsolationKey(),
-                    false /* disable_secure_dns */),
+                    SecureDnsPolicy::kAllow),
                 ClientSocketPool::SocketParams::CreateForHttpForTesting(),
                 base::nullopt /* proxy_annotation_tag */, DEFAULT_PRIORITY,
                 SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
@@ -3787,7 +3797,7 @@ TEST_F(SpdySessionTest, CloseSessionOnIdleWhenPoolStalled) {
   test::StreamDelegateDoNothing delegate1(spdy_stream1);
   spdy_stream1->SetDelegate(&delegate1);
 
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   EXPECT_EQ(ERR_IO_PENDING, spdy_stream1->SendRequestHeaders(
                                 std::move(headers1), NO_MORE_DATA_TO_SEND));
@@ -3804,7 +3814,7 @@ TEST_F(SpdySessionTest, CloseSessionOnIdleWhenPoolStalled) {
                 ClientSocketPool::GroupId(
                     host_port2, ClientSocketPool::SocketType::kHttp,
                     PrivacyMode::PRIVACY_MODE_DISABLED, NetworkIsolationKey(),
-                    false /* disable_secure_dns */),
+                    SecureDnsPolicy::kAllow),
                 ClientSocketPool::SocketParams::CreateForHttpForTesting(),
                 base::nullopt /* proxy_annotation_tag */, DEFAULT_PRIORITY,
                 SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
@@ -3837,11 +3847,11 @@ TEST_F(SpdySessionTest, SpdySessionKeyPrivacyMode) {
   SpdySessionKey key_privacy_enabled(
       host_port_pair, ProxyServer::Direct(), PRIVACY_MODE_ENABLED,
       SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-      NetworkIsolationKey(), false /* disable_secure_dns */);
+      NetworkIsolationKey(), SecureDnsPolicy::kAllow);
   SpdySessionKey key_privacy_disabled(
       host_port_pair, ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
       SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-      NetworkIsolationKey(), false /* disable_secure_dns */);
+      NetworkIsolationKey(), SecureDnsPolicy::kAllow);
 
   EXPECT_FALSE(HasSpdySession(spdy_session_pool_, key_privacy_enabled));
   EXPECT_FALSE(HasSpdySession(spdy_session_pool_, key_privacy_disabled));
@@ -3923,7 +3933,7 @@ TEST_F(SpdySessionTest, CreateStreamOnStreamReset) {
   StreamCreatingDelegate delegate(spdy_stream, session_);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -4193,7 +4203,7 @@ TEST_F(SpdySessionTest, StreamFlowControlTooMuchData) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   EXPECT_EQ(ERR_IO_PENDING, spdy_stream->SendRequestHeaders(
                                 std::move(headers), NO_MORE_DATA_TO_SEND));
@@ -4233,7 +4243,7 @@ TEST_F(SpdySessionTest, SessionFlowControlTooMuchDataTwoDataFrames) {
   spdy::SpdySerializedFrame goaway(spdy_util_.ConstructSpdyGoAway(
       0, spdy::ERROR_CODE_FLOW_CONTROL_ERROR,
       "delta_window_size is 400 in DecreaseRecvWindowSize, which is larger "
-      "than the receive window size of 500"));
+      "than the receive window size of 300"));
   MockWrite writes[] = {
       CreateMockWrite(goaway, 4),
   };
@@ -4328,7 +4338,7 @@ TEST_F(SpdySessionTest, StreamFlowControlTooMuchDataTwoDataFrames) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   EXPECT_EQ(ERR_IO_PENDING, spdy_stream->SendRequestHeaders(
                                 std::move(headers), NO_MORE_DATA_TO_SEND));
@@ -4419,7 +4429,7 @@ TEST_F(SpdySessionTest, SessionFlowControlNoReceiveLeaks) {
   DropReceivedDataDelegate delegate(stream, msg_data);
   stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kMsgDataSize));
   EXPECT_EQ(ERR_IO_PENDING,
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
@@ -4484,7 +4494,7 @@ TEST_F(SpdySessionTest, SessionFlowControlNoSendLeaks) {
   test::StreamDelegateSendImmediate delegate(stream, msg_data);
   stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kMsgDataSize));
   EXPECT_EQ(ERR_IO_PENDING,
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
@@ -4566,7 +4576,7 @@ TEST_F(SpdySessionTest, SessionFlowControlEndToEnd) {
   test::StreamDelegateSendImmediate delegate(stream, msg_data);
   stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kMsgDataSize));
   EXPECT_EQ(ERR_IO_PENDING,
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
@@ -4660,7 +4670,7 @@ void SpdySessionTest::RunResumeAfterUnstallTest(
 
   EXPECT_FALSE(stream->send_stalled_by_flow_control());
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kBodyDataSize));
   EXPECT_EQ(ERR_IO_PENDING,
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
@@ -4795,7 +4805,7 @@ TEST_F(SpdySessionTest, ResumeByPriorityAfterSendWindowSizeIncrease) {
 
   StallSessionSend();
 
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kBodyDataSize));
   EXPECT_EQ(ERR_IO_PENDING, stream1->SendRequestHeaders(std::move(headers1),
                                                         MORE_DATA_TO_SEND));
@@ -4805,7 +4815,7 @@ TEST_F(SpdySessionTest, ResumeByPriorityAfterSendWindowSizeIncrease) {
   EXPECT_EQ(1u, stream1->stream_id());
   EXPECT_TRUE(stream1->send_stalled_by_flow_control());
 
-  spdy::SpdyHeaderBlock headers2(
+  spdy::Http2HeaderBlock headers2(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kBodyDataSize));
   EXPECT_EQ(ERR_IO_PENDING, stream2->SendRequestHeaders(std::move(headers2),
                                                         MORE_DATA_TO_SEND));
@@ -4901,7 +4911,7 @@ TEST_F(SpdySessionTest, ResumeSessionWithStalledStream) {
 
   StallSessionSend();
 
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kBodyDataSize));
   EXPECT_EQ(ERR_IO_PENDING, stream1->SendRequestHeaders(std::move(headers1),
                                                         MORE_DATA_TO_SEND));
@@ -4911,7 +4921,7 @@ TEST_F(SpdySessionTest, ResumeSessionWithStalledStream) {
   EXPECT_EQ(1u, stream1->stream_id());
   EXPECT_TRUE(stream1->send_stalled_by_flow_control());
 
-  spdy::SpdyHeaderBlock headers2(
+  spdy::Http2HeaderBlock headers2(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kBodyDataSize));
   EXPECT_EQ(ERR_IO_PENDING, stream2->SendRequestHeaders(std::move(headers2),
                                                         MORE_DATA_TO_SEND));
@@ -5052,7 +5062,7 @@ TEST_F(SpdySessionTest, SendWindowSizeIncreaseWithDeletedStreams) {
 
   StallSessionSend();
 
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kBodyDataSize));
   EXPECT_EQ(ERR_IO_PENDING, stream1->SendRequestHeaders(std::move(headers1),
                                                         MORE_DATA_TO_SEND));
@@ -5062,7 +5072,7 @@ TEST_F(SpdySessionTest, SendWindowSizeIncreaseWithDeletedStreams) {
   EXPECT_EQ(1u, stream1->stream_id());
   EXPECT_TRUE(stream1->send_stalled_by_flow_control());
 
-  spdy::SpdyHeaderBlock headers2(
+  spdy::Http2HeaderBlock headers2(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kBodyDataSize));
   EXPECT_EQ(ERR_IO_PENDING, stream2->SendRequestHeaders(std::move(headers2),
                                                         MORE_DATA_TO_SEND));
@@ -5072,7 +5082,7 @@ TEST_F(SpdySessionTest, SendWindowSizeIncreaseWithDeletedStreams) {
   EXPECT_EQ(3u, stream2->stream_id());
   EXPECT_TRUE(stream2->send_stalled_by_flow_control());
 
-  spdy::SpdyHeaderBlock headers3(
+  spdy::Http2HeaderBlock headers3(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kBodyDataSize));
   EXPECT_EQ(ERR_IO_PENDING, stream3->SendRequestHeaders(std::move(headers3),
                                                         MORE_DATA_TO_SEND));
@@ -5175,7 +5185,7 @@ TEST_F(SpdySessionTest, SendWindowSizeIncreaseWithDeletedSession) {
 
   StallSessionSend();
 
-  spdy::SpdyHeaderBlock headers1(
+  spdy::Http2HeaderBlock headers1(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kBodyDataSize));
   EXPECT_EQ(ERR_IO_PENDING, stream1->SendRequestHeaders(std::move(headers1),
                                                         MORE_DATA_TO_SEND));
@@ -5185,7 +5195,7 @@ TEST_F(SpdySessionTest, SendWindowSizeIncreaseWithDeletedSession) {
   EXPECT_EQ(1u, stream1->stream_id());
   EXPECT_TRUE(stream1->send_stalled_by_flow_control());
 
-  spdy::SpdyHeaderBlock headers2(
+  spdy::Http2HeaderBlock headers2(
       spdy_util_.ConstructPostHeaderBlock(kDefaultUrl, kBodyDataSize));
   EXPECT_EQ(ERR_IO_PENDING, stream2->SendRequestHeaders(std::move(headers2),
                                                         MORE_DATA_TO_SEND));
@@ -5255,7 +5265,7 @@ TEST_F(SpdySessionTest, GoAwayOnSessionFlowControlError) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -5325,7 +5335,7 @@ TEST_F(SpdySessionTest, PushedStreamShouldNotCountToClientConcurrencyLimit) {
   EXPECT_EQ(0u, num_pushed_streams());
   EXPECT_EQ(0u, num_active_pushed_streams());
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -5412,7 +5422,7 @@ TEST_F(SpdySessionTest, RejectPushedStreamExceedingConcurrencyLimit) {
   EXPECT_EQ(0u, num_pushed_streams());
   EXPECT_EQ(0u, num_active_pushed_streams());
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -5511,7 +5521,7 @@ TEST_F(SpdySessionTest, TrustedSpdyProxy) {
   EXPECT_EQ(0u, num_pushed_streams());
   EXPECT_EQ(0u, num_active_pushed_streams());
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -5599,7 +5609,7 @@ TEST_F(SpdySessionTest, TrustedSpdyProxyNotSet) {
   EXPECT_EQ(0u, num_pushed_streams());
   EXPECT_EQ(0u, num_active_pushed_streams());
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -5628,7 +5638,7 @@ TEST_F(SpdySessionTest, IgnoreReservedRemoteStreamsCount) {
 
   spdy::SpdySerializedFrame push_a(
       spdy_util_.ConstructSpdyPush(nullptr, 0, 2, 1, kPushedUrl));
-  spdy::SpdyHeaderBlock push_headers;
+  spdy::Http2HeaderBlock push_headers;
   push_headers[":method"] = "GET";
   spdy_util_.AddUrlToHeaderBlock("https://www.example.org/b.dat",
                                  &push_headers);
@@ -5678,7 +5688,7 @@ TEST_F(SpdySessionTest, IgnoreReservedRemoteStreamsCount) {
   EXPECT_EQ(0u, num_pushed_streams());
   EXPECT_EQ(0u, num_active_pushed_streams());
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -5728,7 +5738,7 @@ TEST_F(SpdySessionTest, IgnoreReservedRemoteStreamsCount) {
 }
 
 TEST_F(SpdySessionTest, CancelReservedStreamOnHeadersReceived) {
-  spdy::SpdyHeaderBlock push_headers;
+  spdy::Http2HeaderBlock push_headers;
   push_headers[":method"] = "GET";
   spdy_util_.AddUrlToHeaderBlock(kPushedUrl, &push_headers);
   spdy::SpdySerializedFrame push_promise(
@@ -5773,7 +5783,7 @@ TEST_F(SpdySessionTest, CancelReservedStreamOnHeadersReceived) {
   EXPECT_EQ(0u, num_pushed_streams());
   EXPECT_EQ(0u, num_active_pushed_streams());
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -5836,7 +5846,7 @@ TEST_F(SpdySessionTest, CancelReservedStreamOnHeadersReceived) {
 }
 
 TEST_F(SpdySessionTest, GetPushedStream) {
-  spdy::SpdyHeaderBlock push_headers;
+  spdy::Http2HeaderBlock push_headers;
   push_headers[":method"] = "GET";
   spdy_util_.AddUrlToHeaderBlock(kPushedUrl, &push_headers);
   spdy::SpdySerializedFrame push_promise(
@@ -5878,7 +5888,7 @@ TEST_F(SpdySessionTest, GetPushedStream) {
   EXPECT_EQ(0u, num_pushed_streams());
   EXPECT_EQ(0u, num_active_pushed_streams());
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -6216,7 +6226,7 @@ TEST_P(SpdySessionReadIfReadyTest, ReadIfReady) {
   test::StreamDelegateDoNothing delegate(spdy_stream);
   spdy_stream->SetDelegate(&delegate);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
   spdy_stream->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
 
@@ -6440,7 +6450,7 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameWithExpectCTError) {
                         PRIVACY_MODE_DISABLED,
                         SpdySessionKey::IsProxySession::kFalse, SocketTag(),
                         NetworkIsolationKey::CreateTransient(),
-                        false /* disable_secure_dns */);
+                        SecureDnsPolicy::kAllow);
   ssl_.ssl_info.ct_policy_compliance =
       ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS;
   ssl_.ssl_info.is_issued_by_known_root = true;
@@ -6582,7 +6592,7 @@ TEST_F(AltSvcFrameTest, ProcessAltSvcFrameOnActiveStream) {
   test::StreamDelegateDoNothing delegate1(spdy_stream1);
   spdy_stream1->SetDelegate(&delegate1);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(request_origin));
 
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
@@ -6622,14 +6632,14 @@ TEST_F(AltSvcFrameTest,
   session_deps_.http_server_properties =
       std::make_unique<HttpServerProperties>();
 
-  const url::Origin kOrigin1 = url::Origin::Create(GURL("https://foo.test/"));
-  const net::NetworkIsolationKey kNetworkIsolationKey1(kOrigin1, kOrigin1);
-  const url::Origin kOrigin2 = url::Origin::Create(GURL("https://bar.test/"));
-  const net::NetworkIsolationKey kNetworkIsolationKey2(kOrigin2, kOrigin2);
+  const SchemefulSite kSite1(GURL("https://foo.test/"));
+  const net::NetworkIsolationKey kNetworkIsolationKey1(kSite1, kSite1);
+  const SchemefulSite kSite2(GURL("https://bar.test/"));
+  const net::NetworkIsolationKey kNetworkIsolationKey2(kSite2, kSite2);
   key_ = SpdySessionKey(HostPortPair::FromURL(test_url_), ProxyServer::Direct(),
                         PRIVACY_MODE_DISABLED,
                         SpdySessionKey::IsProxySession::kFalse, SocketTag(),
-                        kNetworkIsolationKey1, false /* disable_secure_dns */);
+                        kNetworkIsolationKey1, SecureDnsPolicy::kAllow);
 
   spdy::SpdyAltSvcIR altsvc_ir(/* stream_id = */ 1);
   altsvc_ir.add_altsvc(alternative_service_);
@@ -6662,7 +6672,7 @@ TEST_F(AltSvcFrameTest,
   test::StreamDelegateDoNothing delegate1(spdy_stream1);
   spdy_stream1->SetDelegate(&delegate1);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(request_origin));
 
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
@@ -6731,7 +6741,7 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameOnStreamWithInsecureOrigin) {
   test::StreamDelegateDoNothing delegate1(spdy_stream1);
   spdy_stream1->SetDelegate(&delegate1);
 
-  spdy::SpdyHeaderBlock headers(
+  spdy::Http2HeaderBlock headers(
       spdy_util_.ConstructGetHeaderBlock(request_origin));
 
   spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
@@ -6882,11 +6892,6 @@ class TestSSLConfigService : public SSLConfigService {
         return true;
       }
     }
-    return false;
-  }
-
-  bool ShouldSuppressLegacyTLSWarning(
-      const std::string& hostname) const override {
     return false;
   }
 
@@ -7195,7 +7200,7 @@ TEST(RecordPushedStreamHistogramTest, VaryResponseHeader) {
                     {1, {"vary", "foo, accept-encodingbar"}, 5}};
 
   for (size_t i = 0; i < base::size(test_cases); ++i) {
-    spdy::SpdyHeaderBlock headers;
+    spdy::Http2HeaderBlock headers;
     for (size_t j = 0; j < test_cases[i].num_headers; ++j) {
       headers[test_cases[i].headers[2 * j]] = test_cases[i].headers[2 * j + 1];
     }
@@ -7243,6 +7248,287 @@ TEST_F(SpdySessionTest, UpdateHeaderTableSize) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(data.AllWriteDataConsumed());
   EXPECT_TRUE(data.AllReadDataConsumed());
+}
+
+TEST_F(SpdySessionTest, PriorityUpdateDisabled) {
+  session_deps_.enable_priority_update = false;
+
+  spdy::SettingsMap settings;
+  settings[spdy::SETTINGS_DEPRECATE_HTTP2_PRIORITIES] = 1;
+  auto settings_frame = spdy_util_.ConstructSpdySettings(settings);
+  auto settings_ack = spdy_util_.ConstructSpdySettingsAck();
+
+  MockRead reads[] = {CreateMockRead(settings_frame, 0),
+                      MockRead(ASYNC, ERR_IO_PENDING, 2),
+                      MockRead(ASYNC, 0, 3)};
+  MockWrite writes[] = {CreateMockWrite(settings_ack, 1)};
+  SequencedSocketData data(reads, writes);
+
+  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  AddSSLSocketData();
+
+  CreateNetworkSession();
+  CreateSpdySession();
+
+  // HTTP/2 priorities enabled by default.
+  // PRIORITY_UPDATE is disabled by |enable_priority_update| = false.
+  EXPECT_TRUE(session_->ShouldSendHttp2Priority());
+  EXPECT_FALSE(session_->ShouldSendPriorityUpdate());
+
+  // Receive SETTINGS frame.
+  base::RunLoop().RunUntilIdle();
+
+  // Since |enable_priority_update| = false,
+  // SETTINGS_DEPRECATE_HTTP2_PRIORITIES has no effect.
+  EXPECT_TRUE(session_->ShouldSendHttp2Priority());
+  EXPECT_FALSE(session_->ShouldSendPriorityUpdate());
+
+  data.Resume();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(data.AllWriteDataConsumed());
+  EXPECT_TRUE(data.AllReadDataConsumed());
+}
+
+TEST_F(SpdySessionTest, PriorityUpdateEnabledHttp2PrioritiesDeprecated) {
+  session_deps_.enable_priority_update = true;
+
+  spdy::SettingsMap settings;
+  settings[spdy::SETTINGS_DEPRECATE_HTTP2_PRIORITIES] = 1;
+  auto settings_frame = spdy_util_.ConstructSpdySettings(settings);
+  auto settings_ack = spdy_util_.ConstructSpdySettingsAck();
+
+  MockRead reads[] = {CreateMockRead(settings_frame, 0),
+                      MockRead(ASYNC, ERR_IO_PENDING, 2),
+                      MockRead(ASYNC, 0, 3)};
+  MockWrite writes[] = {CreateMockWrite(settings_ack, 1)};
+  SequencedSocketData data(reads, writes);
+
+  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  AddSSLSocketData();
+
+  CreateNetworkSession();
+  CreateSpdySession();
+
+  // Both priority schemes are enabled until SETTINGS frame is received.
+  EXPECT_TRUE(session_->ShouldSendHttp2Priority());
+  EXPECT_TRUE(session_->ShouldSendPriorityUpdate());
+
+  // Receive SETTINGS frame.
+  base::RunLoop().RunUntilIdle();
+
+  // SETTINGS_DEPRECATE_HTTP2_PRIORITIES = 1 disables HTTP/2 priorities.
+  EXPECT_FALSE(session_->ShouldSendHttp2Priority());
+  EXPECT_TRUE(session_->ShouldSendPriorityUpdate());
+
+  data.Resume();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(data.AllWriteDataConsumed());
+  EXPECT_TRUE(data.AllReadDataConsumed());
+}
+
+TEST_F(SpdySessionTest, PriorityUpdateEnabledHttp2PrioritiesNotDeprecated) {
+  session_deps_.enable_priority_update = true;
+
+  spdy::SettingsMap settings;
+  settings[spdy::SETTINGS_DEPRECATE_HTTP2_PRIORITIES] = 0;
+  auto settings_frame = spdy_util_.ConstructSpdySettings(settings);
+  auto settings_ack = spdy_util_.ConstructSpdySettingsAck();
+
+  MockRead reads[] = {CreateMockRead(settings_frame, 0),
+                      MockRead(ASYNC, ERR_IO_PENDING, 2),
+                      MockRead(ASYNC, 0, 3)};
+  MockWrite writes[] = {CreateMockWrite(settings_ack, 1)};
+  SequencedSocketData data(reads, writes);
+
+  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  AddSSLSocketData();
+
+  CreateNetworkSession();
+  CreateSpdySession();
+
+  // Both priority schemes are enabled until SETTINGS frame is received.
+  EXPECT_TRUE(session_->ShouldSendHttp2Priority());
+  EXPECT_TRUE(session_->ShouldSendPriorityUpdate());
+
+  // Receive SETTINGS frame.
+  base::RunLoop().RunUntilIdle();
+
+  // SETTINGS_DEPRECATE_HTTP2_PRIORITIES = 0 disables PRIORITY_UPDATE.
+  EXPECT_TRUE(session_->ShouldSendHttp2Priority());
+  EXPECT_FALSE(session_->ShouldSendPriorityUpdate());
+
+  data.Resume();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(data.AllWriteDataConsumed());
+  EXPECT_TRUE(data.AllReadDataConsumed());
+}
+
+TEST_F(SpdySessionTest, SettingsDeprecateHttp2PrioritiesValueMustNotChange) {
+  spdy::SettingsMap settings0;
+  settings0[spdy::SETTINGS_DEPRECATE_HTTP2_PRIORITIES] = 0;
+  auto settings_frame0 = spdy_util_.ConstructSpdySettings(settings0);
+  spdy::SettingsMap settings1;
+  settings1[spdy::SETTINGS_DEPRECATE_HTTP2_PRIORITIES] = 1;
+  auto settings_frame1 = spdy_util_.ConstructSpdySettings(settings1);
+  MockRead reads[] = {
+      CreateMockRead(settings_frame1, 0), MockRead(ASYNC, ERR_IO_PENDING, 2),
+      CreateMockRead(settings_frame1, 3), MockRead(ASYNC, ERR_IO_PENDING, 5),
+      CreateMockRead(settings_frame0, 6)};
+
+  auto settings_ack = spdy_util_.ConstructSpdySettingsAck();
+  auto goaway = spdy_util_.ConstructSpdyGoAway(
+      0, spdy::ERROR_CODE_PROTOCOL_ERROR,
+      "spdy::SETTINGS_DEPRECATE_HTTP2_PRIORITIES value changed after first "
+      "SETTINGS frame.");
+  MockWrite writes[] = {
+      CreateMockWrite(settings_ack, 1), CreateMockWrite(settings_ack, 4),
+      CreateMockWrite(settings_ack, 7), CreateMockWrite(goaway, 8)};
+
+  SequencedSocketData data(reads, writes);
+
+  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  AddSSLSocketData();
+
+  CreateNetworkSession();
+  CreateSpdySession();
+
+  base::RunLoop().RunUntilIdle();
+  data.Resume();
+  base::RunLoop().RunUntilIdle();
+  data.Resume();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(data.AllWriteDataConsumed());
+  EXPECT_TRUE(data.AllReadDataConsumed());
+}
+
+TEST_F(SpdySessionTest, AlpsEmpty) {
+  base::HistogramTester histogram_tester;
+
+  ssl_.peer_application_settings = "";
+
+  SequencedSocketData data;
+  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  AddSSLSocketData();
+
+  CreateNetworkSession();
+  CreateSpdySession();
+
+  histogram_tester.ExpectUniqueSample(
+      "Net.SpdySession.AlpsDecoderStatus",
+      static_cast<int>(AlpsDecoder::Error::kNoError), 1);
+  histogram_tester.ExpectUniqueSample(
+      "Net.SpdySession.AlpsSettingParameterCount", 0, 1);
+  const int kNoEntries = 0;
+  histogram_tester.ExpectUniqueSample("Net.SpdySession.AlpsAcceptChEntries",
+                                      kNoEntries, 1);
+
+  histogram_tester.ExpectTotalCount("Net.SpdySession.AcceptChForOrigin", 0);
+  EXPECT_EQ("", session_->GetAcceptChViaAlpsForOrigin(
+                    url::Origin::Create(GURL("https://www.example.org"))));
+  histogram_tester.ExpectUniqueSample("Net.SpdySession.AcceptChForOrigin",
+                                      false, 1);
+}
+
+TEST_F(SpdySessionTest, AlpsSettings) {
+  base::HistogramTester histogram_tester;
+
+  spdy::SettingsMap settings;
+  settings[spdy::SETTINGS_HEADER_TABLE_SIZE] = 12345;
+  spdy::SpdySerializedFrame settings_frame(
+      spdy_util_.ConstructSpdySettings(settings));
+  ssl_.peer_application_settings =
+      std::string(settings_frame.data(), settings_frame.size());
+
+  SequencedSocketData data;
+  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  AddSSLSocketData();
+
+  CreateNetworkSession();
+  CreateSpdySession();
+
+  EXPECT_EQ(12345u, header_encoder_table_size());
+
+  histogram_tester.ExpectUniqueSample(
+      "Net.SpdySession.AlpsDecoderStatus",
+      static_cast<int>(AlpsDecoder::Error::kNoError), 1);
+  histogram_tester.ExpectUniqueSample(
+      "Net.SpdySession.AlpsSettingParameterCount", 1, 1);
+}
+
+TEST_F(SpdySessionTest, AlpsAcceptCh) {
+  base::HistogramTester histogram_tester;
+
+  ssl_.peer_application_settings = HexDecode(
+      "00001e"                    // length
+      "89"                        // type ACCEPT_CH
+      "00"                        // flags
+      "00000000"                  // stream ID
+      "0017"                      // origin length
+      "68747470733a2f2f7777772e"  //
+      "6578616d706c652e636f6d"    // origin "https://www.example.com"
+      "0003"                      // value length
+      "666f6f");                  // value "foo"
+
+  SequencedSocketData data;
+  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  AddSSLSocketData();
+
+  CreateNetworkSession();
+  CreateSpdySession();
+
+  histogram_tester.ExpectUniqueSample(
+      "Net.SpdySession.AlpsDecoderStatus",
+      static_cast<int>(AlpsDecoder::Error::kNoError), 1);
+  const int kOnlyValidEntries = 1;
+  histogram_tester.ExpectUniqueSample("Net.SpdySession.AlpsAcceptChEntries",
+                                      kOnlyValidEntries, 1);
+
+  histogram_tester.ExpectTotalCount("Net.SpdySession.AcceptChForOrigin", 0);
+
+  EXPECT_EQ("foo", session_->GetAcceptChViaAlpsForOrigin(
+                       url::Origin::Create(GURL("https://www.example.com"))));
+  histogram_tester.ExpectUniqueSample("Net.SpdySession.AcceptChForOrigin", true,
+                                      1);
+
+  EXPECT_EQ("", session_->GetAcceptChViaAlpsForOrigin(
+                    url::Origin::Create(GURL("https://www.example.org"))));
+  histogram_tester.ExpectTotalCount("Net.SpdySession.AcceptChForOrigin", 2);
+  histogram_tester.ExpectBucketCount("Net.SpdySession.AcceptChForOrigin", true,
+                                     1);
+  histogram_tester.ExpectBucketCount("Net.SpdySession.AcceptChForOrigin", false,
+                                     1);
+}
+
+TEST_F(SpdySessionTest, AlpsAcceptChInvalidOrigin) {
+  base::HistogramTester histogram_tester;
+
+  // "www.example.com" is not a valid origin, because it does not have a scheme.
+  ssl_.peer_application_settings = HexDecode(
+      "000017"                            // length
+      "89"                                // type ACCEPT_CH
+      "00"                                // flags
+      "00000000"                          // stream ID
+      "0010"                              // origin length
+      "2f7777772e6578616d706c652e636f6d"  // origin "www.example.com"
+      "0003"                              // value length
+      "666f6f");                          // value "foo"
+
+  SequencedSocketData data;
+  session_deps_.socket_factory->AddSocketDataProvider(&data);
+  AddSSLSocketData();
+
+  CreateNetworkSession();
+  CreateSpdySession();
+
+  // Invalid origin error is not considered fatal for the connection.
+  EXPECT_TRUE(session_->IsAvailable());
+
+  histogram_tester.ExpectUniqueSample(
+      "Net.SpdySession.AlpsDecoderStatus",
+      static_cast<int>(AlpsDecoder::Error::kNoError), 1);
+  const int kOnlyInvalidEntries = 2;
+  histogram_tester.ExpectUniqueSample("Net.SpdySession.AlpsAcceptChEntries",
+                                      kOnlyInvalidEntries, 1);
 }
 
 }  // namespace net

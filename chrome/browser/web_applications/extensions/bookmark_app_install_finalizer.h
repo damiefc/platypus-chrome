@@ -6,7 +6,6 @@
 #define CHROME_BROWSER_WEB_APPLICATIONS_EXTENSIONS_BOOKMARK_APP_INSTALL_FINALIZER_H_
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
@@ -17,18 +16,25 @@
 
 class Profile;
 
+namespace webapps {
+enum class WebappUninstallSource;
+}
+
 namespace extensions {
 
 class CrxInstaller;
 class Extension;
 
 // Class used to actually install the Bookmark App in the system.
-// TODO(loyso): Erase this subclass once crbug.com/877898 fixed.
+// TODO(crbug.com/1065748): Erase this subclass.
 class BookmarkAppInstallFinalizer : public web_app::InstallFinalizer {
  public:
   // Constructs a BookmarkAppInstallFinalizer that will install the Bookmark App
   // in |profile|.
   explicit BookmarkAppInstallFinalizer(Profile* profile);
+  BookmarkAppInstallFinalizer(const BookmarkAppInstallFinalizer&) = delete;
+  BookmarkAppInstallFinalizer& operator=(const BookmarkAppInstallFinalizer&) =
+      delete;
   ~BookmarkAppInstallFinalizer() override;
 
   // InstallFinalizer:
@@ -38,18 +44,17 @@ class BookmarkAppInstallFinalizer : public web_app::InstallFinalizer {
   void FinalizeUninstallAfterSync(const web_app::AppId& app_id,
                                   UninstallWebAppCallback callback) override;
   void FinalizeUpdate(const WebApplicationInfo& web_app_info,
+                      content::WebContents* web_contents,
                       InstallFinalizedCallback callback) override;
   void UninstallExternalWebApp(
       const web_app::AppId& app_id,
-      web_app::ExternalInstallSource external_install_source,
+      webapps::WebappUninstallSource webapp_uninstall_source,
       UninstallWebAppCallback callback) override;
-  bool CanUserUninstallFromSync(const web_app::AppId& app_id) const override;
-  void UninstallWebAppFromSyncByUser(const web_app::AppId& app_id,
-                                     UninstallWebAppCallback callback) override;
-  bool CanUserUninstallExternalApp(const web_app::AppId& app_id) const override;
-  void UninstallExternalAppByUser(const web_app::AppId& app_id,
-                                  UninstallWebAppCallback callback) override;
-  bool WasExternalAppUninstalledByUser(
+  bool CanUserUninstallWebApp(const web_app::AppId& app_id) const override;
+  void UninstallWebApp(const web_app::AppId& app_id,
+                       webapps::WebappUninstallSource uninstall_source,
+                       UninstallWebAppCallback callback) override;
+  bool WasPreinstalledWebAppUninstalled(
       const web_app::AppId& app_id) const override;
 
   using CrxInstallerFactory =
@@ -68,7 +73,6 @@ class BookmarkAppInstallFinalizer : public web_app::InstallFinalizer {
                             LaunchType launch_type,
                             bool enable_experimental_tabbed_window,
                             bool is_locally_installed,
-                            bool is_system_app,
                             InstallFinalizedCallback callback,
                             scoped_refptr<CrxInstaller> crx_installer,
                             const base::Optional<CrxInstallError>& error);
@@ -87,7 +91,6 @@ class BookmarkAppInstallFinalizer : public web_app::InstallFinalizer {
 
   base::WeakPtrFactory<BookmarkAppInstallFinalizer> weak_ptr_factory_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(BookmarkAppInstallFinalizer);
 };
 
 }  // namespace extensions

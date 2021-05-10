@@ -4,6 +4,8 @@
 
 #import "ios/chrome/browser/infobars/overlays/browser_agent/interaction_handlers/passwords/password_infobar_modal_interaction_handler.h"
 
+#include "base/metrics/histogram_macros.h"
+#include "components/password_manager/core/browser/manage_passwords_referrer.h"
 #include "ios/chrome/browser/infobars/infobar_ios.h"
 #import "ios/chrome/browser/infobars/overlays/browser_agent/interaction_handlers/passwords/password_infobar_modal_overlay_request_callback_installer.h"
 #include "ios/chrome/browser/main/browser.h"
@@ -19,8 +21,9 @@ PasswordInfobarModalInteractionHandler::
     PasswordInfobarModalInteractionHandler() = default;
 
 PasswordInfobarModalInteractionHandler::PasswordInfobarModalInteractionHandler(
-    Browser* browser)
-    : browser_(browser) {
+    Browser* browser,
+    password_modal::PasswordAction action_type)
+    : browser_(browser), action_type_(action_type) {
   DCHECK(browser_);
 }
 
@@ -46,6 +49,10 @@ void PasswordInfobarModalInteractionHandler::PresentPasswordsSettings(
   id<ApplicationSettingsCommands> settings_command_handler = HandlerForProtocol(
       browser_->GetCommandDispatcher(), ApplicationSettingsCommands);
   [settings_command_handler showSavedPasswordsSettingsFromViewController:nil];
+
+  UMA_HISTOGRAM_ENUMERATION(
+      "PasswordManager.ManagePasswordsReferrer",
+      password_manager::ManagePasswordsReferrer::kManagePasswordsBubble);
 }
 
 void PasswordInfobarModalInteractionHandler::PerformMainAction(
@@ -68,7 +75,7 @@ void PasswordInfobarModalInteractionHandler::InfobarVisibilityChanged(
 std::unique_ptr<InfobarModalOverlayRequestCallbackInstaller>
 PasswordInfobarModalInteractionHandler::CreateModalInstaller() {
   return std::make_unique<PasswordInfobarModalOverlayRequestCallbackInstaller>(
-      this);
+      this, action_type_);
 }
 
 IOSChromeSavePasswordInfoBarDelegate*

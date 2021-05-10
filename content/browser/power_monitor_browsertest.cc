@@ -5,7 +5,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -19,6 +19,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/process_type.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -49,17 +50,17 @@ void VerifyPowerStateInChildProcess(mojom::PowerMonitorTest* power_monitor_test,
   run_loop.Run();
 }
 
-void StartUtilityProcessOnIOThread(
+void StartUtilityProcessOnProcessThread(
     mojo::PendingReceiver<mojom::PowerMonitorTest> receiver) {
   UtilityProcessHost* host = new UtilityProcessHost();
   host->SetMetricsName("test_process");
-  host->SetName(base::ASCIIToUTF16("TestProcess"));
+  host->SetName(u"TestProcess");
   EXPECT_TRUE(host->Start());
 
   host->GetChildProcess()->BindReceiver(std::move(receiver));
 }
 
-void BindInterfaceForGpuOnIOThread(
+void BindInterfaceForGpuOnProcessThread(
     mojo::PendingReceiver<mojom::PowerMonitorTest> receiver) {
   BindInterfaceInGpuProcess(std::move(receiver));
 }
@@ -70,10 +71,7 @@ class MockPowerMonitorMessageBroadcaster : public device::mojom::PowerMonitor {
   ~MockPowerMonitorMessageBroadcaster() override = default;
 
   void Bind(mojo::PendingReceiver<device::mojom::PowerMonitor> receiver) {
-    GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(&MockPowerMonitorMessageBroadcaster::BindOnMainThread,
-                       base::Unretained(this), std::move(receiver)));
+    receivers_.Add(this, std::move(receiver));
   }
 
   // device::mojom::PowerMonitor:
@@ -92,11 +90,6 @@ class MockPowerMonitorMessageBroadcaster : public device::mojom::PowerMonitor {
   }
 
  private:
-  void BindOnMainThread(
-      mojo::PendingReceiver<device::mojom::PowerMonitor> receiver) {
-    receivers_.Add(this, std::move(receiver));
-  }
-
   bool on_battery_power_ = false;
 
   mojo::ReceiverSet<device::mojom::PowerMonitor> receivers_;
@@ -130,16 +123,10 @@ class PowerMonitorTest : public ContentBrowserTest {
     if (!r)
       return;
 
-    // We can receiver binding requests for the spare RenderProcessHost -- this
-    // might happen before the test has provided the |renderer_bound_closure_|.
-    if (renderer_bound_closure_) {
-      ++request_count_from_renderer_;
-      std::move(renderer_bound_closure_).Run();
-    } else {
-      DCHECK(RenderProcessHostImpl::GetSpareRenderProcessHostForTesting());
-    }
-
-    power_monitor_message_broadcaster_.Bind(std::move(r));
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(&PowerMonitorTest::BindForRendererOnMainThread,
+                       base::Unretained(this), std::move(r)));
   }
 
   void BindForNonRenderer(BrowserChildProcessHost* process_host,
@@ -148,28 +135,11 @@ class PowerMonitorTest : public ContentBrowserTest {
     if (!r)
       return;
 
-    const int type = process_host->GetData().process_type;
-    if (type == PROCESS_TYPE_UTILITY) {
-      if (utility_bound_closure_) {
-        ++request_count_from_utility_;
-        std::move(utility_bound_closure_).Run();
-      }
-    } else if (type == PROCESS_TYPE_GPU) {
-      ++request_count_from_gpu_;
-
-      // We ignore null gpu_bound_closure_ here for two possible scenarios:
-      //  - TestRendererProcess and TestUtilityProcess also result in spinning
-      //    up GPU processes as a side effect, but they do not set valid
-      //    gpu_bound_closure_.
-      //  - As GPU process is started during setup of browser test suite, so
-      //    it's possible that TestGpuProcess execution may have not started
-      //    yet when the PowerMonitor bind request comes here, in such case
-      //    gpu_bound_closure_ will also be null.
-      if (gpu_bound_closure_)
-        std::move(gpu_bound_closure_).Run();
-    }
-
-    power_monitor_message_broadcaster_.Bind(std::move(r));
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(&PowerMonitorTest::BindForNonRendererOnMainThread,
+                       base::Unretained(this),
+                       process_host->GetData().process_type, std::move(r)));
   }
 
  protected:
@@ -177,10 +147,15 @@ class PowerMonitorTest : public ContentBrowserTest {
       mojo::Remote<mojom::PowerMonitorTest>* power_monitor_test,
       base::OnceClosure utility_bound_closure) {
     utility_bound_closure_ = std::move(utility_bound_closure);
-    GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(&StartUtilityProcessOnIOThread,
-                       power_monitor_test->BindNewPipeAndPassReceiver()));
+    if (base::FeatureList::IsEnabled(features::kProcessHostOnUI)) {
+      StartUtilityProcessOnProcessThread(
+          power_monitor_test->BindNewPipeAndPassReceiver());
+    } else {
+      GetIOThreadTaskRunner({})->PostTask(
+          FROM_HERE,
+          base::BindOnce(&StartUtilityProcessOnProcessThread,
+                         power_monitor_test->BindNewPipeAndPassReceiver()));
+    }
   }
 
   void set_renderer_bound_closure(base::OnceClosure closure) {
@@ -200,6 +175,46 @@ class PowerMonitorTest : public ContentBrowserTest {
   }
 
  private:
+  void BindForRendererOnMainThread(
+      mojo::PendingReceiver<device::mojom::PowerMonitor> receiver) {
+    // We can receiver binding requests for the spare RenderProcessHost -- this
+    // might happen before the test has provided the |renderer_bound_closure_|.
+    if (renderer_bound_closure_) {
+      ++request_count_from_renderer_;
+      std::move(renderer_bound_closure_).Run();
+    } else {
+      DCHECK(RenderProcessHostImpl::GetSpareRenderProcessHostForTesting());
+    }
+
+    power_monitor_message_broadcaster_.Bind(std::move(receiver));
+  }
+
+  void BindForNonRendererOnMainThread(
+      int process_type,
+      mojo::PendingReceiver<device::mojom::PowerMonitor> receiver) {
+    if (process_type == PROCESS_TYPE_UTILITY) {
+      if (utility_bound_closure_) {
+        ++request_count_from_utility_;
+        std::move(utility_bound_closure_).Run();
+      }
+    } else if (process_type == PROCESS_TYPE_GPU) {
+      ++request_count_from_gpu_;
+
+      // We ignore null gpu_bound_closure_ here for two possible scenarios:
+      //  - TestRendererProcess and TestUtilityProcess also result in spinning
+      //    up GPU processes as a side effect, but they do not set valid
+      //    gpu_bound_closure_.
+      //  - As GPU process is started during setup of browser test suite, so
+      //    it's possible that TestGpuProcess execution may have not started
+      //    yet when the PowerMonitor bind request comes here, in such case
+      //    gpu_bound_closure_ will also be null.
+      if (gpu_bound_closure_)
+        std::move(gpu_bound_closure_).Run();
+    }
+
+    power_monitor_message_broadcaster_.Bind(std::move(receiver));
+  }
+
   int request_count_from_renderer_ = 0;
   int request_count_from_utility_ = 0;
   int request_count_from_gpu_ = 0;
@@ -261,13 +276,8 @@ IN_PROC_BROWSER_TEST_F(PowerMonitorTest, TestUtilityProcess) {
   // Verify utility process on_battery_power changed to false.
   VerifyPowerStateInChildProcess(power_monitor_utility.get(), false);
 }
-// This flakes on Linux TSan: http://crbug.com/1127374
-#if defined(THREAD_SANITIZER)
-#define MAYBE_TestGpuProcess DISABLED_TestGpuProcess
-#else
-#define MAYBE_TestGpuProcess TestGpuProcess
-#endif
-IN_PROC_BROWSER_TEST_F(PowerMonitorTest, MAYBE_TestGpuProcess) {
+
+IN_PROC_BROWSER_TEST_F(PowerMonitorTest, TestGpuProcess) {
   // As gpu process is started automatically during the setup period of browser
   // test suite, it may have already started and bound PowerMonitor interface to
   // Device Service before execution of this TestGpuProcess test. So here we
@@ -282,10 +292,15 @@ IN_PROC_BROWSER_TEST_F(PowerMonitorTest, MAYBE_TestGpuProcess) {
   EXPECT_EQ(1, request_count_from_gpu());
 
   mojo::Remote<mojom::PowerMonitorTest> power_monitor_gpu;
-  GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&BindInterfaceForGpuOnIOThread,
-                     power_monitor_gpu.BindNewPipeAndPassReceiver()));
+  if (base::FeatureList::IsEnabled(features::kProcessHostOnUI)) {
+    BindInterfaceForGpuOnProcessThread(
+        power_monitor_gpu.BindNewPipeAndPassReceiver());
+  } else {
+    GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(&BindInterfaceForGpuOnProcessThread,
+                       power_monitor_gpu.BindNewPipeAndPassReceiver()));
+  }
 
   // Ensure that the PowerMonitorTestImpl instance has been created and is
   // observing power state changes in the child process before simulating a

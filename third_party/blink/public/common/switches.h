@@ -31,8 +31,8 @@ BLINK_COMMON_EXPORT extern const char
 BLINK_COMMON_EXPORT extern const char kEnableLowResTiling[];
 BLINK_COMMON_EXPORT extern const char kEnablePreferCompositingToLCDText[];
 BLINK_COMMON_EXPORT extern const char kEnableRGBA4444Textures[];
+BLINK_COMMON_EXPORT extern const char kEnableRasterSideDarkModeForImages[];
 BLINK_COMMON_EXPORT extern const char kEnableZeroCopy[];
-BLINK_COMMON_EXPORT extern const char kForceLegacyDefaultReferrerPolicy[];
 BLINK_COMMON_EXPORT extern const char kGpuRasterizationMSAASampleCount[];
 BLINK_COMMON_EXPORT extern const char kIntensiveWakeUpThrottlingPolicy[];
 BLINK_COMMON_EXPORT extern const char
@@ -52,4 +52,4 @@ BLINK_COMMON_EXPORT extern const char kUserAgentClientHintDisable[];
 }  // namespace switches
 }  // namespace blink
 
-#endif  // CONTENT_PUBLIC_COMMON_CONTENT_SWITCHES_H_
+#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_SWITCHES_H_

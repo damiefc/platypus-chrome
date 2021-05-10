@@ -30,13 +30,14 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.MathUtils;
 import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
@@ -163,6 +164,7 @@ public class TabListContainerViewBinderTest extends DummyUiActivityTestCase {
     @Test
     @MediumTest
     @Features.EnableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION)
+    @FlakyTest(message = "https://crbug.com/1182554")
     public void testHidesWithAnimation() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mContainerModel.set(
@@ -277,6 +279,16 @@ public class TabListContainerViewBinderTest extends DummyUiActivityTestCase {
                 TabListContainerProperties.SHADOW_TOP_OFFSET, INCREASED_CONTAINER_HEIGHT);
         assertEquals(
                 INCREASED_CONTAINER_HEIGHT, shadowImageView.getTranslationY(), MathUtils.EPSILON);
+    }
+
+    @Test
+    @MediumTest
+    @UiThreadTest
+    public void testBottomPaddingSetsBottomPadding() {
+        assertThat(mRecyclerView.getPaddingBottom(), equalTo(0));
+
+        mContainerModel.set(TabListContainerProperties.BOTTOM_PADDING, CONTAINER_HEIGHT);
+        assertThat(mRecyclerView.getPaddingBottom(), equalTo(CONTAINER_HEIGHT));
     }
 
     @Override

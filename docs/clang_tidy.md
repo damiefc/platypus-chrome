@@ -75,7 +75,7 @@ clang-tidy across all of Chromium is a single command:
 
 ```
 $ cd ${chromium}/src
-$ ${chromium_build}/scripts/slave/recipe_modules/tricium_clang_tidy/resources/tricium_clang_tidy.py \
+$ ${chromium_build}/recipes/recipe_modules/tricium_clang_tidy/resources/tricium_clang_tidy.py \
     --base_path $PWD \
     --out_dir out/Linux \
     --findings_file all_findings.json \
@@ -197,6 +197,15 @@ That said, assuming you have the LLVM sources available, you'll need to bring
 your own `clang-apply-replacements` binary if you want to use the `-fix` option
 noted below.
 
+**Note:** If you're on a system that offers a clang tools through its package
+manager (e.g., on Debian/Ubuntu, `sudo apt-get install clang-tidy clang-tools`),
+you might not need an LLVM checkout to make the required binaries and scripts
+(`clang-tidy`, `run-clang-tidy` and `clang-apply-replacements`) available in
+your `$PATH`. However, the system packaged binaries might be several versions
+behind Chromium's toolchain, so not all flags are guaranteed to work. If this is
+a problem, consider building clang-tidy from the same revision the current
+toolchain is using, rather than filing a bug against the toolchain component.
+
 Running clang-tidy is (hopefully) simple.
 1.  Build chrome normally.
 ```
@@ -212,7 +221,7 @@ gn gen . --export-compile-commands
 ```
 4.  Run clang-tidy.
 ```
-<PATH_TO_LLVM_SRC>/clang-tidy/tool/run-clang-tidy.py \
+<PATH_TO_LLVM_SRC>/clang-tools-extra/clang-tidy/tool/run-clang-tidy.py \
     -p . \# Set the root project directory, where compile_commands.json is.
     # Set the clang-tidy binary path, if it's not in your $PATH.
     -clang-tidy-binary <PATH_TO_LLVM_BUILD>/bin/clang-tidy \
@@ -220,11 +229,11 @@ gn gen . --export-compile-commands
     # and you are using the `fix` behavior of clang-tidy.
     -clang-apply-replacements-binary \
         <PATH_TO_LLVM_BUILD>/bin/clang-apply-replacements \
-    # The checks to employ in the build. Use `-*` to omit default checks.
+    # The checks to employ in the build. Use `-*,...` to omit default checks.
     -checks=<CHECKS> \
     -header-filter=<FILTER> \# Optional, limit results to only certain files.
     -fix \# Optional, used if you want to have clang-tidy auto-fix errors.
-    chrome/browser # The path to the files you want to check.
+    'chrome/browser/.*' # A regex of the files you want to check.
 
 Copy-Paste Friendly (though you'll still need to stub in the variables):
 <PATH_TO_LLVM_SRC>/clang-tools-extra/clang-tidy/tool/run-clang-tidy.py \
@@ -235,12 +244,12 @@ Copy-Paste Friendly (though you'll still need to stub in the variables):
     -checks=<CHECKS> \
     -header-filter=<FILTER> \
     -fix \
-    chrome/browser
+    'chrome/browser/.*'
 ```
 
-\*It's not clear which, if any, `gn` flags may cause issues for
-`clang-tidy`. I've had no problems building a component release build,
-both with and without goma. if you run into issues, let us know!
+Note that the source file regex must match how the build specified the file.
+This means that on Windows, you must use (escaped) backslashes even from a bash
+shell.
 
 ### Questions
 

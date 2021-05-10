@@ -6,7 +6,9 @@
 
 #include <stddef.h>
 
+#include <limits>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
@@ -16,7 +18,6 @@
 #include "base/lazy_instance.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -74,21 +75,17 @@ base::FilePath GetDefaultFilepathForBookmarkExport() {
   base::Time time = base::Time::Now();
 
   // Concatenate a date stamp to the filename.
-#if defined(OS_POSIX)
-  base::FilePath::StringType filename =
+  std::string filename =
       l10n_util::GetStringFUTF8(IDS_EXPORT_BOOKMARKS_DEFAULT_FILENAME,
                                 base::TimeFormatShortDateNumeric(time));
-#elif defined(OS_WIN)
-  base::FilePath::StringType filename =
-      l10n_util::GetStringFUTF16(IDS_EXPORT_BOOKMARKS_DEFAULT_FILENAME,
-                                 base::TimeFormatShortDateNumeric(time));
-#endif
-
-  base::i18n::ReplaceIllegalCharactersInPath(&filename, '_');
+  base::FilePath path = base::FilePath::FromUTF8Unsafe(filename);
+  base::FilePath::StringType path_str = path.value();
+  base::i18n::ReplaceIllegalCharactersInPath(&path_str, '_');
+  path = base::FilePath(path_str);
 
   base::FilePath default_path;
   base::PathService::Get(chrome::DIR_USER_DOCUMENTS, &default_path);
-  return default_path.Append(filename);
+  return default_path.Append(path);
 }
 
 }  // namespace
@@ -162,7 +159,7 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
     index = size_t{*details.index};
   }
 
-  base::string16 title;  // Optional.
+  std::u16string title;  // Optional.
   if (details.title.get())
     title = base::UTF8ToUTF16(*details.title);
 
@@ -341,7 +338,7 @@ void BookmarkEventRouter::BookmarkNodeChanged(BookmarkModel* model,
   api::bookmarks::OnChanged::ChangeInfo change_info;
   change_info.title = base::UTF16ToUTF8(node->GetTitle());
   if (node->is_url())
-    change_info.url.reset(new std::string(node->url().spec()));
+    change_info.url = std::make_unique<std::string>(node->url().spec());
 
   DispatchEvent(events::BOOKMARKS_ON_CHANGED,
                 api::bookmarks::OnChanged::kEventName,
@@ -412,8 +409,8 @@ BookmarksAPI::GetFactoryInstance() {
 }
 
 void BookmarksAPI::OnListenerAdded(const EventListenerInfo& details) {
-  bookmark_event_router_.reset(
-      new BookmarkEventRouter(Profile::FromBrowserContext(browser_context_)));
+  bookmark_event_router_ = std::make_unique<BookmarkEventRouter>(
+      Profile::FromBrowserContext(browser_context_));
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
@@ -529,8 +526,8 @@ ExtensionFunction::ResponseValue BookmarksSearchFunction::RunOnReady() {
   std::vector<const BookmarkNode*> nodes;
   if (params->query.as_string) {
     bookmarks::QueryFields query;
-    query.word_phrase_query.reset(
-        new base::string16(base::UTF8ToUTF16(*params->query.as_string)));
+    query.word_phrase_query = std::make_unique<std::u16string>(
+        base::UTF8ToUTF16(*params->query.as_string));
     bookmarks::GetBookmarksMatchingProperties(
         BookmarkModelFactory::GetForBrowserContext(GetProfile()), query,
         std::numeric_limits<int>::max(), &nodes);
@@ -540,13 +537,15 @@ ExtensionFunction::ResponseValue BookmarksSearchFunction::RunOnReady() {
         *params->query.as_object;
     bookmarks::QueryFields query;
     if (object.query) {
-      query.word_phrase_query.reset(
-          new base::string16(base::UTF8ToUTF16(*object.query)));
+      query.word_phrase_query =
+          std::make_unique<std::u16string>(base::UTF8ToUTF16(*object.query));
     }
     if (object.url)
-      query.url.reset(new base::string16(base::UTF8ToUTF16(*object.url)));
+      query.url =
+          std::make_unique<std::u16string>(base::UTF8ToUTF16(*object.url));
     if (object.title)
-      query.title.reset(new base::string16(base::UTF8ToUTF16(*object.title)));
+      query.title =
+          std::make_unique<std::u16string>(base::UTF8ToUTF16(*object.title));
     bookmarks::GetBookmarksMatchingProperties(
         BookmarkModelFactory::GetForBrowserContext(GetProfile()), query,
         std::numeric_limits<int>::max(), &nodes);
@@ -675,7 +674,7 @@ ExtensionFunction::ResponseValue BookmarksUpdateFunction::RunOnReady() {
     return BadMessage();
 
   // Optional but we need to distinguish non present from an empty title.
-  base::string16 title;
+  std::u16string title;
   bool has_title = false;
   if (params->changes.title.get()) {
     title = base::UTF8ToUTF16(*params->changes.title);
@@ -748,7 +747,7 @@ void BookmarksIOFunction::ShowSelectFileDialog(
   // such a case if file-selection dialogs are forbidden by policy, we will not
   // show an InfoBar, which is better than letting one appear out of the blue.
   select_file_dialog_->SelectFile(
-      type, base::string16(), default_path, &file_type_info, 0,
+      type, std::u16string(), default_path, &file_type_info, 0,
       base::FilePath::StringType(), owning_window, nullptr);
 }
 

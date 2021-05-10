@@ -24,6 +24,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/sys_byteorder.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
@@ -158,13 +159,15 @@ class GpuMemoryBufferVideoFramePool::PoolImpl
                                         FrameResources* frame_resources);
 
   // Called when all the data has been copied.
-  void OnCopiesDone(scoped_refptr<VideoFrame> video_frame,
+  void OnCopiesDone(bool copy_failed,
+                    scoped_refptr<VideoFrame> video_frame,
                     FrameResources* frame_resources);
 
   // Prepares GL resources, mailboxes and calls |frame_ready_cb| with the new
   // VideoFrame. This has to be run on |media_task_runner_| where
   // |frame_ready_cb| associated with video_frame will also be run.
   void BindAndCreateMailboxesHardwareFrameResources(
+      bool copy_failed,
       scoped_refptr<VideoFrame> video_frame,
       FrameResources* frame_resources);
 
@@ -239,6 +242,9 @@ gfx::BufferFormat GpuMemoryBufferFormat(
     case GpuVideoAcceleratorFactories::OutputFormat::I420:
       DCHECK_LE(plane, 2u);
       return gfx::BufferFormat::R_8;
+    case GpuVideoAcceleratorFactories::OutputFormat::P010:
+      DCHECK_LE(plane, 1u);
+      return gfx::BufferFormat::P010;
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB:
       DCHECK_LE(plane, 1u);
       return gfx::BufferFormat::YUV_420_BIPLANAR;
@@ -273,6 +279,7 @@ size_t PlanesPerCopy(GpuVideoAcceleratorFactories::OutputFormat format) {
       return 1;
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_DUAL_GMB:
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB:
+    case GpuVideoAcceleratorFactories::OutputFormat::P010:
       return 2;
     case GpuVideoAcceleratorFactories::OutputFormat::XR30:
     case GpuVideoAcceleratorFactories::OutputFormat::XB30:
@@ -292,6 +299,8 @@ VideoPixelFormat VideoFormat(
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB:
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_DUAL_GMB:
       return PIXEL_FORMAT_NV12;
+    case GpuVideoAcceleratorFactories::OutputFormat::P010:
+      return PIXEL_FORMAT_P016LE;
     case GpuVideoAcceleratorFactories::OutputFormat::BGRA:
       return PIXEL_FORMAT_ARGB;
     case GpuVideoAcceleratorFactories::OutputFormat::RGBA:
@@ -312,6 +321,8 @@ size_t NumGpuMemoryBuffers(GpuVideoAcceleratorFactories::OutputFormat format) {
   switch (format) {
     case GpuVideoAcceleratorFactories::OutputFormat::I420:
       return 3;
+    case GpuVideoAcceleratorFactories::OutputFormat::P010:
+      return 1;
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB:
       return 1;
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_DUAL_GMB:
@@ -375,6 +386,48 @@ void CopyRowsToI420Buffer(int first_row,
   }
 }
 
+void CopyRowsToP010Buffer(int first_row,
+                          int rows,
+                          int width,
+                          const VideoFrame* source_frame,
+                          uint8_t* dest_y,
+                          int dest_stride_y,
+                          uint8_t* dest_uv,
+                          int dest_stride_uv,
+                          base::OnceClosure done) {
+  base::ScopedClosureRunner done_runner(std::move(done));
+  TRACE_EVENT2("media", "CopyRowsToP010Buffer", "width", width, "rows", rows);
+
+  if (!dest_y || !dest_uv)
+    return;
+
+  DCHECK_NE(dest_stride_y, 0);
+  DCHECK_NE(dest_stride_uv, 0);
+  DCHECK_EQ(0, first_row % 2);
+  DCHECK_EQ(source_frame->format(), PIXEL_FORMAT_YUV420P10);
+  DCHECK_LE(width * 2, source_frame->stride(VideoFrame::kYPlane));
+
+  const uint16_t* y_plane = reinterpret_cast<const uint16_t*>(
+      source_frame->visible_data(VideoFrame::kYPlane) +
+      first_row * source_frame->stride(VideoFrame::kYPlane));
+  const size_t y_plane_stride = source_frame->stride(VideoFrame::kYPlane) / 2;
+  const uint16_t* u_plane = reinterpret_cast<const uint16_t*>(
+      source_frame->visible_data(VideoFrame::kUPlane) +
+      (first_row / 2) * source_frame->stride(VideoFrame::kUPlane));
+  const size_t u_plane_stride = source_frame->stride(VideoFrame::kUPlane) / 2;
+  const uint16_t* v_plane = reinterpret_cast<const uint16_t*>(
+      source_frame->visible_data(VideoFrame::kVPlane) +
+      (first_row / 2) * source_frame->stride(VideoFrame::kVPlane));
+  const size_t v_plane_stride = source_frame->stride(VideoFrame::kVPlane) / 2;
+
+  libyuv::I010ToP010(
+      y_plane, y_plane_stride, u_plane, u_plane_stride, v_plane, v_plane_stride,
+      reinterpret_cast<uint16_t*>(dest_y + first_row * dest_stride_y),
+      dest_stride_y / 2,
+      reinterpret_cast<uint16_t*>(dest_uv + (first_row / 2) * dest_stride_uv),
+      dest_stride_uv / 2, width, rows);
+}
+
 void CopyRowsToNV12Buffer(int first_row,
                           int rows,
                           int bytes_per_row,
@@ -397,7 +450,23 @@ void CopyRowsToNV12Buffer(int first_row,
   DCHECK_LE(bytes_per_row, std::abs(dest_stride_uv));
   DCHECK_EQ(0, first_row % 2);
   DCHECK(source_frame->format() == PIXEL_FORMAT_I420 ||
-         source_frame->format() == PIXEL_FORMAT_YV12);
+         source_frame->format() == PIXEL_FORMAT_YV12 ||
+         source_frame->format() == PIXEL_FORMAT_NV12);
+  if (source_frame->format() == PIXEL_FORMAT_NV12) {
+    libyuv::CopyPlane(source_frame->visible_data(VideoFrame::kYPlane) +
+                          first_row * source_frame->stride(VideoFrame::kYPlane),
+                      source_frame->stride(VideoFrame::kYPlane),
+                      dest_y + first_row * dest_stride_y, dest_stride_y,
+                      bytes_per_row, rows);
+    libyuv::CopyPlane(
+        source_frame->visible_data(VideoFrame::kUVPlane) +
+            first_row / 2 * source_frame->stride(VideoFrame::kUVPlane),
+        source_frame->stride(VideoFrame::kUVPlane),
+        dest_uv + first_row / 2 * dest_stride_uv, dest_stride_uv, bytes_per_row,
+        rows / 2);
+
+    return;
+  }
   libyuv::I420ToNV12(
       source_frame->visible_data(VideoFrame::kYPlane) +
           first_row * source_frame->stride(VideoFrame::kYPlane),
@@ -530,6 +599,7 @@ gfx::Size CodedSize(const VideoFrame* video_frame,
   gfx::Size output;
   switch (output_format) {
     case GpuVideoAcceleratorFactories::OutputFormat::I420:
+    case GpuVideoAcceleratorFactories::OutputFormat::P010:
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB:
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_DUAL_GMB:
       DCHECK((video_frame->visible_rect().y() & 1) == 0);
@@ -582,21 +652,25 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
   if (!IOSurfaceCanSetColorSpace(video_frame->ColorSpace()))
     passthrough = true;
 #endif
+
+  if (!video_frame->IsMappable()) {
+    // Already a hardware frame.
+    passthrough = true;
+  }
+
   if (output_format_ == GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED)
     passthrough = true;
   switch (pixel_format) {
     // Supported cases.
     case PIXEL_FORMAT_YV12:
     case PIXEL_FORMAT_I420:
-    case PIXEL_FORMAT_YUV420P9:
     case PIXEL_FORMAT_YUV420P10:
-    case PIXEL_FORMAT_YUV420P12:
     case PIXEL_FORMAT_I420A:
+    case PIXEL_FORMAT_NV12:
       break;
     // Unsupported cases.
     case PIXEL_FORMAT_I422:
     case PIXEL_FORMAT_I444:
-    case PIXEL_FORMAT_NV12:
     case PIXEL_FORMAT_NV21:
     case PIXEL_FORMAT_UYVY:
     case PIXEL_FORMAT_YUY2:
@@ -606,9 +680,11 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
     case PIXEL_FORMAT_RGB24:
     case PIXEL_FORMAT_MJPEG:
     case PIXEL_FORMAT_YUV422P9:
+    case PIXEL_FORMAT_YUV420P9:
     case PIXEL_FORMAT_YUV444P9:
     case PIXEL_FORMAT_YUV422P10:
     case PIXEL_FORMAT_YUV444P10:
+    case PIXEL_FORMAT_YUV420P12:
     case PIXEL_FORMAT_YUV422P12:
     case PIXEL_FORMAT_YUV444P12:
     case PIXEL_FORMAT_Y16:
@@ -617,6 +693,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
     case PIXEL_FORMAT_P016LE:
     case PIXEL_FORMAT_XR30:
     case PIXEL_FORMAT_XB30:
+    case PIXEL_FORMAT_RGBAF16:
     case PIXEL_FORMAT_UNKNOWN:
       if (is_software_backed_video_frame) {
         UMA_HISTOGRAM_ENUMERATION(
@@ -686,13 +763,20 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::Abort() {
 }
 
 void GpuMemoryBufferVideoFramePool::PoolImpl::OnCopiesDone(
+    bool copy_failed,
     scoped_refptr<VideoFrame> video_frame,
     FrameResources* frame_resources) {
-  for (const auto& plane_resource : frame_resources->plane_resources) {
-    if (plane_resource.gpu_memory_buffer) {
-      plane_resource.gpu_memory_buffer->Unmap();
-      plane_resource.gpu_memory_buffer->SetColorSpace(
-          video_frame->ColorSpace());
+  if (!copy_failed) {
+    for (const auto& plane_resource : frame_resources->plane_resources) {
+      if (plane_resource.gpu_memory_buffer) {
+        plane_resource.gpu_memory_buffer->Unmap();
+        plane_resource.gpu_memory_buffer->SetColorSpace(
+            video_frame->ColorSpace());
+        if (video_frame->hdr_metadata()) {
+          plane_resource.gpu_memory_buffer->SetHDRMetadata(
+              video_frame->hdr_metadata().value());
+        }
+      }
     }
   }
 
@@ -702,7 +786,8 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::OnCopiesDone(
   media_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&PoolImpl::BindAndCreateMailboxesHardwareFrameResources,
-                     this, std::move(video_frame), frame_resources));
+                     this, copy_failed, std::move(video_frame),
+                     frame_resources));
 }
 
 void GpuMemoryBufferVideoFramePool::PoolImpl::StartCopy() {
@@ -752,22 +837,25 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CopyVideoFrameToGpuMemoryBuffers(
       ++copies;
   }
 
-  // |barrier| keeps refptr of |video_frame| until all copy tasks are done.
-  const base::RepeatingClosure barrier = base::BarrierClosure(
-      copies, base::BindOnce(&PoolImpl::OnCopiesDone, this, video_frame,
-                             frame_resources));
-
-  // Map the buffers.
-  for (size_t i = 0; i < NumGpuMemoryBuffers(output_format_); i++) {
+  for (size_t i = 0; i < NumGpuMemoryBuffers(output_format_); ++i) {
     gfx::GpuMemoryBuffer* buffer =
         frame_resources->plane_resources[i].gpu_memory_buffer.get();
 
     if (!buffer || !buffer->Map()) {
       DLOG(ERROR) << "Could not get or Map() buffer";
-      frame_resources->MarkUnused(tick_clock_->NowTicks());
+      for (size_t j = 0; j < i; ++j)
+        frame_resources->plane_resources[j].gpu_memory_buffer->Unmap();
+      OnCopiesDone(/*copy_failed=*/true, std::move(video_frame),
+                   frame_resources);
       return;
     }
   }
+
+  // |barrier| keeps refptr of |video_frame| until all copy tasks are done.
+  const base::RepeatingClosure barrier = base::BarrierClosure(
+      copies,
+      base::BindOnce(&PoolImpl::OnCopiesDone, this, /*copy_failed=*/false,
+                     video_frame, frame_resources));
 
   TRACE_EVENT_ASYNC_BEGIN0("media", "CopyVideoFrameToGpuMemoryBuffers",
                            video_frame->timestamp().InNanoseconds() /* id */);
@@ -796,6 +884,18 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CopyVideoFrameToGpuMemoryBuffers(
                              buffer->stride(0), barrier));
           break;
         }
+        case GpuVideoAcceleratorFactories::OutputFormat::P010:
+          // Using base::Unretained(video_frame) here is safe because |barrier|
+          // keeps refptr of |video_frame| until all copy tasks are done.
+          worker_task_runner_->PostTask(
+              FROM_HERE,
+              base::BindOnce(
+                  &CopyRowsToP010Buffer, row, rows_to_copy, coded_size.width(),
+                  base::Unretained(video_frame.get()),
+                  static_cast<uint8_t*>(buffer->memory(0)), buffer->stride(0),
+                  static_cast<uint8_t*>(buffer->memory(1)), buffer->stride(1),
+                  barrier));
+          break;
         case GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB:
           // Using base::Unretained(video_frame) here is safe because |barrier|
           // keeps refptr of |video_frame| until all copy tasks are done.
@@ -865,8 +965,22 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CopyVideoFrameToGpuMemoryBuffers(
 
 void GpuMemoryBufferVideoFramePool::PoolImpl::
     BindAndCreateMailboxesHardwareFrameResources(
+        bool copy_failed,
         scoped_refptr<VideoFrame> video_frame,
         FrameResources* frame_resources) {
+  if (copy_failed) {
+    // Drop the resources if there was an error with them.
+    auto it = std::find(resources_pool_.begin(), resources_pool_.end(),
+                        frame_resources);
+    DCHECK(it != resources_pool_.end());
+    resources_pool_.erase(it);
+    DeleteFrameResources(gpu_factories_, frame_resources);
+    delete frame_resources;
+
+    CompleteCopyRequestAndMaybeStartNextCopy(std::move(video_frame));
+    return;
+  }
+
   gpu::SharedImageInterface* sii = gpu_factories_->SharedImageInterface();
   if (!sii) {
     frame_resources->MarkUnused(tick_clock_->NowTicks());
@@ -934,8 +1048,9 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
 #else
   switch (output_format_) {
     case GpuVideoAcceleratorFactories::OutputFormat::I420:
-      allow_overlay = video_frame->metadata()->allow_overlay;
+      allow_overlay = video_frame->metadata().allow_overlay;
       break;
+    case GpuVideoAcceleratorFactories::OutputFormat::P010:
     case GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB:
       allow_overlay = true;
       break;
@@ -963,9 +1078,9 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
       break;
   }
 #endif  // OS_WIN
-  frame->metadata()->MergeMetadataFrom(video_frame->metadata());
-  frame->metadata()->allow_overlay = allow_overlay;
-  frame->metadata()->read_lock_fences_enabled = true;
+  frame->metadata().MergeMetadataFrom(video_frame->metadata());
+  frame->metadata().allow_overlay = allow_overlay;
+  frame->metadata().read_lock_fences_enabled = true;
 
   CompleteCopyRequestAndMaybeStartNextCopy(std::move(frame));
 }

@@ -5,25 +5,28 @@
 #include "ash/system/phonehub/phone_hub_tray.h"
 
 #include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/focus_cycler.h"
+#include "ash/public/cpp/system_tray_client.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/system/phonehub/phone_status_view.h"
+#include "ash/system/model/system_tray_model.h"
+#include "ash/system/phonehub/phone_hub_content_view.h"
+#include "ash/system/phonehub/phone_hub_metrics.h"
 #include "ash/system/phonehub/quick_actions_view.h"
 #include "ash/system/phonehub/task_continuation_view.h"
+#include "ash/system/phonehub/ui_constants.h"
 #include "ash/system/tray/system_menu_button.h"
 #include "ash/system/tray/tray_bubble_wrapper.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
-#include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tray_utils.h"
 #include "base/bind.h"
 #include "chromeos/components/phonehub/phone_hub_manager.h"
 #include "chromeos/components/phonehub/phone_model.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/geometry/insets.h"
@@ -35,26 +38,24 @@ namespace ash {
 namespace {
 
 // Padding for tray icon (dp; the button that shows the phone_hub menu).
-constexpr int kTrayIconMainAxisInset = 8;
+constexpr int kTrayIconMainAxisInset = 6;
 constexpr int kTrayIconCrossAxisInset = 0;
 
-constexpr gfx::Insets kBubblePadding(4, 16);
-constexpr int kBubbleWidth = 400;
+constexpr gfx::Insets kBubblePadding(0, 0, kBubbleBottomPaddingDip, 0);
 
 }  // namespace
 
 PhoneHubTray::PhoneHubTray(Shelf* shelf)
     : TrayBackgroundView(shelf), ui_controller_(new PhoneHubUiController()) {
-  observed_phone_hub_ui_controller_.Add(ui_controller_.get());
+  observed_phone_hub_ui_controller_.Observe(ui_controller_.get());
+  observed_session_.Observe(Shell::Get()->session_controller());
 
-  // TODO(tengs): Update icon to spec.
   auto icon = std::make_unique<views::ImageView>();
   icon->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_ASH_PHONE_HUB_TRAY_ACCESSIBLE_NAME));
   icon->SetImage(CreateVectorIcon(
-      kSystemMenuPhoneIcon,
-      AshColorProvider::Get()->GetContentLayerColor(
-          AshColorProvider::ContentLayerType::kIconColorPrimary)));
+      kPhoneHubPhoneIcon,
+      TrayIconColor(Shell::Get()->session_controller()->GetSessionState())));
 
   tray_container()->SetMargin(kTrayIconMainAxisInset, kTrayIconCrossAxisInset);
   icon_ = tray_container()->AddChildView(std::move(icon));
@@ -74,7 +75,7 @@ void PhoneHubTray::ClickedOutsideBubble() {
   CloseBubble();
 }
 
-base::string16 PhoneHubTray::GetAccessibleNameForTray() {
+std::u16string PhoneHubTray::GetAccessibleNameForTray() {
   return l10n_util::GetStringUTF16(IDS_ASH_PHONE_HUB_TRAY_ACCESSIBLE_NAME);
 }
 
@@ -88,7 +89,7 @@ void PhoneHubTray::HideBubbleWithView(const TrayBubbleView* bubble_view) {
     CloseBubble();
 }
 
-base::string16 PhoneHubTray::GetAccessibleNameForBubble() {
+std::u16string PhoneHubTray::GetAccessibleNameForBubble() {
   return GetAccessibleNameForTray();
 }
 
@@ -108,17 +109,32 @@ void PhoneHubTray::OnPhoneHubUiStateChanged() {
   TrayBubbleView* bubble_view = bubble_->bubble_view();
 
   DCHECK(ui_controller_.get());
-  std::unique_ptr<views::View> content_view =
-      ui_controller_->CreateContentView(bubble_view);
+  std::unique_ptr<PhoneHubContentView> content_view =
+      ui_controller_->CreateContentView(this);
   if (!content_view.get()) {
     CloseBubble();
     return;
   }
 
-  if (content_view_)
+  if (content_view_) {
+    // If we are already showing the same content_view, no need to remove and
+    // update the tray.
+    // TODO(crbug.com/1185316) : Find way to update views without work around
+    // when same view is removed and added.
+    if (content_view->GetID() == content_view_->GetID())
+      return;
+
     bubble_view->RemoveChildView(content_view_);
-  content_view_ = content_view.get();
-  bubble_view->AddChildView(std::move(content_view));
+    delete content_view_;
+  }
+  content_view_ = bubble_view->AddChildView(std::move(content_view));
+
+  // Updates bubble to handle possible size change with a different child view.
+  bubble_view->UpdateBubble();
+}
+
+void PhoneHubTray::OnSessionStateChanged(session_manager::SessionState state) {
+  icon_->SetImage(CreateVectorIcon(kPhoneHubPhoneIcon, TrayIconColor(state)));
 }
 
 void PhoneHubTray::AnchorUpdated() {
@@ -131,70 +147,93 @@ void PhoneHubTray::Initialize() {
   UpdateVisibility();
 }
 
-bool PhoneHubTray::PerformAction(const ui::Event& event) {
-  // TODO(tengs): Log usage metrics.
-
-  if (bubble_)
-    CloseBubble();
-  else
-    ShowBubble(event.IsMouseEvent() || event.IsGestureEvent());
-  return true;
-}
-
-void PhoneHubTray::ShowBubble(bool show_by_click) {
+void PhoneHubTray::ShowBubble() {
   if (bubble_)
     return;
+
+  ui_controller_->HandleBubbleOpened();
 
   TrayBubbleView::InitParams init_params;
   init_params.delegate = this;
   init_params.parent_window = GetBubbleWindowContainer();
-  init_params.anchor_view = GetBubbleAnchor();
+  init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
+  init_params.anchor_rect = shelf()->GetSystemTrayAnchorRect();
+  init_params.insets = GetTrayBubbleInsets();
   init_params.shelf_alignment = shelf()->alignment();
-  init_params.preferred_width = kBubbleWidth;
+  init_params.preferred_width = kTrayMenuWidth;
   init_params.close_on_deactivate = true;
   init_params.has_shadow = false;
   init_params.translucent = true;
+  init_params.reroute_event_handler = true;
   init_params.corner_radius = kTrayItemCornerRadius;
-  init_params.show_by_click = show_by_click;
 
   TrayBubbleView* bubble_view = new TrayBubbleView(init_params);
-  bubble_view->set_anchor_view_insets(GetBubbleAnchorInsets());
-  bubble_view->set_margins(GetSecondaryBubbleInsets());
   bubble_view->SetBorder(views::CreateEmptyBorder(kBubblePadding));
 
-  // We will always have this phone status view on top of the bubble view
-  // to display any available phone status and the settings icon.
-  std::unique_ptr<views::View> phone_status =
-      ui_controller_->CreateStatusHeaderView();
-  if (phone_status) {
-    phone_status->SetPaintToLayer();
-    phone_status->layer()->SetFillsBoundsOpaquely(false);
-    bubble_view->AddChildView(std::move(phone_status));
-  }
+  // Creates header view on top for displaying phone status and settings icon.
+  auto phone_status = ui_controller_->CreateStatusHeaderView(this);
+  phone_status_view_ = phone_status.get();
+  DCHECK(phone_status_view_);
+  bubble_view->AddChildView(std::move(phone_status));
 
   // Other contents, i.e. the connected view and the interstitial views,
   // will be positioned underneath the phone status view and updated based
   // on the current mode.
-  auto content_view = ui_controller_->CreateContentView(bubble_view);
+  auto content_view = ui_controller_->CreateContentView(this);
   content_view_ = content_view.get();
-  if (content_view_)
-    bubble_view->AddChildView(std::move(content_view));
+  DCHECK(content_view_);
+  bubble_view->AddChildView(std::move(content_view));
 
-  bubble_ = std::make_unique<TrayBubbleWrapper>(this, bubble_view,
-                                                false /* is_persistent */);
+  bubble_ = std::make_unique<TrayBubbleWrapper>(this, bubble_view);
 
   SetIsActive(true);
+
+  phone_hub_metrics::LogScreenOnBubbleOpen(
+      content_view_->GetScreenForMetrics());
 }
 
 TrayBubbleView* PhoneHubTray::GetBubbleView() {
   return bubble_ ? bubble_->bubble_view() : nullptr;
 }
 
+views::Widget* PhoneHubTray::GetBubbleWidget() const {
+  return bubble_ ? bubble_->GetBubbleWidget() : nullptr;
+}
+
 const char* PhoneHubTray::GetClassName() const {
   return "PhoneHubTray";
 }
 
+bool PhoneHubTray::CanOpenConnectedDeviceSettings() {
+  return TrayPopupUtils::CanOpenWebUISettings();
+}
+
+void PhoneHubTray::OpenConnectedDevicesSettings() {
+  DCHECK(content_view_);
+  phone_hub_metrics::LogScreenOnSettingsButtonClicked(
+      content_view_->GetScreenForMetrics());
+
+  DCHECK(CanOpenConnectedDeviceSettings());
+  Shell::Get()->system_tray_model()->client()->ShowConnectedDevicesSettings();
+}
+
+void PhoneHubTray::HideStatusHeaderView() {
+  if (!phone_status_view_)
+    return;
+
+  phone_status_view_->SetVisible(false);
+  bubble_->bubble_view()->UpdateBubble();
+}
+
 void PhoneHubTray::CloseBubble() {
+  if (!bubble_)
+    return;
+
+  DCHECK(content_view_);
+  phone_hub_metrics::LogScreenOnBubbleClose(
+      content_view_->GetScreenForMetrics());
+
+  content_view_->OnBubbleClose();
   content_view_ = nullptr;
   bubble_.reset();
   SetIsActive(false);

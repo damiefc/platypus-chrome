@@ -8,7 +8,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/web_encrypted_media_client.h"
 #include "third_party/blink/public/platform/web_encrypted_media_request.h"
 #include "third_party/blink/public/platform/web_media_key_system_configuration.h"
@@ -34,7 +34,6 @@
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/network/mime/content_type.h"
 #include "third_party/blink/renderer/platform/network/parsed_content_type.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -113,16 +112,16 @@ ScriptPromise NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess(
 
   LocalDOMWindow* window = LocalDOMWindow::From(script_state);
   if (!window->IsFeatureEnabled(
-          mojom::blink::FeaturePolicyFeature::kEncryptedMedia,
+          mojom::blink::PermissionsPolicyFeature::kEncryptedMedia,
           ReportOptions::kReportOnFailure)) {
     UseCounter::Count(window,
                       WebFeature::kEncryptedMediaDisabledByFeaturePolicy);
     window->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kJavaScript,
         mojom::ConsoleMessageLevel::kWarning,
-        kEncryptedMediaFeaturePolicyConsoleWarning));
+        kEncryptedMediaPermissionsPolicyConsoleWarning));
     exception_state.ThrowSecurityError(
-        "requestMediaKeySystemAccess is disabled by feature policy.");
+        "requestMediaKeySystemAccess is disabled by permissions policy.");
     return ScriptPromise();
   }
 

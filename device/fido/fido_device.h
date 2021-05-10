@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/strings/string16.h"
 #include "device/fido/authenticator_get_info_response.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_transport_protocol.h"
@@ -79,9 +78,18 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDevice {
   // cancel may be unsuccessful and that the request may complete normally.
   // It is safe to attempt to cancel an operation that has already completed.
   virtual void Cancel(CancelToken token) = 0;
+  // GetId returns a unique string representing this device. This string should
+  // be distinct from all other devices concurrently discovered.
   virtual std::string GetId() const = 0;
-  virtual base::string16 GetDisplayName() const;
+  // GetDisplayName returns a string identifying a device to a human, which
+  // might not be unique. For example, |GetDisplayName| could return the VID:PID
+  // of a HID device, but |GetId| could not because two devices can share the
+  // same VID:PID. It defaults to returning the value of |GetId|.
+  virtual std::string GetDisplayName() const;
   virtual FidoTransportProtocol DeviceTransport() const = 0;
+  // SupportsCredentialProbing returns true if this device supports silent
+  // probing of credentials.
+  bool SupportsCredentialProbing() const;
 
   // These must only be called on Bluetooth devices.
   virtual bool IsInPairingMode() const;

@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/id_map.h"
 #include "base/gtest_prod_util.h"
@@ -23,7 +23,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/clock.h"
 #include "build/build_config.h"
@@ -162,7 +161,7 @@ class GeolocationPermissionContextTests
   void AcceptPrompt(content::WebContents* web_contents);
   void DenyPrompt();
   void ClosePrompt();
-  base::string16 GetPromptText();
+  std::u16string GetPromptText();
 
   TestPermissionsClient client_;
   // owned by |manager_|
@@ -176,14 +175,16 @@ class GeolocationPermissionContextTests
 
   // A map between renderer child id and a pair represending the bridge id and
   // whether the requested permission was allowed.
-  std::map<int, std::pair<int, bool>> responses_;
+  std::map<int, std::pair<PermissionRequestID::RequestLocalId, bool>>
+      responses_;
 };
 
 PermissionRequestID GeolocationPermissionContextTests::RequestID(
     int request_id) {
   return PermissionRequestID(
       web_contents()->GetMainFrame()->GetProcess()->GetID(),
-      web_contents()->GetMainFrame()->GetRoutingID(), request_id);
+      web_contents()->GetMainFrame()->GetRoutingID(),
+      PermissionRequestID::RequestLocalId(request_id));
 }
 
 PermissionRequestID GeolocationPermissionContextTests::RequestIDForTab(
@@ -191,7 +192,8 @@ PermissionRequestID GeolocationPermissionContextTests::RequestIDForTab(
     int request_id) {
   return PermissionRequestID(
       extra_tabs_[tab]->GetMainFrame()->GetProcess()->GetID(),
-      extra_tabs_[tab]->GetMainFrame()->GetRoutingID(), request_id);
+      extra_tabs_[tab]->GetMainFrame()->GetRoutingID(),
+      PermissionRequestID::RequestLocalId(request_id));
 }
 
 void GeolocationPermissionContextTests::RequestGeolocationPermission(
@@ -210,7 +212,8 @@ void GeolocationPermissionContextTests::PermissionResponse(
     const PermissionRequestID& id,
     ContentSetting content_setting) {
   responses_[id.render_process_id()] =
-      std::make_pair(id.request_id(), content_setting == CONTENT_SETTING_ALLOW);
+      std::make_pair(id.request_local_id_for_testing(),
+                     content_setting == CONTENT_SETTING_ALLOW);
 }
 
 void GeolocationPermissionContextTests::CheckPermissionMessageSent(
@@ -234,7 +237,8 @@ void GeolocationPermissionContextTests::CheckPermissionMessageSentInternal(
     int request_id,
     bool allowed) {
   ASSERT_EQ(responses_.count(process->GetID()), 1U);
-  EXPECT_EQ(request_id, responses_[process->GetID()].first);
+  EXPECT_EQ(PermissionRequestID::RequestLocalId(request_id),
+            responses_[process->GetID()].first);
   EXPECT_EQ(allowed, responses_[process->GetID()].second);
   responses_.erase(process->GetID());
 }
@@ -358,7 +362,7 @@ void GeolocationPermissionContextTests::RequestManagerDocumentLoadCompleted() {
 void GeolocationPermissionContextTests::RequestManagerDocumentLoadCompleted(
     content::WebContents* web_contents) {
   PermissionRequestManager::FromWebContents(web_contents)
-      ->DocumentOnLoadCompletedInMainFrame();
+      ->DocumentOnLoadCompletedInMainFrame(main_rfh());
 }
 
 ContentSetting GeolocationPermissionContextTests::GetGeolocationContentSetting(
@@ -366,8 +370,7 @@ ContentSetting GeolocationPermissionContextTests::GetGeolocationContentSetting(
     GURL frame_1) {
   return PermissionsClient::Get()
       ->GetSettingsMap(browser_context())
-      ->GetContentSetting(frame_0, frame_1, ContentSettingsType::GEOLOCATION,
-                          std::string());
+      ->GetContentSetting(frame_0, frame_1, ContentSettingsType::GEOLOCATION);
 }
 
 void GeolocationPermissionContextTests::SetGeolocationContentSetting(
@@ -376,9 +379,8 @@ void GeolocationPermissionContextTests::SetGeolocationContentSetting(
     ContentSetting content_setting) {
   return PermissionsClient::Get()
       ->GetSettingsMap(browser_context())
-      ->SetContentSettingDefaultScope(frame_0, frame_1,
-                                      ContentSettingsType::GEOLOCATION,
-                                      std::string(), content_setting);
+      ->SetContentSettingDefaultScope(
+          frame_0, frame_1, ContentSettingsType::GEOLOCATION, content_setting);
 }
 
 bool GeolocationPermissionContextTests::HasActivePrompt() {
@@ -418,12 +420,16 @@ void GeolocationPermissionContextTests::ClosePrompt() {
   base::RunLoop().RunUntilIdle();
 }
 
-base::string16 GeolocationPermissionContextTests::GetPromptText() {
+std::u16string GeolocationPermissionContextTests::GetPromptText() {
   PermissionRequestManager* manager =
       PermissionRequestManager::FromWebContents(web_contents());
   PermissionRequest* request = manager->Requests().front();
+#if defined(OS_ANDROID)
+  return request->GetMessageText();
+#else
   return base::ASCIIToUTF16(request->GetOrigin().spec()) +
          request->GetMessageTextFragment();
+#endif
 }
 
 // Tests ----------------------------------------------------------------------
@@ -909,7 +915,7 @@ TEST_F(GeolocationPermissionContextTests, CancelGeolocationPermissionRequest) {
   RequestGeolocationPermission(web_contents(), RequestID(0), frame_0, true);
 
   ASSERT_TRUE(HasActivePrompt());
-  base::string16 text_0 = GetPromptText();
+  std::u16string text_0 = GetPromptText();
   ASSERT_FALSE(text_0.empty());
 
   // Simulate the frame going away; the request should be removed.

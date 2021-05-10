@@ -12,10 +12,10 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/hdr_metadata.h"
 #include "ui/gfx/transform.h"
 #include "ui/gfx/video_types.h"
 #include "ui/gl/gl_export.h"
-#include "ui/gl/hdr_metadata.h"
 
 namespace gl {
 class GLImage;
@@ -49,14 +49,13 @@ struct GL_EXPORT DCRendererLayerParams {
   // after applying the |quad_rect.origin()| as an offset.
   gfx::Transform transform;
 
-  // If |is_clipped| is true, then clip to |clip_rect| in root target space.
-  bool is_clipped = false;
-  gfx::Rect clip_rect;
+  // If present, then clip to |clip_rect| in root target space.
+  base::Optional<gfx::Rect> clip_rect;
 
   gfx::ProtectedVideoType protected_video_type =
       gfx::ProtectedVideoType::kClear;
 
-  gl::HDRMetadata hdr_metadata;
+  gfx::HDRMetadata hdr_metadata;
 };
 
 }  // namespace ui

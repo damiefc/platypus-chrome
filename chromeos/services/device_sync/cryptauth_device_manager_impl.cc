@@ -359,14 +359,13 @@ void AddSoftwareFeaturesToExternalDevice(
           static_cast<cryptauth::SoftwareFeature>(software_feature_int));
     }
 
-    int software_feature_state;
-    if (!it.second.GetAsInteger(&software_feature_state)) {
+    if (!it.second.is_int()) {
       PA_LOG(WARNING) << "Unable to retrieve SoftwareFeature; skipping.";
       continue;
     }
 
-    switch (static_cast<multidevice::SoftwareFeatureState>(
-        software_feature_state)) {
+    switch (
+        static_cast<multidevice::SoftwareFeatureState>(it.second.GetInt())) {
       case multidevice::SoftwareFeatureState::kEnabled:
         external_device->add_enabled_software_features(software_feature);
         FALLTHROUGH;
@@ -707,8 +706,9 @@ void CryptAuthDeviceManagerImpl::OnGetMyDevicesSuccess(
     devices_as_list->Append(std::move(device_dictionary));
   }
 
-  bool unlock_keys_changed = !devices_as_list->Equals(
-      pref_service_->GetList(prefs::kCryptAuthDeviceSyncUnlockKeys));
+  bool unlock_keys_changed =
+      *devices_as_list !=
+      *pref_service_->GetList(prefs::kCryptAuthDeviceSyncUnlockKeys);
   {
     ListPrefUpdate update(pref_service_, prefs::kCryptAuthDeviceSyncUnlockKeys);
     update.Get()->Swap(devices_as_list.get());

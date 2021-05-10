@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
@@ -79,8 +79,8 @@ class WebRtcRtpDumpHandlerTest : public testing::Test {
   }
 
   void ResetDumpHandler(const base::FilePath& dir, bool end_dump_success) {
-    handler_.reset(new WebRtcRtpDumpHandler(
-        dir.empty() ? base::FilePath(FILE_PATH_LITERAL("dummy")) : dir));
+    handler_ = std::make_unique<WebRtcRtpDumpHandler>(
+        dir.empty() ? base::FilePath(FILE_PATH_LITERAL("dummy")) : dir);
 
     std::unique_ptr<WebRtcRtpDumpWriter> writer(new FakeDumpWriter(
         10,
@@ -217,7 +217,7 @@ TEST_F(WebRtcRtpDumpHandlerTest, CannotStartMoreThanFiveDumps) {
   std::unique_ptr<WebRtcRtpDumpHandler> handlers[6];
 
   for (size_t i = 0; i < base::size(handlers); ++i) {
-    handlers[i].reset(new WebRtcRtpDumpHandler(base::FilePath()));
+    handlers[i] = std::make_unique<WebRtcRtpDumpHandler>(base::FilePath());
 
     if (i < base::size(handlers) - 1) {
       EXPECT_TRUE(handlers[i]->StartDump(RTP_DUMP_INCOMING, &error));

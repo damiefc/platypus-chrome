@@ -29,15 +29,6 @@ const base::Feature kOfflinePagesCTFeature{"OfflinePagesCT",
 const base::Feature kOfflinePagesLivePageSharingFeature{
     "OfflinePagesLivePageSharing", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kOfflinePagesLoadSignalCollectingFeature{
-    "OfflinePagesLoadSignalCollecting", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kOfflinePagesRenovationsFeature{
-    "OfflinePagesRenovations", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kOfflinePagesResourceBasedSnapshotFeature{
-    "OfflinePagesResourceBasedSnapshot", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kPrefetchingOfflinePagesFeature{
     "OfflinePagesPrefetching", base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -56,17 +47,11 @@ const base::Feature kOfflinePagesInDownloadHomeOpenInCctFeature{
 const base::Feature kOfflinePagesCTSuppressNotificationsFeature{
     "OfflinePagesCTSuppressNotifications", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kOfflinePagesShowAlternateDinoPageFeature{
-    "OfflinePagesShowAlternateDinoPage", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kOfflineIndicatorFeature{"OfflineIndicator",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kOfflineIndicatorAlwaysHttpProbeFeature{
-    "OfflineIndicatorAlwaysHttpProbe", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kOnTheFlyMhtmlHashComputationFeature{
-    "OnTheFlyMhtmlHashComputation", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kOfflinePagesNetworkStateLikelyUnknown{
+    "OfflinePagesNetworkStateLikelyUnknown", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const char kPrefetchingOfflinePagesExperimentsOption[] = "exp";
 
@@ -84,19 +69,6 @@ bool IsOfflinePagesLivePageSharingEnabled() {
 
 bool IsPrefetchingOfflinePagesEnabled() {
   return base::FeatureList::IsEnabled(kPrefetchingOfflinePagesFeature);
-}
-
-bool IsOfflinePagesLoadSignalCollectingEnabled() {
-  return base::FeatureList::IsEnabled(kOfflinePagesLoadSignalCollectingFeature);
-}
-
-bool IsOfflinePagesRenovationsEnabled() {
-  return base::FeatureList::IsEnabled(kOfflinePagesRenovationsFeature);
-}
-
-bool IsOfflinePagesResourceBasedSnapshotEnabled() {
-  return base::FeatureList::IsEnabled(
-      kOfflinePagesResourceBasedSnapshotFeature);
 }
 
 bool ShouldUseTestingSnapshotDelay() {
@@ -128,11 +100,6 @@ bool IsOfflinePagesSuppressNotificationsEnabled() {
       kOfflinePagesCTSuppressNotificationsFeature);
 }
 
-bool ShouldShowAlternateDinoPage() {
-  return base::FeatureList::IsEnabled(
-      kOfflinePagesShowAlternateDinoPageFeature);
-}
-
 std::string GetPrefetchingOfflinePagesExperimentTag() {
   return base::GetFieldTrialParamValueByFeature(
       kPrefetchingOfflinePagesFeature,
@@ -143,12 +110,12 @@ bool IsOfflineIndicatorFeatureEnabled() {
   return base::FeatureList::IsEnabled(kOfflineIndicatorFeature);
 }
 
-bool IsOfflineIndicatorAlwaysHttpProbeEnabled() {
-  return base::FeatureList::IsEnabled(kOfflineIndicatorAlwaysHttpProbeFeature);
+bool IsOnTheFlyMhtmlHashComputationEnabled() {
+  return false;
 }
 
-bool IsOnTheFlyMhtmlHashComputationEnabled() {
-  return base::FeatureList::IsEnabled(kOnTheFlyMhtmlHashComputationFeature);
+bool IsOfflinePagesNetworkStateLikelyUnknown() {
+  return base::FeatureList::IsEnabled(kOfflinePagesNetworkStateLikelyUnknown);
 }
 
 }  // namespace offline_pages

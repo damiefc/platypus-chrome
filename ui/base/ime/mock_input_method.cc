@@ -4,8 +4,8 @@
 
 #include "ui/base/ime/mock_input_method.h"
 
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "build/build_config.h"
 #include "ui/base/ime/input_method_delegate.h"
 #include "ui/base/ime/text_input_client.h"
@@ -70,6 +70,12 @@ bool MockInputMethod::OnUntranslatedIMEMessage(const MSG event,
     *result = NativeEventResult();
   return false;
 }
+
+void MockInputMethod::OnInputLocaleChanged() {}
+
+bool MockInputMethod::IsInputLocaleCJK() const {
+  return false;
+}
 #endif
 
 void MockInputMethod::OnTextInputTypeChanged(const TextInputClient* client) {
@@ -83,13 +89,6 @@ void MockInputMethod::OnCaretBoundsChanged(const TextInputClient* client) {
 }
 
 void MockInputMethod::CancelComposition(const TextInputClient* client) {
-}
-
-void MockInputMethod::OnInputLocaleChanged() {
-}
-
-bool MockInputMethod::IsInputLocaleCJK() const {
-  return false;
 }
 
 TextInputType MockInputMethod::GetTextInputType() const {
@@ -129,8 +128,7 @@ void MockInputMethod::RemoveObserver(InputMethodObserver* observer) {
   observer_list_.RemoveObserver(observer);
 }
 
-InputMethodKeyboardController*
-MockInputMethod::GetInputMethodKeyboardController() {
+VirtualKeyboardController* MockInputMethod::GetVirtualKeyboardController() {
   return &keyboard_controller_;
 }
 

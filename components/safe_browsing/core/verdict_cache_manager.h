@@ -8,7 +8,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
@@ -97,13 +97,14 @@ class VerdictCacheManager : public history::HistoryServiceObserver,
   void HistoryServiceBeingDeleted(
       history::HistoryService* history_service) override;
 
-  // Returns true if an artificial unsafe URL has been provided using the
-  // command-line flag "mark_as_real_time_phishing".
+  // Returns true if an artificial unsafe URL has been provided using
+  // command-line flags.
   static bool has_artificial_unsafe_url();
 
   void StopCleanUpTimerForTesting();
 
  private:
+  friend class SafeBrowsingBlockingPageRealTimeUrlCheckTest;
   FRIEND_TEST_ALL_PREFIXES(VerdictCacheManagerTest, TestCleanUpExpiredVerdict);
   FRIEND_TEST_ALL_PREFIXES(VerdictCacheManagerTest,
                            TestCleanUpExpiredVerdictWithInvalidEntry);
@@ -114,6 +115,8 @@ class VerdictCacheManager : public history::HistoryServiceObserver,
       TestRemoveRealTimeUrlCheckCachedVerdictOnURLsDeleted);
   FRIEND_TEST_ALL_PREFIXES(VerdictCacheManagerTest,
                            TestCleanUpExpiredVerdictInBackground);
+  FRIEND_TEST_ALL_PREFIXES(VerdictCacheManagerTest,
+                           TestCleanUpVerdictOlderThanUpperBound);
 
   void ScheduleNextCleanUpAfterInterval(base::TimeDelta interval);
 
@@ -143,7 +146,11 @@ class VerdictCacheManager : public history::HistoryServiceObserver,
 
   // This adds a cached verdict for a URL that has artificially been marked as
   // unsafe using the command line flag "mark_as_real_time_phishing".
-  void CacheArtificialVerdict();
+  void CacheArtificialRealTimeUrlVerdict();
+
+  // This adds a cached verdict for a URL that has artificially been marked as
+  // unsafe using the command line flag "mark_as_phish_guard_phishing".
+  void CacheArtificialPhishGuardVerdict();
 
   // Number of verdict stored for this profile for password on focus pings.
   base::Optional<size_t> stored_verdict_count_password_on_focus_;
@@ -155,8 +162,9 @@ class VerdictCacheManager : public history::HistoryServiceObserver,
   // Number of verdict stored for this profile for real time url check pings.
   base::Optional<size_t> stored_verdict_count_real_time_url_check_;
 
-  ScopedObserver<history::HistoryService, history::HistoryServiceObserver>
-      history_service_observer_{this};
+  base::ScopedObservation<history::HistoryService,
+                          history::HistoryServiceObserver>
+      history_service_observation_{this};
 
   // Content settings maps associated with this instance.
   scoped_refptr<HostContentSettingsMap> content_settings_;

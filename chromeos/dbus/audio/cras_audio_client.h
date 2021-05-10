@@ -7,11 +7,13 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/component_export.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "chromeos/dbus/audio/audio_node.h"
@@ -62,6 +64,11 @@ class COMPONENT_EXPORT(DBUS_AUDIO) CrasAudioClient {
     virtual void BluetoothBatteryChanged(const std::string& address,
                                          uint32_t level);
 
+    // Called when the number of input streams with permission per client type
+    // changed.
+    virtual void NumberOfInputStreamsWithPermissionChanged(
+        const base::flat_map<std::string, uint32_t>& num_input_streams);
+
    protected:
     virtual ~Observer();
   };
@@ -103,6 +110,15 @@ class COMPONENT_EXPORT(DBUS_AUDIO) CrasAudioClient {
   virtual void GetNumberOfActiveOutputStreams(
       DBusMethodCallback<int> callback) = 0;
 
+  // Gets the number of input streams with permission per client type.
+  virtual void GetNumberOfInputStreamsWithPermission(
+      DBusMethodCallback<base::flat_map<std::string, uint32_t>>) = 0;
+
+  // Gets the DeprioritzeBtWbsMic flag. On a few platforms CRAS may
+  // report to deprioritize Bluetooth WBS mic's node priority because
+  // WBS feature is still working to be stabilized.
+  virtual void GetDeprioritizeBtWbsMic(DBusMethodCallback<bool> callback) = 0;
+
   // Sets output volume of the given |node_id| to |volume|, in the rage of
   // [0, 100].
   virtual void SetOutputNodeVolume(uint64_t node_id, int32_t volume) = 0;
@@ -116,6 +132,9 @@ class COMPONENT_EXPORT(DBUS_AUDIO) CrasAudioClient {
 
   // Sets input mute state to |mute_on| value.
   virtual void SetInputMute(bool mute_on) = 0;
+
+  // Sets input noise cancellation state to |noise_cancellation_on| value.
+  virtual void SetNoiseCancellationEnabled(bool noise_cancellation_on) = 0;
 
   // Sets the active output node to |node_id|.
   virtual void SetActiveOutputNode(uint64_t node_id) = 0;
@@ -134,8 +153,6 @@ class COMPONENT_EXPORT(DBUS_AUDIO) CrasAudioClient {
 
   // Enables or disables the usage of fixed A2DP packet size in CRAS.
   virtual void SetFixA2dpPacketSize(bool enabled) = 0;
-  // Enables or disables the next Handsfree profile next version in CRAS.
-  virtual void SetNextHandsfreeProfile(bool enabled) = 0;
 
   // Adds input node |node_id| to the active input list. This is used to add
   // an additional active input node besides the one set by SetActiveInputNode.

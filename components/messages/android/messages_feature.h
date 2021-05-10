@@ -18,7 +18,25 @@ extern const base::Feature kMessagesForAndroidInfrastructure;
 // use Messages or Infobars infrastructure.
 extern const base::Feature kMessagesForAndroidPasswords;
 
+// Feature that controls whether "popup blocked" prompts use Messages or
+// Infobars infrastructure.
+extern const base::Feature kMessagesForAndroidPopupBlocked;
+
+// Feature that controls whether "safety tip" prompts use Messages or
+// Infobars infrastructure.
+extern const base::Feature kMessagesForAndroidSafetyTip;
+
+// Feature that controls whether "save card" prompts use Messages or
+// Infobars infrastructure.
+extern const base::Feature kMessagesForAndroidSaveCard;
+
 bool IsPasswordMessagesUiEnabled();
+
+bool IsPopupBlockedMessagesUiEnabled();
+
+bool IsSafetyTipMessagesUiEnabled();
+
+bool IsSaveCardMessagesUiEnabled();
 
 }  // namespace messages
 

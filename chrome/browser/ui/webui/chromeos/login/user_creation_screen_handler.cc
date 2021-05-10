@@ -5,9 +5,9 @@
 #include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
 
 #include "base/values.h"
-#include "chrome/browser/chromeos/login/oobe_screen.h"
-#include "chrome/browser/chromeos/login/screens/user_creation_screen.h"
-#include "chrome/browser/chromeos/login/startup_utils.h"
+#include "chrome/browser/ash/login/oobe_screen.h"
+#include "chrome/browser/ash/login/screens/user_creation_screen.h"
+#include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/login/localized_values_builder.h"
@@ -53,6 +53,15 @@ void UserCreationScreenHandler::DeclareLocalizedValues(
                IDS_OOBE_USER_CREATION_CHILD_ACCOUNT_CREATION_BUTTON_LABEL);
   builder->Add("signInForChildLabel",
                IDS_OOBE_USER_CREATION_CHILD_SIGN_IN_BUTTON_LABEL);
+  builder->AddF("childSignInParentNotificationText",
+                IDS_OOBE_USER_CREATION_CHILD_SIGN_IN_PARENT_NOTIFICATION_TEXT,
+                ui::GetChromeOSDeviceName());
+  builder->Add("childSignInLearnMore",
+               IDS_OOBE_USER_CREATION_CHILD_SIGNIN_LEARN_MORE);
+  builder->Add("childSignInLearnMoreDialogTitle",
+               IDS_OOBE_USER_CREATION_CHILD_SIGN_IN_LEARN_MORE_DIALOG_TITLE);
+  builder->Add("childSignInLearnMoreDialogText",
+               IDS_OOBE_USER_CREATION_CHILD_SIGN_IN_LEARN_MORE_DIALOG_TEXT);
 }
 
 void UserCreationScreenHandler::Initialize() {}

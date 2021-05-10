@@ -5,7 +5,7 @@
 #include "chrome/browser/devtools/devtools_window_testing.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
@@ -109,7 +109,7 @@ void DevToolsWindowTesting::WaitForDevToolsWindowLoad(DevToolsWindow* window) {
     window->ready_for_test_callback_ = runner->QuitClosure();
     runner->Run();
   }
-  base::string16 harness = base::UTF8ToUTF16(
+  std::u16string harness = base::UTF8ToUTF16(
       content::DevToolsFrontendHost::GetFrontendResource(kHarnessScript));
   window->main_web_contents_->GetMainFrame()->ExecuteJavaScript(
       harness, base::NullCallback());
@@ -180,7 +180,7 @@ void DevToolsWindowTesting::CloseDevToolsWindowSync(
 // DevToolsWindowCreationObserver ---------------------------------------------
 
 DevToolsWindowCreationObserver::DevToolsWindowCreationObserver()
-    : creation_callback_(base::Bind(
+    : creation_callback_(base::BindRepeating(
           &DevToolsWindowCreationObserver::DevToolsWindowCreated,
           base::Unretained(this))) {
   DevToolsWindow::AddCreationCallbackForTest(creation_callback_);

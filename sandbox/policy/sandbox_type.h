@@ -9,7 +9,13 @@
 
 #include "base/command_line.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
+#include "printing/buildflags/buildflags.h"
 #include "sandbox/policy/export.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chromeos/assistant/buildflags.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace sandbox {
 namespace policy {
@@ -39,17 +45,21 @@ enum class SandboxType {
   kMediaFoundationCdm,
 #endif
 
-#if defined(OS_FUCHSIA)
-  // Sandbox type for the web::Context process on Fuchsia. Functionally it's an
-  // equivalent of the browser process on other platforms.
-  kWebContext,
-#endif
-
   // Renderer or worker process. Most common case.
   kRenderer,
 
-  // Utility processes. Used by most isolated services.
+  // Utility processes. Used by most isolated services.  Consider using
+  // kService for Chromium-code that makes limited use of OS APIs.
   kUtility,
+
+#if defined(OS_MAC)
+  // On Mac these are identical.
+  kService = kUtility,
+#else
+  // Services with limited use of OS APIs. Tighter than kUtility and
+  // suitable for most isolated mojo service endpoints.
+  kService,
+#endif
 
   // GPU process.
   kGpu,
@@ -68,26 +78,32 @@ enum class SandboxType {
   kNaClLoader,
 #endif  // defined(OS_MAC)
 
+#if BUILDFLAG(ENABLE_PRINTING)
+  // The print backend service process which interfaces with operating system
+  // print drivers.
+  kPrintBackend,
+#endif
+
   // The print compositor service process.
   kPrintCompositor,
 
   // The audio service process.
   kAudio,
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   kIme,
   // Text-to-speech.
   kTts,
-#endif  // defined(OS_CHROMEOS)
+
+#if BUILDFLAG(ENABLE_LIBASSISTANT_SANDBOX)
+  kLibassistant,
+#endif  // BUILDFLAG(ENABLE_LIBASSISTANT_SANDBOX)
+
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Indicates that a process is a zygote and will get a real sandbox later.
   kZygoteIntermediateSandbox,
-#endif
-
-#if !defined(OS_MAC)
-  // Hosts WebRTC for Sharing Service, uses kUtility on OS_MAC.
-  kSharingService,
 #endif
 
   // The speech recognition service process.

@@ -5,8 +5,6 @@
 #ifndef CHROME_BROWSER_UI_EXCLUSIVE_ACCESS_FULLSCREEN_CONTROLLER_H_
 #define CHROME_BROWSER_UI_EXCLUSIVE_ACCESS_FULLSCREEN_CONTROLLER_H_
 
-#include <set>
-
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -66,9 +64,6 @@ class FullscreenController : public ExclusiveAccessControllerBase {
   // transitioned to fullscreen by a browser (i.e., not tab-initiated) mode
   // transition.
   bool IsFullscreenForBrowser() const;
-
-  // Returns true if Flash is providing the "exit from fullscreen" message.
-  bool IsPrivilegedFullscreenForTab() const;
 
   void ToggleBrowserFullscreenMode();
 
@@ -169,7 +164,6 @@ class FullscreenController : public ExclusiveAccessControllerBase {
   void ExitFullscreenModeInternal();
   void SetFullscreenedTab(content::WebContents* tab, const GURL& origin);
 
-  void SetPrivilegedFullscreenForTesting(bool is_privileged);
   // Returns true if |web_contents| was toggled into/out of fullscreen mode as a
   // screen-captured tab or as a content-fullscreen tab.
   // See 'FullscreenWithinTab Note'.
@@ -204,10 +198,6 @@ class FullscreenController : public ExclusiveAccessControllerBase {
   // Set in OnTabDeactivated(). Used to see if we're in the middle of
   // deactivation of a tab.
   content::WebContents* deactivated_contents_ = nullptr;
-
-  // Used in testing to confirm proper behavior for specific, privileged
-  // fullscreen cases.
-  bool is_privileged_fullscreen_for_testing_ = false;
 
   // Used in testing to set the state to tab fullscreen.
   bool is_tab_fullscreen_for_testing_ = false;

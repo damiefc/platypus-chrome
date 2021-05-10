@@ -8,7 +8,7 @@
 
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
-#include "third_party/blink/public/common/privacy_budget/identifiability_study_participation.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/thread_specific.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -39,22 +39,21 @@ IdentifiabilityPaintOpDigest::IdentifiabilityPaintOpDigest(IntSize size,
     : max_digest_ops_(max_digest_ops),
       size_(size),
       paint_cache_(cc::ClientPaintCache::kNoCachingBudget),
-      nodraw_canvas_(size_.Width(), size_.Height()),
       serialize_options_(&image_provider_,
                          /*transfer_cache=*/nullptr,
                          &paint_cache_,
-                         &nodraw_canvas_,
                          /*strike_server=*/nullptr,
                          /*color_space=*/nullptr,
                          /*can_use_lcd_text=*/false,
                          /*content_supports_distance_field_text=*/false,
-                         /*max_texture_size=*/0,
-                         /*original_ctm=*/SkMatrix::I()) {
+                         /*max_texture_size=*/0) {
   serialize_options_.for_identifiability_study = true;
   constexpr size_t kInitialSize = 16 * 1024;
-  if (IsUserInIdentifiabilityStudy() &&
-      SerializationBuffer().size() < kInitialSize)
+  if (IdentifiabilityStudySettings::Get()->IsTypeAllowed(
+          blink::IdentifiableSurface::Type::kCanvasReadback) &&
+      SerializationBuffer().size() < kInitialSize) {
     SerializationBuffer().resize(kInitialSize);
+  }
 }
 
 IdentifiabilityPaintOpDigest::~IdentifiabilityPaintOpDigest() = default;
@@ -64,8 +63,10 @@ constexpr size_t IdentifiabilityPaintOpDigest::kInfiniteOps;
 void IdentifiabilityPaintOpDigest::MaybeUpdateDigest(
     const sk_sp<const cc::PaintRecord>& paint_record,
     const size_t num_ops_to_visit) {
-  if (!IsUserInIdentifiabilityStudy())
+  if (!IdentifiabilityStudySettings::Get()->IsTypeAllowed(
+          blink::IdentifiableSurface::Type::kCanvasReadback)) {
     return;
+  }
   if (total_ops_digested_ >= max_digest_ops_) {
     encountered_skipped_ops_ = true;
     return;
@@ -109,9 +110,9 @@ void IdentifiabilityPaintOpDigest::MaybeUpdateDigest(
 
     std::memset(SerializationBuffer().data(), 0, SerializationBuffer().size());
     size_t serialized_size;
-    while ((serialized_size = op->Serialize(SerializationBuffer().data(),
-                                            SerializationBuffer().size(),
-                                            serialize_options_)) == 0) {
+    while ((serialized_size = op->Serialize(
+                SerializationBuffer().data(), SerializationBuffer().size(),
+                serialize_options_, nullptr, SkM44(), SkM44())) == 0) {
       constexpr size_t kMaxBufferSize =
           gpu::raster::RasterInterface::kDefaultMaxOpSizeHint << 2;
       if (SerializationBuffer().size() >= kMaxBufferSize) {

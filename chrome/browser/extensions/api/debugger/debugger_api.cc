@@ -20,7 +20,7 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
@@ -79,11 +79,11 @@ namespace {
 
 void CopyDebuggee(Debuggee* dst, const Debuggee& src) {
   if (src.tab_id)
-    dst->tab_id.reset(new int(*src.tab_id));
+    dst->tab_id = std::make_unique<int>(*src.tab_id);
   if (src.extension_id)
-    dst->extension_id.reset(new std::string(*src.extension_id));
+    dst->extension_id = std::make_unique<std::string>(*src.extension_id);
   if (src.target_id)
-    dst->target_id.reset(new std::string(*src.target_id));
+    dst->target_id = std::make_unique<std::string>(*src.target_id);
 }
 
 // Returns true if the given |Extension| is allowed to attach to the specified
@@ -92,6 +92,10 @@ bool ExtensionMayAttachToURL(const Extension& extension,
                              const GURL& url,
                              Profile* profile,
                              std::string* error) {
+  // Allow the extension to attach to about:blank and empty URLs.
+  if (url.is_empty() || url == "about:")
+    return true;
+
   if (url == content::kUnreachableWebDataURL)
     return true;
 
@@ -99,6 +103,10 @@ bool ExtensionMayAttachToURL(const Extension& extension,
   // such to the user), so we don't check explicit page access. However, we
   // still need to check if it's an otherwise-restricted URL.
   if (extension.permissions_data()->IsRestrictedUrl(url, error))
+    return false;
+
+  // Policy blocked hosts supersede the `debugger` permission.
+  if (extension.permissions_data()->IsPolicyBlockedHost(url))
     return false;
 
   if (url.SchemeIsFile() && !util::AllowFileAccess(extension.id(), profile)) {
@@ -212,14 +220,13 @@ class ExtensionDevToolsClientHost : public content::DevToolsAgentHostClient,
   content::NotificationRegistrar registrar_;
   int last_request_id_ = 0;
   PendingRequests pending_requests_;
-  std::unique_ptr<ExtensionDevToolsInfoBarDelegate::CallbackList::Subscription>
-      subscription_;
+  base::CallbackListSubscription subscription_;
   api::debugger::DetachReason detach_reason_ =
       api::debugger::DETACH_REASON_TARGET_CLOSED;
 
   // Listen to extension unloaded notification.
-  ScopedObserver<ExtensionRegistry, ExtensionRegistryObserver>
-      extension_registry_observer_{this};
+  base::ScopedObservation<ExtensionRegistry, ExtensionRegistryObserver>
+      extension_registry_observation_{this};
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionDevToolsClientHost);
 };
@@ -238,7 +245,7 @@ ExtensionDevToolsClientHost::ExtensionDevToolsClientHost(
 
   // ExtensionRegistryObserver listen extension unloaded and detach debugger
   // from there.
-  extension_registry_observer_.Add(ExtensionRegistry::Get(profile_));
+  extension_registry_observation_.Observe(ExtensionRegistry::Get(profile_));
 
   // RVH-based agents disconnect from their clients when the app is terminating
   // but shared worker-based agents do not.
@@ -270,6 +277,7 @@ bool ExtensionDevToolsClientHost::Attach() {
 }
 
 ExtensionDevToolsClientHost::~ExtensionDevToolsClientHost() {
+  ExtensionDevToolsInfoBarDelegate::NotifyExtensionDetached(extension_id());
   g_attached_client_hosts.Get().erase(this);
 }
 
@@ -400,11 +408,16 @@ bool ExtensionDevToolsClientHost::MayAttachToURL(const GURL& url,
                                                  bool is_webui) {
   if (is_webui)
     return false;
-  // Allow the extension to attach to about:blank.
-  if (url.is_empty() || url == "about:")
-    return true;
   std::string error;
-  return ExtensionMayAttachToURL(*extension_, url, profile_, &error);
+  if (!ExtensionMayAttachToURL(*extension_, url, profile_, &error))
+    return false;
+  // For nested URLs, make sure ExtensionMayAttachToURL() allows both
+  // the outer and the inner URLs.
+  if (url.inner_url() && !ExtensionMayAttachToURL(*extension_, *url.inner_url(),
+                                                  profile_, &error)) {
+    return false;
+  }
+  return true;
 }
 
 bool ExtensionDevToolsClientHost::MayAttachToBrowser() {
@@ -461,8 +474,9 @@ bool DebuggerFunction::InitAgentHost(std::string* error) {
         ProcessManager::Get(browser_context())
             ->GetBackgroundHostForExtension(*debuggee_.extension_id);
     if (extension_host) {
-      if (extension()->permissions_data()->IsRestrictedUrl(
-              extension_host->GetLastCommittedURL(), error)) {
+      const GURL& url = extension_host->GetLastCommittedURL();
+      if (extension()->permissions_data()->IsRestrictedUrl(url, error) ||
+          extension()->permissions_data()->IsPolicyBlockedHost(url)) {
         return false;
       }
       agent_host_ =
@@ -707,7 +721,8 @@ ExtensionFunction::ResponseAction DebuggerGetTargetsFunction::Run() {
   for (size_t i = 0; i < list.size(); ++i)
     result->Append(SerializeTarget(list[i]));
 
-  return RespondNow(OneArgument(std::move(result)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 }  // namespace extensions

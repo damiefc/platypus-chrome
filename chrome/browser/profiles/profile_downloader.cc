@@ -31,6 +31,7 @@
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/public/cpp/resource_request.h"
 #include "skia/ext/image_operations.h"
 #include "url/gurl.h"
 
@@ -66,20 +67,20 @@ void ProfileDownloader::StartForAccount(const CoreAccountId& account_id) {
   }
 
   account_id_ = account_id.empty() ? identity_manager_->GetPrimaryAccountId(
-                                         signin::ConsentLevel::kNotRequired)
+                                         signin::ConsentLevel::kSignin)
                                    : account_id;
   StartFetchingOAuth2AccessToken();
 }
 
-base::string16 ProfileDownloader::GetProfileHostedDomain() const {
+std::u16string ProfileDownloader::GetProfileHostedDomain() const {
   return base::UTF8ToUTF16(account_info_.hosted_domain);
 }
 
-base::string16 ProfileDownloader::GetProfileFullName() const {
+std::u16string ProfileDownloader::GetProfileFullName() const {
   return base::UTF8ToUTF16(account_info_.full_name);
 }
 
-base::string16 ProfileDownloader::GetProfileGivenName() const {
+std::u16string ProfileDownloader::GetProfileGivenName() const {
   return base::UTF8ToUTF16(account_info_.given_name);
 }
 
@@ -114,11 +115,6 @@ void ProfileDownloader::StartFetchingImage() {
               account_id_);
   if (maybe_account_info.has_value())
     account_info_ = maybe_account_info.value();
-
-#if defined(OS_ANDROID)
-  if (delegate_->IsPreSignin())
-    identity_manager_->ForceRefreshOfExtendedAccountInfo(account_id_);
-#endif
 
   if (account_info_.IsValid()) {
     // FetchImageData might call the delegate's OnProfileDownloadSuccess

@@ -2,10 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMPONENTS_DOM_DISTILLER_CONTENT_BROWSER_DISTILLIBILITY_DRIVER_H_
-#define COMPONENTS_DOM_DISTILLER_CONTENT_BROWSER_DISTILLIBILITY_DRIVER_H_
-
-#include <string>
+#ifndef COMPONENTS_DOM_DISTILLER_CONTENT_BROWSER_DISTILLABILITY_DRIVER_H_
+#define COMPONENTS_DOM_DISTILLER_CONTENT_BROWSER_DISTILLABILITY_DRIVER_H_
 
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -77,4 +75,4 @@ class DistillabilityDriver
 
 }  // namespace dom_distiller
 
-#endif  // COMPONENTS_DOM_DISTILLER_CONTENT_BROWSER_DISTILLIBILITY_DRIVER_H_
+#endif  // COMPONENTS_DOM_DISTILLER_CONTENT_BROWSER_DISTILLABILITY_DRIVER_H_

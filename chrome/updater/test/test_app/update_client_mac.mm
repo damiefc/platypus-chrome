@@ -23,7 +23,7 @@
 #include "chrome/updater/test/test_app/constants.h"
 #include "chrome/updater/test/test_app/test_app_version.h"
 
-@interface CRUUpdateClientOnDemandImpl : NSObject <CRUUpdateChecking> {
+@interface CRUUpdateClientOnDemandImpl : NSObject <CRUUpdateServicing> {
   base::scoped_nsobject<NSXPCConnection> _xpcConnection;
 }
 
@@ -36,11 +36,11 @@
 - (instancetype)init {
   if (self = [super init]) {
     _xpcConnection.reset([[NSXPCConnection alloc]
-        initWithMachServiceName:updater::GetServiceMachName()
+        initWithMachServiceName:updater::GetUpdateServiceMachName()
                         options:0]);
 
     _xpcConnection.get().remoteObjectInterface =
-        updater::GetXPCUpdateCheckingInterface();
+        updater::GetXPCUpdateServicingInterface();
 
     _xpcConnection.get().interruptionHandler = ^{
       LOG(WARNING)
@@ -56,6 +56,17 @@
   }
 
   return self;
+}
+
+- (void)getVersionWithReply:(void (^_Nonnull)(NSString* version))reply {
+  auto errorHandler = ^(NSError* xpcError) {
+    LOG(ERROR) << "XPC Connection failed: "
+               << base::SysNSStringToUTF8([xpcError description]);
+    reply(nil);
+  };
+
+  [[_xpcConnection remoteObjectProxyWithErrorHandler:errorHandler]
+      getVersionWithReply:reply];
 }
 
 - (void)registerForUpdatesWithAppId:(NSString* _Nullable)appId
@@ -77,6 +88,9 @@
                           version:version
              existenceCheckerPath:existenceCheckerPath
                             reply:reply];
+}
+
+- (void)runPeriodicTasksWithReply:(void (^)(void))reply {
 }
 
 - (void)checkForUpdatesWithUpdateState:

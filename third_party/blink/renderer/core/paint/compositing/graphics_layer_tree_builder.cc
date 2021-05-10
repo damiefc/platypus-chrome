@@ -82,7 +82,7 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
                                    : &pending_reparents;
 
 #if DCHECK_IS_ON()
-  PaintLayerListMutationDetector mutation_checker(layer);
+  PaintLayerListMutationDetector mutation_checker(&layer);
 #endif
 
   bool recursion_blocked_by_display_lock =
@@ -99,7 +99,7 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
 
   if (layer.IsStackingContextWithNegativeZOrderChildren()) {
     if (!recursion_blocked_by_display_lock) {
-      PaintLayerPaintOrderIterator iterator(layer, kNegativeZOrderChildren);
+      PaintLayerPaintOrderIterator iterator(&layer, kNegativeZOrderChildren);
       while (PaintLayer* child_layer = iterator.Next()) {
         RebuildRecursive(*child_layer, *layer_vector_for_children,
                          *pending_reparents_for_children);
@@ -116,7 +116,7 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
   }
 
   if (!recursion_blocked_by_display_lock) {
-    PaintLayerPaintOrderIterator iterator(layer,
+    PaintLayerPaintOrderIterator iterator(&layer,
                                           kNormalFlowAndPositiveZOrderChildren);
     while (PaintLayer* child_layer = iterator.Next()) {
       RebuildRecursive(*child_layer, *layer_vector_for_children,
@@ -124,22 +124,20 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
     }
   }
 
-  if (layer.GetLayoutObject().IsLayoutEmbeddedContent()) {
+  if (auto* embedded =
+          DynamicTo<LayoutEmbeddedContent>(layer.GetLayoutObject())) {
     DCHECK(this_layer_children.IsEmpty());
     PaintLayerCompositor* inner_compositor =
-        PaintLayerCompositor::FrameContentsCompositor(
-            ToLayoutEmbeddedContent(layer.GetLayoutObject()));
+        PaintLayerCompositor::FrameContentsCompositor(*embedded);
     if (inner_compositor) {
-      // If the embedded frame is render-throttled, it might not be compositing
-      // clean at this point. In that case, we still need to connect its
-      // existing root graphics layer, so we need to query the stale compositing
-      // state.
+      // Disabler required because inner frame might be throttled.
       DisableCompositingQueryAsserts disabler;
-      if (inner_compositor->InCompositingMode()) {
-        if (GraphicsLayer* inner_root_layer =
-                inner_compositor->RootGraphicsLayer()) {
-          layer_vector_for_children->push_back(inner_root_layer);
-        }
+      if (GraphicsLayer* inner_root_graphics_layer =
+              inner_compositor->RootGraphicsLayer()) {
+        // TODO(szager); Remove this after diagnosing crash
+        CHECK_EQ(inner_compositor->InCompositingMode(),
+                 (bool)inner_root_graphics_layer);
+        layer_vector_for_children->push_back(inner_root_graphics_layer);
       }
       inner_compositor->ClearRootLayerAttachmentDirty();
     }

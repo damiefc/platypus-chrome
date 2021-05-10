@@ -6,7 +6,9 @@
 
 #include <memory>
 
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
@@ -16,6 +18,8 @@
 #include "chrome/browser/ui/webui/signin/dice_turn_sync_on_helper.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/policy/core/common/management/management_service.h"
+#include "components/policy/core/common/management/scoped_management_service_override_for_testing.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_switches.h"
 #include "components/policy/core/common/policy_test_utils.h"
@@ -36,6 +40,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 class UserPolicySigninServiceTest;
+class SigninUIError;
 
 namespace {
 
@@ -53,8 +58,7 @@ class TestDiceTurnSyncOnHelperDelegate : public DiceTurnSyncOnHelper::Delegate {
 
  private:
   // DiceTurnSyncOnHelper::Delegate:
-  void ShowLoginError(const std::string& email,
-                      const std::string& error_message) override;
+  void ShowLoginError(const SigninUIError& error) override;
   void ShowMergeSyncDataConfirmation(
       const std::string& previous_email,
       const std::string& new_email,
@@ -63,6 +67,10 @@ class TestDiceTurnSyncOnHelperDelegate : public DiceTurnSyncOnHelper::Delegate {
       const std::string& email,
       DiceTurnSyncOnHelper::SigninChoiceCallback callback) override;
   void ShowSyncConfirmation(
+      base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
+          callback) override {}
+  void ShowSyncDisabledConfirmation(
+      bool is_managed_account,
       base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
           callback) override;
   void ShowSyncSettings() override;
@@ -128,8 +136,7 @@ class UserPolicySigninServiceTest : public InProcessBrowserTest {
     return new DiceTurnSyncOnHelper(
         profile(), signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER,
         signin_metrics::PromoAction::PROMO_ACTION_WITH_DEFAULT,
-        signin_metrics::Reason::REASON_REAUTHENTICATION,
-        account_info_.account_id,
+        signin_metrics::Reason::kReauthentication, account_info_.account_id,
         DiceTurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT,
         std::make_unique<TestDiceTurnSyncOnHelperDelegate>(this),
         base::DoNothing());
@@ -163,7 +170,7 @@ class UserPolicySigninServiceTest : public InProcessBrowserTest {
     std::move(callback).Run(DiceTurnSyncOnHelper::SIGNIN_CHOICE_CONTINUE);
   }
 
-  void OnShowSyncConfirmation(
+  void OnShowSyncDisabledConfirmation(
       base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
           callback) {
     sync_confirmation_callback_ = std::move(callback);
@@ -299,6 +306,22 @@ class UserPolicySigninServiceTest : public InProcessBrowserTest {
   bool policy_hanging_ = false;
   int dice_helper_created_count_ = 0;
   int dice_helper_deleted_count_ = 0;
+
+  // The sync service and waits for policies to load before starting for
+  // enterprise users, managed devices and browsers. This means that services
+  // depending on it might have to wait too. By setting the management
+  // authorities to none by default, we assume that the default test is on an
+  // unmanaged device and browser thus we avoid unnecessarily waiting for
+  // policies to load. Tests expecting either an enterprise user, a managed
+  // device or browser should add the appropriate management authorities.
+  policy::ScopedManagementServiceOverrideForTesting browser_management_ =
+      policy::ScopedManagementServiceOverrideForTesting(
+          policy::ManagementTarget::BROWSER,
+          base::flat_set<policy::EnterpriseManagementAuthority>());
+  policy::ScopedManagementServiceOverrideForTesting platform_management_ =
+      policy::ScopedManagementServiceOverrideForTesting(
+          policy::ManagementTarget::PLATFORM,
+          base::flat_set<policy::EnterpriseManagementAuthority>());
 };
 
 TestDiceTurnSyncOnHelperDelegate::TestDiceTurnSyncOnHelperDelegate(
@@ -310,8 +333,7 @@ TestDiceTurnSyncOnHelperDelegate::~TestDiceTurnSyncOnHelperDelegate() {
 }
 
 void TestDiceTurnSyncOnHelperDelegate::ShowLoginError(
-    const std::string& email,
-    const std::string& error_message) {
+    const SigninUIError& error) {
   NOTREACHED();
 }
 
@@ -329,10 +351,11 @@ void TestDiceTurnSyncOnHelperDelegate::ShowEnterpriseAccountConfirmation(
                                                      std::move(callback));
 }
 
-void TestDiceTurnSyncOnHelperDelegate::ShowSyncConfirmation(
+void TestDiceTurnSyncOnHelperDelegate::ShowSyncDisabledConfirmation(
+    bool is_managed_account,
     base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
         callback) {
-  test_fixture_->OnShowSyncConfirmation(std::move(callback));
+  test_fixture_->OnShowSyncDisabledConfirmation(std::move(callback));
 }
 
 void TestDiceTurnSyncOnHelperDelegate::ShowSyncSettings() {
@@ -352,7 +375,8 @@ IN_PROC_BROWSER_TEST_F(UserPolicySigninServiceTest, BasicSignin) {
 
   // Policies are applied even before the user confirms.
   EXPECT_TRUE(
-      IdentityManagerFactory::GetForProfile(profile())->HasPrimaryAccount());
+      IdentityManagerFactory::GetForProfile(profile())->HasPrimaryAccount(
+          signin::ConsentLevel::kSync));
   WaitForPrefValue(profile()->GetPrefs(), prefs::kShowHomeButton,
                    base::Value(true));
 
@@ -371,12 +395,13 @@ IN_PROC_BROWSER_TEST_F(UserPolicySigninServiceTest, UndoSignin) {
 
   // Policies are applied even before the user confirms.
   EXPECT_TRUE(
-      IdentityManagerFactory::GetForProfile(profile())->HasPrimaryAccount());
+      IdentityManagerFactory::GetForProfile(profile())->HasPrimaryAccount(
+          signin::ConsentLevel::kSync));
   WaitForPrefValue(profile()->GetPrefs(), prefs::kShowHomeButton,
                    base::Value(true));
 
-  // Undo the signin.
-  ConfirmSync(LoginUIService::ABORT_SIGNIN);
+  // Cancel sync.
+  ConfirmSync(LoginUIService::ABORT_SYNC);
   // Policy is reverted.
   WaitForPrefValue(profile()->GetPrefs(), prefs::kShowHomeButton,
                    base::Value(false));
@@ -394,7 +419,8 @@ IN_PROC_BROWSER_TEST_F(UserPolicySigninServiceTest, ConcurrentSignin) {
 
   // User is not signed in, policy is not applied.
   EXPECT_FALSE(
-      IdentityManagerFactory::GetForProfile(profile())->HasPrimaryAccount());
+      IdentityManagerFactory::GetForProfile(profile())->HasPrimaryAccount(
+          signin::ConsentLevel::kSync));
   EXPECT_FALSE(profile()->GetPrefs()->GetBoolean(prefs::kShowHomeButton));
 
   // Restart a new signin flow and allow it to complete.
@@ -404,7 +430,8 @@ IN_PROC_BROWSER_TEST_F(UserPolicySigninServiceTest, ConcurrentSignin) {
 
   // Policies are applied even before the user confirms.
   EXPECT_TRUE(
-      IdentityManagerFactory::GetForProfile(profile())->HasPrimaryAccount());
+      IdentityManagerFactory::GetForProfile(profile())->HasPrimaryAccount(
+          signin::ConsentLevel::kSync));
   WaitForPrefValue(profile()->GetPrefs(), prefs::kShowHomeButton,
                    base::Value(true));
 

@@ -139,7 +139,6 @@ DisplayLockUtilities::ActivatableLockedInclusiveAncestors(
     const Node& node,
     DisplayLockActivationReason reason) {
   HeapVector<Member<Element>> elements_to_activate;
-  const_cast<Node*>(&node)->UpdateDistributionForFlatTreeTraversal();
   if (!RuntimeEnabledFeatures::CSSContentVisibilityEnabled() ||
       node.GetDocument()
               .GetDisplayLockDocumentState()
@@ -185,7 +184,6 @@ DisplayLockUtilities::ScopedForcedUpdate::Impl::Impl(const Node* node,
           .GetDisplayLockDocumentState()
           .LockedDisplayLockCount() == 0)
     return;
-  const_cast<Node*>(node)->UpdateDistributionForFlatTreeTraversal();
 
   // Get the right ancestor view. Only use inclusive ancestors if the node
   // itself is locked and it prevents self layout, or if |include_self| is true.
@@ -235,7 +233,6 @@ void DisplayLockUtilities::ScopedForcedUpdate::Impl::
 
 const Element* DisplayLockUtilities::NearestLockedInclusiveAncestor(
     const Node& node) {
-  const_cast<Node*>(&node)->UpdateDistributionForFlatTreeTraversal();
   auto* element = DynamicTo<Element>(node);
   if (!element)
     return NearestLockedExclusiveAncestor(node);
@@ -244,7 +241,7 @@ const Element* DisplayLockUtilities::NearestLockedInclusiveAncestor(
       node.GetDocument()
               .GetDisplayLockDocumentState()
               .LockedDisplayLockCount() == 0 ||
-      !node.CanParticipateInFlatTree()) {
+      node.IsShadowRoot()) {
     return nullptr;
   }
   if (auto* context = element->GetDisplayLockContext()) {
@@ -266,7 +263,7 @@ Element* DisplayLockUtilities::NearestHiddenMatchableInclusiveAncestor(
       element.GetDocument()
               .GetDisplayLockDocumentState()
               .LockedDisplayLockCount() == 0 ||
-      !element.CanParticipateInFlatTree()) {
+      element.IsShadowRoot()) {
     return nullptr;
   }
 
@@ -276,7 +273,6 @@ Element* DisplayLockUtilities::NearestHiddenMatchableInclusiveAncestor(
     }
   }
 
-  element.UpdateDistributionForFlatTreeTraversal();
   // TODO(crbug.com/924550): Once we figure out a more efficient way to
   // determine whether we're inside a locked subtree or not, change this.
   for (Node& ancestor : FlatTreeTraversal::AncestorsOf(element)) {
@@ -299,10 +295,9 @@ Element* DisplayLockUtilities::NearestLockedExclusiveAncestor(
       node.GetDocument()
               .GetDisplayLockDocumentState()
               .LockedDisplayLockCount() == 0 ||
-      !node.CanParticipateInFlatTree()) {
+      node.IsShadowRoot()) {
     return nullptr;
   }
-  const_cast<Node*>(&node)->UpdateDistributionForFlatTreeTraversal();
   // TODO(crbug.com/924550): Once we figure out a more efficient way to
   // determine whether we're inside a locked subtree or not, change this.
   for (Node& ancestor : FlatTreeTraversal::AncestorsOf(node)) {
@@ -320,11 +315,10 @@ Element* DisplayLockUtilities::NearestLockedExclusiveAncestor(
 Element* DisplayLockUtilities::HighestLockedInclusiveAncestor(
     const Node& node) {
   if (!RuntimeEnabledFeatures::CSSContentVisibilityEnabled() ||
-      !node.CanParticipateInFlatTree()) {
+      node.IsShadowRoot()) {
     return nullptr;
   }
   auto* node_ptr = const_cast<Node*>(&node);
-  node_ptr->UpdateDistributionForFlatTreeTraversal();
   // If the exclusive result exists, then that's higher than this node, so
   // return it.
   if (auto* result = HighestLockedExclusiveAncestor(node))
@@ -343,10 +337,9 @@ Element* DisplayLockUtilities::HighestLockedInclusiveAncestor(
 Element* DisplayLockUtilities::HighestLockedExclusiveAncestor(
     const Node& node) {
   if (!RuntimeEnabledFeatures::CSSContentVisibilityEnabled() ||
-      !node.CanParticipateInFlatTree()) {
+      node.IsShadowRoot()) {
     return nullptr;
   }
-  const_cast<Node*>(&node)->UpdateDistributionForFlatTreeTraversal();
 
   Node* parent = FlatTreeTraversal::Parent(node);
   Element* locked_ancestor = nullptr;
@@ -360,11 +353,8 @@ Element* DisplayLockUtilities::HighestLockedExclusiveAncestor(
       parent = nullptr;
     }
 
-    if (!parent) {
+    if (!parent)
       parent = GetFrameOwnerNode(last_node);
-      if (parent)
-        parent->UpdateDistributionForFlatTreeTraversal();
-    }
   }
   return locked_ancestor;
 }
@@ -398,10 +388,7 @@ bool DisplayLockUtilities::IsInUnlockedOrActivatableSubtree(
       node.GetDocument()
               .GetDisplayLockDocumentState()
               .LockedDisplayLockCount() == 0 ||
-      node.GetDocument()
-              .GetDisplayLockDocumentState()
-              .DisplayLockBlockingAllActivationCount() == 0 ||
-      !node.CanParticipateInFlatTree()) {
+      node.IsShadowRoot()) {
     return true;
   }
 
@@ -415,15 +402,20 @@ bool DisplayLockUtilities::IsInUnlockedOrActivatableSubtree(
 }
 
 bool DisplayLockUtilities::IsInLockedSubtreeCrossingFrames(
-    const Node& source_node) {
+    const Node& source_node,
+    IncludeSelfOrNot self) {
   if (!RuntimeEnabledFeatures::CSSContentVisibilityEnabled())
     return false;
+  if (LocalFrameView* frame_view = source_node.GetDocument().View()) {
+    if (frame_view->IsDisplayLocked())
+      return true;
+  }
   const Node* node = &source_node;
-  const_cast<Node*>(node)->UpdateDistributionForFlatTreeTraversal();
 
-  // Since we handled the self-check above, we need to do inclusive checks
-  // starting from the parent.
-  node = FlatTreeTraversal::Parent(*node);
+  // If we don't need to check self, skip to the parent immediately.
+  if (self == kExcludeSelf)
+    node = FlatTreeTraversal::Parent(*node);
+
   // If we don't have a flat-tree parent, get the |source_node|'s owner node
   // instead.
   if (!node)
@@ -609,6 +601,14 @@ bool DisplayLockUtilities::PrePaintBlockedInParentFrame(LayoutView* view) {
     element = NearestLockedExclusiveAncestor(*element);
   }
   return false;
+}
+
+bool DisplayLockUtilities::IsAutoWithoutLayout(const LayoutObject& object) {
+  auto* context = object.GetDisplayLockContext();
+  if (!context)
+    return false;
+  return !context->IsLocked() && context->IsAuto() &&
+         !context->HadLifecycleUpdateSinceLastUnlock();
 }
 
 }  // namespace blink

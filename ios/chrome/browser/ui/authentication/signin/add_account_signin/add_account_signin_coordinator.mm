@@ -4,17 +4,26 @@
 
 #import "ios/chrome/browser/ui/authentication/signin/add_account_signin/add_account_signin_coordinator.h"
 
+#import "components/google/core/common/google_util.h"
+#import "components/signin/ios/browser/features.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
+#import "ios/chrome/browser/application_context.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/signin/authentication_service.h"
+#import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/authentication_ui_util.h"
 #import "ios/chrome/browser/ui/authentication/signin/add_account_signin/add_account_signin_manager.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_coordinator+protected.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity_interaction_manager.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
+#import "net/base/mac/url_conversions.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -42,6 +51,11 @@ using signin_metrics::PromoAction;
 @property(nonatomic, assign) PromoAction promoAction;
 // Add account sign-in intent.
 @property(nonatomic, assign, readonly) AddAccountSigninIntent signinIntent;
+// Stores the account creation URL. This URL is received by:
+// |self.manager.openAccountCreationURLCallback|, and used once |self.manager|
+// is fully dismissed (when |addAccountSigninManagerFinishedWithSigninResult:
+// identity:| is called).
+@property(nonatomic, strong) NSURL* openAccountCreationURL;
 
 @end
 
@@ -73,7 +87,7 @@ using signin_metrics::PromoAction;
     // When interrupting |self.userSigninCoordinator|,
     // |self.userSigninCoordinator.signinCompletion| is called. This callback
     // is in charge to call |[self runCompletionCallbackWithSigninResult:
-    // identity:showAdvancedSettingsSignin:].
+    // completionInfo:].
     [self.userSigninCoordinator interruptWithAction:action
                                          completion:completion];
     return;
@@ -102,8 +116,7 @@ using signin_metrics::PromoAction;
   self.identityInteractionManager =
       ios::GetChromeBrowserProvider()
           ->GetChromeIdentityService()
-          ->CreateChromeIdentityInteractionManager(
-              self.browser->GetBrowserState(), self);
+          ->CreateChromeIdentityInteractionManager(self);
 
   signin::IdentityManager* identityManager =
       IdentityManagerFactory::GetForBrowserState(
@@ -115,6 +128,12 @@ using signin_metrics::PromoAction;
                                            ->GetPrefs()
                        identityManager:identityManager];
   self.manager.delegate = self;
+  __weak __typeof(self) weakSelf = self;
+  if (signin::IsSSOAccountCreationInChromeTabEnabled()) {
+    self.manager.openAccountCreationURLCallback = ^(NSURL* url) {
+      weakSelf.openAccountCreationURL = url;
+    };
+  }
   [self.manager showSigninWithIntent:self.signinIntent];
 }
 
@@ -148,14 +167,13 @@ using signin_metrics::PromoAction;
 
 #pragma mark - AddAccountSigninManagerDelegate
 
-- (void)addAccountSigninManagerFailedWithError:(NSError*)error
-                                      identity:(ChromeIdentity*)identity {
+- (void)addAccountSigninManagerFailedWithError:(NSError*)error {
   DCHECK(error);
   __weak AddAccountSigninCoordinator* weakSelf = self;
   ProceduralBlock dismissAction = ^{
     [weakSelf addAccountSigninManagerFinishedWithSigninResult:
                   SigninCoordinatorResultCanceledByUser
-                                                     identity:identity];
+                                                     identity:nil];
   };
 
   self.alertCoordinator = ErrorCoordinator(
@@ -173,8 +191,17 @@ using signin_metrics::PromoAction;
     // is already stopped. This call can be ignored.
     return;
   }
+  // Add account is done, we don't need |self.identityInteractionManager|
+  // anymore.
+  self.identityInteractionManager = nil;
   switch (self.signinIntent) {
     case AddAccountSigninIntentReauthPrimaryAccount: {
+      if (self.openAccountCreationURL) {
+        // The user asked to create a new account. Reauth has to be interrupted,
+        // to open the account creation URL.
+        [self addAccountDoneWithSigninResult:signinResult identity:nil];
+        return;
+      }
       [self presentUserConsentWithIdentity:identity];
       break;
     }
@@ -192,10 +219,22 @@ using signin_metrics::PromoAction;
                               identity:(ChromeIdentity*)identity {
   DCHECK(!self.alertCoordinator);
   DCHECK(!self.userSigninCoordinator);
-  self.identityInteractionManager = nil;
+  // |identity| is set, only and only if the sign-in is successful.
+  DCHECK(((signinResult == SigninCoordinatorResultSuccess) && identity) ||
+         ((signinResult != SigninCoordinatorResultSuccess) && !identity));
+  SigninCompletionInfo* completionInfo = nil;
+  if (self.openAccountCreationURL) {
+    completionInfo = [[SigninCompletionInfo alloc]
+              initWithIdentity:identity
+        signinCompletionAction:SigninCompletionActionOpenCompletionURL];
+    completionInfo.completionURL =
+        net::GURLWithNSURL(self.openAccountCreationURL);
+  } else {
+    completionInfo =
+        [SigninCompletionInfo signinCompletionInfoWithIdentity:identity];
+  }
   [self runCompletionCallbackWithSigninResult:signinResult
-                                     identity:identity
-                   showAdvancedSettingsSignin:NO];
+                               completionInfo:completionInfo];
 }
 
 // Presents the user consent screen with |identity| pre-selected.

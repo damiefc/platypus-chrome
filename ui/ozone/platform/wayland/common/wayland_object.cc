@@ -5,13 +5,20 @@
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
 
 #include <aura-shell-client-protocol.h>
+#include <cursor-shapes-unstable-v1-client-protocol.h>
+#include <extended-drag-unstable-v1-client-protocol.h>
 #include <gtk-primary-selection-client-protocol.h>
+#include <gtk-shell-client-protocol.h>
 #include <keyboard-extension-unstable-v1-client-protocol.h>
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
 #include <linux-explicit-synchronization-unstable-v1-client-protocol.h>
+#include <pointer-gestures-unstable-v1-client-protocol.h>
 #include <presentation-time-client-protocol.h>
+#include <primary-selection-unstable-v1-client-protocol.h>
 #include <text-input-unstable-v1-client-protocol.h>
 #include <viewporter-client-protocol.h>
+#include <wayland-client-core.h>
+#include <wayland-cursor.h>
 #include <wayland-drm-client-protocol.h>
 #include <xdg-decoration-unstable-v1-client-protocol.h>
 #include <xdg-foreign-unstable-v1-client-protocol.h>
@@ -92,6 +99,38 @@ const wl_interface* ObjectTraits<gtk_primary_selection_source>::interface =
 void (*ObjectTraits<gtk_primary_selection_source>::deleter)(
     gtk_primary_selection_source*) = &gtk_primary_selection_source_destroy;
 
+const wl_interface* ObjectTraits<gtk_shell1>::interface = &gtk_shell1_interface;
+void (*ObjectTraits<gtk_shell1>::deleter)(gtk_shell1*) = &gtk_shell1_destroy;
+
+const wl_interface* ObjectTraits<gtk_surface1>::interface =
+    &gtk_surface1_interface;
+void (*ObjectTraits<gtk_surface1>::deleter)(gtk_surface1*) =
+    &gtk_surface1_destroy;
+
+const wl_interface*
+    ObjectTraits<zwp_primary_selection_device_manager_v1>::interface =
+        &zwp_primary_selection_device_manager_v1_interface;
+void (*ObjectTraits<zwp_primary_selection_device_manager_v1>::deleter)(
+    zwp_primary_selection_device_manager_v1*) =
+    &zwp_primary_selection_device_manager_v1_destroy;
+
+const wl_interface* ObjectTraits<zwp_primary_selection_device_v1>::interface =
+    &zwp_primary_selection_device_v1_interface;
+void (*ObjectTraits<zwp_primary_selection_device_v1>::deleter)(
+    zwp_primary_selection_device_v1*) =
+    &zwp_primary_selection_device_v1_destroy;
+
+const wl_interface* ObjectTraits<zwp_primary_selection_offer_v1>::interface =
+    &zwp_primary_selection_offer_v1_interface;
+void (*ObjectTraits<zwp_primary_selection_offer_v1>::deleter)(
+    zwp_primary_selection_offer_v1*) = &zwp_primary_selection_offer_v1_destroy;
+
+const wl_interface* ObjectTraits<zwp_primary_selection_source_v1>::interface =
+    &zwp_primary_selection_source_v1_interface;
+void (*ObjectTraits<zwp_primary_selection_source_v1>::deleter)(
+    zwp_primary_selection_source_v1*) =
+    &zwp_primary_selection_source_v1_destroy;
+
 const wl_interface* ObjectTraits<wl_buffer>::interface = &wl_buffer_interface;
 void (*ObjectTraits<wl_buffer>::deleter)(wl_buffer*) = &wl_buffer_destroy;
 
@@ -103,6 +142,9 @@ const wl_interface* ObjectTraits<wl_compositor>::interface =
     &wl_compositor_interface;
 void (*ObjectTraits<wl_compositor>::deleter)(wl_compositor*) =
     &wl_compositor_destroy;
+
+void (*ObjectTraits<wl_cursor_theme>::deleter)(wl_cursor_theme*) =
+    &wl_cursor_theme_destroy;
 
 const wl_interface* ObjectTraits<wl_data_device_manager>::interface =
     &wl_data_device_manager_interface;
@@ -126,6 +168,10 @@ void (*ObjectTraits<wl_data_source>::deleter)(wl_data_source*) =
 
 const wl_interface* ObjectTraits<wl_drm>::interface = &wl_drm_interface;
 void (*ObjectTraits<wl_drm>::deleter)(wl_drm*) = &wl_drm_destroy;
+
+const wl_interface* ObjectTraits<wl_event_queue>::interface = nullptr;
+void (*ObjectTraits<wl_event_queue>::deleter)(wl_event_queue*) =
+    &wl_event_queue_destroy;
 
 const wl_interface* ObjectTraits<wl_display>::interface = &wl_display_interface;
 void (*ObjectTraits<wl_display>::deleter)(wl_display*) = &wl_display_disconnect;
@@ -183,6 +229,19 @@ const wl_interface* ObjectTraits<struct wp_presentation_feedback>::interface =
 void (*ObjectTraits<struct wp_presentation_feedback>::deleter)(
     struct wp_presentation_feedback*) = &wp_presentation_feedback_destroy;
 
+const wl_interface* ObjectTraits<struct wl_proxy>::interface = nullptr;
+void (*ObjectTraits<wl_proxy>::deleter)(void*) = &wl_proxy_wrapper_destroy;
+
+const wl_interface* ObjectTraits<zwp_pointer_gesture_pinch_v1>::interface =
+    &zwp_pointer_gesture_pinch_v1_interface;
+void (*ObjectTraits<zwp_pointer_gesture_pinch_v1>::deleter)(
+    zwp_pointer_gesture_pinch_v1*) = &zwp_pointer_gesture_pinch_v1_destroy;
+
+const wl_interface* ObjectTraits<zwp_pointer_gestures_v1>::interface =
+    &zwp_pointer_gestures_v1_interface;
+void (*ObjectTraits<zwp_pointer_gestures_v1>::deleter)(
+    zwp_pointer_gestures_v1*) = &zwp_pointer_gestures_v1_destroy;
+
 const wl_interface* ObjectTraits<wp_viewport>::interface =
     &wp_viewport_interface;
 void (*ObjectTraits<wp_viewport>::deleter)(wp_viewport*) = &wp_viewport_destroy;
@@ -221,6 +280,26 @@ const wl_interface* ObjectTraits<zaura_surface>::interface =
     &zaura_surface_interface;
 void (*ObjectTraits<zaura_surface>::deleter)(zaura_surface*) =
     &zaura_surface_destroy;
+
+const wl_interface* ObjectTraits<zcr_cursor_shapes_v1>::interface =
+    &zcr_cursor_shapes_v1_interface;
+void (*ObjectTraits<zcr_cursor_shapes_v1>::deleter)(zcr_cursor_shapes_v1*) =
+    &zcr_cursor_shapes_v1_destroy;
+
+const wl_interface* ObjectTraits<zcr_extended_drag_v1>::interface =
+    &zcr_extended_drag_v1_interface;
+void (*ObjectTraits<zcr_extended_drag_v1>::deleter)(zcr_extended_drag_v1*) =
+    &zcr_extended_drag_v1_destroy;
+
+const wl_interface* ObjectTraits<zcr_extended_drag_source_v1>::interface =
+    &zcr_extended_drag_source_v1_interface;
+void (*ObjectTraits<zcr_extended_drag_source_v1>::deleter)(
+    zcr_extended_drag_source_v1*) = &zcr_extended_drag_source_v1_destroy;
+
+const wl_interface* ObjectTraits<zcr_extended_drag_offer_v1>::interface =
+    &zcr_extended_drag_offer_v1_interface;
+void (*ObjectTraits<zcr_extended_drag_offer_v1>::deleter)(
+    zcr_extended_drag_offer_v1*) = &zcr_extended_drag_offer_v1_destroy;
 
 const wl_interface* ObjectTraits<zcr_keyboard_extension_v1>::interface =
     &zcr_keyboard_extension_v1_interface;

@@ -39,7 +39,7 @@ ShareToData* ShareToDataForWebState(web::WebState* web_state,
   if (last_committed_item) {
     // Do not use WebState::GetTitle() as it returns the display title, not the
     // original page title.
-    const base::string16& original_title = last_committed_item->GetTitle();
+    const std::u16string& original_title = last_committed_item->GetTitle();
     if (!original_title.empty()) {
       // If the original page title exists, it is expected to match the Tab's
       // title. If this ever changes, then a decision has to be made on which
@@ -75,6 +75,7 @@ ShareToData* ShareToDataForWebState(web::WebState* web_state,
   return [[ShareToData alloc] initWithShareURL:finalURLToShare
                                     visibleURL:web_state->GetVisibleURL()
                                          title:tab_title
+                                additionalText:nil
                                isOriginalTitle:is_original_title
                                isPagePrintable:is_page_printable
                               isPageSearchable:is_page_searchable
@@ -83,10 +84,13 @@ ShareToData* ShareToDataForWebState(web::WebState* web_state,
                             thumbnailGenerator:thumbnail_generator];
 }
 
-ShareToData* ShareToDataForURL(const GURL& URL, NSString* title) {
+ShareToData* ShareToDataForURL(const GURL& URL,
+                               NSString* title,
+                               NSString* additionalText) {
   return [[ShareToData alloc] initWithShareURL:URL
                                     visibleURL:URL
                                          title:title
+                                additionalText:additionalText
                                isOriginalTitle:YES
                                isPagePrintable:NO
                               isPageSearchable:NO

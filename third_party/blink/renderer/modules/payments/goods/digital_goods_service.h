@@ -8,11 +8,11 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/mojom/digital_goods/digital_goods.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/platform/heap/visitor.h"
 
 namespace blink {
 
 class ScriptState;
-class Visitor;
 
 class DigitalGoodsService final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
@@ -27,6 +27,7 @@ class DigitalGoodsService final : public ScriptWrappable {
   ScriptPromise acknowledge(ScriptState*,
                             const String& purchase_token,
                             const String& purchase_type);
+  ScriptPromise listPurchases(ScriptState*);
 
   void Trace(Visitor* visitor) const override;
 

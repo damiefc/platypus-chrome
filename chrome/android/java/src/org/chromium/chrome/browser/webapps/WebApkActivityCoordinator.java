@@ -4,12 +4,14 @@
 
 package org.chromium.chrome.browser.webapps;
 
-import androidx.annotation.Nullable;
+import androidx.annotation.NonNull;
 
-import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.browserservices.ui.controller.webapps.WebappDisclosureController;
+import org.chromium.chrome.browser.browserservices.ui.view.DisclosureInfobar;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
-import org.chromium.chrome.browser.lifecycle.Destroyable;
+import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 
 import javax.inject.Inject;
 
@@ -20,26 +22,27 @@ import dagger.Lazy;
  * Add methods here if other components need to communicate with the WebAPK activity component.
  */
 @ActivityScope
-public class WebApkActivityCoordinator implements Destroyable {
-    private final WebappActivity mActivity;
+public class WebApkActivityCoordinator implements DestroyObserver {
+    private final BrowserServicesIntentDataProvider mIntentDataProvider;
     private final Lazy<WebApkUpdateManager> mWebApkUpdateManager;
 
     @Inject
-    public WebApkActivityCoordinator(ChromeActivity<?> activity,
+    public WebApkActivityCoordinator(
             WebappDeferredStartupWithStorageHandler deferredStartupWithStorageHandler,
-            WebappDisclosureSnackbarController disclosureSnackbarController,
+            WebappDisclosureController disclosureController, DisclosureInfobar disclosureInfobar,
             WebApkActivityLifecycleUmaTracker webApkActivityLifecycleUmaTracker,
             ActivityLifecycleDispatcher lifecycleDispatcher,
+            BrowserServicesIntentDataProvider intendDataProvider,
             Lazy<WebApkUpdateManager> webApkUpdateManager) {
-        // We don't need to do anything with |disclosureSnackbarController| and
+        // We don't need to do anything with |disclosureController|, |disclosureInfobar| and
         // |webApkActivityLifecycleUmaTracker|. We just need to resolve
         // them so that they start working.
 
-        mActivity = (WebappActivity) activity;
+        mIntentDataProvider = intendDataProvider;
         mWebApkUpdateManager = webApkUpdateManager;
 
         deferredStartupWithStorageHandler.addTask((storage, didCreateStorage) -> {
-            if (activity.isActivityFinishingOrDestroyed()) return;
+            if (lifecycleDispatcher.isActivityFinishingOrDestroyed()) return;
 
             onDeferredStartupWithStorage(storage, didCreateStorage);
         });
@@ -47,15 +50,15 @@ public class WebApkActivityCoordinator implements Destroyable {
     }
 
     public void onDeferredStartupWithStorage(
-            @Nullable WebappDataStorage storage, boolean didCreateStorage) {
+            @NonNull WebappDataStorage storage, boolean didCreateStorage) {
         assert storage != null;
         storage.incrementLaunchCount();
 
-        mWebApkUpdateManager.get().updateIfNeeded(storage, mActivity.getIntentDataProvider());
+        mWebApkUpdateManager.get().updateIfNeeded(storage, mIntentDataProvider);
     }
 
     @Override
-    public void destroy() {
+    public void onDestroy() {
         // The common case is to be connected to just one WebAPK's services. For the sake of
         // simplicity disconnect from the services of all WebAPKs.
         ChromeWebApkHost.disconnectFromAllServices(true /* waitForPendingWork */);

@@ -13,14 +13,14 @@
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
+#include "base/containers/contains.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "components/browser_ui/site_settings/android/site_settings_jni_headers/WebsitePreferenceBridge_jni.h"
 #include "components/browser_ui/site_settings/android/storage_info_fetcher.h"
 #include "components/browsing_data/content/local_storage_helper.h"
@@ -31,7 +31,7 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/embedder_support/android/browser_context/browser_context_handle.h"
-#include "components/permissions/chooser_context_base.h"
+#include "components/permissions/object_permission_context_base.h"
 #include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/permissions/permission_manager.h"
 #include "components/permissions/permission_uma_util.h"
@@ -126,6 +126,7 @@ ScopedJavaLocalRef<jstring> ConvertOriginToJavaString(
 
 typedef void (*InfoListInsertionFunction)(
     JNIEnv*,
+    JniIntWrapper,
     const base::android::JavaRef<jobject>&,
     const base::android::JavaRef<jstring>&,
     const base::android::JavaRef<jstring>&,
@@ -142,11 +143,9 @@ void GetOrigins(JNIEnv* env,
   ContentSettingsForOneType all_settings;
   ContentSettingsForOneType embargo_settings;
 
-  content_settings_map->GetSettingsForOneType(content_type, std::string(),
-                                              &all_settings);
+  content_settings_map->GetSettingsForOneType(content_type, &all_settings);
   content_settings_map->GetSettingsForOneType(
-      ContentSettingsType::PERMISSION_AUTOBLOCKER_DATA, std::string(),
-      &embargo_settings);
+      ContentSettingsType::PERMISSION_AUTOBLOCKER_DATA, &embargo_settings);
   ContentSetting default_content_setting =
       content_settings_map->GetDefaultContentSetting(content_type, nullptr);
 
@@ -170,7 +169,8 @@ void GetOrigins(JNIEnv* env,
       jembedder = ConvertUTF8ToJavaString(env, embedder);
 
     seen_origins.push_back(origin);
-    insertionFunc(env, list, ConvertOriginToJavaString(env, origin), jembedder,
+    insertionFunc(env, static_cast<int>(content_type), list,
+                  ConvertOriginToJavaString(env, origin), jembedder,
                   /*is_embargoed=*/false);
   }
 
@@ -192,8 +192,9 @@ void GetOrigins(JNIEnv* env,
     if (auto_blocker->GetEmbargoResult(GURL(origin), content_type)
             .content_setting == CONTENT_SETTING_BLOCK) {
       seen_origins.push_back(origin);
-      insertionFunc(env, list, ConvertOriginToJavaString(env, origin),
-                    jembedder, /*is_embargoed=*/true);
+      insertionFunc(env, static_cast<int>(content_type), list,
+                    ConvertOriginToJavaString(env, origin), jembedder,
+                    /*is_embargoed=*/true);
     }
   }
 }
@@ -250,11 +251,11 @@ void SetSettingForOrigin(JNIEnv* env,
           permissions::PermissionSourceUI::SITE_SETTINGS);
   GetHostContentSettingsMap(browser_context)
       ->SetContentSettingDefaultScope(origin_url, embedder_url, content_type,
-                                      std::string(), setting);
+                                      setting);
   content_settings::LogWebSiteSettingsPermissionChange(content_type, setting);
 }
 
-permissions::ChooserContextBase* GetChooserContext(
+permissions::ObjectPermissionContextBase* GetChooserContext(
     const JavaParamRef<jobject>& jbrowser_context_handle,
     ContentSettingsType type) {
   BrowserContext* browser_context = unwrap(jbrowser_context_handle);
@@ -319,175 +320,6 @@ bool IsContentSettingUserModifiable(
 
 }  // anonymous namespace
 
-static void JNI_WebsitePreferenceBridge_GetClipboardOrigins(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jobject>& list) {
-  GetOrigins(
-      env, jbrowser_context_handle, ContentSettingsType::CLIPBOARD_READ_WRITE,
-      &Java_WebsitePreferenceBridge_insertClipboardInfoIntoList, list, false);
-}
-
-static jint JNI_WebsitePreferenceBridge_GetClipboardSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin) {
-  return GetSettingForOrigin(env, jbrowser_context_handle,
-                             ContentSettingsType::CLIPBOARD_READ_WRITE, origin,
-                             origin);
-}
-
-static void JNI_WebsitePreferenceBridge_SetClipboardSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    jint value) {
-  SetSettingForOrigin(env, jbrowser_context_handle,
-                      ContentSettingsType::CLIPBOARD_READ_WRITE, origin, origin,
-                      static_cast<ContentSetting>(value));
-}
-
-static void JNI_WebsitePreferenceBridge_GetGeolocationOrigins(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jobject>& list,
-    jboolean managedOnly) {
-  GetOrigins(env, jbrowser_context_handle, ContentSettingsType::GEOLOCATION,
-             &Java_WebsitePreferenceBridge_insertGeolocationInfoIntoList, list,
-             managedOnly);
-}
-
-static jint JNI_WebsitePreferenceBridge_GetGeolocationSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder) {
-  return GetSettingForOrigin(env, jbrowser_context_handle,
-                             ContentSettingsType::GEOLOCATION, origin,
-                             embedder);
-}
-
-static void JNI_WebsitePreferenceBridge_SetGeolocationSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder,
-    jint value) {
-  SetSettingForOrigin(env, jbrowser_context_handle,
-                      ContentSettingsType::GEOLOCATION, origin, embedder,
-                      static_cast<ContentSetting>(value));
-}
-
-static void JNI_WebsitePreferenceBridge_GetIdleDetectionOrigins(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jobject>& list) {
-  GetOrigins(env, jbrowser_context_handle, ContentSettingsType::IDLE_DETECTION,
-             &Java_WebsitePreferenceBridge_insertIdleDetectionInfoIntoList,
-             list, false);
-}
-
-static jint JNI_WebsitePreferenceBridge_GetIdleDetectionSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder) {
-  return GetSettingForOrigin(env, jbrowser_context_handle,
-                             ContentSettingsType::IDLE_DETECTION, origin,
-                             embedder);
-}
-
-static void JNI_WebsitePreferenceBridge_SetIdleDetectionSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder,
-    jint value) {
-  SetSettingForOrigin(env, jbrowser_context_handle,
-                      ContentSettingsType::IDLE_DETECTION, origin, embedder,
-                      static_cast<ContentSetting>(value));
-}
-
-static void JNI_WebsitePreferenceBridge_GetMidiOrigins(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jobject>& list) {
-  GetOrigins(env, jbrowser_context_handle, ContentSettingsType::MIDI_SYSEX,
-             &Java_WebsitePreferenceBridge_insertMidiInfoIntoList, list, false);
-}
-
-static jint JNI_WebsitePreferenceBridge_GetMidiSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder) {
-  return GetSettingForOrigin(env, jbrowser_context_handle,
-                             ContentSettingsType::MIDI_SYSEX, origin, embedder);
-}
-
-static void JNI_WebsitePreferenceBridge_SetMidiSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder,
-    jint value) {
-  SetSettingForOrigin(env, jbrowser_context_handle,
-                      ContentSettingsType::MIDI_SYSEX, origin, embedder,
-                      static_cast<ContentSetting>(value));
-}
-
-static void JNI_WebsitePreferenceBridge_GetProtectedMediaIdentifierOrigins(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jobject>& list) {
-  GetOrigins(
-      env, jbrowser_context_handle,
-      ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER,
-      &Java_WebsitePreferenceBridge_insertProtectedMediaIdentifierInfoIntoList,
-      list, false);
-}
-
-static jint
-JNI_WebsitePreferenceBridge_GetProtectedMediaIdentifierSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder) {
-  return GetSettingForOrigin(env, jbrowser_context_handle,
-                             ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER,
-                             origin, embedder);
-}
-
-static void
-JNI_WebsitePreferenceBridge_SetProtectedMediaIdentifierSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder,
-    jint value) {
-  SetSettingForOrigin(env, jbrowser_context_handle,
-                      ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER, origin,
-                      embedder, static_cast<ContentSetting>(value));
-}
-
-static void JNI_WebsitePreferenceBridge_GetNotificationOrigins(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jobject>& list) {
-  GetOrigins(env, jbrowser_context_handle, ContentSettingsType::NOTIFICATIONS,
-             &Java_WebsitePreferenceBridge_insertNotificationIntoList, list,
-             false);
-}
-
-static jint JNI_WebsitePreferenceBridge_GetNotificationSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin) {
-  return GetSettingForOrigin(env, jbrowser_context_handle,
-                             ContentSettingsType::NOTIFICATIONS, origin,
-                             origin);
-}
-
 static jboolean JNI_WebsitePreferenceBridge_IsNotificationEmbargoedForOrigin(
     JNIEnv* env,
     const JavaParamRef<jobject>& jbrowser_context_handle,
@@ -505,7 +337,7 @@ static jboolean JNI_WebsitePreferenceBridge_IsNotificationEmbargoedForOrigin(
               permissions::PermissionStatusSource::MULTIPLE_DISMISSALS);
 }
 
-static void JNI_WebsitePreferenceBridge_SetNotificationSettingForOrigin(
+static void SetNotificationSettingForOrigin(
     JNIEnv* env,
     const JavaParamRef<jobject>& jbrowser_context_handle,
     const JavaParamRef<jstring>& origin,
@@ -541,8 +373,7 @@ static void JNI_WebsitePreferenceBridge_SetNotificationSettingForOrigin(
 
   GetHostContentSettingsMap(browser_context)
       ->SetContentSettingDefaultScope(
-          url, GURL(), ContentSettingsType::NOTIFICATIONS,
-          content_settings::ResourceIdentifier(), setting);
+          url, GURL(), ContentSettingsType::NOTIFICATIONS, setting);
   content_settings::LogWebSiteSettingsPermissionChange(
       ContentSettingsType::NOTIFICATIONS, setting);
 }
@@ -568,67 +399,52 @@ static void JNI_WebsitePreferenceBridge_ReportNotificationRevokedForOrigin(
       unwrap(jbrowser_context_handle));
 }
 
-static void JNI_WebsitePreferenceBridge_GetCameraOrigins(
+static jint JNI_WebsitePreferenceBridge_GetSettingForOrigin(
     JNIEnv* env,
     const JavaParamRef<jobject>& jbrowser_context_handle,
+    jint content_settings_type,
+    const JavaParamRef<jstring>& origin,
+    const JavaParamRef<jstring>& embedder) {
+  ContentSettingsType type =
+      static_cast<ContentSettingsType>(content_settings_type);
+  return GetSettingForOrigin(env, jbrowser_context_handle, type, origin,
+                             embedder);
+}
+
+static void JNI_WebsitePreferenceBridge_SetSettingForOrigin(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jbrowser_context_handle,
+    jint content_settings_type,
+    const JavaParamRef<jstring>& origin,
+    const JavaParamRef<jstring>& embedder,
+    jint value) {
+  ContentSettingsType type =
+      static_cast<ContentSettingsType>(content_settings_type);
+
+  switch (type) {
+    case ContentSettingsType::NOTIFICATIONS:
+      return SetNotificationSettingForOrigin(env, jbrowser_context_handle,
+                                             origin, value);
+    case ContentSettingsType::MEDIASTREAM_MIC:
+    case ContentSettingsType::MEDIASTREAM_CAMERA:
+      return SetSettingForOrigin(env, jbrowser_context_handle, type, origin,
+                                 nullptr, static_cast<ContentSetting>(value));
+    default:
+      SetSettingForOrigin(env, jbrowser_context_handle, type, origin, embedder,
+                          static_cast<ContentSetting>(value));
+  }
+}
+
+static void JNI_WebsitePreferenceBridge_GetOriginsForPermission(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jbrowser_context_handle,
+    jint content_settings_type,
     const JavaParamRef<jobject>& list,
     jboolean managedOnly) {
   GetOrigins(env, jbrowser_context_handle,
-             ContentSettingsType::MEDIASTREAM_CAMERA,
-             &Java_WebsitePreferenceBridge_insertCameraInfoIntoList, list,
+             static_cast<ContentSettingsType>(content_settings_type),
+             &Java_WebsitePreferenceBridge_insertPermissionInfoIntoList, list,
              managedOnly);
-}
-
-static void JNI_WebsitePreferenceBridge_GetMicrophoneOrigins(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jobject>& list,
-    jboolean managedOnly) {
-  GetOrigins(env, jbrowser_context_handle, ContentSettingsType::MEDIASTREAM_MIC,
-             &Java_WebsitePreferenceBridge_insertMicrophoneInfoIntoList, list,
-             managedOnly);
-}
-
-static jint JNI_WebsitePreferenceBridge_GetMicrophoneSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder) {
-  return GetSettingForOrigin(env, jbrowser_context_handle,
-                             ContentSettingsType::MEDIASTREAM_MIC, origin,
-                             embedder);
-}
-
-static jint JNI_WebsitePreferenceBridge_GetCameraSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder) {
-  return GetSettingForOrigin(env, jbrowser_context_handle,
-                             ContentSettingsType::MEDIASTREAM_CAMERA, origin,
-                             embedder);
-}
-
-static void JNI_WebsitePreferenceBridge_SetMicrophoneSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    jint value) {
-  // Here 'nullptr' indicates that microphone uses wildcard for embedder.
-  SetSettingForOrigin(env, jbrowser_context_handle,
-                      ContentSettingsType::MEDIASTREAM_MIC, origin, nullptr,
-                      static_cast<ContentSetting>(value));
-}
-
-static void JNI_WebsitePreferenceBridge_SetCameraSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    jint value) {
-  // Here 'nullptr' indicates that camera uses wildcard for embedder.
-  SetSettingForOrigin(env, jbrowser_context_handle,
-                      ContentSettingsType::MEDIASTREAM_CAMERA, origin, nullptr,
-                      static_cast<ContentSetting>(value));
 }
 
 static jboolean JNI_WebsitePreferenceBridge_IsContentSettingsPatternValid(
@@ -655,26 +471,19 @@ static void JNI_WebsitePreferenceBridge_GetChosenObjects(
     const JavaParamRef<jobject>& list) {
   ContentSettingsType type =
       static_cast<ContentSettingsType>(content_settings_type);
-  permissions::ChooserContextBase* context =
+  permissions::ObjectPermissionContextBase* context =
       GetChooserContext(jbrowser_context_handle, type);
-  // The ChooserContextBase can be null if the embedder doesn't support the
-  // given ContentSettingsType.
+  // The ObjectPermissionContextBase can be null if the embedder doesn't support
+  // the given ContentSettingsType.
   if (!context)
     return;
   for (const auto& object : context->GetAllGrantedObjects()) {
     // Remove the trailing slash so that origins are matched correctly in
     // SingleWebsitePreferences.mergePermissionInfoForTopLevelOrigin.
-    std::string origin = object->requesting_origin.spec();
+    std::string origin = object->origin.spec();
     DCHECK_EQ('/', origin.back());
     origin.pop_back();
     ScopedJavaLocalRef<jstring> jorigin = ConvertUTF8ToJavaString(env, origin);
-
-    std::string embedder = object->embedding_origin.spec();
-    DCHECK_EQ('/', embedder.back());
-    embedder.pop_back();
-    ScopedJavaLocalRef<jstring> jembedder;
-    if (embedder != origin)
-      jembedder = ConvertUTF8ToJavaString(env, embedder);
 
     ScopedJavaLocalRef<jstring> jname = ConvertUTF16ToJavaString(
         env, context->GetObjectDisplayName(object->value));
@@ -689,8 +498,8 @@ static void JNI_WebsitePreferenceBridge_GetChosenObjects(
         object->source == content_settings::SETTING_SOURCE_POLICY;
 
     Java_WebsitePreferenceBridge_insertChosenObjectInfoIntoList(
-        env, list, content_settings_type, jorigin, jembedder, jname,
-        jserialized, jis_managed);
+        env, list, content_settings_type, jorigin, jname, jserialized,
+        jis_managed);
   }
 }
 
@@ -699,23 +508,16 @@ static void JNI_WebsitePreferenceBridge_RevokeObjectPermission(
     const JavaParamRef<jobject>& jbrowser_context_handle,
     jint content_settings_type,
     const JavaParamRef<jstring>& jorigin,
-    const JavaParamRef<jstring>& jembedder,
     const JavaParamRef<jstring>& jobject) {
   GURL origin(ConvertJavaStringToUTF8(env, jorigin));
   DCHECK(origin.is_valid());
-  // If embedder == origin above then a null embedder was sent to Java instead
-  // of a duplicated string.
-  GURL embedder(
-      ConvertJavaStringToUTF8(env, jembedder.is_null() ? jorigin : jembedder));
-  DCHECK(embedder.is_valid());
   std::unique_ptr<base::DictionaryValue> object = base::DictionaryValue::From(
       base::JSONReader::ReadDeprecated(ConvertJavaStringToUTF8(env, jobject)));
   DCHECK(object);
-  permissions::ChooserContextBase* context = GetChooserContext(
+  permissions::ObjectPermissionContextBase* context = GetChooserContext(
       jbrowser_context_handle,
       static_cast<ContentSettingsType>(content_settings_type));
-  context->RevokeObjectPermission(url::Origin::Create(origin),
-                                  url::Origin::Create(embedder), *object);
+  context->RevokeObjectPermission(url::Origin::Create(origin), *object);
 }
 
 namespace {
@@ -873,8 +675,7 @@ static void JNI_WebsitePreferenceBridge_ClearCookieData(
   BrowserContext* browser_context = unwrap(jbrowser_context_handle);
   GURL url(ConvertJavaStringToUTF8(env, jorigin));
 
-  auto* storage_partition =
-      content::BrowserContext::GetDefaultStoragePartition(browser_context);
+  auto* storage_partition = browser_context->GetDefaultStoragePartition();
   auto* cookie_manager = storage_partition->GetCookieManagerForBrowserProcess();
   cookie_manager->GetAllCookies(
       base::BindOnce(&OnCookiesReceived, cookie_manager, url));
@@ -887,7 +688,7 @@ static void JNI_WebsitePreferenceBridge_ClearBannerData(
   GetHostContentSettingsMap(jbrowser_context_handle)
       ->SetWebsiteSettingDefaultScope(
           GURL(ConvertJavaStringToUTF8(env, jorigin)), GURL(),
-          ContentSettingsType::APP_BANNER, std::string(), nullptr);
+          ContentSettingsType::APP_BANNER, nullptr);
 }
 
 static void JNI_WebsitePreferenceBridge_ClearMediaLicenses(
@@ -923,118 +724,8 @@ static jboolean JNI_WebsitePreferenceBridge_GetAdBlockingActivated(
       unwrap(jbrowser_context_handle), url);
 }
 
-static void JNI_WebsitePreferenceBridge_GetArOrigins(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jobject>& list) {
-  GetOrigins(env, jbrowser_context_handle, ContentSettingsType::AR,
-             &Java_WebsitePreferenceBridge_insertArInfoIntoList, list, false);
-}
-
-static jint JNI_WebsitePreferenceBridge_GetArSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder) {
-  return GetSettingForOrigin(env, jbrowser_context_handle,
-                             ContentSettingsType::AR, origin, embedder);
-}
-
-static void JNI_WebsitePreferenceBridge_SetArSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder,
-    jint value) {
-  SetSettingForOrigin(env, jbrowser_context_handle, ContentSettingsType::AR,
-                      origin, embedder, static_cast<ContentSetting>(value));
-}
-
-static void JNI_WebsitePreferenceBridge_GetNfcOrigins(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jobject>& list) {
-  GetOrigins(env, jbrowser_context_handle, ContentSettingsType::NFC,
-             &Java_WebsitePreferenceBridge_insertNfcInfoIntoList, list, false);
-}
-
-static jint JNI_WebsitePreferenceBridge_GetNfcSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder) {
-  return GetSettingForOrigin(env, jbrowser_context_handle,
-                             ContentSettingsType::NFC, origin, embedder);
-}
-
-static void JNI_WebsitePreferenceBridge_SetNfcSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder,
-    jint value) {
-  SetSettingForOrigin(env, jbrowser_context_handle, ContentSettingsType::NFC,
-                      origin, embedder, static_cast<ContentSetting>(value));
-}
-
-static void JNI_WebsitePreferenceBridge_GetSensorsOrigins(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jobject>& list) {
-  GetOrigins(env, jbrowser_context_handle, ContentSettingsType::SENSORS,
-             &Java_WebsitePreferenceBridge_insertSensorsInfoIntoList, list,
-             false);
-}
-
-static jint JNI_WebsitePreferenceBridge_GetSensorsSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder) {
-  return GetSettingForOrigin(env, jbrowser_context_handle,
-                             ContentSettingsType::SENSORS, origin, embedder);
-}
-
-static void JNI_WebsitePreferenceBridge_SetSensorsSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder,
-    jint value) {
-  SetSettingForOrigin(env, jbrowser_context_handle,
-                      ContentSettingsType::SENSORS, origin, embedder,
-                      static_cast<ContentSetting>(value));
-}
-
-static void JNI_WebsitePreferenceBridge_GetVrOrigins(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jobject>& list) {
-  GetOrigins(env, jbrowser_context_handle, ContentSettingsType::VR,
-             &Java_WebsitePreferenceBridge_insertVrInfoIntoList, list, false);
-}
-
-static jint JNI_WebsitePreferenceBridge_GetVrSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder) {
-  return GetSettingForOrigin(env, jbrowser_context_handle,
-                             ContentSettingsType::VR, origin, embedder);
-}
-
-static void JNI_WebsitePreferenceBridge_SetVrSettingForOrigin(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jbrowser_context_handle,
-    const JavaParamRef<jstring>& origin,
-    const JavaParamRef<jstring>& embedder,
-    jint value) {
-  SetSettingForOrigin(env, jbrowser_context_handle, ContentSettingsType::VR,
-                      origin, embedder, static_cast<ContentSetting>(value));
-}
-
-// On Android O+ notification channels are not stored in the Chrome profile and
-// so are persisted across tests. This function resets them.
+// On Android O+ notification channels are not stored in the Chrome profile
+// and so are persisted across tests. This function resets them.
 static void JNI_WebsitePreferenceBridge_ResetNotificationsSettingsForTest(
     JNIEnv* env,
     const JavaParamRef<jobject>& jbrowser_context_handle) {
@@ -1142,7 +833,7 @@ static void JNI_WebsitePreferenceBridge_SetContentSettingForPattern(
               ? ContentSettingsPattern::Wildcard()
               : ContentSettingsPattern::FromString(secondary_pattern_string),
           static_cast<ContentSettingsType>(content_settings_type),
-          std::string(), static_cast<ContentSetting>(setting));
+          static_cast<ContentSetting>(setting));
 }
 
 static void JNI_WebsitePreferenceBridge_GetContentSettingsExceptions(
@@ -1153,8 +844,7 @@ static void JNI_WebsitePreferenceBridge_GetContentSettingsExceptions(
   ContentSettingsForOneType entries;
   GetHostContentSettingsMap(jbrowser_context_handle)
       ->GetSettingsForOneType(
-          static_cast<ContentSettingsType>(content_settings_type), "",
-          &entries);
+          static_cast<ContentSettingsType>(content_settings_type), &entries);
   for (size_t i = 0; i < entries.size(); ++i) {
     Java_WebsitePreferenceBridge_addContentSettingExceptionToList(
         env, list, content_settings_type,
@@ -1213,4 +903,3 @@ static jboolean JNI_WebsitePreferenceBridge_GetLocationAllowedByPolicy(
              ->GetDefaultContentSetting(ContentSettingsType::GEOLOCATION,
                                         nullptr) == CONTENT_SETTING_ALLOW;
 }
-

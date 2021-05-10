@@ -19,7 +19,7 @@ namespace ui {
 
 ScopedClipboardWriter::ScopedClipboardWriter(
     ClipboardBuffer buffer,
-    std::unique_ptr<ClipboardDataEndpoint> data_src)
+    std::unique_ptr<DataTransferEndpoint> data_src)
     : buffer_(buffer), data_src_(std::move(data_src)) {}
 
 ScopedClipboardWriter::~ScopedClipboardWriter() {
@@ -40,7 +40,7 @@ ScopedClipboardWriter::~ScopedClipboardWriter() {
     Clipboard::GetForCurrentThread()->MarkAsConfidential();
 }
 
-void ScopedClipboardWriter::WriteText(const base::string16& text) {
+void ScopedClipboardWriter::WriteText(const std::u16string& text) {
   RecordWrite(ClipboardFormatMetric::kText);
   std::string utf8_text = base::UTF16ToUTF8(text);
 
@@ -50,7 +50,7 @@ void ScopedClipboardWriter::WriteText(const base::string16& text) {
   objects_[Clipboard::PortableFormat::kText] = parameters;
 }
 
-void ScopedClipboardWriter::WriteHTML(const base::string16& markup,
+void ScopedClipboardWriter::WriteHTML(const std::u16string& markup,
                                       const std::string& source_url) {
   RecordWrite(ClipboardFormatMetric::kHtml);
   std::string utf8_markup = base::UTF16ToUTF8(markup);
@@ -67,7 +67,7 @@ void ScopedClipboardWriter::WriteHTML(const base::string16& markup,
   objects_[Clipboard::PortableFormat::kHtml] = parameters;
 }
 
-void ScopedClipboardWriter::WriteSvg(const base::string16& markup) {
+void ScopedClipboardWriter::WriteSvg(const std::u16string& markup) {
   RecordWrite(ClipboardFormatMetric::kSvg);
   std::string utf8_markup = base::UTF16ToUTF8(markup);
 
@@ -85,7 +85,15 @@ void ScopedClipboardWriter::WriteRTF(const std::string& rtf_data) {
   objects_[Clipboard::PortableFormat::kRtf] = parameters;
 }
 
-void ScopedClipboardWriter::WriteBookmark(const base::string16& bookmark_title,
+void ScopedClipboardWriter::WriteFilenames(const std::string& uri_list) {
+  RecordWrite(ClipboardFormatMetric::kFilenames);
+  Clipboard::ObjectMapParams parameters;
+  parameters.push_back(
+      Clipboard::ObjectMapParam(uri_list.begin(), uri_list.end()));
+  objects_[Clipboard::PortableFormat::kFilenames] = parameters;
+}
+
+void ScopedClipboardWriter::WriteBookmark(const std::u16string& bookmark_title,
                                           const std::string& url) {
   if (bookmark_title.empty() || url.empty())
     return;
@@ -100,7 +108,7 @@ void ScopedClipboardWriter::WriteBookmark(const base::string16& bookmark_title,
   objects_[Clipboard::PortableFormat::kBookmark] = parameters;
 }
 
-void ScopedClipboardWriter::WriteHyperlink(const base::string16& anchor_text,
+void ScopedClipboardWriter::WriteHyperlink(const std::u16string& anchor_text,
                                            const std::string& url) {
   if (anchor_text.empty() || url.empty())
     return;
@@ -124,6 +132,11 @@ void ScopedClipboardWriter::WriteImage(const SkBitmap& bitmap) {
     return;
   DCHECK(bitmap.getPixels());
   RecordWrite(ClipboardFormatMetric::kImage);
+
+  // The platform code that sets this bitmap into the system clipboard expects
+  // to get N32 32bpp bitmaps. If they get the wrong type and mishandle it, a
+  // memcpy of the pixels can cause out-of-bounds issues.
+  CHECK_EQ(bitmap.colorType(), kN32_SkColorType);
 
   bitmap_ = bitmap;
   // TODO(dcheng): This is slightly less horrible than what we used to do, but
@@ -160,7 +173,7 @@ void ScopedClipboardWriter::WritePickledData(
   objects_[Clipboard::PortableFormat::kData] = parameters;
 }
 
-void ScopedClipboardWriter::WriteData(const base::string16& format,
+void ScopedClipboardWriter::WriteData(const std::u16string& format,
                                       mojo_base::BigBuffer data) {
   RecordWrite(ClipboardFormatMetric::kData);
   platform_representations_.push_back(

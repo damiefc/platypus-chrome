@@ -7,11 +7,11 @@
 #include <stddef.h>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/numerics/ranges.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
@@ -88,19 +88,19 @@ int BackForwardMenuModel::GetCommandIdAt(int index) const {
   return index;
 }
 
-base::string16 BackForwardMenuModel::GetLabelAt(int index) const {
+std::u16string BackForwardMenuModel::GetLabelAt(int index) const {
   // Return label "Show Full History" for the last item of the menu.
   if (index == GetItemCount() - 1)
     return l10n_util::GetStringUTF16(IDS_HISTORY_SHOWFULLHISTORY_LINK);
 
   // Return an empty string for a separator.
   if (IsSeparator(index))
-    return base::string16();
+    return std::u16string();
 
   // Return the entry title, escaping any '&' characters and eliding it if it's
   // super long.
   NavigationEntry* entry = GetNavigationEntry(index);
-  base::string16 menu_text(entry->GetTitleForDisplay());
+  std::u16string menu_text(entry->GetTitleForDisplay());
   menu_text = ui::EscapeMenuLabelAmpersands(menu_text);
   menu_text = gfx::ElideText(menu_text, gfx::FontList(),
                              kMaxBackForwardMenuWidth, gfx::ELIDE_TAIL);
@@ -174,9 +174,9 @@ void BackForwardMenuModel::ActivatedAt(int index, int event_flags) {
   // Execute the command for the last item: "Show Full History".
   if (index == GetItemCount() - 1) {
     base::RecordComputedAction(BuildActionName("ShowFullHistory", -1));
-    ShowSingletonTabOverwritingNTP(
-        browser_, GetSingletonTabNavigateParams(
-                      browser_, GURL(chrome::kChromeUIHistoryURL)));
+    NavigateParams params(GetSingletonTabNavigateParams(
+        browser_, GURL(chrome::kChromeUIHistoryURL)));
+    ShowSingletonTabOverwritingNTP(browser_, &params);
     return;
   }
 
@@ -390,7 +390,7 @@ bool BackForwardMenuModel::ItemHasIcon(int index) const {
   return index < GetItemCount() && !IsSeparator(index);
 }
 
-base::string16 BackForwardMenuModel::GetShowFullHistoryLabel() const {
+std::u16string BackForwardMenuModel::GetShowFullHistoryLabel() const {
   return l10n_util::GetStringUTF16(IDS_HISTORY_SHOWFULLHISTORY_LINK);
 }
 

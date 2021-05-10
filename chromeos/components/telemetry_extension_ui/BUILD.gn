@@ -8,6 +8,8 @@ assert(!is_official_build,
 
 source_set("telemetry_extension_ui") {
   sources = [
+    "bluetooth_observer.cc",
+    "bluetooth_observer.h",
     "convert_ptr.h",
     "diagnostics_service.cc",
     "diagnostics_service.h",
@@ -15,6 +17,8 @@ source_set("telemetry_extension_ui") {
     "diagnostics_service_converters.h",
     "lid_observer.cc",
     "lid_observer.h",
+    "power_observer.cc",
+    "power_observer.h",
     "probe_service.cc",
     "probe_service.h",
     "probe_service_converters.cc",
@@ -23,17 +27,17 @@ source_set("telemetry_extension_ui") {
     "system_events_service.h",
     "telemetry_extension_ui.cc",
     "telemetry_extension_ui.h",
-    "telemetry_extension_untrusted_source.cc",
-    "telemetry_extension_untrusted_source.h",
+    "telemetry_extension_untrusted_ui.cc",
+    "telemetry_extension_untrusted_ui.h",
     "url_constants.cc",
     "url_constants.h",
   ]
 
   deps = [
+    "//ash/constants",
     "//base",
-    "//chrome/browser/chromeos/wilco_dtc_supportd:mojo_utils",
+    "//chrome/browser/ash/wilco_dtc_supportd:mojo_utils",
     "//chromeos/components/telemetry_extension_ui/mojom",
-    "//chromeos/constants",
     "//chromeos/resources:telemetry_extension_resources",
     "//chromeos/services/cros_healthd/public/cpp",
     "//chromeos/services/cros_healthd/public/mojom",
@@ -56,7 +60,7 @@ source_set("unit_tests") {
     ":telemetry_extension_ui",
     "//base",
     "//base/test:test_support",
-    "//chrome/browser/chromeos/wilco_dtc_supportd:mojo_utils",
+    "//chrome/browser/ash/wilco_dtc_supportd:mojo_utils",
     "//chromeos/components/telemetry_extension_ui/mojom",
     "//chromeos/dbus/cros_healthd",
     "//chromeos/services/cros_healthd/public/cpp",

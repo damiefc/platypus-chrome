@@ -13,6 +13,8 @@
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
+#include "chrome/browser/safe_browsing/safe_browsing_metrics_collector.h"
+#include "chrome/browser/safe_browsing/safe_browsing_metrics_collector_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_item.h"
@@ -33,27 +35,6 @@ bool DangerTypeIsDangerous(download::DownloadDangerType danger_type) {
           danger_type == download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED);
 }
 
-std::string DangerTypeToThreatType(download::DownloadDangerType danger_type) {
-  switch (danger_type) {
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
-      return "DANGEROUS_FILE_TYPE";
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
-      return "DANGEROUS_URL";
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
-      return "DANGEROUS";
-    case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
-      return "UNCOMMON";
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
-      return "DANGEROUS_HOST";
-    case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
-      return "POTENTIALLY_UNWANTED";
-    default:
-      // Expects to only be called with the dangerous threat types listed above.
-      NOTREACHED() << "Unexpected danger type: " << danger_type;
-      return "UNKNOWN";
-  }
-}
-
 void MaybeReportDangerousDownloadWarning(download::DownloadItem* download) {
   // If |download| has a deep scanning malware verdict, then it means the
   // dangerous file has already been reported.
@@ -69,13 +50,16 @@ void MaybeReportDangerousDownloadWarning(download::DownloadItem* download) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
   if (profile) {
     std::string raw_digest_sha256 = download->GetHash();
-    extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
-        ->OnDangerousDownloadEvent(
-            download->GetURL(), download->GetTargetFilePath().AsUTF8Unsafe(),
-            base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
-            DangerTypeToThreatType(download->GetDangerType()),
-            download->GetMimeType(), download->GetTotalBytes(),
-            EventResult::WARNED);
+    auto* router =
+        extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(
+            profile);
+    if (router) {
+      router->OnDangerousDownloadEvent(
+          download->GetURL(), download->GetTargetFilePath().AsUTF8Unsafe(),
+          base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
+          download->GetDangerType(), download->GetMimeType(), /*scan_id*/ "",
+          download->GetTotalBytes(), EventResult::WARNED);
+    }
   }
 }
 
@@ -87,12 +71,21 @@ void ReportDangerousDownloadWarningBypassed(
   Profile* profile = Profile::FromBrowserContext(browser_context);
   if (profile) {
     std::string raw_digest_sha256 = download->GetHash();
-    extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
-        ->OnDangerousDownloadWarningBypassed(
-            download->GetURL(), download->GetTargetFilePath().AsUTF8Unsafe(),
-            base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
-            DangerTypeToThreatType(original_danger_type),
-            download->GetMimeType(), download->GetTotalBytes());
+    auto* router =
+        extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(
+            profile);
+    if (router) {
+      enterprise_connectors::ScanResult* stored_result =
+          static_cast<enterprise_connectors::ScanResult*>(
+              download->GetUserData(enterprise_connectors::ScanResult::kKey));
+      router->OnDangerousDownloadWarningBypassed(
+          download->GetURL(), download->GetTargetFilePath().AsUTF8Unsafe(),
+          base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
+          original_danger_type, download->GetMimeType(),
+          /*scan_id*/
+          stored_result ? stored_result->response.request_token() : "",
+          download->GetTotalBytes());
+    }
   }
 }
 
@@ -152,7 +145,8 @@ void DownloadReporter::OnManagerGoingDown(
 
 void DownloadReporter::OnDownloadCreated(download::DownloadItem* download) {
   danger_types_[download] = download->GetDangerType();
-  observed_downloads_.Add(download);
+  if (!observed_downloads_.IsObserving(download))
+    observed_downloads_.Add(download);
 }
 
 void DownloadReporter::OnDownloadDestroyed(download::DownloadItem* download) {
@@ -175,6 +169,7 @@ void DownloadReporter::OnDownloadUpdated(download::DownloadItem* download) {
 
   if (DangerTypeIsDangerous(old_danger_type) &&
       current_danger_type == download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED) {
+    AddBypassEventToPref(download);
     ReportDangerousDownloadWarningBypassed(download, old_danger_type);
   }
 
@@ -185,6 +180,20 @@ void DownloadReporter::OnDownloadUpdated(download::DownloadItem* download) {
   }
 
   danger_types_[download] = current_danger_type;
+}
+
+void DownloadReporter::AddBypassEventToPref(download::DownloadItem* download) {
+  content::BrowserContext* browser_context =
+      content::DownloadItemUtils::GetBrowserContext(download);
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  if (profile) {
+    auto* metrics_collector =
+        SafeBrowsingMetricsCollectorFactory::GetForProfile(profile);
+    if (metrics_collector) {
+      metrics_collector->AddSafeBrowsingEventToPref(
+          SafeBrowsingMetricsCollector::EventType::DANGEROUS_DOWNLOAD_BYPASS);
+    }
+  }
 }
 
 }  // namespace safe_browsing

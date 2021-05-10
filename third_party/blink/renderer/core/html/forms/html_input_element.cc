@@ -33,18 +33,18 @@
 #include "third_party/blink/public/mojom/choosers/date_time_chooser.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
+#include "third_party/blink/renderer/bindings/core/v8/js_event_handler_for_content_attribute.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_focus_options.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
+#include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/dom/id_target_observer.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
-#include "third_party/blink/renderer/core/dom/v0_insertion_point.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/editing/spellcheck/spell_checker.h"
 #include "third_party/blink/renderer/core/events/before_text_inserted_event.h"
@@ -71,7 +71,8 @@
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
-#include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
+#include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
@@ -595,7 +596,7 @@ void HTMLInputElement::SubtreeHasChanged() {
   input_type_view_->SubtreeHasChanged();
   // When typing in an input field, childrenChanged is not called, so we need to
   // force the directionality check.
-  CalculateAndAdjustDirectionality();
+  CalculateAndAdjustAutoDirectionality(this);
 }
 
 const AtomicString& HTMLInputElement::FormControlType() const {
@@ -729,8 +730,9 @@ void HTMLInputElement::SetSelectionRangeForTesting(
   TextControlElement::setSelectionRangeForBinding(start, end);
 }
 
-void HTMLInputElement::AccessKeyAction(bool send_mouse_events) {
-  input_type_view_->AccessKeyAction(send_mouse_events);
+void HTMLInputElement::AccessKeyAction(
+    SimulatedClickCreationScope creation_scope) {
+  input_type_view_->AccessKeyAction(creation_scope);
 }
 
 bool HTMLInputElement::IsPresentationAttribute(
@@ -758,11 +760,19 @@ void HTMLInputElement::CollectStyleForPresentationAttribute(
     if (input_type_->ShouldRespectAlignAttribute())
       ApplyAlignmentAttributeToStyle(value, style);
   } else if (name == html_names::kWidthAttr) {
-    if (input_type_->ShouldRespectHeightAndWidthAttributes())
+    if (input_type_->ShouldRespectHeightAndWidthAttributes()) {
       AddHTMLLengthToStyle(style, CSSPropertyID::kWidth, value);
+      const AtomicString& height = FastGetAttribute(html_names::kHeightAttr);
+      if (height)
+        ApplyAspectRatioToStyle(value, height, style);
+    }
   } else if (name == html_names::kHeightAttr) {
-    if (input_type_->ShouldRespectHeightAndWidthAttributes())
+    if (input_type_->ShouldRespectHeightAndWidthAttributes()) {
       AddHTMLLengthToStyle(style, CSSPropertyID::kHeight, value);
+      const AtomicString& width = FastGetAttribute(html_names::kWidthAttr);
+      if (width)
+        ApplyAspectRatioToStyle(width, value, style);
+    }
   } else if (name == html_names::kBorderAttr &&
              type() == input_type_names::kImage) {  // FIXME: Remove type check.
     ApplyBorderAttributeToStyle(value, style);
@@ -851,7 +861,8 @@ void HTMLInputElement::ParseAttribute(
     // Search field and slider attributes all just cause updateFromElement to be
     // called through style recalcing.
     SetAttributeEventListener(event_type_names::kSearch,
-                              CreateAttributeEventListener(this, name, value));
+                              JSEventHandlerForContentAttribute::Create(
+                                  GetExecutionContext(), name, value));
   } else if (name == html_names::kIncrementalAttr) {
     UseCounter::Count(GetDocument(), WebFeature::kIncrementalAttribute);
   } else if (name == html_names::kMinAttr) {
@@ -1013,6 +1024,10 @@ void HTMLInputElement::DispatchInputAndChangeEventIfNeeded() {
   }
 }
 
+bool HTMLInputElement::IsCheckable() const {
+  return input_type_->IsCheckable();
+}
+
 bool HTMLInputElement::checked() const {
   input_type_->ReadingChecked();
   return is_checked_;
@@ -1125,8 +1140,12 @@ void HTMLInputElement::SetValueForUser(const String& value) {
 }
 
 void HTMLInputElement::SetSuggestedValue(const String& value) {
-  if (!input_type_->CanSetSuggestedValue())
+  if (!input_type_->CanSetSuggestedValue()) {
+    // Clear the suggested value because it may have been set when
+    // `input_type_->CanSetSuggestedValue()` was true.
+    TextControlElement::SetSuggestedValue(String());
     return;
+  }
   needs_to_update_view_value_ = true;
   TextControlElement::SetSuggestedValue(SanitizeValue(value));
   SetNeedsStyleRecalc(
@@ -1191,8 +1210,12 @@ void HTMLInputElement::setValue(const String& value,
                         selection);
   input_type_view_->DidSetValue(sanitized_value, value_changed);
 
-  if (value_changed)
+  if (value_changed) {
     NotifyFormStateChanged();
+    if (value.IsEmpty() && HasBeenPasswordField() && GetDocument().GetPage()) {
+      GetDocument().GetPage()->GetChromeClient().PasswordFieldReset(*this);
+    }
+  }
 }
 
 void HTMLInputElement::SetNonAttributeValue(const String& sanitized_value) {
@@ -1783,8 +1806,55 @@ bool HTMLInputElement::MatchesDefaultPseudoClass() const {
   return input_type_->MatchesDefaultPseudoClass();
 }
 
+int HTMLInputElement::scrollWidth() {
+  if (!IsTextField())
+    return TextControlElement::scrollWidth();
+  // If in preview state, fake the scroll width to prevent that any information
+  // about the suggested content can be derived from the size.
+  if (!SuggestedValue().IsEmpty())
+    return clientWidth();
+
+  GetDocument().UpdateStyleAndLayoutForNode(this,
+                                            DocumentUpdateReason::kJavaScript);
+  const auto* editor = InnerEditorElement();
+  const auto* editor_box = editor ? editor->GetLayoutBox() : nullptr;
+  const auto* box = GetLayoutBox();
+  if (!editor_box || !box)
+    return TextControlElement::scrollWidth();
+  // Adjust scrollWidth to include input element horizontal paddings and
+  // decoration width.
+  LayoutUnit adjustment = box->ClientWidth() - editor_box->ClientWidth();
+  return AdjustForAbsoluteZoom::AdjustLayoutUnit(
+             editor_box->ScrollWidth() + adjustment, box->StyleRef())
+      .Round();
+}
+
+int HTMLInputElement::scrollHeight() {
+  if (!IsTextField())
+    return TextControlElement::scrollHeight();
+
+  // If in preview state, fake the scroll height to prevent that any information
+  // about the suggested content can be derived from the size.
+  if (!SuggestedValue().IsEmpty())
+    return clientHeight();
+
+  GetDocument().UpdateStyleAndLayoutForNode(this,
+                                            DocumentUpdateReason::kJavaScript);
+  const auto* editor = InnerEditorElement();
+  const auto* editor_box = editor ? editor->GetLayoutBox() : nullptr;
+  const auto* box = GetLayoutBox();
+  if (!editor_box || !box)
+    return TextControlElement::scrollHeight();
+  // Adjust scrollHeight to include input element vertical paddings and
+  // decoration height.
+  LayoutUnit adjustment = box->ClientHeight() - editor_box->ClientHeight();
+  return AdjustForAbsoluteZoom::AdjustLayoutUnit(
+             editor_box->ScrollHeight() + adjustment, box->StyleRef())
+      .Round();
+}
+
 bool HTMLInputElement::ShouldAppearChecked() const {
-  return checked() && input_type_->IsCheckable();
+  return checked() && IsCheckable();
 }
 
 void HTMLInputElement::SetPlaceholderVisibility(bool visible) {
@@ -1796,7 +1866,7 @@ bool HTMLInputElement::SupportsPlaceholder() const {
 }
 
 void HTMLInputElement::UpdatePlaceholderText() {
-  return input_type_view_->UpdatePlaceholderText();
+  return input_type_view_->UpdatePlaceholderText(!SuggestedValue().IsEmpty());
 }
 
 String HTMLInputElement::GetPlaceholderValue() const {
@@ -1990,16 +2060,11 @@ bool HTMLInputElement::IsInteractiveContent() const {
   return input_type_->IsInteractiveContent();
 }
 
-scoped_refptr<ComputedStyle> HTMLInputElement::CustomStyleForLayoutObject() {
-  scoped_refptr<ComputedStyle> style = OriginalStyleForLayoutObject();
+ComputedStyle* HTMLInputElement::CustomStyleForLayoutObject(
+    const StyleRecalcContext& style_recalc_context) {
+  ComputedStyle* style = OriginalStyleForLayoutObject(style_recalc_context);
   input_type_view_->CustomStyleForLayoutObject(*style);
   return style;
-}
-
-void HTMLInputElement::DidRecalcStyle(const StyleRecalcChange change) {
-  TextControlElement::DidRecalcStyle(change);
-  if (NeedsReattachLayoutTree() && GetComputedStyle())
-    input_type_view_->StartResourceLoading();
 }
 
 void HTMLInputElement::DidNotifySubtreeInsertionsToDocument() {

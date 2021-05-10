@@ -28,7 +28,7 @@ const char BackButton::kViewClassName[] = "ash/BackButton";
 
 BackButton::BackButton(Shelf* shelf) : ShelfControlButton(shelf, this) {
   SetAccessibleName(l10n_util::GetStringUTF16(IDS_ASH_SHELF_BACK_BUTTON_TITLE));
-  EnableCanvasFlippingForRTLUI(true);
+  SetFlipCanvasOnPaintForRTLUI(true);
 }
 
 BackButton::~BackButton() {}
@@ -53,7 +53,7 @@ const char* BackButton::GetClassName() const {
   return kViewClassName;
 }
 
-base::string16 BackButton::GetTooltipText(const gfx::Point& p) const {
+std::u16string BackButton::GetTooltipText(const gfx::Point& p) const {
   return GetAccessibleName();
 }
 
@@ -86,6 +86,11 @@ void BackButton::ButtonPressed(views::Button* sender,
 
   window_util::SendBackKeyEvent(
       GetWidget()->GetNativeWindow()->GetRootWindow());
+}
+
+void BackButton::OnThemeChanged() {
+  ShelfControlButton::OnThemeChanged();
+  SchedulePaint();
 }
 
 }  // namespace ash

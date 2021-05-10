@@ -35,13 +35,6 @@ enum StadiaGamepadButtons {
   STADIA_GAMEPAD_BUTTON_COUNT
 };
 
-// The Switch Pro controller has a Capture button that has no equivalent in the
-// Standard Gamepad.
-enum SwitchProButtons {
-  SWITCH_PRO_BUTTON_CAPTURE = BUTTON_INDEX_COUNT,
-  SWITCH_PRO_BUTTON_COUNT
-};
-
 void MapperXInputStyleGamepad(const Gamepad& input, Gamepad* mapped) {
   *mapped = input;
   mapped->buttons[BUTTON_INDEX_LEFT_TRIGGER] = AxisToButton(input.axes[2]);
@@ -295,6 +288,39 @@ void MapperDualshock4New(const Gamepad& input, Gamepad* mapped) {
   mapped->axes[AXIS_INDEX_RIGHT_STICK_Y] = input.axes[4];
 
   mapped->buttons_length = BUTTON_INDEX_COUNT;
+  mapped->axes_length = AXIS_INDEX_COUNT;
+}
+
+void MapperDualSense(const Gamepad& input, Gamepad* mapped) {
+  enum DualSenseButtons {
+    DUAL_SENSE_BUTTON_TOUCHPAD = BUTTON_INDEX_COUNT,
+    DUAL_SENSE_BUTTON_COUNT
+  };
+
+  *mapped = input;
+  mapped->buttons[BUTTON_INDEX_PRIMARY] = input.buttons[1];
+  mapped->buttons[BUTTON_INDEX_SECONDARY] = input.buttons[2];
+  mapped->buttons[BUTTON_INDEX_TERTIARY] = input.buttons[0];
+  mapped->buttons[BUTTON_INDEX_QUATERNARY] = input.buttons[3];
+  mapped->buttons[BUTTON_INDEX_LEFT_SHOULDER] = input.buttons[4];
+  mapped->buttons[BUTTON_INDEX_RIGHT_SHOULDER] = input.buttons[5];
+  mapped->buttons[BUTTON_INDEX_LEFT_TRIGGER] = AxisToButton(input.axes[3]);
+  mapped->buttons[BUTTON_INDEX_RIGHT_TRIGGER] = AxisToButton(input.axes[4]);
+  mapped->buttons[BUTTON_INDEX_BACK_SELECT] = input.buttons[8];
+  mapped->buttons[BUTTON_INDEX_START] = input.buttons[9];
+  mapped->buttons[BUTTON_INDEX_LEFT_THUMBSTICK] = input.buttons[10];
+  mapped->buttons[BUTTON_INDEX_RIGHT_THUMBSTICK] = input.buttons[11];
+  mapped->buttons[BUTTON_INDEX_DPAD_UP] = AxisNegativeAsButton(input.axes[7]);
+  mapped->buttons[BUTTON_INDEX_DPAD_DOWN] = AxisPositiveAsButton(input.axes[7]);
+  mapped->buttons[BUTTON_INDEX_DPAD_LEFT] = AxisNegativeAsButton(input.axes[6]);
+  mapped->buttons[BUTTON_INDEX_DPAD_RIGHT] =
+      AxisPositiveAsButton(input.axes[6]);
+  mapped->buttons[BUTTON_INDEX_META] = input.buttons[12];
+  mapped->buttons[DUAL_SENSE_BUTTON_TOUCHPAD] = input.buttons[13];
+  mapped->axes[AXIS_INDEX_RIGHT_STICK_X] = input.axes[2];
+  mapped->axes[AXIS_INDEX_RIGHT_STICK_Y] = input.axes[5];
+
+  mapped->buttons_length = DUAL_SENSE_BUTTON_COUNT;
   mapped->axes_length = AXIS_INDEX_COUNT;
 }
 
@@ -580,7 +606,7 @@ void MapperSteelSeriesStratusXLUsb(const Gamepad& input, Gamepad* mapped) {
   mapped->axes_length = AXIS_INDEX_COUNT;
 }
 
-void MapperSteelSeriesStratusXLBt(const Gamepad& input, Gamepad* mapped) {
+void MapperSteelSeriesStratusBt(const Gamepad& input, Gamepad* mapped) {
   *mapped = input;
   mapped->buttons[BUTTON_INDEX_PRIMARY] = input.buttons[0];
   mapped->buttons[BUTTON_INDEX_SECONDARY] = input.buttons[1];
@@ -590,7 +616,7 @@ void MapperSteelSeriesStratusXLBt(const Gamepad& input, Gamepad* mapped) {
   mapped->buttons[BUTTON_INDEX_RIGHT_SHOULDER] = input.buttons[7];
   mapped->buttons[BUTTON_INDEX_LEFT_TRIGGER] = AxisToButton(input.axes[5]);
   mapped->buttons[BUTTON_INDEX_RIGHT_TRIGGER] = AxisToButton(input.axes[4]);
-  mapped->buttons[BUTTON_INDEX_BACK_SELECT] = NullButton();
+  mapped->buttons[BUTTON_INDEX_BACK_SELECT] = input.buttons[10];
   mapped->buttons[BUTTON_INDEX_START] = input.buttons[11];
   mapped->buttons[BUTTON_INDEX_LEFT_THUMBSTICK] = input.buttons[13];
   mapped->buttons[BUTTON_INDEX_RIGHT_THUMBSTICK] = input.buttons[14];
@@ -600,9 +626,9 @@ void MapperSteelSeriesStratusXLBt(const Gamepad& input, Gamepad* mapped) {
   mapped->buttons[BUTTON_INDEX_DPAD_RIGHT] =
       AxisPositiveAsButton(input.axes[6]);
   mapped->buttons[BUTTON_INDEX_META] = NullButton();
-  // The BACK_SELECT and META button currently aren't mappable since they are
-  // handled separately as key events, causing browser HOME and BACK actions. If
-  // this is fixed, they should be added here.
+  // The META button currently isn't mappable since it's handled separately as
+  // key events, causing a browser HOME action. If this is fixed, it should be
+  // added here.
 
   mapped->axes[AXIS_INDEX_LEFT_STICK_X] = input.axes[0];
   mapped->axes[AXIS_INDEX_LEFT_STICK_Y] = input.axes[1];
@@ -610,34 +636,6 @@ void MapperSteelSeriesStratusXLBt(const Gamepad& input, Gamepad* mapped) {
   mapped->axes[AXIS_INDEX_RIGHT_STICK_Y] = input.axes[3];
 
   mapped->buttons_length = BUTTON_INDEX_META;
-  mapped->axes_length = AXIS_INDEX_COUNT;
-}
-
-void MapperSwitchJoyCon(const Gamepad& input, Gamepad* mapped) {
-  *mapped = input;
-  mapped->buttons_length = BUTTON_INDEX_COUNT;
-  mapped->axes_length = 2;
-}
-
-void MapperSwitchPro(const Gamepad& input, Gamepad* mapped) {
-  *mapped = input;
-  mapped->buttons_length = SWITCH_PRO_BUTTON_COUNT;
-  mapped->axes_length = AXIS_INDEX_COUNT;
-}
-
-void MapperSwitchComposite(const Gamepad& input, Gamepad* mapped) {
-  // In composite mode, the inputs from two Joy-Cons are combined to form one
-  // virtual gamepad. Some buttons do not have equivalents in the Standard
-  // Gamepad and are exposed as extra buttons:
-  // * Capture button (Joy-Con L):  BUTTON_INDEX_COUNT
-  // * SL (Joy-Con L):              BUTTON_INDEX_COUNT + 1
-  // * SR (Joy-Con L):              BUTTON_INDEX_COUNT + 2
-  // * SL (Joy-Con R):              BUTTON_INDEX_COUNT + 3
-  // * SR (Joy-Con R):              BUTTON_INDEX_COUNT + 4
-  const size_t kSwitchCompositeExtraButtonCount = 5;
-  *mapped = input;
-  mapped->buttons_length =
-      BUTTON_INDEX_COUNT + kSwitchCompositeExtraButtonCount;
   mapped->axes_length = AXIS_INDEX_COUNT;
 }
 
@@ -879,6 +877,8 @@ constexpr struct MappingData {
     {GamepadId::kSonyProduct09cc, MapperDualshock4},
     // Dualshock 4 USB receiver
     {GamepadId::kSonyProduct0ba0, MapperDualshock4},
+    // DualSense
+    {GamepadId::kSonyProduct0ce6, MapperDualSense},
     // Switch Joy-Con L
     {GamepadId::kNintendoProduct2006, MapperSwitchJoyCon},
     // Switch Joy-Con R
@@ -908,7 +908,9 @@ constexpr struct MappingData {
     // SteelSeries Stratus XL USB
     {GamepadId::kSteelSeriesProduct1418, MapperSteelSeriesStratusXLUsb},
     // SteelSeries Stratus XL Bluetooth
-    {GamepadId::kSteelSeriesBtProduct1419, MapperSteelSeriesStratusXLBt},
+    {GamepadId::kSteelSeriesBtProduct1419, MapperSteelSeriesStratusBt},
+    // SteelSeries Stratus Duo Bluetooth
+    {GamepadId::kSteelSeriesBtProduct1431, MapperSteelSeriesStratusBt},
     // Razer Serval Controller
     {GamepadId::kRazer1532Product0900, MapperRazerServal},
     // ADT-1 Controller

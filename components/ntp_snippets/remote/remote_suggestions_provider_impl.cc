@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
@@ -1557,7 +1558,7 @@ void RemoteSuggestionsProviderImpl::RestoreCategoriesFromPrefs() {
 
   const base::ListValue* list =
       pref_service_->GetList(prefs::kRemoteSuggestionCategories);
-  for (const base::Value& entry : *list) {
+  for (const base::Value& entry : list->GetList()) {
     const base::DictionaryValue* dict = nullptr;
     if (!entry.GetAsDictionary(&dict)) {
       DLOG(WARNING) << "Invalid category pref value: " << entry;
@@ -1569,7 +1570,7 @@ void RemoteSuggestionsProviderImpl::RestoreCategoriesFromPrefs() {
                     << kCategoryContentId << "': " << entry;
       continue;
     }
-    base::string16 title;
+    std::u16string title;
     if (!dict->GetString(kCategoryContentTitle, &title)) {
       DLOG(WARNING) << "Invalid category pref value, missing '"
                     << kCategoryContentTitle << "': " << entry;

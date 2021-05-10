@@ -21,8 +21,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_type.h"
-#include "chrome/browser/ui/in_product_help/in_product_help.h"
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
+#include "chrome/browser/ui/user_education/in_product_help.h"
 #include "chrome/common/buildflags.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/translate/core/common/translate_errors.h"
@@ -56,11 +56,6 @@ struct NativeWebKeyboardEvent;
 enum class KeyboardEventProcessingResult;
 }  // namespace content
 
-namespace extensions {
-class Command;
-class Extension;
-}  // namespace extensions
-
 namespace gfx {
 class Size;
 }
@@ -78,6 +73,15 @@ namespace send_tab_to_self {
 class SendTabToSelfBubbleController;
 class SendTabToSelfBubbleView;
 }  // namespace send_tab_to_self
+
+namespace sharing_hub {
+class SharingHubBubbleController;
+class SharingHubBubbleView;
+}  // namespace sharing_hub
+
+namespace ui {
+class NativeTheme;
+}
 
 namespace web_modal {
 class WebContentsModalDialogHost;
@@ -177,6 +181,9 @@ class BrowserWindow : public ui::BaseWindow {
   // renderer-initiated animation of the top controls shown ratio).
   virtual bool DoBrowserControlsShrinkRendererSize(
       const content::WebContents* contents) const = 0;
+
+  // Returns the native theme associated with the frame.
+  virtual ui::NativeTheme* GetNativeTheme() = 0;
 
   // Returns the height of the browser's top controls. This height doesn't
   // change with the current shown ratio above. Renderers will call this to
@@ -386,6 +393,12 @@ class BrowserWindow : public ui::BaseWindow {
       send_tab_to_self::SendTabToSelfBubbleController* controller,
       bool is_user_gesture) = 0;
 
+  // Shows the Sharing Hub bubble.
+  virtual sharing_hub::SharingHubBubbleView* ShowSharingHubBubble(
+      content::WebContents* contents,
+      sharing_hub::SharingHubBubbleController* controller,
+      bool is_user_gesture) = 0;
+
   // Shows the translate bubble.
   //
   // |is_user_gesture| is true when the bubble is shown on the user's deliberate
@@ -402,7 +415,7 @@ class BrowserWindow : public ui::BaseWindow {
   // Shows the one-click sign in confirmation UI. |email| holds the full email
   // address of the account that has signed in.
   virtual void ShowOneClickSigninConfirmation(
-      const base::string16& email,
+      const std::u16string& email,
       base::OnceCallback<void(bool)> confirmed_callback) = 0;
 #endif
 
@@ -418,7 +431,7 @@ class BrowserWindow : public ui::BaseWindow {
   virtual void ConfirmBrowserCloseWithPendingDownloads(
       int download_count,
       Browser::DownloadCloseType dialog_type,
-      const base::Callback<void(bool)>& callback) = 0;
+      base::OnceCallback<void(bool)> callback) = 0;
 
   // ThemeService calls this when a user has changed their theme, indicating
   // that it's time to redraw everything.
@@ -470,14 +483,22 @@ class BrowserWindow : public ui::BaseWindow {
       signin_metrics::AccessPoint access_point,
       bool is_source_keyboard) = 0;
 
-  // Shows User Happiness Tracking Survey's invitation bubble when possible
-  // (such as having the proper anchor view).
-  // |site_id| is the site identification of the survey the bubble leads to.
-  virtual void ShowHatsBubble(const std::string& site_id) = 0;
+  // Attempts showing the In-Produce-Help for profile Switching. This is called
+  // after creating a new profile or opening an existing profile. If the profile
+  // customization bubble is shown, the IPH should be shown after.
+  virtual void MaybeShowProfileSwitchIPH() = 0;
 
-  // Executes |command| registered by |extension|.
-  virtual void ExecuteExtensionCommand(const extensions::Extension* extension,
-                                       const extensions::Command& command) = 0;
+  // Shows User Happiness Tracking Survey's dialog after the survey associated
+  // with |site_id| has been successfully loaded. Failure to load the survey
+  // will result in the dialog not being shown. |product_specific_data| should
+  // contain key-value pairs where the keys match the field names set for
+  // the survey in hats_service.cc, and the values are those which will be
+  // associated with the survey response.
+  virtual void ShowHatsDialog(
+      const std::string& site_id,
+      base::OnceClosure success_callback,
+      base::OnceClosure failure_callback,
+      const std::map<std::string, bool>& product_specific_data) = 0;
 
   // Returns object implementing ExclusiveAccessContext interface.
   virtual ExclusiveAccessContext* GetExclusiveAccessContext() = 0;
@@ -503,6 +524,8 @@ class BrowserWindow : public ui::BaseWindow {
 
   // Create and open the tab search bubble.
   virtual void CreateTabSearchBubble() = 0;
+  // Closes the tab search bubble if open for the given browser instance.
+  virtual void CloseTabSearchBubble() = 0;
 
   // Gets the windows's FeaturePromoController which manages display of
   // in-product help.

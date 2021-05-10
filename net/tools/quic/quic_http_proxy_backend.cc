@@ -82,7 +82,7 @@ bool QuicHttpProxyBackend::IsBackendInitialized() const {
 }
 
 void QuicHttpProxyBackend::FetchResponseFromBackend(
-    const spdy::SpdyHeaderBlock& request_headers,
+    const spdy::Http2HeaderBlock& request_headers,
     const std::string& incoming_body,
     QuicSimpleServerBackend::RequestHandler* quic_server_stream) {
   QuicHttpProxyBackendStream* proxy_backend_stream =
@@ -92,8 +92,7 @@ void QuicHttpProxyBackend::FetchResponseFromBackend(
   if (proxy_backend_stream == nullptr ||
       proxy_backend_stream->SendRequestToBackend(&request_headers,
                                                  incoming_body) != true) {
-    std::list<quic::QuicBackendResponse::ServerPushInfo> empty_resources;
-    quic_server_stream->OnResponseBackendComplete(nullptr, empty_resources);
+    quic_server_stream->OnResponseBackendComplete(nullptr);
   }
 }
 

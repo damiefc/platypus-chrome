@@ -10,7 +10,6 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -32,6 +31,7 @@
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/onc/onc_certificate_importer_impl.h"
 #include "chromeos/network/onc/onc_test_utils.h"
+#include "chromeos/network/system_token_cert_db_storage.h"
 #include "components/onc/onc_constants.h"
 #include "crypto/scoped_nss_types.h"
 #include "crypto/scoped_test_nss_db.h"
@@ -121,9 +121,10 @@ class ClientCertResolverTest : public testing::Test,
     service_test_->ClearServices();
     task_environment_.RunUntilIdle();
 
+    SystemTokenCertDbStorage::Initialize();
     NetworkCertLoader::Initialize();
     network_cert_loader_ = NetworkCertLoader::Get();
-    NetworkCertLoader::ForceHardwareBackedForTesting();
+    NetworkCertLoader::ForceAvailableForNetworkAuthForTesting();
   }
 
   void TearDown() override {
@@ -144,7 +145,8 @@ class ClientCertResolverTest : public testing::Test,
  protected:
   void StartNetworkCertLoader() {
     network_cert_loader_->SetUserNSSDB(test_nsscertdb_.get());
-    network_cert_loader_->SetSystemNSSDB(test_system_nsscertdb_.get());
+    network_cert_loader_->SetSystemNssDbForTesting(
+        test_system_nsscertdb_.get());
     if (test_client_cert_.get()) {
       int slot_id = 0;
       const std::string pkcs11_id =
@@ -224,9 +226,9 @@ class ClientCertResolverTest : public testing::Test,
     network_profile_handler_.reset(new NetworkProfileHandler());
     network_config_handler_.reset(new NetworkConfigurationHandler());
     managed_config_handler_.reset(new ManagedNetworkConfigurationHandlerImpl());
-    client_cert_resolver_.reset(new ClientCertResolver());
+    client_cert_resolver_ = std::make_unique<ClientCertResolver>();
 
-    test_clock_.reset(new base::SimpleTestClock);
+    test_clock_ = std::make_unique<base::SimpleTestClock>();
     test_clock_->SetNow(base::Time::Now());
     client_cert_resolver_->SetClockForTesting(test_clock_.get());
 
@@ -246,11 +248,8 @@ class ClientCertResolverTest : public testing::Test,
   }
 
   void SetupWifi() {
-    service_test_->SetServiceProperties(kWifiStub,
-                                        kWifiStub,
-                                        kWifiSSID,
-                                        shill::kTypeWifi,
-                                        shill::kStateOnline,
+    service_test_->SetServiceProperties(kWifiStub, kWifiStub, kWifiSSID,
+                                        shill::kTypeWifi, shill::kStateOnline,
                                         true /* visible */);
     // Set an arbitrary cert id, so that we can check afterwards whether we
     // cleared the property or not.
@@ -387,11 +386,13 @@ class ClientCertResolverTest : public testing::Test,
   void GetServiceProperty(const std::string& prop_name,
                           std::string* prop_value) {
     prop_value->clear();
-    const base::DictionaryValue* properties =
+    const base::Value* properties =
         service_test_->GetServiceProperties(kWifiStub);
     if (!properties)
       return;
-    properties->GetStringWithoutPathExpansion(prop_name, prop_value);
+    const std::string* value = properties->FindStringKey(prop_name);
+    if (value)
+      *prop_value = *value;
   }
 
   // Returns a list of all certificates that are stored on |test_nsscertdb_|'s

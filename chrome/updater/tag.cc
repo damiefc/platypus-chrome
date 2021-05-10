@@ -109,7 +109,7 @@ base::Optional<bool> ParseBool(base::StringPiece str) {
 }
 
 // A custom comparator functor class for the parse tables.
-using ParseTableCompare = CaseInsensitiveASCIICompare<std::string>;
+using ParseTableCompare = CaseInsensitiveASCIICompare;
 
 namespace global_attributes {
 
@@ -118,22 +118,22 @@ ErrorCode ParseBundleName(base::StringPiece value, TagArgs* args) {
   if (value.empty())
     return ErrorCode::kGlobal_BundleNameCannotBeWhitespace;
 
-  args->bundle_name = value.as_string();
+  args->bundle_name = std::string(value);
   return ErrorCode::kSuccess;
 }
 
 ErrorCode ParseInstallationId(base::StringPiece value, TagArgs* args) {
-  args->installation_id = value.as_string();
+  args->installation_id = std::string(value);
   return ErrorCode::kSuccess;
 }
 
 ErrorCode ParseBrandCode(base::StringPiece value, TagArgs* args) {
-  args->brand_code = value.as_string();
+  args->brand_code = std::string(value);
   return ErrorCode::kSuccess;
 }
 
 ErrorCode ParseClientId(base::StringPiece value, TagArgs* args) {
-  args->client_id = value.as_string();
+  args->client_id = std::string(value);
   return ErrorCode::kSuccess;
 }
 
@@ -142,12 +142,12 @@ ErrorCode ParseOmahaExperimentLabels(base::StringPiece value, TagArgs* args) {
   if (value.empty())
     return ErrorCode::kGlobal_ExperimentLabelsCannotBeWhitespace;
 
-  args->experiment_labels = value.as_string();
+  args->experiment_labels = std::string(value);
   return ErrorCode::kSuccess;
 }
 
 ErrorCode ParseReferralId(base::StringPiece value, TagArgs* args) {
-  args->referral_id = value.as_string();
+  args->referral_id = std::string(value);
   return ErrorCode::kSuccess;
 }
 
@@ -170,7 +170,7 @@ ErrorCode ParseBrowserType(base::StringPiece value, TagArgs* args) {
 ErrorCode ParseLanguage(base::StringPiece value, TagArgs* args) {
   // Even if we don't support the language, we want to pass it to the
   // installer. Omaha will pick its language later. See http://b/1336966.
-  args->language = value.as_string();
+  args->language = std::string(value);
   return ErrorCode::kSuccess;
 }
 
@@ -239,7 +239,7 @@ const GlobalParseTable& GetTable() {
 namespace app_attributes {
 
 ErrorCode ParseAdditionalParameters(base::StringPiece value, AppArgs* args) {
-  args->ap = value.as_string();
+  args->ap = std::string(value);
   return ErrorCode::kSuccess;
 }
 
@@ -248,7 +248,7 @@ ErrorCode ParseExperimentLabels(base::StringPiece value, AppArgs* args) {
   if (value.empty())
     return ErrorCode::kApp_ExperimentLabelsCannotBeWhitespace;
 
-  args->experiment_labels = value.as_string();
+  args->experiment_labels = std::string(value);
   return ErrorCode::kSuccess;
 }
 
@@ -257,7 +257,7 @@ ErrorCode ParseAppName(base::StringPiece value, AppArgs* args) {
   if (value.empty())
     return ErrorCode::kApp_AppNameCannotBeWhitespace;
 
-  args->app_name = value.as_string();
+  args->app_name = std::string(value);
   return ErrorCode::kSuccess;
 }
 
@@ -271,12 +271,12 @@ ErrorCode ParseNeedsAdmin(base::StringPiece value, AppArgs* args) {
 }
 
 ErrorCode ParseInstallDataIndex(base::StringPiece value, AppArgs* args) {
-  args->install_data_index = value.as_string();
+  args->install_data_index = std::string(value);
   return ErrorCode::kSuccess;
 }
 
 ErrorCode ParseUntrustedData(base::StringPiece value, AppArgs* args) {
-  args->untrusted_data = value.as_string();
+  args->untrusted_data = std::string(value);
   return ErrorCode::kSuccess;
 }
 
@@ -333,7 +333,7 @@ ErrorCode ParseInstallerData(base::StringPiece value,
         kAppInstallerData_InstallerDataCannotBeSpecifiedBeforeAppId;
 
   args->apps[current_app_index->value()].encoded_installer_data =
-      value.as_string();
+      std::string(value);
 
   return ErrorCode::kSuccess;
 }
@@ -394,7 +394,7 @@ std::vector<Attribute> Split(base::StringPiece query_string,
                                     base::TrimPositions::TRIM_ALL);
       attributes.emplace_back(name, unescape_value
                                         ? updater::UnescapeURLComponent(value)
-                                        : value.as_string());
+                                        : std::string(value));
     }
   }
   return attributes;
@@ -515,6 +515,75 @@ ErrorCode Parse(base::StringPiece tag,
     return ErrorCode::kTagIsInvalid;
 
   return ParseAppInstallerDataArgs(app_installer_data_args.value(), args);
+}
+
+std::ostream& operator<<(std::ostream& os, const ErrorCode& error_code) {
+  switch (error_code) {
+    case ErrorCode::kSuccess:
+      return os << "ErrorCode::kSuccess";
+    case ErrorCode::kUnrecognizedName:
+      return os << "ErrorCode::kUnrecognizedName";
+    case ErrorCode::kTagIsInvalid:
+      return os << "ErrorCode::kTagIsInvalid";
+    case ErrorCode::kAttributeMustHaveValue:
+      return os << "ErrorCode::kAttributeMustHaveValue";
+    case ErrorCode::kApp_AppIdNotSpecified:
+      return os << "ErrorCode::kApp_AppIdNotSpecified";
+    case ErrorCode::kApp_ExperimentLabelsCannotBeWhitespace:
+      return os << "ErrorCode::kApp_ExperimentLabelsCannotBeWhitespace";
+    case ErrorCode::kApp_AppIdIsNotValid:
+      return os << "ErrorCode::kApp_AppIdIsNotValid";
+    case ErrorCode::kApp_AppNameCannotBeWhitespace:
+      return os << "ErrorCode::kApp_AppNameCannotBeWhitespace";
+    case ErrorCode::kApp_NeedsAdminValueIsInvalid:
+      return os << "ErrorCode::kApp_NeedsAdminValueIsInvalid";
+    case ErrorCode::kAppInstallerData_AppIdNotFound:
+      return os << "ErrorCode::kAppInstallerData_AppIdNotFound";
+    case ErrorCode::kAppInstallerData_InstallerDataCannotBeSpecifiedBeforeAppId:
+      return os << "ErrorCode::kAppInstallerData_"
+                   "InstallerDataCannotBeSpecifiedBeforeAppId";
+    case ErrorCode::kGlobal_BundleNameCannotBeWhitespace:
+      return os << "ErrorCode::kGlobal_BundleNameCannotBeWhitespace";
+    case ErrorCode::kGlobal_ExperimentLabelsCannotBeWhitespace:
+      return os << "ErrorCode::kGlobal_ExperimentLabelsCannotBeWhitespace";
+    case ErrorCode::kGlobal_BrowserTypeIsInvalid:
+      return os << "ErrorCode::kGlobal_BrowserTypeIsInvalid";
+    case ErrorCode::kGlobal_FlightingValueIsNotABoolean:
+      return os << "ErrorCode::kGlobal_FlightingValueIsNotABoolean";
+    case ErrorCode::kGlobal_UsageStatsValueIsInvalid:
+      return os << "ErrorCode::kGlobal_UsageStatsValueIsInvalid";
+  }
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const AppArgs::NeedsAdmin& needs_admin) {
+  switch (needs_admin) {
+    case AppArgs::NeedsAdmin::kNo:
+      return os << "AppArgs::NeedsAdmin::kNo";
+    case AppArgs::NeedsAdmin::kYes:
+      return os << "AppArgs::NeedsAdmin::kYes";
+    case AppArgs::NeedsAdmin::kPrefers:
+      return os << "AppArgs::NeedsAdmin::kPrefers";
+  }
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const TagArgs::BrowserType& browser_type) {
+  switch (browser_type) {
+    case TagArgs::BrowserType::kUnknown:
+      return os << "TagArgs::BrowserType::kUnknown";
+    case TagArgs::BrowserType::kDefault:
+      return os << "TagArgs::BrowserType::kDefault";
+    case TagArgs::BrowserType::kInternetExplorer:
+      return os << "TagArgs::BrowserType::kInternetExplorer";
+    case TagArgs::BrowserType::kFirefox:
+      return os << "TagArgs::BrowserType::kFirefox";
+    case TagArgs::BrowserType::kChrome:
+      return os << "TagArgs::BrowserType::kChrome";
+    default:
+      return os << "TagArgs::BrowserType(" << static_cast<int>(browser_type)
+                << ")";
+  }
 }
 
 }  // namespace tagging

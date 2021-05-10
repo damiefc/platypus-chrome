@@ -4,11 +4,13 @@
 
 #include "chrome/browser/chromeos/external_protocol_dialog.h"
 
-#include "chrome/browser/chromeos/arc/intent_helper/arc_external_protocol_dialog.h"
+#include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ash/arc/intent_helper/arc_external_protocol_dialog.h"
+#include "chrome/browser/ash/guest_os/guest_os_external_protocol_handler.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
-#include "chrome/browser/sharing/click_to_call/feature.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/views/external_protocol_dialog.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/render_process_host.h"
@@ -27,9 +29,31 @@ namespace {
 
 const int kMessageWidth = 400;
 
-void OnArcHandled(WebContents* web_contents, const GURL& url, bool handled) {
-  if (!handled)
-    new ExternalProtocolDialog(web_contents, url);
+void OnArcHandled(const GURL& url,
+                  const base::Optional<url::Origin>& initiating_origin,
+                  int render_process_host_id,
+                  int routing_id,
+                  bool handled) {
+  if (handled)
+    return;
+
+  WebContents* web_contents =
+      tab_util::GetWebContentsByID(render_process_host_id, routing_id);
+
+  // Display the standard ExternalProtocolDialog if Guest OS has a handler.
+  if (web_contents) {
+    base::Optional<guest_os::GuestOsRegistryService::Registration>
+        registration = guest_os::GetHandler(
+            Profile::FromBrowserContext(web_contents->GetBrowserContext()),
+            url);
+    if (registration) {
+      new ExternalProtocolDialog(web_contents, url,
+                                 base::UTF8ToUTF16(registration->Name()),
+                                 initiating_origin);
+      return;
+    }
+  }
+  new ExternalProtocolNoHandlersDialog(web_contents, url);
 }
 
 }  // namespace
@@ -48,28 +72,30 @@ void ExternalProtocolHandler::RunExternalProtocolDialog(
   // when possible.
   // TODO(ellyjones): Refactor arc::RunArcExternalProtocolDialog() to take a
   // web_contents directly, which will mean sorting out how lifetimes work in
-  // that code.
+  // that code. Same for OnArcHandled() (crbug.com/1136237).
   int render_process_host_id =
       web_contents->GetRenderViewHost()->GetProcess()->GetID();
   int routing_id = web_contents->GetRenderViewHost()->GetRoutingID();
   arc::RunArcExternalProtocolDialog(
       url, initiating_origin, render_process_host_id, routing_id,
       page_transition, has_user_gesture,
-      base::BindOnce(&OnArcHandled, web_contents, url));
+      base::BindOnce(&OnArcHandled, url, initiating_origin,
+                     render_process_host_id, routing_id));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// ExternalProtocolDialog
+// ExternalProtocolNoHandlersDialog
 
-ExternalProtocolDialog::ExternalProtocolDialog(WebContents* web_contents,
-                                               const GURL& url)
+ExternalProtocolNoHandlersDialog::ExternalProtocolNoHandlersDialog(
+    WebContents* web_contents,
+    const GURL& url)
     : creation_time_(base::TimeTicks::Now()), scheme_(url.scheme()) {
   SetOwnedByWidget(true);
 
   views::DialogDelegate::SetButtons(ui::DIALOG_BUTTON_OK);
   views::DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
-      l10n_util::GetStringUTF16(IDS_EXTERNAL_PROTOCOL_OK_BUTTON_TEXT));
+      l10n_util::GetStringUTF16(IDS_EXTERNAL_PROTOCOL_CLOSE_BUTTON_TEXT));
 
   message_box_view_ = new views::MessageBoxView();
   message_box_view_->SetMessageWidth(kMessageWidth);
@@ -87,29 +113,26 @@ ExternalProtocolDialog::ExternalProtocolDialog(WebContents* web_contents,
       chrome::DialogIdentifier::EXTERNAL_PROTOCOL_CHROMEOS);
 }
 
-ExternalProtocolDialog::~ExternalProtocolDialog() = default;
+ExternalProtocolNoHandlersDialog::~ExternalProtocolNoHandlersDialog() = default;
 
-base::string16 ExternalProtocolDialog::GetWindowTitle() const {
-  // If click to call feature is available, we display a message to the user on
-  // how to use the feature.
-  // TODO(crbug.com/1007995) - This is a hotfix for M78 and we plan to use our
-  // own dialog with more information in the future.
-  if (scheme_ == url::kTelScheme &&
-      base::FeatureList::IsEnabled(kClickToCallUI)) {
+std::u16string ExternalProtocolNoHandlersDialog::GetWindowTitle() const {
+  // If this dialog is shown for a tel link, we display a message to the user on
+  // how to use the Click to Call feature.
+  if (scheme_ == url::kTelScheme) {
     return l10n_util::GetStringUTF16(
         IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_HELP_TEXT_NO_DEVICES);
   }
-  return l10n_util::GetStringUTF16(IDS_EXTERNAL_PROTOCOL_TITLE);
+  return l10n_util::GetStringUTF16(IDS_EXTERNAL_PROTOCOL_NO_HANDLER_TITLE);
 }
 
-views::View* ExternalProtocolDialog::GetContentsView() {
+views::View* ExternalProtocolNoHandlersDialog::GetContentsView() {
   return message_box_view_;
 }
 
-const views::Widget* ExternalProtocolDialog::GetWidget() const {
+const views::Widget* ExternalProtocolNoHandlersDialog::GetWidget() const {
   return message_box_view_->GetWidget();
 }
 
-views::Widget* ExternalProtocolDialog::GetWidget() {
+views::Widget* ExternalProtocolNoHandlersDialog::GetWidget() {
   return message_box_view_->GetWidget();
 }

@@ -10,23 +10,26 @@ namespace chromeos {
 namespace quick_answers {
 namespace prefs {
 
-// A preference that indicates the user has allowed the Quick Answers to access
-// the "selected content".
-const char kQuickAnswersConsented[] = "settings.quick_answers.consented";
+// A preference that indicates the user has seen the Quick Answers notice.
+const char kQuickAnswersNoticed[] = "settings.quick_answers.consented";
 
-// A preference to keep track of the number of Quick Answers consent impression.
-const char kQuickAnswersConsentImpressionCount[] =
+// A preference that indicates the user has enabled the Quick Answers services.
+const char kQuickAnswersEnabled[] = "settings.quick_answers.enabled";
+
+// A preference to keep track of the number of Quick Answers notice impression.
+const char kQuickAnswersNoticeImpressionCount[] =
     "settings.quick_answers.consent.count";
 
-// A preference to keep track of how long (in seconds) the Quick Answers consent
+// A preference to keep track of how long (in seconds) the Quick Answers notice
 // has shown to the user.
-const char kQuickAnswersConsentImpressionDuration[] =
+const char kQuickAnswersNoticeImpressionDuration[] =
     "settings.quick_answers.consent.duration";
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(kQuickAnswersConsented, false);
-  registry->RegisterIntegerPref(kQuickAnswersConsentImpressionCount, 0);
-  registry->RegisterIntegerPref(kQuickAnswersConsentImpressionDuration, 0);
+  registry->RegisterBooleanPref(kQuickAnswersNoticed, false);
+  registry->RegisterBooleanPref(kQuickAnswersEnabled, false);
+  registry->RegisterIntegerPref(kQuickAnswersNoticeImpressionCount, 0);
+  registry->RegisterIntegerPref(kQuickAnswersNoticeImpressionDuration, 0);
 }
 
 }  // namespace prefs

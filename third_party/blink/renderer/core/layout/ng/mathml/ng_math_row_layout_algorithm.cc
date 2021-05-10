@@ -53,8 +53,6 @@ NGMathRowLayoutAlgorithm::NGMathRowLayoutAlgorithm(
     : NGLayoutAlgorithm(params) {
   DCHECK(params.space.IsNewFormattingContext());
   DCHECK(!ConstraintSpace().HasBlockFragmentation());
-  container_builder_.SetIsNewFormattingContext(
-      params.space.IsNewFormattingContext());
 }
 
 void NGMathRowLayoutAlgorithm::LayoutRowItems(
@@ -77,12 +75,10 @@ void NGMathRowLayoutAlgorithm::LayoutRowItems(
     const ComputedStyle& child_style = child.Style();
     NGConstraintSpace child_space = CreateConstraintSpaceForMathChild(
         Node(), ChildAvailableSize(), ConstraintSpace(), child);
-    scoped_refptr<const NGLayoutResult> result =
+    const NGLayoutResult* result =
         To<NGBlockNode>(child).Layout(child_space, nullptr /* break token */);
-    const NGPhysicalContainerFragment& physical_fragment =
-        result->PhysicalFragment();
-    NGBoxFragment fragment(ConstraintSpace().GetWritingMode(),
-                           ConstraintSpace().Direction(),
+    const NGPhysicalFragment& physical_fragment = result->PhysicalFragment();
+    NGBoxFragment fragment(ConstraintSpace().GetWritingDirection(),
                            To<NGPhysicalBoxFragment>(physical_fragment));
 
     NGBoxStrut margins =
@@ -113,7 +109,7 @@ void NGMathRowLayoutAlgorithm::LayoutRowItems(
   row_total_size->block_size = max_row_ascent + max_row_descent;
 }
 
-scoped_refptr<const NGLayoutResult> NGMathRowLayoutAlgorithm::Layout() {
+const NGLayoutResult* NGMathRowLayoutAlgorithm::Layout() {
   DCHECK(!BreakToken());
 
   bool is_display_block_math =
@@ -137,9 +133,7 @@ scoped_refptr<const NGLayoutResult> NGMathRowLayoutAlgorithm::Layout() {
   adjust_offset += LogicalOffset{center_offset, max_row_block_baseline};
   for (auto& child_data : children) {
     child_data.offset += adjust_offset;
-    container_builder_.AddChild(
-        To<NGPhysicalContainerFragment>(*child_data.fragment),
-        child_data.offset);
+    container_builder_.AddChild(*child_data.fragment, child_data.offset);
     child_data.child.StoreMargins(ConstraintSpace(), child_data.margins);
   }
 
@@ -157,30 +151,27 @@ scoped_refptr<const NGLayoutResult> NGMathRowLayoutAlgorithm::Layout() {
 }
 
 MinMaxSizesResult NGMathRowLayoutAlgorithm::ComputeMinMaxSizes(
-    const MinMaxSizesInput& child_input) const {
+    const MinMaxSizesFloatInput&) const {
   if (auto result = CalculateMinMaxSizesIgnoringChildren(
           Node(), BorderScrollbarPadding()))
     return *result;
 
   MinMaxSizes sizes;
-  bool depends_on_percentage_block_size = false;
+  bool depends_on_block_constraints = false;
 
   for (NGLayoutInputNode child = Node().FirstChild(); child;
        child = child.NextSibling()) {
     if (child.IsOutOfFlowPositioned())
       continue;
-    MinMaxSizesResult child_result = ComputeMinAndMaxContentContribution(
-        Style(), To<NGBlockNode>(child), child_input);
-    NGBoxStrut child_margins = ComputeMinMaxMargins(Style(), child);
-    child_result.sizes += child_margins.InlineSum();
-
+    const auto child_result = ComputeMinAndMaxContentContributionForMathChild(
+        Style(), ConstraintSpace(), To<NGBlockNode>(child),
+        ChildAvailableSize().block_size);
     sizes += child_result.sizes;
 
     LayoutUnit lspace, rspace;
     DetermineOperatorSpacing(child, &lspace, &rspace);
     sizes += lspace + rspace;
-    depends_on_percentage_block_size |=
-        child_result.depends_on_percentage_block_size;
+    depends_on_block_constraints |= child_result.depends_on_block_constraints;
 
     // TODO(crbug.com/1125136): take into account italic correction.
   }
@@ -191,8 +182,7 @@ MinMaxSizesResult NGMathRowLayoutAlgorithm::ComputeMinMaxSizes(
 
   DCHECK_LE(sizes.min_size, sizes.max_size);
   sizes += BorderScrollbarPadding().InlineSum();
-
-  return {sizes, depends_on_percentage_block_size};
+  return MinMaxSizesResult(sizes, depends_on_block_constraints);
 }
 
 }  // namespace blink

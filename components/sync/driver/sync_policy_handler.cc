@@ -8,6 +8,7 @@
 
 #include "base/optional.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_value_map.h"
@@ -15,9 +16,9 @@
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/base/user_selectable_type.h"
 
-#if defined(OS_CHROMEOS)
-#include "chromeos/constants/chromeos_features.h"
-#endif  // defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace syncer {
 namespace {
@@ -31,7 +32,7 @@ void DisableSyncType(const std::string& type_name, PrefValueMap* prefs) {
       prefs->SetValue(pref, base::Value(false));
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (chromeos::features::IsSplitSettingsSyncEnabled()) {
     // Check for OS types. This includes types that used to be browser types,
     // like "apps" and "preferences".
@@ -43,7 +44,7 @@ void DisableSyncType(const std::string& type_name, PrefValueMap* prefs) {
         prefs->SetValue(os_pref, base::Value(false));
     }
   }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 }  // namespace
@@ -57,9 +58,8 @@ SyncPolicyHandler::~SyncPolicyHandler() = default;
 void SyncPolicyHandler::ApplyPolicySettings(const policy::PolicyMap& policies,
                                             PrefValueMap* prefs) {
   const base::Value* disable_sync_value = policies.GetValue(policy_name());
-  bool disable_sync;
-  if (disable_sync_value && disable_sync_value->GetAsBoolean(&disable_sync) &&
-      disable_sync) {
+  if (disable_sync_value && disable_sync_value->is_bool() &&
+      disable_sync_value->GetBool()) {
     prefs->SetValue(prefs::kSyncManaged, disable_sync_value->Clone());
   }
 

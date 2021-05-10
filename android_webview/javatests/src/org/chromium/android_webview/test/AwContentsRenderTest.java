@@ -20,9 +20,9 @@ import org.junit.runner.RunWith;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContents.VisualStateCallback;
 import org.chromium.android_webview.test.util.GraphicsTestUtils;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.common.ContentUrlConstants;
 
@@ -64,8 +64,7 @@ public class AwContentsRenderTest {
 
         mActivityTestRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(),
                 ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
-        Assert.assertEquals(
-                Color.CYAN, GraphicsTestUtils.sampleBackgroundColorOnUiThread(mAwContents));
+        GraphicsTestUtils.pollForBackgroundColor(mAwContents, Color.CYAN);
 
         setBackgroundColorOnUiThread(Color.YELLOW);
         GraphicsTestUtils.pollForBackgroundColor(mAwContents, Color.YELLOW);
@@ -129,7 +128,8 @@ public class AwContentsRenderTest {
                 }
             });
         });
-        Assert.assertTrue(latch.await(AwActivityTestRule.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(
+                latch.await(AwActivityTestRule.SCALED_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
         final int width =
                 TestThreadUtils.runOnUiThreadBlockingNoException(() -> mContainerView.getWidth());

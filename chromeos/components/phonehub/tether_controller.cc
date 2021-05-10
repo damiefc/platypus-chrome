@@ -24,6 +24,11 @@ void TetherController::NotifyStatusChanged() {
     observer.OnTetherStatusChanged();
 }
 
+void TetherController::NotifyAttemptConnectionScanFailed() {
+  for (auto& observer : observer_list_)
+    observer.OnAttemptConnectionScanFailed();
+}
+
 std::ostream& operator<<(std::ostream& stream,
                          TetherController::Status status) {
   switch (status) {
@@ -41,6 +46,9 @@ std::ostream& operator<<(std::ostream& stream,
       break;
     case TetherController::Status::kConnected:
       stream << "[Connected]";
+      break;
+    case TetherController::Status::kNoReception:
+      stream << "[No Reception]";
       break;
   }
   return stream;

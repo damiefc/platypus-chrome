@@ -29,8 +29,16 @@ TestPermissionBubbleViewDelegate::Requests() {
   return requests_;
 }
 
+GURL TestPermissionBubbleViewDelegate::GetRequestingOrigin() const {
+  return requests_.front()->GetOrigin();
+}
+
 GURL TestPermissionBubbleViewDelegate::GetEmbeddingOrigin() const {
   return GURL("https://embedder.example.com");
+}
+
+bool TestPermissionBubbleViewDelegate::WasCurrentRequestAlreadyDisplayed() {
+  return false;
 }
 
 PermissionBubbleBrowserTest::PermissionBubbleBrowserTest() = default;
@@ -41,9 +49,8 @@ void PermissionBubbleBrowserTest::SetUpOnMainThread() {
   ExtensionBrowserTest::SetUpOnMainThread();
 
   // Add a single permission request.
-  requests_.push_back(std::make_unique<permissions::MockPermissionRequest>(
-      "Request 1", l10n_util::GetStringUTF8(IDS_PERMISSION_ALLOW),
-      l10n_util::GetStringUTF8(IDS_PERMISSION_DENY)));
+  requests_.push_back(
+      std::make_unique<permissions::MockPermissionRequest>(u"Request 1"));
 
   std::vector<permissions::PermissionRequest*> raw_requests;
   raw_requests.push_back(requests_[0].get());
@@ -64,7 +71,7 @@ content::WebContents* PermissionBubbleBrowserTest::OpenExtensionAppWindow() {
   content::WebContents* app_contents =
       apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
           ->BrowserAppLauncher()
-          ->LaunchAppWithParams(params);
+          ->LaunchAppWithParams(std::move(params));
   CHECK(app_contents);
   return app_contents;
 }

@@ -135,12 +135,12 @@ TEST_F(ServiceProcessStateTest, AutoRun) {
   std::unique_ptr<base::CommandLine> autorun_command_line;
 #if defined(OS_WIN)
   std::string value_name = GetServiceProcessScopedName("_service_run");
-  base::string16 value;
+  std::wstring value;
   EXPECT_TRUE(base::win::ReadCommandFromAutoRun(HKEY_CURRENT_USER,
                                                 base::UTF8ToWide(value_name),
                                                 &value));
-  autorun_command_line.reset(
-      new base::CommandLine(base::CommandLine::FromString(value)));
+  autorun_command_line =
+      std::make_unique<base::CommandLine>(base::CommandLine::FromString(value));
 #elif defined(OS_POSIX) && !defined(OS_MAC)
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   std::string base_desktop_name = "google-chrome-service.desktop";

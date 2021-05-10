@@ -114,6 +114,9 @@ class PLATFORM_EXPORT Character {
     return c == kSpaceCharacter || c == kNewlineCharacter ||
            c == kTabulationCharacter || c == kCarriageReturnCharacter;
   }
+  static bool IsOtherSpaceSeparator(UChar c) {
+    return c == kIdeographicSpaceCharacter;
+  }
   static bool TreatAsSpace(UChar32 c) {
     return c == kSpaceCharacter || c == kTabulationCharacter ||
            c == kNewlineCharacter || c == kNoBreakSpaceCharacter;
@@ -219,4 +222,4 @@ class PLATFORM_EXPORT Character {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_TEXT_CHARACTER_H_

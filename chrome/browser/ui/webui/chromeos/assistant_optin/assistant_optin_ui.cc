@@ -8,16 +8,20 @@
 #include <string>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
+#include "ash/public/cpp/shelf_config.h"
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/buildflag.h"
-#include "chrome/browser/chromeos/assistant/assistant_util.h"
+#include "chrome/browser/ash/assistant/assistant_util.h"
+#include "chrome/browser/ash/login/ui/oobe_dialog_size_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/views/chrome_web_dialog_view.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chromeos/assistant/buildflags.h"
@@ -85,6 +89,9 @@ AssistantOptInUI::AssistantOptInUI(content::WebUI* web_ui)
 
   base::DictionaryValue localized_strings;
   assistant_handler_ptr_->GetLocalizedStrings(&localized_strings);
+
+  OobeUI::AddOobeComponents(source, localized_strings);
+
   source->AddLocalizedStrings(localized_strings);
   source->UseStringsJs();
   source->AddResourcePath("assistant_optin.js", IDR_ASSISTANT_OPTIN_JS);
@@ -94,6 +101,8 @@ AssistantOptInUI::AssistantOptInUI(content::WebUI* web_ui)
                           IDR_ASSISTANT_VOICE_MATCH_ANIMATION);
   source->AddResourcePath("voice_match_already_setup_animation.json",
                           IDR_ASSISTANT_VOICE_MATCH_ALREADY_SETUP_ANIMATION);
+  source->AddBoolean("newLayoutEnabled",
+                     chromeos::features::IsNewOobeLayoutEnabled());
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::WorkerSrc, "worker-src blob: 'self';");
   source->DisableTrustedTypesCSP();
@@ -167,7 +176,7 @@ bool AssistantOptInDialog::BounceIfActive() {
 AssistantOptInDialog::AssistantOptInDialog(
     ash::FlowType type,
     ash::AssistantSetup::StartAssistantOptInFlowCallback callback)
-    : SystemWebDialogDelegate(CreateAssistantOptInURL(type), base::string16()),
+    : SystemWebDialogDelegate(CreateAssistantOptInURL(type), std::u16string()),
       callback_(std::move(callback)) {}
 
 AssistantOptInDialog::~AssistantOptInDialog() {
@@ -182,10 +191,18 @@ void AssistantOptInDialog::AdjustWidgetInitParams(
 
 void AssistantOptInDialog::GetDialogSize(gfx::Size* size) const {
   auto bounds = display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
-  bounds.Inset(kDialogInsets);
-  auto dialog_size = bounds.size();
-  dialog_size.SetToMin(kDialogMaxSize);
-  dialog_size.SetToMax(kDialogMinSize);
+  gfx::Size dialog_size;
+  if (features::IsNewOobeLayoutEnabled()) {
+    const bool is_horizontal = bounds.width() > bounds.height();
+    dialog_size = CalculateOobeDialogSize(
+        display::Screen::GetScreen()->GetPrimaryDisplay().size(),
+        ash::ShelfConfig::Get()->shelf_size(), is_horizontal);
+  } else {
+    bounds.Inset(kDialogInsets);
+    dialog_size = bounds.size();
+    dialog_size.SetToMin(kDialogMaxSize);
+    dialog_size.SetToMax(kDialogMinSize);
+  }
   size->SetSize(dialog_size.width(), dialog_size.height());
 }
 

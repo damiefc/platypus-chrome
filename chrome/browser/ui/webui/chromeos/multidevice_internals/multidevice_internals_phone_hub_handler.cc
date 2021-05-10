@@ -11,6 +11,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/components/phonehub/fake_phone_hub_manager.h"
+#include "chromeos/components/phonehub/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/image/image.h"
 
@@ -59,7 +61,7 @@ const SkBitmap ImageTypeToBitmap(ImageType image_type_num, int size) {
 
 phonehub::Notification::AppMetadata DictToAppMetadata(
     const base::DictionaryValue* app_metadata_dict) {
-  base::string16 visible_app_name;
+  std::u16string visible_app_name;
   CHECK(app_metadata_dict->GetString("visibleAppName", &visible_app_name));
 
   std::string package_name;
@@ -88,7 +90,7 @@ void TryAddingMetadata(
   if (!browser_tab_metadata->GetString("url", &url) || url.empty())
     return;
 
-  base::string16 title;
+  std::u16string title;
   if (!browser_tab_metadata->GetString("title", &title) || title.empty())
     return;
 
@@ -184,6 +186,18 @@ void MultidevicePhoneHubHandler::RegisterMessages() {
       "setTetherStatus",
       base::BindRepeating(&MultidevicePhoneHubHandler::HandleSetTetherStatus,
                           base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      "resetShouldShowOnboardingUi",
+      base::BindRepeating(
+          &MultidevicePhoneHubHandler::HandleResetShouldShowOnboardingUi,
+          base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      "resetHasNotificationSetupUiBeenDismissed",
+      base::BindRepeating(&MultidevicePhoneHubHandler::
+                              HandleResetHasNotificationSetupUiBeenDismissed,
+                          base::Unretained(this)));
 }
 
 void MultidevicePhoneHubHandler::OnJavascriptDisallowed() {
@@ -191,43 +205,24 @@ void MultidevicePhoneHubHandler::OnJavascriptDisallowed() {
 }
 
 void MultidevicePhoneHubHandler::AddObservers() {
-  notification_manager_observer_.Add(
+  notification_manager_observation_.Observe(
       fake_phone_hub_manager_->fake_notification_manager());
-  do_not_disturb_controller_observer_.Add(
+  do_not_disturb_controller_observation_.Observe(
       fake_phone_hub_manager_->fake_do_not_disturb_controller());
-  find_my_device_controller_oberserver_.Add(
+  find_my_device_controller_observation_.Observe(
       fake_phone_hub_manager_->fake_find_my_device_controller());
-  tether_controller_observer_.Add(
+  tether_controller_observation_.Observe(
       fake_phone_hub_manager_->fake_tether_controller());
+  onboarding_ui_tracker_observation_.Observe(
+      fake_phone_hub_manager_->fake_onboarding_ui_tracker());
 }
 
 void MultidevicePhoneHubHandler::RemoveObservers() {
-  phonehub::FakeNotificationManager* fake_notification_manager =
-      fake_phone_hub_manager_->fake_notification_manager();
-  if (notification_manager_observer_.IsObserving(fake_notification_manager)) {
-    notification_manager_observer_.Remove(fake_notification_manager);
-  }
-
-  phonehub::FakeDoNotDisturbController* fake_do_not_disturb_controller =
-      fake_phone_hub_manager_->fake_do_not_disturb_controller();
-  if (do_not_disturb_controller_observer_.IsObserving(
-          fake_do_not_disturb_controller)) {
-    do_not_disturb_controller_observer_.Remove(fake_do_not_disturb_controller);
-  }
-
-  phonehub::FakeFindMyDeviceController* fake_find_my_device_controller =
-      fake_phone_hub_manager_->fake_find_my_device_controller();
-  if (find_my_device_controller_oberserver_.IsObserving(
-          fake_find_my_device_controller)) {
-    find_my_device_controller_oberserver_.Remove(
-        fake_find_my_device_controller);
-  }
-
-  phonehub::FakeTetherController* fake_tether_controller =
-      fake_phone_hub_manager_->fake_tether_controller();
-  if (tether_controller_observer_.IsObserving(fake_tether_controller)) {
-    tether_controller_observer_.Remove(fake_tether_controller);
-  }
+  notification_manager_observation_.Reset();
+  do_not_disturb_controller_observation_.Reset();
+  find_my_device_controller_observation_.Reset();
+  tether_controller_observation_.Reset();
+  onboarding_ui_tracker_observation_.Reset();
 }
 
 void MultidevicePhoneHubHandler::OnNotificationsRemoved(
@@ -247,12 +242,12 @@ void MultidevicePhoneHubHandler::OnDndStateChanged() {
 }
 
 void MultidevicePhoneHubHandler::OnPhoneRingingStateChanged() {
-  // TODO(jimmyxgong): Change to casting the enum TBA to int.
-  bool is_ringing = fake_phone_hub_manager_->fake_find_my_device_controller()
-                        ->IsPhoneRinging();
-  int status_as_int = is_ringing ? 2 : 1;
+  phonehub::FindMyDeviceController::Status ringing_status =
+      fake_phone_hub_manager_->fake_find_my_device_controller()
+          ->GetPhoneRingingStatus();
+
   FireWebUIListener("find-my-device-status-changed",
-                    base::Value(status_as_int));
+                    base::Value(static_cast<int>(ringing_status)));
 }
 
 void MultidevicePhoneHubHandler::OnTetherStatusChanged() {
@@ -261,12 +256,21 @@ void MultidevicePhoneHubHandler::OnTetherStatusChanged() {
   FireWebUIListener("tether-status-changed", base::Value(status_as_int));
 }
 
+void MultidevicePhoneHubHandler::OnShouldShowOnboardingUiChanged() {
+  bool should_show_onboarding_ui =
+      fake_phone_hub_manager_->fake_onboarding_ui_tracker()
+          ->ShouldShowOnboardingUi();
+  FireWebUIListener("should-show-onboarding-ui-changed",
+                    base::Value(should_show_onboarding_ui));
+}
+
 void MultidevicePhoneHubHandler::HandleEnableDnd(const base::ListValue* args) {
   bool enabled = false;
   CHECK(args->GetBoolean(0, &enabled));
   PA_LOG(VERBOSE) << "Setting Do Not Disturb state to " << enabled;
   fake_phone_hub_manager_->fake_do_not_disturb_controller()
-      ->SetDoNotDisturbStateInternal(enabled);
+      ->SetDoNotDisturbStateInternal(enabled,
+                                     /*can_request_new_dnd_state=*/true);
 }
 
 void MultidevicePhoneHubHandler::HandleSetFindMyDeviceStatus(
@@ -274,11 +278,11 @@ void MultidevicePhoneHubHandler::HandleSetFindMyDeviceStatus(
   int status_as_int = 0;
   CHECK(args->GetInteger(0, &status_as_int));
 
-  // TODO(jimmyxgong): Change to casting the enum TBA to int.
-  bool is_ringing = status_as_int == 2;
-  PA_LOG(VERBOSE) << "Setting phone ringing status to " << is_ringing;
+  auto status =
+      static_cast<phonehub::FindMyDeviceController::Status>(status_as_int);
+  PA_LOG(VERBOSE) << "Setting phone ringing status to " << status;
   fake_phone_hub_manager_->fake_find_my_device_controller()
-      ->SetIsPhoneRingingInternal(is_ringing);
+      ->SetPhoneRingingState(status);
 }
 
 void MultidevicePhoneHubHandler::HandleSetTetherStatus(
@@ -348,7 +352,7 @@ void MultidevicePhoneHubHandler::HandleSetShowOnboardingFlow(
 
 void MultidevicePhoneHubHandler::HandleSetFakePhoneName(
     const base::ListValue* args) {
-  base::string16 phone_name;
+  std::u16string phone_name;
   CHECK(args->GetString(0, &phone_name));
   fake_phone_hub_manager_->mutable_phone_model()->SetPhoneName(phone_name);
   PA_LOG(VERBOSE) << "Set phone name to " << phone_name;
@@ -371,7 +375,7 @@ void MultidevicePhoneHubHandler::HandleSetFakePhoneStatus(
       static_cast<phonehub::PhoneStatusModel::SignalStrength>(
           signal_strength_as_int);
 
-  base::string16 mobile_provider;
+  std::u16string mobile_provider;
   CHECK(phones_status_dict->GetString("mobileProvider", &mobile_provider));
 
   int charging_state_as_int;
@@ -430,10 +434,6 @@ void MultidevicePhoneHubHandler::HandleSetBrowserTabs(
                     metadatas);
   TryAddingMetadata("browserTabTwoMetadata", browser_tab_status_dict,
                     metadatas);
-  TryAddingMetadata("browserTabThreeMetadata", browser_tab_status_dict,
-                    metadatas);
-  TryAddingMetadata("browserTabFourMetadata", browser_tab_status_dict,
-                    metadatas);
 
   fake_phone_hub_manager_->mutable_phone_model()->SetBrowserTabsModel(
       phonehub::BrowserTabsModel(is_tab_sync_enabled, metadatas));
@@ -476,14 +476,14 @@ void MultidevicePhoneHubHandler::HandleSetNotification(
   int inline_reply_id;
   CHECK(notification_data_dict->GetInteger("inlineReplyId", &inline_reply_id));
 
-  base::Optional<base::string16> opt_title;
-  base::string16 title;
+  base::Optional<std::u16string> opt_title;
+  std::u16string title;
   if (notification_data_dict->GetString("title", &title) && !title.empty()) {
     opt_title = title;
   }
 
-  base::Optional<base::string16> opt_text_content;
-  base::string16 text_content;
+  base::Optional<std::u16string> opt_text_content;
+  std::u16string text_content;
   if (notification_data_dict->GetString("textContent", &text_content) &&
       !text_content.empty()) {
     opt_text_content = text_content;
@@ -511,7 +511,8 @@ void MultidevicePhoneHubHandler::HandleSetNotification(
   }
 
   auto notification = phonehub::Notification(
-      id, app_metadata, timestamp, importance, inline_reply_id, opt_title,
+      id, app_metadata, timestamp, importance, inline_reply_id,
+      phonehub::Notification::InteractionBehavior::kNone, opt_title,
       opt_text_content, opt_shared_image, opt_contact_image);
 
   PA_LOG(VERBOSE) << "Set notification" << notification;
@@ -526,6 +527,21 @@ void MultidevicePhoneHubHandler::HandleRemoveNotification(
   fake_phone_hub_manager_->fake_notification_manager()->RemoveNotification(
       notification_id);
   PA_LOG(VERBOSE) << "Removed notification with id " << notification_id;
+}
+
+void MultidevicePhoneHubHandler::HandleResetShouldShowOnboardingUi(
+    const base::ListValue* args) {
+  PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
+  prefs->SetBoolean(chromeos::phonehub::prefs::kHideOnboardingUi, false);
+  PA_LOG(VERBOSE) << "Reset kHideOnboardingUi pref";
+}
+
+void MultidevicePhoneHubHandler::HandleResetHasNotificationSetupUiBeenDismissed(
+    const base::ListValue* args) {
+  PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
+  prefs->SetBoolean(chromeos::phonehub::prefs::kHasDismissedSetupRequiredUi,
+                    false);
+  PA_LOG(VERBOSE) << "Reset kHasDismissedSetupRequiredUi pref";
 }
 
 }  // namespace multidevice

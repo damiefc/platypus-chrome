@@ -4,6 +4,8 @@
 
 #include "components/autofill/android/provider/form_data_android.h"
 
+#include <memory>
+
 #include "base/android/jni_string.h"
 #include "components/autofill/android/provider/form_field_data_android.h"
 #include "components/autofill/android/provider/jni_headers/FormData_jni.h"
@@ -36,11 +38,11 @@ ScopedJavaLocalRef<jobject> FormDataAndroid::GetJavaPeer(
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null()) {
     for (size_t i = 0; i < form_.fields.size(); ++i) {
-      fields_.push_back(std::unique_ptr<FormFieldDataAndroid>(
-          new FormFieldDataAndroid(&form_.fields[i])));
+      fields_.push_back(
+          std::make_unique<FormFieldDataAndroid>(&form_.fields[i]));
     }
     if (form_structure)
-      ApplyHeuristicFieldType(*form_structure);
+      UpdateFieldTypes(*form_structure);
     ScopedJavaLocalRef<jstring> jname =
         ConvertUTF16ToJavaString(env, form_.name);
     ScopedJavaLocalRef<jstring> jhost =
@@ -66,7 +68,7 @@ ScopedJavaLocalRef<jobject> FormDataAndroid::GetNextFormFieldData(JNIEnv* env) {
 }
 
 void FormDataAndroid::OnFormFieldDidChange(size_t index,
-                                           const base::string16& value) {
+                                           const std::u16string& value) {
   form_.fields[index].value = value;
   fields_[index]->OnFormFieldDidChange(value);
 }
@@ -96,14 +98,23 @@ bool FormDataAndroid::SimilarFormAs(const FormData& form) {
   return form_.SimilarFormAs(form);
 }
 
-void FormDataAndroid::ApplyHeuristicFieldType(
-    const FormStructure& form_structure) {
-  DCHECK(form_structure.field_count() == fields_.size());
+void FormDataAndroid::UpdateFieldTypes(const FormStructure& form_structure) {
+  // This form has been changed after the query starts, ignore this response,
+  // new one is on the way.
+  if (form_structure.field_count() != fields_.size())
+    return;
   auto form_field_data_android = fields_.begin();
   for (const auto& autofill_field : form_structure) {
     DCHECK(form_field_data_android->get()->SimilarFieldAs(*autofill_field));
-    form_field_data_android->get()->set_heuristic_type(
-        AutofillType(autofill_field->heuristic_type()));
+    std::vector<AutofillType> server_predictions;
+    for (const auto& prediction : autofill_field->server_predictions()) {
+      server_predictions.emplace_back(
+          static_cast<ServerFieldType>(prediction.type()));
+    }
+    form_field_data_android->get()->UpdateAutofillTypes(
+        AutofillType(autofill_field->heuristic_type()),
+        AutofillType(autofill_field->server_type()),
+        autofill_field->ComputedType(), server_predictions);
     if (++form_field_data_android == fields_.end())
       break;
   }

@@ -61,6 +61,7 @@ class URLPattern {
     SCHEME_WS = 1 << 7,
     SCHEME_WSS = 1 << 8,
     SCHEME_DATA = 1 << 9,
+    SCHEME_URN = 1 << 10,
 
     // IMPORTANT!
     // SCHEME_ALL will match every scheme, including chrome://, chrome-
@@ -98,6 +99,7 @@ class URLPattern {
 
   // Convenience to construct a URLPattern from a string. If the string is not
   // known ahead of time, use Parse() instead, which returns success or failure.
+  // This method will DCHECK if parsing fails.
   URLPattern(int valid_schemes, base::StringPiece pattern);
 
   URLPattern();

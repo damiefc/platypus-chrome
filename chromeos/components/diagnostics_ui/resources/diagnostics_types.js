@@ -5,168 +5,256 @@
 /**
  * @fileoverview
  * Type aliases for the mojo API.
- *
- * TODO(zentaro): When the fake API is replaced by mojo these can be
- * re-aliased to the corresponding mojo types, or replaced by them.
  */
-
-/**
- * Type of SystemDataProviderInterface.ObserveBatteryChargeStatus function.
- * @typedef {!function(!BatteryChargeStatusObserver): !Promise}
- */
-export let ObserveBatteryChargeStatusFunction;
-
-/**
- * Type of SystemDataProviderInterface.ObserveBatteryHealth function.
- * @typedef {!function(!BatteryHealthObserver): !Promise}
- */
-export let ObserveBatteryHealthFunction;
-
-/**
- * Type of SystemDataProviderInterface.ObserveCpuUsage function.
- * @typedef {!function(!CpuUsageObserver): !Promise}
- */
-export let ObserveCpuUsageFunction;
-
-/**
- * Type of SystemDataProviderInterface.ObserveMemoryUsage function.
- * @typedef {!function(!MemoryUsageObserver): !Promise}
- */
-export let ObserveMemoryUsageFunction;
 
 /**
  * Type alias for the SystemDataProviderInterface.
- * TODO(zentaro): Replace with a real mojo type when implemented.
- * @typedef {{
- *   getBatteryInfo: !function(): !Promise<!BatteryInfo>,
- *   getSystemInfo: !function(): !Promise<!SystemInfo>,
- *   observeBatteryChargeStatus: !ObserveBatteryChargeStatusFunction,
- *   observeBatteryHealth: !ObserveBatteryHealthFunction,
- *   observeCpuUsage: !ObserveCpuUsageFunction,
- *   observeMemoryUsage: !ObserveMemoryUsageFunction,
- * }}
+ * @typedef {chromeos.diagnostics.mojom.SystemDataProviderInterface}
  */
 export let SystemDataProviderInterface;
 
 /**
  * Type alias for DeviceCapabilities.
- * @typedef {{
- *   has_battery: boolean,
- * }}
+ * @typedef {chromeos.diagnostics.mojom.DeviceCapabilities}
  */
 export let DeviceCapabilities;
 
 /**
  * Type alias for VersionInfo.
- * @typedef {{
- *   milestone_version: string,
- * }}
+ * @typedef {chromeos.diagnostics.mojom.VersionInfo}
  */
 export let VersionInfo;
 
 /**
  * Type alias for SystemInfo.
- * @typedef {{
- *   board_name: string,
- *   cpu_model_name: string,
- *   cpu_threads_count: number,
- *   device_capabilities: DeviceCapabilities,
- *   total_memory_kib: number,
- *   version: VersionInfo,
- * }}
+ * @typedef {chromeos.diagnostics.mojom.SystemInfo}
  */
 export let SystemInfo;
 
 /**
+ * Type alias for ExternalPowerSource.
+ * @typedef {chromeos.diagnostics.mojom.ExternalPowerSource}
+ */
+export let ExternalPowerSource;
+
+/**
+ * Type alias for BatteryState.
+ * @typedef {chromeos.diagnostics.mojom.BatteryState}
+ */
+export let BatteryState;
+
+/**
  * Type alias for BatteryInfo.
- * @typedef {{
- *   charge_full_design_milliamp_hours: number,
- *   manufacturer: string,
- * }}
+ * @typedef {chromeos.diagnostics.mojom.BatteryInfo}
  */
 export let BatteryInfo;
 
 /**
- * Type alias for CpuUsageObserver.
- * @typedef {{
- *   onCpuUsageUpdated: !function(!CpuUsage),
- * }}
- */
-export let CpuUsageObserver;
-
-/**
- * Type alias for CpuUsage.
- * @typedef {{
- *   cpu_temp_degrees_celcius: number,
- *   percent_usage_system: number,
- *   percent_usage_user: number,
- * }}
- */
-export let CpuUsage;
-
-/**
- * Type alias for BatteryChargeStatusObserver.
- * @typedef {{
- *   onBatteryChargeStatusUpdated: !function(!BatteryChargeStatus)
- * }}
+ * Type alias for BatteryHealthObserver.
+ * @typedef {chromeos.diagnostics.mojom.BatteryChargeStatusObserver}
  */
 export let BatteryChargeStatusObserver;
 
 /**
- * External power source enumeration.
- * @enum {number}
- */
-export let ExternalPowerSource = {
-  kAc: 0,
-  kUsb: 1,
-  kDisconnected: 2,
-};
-
-/**
  * Type alias for BatteryChargeStatus.
- * @typedef {{
- *   charge_full_now_milliamp_hours: number,
- *   charge_now_milliamp_hours: number,
- *   current_now_milliamps: number,
- *   power_adapter_status: ExternalPowerSource,
- *   power_time: string,
- * }}
+ * @typedef {chromeos.diagnostics.mojom.BatteryChargeStatus}
  */
 export let BatteryChargeStatus;
 
 /**
  * Type alias for BatteryHealthObserver.
- * @typedef {{
- *   onBatteryHealthUpdated: !function(!BatteryHealth)
- * }}
+ * @typedef {chromeos.diagnostics.mojom.BatteryHealthObserver}
  */
 export let BatteryHealthObserver;
 
 /**
  * Type alias for BatteryHealth.
- * @typedef {{
- *   battery_wear_percentage: number,
- *   charge_full_design_milliamp_hours: number,
- *   charge_full_now_milliamp_hours: number,
- *   cycle_count: number,
- * }}
+ * @typedef {chromeos.diagnostics.mojom.BatteryHealth}
  */
 export let BatteryHealth;
 
 /**
  * Type alias for MemoryUsageObserver.
- * @typedef {{
- *   onMemoryUsageUpdated: !function(!MemoryUsage)
- * }}
+ * @typedef {chromeos.diagnostics.mojom.MemoryUsageObserver}
  */
 export let MemoryUsageObserver;
 
 /**
  * Type alias for MemoryUsage.
- * @typedef {{
- *   available_memory_kib: number,
- *   free_memory_kib: number,
- *   total_memory_kib: number,
- * }}
+ * @typedef {chromeos.diagnostics.mojom.MemoryUsage}
  */
 export let MemoryUsage;
+
+/**
+ * Type alias for CpuUsageObserver.
+ * @typedef {chromeos.diagnostics.mojom.CpuUsageObserver}
+ */
+export let CpuUsageObserver;
+
+/**
+ * Type alias for CpuUsage.
+ * @typedef {chromeos.diagnostics.mojom.CpuUsage}
+ */
+export let CpuUsage;
+
+/**
+ * Enumeration of routines.
+ * @typedef {chromeos.diagnostics.mojom.RoutineType}
+ */
+export let RoutineType;
+
+/**
+ * Type alias for StandardRoutineResult.
+ * @typedef {chromeos.diagnostics.mojom.StandardRoutineResult}
+ */
+export let StandardRoutineResult;
+
+/**
+ * Type alias for PowerRoutineResult.
+ * @typedef {chromeos.diagnostics.mojom.PowerRoutineResult}
+ */
+export let PowerRoutineResult;
+
+/**
+ * Type alias for RoutineResult.
+ * @typedef {chromeos.diagnostics.mojom.RoutineResult}
+ */
+export let RoutineResult;
+
+/**
+ * Type alias for RoutineResultInfo.
+ * @typedef {chromeos.diagnostics.mojom.RoutineResultInfo}
+ */
+export let RoutineResultInfo;
+
+/**
+ * Type alias for RoutineRunner.
+ * @typedef {chromeos.diagnostics.mojom.RoutineRunnerInterface}
+ */
+export let RoutineRunner;
+
+/**
+ * Type alias for SystemRoutineControllerInterface.
+ * @typedef {chromeos.diagnostics.mojom.SystemRoutineControllerInterface}
+ */
+export let SystemRoutineControllerInterface;
+
+/**
+ * TODO(michaelcheco): Add Cellular properties.
+ * @typedef {!Object}
+ */
+export let CellularStateProperties;
+
+/**
+ * TODO(michaelcheco): Add Ethernet properties.
+ * @typedef {!Object}
+ */
+export let EthernetStateProperties;
+
+/**
+ * @typedef {{
+ *   signalStrength: number,
+ *   frequency: number,
+ *   ssid: string,
+ *   bssid: string,
+ * }}
+ */
+export let WiFiStateProperties;
+
+/**
+ * @typedef {{
+ *   ipAddress: ?string,
+ *   nameServers: ?Array<string>,
+ *   subnetMask: ?string,
+ *   gateway: ?string,
+ * }}
+ */
+export let IPConfigProperties;
+
+/**
+ * @typedef {(
+ * !CellularStateProperties|!EthernetStateProperties|!WiFiStateProperties)}
+ */
+export let NetworkProperties;
+
+/**
+ * @typedef {{
+ *   state: number,
+ *   type: number,
+ *   networkProperties: !NetworkProperties,
+ *   guid: string,
+ *   name: string,
+ *   macAddress: string,
+ *   ipConfigProperties: ?IPConfigProperties,
+ * }}
+ */
+export let Network;
+
+/**
+ * @typedef {{
+ *   networkGuids: !Array<string>,
+ *   activeGuid: ?string,
+ * }}
+ */
+export let NetworkGuidInfo;
+
+/**
+ * Type alias for NetworkListObserver.
+ * @typedef {{
+ *   onNetworkListChanged: !function(!NetworkGuidInfo)
+ * }}
+ */
+export let NetworkListObserver;
+
+/**
+ * Type alias for NetworkStateObserver.
+ * @typedef {{
+ *   onNetworkStateChanged: !function(!Network)
+ * }}
+ */
+export let NetworkStateObserver;
+
+/**
+ * Type of NetworkHealthProviderInterface.ObserveNetworkListFunction function.
+ * @typedef {!function(!NetworkListObserver): !Promise}
+ */
+export let ObserveNetworkListFunction;
+
+/**
+ * Type of NetworkHealthProviderInterface.ObserveNetworkFunction function.
+ * @typedef {!function(!NetworkStateObserver, !string): !Promise}
+ */
+export let ObserveNetworkFunction;
+
+/**
+ * Type alias for the NetworkHealthProviderInterface.
+ * TODO(michaelcheco): Replace with a real mojo type when implemented.
+ * @typedef {{
+ *   observeNetworkList: !ObserveNetworkListFunction,
+ *   observeNetwork: !ObserveNetworkFunction,
+ * }}
+ */
+export let NetworkHealthProviderInterface;
+
+/**
+ * @enum {number}
+ */
+export let NetworkState = {
+  kUninitialized: 0,
+  kDisabled: 1,
+  kProhibited: 2,
+  kNotConnected: 3,
+  kConnecting: 4,
+  kPortal: 5,
+  kConnected: 6,
+  kOnline: 7,
+};
+
+/**
+ * @enum {number}
+ */
+export let NetworkType = {
+  kCellular: 0,
+  kEthernet: 1,
+  kWiFi: 2,
+};

@@ -112,17 +112,27 @@ class PeerVideoSender : public VideoSender {
       const FrameSenderConfig& video_config,
       const StatusChangeCallback& status_change_cb,
       const CreateVideoEncodeAcceleratorCallback& create_vea_cb,
-      const CreateVideoEncodeMemoryCallback& create_video_encode_mem_cb,
       CastTransport* const transport_sender)
       : VideoSender(cast_environment,
                     video_config,
                     status_change_cb,
                     create_vea_cb,
-                    create_video_encode_mem_cb,
                     transport_sender,
-                    base::Bind(&IgnorePlayoutDelayChanges)) {}
+                    base::BindRepeating(&IgnorePlayoutDelayChanges),
+                    base::BindRepeating(&PeerVideoSender::ProcessFeedback,
+                                        base::Unretained(this))) {}
+
   using VideoSender::OnReceivedCastFeedback;
   using VideoSender::OnReceivedPli;
+
+  void ProcessFeedback(const media::VideoCaptureFeedback& feedback) {
+    feedback_ = feedback;
+  }
+
+  VideoCaptureFeedback GetFeedback() { return feedback_; }
+
+ private:
+  VideoCaptureFeedback feedback_;
 };
 
 class TransportClient : public CastTransport::Client {
@@ -156,9 +166,9 @@ class VideoSenderTest : public ::testing::Test {
     vea_factory_.SetAutoRespond(true);
     last_pixel_value_ = kPixelValue;
     transport_ = new TestPacketSender();
-    transport_sender_.reset(new CastTransportImpl(
+    transport_sender_ = std::make_unique<CastTransportImpl>(
         &testing_clock_, base::TimeDelta(), std::make_unique<TransportClient>(),
-        base::WrapUnique(transport_), task_runner_));
+        base::WrapUnique(transport_), task_runner_);
   }
 
   ~VideoSenderTest() override = default;
@@ -178,21 +188,18 @@ class VideoSenderTest : public ::testing::Test {
 
     if (external) {
       vea_factory_.SetInitializationWillSucceed(expect_init_success);
-      video_sender_.reset(new PeerVideoSender(
+      video_sender_ = std::make_unique<PeerVideoSender>(
           cast_environment_, video_config,
-          base::Bind(&SaveOperationalStatus, &operational_status_),
-          base::Bind(
+          base::BindRepeating(&SaveOperationalStatus, &operational_status_),
+          base::BindRepeating(
               &FakeVideoEncodeAcceleratorFactory::CreateVideoEncodeAccelerator,
               base::Unretained(&vea_factory_)),
-          base::Bind(&FakeVideoEncodeAcceleratorFactory::CreateSharedMemory,
-                     base::Unretained(&vea_factory_)),
-          transport_sender_.get()));
+          transport_sender_.get());
     } else {
-      video_sender_.reset(new PeerVideoSender(
+      video_sender_ = std::make_unique<PeerVideoSender>(
           cast_environment_, video_config,
-          base::Bind(&SaveOperationalStatus, &operational_status_),
-          CreateDefaultVideoEncodeAcceleratorCallback(),
-          CreateDefaultVideoEncodeMemoryCallback(), transport_sender_.get()));
+          base::BindRepeating(&SaveOperationalStatus, &operational_status_),
+          base::DoNothing(), transport_sender_.get());
     }
     task_runner_->RunTasks();
   }
@@ -273,7 +280,6 @@ TEST_F(VideoSenderTest, ExternalEncoder) {
   // VideoSender created an encoder for 1280x720 frames, in order to provide the
   // INITIALIZED status.
   EXPECT_EQ(1, vea_factory_.vea_response_count());
-  EXPECT_LT(0, vea_factory_.shm_response_count());
 
   scoped_refptr<media::VideoFrame> video_frame = GetNewVideoFrame();
 
@@ -284,13 +290,11 @@ TEST_F(VideoSenderTest, ExternalEncoder) {
     // VideoSender re-created the encoder for the 320x240 frames we're
     // providing.
     EXPECT_EQ(1, vea_factory_.vea_response_count());
-    EXPECT_LT(0, vea_factory_.shm_response_count());
   }
 
   video_sender_.reset(NULL);
   task_runner_->RunTasks();
   EXPECT_EQ(1, vea_factory_.vea_response_count());
-  EXPECT_LT(0, vea_factory_.shm_response_count());
 }
 
 TEST_F(VideoSenderTest, ExternalEncoderInitFails) {
@@ -567,13 +571,12 @@ TEST_F(VideoSenderTest, CheckVideoFrameFactoryIsNull) {
   EXPECT_EQ(nullptr, video_sender_->CreateVideoFrameFactory().get());
 }
 
-TEST_F(VideoSenderTest, PopulatesResourceUtilizationInFrameFeedback) {
+TEST_F(VideoSenderTest, ReportsResourceUtilizationInCallback) {
   InitEncoder(false, true);
   ASSERT_EQ(STATUS_INITIALIZED, operational_status_);
 
   for (int i = 0; i < 3; ++i) {
     scoped_refptr<media::VideoFrame> video_frame = GetNewVideoFrame();
-    EXPECT_LE(video_frame->feedback()->resource_utilization, 0.0);
 
     const base::TimeTicks reference_time = testing_clock_.NowTicks();
     video_sender_->InsertRawVideoFrame(video_frame, reference_time);
@@ -586,7 +589,7 @@ TEST_F(VideoSenderTest, PopulatesResourceUtilizationInFrameFeedback) {
     // Check that the resource_utilization value is set and non-negative.  Don't
     // check for specific values because they are dependent on real-world CPU
     // encode time, which can vary across test runs.
-    double utilization = video_frame->feedback()->resource_utilization;
+    double utilization = video_sender_->GetFeedback().resource_utilization;
     EXPECT_LE(0.0, utilization);
     if (i == 0)
       EXPECT_GE(1.0, utilization);  // Key frames never exceed 1.0.

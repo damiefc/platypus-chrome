@@ -6,15 +6,14 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/infobars/content/content_infobar_manager.h"
 #include "components/permissions/permission_request_id.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
@@ -55,17 +54,17 @@ class MediaStreamDevicePermissionContextTests
               HostContentSettingsMapFactory::GetForProfile(profile())
                   ->GetContentSetting(insecure_url.GetOrigin(),
                                       insecure_url.GetOrigin(),
-                                      content_settings_type, std::string()));
+                                      content_settings_type));
     EXPECT_EQ(CONTENT_SETTING_ASK,
               HostContentSettingsMapFactory::GetForProfile(profile())
                   ->GetContentSetting(secure_url.GetOrigin(),
                                       insecure_url.GetOrigin(),
-                                      content_settings_type, std::string()));
-    EXPECT_EQ(CONTENT_SETTING_ASK,
-              HostContentSettingsMapFactory::GetForProfile(profile())
-                  ->GetContentSetting(insecure_url.GetOrigin(),
-                                      secure_url.GetOrigin(),
-                                      content_settings_type, std::string()));
+                                      content_settings_type));
+    EXPECT_EQ(
+        CONTENT_SETTING_ASK,
+        HostContentSettingsMapFactory::GetForProfile(profile())
+            ->GetContentSetting(insecure_url.GetOrigin(),
+                                secure_url.GetOrigin(), content_settings_type));
 
     EXPECT_EQ(CONTENT_SETTING_BLOCK,
               permission_context
@@ -85,12 +84,11 @@ class MediaStreamDevicePermissionContextTests
     GURL secure_url("https://www.example.com");
 
     // Check that there is no saved content settings.
-    EXPECT_EQ(CONTENT_SETTING_ASK,
-              HostContentSettingsMapFactory::GetForProfile(profile())
-                  ->GetContentSetting(secure_url.GetOrigin(),
-                                      secure_url.GetOrigin(),
-                                      content_settings_type,
-                                      std::string()));
+    EXPECT_EQ(
+        CONTENT_SETTING_ASK,
+        HostContentSettingsMapFactory::GetForProfile(profile())
+            ->GetContentSetting(secure_url.GetOrigin(), secure_url.GetOrigin(),
+                                content_settings_type));
 
     EXPECT_EQ(CONTENT_SETTING_ASK,
               permission_context
@@ -104,7 +102,7 @@ class MediaStreamDevicePermissionContextTests
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 #if defined(OS_ANDROID)
-    InfoBarService::CreateForWebContents(web_contents());
+    infobars::ContentInfoBarManager::CreateForWebContents(web_contents());
 #else
     permissions::PermissionRequestManager::CreateForWebContents(web_contents());
 #endif

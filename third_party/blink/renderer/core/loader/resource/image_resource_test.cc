@@ -118,7 +118,14 @@ constexpr size_t kJpegImageSubrangeWithDimensionsLength =
 constexpr size_t kJpegImageSubrangeWithoutDimensionsLength = 3;
 
 class ImageResourceTest : public testing::Test,
-                          private ScopedMockOverlayScrollbars {};
+                          private ScopedMockOverlayScrollbars {
+  void TearDown() override {
+    // Trigger a GC so MockFinishObserver gets destroyed and EXPECT_CALL gets
+    // checked before the test ends.
+    ThreadState::Current()->CollectAllGarbageForTesting(
+        BlinkGC::kNoHeapPointersOnStack);
+  }
+};
 
 // Ensure that the image decoder can determine the dimensions of kJpegImage from
 // just the first kJpegImageSubrangeWithDimensionsLength bytes. If this test
@@ -215,8 +222,10 @@ ResourceFetcher* CreateFetcher() {
   return MakeGarbageCollected<ResourceFetcher>(ResourceFetcherInit(
       properties->MakeDetachable(), MakeGarbageCollected<MockFetchContext>(),
       base::MakeRefCounted<scheduler::FakeTaskRunner>(),
+      base::MakeRefCounted<scheduler::FakeTaskRunner>(),
       MakeGarbageCollected<TestLoaderFactory>(),
-      MakeGarbageCollected<MockContextLifecycleNotifier>()));
+      MakeGarbageCollected<MockContextLifecycleNotifier>(),
+      nullptr /* back_forward_cache_loader_helper */));
 }
 
 TEST_F(ImageResourceTest, MultipartImage) {
@@ -398,6 +407,8 @@ TEST_F(ImageResourceTest, CancelWithImageAndFinishObserver) {
   ScopedMockedURLLoad scoped_mocked_url_load(test_url, GetTestFilePath());
 
   ResourceFetcher* fetcher = CreateFetcher();
+  scheduler::FakeTaskRunner* task_runner =
+      static_cast<scheduler::FakeTaskRunner*>(fetcher->GetTaskRunner().get());
 
   // Emulate starting a real load.
   ImageResource* image_resource = ImageResource::CreateForTest(test_url);
@@ -427,7 +438,7 @@ TEST_F(ImageResourceTest, CancelWithImageAndFinishObserver) {
 
   // ResourceFinishObserver is notified asynchronously.
   EXPECT_CALL(*finish_observer, NotifyFinished());
-  blink::test::RunPendingTasks();
+  task_runner->RunUntilIdle();
 }
 
 TEST_F(ImageResourceTest, DecodedDataRemainsWhileHasClients) {
@@ -905,13 +916,9 @@ TEST_F(ImageResourceTest, PeriodicFlushTest) {
   ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
       platform;
 
-  EmptyChromeClient* chrome_client = MakeGarbageCollected<EmptyChromeClient>();
-  Page::PageClients clients;
-  FillWithEmptyClients(clients);
-  clients.chrome_client = chrome_client;
   std::unique_ptr<DummyPageHolder> page_holder =
       std::make_unique<DummyPageHolder>(
-          IntSize(800, 600), &clients,
+          IntSize(800, 600), /*chrome_client=*/nullptr,
           MakeGarbageCollected<EmptyLocalFrameClient>());
 
   KURL test_url(kTestURL);
@@ -919,13 +926,16 @@ TEST_F(ImageResourceTest, PeriodicFlushTest) {
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       page_holder->GetFrame().GetTaskRunner(TaskType::kInternalTest);
+  scoped_refptr<base::SingleThreadTaskRunner> unfreezable_task_runner =
+      page_holder->GetFrame().GetTaskRunner(TaskType::kInternalTest);
   auto* context = MakeGarbageCollected<MockFetchContext>();
   auto& properties =
       MakeGarbageCollected<TestResourceFetcherProperties>()->MakeDetachable();
-  auto* fetcher = MakeGarbageCollected<ResourceFetcher>(
-      ResourceFetcherInit(properties, context, task_runner,
-                          MakeGarbageCollected<TestLoaderFactory>(),
-                          page_holder->GetFrame().DomWindow()));
+  auto* fetcher = MakeGarbageCollected<ResourceFetcher>(ResourceFetcherInit(
+      properties, context, task_runner, unfreezable_task_runner,
+      MakeGarbageCollected<TestLoaderFactory>(),
+      page_holder->GetFrame().DomWindow(),
+      nullptr /* back_forward_cache_loader_helper */));
   auto frame_scheduler = std::make_unique<scheduler::FakeFrameScheduler>();
   auto* scheduler = MakeGarbageCollected<ResourceLoadScheduler>(
       ResourceLoadScheduler::ThrottlingPolicy::kNormal,

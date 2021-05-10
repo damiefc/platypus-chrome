@@ -6,7 +6,9 @@
 
 #include <memory>
 
+#include "build/chromeos_buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
 #include "ui/gfx/color_palette.h"
@@ -21,9 +23,6 @@
 #include "ui/views/layout/box_layout.h"
 
 namespace message_center {
-
-const char NotificationControlButtonsView::kViewClassName[] =
-    "NotificationControlButtonsView";
 
 NotificationControlButtonsView::NotificationControlButtonsView(
     MessageView* message_view)
@@ -44,7 +43,9 @@ NotificationControlButtonsView::~NotificationControlButtonsView() = default;
 
 void NotificationControlButtonsView::ShowCloseButton(bool show) {
   if (show && !close_button_) {
-    close_button_ = AddChildView(std::make_unique<PaddedButton>(this));
+    close_button_ = AddChildView(std::make_unique<PaddedButton>(
+        base::BindRepeating(&MessageView::OnCloseButtonPressed,
+                            base::Unretained(message_view_))));
     close_button_->SetImage(views::Button::STATE_NORMAL,
                             gfx::CreateVectorIcon(kNotificationCloseButtonIcon,
                                                   DetermineButtonIconColor()));
@@ -67,7 +68,10 @@ void NotificationControlButtonsView::ShowSettingsButton(bool show) {
     // Add the button next right to the snooze button.
     const int position = snooze_button_ ? 1 : 0;
     settings_button_ =
-        AddChildViewAt(std::make_unique<PaddedButton>(this), position);
+        AddChildViewAt(std::make_unique<PaddedButton>(base::BindRepeating(
+                           &MessageView::OnSettingsButtonPressed,
+                           base::Unretained(message_view_))),
+                       position);
     settings_button_->SetImage(
         views::Button::STATE_NORMAL,
         gfx::CreateVectorIcon(kNotificationSettingsButtonIcon,
@@ -89,7 +93,11 @@ void NotificationControlButtonsView::ShowSettingsButton(bool show) {
 void NotificationControlButtonsView::ShowSnoozeButton(bool show) {
   if (show && !snooze_button_) {
     // Snooze button should appear as the first child.
-    snooze_button_ = AddChildViewAt(std::make_unique<PaddedButton>(this), 0);
+    snooze_button_ =
+        AddChildViewAt(std::make_unique<PaddedButton>(base::BindRepeating(
+                           &MessageView::OnSnoozeButtonPressed,
+                           base::Unretained(message_view_))),
+                       0);
     snooze_button_->SetImage(
         views::Button::STATE_NORMAL,
         gfx::CreateVectorIcon(kNotificationSnoozeButtonIcon,
@@ -136,28 +144,13 @@ void NotificationControlButtonsView::SetBackgroundColor(SkColor color) {
   UpdateButtonIconColors();
 }
 
-const char* NotificationControlButtonsView::GetClassName() const {
-  return kViewClassName;
-}
-
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void NotificationControlButtonsView::OnThemeChanged() {
   View::OnThemeChanged();
   SetBackground(views::CreateSolidBackground(GetNativeTheme()->GetSystemColor(
       ui::NativeTheme::kColorId_NotificationButtonBackground)));
 }
 #endif
-
-void NotificationControlButtonsView::ButtonPressed(views::Button* sender,
-                                                   const ui::Event& event) {
-  if (close_button_ && sender == close_button_) {
-    message_view_->OnCloseButtonPressed();
-  } else if (settings_button_ && sender == settings_button_) {
-    message_view_->OnSettingsButtonPressed(event);
-  } else if (snooze_button_ && sender == snooze_button_) {
-    message_view_->OnSnoozeButtonPressed(event);
-  }
-}
 
 void NotificationControlButtonsView::UpdateButtonIconColors() {
   SkColor icon_color = DetermineButtonIconColor();
@@ -184,5 +177,8 @@ SkColor NotificationControlButtonsView::DetermineButtonIconColor() const {
 
   return color_utils::BlendForMinContrast(icon_color_, background_color_).color;
 }
+
+BEGIN_METADATA(NotificationControlButtonsView, views::View)
+END_METADATA
 
 }  // namespace message_center

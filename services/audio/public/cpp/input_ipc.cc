@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "media/mojo/mojom/audio_data_pipe.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -15,7 +15,7 @@
 namespace audio {
 
 InputIPC::InputIPC(
-    mojo::PendingRemote<audio::mojom::StreamFactory> stream_factory,
+    mojo::PendingRemote<media::mojom::AudioStreamFactory> stream_factory,
     const std::string& device_id,
     mojo::PendingRemote<media::mojom::AudioLog> log)
     : device_id_(device_id),

@@ -10,10 +10,12 @@
 #include "components/navigation_metrics/navigation_metrics.h"
 #include "components/profile_metrics/browser_profile_type.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/browser_state_metrics/browser_state_metrics.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/crash_report/crash_loop_detection_util.h"
 #import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
+#include "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#include "ios/chrome/browser/web_state_list/all_web_state_observation_forwarder.h"
+#include "ios/chrome/browser/web_state_list/session_metrics.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/navigation/navigation_context.h"
@@ -27,33 +29,36 @@
 
 BROWSER_USER_DATA_KEY_IMPL(WebStateListMetricsBrowserAgent)
 
+// static
+void WebStateListMetricsBrowserAgent::CreateForBrowser(
+    Browser* browser,
+    SessionMetrics* session_metrics) {
+  if (!FromBrowser(browser)) {
+    browser->SetUserData(UserDataKey(),
+                         base::WrapUnique(new WebStateListMetricsBrowserAgent(
+                             browser, session_metrics)));
+  }
+}
+
 WebStateListMetricsBrowserAgent::WebStateListMetricsBrowserAgent(
-    Browser* browser)
-    : web_state_list_(browser->GetWebStateList()) {
-  browser->AddObserver(this);
+    Browser* browser,
+    SessionMetrics* session_metrics)
+    : web_state_list_(browser->GetWebStateList()),
+      session_metrics_(session_metrics) {
   DCHECK(web_state_list_);
+  DCHECK(session_metrics_);
+  browser->AddObserver(this);
   web_state_list_->AddObserver(this);
+  web_state_forwarder_.reset(
+      new AllWebStateObservationForwarder(web_state_list_, this));
+
   SessionRestorationBrowserAgent* restoration_agent =
       SessionRestorationBrowserAgent::FromBrowser(browser);
   if (restoration_agent)
     restoration_agent->AddObserver(this);
 }
 
-WebStateListMetricsBrowserAgent::WebStateListMetricsBrowserAgent() {
-  ResetSessionMetrics();
-}
-
 WebStateListMetricsBrowserAgent::~WebStateListMetricsBrowserAgent() = default;
-
-void WebStateListMetricsBrowserAgent::RecordSessionMetrics() {
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Session.ClosedTabCounts",
-                              detached_web_state_counter_, 1, 200, 50);
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Session.OpenedTabCounts",
-                              activated_web_state_counter_, 1, 200, 50);
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Session.NewTabCounts",
-                              inserted_web_state_counter_, 1, 200, 50);
-  ResetSessionMetrics();
-}
 
 void WebStateListMetricsBrowserAgent::WillStartSessionRestoration() {
   metric_collection_paused_ = true;
@@ -72,7 +77,7 @@ void WebStateListMetricsBrowserAgent::WebStateInsertedAt(
   if (metric_collection_paused_)
     return;
   base::RecordAction(base::UserMetricsAction("MobileNewTabOpened"));
-  ++inserted_web_state_counter_;
+  session_metrics_->OnWebStateInserted();
 }
 
 void WebStateListMetricsBrowserAgent::WebStateDetachedAt(
@@ -82,7 +87,7 @@ void WebStateListMetricsBrowserAgent::WebStateDetachedAt(
   if (metric_collection_paused_)
     return;
   base::RecordAction(base::UserMetricsAction("MobileTabClosed"));
-  ++detached_web_state_counter_;
+  session_metrics_->OnWebStateDetached();
 }
 
 void WebStateListMetricsBrowserAgent::WebStateActivatedAt(
@@ -93,18 +98,11 @@ void WebStateListMetricsBrowserAgent::WebStateActivatedAt(
     ActiveWebStateChangeReason reason) {
   if (metric_collection_paused_)
     return;
-  ++activated_web_state_counter_;
+  session_metrics_->OnWebStateActivated();
   if (reason == ActiveWebStateChangeReason::Replaced)
     return;
 
   base::RecordAction(base::UserMetricsAction("MobileTabSwitched"));
-}
-
-void WebStateListMetricsBrowserAgent::ResetSessionMetrics() {
-  inserted_web_state_counter_ = 0;
-  detached_web_state_counter_ = 0;
-  activated_web_state_counter_ = 0;
-  metric_collection_paused_ = false;
 }
 
 // web::WebStateObserver
@@ -120,28 +118,6 @@ void WebStateListMetricsBrowserAgent::DidStartNavigation(
     dispatch_once(&dispatch_once_token, ^{
       crash_util::ResetFailedStartupAttemptCount();
     });
-  }
-
-  DCHECK(web_state->GetNavigationManager());
-  web::NavigationItem* navigation_item =
-      web_state->GetNavigationManager()->GetPendingItem();
-
-  // TODO(crbug.com/676129): the pending item is not correctly set when the
-  // page is reloading, use the last committed item if pending item is null.
-  // Remove this once tracking bug is fixed.
-  if (!navigation_item) {
-    navigation_item = web_state->GetNavigationManager()->GetLastCommittedItem();
-  }
-
-  if (!navigation_item) {
-    // Pending item may not exist due to the bug in //ios/web layer.
-    // TODO(crbug.com/899827): remove this early return once GetPendingItem()
-    // always return valid object inside WebStateObserver::DidStartNavigation()
-    // callback.
-    //
-    // Note that GetLastCommittedItem() returns null if navigation manager does
-    // not have committed items (which is normal situation).
-    return;
   }
 }
 
@@ -163,13 +139,13 @@ void WebStateListMetricsBrowserAgent::DidFinishNavigation(
       item ? item->GetVirtualURL() : GURL::EmptyGURL(),
       navigation_context->IsSameDocument(),
       web_state->GetBrowserState()->IsOffTheRecord(),
-      GetBrowserStateType(web_state->GetBrowserState()));
+      profile_metrics::GetBrowserProfileType(web_state->GetBrowserState()));
 }
 
 void WebStateListMetricsBrowserAgent::PageLoaded(
     web::WebState* web_state,
     web::PageLoadCompletionStatus load_completion_status) {
-  switch ([[UIApplication sharedApplication] statusBarOrientation]) {
+  switch (GetInterfaceOrientation()) {
     case UIInterfaceOrientationPortrait:
     case UIInterfaceOrientationPortraitUpsideDown:
       UMA_HISTOGRAM_BOOLEAN("Tab.PageLoadInPortrait", YES);
@@ -188,11 +164,14 @@ void WebStateListMetricsBrowserAgent::PageLoaded(
 void WebStateListMetricsBrowserAgent::BrowserDestroyed(Browser* browser) {
   DCHECK_EQ(browser->GetWebStateList(), web_state_list_);
 
-  web_state_list_->RemoveObserver(this);
-  browser->RemoveObserver(this);
   SessionRestorationBrowserAgent* restoration_agent =
       SessionRestorationBrowserAgent::FromBrowser(browser);
   if (restoration_agent)
     restoration_agent->RemoveObserver(this);
+
+  web_state_forwarder_.reset(nullptr);
+  web_state_list_->RemoveObserver(this);
   web_state_list_ = nullptr;
+
+  browser->RemoveObserver(this);
 }

@@ -10,9 +10,10 @@
 #include "base/guid.h"
 #include "base/location.h"
 #include "base/strings/stringprintf.h"
-#include "components/sync/engine_impl/syncer_proto_util.h"
+#include "components/sync/engine/syncer_proto_util.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "net/base/net_errors.h"
+#include "net/http/http_status_code.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using std::find;
@@ -52,10 +53,6 @@ MockConnectionManager::~MockConnectionManager() {
   EXPECT_TRUE(update_queue_.empty()) << "Unfetched updates.";
 }
 
-void MockConnectionManager::SetCommitTimeRename(const string& prepend) {
-  commit_time_rename_prepended_string_ = prepend;
-}
-
 void MockConnectionManager::SetMidCommitCallback(base::OnceClosure callback) {
   mid_commit_callback_ = std::move(callback);
 }
@@ -65,27 +62,27 @@ void MockConnectionManager::SetMidCommitObserver(
   mid_commit_observer_ = observer;
 }
 
-bool MockConnectionManager::PostBufferToPath(const std::string& buffer_in,
-                                             const std::string& path,
-                                             const std::string& access_token,
-                                             std::string* buffer_out,
-                                             HttpResponse* http_response) {
+HttpResponse MockConnectionManager::PostBuffer(const std::string& buffer_in,
+                                               const std::string& access_token,
+                                               std::string* buffer_out) {
   ClientToServerMessage post;
   if (!post.ParseFromString(buffer_in)) {
     ADD_FAILURE();
-    return false;
+    // Note: Here and below, ForIoError() is chosen somewhat arbitrarily, since
+    // HttpResponse doesn't have any better-fitting type of error.
+    return HttpResponse::ForIoError();
   }
   if (!post.has_protocol_version()) {
     ADD_FAILURE();
-    return false;
+    return HttpResponse::ForIoError();
   }
   if (!post.has_api_key()) {
     ADD_FAILURE();
-    return false;
+    return HttpResponse::ForIoError();
   }
   if (!post.has_bag_of_chips()) {
     ADD_FAILURE();
-    return false;
+    return HttpResponse::ForIoError();
   }
 
   requests_.push_back(post);
@@ -94,29 +91,25 @@ bool MockConnectionManager::PostBufferToPath(const std::string& buffer_in,
   client_to_server_response.Clear();
 
   if (access_token.empty()) {
-    http_response->server_status = HttpResponse::SYNC_AUTH_ERROR;
-    return false;
+    return HttpResponse::ForNetError(net::HTTP_UNAUTHORIZED);
   }
 
   if (access_token != kValidAccessToken) {
     // Simulate server-side auth failure.
-    http_response->server_status = HttpResponse::SYNC_AUTH_ERROR;
     ClearAccessToken();
+    return HttpResponse::ForNetError(net::HTTP_UNAUTHORIZED);
   }
 
   if (--countdown_to_postbuffer_fail_ == 0) {
     // Fail as countdown hits zero.
-    http_response->server_status = HttpResponse::SYNC_SERVER_ERROR;
-    return false;
+    return HttpResponse::ForHttpStatusCode(net::HTTP_BAD_REQUEST);
   }
 
   if (!server_reachable_) {
-    http_response->server_status = HttpResponse::CONNECTION_UNAVAILABLE;
-    return false;
+    return HttpResponse::ForNetError(net::ERR_FAILED);
   }
 
   // Default to an ok connection.
-  http_response->server_status = HttpResponse::SERVER_CONNECTION_OK;
   client_to_server_response.set_error_code(SyncEnums::SUCCESS);
   const string current_store_birthday = store_birthday();
   client_to_server_response.set_store_birthday(current_store_birthday);
@@ -126,9 +119,8 @@ bool MockConnectionManager::PostBufferToPath(const std::string& buffer_in,
     client_to_server_response.set_error_message("Merry Unbirthday!");
     client_to_server_response.SerializeToString(buffer_out);
     store_birthday_sent_ = true;
-    return true;
+    return HttpResponse::ForSuccess();
   }
-  bool result = true;
   EXPECT_TRUE(!store_birthday_sent_ || post.has_store_birthday() ||
               post.message_contents() ==
                   ClientToServerMessage::CLEAR_SERVER_DATA);
@@ -136,21 +128,21 @@ bool MockConnectionManager::PostBufferToPath(const std::string& buffer_in,
 
   if (post.message_contents() == ClientToServerMessage::COMMIT) {
     if (!ProcessCommit(&post, &client_to_server_response)) {
-      return false;
+      return HttpResponse::ForIoError();
     }
 
   } else if (post.message_contents() == ClientToServerMessage::GET_UPDATES) {
     if (!ProcessGetUpdates(&post, &client_to_server_response)) {
-      return false;
+      return HttpResponse::ForIoError();
     }
   } else if (post.message_contents() ==
              ClientToServerMessage::CLEAR_SERVER_DATA) {
     if (!ProcessClearServerData(&post, &client_to_server_response)) {
-      return false;
+      return HttpResponse::ForIoError();
     }
   } else {
     EXPECT_TRUE(false) << "Unknown/unsupported ClientToServerMessage";
-    return false;
+    return HttpResponse::ForIoError();
   }
 
   {
@@ -187,7 +179,7 @@ bool MockConnectionManager::PostBufferToPath(const std::string& buffer_in,
     mid_commit_observer_->Observe();
   }
 
-  return result;
+  return HttpResponse::ForSuccess();
 }
 
 sync_pb::GetUpdatesResponse* MockConnectionManager::GetUpdateResponse() {
@@ -375,7 +367,8 @@ sync_pb::SyncEntity* MockConnectionManager::AddUpdateFromLastCommit() {
             last_commit_response().entryresponse(0).response_type());
 
   if (last_sent_commit().entries(0).deleted()) {
-    ModelType type = GetModelType(last_sent_commit().entries(0));
+    ModelType type =
+        GetModelTypeFromSpecifics(last_sent_commit().entries(0).specifics());
     AddUpdateTombstone(last_sent_commit().entries(0).id_string(), type);
   } else {
     sync_pb::SyncEntity* ent = GetUpdateResponse()->add_entries();
@@ -417,7 +410,8 @@ void MockConnectionManager::AddUpdateTombstone(const std::string& id,
 void MockConnectionManager::SetLastUpdateDeleted() {
   // Tombstones have only the ID set.  Wipe anything else.
   string id_string = GetMutableLastUpdate()->id_string();
-  ModelType type = GetModelType(*GetMutableLastUpdate());
+  ModelType type =
+      GetModelTypeFromSpecifics(GetMutableLastUpdate()->specifics());
   GetUpdateResponse()->mutable_entries()->RemoveLast();
   AddUpdateTombstone(id_string, type);
 }
@@ -488,7 +482,8 @@ bool MockConnectionManager::ProcessGetUpdates(
   sync_pb::GetUpdatesResponse* updates = &update_queue_.front();
   for (int i = 0; i < updates->entries_size(); ++i) {
     if (!updates->entries(i).deleted()) {
-      ModelType entry_type = GetModelType(updates->entries(i));
+      ModelType entry_type =
+          GetModelTypeFromSpecifics(updates->entries(i).specifics());
       EXPECT_TRUE(
           IsModelTypePresentInSpecifics(gu.from_progress_marker(), entry_type))
           << "Syncer did not request updates being provided by the test.";
@@ -555,7 +550,6 @@ bool MockConnectionManager::ProcessCommit(
     ADD_FAILURE() << "Wrong contents, found " << csm->message_contents();
     return false;
   }
-  map<string, string> changed_ids;
   const CommitMessage& commit_message = csm->commit();
   CommitResponse* commit_response = response_buffer->mutable_commit();
   commit_messages_.push_back(std::make_unique<CommitMessage>());
@@ -599,21 +593,10 @@ bool MockConnectionManager::ProcessCommit(
     }
     er->set_response_type(CommitResponse::SUCCESS);
     er->set_version(entry.version() + 1);
-    if (!commit_time_rename_prepended_string_.empty()) {
-      // Commit time rename sent down from the server.
-      er->set_name(commit_time_rename_prepended_string_ + entry.name());
-    }
-    string parent_id_string = entry.parent_id_string();
-    // Remap id's we've already assigned.
-    if (changed_ids.end() != changed_ids.find(parent_id_string)) {
-      parent_id_string = changed_ids[parent_id_string];
-      er->set_parent_id_string(parent_id_string);
-    }
     if (entry.has_version() && 0 != entry.version()) {
       er->set_id_string(id_string);  // Allows verification.
     } else {
       string new_id = base::StringPrintf("mock_server:%d", next_new_id_++);
-      changed_ids[id_string] = new_id;
       er->set_id_string(new_id);
     }
   }

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/json/json_reader.h"
+#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -31,10 +32,10 @@ static std::unique_ptr<base::DictionaryValue> CreateTestTypeDictionary() {
 void GetManifestParseError(base::StringPiece manifest_json,
                            std::string* error) {
   base::Optional<base::Value> manifest = base::JSONReader::Read(manifest_json);
-  ASSERT_TRUE(manifest);
+  ASSERT_TRUE(manifest) << "Invalid json \n" << manifest_json;
 
   simple_api::ManifestKeys manifest_keys;
-  base::string16 error_16;
+  std::u16string error_16;
   bool result = simple_api::ManifestKeys::ParseFromDictionary(
       base::Value::AsDictionaryValue(*manifest), &manifest_keys, &error_16);
 
@@ -47,7 +48,7 @@ void PopulateManifestKeys(base::StringPiece manifest_json,
   base::Optional<base::Value> manifest = base::JSONReader::Read(manifest_json);
   ASSERT_TRUE(manifest.has_value());
 
-  base::string16 error_16;
+  std::u16string error_16;
   bool result = simple_api::ManifestKeys::ParseFromDictionary(
       base::Value::AsDictionaryValue(*manifest), manifest_keys, &error_16);
 
@@ -58,11 +59,11 @@ void PopulateManifestKeys(base::StringPiece manifest_json,
 }  // namespace
 
 TEST(JsonSchemaCompilerSimpleTest, IncrementIntegerResultCreate) {
-  std::unique_ptr<base::ListValue> results =
-      simple_api::IncrementInteger::Results::Create(5);
+  base::Value results = base::Value::FromUniquePtrValue(
+      simple_api::IncrementInteger::Results::Create(5));
   base::ListValue expected;
   expected.AppendInteger(5);
-  EXPECT_TRUE(results->Equals(&expected));
+  EXPECT_EQ(expected, results);
 }
 
 TEST(JsonSchemaCompilerSimpleTest, IncrementIntegerParamsCreate) {
@@ -145,10 +146,10 @@ TEST(JsonSchemaCompilerSimpleTest, OptionalBeforeRequired) {
 }
 
 TEST(JsonSchemaCompilerSimpleTest, NoParamsResultCreate) {
-  std::unique_ptr<base::ListValue> results =
-      simple_api::OptionalString::Results::Create();
+  base::Value results = base::Value::FromUniquePtrValue(
+      simple_api::OptionalString::Results::Create());
   base::ListValue expected;
-  EXPECT_TRUE(results->Equals(&expected));
+  EXPECT_EQ(expected, results);
 }
 
 TEST(JsonSchemaCompilerSimpleTest, TestTypePopulate) {
@@ -175,32 +176,31 @@ TEST(JsonSchemaCompilerSimpleTest, GetTestType) {
     std::unique_ptr<base::DictionaryValue> value = CreateTestTypeDictionary();
     auto test_type = std::make_unique<simple_api::TestType>();
     EXPECT_TRUE(simple_api::TestType::Populate(*value, test_type.get()));
-    std::unique_ptr<base::ListValue> results =
-        simple_api::GetTestType::Results::Create(*test_type);
-
-    base::DictionaryValue* result = NULL;
-    results->GetDictionary(0, &result);
-    EXPECT_TRUE(result->Equals(value.get()));
+    base::Value results = base::Value::FromUniquePtrValue(
+        simple_api::GetTestType::Results::Create(*test_type));
+    ASSERT_TRUE(results.is_list());
+    ASSERT_EQ(1u, results.GetList().size());
+    EXPECT_TRUE(results.GetList()[0].Equals(value.get()));
   }
 }
 
 TEST(JsonSchemaCompilerSimpleTest, OnIntegerFiredCreate) {
   {
-    std::unique_ptr<base::ListValue> results(
-        simple_api::OnIntegerFired::Create(5));
+    base::Value results =
+        base::Value::FromUniquePtrValue(simple_api::OnIntegerFired::Create(5));
     base::ListValue expected;
     expected.AppendInteger(5);
-    EXPECT_TRUE(results->Equals(&expected));
+    EXPECT_EQ(expected, results);
   }
 }
 
 TEST(JsonSchemaCompilerSimpleTest, OnStringFiredCreate) {
   {
-    std::unique_ptr<base::ListValue> results(
+    base::Value results = base::Value::FromUniquePtrValue(
         simple_api::OnStringFired::Create("yo dawg"));
     base::ListValue expected;
     expected.AppendString("yo dawg");
-    EXPECT_TRUE(results->Equals(&expected));
+    EXPECT_EQ(expected, results);
   }
 }
 
@@ -214,11 +214,11 @@ TEST(JsonSchemaCompilerSimpleTest, OnTestTypeFiredCreate) {
     ASSERT_TRUE(expected->GetInteger("integer", &some_test_type.integer));
     ASSERT_TRUE(expected->GetBoolean("boolean", &some_test_type.boolean));
 
-    std::unique_ptr<base::ListValue> results(
+    base::Value results = base::Value::FromUniquePtrValue(
         simple_api::OnTestTypeFired::Create(some_test_type));
-    base::DictionaryValue* result = NULL;
-    results->GetDictionary(0, &result);
-    EXPECT_TRUE(result->Equals(expected.get()));
+    ASSERT_TRUE(results.is_list());
+    ASSERT_EQ(1u, results.GetList().size());
+    EXPECT_EQ(*expected, results.GetList()[0]);
   }
 }
 
@@ -248,7 +248,8 @@ TEST(JsonSchemaCompilerSimpleTest, ManifestKeyParsing_InvalidTypeError) {
       "object": {
         "foo": "bar"
       },
-      "key_enum": "one"
+      "key_enum": "one",
+      "key_enum_array": ["two"]
     }
   })";
 
@@ -270,16 +271,100 @@ TEST(JsonSchemaCompilerSimpleTest, ManifestKeyParsing_ArrayParseError) {
       "integer": 32,
       "array": ["one", "two", 3]
     },
-    "key_enum": "one"
+    "key_enum": "one",
+    "key_enum_array": ["two"]
   })";
 
   std::string error;
   ASSERT_NO_FATAL_FAILURE(GetManifestParseError(kPartialManifestJson, &error));
   EXPECT_EQ(
-      "Error at key 'key_ref.array'. Parsing array failed: expected string, "
-      "got integer.",
+      "Error at key 'key_ref.array'. Parsing array failed at index 2: expected "
+      "string, got integer",
       error);
 }
+
+TEST(JsonSchemaCompilerSimpleTest, ManifestKeyParsing_EnumArrayParseError) {
+  {
+    const char kPartialManifestJson[] = R"({
+      "key_string": "abc",
+      "key_ref": {
+        "string": "ref_string",
+        "boolean": true,
+        "number": 25.4,
+        "integer": 32,
+        "array": ["one", "two"]
+      },
+      "key_enum": "one",
+      "key_enum_array": ["two", false]
+    })";
+
+    std::string error;
+    ASSERT_NO_FATAL_FAILURE(
+        GetManifestParseError(kPartialManifestJson, &error));
+    EXPECT_EQ(
+        "Error at key 'key_enum_array'. Parsing array failed at index 1: "
+        "expected string, got boolean",
+        error);
+  }
+  {
+    const char kPartialManifestJson[] = R"({
+      "key_string": "abc",
+      "key_ref": {
+        "string": "ref_string",
+        "boolean": true,
+        "number": 25.4,
+        "integer": 32,
+        "array": ["one", "two"]
+      },
+      "key_enum": "one",
+      "key_enum_array": [],
+      "key_obj": {
+        "obj_string": "foo",
+        "obj_bool": true,
+        "obj_optional_enum_array": ["one", "invalid_value"]
+      }
+    })";
+
+    std::string error;
+    ASSERT_NO_FATAL_FAILURE(
+        GetManifestParseError(kPartialManifestJson, &error));
+    EXPECT_EQ(
+        "Error at key 'key_obj.obj_optional_enum_array'. Parsing array failed "
+        "at index 1: "
+        "Specified value 'invalid_value' is invalid.",
+        error);
+  }
+  {
+    const char kPartialManifestJson[] = R"({
+      "key_string": "abc",
+      "key_ref": {
+        "string": "ref_string",
+        "boolean": true,
+        "number": 25.4,
+        "integer": 32,
+        "array": ["one", "two"]
+      },
+      "key_enum": "one",
+      "key_enum_array": [],
+      "key_obj": {
+        "obj_string": "foo",
+        "obj_bool": true,
+        "obj_optional_enum_array": false
+      }
+    })";
+
+    std::string error;
+    ASSERT_NO_FATAL_FAILURE(
+        GetManifestParseError(kPartialManifestJson, &error));
+    EXPECT_EQ(
+        "Error at key 'key_obj.obj_optional_enum_array'. Type is invalid. "
+        "Expected list, found boolean.",
+        error);
+  }
+}
+
+TEST(JsonSchemaCompilerSimpleTest,
+     ManifestKeyParsing_OptionalEnumArrayParseError) {}
 
 TEST(JsonSchemaCompilerSimpleTest, ManifestKeyParsing_InvalidEnumValue) {
   const char kPartialManifestJson[] = R"({
@@ -291,7 +376,8 @@ TEST(JsonSchemaCompilerSimpleTest, ManifestKeyParsing_InvalidEnumValue) {
       "integer": 32,
       "opt_external_enum": "four"
     },
-    "key_enum": "one"
+    "key_enum": "one",
+    "key_enum_array": ["two"]
   })";
 
   std::string error;
@@ -318,9 +404,12 @@ TEST(JsonSchemaCompilerSimpleTest, ManifestKeyParsing_Success_AllKeys) {
     },
     "key_obj": {
       "obj_string": "foo",
-      "obj_bool": true
+      "obj_bool": true,
+      "obj_optional_enum_array": ["three"]
     },
-    "key_enum": "one"
+    "key_enum": "one",
+    "key_enum_array": ["two", "one"],
+    "3d_key": "yes"
   })";
 
   simple_api::ManifestKeys manifest_keys;
@@ -332,6 +421,9 @@ TEST(JsonSchemaCompilerSimpleTest, ManifestKeyParsing_Success_AllKeys) {
   ASSERT_TRUE(manifest_keys.key_obj);
   EXPECT_EQ("foo", manifest_keys.key_obj->obj_string);
   EXPECT_TRUE(manifest_keys.key_obj->obj_bool);
+  ASSERT_TRUE(manifest_keys.key_obj->obj_optional_enum_array);
+  EXPECT_THAT(*manifest_keys.key_obj->obj_optional_enum_array,
+              ::testing::ElementsAre(enums::ENUMERATION_THREE));
 
   EXPECT_EQ(simple_api::TEST_ENUM_ONE, manifest_keys.key_enum);
 
@@ -345,6 +437,10 @@ TEST(JsonSchemaCompilerSimpleTest, ManifestKeyParsing_Success_AllKeys) {
   EXPECT_THAT(*manifest_keys.key_ref.array,
               ::testing::ElementsAre("one", "two"));
   EXPECT_EQ(enums::ENUMERATION_TWO, manifest_keys.key_ref.opt_external_enum);
+  EXPECT_THAT(manifest_keys.key_enum_array,
+              ::testing::ElementsAre(simple_api::TEST_ENUM_TWO,
+                                     simple_api::TEST_ENUM_ONE));
+  EXPECT_EQ(simple_api::_3D_YES, manifest_keys._3d_key);
 }
 
 // Ensure leaving out optional keys is not a manifest parse error.
@@ -358,7 +454,8 @@ TEST(JsonSchemaCompilerSimpleTest,
       "number": 25.4,
       "integer": 32
     },
-    "key_enum": "two"
+    "key_enum": "two",
+    "key_enum_array": ["one"]
   })";
 
   simple_api::ManifestKeys manifest_keys;
@@ -375,4 +472,5 @@ TEST(JsonSchemaCompilerSimpleTest,
   EXPECT_EQ(32, manifest_keys.key_ref.integer);
   EXPECT_FALSE(manifest_keys.key_ref.array);
   EXPECT_EQ(enums::ENUMERATION_NONE, manifest_keys.key_ref.opt_external_enum);
+  EXPECT_EQ(simple_api::_3D_NONE, manifest_keys._3d_key);
 }

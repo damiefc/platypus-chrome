@@ -5,11 +5,10 @@
 #include "media/mojo/clients/mojo_audio_decoder.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/single_thread_task_runner.h"
+#include "base/sequenced_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "media/base/audio_buffer.h"
@@ -21,12 +20,13 @@
 namespace media {
 
 MojoAudioDecoder::MojoAudioDecoder(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
     mojo::PendingRemote<mojom::AudioDecoder> remote_decoder)
     : task_runner_(task_runner),
       pending_remote_decoder_(std::move(remote_decoder)),
       writer_capacity_(
           GetDefaultDecoderBufferConverterCapacity(DemuxerStream::AUDIO)) {
+  DETACH_FROM_SEQUENCE(sequence_checker_);
   DVLOG(1) << __func__;
 }
 
@@ -47,8 +47,8 @@ bool MojoAudioDecoder::SupportsDecryption() const {
 #endif
 }
 
-std::string MojoAudioDecoder::GetDisplayName() const {
-  return "MojoAudioDecoder";
+AudioDecoderType MojoAudioDecoder::GetDecoderType() const {
+  return decoder_type_;
 }
 
 void MojoAudioDecoder::FailInit(InitCB init_cb, Status err) {
@@ -62,7 +62,7 @@ void MojoAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                   const OutputCB& output_cb,
                                   const WaitingCB& waiting_cb) {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!remote_decoder_.is_bound())
     BindRemoteDecoder();
@@ -100,7 +100,7 @@ void MojoAudioDecoder::Initialize(const AudioDecoderConfig& config,
 void MojoAudioDecoder::Decode(scoped_refptr<DecoderBuffer> media_buffer,
                               DecodeCB decode_cb) {
   DVLOG(3) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!remote_decoder_.is_connected()) {
     task_runner_->PostTask(
@@ -128,7 +128,7 @@ void MojoAudioDecoder::Decode(scoped_refptr<DecoderBuffer> media_buffer,
 
 void MojoAudioDecoder::Reset(base::OnceClosure closure) {
   DVLOG(2) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!remote_decoder_.is_connected()) {
     if (decode_cb_) {
@@ -149,14 +149,14 @@ void MojoAudioDecoder::Reset(base::OnceClosure closure) {
 
 bool MojoAudioDecoder::NeedsBitstreamConversion() const {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return needs_bitstream_conversion_;
 }
 
 void MojoAudioDecoder::BindRemoteDecoder() {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   remote_decoder_.Bind(std::move(pending_remote_decoder_));
 
@@ -170,21 +170,21 @@ void MojoAudioDecoder::BindRemoteDecoder() {
 
 void MojoAudioDecoder::OnBufferDecoded(mojom::AudioBufferPtr buffer) {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   output_cb_.Run(buffer.To<scoped_refptr<AudioBuffer>>());
 }
 
 void MojoAudioDecoder::OnWaiting(WaitingReason reason) {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   waiting_cb_.Run(reason);
 }
 
 void MojoAudioDecoder::OnConnectionError() {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!remote_decoder_.is_connected());
 
   if (init_cb_) {
@@ -199,11 +199,13 @@ void MojoAudioDecoder::OnConnectionError() {
 }
 
 void MojoAudioDecoder::OnInitialized(const Status& status,
-                                     bool needs_bitstream_conversion) {
+                                     bool needs_bitstream_conversion,
+                                     AudioDecoderType decoder_type) {
   DVLOG(1) << __func__ << ": success:" << status.is_ok();
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   needs_bitstream_conversion_ = needs_bitstream_conversion;
+  decoder_type_ = decoder_type;
 
   if (status.is_ok() && !mojo_decoder_buffer_writer_) {
     mojo::ScopedDataPipeConsumerHandle remote_consumer_handle;
@@ -219,7 +221,7 @@ void MojoAudioDecoder::OnInitialized(const Status& status,
 
 void MojoAudioDecoder::OnDecodeStatus(const Status& status) {
   DVLOG(1) << __func__ << ": status:" << status.code();
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   DCHECK(decode_cb_);
   std::move(decode_cb_).Run(status);
@@ -227,7 +229,7 @@ void MojoAudioDecoder::OnDecodeStatus(const Status& status) {
 
 void MojoAudioDecoder::OnResetDone() {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // For pending decodes OnDecodeStatus() should arrive before OnResetDone().
   DCHECK(!decode_cb_);

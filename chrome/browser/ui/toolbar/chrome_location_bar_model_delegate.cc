@@ -11,7 +11,6 @@
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
@@ -24,6 +23,7 @@
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/search/ntp_features.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/navigation_controller.h"
@@ -41,6 +41,13 @@
 #include "chrome/browser/offline_pages/offline_page_utils.h"
 #endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/browser/extension_registry.h"
+
+// Id for extension that enables users to report sites to Safe Browsing.
+const char kPreventElisionExtensionId[] = "jknemblkbdhdcpllfgbfekkdciegfboi";
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
 ChromeLocationBarModelDelegate::ChromeLocationBarModelDelegate() {}
 
 ChromeLocationBarModelDelegate::~ChromeLocationBarModelDelegate() {}
@@ -51,10 +58,10 @@ content::NavigationEntry* ChromeLocationBarModelDelegate::GetNavigationEntry()
   return controller ? controller->GetVisibleEntry() : nullptr;
 }
 
-base::string16
+std::u16string
 ChromeLocationBarModelDelegate::FormattedStringWithEquivalentMeaning(
     const GURL& url,
-    const base::string16& formatted_url) const {
+    const std::u16string& formatted_url) const {
   return AutocompleteInput::FormattedStringWithEquivalentMeaning(
       url, formatted_url, ChromeAutocompleteSchemeClassifier(GetProfile()),
       nullptr);
@@ -71,7 +78,6 @@ bool ChromeLocationBarModelDelegate::GetURL(GURL* url) const {
 }
 
 bool ChromeLocationBarModelDelegate::ShouldPreventElision() {
-  RecordElisionConfig();
   if (GetElisionConfig() != ELISION_CONFIG_DEFAULT) {
     return true;
   }
@@ -103,10 +109,8 @@ bool ChromeLocationBarModelDelegate::ShouldDisplayURL() const {
   if (login_tab_helper && login_tab_helper->IsShowingPrompt())
     return login_tab_helper->ShouldDisplayURL();
 
-  if (entry->IsViewSourceMode() ||
-      entry->GetPageType() == content::PAGE_TYPE_INTERSTITIAL) {
+  if (entry->IsViewSourceMode())
     return true;
-  }
 
   const auto is_ntp = [](const GURL& url) {
     return url.SchemeIs(content::kChromeUIScheme) &&
@@ -192,9 +196,7 @@ bool ChromeLocationBarModelDelegate::IsNewTabPage() const {
   if (!search::DefaultSearchProviderIsGoogle(profile))
     return false;
 
-  GURL ntp_url(base::FeatureList::IsEnabled(ntp_features::kWebUI)
-                   ? chrome::kChromeUINewTabPageURL
-                   : chrome::kChromeSearchLocalNtpUrl);
+  GURL ntp_url(chrome::kChromeUINewTabPageURL);
   return ntp_url.scheme_piece() == entry->GetURL().scheme_piece() &&
          ntp_url.host_piece() == entry->GetURL().host_piece();
 }
@@ -234,19 +236,14 @@ ChromeLocationBarModelDelegate::GetElisionConfig() const {
       profile->GetPrefs()->GetBoolean(omnibox::kPreventUrlElisionsInOmnibox)) {
     return ELISION_CONFIG_TURNED_OFF_BY_PREF;
   }
-  return ELISION_CONFIG_DEFAULT;
-}
-
-void ChromeLocationBarModelDelegate::RecordElisionConfig() {
-  Profile* const profile = GetProfile();
-  // Only record metrics once for this object, and only record if the profile
-  // has already been created to avoid false logging of the default config.
-  if (elision_config_recorded_ || !profile) {
-    return;
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  if (profile && extensions::ExtensionRegistry::Get(profile)
+                     ->enabled_extensions()
+                     .Contains(kPreventElisionExtensionId)) {
+    return ELISION_CONFIG_TURNED_OFF_BY_EXTENSION;
   }
-  UMA_HISTOGRAM_ENUMERATION("Omnibox.ElisionConfig", GetElisionConfig(),
-                            ELISION_CONFIG_MAX);
-  elision_config_recorded_ = true;
+#endif
+  return ELISION_CONFIG_DEFAULT;
 }
 
 AutocompleteClassifier*

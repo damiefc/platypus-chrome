@@ -37,6 +37,14 @@ bool SchemaRegistryTrackingPolicyProvider::IsInitializationComplete(
   return state_ == READY;
 }
 
+bool SchemaRegistryTrackingPolicyProvider::IsFirstPolicyLoadComplete(
+    PolicyDomain domain) const {
+  if (domain == POLICY_DOMAIN_CHROME)
+    return delegate_->IsFirstPolicyLoadComplete(domain);
+  // This provider keeps its own state for all the other domains.
+  return state_ == READY;
+}
+
 void SchemaRegistryTrackingPolicyProvider::RefreshPolicies() {
   delegate_->RefreshPolicies();
 }
@@ -91,7 +99,7 @@ void SchemaRegistryTrackingPolicyProvider::OnUpdatePolicy(
     // Always pass on the Chrome policy, even if the components are not ready
     // yet.
     const PolicyNamespace chrome_ns(POLICY_DOMAIN_CHROME, "");
-    bundle->Get(chrome_ns).CopyFrom(delegate_->policies().Get(chrome_ns));
+    bundle->Get(chrome_ns) = delegate_->policies().Get(chrome_ns).Clone();
   }
 
   UpdatePolicy(std::move(bundle));

@@ -12,11 +12,10 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
-#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
 #include "base/values.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -153,7 +152,7 @@ ExtensionFunction::ResponseAction RulesFunction::Run() {
   // <webview> embedders use the declarativeWebRequest API via
   // <webview>.onRequest.
   if (web_view_instance_id && !extension_->permissions_data()->HasAPIPermission(
-                                  APIPermission::kWebView)) {
+                                  mojom::APIPermissionID::kWebView)) {
     return RespondNow(Error("Missing webview permission"));
   }
 
@@ -187,12 +186,12 @@ ExtensionFunction::ResponseAction RulesFunction::Run() {
   if (content::BrowserThread::CurrentlyOn(rules_registry_->owner_thread()))
     return RespondNow(RunAsyncOnCorrectThread());
 
-  scoped_refptr<base::SingleThreadTaskRunner> thread_task_runner =
-      base::CreateSingleThreadTaskRunner({rules_registry_->owner_thread()});
-  base::PostTaskAndReplyWithResult(
-      thread_task_runner.get(), FROM_HERE,
-      base::BindOnce(&RulesFunction::RunAsyncOnCorrectThread, this),
-      base::BindOnce(&RulesFunction::SendResponse, this));
+  content::BrowserThread::GetTaskRunnerForThread(
+      rules_registry_->owner_thread())
+      ->PostTaskAndReplyWithResult(
+          FROM_HERE,
+          base::BindOnce(&RulesFunction::RunAsyncOnCorrectThread, this),
+          base::BindOnce(&RulesFunction::SendResponse, this));
   return RespondLater();
 }
 
@@ -222,7 +221,7 @@ EventsEventAddRulesFunction::RunAsyncOnCorrectThread() {
   auto rules_value = std::make_unique<base::ListValue>();
   for (const auto* rule : rules_out)
     rules_value->Append(rule->ToValue());
-  return OneArgument(std::move(rules_value));
+  return OneArgument(base::Value::FromUniquePtrValue(std::move(rules_value)));
 }
 
 void EventsEventAddRulesFunction::RecordUMA(
@@ -309,7 +308,7 @@ EventsEventGetRulesFunction::RunAsyncOnCorrectThread() {
   auto rules_value = std::make_unique<base::ListValue>();
   for (const auto* rule : rules)
     rules_value->Append(rule->ToValue());
-  return OneArgument(std::move(rules_value));
+  return OneArgument(base::Value::FromUniquePtrValue(std::move(rules_value)));
 }
 
 void EventsEventGetRulesFunction::RecordUMA(

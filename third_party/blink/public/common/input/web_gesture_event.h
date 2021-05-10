@@ -26,7 +26,7 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
  public:
   using InertialPhaseState = mojom::InertialPhaseState;
 
-  bool is_source_touch_event_set_non_blocking = false;
+  bool is_source_touch_event_set_blocking = false;
 
   // The pointer type for the first touch point in the gesture.
   WebPointerProperties::PointerType primary_pointer_type =
@@ -98,14 +98,17 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
       // If true, this event will skip hit testing to find a scroll
       // target and instead just scroll the viewport.
       bool target_viewport;
-      // True if this event is generated from a wheel event with synthetic
-      // phase.
+      // True if this event is generated from a mousewheel or scrollbar.
+      // Synthetic GSB(s) are ignored by the blink::ElasticOverscrollController.
       bool synthetic;
       // If true, this event has been hit tested by the main thread and the
       // result is stored in scrollable_area_element_id. Used only in scroll
       // unification when the event is sent back the the compositor for a
       // second time after the main thread hit test is complete.
       bool main_thread_hit_tested;
+      // If true, this event will be used for cursor control instead of
+      // scrolling. the entire scroll sequence will be used for cursor control.
+      bool cursor_control;
     } scroll_begin;
 
     struct {

@@ -4,7 +4,7 @@
 
 #include "content/browser/web_package/web_bundle_url_loader_factory.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
@@ -87,14 +87,14 @@ class WebBundleURLLoaderFactoryTest : public testing::Test {
       loader_factory_->Clone(loader_factory.BindNewPipeAndPassReceiver());
       loader_factory->CreateLoaderAndStart(
           loader.BindNewPipeAndPassReceiver(),
-          /*routing_id=*/0, /*request_id=*/0, /*options=*/0, resource_request_,
+          /*request_id=*/0, /*options=*/0, resource_request_,
           test_client_.CreateRemote(),
           net::MutableNetworkTrafficAnnotationTag(
               TRAFFIC_ANNOTATION_FOR_TESTS));
     } else {
       loader_factory_->CreateLoaderAndStart(
           loader.BindNewPipeAndPassReceiver(),
-          /*routing_id=*/0, /*request_id=*/0, /*options=*/0, resource_request_,
+          /*request_id=*/0, /*options=*/0, resource_request_,
           test_client_.CreateRemote(),
           net::MutableNetworkTrafficAnnotationTag(
               TRAFFIC_ANNOTATION_FOR_TESTS));

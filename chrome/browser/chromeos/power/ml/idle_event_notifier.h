@@ -10,9 +10,8 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
-#include "base/timer/timer.h"
 #include "chrome/browser/chromeos/power/ml/boot_clock.h"
 #include "chrome/browser/chromeos/power/ml/user_activity_event.pb.h"
 #include "chromeos/dbus/power/power_manager_client.h"
@@ -99,9 +98,9 @@ class IdleEventNotifier : public PowerManagerClient::Observer,
 
   // chromeos::PowerManagerClient::Observer overrides:
   void LidEventReceived(chromeos::PowerManagerClient::LidState state,
-                        const base::TimeTicks& timestamp) override;
+                        base::TimeTicks timestamp) override;
   void PowerChanged(const power_manager::PowerSupplyProperties& proto) override;
-  void SuspendDone(const base::TimeDelta& sleep_duration) override;
+  void SuspendDone(base::TimeDelta sleep_duration) override;
 
   // ui::UserActivityObserver overrides:
   void OnUserActivity(const ui::Event* event) override;
@@ -147,11 +146,11 @@ class IdleEventNotifier : public PowerManagerClient::Observer,
 
   BootClock boot_clock_;
 
-  ScopedObserver<chromeos::PowerManagerClient,
-                 chromeos::PowerManagerClient::Observer>
-      power_manager_client_observer_;
-  ScopedObserver<ui::UserActivityDetector, ui::UserActivityObserver>
-      user_activity_observer_;
+  base::ScopedObservation<chromeos::PowerManagerClient,
+                          chromeos::PowerManagerClient::Observer>
+      power_manager_client_observation_{this};
+  base::ScopedObservation<ui::UserActivityDetector, ui::UserActivityObserver>
+      user_activity_observation_{this};
 
   // Last-received external power state. Changes are treated as user activity.
   base::Optional<power_manager::PowerSupplyProperties_ExternalPower>

@@ -8,7 +8,7 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/system_monitor.h"
@@ -67,7 +67,7 @@ class AudioDeviceListenerWinTest
   bool SimulateDefaultOutputDeviceChange(const char* new_device_id) {
     auto result = output_device_listener_->OnDefaultDeviceChanged(
         static_cast<EDataFlow>(eConsole), static_cast<ERole>(eRender),
-        base::ASCIIToUTF16(new_device_id).c_str());
+        base::ASCIIToWide(new_device_id).c_str());
     task_environment_.RunUntilIdle();
     return result == S_OK;
   }

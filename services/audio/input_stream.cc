@@ -8,8 +8,9 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "media/audio/audio_manager.h"
@@ -34,6 +35,8 @@ const char* ErrorCodeToString(InputController::ErrorCode error) {
       return "STREAM_OPEN_ERROR";
     case (InputController::STREAM_ERROR):
       return "STREAM_ERROR";
+    case (InputController::STREAM_OPEN_SYSTEM_PERMISSIONS_ERROR):
+      return "STREAM_OPEN_SYSTEM_PERMISSIONS_ERROR";
     default:
       NOTREACHED();
   }
@@ -231,7 +234,7 @@ void InputStream::OnError(InputController::ErrorCode error_code) {
 void InputStream::OnLog(base::StringPiece message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
   if (log_)
-    log_->OnLogMessage(message.as_string() + " [id=" + id_.ToString() + "]");
+    log_->OnLogMessage(std::string(message) + " [id=" + id_.ToString() + "]");
 }
 
 void InputStream::OnMuted(bool is_muted) {

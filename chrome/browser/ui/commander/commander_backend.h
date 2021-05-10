@@ -5,8 +5,9 @@
 #ifndef CHROME_BROWSER_UI_COMMANDER_COMMANDER_BACKEND_H_
 #define CHROME_BROWSER_UI_COMMANDER_COMMANDER_BACKEND_H_
 
+#include <string>
+
 #include "base/callback.h"
-#include "base/strings/string16.h"
 
 class Browser;
 
@@ -26,12 +27,16 @@ class CommanderBackend {
   // Called when user input changes. |text| is the full contents of
   // the textfield. |browser| is the browser the commander UI is currently
   // attached to.
-  virtual void OnTextChanged(const base::string16& text, Browser* browser) = 0;
+  virtual void OnTextChanged(const std::u16string& text, Browser* browser) = 0;
   // Called when the user has selected (clicked or pressed enter) the option at
   // |command_index| from the result set identified by |result_set_id|.
   // If |result_set_id| is stale due to race conditions, this is a no-op to
   // ensure that we don't perform an action the user didn't intend.
   virtual void OnCommandSelected(size_t command_index, int result_set_id) = 0;
+  // Called when the user has cancelled entering a composite command. This
+  // should have the effect of returning the backend to the state it was in
+  // previous to the composite command being selected.
+  virtual void OnCompositeCommandCancelled() {}
   // Sets the callback to be used when a fresh view model is ready to be
   // displayed. Invocations of the callback are not necessarily 1:1 or
   // synchronous with user input, since some command sources may be async or

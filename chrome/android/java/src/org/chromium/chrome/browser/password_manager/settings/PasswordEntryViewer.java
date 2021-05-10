@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.password_manager.settings;
 
+import static org.chromium.chrome.browser.password_manager.settings.PasswordAccessReauthenticationHelper.SETTINGS_REAUTHENTICATION_HISTOGRAM;
+
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -36,8 +38,7 @@ import androidx.fragment.app.Fragment;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.sync.AndroidSyncSettings;
+import org.chromium.chrome.browser.password_manager.ReauthResult;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.ui.text.SpanApplier;
@@ -216,17 +217,13 @@ public class PasswordEntryViewer
 
     private boolean isPasswordSyncingUser() {
         ProfileSyncService syncService = ProfileSyncService.get();
-        return (AndroidSyncSettings.get().isSyncEnabled() && syncService.isEngineInitialized()
-                && !syncService.isUsingSecondaryPassphrase());
+        return syncService != null && syncService.isSyncRequested()
+                && syncService.isEngineInitialized() && !syncService.isUsingExplicitPassphrase();
     }
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
         inflater.inflate(R.menu.password_entry_viewer_action_bar_menu, menu);
-        menu.findItem(R.id.action_edit_saved_password)
-                .setVisible(
-                        ChromeFeatureList.isEnabled(ChromeFeatureList.EDIT_PASSWORDS_IN_SETTINGS)
-                        && !mException);
     }
 
     @Override
@@ -234,12 +231,6 @@ public class PasswordEntryViewer
         int id = item.getItemId();
         if (id == R.id.action_delete_saved_password) {
             removeItem();
-            return true;
-        }
-        if (id == R.id.action_edit_saved_password) {
-            PasswordManagerHandlerProvider.getInstance()
-                    .getPasswordManagerHandler()
-                    .showPasswordEntryEditingView(getContext(), mID);
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -407,6 +398,8 @@ public class PasswordEntryViewer
                         .show();
             } else if (ReauthenticationManager.authenticationStillValid(
                                ReauthenticationManager.ReauthScope.ONE_AT_A_TIME)) {
+                RecordHistogram.recordEnumeratedHistogram(SETTINGS_REAUTHENTICATION_HISTOGRAM,
+                        ReauthResult.SKIPPED, ReauthResult.MAX_VALUE);
                 copyPassword();
             } else {
                 mCopyButtonPressed = true;
@@ -428,6 +421,8 @@ public class PasswordEntryViewer
                 hidePassword();
             } else if (ReauthenticationManager.authenticationStillValid(
                                ReauthenticationManager.ReauthScope.ONE_AT_A_TIME)) {
+                RecordHistogram.recordEnumeratedHistogram(SETTINGS_REAUTHENTICATION_HISTOGRAM,
+                        ReauthResult.SKIPPED, ReauthResult.MAX_VALUE);
                 displayPassword();
             } else {
                 mViewButtonPressed = true;

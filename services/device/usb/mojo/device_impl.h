@@ -9,6 +9,8 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -31,13 +33,17 @@ class DeviceImpl : public mojom::UsbDevice, public device::UsbDevice::Observer {
  public:
   static void Create(scoped_refptr<device::UsbDevice> device,
                      mojo::PendingReceiver<mojom::UsbDevice> receiver,
-                     mojo::PendingRemote<mojom::UsbDeviceClient> client);
+                     mojo::PendingRemote<mojom::UsbDeviceClient> client,
+                     base::span<const uint8_t> blocked_interface_classes,
+                     bool allow_security_key_requests);
 
   ~DeviceImpl() override;
 
  private:
   DeviceImpl(scoped_refptr<device::UsbDevice> device,
-             mojo::PendingRemote<mojom::UsbDeviceClient> client);
+             mojo::PendingRemote<mojom::UsbDeviceClient> client,
+             base::span<const uint8_t> blocked_interface_classes,
+             bool allow_security_key_requests);
 
   // Closes the device if it's open. This will always set |device_handle_| to
   // null.
@@ -100,15 +106,20 @@ class DeviceImpl : public mojom::UsbDevice, public device::UsbDevice::Observer {
   // device::UsbDevice::Observer implementation:
   void OnDeviceRemoved(scoped_refptr<device::UsbDevice> device) override;
 
+  void OnInterfaceClaimed(ClaimInterfaceCallback callback, bool success);
   void OnClientConnectionError();
 
   const scoped_refptr<device::UsbDevice> device_;
   ScopedObserver<device::UsbDevice, device::UsbDevice::Observer> observer_;
 
   // The device handle. Will be null before the device is opened and after it
-  // has been closed.
+  // has been closed. |opening_| is set to true while the asynchronous open is
+  // in progress.
+  bool opening_ = false;
   scoped_refptr<UsbDeviceHandle> device_handle_;
 
+  const base::flat_set<uint8_t> blocked_interface_classes_;
+  const bool allow_security_key_requests_;
   mojo::SelfOwnedReceiverRef<mojom::UsbDevice> receiver_;
   mojo::Remote<device::mojom::UsbDeviceClient> client_;
   base::WeakPtrFactory<DeviceImpl> weak_factory_{this};

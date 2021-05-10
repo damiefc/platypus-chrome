@@ -10,7 +10,6 @@
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
@@ -85,7 +84,7 @@ void AutofillSaveCardInfoBarDelegateMobileTest::SetUp() {
   PersonalDataManagerFactory::GetInstance()->SetTestingFactory(
       profile(), BrowserContextKeyedServiceFactory::TestingFactory());
 
-  personal_data_.reset(new TestPersonalDataManager());
+  personal_data_ = std::make_unique<TestPersonalDataManager>();
   personal_data_->SetPrefService(profile()->GetPrefs());
 
   profile()->GetPrefs()->SetInteger(
@@ -397,7 +396,7 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest,
 
 TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, LocalCardHasNickname) {
   CreditCard card = test::GetCreditCard();
-  card.SetNickname(base::ASCIIToUTF16("Nickname"));
+  card.SetNickname(u"Nickname");
   std::unique_ptr<AutofillSaveCardInfoBarDelegateMobile> delegate =
       CreateDelegate(/*is_uploading=*/true,
                      prefs::PREVIOUS_SAVE_CREDIT_CARD_PROMPT_USER_DECISION_NONE,

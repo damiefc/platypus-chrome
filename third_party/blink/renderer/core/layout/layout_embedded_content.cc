@@ -44,52 +44,22 @@
 namespace blink {
 
 LayoutEmbeddedContent::LayoutEmbeddedContent(HTMLFrameOwnerElement* element)
-    : LayoutReplaced(element),
-      // Reference counting is used to prevent the part from being destroyed
-      // while inside the EmbeddedContentView code, which might not be able to
-      // handle that.
-      ref_count_(1) {
+    : LayoutReplaced(element) {
   DCHECK(element);
   SetInline(false);
 }
 
-void LayoutEmbeddedContent::Release() {
-  NOT_DESTROYED();
-  if (--ref_count_ <= 0)
-    delete this;
-}
-
 void LayoutEmbeddedContent::WillBeDestroyed() {
   NOT_DESTROYED();
-  if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache()) {
-    cache->ChildrenChanged(Parent());
+  if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
     cache->Remove(this);
-  }
 
   if (auto* frame_owner = GetFrameOwnerElement())
     frame_owner->SetEmbeddedContentView(nullptr);
 
   LayoutReplaced::WillBeDestroyed();
-}
 
-void LayoutEmbeddedContent::DeleteThis() {
-  NOT_DESTROYED();
-  // We call clearNode here because LayoutEmbeddedContent is ref counted. This
-  // call to destroy may not actually destroy the layout object. We can keep it
-  // around because of references from the LocalFrameView class. (The actual
-  // destruction of the class happens in PostDestroy() which is called from
-  // Release()).
-  //
-  // But, we've told the system we've destroyed the layoutObject, which happens
-  // when the DOM node is destroyed. So there is a good chance the DOM node this
-  // object points too is invalid, so we have to clear the node so we make sure
-  // we don't access it in the future.
   ClearNode();
-  Release();
-}
-
-LayoutEmbeddedContent::~LayoutEmbeddedContent() {
-  DCHECK_LE(ref_count_, 0);
 }
 
 FrameView* LayoutEmbeddedContent::ChildFrameView() const {
@@ -142,7 +112,7 @@ PaintLayerType LayoutEmbeddedContent::LayerTypeRequired() const {
   return kForcedPaintLayer;
 }
 
-bool LayoutEmbeddedContent::ContentDocumentIsCompositing() const {
+bool LayoutEmbeddedContent::ContentDocumentContainsGraphicsLayer() const {
   NOT_DESTROYED();
   if (PaintLayerCompositor* inner_compositor =
           PaintLayerCompositor::FrameContentsCompositor(*this)) {
@@ -316,14 +286,6 @@ void LayoutEmbeddedContent::PaintReplaced(
   if (ChildPaintBlockedByDisplayLock())
     return;
   EmbeddedContentPainter(*this).PaintReplaced(paint_info, paint_offset);
-}
-
-void LayoutEmbeddedContent::InvalidatePaint(
-    const PaintInvalidatorContext& context) const {
-  NOT_DESTROYED();
-  LayoutReplaced::InvalidatePaint(context);
-  if (auto* plugin = Plugin())
-    plugin->InvalidatePaint();
 }
 
 CursorDirective LayoutEmbeddedContent::GetCursor(const PhysicalOffset& point,

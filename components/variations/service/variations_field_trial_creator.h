@@ -70,6 +70,8 @@ class VariationsFieldTrialCreator {
   // |safe_seed_manager| should be notified of the combined server and client
   // state that was activated to create the field trials (only when the return
   // value is true).
+  // |low_entropy_source_value| contains the low entropy source value that was
+  // used for client-side randomization of variations.
   // |extra_overrides| gives a list of feature overrides that should be applied
   // after the features explicitly disabled/enabled from the command line via
   // --disable-features and --enable-features, but before field trials.
@@ -88,7 +90,8 @@ class VariationsFieldTrialCreator {
           low_entropy_provider,
       std::unique_ptr<base::FeatureList> feature_list,
       PlatformFieldTrials* platform_field_trials,
-      SafeSeedManager* safe_seed_manager);
+      SafeSeedManager* safe_seed_manager,
+      base::Optional<int> low_entropy_source_value);
 
   // Returns all of the client state used for filtering studies.
   // As a side-effect, may update the stored permanent consistency country.
@@ -111,9 +114,6 @@ class VariationsFieldTrialCreator {
   // Sets the stored permanent variations overridden country pref for this
   // client.
   void StoreVariationsOverriddenCountry(const std::string& country);
-
-  // Records the time of the most recent successful fetch.
-  void RecordLastFetchTime();
 
   // Allow the platform that is used to filter the set of active trials to be
   // overridden.
@@ -151,14 +151,13 @@ class VariationsFieldTrialCreator {
   // successfully; and if so, stores the loaded variations state into the
   // |safe_seed_manager|.
   bool CreateTrialsFromSeed(
-      std::unique_ptr<const base::FieldTrial::EntropyProvider>
-          low_entropy_provider,
+      const base::FieldTrial::EntropyProvider* low_entropy_provider,
       base::FeatureList* feature_list,
       SafeSeedManager* safe_seed_manager);
 
   // Overrides the string resource specified by |hash| with |str| in the
   // resource bundle.
-  void OverrideUIString(uint32_t hash, const base::string16& str);
+  void OverrideUIString(uint32_t hash, const std::u16string& str);
 
   // Returns the seed store. Virtual for testing.
   virtual VariationsSeedStore* GetSeedStore();
@@ -194,7 +193,7 @@ class VariationsFieldTrialCreator {
 
   // Caches the UI strings which need to be overridden in the resource bundle.
   // These strings are cached before the resource bundle is initialized.
-  std::unordered_map<int, base::string16> overridden_strings_map_;
+  std::unordered_map<int, std::u16string> overridden_strings_map_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

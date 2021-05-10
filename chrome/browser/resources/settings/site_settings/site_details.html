@@ -123,7 +123,7 @@
     </div>
     <div class="list-frame">
       <site-details-permission category="[[ContentSettingsTypes.GEOLOCATION]]"
-          icon="cr:location-on" label="$i18n{siteSettingsLocation}">
+          icon="settings:location-on" label="$i18n{siteSettingsLocation}">
       </site-details-permission>
       <site-details-permission category="[[ContentSettingsTypes.CAMERA]]"
           icon="cr:videocam" label="$i18n{siteSettingsCamera}">
@@ -140,9 +140,6 @@
       </site-details-permission>
       <site-details-permission category="[[ContentSettingsTypes.JAVASCRIPT]]"
           icon="settings:code" label="$i18n{siteSettingsJavascript}">
-      </site-details-permission>
-      <site-details-permission category="[[ContentSettingsTypes.PLUGINS]]"
-          icon="cr:extension" label="$i18n{siteSettingsFlash}">
       </site-details-permission>
       <site-details-permission category="[[ContentSettingsTypes.IMAGES]]"
           icon="settings:photo" label="$i18n{siteSettingsImages}">
@@ -189,10 +186,6 @@
       <site-details-permission category="[[ContentSettingsTypes.HID_DEVICES]]"
           icon="settings:hid-device" label="$i18n{siteSettingsHidDevices}">
       </site-details-permission>
-      <site-details-permission
-          category="[[ContentSettingsTypes.UNSANDBOXED_PLUGINS]]"
-          icon="cr:extension" label="$i18n{siteSettingsUnsandboxedPlugins}">
-      </site-details-permission>
 <if expr="chromeos">
       <site-details-permission
           category="[[ContentSettingsTypes.PROTECTED_CONTENT]]"
@@ -228,7 +221,7 @@
       </site-details-permission>
       <site-details-permission
           category="[[ContentSettingsTypes.IDLE_DETECTION]]"
-          icon="settings:person"
+          icon="settings:devices"
           label="$i18n{siteSettingsIdleDetection}">
       </site-details-permission>
       <template is="dom-if" if="[[enableExperimentalWebPlatformFeatures_]]">
@@ -239,8 +232,17 @@
         </site-details-permission>
       </template>
       <template is="dom-if" if="[[enableFontAccessContentSetting_]]">
-        <site-details-permission category="[[ContentSettingsTypes.FONT_ACCESS]]"
-            icon="settings:font-access" label="$i18n{fonts}">
+        <site-details-permission
+            category="[[ContentSettingsTypes.FONT_ACCESS]]"
+            icon="settings:font-access"
+            label="$i18n{fonts}">
+        </site-details-permission>
+      </template>
+      <template is="dom-if" if="[[enableFileHandlingContentSetting_]]">
+        <site-details-permission
+            category="[[ContentSettingsTypes.FILE_HANDLING]]"
+            icon="settings:file-handling"
+            label="$i18n{siteSettingsFileHandling}">
         </site-details-permission>
       </template>
     </div>

@@ -4,10 +4,10 @@
 
 #include "chrome/browser/browsing_data/access_context_audit_database.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "sql/database.h"
@@ -47,21 +47,24 @@ void ExpectAccessRecordsEqual(
   }
 }
 
+void ValidateRecords(
+    std::vector<AccessContextAuditDatabase::AccessRecord> got_records,
+    std::vector<AccessContextAuditDatabase::AccessRecord> want_records) {
+  // Apply an arbitrary ordering to simplify testing equivalence.
+  std::sort(got_records.begin(), got_records.end(), RecordTestOrdering);
+  std::sort(want_records.begin(), want_records.end(), RecordTestOrdering);
+
+  EXPECT_EQ(got_records.size(), want_records.size());
+  for (size_t i = 0; i < std::min(got_records.size(), want_records.size());
+       i++) {
+    ExpectAccessRecordsEqual(got_records[i], want_records[i]);
+  }
+}
+
 void ValidateDatabaseRecords(
     AccessContextAuditDatabase* database,
     std::vector<AccessContextAuditDatabase::AccessRecord> expected_records) {
-  auto stored_records = database->GetAllRecords();
-
-  // Apply an arbitrary ordering to simplify testing equivalence.
-  std::sort(stored_records.begin(), stored_records.end(), RecordTestOrdering);
-  std::sort(expected_records.begin(), expected_records.end(),
-            RecordTestOrdering);
-
-  EXPECT_EQ(stored_records.size(), expected_records.size());
-  for (size_t i = 0;
-       i < std::min(stored_records.size(), expected_records.size()); i++) {
-    ExpectAccessRecordsEqual(stored_records[i], expected_records[i]);
-  }
+  ValidateRecords(database->GetAllRecords(), expected_records);
 }
 
 constexpr char kManyContextsCookieName[] = "multiple contexts cookie";
@@ -645,4 +648,34 @@ TEST_F(AccessContextAuditDatabaseTest, RemoveStorageApiRecords) {
       test_records.end());
   EXPECT_GT(GetTestRecords().size(), test_records.size());
   ValidateDatabaseRecords(database(), test_records);
+}
+
+TEST_F(AccessContextAuditDatabaseTest, GetCookieRecords) {
+  auto test_records = GetTestRecords();
+  OpenDatabase();
+  database()->AddRecords(test_records);
+
+  std::vector<AccessContextAuditDatabase::AccessRecord> want_records;
+  for (auto& record : test_records) {
+    if (record.type == AccessContextAuditDatabase::StorageAPIType::kCookie) {
+      want_records.push_back(record);
+    }
+  }
+
+  ValidateRecords(database()->GetCookieRecords(), want_records);
+}
+
+TEST_F(AccessContextAuditDatabaseTest, GetStorageRecords) {
+  auto test_records = GetTestRecords();
+  OpenDatabase();
+  database()->AddRecords(test_records);
+
+  std::vector<AccessContextAuditDatabase::AccessRecord> want_records;
+  for (auto& record : test_records) {
+    if (record.type != AccessContextAuditDatabase::StorageAPIType::kCookie) {
+      want_records.push_back(record);
+    }
+  }
+
+  ValidateRecords(database()->GetStorageRecords(), want_records);
 }

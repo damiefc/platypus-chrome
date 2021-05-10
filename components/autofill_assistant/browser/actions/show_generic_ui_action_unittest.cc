@@ -14,6 +14,8 @@
 #include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/user_model.h"
 #include "components/autofill_assistant/browser/value_util.h"
+#include "content/public/test/browser_task_environment.h"
+#include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -36,19 +38,20 @@ using ::testing::SizeIs;
 using ::testing::UnorderedElementsAre;
 using ::testing::UnorderedElementsAreArray;
 
-class ShowGenericUiActionTest : public content::RenderViewHostTestHarness {
+class ShowGenericUiActionTest : public testing::Test {
  public:
-  ShowGenericUiActionTest() {}
-
   void SetUp() override {
-    RenderViewHostTestHarness::SetUp();
+    web_contents_ = content::WebContentsTester::CreateTestWebContents(
+        &browser_context_, nullptr);
+    content::WebContentsTester::For(web_contents_.get())
+        ->SetLastCommittedURL(GURL(kFakeUrl));
 
-    ON_CALL(mock_action_delegate_, OnSetGenericUi(_, _, _))
+    ON_CALL(mock_action_delegate_, SetGenericUi(_, _, _))
         .WillByDefault(
             Invoke([&](std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-                       base::OnceCallback<void(const ClientStatus&)>&
+                       base::OnceCallback<void(const ClientStatus&)>
                            end_action_callback,
-                       base::OnceCallback<void(const ClientStatus&)>&
+                       base::OnceCallback<void(const ClientStatus&)>
                            view_inflation_finished_callback) {
               std::move(view_inflation_finished_callback)
                   .Run(ClientStatus(ACTION_APPLIED));
@@ -67,10 +70,8 @@ class ShowGenericUiActionTest : public content::RenderViewHostTestHarness {
         .WillByDefault(
             RunOnceCallback<1>(std::vector<WebsiteLoginManager::Login>{
                 WebsiteLoginManager::Login(GURL(kFakeUrl), kFakeUsername)}));
-    content::WebContentsTester::For(web_contents())
-        ->SetLastCommittedURL(GURL(kFakeUrl));
     ON_CALL(mock_action_delegate_, GetWebContents())
-        .WillByDefault(Return(web_contents()));
+        .WillByDefault(Return(web_contents_.get()));
   }
 
  protected:
@@ -85,6 +86,10 @@ class ShowGenericUiActionTest : public content::RenderViewHostTestHarness {
     return action;
   }
 
+  content::BrowserTaskEnvironment task_environment_;
+  content::RenderViewHostTestEnabler rvh_test_enabler_;
+  content::TestBrowserContext browser_context_;
+  std::unique_ptr<content::WebContents> web_contents_;
   UserData user_data_;
   UserModel user_model_;
   MockPersonalDataManager mock_personal_data_manager_;
@@ -95,13 +100,12 @@ class ShowGenericUiActionTest : public content::RenderViewHostTestHarness {
 };
 
 TEST_F(ShowGenericUiActionTest, FailedViewInflationEndsAction) {
-  ON_CALL(mock_action_delegate_, OnSetGenericUi(_, _, _))
-      .WillByDefault(
-          Invoke([&](std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-                     base::OnceCallback<void(const ClientStatus&)>&
-                         end_action_callback,
-                     base::OnceCallback<void(const ClientStatus&)>&
-                         view_inflation_finished_callback) {
+  ON_CALL(mock_action_delegate_, SetGenericUi(_, _, _))
+      .WillByDefault(Invoke(
+          [&](std::unique_ptr<GenericUserInterfaceProto> generic_ui,
+              base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+              base::OnceCallback<void(const ClientStatus&)>
+                  view_inflation_finished_callback) {
             std::move(view_inflation_finished_callback)
                 .Run(ClientStatus(INVALID_ACTION));
           }));
@@ -117,7 +121,7 @@ TEST_F(ShowGenericUiActionTest, FailedViewInflationEndsAction) {
 TEST_F(ShowGenericUiActionTest, GoesIntoPromptState) {
   InSequence seq;
   EXPECT_CALL(mock_action_delegate_, Prompt(_, _, _, _, _)).Times(1);
-  EXPECT_CALL(mock_action_delegate_, OnSetGenericUi(_, _, _)).Times(1);
+  EXPECT_CALL(mock_action_delegate_, SetGenericUi(_, _, _)).Times(1);
   EXPECT_CALL(mock_action_delegate_, ClearGenericUi()).Times(1);
   EXPECT_CALL(mock_action_delegate_, CleanUpAfterPrompt()).Times(1);
   EXPECT_CALL(
@@ -157,13 +161,13 @@ TEST_F(ShowGenericUiActionTest, NonEmptyOutputModel) {
 
   proto_.add_output_model_identifiers("value_2");
 
-  ON_CALL(mock_action_delegate_, OnSetGenericUi(_, _, _))
-      .WillByDefault(
-          Invoke([this](std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-                        base::OnceCallback<void(const ClientStatus&)>&
-                            end_action_callback,
-                        base::OnceCallback<void(const ClientStatus&)>&
-                            view_inflation_finished_callback) {
+  ON_CALL(mock_action_delegate_, SetGenericUi(_, _, _))
+      .WillByDefault(Invoke(
+          [this](
+              std::unique_ptr<GenericUserInterfaceProto> generic_ui,
+              base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+              base::OnceCallback<void(const ClientStatus&)>
+                  view_inflation_finished_callback) {
             std::move(view_inflation_finished_callback)
                 .Run(ClientStatus(ACTION_APPLIED));
             user_model_.SetValue("value_2", SimpleValue(std::string("change")));
@@ -200,7 +204,7 @@ TEST_F(ShowGenericUiActionTest, OutputModelNotSubsetOfInputModel) {
   proto_.add_output_model_identifiers("value_2");
   proto_.add_output_model_identifiers("value_3");
 
-  EXPECT_CALL(mock_action_delegate_, OnSetGenericUi(_, _, _)).Times(0);
+  EXPECT_CALL(mock_action_delegate_, SetGenericUi(_, _, _)).Times(0);
   EXPECT_CALL(mock_action_delegate_, ClearGenericUi()).Times(1);
   EXPECT_CALL(
       callback_,
@@ -445,7 +449,7 @@ TEST_F(ShowGenericUiActionTest, ElementPreconditionMissesIdentifier) {
       ->add_filters()
       ->set_css_selector("selector");
 
-  EXPECT_CALL(mock_action_delegate_, OnSetGenericUi(_, _, _)).Times(0);
+  EXPECT_CALL(mock_action_delegate_, SetGenericUi(_, _, _)).Times(0);
   EXPECT_CALL(mock_action_delegate_, ClearGenericUi()).Times(1);
   EXPECT_CALL(
       callback_,
@@ -459,13 +463,12 @@ TEST_F(ShowGenericUiActionTest, ElementPreconditionMissesIdentifier) {
 }
 
 TEST_F(ShowGenericUiActionTest, EndActionOnNavigation) {
-  ON_CALL(mock_action_delegate_, OnSetGenericUi(_, _, _))
-      .WillByDefault(
-          Invoke([&](std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-                     base::OnceCallback<void(const ClientStatus&)>&
-                         end_action_callback,
-                     base::OnceCallback<void(const ClientStatus&)>&
-                         view_inflation_finished_callback) {
+  ON_CALL(mock_action_delegate_, SetGenericUi(_, _, _))
+      .WillByDefault(Invoke(
+          [&](std::unique_ptr<GenericUserInterfaceProto> generic_ui,
+              base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+              base::OnceCallback<void(const ClientStatus&)>
+                  view_inflation_finished_callback) {
             std::move(view_inflation_finished_callback)
                 .Run(ClientStatus(ACTION_APPLIED));
           }));
@@ -498,13 +501,12 @@ TEST_F(ShowGenericUiActionTest, BreakingNavigationBeforeUiIsSet) {
                    bool browse_mode, bool browse_mode_invisible) {
         std::move(end_navigation_callback).Run();
       });
-  ON_CALL(mock_action_delegate_, OnSetGenericUi(_, _, _))
-      .WillByDefault(
-          Invoke([&](std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-                     base::OnceCallback<void(const ClientStatus&)>&
-                         end_action_callback,
-                     base::OnceCallback<void(const ClientStatus&)>&
-                         view_inflation_finished_callback) {
+  ON_CALL(mock_action_delegate_, SetGenericUi(_, _, _))
+      .WillByDefault(Invoke(
+          [&](std::unique_ptr<GenericUserInterfaceProto> generic_ui,
+              base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+              base::OnceCallback<void(const ClientStatus&)>
+                  view_inflation_finished_callback) {
             std::move(view_inflation_finished_callback)
                 .Run(ClientStatus(ACTION_APPLIED));
             // Also end action when UI is set. At this point, the action should

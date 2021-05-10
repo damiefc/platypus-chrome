@@ -56,6 +56,7 @@ class CC_EXPORT ThreadedInputHandler : public InputHandler,
       ScrollState* scroll_state,
       base::TimeDelta delayed_by = base::TimeDelta()) override;
   void ScrollEnd(bool should_snap = false) override;
+  PointerResultType HitTest(const gfx::PointF& viewport_point) override;
   void RecordScrollBegin(ui::ScrollInputType input_type,
                          ScrollBeginThreadState scroll_start_state) override;
   void RecordScrollEnd(ui::ScrollInputType input_type) override;
@@ -88,7 +89,7 @@ class CC_EXPORT ThreadedInputHandler : public InputHandler,
       ui::LatencyInfo* latency) override;
   std::unique_ptr<EventsMetricsManager::ScopedMonitor>
   GetScopedEventMetricsMonitor(
-      std::unique_ptr<EventMetrics> event_metrics) override;
+      EventsMetricsManager::ScopedMonitor::DoneCallback done_callback) override;
   ScrollElasticityHelper* CreateScrollElasticityHelper() override;
   bool GetScrollOffsetForLayer(ElementId element_id,
                                gfx::ScrollOffset* offset) override;
@@ -117,7 +118,7 @@ class CC_EXPORT ThreadedInputHandler : public InputHandler,
                               ScrollbarOrientation orientation) override;
   void ScrollOffsetAnimationFinished() override;
   bool IsCurrentlyScrolling() const override;
-  bool IsActivelyPrecisionScrolling() const override;
+  ActivelyScrollingType GetActivelyScrollingType() const override;
 
   // =========== Public Interface
 
@@ -167,6 +168,8 @@ class CC_EXPORT ThreadedInputHandler : public InputHandler,
   bool animating_for_snap_for_testing() const { return IsAnimatingForSnap(); }
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(ScrollUnifiedLayerTreeHostImplTest,
+                           AbortAnimatedScrollBeforeStartingAutoscroll);
   FRIEND_TEST_ALL_PREFIXES(ScrollUnifiedLayerTreeHostImplTest,
                            AnimatedScrollYielding);
   FRIEND_TEST_ALL_PREFIXES(ScrollUnifiedLayerTreeHostImplTest,
@@ -237,9 +240,11 @@ class CC_EXPORT ThreadedInputHandler : public InputHandler,
   InputHandler::ScrollStatus TryScroll(const ScrollTree& scroll_tree,
                                        ScrollNode* scroll_node) const;
 
+  enum class SnapReason { kGestureScrollEnd, kScrollOffsetAnimationFinished };
+
   // Creates an animation curve and returns true if we need to update the
   // scroll position to a snap point. Otherwise returns false.
-  bool SnapAtScrollEnd();
+  bool SnapAtScrollEnd(SnapReason reason);
 
   // |layer| is returned from a regular hit test, and
   // |first_scrolling_layer_or_drawn_scrollbar| is returned from a hit test
@@ -336,6 +341,8 @@ class CC_EXPORT ThreadedInputHandler : public InputHandler,
   // |overflow-x: hidden|).
   gfx::Vector2dF UserScrollableDelta(const ScrollNode& node,
                                      const gfx::Vector2dF& delta) const;
+
+  void AdjustScrollDeltaForScrollbarSnap(ScrollState* scroll_state);
 
   FrameSequenceTrackerType GetTrackerTypeForScroll(
       ui::ScrollInputType input_type) const;
@@ -434,6 +441,7 @@ class CC_EXPORT ThreadedInputHandler : public InputHandler,
   bool has_scrolled_by_wheel_ = false;
   bool has_scrolled_by_touch_ = false;
   bool has_scrolled_by_precisiontouchpad_ = false;
+  bool has_scrolled_by_scrollbar_ = false;
 
   // Must be the last member to ensure this is destroyed first in the
   // destruction order and invalidates all weak pointers.

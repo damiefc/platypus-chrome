@@ -9,10 +9,9 @@
 #include "base/macros.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
-#include "chromeos/components/phonehub/connection_manager.h"
-#include "chromeos/components/phonehub/fake_connection_manager.h"
 #include "chromeos/components/phonehub/fake_feature_status_provider.h"
 #include "chromeos/components/phonehub/feature_status.h"
+#include "chromeos/services/secure_channel/public/cpp/client/fake_connection_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {
@@ -27,7 +26,8 @@ class ConnectionSchedulerImplTest : public testing::Test {
   ~ConnectionSchedulerImplTest() override = default;
 
   void SetUp() override {
-    fake_connection_manager_ = std::make_unique<FakeConnectionManager>();
+    fake_connection_manager_ =
+        std::make_unique<secure_channel::FakeConnectionManager>();
     fake_feature_status_provider_ =
         std::make_unique<FakeFeatureStatusProvider>();
   }
@@ -47,7 +47,8 @@ class ConnectionSchedulerImplTest : public testing::Test {
 
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-  std::unique_ptr<FakeConnectionManager> fake_connection_manager_;
+  std::unique_ptr<secure_channel::FakeConnectionManager>
+      fake_connection_manager_;
   std::unique_ptr<FakeFeatureStatusProvider> fake_feature_status_provider_;
   std::unique_ptr<ConnectionSchedulerImpl> connection_scheduler_;
 };
@@ -143,6 +144,8 @@ TEST_F(ConnectionSchedulerImplTest, BackoffRetryWithUpdatedFeatures) {
   // connection.
   EXPECT_EQ(0, GetBackoffFailureCount());
   EXPECT_EQ(1u, fake_connection_manager_->num_attempt_connection_calls());
+  // Expect that connection has been disconnected.
+  EXPECT_EQ(1u, fake_connection_manager_->num_disconnect_calls());
 
   // Fast forward time and confirm no other retries have been made.
   task_environment_.FastForwardBy(base::TimeDelta::FromSeconds(100));
@@ -167,5 +170,41 @@ TEST_F(ConnectionSchedulerImplTest, BackoffRetryWithUpdatedFeatures) {
   // failure count.
   EXPECT_EQ(1, GetBackoffFailureCount());
 }
+
+TEST_F(ConnectionSchedulerImplTest, ScheduleConnectionSuspended) {
+  fake_feature_status_provider_->SetStatus(
+      FeatureStatus::kEnabledButDisconnected);
+  CreateConnectionScheduler();
+
+  // Simulate screen locked and expect no scheduled connections.
+  fake_feature_status_provider_->SetStatus(FeatureStatus::kLockOrSuspended);
+  // Expect no scheduled connections on screen lock.
+  EXPECT_EQ(0, GetBackoffFailureCount());
+  EXPECT_EQ(0u, fake_connection_manager_->num_attempt_connection_calls());
+  EXPECT_EQ(1u, fake_connection_manager_->num_disconnect_calls());
+
+  // Simulate screen unlocked and expect a scheduled connection.
+  fake_feature_status_provider_->SetStatus(
+      FeatureStatus::kEnabledButDisconnected);
+  EXPECT_EQ(0, GetBackoffFailureCount());
+  EXPECT_EQ(1u, fake_connection_manager_->num_attempt_connection_calls());
+}
+
+TEST_F(ConnectionSchedulerImplTest, HostsNotEligible) {
+  // Simulate no eligible hosts available. Expect no scheduled connections.
+  fake_feature_status_provider_->SetStatus(
+      FeatureStatus::kNotEligibleForFeature);
+  CreateConnectionScheduler();
+
+  EXPECT_EQ(0, GetBackoffFailureCount());
+  EXPECT_EQ(0u, fake_connection_manager_->num_attempt_connection_calls());
+
+  fake_feature_status_provider_->SetStatus(
+      FeatureStatus::kEnabledButDisconnected);
+  // Flip to have eligble hosts available. Expect a scheduled connection.
+  EXPECT_EQ(0, GetBackoffFailureCount());
+  EXPECT_EQ(1u, fake_connection_manager_->num_attempt_connection_calls());
+}
+
 }  // namespace phonehub
 }  // namespace chromeos

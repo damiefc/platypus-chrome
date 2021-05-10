@@ -26,10 +26,10 @@ import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.ui.appmenu.internal.R;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightParams;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightShape;
 import org.chromium.components.browser_ui.widget.text.TextViewWithCompoundDrawables;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
@@ -288,8 +288,8 @@ class AppMenuAdapter extends BaseAdapter {
                         convertView = null;
                     }
 
-                    convertView = binder.getView(
-                            item, convertView, parent, mInflater, mAppMenuClickHandler);
+                    convertView = binder.getView(item, convertView, parent, mInflater,
+                            mAppMenuClickHandler, mHighlightedItemId);
 
                     if (binder.supportsEnterAnimation(item.getItemId())) {
                         convertView.setTag(R.id.menu_item_enter_anim_id,
@@ -308,15 +308,26 @@ class AppMenuAdapter extends BaseAdapter {
                 break;
         }
 
-        if (mHighlightedItemId != null && item.getItemId() == mHighlightedItemId) {
-            ViewHighlighter.turnOnHighlight(convertView, false);
-        } else {
-            ViewHighlighter.turnOffHighlight(convertView);
+        if (getCustomItemViewType(item) == CustomViewBinder.NOT_HANDLED) {
+            // IPH for custom view is handled by themselves.
+            if (mHighlightedItemId != null && item.getItemId() == mHighlightedItemId) {
+                ViewHighlighter.turnOnHighlight(
+                        convertView, new HighlightParams(HighlightShape.RECTANGLE));
+            } else {
+                ViewHighlighter.turnOffHighlight(convertView);
+            }
         }
 
         convertView.setTag(R.id.menu_item_view_type, itemViewType);
 
         return convertView;
+    }
+
+    /**
+     * @return Whether the menu item corresponding to {@code menuItemId} is currently highlighted.
+     */
+    boolean isMenuItemHighlighted(int menuItemId) {
+        return mHighlightedItemId != null && mHighlightedItemId == menuItemId;
     }
 
     private void setupCheckBox(AppMenuItemIcon button, final MenuItem item) {
@@ -361,7 +372,7 @@ class AppMenuAdapter extends BaseAdapter {
         button.setOnLongClickListener(v -> mAppMenuClickHandler.onItemLongClick(item, v));
 
         if (mHighlightedItemId != null && item.getItemId() == mHighlightedItemId) {
-            ViewHighlighter.turnOnHighlight(button, true);
+            ViewHighlighter.turnOnHighlight(button, new HighlightParams(HighlightShape.CIRCLE));
         } else {
             ViewHighlighter.turnOffHighlight(button);
         }
@@ -495,11 +506,9 @@ class AppMenuAdapter extends BaseAdapter {
             setupImageButton(holder.buttons[i], item.getSubMenu().getItem(i));
         }
 
-        if (CachedFeatureFlags.isEnabled(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_ICONS)) {
-            // Tint action bar's background.
-            convertView.setBackgroundDrawable(ApiCompatibilityUtils.getDrawable(
-                    convertView.getContext().getResources(), R.drawable.menu_action_bar_bg));
-        }
+        // Tint action bar's background.
+        convertView.setBackgroundDrawable(ApiCompatibilityUtils.getDrawable(
+                convertView.getContext().getResources(), R.drawable.menu_action_bar_bg));
 
         convertView.setFocusable(false);
         convertView.setEnabled(false);

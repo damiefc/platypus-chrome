@@ -4,7 +4,7 @@
 
 (async function() {
   TestRunner.addResult(`Bindings should only generate locations for an inline script (style) if the location is inside of the inline script (style).\n`);
-  await TestRunner.loadModule('sources_test_runner');
+  await TestRunner.loadModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
   await TestRunner.showPanel('sources');
 
   await TestRunner.navigatePromise('../bindings/resources/inline-style.html');
@@ -18,7 +18,7 @@
 
   TestRunner.addResult("\n\nFormatting source now...\n\n");
 
-  const formatData = await Formatter.sourceFormatter.format(source);
+  const formatData = await Formatter.SourceFormatter.instance().format(source);
   const formattedSource = formatData.formattedSourceCode;
   var formattedContent = (await formatData.formattedSourceCode.requestContent()).content;
   TestRunner.addResult(`Formatted Content:\n${formattedContent}`);

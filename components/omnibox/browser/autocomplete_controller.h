@@ -6,6 +6,7 @@
 #define COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_CONTROLLER_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
@@ -13,7 +14,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
-#include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_provider.h"
@@ -23,6 +23,7 @@
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
 #include "components/omnibox/browser/autocomplete_result.h"
+#include "components/omnibox/browser/omnibox_log.h"
 
 class ClipboardProvider;
 class DocumentProvider;
@@ -30,6 +31,7 @@ class HistoryURLProvider;
 class KeywordProvider;
 class SearchProvider;
 class TemplateURLService;
+class VoiceSuggestProvider;
 class ZeroSuggestProvider;
 class OnDeviceHeadProvider;
 
@@ -127,12 +129,10 @@ class AutocompleteController : public AutocompleteProviderListener,
   void OnProviderUpdate(bool updated_matches) override;
 
   // Called when an omnibox event log entry is generated.
-  // Populates provider_info with diagnostic information about the status
-  // of various providers.  In turn, calls
-  // AutocompleteProvider::AddProviderInfo() so each provider can add
-  // provider-specific information, information we want to log for a particular
-  // provider but not others.
-  void AddProvidersInfo(ProvidersInfo* provider_info) const;
+  // Populates |log.provider_info| with diagnostic information about the status
+  // of various providers and |log.feature_triggered_in_session| with triggered
+  // features.
+  void AddProviderAndTriggeringLogs(OmniboxLog* logs) const;
 
   // Called when a new omnibox session starts.
   // We start a new session when the user first begins modifying the omnibox
@@ -162,6 +162,9 @@ class AutocompleteController : public AutocompleteProviderListener,
   KeywordProvider* keyword_provider() const { return keyword_provider_; }
   SearchProvider* search_provider() const { return search_provider_; }
   ClipboardProvider* clipboard_provider() const { return clipboard_provider_; }
+  VoiceSuggestProvider* voice_suggest_provider() const {
+    return voice_suggest_provider_;
+  }
 
   const AutocompleteInput& input() const { return input_; }
   const AutocompleteResult& result() const { return result_; }
@@ -172,8 +175,17 @@ class AutocompleteController : public AutocompleteProviderListener,
     return last_time_default_match_changed_;
   }
 
+  // Sets the provider timeout duration for future calls to |Start()|.
+  void SetStartStopTimerDurationForTesting(base::TimeDelta duration);
+
+  // Returns the AutocompleteProviderClient owned by the controller.
+  AutocompleteProviderClient* autocomplete_provider_client() const {
+    return provider_client_.get();
+  }
+
  private:
   friend class AutocompleteProviderTest;
+  friend class OmniboxSuggestionButtonRowBrowserTest;
   FRIEND_TEST_ALL_PREFIXES(AutocompleteProviderTest,
                            RedundantKeywordsIgnoredInResult);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteProviderTest, UpdateAssistedQueryStats);
@@ -199,10 +211,6 @@ class AutocompleteController : public AutocompleteProviderListener,
                            PopupStepSelectionWithHiddenGroupIds);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupModelTest,
                            PopupInlineAutocompleteAndTemporaryText);
-  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupModelSuggestionButtonRowTest,
-                           PopupStepSelectionWithButtonRow);
-  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupModelSuggestionButtonRowTest,
-                           PopupStepSelectionWithButtonRowAndKeywordButton);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupContentsViewTest,
                            EmitSelectedChildrenChangedAccessibilityEvent);
 
@@ -265,7 +273,7 @@ class AutocompleteController : public AutocompleteProviderListener,
   // Helper for UpdateKeywordDescriptions(). Returns whether curbing the keyword
   // descriptions is enabled, and whether there is enough input to guarantee
   // that the Omnibox is in keyword mode.
-  bool ShouldCurbKeywordDescriptions(const base::string16& keyword);
+  bool ShouldCurbKeywordDescriptions(const std::u16string& keyword);
 
   // MemoryDumpProvider:
   bool OnMemoryDump(
@@ -294,6 +302,8 @@ class AutocompleteController : public AutocompleteProviderListener,
 
   ClipboardProvider* clipboard_provider_;
 
+  VoiceSuggestProvider* voice_suggest_provider_;
+
   // Input passed to Start.
   AutocompleteInput input_;
 
@@ -319,12 +329,11 @@ class AutocompleteController : public AutocompleteProviderListener,
   // Timer used to tell the providers to Stop() searching for matches.
   base::OneShotTimer stop_timer_;
 
-  // Amount of time (in ms) between when the user stops typing and
-  // when we send Stop() to every provider.  This is intended to avoid
-  // the disruptive effect of belated omnibox updates, updates that
-  // come after the user has had to time to read the whole dropdown
-  // and doesn't expect it to change.
-  const base::TimeDelta stop_timer_duration_;
+  // Amount of time between when the user stops typing and when we send Stop()
+  // to every provider.  This is intended to avoid the disruptive effect of
+  // belated omnibox updates, updates that come after the user has had to time
+  // to read the whole dropdown and doesn't expect it to change.
+  base::TimeDelta stop_timer_duration_;
 
   // True if a query is not currently running.
   bool done_;
@@ -333,9 +342,6 @@ class AutocompleteController : public AutocompleteProviderListener,
   // notifications until Start() has been invoked on all providers. When this
   // boolean is true, we are definitely within the synchronous pass.
   bool in_start_;
-
-  // Indicate whether it is the first query since startup.
-  bool first_query_;
 
   // True if the signal predicting a likely search has already been sent to the
   // service worker context during the current input session. False on

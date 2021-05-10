@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/print_preview/print_preview_handler.h"
 
 #include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -17,11 +18,11 @@
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/printing/print_test_utils.h"
 #include "chrome/browser/printing/print_view_manager.h"
 #include "chrome/browser/ui/webui/print_preview/fake_print_render_frame.h"
@@ -47,6 +48,7 @@ namespace printing {
 namespace {
 
 const char kDummyInitiatorName[] = "TestInitiator";
+const char16_t kDummyInitiatorName16[] = u"TestInitiator";
 const char kEmptyPrinterName[] = "EmptyPrinter";
 const char kTestData[] = "abc";
 
@@ -203,7 +205,7 @@ class TestPrinterHandler : public PrinterHandler {
   void StartGrantPrinterAccess(const std::string& printer_id,
                                GetPrinterInfoCallback callback) override {}
 
-  void StartPrint(const base::string16& job_title,
+  void StartPrint(const std::u16string& job_title,
                   base::Value settings,
                   scoped_refptr<base::RefCountedMemory> print_data,
                   PrintCallback callback) override {
@@ -296,12 +298,9 @@ class TestPrintPreviewHandler : public PrintPreviewHandler {
 
   bool IsCloudPrintEnabled() override { return true; }
 
-  void RegisterForGaiaCookieChanges() override {}
-  void UnregisterForGaiaCookieChanges() override {}
-
   void BadMessageReceived() override { bad_messages_++; }
 
-  content::WebContents* GetInitiator() const override { return initiator_; }
+  content::WebContents* GetInitiator() override { return initiator_; }
 
   bool CalledOnlyForType(PrinterType printer_type) {
     return (called_for_type_.size() == 1 &&
@@ -355,7 +354,7 @@ class PrintPreviewHandlerTest : public testing::Test {
 
     auto preview_ui = std::make_unique<FakePrintPreviewUI>(
         web_ui(), std::move(preview_handler));
-    preview_ui->SetInitiatorTitle(base::ASCIIToUTF16(kDummyInitiatorName));
+    preview_ui->SetInitiatorTitle(kDummyInitiatorName16);
     web_ui()->SetController(std::move(preview_ui));
   }
 
@@ -483,10 +482,6 @@ class PrintPreviewHandlerTest : public testing::Test {
                                         base::Value::Type::BOOLEAN));
     ASSERT_TRUE(
         settings->FindKeyOfType("cloudPrintURL", base::Value::Type::STRING));
-    ASSERT_TRUE(
-        settings->FindKeyOfType("userAccounts", base::Value::Type::LIST));
-    ASSERT_TRUE(
-        settings->FindKeyOfType("syncAvailable", base::Value::Type::BOOLEAN));
   }
 
   // Returns |policy_name| entry from initial settings policies.
@@ -803,14 +798,14 @@ TEST_F(PrintPreviewHandlerTest, InitialSettingsDefaultPaperSizeCustomSize) {
       std::move(expected_initial_settings_policy));
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(PrintPreviewHandlerTest, InitialSettingsMaxSheetsAllowedPolicy) {
   prefs()->SetInteger(prefs::kPrintingMaxSheetsAllowed, 2);
   Initialize();
   ValidateInitialSettingsValuePolicy(*web_ui()->call_data().back(), "sheets",
                                      base::Value(2));
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 TEST_F(PrintPreviewHandlerTest, GetPrinters) {
   Initialize();

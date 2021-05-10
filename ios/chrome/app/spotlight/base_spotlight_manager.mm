@@ -9,8 +9,8 @@
 #import <MaterialComponents/MaterialTypography.h>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/hash/md5.h"
-#include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "components/favicon/core/fallback_url_util.h"
@@ -95,7 +95,7 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string,
 
 // Compute a hash consisting of the first 8 bytes of the MD5 hash of a string
 // containing |URL| and |title|.
-- (int64_t)getHashForURL:(const GURL&)URL title:(NSString*)title;
+- (int64_t)hashForURL:(const GURL&)URL title:(NSString*)title;
 
 // Returns an array of Keywords for Spotlight search.
 - (NSArray*)keywordsForSpotlightItems;
@@ -120,7 +120,7 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string,
   DCHECK(_shutdownCalled);
 }
 
-- (int64_t)getHashForURL:(const GURL&)URL title:(NSString*)title {
+- (int64_t)hashForURL:(const GURL&)URL title:(NSString*)title {
   NSString* key = [NSString
       stringWithFormat:@"%@ %@", base::SysUTF8ToNSString(URL.spec()), title];
   const std::string clipboard = base::SysNSStringToUTF8(key);
@@ -136,7 +136,7 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string,
   NSString* spotlightID = [NSString
       stringWithFormat:@"%@.%016llx",
                        spotlight::StringFromSpotlightDomain(_spotlightDomain),
-                       [self getHashForURL:URL title:title]];
+                       [self hashForURL:URL title:title]];
   return spotlightID;
 }
 

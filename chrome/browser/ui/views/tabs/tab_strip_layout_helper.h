@@ -5,15 +5,14 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TABS_TAB_STRIP_LAYOUT_HELPER_H_
 #define CHROME_BROWSER_UI_VIEWS_TABS_TAB_STRIP_LAYOUT_HELPER_H_
 
-#include <map>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/callback_forward.h"
 #include "base/optional.h"
-#include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_types.h"
 #include "chrome/browser/ui/views/tabs/tab_animation_state.h"
+#include "chrome/browser/ui/views/tabs/tab_slot_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_layout.h"
 #include "chrome/browser/ui/views/tabs/tab_width_constraints.h"
 #include "ui/gfx/geometry/rect.h"
@@ -33,19 +32,20 @@ class TabGroupId;
 class TabStripLayoutHelper {
  public:
   using GetTabsCallback = base::RepeatingCallback<views::ViewModelT<Tab>*()>;
-  using GetGroupHeadersCallback = base::RepeatingCallback<
-      std::map<tab_groups::TabGroupId, TabGroupHeader*>()>;
 
   TabStripLayoutHelper(const TabStripController* controller,
-                       GetTabsCallback get_tabs_callback,
-                       GetGroupHeadersCallback get_group_headers_callback);
+                       GetTabsCallback get_tabs_callback);
   TabStripLayoutHelper(const TabStripLayoutHelper&) = delete;
   TabStripLayoutHelper& operator=(const TabStripLayoutHelper&) = delete;
   ~TabStripLayoutHelper();
 
   // Returns a vector of all tabs in the strip, including both closing tabs
   // and tabs still in the model.
-  std::vector<Tab*> GetTabs();
+  std::vector<Tab*> GetTabs() const;
+
+  // Get all tab slot views in visual order, including all tabs from
+  // GetTabs() and all tab group headers.
+  std::vector<TabSlotView*> GetTabSlotViews() const;
 
   int active_tab_width() { return active_tab_width_; }
   int inactive_tab_width() { return inactive_tab_width_; }
@@ -132,11 +132,25 @@ class TabStripLayoutHelper {
   std::vector<gfx::Rect> CalculateIdealBounds(
       base::Optional<int> available_width);
 
-  // Given a tab's |model_index| and |group|, returns the index of its
-  // corresponding TabSlot in |slots_|.
-  int GetSlotIndexForTabModelIndex(
-      int model_index,
+  // Given |model_index| for a tab already present in |slots_|, return
+  // the corresponding index in |slots_|.
+  int GetSlotIndexForExistingTab(int model_index) const;
+
+  // For a new tab at |new_model_index|, get the insertion index in
+  // |slots_|. |group| is the new tab's group.
+  int GetSlotInsertionIndexForNewTab(
+      int new_model_index,
       base::Optional<tab_groups::TabGroupId> group) const;
+
+  // Used internally in the above two functions. For a tabstrip with N
+  // tabs, this takes 0 <= |model_index| <= N and returns the first
+  // possible slot corresponding to this model index.
+  //
+  // This means that if |model_index| is the first tab in a group, the
+  // returned slot index will point to the group header. For other tabs,
+  // the slot index corresponding to that tab will be returned. Finally,
+  // if |model_index| = N, slots_.size() will be returned.
+  int GetFirstSlotIndexForTabModelIndex(int model_index) const;
 
   // Given a group ID, returns the index of its header's corresponding TabSlot
   // in |slots_|.
@@ -161,12 +175,14 @@ class TabStripLayoutHelper {
   // Returns true if any width constraint is currently being enforced.
   bool WidthsConstrainedForClosingMode();
 
+  // True iff the slot at index |i| is a tab that is in a collapsed group.
+  bool SlotIsCollapsedTab(int i) const;
+
   // The owning tabstrip's controller.
   const TabStripController* const controller_;
 
-  // Callbacks to get the necessary View objects from the owning tabstrip.
+  // Callback to get the necessary View objects from the owning tabstrip.
   GetTabsCallback get_tabs_callback_;
-  GetGroupHeadersCallback get_group_headers_callback_;
 
   // Current collation of tabs and group headers, along with necessary data to
   // run layout and animations for those Views.

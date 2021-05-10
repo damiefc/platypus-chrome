@@ -7,8 +7,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/time/time.h"
 #include "content/browser/conversions/conversion_manager_impl.h"
 #include "content/browser/conversions/conversion_report.h"
@@ -19,10 +20,20 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_switches.h"
 
 namespace content {
 
 namespace {
+
+::mojom::SourceType SourceTypeToMojoType(StorableImpression::SourceType input) {
+  switch (input) {
+    case StorableImpression::SourceType::kNavigation:
+      return ::mojom::SourceType::kNavigation;
+    case StorableImpression::SourceType::kEvent:
+      return ::mojom::SourceType::kEvent;
+  }
+}
 
 void ForwardImpressionsToWebUI(
     ::mojom::ConversionInternalsHandler::GetActiveImpressionsCallback
@@ -36,7 +47,8 @@ void ForwardImpressionsToWebUI(
         impression.impression_data(), impression.impression_origin(),
         impression.conversion_origin(), impression.reporting_origin(),
         impression.impression_time().ToJsTime(),
-        impression.expiry_time().ToJsTime()));
+        impression.expiry_time().ToJsTime(),
+        SourceTypeToMojoType(impression.source_type())));
   }
 
   std::move(web_ui_callback).Run(std::move(web_ui_impressions));
@@ -54,7 +66,7 @@ void ForwardReportsToWebUI(
         report.impression.impression_data(), report.conversion_data,
         report.impression.conversion_origin(),
         report.impression.reporting_origin(), report.report_time.ToJsTime(),
-        report.attribution_credit));
+        SourceTypeToMojoType(report.impression.source_type())));
   }
   std::move(web_ui_callback).Run(std::move(web_ui_reports));
 }
@@ -76,9 +88,11 @@ void ConversionInternalsHandlerImpl::IsMeasurementEnabled(
   content::WebContents* contents = web_ui_->GetWebContents();
   bool measurement_enabled =
       manager_provider_->GetManager(contents) &&
-      GetContentClient()->browser()->AllowConversionMeasurement(
+      GetContentClient()->browser()->IsConversionMeasurementAllowed(
           contents->GetBrowserContext());
-  std::move(callback).Run(measurement_enabled);
+  bool debug_mode = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kConversionsDebugMode);
+  std::move(callback).Run(measurement_enabled, debug_mode);
 }
 
 void ConversionInternalsHandlerImpl::GetActiveImpressions(

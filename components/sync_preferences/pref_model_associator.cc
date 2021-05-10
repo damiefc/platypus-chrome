@@ -10,16 +10,16 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "components/prefs/persistent_pref_store.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/model_type.h"
@@ -44,7 +44,7 @@ const sync_pb::PreferenceSpecifics& GetSpecifics(const syncer::SyncData& pref) {
       return pref.GetSpecifics().preference();
     case syncer::PRIORITY_PREFERENCES:
       return pref.GetSpecifics().priority_preference().preference();
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     case syncer::OS_PREFERENCES:
       return pref.GetSpecifics().os_preference().preference();
     case syncer::OS_PRIORITY_PREFERENCES:
@@ -64,7 +64,7 @@ PrefModelAssociator::PrefModelAssociator(
     PersistentPrefStore* user_pref_store)
     : type_(type), client_(client), user_pref_store_(user_pref_store) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   DCHECK(type_ == syncer::PREFERENCES ||
          type_ == syncer::PRIORITY_PREFERENCES ||
          type_ == syncer::OS_PREFERENCES ||
@@ -91,7 +91,7 @@ sync_pb::PreferenceSpecifics* PrefModelAssociator::GetMutableSpecifics(
       return specifics->mutable_preference();
     case syncer::PRIORITY_PREFERENCES:
       return specifics->mutable_priority_preference()->mutable_preference();
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     case syncer::OS_PREFERENCES:
       return specifics->mutable_os_preference()->mutable_preference();
     case syncer::OS_PRIORITY_PREFERENCES:
@@ -136,12 +136,12 @@ void PrefModelAssociator::InitPrefAndAssociate(
       if (new_value->is_none()) {
         LOG(WARNING) << "Sync has null value for pref " << pref_name.c_str();
         pref_service_->ClearPref(pref_name);
-      } else if (!user_pref_value->Equals(new_value.get())) {
+      } else if (*user_pref_value != *new_value) {
         SetPrefWithTypeCheck(pref_name, *new_value);
       }
 
       // If the merge resulted in an updated value, inform the syncer.
-      if (!sync_value->Equals(new_value.get())) {
+      if (*sync_value != *new_value) {
         syncer::SyncData sync_data;
         if (!CreatePrefSyncData(pref_name, *new_value, &sync_data)) {
           LOG(ERROR) << "Failed to update preference.";
@@ -222,6 +222,7 @@ PrefModelAssociator::MergeDataAndStartSyncing(
 
     remaining_preferences.erase(sync_pref_name);
     InitPrefAndAssociate(*sync_iter, sync_pref_name, &new_changes);
+    NotifyStartedSyncing(sync_pref_name);
   }
 
   // Go through and build sync data for any remaining preferences.
@@ -478,7 +479,7 @@ bool PrefModelAssociator::IsPrefSyncedForTesting(
 }
 
 void PrefModelAssociator::RegisterPref(const std::string& name) {
-  DCHECK(registered_preferences_.count(name) == 0);
+  DCHECK(!base::Contains(registered_preferences_, name));
   registered_preferences_.insert(name);
 
   // Make sure data in the local store matches the registered type (where "type"
@@ -491,8 +492,8 @@ void PrefModelAssociator::RegisterPref(const std::string& name) {
 
 void PrefModelAssociator::RegisterPrefWithLegacyModelType(
     const std::string& name) {
-  DCHECK(legacy_model_type_preferences_.count(name) == 0);
-  DCHECK(registered_preferences_.count(name) == 0);
+  DCHECK(!base::Contains(legacy_model_type_preferences_, name));
+  DCHECK(!base::Contains(registered_preferences_, name));
   legacy_model_type_preferences_.insert(name);
 }
 
@@ -627,10 +628,17 @@ void PrefModelAssociator::EnforceRegisteredTypeInStore(
       // done on a higher level.
       user_pref_store_->RemoveValue(
           pref_name, WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
-      UMA_HISTOGRAM_BOOLEAN("Sync.Preferences.ClearedLocalPrefOnTypeMismatch",
-                            true);
     }
   }
+}
+
+void PrefModelAssociator::NotifyStartedSyncing(const std::string& path) const {
+  auto observer_iter = synced_pref_observers_.find(path);
+  if (observer_iter == synced_pref_observers_.end())
+    return;
+
+  for (auto& observer : *observer_iter->second)
+    observer.OnStartedSyncing(path);
 }
 
 }  // namespace sync_preferences

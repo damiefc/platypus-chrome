@@ -7,7 +7,8 @@
 
 #include "base/process/process_handle.h"
 #include "build/build_config.h"
-#include "content/browser/accessibility/accessibility_event_recorder.h"
+#include "ui/accessibility/platform/inspect/ax_event_recorder.h"
+#include "ui/accessibility/platform/inspect/ax_inspect.h"
 
 #if defined(OS_WIN)
 #include "base/win/scoped_com_initializer.h"
@@ -19,9 +20,8 @@ class AXEventServer final {
  public:
   // Dumps events into console for application identified either by process id
   // or tree selector.
-  explicit AXEventServer(
-      base::ProcessId pid,
-      const content::AccessibilityTreeFormatter::TreeSelector& selector);
+  explicit AXEventServer(base::ProcessId pid,
+                         const ui::AXTreeSelector& selector);
   ~AXEventServer();
 
  private:
@@ -31,7 +31,7 @@ class AXEventServer final {
   // Only one COM initializer per thread is permitted.
   base::win::ScopedCOMInitializer com_initializer_;
 #endif
-  std::unique_ptr<content::AccessibilityEventRecorder> recorder_;
+  std::unique_ptr<ui::AXEventRecorder> recorder_;
 
   DISALLOW_COPY_AND_ASSIGN(AXEventServer);
 };

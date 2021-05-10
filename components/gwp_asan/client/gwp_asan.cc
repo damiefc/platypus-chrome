@@ -9,7 +9,7 @@
 #include <limits>
 
 #include "base/allocator/buildflags.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
@@ -19,7 +19,6 @@
 #include "base/optional.h"
 #include "base/partition_alloc_buildflags.h"
 #include "base/rand_util.h"
-#include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "components/gwp_asan/client/guarded_page_allocator.h"
 

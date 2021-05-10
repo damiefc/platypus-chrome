@@ -23,25 +23,20 @@ class ToggleImageButton;
 // Creates an ImageButton with an ink drop and a centered image built from a
 // vector icon that tracks color changes in NativeTheme.
 VIEWS_EXPORT std::unique_ptr<ImageButton>
-CreateVectorImageButtonWithNativeTheme(Button::PressedCallback callback,
-                                       const gfx::VectorIcon& icon);
-VIEWS_EXPORT std::unique_ptr<ImageButton>
-CreateVectorImageButtonWithNativeTheme(ButtonListener* listener,
-                                       const gfx::VectorIcon& icon);
+CreateVectorImageButtonWithNativeTheme(
+    Button::PressedCallback callback,
+    const gfx::VectorIcon& icon,
+    base::Optional<int> dip_size = base::nullopt);
 
 // Creates an ImageButton with an ink drop and a centered image in preparation
 // for applying a vector icon with SetImageFromVectorIcon below.
 VIEWS_EXPORT std::unique_ptr<ImageButton> CreateVectorImageButton(
     Button::PressedCallback callback);
-VIEWS_EXPORT std::unique_ptr<ImageButton> CreateVectorImageButton(
-    ButtonListener* listener);
 
 // Creates a ToggleImageButton with an ink drop and a centered image in
 // preparation for applying a vector icon from SetImageFromVectorIcon below.
 VIEWS_EXPORT std::unique_ptr<ToggleImageButton> CreateVectorToggleImageButton(
     Button::PressedCallback callback);
-VIEWS_EXPORT std::unique_ptr<ToggleImageButton> CreateVectorToggleImageButton(
-    ButtonListener* listener);
 
 // Configures an existing ImageButton with an ink drop and a centered image in
 // preparation for applying a vector icon with SetImageFromVectorIcon below.

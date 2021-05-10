@@ -9,7 +9,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "chrome/browser/chromeos/login/screens/update_required_screen.h"
+#include "chrome/browser/ash/login/screens/update_required_screen.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 
 namespace chromeos {
@@ -42,7 +42,7 @@ class UpdateRequiredView {
   // Hides the contents of the screen.
   virtual void Hide() = 0;
 
-  // Binds |screen| to the view.
+  // Binds `screen` to the view.
   virtual void Bind(UpdateRequiredScreen* screen) = 0;
 
   // Unbinds the screen from the view.
@@ -55,7 +55,7 @@ class UpdateRequiredView {
   // Set progress percentage.
   virtual void SetUpdateProgressValue(int progress) = 0;
   // Set progress message (like "Verifying").
-  virtual void SetUpdateProgressMessage(const base::string16& message) = 0;
+  virtual void SetUpdateProgressMessage(const std::u16string& message) = 0;
   // Set the visibility of the estimated time left.
   virtual void SetEstimatedTimeLeftVisible(bool visible) = 0;
   // Set the estimated time left, in seconds.
@@ -64,8 +64,9 @@ class UpdateRequiredView {
   virtual void SetUIState(UpdateRequiredView::UIState ui_state) = 0;
   // Set enterprise and device name to be used in strings in the UI.
   virtual void SetEnterpriseAndDeviceName(const std::string& enterpriseDomain,
-                                          const base::string16& deviceName) = 0;
+                                          const std::u16string& deviceName) = 0;
   virtual void SetEolMessage(const std::string& eolMessage) = 0;
+  virtual void SetIsUserDataPresent(bool deleted) = 0;
 };
 
 class UpdateRequiredScreenHandler : public UpdateRequiredView,
@@ -85,13 +86,14 @@ class UpdateRequiredScreenHandler : public UpdateRequiredView,
   void SetIsConnected(bool connected) override;
   void SetUpdateProgressUnavailable(bool unavailable) override;
   void SetUpdateProgressValue(int progress) override;
-  void SetUpdateProgressMessage(const base::string16& message) override;
+  void SetUpdateProgressMessage(const std::u16string& message) override;
   void SetEstimatedTimeLeftVisible(bool visible) override;
   void SetEstimatedTimeLeft(int seconds_left) override;
   void SetUIState(UpdateRequiredView::UIState ui_state) override;
   void SetEnterpriseAndDeviceName(const std::string& enterpriseDomain,
-                                  const base::string16& deviceName) override;
+                                  const std::u16string& deviceName) override;
   void SetEolMessage(const std::string& eolMessage) override;
+  void SetIsUserDataPresent(bool data_present) override;
 
   // BaseScreenHandler:
   void DeclareLocalizedValues(

@@ -134,6 +134,15 @@ const char kPaymentHandlerInsecureNavigation[] =
     "The payment handler navigated to a page with insecure context, invalid "
     "certificate state, or malicious content.";
 
+const char kPaymentHandlerInstallFailed[] =
+    "Failed to install the payment handler.";
+
+const char kPaymentHandlerActivityDied[] =
+    "The payment handler is closed because the Android activity is destroyed.";
+
+const char kPaymentHandlerFailToLoadMainFrame[] =
+    "The payment handler fails to load the page.";
+
 const char kSinglePaymentMethodNotSupportedFormat[] =
     "The payment method $ is not supported.";
 

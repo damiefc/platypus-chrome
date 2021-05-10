@@ -16,10 +16,8 @@
 #include "ash/public/cpp/app_list/app_list_client.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "base/callback_forward.h"
-#include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_observer.h"
@@ -43,13 +41,15 @@ class AppListClientImpl
       public TemplateURLServiceObserver {
  public:
   AppListClientImpl();
+  AppListClientImpl(const AppListClientImpl&) = delete;
+  AppListClientImpl& operator=(const AppListClientImpl&) = delete;
   ~AppListClientImpl() override;
 
   static AppListClientImpl* GetInstance();
 
   // ash::AppListClient:
   void OnAppListControllerDestroyed() override;
-  void StartSearch(const base::string16& trimmed_query) override;
+  void StartSearch(const std::u16string& trimmed_query) override;
   void OpenSearchResult(const std::string& result_id,
                         int event_flags,
                         ash::AppListLaunchedFrom launched_from,
@@ -57,8 +57,7 @@ class AppListClientImpl
                         int suggestion_index,
                         bool launch_as_default) override;
   void InvokeSearchResultAction(const std::string& result_id,
-                                int action_index,
-                                int event_flags) override;
+                                int action_index) override;
   void GetSearchResultContextMenuModel(
       const std::string& result_id,
       GetContextMenuModelCallback callback) override;
@@ -79,16 +78,13 @@ class AppListClientImpl
   void OnFolderDeleted(int profile_id,
                        std::unique_ptr<ash::AppListItemMetadata> item) override;
   void OnPageBreakItemDeleted(int profile_id, const std::string& id) override;
-  void GetNavigableContentsFactory(
-      mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver)
-      override;
   void OnSearchResultVisibilityChanged(const std::string& id,
                                        bool visible) override;
   void OnQuickSettingsChanged(
       const std::string& setting_name,
       const std::map<std::string, int>& values) override;
   void NotifySearchResultsForLogging(
-      const base::string16& trimmed_query,
+      const std::u16string& trimmed_query,
       const ash::SearchResultIdWithPositionIndices& results,
       int position_index) override;
   ash::AppListNotifier* GetNotifier() override;
@@ -100,7 +96,6 @@ class AppListClientImpl
   void DismissView() override;
   aura::Window* GetAppListWindow() override;
   int64_t GetAppListDisplayId() override;
-  void GetAppInfoDialogBounds(GetAppInfoDialogBoundsCallback callback) override;
   bool IsAppPinned(const std::string& app_id) override;
   bool IsAppOpen(const std::string& app_id) const override;
   void PinApp(const std::string& app_id) override;
@@ -111,15 +106,6 @@ class AppListClientImpl
                const GURL& url,
                ui::PageTransition transition,
                WindowOpenDisposition disposition) override;
-  void ActivateApp(Profile* profile,
-                   const extensions::Extension* extension,
-                   AppListSource source,
-                   int event_flags) override;
-  void LaunchApp(Profile* profile,
-                 const extensions::Extension* extension,
-                 AppListSource source,
-                 int event_flags,
-                 int64_t display_id) override;
 
   // Associates this client with the current active user, called when this
   // client is accessed or active user is changed.
@@ -154,8 +140,6 @@ class AppListClientImpl
   // Updates the speech webview and start page for the current |profile_|.
   void SetUpSearchUI();
 
-  ash::ShelfLaunchSource AppListSourceToLaunchSource(AppListSource source);
-
   // The current display id showing the app list.
   int64_t display_id_ = display::kInvalidDisplayId;
 
@@ -179,8 +163,8 @@ class AppListClientImpl
   std::unique_ptr<app_list::SearchController> search_controller_;
   std::unique_ptr<AppSyncUIStateWatcher> app_sync_ui_state_watcher_;
 
-  ScopedObserver<TemplateURLService, TemplateURLServiceObserver>
-      template_url_service_observer_{this};
+  base::ScopedObservation<TemplateURLService, TemplateURLServiceObserver>
+      template_url_service_observation_{this};
 
   ash::AppListController* app_list_controller_ = nullptr;
 
@@ -190,8 +174,6 @@ class AppListClientImpl
   bool app_list_visible_ = false;
 
   base::WeakPtrFactory<AppListClientImpl> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(AppListClientImpl);
 };
 
 #endif  // CHROME_BROWSER_UI_APP_LIST_APP_LIST_CLIENT_IMPL_H_

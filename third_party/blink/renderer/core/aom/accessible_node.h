@@ -40,7 +40,8 @@ enum class AOMStringProperty {
   kRole,
   kRoleDescription,
   kSort,
-  kValueText
+  kValueText,
+  kVirtualContent
 };
 
 // All of the properties of AccessibleNode that have type "boolean".
@@ -190,11 +191,8 @@ class CORE_EXPORT AccessibleNode : public EventTargetWithInlineData {
                                              bool& is_null);
 
   // Iterates over all AOM properties. For each one, calls AOMPropertyClient
-  // with the value of the AOM property if set. Updates
-  // |shadowed_aria_attributes| to contain a list of the ARIA attributes that
-  // would be shadowed by these AOM properties.
-  void GetAllAOMProperties(AOMPropertyClient*,
-                           HashSet<QualifiedName>& shadowed_aria_attributes);
+  // with the value of the AOM property if set.
+  void GetAllAOMProperties(AOMPropertyClient*);
 
   AccessibleNode* activeDescendant() const;
   void setActiveDescendant(AccessibleNode*);
@@ -339,6 +337,9 @@ class CORE_EXPORT AccessibleNode : public EventTargetWithInlineData {
 
   AtomicString valueText() const;
   void setValueText(const AtomicString&);
+
+  AtomicString virtualContent() const;
+  void setVirtualContent(const AtomicString&);
 
   AccessibleNodeList* childNodes();
 

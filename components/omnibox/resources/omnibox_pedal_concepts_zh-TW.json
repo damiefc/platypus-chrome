@@ -1,13 +1,14 @@
 {
   "schema": "pedal_concepts_runtime",
-  "schema_version": 1,
-  "data_version": 15497154,
-  "tokenize_characters": " -",
+  "schema_version": 3,
+  "data_version": 15831389,
+  "tokenize_each_character": false,
   "dictionary": [
     "chrome",
     "cookie",
     "google",
     "一個",
+    "一時的踏板placeholder",
     "上",
     "之中",
     "之內",
@@ -63,7 +64,6 @@
   ],
   "pedals": [
     {
-      "name": "CLEAR_BROWSING_DATA",
       "id": 1,
       "groups": [
         {
@@ -75,10 +75,137 @@
               0
             ],
             [
+              34
+            ],
+            [
+              0
+            ],
+            [
               33
+            ]
+          ]
+        },
+        {
+          "required": true,
+          "single": true,
+          "synonyms": [
+            [
+              14
+            ],
+            [
+              28
             ],
             [
               32
+            ],
+            [
+              41
+            ]
+          ]
+        },
+        {
+          "required": true,
+          "single": true,
+          "synonyms": [
+            [
+              31
+            ],
+            [
+              1
+            ],
+            [
+              24
+            ],
+            [
+              48
+            ],
+            [
+              49
+            ]
+          ]
+        }
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
+    },
+    {
+      "id": 2,
+      "groups": [
+        {
+          "required": false,
+          "single": true,
+          "synonyms": [
+            [
+              2,
+              0
+            ],
+            [
+              34
+            ],
+            [
+              0
+            ]
+          ]
+        },
+        {
+          "required": true,
+          "single": true,
+          "synonyms": [
+            [
+              43
+            ],
+            [
+              13
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              42
+            ],
+            [
+              44
+            ],
+            [
+              46
+            ],
+            [
+              56
+            ]
+          ]
+        },
+        {
+          "required": true,
+          "single": true,
+          "synonyms": [
+            [
+              22
+            ],
+            [
+              25
+            ]
+          ]
+        }
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
+    },
+    {
+      "id": 3,
+      "groups": [
+        {
+          "required": false,
+          "single": true,
+          "synonyms": [
+            [
+              2,
+              0
+            ],
+            [
+              34
             ],
             [
               0
@@ -93,92 +220,16 @@
               13
             ],
             [
-              40
+              29
             ],
-            [
-              31
-            ],
-            [
-              31
-            ],
-            [
-              27
-            ]
-          ]
-        },
-        {
-          "required": true,
-          "single": true,
-          "synonyms": [
-            [
-              30
-            ],
-            [
-              23
-            ],
-            [
-              47
-            ],
-            [
-              48
-            ],
-            [
-              48
-            ],
-            [
-              1
-            ]
-          ]
-        }
-      ]
-    },
-    {
-      "name": "MANAGE_PASSWORDS",
-      "id": 2,
-      "groups": [
-        {
-          "required": false,
-          "single": true,
-          "synonyms": [
-            [
-              2,
-              0
-            ],
-            [
-              33
-            ],
-            [
-              0
-            ]
-          ]
-        },
-        {
-          "required": true,
-          "single": true,
-          "synonyms": [
             [
               42
             ],
             [
-              43
+              44
             ],
             [
-              41
-            ],
-            [
-              28
-            ],
-            [
-              45
-            ],
-            [
-              12
-            ],
-            [
-              29
-            ],
-            [
-              55
+              46
             ]
           ]
         },
@@ -187,99 +238,30 @@
           "single": true,
           "synonyms": [
             [
-              21
+              11
             ],
             [
-              21
+              9
             ],
             [
-              24
-            ]
-          ]
-        }
-      ]
-    },
-    {
-      "name": "UPDATE_CREDIT_CARD",
-      "id": 3,
-      "groups": [
-        {
-          "required": false,
-          "single": true,
-          "synonyms": [
-            [
-              2,
-              0
-            ],
-            [
-              33
-            ],
-            [
-              0
-            ]
-          ]
-        },
-        {
-          "required": true,
-          "single": true,
-          "synonyms": [
-            [
-              41
-            ],
-            [
-              28
-            ],
-            [
-              43
-            ],
-            [
-              45
-            ],
-            [
-              12
-            ]
-          ]
-        },
-        {
-          "required": true,
-          "single": true,
-          "synonyms": [
-            [
-              10
+              18
             ],
             [
               10
-            ],
-            [
-              17
             ],
             [
               8
             ],
             [
               17
-            ],
-            [
-              9
-            ],
-            [
-              9
-            ],
-            [
-              16
-            ],
-            [
-              7
-            ],
-            [
-              7
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "LAUNCH_INCOGNITO",
       "id": 4,
       "groups": [
         {
@@ -291,7 +273,7 @@
               0
             ],
             [
-              33
+              34
             ],
             [
               0
@@ -303,19 +285,16 @@
           "single": true,
           "synonyms": [
             [
-              18
+              19
             ],
             [
-              18
+              23
             ],
             [
-              49
+              50
             ],
             [
-              53
-            ],
-            [
-              22
+              54
             ]
           ]
         },
@@ -327,29 +306,27 @@
               39
             ],
             [
-              38
+              40
+            ],
+            [
+              36
             ],
             [
               35
             ],
             [
-              36
-            ],
-            [
-              34
-            ],
-            [
               37
             ],
             [
-              36
+              38
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "TRANSLATE",
       "id": 5,
       "groups": [
         {
@@ -361,7 +338,7 @@
               0
             ],
             [
-              33
+              34
             ],
             [
               0
@@ -373,10 +350,10 @@
           "single": true,
           "synonyms": [
             [
-              46
+              47
             ],
             [
-              44
+              45
             ]
           ]
         },
@@ -385,17 +362,18 @@
           "single": true,
           "synonyms": [
             [
-              51
+              52
             ],
             [
-              54
+              55
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "UPDATE_CHROME",
       "id": 6,
       "groups": [
         {
@@ -407,7 +385,7 @@
               0
             ],
             [
-              33
+              34
             ],
             [
               0
@@ -419,17 +397,19 @@
           "single": true,
           "synonyms": [
             [
-              15
+              16
             ],
             [
-              20
+              21
             ],
             [
-              28
+              29
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     }
   ],
   "ignore_group": {
@@ -437,43 +417,37 @@
     "single": false,
     "synonyms": [
       [
-        52
-      ],
-      [
-        5
+        53
       ],
       [
         6
       ],
       [
-        19
+        7
       ],
       [
-        50
+        20
+      ],
+      [
+        51
       ],
       [
         3
+      ],
+      [
+        27
+      ],
+      [
+        12
       ],
       [
         5
       ],
       [
+        15
+      ],
+      [
         26
-      ],
-      [
-        3
-      ],
-      [
-        11
-      ],
-      [
-        4
-      ],
-      [
-        14
-      ],
-      [
-        25
       ]
     ]
   },

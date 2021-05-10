@@ -14,10 +14,12 @@
 #include "chrome/browser/web_applications/components/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_app_system_web_app_data.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
 #include "components/services/app_service/public/cpp/share_target.h"
+#include "components/services/app_service/public/cpp/url_handler_info.h"
 #include "components/sync/model/string_ordinal.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
@@ -74,6 +76,17 @@ class WebApp {
     return chromeos_data_;
   }
 
+  struct ClientData {
+    ClientData();
+    ~ClientData();
+    ClientData(const ClientData& client_data);
+    base::Optional<WebAppSystemWebAppData> system_web_app_data;
+  };
+
+  const ClientData& client_data() const { return client_data_; }
+
+  ClientData* client_data() { return &client_data_; }
+
   // Locally installed apps have shortcuts installed on various UI surfaces.
   // If app isn't locally installed, it is excluded from UIs and only listed as
   // a part of user's app library.
@@ -86,6 +99,11 @@ class WebApp {
   // using |sync_fallback_data| fields.
   bool is_in_sync_install() const { return is_in_sync_install_; }
 
+  // Represents whether the web app is being uninstalled.
+  bool is_uninstalling() const { return is_uninstalling_; }
+
+  // Represents the last time the Badging API was used.
+  const base::Time& last_badging_time() const { return last_badging_time_; }
   // Represents the last time this app is launched.
   const base::Time& last_launch_time() const { return last_launch_time_; }
   // Represents the time when this app is installed.
@@ -106,6 +124,10 @@ class WebApp {
 
   const apps::FileHandlers& file_handlers() const { return file_handlers_; }
 
+  bool file_handler_permission_blocked() const {
+    return file_handler_permission_blocked_;
+  }
+
   const base::Optional<apps::ShareTarget>& share_target() const {
     return share_target_;
   }
@@ -117,6 +139,15 @@ class WebApp {
   const std::vector<apps::ProtocolHandlerInfo>& protocol_handlers() const {
     return protocol_handlers_;
   }
+
+  // URL within scope to launch for a "new note" action. Valid iff this is
+  // considered a note-taking app.
+  // TODO(crbug.com/1185678): Persist this in the database.
+  const GURL& note_taking_new_note_url() const {
+    return note_taking_new_note_url_;
+  }
+
+  const apps::UrlHandlers& url_handlers() const { return url_handlers_; }
 
   RunOnOsLoginMode run_on_os_login_mode() const {
     return run_on_os_login_mode_;
@@ -151,9 +182,16 @@ class WebApp {
 
   // Represents which shortcuts menu icon sizes we successfully downloaded for
   // each WebAppShortcutsMenuItemInfo.shortcuts_menu_icon_infos.
-  const std::vector<std::vector<SquareSizePx>>&
-  downloaded_shortcuts_menu_icons_sizes() const {
+  const std::vector<IconSizes>& downloaded_shortcuts_menu_icons_sizes() const {
     return downloaded_shortcuts_menu_icons_sizes_;
+  }
+
+  blink::mojom::CaptureLinks capture_links() const { return capture_links_; }
+
+  const GURL& manifest_url() const { return manifest_url_; }
+
+  const base::Optional<std::string>& manifest_id() const {
+    return manifest_id_;
   }
 
   // A Web App can be installed from multiple sources simultaneously. Installs
@@ -164,10 +202,10 @@ class WebApp {
   bool HasOnlySource(Source::Type source) const;
 
   bool IsSynced() const;
-  bool IsDefaultApp() const;
+  bool IsPreinstalledApp() const;
   bool IsPolicyInstalledApp() const;
   bool IsSystemApp() const;
-  bool CanUserUninstallExternalApp() const;
+  bool CanUserUninstallWebApp() const;
   bool WasInstalledByUser() const;
   // Returns the highest priority source. AppService assumes that every app has
   // just one install source.
@@ -175,7 +213,7 @@ class WebApp {
 
   void SetName(const std::string& name);
   void SetDescription(const std::string& description);
-  void SetStartUrl(const GURL& launch_url);
+  void SetStartUrl(const GURL& start_url);
   void SetLaunchQueryParams(base::Optional<std::string> launch_query_params);
   void SetScope(const GURL& scope);
   void SetThemeColor(base::Optional<SkColor> theme_color);
@@ -188,6 +226,7 @@ class WebApp {
   void SetWebAppChromeOsData(base::Optional<WebAppChromeOsData> chromeos_data);
   void SetIsLocallyInstalled(bool is_locally_installed);
   void SetIsInSyncInstall(bool is_in_sync_install);
+  void SetIsUninstalling(bool is_uninstalling);
   void SetIconInfos(std::vector<WebApplicationIconInfo> icon_infos);
   // Performs sorting and uniquifying of |sizes| if passed as vector.
   void SetDownloadedIconSizes(IconPurpose purpose, SortedSizesPx sizes);
@@ -195,25 +234,34 @@ class WebApp {
   void SetShortcutsMenuItemInfos(
       std::vector<WebApplicationShortcutsMenuItemInfo>
           shortcuts_menu_item_infos);
-  void SetDownloadedShortcutsMenuIconsSizes(
-      std::vector<std::vector<SquareSizePx>> icon_sizes);
+  void SetDownloadedShortcutsMenuIconsSizes(std::vector<IconSizes> icon_sizes);
   void SetFileHandlers(apps::FileHandlers file_handlers);
   void SetShareTarget(base::Optional<apps::ShareTarget> share_target);
   void SetAdditionalSearchTerms(
       std::vector<std::string> additional_search_terms);
   void SetProtocolHandlers(
       std::vector<apps::ProtocolHandlerInfo> protocol_handlers);
+  void SetNoteTakingNewNoteUrl(const GURL& note_taking_new_note_url);
+  void SetUrlHandlers(apps::UrlHandlers url_handlers);
+  void SetLastBadgingTime(const base::Time& time);
   void SetLastLaunchTime(const base::Time& time);
   void SetInstallTime(const base::Time& time);
   void SetRunOnOsLoginMode(RunOnOsLoginMode mode);
   void SetSyncFallbackData(SyncFallbackData sync_fallback_data);
+  void SetCaptureLinks(blink::mojom::CaptureLinks capture_links);
+  void SetManifestUrl(const GURL& manifest_url);
+  void SetManifestId(const base::Optional<std::string>& manifest_id);
+  void SetFileHandlerPermissionBlocked(bool permission_blocked);
+
+  // For logging and debug purposes.
+  bool operator==(const WebApp&) const;
+  bool operator!=(const WebApp&) const;
 
  private:
   using Sources = std::bitset<Source::kMaxValue + 1>;
   bool HasAnySpecifiedSourcesAndNoOtherSources(Sources specified_sources) const;
 
   friend class WebAppDatabase;
-  friend bool operator==(const WebApp&, const WebApp&);
   friend std::ostream& operator<<(std::ostream&, const WebApp&);
 
   AppId app_id_;
@@ -225,8 +273,6 @@ class WebApp {
   std::string description_;
   GURL start_url_;
   base::Optional<std::string> launch_query_params_;
-  // TODO(loyso): Implement IsValid() function that verifies that the start_url
-  // is within the scope.
   GURL scope_;
   base::Optional<SkColor> theme_color_;
   base::Optional<SkColor> background_color_;
@@ -238,6 +284,11 @@ class WebApp {
   base::Optional<WebAppChromeOsData> chromeos_data_;
   bool is_locally_installed_ = true;
   bool is_in_sync_install_ = false;
+  // Note: This field is not persisted in the database.
+  // TODO: Add this field to the protocol buffer file and other places to
+  // save it to the database, and then make sure to continue uninstallation
+  // on startup if any web apps have this field set to true.
+  bool is_uninstalling_ = false;
   std::vector<WebApplicationIconInfo> icon_infos_;
   SortedSizesPx downloaded_icon_sizes_any_;
   // TODO (crbug.com/1114638): Monochrome icons are not currently downloaded.
@@ -245,15 +296,31 @@ class WebApp {
   SortedSizesPx downloaded_icon_sizes_maskable_;
   bool is_generated_icon_ = false;
   std::vector<WebApplicationShortcutsMenuItemInfo> shortcuts_menu_item_infos_;
-  std::vector<std::vector<SquareSizePx>> downloaded_shortcuts_menu_icons_sizes_;
+  std::vector<IconSizes> downloaded_shortcuts_menu_icons_sizes_;
   apps::FileHandlers file_handlers_;
   base::Optional<apps::ShareTarget> share_target_;
   std::vector<std::string> additional_search_terms_;
   std::vector<apps::ProtocolHandlerInfo> protocol_handlers_;
+  GURL note_taking_new_note_url_;
+  base::Time last_badging_time_;
   base::Time last_launch_time_;
   base::Time install_time_;
-  RunOnOsLoginMode run_on_os_login_mode_ = RunOnOsLoginMode::kUndefined;
+  RunOnOsLoginMode run_on_os_login_mode_ = RunOnOsLoginMode::kNotRun;
   SyncFallbackData sync_fallback_data_;
+  apps::UrlHandlers url_handlers_;
+  blink::mojom::CaptureLinks capture_links_ =
+      blink::mojom::CaptureLinks::kUndefined;
+  ClientData client_data_;
+  GURL manifest_url_;
+  base::Optional<std::string> manifest_id_;
+  bool file_handler_permission_blocked_ = false;
+  // New fields must be added to:
+  //  - |operator==|
+  //  - |operator<<|
+  //  - WebAppDatabase::CreateWebApp()
+  //  - WebAppDatabase::CreateWebAppProto()
+  //  - CreateRandomWebApp()
+  //  - ManifestUpdateTask::IsUpdateNeededForManifest()
 };
 
 // For logging and debug purposes.
@@ -265,9 +332,6 @@ bool operator==(const WebApp::SyncFallbackData& sync_fallback_data1,
                 const WebApp::SyncFallbackData& sync_fallback_data2);
 bool operator!=(const WebApp::SyncFallbackData& sync_fallback_data1,
                 const WebApp::SyncFallbackData& sync_fallback_data2);
-
-bool operator==(const WebApp& app1, const WebApp& app2);
-bool operator!=(const WebApp& app1, const WebApp& app2);
 
 }  // namespace web_app
 

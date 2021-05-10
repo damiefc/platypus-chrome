@@ -5,13 +5,17 @@
 #include "content/browser/accessibility/hit_testing_browsertest.h"
 
 #include "base/check.h"
-#include "base/test/bind_test_util.h"
+#include "base/strings/stringprintf.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
+#include "content/browser/accessibility/touch_passthrough_manager.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/ax_inspect_factory.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
@@ -29,6 +33,8 @@
 #include "ui/gfx/geometry/vector2d_conversions.h"
 
 namespace content {
+
+using ui::AXTreeFormatter;
 
 #define EXPECT_ACCESSIBILITY_HIT_TEST_RESULT(css_point, expected_node, \
                                              hit_node)                 \
@@ -104,6 +110,18 @@ gfx::Point AccessibilityHitTestingBrowserTest::CSSToFramePoint(
 
   gfx::Point frame_point = page_point - scroll_offset_;
   return frame_point;
+}
+
+gfx::Point AccessibilityHitTestingBrowserTest::FrameToCSSPoint(
+    gfx::Point frame_point) {
+  gfx::Point page_point = frame_point + scroll_offset_;
+
+  gfx::Point css_point;
+  if (IsUseZoomForDSFEnabled())
+    css_point = ScaleToRoundedPoint(page_point, 1.0 / GetDeviceScaleFactor());
+  else
+    css_point = page_point;
+  return css_point;
 }
 
 gfx::Point AccessibilityHitTestingBrowserTest::CSSToPhysicalPixelPoint(
@@ -264,17 +282,15 @@ void AccessibilityHitTestingBrowserTest::SimulatePinchZoom(
 
 std::string
 AccessibilityHitTestingBrowserTest::FormatHitTestAccessibilityTree() {
-  std::unique_ptr<AccessibilityTreeFormatter> accessibility_tree_formatter =
-      AccessibilityTreeFormatterBlink::CreateBlink();
+  std::unique_ptr<AXTreeFormatter> accessibility_tree_formatter =
+      AXInspectFactory::CreateBlinkFormatter();
   accessibility_tree_formatter->set_show_ids(true);
   accessibility_tree_formatter->SetPropertyFilters(
-      {{"name=*", AccessibilityTreeFormatter::PropertyFilter::ALLOW},
-       {"location=*", AccessibilityTreeFormatter::PropertyFilter::ALLOW},
-       {"size=*", AccessibilityTreeFormatter::PropertyFilter::ALLOW}});
+      {{"name=*", ui::AXPropertyFilter::ALLOW},
+       {"location=*", ui::AXPropertyFilter::ALLOW},
+       {"size=*", ui::AXPropertyFilter::ALLOW}});
   std::string accessibility_tree;
-  accessibility_tree_formatter->FormatAccessibilityTreeForTesting(
-      GetRootAndAssertNonNull(), &accessibility_tree);
-  return accessibility_tree;
+  return accessibility_tree_formatter->Format(GetRootAndAssertNonNull());
 }
 
 std::string AccessibilityHitTestingBrowserTest::GetScopedTrace(
@@ -466,18 +482,17 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingCrossProcessBrowserTest,
   ASSERT_EQ(1U, root->child_count());
 
   FrameTreeNode* child = root->child_at(0);
-  NavigateFrameToURL(child, url_b);
+  EXPECT_TRUE(NavigateToURLFromRenderer(child, url_b));
   EXPECT_EQ(url_b, child->current_url());
   WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
                                                 "rectF");
 
-  FrameTreeVisualizer visualizer;
   EXPECT_EQ(
       " Site A ------------ proxies for B\n"
       "   +--Site B ------- proxies for A\n"
       "Where A = http://a.com/\n"
       "      B = http://b.com/",
-      visualizer.DepictFrameTree(root));
+      DepictFrameTree(*root));
 
   // Before scrolling.
   {
@@ -494,14 +509,11 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingCrossProcessBrowserTest,
 
   // Scroll div up 100px.
   int scroll_delta = 100;
-  double actual_scroll_delta = 0;
   std::string scroll_string = base::StringPrintf(
-      "window.scrollTo(0, %d); "
-      "window.domAutomationController.send(window.scrollY);",
-      scroll_delta);
-  EXPECT_TRUE(ExecuteScriptAndExtractDouble(
-      child->current_frame_host(), scroll_string, &actual_scroll_delta));
-  EXPECT_NEAR(static_cast<double>(scroll_delta), actual_scroll_delta, 1.0);
+      "window.scrollTo(0, %d); window.scrollY;", scroll_delta);
+  EXPECT_NEAR(
+      EvalJs(child->current_frame_host(), scroll_string).ExtractDouble(),
+      static_cast<double>(scroll_delta), 1.0);
 
   // After scrolling.
   {
@@ -738,8 +750,9 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
 
 // GetAXPlatformNode is currently only supported on windows and linux (excluding
 // Chrome OS or Chromecast)
-#if defined(OS_WIN) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS) && !BUILDFLAG(IS_CHROMECAST))
+#if defined(OS_WIN) ||                                       \
+    ((defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && \
+     !BUILDFLAG(IS_CHROMECAST))
 IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
                        NearestLeafInIframes) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -776,4 +789,66 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
   }
 }
 #endif
+
+IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
+                       AriaTouchPassthroughKeypadTap) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
+
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kLoadComplete);
+
+  GURL url(embedded_test_server()->GetURL(
+      "/accessibility/hit_testing/aria_touchpassthrough_key.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+  SynchronizeThreads();
+  waiter.WaitForNotification();
+
+  WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
+                                                "Dial");
+
+  BrowserAccessibility* field = FindNode(ax::mojom::Role::kTextField, "");
+  ASSERT_TRUE(field);
+
+  BrowserAccessibility* key5 = FindNode(ax::mojom::Role::kButton, "5");
+  ASSERT_TRUE(key5);
+
+  // Press on the '5' key
+  {
+    // Hit test a point within the '5' key and ensure we hit the right node.
+    gfx::Point key5_ctr = key5->GetClippedRootFrameBoundsRect().CenterPoint();
+    LOG(ERROR) << "AXAX key5 before: " << key5_ctr.x() << ", " << key5_ctr.y();
+    key5_ctr = FrameToCSSPoint(key5_ctr);
+    LOG(ERROR) << "AXAX key5 after: " << key5_ctr.x() << ", " << key5_ctr.y();
+    BrowserAccessibility* hit_node = HitTestAndWaitForResult(key5_ctr);
+    ASSERT_TRUE(hit_node);
+
+    while (hit_node && hit_node->GetRole() != ax::mojom::Role::kButton)
+      hit_node = hit_node->PlatformGetParent();
+    ASSERT_TRUE(hit_node);
+
+    EXPECT_ACCESSIBILITY_HIT_TEST_RESULT(key5_ctr, key5, hit_node);
+
+    // Ensure that element has touch-passthrough set.
+    EXPECT_TRUE(
+        key5->GetBoolAttribute(ax::mojom::BoolAttribute::kTouchPassthrough));
+
+    AccessibilityNotificationWaiter event_waiter(
+        shell()->web_contents(), ui::kAXModeComplete,
+        ui::AXEventGenerator::Event::VALUE_IN_TEXT_FIELD_CHANGED);
+
+    // Simulate a tap at that point using TouchPassthroughManager.
+    TouchPassthroughManager touch_passthrough_manager(
+        static_cast<WebContentsImpl*>(shell()->web_contents())->GetMainFrame());
+    touch_passthrough_manager.OnTouchStart(CSSToFramePoint(key5_ctr));
+    touch_passthrough_manager.OnTouchEnd();
+    event_waiter.WaitForNotification();
+
+    EXPECT_EQ("5",
+              field->GetStringAttribute(ax::mojom::StringAttribute::kValue));
+  }
+}
+
 }  // namespace content

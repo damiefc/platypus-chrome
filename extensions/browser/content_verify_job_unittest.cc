@@ -3,12 +3,12 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/version.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -225,7 +225,8 @@ class ContentVerifyJobUnittest : public ExtensionsTest {
 
     std::string error;
     scoped_refptr<Extension> extension = file_util::LoadExtension(
-        extension_root, Manifest::INTERNAL, /*flags=*/0, &error);
+        extension_root, mojom::ManifestLocation::kInternal, /*flags=*/0,
+        &error);
     EXPECT_NE(nullptr, extension.get()) << " error:'" << error << "'";
 
     content_verifier_->OnExtensionLoaded(&testing_context_, extension.get());

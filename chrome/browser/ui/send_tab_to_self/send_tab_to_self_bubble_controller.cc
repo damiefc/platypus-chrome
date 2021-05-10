@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/send_tab_to_self/metrics_util.h"
 #include "components/send_tab_to_self/pref_names.h"
 #include "components/send_tab_to_self/send_tab_to_self_model.h"
 #include "components/send_tab_to_self/send_tab_to_self_sync_service.h"
@@ -57,13 +58,18 @@ SendTabToSelfBubbleController::send_tab_to_self_bubble_view() const {
   return send_tab_to_self_bubble_view_;
 }
 
-base::string16 SendTabToSelfBubbleController::GetWindowTitle() const {
+std::u16string SendTabToSelfBubbleController::GetWindowTitle() const {
   return l10n_util::GetStringUTF16(IDS_CONTEXT_MENU_SEND_TAB_TO_SELF);
 }
 
-const std::vector<TargetDeviceInfo>&
-SendTabToSelfBubbleController::GetValidDevices() const {
-  return valid_devices_;
+std::vector<TargetDeviceInfo> SendTabToSelfBubbleController::GetValidDevices()
+    const {
+  SendTabToSelfSyncService* const service =
+      SendTabToSelfSyncServiceFactory::GetForProfile(GetProfile());
+  SendTabToSelfModel* const model =
+      service ? service->GetSendTabToSelfModel() : nullptr;
+  return model ? model->GetTargetDeviceInfoSortedList()
+               : std::vector<TargetDeviceInfo>();
 }
 
 Profile* SendTabToSelfBubbleController::GetProfile() const {
@@ -73,10 +79,8 @@ Profile* SendTabToSelfBubbleController::GetProfile() const {
 void SendTabToSelfBubbleController::OnDeviceSelected(
     const std::string& target_device_name,
     const std::string& target_device_guid) {
-  RecordSendTabToSelfClickResult(kOmniboxIcon,
-                                 SendTabToSelfClickResult::kClickItem);
-  CreateNewEntry(web_contents_, target_device_name, target_device_guid, GURL(),
-                 false);
+  send_tab_to_self::RecordDeviceClicked(ShareEntryPoint::kOmniboxIcon);
+  CreateNewEntry(web_contents_, target_device_name, target_device_guid, GURL());
 }
 
 void SendTabToSelfBubbleController::OnBubbleClosed() {
@@ -111,21 +115,6 @@ SendTabToSelfBubbleController::SendTabToSelfBubbleController(
     content::WebContents* web_contents)
     : web_contents_(web_contents) {
   DCHECK(web_contents);
-  FetchDeviceInfo();
-}
-
-void SendTabToSelfBubbleController::FetchDeviceInfo() {
-  valid_devices_.clear();
-  SendTabToSelfSyncService* service =
-      SendTabToSelfSyncServiceFactory::GetForProfile(GetProfile());
-  if (!service) {
-    return;
-  }
-  SendTabToSelfModel* model = service->GetSendTabToSelfModel();
-  if (!model) {
-    return;
-  }
-  valid_devices_ = model->GetTargetDeviceInfoSortedList();
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(SendTabToSelfBubbleController)

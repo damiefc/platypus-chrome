@@ -17,6 +17,7 @@
 
 namespace blink {
 
+class LocalDOMWindow;
 class XRFrameTransport;
 class XRSession;
 class XRSystem;
@@ -48,7 +49,7 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
   void OnSessionEnded(XRSession* session);
   void RestartNonImmersiveFrameLoop();
 
-  void RequestFrame(XRSession*);
+  void RequestFrame(XRSession* session);
 
   void OnNonImmersiveVSync(double high_res_now_ms);
 
@@ -62,8 +63,9 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
     return immersive_data_provider_.get();
   }
 
+  // Adds an ImmersiveSessionObserver. Observers will be automatically removed
+  // by Oilpan when they are destroyed, and their WeakMember becomes null.
   void AddImmersiveSessionObserver(ImmersiveSessionObserver*);
-  void RemoveImmersiveSessionObserver(ImmersiveSessionObserver*);
 
   virtual void Trace(Visitor*) const;
 
@@ -102,19 +104,28 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
       const base::Optional<gpu::MailboxHolder>& output_mailbox_holder,
       const base::Optional<gpu::MailboxHolder>& camera_image_mailbox_holder);
 
+  // Updates the |first_immersive_frame_time_| and
+  // |first_immersive_frame_time_delta_| members and returns the computed high
+  // resolution timestamp for the received frame. The result corresponds to
+  // WebXR's XRFrame's `time` attribute.
+  double UpdateImmersiveFrameTime(
+      LocalDOMWindow* window,
+      const device::mojom::blink::XRFrameData& data);
+
   const Member<XRSystem> xr_;
 
   // Immersive session state
   Member<XRSession> immersive_session_;
   Member<XRFrameTransport> frame_transport_;
-  HeapMojoRemote<device::mojom::blink::XRFrameDataProvider,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
+  HeapMojoRemote<device::mojom::blink::XRFrameDataProvider>
       immersive_data_provider_;
-  HeapMojoRemote<device::mojom::blink::XRPresentationProvider,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
+  HeapMojoRemote<device::mojom::blink::XRPresentationProvider>
       immersive_presentation_provider_;
   device::mojom::blink::VRPosePtr immersive_frame_pose_;
   bool is_immersive_frame_position_emulated_ = false;
+
+  // Note: Oilpan automatically removes destroyed observers from
+  // |immersive_observers_| and does not need an explicit removal.
   HeapHashSet<WeakMember<ImmersiveSessionObserver>> immersive_observers_;
 
   // Time the first immersive frame has arrived - used to align the monotonic
@@ -125,9 +136,8 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
 
   // Non-immersive session state
   HeapHashMap<Member<XRSession>,
-              Member<DisallowNewWrapper<HeapMojoRemote<
-                  device::mojom::blink::XRFrameDataProvider,
-                  HeapMojoWrapperMode::kWithoutContextObserver>>>>
+              Member<DisallowNewWrapper<
+                  HeapMojoRemote<device::mojom::blink::XRFrameDataProvider>>>>
       non_immersive_data_providers_;
   HeapHashMap<Member<XRSession>, device::mojom::blink::XRFrameDataPtr>
       requesting_sessions_;

@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
+#include "base/types/pass_key.h"
 #include "third_party/blink/renderer/modules/peerconnection/peer_connection_tracker.h"
 
 #include "base/run_loop.h"
@@ -127,8 +130,7 @@ class MockPeerConnectionHandler : public RTCPeerConnectionHandler {
             /*force_encoded_audio_insertable_streams=*/false,
             /*force_encoded_video_insertable_streams=*/false) {}
   MOCK_METHOD0(CloseClientPeerConnection, void());
-  MOCK_METHOD1(OnThermalStateChange,
-               void(base::PowerObserver::DeviceThermalState));
+  MOCK_METHOD1(OnThermalStateChange, void(mojom::blink::DeviceThermalState));
 
  private:
   blink::MockPeerConnectionDependencyFactory dependency_factory_;
@@ -140,14 +142,15 @@ class MockPeerConnectionHandler : public RTCPeerConnectionHandler {
 class PeerConnectionTrackerTest : public ::testing::Test {
  public:
   void CreateTrackerWithMocks() {
-    mock_host_.reset(new MockPeerConnectionTrackerHost());
-    tracker_.reset(new PeerConnectionTracker(
+    mock_host_ = std::make_unique<MockPeerConnectionTrackerHost>();
+    tracker_ = MakeGarbageCollected<PeerConnectionTracker>(
         mock_host_->CreatePendingRemoteAndBind(),
-        blink::scheduler::GetSingleThreadTaskRunnerForTesting()));
+        blink::scheduler::GetSingleThreadTaskRunnerForTesting(),
+        base::PassKey<PeerConnectionTrackerTest>());
   }
 
   void CreateAndRegisterPeerConnectionHandler() {
-    mock_handler_.reset(new MockPeerConnectionHandler());
+    mock_handler_ = std::make_unique<MockPeerConnectionHandler>();
     EXPECT_CALL(*mock_host_, AddPeerConnection(_));
     tracker_->RegisterPeerConnection(
         mock_handler_.get(),
@@ -158,14 +161,9 @@ class PeerConnectionTrackerTest : public ::testing::Test {
 
  protected:
   std::unique_ptr<MockPeerConnectionTrackerHost> mock_host_;
-  std::unique_ptr<PeerConnectionTracker> tracker_;
+  Persistent<PeerConnectionTracker> tracker_;
   std::unique_ptr<MockPeerConnectionHandler> mock_handler_;
 };
-
-TEST_F(PeerConnectionTrackerTest, CreatingObject) {
-  PeerConnectionTracker tracker(
-      blink::scheduler::GetSingleThreadTaskRunnerForTesting());
-}
 
 TEST_F(PeerConnectionTrackerTest, TrackCreateOffer) {
   CreateTrackerWithMocks();
@@ -195,35 +193,30 @@ TEST_F(PeerConnectionTrackerTest, OnThermalStateChange) {
   CreateTrackerWithMocks();
   CreateAndRegisterPeerConnectionHandler();
 
-  EXPECT_CALL(
-      *mock_handler_,
-      OnThermalStateChange(base::PowerObserver::DeviceThermalState::kUnknown))
+  EXPECT_CALL(*mock_handler_,
+              OnThermalStateChange(mojom::blink::DeviceThermalState::kUnknown))
       .Times(1);
-  tracker_->OnThermalStateChange(blink::mojom::DeviceThermalState::kUnknown);
+  tracker_->OnThermalStateChange(mojom::blink::DeviceThermalState::kUnknown);
 
-  EXPECT_CALL(
-      *mock_handler_,
-      OnThermalStateChange(base::PowerObserver::DeviceThermalState::kNominal))
+  EXPECT_CALL(*mock_handler_,
+              OnThermalStateChange(mojom::blink::DeviceThermalState::kNominal))
       .Times(1);
-  tracker_->OnThermalStateChange(blink::mojom::DeviceThermalState::kNominal);
+  tracker_->OnThermalStateChange(mojom::blink::DeviceThermalState::kNominal);
 
-  EXPECT_CALL(
-      *mock_handler_,
-      OnThermalStateChange(base::PowerObserver::DeviceThermalState::kFair))
+  EXPECT_CALL(*mock_handler_,
+              OnThermalStateChange(mojom::blink::DeviceThermalState::kFair))
       .Times(1);
-  tracker_->OnThermalStateChange(blink::mojom::DeviceThermalState::kFair);
+  tracker_->OnThermalStateChange(mojom::blink::DeviceThermalState::kFair);
 
-  EXPECT_CALL(
-      *mock_handler_,
-      OnThermalStateChange(base::PowerObserver::DeviceThermalState::kSerious))
+  EXPECT_CALL(*mock_handler_,
+              OnThermalStateChange(mojom::blink::DeviceThermalState::kSerious))
       .Times(1);
-  tracker_->OnThermalStateChange(blink::mojom::DeviceThermalState::kSerious);
+  tracker_->OnThermalStateChange(mojom::blink::DeviceThermalState::kSerious);
 
-  EXPECT_CALL(
-      *mock_handler_,
-      OnThermalStateChange(base::PowerObserver::DeviceThermalState::kCritical))
+  EXPECT_CALL(*mock_handler_,
+              OnThermalStateChange(mojom::blink::DeviceThermalState::kCritical))
       .Times(1);
-  tracker_->OnThermalStateChange(blink::mojom::DeviceThermalState::kCritical);
+  tracker_->OnThermalStateChange(mojom::blink::DeviceThermalState::kCritical);
 }
 
 TEST_F(PeerConnectionTrackerTest, ReportInitialThermalState) {
@@ -241,14 +234,14 @@ TEST_F(PeerConnectionTrackerTest, ReportInitialThermalState) {
   base::RunLoop().RunUntilIdle();
 
   // Report a known thermal state.
-  EXPECT_CALL(handler0, OnThermalStateChange(
-                            base::PowerObserver::DeviceThermalState::kNominal))
+  EXPECT_CALL(handler0,
+              OnThermalStateChange(mojom::blink::DeviceThermalState::kNominal))
       .Times(1);
-  tracker_->OnThermalStateChange(blink::mojom::DeviceThermalState::kNominal);
+  tracker_->OnThermalStateChange(mojom::blink::DeviceThermalState::kNominal);
 
   // Handlers registered late will get the event upon registering.
-  EXPECT_CALL(handler1, OnThermalStateChange(
-                            base::PowerObserver::DeviceThermalState::kNominal))
+  EXPECT_CALL(handler1,
+              OnThermalStateChange(mojom::blink::DeviceThermalState::kNominal))
       .Times(1);
   EXPECT_CALL(*mock_host_, AddPeerConnection(_)).Times(1);
   tracker_->RegisterPeerConnection(
@@ -257,13 +250,13 @@ TEST_F(PeerConnectionTrackerTest, ReportInitialThermalState) {
   base::RunLoop().RunUntilIdle();
 
   // Report the unknown thermal state.
-  EXPECT_CALL(handler0, OnThermalStateChange(
-                            base::PowerObserver::DeviceThermalState::kUnknown))
+  EXPECT_CALL(handler0,
+              OnThermalStateChange(mojom::blink::DeviceThermalState::kUnknown))
       .Times(1);
-  EXPECT_CALL(handler1, OnThermalStateChange(
-                            base::PowerObserver::DeviceThermalState::kUnknown))
+  EXPECT_CALL(handler1,
+              OnThermalStateChange(mojom::blink::DeviceThermalState::kUnknown))
       .Times(1);
-  tracker_->OnThermalStateChange(blink::mojom::DeviceThermalState::kUnknown);
+  tracker_->OnThermalStateChange(mojom::blink::DeviceThermalState::kUnknown);
 
   // Handlers registered late get no event.
   EXPECT_CALL(handler2, OnThermalStateChange(_)).Times(0);

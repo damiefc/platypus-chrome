@@ -23,28 +23,6 @@ bool AdjustToClearance(LayoutUnit clearance_offset, NGBfcOffset* offset) {
   return false;
 }
 
-NGConstraintSpace CreateIndefiniteConstraintSpaceForChild(
-    const ComputedStyle& container_style,
-    const MinMaxSizesInput& input,
-    NGLayoutInputNode child) {
-  WritingMode parent_writing_mode = container_style.GetWritingMode();
-  WritingMode child_writing_mode = child.Style().GetWritingMode();
-  DCHECK(!IsParallelWritingMode(parent_writing_mode, child_writing_mode));
-
-  LogicalSize indefinite_size(kIndefiniteSize, kIndefiniteSize);
-  NGConstraintSpaceBuilder builder(parent_writing_mode, child_writing_mode,
-                                   child.CreatesNewFormattingContext());
-  SetOrthogonalFallbackInlineSizeIfNeeded(container_style, child, &builder);
-
-  builder.SetCacheSlot(NGCacheSlot::kMeasure);
-  builder.SetAvailableSize(indefinite_size);
-  builder.SetPercentageResolutionSize(
-      {kIndefiniteSize, input.percentage_resolution_block_size});
-  builder.SetReplacedPercentageResolutionSize(indefinite_size);
-  builder.SetIsShrinkToFit(child.Style().LogicalWidth().IsAuto());
-  return builder.ToConstraintSpace();
-}
-
 void SetOrthogonalFallbackInlineSizeIfNeeded(
     const ComputedStyle& parent_style,
     const NGLayoutInputNode child,

@@ -61,7 +61,7 @@ public class SnackbarManager implements OnClickListener, ActivityStateListener, 
     }
 
     public static final int DEFAULT_SNACKBAR_DURATION_MS = 3000;
-    private static final int ACCESSIBILITY_MODE_SNACKBAR_DURATION_MS = 10000;
+    private static final int ACCESSIBILITY_MODE_SNACKBAR_DURATION_MS = 30000;
 
     // Used instead of the constant so tests can override the value.
     private static int sSnackbarDurationMs = DEFAULT_SNACKBAR_DURATION_MS;
@@ -131,6 +131,13 @@ public class SnackbarManager implements OnClickListener, ActivityStateListener, 
     }
 
     /**
+     * @return True if a Snackbar can currently be shown by this SnackbarManager.
+     */
+    public boolean canShowSnackbar() {
+        return mActivityInForeground && !mIsDisabledForTesting;
+    }
+
+    /**
      * Shows a snackbar at the bottom of the screen, or above the keyboard if the keyboard is
      * visible.
      */
@@ -179,6 +186,7 @@ public class SnackbarManager implements OnClickListener, ActivityStateListener, 
      */
     @Override
     public void onClick(View v) {
+        mView.announceActionForAccessibility();
         mSnackbars.removeCurrentDueToAction();
         updateView();
     }

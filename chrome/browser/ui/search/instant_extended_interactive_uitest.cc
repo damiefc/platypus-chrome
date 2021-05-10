@@ -14,7 +14,6 @@
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/omnibox_tab_helper.h"
 #include "chrome/browser/ui/search/instant_test_base.h"
-#include "chrome/browser/ui/search/instant_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -26,9 +25,32 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace {
+
+std::string WrapScript(const std::string& script) {
+  return "domAutomationController.send(" + script + ")";
+}
+
+bool GetBoolFromJS(const content::ToRenderFrameHost& adapter,
+                   const std::string& script,
+                   bool* result) {
+  return content::ExecuteScriptAndExtractBool(adapter, WrapScript(script),
+                                              result);
+}
+
+bool GetIntFromJS(const content::ToRenderFrameHost& adapter,
+                  const std::string& script,
+                  int* result) {
+  return content::ExecuteScriptAndExtractInt(adapter, WrapScript(script),
+                                             result);
+}
+
+}  // namespace
 
 class InstantExtendedTest : public InProcessBrowserTest,
                             public InstantTestBase {
@@ -41,41 +63,40 @@ class InstantExtendedTest : public InProcessBrowserTest,
         is_focused_(false) {}
 
  protected:
-  void SetUpInProcessBrowserTestFixture() override {
+  void SetUpOnMainThread() override {
     ASSERT_TRUE(https_test_server().Start());
     GURL base_url = https_test_server().GetURL("/instant_extended.html?");
     GURL ntp_url = https_test_server().GetURL("/instant_extended_ntp.html?");
-    InstantTestBase::Init(base_url, ntp_url, false);
+    ASSERT_NO_FATAL_FAILURE(
+        SetupInstant(browser()->profile(), base_url, ntp_url));
   }
 
   bool UpdateSearchState(content::WebContents* contents) WARN_UNUSED_RESULT {
-    return instant_test_utils::GetIntFromJS(contents,
-                                            "onMostVisitedChangedCalls",
-                                            &on_most_visited_change_calls_) &&
-           instant_test_utils::GetIntFromJS(contents, "mostVisitedItemsCount",
-                                            &most_visited_items_count_) &&
-           instant_test_utils::GetIntFromJS(contents, "firstMostVisitedItemId",
-                                            &first_most_visited_item_id_) &&
-           instant_test_utils::GetIntFromJS(contents, "onFocusChangedCalls",
-                                            &on_focus_changed_calls_) &&
-           instant_test_utils::GetBoolFromJS(contents, "isFocused",
-                                             &is_focused_);
+    return GetIntFromJS(contents, "onMostVisitedChangedCalls",
+                        &on_most_visited_change_calls_) &&
+           GetIntFromJS(contents, "mostVisitedItemsCount",
+                        &most_visited_items_count_) &&
+           GetIntFromJS(contents, "firstMostVisitedItemId",
+                        &first_most_visited_item_id_) &&
+           GetIntFromJS(contents, "onFocusChangedCalls",
+                        &on_focus_changed_calls_) &&
+           GetBoolFromJS(contents, "isFocused", &is_focused_);
   }
 
   OmniboxView* omnibox() {
-    return instant_browser()->window()->GetLocationBar()->GetOmniboxView();
+    return browser()->window()->GetLocationBar()->GetOmniboxView();
   }
 
   void FocusOmnibox() {
     // If the omnibox already has focus, just notify OmniboxTabHelper.
     if (omnibox()->model()->has_focus()) {
       content::WebContents* active_tab =
-          instant_browser()->tab_strip_model()->GetActiveWebContents();
+          browser()->tab_strip_model()->GetActiveWebContents();
       OmniboxTabHelper::FromWebContents(active_tab)
           ->OnFocusChanged(OMNIBOX_FOCUS_VISIBLE,
                            OMNIBOX_FOCUS_CHANGE_EXPLICIT);
     } else {
-      instant_browser()->window()->GetLocationBar()->FocusLocation(false);
+      browser()->window()->GetLocationBar()->FocusLocation(false);
     }
   }
 
@@ -85,18 +106,17 @@ class InstantExtendedTest : public InProcessBrowserTest,
   }
 
   void PressEnterAndWaitForNavigation() {
-    content::WindowedNotificationObserver nav_observer(
-        content::NOTIFICATION_NAV_ENTRY_COMMITTED,
-        content::NotificationService::AllSources());
-    instant_browser()->window()->GetLocationBar()->AcceptInput();
-    nav_observer.Wait();
+    content::TestNavigationObserver observer(
+        browser()->tab_strip_model()->GetActiveWebContents(), 1);
+    browser()->window()->GetLocationBar()->AcceptInput();
+    observer.WaitForNavigationFinished();
   }
 
   void PressEnterAndWaitForFrameLoad() {
     content::WindowedNotificationObserver nav_observer(
         content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
         content::NotificationService::AllSources());
-    instant_browser()->window()->GetLocationBar()->AcceptInput();
+    browser()->window()->GetLocationBar()->AcceptInput();
     nav_observer.Wait();
   }
 
@@ -114,9 +134,6 @@ class InstantExtendedTest : public InProcessBrowserTest,
 // Test to verify that switching tabs should not dispatch onmostvisitedchanged
 // events.
 IN_PROC_BROWSER_TEST_F(InstantExtendedTest, NoMostVisitedChangedOnTabSwitch) {
-  // Initialize Instant.
-  ASSERT_NO_FATAL_FAILURE(SetupInstant(browser()));
-
   // Open new tab.
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL(chrome::kChromeUINewTabURL),
@@ -144,7 +161,6 @@ IN_PROC_BROWSER_TEST_F(InstantExtendedTest, NoMostVisitedChangedOnTabSwitch) {
 }
 
 IN_PROC_BROWSER_TEST_F(InstantExtendedTest, NavigateBackToNTP) {
-  ASSERT_NO_FATAL_FAILURE(SetupInstant(browser()));
   FocusOmnibox();
 
   // Open a new tab page.
@@ -175,8 +191,6 @@ IN_PROC_BROWSER_TEST_F(InstantExtendedTest, NavigateBackToNTP) {
 
 IN_PROC_BROWSER_TEST_F(InstantExtendedTest,
                        DispatchMVChangeEventWhileNavigatingBackToNTP) {
-  // Setup Instant.
-  ASSERT_NO_FATAL_FAILURE(SetupInstant(browser()));
   FocusOmnibox();
 
   // Open new tab.
@@ -220,7 +234,6 @@ IN_PROC_BROWSER_TEST_F(InstantExtendedTest, Referrer) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL result_url = embedded_test_server()->GetURL(
       "/referrer_policy/referrer-policy-log.html");
-  ASSERT_NO_FATAL_FAILURE(SetupInstant(browser()));
   FocusOmnibox();
 
   // Type a query and press enter to get results.
@@ -239,6 +252,6 @@ IN_PROC_BROWSER_TEST_F(InstantExtendedTest, Referrer) {
 
   EXPECT_TRUE(content::WaitForLoadStop(contents));
   std::string expected_title =
-      "Referrer is " + base_url().GetWithEmptyPath().spec();
+      "Referrer is " + https_test_server().base_url().spec();
   EXPECT_EQ(base::ASCIIToUTF16(expected_title), contents->GetTitle());
 }

@@ -13,16 +13,12 @@
 #include <vector>
 
 #include "base/files/file.h"
+#include "chrome/browser/chromeos/extensions/file_manager/files_extension_function.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_base.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_interface.h"
-#include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
-#include "chrome/services/printing/public/mojom/pdf_thumbnailer.mojom.h"
 #include "google_apis/drive/drive_api_error_codes.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "storage/browser/file_system/file_system_url.h"
-
-class SkBitmap;
 
 namespace chromeos {
 class RecentFile;
@@ -104,7 +100,7 @@ class FileManagerPrivateInternalZipSelectionFunction
   ResponseAction Run() override;
 
   // Receives the result from ZipFileCreator.
-  void OnZipDone(bool success);
+  void OnZipDone(const std::string& dest_file, bool success);
 };
 
 // Implements the chrome.fileManagerPrivate.zoom method.
@@ -142,7 +138,6 @@ class FileManagerPrivateRequestWebStoreAccessTokenFunction
 
   void OnAccessTokenFetched(google_apis::DriveApiErrorCode code,
                             const std::string& access_token);
-  const ChromeExtensionFunctionDetails chrome_details_;
 };
 
 class FileManagerPrivateGetProfilesFunction : public ExtensionFunction {
@@ -216,7 +211,6 @@ class FileManagerPrivateGetProvidersFunction : public ExtensionFunction {
 
  private:
   ResponseAction Run() override;
-  const ChromeExtensionFunctionDetails chrome_details_;
 };
 
 // Implements the chrome.fileManagerPrivate.addProvidedFileSystem method.
@@ -237,7 +231,6 @@ class FileManagerPrivateAddProvidedFileSystemFunction
 
  private:
   ResponseAction Run() override;
-  const ChromeExtensionFunctionDetails chrome_details_;
 };
 
 // Implements the chrome.fileManagerPrivate.configureVolume method.
@@ -259,8 +252,6 @@ class FileManagerPrivateConfigureVolumeFunction
  private:
   ResponseAction Run() override;
   void OnCompleted(base::File::Error result);
-
-  const ChromeExtensionFunctionDetails chrome_details_;
 };
 
 // Implements the chrome.fileManagerPrivate.mountCrostini method.
@@ -281,10 +272,7 @@ class FileManagerPrivateMountCrostiniFunction : public LoggedExtensionFunction {
 
   ResponseAction Run() override;
   void RestartCallback(crostini::CrostiniResult);
-
- private:
-  std::string source_path_;
-  std::string mount_label_;
+  void MountCallback(crostini::CrostiniResult);
 };
 
 // Implements the chrome.fileManagerPrivate.importCrostiniImage method.
@@ -363,7 +351,7 @@ class FileManagerPrivateInternalUnsharePathWithCrostiniFunction
 // Implements the chrome.fileManagerPrivate.getCrostiniSharedPaths
 // method.  Returns list of file entries.
 class FileManagerPrivateInternalGetCrostiniSharedPathsFunction
-    : public ExtensionFunction {
+    : public FilesExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION(
       "fileManagerPrivateInternal.getCrostiniSharedPaths",
@@ -448,8 +436,6 @@ class FileManagerPrivateInternalGetCustomActionsFunction
   ResponseAction Run() override;
   void OnCompleted(const chromeos::file_system_provider::Actions& actions,
                    base::File::Error result);
-
-  const ChromeExtensionFunctionDetails chrome_details_;
 };
 
 // Implements the chrome.fileManagerPrivate.executeCustomAction method.
@@ -471,8 +457,6 @@ class FileManagerPrivateInternalExecuteCustomActionFunction
  private:
   ResponseAction Run() override;
   void OnCompleted(base::File::Error result);
-
-  const ChromeExtensionFunctionDetails chrome_details_;
 };
 
 // Implements the chrome.fileManagerPrivateInternal.getRecentFiles method.
@@ -499,8 +483,6 @@ class FileManagerPrivateInternalGetRecentFilesFunction
   void OnConvertFileDefinitionListToEntryDefinitionList(
       std::unique_ptr<file_manager::util::EntryDefinitionList>
           entry_definition_list);
-
-  const ChromeExtensionFunctionDetails chrome_details_;
 };
 
 // Implements the chrome.fileManagerPrivate.detectCharacterEncoding method.
@@ -516,76 +498,17 @@ class FileManagerPrivateDetectCharacterEncodingFunction
   ResponseAction Run() override;
 };
 
-class FileManagerPrivateInternalGetThumbnailFunction
-    : public LoggedExtensionFunction {
+// Implements the chrome.fileManagerPrivate.isTabletModeEnabled method.
+class FileManagerPrivateIsTabletModeEnabledFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("fileManagerPrivateInternal.getThumbnail",
-                             FILEMANAGERPRIVATEINTERNAL_GETTHUMBNAIL)
-
-  FileManagerPrivateInternalGetThumbnailFunction();
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivate.isTabletModeEnabled",
+                             FILEMANAGERPRIVATE_ISTABLETMODEENABLED)
 
  protected:
-  ~FileManagerPrivateInternalGetThumbnailFunction() override;
-
-  // ExtensionFunction overrides.
-  ResponseAction Run() override;
+  ~FileManagerPrivateIsTabletModeEnabledFunction() override = default;
 
  private:
-  // Attempts to generate a thumbnail for the given url. This method
-  // checks that the URL references a Google Drive file.
-  ResponseAction GetDrivefsThumbnail(
-      const ChromeExtensionFunctionDetails& chrome_details,
-      const storage::FileSystemURL& url,
-      bool crop_to_square);
-
-  // Attempts to generate a thumbnail for the given url. This method checks
-  // that the URL references a local PDF file. If so, it attempts to generate
-  // a one page thumbnail.
-  ResponseAction GetLocalThumbnail(
-      const ChromeExtensionFunctionDetails& chrome_details,
-      const storage::FileSystemURL& url,
-      bool crop_to_square);
-
-  // For a given |content| starts fetching the first page PDF thumbnail by
-  // calling PdfThumbnailer from the printing service. The first parameter,
-  // |crop_to_square| is supplied by the JavaScript caller.
-  void FetchPdfThumbnail(bool crop_to_square, const std::string& content);
-
-  // Callback invoked by the thumbnailing service when a PDF thumbnail has been
-  // generated. The solitary parameter |bitmap| is supplied by the callback.
-  // If |bitmap| is null, an error occurred. Otherwise, |bitmap| contains the
-  // generated thumbnail.
-  void GotPdfThumbnail(const SkBitmap& bitmap);
-
-  // Handles a mojo channel disconnect event.
-  void PdfThumbnailDisconected();
-
-  // A callback invoked when thumbnail data has been generated.
-  void GotDriveThumbnail(const base::Optional<std::vector<uint8_t>>& data);
-
-  // Responds with a base64 encoded PNG thumbnail data.
-  void SendEncodedThumbnail(std::string thumbnail_data_url);
-
-  // Holds the channel to Printing PDF thumbnailing service. Bound only
-  // when needed.
-  mojo::Remote<printing::mojom::PdfThumbnailer> pdf_thumbnailer_;
-
-  // The dots per inch (dpi) resolution at which the PDF is rendered to a
-  // thumbnail. The value of 30 is selected so that a US Letter size page does
-  // not overflow a kSize x kSize thumbnail.
-  constexpr static int kDpi = 30;
-
-  // The default size if we are asked to generate a square thumbnail. The
-  // value is set to match chromeos/components/drivefs/mojom/drivefs.mojom
-  constexpr static int kSize = 360;
-
-  // The default width if we are asked to generate a non-square thumbnail. The
-  // value is set to match chromeos/components/drivefs/mojom/drivefs.mojom
-  constexpr static int kWidth = 500;
-
-  // The default height if we are asked to generate a non-square thumbnail. The
-  // value is set to match chromeos/components/drivefs/mojom/drivefs.mojom
-  constexpr static int kHeight = 500;
+  ResponseAction Run() override;
 };
 
 }  // namespace extensions

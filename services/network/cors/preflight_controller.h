@@ -14,11 +14,11 @@
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "base/optional.h"
-#include "base/util/type_safety/strong_alias.h"
+#include "base/types/strong_alias.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/cors/preflight_cache.h"
+#include "services/network/cors/preflight_result.h"
 #include "services/network/public/cpp/cors/cors_error_status.h"
-#include "services/network/public/cpp/cors/preflight_cache.h"
-#include "services/network/public/cpp/cors/preflight_result.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
@@ -35,10 +35,12 @@ namespace cors {
 // its result, and owning a CORS-preflight cache.
 class COMPONENT_EXPORT(NETWORK_SERVICE) PreflightController final {
  public:
-  using CompletionCallback =
-      base::OnceCallback<void(int net_error, base::Optional<CorsErrorStatus>)>;
+  using CompletionCallback = base::OnceCallback<
+      void(int net_error, base::Optional<CorsErrorStatus>, bool)>;
   using WithTrustedHeaderClient =
-      util::StrongAlias<class WithTrustedHeaderClientTag, bool>;
+      base::StrongAlias<class WithTrustedHeaderClientTag, bool>;
+  using WithNonWildcardRequestHeadersSupport =
+      PreflightResult::WithNonWildcardRequestHeadersSupport;
   // Creates a CORS-preflight ResourceRequest for a specified |request| for a
   // URL that is originally requested.
   static std::unique_ptr<ResourceRequest> CreatePreflightRequestForTesting(
@@ -62,11 +64,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) PreflightController final {
       CompletionCallback callback,
       const ResourceRequest& resource_request,
       WithTrustedHeaderClient with_trusted_header_client,
+      WithNonWildcardRequestHeadersSupport
+          with_non_wildcard_request_headers_support,
       bool tainted,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       mojom::URLLoaderFactory* loader_factory,
-      int32_t process_id,
-      const net::IsolationInfo& isolation_info);
+      const net::IsolationInfo& isolation_info,
+      mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer);
 
  private:
   class PreflightLoader;

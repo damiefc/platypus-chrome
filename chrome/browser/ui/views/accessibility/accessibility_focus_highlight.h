@@ -7,18 +7,22 @@
 
 #include <memory>
 
+#include "base/callback_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/compositor/compositor_animation_observer.h"
 #include "ui/compositor/layer_delegate.h"
 #include "ui/gfx/geometry/rect.h"
 
 class BrowserView;
+
+namespace content {
+struct FocusedNodeDetails;
+}  // namespace content
 
 namespace ui {
 class Compositor;
@@ -29,7 +33,7 @@ class Layer;
 // highlight the focused UI element for accessibility.
 class AccessibilityFocusHighlight : public ui::LayerDelegate,
                                     public ui::CompositorAnimationObserver,
-                                    public content::NotificationObserver {
+                                    public TabStripModelObserver {
  public:
   explicit AccessibilityFocusHighlight(BrowserView* browser_view);
   ~AccessibilityFocusHighlight() override;
@@ -56,13 +60,11 @@ class AccessibilityFocusHighlight : public ui::LayerDelegate,
   // Get rid of the layer and stop animation.
   void RemoveLayer();
 
-  // Handle preference changes by adding or removing the layer as necessary.
-  void AddOrRemoveFocusObserver();
+  // Handle preference changes by adding or removing observers as necessary.
+  void AddOrRemoveObservers();
 
-  // content::NotificationObserver overrides:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
+  // Handle focus change notifications.
+  void OnFocusChangedInPage(const content::FocusedNodeDetails& details);
 
   // ui::LayerDelegate overrides:
   void OnPaintLayer(const ui::PaintContext& context) override;
@@ -72,6 +74,11 @@ class AccessibilityFocusHighlight : public ui::LayerDelegate,
   // CompositorAnimationObserver overrides:
   void OnAnimationStep(base::TimeTicks timestamp) override;
   void OnCompositingShuttingDown(ui::Compositor* compositor) override;
+
+  // TabStripModelObserver
+  void OnTabStripModelChanged(TabStripModel*,
+                              const TabStripModelChange&,
+                              const TabStripSelectionChange&) override;
 
   // Compute the highlight color based on theme colors and defaults.
   SkColor GetHighlightColor();
@@ -125,7 +132,7 @@ class AccessibilityFocusHighlight : public ui::LayerDelegate,
   PrefChangeRegistrar profile_pref_registrar_;
 
   // For observing focus notifications.
-  content::NotificationRegistrar notification_registrar_;
+  base::Optional<base::CallbackListSubscription> focus_changed_subscription_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_ACCESSIBILITY_ACCESSIBILITY_FOCUS_HIGHLIGHT_H_

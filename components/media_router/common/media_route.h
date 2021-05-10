@@ -8,7 +8,6 @@
 #include <iosfwd>
 #include <string>
 
-#include "base/values.h"
 #include "components/media_router/common/media_sink.h"
 #include "components/media_router/common/media_source.h"
 
@@ -34,6 +33,7 @@ class MediaRoute {
                                         const MediaSource& source);
   static std::string GetPresentationIdFromMediaRouteId(
       const MediaRoute::Id route_id);
+  static std::string GetSinkIdFromMediaRouteId(const MediaRoute::Id route_id);
   static std::string GetMediaSourceIdFromMediaRouteId(
       const MediaRoute::Id route_id);
 

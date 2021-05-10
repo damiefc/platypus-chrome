@@ -48,8 +48,7 @@ class TestBlobContextGetterFactory : public download::BlobContextGetterFactory {
   // download::BlobContextGetterFactory implementation.
   void RetrieveBlobContextGetter(
       download::BlobContextGetterCallback callback) override {
-    auto blob_context_getter =
-        content::BrowserContext::GetBlobStorageContext(browser_context_);
+    auto blob_context_getter = browser_context_->GetBlobStorageContext();
     std::move(callback).Run(blob_context_getter);
   }
 
@@ -241,14 +240,6 @@ void WebTestBackgroundFetchDelegate::GetIconDisplaySize(
   std::move(callback).Run(gfx::Size(192, 192));
 }
 
-void WebTestBackgroundFetchDelegate::GetPermissionForOrigin(
-    const url::Origin& origin,
-    const WebContents::Getter& wc_getter,
-    GetPermissionForOriginCallback callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::move(callback).Run(BackgroundFetchPermission::ALLOWED);
-}
-
 void WebTestBackgroundFetchDelegate::CreateDownloadJob(
     base::WeakPtr<Client> client,
     std::unique_ptr<BackgroundFetchDescription> fetch_description) {
@@ -273,10 +264,9 @@ void WebTestBackgroundFetchDelegate::CreateDownloadJob(
       base::test::ScopedFeatureList download_service_configuration;
       download_service_configuration.InitAndEnableFeatureWithParameters(
           download::kDownloadServiceFeature, {{"start_up_delay_ms", "0"}});
-      auto* url_loader_factory =
-          BrowserContext::GetDefaultStoragePartition(browser_context_)
-              ->GetURLLoaderFactoryForBrowserProcess()
-              .get();
+      auto* url_loader_factory = browser_context_->GetDefaultStoragePartition()
+                                     ->GetURLLoaderFactoryForBrowserProcess()
+                                     .get();
       SimpleFactoryKey* simple_key =
           SimpleKeyMap::GetInstance()->GetForBrowserContext(browser_context_);
       download_service_ = download::BuildInMemoryDownloadService(

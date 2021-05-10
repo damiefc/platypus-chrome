@@ -17,6 +17,7 @@
 #include "chrome/browser/extensions/api/platform_keys/platform_keys_api.h"
 #include "chrome/common/extensions/api/enterprise_platform_keys.h"
 #include "chrome/common/extensions/api/enterprise_platform_keys_internal.h"
+#include "chromeos/crosapi/mojom/keystore_error.mojom.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/cert/x509_certificate.h"
@@ -72,7 +73,7 @@ EnterprisePlatformKeysInternalGenerateKeyFunction::Run() {
     service->GenerateRSAKey(
         platform_keys_token_id.value(), *(params->algorithm.modulus_length),
         extension_id(),
-        base::Bind(
+        base::BindOnce(
             &EnterprisePlatformKeysInternalGenerateKeyFunction::OnGeneratedKey,
             this));
   } else if (params->algorithm.name == "ECDSA") {
@@ -80,7 +81,7 @@ EnterprisePlatformKeysInternalGenerateKeyFunction::Run() {
     service->GenerateECKey(
         platform_keys_token_id.value(), *(params->algorithm.named_curve),
         extension_id(),
-        base::Bind(
+        base::BindOnce(
             &EnterprisePlatformKeysInternalGenerateKeyFunction::OnGeneratedKey,
             this));
   } else {
@@ -92,13 +93,14 @@ EnterprisePlatformKeysInternalGenerateKeyFunction::Run() {
 
 void EnterprisePlatformKeysInternalGenerateKeyFunction::OnGeneratedKey(
     const std::string& public_key_der,
-    chromeos::platform_keys::Status status) {
+    base::Optional<crosapi::mojom::KeystoreError> error) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (status == chromeos::platform_keys::Status::kSuccess) {
+  if (!error) {
     Respond(ArgumentList(api_epki::GenerateKey::Results::Create(
         std::vector<uint8_t>(public_key_der.begin(), public_key_der.end()))));
   } else {
-    Respond(Error(chromeos::platform_keys::StatusToString(status)));
+    Respond(
+        Error(chromeos::platform_keys::KeystoreErrorToString(error.value())));
   }
 }
 
@@ -120,7 +122,7 @@ EnterprisePlatformKeysGetCertificatesFunction::Run() {
           browser_context());
   platform_keys_service->GetCertificates(
       platform_keys_token_id.value(),
-      base::Bind(
+      base::BindOnce(
           &EnterprisePlatformKeysGetCertificatesFunction::OnGotCertificates,
           this));
   return RespondLater();
@@ -181,9 +183,9 @@ EnterprisePlatformKeysImportCertificateFunction::Run() {
 
   platform_keys_service->ImportCertificate(
       platform_keys_token_id.value(), cert_x509,
-      base::Bind(&EnterprisePlatformKeysImportCertificateFunction::
-                     OnImportedCertificate,
-                 this));
+      base::BindOnce(&EnterprisePlatformKeysImportCertificateFunction::
+                         OnImportedCertificate,
+                     this));
   return RespondLater();
 }
 
@@ -228,9 +230,9 @@ EnterprisePlatformKeysRemoveCertificateFunction::Run() {
 
   platform_keys_service->RemoveCertificate(
       platform_keys_token_id.value(), cert_x509,
-      base::Bind(&EnterprisePlatformKeysRemoveCertificateFunction::
-                     OnRemovedCertificate,
-                 this));
+      base::BindOnce(&EnterprisePlatformKeysRemoveCertificateFunction::
+                         OnRemovedCertificate,
+                     this));
   return RespondLater();
 }
 
@@ -295,7 +297,7 @@ EnterprisePlatformKeysChallengeMachineKeyFunction::Run() {
   std::unique_ptr<api_epk::ChallengeMachineKey::Params> params(
       api_epk::ChallengeMachineKey::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
-  chromeos::attestation::TpmChallengeKeyCallback callback = base::BindOnce(
+  ash::attestation::TpmChallengeKeyCallback callback = base::BindOnce(
       &EnterprisePlatformKeysChallengeMachineKeyFunction::OnChallengedKey,
       this);
   // base::Unretained is safe on impl_ since its life-cycle matches |this| and
@@ -310,7 +312,7 @@ EnterprisePlatformKeysChallengeMachineKeyFunction::Run() {
 }
 
 void EnterprisePlatformKeysChallengeMachineKeyFunction::OnChallengedKey(
-    const chromeos::attestation::TpmChallengeKeyResult& result) {
+    const ash::attestation::TpmChallengeKeyResult& result) {
   if (result.IsSuccess()) {
     Respond(ArgumentList(api_epk::ChallengeMachineKey::Results::Create(
         VectorFromString(result.challenge_response))));
@@ -330,7 +332,7 @@ EnterprisePlatformKeysChallengeUserKeyFunction::Run() {
   std::unique_ptr<api_epk::ChallengeUserKey::Params> params(
       api_epk::ChallengeUserKey::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
-  chromeos::attestation::TpmChallengeKeyCallback callback = base::BindOnce(
+  ash::attestation::TpmChallengeKeyCallback callback = base::BindOnce(
       &EnterprisePlatformKeysChallengeUserKeyFunction::OnChallengedKey, this);
   // base::Unretained is safe on impl_ since its life-cycle matches |this| and
   // |callback| holds a reference to |this|.
@@ -344,7 +346,7 @@ EnterprisePlatformKeysChallengeUserKeyFunction::Run() {
 }
 
 void EnterprisePlatformKeysChallengeUserKeyFunction::OnChallengedKey(
-    const chromeos::attestation::TpmChallengeKeyResult& result) {
+    const ash::attestation::TpmChallengeKeyResult& result) {
   if (result.IsSuccess()) {
     Respond(ArgumentList(api_epk::ChallengeUserKey::Results::Create(
         VectorFromString(result.challenge_response))));

@@ -4,8 +4,10 @@
 
 #include "components/browsing_data/core/counters/history_counter.h"
 
+#include <memory>
+
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/web_history_service_factory.h"
@@ -51,6 +53,8 @@ class HistoryCounterTest : public InProcessBrowserTest {
     return time_;
   }
 
+  void SetTime(base::Time time) { time_ = time; }
+
   void RevertTimeInDays(int days) {
     time_ -= base::TimeDelta::FromDays(days);
   }
@@ -66,7 +70,7 @@ class HistoryCounterTest : public InProcessBrowserTest {
   }
 
   void WaitForCounting() {
-    run_loop_.reset(new base::RunLoop());
+    run_loop_ = std::make_unique<base::RunLoop>();
     run_loop_->Run();
   }
 
@@ -126,6 +130,11 @@ class HistoryCounterTest : public InProcessBrowserTest {
 // Tests that the counter considers duplicate visits from the same day
 // to be a single item.
 IN_PROC_BROWSER_TEST_F(HistoryCounterTest, DuplicateVisits) {
+  // Start at a fixed day to avoid flakiness due to timezone changes.
+  base::Time time;
+  ASSERT_TRUE(base::Time::FromUTCString("1 Jul 2020 10:00 GMT", &time));
+  SetTime(time);
+
   AddVisit("https://www.google.com");   // 1 item
   AddVisit("https://www.google.com");
   AddVisit("https://www.chrome.com");   // 2 items

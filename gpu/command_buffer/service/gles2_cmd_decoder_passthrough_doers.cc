@@ -4,7 +4,9 @@
 
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 
-#include "base/bind_helpers.h"
+#include <memory>
+
+#include "base/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
 #include "base/strings/string_number_conversions.h"
@@ -554,7 +556,7 @@ error::Error GLES2DecoderPassthroughImpl::DoBindTexture(GLenum target,
 
   // Track the currently bound textures
   DCHECK(GLenumToTextureTarget(target) != TextureTarget::kUnkown);
-  scoped_refptr<TexturePassthrough> texture_passthrough = nullptr;
+  scoped_refptr<TexturePassthrough> texture_passthrough;
 
   // If there was anything bound that required an image bind / copy,
   // forget it since it's no longer bound to a sampler.
@@ -1128,7 +1130,7 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteTextures(
   std::vector<GLuint> non_mailbox_client_ids;
   for (GLsizei ii = 0; ii < n; ++ii) {
     GLuint client_id = textures[ii];
-    scoped_refptr<TexturePassthrough> texture = nullptr;
+    scoped_refptr<TexturePassthrough> texture;
     if (!resources_->texture_object_map.GetServiceID(client_id, &texture) ||
         texture == nullptr) {
       // Delete with DeleteHelper
@@ -2779,6 +2781,12 @@ error::Error GLES2DecoderPassthroughImpl::DoTexImage3D(GLenum target,
 error::Error GLES2DecoderPassthroughImpl::DoTexParameterf(GLenum target,
                                                           GLenum pname,
                                                           GLfloat param) {
+  // Don't allow clients to modify the resource initialization state.
+  if (pname == GL_RESOURCE_INITIALIZED_ANGLE) {
+    InsertError(GL_INVALID_ENUM, "Invalid enum.");
+    return error::kNoError;
+  }
+
   api()->glTexParameterfFn(target, pname, param);
   return error::kNoError;
 }
@@ -2787,6 +2795,12 @@ error::Error GLES2DecoderPassthroughImpl::DoTexParameterfv(
     GLenum target,
     GLenum pname,
     const volatile GLfloat* params) {
+  // Don't allow clients to modify the resource initialization state.
+  if (pname == GL_RESOURCE_INITIALIZED_ANGLE) {
+    InsertError(GL_INVALID_ENUM, "Invalid enum.");
+    return error::kNoError;
+  }
+
   std::array<GLfloat, 1> params_copy{{params[0]}};
   api()->glTexParameterfvRobustANGLEFn(target, pname,
                                        static_cast<GLsizei>(params_copy.size()),
@@ -2797,6 +2811,12 @@ error::Error GLES2DecoderPassthroughImpl::DoTexParameterfv(
 error::Error GLES2DecoderPassthroughImpl::DoTexParameteri(GLenum target,
                                                           GLenum pname,
                                                           GLint param) {
+  // Don't allow clients to modify the resource initialization state.
+  if (pname == GL_RESOURCE_INITIALIZED_ANGLE) {
+    InsertError(GL_INVALID_ENUM, "Invalid enum.");
+    return error::kNoError;
+  }
+
   api()->glTexParameteriFn(target, pname, param);
   return error::kNoError;
 }
@@ -2805,6 +2825,12 @@ error::Error GLES2DecoderPassthroughImpl::DoTexParameteriv(
     GLenum target,
     GLenum pname,
     const volatile GLint* params) {
+  // Don't allow clients to modify the resource initialization state.
+  if (pname == GL_RESOURCE_INITIALIZED_ANGLE) {
+    InsertError(GL_INVALID_ENUM, "Invalid enum.");
+    return error::kNoError;
+  }
+
   std::array<GLint, 1> params_copy{{params[0]}};
   api()->glTexParameterivRobustANGLEFn(target, pname,
                                        static_cast<GLsizei>(params_copy.size()),
@@ -3789,6 +3815,7 @@ error::Error GLES2DecoderPassthroughImpl::DoIsVertexArrayOES(GLuint array,
 error::Error GLES2DecoderPassthroughImpl::DoBindVertexArrayOES(GLuint array) {
   api()->glBindVertexArrayOESFn(
       GetVertexArrayServiceID(array, &vertex_array_id_map_));
+  UpdateCurrentlyBoundElementArrayBuffer();
   return error::kNoError;
 }
 
@@ -4575,7 +4602,7 @@ error::Error GLES2DecoderPassthroughImpl::DoVertexAttribDivisorANGLE(
 error::Error GLES2DecoderPassthroughImpl::DoProduceTextureDirectCHROMIUM(
     GLuint texture_client_id,
     const volatile GLbyte* mailbox) {
-  scoped_refptr<TexturePassthrough> texture = nullptr;
+  scoped_refptr<TexturePassthrough> texture;
   if (!resources_->texture_object_map.GetServiceID(texture_client_id,
                                                    &texture) ||
       texture == nullptr) {
@@ -4790,7 +4817,7 @@ error::Error GLES2DecoderPassthroughImpl::DoScheduleOverlayPlaneCHROMIUM(
     GLfloat uv_height,
     bool enable_blend,
     GLuint gpu_fence_id) {
-  scoped_refptr<TexturePassthrough> passthrough_texture = nullptr;
+  scoped_refptr<TexturePassthrough> passthrough_texture;
   if (!resources_->texture_object_map.GetServiceID(overlay_texture_id,
                                                    &passthrough_texture) ||
       passthrough_texture == nullptr) {
@@ -4840,7 +4867,7 @@ error::Error GLES2DecoderPassthroughImpl::DoScheduleCALayerSharedStateCHROMIUM(
     GLint sorting_context_id,
     const GLfloat* transform) {
   if (!ca_layer_shared_state_) {
-    ca_layer_shared_state_.reset(new CALayerSharedState);
+    ca_layer_shared_state_ = std::make_unique<CALayerSharedState>();
   }
 
   ca_layer_shared_state_->opacity = opacity;
@@ -4901,7 +4928,8 @@ error::Error GLES2DecoderPassthroughImpl::DoScheduleCALayerCHROMIUM(
                  contents_rect[3]),
       gfx::ToEnclosingRect(gfx::RectF(bounds_rect[0], bounds_rect[1],
                                       bounds_rect[2], bounds_rect[3])),
-      background_color, edge_aa_mask, ca_layer_shared_state_->opacity, filter);
+      background_color, edge_aa_mask, ca_layer_shared_state_->opacity, filter,
+      gfx::ProtectedVideoType::kClear);
   if (!surface_->ScheduleCALayer(params)) {
     InsertError(GL_INVALID_OPERATION, "failed to schedule CALayer");
     return error::kNoError;
@@ -4911,7 +4939,7 @@ error::Error GLES2DecoderPassthroughImpl::DoScheduleCALayerCHROMIUM(
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoScheduleCALayerInUseQueryCHROMIUM(
-    GLuint n,
+    GLsizei n,
     const volatile GLuint* textures) {
   // Validate that count is non-negative before allocating a vector
   if (n < 0) {
@@ -4921,7 +4949,7 @@ error::Error GLES2DecoderPassthroughImpl::DoScheduleCALayerInUseQueryCHROMIUM(
 
   std::vector<gl::GLSurface::CALayerInUseQuery> queries;
   queries.reserve(n);
-  for (GLuint i = 0; i < n; ++i) {
+  for (GLsizei i = 0; i < n; ++i) {
     gl::GLImage* image = nullptr;
     GLuint texture_id = textures[i];
     if (texture_id) {
@@ -5011,8 +5039,9 @@ error::Error GLES2DecoderPassthroughImpl::DoScheduleDCLayerCHROMIUM(
   params.transform =
       gfx::Transform(transform_c1r1, transform_c2r1, transform_c1r2,
                      transform_c2r2, transform_tx, transform_ty);
-  params.is_clipped = is_clipped;
-  params.clip_rect = gfx::Rect(clip_x, clip_y, clip_width, clip_height);
+  if (is_clipped) {
+    params.clip_rect = gfx::Rect(clip_x, clip_y, clip_width, clip_height);
+  }
   params.protected_video_type =
       static_cast<gfx::ProtectedVideoType>(protected_video_type);
 
@@ -5052,7 +5081,7 @@ error::Error GLES2DecoderPassthroughImpl::DoCommitOverlayPlanesCHROMIUM(
 error::Error GLES2DecoderPassthroughImpl::DoSetColorSpaceMetadataCHROMIUM(
     GLuint texture_id,
     gfx::ColorSpace color_space) {
-  scoped_refptr<TexturePassthrough> passthrough_texture = nullptr;
+  scoped_refptr<TexturePassthrough> passthrough_texture;
   if (!resources_->texture_object_map.GetServiceID(texture_id,
                                                    &passthrough_texture) ||
       passthrough_texture == nullptr) {
@@ -5180,60 +5209,6 @@ error::Error GLES2DecoderPassthroughImpl::DoSetEnableDCLayersCHROMIUM(
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::DoBeginRasterCHROMIUM(
-    GLuint texture_id,
-    GLuint sk_color,
-    GLuint msaa_sample_count,
-    GLboolean can_use_lcd_text,
-    GLint color_type) {
-  NOTIMPLEMENTED();
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderPassthroughImpl::DoRasterCHROMIUM(
-    GLuint raster_shm_id,
-    GLuint raster_shm_offset,
-    GLsizeiptr raster_shm_size,
-    GLuint font_shm_id,
-    GLuint font_shm_offset,
-    GLsizeiptr font_shm_size) {
-  // TODO(enne): Add CHROMIUM_raster_transport extension support to the
-  // passthrough command buffer.
-  NOTIMPLEMENTED();
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderPassthroughImpl::DoEndRasterCHROMIUM() {
-  NOTIMPLEMENTED();
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderPassthroughImpl::DoCreateTransferCacheEntryINTERNAL(
-    GLuint entry_type,
-    GLuint entry_id,
-    GLuint handle_shm_id,
-    GLuint handle_shm_offset,
-    GLuint data_shm_id,
-    GLuint data_shm_offset,
-    GLuint data_size) {
-  NOTIMPLEMENTED();
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderPassthroughImpl::DoUnlockTransferCacheEntryINTERNAL(
-    GLuint entry_type,
-    GLuint entry_id) {
-  NOTIMPLEMENTED();
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderPassthroughImpl::DoDeleteTransferCacheEntryINTERNAL(
-    GLuint entry_type,
-    GLuint entry_id) {
-  NOTIMPLEMENTED();
-  return error::kNoError;
-}
-
 error::Error GLES2DecoderPassthroughImpl::DoWindowRectanglesEXT(
     GLenum mode,
     GLsizei n,
@@ -5320,7 +5295,7 @@ error::Error
 GLES2DecoderPassthroughImpl::DoInitializeDiscardableTextureCHROMIUM(
     GLuint texture_id,
     ServiceDiscardableHandle&& discardable_handle) {
-  scoped_refptr<TexturePassthrough> texture_passthrough = nullptr;
+  scoped_refptr<TexturePassthrough> texture_passthrough;
   if (!resources_->texture_object_map.GetServiceID(texture_id,
                                                    &texture_passthrough) ||
       texture_passthrough == nullptr) {

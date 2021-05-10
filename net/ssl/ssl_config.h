@@ -43,6 +43,8 @@ NET_EXPORT extern const uint16_t kDefaultSSLVersionMax;
 
 // A collection of SSL-related configuration settings.
 struct NET_EXPORT SSLConfig {
+  using ApplicationSettings = base::flat_map<NextProto, std::vector<uint8_t>>;
+
   // Default to revocation checking.
   SSLConfig();
   SSLConfig(const SSLConfig& other);
@@ -126,6 +128,10 @@ struct NET_EXPORT SSLConfig {
 
   // The list of application-level protocols to enable renegotiation for.
   NextProtoVector renego_allowed_for_protos;
+
+  // ALPS TLS extension is enabled and corresponding data is sent to server
+  // for each NextProto in |application_settings|.  Data might be empty.
+  ApplicationSettings application_settings;
 
   // If the PartitionSSLSessionsByNetworkIsolationKey feature is enabled, the
   // session cache is partitioned by this value.

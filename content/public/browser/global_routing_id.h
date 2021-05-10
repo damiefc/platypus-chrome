@@ -8,11 +8,16 @@
 #include <tuple>
 
 #include "base/hash/hash.h"
+#include "base/i18n/number_formatting.h"
 #include "ipc/ipc_message.h"
 
 namespace content {
 
 // Uniquely identifies a target that legacy IPCs can be routed to.
+//
+// These IDs can be considered to be unique for the lifetime of the browser
+// process. While they are finite and thus must eventually roll over, this case
+// may be considered sufficiently rare as to be ignorable.
 struct GlobalRoutingID {
   GlobalRoutingID() : child_id(-1), route_id(-1) {}
 
@@ -38,8 +43,17 @@ struct GlobalRoutingID {
   }
 };
 
+inline std::ostream& operator<<(std::ostream& os, const GlobalRoutingID& id) {
+  os << "GlobalRoutingID(" << id.child_id << ", " << id.route_id << ")";
+  return os;
+}
+
 // Same as GlobalRoutingID except the route_id must be a RenderFrameHost routing
 // id.
+//
+// These IDs can be considered to be unique for the lifetime of the browser
+// process. While they are finite and thus must eventually roll over, this case
+// may be considered sufficiently rare as to be ignorable.
 struct GlobalFrameRoutingId {
   GlobalFrameRoutingId() : child_id(0), frame_routing_id(MSG_ROUTING_NONE) {}
 
@@ -73,6 +87,13 @@ struct GlobalFrameRoutingId {
     return frame_routing_id != MSG_ROUTING_NONE;
   }
 };
+
+inline std::ostream& operator<<(std::ostream& os,
+                                const GlobalFrameRoutingId& id) {
+  os << "GlobalFrameRoutingId(" << id.child_id << ", " << id.frame_routing_id
+     << ")";
+  return os;
+}
 
 struct GlobalFrameRoutingIdHasher {
   std::size_t operator()(const GlobalFrameRoutingId& id) const {

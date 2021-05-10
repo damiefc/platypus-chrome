@@ -15,10 +15,51 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/storage_partition.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+
+AccessContextAuditService::CookieAccessHelper::CookieAccessHelper(
+    AccessContextAuditService* service)
+    : service_(service) {
+  DCHECK(service);
+  deletion_observer_.Add(service);
+}
+
+AccessContextAuditService::CookieAccessHelper::~CookieAccessHelper() {
+  FlushCookieRecords();
+}
+
+void AccessContextAuditService::CookieAccessHelper::OnCookieDeleted(
+    const net::CanonicalCookie& cookie) {
+  accessed_cookies_.erase(cookie);
+}
+
+void AccessContextAuditService::CookieAccessHelper::RecordCookieAccess(
+    const net::CookieList& accessed_cookies,
+    const url::Origin& top_frame_origin) {
+  if (top_frame_origin != last_seen_top_frame_origin_) {
+    FlushCookieRecords();
+    last_seen_top_frame_origin_ = top_frame_origin;
+  }
+
+  for (const auto& cookie : accessed_cookies)
+    accessed_cookies_.insert(cookie);
+}
+
+void AccessContextAuditService::CookieAccessHelper::FlushCookieRecords() {
+  if (accessed_cookies_.empty())
+    return;
+
+  service_->RecordCookieAccess(accessed_cookies_, last_seen_top_frame_origin_);
+  accessed_cookies_.clear();
+}
 
 AccessContextAuditService::AccessContextAuditService(Profile* profile)
     : clock_(base::DefaultClock::GetInstance()), profile_(profile) {}
-AccessContextAuditService::~AccessContextAuditService() = default;
+
+AccessContextAuditService::~AccessContextAuditService() {
+  // This destructor may do I/O, so destroy it on the database task runner.
+  database_task_runner_->ReleaseSoon(FROM_HERE, std::move(database_));
+}
 
 bool AccessContextAuditService::Init(
     const base::FilePath& database_dir,
@@ -53,7 +94,7 @@ bool AccessContextAuditService::Init(
 }
 
 void AccessContextAuditService::RecordCookieAccess(
-    const net::CookieList& accessed_cookies,
+    const canonical_cookie::CookieHashSet& accessed_cookies,
     const url::Origin& top_frame_origin) {
   // Opaque top frame origins are not supported.
   if (top_frame_origin.opaque())
@@ -68,8 +109,8 @@ void AccessContextAuditService::RecordCookieAccess(
       continue;
 
     access_records.emplace_back(top_frame_origin, cookie.Name(),
-                                cookie.Domain(), cookie.Path(),
-                                cookie.LastAccessDate(), cookie.IsPersistent());
+                                cookie.Domain(), cookie.Path(), now,
+                                cookie.IsPersistent());
   }
   database_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&AccessContextAuditDatabase::AddRecords,
@@ -93,20 +134,79 @@ void AccessContextAuditService::RecordStorageAPIAccess(
                                 database_, std::move(access_record)));
 }
 
-void AccessContextAuditService::GetAllAccessRecords(
+void AccessContextAuditService::GetCookieAccessRecords(
+    AccessContextRecordsCallback callback) {
+  if (!user_visible_tasks_in_progress++)
+    database_task_runner_->UpdatePriority(base::TaskPriority::USER_VISIBLE);
+
+  for (auto& helper : cookie_access_helpers_)
+    helper.FlushCookieRecords();
+
+  database_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&AccessContextAuditDatabase::GetCookieRecords, database_),
+      base::BindOnce(
+          &AccessContextAuditService::CompleteGetAccessRecordsInternal,
+          weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void AccessContextAuditService::GetStorageAccessRecords(
     AccessContextRecordsCallback callback) {
   if (!user_visible_tasks_in_progress++)
     database_task_runner_->UpdatePriority(base::TaskPriority::USER_VISIBLE);
 
   database_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
-      base::BindOnce(&AccessContextAuditDatabase::GetAllRecords, database_),
+      base::BindOnce(&AccessContextAuditDatabase::GetStorageRecords, database_),
       base::BindOnce(
-          &AccessContextAuditService::CompleteGetAllAccessRecordsInternal,
+          &AccessContextAuditService::CompleteGetAccessRecordsInternal,
           weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void AccessContextAuditService::CompleteGetAllAccessRecordsInternal(
+namespace {
+
+bool IsSameSite(const url::Origin& origin1, const url::Origin& origin2) {
+  return net::registry_controlled_domains::SameDomainOrHost(
+      origin1, origin2,
+      net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+}
+
+void SelectThirdPartyStorageAccessRecords(
+    AccessContextRecordsCallback callback,
+    std::vector<AccessContextAuditDatabase::AccessRecord> storage_records) {
+  std::vector<AccessContextAuditDatabase::AccessRecord> result;
+  for (auto& record : storage_records) {
+    if (!IsSameSite(record.origin, record.top_frame_origin))
+      result.push_back(std::move(record));
+  }
+  std::move(callback).Run(std::move(result));
+}
+
+}  // namespace
+
+void AccessContextAuditService::GetThirdPartyStorageAccessRecords(
+    AccessContextRecordsCallback callback) {
+  GetStorageAccessRecords(base::BindOnce(&SelectThirdPartyStorageAccessRecords,
+                                         std::move(callback)));
+}
+
+void AccessContextAuditService::GetAllAccessRecords(
+    AccessContextRecordsCallback callback) {
+  if (!user_visible_tasks_in_progress++)
+    database_task_runner_->UpdatePriority(base::TaskPriority::USER_VISIBLE);
+
+  for (auto& helper : cookie_access_helpers_)
+    helper.FlushCookieRecords();
+
+  database_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&AccessContextAuditDatabase::GetAllRecords, database_),
+      base::BindOnce(
+          &AccessContextAuditService::CompleteGetAccessRecordsInternal,
+          weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void AccessContextAuditService::CompleteGetAccessRecordsInternal(
     AccessContextRecordsCallback callback,
     std::vector<AccessContextAuditDatabase::AccessRecord> records) {
   DCHECK_GT(user_visible_tasks_in_progress, 0);
@@ -129,6 +229,7 @@ void AccessContextAuditService::RemoveAllRecordsForOriginKeyedStorage(
 }
 
 void AccessContextAuditService::Shutdown() {
+  DCHECK(cookie_access_helpers_.empty());
   ClearSessionOnlyRecords();
 }
 
@@ -198,6 +299,10 @@ void AccessContextAuditService::OnCookieChange(
     case net::CookieChangeCause::EXPIRED:
     case net::CookieChangeCause::EVICTED:
     case net::CookieChangeCause::EXPIRED_OVERWRITE: {
+      // Notify helpers so that future accesses to this cookie are reported.
+      for (auto& helper : cookie_access_helpers_) {
+        helper.OnCookieDeleted(change.cookie);
+      }
       // Remove records of deleted cookie from database.
       database_task_runner_->PostTask(
           FROM_HERE,
@@ -251,6 +356,14 @@ void AccessContextAuditService::OnURLsDeleted(
   }
 }
 
+void AccessContextAuditService::AddObserver(CookieAccessHelper* helper) {
+  cookie_access_helpers_.AddObserver(helper);
+}
+
+void AccessContextAuditService::RemoveObserver(CookieAccessHelper* helper) {
+  cookie_access_helpers_.RemoveObserver(helper);
+}
+
 void AccessContextAuditService::SetClockForTesting(base::Clock* clock) {
   clock_ = clock;
 }
@@ -264,7 +377,7 @@ void AccessContextAuditService::SetTaskRunnerForTesting(
 void AccessContextAuditService::ClearSessionOnlyRecords() {
   ContentSettingsForOneType settings;
   HostContentSettingsMapFactory::GetForProfile(profile_)->GetSettingsForOneType(
-      ContentSettingsType::COOKIES, std::string(), &settings);
+      ContentSettingsType::COOKIES, &settings);
 
   database_task_runner_->PostTask(
       FROM_HERE,

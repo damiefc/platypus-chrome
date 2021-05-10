@@ -21,11 +21,14 @@
 #include "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_coordinator.h"
+#import "ios/chrome/browser/ui/authentication/signin/signin_utils.h"
 #include "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #include "ios/chrome/browser/ui/fancy_ui/primary_action_button.h"
 #import "ios/chrome/browser/ui/first_run/first_run_constants.h"
 #include "ios/chrome/browser/ui/first_run/first_run_util.h"
-#include "ios/chrome/browser/ui/first_run/static_file_view_controller.h"
+#import "ios/chrome/browser/ui/first_run/location_permissions_field_trial.h"
+#include "ios/chrome/browser/ui/first_run/welcome/static_file_view_controller.h"
 #import "ios/chrome/browser/ui/first_run/welcome_to_chrome_view.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/browser/ui/util/terms_util.h"
@@ -72,6 +75,10 @@ const BOOL kDefaultStatsCheckboxValue = YES;
 // Holds the state of the first run flow.
 @property(nonatomic, strong) FirstRunConfiguration* firstRunConfig;
 
+// Stores the interrupt completion block to be invoked once the first run is
+// dismissed.
+@property(nonatomic, copy) void (^interruptCompletion)(void);
+
 @end
 
 @implementation WelcomeToChromeViewController
@@ -113,6 +120,21 @@ const BOOL kDefaultStatsCheckboxValue = YES;
     _dispatcher = dispatcher;
   }
   return self;
+}
+
+- (void)interruptSigninCoordinatorWithCompletion:(void (^)(void))completion {
+  // The first run can only be dismissed on the sign-in view.
+  DCHECK(self.coordinator);
+  // The sign-in coordinator is part of the navigation controller, so the
+  // sign-in coordinator didn't present itself. Therefore the interrupt action
+  // must be SigninCoordinatorInterruptActionNoDismiss.
+  // |completion| has to be stored in order to be invoked when
+  // |firstRunDismissedWithPresentingViewController:signinAction:| is
+  // called.
+  self.interruptCompletion = completion;
+  [self.coordinator
+      interruptWithAction:SigninCoordinatorInterruptActionNoDismiss
+               completion:nil];
 }
 
 - (void)loadView {
@@ -184,9 +206,21 @@ const BOOL kDefaultStatsCheckboxValue = YES;
   }
 
   self.firstRunConfig = [[FirstRunConfiguration alloc] init];
-  self.firstRunConfig.hasSSOAccount = ios::GetChromeBrowserProvider()
-                                          ->GetChromeIdentityService()
-                                          ->HasIdentities();
+  self.firstRunConfig.signInAttemptStatus =
+      first_run::SignInAttemptStatus::NOT_ATTEMPTED;
+  ios::ChromeIdentityService* identityService =
+      ios::GetChromeBrowserProvider()->GetChromeIdentityService();
+  self.firstRunConfig.hasSSOAccount = identityService->HasIdentities();
+
+  if (!signin::IsSigninAllowed(_browser->GetBrowserState()->GetPrefs())) {
+    // Sign-in is disabled by policy. Skip the sign-in flow.
+    self.firstRunConfig.signInAttemptStatus =
+        first_run::SignInAttemptStatus::SKIPPED_BY_POLICY;
+    SigninCompletionInfo* completionInfo =
+        [SigninCompletionInfo signinCompletionInfoWithIdentity:nil];
+    [self completeFirstRunWithSigninCompletionInfo:completionInfo];
+    return;
+  }
 
   self.coordinator = [SigninCoordinator
       firstRunCoordinatorWithBaseNavigationController:self.navigationController
@@ -200,64 +234,82 @@ const BOOL kDefaultStatsCheckboxValue = YES;
   self.coordinator.signinCompletion =
       ^(SigninCoordinatorResult signinResult,
         SigninCompletionInfo* signinCompletionInfo) {
-        [weakSelf.coordinator stop];
-        weakSelf.coordinator = nil;
-        [weakSelf finishFirstRunWithSigninResult:signinResult
-                            signinCompletionInfo:signinCompletionInfo];
+        [weakSelf signinCompleteResult:signinResult
+                        completionInfo:signinCompletionInfo];
       };
 
   [self.coordinator start];
 }
 
-// Completes the first run operation depending on the |signinResult| state.
-- (void)finishFirstRunWithSigninResult:(SigninCoordinatorResult)signinResult
-                  signinCompletionInfo:
-                      (SigninCompletionInfo*)signinCompletionInfo {
-  switch (signinResult) {
-    case SigninCoordinatorResultSuccess: {
-      // User is considered done with First Run only after successful sign-in.
-      WriteFirstRunSentinelAndRecordMetrics(
-          _browser->GetBrowserState(), YES,
-          [self.firstRunConfig hasSSOAccount]);
-      web::WebState* currentWebState =
-          _browser->GetWebStateList()->GetActiveWebState();
-      FinishFirstRun(_browser->GetBrowserState(), currentWebState,
-                     self.firstRunConfig, self.presenter);
-      break;
-    }
-    case SigninCoordinatorResultCanceledByUser: {
-      web::WebState* currentWebState =
-          _browser->GetWebStateList()->GetActiveWebState();
-      FinishFirstRun(_browser->GetBrowserState(), currentWebState,
-                     self.firstRunConfig, self.presenter);
-      break;
-    }
-    case SigninCoordinatorResultInterrupted: {
-      NOTREACHED();
-    }
-  }
+// Handles the sign-in completion and proceeds to complete the first run
+// operation depending on the |signinResult| state.
+- (void)signinCompleteResult:(SigninCoordinatorResult)signinResult
+              completionInfo:(SigninCompletionInfo*)signinCompletionInfo {
+  [self.coordinator stop];
+  self.coordinator = nil;
+
+  [self completeFirstRunWithSigninCompletionInfo:signinCompletionInfo];
+}
+
+// Completes the first run operation by either showing advanced settings
+// sign-in, showing the location permission prompt, or simply dismissing the
+// welcome page.
+- (void)completeFirstRunWithSigninCompletionInfo:
+    (SigninCompletionInfo*)completionInfo {
+  web::WebState* currentWebState =
+      _browser->GetWebStateList()->GetActiveWebState();
+  FinishFirstRun(_browser->GetBrowserState(), currentWebState,
+                 self.firstRunConfig, self.presenter);
+
+  __weak __typeof(self) weakSelf = self;
   UIViewController* presentingViewController =
       self.navigationController.presentingViewController;
-  BOOL needsAvancedSettingsSignin =
-      signinCompletionInfo.signinCompletionAction ==
-      SigninCompletionActionShowAdvancedSettingsSignin;
-  [self.navigationController.presentingViewController
-      dismissViewControllerAnimated:YES
-                         completion:^{
-                           FirstRunDismissed();
-                           if (needsAvancedSettingsSignin) {
-                             [self.dispatcher
-                                 showAdvancedSigninSettingsFromViewController:
-                                     presentingViewController];
-                           }
-                         }];
+  void (^completion)(void) = ^{
+    [weakSelf
+        firstRunDismissedWithPresentingViewController:presentingViewController
+                                 signinCompletionInfo:completionInfo];
+  };
+  [presentingViewController dismissViewControllerAnimated:YES
+                                               completion:completion];
+}
+
+// Triggers all the events after the first run is dismissed.
+- (void)firstRunDismissedWithPresentingViewController:
+            (UIViewController*)presentingViewController
+                                 signinCompletionInfo:
+                                     (SigninCompletionInfo*)completionInfo {
+  FirstRunDismissed();
+  switch (completionInfo.signinCompletionAction) {
+    case SigninCompletionActionShowAdvancedSettingsSignin:
+      DCHECK(!self.interruptCompletion);
+      [self.dispatcher showAdvancedSigninSettingsFromViewController:
+                           presentingViewController];
+      break;
+    case SigninCompletionActionOpenCompletionURL: {
+      // The user asked to create a new account.
+      DCHECK(completionInfo.completionURL.is_valid());
+      OpenNewTabCommand* command = [OpenNewTabCommand
+          commandWithURLFromChrome:completionInfo.completionURL];
+      [self.dispatcher closeSettingsUIAndOpenURL:command];
+      break;
+    }
+    case SigninCompletionActionNone:
+      if (self.interruptCompletion) {
+        self.interruptCompletion();
+      } else if (location_permissions_field_trial::IsInFirstRunModalGroup()) {
+        [self.dispatcher
+            showLocationPermissionsFromViewController:presentingViewController];
+      }
+      break;
+  }
 }
 
 #pragma mark - Notifications
 
 // Marks the sign-in attempted field in first run config.
 - (void)markSigninAttempted:(NSNotification*)notification {
-  [self.firstRunConfig setSignInAttempted:YES];
+  self.firstRunConfig.signInAttemptStatus =
+      first_run::SignInAttemptStatus::ATTEMPTED;
 
   [[NSNotificationCenter defaultCenter]
       removeObserver:self

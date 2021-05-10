@@ -141,9 +141,8 @@ void BaseAudioContext::Initialize() {
 }
 
 void BaseAudioContext::Clear() {
-  // The audio rendering thread is dead.  Nobody will schedule AudioHandler
-  // deletion.  Let's do it ourselves.
-  GetDeferredTaskHandler().ClearHandlersToBeDeleted();
+  // Make a note that we've cleared out the context so that there's no pending
+  // activity.
   is_cleared_ = true;
 }
 
@@ -278,7 +277,7 @@ AudioBuffer* BaseAudioContext::createBuffer(uint32_t number_of_channels,
       // 100*(384000/3000) = 12800, where 3000 and 384000 are the current
       // min and max sample rates possible for an AudioBuffer.  The number
       // of buckets is fairly arbitrary.
-      float ratio = 100 * sample_rate / this->sampleRate();
+      float ratio = 100 * sample_rate / sampleRate();
       base::UmaHistogramCustomCounts(
           "WebAudio.AudioBuffer.SampleRateRatio384kHz",
           static_cast<int>(0.5 + ratio), 1, 12800, 50);

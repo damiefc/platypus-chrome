@@ -25,7 +25,7 @@
 #include "ash/test/ash_test_base.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "components/exo/buffer.h"
 #include "components/exo/keyboard.h"
 #include "components/exo/keyboard_delegate.h"
@@ -46,6 +46,7 @@
 #include "ui/message_center/views/message_view_factory.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/message_center/views/padded_button.h"
+#include "ui/views/test/button_test_api.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/native_widget_delegate.h"
 
@@ -70,7 +71,7 @@ class MockKeyboardDelegate : public exo::KeyboardDelegate {
   MOCK_METHOD(void,
               OnKeyboardEnter,
               (exo::Surface*,
-               (const base::flat_map<ui::DomCode, ui::DomCode>&)),
+               (const base::flat_map<ui::DomCode, exo::KeyState>&)),
               (override));
   MOCK_METHOD(void, OnKeyboardLeave, (exo::Surface*), (override));
   MOCK_METHOD(uint32_t,
@@ -136,9 +137,8 @@ class ArcNotificationContentViewTest : public AshTestBase {
 
     surface_manager_ = std::make_unique<ArcNotificationSurfaceManagerImpl>();
 
-    message_center::MessageViewFactory::
-        ClearCustomNotificationViewFactoryForTest(
-            kArcNotificationCustomViewType);
+    message_center::MessageViewFactory::ClearCustomNotificationViewFactory(
+        kArcNotificationCustomViewType);
     ArcNotificationManager::SetCustomNotificationViewFactory();
   }
 
@@ -168,7 +168,7 @@ class ArcNotificationContentViewTest : public AshTestBase {
     views::Button* close_button = control_buttons_view->close_button();
     ASSERT_NE(nullptr, close_button);
     close_button->RequestFocus();
-    control_buttons_view->ButtonPressed(close_button, dummy_event);
+    views::test::ButtonTestApi(close_button).NotifyClick(dummy_event);
   }
 
   void CreateAndShowNotificationView(const Notification& notification) {
@@ -224,9 +224,8 @@ class ArcNotificationContentViewTest : public AshTestBase {
         message_center::SettingsButtonHandler::DELEGATE;
     Notification notification(
         message_center::NOTIFICATION_TYPE_CUSTOM,
-        notification_item->GetNotificationId(), base::UTF8ToUTF16("title"),
-        base::UTF8ToUTF16("message"), gfx::Image(), base::UTF8ToUTF16("arc"),
-        GURL(),
+        notification_item->GetNotificationId(), u"title", u"message",
+        gfx::Image(), u"arc", GURL(),
         message_center::NotifierId(
             message_center::NotifierType::ARC_APPLICATION, "ARC_NOTIFICATION"),
         optional_fields,
@@ -325,9 +324,8 @@ TEST_F(ArcNotificationContentViewTest, CloseButton) {
   // ARC to avoid surface shutdown issues.
   auto mc_notification = std::make_unique<Notification>(
       message_center::NOTIFICATION_TYPE_SIMPLE,
-      notification_item->GetNotificationId(), base::UTF8ToUTF16("title"),
-      base::UTF8ToUTF16("message"), gfx::Image(), base::UTF8ToUTF16("arc"),
-      GURL(),
+      notification_item->GetNotificationId(), u"title", u"message",
+      gfx::Image(), u"arc", GURL(),
       message_center::NotifierId(message_center::NotifierType::ARC_APPLICATION,
                                  "ARC_NOTIFICATION"),
       message_center::RichNotificationData(), nullptr);
@@ -346,7 +344,7 @@ TEST_F(ArcNotificationContentViewTest, CloseButton) {
 TEST_F(ArcNotificationContentViewTest, CloseButtonInMessageCenterView) {
   std::string notification_key("notification id");
 
-  message_center::MessageViewFactory::ClearCustomNotificationViewFactoryForTest(
+  message_center::MessageViewFactory::ClearCustomNotificationViewFactory(
       kArcNotificationCustomViewType);
 
   // Override MessageView factory to capture the created notification view in
@@ -369,7 +367,7 @@ TEST_F(ArcNotificationContentViewTest, CloseButtonInMessageCenterView) {
   // Show MessageCenterView and activate its widget.
   auto* unified_system_tray =
       StatusAreaWidgetTestHelper::GetStatusAreaWidget()->unified_system_tray();
-  unified_system_tray->ShowBubble(false /* show_by_click */);
+  unified_system_tray->ShowBubble();
   unified_system_tray->ActivateBubble();
 
   auto notification_item =

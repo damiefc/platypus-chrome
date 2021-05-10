@@ -43,14 +43,20 @@ class IntersectionObserverDelegateImpl final
   IntersectionObserverDelegateImpl(
       ExecutionContext* context,
       IntersectionObserver::EventCallback callback,
+      LocalFrameUkmAggregator::MetricId ukm_metric_id,
       IntersectionObserver::DeliveryBehavior delivery_behavior)
       : context_(context),
         callback_(std::move(callback)),
+        ukm_metric_id_(ukm_metric_id),
         delivery_behavior_(delivery_behavior) {}
   IntersectionObserverDelegateImpl(const IntersectionObserverDelegateImpl&) =
       delete;
   IntersectionObserverDelegateImpl& operator=(
       const IntersectionObserverDelegateImpl&) = delete;
+
+  LocalFrameUkmAggregator::MetricId GetUkmMetricId() const override {
+    return ukm_metric_id_;
+  }
 
   IntersectionObserver::DeliveryBehavior GetDeliveryBehavior() const override {
     return delivery_behavior_;
@@ -71,6 +77,7 @@ class IntersectionObserverDelegateImpl final
  private:
   WeakMember<ExecutionContext> context_;
   IntersectionObserver::EventCallback callback_;
+  LocalFrameUkmAggregator::MetricId ukm_metric_id_;
   IntersectionObserver::DeliveryBehavior delivery_behavior_;
 };
 
@@ -201,7 +208,7 @@ IntersectionObserver* IntersectionObserver::Create(
 
   return MakeGarbageCollected<IntersectionObserver>(
       delegate, root, margin, thresholds, kFractionOfTarget, delay,
-      track_visibility, false, kApplyMarginToRoot);
+      track_visibility, false, kApplyMarginToRoot, false);
 }
 
 IntersectionObserver* IntersectionObserver::Create(
@@ -224,19 +231,23 @@ IntersectionObserver* IntersectionObserver::Create(
     const Vector<float>& thresholds,
     Document* document,
     EventCallback callback,
+    LocalFrameUkmAggregator::MetricId ukm_metric_id,
     DeliveryBehavior behavior,
     ThresholdInterpretation semantics,
     DOMHighResTimeStamp delay,
     bool track_visibility,
     bool always_report_root_bounds,
     MarginTarget margin_target,
+    bool use_overflow_clip_edge,
     ExceptionState& exception_state) {
   IntersectionObserverDelegateImpl* intersection_observer_delegate =
       MakeGarbageCollected<IntersectionObserverDelegateImpl>(
-          document->GetExecutionContext(), std::move(callback), behavior);
+          document->GetExecutionContext(), std::move(callback), ukm_metric_id,
+          behavior);
   return MakeGarbageCollected<IntersectionObserver>(
       *intersection_observer_delegate, nullptr, margin, thresholds, semantics,
-      delay, track_visibility, always_report_root_bounds, margin_target);
+      delay, track_visibility, always_report_root_bounds, margin_target,
+      use_overflow_clip_edge);
 }
 
 IntersectionObserver::IntersectionObserver(
@@ -248,7 +259,8 @@ IntersectionObserver::IntersectionObserver(
     DOMHighResTimeStamp delay,
     bool track_visibility,
     bool always_report_root_bounds,
-    MarginTarget margin_target)
+    MarginTarget margin_target,
+    bool use_overflow_clip_edge)
     : ExecutionContextClient(delegate.GetExecutionContext()),
       delegate_(&delegate),
       root_(root),
@@ -261,7 +273,8 @@ IntersectionObserver::IntersectionObserver(
       track_fraction_of_root_(semantics == kFractionOfRoot),
       always_report_root_bounds_(always_report_root_bounds),
       needs_delivery_(0),
-      can_use_cached_rects_(0) {
+      can_use_cached_rects_(0),
+      use_overflow_clip_edge_(use_overflow_clip_edge) {
   switch (margin.size()) {
     case 0:
       break;
@@ -314,10 +327,7 @@ bool IntersectionObserver::RootIsValid() const {
 
 void IntersectionObserver::observe(Element* target,
                                    ExceptionState& exception_state) {
-  if (!RootIsValid())
-    return;
-
-  if (!target || root() == target)
+  if (!RootIsValid() || !target)
     return;
 
   if (target->EnsureIntersectionObserverData().GetObservationFor(*this))
@@ -349,7 +359,9 @@ void IntersectionObserver::observe(Element* target,
     observation->ComputeIntersection(
         IntersectionObservation::kImplicitRootObserversNeedUpdate |
         IntersectionObservation::kExplicitRootObserversNeedUpdate |
-        IntersectionObservation::kIgnoreDelay);
+        IntersectionObservation::kIgnoreDelay |
+        (use_overflow_clip_edge_ ? IntersectionObservation::kUseOverflowClipEdge
+                                 : 0));
   }
 }
 
@@ -436,11 +448,19 @@ bool IntersectionObserver::ComputeIntersections(unsigned flags) {
     return false;
 
   // If we're processing post-layout deliveries only and we're not a post-layout
-  // delivery observer, then return early.
-  if (flags & IntersectionObservation::kPostLayoutDeliveryOnly) {
-    if (GetDeliveryBehavior() != kDeliverDuringPostLayoutSteps)
-      return false;
-  }
+  // delivery observer, then return early. Likewise, return if we need to
+  // compute non-post-layout-delivery observations but the observer behavior is
+  // post-layout.
+  bool post_layout_delivery_only =
+      flags & IntersectionObservation::kPostLayoutDeliveryOnly;
+  bool is_post_layout_delivery_observer =
+      GetDeliveryBehavior() ==
+      IntersectionObserver::kDeliverDuringPostLayoutSteps;
+  if (post_layout_delivery_only != is_post_layout_delivery_observer)
+    return false;
+
+  if (use_overflow_clip_edge_)
+    flags |= IntersectionObservation::kUseOverflowClipEdge;
 
   IntersectionGeometry::RootGeometry root_geometry(
       IntersectionGeometry::GetRootLayoutObjectForTarget(root(), nullptr,
@@ -454,6 +474,10 @@ bool IntersectionObserver::ComputeIntersections(unsigned flags) {
   }
   can_use_cached_rects_ = 1;
   return trackVisibility();
+}
+
+LocalFrameUkmAggregator::MetricId IntersectionObserver::GetUkmMetricId() const {
+  return delegate_->GetUkmMetricId();
 }
 
 void IntersectionObserver::SetNeedsDelivery() {

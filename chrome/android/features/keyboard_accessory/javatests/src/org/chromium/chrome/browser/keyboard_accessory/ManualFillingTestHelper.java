@@ -42,6 +42,8 @@ import org.hamcrest.Matchers;
 import org.junit.Assert;
 
 import org.chromium.base.task.PostTask;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.ChromeWindow;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
@@ -53,12 +55,10 @@ import org.chromium.chrome.browser.keyboard_accessory.data.PropertyProvider;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.AddressAccessorySheetCoordinator;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.CreditCardAccessorySheetCoordinator;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.PasswordAccessorySheetCoordinator;
-import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestInputMethodManagerWrapper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -76,8 +76,9 @@ public class ManualFillingTestHelper {
     private static final String PASSWORD_NODE_ID = "password_field";
     private static final String USERNAME_NODE_ID = "username_field";
     private static final String SUBMIT_NODE_ID = "input_submit_button";
+    private static final String NO_COMPLETION_FIELD_ID = "field_without_completion";
 
-    private final ChromeActivityTestRule mActivityTestRule;
+    private final ChromeTabbedActivityTestRule mActivityTestRule;
     private final AtomicReference<WebContents> mWebContentsRef = new AtomicReference<>();
     private TestInputMethodManagerWrapper mInputMethodManagerWrapper;
     private PropertyProvider<AccessorySheetData> mSheetSuggestionsProvider =
@@ -89,7 +90,7 @@ public class ManualFillingTestHelper {
         return (FakeKeyboard) mActivityTestRule.getKeyboardDelegate();
     }
 
-    public ManualFillingTestHelper(ChromeActivityTestRule activityTestRule) {
+    public ManualFillingTestHelper(ChromeTabbedActivityTestRule activityTestRule) {
         mActivityTestRule = activityTestRule;
     }
 
@@ -107,7 +108,11 @@ public class ManualFillingTestHelper {
                 InstrumentationRegistry.getInstrumentation().getContext(),
                 ServerCertificate.CERT_OK);
         ChromeWindow.setKeyboardVisibilityDelegateFactory(keyboardDelegate);
-        mActivityTestRule.startMainActivityWithURL(mEmbeddedTestServer.getURL(url));
+        if (mActivityTestRule.getActivity() == null) {
+            mActivityTestRule.startMainActivityWithURL(mEmbeddedTestServer.getURL(url));
+        } else {
+            mActivityTestRule.loadUrl(mEmbeddedTestServer.getURL(url));
+        }
         setRtlForTesting(isRtl);
         updateWebContentsDependentState();
         cacheCredentials(new String[0], new String[0], false); // This caches the empty state.
@@ -128,7 +133,7 @@ public class ManualFillingTestHelper {
             mInputMethodManagerWrapper = TestInputMethodManagerWrapper.create(imeAdapter);
             imeAdapter.setInputMethodManagerWrapper(mInputMethodManagerWrapper);
             getManualFillingCoordinator().registerSheetDataProvider(
-                    AccessoryTabType.PASSWORDS, mSheetSuggestionsProvider);
+                    mWebContentsRef.get(), AccessoryTabType.PASSWORDS, mSheetSuggestionsProvider);
         });
     }
 
@@ -190,21 +195,28 @@ public class ManualFillingTestHelper {
         getKeyboard().showKeyboard(mActivityTestRule.getActivity().getCurrentFocus());
     }
 
-    public void clickNodeAndShowKeyboard(String node) throws TimeoutException {
-        clickNodeAndShowKeyboard(node, FILLABLE_NON_SEARCH_FIELD);
+    public void clickFieldWithoutCompletion() throws TimeoutException {
+        DOMUtils.waitForNonZeroNodeBounds(mWebContentsRef.get(), PASSWORD_NODE_ID);
+        DOMUtils.focusNode(mWebContentsRef.get(), NO_COMPLETION_FIELD_ID);
+        DOMUtils.clickNode(mWebContentsRef.get(), NO_COMPLETION_FIELD_ID);
     }
 
-    public void clickNodeAndShowKeyboard(String node, int focusedFieldType)
+    public void clickNodeAndShowKeyboard(String node, long focusedFieldId) throws TimeoutException {
+        clickNodeAndShowKeyboard(node, focusedFieldId, FILLABLE_NON_SEARCH_FIELD);
+    }
+
+    public void clickNodeAndShowKeyboard(String node, long focusedFieldId, int focusedFieldType)
             throws TimeoutException {
-        clickNode(node, focusedFieldType);
+        clickNode(node, focusedFieldId, focusedFieldType);
         getKeyboard().showKeyboard(mActivityTestRule.getActivity().getCurrentFocus());
     }
 
-    public void clickNode(String node, int focusedFieldType) throws TimeoutException {
+    public void clickNode(String node, long focusedFieldId, int focusedFieldType)
+            throws TimeoutException {
         DOMUtils.clickNode(mWebContentsRef.get(), node);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             ManualFillingComponentBridge.notifyFocusedFieldType(
-                    mActivityTestRule.getWebContents(), focusedFieldType);
+                    mActivityTestRule.getWebContents(), focusedFieldId, focusedFieldType);
         });
     }
 
@@ -294,19 +306,19 @@ public class ManualFillingTestHelper {
     public PasswordAccessorySheetCoordinator getOrCreatePasswordAccessorySheet() {
         return (PasswordAccessorySheetCoordinator) getManualFillingCoordinator()
                 .getMediatorForTesting()
-                .getOrCreateSheet(AccessoryTabType.PASSWORDS);
+                .getOrCreateSheet(mWebContentsRef.get(), AccessoryTabType.PASSWORDS);
     }
 
     public AddressAccessorySheetCoordinator getOrCreateAddressAccessorySheet() {
         return (AddressAccessorySheetCoordinator) getManualFillingCoordinator()
                 .getMediatorForTesting()
-                .getOrCreateSheet(AccessoryTabType.ADDRESSES);
+                .getOrCreateSheet(mWebContentsRef.get(), AccessoryTabType.ADDRESSES);
     }
 
     public CreditCardAccessorySheetCoordinator getOrCreateCreditCardAccessorySheet() {
         return (CreditCardAccessorySheetCoordinator) getManualFillingCoordinator()
                 .getMediatorForTesting()
-                .getOrCreateSheet(AccessoryTabType.CREDIT_CARDS);
+                .getOrCreateSheet(mWebContentsRef.get(), AccessoryTabType.CREDIT_CARDS);
     }
 
     // ----------------------------------
@@ -336,27 +348,29 @@ public class ManualFillingTestHelper {
      * controller. The controller will only refresh this cache on page load.
      * @param usernames {@link String}s to be used as display text for username chips.
      * @param passwords {@link String}s to be used as display text for password chips.
-     * @param originBlacklisted boolean indicating whether password saving is disabled for the
+     * @param originDenylisted boolean indicating whether password saving is disabled for the
      *                          origin.
      */
-    public void cacheCredentials(
-            String[] usernames, String[] passwords, boolean originBlacklisted) {
+    public void cacheCredentials(String[] usernames, String[] passwords, boolean originDenylisted) {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             ManualFillingComponentBridge.cachePasswordSheetData(
-                    mActivityTestRule.getWebContents(), usernames, passwords, originBlacklisted);
+                    mActivityTestRule.getWebContents(), usernames, passwords, originDenylisted);
         });
     }
 
     public static void createAutofillTestProfiles() throws TimeoutException {
         new AutofillTestHelper().setProfile(new AutofillProfile("", "https://www.example.com",
-                "Johnathan Smithonian-Jackson", "Acme Inc", "1 Main\nApt A", "CA", "San Francisco",
-                "", "94102", "", "US", "(415) 888-9999", "john.sj@acme-mail.inc", "en"));
+                "" /* honorific prefix */, "Johnathan Smithonian-Jackson", "Acme Inc",
+                "1 Main\nApt A", "CA", "San Francisco", "", "94102", "", "US", "(415) 888-9999",
+                "john.sj@acme-mail.inc", "en"));
         new AutofillTestHelper().setProfile(new AutofillProfile("", "https://www.example.com",
-                "Jane Erika Donovanova", "Acme Inc", "1 Main\nApt A", "CA", "San Francisco", "",
-                "94102", "", "US", "(415) 999-0000", "donovanova.j@acme-mail.inc", "en"));
+                "" /* honorific prefix */, "Jane Erika Donovanova", "Acme Inc", "1 Main\nApt A",
+                "CA", "San Francisco", "", "94102", "", "US", "(415) 999-0000",
+                "donovanova.j@acme-mail.inc", "en"));
         new AutofillTestHelper().setProfile(new AutofillProfile("", "https://www.example.com",
-                "Marcus McSpartangregor", "Acme Inc", "1 Main\nApt A", "CA", "San Francisco", "",
-                "94102", "", "US", "(415) 999-0000", "marc@acme-mail.inc", "en"));
+                "" /* honorific prefix */, "Marcus McSpartangregor", "Acme Inc", "1 Main\nApt A",
+                "CA", "San Francisco", "", "94102", "", "US", "(415) 999-0000",
+                "marc@acme-mail.inc", "en"));
     }
 
     public static void disableServerPredictions() {
@@ -486,7 +500,8 @@ public class ManualFillingTestHelper {
     public void addGenerationButton() {
         PropertyProvider<KeyboardAccessoryData.Action[]> generationActionProvider =
                 new PropertyProvider<>(AccessoryAction.GENERATE_PASSWORD_AUTOMATIC);
-        getManualFillingCoordinator().registerActionProvider(generationActionProvider);
+        getManualFillingCoordinator().registerActionProvider(
+                mWebContentsRef.get(), generationActionProvider);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             generationActionProvider.notifyObservers(new KeyboardAccessoryData.Action[] {
                     new KeyboardAccessoryData.Action("Generate Password",

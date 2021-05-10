@@ -45,7 +45,9 @@ AutocompleteProviderClientImpl::AutocompleteProviderClientImpl(
       url_consent_helper_(unified_consent::UrlKeyedDataCollectionConsentHelper::
                               NewPersonalizedDataCollectionConsentHelper(
                                   ProfileSyncServiceFactory::GetForBrowserState(
-                                      browser_state_))) {}
+                                      browser_state_))),
+      omnibox_triggered_feature_service_(
+          std::make_unique<OmniboxTriggeredFeatureService>()) {}
 
 AutocompleteProviderClientImpl::~AutocompleteProviderClientImpl() {}
 
@@ -56,6 +58,10 @@ AutocompleteProviderClientImpl::GetURLLoaderFactory() {
 
 PrefService* AutocompleteProviderClientImpl::GetPrefs() {
   return browser_state_->GetPrefs();
+}
+
+PrefService* AutocompleteProviderClientImpl::GetLocalState() {
+  return GetApplicationContext()->GetLocalState();
 }
 
 const AutocompleteSchemeClassifier&
@@ -115,7 +121,6 @@ AutocompleteProviderClientImpl::GetDocumentSuggestionsService(
 }
 
 OmniboxPedalProvider* AutocompleteProviderClientImpl::GetPedalProvider() const {
-  NOTREACHED();
   return nullptr;
 }
 
@@ -141,6 +146,11 @@ query_tiles::TileService* AutocompleteProviderClientImpl::GetQueryTileService()
   return nullptr;
 }
 
+OmniboxTriggeredFeatureService*
+AutocompleteProviderClientImpl::GetOmniboxTriggeredFeatureService() const {
+  return omnibox_triggered_feature_service_.get();
+}
+
 std::string AutocompleteProviderClientImpl::GetAcceptLanguages() const {
   return browser_state_->GetPrefs()->GetString(
       language::prefs::kAcceptLanguages);
@@ -151,19 +161,19 @@ AutocompleteProviderClientImpl::GetEmbedderRepresentationOfAboutScheme() const {
   return kChromeUIScheme;
 }
 
-std::vector<base::string16> AutocompleteProviderClientImpl::GetBuiltinURLs() {
+std::vector<std::u16string> AutocompleteProviderClientImpl::GetBuiltinURLs() {
   std::vector<std::string> chrome_builtins(
       kChromeHostURLs, kChromeHostURLs + kNumberOfChromeHostURLs);
   std::sort(chrome_builtins.begin(), chrome_builtins.end());
 
-  std::vector<base::string16> builtins;
+  std::vector<std::u16string> builtins;
   for (auto& url : chrome_builtins) {
     builtins.push_back(base::ASCIIToUTF16(url));
   }
   return builtins;
 }
 
-std::vector<base::string16>
+std::vector<std::u16string>
 AutocompleteProviderClientImpl::GetBuiltinsToProvideAsUserTypes() {
   return {base::ASCIIToUTF16(kChromeUIChromeURLsURL),
           base::ASCIIToUTF16(kChromeUIVersionURL)};
@@ -172,6 +182,11 @@ AutocompleteProviderClientImpl::GetBuiltinsToProvideAsUserTypes() {
 component_updater::ComponentUpdateService*
 AutocompleteProviderClientImpl::GetComponentUpdateService() {
   return GetApplicationContext()->GetComponentUpdateService();
+}
+
+signin::IdentityManager* AutocompleteProviderClientImpl::GetIdentityManager()
+    const {
+  return IdentityManagerFactory::GetForBrowserState(browser_state_);
 }
 
 bool AutocompleteProviderClientImpl::IsOffTheRecord() const {
@@ -190,7 +205,8 @@ bool AutocompleteProviderClientImpl::IsPersonalizedUrlDataCollectionActive()
 bool AutocompleteProviderClientImpl::IsAuthenticated() const {
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForBrowserState(browser_state_);
-  return identity_manager != nullptr && identity_manager->HasPrimaryAccount();
+  return identity_manager &&
+         identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync);
 }
 
 bool AutocompleteProviderClientImpl::IsSyncActive() const {
@@ -200,7 +216,7 @@ bool AutocompleteProviderClientImpl::IsSyncActive() const {
 }
 
 void AutocompleteProviderClientImpl::Classify(
-    const base::string16& text,
+    const std::u16string& text,
     bool prefer_keyword,
     bool allow_exact_keyword_match,
     metrics::OmniboxEventProto::PageClassification page_classification,
@@ -213,7 +229,7 @@ void AutocompleteProviderClientImpl::Classify(
 
 void AutocompleteProviderClientImpl::DeleteMatchingURLsForKeywordFromHistory(
     history::KeywordID keyword_id,
-    const base::string16& term) {
+    const std::u16string& term) {
   GetHistoryService()->DeleteMatchingURLsForKeyword(keyword_id, term);
 }
 

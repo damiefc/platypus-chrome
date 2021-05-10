@@ -5,8 +5,10 @@
 #include "chrome/browser/chromeos/phonehub/browser_tabs_metadata_fetcher_impl.h"
 
 #include "base/barrier_closure.h"
-#include "components/favicon/core/favicon_service.h"
+#include "components/favicon/core/history_ui_favicon_request_handler.h"
+#include "components/favicon_base/favicon_types.h"
 #include "components/sync_sessions/synced_session.h"
+#include "components/ukm/scheme_constants.h"
 
 namespace chromeos {
 namespace phonehub {
@@ -23,17 +25,30 @@ GetSortedMetadataWithoutFavicons(const sync_sessions::SyncedSession* session) {
     const sessions::SessionWindow& window = window_pair.second->wrapped_window;
     for (const std::unique_ptr<sessions::SessionTab>& tab : window.tabs) {
       int selected_index = tab->normalized_navigation_index();
+
+      if (selected_index + 1 > tab->navigations.size() ||
+          tab->navigations.empty()) {
+        continue;
+      }
+
       const sessions::SerializedNavigationEntry& current_navigation =
           tab->navigations.at(selected_index);
 
       GURL tab_url = current_navigation.virtual_url();
 
-      // If the url is incorrectly formatted, or is empty, do not proceed with
-      // storing its metadata.
+      // URLs whose schemes are not http:// or https:// should be ignored
+      // because they may be platform specific (e.g., chrome:// URLs) or may
+      // refer to local media on the phone (e.g., content:// URLs).
+      if (!tab_url.SchemeIsHTTPOrHTTPS())
+        continue;
+
+      // If the url is incorrectly formatted, is empty, or has a
+      // scheme that should be omitted, do not proceed with storing its
+      // metadata.
       if (!tab_url.is_valid())
         continue;
 
-      const base::string16& title = current_navigation.title();
+      const std::u16string& title = current_navigation.title();
       const base::Time last_accessed_timestamp = tab->timestamp;
       browser_tab_metadata.emplace_back(tab_url, title, last_accessed_timestamp,
                                         gfx::Image());
@@ -55,8 +70,8 @@ GetSortedMetadataWithoutFavicons(const sync_sessions::SyncedSession* session) {
 }  // namespace
 
 BrowserTabsMetadataFetcherImpl::BrowserTabsMetadataFetcherImpl(
-    favicon::FaviconService* favicon_service)
-    : favicon_service_(favicon_service) {}
+    favicon::HistoryUiFaviconRequestHandler* favicon_request_handler)
+    : favicon_request_handler_(favicon_request_handler) {}
 
 BrowserTabsMetadataFetcherImpl::~BrowserTabsMetadataFetcherImpl() = default;
 
@@ -66,7 +81,6 @@ void BrowserTabsMetadataFetcherImpl::Fetch(
   // A new fetch was made, return a base::nullopt to the previous |callback_|.
   if (!callback_.is_null()) {
     weak_ptr_factory_.InvalidateWeakPtrs();
-    favicon_tracker_.TryCancelAll();
     std::move(callback_).Run(base::nullopt);
   }
 
@@ -81,11 +95,11 @@ void BrowserTabsMetadataFetcherImpl::Fetch(
                      weak_ptr_factory_.GetWeakPtr()));
 
   for (size_t i = 0; i < results_.size(); ++i) {
-    favicon_service_->GetFaviconImageForPageURL(
+    favicon_request_handler_->GetFaviconImageForPageURL(
         results_[i].url,
         base::BindOnce(&BrowserTabsMetadataFetcherImpl::OnFaviconReady,
                        weak_ptr_factory_.GetWeakPtr(), i, barrier),
-        &favicon_tracker_);
+        favicon::HistoryUiFaviconRequestOrigin::kRecentTabs);
   }
 }
 

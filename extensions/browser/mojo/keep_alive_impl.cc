@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "content/public/browser/browser_context.h"
-#include "extensions/browser/process_manager.h"
 
 namespace extensions {
 
@@ -31,7 +30,8 @@ KeepAliveImpl::KeepAliveImpl(content::BrowserContext* context,
       extension_, Activity::MOJO, std::string());
   receiver_.set_disconnect_handler(
       base::BindOnce(&KeepAliveImpl::OnDisconnected, base::Unretained(this)));
-  extension_registry_observer_.Add(ExtensionRegistry::Get(context_));
+  extension_registry_observation_.Observe(ExtensionRegistry::Get(context_));
+  process_manager_observation_.Observe(ProcessManager::Get(context_));
 }
 
 KeepAliveImpl::~KeepAliveImpl() = default;
@@ -51,6 +51,10 @@ void KeepAliveImpl::OnShutdown(ExtensionRegistry* registry) {
 void KeepAliveImpl::OnDisconnected() {
   ProcessManager::Get(context_)->DecrementLazyKeepaliveCount(
       extension_, Activity::MOJO, std::string());
+  delete this;
+}
+
+void KeepAliveImpl::OnProcessManagerShutdown(ProcessManager* manager) {
   delete this;
 }
 

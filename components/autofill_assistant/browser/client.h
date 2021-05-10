@@ -9,15 +9,12 @@
 
 #include "components/autofill_assistant/browser/device_context.h"
 #include "components/autofill_assistant/browser/metrics.h"
+#include "components/autofill_assistant/browser/service/service.h"
 #include "content/public/browser/web_contents.h"
 
 namespace autofill {
 class PersonalDataManager;
 }  // namespace autofill
-
-namespace password_manager {
-class PasswordManagerClient;
-}  // namespace password_manager
 
 namespace version_info {
 enum class Channel;
@@ -60,10 +57,6 @@ class Client {
   // Returns the current active personal data manager.
   virtual autofill::PersonalDataManager* GetPersonalDataManager() const = 0;
 
-  // Return the password manager client for the current WebContents.
-  virtual password_manager::PasswordManagerClient* GetPasswordManagerClient()
-      const = 0;
-
   // Returns the currently active login fetcher.
   virtual WebsiteLoginManager* GetWebsiteLoginManager() const = 0;
 
@@ -78,6 +71,13 @@ class Client {
 
   // Returns whether a11y (talkback and touch exploration) is enabled or not.
   virtual bool IsAccessibilityEnabled() const = 0;
+
+  // Returns the width and height of the window.
+  virtual base::Optional<std::pair<int, int>> GetWindowSize() const = 0;
+
+  // Returns the orientation of the screen.
+  virtual ClientContextProto::ScreenOrientation GetScreenOrientation()
+      const = 0;
 
   // Returns current WebContents.
   virtual content::WebContents* GetWebContents() const = 0;

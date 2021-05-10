@@ -9,6 +9,10 @@ class GURL;
 
 @protocol ManageAccountsDelegate<NSObject>
 
+// Called when Gaia cookies have been regenerated for a specific user sign-in.
+// This occurs when a SAPISID cookie has been deleted by the operating system.
+- (void)onRestoreGaiaCookies;
+
 // Called when the user taps on a manage accounts button in a Google web
 // property.
 - (void)onManageAccounts;
@@ -18,7 +22,9 @@ class GURL;
 
 // Called when the user taps a sign-in or add account button in a Google web
 // property with signin::kMobileIdentityConsistency enabled.
-- (void)onShowConsistencyPromo;
+// |url| is the continuation URL received from the server. If it is valid,
+// then this delegate should navigate to |url|.
+- (void)onShowConsistencyPromo:(const GURL&)url;
 
 // Called when the user taps on go incognito button in a Google web property.
 // |url| is the continuation URL received from the server. If it is valid,

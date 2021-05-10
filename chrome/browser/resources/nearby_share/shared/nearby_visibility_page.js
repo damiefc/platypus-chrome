@@ -21,24 +21,41 @@ Polymer({
     settings: {
       type: Object,
       notify: true,
-    }
+    },
+
+    /** @private */
+    isVisibilitySelected_: {
+      type: Boolean,
+      notify: true,
+    },
   },
 
   listeners: {
     'next': 'onNext_',
-    'manage-contacts': 'onManageContacts_'
+    'manage-contacts': 'onManageContacts_',
+    'close': 'onClose_'
   },
 
   /** @private */
   onNext_() {
+    const contactVisibility = /** @type {NearbyContactVisibilityElement} */
+        (this.$.contactVisibility);
+    contactVisibility.saveVisibilityAndAllowedContacts();
     this.set('settings.enabled', true);
+    processOnboardingCompleteMetrics();
     this.fire('onboarding-complete');
   },
 
   /** @private */
+  onClose_() {
+    processOnboardingCancelledMetrics(
+        NearbyShareOnboardingFinalState.VISIBILITY_PAGE);
+    this.fire('onboarding-cancelled');
+  },
+
+  /** @private */
   onManageContacts_() {
-    // TODO(vecore): this is not a final link
-    window.open('https://contacts.google.com', '_blank');
+    window.open(this.i18n('nearbyShareManageContactsUrl'), '_blank');
   },
 
 });

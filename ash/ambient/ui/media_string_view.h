@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/media_session/public/mojom/media_controller.mojom.h"
@@ -16,6 +16,7 @@
 #include "ui/views/view_observer.h"
 
 namespace views {
+class ImageView;
 class Label;
 }  // namespace views
 
@@ -33,14 +34,12 @@ class MediaStringView : public views::View,
                         public media_session::mojom::MediaControllerObserver,
                         public ui::ImplicitAnimationObserver {
  public:
+  METADATA_HEADER(MediaStringView);
+
   MediaStringView();
   MediaStringView(const MediaStringView&) = delete;
   MediaStringView& operator=(const MediaStringView&) = delete;
   ~MediaStringView() override;
-
-  // views::View:
-  const char* GetClassName() const override;
-  void VisibilityChanged(View* starting_from, bool is_visible) override;
 
   // views::ViewObserver:
   void OnViewBoundsChanged(views::View* observed_view) override;
@@ -84,7 +83,7 @@ class MediaStringView : public views::View,
   views::Label* media_text_label_for_testing() { return media_text_; }
 
   // Music eighth note.
-  views::Label* icon_ = nullptr;
+  views::ImageView* icon_ = nullptr;
 
   // Container of media info text.
   views::View* media_text_container_ = nullptr;
@@ -99,7 +98,8 @@ class MediaStringView : public views::View,
   mojo::Receiver<media_session::mojom::MediaControllerObserver>
       observer_receiver_{this};
 
-  ScopedObserver<views::View, views::ViewObserver> observed_view_{this};
+  base::ScopedObservation<views::View, views::ViewObserver> observed_view_{
+      this};
 
   base::WeakPtrFactory<MediaStringView> weak_factory_{this};
 };

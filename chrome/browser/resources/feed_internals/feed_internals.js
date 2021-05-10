@@ -26,6 +26,9 @@ function updatePageWithProperties() {
     $('load-stream-status').textContent = properties.loadStreamStatus;
     $('feed-fetch-url').textContent = properties.feedFetchUrl.url;
     $('feed-actions-url').textContent = properties.feedActionsUrl.url;
+    $('webfeed-ui-enabled-status').textContent = properties.isWebFeedUiEnabled;
+    $('webfeed-follow-intro-debug-enabled-status').textContent =
+        properties.isWebFeedFollowIntroDebugEnabled;
   });
 }
 
@@ -111,9 +114,9 @@ function setLinkNode(node, url) {
  * @return {string}
  */
 function toDateString(timeSinceEpoch) {
-  return timeSinceEpoch.microseconds === 0 ?
-      '' :
-      new Date(timeSinceEpoch.microseconds / 1000).toLocaleString();
+  const microseconds = Number(timeSinceEpoch.microseconds);
+  return microseconds === 0 ? '' :
+                              new Date(microseconds / 1000).toLocaleString();
 }
 
 /**
@@ -151,9 +154,31 @@ function setupEventListeners() {
     pageHandler.overrideFeedHost({url: $('feed-host-override').value});
   });
 
-  $('actions-endpoint-override-apply').addEventListener('click', function() {
-    pageHandler.overrideFeedHost({url: $('actions-endpoint-override').value});
+  $('discover-api-override-apply').addEventListener('click', function() {
+    pageHandler.overrideFeedHost({url: $('discover-api-override').value});
   });
+
+  $('feed-stream-data-override').addEventListener('click', function() {
+    const file = $('feed-stream-data-file').files[0];
+    if (file && typeof pageHandler.overrideFeedStreamData == 'function') {
+      const reader = new FileReader();
+      reader.readAsArrayBuffer(file);
+      reader.onload = function(e) {
+        const typedArray = new Uint8Array(e.target.result);
+        pageHandler.overrideFeedStreamData([...typedArray]);
+      };
+    }
+  });
+
+  $('enable-webfeed-ui-apply').addEventListener('click', function() {
+    pageHandler.setWebFeedUIEnabled($('enable-webfeed-ui').checked);
+  });
+
+  $('enable-webfeed-follow-intro-debug-apply')
+      .addEventListener('click', function() {
+        pageHandler.setWebFeedFollowIntroDebugEnabled(
+            $('enable-webfeed-follow-intro-debug').checked);
+      });
 }
 
 function updatePage() {

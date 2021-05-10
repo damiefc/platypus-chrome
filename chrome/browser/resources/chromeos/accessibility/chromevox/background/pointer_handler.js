@@ -29,6 +29,8 @@ PointerHandler = class extends BaseAutomationHandler {
     this.lastNoPointerAnchorEarconPlayedTime_ = new Date();
     /** @private {!AutomationNode|undefined} */
     this.lastValidNodeBeforePointerInvalidation_;
+    /** @private {boolean} */
+    this.isExpectingHover_ = false;
 
     chrome.automation.getDesktop((desktop) => {
       this.node_ = desktop;
@@ -37,6 +39,10 @@ PointerHandler = class extends BaseAutomationHandler {
       // This is needed for ARC++ which sends back hovers when we send mouse
       // moves.
       this.addListener_(EventType.HOVER, (evt) => {
+        if (!this.isExpectingHover_) {
+          return;
+        }
+        this.isExpectingHover_ = false;
         this.handleHitTestResult(evt.target);
         this.runHitTest();
       });
@@ -46,8 +52,8 @@ PointerHandler = class extends BaseAutomationHandler {
       this.mouseY_ = 0;
     });
 
-    if (localStorage['speakTextUnderMouse'] == String(true)) {
-      chrome.accessibilityPrivate.enableChromeVoxMouseEvents(true);
+    if (localStorage['speakTextUnderMouse'] === String(true)) {
+      chrome.accessibilityPrivate.enableMouseEvents(true);
     }
   }
 
@@ -121,6 +127,7 @@ PointerHandler = class extends BaseAutomationHandler {
       return;
     }
 
+    this.isExpectingHover_ = true;
     EventGenerator.sendMouseMove(
         this.mouseX_, this.mouseY_, true /* touchAccessibility */);
   }
@@ -140,15 +147,15 @@ PointerHandler = class extends BaseAutomationHandler {
     // mouse move. This only occurs when we programmatically hit test content
     // within ARC++ for now. Mouse moves automatically trigger Android to send
     // hover events back.
-    if (target.role == RoleType.WINDOW &&
-        target.className.indexOf('ExoSurface') == 0) {
+    if (target.role === RoleType.WINDOW &&
+        target.className.indexOf('ExoSurface') === 0) {
       this.synthesizeMouseMove();
       return;
     }
 
     let targetLeaf = null;
     let targetObject = null;
-    while (target && target != target.root) {
+    while (target && target !== target.root) {
       if (!targetObject && AutomationPredicate.touchObject(target)) {
         targetObject = target;
       }
@@ -181,13 +188,14 @@ PointerHandler = class extends BaseAutomationHandler {
     }
 
     if (ChromeVoxState.instance.currentRange &&
-        target == ChromeVoxState.instance.currentRange.start.node) {
+        target === ChromeVoxState.instance.currentRange.start.node) {
       return;
     }
 
     Output.forceModeForNextSpeechUtterance(QueueMode.FLUSH);
-    DesktopAutomationHandler.instance.onEventDefault(
-        new CustomAutomationEvent(EventType.HOVER, target, '', []));
+    DesktopAutomationHandler.instance.onEventDefault(new CustomAutomationEvent(
+        EventType.HOVER, target,
+        {eventFromAction: chrome.automation.ActionType.HIT_TEST}));
   }
 
   /**

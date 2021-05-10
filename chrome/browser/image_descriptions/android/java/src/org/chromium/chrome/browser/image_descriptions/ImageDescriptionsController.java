@@ -8,6 +8,8 @@ import android.content.Context;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.annotations.NativeMethods;
+import org.chromium.chrome.browser.device.DeviceConditions;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
@@ -16,7 +18,10 @@ import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.browser.WebContents;
+import org.chromium.net.ConnectionType;
 import org.chromium.ui.modaldialog.ModalDialogManager;
+import org.chromium.ui.widget.Toast;
 
 /**
  * Singleton class to control the Image Descriptions feature. This class can be used to initiate the
@@ -29,7 +34,7 @@ public class ImageDescriptionsController {
     // Static instance of this singleton, lazily initialized during first getInstance() call.
     private static ImageDescriptionsController sInstance;
 
-    private ImageDescriptionsDialog.Delegate mDelegate;
+    private ImageDescriptionsControllerDelegate mDelegate;
 
     /**
      * Method to return the private instance of this singleton, lazily initialized.
@@ -51,21 +56,32 @@ public class ImageDescriptionsController {
     }
 
     /**
-     * Creates a default ImageDescriptionsDialog.Delegate implementation, used in production.
-     * @return      Default ImageDescriptionsDialog.Delegate delegate.
+     * Creates a default ImageDescriptionsControllerDelegate implementation, used in production.
+     * @return      Default ImageDescriptionsControllerDelegate delegate.
      */
-    private ImageDescriptionsDialog.Delegate defaultDelegate() {
-        return new ImageDescriptionsDialog.Delegate() {
+    private ImageDescriptionsControllerDelegate defaultDelegate() {
+        return new ImageDescriptionsControllerDelegate() {
             @Override
-            public void enableImageDescriptions(boolean onlyOnWifi) {
-                getPrefService().setBoolean(Pref.ACCESSIBILITY_IMAGE_LABELS_ENABLED_ANDROID, true);
-                getPrefService().setBoolean(
-                        Pref.ACCESSIBILITY_IMAGE_LABELS_ONLY_ON_WIFI, onlyOnWifi);
-                // TODO (mschillaci@) - Use JNI to enable descriptions in native code with AXMode
+            public void enableImageDescriptions(Profile profile) {
+                getPrefService(profile).setBoolean(
+                        Pref.ACCESSIBILITY_IMAGE_LABELS_ENABLED_ANDROID, true);
             }
 
             @Override
-            public void getImageDescriptionsJustOnce(boolean dontAskAgain) {
+            public void disableImageDescriptions(Profile profile) {
+                getPrefService(profile).setBoolean(
+                        Pref.ACCESSIBILITY_IMAGE_LABELS_ENABLED_ANDROID, false);
+            }
+
+            @Override
+            public void setOnlyOnWifiRequirement(boolean onlyOnWifi, Profile profile) {
+                getPrefService(profile).setBoolean(
+                        Pref.ACCESSIBILITY_IMAGE_LABELS_ONLY_ON_WIFI, onlyOnWifi);
+            }
+
+            @Override
+            public void getImageDescriptionsJustOnce(
+                    boolean dontAskAgain, WebContents webContents) {
                 // User selected "Just Once", update counter and "Don't ask again" preference as
                 // needed.
                 getSharedPrefs().incrementInt(
@@ -73,43 +89,67 @@ public class ImageDescriptionsController {
                 getSharedPrefs().writeBoolean(
                         ChromePreferenceKeys.IMAGE_DESCRIPTIONS_DONT_ASK_AGAIN, dontAskAgain);
 
-                // TODO (mschillaci@) - Use JNI to enable descriptions once with AXActionData. Will
-                //                      need a Tab so that we can get web_contents.
+                ImageDescriptionsControllerJni.get().getImageDescriptionsOnce(webContents);
             }
         };
     }
 
     /**
-     * Set the ImageDescriptionsDialog.Delegate delegate one time, used for testing purposes.
-     * @param delegate      The new ImageDescriptionsDialog.Delegate delegate to use.
+     * Set the ImageDescriptionsControllerDelegate delegate one time, used for testing purposes.
+     * @param delegate      The new ImageDescriptionsControllerDelegate delegate to use.
      */
     @VisibleForTesting
-    public void setDelegateForTesting(ImageDescriptionsDialog.Delegate delegate) {
+    public void setDelegateForTesting(ImageDescriptionsControllerDelegate delegate) {
         this.mDelegate = delegate;
+    }
+
+    /**
+     * Get the current ImageDescriptionsControllerDelegate in use for this instance.
+     * @return mDelegate    The current ImageDescriptionsControllerDelegate in use.
+     */
+    public ImageDescriptionsControllerDelegate getDelegate() {
+        return mDelegate;
     }
 
     /**
      * Handle user selecting menu item and the potential creation of the image descriptions dialog.
      */
     public void onImageDescriptionsMenuItemSelected(
-            Context context, ModalDialogManager modalDialogManager) {
-        // If descriptions are enabled, then the menu item option was to stop descriptions. If the
-        // user has the don't ask again option enabled, immediately do a "just once" fetch. In all
-        // other cases, show the dialog to prompt the user.
-        if (imageDescriptionsEnabled()) {
-            disableImageDescriptions();
-        } else if (dontAskAgainEnabled()) {
-            getImageDescriptionsJustOnce(true);
-        } else {
-            ImageDescriptionsDialog prompt = new ImageDescriptionsDialog(
-                    context, modalDialogManager, mDelegate, shouldShowDontAskAgainOption());
-            prompt.show();
-        }
-    }
+            Context context, ModalDialogManager modalDialogManager, WebContents webContents) {
+        Profile profile = Profile.getLastUsedRegularProfile();
+        boolean enabledBeforeMenuItemSelected = imageDescriptionsEnabled(profile);
 
-    protected void disableImageDescriptions() {
-        getPrefService().setBoolean(Pref.ACCESSIBILITY_IMAGE_LABELS_ENABLED_ANDROID, false);
-        // TODO (mschillaci@) - Potentially remove AXMode through JNI to turn off descriptions?
+        if (enabledBeforeMenuItemSelected) {
+            // If descriptions are enabled, and the user has selected "only on wifi", and we
+            // currently do not have a wifi connection, then do a "just once" fetch.
+            if (onlyOnWifiEnabled(profile)
+                    && DeviceConditions.getCurrentNetConnectionType(context)
+                            != ConnectionType.CONNECTION_WIFI) {
+                mDelegate.getImageDescriptionsJustOnce(false, webContents);
+                Toast.makeText(context, R.string.image_descriptions_toast_just_once,
+                             Toast.LENGTH_LONG)
+                        .show();
+            } else {
+                // Otherwise, user has elected to stop descriptions.
+                mDelegate.disableImageDescriptions(profile);
+                Toast.makeText(context, R.string.image_descriptions_toast_off, Toast.LENGTH_LONG)
+                        .show();
+            }
+        } else {
+            // If descriptions are not enabled, and the user has selected "don't ask again", then do
+            // a "just once" fetch. In all other cases, show the dialog to prompt the user.
+            if (dontAskAgainEnabled()) {
+                mDelegate.getImageDescriptionsJustOnce(true, webContents);
+                Toast.makeText(context, R.string.image_descriptions_toast_just_once,
+                             Toast.LENGTH_LONG)
+                        .show();
+            } else {
+                ImageDescriptionsDialog prompt =
+                        new ImageDescriptionsDialog(context, modalDialogManager, getDelegate(),
+                                shouldShowDontAskAgainOption(), webContents);
+                prompt.show();
+            }
+        }
     }
 
     protected boolean dontAskAgainEnabled() {
@@ -123,36 +163,24 @@ public class ImageDescriptionsController {
     }
 
     public boolean shouldShowImageDescriptionsMenuItem() {
-        // TODO (mschillaci@) - Expand this to check touch exploration rather than accessibility
         return ContentFeatureList.isEnabled(ContentFeatureList.EXPERIMENTAL_ACCESSIBILITY_LABELS)
-                && ChromeAccessibilityUtil.get().isAccessibilityEnabled();
+                && ChromeAccessibilityUtil.get().isTouchExplorationEnabled();
     }
 
-    public boolean imageDescriptionsEnabled() {
-        return getPrefService().getBoolean(Pref.ACCESSIBILITY_IMAGE_LABELS_ENABLED_ANDROID);
+    public boolean imageDescriptionsEnabled(Profile profile) {
+        return getPrefService(profile).getBoolean(Pref.ACCESSIBILITY_IMAGE_LABELS_ENABLED_ANDROID);
     }
 
-    public boolean onlyOnWifiEnabled() {
-        return getPrefService().getBoolean(Pref.ACCESSIBILITY_IMAGE_LABELS_ONLY_ON_WIFI);
-    }
-
-    // Pass-through methods to our delegate.
-
-    protected void enableImageDescriptions(boolean onlyOnWifi) {
-        mDelegate.enableImageDescriptions(onlyOnWifi);
-    }
-
-    protected void getImageDescriptionsJustOnce(boolean dontAskAgain) {
-        mDelegate.getImageDescriptionsJustOnce(dontAskAgain);
+    public boolean onlyOnWifiEnabled(Profile profile) {
+        return getPrefService(profile).getBoolean(Pref.ACCESSIBILITY_IMAGE_LABELS_ONLY_ON_WIFI);
     }
 
     /**
      * Helper method to return PrefService for last used regular profile.
      * @return PrefService
      */
-    private PrefService getPrefService() {
-        // TODO (mschillaci@) - Use the correct profile here for Incognito mode etc.
-        return UserPrefs.get(Profile.getLastUsedRegularProfile());
+    private PrefService getPrefService(Profile profile) {
+        return UserPrefs.get(profile);
     }
 
     /**
@@ -161,5 +189,10 @@ public class ImageDescriptionsController {
      */
     private SharedPreferencesManager getSharedPrefs() {
         return SharedPreferencesManager.getInstance();
+    }
+
+    @NativeMethods
+    interface Natives {
+        void getImageDescriptionsOnce(WebContents webContents);
     }
 }

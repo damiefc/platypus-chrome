@@ -118,10 +118,8 @@ base::Optional<Binary> Binary::Parse(base::span<const uint8_t> binary) {
       // http://msdn.microsoft.com/en-us/library/windows/desktop/ms680305(v=vs.85).aspx.
       !CBS_get_u32le(&optional_header, &cert_entry_virtual_addr) ||
       !CBS_get_u32le(&optional_header, &cert_entry_size) ||
-      static_cast<size_t>(cert_entry_virtual_addr) + cert_entry_size <
-          cert_entry_size ||
-      static_cast<size_t>(cert_entry_virtual_addr) + cert_entry_size !=
-          CBS_len(&bin)) {
+      size_t{cert_entry_virtual_addr} + cert_entry_size < cert_entry_size ||
+      size_t{cert_entry_virtual_addr} + cert_entry_size != CBS_len(&bin)) {
     return base::nullopt;
   }
 
@@ -444,13 +442,11 @@ bool Binary::ParseTag() {
       // subjectPublicKeyInfo
       !CBS_get_asn1(&tbs_cert, nullptr, CBS_ASN1_SEQUENCE) ||
       // issuerUniqueID
-      !CBS_get_optional_asn1(
-          &tbs_cert, nullptr, nullptr,
-          CBS_ASN1_CONSTRUCTED | CBS_ASN1_CONTEXT_SPECIFIC | 1) ||
+      !CBS_get_optional_asn1(&tbs_cert, nullptr, nullptr,
+                             CBS_ASN1_CONTEXT_SPECIFIC | 1) ||
       // subjectUniqueID
-      !CBS_get_optional_asn1(
-          &tbs_cert, nullptr, nullptr,
-          CBS_ASN1_CONSTRUCTED | CBS_ASN1_CONTEXT_SPECIFIC | 2) ||
+      !CBS_get_optional_asn1(&tbs_cert, nullptr, nullptr,
+                             CBS_ASN1_CONTEXT_SPECIFIC | 2) ||
       !CBS_get_optional_asn1(
           &tbs_cert, &outer_extensions, &has_extensions,
           CBS_ASN1_CONSTRUCTED | CBS_ASN1_CONTEXT_SPECIFIC | 3)) {

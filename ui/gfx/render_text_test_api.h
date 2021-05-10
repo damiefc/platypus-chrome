@@ -42,7 +42,7 @@ class RenderTextTestApi {
     render_text_->Draw(canvas, select_all);
   }
 
-  const base::string16& GetLayoutText() {
+  const std::u16string& GetLayoutText() {
     return render_text_->GetLayoutText();
   }
 
@@ -64,6 +64,10 @@ class RenderTextTestApi {
 
   const std::vector<internal::Line>& lines() const {
     return render_text_->GetShapedText()->lines();
+  }
+
+  const Vector2d& display_offset() const {
+    return render_text_->display_offset_;
   }
 
   SelectionModel EdgeSelectionModel(VisualCursorDirection direction) {
@@ -100,6 +104,10 @@ class RenderTextTestApi {
       const gfx::Rect& rect,
       const gfx::Rect& display_rect) {
     return RenderText::ExpandToBeVerticallySymmetric(rect, display_rect);
+  }
+
+  static void MergeIntersectingRects(std::vector<Rect>& rects) {
+    RenderText::MergeIntersectingRects(rects);
   }
 
   void reset_cached_cursor_x() { render_text_->reset_cached_cursor_x(); }

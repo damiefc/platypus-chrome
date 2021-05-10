@@ -20,6 +20,8 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/permission_request_id.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/web_contents_user_data.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -33,6 +35,35 @@
 #include "ui/message_center/public/cpp/notifier_id.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
+namespace {
+
+class NotificationTabHelper
+    : public content::WebContentsUserData<NotificationTabHelper> {
+ public:
+  ~NotificationTabHelper() override = default;
+
+  void set_should_block_new_notification_requests(bool value) {
+    should_block_new_notification_requests_ = value;
+  }
+
+  bool should_block_new_notification_requests() {
+    return should_block_new_notification_requests_;
+  }
+
+ private:
+  explicit NotificationTabHelper(content::WebContents* contents) {}
+
+  friend class content::WebContentsUserData<NotificationTabHelper>;
+
+  bool should_block_new_notification_requests_ = false;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+};
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(NotificationTabHelper)
+
+}  // namespace
+
 // static
 void NotificationPermissionContext::UpdatePermission(
     content::BrowserContext* browser_context,
@@ -44,8 +75,7 @@ void NotificationPermissionContext::UpdatePermission(
     case CONTENT_SETTING_DEFAULT:
       HostContentSettingsMapFactory::GetForProfile(browser_context)
           ->SetContentSettingDefaultScope(
-              origin, GURL(), ContentSettingsType::NOTIFICATIONS,
-              content_settings::ResourceIdentifier(), setting);
+              origin, GURL(), ContentSettingsType::NOTIFICATIONS, setting);
       break;
 
     default:
@@ -57,9 +87,19 @@ NotificationPermissionContext::NotificationPermissionContext(
     content::BrowserContext* browser_context)
     : PermissionContextBase(browser_context,
                             ContentSettingsType::NOTIFICATIONS,
-                            blink::mojom::FeaturePolicyFeature::kNotFound) {}
+                            blink::mojom::PermissionsPolicyFeature::kNotFound) {
+}
 
 NotificationPermissionContext::~NotificationPermissionContext() {}
+
+// static
+void NotificationPermissionContext::SetBlockNewNotificationRequests(
+    content::WebContents* web_contents,
+    bool value) {
+  NotificationTabHelper::CreateForWebContents(web_contents);
+  NotificationTabHelper::FromWebContents(web_contents)
+      ->set_should_block_new_notification_requests(value);
+}
 
 ContentSetting NotificationPermissionContext::GetPermissionStatusInternal(
     content::RenderFrameHost* render_frame_host,
@@ -98,7 +138,7 @@ ContentSetting NotificationPermissionContext::GetPermissionStatusForExtension(
           .GetByID(origin.host());
 
   if (!extension || !extension->permissions_data()->HasAPIPermission(
-                        extensions::APIPermission::kNotifications)) {
+                        extensions::mojom::APIPermissionID::kNotifications)) {
     // The |extension| doesn't exist, or doesn't have the "notifications"
     // permission declared in their manifest
     return kDefaultSetting;
@@ -153,9 +193,15 @@ void NotificationPermissionContext::DecidePermission(
             base::BindOnce(&NotificationPermissionContext::NotifyPermissionSet,
                            weak_factory_ui_thread_.GetWeakPtr(), id,
                            requesting_origin, embedding_origin,
-                           std::move(callback), true /* persist */,
-                           CONTENT_SETTING_BLOCK),
+                           std::move(callback), /*persist=*/true,
+                           CONTENT_SETTING_BLOCK, /*is_one_time=*/false),
             base::TimeDelta::FromSecondsD(delay_seconds));
+    return;
+  }
+
+  auto* tab_helper = NotificationTabHelper::FromWebContents(web_contents);
+  if (tab_helper && tab_helper->should_block_new_notification_requests()) {
+    std::move(callback).Run(CONTENT_SETTING_BLOCK);
     return;
   }
 

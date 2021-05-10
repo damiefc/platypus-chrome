@@ -4,6 +4,7 @@
 
 #include "components/security_interstitials/content/renderer/security_interstitial_page_controller.h"
 
+#include "components/security_interstitials/core/common/mojom/interstitial_commands.mojom.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "content/public/renderer/render_frame.h"
 #include "gin/converter.h"
@@ -22,6 +23,8 @@ void SecurityInterstitialPageController::Install(
     content::RenderFrame* render_frame) {
   v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
+  v8::MicrotasksScope microtasks_scope(
+      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::Local<v8::Context> context =
       render_frame->GetWebFrame()->MainWorldScriptContext();
   if (context.IsEmpty())
@@ -111,6 +114,11 @@ void SecurityInterstitialPageController::ReportPhishingError() {
                   CMD_REPORT_PHISHING_ERROR);
 }
 
+void SecurityInterstitialPageController::OpenEnhancedProtectionSettings() {
+  SendCommand(security_interstitials::SecurityInterstitialCommand::
+                  CMD_OPEN_ENHANCED_PROTECTION_SETTINGS);
+}
+
 void SecurityInterstitialPageController::SendCommand(
     security_interstitials::SecurityInterstitialCommand command) {
   if (!render_frame() || !active_)
@@ -160,6 +168,9 @@ void SecurityInterstitialPageController::SendCommand(
     case security_interstitials::CMD_REPORT_PHISHING_ERROR:
       interface->ReportPhishingError();
       break;
+    case security_interstitials::CMD_OPEN_ENHANCED_PROTECTION_SETTINGS:
+      interface->OpenEnhancedProtectionSettings();
+      break;
     default:
       // Other values in the enum are only used by tests so this
       // method should not be called with them.
@@ -194,7 +205,10 @@ SecurityInterstitialPageController::GetObjectTemplateBuilder(
           .SetMethod("openWhitepaper",
                      &SecurityInterstitialPageController::OpenWhitepaper)
           .SetMethod("reportPhishingError",
-                     &SecurityInterstitialPageController::ReportPhishingError);
+                     &SecurityInterstitialPageController::ReportPhishingError)
+          .SetMethod("openEnhancedProtectionSettings",
+                     &SecurityInterstitialPageController::
+                         OpenEnhancedProtectionSettings);
 }
 
 void SecurityInterstitialPageController::OnDestruct() {}

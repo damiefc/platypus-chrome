@@ -59,7 +59,7 @@ struct CORE_EXPORT Timing {
   };
   // Represents the animation direction from the Web Animations spec, see
   // https://drafts.csswg.org/web-animations-1/#animation-direction.
-  enum AnimationDirection {
+  enum class AnimationDirection {
     kForwards,
     kBackwards,
   };
@@ -184,4 +184,4 @@ struct CORE_EXPORT Timing {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_ANIMATION_TIMING_H_

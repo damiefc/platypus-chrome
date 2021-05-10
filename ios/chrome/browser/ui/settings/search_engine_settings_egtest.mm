@@ -114,7 +114,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 // Tests that when changing the default search engine, the URL used for the
 // search is updated.
 - (void)testChangeSearchEngine {
-  self.testServer->RegisterRequestHandler(base::Bind(&SearchResponse));
+  self.testServer->RegisterRequestHandler(base::BindRepeating(&SearchResponse));
   GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
 
   GURL url = self.testServer->GetURL(kPageURL);
@@ -239,8 +239,8 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 // enters the search engine screen in Settings.
 - (void)enterSettingsWithCustomSearchEngine {
   _openSearchCalled = false;
-  self.testServer->RegisterRequestHandler(
-      base::Bind(&StandardResponse, &(_serverURL), &(_openSearchCalled)));
+  self.testServer->RegisterRequestHandler(base::BindRepeating(
+      &StandardResponse, &(_serverURL), &(_openSearchCalled)));
   GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
   const GURL pageURL = self.testServer->GetURL(kPageURL);
   _serverURL = pageURL.spec();
@@ -249,10 +249,11 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 
   [ChromeEarlGrey loadURL:pageURL];
 
+  __weak SearchEngineSettingsTestCase* weakSelf = self;
   GREYCondition* openSearchQuery =
       [GREYCondition conditionWithName:@"Wait for Open Search query"
                                  block:^BOOL {
-                                   return _openSearchCalled;
+                                   return [weakSelf wasOpenSearchCalled];
                                  }];
   // Wait for the
   GREYAssertTrue([openSearchQuery
@@ -265,6 +266,10 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [[EarlGrey
       selectElementWithMatcher:chrome_test_util::SettingsSearchEngineButton()]
       performAction:grey_tap()];
+}
+
+- (BOOL)wasOpenSearchCalled {
+  return _openSearchCalled;
 }
 
 @end

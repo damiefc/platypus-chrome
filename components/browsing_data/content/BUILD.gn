@@ -39,8 +39,9 @@ static_library("content") {
     "//components/browsing_data/core",
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
+    "//components/no_state_prefetch/browser",
     "//components/prefs",
-    "//components/prerender/browser",
+    "//components/services/storage/public/cpp",
     "//components/site_isolation",
     "//content/public/browser",
     "//net",
@@ -97,6 +98,7 @@ source_set("test_support") {
   deps = [
     ":content",
     "//base",
+    "//components/services/storage/public/cpp",
     "//content/public/browser",
     "//testing/gtest",
     "//url",

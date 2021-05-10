@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "content/browser/background_sync/background_sync_manager.h"
@@ -27,7 +26,7 @@ namespace content {
 
 using ::testing::_;
 
-const char kServiceWorkerScope[] = "https://example.com/a";
+const char kServiceWorkerScope[] = "https://example.com/a/";
 const char kServiceWorkerScript[] = "https://example.com/a/script.js";
 
 void BackgroundSyncServiceImplTestHarness::RegisterServiceWorkerCallback(

@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_context.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
@@ -94,7 +95,8 @@ class MemoryCacheCorrectnessTest : public testing::Test {
   // RawResource.
   RawResource* FetchRawResource() {
     ResourceRequest resource_request{KURL(kResourceURL)};
-    resource_request.SetRequestContext(mojom::RequestContextType::INTERNAL);
+    resource_request.SetRequestContext(
+        mojom::blink::RequestContextType::INTERNAL);
     resource_request.SetRequestorOrigin(GetSecurityOrigin());
     FetchParameters fetch_params =
         FetchParameters::CreateForTest(std::move(resource_request));
@@ -128,8 +130,10 @@ class MemoryCacheCorrectnessTest : public testing::Test {
     fetcher_ = MakeGarbageCollected<ResourceFetcher>(ResourceFetcherInit(
         properties->MakeDetachable(), context,
         base::MakeRefCounted<scheduler::FakeTaskRunner>(),
+        base::MakeRefCounted<scheduler::FakeTaskRunner>(),
         MakeGarbageCollected<TestLoaderFactory>(),
-        MakeGarbageCollected<MockContextLifecycleNotifier>()));
+        MakeGarbageCollected<MockContextLifecycleNotifier>(),
+        nullptr /* back_forward_cache_loader_helper */));
     Resource::SetClockForTesting(platform_->test_task_runner()->GetMockClock());
   }
   void TearDown() override {

@@ -7,6 +7,8 @@
 #include <memory>
 #include <vector>
 
+#include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -29,8 +31,6 @@
 namespace chromeos {
 
 namespace {
-
-constexpr int kMaxRecords = 16;
 
 struct TaskResults {
   int task_id;
@@ -127,7 +127,8 @@ TaskResults ParseData(int task_id, std::unique_ptr<std::string> data) {
     }
     // Checks if server's ID and URL is not already used. If yes, a warning is
     // emitted and the record is skipped.
-    if (print_server_ids.count(*id) || print_server_urls.count(gurl)) {
+    if (base::Contains(print_server_ids, *id) ||
+        base::Contains(print_server_urls, gurl)) {
       LOG(WARNING) << "Entry in print servers policy skipped. There is "
                    << "already a record with the same ID (" << *id << ") or "
                    << "the same URL (" << gurl.spec() << ")";
@@ -155,6 +156,7 @@ class PrintServersProviderImpl : public PrintServersProvider {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   }
 
+  // This method sets the allowlist to calculate resultant list of servers.
   void SetAllowlistPref(PrefService* prefs,
                         const std::string& allowlist_pref) override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -171,6 +173,17 @@ class PrintServersProviderImpl : public PrintServersProvider {
         base::BindRepeating(&PrintServersProviderImpl::UpdateAllowlist,
                             base::Unretained(this)));
     UpdateAllowlist();
+  }
+
+  void NotifyObservers(bool servers_are_complete,
+                       const std::vector<PrintServer>& servers) {
+    for (auto& observer : observers_) {
+      observer.OnServersChanged(servers_are_complete, servers);
+    }
+  }
+
+  base::Optional<std::vector<PrintServer>> GetPrintServers() override {
+    return IsCompleted() ? base::make_optional(result_servers_) : base::nullopt;
   }
 
   void AddObserver(PrintServersProvider::Observer* observer) override {
@@ -193,8 +206,7 @@ class PrintServersProviderImpl : public PrintServersProvider {
     result_servers_.clear();
     if (!(previously_completed && previously_empty)) {
       // Notify observers.
-      for (auto& observer : observers_)
-        observer.OnServersChanged(true, result_servers_);
+      NotifyObservers(true, result_servers_);
     }
   }
 
@@ -208,8 +220,7 @@ class PrintServersProviderImpl : public PrintServersProvider {
                        weak_ptr_factory_.GetWeakPtr()));
     if (previously_completed) {
       // Notify observers.
-      for (auto& observer : observers_)
-        observer.OnServersChanged(false, result_servers_);
+      NotifyObservers(false, result_servers_);
     }
   }
 
@@ -247,8 +258,7 @@ class PrintServersProviderImpl : public PrintServersProvider {
     const bool has_changes = CalculateResultantList();
     if (has_changes) {
       const bool is_completed = IsCompleted();
-      for (auto& observer : observers_)
-        observer.OnServersChanged(is_completed, result_servers_);
+      NotifyObservers(is_completed, result_servers_);
     }
   }
 
@@ -264,14 +274,7 @@ class PrintServersProviderImpl : public PrintServersProvider {
       new_servers = servers_;
     } else {
       for (auto& print_server : servers_) {
-        if (allowlist_.value().count(print_server.GetId())) {
-          if (new_servers.size() == kMaxRecords) {
-            LOG(WARNING) << "The list of resultant print servers read from "
-                         << "policies is too long. Only the first "
-                         << kMaxRecords << " print servers will be taken into "
-                         << "account";
-            break;
-          }
+        if (base::Contains(allowlist_.value(), print_server.GetId())) {
           new_servers.push_back(print_server);
         }
       }
@@ -302,8 +305,7 @@ class PrintServersProviderImpl : public PrintServersProvider {
     const bool has_changes = CalculateResultantList();
     // Notify observers if something changed.
     if (is_complete || has_changes) {
-      for (auto& observer : observers_)
-        observer.OnServersChanged(is_complete, result_servers_);
+      NotifyObservers(is_complete, result_servers_);
     }
   }
 
@@ -324,6 +326,8 @@ class PrintServersProviderImpl : public PrintServersProvider {
   PrefService* prefs_ = nullptr;
   PrefChangeRegistrar pref_change_registrar_;
   std::string allowlist_pref_;
+
+  std::unique_ptr<base::RepeatingCallback<void()>> policy_callback_;
 
   base::ObserverList<PrintServersProvider::Observer>::Unchecked observers_;
   base::WeakPtrFactory<PrintServersProviderImpl> weak_ptr_factory_{this};

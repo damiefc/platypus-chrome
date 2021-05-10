@@ -44,7 +44,6 @@
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
 #include "third_party/blink/renderer/platform/instrumentation/instance_counters.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/timer.h"
 
 #define MEDIA_KEYS_LOG_LEVEL 3
@@ -228,21 +227,6 @@ MediaKeySession* MediaKeys::createSession(ScriptState* script_state,
     return nullptr;
   }
 
-  // [RuntimeEnabled] does not work with enum values. So we have to check it
-  // here. See https://crbug.com/871867 for details.
-  if (!RuntimeEnabledFeatures::
-          EncryptedMediaPersistentUsageRecordSessionEnabled() &&
-      session_type_string == "persistent-usage-record") {
-    DVLOG(MEDIA_KEYS_LOG_LEVEL)
-        << __func__ << ": 'persistent-usage-record' support not enabled.";
-    // The message here is carefully chosen to be exactly the same as what the
-    // generated bindings would generate for invalid enum values.
-    exception_state.ThrowTypeError(
-        "The provided value 'persistent-usage-record' is not a valid enum "
-        "value of type MediaKeySessionType.");
-    return nullptr;
-  }
-
   // From http://w3c.github.io/encrypted-media/#createSession
 
   // When this method is invoked, the user agent must run the following steps:
@@ -293,7 +277,7 @@ ScriptPromise MediaKeys::setServerCertificate(
   //
   // 2. If serverCertificate is an empty array, return a promise rejected
   //    with a new a newly created TypeError.
-  if (!server_certificate.ByteLengthAsSizeT()) {
+  if (!server_certificate.ByteLength()) {
     exception_state.ThrowTypeError("The serverCertificate parameter is empty.");
     return ScriptPromise();
   }
@@ -301,7 +285,7 @@ ScriptPromise MediaKeys::setServerCertificate(
   // 3. Let certificate be a copy of the contents of the serverCertificate
   //    parameter.
   DOMArrayBuffer* server_certificate_buffer = DOMArrayBuffer::Create(
-      server_certificate.Data(), server_certificate.ByteLengthAsSizeT());
+      server_certificate.Data(), server_certificate.ByteLength());
 
   // 4. Let promise be a new promise.
   SetCertificateResultPromise* result =
@@ -338,7 +322,7 @@ void MediaKeys::SetServerCertificateTask(
   // 5.2 Use the cdm to process certificate.
   cdm->SetServerCertificate(
       static_cast<unsigned char*>(server_certificate->Data()),
-      server_certificate->ByteLengthAsSizeT(), result->Result());
+      server_certificate->ByteLength(), result->Result());
 
   // 5.3 If any of the preceding steps failed, reject promise with a
   //     new DOMException whose name is the appropriate error name.
@@ -460,6 +444,7 @@ WebContentDecryptionModule* MediaKeys::ContentDecryptionModule() {
 void MediaKeys::Trace(Visitor* visitor) const {
   visitor->Trace(pending_actions_);
   visitor->Trace(media_element_);
+  visitor->Trace(timer_);
   ScriptWrappable::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);
 }

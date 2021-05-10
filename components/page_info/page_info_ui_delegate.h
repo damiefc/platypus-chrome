@@ -15,10 +15,12 @@ class PageInfoUiDelegate {
   virtual ~PageInfoUiDelegate() = default;
 #if !defined(OS_ANDROID)
   virtual bool IsBlockAutoPlayEnabled() = 0;
+  virtual bool ShouldShowSiteSettings() = 0;
 #endif
   virtual permissions::PermissionResult GetPermissionStatus(
-      ContentSettingsType type,
-      const GURL& url) = 0;
+      ContentSettingsType type) = 0;
+  virtual bool ShouldShowAllow(ContentSettingsType type) = 0;
+  virtual bool ShouldShowAsk(ContentSettingsType type) = 0;
 };
 
 #endif  // COMPONENTS_PAGE_INFO_PAGE_INFO_UI_DELEGATE_H_

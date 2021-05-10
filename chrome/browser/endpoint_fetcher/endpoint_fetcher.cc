@@ -5,6 +5,7 @@
 #include "chrome/browser/endpoint_fetcher/endpoint_fetcher.h"
 
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -44,18 +45,17 @@ EndpointFetcher::EndpointFetcher(
     int64_t timeout_ms,
     const std::string& post_data,
     const net::NetworkTrafficAnnotationTag& annotation_tag)
-    : EndpointFetcher(
-          oauth_consumer_name,
-          url,
-          http_method,
-          content_type,
-          scopes,
-          timeout_ms,
-          post_data,
-          annotation_tag,
-          content::BrowserContext::GetDefaultStoragePartition(profile)
-              ->GetURLLoaderFactoryForBrowserProcess(),
-          IdentityManagerFactory::GetForProfile(profile)) {}
+    : EndpointFetcher(oauth_consumer_name,
+                      url,
+                      http_method,
+                      content_type,
+                      scopes,
+                      timeout_ms,
+                      post_data,
+                      annotation_tag,
+                      profile->GetDefaultStoragePartition()
+                          ->GetURLLoaderFactoryForBrowserProcess(),
+                      IdentityManagerFactory::GetForProfile(profile)) {}
 
 EndpointFetcher::EndpointFetcher(
     Profile* const profile,
@@ -64,6 +64,7 @@ EndpointFetcher::EndpointFetcher(
     const std::string& content_type,
     int64_t timeout_ms,
     const std::string& post_data,
+    const std::vector<std::string>& headers,
     const net::NetworkTrafficAnnotationTag& annotation_tag)
     : auth_type_(CHROME_API_KEY),
       url_(url),
@@ -71,10 +72,10 @@ EndpointFetcher::EndpointFetcher(
       content_type_(content_type),
       timeout_ms_(timeout_ms),
       post_data_(post_data),
+      headers_(headers),
       annotation_tag_(annotation_tag),
-      url_loader_factory_(
-          content::BrowserContext::GetDefaultStoragePartition(profile)
-              ->GetURLLoaderFactoryForBrowserProcess()),
+      url_loader_factory_(profile->GetDefaultStoragePartition()
+                              ->GetURLLoaderFactoryForBrowserProcess()),
       identity_manager_(nullptr),
       sanitize_response_(true) {}
 
@@ -89,9 +90,8 @@ EndpointFetcher::EndpointFetcher(
       timeout_ms_(0),
       post_data_(std::string()),
       annotation_tag_(annotation_tag),
-      url_loader_factory_(
-          content::BrowserContext::GetDefaultStoragePartition(profile)
-              ->GetURLLoaderFactoryForBrowserProcess()),
+      url_loader_factory_(profile->GetDefaultStoragePartition()
+                              ->GetURLLoaderFactoryForBrowserProcess()),
       identity_manager_(nullptr),
       sanitize_response_(false) {}
 
@@ -164,6 +164,10 @@ void EndpointFetcher::PerformRequest(
   resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   if (base::EqualsCaseInsensitiveASCII(http_method_, "POST")) {
     resource_request->headers.SetHeader(kContentTypeKey, content_type_);
+  }
+  DCHECK(headers_.size() % 2 == 0);
+  for (size_t i = 0; i + 1 < headers_.size(); i += 2) {
+    resource_request->headers.SetHeader(headers_[i], headers_[i + 1]);
   }
   switch (auth_type_) {
     case OAUTH:
@@ -288,7 +292,8 @@ static void JNI_EndpointFetcher_NativeFetchOAuth(
       // TODO(crbug.com/995852) Create a traffic annotation tag and configure it
       // as part of the EndpointFetcher call over JNI.
       NO_TRAFFIC_ANNOTATION_YET);
-  endpoint_fetcher->Fetch(
+  auto* const endpoint_fetcher_ptr = endpoint_fetcher.get();
+  endpoint_fetcher_ptr->Fetch(
       base::BindOnce(&OnEndpointFetcherComplete,
                      base::android::ScopedJavaGlobalRef<jobject>(jcallback),
                      // unique_ptr endpoint_fetcher is passed until the callback
@@ -304,15 +309,19 @@ static void JNI_EndpointFetcher_NativeFetchChromeAPIKey(
     const base::android::JavaParamRef<jstring>& jcontent_type,
     const base::android::JavaParamRef<jstring>& jpost_data,
     jlong jtimeout,
+    const base::android::JavaParamRef<jobjectArray>& jheaders,
     const base::android::JavaParamRef<jobject>& jcallback) {
+  std::vector<std::string> headers;
+  base::android::AppendJavaStringArrayToStringVector(env, jheaders, &headers);
   auto endpoint_fetcher = std::make_unique<EndpointFetcher>(
       ProfileAndroid::FromProfileAndroid(jprofile),
       GURL(base::android::ConvertJavaStringToUTF8(env, jurl)),
       base::android::ConvertJavaStringToUTF8(env, jhttps_method),
       base::android::ConvertJavaStringToUTF8(env, jcontent_type), jtimeout,
-      base::android::ConvertJavaStringToUTF8(env, jpost_data),
+      base::android::ConvertJavaStringToUTF8(env, jpost_data), headers,
       NO_TRAFFIC_ANNOTATION_YET);
-  endpoint_fetcher->PerformRequest(
+  auto* const endpoint_fetcher_ptr = endpoint_fetcher.get();
+  endpoint_fetcher_ptr->PerformRequest(
       base::BindOnce(&OnEndpointFetcherComplete,
                      base::android::ScopedJavaGlobalRef<jobject>(jcallback),
                      // unique_ptr endpoint_fetcher is passed until the callback
@@ -330,7 +339,8 @@ static void JNI_EndpointFetcher_NativeFetchWithNoAuth(
       ProfileAndroid::FromProfileAndroid(jprofile),
       GURL(base::android::ConvertJavaStringToUTF8(env, jurl)),
       NO_TRAFFIC_ANNOTATION_YET);
-  endpoint_fetcher->PerformRequest(
+  auto* const endpoint_fetcher_ptr = endpoint_fetcher.get();
+  endpoint_fetcher_ptr->PerformRequest(
       base::BindOnce(&OnEndpointFetcherComplete,
                      base::android::ScopedJavaGlobalRef<jobject>(jcallback),
                      // unique_ptr endpoint_fetcher is passed until the callback

@@ -7,7 +7,11 @@ package org.chromium.chrome.browser.omnibox.suggestions.base;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
+import android.os.Bundle;
 import android.view.View;
+import android.view.View.AccessibilityDelegate;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.widget.ImageView;
 
 import androidx.annotation.ColorRes;
@@ -47,10 +51,7 @@ public final class BaseSuggestionViewBinder<T extends View>
     public void bind(PropertyModel model, BaseSuggestionView<T> view, PropertyKey propertyKey) {
         mContentBinder.bind(model, view.getContentView(), propertyKey);
 
-        if (BaseSuggestionViewProperties.SUGGESTION_DELEGATE == propertyKey) {
-            view.setDelegate(model.get(BaseSuggestionViewProperties.SUGGESTION_DELEGATE));
-            updateContentViewPadding(model, view.getDecoratedSuggestionView());
-        } else if (BaseSuggestionViewProperties.ICON == propertyKey) {
+        if (BaseSuggestionViewProperties.ICON == propertyKey) {
             updateSuggestionIcon(model, view);
             updateContentViewPadding(model, view.getDecoratedSuggestionView());
         } else if (BaseSuggestionViewProperties.DENSITY == propertyKey) {
@@ -63,6 +64,26 @@ public final class BaseSuggestionViewBinder<T extends View>
             updateColorScheme(model, view);
         } else if (BaseSuggestionViewProperties.ACTIONS == propertyKey) {
             bindActionButtons(model, view, model.get(BaseSuggestionViewProperties.ACTIONS));
+        } else if (BaseSuggestionViewProperties.ON_FOCUS_VIA_SELECTION == propertyKey) {
+            view.setOnFocusViaSelectionListener(
+                    model.get(BaseSuggestionViewProperties.ON_FOCUS_VIA_SELECTION));
+        } else if (BaseSuggestionViewProperties.ON_CLICK == propertyKey) {
+            Runnable listener = model.get(BaseSuggestionViewProperties.ON_CLICK);
+            if (listener == null) {
+                view.getDecoratedSuggestionView().setOnClickListener(null);
+            } else {
+                view.getDecoratedSuggestionView().setOnClickListener(v -> listener.run());
+            }
+        } else if (BaseSuggestionViewProperties.ON_LONG_CLICK == propertyKey) {
+            Runnable listener = model.get(BaseSuggestionViewProperties.ON_LONG_CLICK);
+            if (listener == null) {
+                view.getDecoratedSuggestionView().setOnLongClickListener(null);
+            } else {
+                view.getDecoratedSuggestionView().setOnLongClickListener(v -> {
+                    listener.run();
+                    return true;
+                });
+            }
         }
     }
 
@@ -74,7 +95,6 @@ public final class BaseSuggestionViewBinder<T extends View>
 
         // Drawable retrieved once here (expensive) and will be copied multiple times (cheap).
         Drawable backgroundDrawable = getSelectableBackgroundDrawable(view, model);
-
         final List<ImageView> actionViews = view.getActionButtons();
         for (int index = 0; index < actionCount; index++) {
             final ImageView actionView = actionViews.get(index);
@@ -84,6 +104,25 @@ public final class BaseSuggestionViewBinder<T extends View>
             actionView.setBackground(copyDrawable(backgroundDrawable));
             updateIcon(actionView, action.icon,
                     ChromeColors.getPrimaryIconTintRes(!useDarkColors(model)));
+
+            actionView.setAccessibilityDelegate(new AccessibilityDelegate() {
+                @Override
+                public void onInitializeAccessibilityNodeInfo(
+                        View host, AccessibilityNodeInfo info) {
+                    super.onInitializeAccessibilityNodeInfo(host, info);
+                    info.addAction(AccessibilityAction.ACTION_CLICK);
+                }
+
+                @Override
+                public boolean performAccessibilityAction(
+                        View host, int accessibilityAction, Bundle arguments) {
+                    if (accessibilityAction == AccessibilityNodeInfo.ACTION_CLICK
+                            && action.onClickAnnouncement != null) {
+                        actionView.announceForAccessibility(action.onClickAnnouncement);
+                    }
+                    return super.performAccessibilityAction(host, accessibilityAction, arguments);
+                }
+            });
         }
     }
 

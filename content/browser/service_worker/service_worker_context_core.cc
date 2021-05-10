@@ -5,12 +5,12 @@
 #include "content/browser/service_worker/service_worker_context_core.h"
 
 #include <limits>
+#include <memory>
 #include <set>
 #include <utility>
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
@@ -19,6 +19,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/services/storage/public/cpp/quota_client_callback_wrapper.h"
+#include "components/services/storage/public/cpp/storage_key.h"
 #include "content/browser/log_console_message.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
@@ -31,6 +33,7 @@
 #include "content/browser/service_worker/service_worker_job_coordinator.h"
 #include "content/browser/service_worker/service_worker_offline_capability_checker.h"
 #include "content/browser/service_worker/service_worker_process_manager.h"
+#include "content/browser/service_worker/service_worker_quota_client.h"
 #include "content/browser/service_worker/service_worker_register_job.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_version.h"
@@ -138,7 +141,7 @@ bool IsSameOriginClientContainerHost(
       container_host->IsInBackForwardCache()) {
     return false;
   }
-  return container_host->url().GetOrigin() == origin &&
+  return container_host->GetOrigin() == origin &&
          (allow_reserved_client || container_host->is_execution_ready());
 }
 
@@ -267,8 +270,6 @@ void ServiceWorkerContextCore::ContainerHostIterator::
 }
 
 ServiceWorkerContextCore::ServiceWorkerContextCore(
-    const base::FilePath& user_data_directory,
-    scoped_refptr<base::SequencedTaskRunner> database_task_runner,
     storage::QuotaManagerProxy* quota_manager_proxy,
     storage::SpecialStoragePolicy* special_storage_policy,
     URLLoaderFactoryGetter* url_loader_factory_getter,
@@ -281,17 +282,22 @@ ServiceWorkerContextCore::ServiceWorkerContextCore(
       container_host_receivers_(std::make_unique<mojo::AssociatedReceiverSet<
                                     blink::mojom::ServiceWorkerContainerHost,
                                     ServiceWorkerContainerHost*>>()),
-      registry_(std::make_unique<ServiceWorkerRegistry>(
-          user_data_directory,
-          this,
-          std::move(database_task_runner),
-          quota_manager_proxy,
-          special_storage_policy)),
+      registry_(
+          std::make_unique<ServiceWorkerRegistry>(this,
+                                                  quota_manager_proxy,
+                                                  special_storage_policy)),
       job_coordinator_(std::make_unique<ServiceWorkerJobCoordinator>(this)),
       loader_factory_getter_(url_loader_factory_getter),
       force_update_on_page_load_(false),
       was_service_worker_registered_(false),
-      observer_list_(observer_list) {
+      observer_list_(observer_list),
+      quota_client_(std::make_unique<ServiceWorkerQuotaClient>(*this)),
+      quota_client_wrapper_(
+          std::make_unique<storage::QuotaClientCallbackWrapper>(
+              quota_client_.get())),
+      quota_client_receiver_(
+          std::make_unique<mojo::Receiver<storage::mojom::QuotaClient>>(
+              quota_client_wrapper_.get())) {
   DCHECK(observer_list_);
   if (non_network_pending_loader_factory_bundle_for_update_check) {
     loader_factory_bundle_for_update_check_ =
@@ -302,6 +308,13 @@ ServiceWorkerContextCore::ServiceWorkerContextCore(
   container_host_receivers_->set_disconnect_handler(base::BindRepeating(
       &ServiceWorkerContextCore::OnContainerHostReceiverDisconnected,
       base::Unretained(this)));
+
+  if (quota_manager_proxy) {
+    quota_manager_proxy->RegisterClient(
+        quota_client_receiver_->BindNewPipeAndPassRemote(),
+        storage::QuotaClientType::kServiceWorker,
+        {blink::mojom::StorageType::kTemporary});
+  }
 }
 
 ServiceWorkerContextCore::ServiceWorkerContextCore(
@@ -321,10 +334,14 @@ ServiceWorkerContextCore::ServiceWorkerContextCore(
       was_service_worker_registered_(
           old_context->was_service_worker_registered_),
       observer_list_(old_context->observer_list_),
-      next_embedded_worker_id_(old_context->next_embedded_worker_id_) {
+      next_embedded_worker_id_(old_context->next_embedded_worker_id_),
+      quota_client_(std::move(old_context->quota_client_)),
+      quota_client_wrapper_(std::move(old_context->quota_client_wrapper_)),
+      quota_client_receiver_(std::move(old_context->quota_client_receiver_)) {
   container_host_receivers_->set_disconnect_handler(base::BindRepeating(
       &ServiceWorkerContextCore::OnContainerHostReceiverDisconnected,
       base::Unretained(this)));
+  quota_client_->ResetContext(*this);
 }
 
 ServiceWorkerContextCore::~ServiceWorkerContextCore() {
@@ -332,7 +349,7 @@ ServiceWorkerContextCore::~ServiceWorkerContextCore() {
   for (const auto& it : live_versions_)
     it.second->RemoveObserver(this);
 
-  job_coordinator_->ClearForShutdown();
+  job_coordinator_->AbortAll();
 }
 
 std::unique_ptr<ServiceWorkerContextCore::ContainerHostIterator>
@@ -384,17 +401,9 @@ void ServiceWorkerContextCore::HasMainFrameWindowClient(const GURL& origin,
     container_host_iterator->Advance();
   }
 
-  if (ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
-    bool result = FrameListContainsMainFrameOnUI(std::move(render_frames));
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback), result));
-  } else {
-    GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
-        FROM_HERE,
-        base::BindOnce(&FrameListContainsMainFrameOnUI,
-                       std::move(render_frames)),
-        std::move(callback));
-  }
+  bool result = FrameListContainsMainFrameOnUI(std::move(render_frames));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), result));
 }
 
 base::WeakPtr<ServiceWorkerContainerHost>
@@ -475,9 +484,25 @@ ServiceWorkerContextCore::GetContainerHostByClientID(
   return it->second.get();
 }
 
+ServiceWorkerContainerHost*
+ServiceWorkerContextCore::GetContainerHostByWindowId(
+    const base::UnguessableToken& window_id) {
+  for (auto& it : container_host_by_uuid_) {
+    if (it.second->fetch_request_window_id() == window_id)
+      return it.second.get();
+  }
+
+  return nullptr;
+}
+
 void ServiceWorkerContextCore::OnContainerHostReceiverDisconnected() {
   ServiceWorkerContainerHost* container_host =
       container_host_receivers_->current_context();
+
+  observer_list_->Notify(FROM_HERE,
+                         &ServiceWorkerContextCoreObserver::OnClientDestroyed,
+                         container_host->ukm_source_id(), container_host->url(),
+                         container_host->GetClientType());
 
   size_t removed = container_host_by_uuid_.erase(container_host->client_uuid());
   DCHECK_EQ(removed, 1u);
@@ -540,8 +565,8 @@ void ServiceWorkerContextCore::UnregisterServiceWorker(
 void ServiceWorkerContextCore::DeleteForOrigin(const url::Origin& origin,
                                                StatusCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  registry()->GetRegistrationsForOrigin(
-      origin,
+  registry()->GetRegistrationsForStorageKey(
+      storage::StorageKey(origin),
       base::BindOnce(
           &ServiceWorkerContextCore::DidGetRegistrationsForDeleteForOrigin,
           AsWeakPtr(), origin, std::move(callback)));
@@ -550,7 +575,7 @@ void ServiceWorkerContextCore::DeleteForOrigin(const url::Origin& origin,
 void ServiceWorkerContextCore::PerformStorageCleanup(
     base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  GetStorageControl()->PerformStorageCleanup(std::move(callback));
+  registry()->PerformStorageCleanup(std::move(callback));
 }
 
 void ServiceWorkerContextCore::DidGetRegistrationsForDeleteForOrigin(
@@ -568,7 +593,8 @@ void ServiceWorkerContextCore::DidGetRegistrationsForDeleteForOrigin(
   // unload.
   std::vector<scoped_refptr<ServiceWorkerRegistration>>
       uninstalling_registrations =
-          registry()->GetUninstallingRegistrationsForOrigin(origin);
+          registry()->GetUninstallingRegistrationsForStorageKey(
+              storage::StorageKey(origin));
   for (const auto& uninstalling_registration : uninstalling_registrations) {
     job_coordinator_->Abort(uninstalling_registration->scope());
     uninstalling_registration->DeleteAndClearImmediately();
@@ -609,6 +635,15 @@ void ServiceWorkerContextCore::DidGetRegistrationsForDeleteForOrigin(
 
 int ServiceWorkerContextCore::GetNextEmbeddedWorkerId() {
   return next_embedded_worker_id_++;
+}
+
+void ServiceWorkerContextCore::NotifyClientIsExecutionReady(
+    const ServiceWorkerContainerHost& container_host) {
+  DCHECK(container_host.is_execution_ready());
+  observer_list_->Notify(
+      FROM_HERE, &ServiceWorkerContextCoreObserver::OnClientIsExecutionReady,
+      container_host.ukm_source_id(), container_host.url(),
+      container_host.GetClientType());
 }
 
 void ServiceWorkerContextCore::RegistrationComplete(
@@ -731,6 +766,9 @@ void ServiceWorkerContextCore::RemoveLiveVersion(int64_t id) {
                            &ServiceWorkerContextCoreObserver::OnStopped, id);
   }
 
+  observer_list_->Notify(
+      FROM_HERE, &ServiceWorkerContextCoreObserver::OnLiveVersionDestroyed, id);
+
   live_versions_.erase(it);
 }
 
@@ -769,7 +807,7 @@ void ServiceWorkerContextCore::UnprotectVersion(int64_t version_id) {
 }
 
 void ServiceWorkerContextCore::ScheduleDeleteAndStartOver() const {
-  registry()->PrepareForDeleteAndStarOver();
+  registry()->PrepareForDeleteAndStartOver();
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(&ServiceWorkerContextWrapper::DeleteAndStartOver,
@@ -803,9 +841,10 @@ void ServiceWorkerContextCore::CheckHasServiceWorker(
     const GURL& url,
     ServiceWorkerContext::CheckHasServiceWorkerCallback callback) {
   registry()->FindRegistrationForClientUrl(
-      url, base::BindOnce(&ServiceWorkerContextCore::
-                              DidFindRegistrationForCheckHasServiceWorker,
-                          AsWeakPtr(), std::move(callback)));
+      url, storage::StorageKey(url::Origin::Create(url)),
+      base::BindOnce(&ServiceWorkerContextCore::
+                         DidFindRegistrationForCheckHasServiceWorker,
+                     AsWeakPtr(), std::move(callback)));
 }
 
 void ServiceWorkerContextCore::CheckOfflineCapability(
@@ -821,7 +860,9 @@ void ServiceWorkerContextCore::CheckOfflineCapability(
       base::BindOnce(
           [](std::unique_ptr<ServiceWorkerOfflineCapabilityChecker> checker,
              ServiceWorkerContext::CheckOfflineCapabilityCallback callback,
-             OfflineCapability result) { std::move(callback).Run(result); },
+             OfflineCapability result, int64_t registration_id) {
+            std::move(callback).Run(result, registration_id);
+          },
           std::move(checker), std::move(callback)));
 }
 
@@ -991,7 +1032,7 @@ void ServiceWorkerContextCore::OnDevToolsRoutingIdChanged(
 
 void ServiceWorkerContextCore::OnErrorReported(
     ServiceWorkerVersion* version,
-    const base::string16& error_message,
+    const std::u16string& error_message,
     int line_number,
     int column_number,
     const GURL& source_url) {
@@ -1007,7 +1048,7 @@ void ServiceWorkerContextCore::OnReportConsoleMessage(
     ServiceWorkerVersion* version,
     blink::mojom::ConsoleMessageSource source,
     blink::mojom::ConsoleMessageLevel message_level,
-    const base::string16& message,
+    const std::u16string& message,
     int line_number,
     const GURL& source_url) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());

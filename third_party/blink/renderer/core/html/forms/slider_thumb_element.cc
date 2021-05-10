@@ -114,7 +114,7 @@ void SliderThumbElement::SetPositionFromPoint(const LayoutPoint& point) {
   LayoutUnit track_size;
   LayoutUnit position;
   LayoutUnit current_position;
-  const LayoutBox* input_box = ToLayoutBox(input_object);
+  const auto* input_box = To<LayoutBox>(input_object);
   PhysicalOffset thumb_offset =
       thumb_box->LocalToAncestorPoint(PhysicalOffset(), input_box) -
       track_box->LocalToAncestorPoint(PhysicalOffset(), input_box);
@@ -287,11 +287,12 @@ const AtomicString& SliderThumbElement::ShadowPseudoId() const {
   }
 }
 
-scoped_refptr<ComputedStyle> SliderThumbElement::CustomStyleForLayoutObject() {
+ComputedStyle* SliderThumbElement::CustomStyleForLayoutObject(
+    const StyleRecalcContext& style_recalc_context) {
   Element* host = OwnerShadowHost();
   DCHECK(host);
   const ComputedStyle& host_style = host->ComputedStyleRef();
-  scoped_refptr<ComputedStyle> style = OriginalStyleForLayoutObject();
+  ComputedStyle* style = OriginalStyleForLayoutObject(style_recalc_context);
 
   if (host_style.EffectiveAppearance() == kSliderVerticalPart)
     style->SetEffectiveAppearance(kSliderThumbVerticalPart);

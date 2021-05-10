@@ -28,6 +28,7 @@ namespace tray {
 bool CanNetworkConnect(
     chromeos::network_config::mojom::ConnectionStateType connection_state,
     chromeos::network_config::mojom::NetworkType type,
+    chromeos::network_config::mojom::ActivationStateType activation_state,
     bool is_connectable);
 
 // Exported for tests.
@@ -73,8 +74,6 @@ class ASH_EXPORT NetworkStateListDetailedView
 
   // TrayDetailedView:
   void HandleViewClicked(views::View* view) override;
-  void HandleButtonPressed(views::Button* sender,
-                           const ui::Event& event) override;
   void CreateExtraTitleRowButtons() override;
 
   // Implementation of 'HandleViewClicked' once networks are received.

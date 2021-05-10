@@ -11,6 +11,10 @@ assert(is_chromeos, "Help App is Chrome OS only")
 
 static_library("help_app_ui") {
   sources = [
+    "help_app_manager.cc",
+    "help_app_manager.h",
+    "help_app_manager_factory.cc",
+    "help_app_manager_factory.h",
     "help_app_page_handler.cc",
     "help_app_page_handler.h",
     "help_app_ui.cc",
@@ -18,6 +22,12 @@ static_library("help_app_ui") {
     "help_app_ui_delegate.h",
     "help_app_untrusted_ui.cc",
     "help_app_untrusted_ui.h",
+    "search/search_handler.cc",
+    "search/search_handler.h",
+    "search/search_metadata.cc",
+    "search/search_metadata.h",
+    "search/search_tag_registry.cc",
+    "search/search_tag_registry.h",
     "url_constants.cc",
     "url_constants.h",
   ]
@@ -25,19 +35,23 @@ static_library("help_app_ui") {
   deps = [
     ":mojo_bindings",
     ":mojo_bindings_js",
-    "//chromeos/components/local_search_service:local_search_service_proxy",
-    "//chromeos/components/local_search_service/mojom:mojom",
-    "//chromeos/components/local_search_service/mojom:mojom_js",
+    "//ash/constants",
+    "//chromeos/components/help_app_ui/search:mojo_bindings",
+    "//chromeos/components/help_app_ui/search:mojo_bindings_js",
+    "//chromeos/components/local_search_service/public/cpp",
+    "//chromeos/components/local_search_service/public/mojom",
+    "//chromeos/components/local_search_service/public/mojom:mojom_js",
     "//chromeos/components/web_applications",
-    "//chromeos/constants",
     "//chromeos/resources:help_app_bundle_resources",
     "//chromeos/resources:help_app_resources",
     "//chromeos/strings",
     "//chromeos/system",
+    "//components/keyed_service/content:content",
     "//content/public/browser",
     "//content/public/common",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/platform",
+    "//ui/resources:webui_generated_resources_grd_grit",
     "//ui/resources:webui_resources_grd_grit",
     "//ui/webui",
   ]
@@ -47,10 +61,29 @@ mojom("mojo_bindings") {
   sources = [ "help_app_ui.mojom" ]
 }
 
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "search/search_handler_unittest.cc",
+    "search/search_tag_registry_unittest.cc",
+  ]
+
+  deps = [
+    ":help_app_ui",
+    "//base/test:test_support",
+    "//chromeos/components/help_app_ui/search:mojo_bindings",
+    "//chromeos/components/local_search_service/public/mojom:mojom",
+    "//mojo/public/cpp/bindings:bindings",
+    "//testing/gtest",
+  ]
+}
+
 group("closure_compile") {
   testonly = true
   deps = [
-    ":closure_compile_tests",
+    ":closure_compile_browsertests",
+    ":closure_compile_test_lib",
     "resources:closure_compile",
     "resources/mock:closure_compile",
   ]
@@ -65,7 +98,7 @@ js2gtest("browser_tests_js") {
 
   deps = [
     ":browser_test_support",
-    "//chromeos/constants",
+    "//ash/constants",
   ]
 }
 
@@ -92,13 +125,24 @@ source_set("browser_test_support") {
   ]
 }
 
-js_type_check("closure_compile_tests") {
+js_type_check("closure_compile_test_lib") {
   testonly = true
   closure_flags = system_app_closure_flags_strict
   deps = [
     ":test_driver_api_js",
     ":test_driver_js",
     ":test_guest_query_receiver_js",
+  ]
+}
+
+# Use relaxed flags for the browsertest files themselves. This removes null
+# checks and "could not determine type" errors which don't add a lot of value.
+js_type_check("closure_compile_browsertests") {
+  testonly = true
+  closure_flags = system_app_closure_flags
+  deps = [
+    ":test_help_app_guest_ui_browsertest_js",
+    ":test_help_app_ui_browsertest_js",
   ]
 }
 
@@ -120,9 +164,34 @@ js_library("test_guest_query_receiver_js") {
 js_library("test_driver_js") {
   testonly = true
   sources = [ "test/driver.js" ]
+  externs_list = [ "//third_party/chaijs/externs/chai-3.5.js" ]
   deps = [
     ":test_driver_api_js",
     "//chromeos/components/help_app_ui/resources:browser_proxy",
+    "//chromeos/components/system_apps/public/js:message_pipe",
+  ]
+}
+
+js_library("test_help_app_ui_browsertest_js") {
+  testonly = true
+  sources = [ "test/help_app_ui_browsertest.js" ]
+  externs_list =
+      [ "//chromeos/components/web_applications/js2gtest_support.externs.js" ]
+  deps = [
+    ":test_driver_js",
+    "//chromeos/components/help_app_ui/resources:browser_proxy",
+    "//chromeos/components/system_apps/public/js:message_pipe",
+  ]
+}
+
+js_library("test_help_app_guest_ui_browsertest_js") {
+  testonly = true
+  sources = [ "test/help_app_guest_ui_browsertest.js" ]
+  externs_list =
+      [ "//chromeos/components/web_applications/js2gtest_support.externs.js" ]
+  deps = [
+    ":test_driver_js",
+    "//chromeos/components/help_app_ui/resources:receiver",
     "//chromeos/components/system_apps/public/js:message_pipe",
   ]
 }

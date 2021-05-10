@@ -16,7 +16,7 @@ which you can set up in a new GN out directory with the following args:
 The scripts are invoked using the driver located at
 `//chrome/installer/mac/sign_chrome.py`. In order to sign a binary, a signing
 identity is required. Googlers can use the [internal development
-identity](https://goto.google.com/macoscerts); otherwise you must supply your
+identity](https://goto.google.com/ioscerts); otherwise you must supply your
 own. Note that a
 [self-signed](https://developer.apple.com/library/archive/documentation/Security/Conceptual/CodeSigningGuide/Procedures/Procedures.html)
 identity is incompatible with the _library validation_ signing option that
@@ -32,6 +32,30 @@ speeds up the signing process when one is only interested in a signed .app
 bundle. The `--development` flag skips over code signing requirements and checks
 that do not work without the official Google signing identity.
 
+## The Installer Identity
+
+The above section speaks of the `--identity` parameter to `sign_chrome.py`, and
+how the normal development identity will do, and how a self-signed identity will
+not work. However, the identity used for Installer (.pkg) files is different.
+
+Installer files require a special Installer Package Signing Certificate, which
+is different than a normal certificate in that it has a special Extended Key
+Usage extension.
+
+For the normal identity, Apple provides both a development and a deployment
+certificate, and while the deployment certificate can be (and should be)
+carefully guarded, the development certificate can be more widely used by the
+development team. However, Apple provides _only_ a deployment installer
+certificate. For development purposes, you must self-sign your own.
+
+Directions on how to create a self-signed certificate with the special Extended
+Key Usage extension for installer use can be found on
+[security.stackexchange](https://security.stackexchange.com/a/47908).
+
+You will need to explicitly mark the certificate in Keychain Access as trusted.
+Be sure that `security -v find-identity` lists this new certificate as a valid
+identity.
+
 ## Chromium
 
 There are slight differences between the official Google Chrome signed build and
@@ -44,8 +68,17 @@ tied to the official Google signing identity.
 In addition, the Chromium [code sign
 config](https://cs.chromium.org/chromium/src/chrome/installer/mac/signing/chromium_config.py)
 only produces one Distribution to sign just the .app. An
-`is_chrome_build=true` build produces several Distributions for the official
+`is_chrome_branded=true` build produces several Distributions for the official
 release system.
+
+## Google Chrome
+
+If you attempt to sign an `is_chrome_branded=true` build locally, the app will
+fail to launch because certain entitlements are tied to the official Google code
+signing identity/certificate. To test an `is_chrome_branded=true` build locally,
+replace the contents of
+[`app-entitlements-chrome.plist`](../../../app/app-entitlements-chrome.plist) with
+an empty plist.
 
 ### System Detached Signatures
 

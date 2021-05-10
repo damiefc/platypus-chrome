@@ -23,14 +23,6 @@ namespace chromeos {
 
 namespace {
 
-#if !BUILDFLAG(OPTIMIZE_WEBUI)
-namespace {
-const char kGeneratedPath[] =
-    "@out_folder@/gen/chrome/browser/resources/chromeos/"
-    "bluetooth_pairing_dialog/";
-}
-#endif
-
 constexpr int kBluetoothPairingDialogHeight = 375;
 
 void AddBluetoothStrings(content::WebUIDataSource* html_source) {
@@ -53,7 +45,7 @@ void AddBluetoothStrings(content::WebUIDataSource* html_source) {
 // static
 SystemWebDialogDelegate* BluetoothPairingDialog::ShowDialog(
     const std::string& address,
-    const base::string16& name_for_display,
+    const std::u16string& name_for_display,
     bool paired,
     bool connected) {
   std::string cannonical_address =
@@ -76,11 +68,11 @@ SystemWebDialogDelegate* BluetoothPairingDialog::ShowDialog(
 
 BluetoothPairingDialog::BluetoothPairingDialog(
     const std::string& address,
-    const base::string16& name_for_display,
+    const std::u16string& name_for_display,
     bool paired,
     bool connected)
     : SystemWebDialogDelegate(GURL(chrome::kChromeUIBluetoothPairingURL),
-                              base::string16() /* title */),
+                              std::u16string() /* title */),
       address_(address) {
   device_data_.SetString("address", address);
   device_data_.SetString("name", name_for_display);
@@ -114,18 +106,11 @@ BluetoothPairingDialogUI::BluetoothPairingDialogUI(content::WebUI* web_ui)
 
   AddBluetoothStrings(source);
   source->AddLocalizedString("title", IDS_SETTINGS_BLUETOOTH_PAIR_DEVICE_TITLE);
-#if BUILDFLAG(OPTIMIZE_WEBUI)
-  webui::SetupBundledWebUIDataSource(
-      source, "bluetooth_pairing_dialog.js",
-      IDR_BLUETOOTH_PAIRING_DIALOG_ROLLUP_JS,
-      IDR_BLUETOOTH_PAIRING_DIALOG_CONTAINER_HTML);
-#else
   webui::SetupWebUIDataSource(
       source,
       base::make_span(kBluetoothPairingDialogResources,
                       kBluetoothPairingDialogResourcesSize),
-      kGeneratedPath, IDR_BLUETOOTH_PAIRING_DIALOG_CONTAINER_HTML);
-#endif
+      IDR_BLUETOOTH_PAIRING_DIALOG_BLUETOOTH_PAIRING_DIALOG_CONTAINER_HTML);
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source);
 }
 

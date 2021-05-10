@@ -22,7 +22,7 @@
 
 #include "third_party/blink/renderer/core/html/html_meta_element.h"
 
-#include "third_party/blink/public/common/css/color_scheme.h"
+#include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_to_number.h"
 
 namespace blink {
@@ -588,18 +589,9 @@ void HTMLMetaElement::ProcessContent() {
       UseCounter::Count(&GetDocument(),
                         WebFeature::kHTMLMetaElementReferrerPolicyOutsideHead);
     }
-    bool comma_in_content_value = false;
-    if (content_value.Contains(',')) {
-      comma_in_content_value = true;
-      UseCounter::Count(
-          &GetDocument(),
-          WebFeature::kHTMLMetaElementReferrerPolicyMultipleTokens);
-    }
 
-    GetExecutionContext()->ParseAndSetReferrerPolicy(
-        content_value, true /* support legacy keywords */,
-        /*from_meta_tag_with_list_of_policies=*/
-        comma_in_content_value);
+    GetExecutionContext()->ParseAndSetReferrerPolicy(content_value,
+                                                     kPolicySourceMetaTag);
   } else if (EqualIgnoringASCIICase(name_value, "handheldfriendly") &&
              EqualIgnoringASCIICase(content_value, "true")) {
     ProcessViewportContentAttribute("width=device-width",
@@ -637,4 +629,4 @@ const AtomicString& HTMLMetaElement::HttpEquiv() const {
 const AtomicString& HTMLMetaElement::GetName() const {
   return FastGetAttribute(html_names::kNameAttr);
 }
-}
+}  // namespace blink

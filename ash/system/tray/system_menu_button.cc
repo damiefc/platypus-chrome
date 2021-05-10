@@ -4,24 +4,23 @@
 
 #include "ash/system/tray/system_menu_button.h"
 
-#include "ash/public/cpp/shelf_config.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_ink_drop_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icon_utils.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
 
 namespace ash {
 
-SystemMenuButton::SystemMenuButton(views::ButtonListener* listener,
+SystemMenuButton::SystemMenuButton(PressedCallback callback,
                                    const gfx::ImageSkia& normal_icon,
                                    const gfx::ImageSkia& disabled_icon,
                                    int accessible_name_id)
-    : views::ImageButton(listener) {
+    : views::ImageButton(std::move(callback)) {
   DCHECK_EQ(normal_icon.width(), disabled_icon.width());
   DCHECK_EQ(normal_icon.height(), disabled_icon.height());
 
@@ -34,16 +33,18 @@ SystemMenuButton::SystemMenuButton(views::ButtonListener* listener,
 
   SetTooltipText(l10n_util::GetStringUTF16(accessible_name_id));
 
-  TrayPopupUtils::ConfigureTrayPopupButton(this);
+  TrayPopupUtils::ConfigureTrayPopupButton(
+      this, TrayPopupInkDropStyle::HOST_CENTERED);
   TrayPopupUtils::InstallHighlightPathGenerator(
       this, TrayPopupInkDropStyle::HOST_CENTERED);
-  focus_ring()->SetColor(ShelfConfig::Get()->shelf_focus_border_color());
+  focus_ring()->SetColor(AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kFocusRingColor));
 }
 
-SystemMenuButton::SystemMenuButton(views::ButtonListener* listener,
+SystemMenuButton::SystemMenuButton(PressedCallback callback,
                                    const gfx::VectorIcon& icon,
                                    int accessible_name_id)
-    : SystemMenuButton(listener,
+    : SystemMenuButton(std::move(callback),
                        gfx::ImageSkia(),
                        gfx::ImageSkia(),
                        accessible_name_id) {
@@ -51,32 +52,11 @@ SystemMenuButton::SystemMenuButton(views::ButtonListener* listener,
 }
 
 void SystemMenuButton::SetVectorIcon(const gfx::VectorIcon& icon) {
-  const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kIconColorPrimary);
-  SetImage(views::Button::STATE_NORMAL,
-           gfx::CreateVectorIcon(icon, icon_color));
-  SetImage(views::Button::STATE_DISABLED,
-           gfx::CreateVectorIcon(
-               icon, AshColorProvider::GetDisabledColor(icon_color)));
+  AshColorProvider::Get()->DecorateIconButton(this, icon, /*toggled=*/false,
+                                              GetDefaultSizeOfVectorIcon(icon));
 }
 
 SystemMenuButton::~SystemMenuButton() = default;
-
-std::unique_ptr<views::InkDrop> SystemMenuButton::CreateInkDrop() {
-  return TrayPopupUtils::CreateInkDrop(this);
-}
-
-std::unique_ptr<views::InkDropRipple> SystemMenuButton::CreateInkDropRipple()
-    const {
-  return TrayPopupUtils::CreateInkDropRipple(
-      TrayPopupInkDropStyle::HOST_CENTERED, this,
-      GetInkDropCenterBasedOnLastEvent());
-}
-
-std::unique_ptr<views::InkDropHighlight>
-SystemMenuButton::CreateInkDropHighlight() const {
-  return TrayPopupUtils::CreateInkDropHighlight(this);
-}
 
 const char* SystemMenuButton::GetClassName() const {
   return "SystemMenuButton";

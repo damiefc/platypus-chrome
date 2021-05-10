@@ -13,9 +13,10 @@
 #include "base/debug/alias.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/stringprintf.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "components/viz/common/gpu/context_provider.h"
@@ -42,11 +43,11 @@ const int kMaxBytesPerCopyOperation = 1024 * 1024 * 4;
 
 // When enabled, OneCopyRasterBufferProvider::RasterBufferImpl::Playback() runs
 // at normal thread priority.
-// TODO(https://crbug.com/1072756): Enable by default and remove the feature
-// once experiments confirm that this prevents priority inversions.
+// TODO(crbug.com/1072756): Cleanup the feature when the Stable experiment is
+// complete, on November 25, 2020.
 const base::Feature kOneCopyRasterBufferPlaybackNormalThreadPriority{
     "OneCopyRasterBufferPlaybackNormalThreadPriority",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace
 
@@ -263,6 +264,11 @@ uint64_t OneCopyRasterBufferProvider::SetReadyToDrawCallback(
   return callback_id;
 }
 
+void OneCopyRasterBufferProvider::SetShutdownEvent(
+    base::WaitableEvent* shutdown_event) {
+  shutdown_event_ = shutdown_event;
+}
+
 void OneCopyRasterBufferProvider::Shutdown() {
   staging_pool_.Shutdown();
 }
@@ -315,7 +321,8 @@ void OneCopyRasterBufferProvider::PlaybackToStagingBuffer(
     staging_buffer->gpu_memory_buffer =
         gpu_memory_buffer_manager_->CreateGpuMemoryBuffer(
             staging_buffer->size, BufferFormat(format),
-            gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, gpu::kNullSurfaceHandle);
+            gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, gpu::kNullSurfaceHandle,
+            shutdown_event_);
   }
 
   gfx::Rect playback_rect = raster_full_rect;
@@ -423,7 +430,7 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
     query_target = GL_COMMANDS_COMPLETED_CHROMIUM;
   }
 
-#if defined(OS_CHROMEOS) && defined(ARCH_CPU_ARM_FAMILY)
+#if BUILDFLAG(IS_CHROMEOS_ASH) && defined(ARCH_CPU_ARM_FAMILY)
   // TODO(reveman): This avoids a performance problem on ARM ChromeOS devices.
   // https://crbug.com/580166
   query_target = GL_COMMANDS_ISSUED_CHROMIUM;
@@ -487,10 +494,6 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
       viz::ClientResourceProvider::GenerateSyncTokenHelper(ri);
   staging_buffer->sync_token = out_sync_token;
   return out_sync_token;
-}
-
-bool OneCopyRasterBufferProvider::CheckRasterFinishedQueries() {
-  return false;
 }
 
 }  // namespace cc

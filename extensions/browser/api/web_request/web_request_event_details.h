@@ -8,7 +8,6 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/optional.h"
@@ -42,9 +41,6 @@ struct WebRequestInfo;
 // other threads, as long as there is no concurrent access.
 class WebRequestEventDetails {
  public:
-  using DeterminedFrameDataCallback =
-      base::Callback<void(std::unique_ptr<WebRequestEventDetails>)>;
-
   // Create a WebRequestEventDetails with the following keys:
   // - method
   // - requestId

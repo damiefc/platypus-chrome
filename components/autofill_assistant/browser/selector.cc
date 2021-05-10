@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
+#include "components/autofill_assistant/browser/action_value.pb.h"
 
 namespace autofill_assistant {
 
@@ -14,8 +15,7 @@ namespace autofill_assistant {
 // they're not shared outside of this module, for them to be visible to
 // std::make_tuple and std::lexicographical_compare.
 
-bool operator<(const SelectorProto::TextFilter& a,
-               const SelectorProto::TextFilter& b) {
+bool operator<(const TextFilter& a, const TextFilter& b) {
   return std::make_tuple(a.re2(), a.case_sensitive()) <
          std::make_tuple(b.re2(), b.case_sensitive());
 }
@@ -55,18 +55,33 @@ bool operator<(const SelectorProto::Filter& a, const SelectorProto::Filter& b) {
              std::make_tuple(b.pseudo_element_content().pseudo_type(),
                              b.pseudo_element_content().content());
 
+    case SelectorProto::Filter::kCssStyle:
+      return std::make_tuple(a.css_style().property(),
+                             a.css_style().pseudo_element(),
+                             a.css_style().value()) <
+             std::make_tuple(b.css_style().property(),
+                             b.css_style().pseudo_element(),
+                             b.css_style().value());
+
+    case SelectorProto::Filter::kOnTop:
+      return std::make_tuple(a.on_top().scroll_into_view_if_needed(),
+                             a.on_top().accept_element_if_not_in_view()) <
+             std::make_tuple(b.on_top().scroll_into_view_if_needed(),
+                             b.on_top().accept_element_if_not_in_view());
+
     case SelectorProto::Filter::kBoundingBox:
+      return a.bounding_box().require_nonempty() <
+             b.bounding_box().require_nonempty();
+
     case SelectorProto::Filter::kEnterFrame:
-    case SelectorProto::Filter::kPickOne:
     case SelectorProto::Filter::kLabelled:
       return false;
 
-    case SelectorProto::Filter::kClosest: {
-      return std::make_tuple(a.closest().target(), a.closest().in_alignment(),
-                             a.closest().relative_position()) <
-             std::make_tuple(b.closest().target(), b.closest().in_alignment(),
-                             b.closest().relative_position());
-    }
+    case SelectorProto::Filter::kMatchCssSelector:
+      return a.match_css_selector() < b.match_css_selector();
+
+    case SelectorProto::Filter::kNthMatch:
+      return a.nth_match().index() < b.nth_match().index();
 
     case SelectorProto::Filter::FILTER_NOT_SET:
       return false;
@@ -83,7 +98,7 @@ SelectorProto ToSelectorProto(const std::vector<std::string>& s) {
   if (!s.empty()) {
     for (size_t i = 0; i < s.size(); i++) {
       if (i > 0) {
-        proto.add_filters()->mutable_pick_one();
+        proto.add_filters()->mutable_nth_match()->set_index(0);
         proto.add_filters()->mutable_enter_frame();
       }
       proto.add_filters()->set_css_selector(s[i]);
@@ -183,66 +198,6 @@ bool Selector::empty() const {
   return !has_css_selector;
 }
 
-base::Optional<std::string> Selector::ExtractSingleCssSelectorForAutofill()
-    const {
-  int last_enter_frame_index = -1;
-  for (int i = proto.filters().size() - 1; i >= 0; i--) {
-    if (proto.filters(i).filter_case() == SelectorProto::Filter::kEnterFrame) {
-      last_enter_frame_index = i;
-      break;
-    }
-  }
-  std::string css_selector;
-  for (int i = last_enter_frame_index + 1; i < proto.filters().size(); i++) {
-    const SelectorProto::Filter& filter = proto.filters(i);
-    switch (filter.filter_case()) {
-      case SelectorProto::Filter::kCssSelector:
-        if (css_selector.empty()) {
-          css_selector = filter.css_selector();
-        } else {
-          VLOG(1) << __func__
-                  << " Selector with multiple CSS selectors not supported for "
-                     "autofill: "
-                  << *this;
-          return base::nullopt;
-        }
-        break;
-
-      case SelectorProto::Filter::kBoundingBox:
-      case SelectorProto::Filter::kPickOne:
-        // Ignore these; they're not relevant for the autofill use-case
-        break;
-
-      case SelectorProto::Filter::kInnerText:
-      case SelectorProto::Filter::kValue:
-      case SelectorProto::Filter::kPseudoType:
-      case SelectorProto::Filter::kPseudoElementContent:
-      case SelectorProto::Filter::kLabelled:
-      case SelectorProto::Filter::kClosest:
-        VLOG(1) << __func__
-                << " Selector feature not supported by autofill: " << *this;
-        return base::nullopt;
-
-      case SelectorProto::Filter::FILTER_NOT_SET:
-        VLOG(1) << __func__ << " Unknown filter type in: " << *this;
-        return base::nullopt;
-
-      case SelectorProto::Filter::kEnterFrame:
-        // This cannot possibly happen, since the iteration started after the
-        // last enter_frame.
-        NOTREACHED();
-        break;
-    }
-  }
-  if (css_selector.empty()) {
-    VLOG(1) << __func__
-            << " Selector without CSS selector not supported by autofill: "
-            << *this;
-    return base::nullopt;
-  }
-  return css_selector;
-}
-
 std::ostream& operator<<(std::ostream& out, const Selector& selector) {
   return out << selector.proto;
 }
@@ -255,8 +210,7 @@ std::ostream& operator<<(std::ostream& out, PseudoType pseudo_type) {
   return out << PseudoTypeName(pseudo_type);
 }
 
-std::ostream& operator<<(std::ostream& out,
-                         const SelectorProto::TextFilter& c) {
+std::ostream& operator<<(std::ostream& out, const TextFilter& c) {
   out << "/" << c.re2() << "/";
   if (c.case_sensitive()) {
     out << "i";
@@ -319,38 +273,41 @@ std::ostream& operator<<(std::ostream& out, const SelectorProto::Filter& f) {
           << "~=" << f.pseudo_element_content().content();
       return out;
 
-    case SelectorProto::Filter::kBoundingBox:
-      out << "bounding_box";
+    case SelectorProto::Filter::kCssStyle:
+      if (!f.css_style().pseudo_element().empty()) {
+        out << f.css_style().pseudo_element() << " ";
+      }
+      out << "style." << f.css_style().property()
+          << "~=" << f.css_style().value();
       return out;
 
-    case SelectorProto::Filter::kPickOne:
-      out << "pick_one";
+    case SelectorProto::Filter::kBoundingBox:
+      if (f.bounding_box().require_nonempty()) {
+        out << "bounding_box (nonempty)";
+      } else {
+        out << "bounding_box (any)";
+      }
+      return out;
+
+    case SelectorProto::Filter::kNthMatch:
+      out << "nth_match[" << f.nth_match().index() << "]";
       return out;
 
     case SelectorProto::Filter::kLabelled:
       out << "labelled";
       return out;
 
-    case SelectorProto::Filter::kClosest:
-      out << "closest to " << f.closest().target();
-      switch (f.closest().relative_position()) {
-        case SelectorProto::ProximityFilter::UNSPECIFIED_POSITION:
-          break;
-        case SelectorProto::ProximityFilter::ABOVE:
-          out << " above";
-          break;
-        case SelectorProto::ProximityFilter::BELOW:
-          out << " below";
-          break;
-        case SelectorProto::ProximityFilter::RIGHT:
-          out << " right";
-          break;
-        case SelectorProto::ProximityFilter::LEFT:
-          out << " left";
-          break;
+    case SelectorProto::Filter::kMatchCssSelector:
+      out << "matches: " << f.css_selector();
+      return out;
+
+    case SelectorProto::Filter::kOnTop:
+      out << "on_top";
+      if (!f.on_top().scroll_into_view_if_needed()) {
+        out << "(no scroll)";
       }
-      if (f.closest().in_alignment()) {
-        out << " in alignment";
+      if (f.on_top().accept_element_if_not_in_view()) {
+        out << "(accept not in view)";
       }
       return out;
 

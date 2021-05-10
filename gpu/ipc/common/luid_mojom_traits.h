@@ -5,12 +5,15 @@
 #ifndef GPU_IPC_COMMON_LUID_MOJOM_TRAITS_H_
 #define GPU_IPC_COMMON_LUID_MOJOM_TRAITS_H_
 
+#include <windows.h>
+
+#include "gpu/gpu_export.h"
 #include "gpu/ipc/common/luid.mojom-shared.h"
 
 namespace mojo {
 
 template <>
-struct StructTraits<gpu::mojom::LuidDataView, LUID> {
+struct GPU_EXPORT StructTraits<gpu::mojom::LuidDataView, LUID> {
   static bool Read(gpu::mojom::LuidDataView data, LUID* out) {
     out->HighPart = data.high();
     out->LowPart = data.low();

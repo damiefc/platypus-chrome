@@ -34,16 +34,15 @@
 #include "cc/trees/paint_holding_commit_trigger.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
-#include "third_party/blink/public/common/feature_policy/feature_policy_features.h"
 #include "third_party/blink/public/common/page/drag_operation.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy_features.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/blame_context.h"
-#include "third_party/blink/public/platform/web_battery_savings.h"
 #include "third_party/blink/public/web/web_swap_result.h"
-#include "third_party/blink/public/web/web_widget_client.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/html/battery_savings.h"
 #include "third_party/blink/renderer/core/html/forms/external_date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/popup_menu.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
@@ -57,6 +56,7 @@
 #include "third_party/blink/renderer/platform/transforms/transformation_matrix.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "ui/gfx/delegated_ink_metadata.h"
 
 // To avoid conflicts with the CreateWindow macro from the Windows SDK...
 #undef CreateWindow
@@ -83,6 +83,7 @@ class FileChooser;
 class Frame;
 class FullscreenOptions;
 class HTMLFormControlElement;
+class HTMLFormElement;
 class HTMLInputElement;
 class HTMLSelectElement;
 class HitTestLocation;
@@ -105,8 +106,8 @@ struct DateTimeChooserParameters;
 struct FrameLoadRequest;
 struct ViewportDescription;
 struct ScreenInfo;
+struct ScreenInfos;
 struct WebWindowFeatures;
-struct WebRect;
 
 namespace mojom {
 namespace blink {
@@ -134,24 +135,31 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
 
   // For non-composited WebViews that exist to contribute to a "parent" WebView
   // painting. This informs the client of the area that needs to be redrawn.
-  virtual void InvalidateRect(const IntRect& update_rect) = 0;
+  virtual void InvalidateContainer() = 0;
 
   // Converts the rect from the viewport coordinates to screen coordinates.
   virtual IntRect ViewportToScreen(const IntRect&,
                                    const LocalFrameView*) const = 0;
 
+  void ScheduleAnimation(const LocalFrameView* view) {
+    ScheduleAnimation(view, base::TimeDelta());
+  }
   virtual void ScheduleAnimation(const LocalFrameView*,
-                                 base::TimeDelta = base::TimeDelta()) = 0;
+                                 base::TimeDelta delay) = 0;
 
-  // Adjusts |pending_rect| for the minimum window size and |frame|'s screen,
-  // then calls SetWindowRect on |frame| with the adjusted rectangle.
+  // Adjusts |pending_rect| for the minimum window size and |frame|'s screen
+  // and returns the adjusted value.
   // Cross-screen window placements are passed on without same-screen clamping
   // if the |requesting_frame| (i.e. the opener or |frame| itself) has
   // experimental window placement features enabled. The browser will check
   // permissions before actually supporting cross-screen placement requests.
+  IntRect CalculateWindowRectWithAdjustment(const IntRect& pending_rect,
+                                            LocalFrame& frame,
+                                            LocalFrame& requesting_frame);
+
+  // Calls CalculateWindowRectWithAdjustment, then SetWindowRect.
   void SetWindowRectWithAdjustment(const IntRect& pending_rect,
-                                   LocalFrame& frame,
-                                   LocalFrame& requesting_frame);
+                                   LocalFrame& frame);
 
   // This gives the rect of the top level window that the given LocalFrame is a
   // part of.
@@ -211,9 +219,18 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                      const AtomicString& frame_name,
                      const WebWindowFeatures&,
                      network::mojom::blink::WebSandboxFlags,
-                     const FeaturePolicyFeatureState&,
-                     const SessionStorageNamespaceId&);
-  virtual void Show(NavigationPolicy) = 0;
+                     const SessionStorageNamespaceId&,
+                     bool& consumed_user_gesture);
+
+  // Show a previously created Page that was created via CreateWindow. This
+  // should only be called once the newly created window when it is ready to be
+  // shown. Under some circumstances CreateWindow's implementation may return a
+  // previously shown page. Calling this method should still work and the
+  // browser will discard the unnecessary show request.
+  virtual void Show(const blink::LocalFrameToken& opener_frame_token,
+                    NavigationPolicy navigation_policy,
+                    const IntRect& initial_rect,
+                    bool consumed_user_gesture) = 0;
 
   // All the parameters should be in viewport space. That is, if an event
   // scrolls by 10 px, but due to a 2X page scale we apply a 5px scroll to the
@@ -249,8 +266,10 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
   virtual void SetOverscrollBehavior(LocalFrame& main_frame,
                                      const cc::OverscrollBehavior&) = 0;
 
-  virtual bool ShouldReportDetailedMessageForSource(LocalFrame&,
-                                                    const String& source) = 0;
+  virtual bool ShouldReportDetailedMessageForSourceAndSeverity(
+      LocalFrame&,
+      mojom::blink::ConsoleMessageLevel log_level,
+      const String& source) = 0;
   virtual void AddMessageToConsole(LocalFrame*,
                                    mojom::ConsoleMessageSource,
                                    mojom::ConsoleMessageLevel,
@@ -274,9 +293,10 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                             String& result);
   virtual bool TabsToLinks() = 0;
 
-  virtual ScreenInfo GetScreenInfo(LocalFrame& frame) const = 0;
-  virtual void SetCursor(const ui::Cursor&, LocalFrame* local_root) = 0;
+  virtual const ScreenInfo& GetScreenInfo(LocalFrame& frame) const = 0;
+  virtual const ScreenInfos& GetScreenInfos(LocalFrame& frame) const = 0;
 
+  virtual void SetCursor(const ui::Cursor&, LocalFrame* local_root) = 0;
   virtual void SetCursorOverridden(bool) = 0;
 
   virtual void AutoscrollStart(const gfx::PointF& position, LocalFrame*) {}
@@ -306,7 +326,7 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
 
   virtual void EnablePreferredSizeChangedMode() {}
 
-  virtual void ZoomToFindInPageRect(const WebRect&) {}
+  virtual void ZoomToFindInPageRect(const gfx::Rect&) {}
 
   virtual void ContentsSizeChanged(LocalFrame*, const IntSize&) const = 0;
   // Call during pinch gestures, or when page-scale changes on main-frame load.
@@ -322,6 +342,16 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                                const HitTestLocation&,
                                const HitTestResult&);
   virtual void SetToolTip(LocalFrame&, const String&, TextDirection) = 0;
+  void ElementFocusedFromKeypress(LocalFrame&, const Element*);
+  // This function allows us to trigger a tooltip to show from a keypress. The
+  // tooltip will be positioned in the gfx::Rect passed by parameter. That rect
+  // corresponds to the focused element's bounds, which are in viewport
+  // coordinates at this point. They will be converted to enclosed DIPS before
+  // being passed to the browser process.
+  virtual void UpdateTooltipFromKeyboard(LocalFrame&,
+                                         const String&,
+                                         TextDirection,
+                                         const gfx::Rect&) = 0;
   void ClearToolTip(LocalFrame&);
   String GetLastToolTipTextForTesting() {
     return current_tool_tip_text_for_test_;
@@ -374,7 +404,9 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                                FullscreenRequestType) {}
   virtual void ExitFullscreen(LocalFrame&) {}
   virtual void FullscreenElementChanged(Element* old_element,
-                                        Element* new_element) {}
+                                        Element* new_element,
+                                        const FullscreenOptions* options,
+                                        FullscreenRequestType) {}
 
   virtual void AnimateDoubleTapZoom(const gfx::Point& point,
                                     const gfx::Rect& rect) {}
@@ -431,21 +463,6 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
 
   virtual bool IsSVGImageChromeClient() const { return false; }
 
-  virtual bool RequestPointerLock(LocalFrame*,
-                                  WebWidgetClient::PointerLockCallback callback,
-                                  bool request_unadjusted_movement) {
-    return false;
-  }
-
-  virtual bool RequestPointerLockChange(
-      LocalFrame*,
-      WebWidgetClient::PointerLockCallback callback,
-      bool request_unadjusted_movement) {
-    return false;
-  }
-
-  virtual void RequestPointerUnlock(LocalFrame*) {}
-
   virtual IntSize MinimumWindowSize() const { return IntSize(100, 100); }
 
   virtual bool IsChromeClientImpl() const { return false; }
@@ -490,11 +507,13 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
   }
 
   // The |callback| will be fired when the corresponding renderer frame for the
-  // |frame| is submitted (still called "swapped") to the display compositor
-  // (either with DidSwap or DidNotSwap).
+  // |frame| is presented in the display compositor. The reported time could
+  // sometimes be the swap time, as is the case when the swap is aborted. In
+  // this case, WebSwapResult will be DidNotSwap.
   using ReportTimeCallback =
       WTF::CrossThreadOnceFunction<void(WebSwapResult, base::TimeTicks)>;
-  virtual void NotifySwapTime(LocalFrame& frame, ReportTimeCallback callback) {}
+  virtual void NotifyPresentationTime(LocalFrame& frame,
+                                      ReportTimeCallback callback) {}
 
   // Enable or disable BeginMainFrameNotExpected signals from the compositor of
   // the local root of |frame|. These signals would be consumed by the blink
@@ -521,10 +540,14 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
 
   virtual void SetDelegatedInkMetadata(
       LocalFrame* frame,
-      std::unique_ptr<viz::DelegatedInkMetadata> metadata) {}
+      std::unique_ptr<gfx::DelegatedInkMetadata> metadata) {}
 
   virtual void BatterySavingsChanged(LocalFrame& main_frame,
-                                     WebBatterySavingsFlags savings) = 0;
+                                     BatterySavingsFlags savings) = 0;
+
+  virtual void FormElementReset(HTMLFormElement& element) {}
+
+  virtual void PasswordFieldReset(HTMLInputElement& element) {}
 
  protected:
   ChromeClient() = default;
@@ -545,8 +568,8 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                                      const AtomicString& frame_name,
                                      const WebWindowFeatures&,
                                      network::mojom::blink::WebSandboxFlags,
-                                     const FeaturePolicyFeatureState&,
-                                     const SessionStorageNamespaceId&) = 0;
+                                     const SessionStorageNamespaceId&,
+                                     bool& consumed_user_gesture) = 0;
 
  private:
   bool CanOpenUIElementIfDuringPageDismissal(Frame& main_frame,

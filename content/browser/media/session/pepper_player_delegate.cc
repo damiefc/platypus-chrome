@@ -7,7 +7,6 @@
 #include "base/command_line.h"
 #include "content/browser/media/session/pepper_playback_observer.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
-#include "content/common/frame_messages.h"
 #include "media/base/media_switches.h"
 #include "services/media_session/public/cpp/media_position.h"
 
@@ -54,6 +53,10 @@ void PepperPlayerDelegate::OnSeekBackward(int player_id,
   // Cannot seek pepper player. Do nothing.
 }
 
+void PepperPlayerDelegate::OnSeekTo(int player_id, base::TimeDelta seek_time) {
+  // Cannot seek pepper player. Do nothing.
+}
+
 void PepperPlayerDelegate::OnSetVolumeMultiplier(int player_id,
                                                  double volume_multiplier) {
   if (!base::FeatureList::IsEnabled(media::kAudioFocusDuckFlash))
@@ -94,8 +97,13 @@ RenderFrameHost* PepperPlayerDelegate::render_frame_host() const {
 }
 
 void PepperPlayerDelegate::SetVolume(int player_id, double volume) {
-  render_frame_host_->Send(new FrameMsg_SetPepperVolume(
-      render_frame_host_->GetRoutingID(), pp_instance_, volume));
+  static_cast<RenderFrameHostImpl*>(render_frame_host_)
+      ->PepperSetVolume(pp_instance_, volume);
+}
+
+bool PepperPlayerDelegate::HasAudio(int player_id) const {
+  // We don't actually know whether a pepper player has both audio/video.
+  return true;
 }
 
 bool PepperPlayerDelegate::HasVideo(int player_id) const {

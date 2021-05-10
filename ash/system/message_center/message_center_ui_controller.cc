@@ -27,14 +27,14 @@ MessageCenterUiController::~MessageCenterUiController() {
   message_center_->RemoveObserver(this);
 }
 
-bool MessageCenterUiController::ShowMessageCenterBubble(bool show_by_click) {
+bool MessageCenterUiController::ShowMessageCenterBubble() {
   if (message_center_visible_)
     return true;
 
   HidePopupBubbleInternal();
 
   message_center_->SetVisibility(message_center::VISIBILITY_MESSAGE_CENTER);
-  message_center_visible_ = delegate_->ShowMessageCenter(show_by_click);
+  message_center_visible_ = delegate_->ShowMessageCenter();
   if (message_center_visible_)
     NotifyUiControllerChanged();
   return message_center_visible_;
@@ -120,14 +120,16 @@ void MessageCenterUiController::OnNotificationUpdated(
 void MessageCenterUiController::OnNotificationClicked(
     const std::string& notification_id,
     const base::Optional<int>& button_index,
-    const base::Optional<base::string16>& reply) {
+    const base::Optional<std::u16string>& reply) {
   if (popups_visible_)
     OnMessageCenterChanged();
 
   // Note: we use |message_center_visible_| instead of |popups_visible_| here
   // due to timing issues when dismissing the last popup notification.
   bool is_popup = !message_center_visible_;
-  if (button_index.has_value())
+  if (reply.has_value())
+    metrics_utils::LogInlineReplySent(notification_id, is_popup);
+  else if (button_index.has_value())
     metrics_utils::LogClickedActionButton(notification_id, is_popup);
   else
     metrics_utils::LogClickedBody(notification_id, is_popup);

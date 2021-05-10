@@ -7,10 +7,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <string>
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -27,7 +28,7 @@
 #include "base/task/post_task.h"
 #include "base/task/task_observer.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_simple_task_runner.h"
@@ -36,6 +37,7 @@
 #include "base/threading/sequence_local_storage_slot.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -49,7 +51,6 @@
 #if defined(OS_WIN)
 #include "base/message_loop/message_pump_win.h"
 #include "base/process/memory.h"
-#include "base/strings/string16.h"
 #include "base/win/current_module.h"
 #include "base/win/message_window.h"
 #include "base/win/scoped_handle.h"
@@ -386,27 +387,54 @@ void RecursiveFuncWin(scoped_refptr<SingleThreadTaskRunner> task_runner,
 
 #endif  // defined(OS_WIN)
 
-void PostNTasksThenQuit(int posts_remaining) {
-  if (posts_remaining > 1) {
-    ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, BindOnce(&PostNTasksThenQuit, posts_remaining - 1));
-  } else {
-    RunLoop::QuitCurrentWhenIdleDeprecated();
+void Post128KTasksThenQuit(SingleThreadTaskRunner* executor_task_runner,
+                           TimeTicks begin_ticks,
+                           TimeTicks last_post_ticks,
+                           TimeDelta slowest_delay,
+                           OnceClosure on_done,
+                           int num_posts_done = 0) {
+  const int kNumTimes = 128000;
+
+  // Tasks should be running on a decent heart beat. Some platforms/bots however
+  // have a hard time posting+running *all* tasks before test timeout, add
+  // detailed logging for diagnosis where this flakes.
+  const auto now = TimeTicks::Now();
+  const auto scheduling_delay = now - last_post_ticks;
+  if (scheduling_delay > slowest_delay)
+    slowest_delay = scheduling_delay;
+
+  if (num_posts_done == kNumTimes) {
+    std::move(on_done).Run();
+    return;
+  } else if (now - begin_ticks >= TestTimeouts::action_max_timeout()) {
+    ADD_FAILURE() << "Couldn't run all tasks."
+                  << "\nNumber of tasks remaining: "
+                  << kNumTimes - num_posts_done
+                  << "\nSlowest scheduling delay: " << slowest_delay
+                  << "\nAverage per task: "
+                  << (now - begin_ticks) / num_posts_done;
+    std::move(on_done).Run();
+    return;
   }
+
+  executor_task_runner->PostTask(
+      FROM_HERE,
+      BindOnce(&Post128KTasksThenQuit, Unretained(executor_task_runner),
+               begin_ticks, now, slowest_delay, std::move(on_done),
+               num_posts_done + 1));
 }
 
 #if defined(OS_WIN)
 
 class TestIOHandler : public MessagePumpForIO::IOHandler {
  public:
-  TestIOHandler(const wchar_t* name, HANDLE signal, bool wait);
+  TestIOHandler(const wchar_t* name, HANDLE signal);
 
   void OnIOCompleted(MessagePumpForIO::IOContext* context,
                      DWORD bytes_transfered,
                      DWORD error) override;
 
   void Init();
-  void WaitForIO();
   OVERLAPPED* context() { return &context_.overlapped; }
   DWORD size() { return sizeof(buffer_); }
 
@@ -415,11 +443,10 @@ class TestIOHandler : public MessagePumpForIO::IOHandler {
   MessagePumpForIO::IOContext context_;
   HANDLE signal_;
   win::ScopedHandle file_;
-  bool wait_;
 };
 
-TestIOHandler::TestIOHandler(const wchar_t* name, HANDLE signal, bool wait)
-    : MessagePumpForIO::IOHandler(FROM_HERE), signal_(signal), wait_(wait) {
+TestIOHandler::TestIOHandler(const wchar_t* name, HANDLE signal)
+    : MessagePumpForIO::IOHandler(FROM_HERE), signal_(signal) {
   memset(buffer_, 0, sizeof(buffer_));
 
   file_.Set(CreateFile(name, GENERIC_READ, 0, NULL, OPEN_EXISTING,
@@ -433,8 +460,6 @@ void TestIOHandler::Init() {
   DWORD read;
   EXPECT_FALSE(ReadFile(file_.Get(), buffer_, size(), &read, context()));
   EXPECT_EQ(static_cast<DWORD>(ERROR_IO_PENDING), GetLastError());
-  if (wait_)
-    WaitForIO();
 }
 
 void TestIOHandler::OnIOCompleted(MessagePumpForIO::IOContext* context,
@@ -442,11 +467,6 @@ void TestIOHandler::OnIOCompleted(MessagePumpForIO::IOContext* context,
                                   DWORD error) {
   ASSERT_TRUE(context == &context_);
   ASSERT_TRUE(SetEvent(signal_));
-}
-
-void TestIOHandler::WaitForIO() {
-  EXPECT_TRUE(CurrentIOThread::Get()->WaitForIOCompletion(300, this));
-  EXPECT_TRUE(CurrentIOThread::Get()->WaitForIOCompletion(400, this));
 }
 
 void RunTest_IOHandler() {
@@ -463,7 +483,7 @@ void RunTest_IOHandler() {
   options.message_pump_type = MessagePumpType::IO;
   ASSERT_TRUE(thread.StartWithOptions(options));
 
-  TestIOHandler handler(kPipeName, callback_called.Get(), false);
+  TestIOHandler handler(kPipeName, callback_called.Get());
   thread.task_runner()->PostTask(
       FROM_HERE, BindOnce(&TestIOHandler::Init, Unretained(&handler)));
   // Make sure the thread runs and sleeps for lack of work.
@@ -474,58 +494,6 @@ void RunTest_IOHandler() {
   EXPECT_TRUE(WriteFile(server.Get(), buffer, sizeof(buffer), &written, NULL));
 
   DWORD result = WaitForSingleObject(callback_called.Get(), 1000);
-  EXPECT_EQ(WAIT_OBJECT_0, result);
-
-  thread.Stop();
-}
-
-void RunTest_WaitForIO() {
-  win::ScopedHandle callback1_called(CreateEvent(NULL, TRUE, FALSE, NULL));
-  win::ScopedHandle callback2_called(CreateEvent(NULL, TRUE, FALSE, NULL));
-  ASSERT_TRUE(callback1_called.IsValid());
-  ASSERT_TRUE(callback2_called.IsValid());
-
-  const wchar_t* kPipeName1 = L"\\\\.\\pipe\\iohandler_pipe1";
-  const wchar_t* kPipeName2 = L"\\\\.\\pipe\\iohandler_pipe2";
-  win::ScopedHandle server1(
-      CreateNamedPipe(kPipeName1, PIPE_ACCESS_OUTBOUND, 0, 1, 0, 0, 0, NULL));
-  win::ScopedHandle server2(
-      CreateNamedPipe(kPipeName2, PIPE_ACCESS_OUTBOUND, 0, 1, 0, 0, 0, NULL));
-  ASSERT_TRUE(server1.IsValid());
-  ASSERT_TRUE(server2.IsValid());
-
-  Thread thread("IOHandler test");
-  Thread::Options options;
-  options.message_pump_type = MessagePumpType::IO;
-  ASSERT_TRUE(thread.StartWithOptions(options));
-
-  TestIOHandler handler1(kPipeName1, callback1_called.Get(), false);
-  TestIOHandler handler2(kPipeName2, callback2_called.Get(), true);
-  thread.task_runner()->PostTask(
-      FROM_HERE, BindOnce(&TestIOHandler::Init, Unretained(&handler1)));
-  // TODO(ajwong): Do we really need such long Sleeps in this function?
-  // Make sure the thread runs and sleeps for lack of work.
-  TimeDelta delay = TimeDelta::FromMilliseconds(100);
-  PlatformThread::Sleep(delay);
-  thread.task_runner()->PostTask(
-      FROM_HERE, BindOnce(&TestIOHandler::Init, Unretained(&handler2)));
-  PlatformThread::Sleep(delay);
-
-  // At this time handler1 is waiting to be called, and the thread is waiting
-  // on the Init method of handler2, filtering only handler2 callbacks.
-
-  const char buffer[] = "Hello there!";
-  DWORD written;
-  EXPECT_TRUE(WriteFile(server1.Get(), buffer, sizeof(buffer), &written, NULL));
-  PlatformThread::Sleep(2 * delay);
-  EXPECT_EQ(static_cast<DWORD>(WAIT_TIMEOUT),
-            WaitForSingleObject(callback1_called.Get(), 0))
-      << "handler1 has not been called";
-
-  EXPECT_TRUE(WriteFile(server2.Get(), buffer, sizeof(buffer), &written, NULL));
-
-  HANDLE objects[2] = {callback1_called.Get(), callback2_called.Get()};
-  DWORD result = WaitForMultipleObjects(2, objects, TRUE, 1000);
   EXPECT_EQ(WAIT_OBJECT_0, result);
 
   thread.Stop();
@@ -1314,26 +1282,29 @@ TEST_P(SingleThreadTaskExecutorTypedTest, RunLoopQuitOrderAfter) {
   EXPECT_EQ(static_cast<size_t>(task_index), order.Size());
 }
 
-// There was a bug in the MessagePumpGLib where posting tasks recursively
-// caused the message loop to hang, due to the buffer of the internal pipe
-// becoming full. Test all SingleThreadTaskExecutor types to ensure this issue
-// does not exist in other MessagePumps.
+// Regression test for crbug.com/170904 where posting tasks recursively caused
+// the message loop to hang in MessagePumpGLib, due to the buffer of the
+// internal pipe becoming full. Test all SingleThreadTaskExecutor types to
+// ensure this issue does not exist in other MessagePumps.
 //
-// On Linux, the pipe buffer size is 64KiB by default. The bug caused one
-// byte accumulated in the pipe per two posts, so we should repeat 128K
-// times to reproduce the bug.
-#if defined(OS_FUCHSIA)
-// TODO(crbug.com/810077): This is flaky on Fuchsia.
-#define MAYBE_RecursivePosts DISABLED_RecursivePosts
+// On Linux, the pipe buffer size is 64KiB by default. The bug caused one byte
+// accumulated in the pipe per two posts, so we should repeat 128K times to
+// reproduce the bug.
+#if defined(OS_CHROMEOS)
+// TODO(crbug.com/1188497): This test is unreasonably slow on CrOS and flakily
+// times out (100x slower than other platforms which take < 1s to complete
+// it).
+#define MAYBE_RecursivePostsDoNotFloodPipe DISABLED_RecursivePostsDoNotFloodPipe
 #else
-#define MAYBE_RecursivePosts RecursivePosts
+#define MAYBE_RecursivePostsDoNotFloodPipe RecursivePostsDoNotFloodPipe
 #endif
-TEST_P(SingleThreadTaskExecutorTypedTest, MAYBE_RecursivePosts) {
-  const int kNumTimes = 1 << 17;
+TEST_P(SingleThreadTaskExecutorTypedTest, MAYBE_RecursivePostsDoNotFloodPipe) {
   SingleThreadTaskExecutor executor(GetParam());
-  executor.task_runner()->PostTask(FROM_HERE,
-                                   BindOnce(&PostNTasksThenQuit, kNumTimes));
-  RunLoop().Run();
+  const auto begin_ticks = TimeTicks::Now();
+  RunLoop run_loop;
+  Post128KTasksThenQuit(executor.task_runner().get(), begin_ticks, begin_ticks,
+                        TimeDelta(), run_loop.QuitClosure());
+  run_loop.Run();
 }
 
 TEST_P(SingleThreadTaskExecutorTypedTest, NestableTasksAllowedAtTopLevel) {
@@ -1884,10 +1855,6 @@ TEST(SingleThreadTaskExecutorTest, NestingSupport2) {
 #if defined(OS_WIN)
 TEST(SingleThreadTaskExecutorTest, IOHandler) {
   RunTest_IOHandler();
-}
-
-TEST(SingleThreadTaskExecutorTest, WaitForIO) {
-  RunTest_WaitForIO();
 }
 
 TEST(SingleThreadTaskExecutorTest, HighResolutionTimer) {

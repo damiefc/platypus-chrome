@@ -9,12 +9,14 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "base/containers/span.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/trace_event/trace_event.h"
 #include "ipc/ipc_channel_mojo.h"
 #include "mojo/public/cpp/bindings/message.h"
 
@@ -62,7 +64,9 @@ bool MessagePipeReader::Send(std::unique_ptr<Message> message) {
   if (!sender_)
     return false;
 
-  sender_->Receive(MessageView(*message, std::move(handles)));
+  base::span<const uint8_t> bytes(static_cast<const uint8_t*>(message->data()),
+                                  message->size());
+  sender_->Receive(MessageView(bytes, std::move(handles)));
   DVLOG(4) << "Send " << message->type() << ": " << message->size();
   return true;
 }
@@ -82,11 +86,12 @@ void MessagePipeReader::SetPeerPid(int32_t peer_pid) {
 }
 
 void MessagePipeReader::Receive(MessageView message_view) {
-  if (!message_view.size()) {
+  if (message_view.bytes().empty()) {
     delegate_->OnBrokenDataReceived();
     return;
   }
-  Message message(message_view.data(), message_view.size());
+  Message message(reinterpret_cast<const char*>(message_view.bytes().data()),
+                  message_view.bytes().size());
   if (!message.IsValid()) {
     delegate_->OnBrokenDataReceived();
     return;

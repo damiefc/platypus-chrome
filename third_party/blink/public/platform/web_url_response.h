@@ -245,28 +245,31 @@ class WebURLResponse {
   BLINK_PLATFORM_EXPORT bool WasFetchedViaSPDY() const;
   BLINK_PLATFORM_EXPORT void SetWasFetchedViaSPDY(bool);
 
-  // Flag whether this request was loaded via a ServiceWorker. See
-  // network::ResourceResponseInfo::was_fetched_via_service_worker for details.
+  // Flag whether this request was loaded via a ServiceWorker.
+  // See network.mojom.URLResponseHead.was_fetched_via_service_worker.
   BLINK_PLATFORM_EXPORT bool WasFetchedViaServiceWorker() const;
   BLINK_PLATFORM_EXPORT void SetWasFetchedViaServiceWorker(bool);
 
-  // Set when this request was loaded via a ServiceWorker. See
-  // network::ResourceResponseInfo::service_worker_response_source for details.
+  // Set when this request was loaded via a ServiceWorker.
+  // See network.mojom.URLResponseHead.service_worker_response_source.
   BLINK_PLATFORM_EXPORT network::mojom::FetchResponseSource
   GetServiceWorkerResponseSource() const;
   BLINK_PLATFORM_EXPORT void SetServiceWorkerResponseSource(
       network::mojom::FetchResponseSource);
 
-  // See network::ResourceResponseInfo::was_fallback_required_by_service_worker.
-  BLINK_PLATFORM_EXPORT void SetWasFallbackRequiredByServiceWorker(bool);
-
   // https://fetch.spec.whatwg.org/#concept-response-type
   BLINK_PLATFORM_EXPORT void SetType(network::mojom::FetchResponseType);
   BLINK_PLATFORM_EXPORT network::mojom::FetchResponseType GetType() const;
 
+  // Pre-computed padding.  This should only be non-zero if the type is
+  // kOpaque.  In addition, it is only set for responses provided by a
+  // service worker FetchEvent handler.
+  BLINK_PLATFORM_EXPORT void SetPadding(int64_t);
+  BLINK_PLATFORM_EXPORT int64_t GetPadding() const;
+
   // The URL list of the Response object the ServiceWorker passed to
-  // respondWith(). See
-  // network::ResourceResponseInfo::url_list_via_service_worker for details.
+  // respondWith().
+  // See network.mojom.URLResponseHead.url_list_via_service_worker.
   BLINK_PLATFORM_EXPORT void SetUrlListViaServiceWorker(
       const WebVector<WebURL>&);
   // Returns true if the URL list is not empty.
@@ -284,7 +287,7 @@ class WebURLResponse {
       const WebVector<WebString>&);
 
   // Whether service worker navigation preload occurred.
-  // See network::ResourceResponseInfo::did_navigation_preload for details.
+  // See network.mojom.URLResponseHead.did_navigation_preload.
   BLINK_PLATFORM_EXPORT void SetDidServiceWorkerNavigationPreload(bool);
 
   // Remote IP endpoint of the socket which fetched this resource.
@@ -300,6 +303,11 @@ class WebURLResponse {
   BLINK_PLATFORM_EXPORT void SetWasAlpnNegotiated(bool);
   BLINK_PLATFORM_EXPORT WebString AlpnNegotiatedProtocol() const;
   BLINK_PLATFORM_EXPORT void SetAlpnNegotiatedProtocol(const WebString&);
+
+  BLINK_PLATFORM_EXPORT bool HasAuthorizationCoveredByWildcardOnPreflight()
+      const;
+  BLINK_PLATFORM_EXPORT void SetHasAuthorizationCoveredByWildcardOnPreflight(
+      bool);
 
   // Whether the response could use alternate protocol.
   BLINK_PLATFORM_EXPORT bool WasAlternateProtocolAvailable() const;
@@ -327,6 +335,19 @@ class WebURLResponse {
   // Whether this resource is from a MHTML archive.
   BLINK_PLATFORM_EXPORT bool FromArchive() const;
 
+  // Sets any DNS aliases for the requested URL. The alias chain order is
+  // expected to be in reverse, from canonical name (i.e. address record name)
+  // through to query name.
+  BLINK_PLATFORM_EXPORT void SetDnsAliases(const WebVector<WebString>&);
+
+  BLINK_PLATFORM_EXPORT WebURL WebBundleURL() const;
+  BLINK_PLATFORM_EXPORT void SetWebBundleURL(const WebURL&);
+
+  BLINK_PLATFORM_EXPORT void SetAuthChallengeInfo(
+      const base::Optional<net::AuthChallengeInfo>&);
+  BLINK_PLATFORM_EXPORT const base::Optional<net::AuthChallengeInfo>&
+  AuthChallengeInfo() const;
+
 #if INSIDE_BLINK
  protected:
   // Permit subclasses to set arbitrary ResourceResponse pointer as
@@ -346,4 +367,4 @@ class WebURLResponse {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_URL_RESPONSE_H_

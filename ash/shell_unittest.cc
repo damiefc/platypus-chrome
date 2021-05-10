@@ -29,9 +29,9 @@
 #include "ash/system/status_area_widget.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
+#include "ash/test/test_widget_builder.h"
 #include "ash/test_shell_delegate.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
-#include "ash/window_factory.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/window_util.h"
@@ -134,12 +134,13 @@ void ExpectAllContainers() {
   EXPECT_FALSE(Shell::GetContainer(root_window, kShellWindowId_PhantomWindow));
 }
 
-views::WidgetDelegateView* CreateModalWidgetDelegate() {
+std::unique_ptr<views::WidgetDelegateView> CreateModalWidgetDelegate() {
   auto delegate = std::make_unique<views::WidgetDelegateView>();
   delegate->SetCanResize(true);
   delegate->SetModalType(ui::MODAL_TYPE_SYSTEM);
-  delegate->SetTitle(base::ASCIIToUTF16("Modal Window"));
-  return delegate.release();
+  delegate->SetOwnedByWidget(true);
+  delegate->SetTitle(u"Modal Window");
+  return delegate;
 }
 
 class SimpleMenuDelegate : public ui::SimpleMenuModel::Delegate {
@@ -161,23 +162,14 @@ class SimpleMenuDelegate : public ui::SimpleMenuModel::Delegate {
 
 class ShellTest : public AshTestBase {
  public:
-  // TODO(jamescook): Convert to AshTestBase::CreateTestWidget().
-  views::Widget* CreateTestWindow(views::Widget::InitParams params) {
-    views::Widget* widget = new views::Widget;
-    params.context = GetContext();
-    widget->Init(std::move(params));
-    return widget;
-  }
-
   void TestCreateWindow(views::Widget::InitParams::Type type,
                         bool always_on_top,
                         aura::Window* expected_container) {
-    views::Widget::InitParams widget_params(type);
+    TestWidgetBuilder builder;
     if (always_on_top)
-      widget_params.z_order = ui::ZOrderLevel::kFloatingWindow;
-
-    views::Widget* widget = CreateTestWindow(std::move(widget_params));
-    widget->Show();
+      builder.SetZOrderLevel(ui::ZOrderLevel::kFloatingWindow);
+    views::Widget* widget =
+        builder.SetWidgetType(type).BuildOwnedByNativeWidget();
 
     EXPECT_TRUE(
         expected_container->Contains(widget->GetNativeWindow()->parent()))
@@ -196,9 +188,11 @@ class ShellTest : public AshTestBase {
               menu_controller->exit_type());
 
     // Create a LockScreen window.
-    views::Widget::InitParams widget_params(
-        views::Widget::InitParams::TYPE_WINDOW);
-    views::Widget* lock_widget = CreateTestWindow(std::move(widget_params));
+    views::Widget* lock_widget =
+        TestWidgetBuilder()
+            .SetWidgetType(views::Widget::InitParams::TYPE_WINDOW)
+            .SetShow(false)
+            .BuildOwnedByNativeWidget();
     Shell::GetContainer(Shell::GetPrimaryRootWindow(),
                         kShellWindowId_LockScreenContainer)
         ->AddChild(lock_widget->GetNativeView());
@@ -265,12 +259,8 @@ TEST_F(ShellTest, CreateWindowWithPreferredSize) {
 }
 
 TEST_F(ShellTest, ChangeZOrderLevel) {
-  views::Widget::InitParams widget_params(
-      views::Widget::InitParams::TYPE_WINDOW);
-
   // Creates a normal window.
-  views::Widget* widget = CreateTestWindow(std::move(widget_params));
-  widget->Show();
+  views::Widget* widget = TestWidgetBuilder().BuildOwnedByNativeWidget();
 
   // It should be in the active desk container.
   EXPECT_TRUE(
@@ -297,12 +287,8 @@ TEST_F(ShellTest, ChangeZOrderLevel) {
 }
 
 TEST_F(ShellTest, CreateModalWindow) {
-  views::Widget::InitParams widget_params(
-      views::Widget::InitParams::TYPE_WINDOW);
-
   // Create a normal window.
-  views::Widget* widget = CreateTestWindow(std::move(widget_params));
-  widget->Show();
+  views::Widget* widget = TestWidgetBuilder().BuildOwnedByNativeWidget();
 
   // It should be in the active desk container.
   EXPECT_TRUE(
@@ -322,21 +308,9 @@ TEST_F(ShellTest, CreateModalWindow) {
   widget->Close();
 }
 
-class TestModalDialogDelegate : public views::DialogDelegateView {
- public:
-  TestModalDialogDelegate() = default;
-
-  // Overridden from views::WidgetDelegate:
-  ui::ModalType GetModalType() const override { return ui::MODAL_TYPE_SYSTEM; }
-};
-
 TEST_F(ShellTest, CreateLockScreenModalWindow) {
-  views::Widget::InitParams widget_params(
-      views::Widget::InitParams::TYPE_WINDOW);
-
   // Create a normal window.
-  views::Widget* widget = CreateTestWindow(std::move(widget_params));
-  widget->Show();
+  views::Widget* widget = TestWidgetBuilder().BuildOwnedByNativeWidget();
   EXPECT_TRUE(widget->GetNativeView()->HasFocus());
 
   // It should be in the active desk container.
@@ -345,7 +319,8 @@ TEST_F(ShellTest, CreateLockScreenModalWindow) {
 
   GetSessionControllerClient()->LockScreen();
   // Create a LockScreen window.
-  views::Widget* lock_widget = CreateTestWindow(std::move(widget_params));
+  views::Widget* lock_widget =
+      TestWidgetBuilder().SetShow(false).BuildOwnedByNativeWidget();
   Shell::GetContainer(Shell::GetPrimaryRootWindow(),
                       kShellWindowId_LockScreenContainer)
       ->AddChild(lock_widget->GetNativeView());
@@ -383,9 +358,9 @@ TEST_F(ShellTest, CreateLockScreenModalWindow) {
       Shell::GetPrimaryRootWindow(), kShellWindowId_SystemModalContainer);
   EXPECT_EQ(modal_container, modal_widget->GetNativeWindow()->parent());
 
-  // Modal dialog without parent, caused crash see crbug.com/226141
+  // Modal widget without parent, caused crash see crbug.com/226141
   views::Widget* modal_dialog = views::DialogDelegate::CreateDialogWidget(
-      new TestModalDialogDelegate(), GetContext(), nullptr);
+      CreateModalWidgetDelegate(), GetContext(), nullptr);
 
   modal_dialog->Show();
   EXPECT_FALSE(modal_dialog->GetNativeView()->HasFocus());
@@ -411,7 +386,7 @@ TEST_F(ShellTest, LockScreenClosesActiveMenu) {
   SimpleMenuDelegate menu_delegate;
   std::unique_ptr<ui::SimpleMenuModel> menu_model(
       new ui::SimpleMenuModel(&menu_delegate));
-  menu_model->AddItem(0, base::ASCIIToUTF16("Menu item"));
+  menu_model->AddItem(0, u"Menu item");
   views::Widget* widget = Shell::GetPrimaryRootWindowController()
                               ->wallpaper_widget_controller()
                               ->GetWidget();
@@ -445,11 +420,9 @@ TEST_F(ShellTest, ManagedWindowModeBasics) {
   //  EXPECT_FALSE(wallpaper->layer());
 
   // Create a normal window.  It is not maximized.
-  views::Widget::InitParams widget_params(
-      views::Widget::InitParams::TYPE_WINDOW);
-  widget_params.bounds.SetRect(11, 22, 300, 400);
-  views::Widget* widget = CreateTestWindow(std::move(widget_params));
-  widget->Show();
+  views::Widget* widget = TestWidgetBuilder()
+                              .SetBounds(gfx::Rect(11, 22, 300, 400))
+                              .BuildOwnedByNativeWidget();
   EXPECT_FALSE(widget->IsMaximized());
 
   // Clean up.
@@ -460,11 +433,9 @@ TEST_F(ShellTest, FullscreenWindowHidesShelf) {
   ExpectAllContainers();
 
   // Create a normal window.  It is not maximized.
-  views::Widget::InitParams widget_params(
-      views::Widget::InitParams::TYPE_WINDOW);
-  widget_params.bounds.SetRect(11, 22, 300, 400);
-  views::Widget* widget = CreateTestWindow(std::move(widget_params));
-  widget->Show();
+  views::Widget* widget = TestWidgetBuilder()
+                              .SetBounds(gfx::Rect(11, 22, 300, 400))
+                              .BuildOwnedByNativeWidget();
   EXPECT_FALSE(widget->IsMaximized());
 
   // Shelf defaults to visible.
@@ -491,7 +462,8 @@ TEST_F(ShellTest, FullscreenWindowHidesShelf) {
 // Various assertions around auto-hide behavior.
 // TODO(jamescook): Move this to ShelfTest.
 TEST_F(ShellTest, ToggleAutoHide) {
-  std::unique_ptr<aura::Window> window = window_factory::NewWindow();
+  std::unique_ptr<aura::Window> window =
+      std::make_unique<aura::Window>(nullptr);
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
   window->SetType(aura::client::WINDOW_TYPE_NORMAL);
   window->Init(ui::LAYER_TEXTURED);

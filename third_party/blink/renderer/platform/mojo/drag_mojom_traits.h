@@ -7,15 +7,15 @@
 
 #include <stdint.h>
 
-#include <string>
-
+#include "mojo/public/cpp/base/big_buffer.h"
 #include "mojo/public/cpp/base/file_path_mojom_traits.h"
 #include "mojo/public/cpp/bindings/array_traits_web_vector.h"
 #include "mojo/public/cpp/bindings/string_traits_wtf.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 #include "mojo/public/cpp/bindings/union_traits.h"
 #include "services/network/public/mojom/referrer_policy.mojom-forward.h"
-#include "third_party/blink/public/mojom/file_system_access/native_file_system_drag_drop_token.mojom-blink.h"
+#include "third_party/blink/public/mojom/data_transfer/data_transfer.mojom-shared.h"
+#include "third_party/blink/public/mojom/file_system_access/file_system_access_data_transfer_token.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/drag.mojom-shared.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
 #include "third_party/blink/renderer/platform/mojo/kurl_mojom_traits.h"
@@ -48,20 +48,21 @@ struct StructTraits<blink::mojom::DragItemStringDataView,
 };
 
 template <>
-struct StructTraits<blink::mojom::DragItemFileDataView,
+struct StructTraits<blink::mojom::DataTransferFileDataView,
                     blink::WebDragData::Item> {
   static base::FilePath path(const blink::WebDragData::Item& item);
   static base::FilePath display_name(const blink::WebDragData::Item& item);
-  static mojo::PendingRemote<blink::mojom::blink::NativeFileSystemDragDropToken>
-  native_file_system_token(const blink::WebDragData::Item& item);
-  static bool Read(blink::mojom::DragItemFileDataView data,
+  static mojo::PendingRemote<
+      blink::mojom::blink::FileSystemAccessDataTransferToken>
+  file_system_access_token(const blink::WebDragData::Item& item);
+  static bool Read(blink::mojom::DataTransferFileDataView data,
                    blink::WebDragData::Item* out);
 };
 
 template <>
 struct StructTraits<blink::mojom::DragItemBinaryDataView,
                     blink::WebDragData::Item> {
-  static blink::WebVector<uint8_t> data(const blink::WebDragData::Item& item);
+  static mojo_base::BigBuffer data(const blink::WebDragData::Item& item);
   static blink::KURL source_url(const blink::WebDragData::Item& item);
   static base::FilePath filename_extension(
       const blink::WebDragData::Item& item);

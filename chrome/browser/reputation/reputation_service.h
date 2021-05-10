@@ -67,7 +67,9 @@ class ReputationService : public KeyedService {
   // will be called regardless of whether |url| is flagged or
   // not. (Specifically, |callback| will be called with SafetyTipStatus::kNone
   // if the url is not flagged).
-  void GetReputationStatus(const GURL& url, ReputationCheckCallback callback);
+  void GetReputationStatus(const GURL& url,
+                           content::WebContents* web_contents,
+                           ReputationCheckCallback callback);
 
   // Returns whether the user has dismissed a similar warning, and thus no
   // warning should be shown for the provided url.
@@ -90,15 +92,18 @@ class ReputationService : public KeyedService {
 
  private:
   // Callback once we have up-to-date |engaged_sites|. Performs checks on the
-  // navigated |url|. Displays the warning when needed.
+  // navigated |url|. |has_delayed_warning| is true if the relevant WebContents
+  // is currently delaying a Safe Browsing warning (an experiment described in
+  // https://crbug.com/1057157). Displays the Safety Tip warning when needed.
   void GetReputationStatusWithEngagedSites(
       const GURL& url,
+      bool has_delayed_warning,
       ReputationCheckCallback callback,
       const std::vector<DomainInfo>& engaged_sites);
 
-  // Set of origins that we've warned about, and the user has explicitly
+  // Set of eTLD+1s that we've warned about, and the user has explicitly
   // ignored.  Used to avoid re-warning the user.
-  std::set<url::Origin> warning_dismissed_origins_;
+  std::set<std::string> warning_dismissed_etld1s_;
 
   Profile* profile_;
 

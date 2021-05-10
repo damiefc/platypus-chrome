@@ -28,10 +28,11 @@
 
 #include <memory>
 #include "third_party/blink/renderer/core/css/parser/css_parser_selector.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
+
+namespace blink {
 
 namespace {
 // CSSSelector is one of the top types that consume renderer memory,
@@ -39,14 +40,13 @@ namespace {
 // allocations below, pass this type name constant to allow profiling
 // in official builds.
 const char kCSSSelectorTypeName[] = "blink::CSSSelector";
-}
 
-namespace blink {
+}  // namespace
 
 CSSSelectorList CSSSelectorList::Copy() const {
   CSSSelectorList list;
 
-  unsigned length = this->ComputeLength();
+  unsigned length = ComputeLength();
   list.selector_array_ =
       reinterpret_cast<CSSSelector*>(WTF::Partitions::FastMalloc(
           WTF::Partitions::ComputeAllocationSize(length, sizeof(CSSSelector)),
@@ -100,14 +100,14 @@ CSSSelectorList CSSSelectorList::AdoptSelectorVector(
 }
 
 const CSSSelector* CSSSelectorList::FirstForCSSOM() const {
-  const CSSSelector* s = this->First();
+  const CSSSelector* s = First();
   if (!s)
     return nullptr;
-  while (this->Next(*s))
-    s = this->Next(*s);
-  if (this->NextInFullList(*s))
-    return this->NextInFullList(*s);
-  return this->First();
+  while (Next(*s))
+    s = Next(*s);
+  if (NextInFullList(*s))
+    return NextInFullList(*s);
+  return First();
 }
 
 unsigned CSSSelectorList::ComputeLength() const {

@@ -14,10 +14,12 @@ namespace bookmarks {
 class BookmarkModel;
 }
 
+@protocol BookmarksCommands;
 @protocol BrowserCommands;
 @class ChromeActivityImageSource;
 @protocol ChromeActivityItemSource;
 @class ChromeActivityURLSource;
+@class DefaultBrowserPromoNonModalScheduler;
 @protocol FindInPageCommands;
 class PrefService;
 @protocol QRGenerationCommands;
@@ -28,19 +30,25 @@ class PrefService;
 @interface ActivityServiceMediator : NSObject
 
 // Initializes a mediator instance with a |handler| used to execute action, a
+// |bookmarksHandler| to execute Bookmarks actions, a
 // |qrGenerationHandler| to execute QR generation actions, a |prefService| to
 // read settings and policies, and a |bookmarkModel| to retrieve bookmark
 // states.
 - (instancetype)initWithHandler:(id<BrowserCommands, FindInPageCommands>)handler
+               bookmarksHandler:(id<BookmarksCommands>)bookmarksHandler
             qrGenerationHandler:(id<QRGenerationCommands>)qrGenerationHandler
                     prefService:(PrefService*)prefService
                   bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
+// Scheduler to notify about events happening in this activity.
+@property(nonatomic, weak) DefaultBrowserPromoNonModalScheduler* promoScheduler;
+
 // Generates an array of activity items to be shared via an activity view for
 // the given |data|.
-- (NSArray<ChromeActivityURLSource*>*)activityItemsForData:(ShareToData*)data;
+- (NSArray<id<ChromeActivityItemSource>>*)activityItemsForData:
+    (ShareToData*)data;
 
 // Generates an array of activities to be added to the activity view for the
 // given |data|.

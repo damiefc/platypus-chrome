@@ -35,6 +35,8 @@
 #include "extensions/grit/extensions_browser_resources.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/insets.h"
@@ -82,7 +84,6 @@ std::unique_ptr<views::ImageButton> CreateZoomButton(
     int tooltip_id) {
   auto zoom_button =
       views::CreateVectorImageButtonWithNativeTheme(std::move(callback), icon);
-  zoom_button->SetFocusForPlatform();
   zoom_button->SetTooltipText(l10n_util::GetStringUTF16(tooltip_id));
   views::HighlightPathGenerator::Install(
       zoom_button.get(), std::make_unique<ZoomButtonHighlightPathGenerator>());
@@ -91,14 +92,18 @@ std::unique_ptr<views::ImageButton> CreateZoomButton(
 
 class ZoomValue : public views::Label {
  public:
+  METADATA_HEADER(ZoomValue);
+
   explicit ZoomValue(const content::WebContents* web_contents)
-      : Label(base::string16(),
+      : Label(std::u16string(),
               views::style::CONTEXT_LABEL,
               views::style::STYLE_PRIMARY),
         max_width_(GetLabelMaxWidth(web_contents)) {
     SetHorizontalAlignment(gfx::ALIGN_LEFT);
   }
-  ~ZoomValue() override {}
+  ZoomValue(const ZoomValue&) = delete;
+  ZoomValue& operator=(const ZoomValue&) = delete;
+  ~ZoomValue() override = default;
 
   // views::Label:
   gfx::Size CalculatePreferredSize() const override {
@@ -124,9 +129,10 @@ class ZoomValue : public views::Label {
   }
 
   const int max_width_;
-
-  DISALLOW_COPY_AND_ASSIGN(ZoomValue);
 };
+
+BEGIN_METADATA(ZoomValue, views::Label)
+END_METADATA
 
 bool IsBrowserFullscreen(Browser* browser) {
   DCHECK(browser->window() &&
@@ -306,7 +312,7 @@ ZoomBubbleView::~ZoomBubbleView() {
     immersive_mode_controller_->RemoveObserver(this);
 }
 
-base::string16 ZoomBubbleView::GetAccessibleWindowTitle() const {
+std::u16string ZoomBubbleView::GetAccessibleWindowTitle() const {
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
   if (!browser)
     return {};

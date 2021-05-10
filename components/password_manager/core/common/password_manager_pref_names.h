@@ -24,11 +24,6 @@ extern const char kCredentialsEnableAutosignin[];
 // passwords.
 extern const char kCredentialsEnableService[];
 
-#if !defined(OS_APPLE) && !defined(OS_CHROMEOS) && defined(OS_POSIX)
-// The current state of the migration to LoginDB from Keyring/Kwallet on Linux.
-extern const char kMigrationToLoginDBStep[];
-#endif
-
 #if defined(OS_WIN)
 // Whether the password was blank, only valid if OS password was last changed
 // on or before the value contained in kOsPasswordLastChanged.
@@ -52,6 +47,10 @@ extern const char kPasswordRecovery[];
 // Boolean that indicated whether first run experience for the auto sign-in
 // prompt was shown or not.
 extern const char kWasAutoSignInFirstRunExperienceShown[];
+
+// Boolean that indicated whether one time upload of phished credentials was
+// performed for syncing users.
+extern const char kWasPhishedCredentialsUploadedToSync[];
 
 // Boolean that indicated if user interacted with the Chrome Sign in promo.
 extern const char kWasSignInPasswordPromoClicked[];
@@ -88,6 +87,10 @@ extern const char kLastTimeObsoleteHttpCredentialsRemoved[];
 // The last time the password check has run to completion.
 extern const char kLastTimePasswordCheckCompleted[];
 
+// The last time the password check has run to completion synced across devices.
+// It's used on passwords.google.com and not in Chrome.
+extern const char kSyncedLastTimePasswordCheckCompleted[];
+
 // List that contains captured password hashes.
 extern const char kPasswordHashDataList[];
 
@@ -99,10 +102,6 @@ extern const char kPasswordLeakDetectionEnabled[];
 // used to fill a form, in microseconds since Windows epoch.
 extern const char kProfileStoreDateLastUsedForFilling[];
 extern const char kAccountStoreDateLastUsedForFilling[];
-
-// Number of times the check for leaked password has been performed from the
-// password settings.
-extern const char kSettingsLaunchedPasswordChecks[];
 
 }  // namespace prefs
 }  // namespace password_manager

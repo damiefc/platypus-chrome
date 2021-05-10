@@ -7,9 +7,10 @@ package org.chromium.chrome.browser.download.dialogs;
 import android.content.Context;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
+import androidx.annotation.NonNull;
 
 import org.chromium.base.Callback;
+import org.chromium.chrome.browser.download.DownloadDialogBridge;
 import org.chromium.chrome.browser.download.DownloadLaterMetrics;
 import org.chromium.chrome.browser.download.DownloadLaterMetrics.DownloadLaterUiEvent;
 import org.chromium.components.offline_items_collection.OfflineItemSchedule;
@@ -71,21 +72,26 @@ public class DownloadLaterDialogHelper implements DownloadLaterDialogController 
      * @param callback The callback to reply the new schedule selected by the user. May reply null
      *                 if the user cancels the dialog.
      */
-    public void showChangeScheduleDialog(@Nullable final OfflineItemSchedule currentSchedule,
+    public void showChangeScheduleDialog(@NonNull final OfflineItemSchedule currentSchedule,
             @Source int source, Callback<OfflineItemSchedule> callback) {
         @DownloadLaterDialogChoice
         int initialChoice = DownloadLaterDialogChoice.DOWNLOAD_NOW;
-        if (currentSchedule != null) {
-            initialChoice = currentSchedule.onlyOnWifi ? DownloadLaterDialogChoice.ON_WIFI
-                                                       : DownloadLaterDialogChoice.DOWNLOAD_LATER;
-        }
+        initialChoice = currentSchedule.onlyOnWifi ? DownloadLaterDialogChoice.ON_WIFI
+                                                   : DownloadLaterDialogChoice.DOWNLOAD_LATER;
 
         mCallback = callback;
         mSource = source;
+        boolean shouldShowDateTimePicker = DownloadDialogBridge.shouldShowDateTimePicker();
+        if (!shouldShowDateTimePicker
+                && initialChoice == DownloadLaterDialogChoice.DOWNLOAD_LATER) {
+            initialChoice = DownloadLaterDialogChoice.DOWNLOAD_NOW;
+        }
         PropertyModel.Builder builder =
                 new PropertyModel.Builder(DownloadLaterDialogProperties.ALL_KEYS)
                         .with(DownloadLaterDialogProperties.CONTROLLER, mDownloadLaterDialog)
-                        .with(DownloadLaterDialogProperties.INITIAL_CHOICE, initialChoice);
+                        .with(DownloadLaterDialogProperties.INITIAL_CHOICE, initialChoice)
+                        .with(DownloadLaterDialogProperties.SHOW_DATE_TIME_PICKER_OPTION,
+                                shouldShowDateTimePicker);
 
         // Set the previously selected time to the date time picker UI.
         if (currentSchedule.startTimeMs > 0) {

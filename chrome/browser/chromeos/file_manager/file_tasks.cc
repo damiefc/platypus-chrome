@@ -11,10 +11,11 @@
 #include <utility>
 
 #include "apps/launcher.h"
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -23,8 +24,8 @@
 #include "chrome/browser/apps/app_service/app_service_metrics.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
-#include "chrome/browser/chromeos/crostini/crostini_features.h"
-#include "chrome/browser/chromeos/drive/file_system_util.h"
+#include "chrome/browser/ash/crostini/crostini_features.h"
+#include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/file_manager/app_service_file_tasks.h"
 #include "chrome/browser/chromeos/file_manager/arc_file_tasks.h"
@@ -36,18 +37,17 @@
 #include "chrome/browser/chromeos/file_manager/open_with_browser.h"
 #include "chrome/browser/chromeos/file_manager/web_file_tasks.h"
 #include "chrome/browser/chromeos/fileapi/file_system_backend.h"
-#include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
+#include "chrome/browser/web_applications/components/web_app_id_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/file_browser_handlers/file_browser_handler.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "components/drive/drive_api_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -174,11 +174,6 @@ void RemoveFileManagerInternalActions(const std::set<std::string>& actions,
 // should behave more like a user-installed app than a fallback handler.
 // Specifically, only apps set as the default in user prefs should be preferred
 // over chrome://media-app.
-// Until the Gallery app is removed, this function will also hide the Gallery
-// task in cases where choosing it would instead launch chrome://media-app due
-// to interception done in executeTask to support the "camera roll" function,
-// when the MediaApp feature is enabled. If the feature is not enabled, there
-// will be no MediaApp task and this function does nothing.
 void AdjustTasksForMediaApp(const std::vector<extensions::EntryInfo>& entries,
                             std::vector<FullTaskDescriptor>* tasks) {
   const auto task_for_app = [&](const std::string& app_id) {
@@ -187,46 +182,36 @@ void AdjustTasksForMediaApp(const std::vector<extensions::EntryInfo>& entries,
     });
   };
 
-  const auto media_app_task =
-      task_for_app(chromeos::default_web_apps::kMediaAppId);
+  // Gallery app was replaced by media app in m86, deprecated in m91, and will
+  // be deleted in m93. However, it still sometimes appears in the file task
+  // list because its manifest registers it as a handler for many file types.
+  // Manually erase it from the list here. This can be removed at the same time
+  // as the gallery app deletion (currently planned for m93). See b/180347590.
+  const auto gallery_task = task_for_app(kGalleryAppId);
+  if (gallery_task != tasks->end())
+    tasks->erase(gallery_task);
+
+  const auto media_app_task = task_for_app(web_app::kMediaAppId);
   if (media_app_task == tasks->end())
     return;
 
-  // TODO(crbug/1030935): Once Media app supports RAW files, delete the
-  // IsRawImage early exit. This is necessary while Gallery is still the
-  // better option for RAW files. The any_non_image check can be removed once
-  // video player functionality of the Media App is fully polished.
-  bool any_non_image = false;
-  for (const auto& entry : entries) {
-    if (IsRawImage(entry.path)) {
-      tasks->erase(media_app_task);
-      return;  // Let Gallery handle it.
-    }
-
-    any_non_image =
-        any_non_image || !net::MatchesMimeType("image/*", entry.mime_type);
-  }
-
-  const auto gallery_task = task_for_app(kGalleryAppId);
-  if (any_non_image) {
-    // Remove the gallery app (if it was found), but don't re-order prefs.
-    // Picking it would launch Media App due to executeTask interception, but we
-    // should still prefer the Video Player app over Media App.
-    if (gallery_task != tasks->end())
-      tasks->erase(gallery_task);  // Note: invalidates iterators.
+  // If the video player is still available, check if it was offered and early
+  // exit. Unfortunately because obscure videos must be handled with extension
+  // matches, both the MediaApp and Video have equal priority for those. That
+  // causes them to be ordered by extension ID. Video is "jhd.." and Media is
+  // "jcg..". So to ensure the Video app takes precedence, we pretend the media
+  // app is actually a wildcard match. Note the video player will only be
+  // offered if _all_ the files in the selection are videos, and it is not
+  // already hidden by flags.
+  if (task_for_app(kVideoPlayerAppId) != tasks->end()) {
+    media_app_task->set_is_generic_file_handler(true);
     return;
   }
 
-  // Due to https://crbug.com/1071289, configuring extension matches in SWA
-  // manifests has no effect on is_file_extension_match(), which means a non-
-  // "fallback" web app (i.e. a built-in app) can never be an automatic default.
-  // Fallback handlers are never preferred over extension-matched handlers, so
-  // we must instead pretend that the media app has an extension match.
-  // Note this must be done after the any_non_image check to ensure the video
-  // player app gets preference as "default".
-
-  // First DCHECK to see if the hack can be removed.
-  DCHECK(!media_app_task->is_file_extension_match());
+  // TOOD(crbug/1071289): For a while is_file_extension_match() would always be
+  // false for System Web App manifests, even when specifying extension matches.
+  // So this line can be removed once the media app manifest is updated with a
+  // full complement of image file extensions.
   media_app_task->set_is_file_extension_match(true);
 
   // The logic in ChooseAndSetDefaultTask() also requires the following to hold.
@@ -234,11 +219,14 @@ void AdjustTasksForMediaApp(const std::vector<extensions::EntryInfo>& entries,
   // Zip Archiver). "image/*" does not count as "generic".
   DCHECK(!media_app_task->is_generic_file_handler());
 
-  // Otherwise, build a new list with Media App at the front, and no Gallery.
+  // Otherwise, build a new list with Media App at the front.
+  if (media_app_task == tasks->begin())
+    return;
+
   std::vector<FullTaskDescriptor> new_tasks;
   new_tasks.push_back(*media_app_task);
   for (auto it = tasks->begin(); it != tasks->end(); ++it) {
-    if (it != media_app_task && it != gallery_task)
+    if (it != media_app_task)
       new_tasks.push_back(std::move(*it));
   }
   std::swap(*tasks, new_tasks);
@@ -255,7 +243,7 @@ bool IsFallbackFileHandler(const FullTaskDescriptor& task) {
     return false;
   }
 
-  // Note that chromeos::default_web_apps::kMediaAppId does not appear in the
+  // Note that web_app::kMediaAppId does not appear in the
   // list of built-in apps below. Doing so would mean the presence of any other
   // handler of image files (e.g. Keep, Photos) would take precedence. But we
   // want that only to occur if the user has explicitly set the preference for
@@ -263,7 +251,6 @@ bool IsFallbackFileHandler(const FullTaskDescriptor& task) {
   constexpr const char* kBuiltInApps[] = {
       kFileManagerAppId,
       kVideoPlayerAppId,
-      kGalleryAppId,
       kTextEditorAppId,
       kAudioPlayerAppId,
       extension_misc::kQuickOfficeComponentExtensionId,
@@ -686,7 +673,7 @@ void FindFileHandlerTasks(Profile* profile,
     const Extension* extension = iter->get();
 
     // Check that the extension can be launched with files. This includes all
-    // platform apps and whitelisted extensions.
+    // platform apps and allowlisted extensions.
     if (!CanLaunchViaEvent(extension)) {
       continue;
     }
@@ -694,6 +681,17 @@ void FindFileHandlerTasks(Profile* profile,
     if (profile->IsOffTheRecord() &&
         !extensions::util::IsIncognitoEnabled(extension->id(), profile))
       continue;
+
+    if (base::FeatureList::IsEnabled(ash::features::kVideoPlayerAppHidden) &&
+        extension->id() == kVideoPlayerAppId) {
+      // "Hide" the video player component extension (i.e. skip the rest of this
+      // loop which would add it as a handler). Note this is not achieved by
+      // preventing the extension install in component_loader.cc. The component
+      // extension must first be properly "uninstalled" in a milestone after all
+      // entrypoints are removed.
+      // TODO(crbug/1158531): Remove this when the video player is uninstalled.
+      continue;
+    }
 
     typedef std::vector<extensions::FileHandlerMatch> FileHandlerMatchList;
     FileHandlerMatchList file_handlers =
@@ -912,16 +910,6 @@ void ChooseAndSetDefaultTask(const PrefService& pref_service,
       return;
     }
   }
-}
-
-bool IsRawImage(const base::FilePath& path) {
-  constexpr const char* kRawExtensions[] = {".arw", ".cr2", ".dng", ".nef",
-                                            ".nrw", ".orf", ".raf", ".rw2"};
-  for (const char* extension : kRawExtensions) {
-    if (path.MatchesExtension(extension))
-      return true;
-  }
-  return false;
 }
 
 bool IsHtmlFile(const base::FilePath& path) {

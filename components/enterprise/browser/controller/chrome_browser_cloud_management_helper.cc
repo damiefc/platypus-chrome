@@ -8,8 +8,8 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "components/enterprise/browser/controller/browser_dm_token_storage.h"
 #include "components/policy/core/common/cloud/cloud_policy_client_registration_helper.h"
@@ -73,7 +73,7 @@ void ChromeBrowserCloudManagementRegistrar::
       enrollment_token, client_id,
       base::BindOnce(&ChromeBrowserCloudManagementRegistrar::
                          CallCloudManagementRegistrationCallback,
-                     base::Unretained(this), base::Passed(&policy_client),
+                     base::Unretained(this), std::move(policy_client),
                      callback));
 }
 

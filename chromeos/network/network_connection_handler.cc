@@ -63,6 +63,13 @@ const char NetworkConnectionHandler::kErrorEnabledOrDisabledWhenNotAvailable[] =
     "not-available";
 const char NetworkConnectionHandler::kErrorTetherAttemptWithNoDelegate[] =
     "tether-with-no-delegate";
+const char NetworkConnectionHandler::kErrorCellularInhibitFailure[] =
+    "cellular-inhibit-failure";
+const char NetworkConnectionHandler::kErrorCellularOutOfCredits[] =
+    "cellular-out-of-credits";
+const char NetworkConnectionHandler::kErrorESimProfileIssue[] =
+    "esim-profile-issue";
+const char NetworkConnectionHandler::kErrorSimLocked[] = "sim-locked";
 
 NetworkConnectionHandler::NetworkConnectionHandler()
     : tether_delegate_(nullptr) {}
@@ -141,10 +148,12 @@ std::unique_ptr<NetworkConnectionHandler>
 NetworkConnectionHandler::InitializeForTesting(
     NetworkStateHandler* network_state_handler,
     NetworkConfigurationHandler* network_configuration_handler,
-    ManagedNetworkConfigurationHandler* managed_network_configuration_handler) {
+    ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
+    CellularConnectionHandler* cellular_connection_handler) {
   NetworkConnectionHandlerImpl* handler = new NetworkConnectionHandlerImpl();
   handler->Init(network_state_handler, network_configuration_handler,
-                managed_network_configuration_handler);
+                managed_network_configuration_handler,
+                cellular_connection_handler);
   return base::WrapUnique(handler);
 }
 

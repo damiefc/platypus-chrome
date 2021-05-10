@@ -55,8 +55,9 @@ import org.chromium.components.query_tiles.TestTileProvider;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@Features.
-EnableFeatures({ChromeFeatureList.QUERY_TILES, ChromeFeatureList.QUERY_TILES_ENABLE_QUERY_EDITING})
+@Features.EnableFeatures({ChromeFeatureList.QUERY_TILES, ChromeFeatureList.QUERY_TILES_IN_NTP,
+        ChromeFeatureList.QUERY_TILES_ENABLE_QUERY_EDITING})
+@Features.DisableFeatures({ChromeFeatureList.QUERY_TILES_SEGMENTATION})
 public class QueryTileSectionToOmniboxTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();

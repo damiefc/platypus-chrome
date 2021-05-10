@@ -145,8 +145,6 @@ v8::Local<v8::Value> ToV8(const IDBAny* impl,
       return v8::Undefined(isolate);
     case IDBAny::kNullType:
       return v8::Null(isolate);
-    case IDBAny::kDOMStringListType:
-      return ToV8(impl->DomStringList(), creation_context, isolate);
     case IDBAny::kIDBCursorType:
       return ToV8(impl->IdbCursor(), creation_context, isolate);
     case IDBAny::kIDBCursorWithValueType:
@@ -197,7 +195,7 @@ static std::unique_ptr<IDBKey> CreateIDBKeyFromSimpleValue(
       return IDBKey::CreateInvalid();
     }
     const char* start = static_cast<const char*>(buffer->Data());
-    size_t length = buffer->ByteLengthAsSizeT();
+    size_t length = buffer->ByteLength();
     return IDBKey::CreateBinary(SharedBuffer::Create(start, length));
   }
 
@@ -209,7 +207,7 @@ static std::unique_ptr<IDBKey> CreateIDBKeyFromSimpleValue(
       return IDBKey::CreateInvalid();
     }
     const char* start = static_cast<const char*>(view->BaseAddress());
-    size_t length = view->byteLengthAsSizeT();
+    size_t length = view->byteLength();
     return IDBKey::CreateBinary(SharedBuffer::Create(start, length));
   }
 
@@ -269,6 +267,8 @@ static std::unique_ptr<IDBKey> CreateIDBKeyFromValue(
 
   v8::Local<v8::Context> context = isolate->GetCurrentContext();
   v8::TryCatch try_block(isolate);
+  v8::MicrotasksScope microtasks_scope(
+      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
   // Process stack - will return when complete.
   while (true) {
@@ -373,6 +373,8 @@ static std::unique_ptr<IDBKey> CreateIDBKeyFromValueAndKeyPath(
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context = isolate->GetCurrentContext();
   v8::TryCatch block(isolate);
+  v8::MicrotasksScope microtasks_scope(
+      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
   for (wtf_size_t i = 0; i < key_path_elements.size(); ++i) {
     const String& element = key_path_elements[i];
 
@@ -544,8 +546,8 @@ static v8::Local<v8::Value> DeserializeIDBValueData(v8::Isolate* isolate,
   scoped_refptr<SerializedScriptValue> serialized_value =
       value->CreateSerializedValue();
 
-  serialized_value->NativeFileSystemTokens() =
-      std::move(const_cast<IDBValue*>(value)->NativeFileSystemTokens());
+  serialized_value->FileSystemAccessTokens() =
+      std::move(const_cast<IDBValue*>(value)->FileSystemAccessTokens());
 
   SerializedScriptValue::DeserializeOptions options;
   options.blob_info = &value->BlobInfo();

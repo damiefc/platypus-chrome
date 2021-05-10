@@ -27,7 +27,7 @@ ExtensionLocalizationPeer::DataPipeState::DataPipeState()
 ExtensionLocalizationPeer::DataPipeState::~DataPipeState() = default;
 
 ExtensionLocalizationPeer::ExtensionLocalizationPeer(
-    std::unique_ptr<content::RequestPeer> peer,
+    scoped_refptr<blink::WebRequestPeer> peer,
     IPC::Sender* message_sender,
     const GURL& request_url)
     : original_peer_(std::move(peer)),
@@ -38,9 +38,9 @@ ExtensionLocalizationPeer::~ExtensionLocalizationPeer() {
 }
 
 // static
-std::unique_ptr<content::RequestPeer>
+scoped_refptr<blink::WebRequestPeer>
 ExtensionLocalizationPeer::CreateExtensionLocalizationPeer(
-    std::unique_ptr<content::RequestPeer> peer,
+    scoped_refptr<blink::WebRequestPeer> peer,
     IPC::Sender* message_sender,
     const std::string& mime_type,
     const GURL& request_url) {
@@ -49,7 +49,7 @@ ExtensionLocalizationPeer::CreateExtensionLocalizationPeer(
   return (request_url.SchemeIs(extensions::kExtensionScheme) &&
           base::StartsWith(mime_type, "text/css",
                            base::CompareCase::INSENSITIVE_ASCII))
-             ? base::WrapUnique(new ExtensionLocalizationPeer(
+             ? base::WrapRefCounted(new ExtensionLocalizationPeer(
                    std::move(peer), message_sender, request_url))
              : std::move(peer);
 }
@@ -116,10 +116,6 @@ void ExtensionLocalizationPeer::OnCompletedRequest(
   CompleteRequest();
 }
 
-scoped_refptr<base::TaskRunner> ExtensionLocalizationPeer::GetTaskRunner() {
-  return original_peer_->GetTaskRunner();
-}
-
 void ExtensionLocalizationPeer::OnReadableBody(
     MojoResult,
     const mojo::HandleSignalsState&) {
@@ -172,7 +168,7 @@ void ExtensionLocalizationPeer::StartSendingBody() {
 
   mojo::ScopedDataPipeConsumerHandle consumer_to_send;
   MojoResult result = mojo::CreateDataPipe(
-      nullptr, &data_pipe_state_.destination_handle_, &consumer_to_send);
+      nullptr, data_pipe_state_.destination_handle_, consumer_to_send);
   if (result != MOJO_RESULT_OK) {
     completion_status_ =
         network::URLLoaderCompletionStatus(net::ERR_INSUFFICIENT_RESOURCES);

@@ -13,7 +13,7 @@ import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
-import '../settings_shared_css.m.js';
+import '../settings_shared_css.js';
 
 import {assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
@@ -73,6 +73,11 @@ Polymer({
     external: {
       type: Boolean,
       value: false,
+    },
+
+    rowClickableIcon_: {
+      type: String,
+      computed: 'computeRowClickableIcon_(external)',
     },
 
     // Right hand managed icon. |null| removes it from the DOM.
@@ -176,7 +181,18 @@ Polymer({
    * @return {string}
    * @private
    */
-  getRowClickableIcon_() {
+  computeRowClickableIcon_() {
     return this.external ? 'cr:open-in-new' : 'cr:arrow-right';
   },
+
+  /**
+   * Return the subpage role description if the arrow right icon is used.
+   * @return {string}
+   * @private
+   */
+  getRoleDescription_() {
+    return this.rowClickableIcon_ === 'cr:arrow-right' ?
+        this.i18n('subpageArrowRoleDescription') :
+        '';
+  }
 });

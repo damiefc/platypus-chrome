@@ -53,8 +53,7 @@ LayerAnimator::LayerAnimator(base::TimeDelta transition_duration)
       tween_type_(gfx::Tween::LINEAR),
       is_started_(false),
       disable_timer_for_test_(false),
-      adding_animations_(false),
-      animation_metrics_reporter_(nullptr) {
+      adding_animations_(false) {
   animation_ =
       cc::Animation::Create(cc::AnimationIdProvider::NextAnimationId());
 }
@@ -92,6 +91,8 @@ LayerAnimator* LayerAnimator::CreateImplicitAnimator() {
     if (duration.is_zero() && delegate() &&                            \
         (preemption_strategy_ != ENQUEUE_NEW_ANIMATION)) {             \
       StopAnimatingProperty(LayerAnimationElement::property);          \
+      if (!delegate())                                                 \
+        return;                                                        \
       delegate()->Set##name##FromAnimation(                            \
           value, PropertyChangeReason::NOT_FROM_ANIMATION);            \
       return;                                                          \
@@ -214,8 +215,6 @@ cc::Animation* LayerAnimator::GetAnimationForTesting() const {
 
 void LayerAnimator::StartAnimation(LayerAnimationSequence* animation) {
   scoped_refptr<LayerAnimator> retain(this);
-  if (animation_metrics_reporter_)
-    animation->SetAnimationMetricsReporter(animation_metrics_reporter_);
   OnScheduled(animation);
   if (!StartSequenceImmediately(animation)) {
     // Attempt to preempt a running animation.

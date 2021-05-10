@@ -5,18 +5,19 @@
 #include "chrome/browser/task_manager/sampling/task_group.h"
 
 #include <memory>
+#include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
-#include "base/strings/string16.h"
 #include "base/test/gtest_util.h"
 #include "chrome/browser/task_manager/sampling/shared_sampler.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/browser_task_environment.h"
 #include "gpu/ipc/common/memory_stats.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -28,10 +29,7 @@ namespace {
 class FakeTask : public Task {
  public:
   FakeTask(base::ProcessId process_id, Type type, bool is_running_in_vm)
-      : Task(base::string16(),
-             nullptr,
-             base::kNullProcessHandle,
-             process_id),
+      : Task(std::u16string(), nullptr, base::kNullProcessHandle, process_id),
         type_(type),
         is_running_in_vm_(is_running_in_vm) {}
 
@@ -73,7 +71,11 @@ class TaskGroupTest : public testing::Test {
         is_running_in_vm,
         base::BindRepeating(&TaskGroupTest::OnBackgroundCalculationsDone,
                             base::Unretained(this)),
-        new SharedSampler(io_task_runner_), io_task_runner_);
+        new SharedSampler(io_task_runner_),
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+        /*crosapi_task_provider=*/nullptr,
+#endif
+        io_task_runner_);
     // Refresh() is only valid on non-empty TaskGroups, so add a fake Task.
     fake_task_ = std::make_unique<FakeTask>(base::Process::Current().Pid(),
                                             Task::UNKNOWN, is_running_in_vm);
@@ -166,10 +168,12 @@ TEST_F(TaskGroupTest, NaclRefreshWithTask) {
   task_group_->Refresh(gpu::VideoMemoryUsageStats(), base::TimeDelta(),
                        REFRESH_TYPE_NACL);
 #if BUILDFLAG(ENABLE_NACL)
-  EXPECT_FALSE(task_group_->AreBackgroundCalculationsDone());
+  if (!base::FeatureList::IsEnabled(features::kProcessHostOnUI)) {
+    EXPECT_FALSE(task_group_->AreBackgroundCalculationsDone());
 
-  ASSERT_FALSE(background_refresh_complete_);
-  run_loop_->Run();
+    ASSERT_FALSE(background_refresh_complete_);
+    run_loop_->Run();
+  }
 
   EXPECT_TRUE(background_refresh_complete_);
 #endif  // BUILDFLAG(ENABLE_NACL)
@@ -186,11 +190,11 @@ TEST_F(TaskGroupTest, NetworkBytesSentReadZero) {
   fake_task.OnNetworkBytesRead(zero_bytes);
   fake_task.Refresh(base::TimeDelta::FromSeconds(1),
                     REFRESH_TYPE_NETWORK_USAGE);
-  EXPECT_EQ(zero_bytes, fake_task.network_usage_rate());
+  EXPECT_EQ(zero_bytes, fake_task.GetNetworkUsageRate());
   fake_task.OnNetworkBytesSent(zero_bytes);
   fake_task.Refresh(base::TimeDelta::FromSeconds(1),
                     REFRESH_TYPE_NETWORK_USAGE);
-  EXPECT_EQ(zero_bytes, fake_task.network_usage_rate());
+  EXPECT_EQ(zero_bytes, fake_task.GetNetworkUsageRate());
 }
 
 // Test the task has correct network usage rate when only having read bytes.
@@ -200,12 +204,12 @@ TEST_F(TaskGroupTest, NetworkBytesRead) {
   FakeTask fake_task(base::Process::Current().Pid(), Task::RENDERER,
                      false /* is_running_in_vm */);
   fake_task.OnNetworkBytesRead(read_bytes);
-  EXPECT_EQ(0, fake_task.network_usage_rate());
-  EXPECT_EQ(read_bytes, fake_task.cumulative_network_usage());
+  EXPECT_EQ(0, fake_task.GetNetworkUsageRate());
+  EXPECT_EQ(read_bytes, fake_task.GetCumulativeNetworkUsage());
   fake_task.Refresh(base::TimeDelta::FromSeconds(1),
                     REFRESH_TYPE_NETWORK_USAGE);
-  EXPECT_EQ(read_bytes, fake_task.network_usage_rate());
-  EXPECT_EQ(read_bytes, fake_task.cumulative_network_usage());
+  EXPECT_EQ(read_bytes, fake_task.GetNetworkUsageRate());
+  EXPECT_EQ(read_bytes, fake_task.GetCumulativeNetworkUsage());
 }
 
 // Test the task has correct network usage rate when only having sent bytes.
@@ -215,12 +219,12 @@ TEST_F(TaskGroupTest, NetworkBytesSent) {
   FakeTask fake_task(base::Process::Current().Pid(), Task::RENDERER,
                      false /* is_running_in_vm */);
   fake_task.OnNetworkBytesSent(sent_bytes);
-  EXPECT_EQ(0, fake_task.network_usage_rate());
-  EXPECT_EQ(sent_bytes, fake_task.cumulative_network_usage());
+  EXPECT_EQ(0, fake_task.GetNetworkUsageRate());
+  EXPECT_EQ(sent_bytes, fake_task.GetCumulativeNetworkUsage());
   fake_task.Refresh(base::TimeDelta::FromSeconds(1),
                     REFRESH_TYPE_NETWORK_USAGE);
-  EXPECT_EQ(sent_bytes, fake_task.network_usage_rate());
-  EXPECT_EQ(sent_bytes, fake_task.cumulative_network_usage());
+  EXPECT_EQ(sent_bytes, fake_task.GetNetworkUsageRate());
+  EXPECT_EQ(sent_bytes, fake_task.GetCumulativeNetworkUsage());
 }
 
 // Test the task has correct network usage rate when only having read bytes and
@@ -232,12 +236,12 @@ TEST_F(TaskGroupTest, NetworkBytesRead2SecRefresh) {
   FakeTask fake_task(base::Process::Current().Pid(), Task::RENDERER,
                      false /* is_running_in_vm */);
   fake_task.OnNetworkBytesRead(read_bytes);
-  EXPECT_EQ(0, fake_task.network_usage_rate());
-  EXPECT_EQ(read_bytes, fake_task.cumulative_network_usage());
+  EXPECT_EQ(0, fake_task.GetNetworkUsageRate());
+  EXPECT_EQ(read_bytes, fake_task.GetCumulativeNetworkUsage());
   fake_task.Refresh(base::TimeDelta::FromSeconds(refresh_secs),
                     REFRESH_TYPE_NETWORK_USAGE);
-  EXPECT_EQ(read_bytes / refresh_secs, fake_task.network_usage_rate());
-  EXPECT_EQ(read_bytes, fake_task.cumulative_network_usage());
+  EXPECT_EQ(read_bytes / refresh_secs, fake_task.GetNetworkUsageRate());
+  EXPECT_EQ(read_bytes, fake_task.GetCumulativeNetworkUsage());
 }
 
 // Test the task has correct network usage rate when only having sent bytes and
@@ -249,12 +253,12 @@ TEST_F(TaskGroupTest, NetworkBytesSent2SecRefresh) {
   FakeTask fake_task(base::Process::Current().Pid(), Task::RENDERER,
                      false /* is_running_in_vm */);
   fake_task.OnNetworkBytesSent(sent_bytes);
-  EXPECT_EQ(0, fake_task.network_usage_rate());
-  EXPECT_EQ(sent_bytes, fake_task.cumulative_network_usage());
+  EXPECT_EQ(0, fake_task.GetNetworkUsageRate());
+  EXPECT_EQ(sent_bytes, fake_task.GetCumulativeNetworkUsage());
   fake_task.Refresh(base::TimeDelta::FromSeconds(refresh_secs),
                     REFRESH_TYPE_NETWORK_USAGE);
-  EXPECT_EQ(sent_bytes / refresh_secs, fake_task.network_usage_rate());
-  EXPECT_EQ(sent_bytes, fake_task.cumulative_network_usage());
+  EXPECT_EQ(sent_bytes / refresh_secs, fake_task.GetNetworkUsageRate());
+  EXPECT_EQ(sent_bytes, fake_task.GetCumulativeNetworkUsage());
 }
 
 // Tests the task has correct usage on receiving and then sending bytes.
@@ -265,12 +269,12 @@ TEST_F(TaskGroupTest, NetworkBytesReadThenSent) {
   FakeTask fake_task(base::Process::Current().Pid(), Task::RENDERER,
                      false /* is_running_in_vm */);
   fake_task.OnNetworkBytesRead(read_bytes);
-  EXPECT_EQ(read_bytes, fake_task.cumulative_network_usage());
+  EXPECT_EQ(read_bytes, fake_task.GetCumulativeNetworkUsage());
   fake_task.OnNetworkBytesSent(sent_bytes);
   fake_task.Refresh(base::TimeDelta::FromSeconds(1),
                     REFRESH_TYPE_NETWORK_USAGE);
-  EXPECT_EQ(read_bytes + sent_bytes, fake_task.network_usage_rate());
-  EXPECT_EQ(read_bytes + sent_bytes, fake_task.cumulative_network_usage());
+  EXPECT_EQ(read_bytes + sent_bytes, fake_task.GetNetworkUsageRate());
+  EXPECT_EQ(read_bytes + sent_bytes, fake_task.GetCumulativeNetworkUsage());
 }
 
 // Tests the task has correct usage rate on sending and then receiving bytes.
@@ -284,7 +288,7 @@ TEST_F(TaskGroupTest, NetworkBytesSentThenRead) {
   fake_task.OnNetworkBytesRead(read_bytes);
   fake_task.Refresh(base::TimeDelta::FromSeconds(1),
                     REFRESH_TYPE_NETWORK_USAGE);
-  EXPECT_EQ(read_bytes + sent_bytes, fake_task.network_usage_rate());
+  EXPECT_EQ(read_bytes + sent_bytes, fake_task.GetNetworkUsageRate());
 }
 
 // Tests that the network usage rate goes to 0 after reading bytes then a
@@ -300,8 +304,8 @@ TEST_F(TaskGroupTest, NetworkBytesReadRefreshNone) {
   // Refresh to zero out the usage rate.
   fake_task.Refresh(base::TimeDelta::FromSeconds(1),
                     REFRESH_TYPE_NETWORK_USAGE);
-  EXPECT_EQ(0, fake_task.network_usage_rate());
-  EXPECT_EQ(read_bytes, fake_task.cumulative_network_usage());
+  EXPECT_EQ(0, fake_task.GetNetworkUsageRate());
+  EXPECT_EQ(read_bytes, fake_task.GetCumulativeNetworkUsage());
 }
 
 // Tests that the network usage rate goes to 0 after sending bytes then a
@@ -317,8 +321,8 @@ TEST_F(TaskGroupTest, NetworkBytesSentRefreshNone) {
   // Refresh to zero out the usage rate.
   fake_task.Refresh(base::TimeDelta::FromSeconds(1),
                     REFRESH_TYPE_NETWORK_USAGE);
-  EXPECT_EQ(0, fake_task.network_usage_rate());
-  EXPECT_EQ(sent_bytes, fake_task.cumulative_network_usage());
+  EXPECT_EQ(0, fake_task.GetNetworkUsageRate());
+  EXPECT_EQ(sent_bytes, fake_task.GetCumulativeNetworkUsage());
 }
 
 // Tests that the network usage rate goes to 0 after a refresh with no traffic
@@ -341,9 +345,9 @@ TEST_F(TaskGroupTest, NetworkBytesTransferredRefreshNone) {
   // Refresh to zero out the usage rate.
   fake_task.Refresh(base::TimeDelta::FromSeconds(1),
                     REFRESH_TYPE_NETWORK_USAGE);
-  EXPECT_EQ(0, fake_task.network_usage_rate());
+  EXPECT_EQ(0, fake_task.GetNetworkUsageRate());
   EXPECT_EQ((read_bytes + sent_bytes) * number_of_cycles,
-            fake_task.cumulative_network_usage());
+            fake_task.GetCumulativeNetworkUsage());
 }
 
 // Tests that 2 tasks in 1 task group that both read bytes have correct usage
@@ -389,24 +393,24 @@ TEST_F(TaskGroupTest, NetworkBytesTransferredRefreshOutOfOrder) {
     fake_task.OnNetworkBytesRead(read_bytes * i);
     number_of_bytes_transferred += read_bytes * i;
     EXPECT_EQ(number_of_bytes_transferred,
-              fake_task.cumulative_network_usage());
+              fake_task.GetCumulativeNetworkUsage());
     fake_task.OnNetworkBytesSent(sent_bytes * i);
     number_of_bytes_transferred += sent_bytes * i;
     EXPECT_EQ(number_of_bytes_transferred,
-              fake_task.cumulative_network_usage());
+              fake_task.GetCumulativeNetworkUsage());
     if (i > 0) {
       EXPECT_EQ((read_bytes + sent_bytes) * (i - 1),
-                fake_task.network_usage_rate());
+                fake_task.GetNetworkUsageRate());
     }
     fake_task.Refresh(base::TimeDelta::FromSeconds(1),
                       REFRESH_TYPE_NETWORK_USAGE);
-    EXPECT_EQ((read_bytes + sent_bytes) * i, fake_task.network_usage_rate());
+    EXPECT_EQ((read_bytes + sent_bytes) * i, fake_task.GetNetworkUsageRate());
   }
   // Refresh to zero out the usage rate.
   fake_task.Refresh(base::TimeDelta::FromSeconds(1),
                     REFRESH_TYPE_NETWORK_USAGE);
-  EXPECT_EQ(0, fake_task.network_usage_rate());
-  EXPECT_EQ(number_of_bytes_transferred, fake_task.cumulative_network_usage());
+  EXPECT_EQ(0, fake_task.GetNetworkUsageRate());
+  EXPECT_EQ(number_of_bytes_transferred, fake_task.GetCumulativeNetworkUsage());
 }
 
 // Tests that 2 tasks in 1 task group that both sent bytes have correct usage

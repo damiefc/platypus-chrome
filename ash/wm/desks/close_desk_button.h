@@ -20,7 +20,7 @@ namespace ash {
 class ASH_EXPORT CloseDeskButton : public views::ImageButton,
                                    public views::ViewTargeterDelegate {
  public:
-  explicit CloseDeskButton(views::ButtonListener* listener);
+  explicit CloseDeskButton(PressedCallback callback);
   ~CloseDeskButton() override;
 
   // The size of the close button.
@@ -28,10 +28,7 @@ class ASH_EXPORT CloseDeskButton : public views::ImageButton,
 
   // views::ImageButton:
   const char* GetClassName() const override;
-  std::unique_ptr<views::InkDrop> CreateInkDrop() override;
-  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
-      const override;
-  SkColor GetInkDropBaseColor() const override;
+  void OnThemeChanged() override;
 
   // views::ViewTargeterDelegate:
   bool DoesIntersectRect(const views::View* target,

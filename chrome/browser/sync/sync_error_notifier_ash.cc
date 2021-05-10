@@ -9,8 +9,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/login/user_flow.h"
-#include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -130,17 +128,6 @@ void SyncErrorNotifier::OnStateChanged(syncer::SyncService* service) {
     return;
   }
 
-  if (user_manager::UserManager::IsInitialized()) {
-    chromeos::UserFlow* user_flow =
-        chromeos::ChromeUserManager::Get()->GetCurrentUserFlow();
-
-    // Check whether Chrome OS user flow allows launching browser.
-    // Example: Supervised user creation flow which handles token invalidation
-    // itself and notifications should be suppressed. http://crbug.com/359045
-    if (!user_flow->ShouldLaunchBrowser())
-      return;
-  }
-
   // Error state just got triggered. There shouldn't be previous notification.
   // Let's display one.
   DCHECK(!notification_displayed_ && should_display_notification);
@@ -161,8 +148,7 @@ void SyncErrorNotifier::OnStateChanged(syncer::SyncService* service) {
       ash::CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, notification_id_,
           l10n_util::GetStringUTF16(IDS_SYNC_ERROR_BUBBLE_VIEW_TITLE),
-          l10n_util::GetStringUTF16(parameters.message_id),
-          l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_DISPLAY_SOURCE),
+          l10n_util::GetStringUTF16(parameters.message_id), std::u16string(),
           GURL(notification_id_), notifier_id,
           message_center::RichNotificationData(),
           base::MakeRefCounted<message_center::HandleNotificationClickDelegate>(

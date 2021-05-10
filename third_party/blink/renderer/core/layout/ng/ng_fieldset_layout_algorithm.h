@@ -21,11 +21,12 @@ class CORE_EXPORT NGFieldsetLayoutAlgorithm
                                NGBoxFragmentBuilder,
                                NGBlockBreakToken> {
  public:
-  NGFieldsetLayoutAlgorithm(const NGLayoutAlgorithmParams& params);
+  explicit NGFieldsetLayoutAlgorithm(const NGLayoutAlgorithmParams& params);
 
-  scoped_refptr<const NGLayoutResult> Layout() override;
+  const NGLayoutResult* Layout() override;
 
-  MinMaxSizesResult ComputeMinMaxSizes(const MinMaxSizesInput&) const override;
+  MinMaxSizesResult ComputeMinMaxSizes(
+      const MinMaxSizesFloatInput&) const override;
 
   static LayoutUnit ComputeLegendInlineOffset(
       const ComputedStyle& legend_style,
@@ -40,7 +41,7 @@ class CORE_EXPORT NGFieldsetLayoutAlgorithm
   void LayoutLegend(NGBlockNode& legend);
   NGBreakStatus LayoutFieldsetContent(
       NGBlockNode& fieldset_content,
-      scoped_refptr<const NGBlockBreakToken> content_break_token,
+      const NGBlockBreakToken* content_break_token,
       LogicalSize adjusted_padding_box_size,
       bool has_legend);
 
@@ -51,10 +52,11 @@ class CORE_EXPORT NGFieldsetLayoutAlgorithm
   const NGConstraintSpace CreateConstraintSpaceForFieldsetContent(
       NGBlockNode fieldset_content,
       LogicalSize padding_box_size,
-      LayoutUnit block_offset);
+      LayoutUnit block_offset,
+      NGCacheSlot slot);
   bool IsFragmentainerOutOfSpace(LayoutUnit block_offset) const;
 
-  const WritingMode writing_mode_;
+  const WritingDirectionMode writing_direction_;
 
   NGBoxStrut borders_;
   NGBoxStrut padding_;

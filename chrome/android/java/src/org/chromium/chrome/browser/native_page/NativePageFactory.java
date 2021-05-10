@@ -6,9 +6,7 @@ package org.chromium.chrome.browser.native_page;
 
 import android.content.Context;
 import android.graphics.Rect;
-import android.net.Uri;
 
-import androidx.annotation.IntDef;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.supplier.DestroyableObservableSupplier;
@@ -19,6 +17,7 @@ import org.chromium.chrome.browser.browser_controls.BrowserControlsMarginSupplie
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.download.DownloadPage;
 import org.chromium.chrome.browser.explore_sites.ExploreSitesPage;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.history.HistoryManagerUtils;
 import org.chromium.chrome.browser.history.HistoryPage;
 import org.chromium.chrome.browser.ntp.IncognitoNewTabPage;
@@ -32,13 +31,13 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
+import org.chromium.chrome.browser.ui.native_page.NativePage.NativePageType;
 import org.chromium.chrome.browser.ui.native_page.NativePageHost;
+import org.chromium.chrome.browser.webapps.launchpad.LaunchpadPage;
+import org.chromium.chrome.browser.webapps.launchpad.LaunchpadUtils;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
-import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.LoadUrlParams;
-
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
+import org.chromium.ui.util.ColorUtils;
 
 /**
  * Creates NativePage objects to show chrome-native:// URLs using the native Android view system.
@@ -93,79 +92,57 @@ public class NativePageFactory {
             return new NewTabPage(mActivity, mActivity.getBrowserControlsManager(),
                     mActivity.getActivityTabProvider(), mActivity.getSnackbarManager(),
                     mActivity.getLifecycleDispatcher(), mActivity.getTabModelSelector(),
-                    mActivity.isTablet(), mUma.get(),
-                    mActivity.getNightModeStateProvider().isInNightMode(), nativePageHost, tab,
-                    mBottomSheetController);
+                    mActivity.isTablet(), mUma.get(), ColorUtils.inNightMode(mActivity),
+                    nativePageHost, tab, mBottomSheetController,
+                    mActivity.getShareDelegateSupplier(), mActivity.getWindowAndroid());
         }
 
         protected NativePage buildBookmarksPage(Tab tab) {
-            return new BookmarkPage(mActivity, new TabShim(tab, mActivity));
+            return new BookmarkPage(mActivity.getComponentName(), mActivity.getSnackbarManager(),
+                    mActivity.getTabModelSelector().isIncognitoSelected(),
+                    new TabShim(tab, mActivity));
         }
 
         protected NativePage buildDownloadsPage(Tab tab) {
-            return new DownloadPage(mActivity, new TabShim(tab, mActivity));
+            // For preloaded tabs, the tab model might not be initialized yet. Use tab to figure
+            // out if it is a regular profile.
+            Profile profile = tab.isIncognito() ? mActivity.getCurrentTabModel().getProfile()
+                                                : Profile.getLastUsedRegularProfile();
+            return new DownloadPage(mActivity, mActivity.getSnackbarManager(),
+                    mActivity.getModalDialogManager(), profile.getOTRProfileID(),
+                    new TabShim(tab, mActivity));
         }
 
         protected NativePage buildExploreSitesPage(Tab tab) {
-            return new ExploreSitesPage(mActivity, new TabShim(tab, mActivity), tab);
+            return new ExploreSitesPage(
+                    mActivity, new TabShim(tab, mActivity), tab, mActivity.getTabModelSelector());
         }
 
         protected NativePage buildHistoryPage(Tab tab) {
-            return new HistoryPage(mActivity, new TabShim(tab, mActivity));
+            return new HistoryPage(mActivity, new TabShim(tab, mActivity),
+                    mActivity.getSnackbarManager(),
+                    mActivity.getTabModelSelector().isIncognitoSelected(),
+                    /* TabCreatorManager */ mActivity, mActivity.getActivityTabProvider());
         }
 
         protected NativePage buildRecentTabsPage(Tab tab) {
             RecentTabsManager recentTabsManager = new RecentTabsManager(tab,
                     Profile.fromWebContents(tab.getWebContents()), mActivity,
-                    () -> HistoryManagerUtils.showHistoryManager(mActivity, tab));
-            return new RecentTabsPage(mActivity, recentTabsManager, new TabShim(tab, mActivity));
-        }
-    }
-
-    @IntDef({NativePageType.NONE, NativePageType.CANDIDATE, NativePageType.NTP,
-            NativePageType.BOOKMARKS, NativePageType.RECENT_TABS, NativePageType.DOWNLOADS,
-            NativePageType.HISTORY, NativePageType.EXPLORE})
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface NativePageType {
-        int NONE = 0;
-        int CANDIDATE = 1;
-        int NTP = 2;
-        int BOOKMARKS = 3;
-        int RECENT_TABS = 4;
-        int DOWNLOADS = 5;
-        int HISTORY = 6;
-        int EXPLORE = 7;
-    }
-
-    private static @NativePageType int nativePageType(
-            String url, NativePage candidatePage, boolean isIncognito) {
-        if (url == null) return NativePageType.NONE;
-
-        Uri uri = Uri.parse(url);
-        if (!UrlConstants.CHROME_NATIVE_SCHEME.equals(uri.getScheme())
-                && !UrlConstants.CHROME_SCHEME.equals(uri.getScheme())) {
-            return NativePageType.NONE;
+                    ()
+                            -> HistoryManagerUtils.showHistoryManager(mActivity, tab,
+                                    mActivity.getTabModelSelector().isIncognitoSelected()));
+            return new RecentTabsPage(mActivity, recentTabsManager, new TabShim(tab, mActivity),
+                    mActivity.getBrowserControlsManager());
         }
 
-        String host = uri.getHost();
-        if (candidatePage != null && candidatePage.getHost().equals(host)) {
-            return NativePageType.CANDIDATE;
-        }
-
-        if (UrlConstants.NTP_HOST.equals(host)) {
-            return NativePageType.NTP;
-        } else if (UrlConstants.BOOKMARKS_HOST.equals(host)) {
-            return NativePageType.BOOKMARKS;
-        } else if (UrlConstants.DOWNLOADS_HOST.equals(host)) {
-            return NativePageType.DOWNLOADS;
-        } else if (UrlConstants.HISTORY_HOST.equals(host)) {
-            return NativePageType.HISTORY;
-        } else if (UrlConstants.RECENT_TABS_HOST.equals(host) && !isIncognito) {
-            return NativePageType.RECENT_TABS;
-        } else if (ExploreSitesPage.isExploreSitesHost(host)) {
-            return NativePageType.EXPLORE;
-        } else {
-            return NativePageType.NONE;
+        protected NativePage buildLaunchpadPage(Tab tab) {
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.APP_LAUNCHPAD)) {
+                return new LaunchpadPage(mActivity, new TabShim(tab, mActivity),
+                        mActivity.getModalDialogManagerSupplier(),
+                        LaunchpadUtils.retrieveWebApks(mActivity));
+            } else {
+                return null;
+            }
         }
     }
 
@@ -188,7 +165,7 @@ public class NativePageFactory {
             String url, NativePage candidatePage, Tab tab, boolean isIncognito) {
         NativePage page;
 
-        switch (nativePageType(url, candidatePage, isIncognito)) {
+        switch (NativePage.nativePageType(url, candidatePage, isIncognito)) {
             case NativePageType.NONE:
                 return null;
             case NativePageType.CANDIDATE:
@@ -212,24 +189,15 @@ public class NativePageFactory {
             case NativePageType.EXPLORE:
                 page = getBuilder().buildExploreSitesPage(tab);
                 break;
+            case NativePageType.LAUNCHPAD:
+                page = getBuilder().buildLaunchpadPage(tab);
+                break;
             default:
                 assert false;
                 return null;
         }
         if (page != null) page.updateForUrl(url);
         return page;
-    }
-
-    /**
-     * Returns whether the URL would navigate to a native page.
-     *
-     * @param url The URL to be checked.
-     * @param isIncognito Whether the page will be displayed in incognito mode.
-     * @return Whether the host and the scheme of the passed in URL matches one of the supported
-     *         native pages.
-     */
-    public static boolean isNativePageUrl(String url, boolean isIncognito) {
-        return nativePageType(url, null, isIncognito) != NativePageType.NONE;
     }
 
     @VisibleForTesting
@@ -279,5 +247,10 @@ public class NativePageFactory {
         public DestroyableObservableSupplier<Rect> createDefaultMarginSupplier() {
             return new BrowserControlsMarginSupplier(mBrowserControlsStateProvider);
         }
+    }
+
+    /** Destroy and unhook objects at destruction. */
+    public void destroy() {
+        if (mNewTabPageUma != null) mNewTabPageUma.destroy();
     }
 }

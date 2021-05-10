@@ -17,7 +17,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/omnibox/browser/answers_cache.h"
@@ -99,7 +99,6 @@ class SearchProvider : public BaseSearchProvider,
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, SuggestRelevanceExperiment);
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, TestDeleteMatch);
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, SuggestQueryUsesToken);
-  FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, SessionToken);
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, AnswersCache);
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, RemoveExtraAnswers);
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, DoesNotProvideOnFocus);
@@ -110,8 +109,6 @@ class SearchProvider : public BaseSearchProvider,
                            DontTrimHttpsSchemeIfInputHasScheme);
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, DoTrimHttpsScheme);
   FRIEND_TEST_ALL_PREFIXES(SearchProviderWarmUpTest, SendsWarmUpRequestOnFocus);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedPrefetchTest, ClearPrefetchedResults);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedPrefetchTest, SetPrefetchQuery);
 
   // Manages the providers (TemplateURLs) used by SearchProvider. Two providers
   // may be used:
@@ -127,21 +124,21 @@ class SearchProvider : public BaseSearchProvider,
 
     // Returns true if the specified providers match the two providers cached
     // by this class.
-    bool equal(const base::string16& default_provider,
-               const base::string16& keyword_provider) const {
+    bool equal(const std::u16string& default_provider,
+               const std::u16string& keyword_provider) const {
       return (default_provider == default_provider_) &&
           (keyword_provider == keyword_provider_);
     }
 
     // Resets the cached providers.
-    void set(const base::string16& default_provider,
-             const base::string16& keyword_provider) {
+    void set(const std::u16string& default_provider,
+             const std::u16string& keyword_provider) {
       default_provider_ = default_provider;
       keyword_provider_ = keyword_provider;
     }
 
-    const base::string16& default_provider() const { return default_provider_; }
-    const base::string16& keyword_provider() const { return keyword_provider_; }
+    const std::u16string& default_provider() const { return default_provider_; }
+    const std::u16string& keyword_provider() const { return keyword_provider_; }
 
     // NOTE: These may return NULL even if the provider members are nonempty!
     const TemplateURL* GetDefaultProviderURL() const;
@@ -155,8 +152,8 @@ class SearchProvider : public BaseSearchProvider,
 
     // Cached across the life of a query so we behave consistently even if the
     // user changes their default while the query is running.
-    base::string16 default_provider_;
-    base::string16 keyword_provider_;
+    std::u16string default_provider_;
+    std::u16string keyword_provider_;
   };
 
   class CompareScoredResults;
@@ -195,7 +192,7 @@ class SearchProvider : public BaseSearchProvider,
 
   // Recalculates the match contents class of |results| to better display
   // against the current input and user's language.
-  void UpdateMatchContentsClass(const base::string16& input_text,
+  void UpdateMatchContentsClass(const std::u16string& input_text,
                                 SearchSuggestionParser::Results* results);
 
   // Called after ParseSuggestResults to rank the |results|.
@@ -311,7 +308,7 @@ class SearchProvider : public BaseSearchProvider,
       const HistoryResults& results,
       bool base_prevent_inline_autocomplete,
       bool input_multiple_words,
-      const base::string16& input_text,
+      const std::u16string& input_text,
       bool is_keyword);
 
   // Calculates relevance scores for |results|, adjusting for boundary
@@ -376,9 +373,6 @@ class SearchProvider : public BaseSearchProvider,
   // Updates the value of |done_| from the internal state.
   void UpdateDone();
 
-  // Obtains a session token, regenerating if necessary.
-  std::string GetSessionToken();
-
   // Answers prefetch handling - finds the previously displayed answer matching
   // the current top-scoring history result. If there is a previous answer,
   // returns the query data associated with it. Otherwise, returns an empty
@@ -426,20 +420,16 @@ class SearchProvider : public BaseSearchProvider,
   SearchSuggestionParser::Results keyword_results_;
 
   // The top query suggestion, left blank if none.
-  base::string16 top_query_suggestion_fill_into_edit_;
+  std::u16string top_query_suggestion_fill_into_edit_;
   // The top navigation suggestion, left blank/invalid if none.
   GURL top_navigation_suggestion_;
-
-  // Session token management.
-  std::string current_token_;
-  base::TimeTicks token_expiration_time_;
 
   // Answers prefetch management.
   AnswersCache answers_cache_;  // Cache for last answers seen.
   AnswersQueryData prefetch_data_;  // Data to use for query prefetching.
 
-  ScopedObserver<TemplateURLService, TemplateURLServiceObserver> observer_{
-      this};
+  base::ScopedObservation<TemplateURLService, TemplateURLServiceObserver>
+      observation_{this};
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_SEARCH_PROVIDER_H_

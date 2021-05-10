@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_GLOBAL_MEDIA_CONTROLS_MEDIA_NOTIFICATION_DEVICE_ENTRY_UI_H_
 
 #include "chrome/browser/ui/views/media_router/cast_dialog_sink_button.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 
 enum class DeviceEntryUIType {
   kAudio = 0,
@@ -42,12 +43,12 @@ class DeviceEntryUI {
 
 class AudioDeviceEntryView : public DeviceEntryUI, public HoverButton {
  public:
-  AudioDeviceEntryView(views::ButtonListener* button_listener,
+  METADATA_HEADER(AudioDeviceEntryView);
+  AudioDeviceEntryView(PressedCallback callback,
                        SkColor foreground_color,
                        SkColor background_color,
                        const std::string& raw_device_id,
-                       const std::string& name,
-                       const std::string& subtext = "");
+                       const std::string& name);
   ~AudioDeviceEntryView() override = default;
 
   // DeviceEntryUI
@@ -55,19 +56,19 @@ class AudioDeviceEntryView : public DeviceEntryUI, public HoverButton {
                        SkColor background_color) override;
   DeviceEntryUIType GetType() const override;
 
-  // HoverButton
-  SkColor GetInkDropBaseColor() const override;
-
   void SetHighlighted(bool highlighted);
+  bool GetHighlighted() const;
 };
 
 class CastDeviceEntryView : public DeviceEntryUI,
                             public media_router::CastDialogSinkButton {
  public:
-  CastDeviceEntryView(views::ButtonListener* button_listener,
-                      SkColor foreground_color,
-                      SkColor background_color,
-                      const media_router::UIMediaSink& sink);
+  METADATA_HEADER(CastDeviceEntryView);
+  CastDeviceEntryView(
+      base::RepeatingCallback<void(CastDeviceEntryView*)> callback,
+      SkColor foreground_color,
+      SkColor background_color,
+      const media_router::UIMediaSink& sink);
   ~CastDeviceEntryView() override = default;
 
   // DeviceEntryUI
@@ -75,8 +76,13 @@ class CastDeviceEntryView : public DeviceEntryUI,
                        SkColor background_color) override;
   DeviceEntryUIType GetType() const override;
 
-  // HoverButton
-  SkColor GetInkDropBaseColor() const override;
+  // media_router::CastDialogSinkButton
+  void OnFocus() override;
+
+ private:
+  void ChangeCastEntryColor(const media_router::UIMediaSink& sink,
+                            SkColor foreground_color,
+                            SkColor background_color);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_GLOBAL_MEDIA_CONTROLS_MEDIA_NOTIFICATION_DEVICE_ENTRY_UI_H_

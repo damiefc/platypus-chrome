@@ -47,13 +47,18 @@ class StubTabStripUIEmbedder : public TabStripUIEmbedder {
   void CloseContainer() override {}
   void ShowContextMenuAtPoint(
       gfx::Point point,
-      std::unique_ptr<ui::MenuModel> menu_model) override {}
+      std::unique_ptr<ui::MenuModel> menu_model,
+      base::RepeatingClosure on_menu_closed_callback) override {}
+  void CloseContextMenu() override {}
   void ShowEditDialogForGroupAtPoint(gfx::Point point,
                                      gfx::Rect rect,
                                      tab_groups::TabGroupId group_id) override {
   }
   TabStripUILayout GetLayout() override { return TabStripUILayout(); }
   SkColor GetColor(int id) const override { return SK_ColorWHITE; }
+  SkColor GetSystemColor(ui::NativeTheme::ColorId id) const override {
+    return SK_ColorWHITE;
+  }
 };
 
 }  // namespace
@@ -64,10 +69,17 @@ class TabStripUIHandlerTest : public BrowserWithTestWindowTest {
 
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
+    web_contents_ = content::WebContents::Create(
+        content::WebContents::CreateParams(profile()));
+    web_ui_.set_web_contents(web_contents_.get());
     handler_ = std::make_unique<TestTabStripUIHandler>(web_ui(), browser(),
                                                        &stub_embedder_);
     handler()->AllowJavascriptForTesting();
     web_ui()->ClearTrackedCalls();
+  }
+  void TearDown() override {
+    web_contents_.reset();
+    BrowserWithTestWindowTest::TearDown();
   }
 
   TabStripUIHandler* handler() { return handler_.get(); }
@@ -87,6 +99,7 @@ class TabStripUIHandlerTest : public BrowserWithTestWindowTest {
 
  private:
   StubTabStripUIEmbedder stub_embedder_;
+  std::unique_ptr<content::WebContents> web_contents_;
   content::TestWebUI web_ui_;
   std::unique_ptr<TestTabStripUIHandler> handler_;
 };
@@ -139,7 +152,7 @@ TEST_F(TabStripUIHandlerTest, GetGroupVisualData) {
   tab_groups::TabGroupId group1 =
       browser()->tab_strip_model()->AddToNewGroup({0});
   const tab_groups::TabGroupVisualData group1_visuals(
-      base::ASCIIToUTF16("Group 1"), tab_groups::TabGroupColorId::kGreen);
+      u"Group 1", tab_groups::TabGroupColorId::kGreen);
   browser()
       ->tab_strip_model()
       ->group_model()
@@ -148,7 +161,7 @@ TEST_F(TabStripUIHandlerTest, GetGroupVisualData) {
   tab_groups::TabGroupId group2 =
       browser()->tab_strip_model()->AddToNewGroup({1});
   const tab_groups::TabGroupVisualData group2_visuals(
-      base::ASCIIToUTF16("Group 2"), tab_groups::TabGroupColorId::kCyan);
+      u"Group 2", tab_groups::TabGroupColorId::kCyan);
   browser()
       ->tab_strip_model()
       ->group_model()
@@ -181,7 +194,7 @@ TEST_F(TabStripUIHandlerTest, GroupVisualDataChangedEvent) {
   tab_groups::TabGroupId expected_group_id =
       browser()->tab_strip_model()->AddToNewGroup({0});
   const tab_groups::TabGroupVisualData new_visual_data(
-      base::ASCIIToUTF16("My new title"), tab_groups::TabGroupColorId::kGreen);
+      u"My new title", tab_groups::TabGroupColorId::kGreen);
   browser()
       ->tab_strip_model()
       ->group_model()
@@ -229,13 +242,13 @@ TEST_F(TabStripUIHandlerTest, MoveGroup) {
   args.AppendInteger(new_index);
   handler()->HandleMoveGroup(&args);
 
-  std::vector<int> tabs_in_group = browser()
-                                       ->tab_strip_model()
-                                       ->group_model()
-                                       ->GetTabGroup(group_id)
-                                       ->ListTabs();
-  ASSERT_EQ(new_index, tabs_in_group.front());
-  ASSERT_EQ(new_index, tabs_in_group.back());
+  gfx::Range tabs_in_group = browser()
+                                 ->tab_strip_model()
+                                 ->group_model()
+                                 ->GetTabGroup(group_id)
+                                 ->ListTabs();
+  ASSERT_EQ(new_index, static_cast<int>(tabs_in_group.start()));
+  ASSERT_EQ(new_index, static_cast<int>(tabs_in_group.end()) - 1);
 
   EXPECT_EQ(1U, web_ui()->call_data().size());
   const content::TestWebUI::CallData& call_data =
@@ -259,7 +272,7 @@ TEST_F(TabStripUIHandlerTest, MoveGroupAcrossWindows) {
 
   // Create some visual data to make sure it gets transferred.
   const tab_groups::TabGroupVisualData visual_data(
-      base::ASCIIToUTF16("My group"), tab_groups::TabGroupColorId::kGreen);
+      u"My group", tab_groups::TabGroupColorId::kGreen);
   new_browser.get()
       ->tab_strip_model()
       ->group_model()
@@ -548,4 +561,32 @@ TEST_F(TabStripUIHandlerTest, CloseTab) {
   handler()->HandleCloseTab(&args);
 
   ASSERT_EQ(1, browser()->tab_strip_model()->GetTabCount());
+}
+
+TEST_F(TabStripUIHandlerTest, RemoveTabIfInvalidContextMenu) {
+  AddTab(browser(), GURL("http://foo"));
+
+  std::unique_ptr<BrowserWindow> new_window(CreateBrowserWindow());
+  std::unique_ptr<Browser> new_browser =
+      CreateBrowser(profile(), browser()->type(), false, new_window.get());
+  AddTab(new_browser.get(), GURL("http://bar"));
+
+  web_ui()->ClearTrackedCalls();
+
+  base::ListValue args;
+  args.AppendInteger(extensions::ExtensionTabUtil::GetTabId(
+      new_browser->tab_strip_model()->GetWebContentsAt(0)));
+  args.AppendDouble(50);
+  args.AppendDouble(100);
+  handler()->HandleShowTabContextMenu(&args);
+
+  const content::TestWebUI::CallData& call_data = *web_ui()->call_data().back();
+  EXPECT_EQ("cr.webUIListenerCallback", call_data.function_name());
+  EXPECT_EQ("tab-removed", call_data.arg1()->GetString());
+  EXPECT_EQ(extensions::ExtensionTabUtil::GetTabId(
+                new_browser->tab_strip_model()->GetWebContentsAt(0)),
+            call_data.arg2()->GetInt());
+
+  // Close all tabs before destructing.
+  new_browser.get()->tab_strip_model()->CloseAllTabs();
 }

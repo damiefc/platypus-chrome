@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "components/autofill_assistant/browser/actions/mock_action_delegate.h"
 #include "components/autofill_assistant/browser/web/mock_web_controller.h"
@@ -44,9 +44,9 @@ class ConfigureBottomSheetActionTest : public testing::Test {
             Invoke([this](ConfigureBottomSheetProto::PeekMode peek_mode) {
               peek_mode_ = peek_mode;
             }));
-    ON_CALL(mock_action_delegate_, OnWaitForWindowHeightChange(_))
+    ON_CALL(mock_action_delegate_, WaitForWindowHeightChange(_))
         .WillByDefault(Invoke(
-            [this](base::OnceCallback<void(const ClientStatus&)>& callback) {
+            [this](base::OnceCallback<void(const ClientStatus&)> callback) {
               on_resize_cb_ = std::move(callback);
             }));
   }
@@ -62,11 +62,10 @@ class ConfigureBottomSheetActionTest : public testing::Test {
     *action_proto.mutable_configure_bottom_sheet() = proto_;
     action_ = std::make_unique<ConfigureBottomSheetAction>(
         &mock_action_delegate_, action_proto);
-    action_->ProcessAction(
-        base::BindOnce(base::BindLambdaForTesting(
-            [&](std::unique_ptr<ProcessedActionProto> result) {
-              processed_action_ = *result;
-            })));
+    action_->ProcessAction(base::BindOnce(base::BindLambdaForTesting(
+        [&](std::unique_ptr<ProcessedActionProto> result) {
+          processed_action_ = *result;
+        })));
   }
 
   // Runs an action that waits for a resize.

@@ -7,9 +7,14 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "content/public/browser/bluetooth_chooser.h"
 
 class BluetoothChooserController;
+
+namespace content {
+class RenderFrameHost;
+}  // namespace content
 
 // Represents a Bluetooth chooser to ask the user to select a Bluetooth
 // device from a list of options. This implementation is for desktop.
@@ -17,8 +22,8 @@ class BluetoothChooserController;
 class BluetoothChooserDesktop : public content::BluetoothChooser {
  public:
   BluetoothChooserDesktop(
-      BluetoothChooserController* bluetooth_chooser_controller,
-      base::OnceClosure&& close_closure);
+      content::RenderFrameHost* frame,
+      const content::BluetoothChooser::EventHandler& event_handler);
   ~BluetoothChooserDesktop() override;
 
   // BluetoothChooser:
@@ -26,14 +31,14 @@ class BluetoothChooserDesktop : public content::BluetoothChooser {
   void ShowDiscoveryState(DiscoveryState state) override;
   void AddOrUpdateDevice(const std::string& device_id,
                          bool should_update_name,
-                         const base::string16& device_name,
+                         const std::u16string& device_name,
                          bool is_gatt_connected,
                          bool is_paired,
                          int signal_strength_level) override;
 
  private:
-  // Weak. DeviceChooserContentView[Cocoa] owns it.
-  BluetoothChooserController* bluetooth_chooser_controller_;
+  // DeviceChooserContentView owns the controller.
+  base::WeakPtr<BluetoothChooserController> bluetooth_chooser_controller_;
 
   // Closes the displayed UI if it is still open. Used to ensure the bubble
   // closes if this controller is torn down.

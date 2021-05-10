@@ -51,7 +51,7 @@ class FidoGetAssertionTaskTest : public testing::Test {
 
 TEST_F(FidoGetAssertionTaskTest, TestGetAssertionSuccess) {
   auto device = MockFidoDevice::MakeCtap();
-  device->ExpectCtap2CommandAndRespondWith(
+  device->ExpectCtap2CommandAndRespondRepeatedlyWith(
       CtapRequestCommand::kAuthenticatorGetAssertion,
       test_data::kTestGetAssertionResponse);
 
@@ -122,19 +122,12 @@ TEST_F(FidoGetAssertionTaskTest, TestSignSuccessWithFake) {
   ASSERT_GE(32u + 1u + 4u + 8u,  // Minimal ECDSA signature is 8 bytes
             get_assertion_callback_receiver()
                 .value()
-                ->auth_data()
-                .SerializeToByteArray()
+                ->authenticator_data.SerializeToByteArray()
                 .size());
   EXPECT_EQ(0x01,
             get_assertion_callback_receiver()
                 .value()
-                ->auth_data()
-                .SerializeToByteArray()[32]);  // UP flag
-  // Counter starts at zero and is incremented for every sign request.
-  EXPECT_EQ(1, get_assertion_callback_receiver()
-                   .value()
-                   ->auth_data()
-                   .SerializeToByteArray()[36]);  // counter
+                ->authenticator_data.SerializeToByteArray()[32]);  // UP flag
 }
 
 TEST_F(FidoGetAssertionTaskTest, TestIncorrectGetAssertionResponse) {
@@ -268,7 +261,7 @@ TEST_F(FidoGetAssertionTaskTest, TestAvoidSilentSignInForCtapOnlyDevice) {
       test_data::kTestCtap2OnlyAuthenticatorGetInfoResponse));
   std::array<uint8_t, 1> error{
       {base::strict_cast<uint8_t>(CtapDeviceResponseCode::kCtap2ErrOther)}};
-  device->ExpectRequestAndRespondWith(test_data::kCtapGetAssertionRequest,
+  device->ExpectRequestAndRespondWith(test_data::kCtapSilentGetAssertionRequest,
                                       error);
 
   auto task = std::make_unique<GetAssertionTask>(

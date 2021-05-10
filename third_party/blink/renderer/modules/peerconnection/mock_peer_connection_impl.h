@@ -17,7 +17,6 @@
 #include "third_party/webrtc/api/peer_connection_interface.h"
 #include "third_party/webrtc/api/sctp_transport_interface.h"
 #include "third_party/webrtc/api/stats/rtc_stats_report.h"
-#include "third_party/webrtc/api/test/dummy_peer_connection.h"
 
 namespace blink {
 
@@ -139,7 +138,7 @@ class FakeDtlsTransport : public webrtc::DtlsTransportInterface {
 // this. It introduces complexity, is error prone (not testing the right thing
 // and bugs in the mocks). This class is a maintenance burden and should be
 // removed. https://crbug.com/788659
-class MockPeerConnectionImpl : public webrtc::DummyPeerConnection {
+class MockPeerConnectionImpl : public webrtc::PeerConnectionInterface {
  public:
   explicit MockPeerConnectionImpl(MockPeerConnectionDependencyFactory* factory,
                                   webrtc::PeerConnectionObserver* observer);
@@ -293,6 +292,8 @@ class MockPeerConnectionImpl : public webrtc::DummyPeerConnection {
     return nullptr;
   }
 
+  void RestartIce() override { NOTIMPLEMENTED(); }
+
   // JSEP01 APIs
   void CreateOffer(webrtc::CreateSessionDescriptionObserver* observer,
                    const RTCOfferAnswerOptions& options) override;
@@ -386,9 +387,6 @@ class MockPeerConnectionImpl : public webrtc::DummyPeerConnection {
   ~MockPeerConnectionImpl() override;
 
  private:
-  // Used for creating MockSessionDescription.
-  MockPeerConnectionDependencyFactory* dependency_factory_;
-
   std::string stream_label_;
   std::vector<std::string> local_stream_ids_;
   rtc::scoped_refptr<MockStreamCollection> remote_streams_;

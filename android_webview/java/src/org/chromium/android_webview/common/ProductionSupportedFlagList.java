@@ -5,9 +5,14 @@
 package org.chromium.android_webview.common;
 
 import org.chromium.base.BaseSwitches;
+import org.chromium.blink_public.common.BlinkFeatures;
 import org.chromium.cc.base.CcSwitches;
 import org.chromium.components.metrics.MetricsSwitches;
+import org.chromium.components.viz.common.VizFeatures;
+import org.chromium.gpu.config.GpuFeatures;
 import org.chromium.gpu.config.GpuSwitches;
+import org.chromium.services.network.NetworkServiceFeatures;
+import org.chromium.ui.base.UiFeatures;
 
 /**
  * List of experimental features/flags supported for user devices. Add features/flags to this list
@@ -64,28 +69,64 @@ public final class ProductionSupportedFlagList {
             Flag.commandLine(GpuSwitches.IGNORE_GPU_BLOCKLIST,
                     "Overrides the built-in software rendering list and enables "
                             + "GPU acceleration on unsupported device configurations."),
-            Flag.baseFeature("EnableSharedImageForWebview", "Enables shared images for WebView."),
-            Flag.baseFeature("VizForWebView", "Enables Viz for WebView."),
+            Flag.commandLine(AwSwitches.WEBVIEW_ENABLE_MODERN_COOKIE_SAME_SITE,
+                    "Enables modern SameSite cookie behavior: 1) SameSite=Lax by default "
+                            + "(cookies without a SameSite attribute are treated as SameSite=Lax); "
+                            + "2) Schemeful Same-Site (site boundaries include the URL scheme)."),
+            Flag.baseFeature(GpuFeatures.WEBVIEW_VULKAN,
+                    "Use Vulkan for composite. Requires Android device and OS support. May crash "
+                            + "if enabled on unsupported device."),
+            Flag.baseFeature(GpuFeatures.WEBVIEW_SURFACE_CONTROL,
+                    "Use SurfaceControl. Requires WebViewZeroCopyVideo and Android device and OS "
+                            + "support."),
+            Flag.baseFeature(GpuFeatures.WEBVIEW_ZERO_COPY_VIDEO,
+                    "Avoid extra copy for video frames when possible"),
+            Flag.baseFeature(
+                    VizFeatures.WEBVIEW_VULKAN_INTERMEDIATE_BUFFER, "For debugging vulkan"),
+            Flag.baseFeature(
+                    GpuFeatures.USE_GLES2_FOR_OOP_R, "Force Skia context to use es2 only."),
             Flag.baseFeature(AwFeatures.WEBVIEW_CONNECTIONLESS_SAFE_BROWSING,
                     "Uses GooglePlayService's 'connectionless' APIs for Safe Browsing "
                             + "security checks."),
-            Flag.baseFeature(
-                    "WebViewBrotliSupport", "Enables brotli compression support in WebView."),
-            Flag.baseFeature(
-                    "AppCache", "Controls AppCache to facilitate testing against future removal."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_BROTLI_SUPPORT,
+                    "Enables brotli compression support in WebView."),
+            Flag.baseFeature(BlinkFeatures.APP_CACHE,
+                    "Controls AppCache to facilitate testing against future removal."),
             Flag.baseFeature(AwFeatures.WEBVIEW_EXTRA_HEADERS_SAME_ORIGIN_ONLY,
                     "Only allow extra headers added via loadUrl() to be sent to the same origin "
                             + "as the original request."),
-            Flag.baseFeature(AwFeatures.WEBVIEW_EXTRA_HEADERS_SAME_DOMAIN_ONLY,
-                    "Only allow extra headers added via loadUrl() to be sent to the same domain "
-                            + "(eTLD+1) as the original request. Has no effect when the "
-                            + "stricter same-origin feature is enabled."),
-            Flag.baseFeature("WebComponentsV0",
-                    "Re-enables the deprecated Web Components v0 features (Shadow DOM v0, Custom "
-                            + "Elements v0, and HTML Imports)."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_MEASURE_SCREEN_COVERAGE,
+                    "Measure the number of pixels occupied by one or more WebViews as a proportion "
+                            + "of the total screen size. Depending on the number of WebViews and "
+                            + "the size of the screen this might be expensive so hidden behind a "
+                            + "feature flag until the true runtime cost can be measured."),
             Flag.baseFeature(AwFeatures.WEBVIEW_DISPLAY_CUTOUT,
                     "Enables display cutout (notch) support in WebView for Android P and above."),
-            Flag.commandLine(AwSwitches.WEBVIEW_FORCE_LITTLE_CORES,
-                    "Forces WebView to do rendering work in little cores"),
+            Flag.baseFeature(AwFeatures.WEBVIEW_CPU_AFFINITY_RESTRICT_TO_LITTLE_CORES,
+                    "Forces WebView to do rendering work on LITTLE CPU cores on big.LITTLE "
+                            + "architectures"),
+            Flag.baseFeature(AwFeatures.WEBVIEW_POWER_SCHEDULER_THROTTLE_IDLE,
+                    "Restricts all of WebView's out-of-process renderer threads to use only LITTLE "
+                            + "CPU cores on big.LITTLE architectures when the power mode is idle. "
+                            + "WebViewCpuAffinityRestrictToLittleCores, if set, takes precedence "
+                            + "over this flag."),
+            Flag.baseFeature(BlinkFeatures.WEBVIEW_ACCELERATE_SMALL_CANVASES,
+                    "Accelerate all canvases in webview."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_MIXED_CONTENT_AUTOUPGRADES,
+                    "Enables autoupgrades for audio/video/image mixed content when mixed content "
+                            + "mode is set to MIXED_CONTENT_COMPATIBILITY_MODE"),
+            Flag.baseFeature(UiFeatures.SWIPE_TO_MOVE_CURSOR,
+                    "Enables swipe to move cursor feature."
+                            + "This flag will only take effect on Android 11 and above."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_JAVA_JS_BRIDGE_MOJO,
+                    "Enables the new Java/JS Bridge code path with mojo implementation."),
+            Flag.baseFeature(
+                    AwFeatures.WEBVIEW_ORIGIN_TRIALS, "Enables Origin Trials support on WebView."),
+            Flag.baseFeature(UiFeatures.FORM_CONTROLS_REFRESH,
+                    "Enables the Form Controls visual improvements and dark mode."),
+            Flag.baseFeature(
+                    BlinkFeatures.LAYOUT_NG_TABLE, "Enables Blink's next generation table layout."),
+            Flag.baseFeature(
+                    NetworkServiceFeatures.TRUST_TOKENS, "Enables the prototype Trust Tokens API."),
     };
 }

@@ -25,10 +25,10 @@ const createVideoChild = async (blobSrc) => {
 };
 
 /** @type {ModuleHandler} */
-const createImgChild = async (blobSrc, altText) => {
+const createImgChild = async (blobSrc, fileName) => {
   const img = /** @type {!HTMLImageElement} */ (document.createElement('img'));
   img.src = blobSrc;
-  img.alt = altText;
+  img.alt = fileName;
   try {
     await img.decode();
   } catch (error) {
@@ -55,26 +55,41 @@ class BacklightApp extends HTMLElement {
     this.appendChild(this.currentMedia);
     /** @type {?mediaApp.AbstractFileList} */
     this.files;
+    /** @type {?mediaApp.ClientApiDelegate} */
+    this.delegate;
   }
 
-  /** @override  */
-  async loadFiles(files) {
-    let child;
-    const file = files.item(0);
-    if (file) {
-      const isVideo = file.mimeType.match('^video/');
-      const factory = isVideo ? createVideoChild : createImgChild;
-      // Note the mock app will just leak this Blob URL.
-      child = await factory(URL.createObjectURL(file.blob), file.name);
-    } else {
-      // Emulate zero state.
-      child = document.createElement('img');
+  /**
+   * Emulates the preprocessing done in the "real" BacklightApp to hook in the
+   * RAW file converter. See go/media-app-element.
+   *
+   * @param {?mediaApp.AbstractFile} file
+   * @private
+   */
+  async preprocessFile(file) {
+    // This mock is only used for tests (which only test a .orf RAW file). We
+    // don't maintain the full list of RAW extensions here.
+    if (file && file.name.toLowerCase().endsWith('.orf')) {
+      file.blob = await this.delegate.extractPreview(file.blob);
     }
-    // Simulate an app that shows one image (either the loaded image or zero
-    // state) at a time.
+  }
+
+  /**
+   * Emulates loading a single file at a time.
+   * @param {!mediaApp.AbstractFile} file
+   */
+  async loadFile(file) {
+    await this.preprocessFile(file);
+    const isVideo = file.mimeType.match('^video/');
+    const factory = isVideo ? createVideoChild : createImgChild;
+    // Note the mock app will just leak this Blob URL.
+    const child = await factory(URL.createObjectURL(file.blob), file.name);
+
     this.replaceChild(child, this.currentMedia);
     this.currentMedia = child;
+  }
 
+  updateHandler() {
     // Loads a new handler each time a new media is loaded. Note: in actual
     // implementation we cache our handler instances and early exit if we load
     // the same media type.
@@ -83,23 +98,45 @@ class BacklightApp extends HTMLElement {
     this.replaceChild(newHandler, this.currentHandler);
     this.currentHandler = newHandler;
 
+    // Toggle 'shownav' indicating the navigation buttons are available.
+    // This emulates `setNavigationPossible()` in the real app.
+    this.currentHandler.toggleAttribute('shownav', this.files.length > 1);
+  }
+
+  /** @override  */
+  async loadFiles(files) {
     this.files = files;
     files.addObserver((f) => this.onNewFiles(f));
+
+    const file = files.item(files.currentFileIndex);
+    if (!file) {
+      // Emulate zero state.
+      const child = document.createElement('img');
+      this.replaceChild(child, this.currentMedia);
+      this.currentMedia = child;
+    } else {
+      this.loadFile(file);
+    }
+    this.updateHandler();
   }
 
   /** @override */
-  setDelegate(delegate) {}
+  setDelegate(delegate) {
+    this.delegate = delegate;
+  }
 
   /** @param {!mediaApp.AbstractFileList} files */
   onNewFiles(files) {
     if (files !== this.files) {
       return;
     }
-    if (!this.currentHandler) {
-      return;
-    }
-    // Toggle 'shownav' indicating the navigation buttons are available.
-    this.currentHandler.toggleAttribute('shownav', files.length > 1);
+
+    // Handlers in the real app contain a notion of the "current" file. For the
+    // mock, assume here that the current file does not change when new files
+    // are added to the file list. However, we still "update" the handler to
+    // ensure it reflects the navigation state when new files are added. Note
+    // merely toggling attributes here will fail to notify mutation observers.
+    this.updateHandler();
   }
 }
 
@@ -142,6 +179,14 @@ self.addEventListener('unhandledrejection', (event) => {
 
 document.addEventListener('DOMContentLoaded', () => {
   // The "real" app first loads translations for populating strings in the app
-  // for the initial load, then does this.
-  document.body.appendChild(new BacklightApp());
+  // for the initial load, then does this. See go/media-app-loadapp.
+  const app = new BacklightApp();
+  document.body.appendChild(app);
+
+  if (window.customLaunchData) {
+    if (window.customLaunchData.delegate) {
+      app.setDelegate(window.customLaunchData.delegate);
+    }
+    return app.loadFiles(window.customLaunchData.files);
+  }
 });

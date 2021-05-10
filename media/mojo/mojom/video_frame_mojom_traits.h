@@ -7,7 +7,6 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
-#include "base/values.h"
 #include "gpu/ipc/common/mailbox_holder_mojom_traits.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info_mojom_traits.h"
 #include "media/base/ipc/media_param_traits_macros.h"
@@ -62,7 +61,7 @@ struct StructTraits<media::mojom::VideoFrameDataView,
     return input->ColorSpace();
   }
 
-  static const base::Optional<gl::HDRMetadata>& hdr_metadata(
+  static const base::Optional<gfx::HDRMetadata>& hdr_metadata(
       const scoped_refptr<media::VideoFrame>& input) {
     return input->hdr_metadata();
   }
@@ -79,7 +78,7 @@ struct StructTraits<media::mojom::VideoFrameDataView,
   // const &.
   static const media::VideoFrameMetadata& metadata(
       const scoped_refptr<media::VideoFrame>& input) {
-    return *(input->metadata());
+    return input->metadata();
   }
 
   static bool Read(media::mojom::VideoFrameDataView input,

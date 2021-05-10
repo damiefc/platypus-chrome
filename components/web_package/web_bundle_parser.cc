@@ -7,16 +7,19 @@
 #include <algorithm>
 
 #include "base/big_endian.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/containers/span.h"
 #include "base/memory/weak_ptr.h"
 #include "base/numerics/checked_math.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "components/cbor/reader.h"
+#include "components/web_package/web_bundle_utils.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/http/http_util.h"
+#include "url/url_constants.h"
 
 namespace web_package {
 
@@ -136,7 +139,7 @@ base::Optional<ParsedHeaders> ConvertCBORValueToHeaders(
       DCHECK(!result.pseudos.contains(name));
       // Step 4.2.2. Set pseudos[name] to value.
       result.pseudos.insert(
-          std::make_pair(name.as_string(), value.as_string()));
+          std::make_pair(std::string(name), std::string(value)));
       // Step 4.3.3. Continue.
       continue;
     }
@@ -154,7 +157,8 @@ base::Optional<ParsedHeaders> ConvertCBORValueToHeaders(
     DCHECK(!result.headers.contains(name));
 
     // Step 4.5. Append (name, value) to headers.
-    result.headers.insert(std::make_pair(name.as_string(), value.as_string()));
+    result.headers.insert(
+        std::make_pair(std::string(name), std::string(value)));
   }
 
   // Step 5. Return (headers, pseudos).
@@ -278,10 +282,10 @@ GURL ParseExchangeURL(base::StringPiece str) {
   if (url.has_ref() || url.has_username() || url.has_password())
     return GURL();
 
-  // For now, we allow only http: and https: schemes in Web Bundle URLs.
+  // For now, we allow only http:, https: and urn:uuid URLs in Web Bundles.
   // TODO(crbug.com/966753): Revisit this once
   // https://github.com/WICG/webpackage/issues/468 is resolved.
-  if (!url.SchemeIsHTTPOrHTTPS())
+  if (!url.SchemeIsHTTPOrHTTPS() && !IsValidUrnUuidURL(url))
     return GURL();
 
   return url;
@@ -756,7 +760,7 @@ class WebBundleParser::MetadataParser
       }
       requests.insert(std::make_pair(
           parsed_url,
-          mojom::BundleIndexValue::New(variants_value.as_string(),
+          mojom::BundleIndexValue::New(std::string(variants_value),
                                        std::move(response_locations))));
     }
 
@@ -1049,7 +1053,7 @@ class WebBundleParser::MetadataParser
       }
       subset_hashes.insert(std::make_pair(
           parsed_url,
-          mojom::SubsetHashesValue::New(variants_value.as_string(),
+          mojom::SubsetHashesValue::New(std::string(variants_value),
                                         std::move(resource_integrities))));
     }
 

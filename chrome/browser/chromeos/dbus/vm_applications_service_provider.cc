@@ -8,16 +8,17 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "chrome/browser/chromeos/crostini/crostini_features.h"
-#include "chrome/browser/chromeos/crostini/crostini_mime_types_service.h"
-#include "chrome/browser/chromeos/crostini/crostini_mime_types_service_factory.h"
+#include "chrome/browser/ash/borealis/borealis_features.h"
+#include "chrome/browser/ash/borealis/borealis_service.h"
+#include "chrome/browser/ash/crostini/crostini_features.h"
+#include "chrome/browser/ash/crostini/crostini_mime_types_service.h"
+#include "chrome/browser/ash/crostini/crostini_mime_types_service_factory.h"
+#include "chrome/browser/ash/guest_os/guest_os_registry_service.h"
+#include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
+#include "chrome/browser/ash/plugin_vm/plugin_vm_features.h"
+#include "chrome/browser/ash/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/chromeos/crostini/crostini_terminal.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
-#include "chrome/browser/chromeos/guest_os/guest_os_registry_service.h"
-#include "chrome/browser/chromeos/guest_os/guest_os_registry_service_factory.h"
-#include "chrome/browser/chromeos/plugin_vm/plugin_vm_features.h"
-#include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chromeos/dbus/vm_applications/apps.pb.h"
 #include "dbus/bus.h"
@@ -83,7 +84,10 @@ void VmApplicationsServiceProvider::UpdateApplicationList(
 
   Profile* profile = ProfileManager::GetPrimaryUserProfile();
   if (crostini::CrostiniFeatures::Get()->IsEnabled(profile) ||
-      plugin_vm::PluginVmFeatures::Get()->IsEnabled(profile)) {
+      plugin_vm::PluginVmFeatures::Get()->IsEnabled(profile) ||
+      borealis::BorealisService::GetForProfile(profile)
+          ->Features()
+          .IsEnabled()) {
     auto* registry_service =
         guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile);
     registry_service->UpdateApplicationList(request);

@@ -91,12 +91,13 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
                 // TabGridDialog is showing. If so, don't show the undo bar because TabGridDialog
                 // has its own undo bar. See crbug.com/1119899. Note that we don't disable attempts
                 // to dismiss snack bar to make sure that snack bar state is in sync with tab model.
-                if (dialogVisibilitySupplier != null && showingUndoBar) {
-                    return dialogVisibilitySupplier.get();
+                if (showingUndoBar && dialogVisibilitySupplier != null
+                        && dialogVisibilitySupplier.get()) {
+                    return true;
                 }
-                // If grid tab switcher is enabled, show the undo snack bar regardless of whether
+                // If grid / group M5 is enabled, show the undo snack bar regardless of whether
                 // accessibility mode is enabled.
-                if (TabUiFeatureUtilities.isGridTabSwitcherEnabled()) {
+                if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled()) {
                     return false;
                 }
                 return ChromeAccessibilityUtil.get().isAccessibilityEnabled()
@@ -176,7 +177,9 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
         mSnackbarManagable.getSnackbarManager().showSnackbar(
                 Snackbar.make(content, this, Snackbar.TYPE_ACTION, Snackbar.UMA_TAB_CLOSE_UNDO)
                         .setTemplateText(mContext.getString(R.string.undo_bar_close_message))
-                        .setAction(mContext.getString(R.string.undo), tabId));
+                        .setAction(mContext.getString(R.string.undo), tabId)
+                        .setActionAccessibilityAnnouncement(
+                                getUndoneAccessibilityAnnouncement(content, false)));
     }
 
     /**
@@ -195,7 +198,18 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
                                 isAllTabs ? Snackbar.UMA_TAB_CLOSE_ALL_UNDO
                                           : Snackbar.UMA_TAB_CLOSE_MULTIPLE_UNDO)
                         .setTemplateText(mContext.getString(R.string.undo_bar_close_all_message))
-                        .setAction(mContext.getString(R.string.undo), closedTabs));
+                        .setAction(mContext.getString(R.string.undo), closedTabs)
+                        .setActionAccessibilityAnnouncement(
+                                getUndoneAccessibilityAnnouncement(content, true)));
+    }
+
+    private String getUndoneAccessibilityAnnouncement(String content, boolean isMultiple) {
+        return isMultiple
+                ? mContext.getString(
+                        R.string.accessibility_undo_multiple_closed_tabs_announcement_message,
+                        content)
+                : mContext.getString(
+                        R.string.accessibility_undo_closed_tab_announcement_message, content);
     }
 
     /**

@@ -180,6 +180,8 @@ class CORE_EXPORT StringKeyframe : public Keyframe {
     static PropertyResolver* CreateCustomVariableResolver(
         const CSSValue& css_value);
 
+    bool IsValid() const;
+
     const CSSValue* CssValue();
 
     void AppendTo(MutableCSSPropertyValueSet* property_value_set,
@@ -283,4 +285,4 @@ struct DowncastTraits<SVGPropertySpecificKeyframe> {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_ANIMATION_STRING_KEYFRAME_H_

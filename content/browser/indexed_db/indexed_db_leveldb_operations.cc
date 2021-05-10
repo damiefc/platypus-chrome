@@ -7,7 +7,9 @@
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_piece.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "components/services/storage/indexed_db/scopes/leveldb_scopes.h"
 #include "components/services/storage/indexed_db/scopes/varint_coding.h"
 #include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_database.h"
@@ -35,7 +37,7 @@ class LDBComparator : public leveldb::Comparator {
   int Compare(const leveldb::Slice& a, const leveldb::Slice& b) const override {
     return content::Compare(leveldb_env::MakeStringPiece(a),
                             leveldb_env::MakeStringPiece(b),
-                            false /*index_keys*/);
+                            /*index_keys=*/false);
   }
   const char* Name() const override { return "idb_cmp1"; }
   void FindShortestSeparator(std::string* start,
@@ -80,7 +82,7 @@ bool IsPathTooLong(storage::FilesystemProxy* filesystem,
   if (!limit.has_value()) {
     DLOG(WARNING) << "GetMaximumPathComponentLength returned -1";
 // In limited testing, ChromeOS returns 143, other OSes 255.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     limit = 143;
 #else
     limit = 255;
@@ -217,7 +219,7 @@ template leveldb::Status PutVarInt<LevelDBWriteBatch>(
 template <typename DBOrTransaction>
 Status GetString(DBOrTransaction* db,
                  const StringPiece& key,
-                 base::string16* found_string,
+                 std::u16string* found_string,
                  bool* found) {
   std::string result;
   *found = false;
@@ -235,17 +237,17 @@ Status GetString(DBOrTransaction* db,
 template Status GetString<TransactionalLevelDBTransaction>(
     TransactionalLevelDBTransaction* txn,
     const StringPiece& key,
-    base::string16* found_string,
+    std::u16string* found_string,
     bool* found);
 template Status GetString<TransactionalLevelDBDatabase>(
     TransactionalLevelDBDatabase* db,
     const StringPiece& key,
-    base::string16* found_string,
+    std::u16string* found_string,
     bool* found);
 
 leveldb::Status PutString(TransactionalLevelDBTransaction* transaction,
                           const StringPiece& key,
-                          const base::string16& value) {
+                          const std::u16string& value) {
   std::string buffer;
   EncodeString(value, &buffer);
   return transaction->Put(key, &buffer);
@@ -303,7 +305,7 @@ Status SetMaxObjectStoreId(TransactionalLevelDBTransaction* transaction,
 
   DCHECK_GE(max_object_store_id, 0);
   if (!s.ok()) {
-    INTERNAL_READ_ERROR_UNTESTED(SET_MAX_OBJECT_STORE_ID);
+    INTERNAL_READ_ERROR(SET_MAX_OBJECT_STORE_ID);
     return s;
   }
 
@@ -327,7 +329,7 @@ Status GetNewVersionNumber(TransactionalLevelDBTransaction* transaction,
   bool found = false;
   Status s = GetInt(transaction, last_version_key, &last_version, &found);
   if (!s.ok()) {
-    INTERNAL_READ_ERROR_UNTESTED(GET_NEW_VERSION_NUMBER);
+    INTERNAL_READ_ERROR(GET_NEW_VERSION_NUMBER);
     return s;
   }
   if (!found)
@@ -338,7 +340,7 @@ Status GetNewVersionNumber(TransactionalLevelDBTransaction* transaction,
   int64_t version = last_version + 1;
   s = PutInt(transaction, last_version_key, version);
   if (!s.ok()) {
-    INTERNAL_READ_ERROR_UNTESTED(GET_NEW_VERSION_NUMBER);
+    INTERNAL_READ_ERROR(GET_NEW_VERSION_NUMBER);
     return s;
   }
 
@@ -359,14 +361,14 @@ Status SetMaxIndexId(TransactionalLevelDBTransaction* transaction,
   bool found = false;
   Status s = GetInt(transaction, max_index_id_key, &max_index_id, &found);
   if (!s.ok()) {
-    INTERNAL_READ_ERROR_UNTESTED(SET_MAX_INDEX_ID);
+    INTERNAL_READ_ERROR(SET_MAX_INDEX_ID);
     return s;
   }
   if (!found)
     max_index_id = kMinimumIndexId;
 
   if (index_id <= max_index_id) {
-    INTERNAL_CONSISTENCY_ERROR_UNTESTED(SET_MAX_INDEX_ID);
+    INTERNAL_CONSISTENCY_ERROR(SET_MAX_INDEX_ID);
     return InternalInconsistencyStatus();
   }
 
@@ -385,7 +387,7 @@ Status VersionExists(TransactionalLevelDBTransaction* transaction,
 
   Status s = transaction->Get(key, &data, exists);
   if (!s.ok()) {
-    INTERNAL_READ_ERROR_UNTESTED(VERSION_EXISTS);
+    INTERNAL_READ_ERROR(VERSION_EXISTS);
     return s;
   }
   if (!*exists)
@@ -415,7 +417,7 @@ Status GetNewDatabaseId(Transaction* transaction, int64_t* new_id) {
   Status s = indexed_db::GetInt(transaction, MaxDatabaseIdKey::Encode(),
                                 &max_database_id, &found);
   if (!s.ok()) {
-    INTERNAL_READ_ERROR_UNTESTED(GET_NEW_DATABASE_ID);
+    INTERNAL_READ_ERROR(GET_NEW_DATABASE_ID);
     return s;
   }
   if (!found)
@@ -426,7 +428,7 @@ Status GetNewDatabaseId(Transaction* transaction, int64_t* new_id) {
   int64_t database_id = max_database_id + 1;
   s = indexed_db::PutInt(transaction, MaxDatabaseIdKey::Encode(), database_id);
   if (!s.ok()) {
-    INTERNAL_READ_ERROR_UNTESTED(GET_NEW_DATABASE_ID);
+    INTERNAL_READ_ERROR(GET_NEW_DATABASE_ID);
     return s;
   }
   *new_id = database_id;
@@ -478,7 +480,7 @@ bool FindGreatestKeyLessThanOrEqual(
   std::unique_ptr<TransactionalLevelDBIterator> it =
       transaction->CreateIterator(*s);
   if (!s->ok()) {
-    INTERNAL_WRITE_ERROR_UNTESTED(CREATE_ITERATOR);
+    INTERNAL_WRITE_ERROR(CREATE_ITERATOR);
     return false;
   }
 
@@ -499,7 +501,7 @@ bool FindGreatestKeyLessThanOrEqual(
   }
 
   do {
-    *found_key = it->Key().as_string();
+    *found_key = std::string(it->Key());
 
     // There can be several index keys that compare equal. We want the last one.
     *s = it->Next();
@@ -522,14 +524,14 @@ bool GetBlobNumberGeneratorCurrentNumber(
   bool found = false;
   bool ok = leveldb_transaction->Get(key_gen_key, &data, &found).ok();
   if (!ok) {
-    INTERNAL_READ_ERROR_UNTESTED(GET_BLOB_KEY_GENERATOR_CURRENT_NUMBER);
+    INTERNAL_READ_ERROR(GET_BLOB_KEY_GENERATOR_CURRENT_NUMBER);
     return false;
   }
   if (found) {
     StringPiece slice(data);
     if (!DecodeVarInt(&slice, &cur_number) || !slice.empty() ||
         !DatabaseMetaDataKey::IsValidBlobNumber(cur_number)) {
-      INTERNAL_READ_ERROR_UNTESTED(GET_BLOB_KEY_GENERATOR_CURRENT_NUMBER);
+      INTERNAL_READ_ERROR(GET_BLOB_KEY_GENERATOR_CURRENT_NUMBER);
       return false;
     }
   }
@@ -590,6 +592,42 @@ leveldb::Status SetEarliestSweepTime(Transaction* txn,
   const std::string earliest_sweep_time_key = EarliestSweepKey::Encode();
   int64_t time_micros = (earliest_sweep - base::Time()).InMicroseconds();
   return indexed_db::PutInt(txn, earliest_sweep_time_key, time_micros);
+}
+
+Status GetEarliestCompactionTime(TransactionalLevelDBDatabase* db,
+                                 base::Time* earliest_compaction) {
+  const std::string earliest_compaction_time_key =
+      EarliestCompactionKey::Encode();
+  *earliest_compaction = base::Time();
+  bool found = false;
+  int64_t time_micros = 0;
+  Status s = indexed_db::GetInt(db, earliest_compaction_time_key, &time_micros,
+                                &found);
+  if (!s.ok())
+    return s;
+  if (!found)
+    time_micros = 0;
+
+  DCHECK_GE(time_micros, 0);
+  *earliest_compaction += base::TimeDelta::FromMicroseconds(time_micros);
+
+  return s;
+}
+
+template leveldb::Status SetEarliestCompactionTime<
+    TransactionalLevelDBTransaction>(TransactionalLevelDBTransaction* db,
+                                     base::Time earliest_compaction);
+template leveldb::Status SetEarliestCompactionTime<LevelDBDirectTransaction>(
+    LevelDBDirectTransaction* db,
+    base::Time earliest_compaction);
+
+template <typename Transaction>
+leveldb::Status SetEarliestCompactionTime(Transaction* txn,
+                                          base::Time earliest_compaction) {
+  const std::string earliest_compaction_time_key =
+      EarliestCompactionKey::Encode();
+  int64_t time_micros = (earliest_compaction - base::Time()).InMicroseconds();
+  return indexed_db::PutInt(txn, earliest_compaction_time_key, time_micros);
 }
 
 const leveldb::Comparator* GetDefaultLevelDBComparator() {

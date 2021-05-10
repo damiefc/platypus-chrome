@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/platform/graphics/image_decoder_wrapper.h"
 
+#include "base/trace_event/trace_event.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/graphics/image_decoding_store.h"
 #include "third_party/blink/renderer/platform/graphics/image_frame_generator.h"
@@ -292,7 +293,6 @@ std::unique_ptr<ImageDecoder> ImageDecoderWrapper::CreateDecoderWithData(
   // The newly created decoder just grabbed the data.  No need to reset it.
   return ImageDecoder::Create(data_, all_data_received_, alpha_option_,
                               decoding_option_, decoder_color_behavior_,
-                              ImageDecoder::OverrideAllowDecodeToYuv::kDeny,
                               scaled_size_);
 }
 

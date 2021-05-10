@@ -404,12 +404,10 @@ TEST_P(PaintControllerTest, CachedDisplayItems) {
   EXPECT_TRUE(ClientCacheIsValid(first));
   EXPECT_TRUE(ClientCacheIsValid(second));
   sk_sp<const PaintRecord> first_paint_record =
-      static_cast<const DrawingDisplayItem&>(
-          GetPaintController().GetDisplayItemList()[0])
+      To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[0])
           .GetPaintRecord();
   sk_sp<const PaintRecord> second_paint_record =
-      static_cast<const DrawingDisplayItem&>(
-          GetPaintController().GetDisplayItemList()[1])
+      To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[1])
           .GetPaintRecord();
 
   first.Invalidate();
@@ -426,15 +424,14 @@ TEST_P(PaintControllerTest, CachedDisplayItems) {
                           IsSameId(&second, kBackgroundType)));
   // The first display item should be updated.
   EXPECT_NE(first_paint_record,
-            static_cast<const DrawingDisplayItem&>(
-                GetPaintController().GetDisplayItemList()[0])
+            To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[0])
                 .GetPaintRecord());
   // The second display item should be cached.
   if (!RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled()) {
-    EXPECT_EQ(second_paint_record,
-              static_cast<const DrawingDisplayItem&>(
-                  GetPaintController().GetDisplayItemList()[1])
-                  .GetPaintRecord());
+    EXPECT_EQ(
+        second_paint_record,
+        To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[1])
+            .GetPaintRecord());
   }
   EXPECT_TRUE(ClientCacheIsValid(first));
   EXPECT_TRUE(ClientCacheIsValid(second));
@@ -844,6 +841,85 @@ TEST_P(PaintControllerTest, CachedSubsequenceAndDisplayItemsSwapOrder) {
                        DefaultPaintChunkProperties())));
 }
 
+TEST_P(PaintControllerTest, DisplayItemSwapOrderBeforeCachedSubsequence) {
+  FakeDisplayItemClient content1a("content1a");
+  FakeDisplayItemClient content1b("content1b");
+  FakeDisplayItemClient container2("container2");
+  FakeDisplayItemClient content3("content3");
+  GraphicsContext context(GetPaintController());
+
+  PaintChunk::Id content1a_id(content1a, kBackgroundType);
+  PaintChunk::Id content1b_id(content1b, kBackgroundType);
+  PaintChunk::Id container2_id(container2, kBackgroundType);
+  PaintChunk::Id content3_id(content3, kBackgroundType);
+  IntRect rect(100, 100, 50, 200);
+
+  InitRootChunk();
+
+  DrawRect(context, content1a, kBackgroundType, rect);
+  DrawRect(context, content1b, kBackgroundType, rect);
+  {
+    SubsequenceRecorder r(context, container2);
+    DrawRect(context, container2, kBackgroundType, rect);
+  }
+  DrawRect(context, content3, kBackgroundType, rect);
+  CommitAndFinishCycle();
+
+  EXPECT_THAT(GetPaintController().GetDisplayItemList(),
+              ElementsAre(IsSameId(&content1a, kBackgroundType),
+                          IsSameId(&content1b, kBackgroundType),
+                          IsSameId(&container2, kBackgroundType),
+                          IsSameId(&content3, kBackgroundType)));
+
+  // New paint order:
+  // Subsequence(container1): container1, content1b(cached), content1a(cached).
+  // Subsequence(container2): cached
+  // Subsequence(contaienr3): container3, content3
+  InitRootChunk();
+  if (RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled()) {
+    EXPECT_FALSE(DrawingRecorder::UseCachedDrawingIfPossible(context, content1b,
+                                                             kBackgroundType));
+    DrawRect(context, content1b, kBackgroundType, rect);
+    EXPECT_FALSE(DrawingRecorder::UseCachedDrawingIfPossible(context, content1a,
+                                                             kBackgroundType));
+    DrawRect(context, content1a, kBackgroundType, rect);
+    {
+      EXPECT_FALSE(SubsequenceRecorder::UseCachedSubsequenceIfPossible(
+          context, container2));
+      SubsequenceRecorder r(context, container2);
+      DrawRect(context, container2, kBackgroundType, rect);
+    }
+    EXPECT_FALSE(DrawingRecorder::UseCachedDrawingIfPossible(context, content3,
+                                                             kBackgroundType));
+    DrawRect(context, content3, kBackgroundType, rect);
+  } else {
+    EXPECT_TRUE(DrawingRecorder::UseCachedDrawingIfPossible(context, content1b,
+                                                            kBackgroundType));
+    EXPECT_TRUE(DrawingRecorder::UseCachedDrawingIfPossible(context, content1a,
+                                                            kBackgroundType));
+    EXPECT_TRUE(SubsequenceRecorder::UseCachedSubsequenceIfPossible(
+        context, container2));
+    EXPECT_TRUE(DrawingRecorder::UseCachedDrawingIfPossible(context, content3,
+                                                            kBackgroundType));
+  }
+
+  EXPECT_EQ(4u, NumCachedNewItems());
+  EXPECT_EQ(1u, NumCachedNewSubsequences());
+#if DCHECK_IS_ON()
+  EXPECT_EQ(1u, NumIndexedItems());
+  EXPECT_EQ(2u, NumSequentialMatches());
+  EXPECT_EQ(1u, NumOutOfOrderMatches());
+#endif
+
+  CommitAndFinishCycle();
+
+  EXPECT_THAT(GetPaintController().GetDisplayItemList(),
+              ElementsAre(IsSameId(&content1b, kBackgroundType),
+                          IsSameId(&content1a, kBackgroundType),
+                          IsSameId(&container2, kBackgroundType),
+                          IsSameId(&content3, kBackgroundType)));
+}
+
 TEST_P(PaintControllerTest, CachedSubsequenceContainingFragments) {
   GraphicsContext context(GetPaintController());
   FakeDisplayItemClient root("root");
@@ -1192,12 +1268,10 @@ TEST_P(PaintControllerTest, SkipCache) {
                           IsSameId(&content, kForegroundType),
                           IsSameId(&content, kForegroundType)));
   sk_sp<const PaintRecord> record1 =
-      static_cast<const DrawingDisplayItem&>(
-          GetPaintController().GetDisplayItemList()[1])
+      To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[1])
           .GetPaintRecord();
   sk_sp<const PaintRecord> record2 =
-      static_cast<const DrawingDisplayItem&>(
-          GetPaintController().GetDisplayItemList()[2])
+      To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[2])
           .GetPaintRecord();
   EXPECT_NE(record1, record2);
   EXPECT_DEFAULT_ROOT_CHUNK(3);
@@ -1226,12 +1300,12 @@ TEST_P(PaintControllerTest, SkipCache) {
               ElementsAre(IsSameId(&multicol, kBackgroundType),
                           IsSameId(&content, kForegroundType),
                           IsSameId(&content, kForegroundType)));
-  EXPECT_NE(record1, static_cast<const DrawingDisplayItem&>(
-                         GetPaintController().GetDisplayItemList()[1])
-                         .GetPaintRecord());
-  EXPECT_NE(record2, static_cast<const DrawingDisplayItem&>(
-                         GetPaintController().GetDisplayItemList()[2])
-                         .GetPaintRecord());
+  EXPECT_NE(record1,
+            To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[1])
+                .GetPaintRecord());
+  EXPECT_NE(record2,
+            To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[2])
+                .GetPaintRecord());
   EXPECT_DEFAULT_ROOT_CHUNK(3);
 
   InitRootChunk();
@@ -1246,17 +1320,17 @@ TEST_P(PaintControllerTest, SkipCache) {
   GetPaintController().EndSkippingCache();
 
   // We should repaint everything on invalidation of the scope container.
-  EXPECT_THAT(GetPaintController().NewDisplayItemList(),
+  const auto& display_item_list =
+      GetPaintController().GetNewPaintArtifactShared()->GetDisplayItemList();
+  EXPECT_THAT(display_item_list,
               ElementsAre(IsSameId(&multicol, kBackgroundType),
                           IsSameId(&content, kForegroundType),
                           IsSameId(&content, kForegroundType),
                           IsSameId(&content, kForegroundType)));
-  EXPECT_NE(record1, static_cast<const DrawingDisplayItem&>(
-                         GetPaintController().NewDisplayItemList()[1])
-                         .GetPaintRecord());
-  EXPECT_NE(record2, static_cast<const DrawingDisplayItem&>(
-                         GetPaintController().NewDisplayItemList()[2])
-                         .GetPaintRecord());
+  EXPECT_NE(record1,
+            To<DrawingDisplayItem>(display_item_list[1]).GetPaintRecord());
+  EXPECT_NE(record2,
+            To<DrawingDisplayItem>(display_item_list[2]).GetPaintRecord());
 
   CommitAndFinishCycle();
   EXPECT_DEFAULT_ROOT_CHUNK(4);
@@ -1284,16 +1358,13 @@ TEST_P(PaintControllerTest, PartialSkipCache) {
                           IsSameId(&content, kForegroundType),
                           IsSameId(&content, kForegroundType)));
   sk_sp<const PaintRecord> record0 =
-      static_cast<const DrawingDisplayItem&>(
-          GetPaintController().GetDisplayItemList()[0])
+      To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[0])
           .GetPaintRecord();
   sk_sp<const PaintRecord> record1 =
-      static_cast<const DrawingDisplayItem&>(
-          GetPaintController().GetDisplayItemList()[1])
+      To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[1])
           .GetPaintRecord();
   sk_sp<const PaintRecord> record2 =
-      static_cast<const DrawingDisplayItem&>(
-          GetPaintController().GetDisplayItemList()[2])
+      To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[2])
           .GetPaintRecord();
   EXPECT_NE(record1, record2);
 
@@ -1324,17 +1395,48 @@ TEST_P(PaintControllerTest, PartialSkipCache) {
               ElementsAre(IsSameId(&content, kBackgroundType),
                           IsSameId(&content, kForegroundType),
                           IsSameId(&content, kForegroundType)));
-  EXPECT_NE(record0, static_cast<const DrawingDisplayItem&>(
-                         GetPaintController().GetDisplayItemList()[0])
-                         .GetPaintRecord());
-  EXPECT_NE(record1, static_cast<const DrawingDisplayItem&>(
-                         GetPaintController().GetDisplayItemList()[1])
-                         .GetPaintRecord());
-  EXPECT_NE(record2, static_cast<const DrawingDisplayItem&>(
-                         GetPaintController().GetDisplayItemList()[2])
-                         .GetPaintRecord());
+  EXPECT_NE(record0,
+            To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[0])
+                .GetPaintRecord());
+  EXPECT_NE(record1,
+            To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[1])
+                .GetPaintRecord());
+  EXPECT_NE(record2,
+            To<DrawingDisplayItem>(GetPaintController().GetDisplayItemList()[2])
+                .GetPaintRecord());
 }
 
+TEST_P(PaintControllerTest, SkipCacheDuplicatedItemAndChunkIds) {
+  FakeDisplayItemClient chunk_client("chunk client");
+  FakeDisplayItemClient item_client("item client");
+  auto properties = DefaultPaintChunkProperties();
+  PaintChunk::Id chunk_id(chunk_client, DisplayItem::kLayerChunk);
+  auto& paint_controller = GetPaintController();
+
+  GraphicsContext context(paint_controller);
+  paint_controller.BeginSkippingCache();
+  paint_controller.SetWillForceNewChunk(true);
+  paint_controller.UpdateCurrentPaintChunkProperties(&chunk_id, properties);
+  DrawRect(context, item_client, kBackgroundType, IntRect(0, 0, 100, 100));
+  paint_controller.SetWillForceNewChunk(true);
+  paint_controller.UpdateCurrentPaintChunkProperties(&chunk_id, properties);
+  DrawRect(context, item_client, kBackgroundType, IntRect(0, 0, 100, 100));
+  paint_controller.EndSkippingCache();
+
+  CommitAndFinishCycle();
+
+  EXPECT_THAT(paint_controller.GetDisplayItemList(),
+              ElementsAre(IsSameId(&item_client, kBackgroundType),
+                          IsSameId(&item_client, kBackgroundType)));
+  EXPECT_FALSE(paint_controller.GetDisplayItemList()[0].IsCacheable());
+  EXPECT_FALSE(paint_controller.GetDisplayItemList()[1].IsCacheable());
+
+  EXPECT_THAT(GetPaintController().PaintChunks(),
+              ElementsAre(IsPaintChunk(0, 1, chunk_id, properties),
+                          IsPaintChunk(1, 2, chunk_id, properties)));
+  EXPECT_FALSE(paint_controller.PaintChunks()[0].is_cacheable);
+  EXPECT_FALSE(paint_controller.PaintChunks()[1].is_cacheable);
+}
 
 TEST_P(PaintControllerTest, SmallPaintControllerHasOnePaintChunk) {
   FakeDisplayItemClient client("test client");
@@ -1344,10 +1446,8 @@ TEST_P(PaintControllerTest, SmallPaintControllerHasOnePaintChunk) {
   DrawRect(context, client, kBackgroundType, IntRect(0, 0, 100, 100));
 
   CommitAndFinishCycle();
-  const auto& paint_chunks = GetPaintController().PaintChunks();
-  ASSERT_EQ(1u, paint_chunks.size());
-  EXPECT_EQ(0u, paint_chunks[0].begin_index);
-  EXPECT_EQ(1u, paint_chunks[0].end_index);
+  EXPECT_THAT(GetPaintController().PaintChunks(),
+              ElementsAre(IsPaintChunk(0, 1)));
 }
 
 void DrawPath(GraphicsContext& context,
@@ -1413,35 +1513,6 @@ TEST_P(PaintControllerTest, BeginAndEndFrame) {
   EXPECT_TRUE(result.first_painted);
   EXPECT_FALSE(result.text_painted);
   EXPECT_FALSE(result.image_painted);
-}
-
-TEST_P(PaintControllerTest, InvalidateAll) {
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
-  EXPECT_TRUE(GetPaintController().CacheIsAllInvalid());
-  CommitAndFinishCycle();
-  EXPECT_TRUE(GetPaintController().GetPaintArtifact().IsEmpty());
-  EXPECT_FALSE(GetPaintController().CacheIsAllInvalid());
-
-  InvalidateAll();
-  EXPECT_TRUE(GetPaintController().CacheIsAllInvalid());
-  CommitAndFinishCycle();
-  EXPECT_TRUE(GetPaintController().GetPaintArtifact().IsEmpty());
-  EXPECT_FALSE(GetPaintController().CacheIsAllInvalid());
-
-  FakeDisplayItemClient client("client");
-  GraphicsContext context(GetPaintController());
-
-  InitRootChunk();
-  DrawRect(context, client, kBackgroundType, IntRect(1, 2, 3, 4));
-  CommitAndFinishCycle();
-  EXPECT_FALSE(GetPaintController().GetPaintArtifact().IsEmpty());
-  EXPECT_FALSE(GetPaintController().CacheIsAllInvalid());
-
-  InvalidateAll();
-  EXPECT_TRUE(GetPaintController().GetPaintArtifact().IsEmpty());
-  EXPECT_TRUE(GetPaintController().CacheIsAllInvalid());
 }
 
 TEST_P(PaintControllerTest, InsertValidItemInFront) {

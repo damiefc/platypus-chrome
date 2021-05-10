@@ -33,6 +33,7 @@
 #include "cc/animation/animation_host.h"
 #include "third_party/blink/renderer/core/animation/animation_clock.h"
 #include "third_party/blink/renderer/core/animation/animation_timeline.h"
+#include "third_party/blink/renderer/core/animation/css/css_scroll_timeline.h"
 #include "third_party/blink/renderer/core/animation/keyframe_effect.h"
 #include "third_party/blink/renderer/core/animation/pending_animations.h"
 #include "third_party/blink/renderer/core/animation/worklet_animation_controller.h"
@@ -70,6 +71,7 @@ DocumentAnimations::DocumentAnimations(Document* document)
 
 void DocumentAnimations::AddTimeline(AnimationTimeline& timeline) {
   timelines_.insert(&timeline);
+  unvalidated_timelines_.insert(&timeline);
 }
 
 void DocumentAnimations::UpdateAnimationTimingForAnimationFrame() {
@@ -115,27 +117,24 @@ void DocumentAnimations::UpdateAnimations(
     DCHECK(document_->View());
     document_->View()->ScheduleAnimation();
   }
-  if (document_->View()) {
-    if (cc::AnimationHost* host =
-            document_->View()->GetCompositorAnimationHost()) {
-      wtf_size_t total_animations_count = 0;
-      for (auto& timeline : timelines_) {
-        if (timeline->HasAnimations())
-          total_animations_count += timeline->AnimationsNeedingUpdateCount();
-      }
-
-      // In the CompositorTimingHistory::DidDraw where we know that there is
-      // visual update, we will use document.CurrentFrameHadRAF as a signal to
-      // record UMA or not.
-      host->SetAnimationCounts(total_animations_count,
-                               document_->CurrentFrameHadRAF(),
-                               document_->NextFrameHasPendingRAF());
-    }
-  }
 
   document_->GetWorkletAnimationController().UpdateAnimationStates();
   for (auto& timeline : timelines_)
     timeline->ScheduleNextService();
+}
+
+size_t DocumentAnimations::GetAnimationsCount() {
+  wtf_size_t total_animations_count = 0;
+  if (document_->View()) {
+    if (cc::AnimationHost* host =
+            document_->View()->GetCompositorAnimationHost()) {
+      for (auto& timeline : timelines_) {
+        if (timeline->HasAnimations())
+          total_animations_count += timeline->AnimationsNeedingUpdateCount();
+      }
+    }
+  }
+  return total_animations_count;
 }
 
 void DocumentAnimations::MarkAnimationsCompositorPending() {
@@ -161,9 +160,30 @@ HeapVector<Member<Animation>> DocumentAnimations::getAnimations(
   return animations;
 }
 
+void DocumentAnimations::ValidateTimelines() {
+  for (auto& timeline : unvalidated_timelines_) {
+    if (auto* scroll_timeline = DynamicTo<CSSScrollTimeline>(timeline.Get()))
+      scroll_timeline->ValidateState();
+  }
+
+  unvalidated_timelines_.clear();
+}
+
+void DocumentAnimations::CacheCSSScrollTimeline(CSSScrollTimeline& timeline) {
+  // We cache the least seen CSSScrollTimeline for a given name.
+  cached_css_timelines_.Set(timeline.Name(), &timeline);
+}
+
+CSSScrollTimeline* DocumentAnimations::FindCachedCSSScrollTimeline(
+    const AtomicString& name) {
+  return To<CSSScrollTimeline>(cached_css_timelines_.at(name));
+}
+
 void DocumentAnimations::Trace(Visitor* visitor) const {
   visitor->Trace(document_);
   visitor->Trace(timelines_);
+  visitor->Trace(unvalidated_timelines_);
+  visitor->Trace(cached_css_timelines_);
 }
 
 void DocumentAnimations::GetAnimationsTargetingTreeScope(

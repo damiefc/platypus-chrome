@@ -35,7 +35,6 @@
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_container.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
-#include "third_party/blink/renderer/core/layout/svg/svg_resources_cache.h"
 #include "third_party/blink/renderer/core/layout/svg/transform_helper.h"
 #include "third_party/blink/renderer/core/layout/svg/transformed_hit_test_location.h"
 #include "third_party/blink/renderer/core/paint/image_element_timing.h"
@@ -50,7 +49,6 @@ namespace blink {
 
 LayoutSVGImage::LayoutSVGImage(SVGImageElement* impl)
     : LayoutSVGModelObject(impl),
-      needs_boundaries_update_(true),
       needs_transform_update_(true),
       transform_uses_reference_box_(false),
       image_resource_(MakeGarbageCollected<LayoutImageResource>()) {
@@ -58,6 +56,11 @@ LayoutSVGImage::LayoutSVGImage(SVGImageElement* impl)
 }
 
 LayoutSVGImage::~LayoutSVGImage() = default;
+
+void LayoutSVGImage::Trace(Visitor* visitor) const {
+  visitor->Trace(image_resource_);
+  LayoutSVGModelObject::Trace(visitor);
+}
 
 void LayoutSVGImage::StyleDidChange(StyleDifference diff,
                                     const ComputedStyle* old_style) {
@@ -86,7 +89,7 @@ static float ResolveHeightForRatio(float width,
 
 bool LayoutSVGImage::HasOverriddenIntrinsicSize() const {
   NOT_DESTROYED();
-  if (!RuntimeEnabledFeatures::ExperimentalProductivityFeaturesEnabled())
+  if (!RuntimeEnabledFeatures::ExperimentalPoliciesEnabled())
     return false;
   auto* svg_image_element = DynamicTo<SVGImageElement>(GetElement());
   return svg_image_element && svg_image_element->IsDefaultIntrinsicSize();
@@ -143,20 +146,15 @@ bool LayoutSVGImage::UpdateBoundingBox() {
 
   SVGLengthContext length_context(GetElement());
   const ComputedStyle& style = StyleRef();
-  const SVGComputedStyle& svg_style = style.SvgStyle();
-  object_bounding_box_ = FloatRect(
-      length_context.ResolveLengthPair(svg_style.X(), svg_style.Y(), style),
-      ToFloatSize(length_context.ResolveLengthPair(style.Width(),
-                                                   style.Height(), style)));
+  object_bounding_box_ =
+      FloatRect(length_context.ResolveLengthPair(style.X(), style.Y(), style),
+                ToFloatSize(length_context.ResolveLengthPair(
+                    style.Width(), style.Height(), style)));
 
   if (style.Width().IsAuto() || style.Height().IsAuto())
     object_bounding_box_.SetSize(CalculateObjectSize());
 
-  if (old_object_bounding_box != object_bounding_box_) {
-    SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kImage);
-    needs_boundaries_update_ = true;
-  }
-  return old_object_bounding_box.Size() != object_bounding_box_.Size();
+  return old_object_bounding_box != object_bounding_box_;
 }
 
 void LayoutSVGImage::UpdateLayout() {
@@ -164,19 +162,13 @@ void LayoutSVGImage::UpdateLayout() {
   DCHECK(NeedsLayout());
   LayoutAnalyzer::Scope analyzer(*this);
 
-  // Invalidate all resources of this client if our layout changed.
-  if (EverHadLayout() && SelfNeedsLayout())
-    SVGResourcesCache::ClientLayoutChanged(*this);
+  const bool bbox_changed = UpdateBoundingBox();
+  if (bbox_changed) {
+    SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kImage);
 
-  FloatPoint old_bbox_location = object_bounding_box_.Location();
-  bool bbox_changed = UpdateBoundingBox() ||
-                      old_bbox_location != object_bounding_box_.Location();
-
-  bool update_parent_boundaries = false;
-  if (needs_boundaries_update_) {
-    local_visual_rect_ = object_bounding_box_;
-    needs_boundaries_update_ = false;
-    update_parent_boundaries = true;
+    // Invalidate all resources of this client if our reference box changed.
+    if (EverHadLayout())
+      SVGResourceInvalidator(*this).InvalidateEffects();
   }
 
   if (!needs_transform_update_ && transform_uses_reference_box_) {
@@ -185,6 +177,7 @@ void LayoutSVGImage::UpdateLayout() {
       SetNeedsPaintPropertyUpdate();
   }
 
+  bool update_parent_boundaries = bbox_changed;
   if (needs_transform_update_) {
     local_transform_ = CalculateLocalTransform();
     needs_transform_update_ = false;
@@ -195,7 +188,6 @@ void LayoutSVGImage::UpdateLayout() {
   if (update_parent_boundaries)
     LayoutSVGModelObject::SetNeedsBoundariesUpdate();
 
-  DCHECK(!needs_boundaries_update_);
   DCHECK(!needs_transform_update_);
 
   if (auto* svg_image_element = DynamicTo<SVGImageElement>(GetElement())) {
@@ -256,7 +248,7 @@ void LayoutSVGImage::ImageChanged(WrappedImagePtr, CanDeferInvalidation defer) {
                                                                          false);
 
   if (StyleRef().Width().IsAuto() || StyleRef().Height().IsAuto()) {
-    if (UpdateBoundingBox())
+    if (CalculateObjectSize() != object_bounding_box_.Size())
       SetNeedsLayout(layout_invalidation_reason::kSizeChanged);
   }
 

@@ -4,8 +4,9 @@
 
 #include "chrome/test/base/chrome_render_view_test.h"
 
+#include <memory>
+
 #include "base/debug/leak_annotations.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/common/chrome_content_client.h"
@@ -70,11 +71,13 @@ class MockAutofillAgent : public AutofillAgent {
                       autofill_assistant_agent,
                       registry) {}
 
-  ~MockAutofillAgent() override {}
+  MockAutofillAgent(const MockAutofillAgent&) = delete;
+  MockAutofillAgent& operator=(const MockAutofillAgent&) = delete;
+  ~MockAutofillAgent() override = default;
 
   void WaitForAutofillDidAssociateFormControl() {
     DCHECK(run_loop_ == nullptr);
-    run_loop_.reset(new base::RunLoop);
+    run_loop_ = std::make_unique<base::RunLoop>();
     run_loop_->Run();
     run_loop_.reset();
   }
@@ -87,8 +90,6 @@ class MockAutofillAgent : public AutofillAgent {
   }
 
   std::unique_ptr<base::RunLoop> run_loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockAutofillAgent);
 };
 
 }  // namespace
@@ -99,9 +100,6 @@ ChromeRenderViewTest::~ChromeRenderViewTest() = default;
 void ChromeRenderViewTest::SetUp() {
   ChromeUnitTestSuite::InitializeProviders();
   ChromeUnitTestSuite::InitializeResourceBundle();
-
-  chrome_render_thread_ = new ChromeMockRenderThread();
-  render_thread_.reset(chrome_render_thread_);
 
   registry_ = std::make_unique<service_manager::BinderRegistry>();
 

@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/common/url_constants.h"
@@ -55,11 +54,11 @@ TEST_F(ChromePermissionManagerTest, GetCanonicalOriginSearch) {
   const GURL other_url("https://other.url");
   const GURL google_base =
       GURL(UIThreadSearchTermsData().GoogleBaseURLValue()).GetOrigin();
-  const GURL local_ntp = GURL(chrome::kChromeSearchLocalNtpUrl).GetOrigin();
   const GURL remote_ntp = GURL(std::string("chrome-search://") +
                                chrome::kChromeSearchRemoteNtpHost);
   const GURL other_chrome_search = GURL("chrome-search://not-local-ntp");
   const GURL top_level_ntp(chrome::kChromeUINewTabURL);
+  const GURL webui_ntp = GURL(chrome::kChromeUINewTabPageURL);
 
   // "Normal" URLs are not affected by GetCanonicalOrigin.
   EXPECT_EQ(google_com,
@@ -75,12 +74,12 @@ TEST_F(ChromePermissionManagerTest, GetCanonicalOriginSearch) {
             GetPermissionControllerDelegate()->GetCanonicalOrigin(
                 ContentSettingsType::GEOLOCATION, google_base, google_base));
 
-  // The local NTP URL gets mapped to the Google base URL.
+  // The WebUI NTP URL gets mapped to the Google base URL.
   EXPECT_EQ(google_base,
             GetPermissionControllerDelegate()->GetCanonicalOrigin(
-                ContentSettingsType::GEOLOCATION, local_ntp, top_level_ntp));
-  // However, other chrome-search:// URLs, including the remote NTP URL, are
-  // not affected.
+                ContentSettingsType::GEOLOCATION, webui_ntp, top_level_ntp));
+
+  // chrome-search://remote-ntp and other URLs are not affected.
   EXPECT_EQ(remote_ntp,
             GetPermissionControllerDelegate()->GetCanonicalOrigin(
                 ContentSettingsType::GEOLOCATION, remote_ntp, top_level_ntp));

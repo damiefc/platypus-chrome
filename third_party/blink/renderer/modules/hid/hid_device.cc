@@ -41,13 +41,12 @@ Vector<uint8_t> ConvertBufferSource(
   if (buffer.IsArrayBuffer()) {
     vector.Append(static_cast<uint8_t*>(buffer.GetAsArrayBuffer()->Data()),
                   base::checked_cast<wtf_size_t>(
-                      buffer.GetAsArrayBuffer()->ByteLengthAsSizeT()));
+                      buffer.GetAsArrayBuffer()->ByteLength()));
   } else {
     vector.Append(
-        static_cast<uint8_t*>(
-            buffer.GetAsArrayBufferView().View()->BaseAddress()),
+        static_cast<uint8_t*>(buffer.GetAsArrayBufferView()->BaseAddress()),
         base::checked_cast<wtf_size_t>(
-            buffer.GetAsArrayBufferView().View()->byteLengthAsSizeT()));
+            buffer.GetAsArrayBufferView()->byteLength()));
   }
   return vector;
 }
@@ -185,6 +184,7 @@ HIDCollectionInfo* ToHIDCollectionInfo(
   HIDCollectionInfo* result = HIDCollectionInfo::Create();
   result->setUsage(collection.usage->usage);
   result->setUsagePage(collection.usage->usage_page);
+  result->setType(collection.collection_type);
 
   HeapVector<Member<HIDReportInfo>> input_reports;
   for (const auto& report : collection.input_reports)
@@ -216,15 +216,9 @@ HIDDevice::HIDDevice(HID* parent,
                      ExecutionContext* context)
     : ExecutionContextLifecycleObserver(context),
       parent_(parent),
-      device_info_(std::move(info)),
       connection_(context),
       receiver_(this, context) {
-  DCHECK(device_info_);
-  for (const auto& collection : device_info_->collections) {
-    // Omit information about top-level collections with protected usages.
-    if (!IsProtected(*collection->usage))
-      collections_.push_back(ToHIDCollectionInfo(*collection));
-  }
+  UpdateDeviceInfo(std::move(info));
 }
 
 HIDDevice::~HIDDevice() {
@@ -318,10 +312,9 @@ ScriptPromise HIDDevice::sendReport(ScriptState* script_state,
     return promise;
   }
 
-  size_t data_size =
-      data.IsArrayBuffer()
-          ? data.GetAsArrayBuffer()->ByteLengthAsSizeT()
-          : data.GetAsArrayBufferView().View()->byteLengthAsSizeT();
+  size_t data_size = data.IsArrayBuffer()
+                         ? data.GetAsArrayBuffer()->ByteLength()
+                         : data.GetAsArrayBufferView()->byteLength();
 
   if (!base::CheckedNumeric<wtf_size_t>(data_size).IsValid()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -352,10 +345,9 @@ ScriptPromise HIDDevice::sendFeatureReport(
     return promise;
   }
 
-  size_t data_size =
-      data.IsArrayBuffer()
-          ? data.GetAsArrayBuffer()->ByteLengthAsSizeT()
-          : data.GetAsArrayBufferView().View()->byteLengthAsSizeT();
+  size_t data_size = data.IsArrayBuffer()
+                         ? data.GetAsArrayBuffer()->ByteLength()
+                         : data.GetAsArrayBufferView()->byteLength();
 
   if (!base::CheckedNumeric<wtf_size_t>(data_size).IsValid()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -394,6 +386,22 @@ ScriptPromise HIDDevice::receiveFeatureReport(ScriptState* script_state,
 
 void HIDDevice::ContextDestroyed() {
   device_requests_.clear();
+}
+
+bool HIDDevice::HasPendingActivity() const {
+  // The object should be considered active if it is connected and has at least
+  // one event listener.
+  return connection_.is_bound() && HasEventListeners();
+}
+
+void HIDDevice::UpdateDeviceInfo(device::mojom::blink::HidDeviceInfoPtr info) {
+  device_info_ = std::move(info);
+  collections_.clear();
+  for (const auto& collection : device_info_->collections) {
+    // Omit information about top-level collections with protected usages.
+    if (!IsProtected(*collection->usage))
+      collections_.push_back(ToHIDCollectionInfo(*collection));
+  }
 }
 
 void HIDDevice::Trace(Visitor* visitor) const {
@@ -501,8 +509,14 @@ HIDReportItem* HIDDevice::ToHIDReportItem(
   HIDReportItem* result = HIDReportItem::Create();
   result->setIsAbsolute(!report_item.is_relative);
   result->setIsArray(!report_item.is_variable);
+  result->setIsBufferedBytes(report_item.is_buffered_bytes);
+  result->setIsConstant(report_item.is_constant);
+  result->setIsLinear(!report_item.is_non_linear);
   result->setIsRange(report_item.is_range);
+  result->setIsVolatile(report_item.is_volatile);
   result->setHasNull(report_item.has_null_position);
+  result->setHasPreferredState(!report_item.no_preferred_state);
+  result->setWrap(report_item.wrap);
   result->setReportSize(report_item.report_size);
   result->setReportCount(report_item.report_count);
   result->setUnitExponent(

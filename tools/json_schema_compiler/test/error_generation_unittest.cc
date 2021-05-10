@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/json/json_writer.h"
+#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/json_schema_compiler/test/test_util.h"
@@ -17,15 +18,15 @@ using json_schema_compiler::test_util::Dictionary;
 using json_schema_compiler::test_util::List;
 
 template <typename T>
-base::string16 GetPopulateError(const Value& value) {
-  base::string16 error;
+std::u16string GetPopulateError(const Value& value) {
+  std::u16string error;
   T test_type;
   T::Populate(value, &test_type, &error);
   return error;
 }
 
 testing::AssertionResult EqualsUtf16(const std::string& expected,
-                                     const base::string16& actual) {
+                                     const std::u16string& actual) {
   if (base::ASCIIToUTF16(expected) == actual)
     return testing::AssertionSuccess();
   return testing::AssertionFailure() << "\n    actual:     " << actual
@@ -82,13 +83,13 @@ TEST(JsonSchemaCompilerErrorTest, TooManyParameters) {
   {
     std::unique_ptr<base::ListValue> params_value =
         List(std::make_unique<Value>(5));
-    base::string16 error;
+    std::u16string error;
     EXPECT_TRUE(errors::TestFunction::Params::Create(*params_value, &error));
   }
   {
     std::unique_ptr<base::ListValue> params_value =
         List(std::make_unique<Value>(5), std::make_unique<Value>(5));
-    base::string16 error;
+    std::u16string error;
     EXPECT_FALSE(errors::TestFunction::Params::Create(*params_value, &error));
     EXPECT_TRUE(EqualsUtf16("expected 1 arguments, got 2", error));
   }
@@ -100,13 +101,13 @@ TEST(JsonSchemaCompilerErrorTest, ParamIsRequired) {
   {
     std::unique_ptr<base::ListValue> params_value =
         List(std::make_unique<Value>(5));
-    base::string16 error;
+    std::u16string error;
     EXPECT_TRUE(errors::TestFunction::Params::Create(*params_value, &error));
   }
   {
     std::unique_ptr<base::ListValue> params_value =
         List(std::make_unique<Value>());
-    base::string16 error;
+    std::u16string error;
     EXPECT_FALSE(errors::TestFunction::Params::Create(*params_value, &error));
     EXPECT_TRUE(EqualsUtf16("'num' is required", error));
   }
@@ -130,7 +131,7 @@ TEST(JsonSchemaCompilerErrorTest, WrongPropertyValueType) {
 
 TEST(JsonSchemaCompilerErrorTest, WrongParameterCreationType) {
   {
-    base::string16 error;
+    std::u16string error;
     std::unique_ptr<base::ListValue> params_value =
         List(std::make_unique<Value>("Yeah!"));
     EXPECT_TRUE(errors::TestString::Params::Create(*params_value, &error));
@@ -138,7 +139,7 @@ TEST(JsonSchemaCompilerErrorTest, WrongParameterCreationType) {
   {
     std::unique_ptr<base::ListValue> params_value =
         List(std::make_unique<Value>(5));
-    base::string16 error;
+    std::u16string error;
     EXPECT_FALSE(
         errors::TestTypeInObject::Params::Create(*params_value, &error));
     EXPECT_TRUE(EqualsUtf16("'paramObject': expected dictionary, got integer",
@@ -155,8 +156,8 @@ TEST(JsonSchemaCompilerErrorTest, WrongTypeValueType) {
     std::unique_ptr<base::DictionaryValue> value =
         Dictionary("otherType", std::make_unique<Value>(1.1));
     errors::ObjectType out;
-    base::string16 error;
-    EXPECT_TRUE(errors::ObjectType::Populate(*value, &out, &error));
+    std::u16string error;
+    EXPECT_FALSE(errors::ObjectType::Populate(*value, &out, &error));
     EXPECT_TRUE(EqualsUtf16("'otherType': expected dictionary, got double",
         error));
     EXPECT_EQ(NULL, out.other_type.get());
@@ -174,7 +175,8 @@ TEST(JsonSchemaCompilerErrorTest, UnableToPopulateArray) {
     std::unique_ptr<base::ListValue> params_value =
         List(std::make_unique<Value>(5), std::make_unique<Value>(false));
     EXPECT_TRUE(EqualsUtf16(
-        "expected integer, got boolean; unable to populate array 'integers'",
+        "Error at key 'integers': Parsing array failed at index 1: expected "
+        "integer, got boolean",
         GetPopulateError<errors::ChoiceType::Integers>(*params_value)));
   }
 }
@@ -226,9 +228,7 @@ TEST(JsonSchemaCompilerErrorTest, BadEnumValue) {
   }
 }
 
-// Warn but don't fail out errors
-
-TEST(JsonSchemaCompilerErrorTest, WarnOnOptionalFailure) {
+TEST(JsonSchemaCompilerErrorTest, ErrorOnOptionalFailure) {
   {
     std::unique_ptr<base::DictionaryValue> value =
         Dictionary("string", std::make_unique<Value>("bling"));
@@ -240,8 +240,8 @@ TEST(JsonSchemaCompilerErrorTest, WarnOnOptionalFailure) {
         Dictionary("string", std::make_unique<Value>(1));
 
     errors::OptionalTestType out;
-    base::string16 error;
-    EXPECT_TRUE(errors::OptionalTestType::Populate(*value, &out, &error));
+    std::u16string error;
+    EXPECT_FALSE(errors::OptionalTestType::Populate(*value, &out, &error));
     EXPECT_TRUE(EqualsUtf16("'string': expected string, got integer",
         error));
     EXPECT_EQ(NULL, out.string.get());
@@ -261,8 +261,8 @@ TEST(JsonSchemaCompilerErrorTest, OptionalBinaryTypeFailure) {
         Dictionary("data", std::make_unique<Value>(1));
 
     errors::OptionalBinaryData out;
-    base::string16 error;
-    EXPECT_TRUE(errors::OptionalBinaryData::Populate(*value, &out, &error));
+    std::u16string error;
+    EXPECT_FALSE(errors::OptionalBinaryData::Populate(*value, &out, &error));
     EXPECT_TRUE(EqualsUtf16("'data': expected binary, got integer",
         error));
     EXPECT_EQ(NULL, out.data.get());
@@ -279,8 +279,8 @@ TEST(JsonSchemaCompilerErrorTest, OptionalArrayTypeFailure) {
     std::unique_ptr<base::DictionaryValue> value =
         Dictionary("TheArray", std::make_unique<Value>(5));
     errors::ArrayObject out;
-    base::string16 error;
-    EXPECT_TRUE(errors::ArrayObject::Populate(*value, &out, &error));
+    std::u16string error;
+    EXPECT_FALSE(errors::ArrayObject::Populate(*value, &out, &error));
     EXPECT_TRUE(EqualsUtf16("'TheArray': expected list, got integer",
         error));
     EXPECT_EQ(NULL, out.the_array.get());
@@ -299,32 +299,14 @@ TEST(JsonSchemaCompilerErrorTest, OptionalUnableToPopulateArray) {
     std::unique_ptr<base::ListValue> params_value =
         List(std::make_unique<Value>(5), std::make_unique<Value>(false));
     errors::OptionalChoiceType::Integers out;
-    base::string16 error;
-    EXPECT_TRUE(errors::OptionalChoiceType::Integers::Populate(*params_value,
-                                                               &out, &error));
-    EXPECT_TRUE(EqualsUtf16(
-        "expected integer, got boolean; unable to populate array 'integers'",
-        error));
+    std::u16string error;
+    EXPECT_FALSE(errors::OptionalChoiceType::Integers::Populate(*params_value,
+                                                                &out, &error));
+    EXPECT_TRUE(
+        EqualsUtf16("Error at key 'integers': Parsing array failed at index 1: "
+                    "expected integer, got boolean",
+                    error));
     EXPECT_EQ(NULL, out.as_integer.get());
-  }
-}
-
-TEST(JsonSchemaCompilerErrorTest, MultiplePopulationErrors) {
-  {
-    std::unique_ptr<base::DictionaryValue> value =
-        Dictionary("TheArray", std::make_unique<Value>(5));
-    errors::ArrayObject out;
-    base::string16 error;
-    EXPECT_TRUE(errors::ArrayObject::Populate(*value, &out, &error));
-    EXPECT_TRUE(EqualsUtf16("'TheArray': expected list, got integer",
-        error));
-    EXPECT_EQ(NULL, out.the_array.get());
-
-    EXPECT_TRUE(errors::ArrayObject::Populate(*value, &out, &error));
-    EXPECT_TRUE(EqualsUtf16("'TheArray': expected list, got integer; "
-        "'TheArray': expected list, got integer",
-        error));
-    EXPECT_EQ(NULL, out.the_array.get());
   }
 }
 
@@ -335,10 +317,10 @@ TEST(JsonSchemaCompilerErrorTest, TooManyKeys) {
     EXPECT_TRUE(EqualsUtf16("", GetPopulateError<errors::TestType>(*value)));
   }
   {
+    // We simply ignore extra keys.
     std::unique_ptr<base::DictionaryValue> value =
         Dictionary("string", std::make_unique<Value>("yes"), "ohno",
                    std::make_unique<Value>("many values"));
-    EXPECT_TRUE(EqualsUtf16("found unexpected key 'ohno'",
-                            GetPopulateError<errors::TestType>(*value)));
+    EXPECT_TRUE(EqualsUtf16("", GetPopulateError<errors::TestType>(*value)));
   }
 }

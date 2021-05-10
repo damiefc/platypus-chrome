@@ -82,7 +82,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) TLSSocketFactory {
   std::unique_ptr<net::CertVerifier> no_verification_cert_verifier_;
   std::unique_ptr<net::TransportSecurityState>
       no_verification_transport_security_state_;
-  std::unique_ptr<net::CTVerifier> no_verification_cert_transparency_verifier_;
   std::unique_ptr<net::CTPolicyEnforcer> no_verification_ct_policy_enforcer_;
 
   net::SSLClientContext ssl_client_context_;
@@ -95,4 +94,4 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) TLSSocketFactory {
 
 }  // namespace network
 
-#endif  // SERVICES_NETWORK_SOCKET_FACTORY_H_
+#endif  // SERVICES_NETWORK_TLS_SOCKET_FACTORY_H_

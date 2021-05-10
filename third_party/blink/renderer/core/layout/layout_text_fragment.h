@@ -118,9 +118,10 @@ class CORE_EXPORT LayoutTextFragment : public LayoutText {
   Text* AssociatedTextNode() const;
   LayoutText* GetFirstLetterPart() const override;
 
+  LayoutTextFragment(Node*, StringImpl*, int start_offset, int length);
+
  protected:
   friend class LayoutObjectFactory;
-  LayoutTextFragment(Node*, StringImpl*, int start_offset, int length);
   void WillBeDestroyed() override;
 
  private:
@@ -140,11 +141,15 @@ class CORE_EXPORT LayoutTextFragment : public LayoutText {
   UntracedMember<FirstLetterPseudoElement> first_letter_pseudo_element_;
 };
 
-DEFINE_TYPE_CASTS(LayoutTextFragment,
-                  LayoutObject,
-                  object,
-                  (object->IsText() && ToLayoutText(object)->IsTextFragment()),
-                  (object.IsText() && ToLayoutText(object).IsTextFragment()));
+template <>
+struct DowncastTraits<LayoutTextFragment> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsText() && To<LayoutText>(object).IsTextFragment();
+  }
+  static bool AllowFrom(const LayoutText& text) {
+    return text.IsTextFragment();
+  }
+};
 
 }  // namespace blink
 

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMPONENTS_PAYMENTS_PAYMENT_REQUEST_WEB_CONTENTS_MANAGER_H_
-#define COMPONENTS_PAYMENTS_PAYMENT_REQUEST_WEB_CONTENTS_MANAGER_H_
+#ifndef COMPONENTS_PAYMENTS_CONTENT_PAYMENT_REQUEST_WEB_CONTENTS_MANAGER_H_
+#define COMPONENTS_PAYMENTS_CONTENT_PAYMENT_REQUEST_WEB_CONTENTS_MANAGER_H_
 
 #include <map>
 #include <memory>
@@ -53,7 +53,6 @@ class PaymentRequestWebContentsManager
   // and the associated `web_contents`.
   void CreatePaymentRequest(
       content::RenderFrameHost* render_frame_host,
-      content::WebContents* web_contents,
       std::unique_ptr<ContentPaymentRequestDelegate> delegate,
       mojo::PendingReceiver<payments::mojom::PaymentRequest> receiver,
       PaymentRequest::ObserverForTest* observer_for_testing);
@@ -93,4 +92,4 @@ class PaymentRequestWebContentsManager
 
 }  // namespace payments
 
-#endif  // COMPONENTS_PAYMENTS_PAYMENT_REQUEST_WEB_CONTENTS_MANAGER_H_
+#endif  // COMPONENTS_PAYMENTS_CONTENT_PAYMENT_REQUEST_WEB_CONTENTS_MANAGER_H_

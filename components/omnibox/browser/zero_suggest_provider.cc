@@ -17,7 +17,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -91,9 +90,6 @@ void LogOmniboxZeroSuggestRequest(
 
 // Relevance value to use if it was not set explicitly by the server.
 const int kDefaultZeroSuggestRelevance = 100;
-// The relevance score for navsuggest tiles.
-// Navsuggest tiles should be positioned below the Query Tiles object.
-const int kMostVisitedTilesRelevance = 1500;
 
 // Used for testing whether zero suggest is ever available.
 constexpr char kArbitraryInsecureUrlString[] = "http://www.google.com/";
@@ -131,12 +127,6 @@ bool RemoteNoUrlSuggestionsAreAllowed(
 }
 
 }  // namespace
-
-// static
-const char ZeroSuggestProvider::kNoneVariant[] = "None";
-const char ZeroSuggestProvider::kRemoteNoUrlVariant[] = "RemoteNoUrl";
-const char ZeroSuggestProvider::kRemoteSendUrlVariant[] = "RemoteSendUrl";
-const char ZeroSuggestProvider::kMostVisitedVariant[] = "MostVisited";
 
 // static
 ZeroSuggestProvider* ZeroSuggestProvider::Create(
@@ -189,21 +179,6 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
 
   MaybeUseCachedSuggestions();
 
-  if (result_type_running_ == MOST_VISITED) {
-    most_visited_urls_.clear();
-    scoped_refptr<history::TopSites> ts = client()->GetTopSites();
-    if (!ts) {
-      done_ = true;
-      result_type_running_ = NONE;
-      return;
-    }
-
-    ts->GetMostVisitedURLs(base::BindRepeating(
-        &ZeroSuggestProvider::OnMostVisitedUrlsAvailable,
-        weak_ptr_factory_.GetWeakPtr(), most_visited_request_num_));
-    return;
-  }
-
   search_terms_args.current_page_url =
       result_type_running_ == REMOTE_SEND_URL ? current_query_ : std::string();
   // Create a request for suggestions, routing completion to
@@ -230,7 +205,6 @@ void ZeroSuggestProvider::Stop(bool clear_cached_results,
   // the TopSites::GetMostVisitedURLs request.
   done_ = true;
   result_type_running_ = NONE;
-  ++most_visited_request_num_;
 
   if (clear_cached_results) {
     // We do not call Clear() on |results_| to retain |verbatim_relevance|
@@ -243,27 +217,28 @@ void ZeroSuggestProvider::Stop(bool clear_cached_results,
     results_.headers_map.clear();
     current_query_.clear();
     current_title_.clear();
-    most_visited_urls_.clear();
   }
 }
 
 void ZeroSuggestProvider::DeleteMatch(const AutocompleteMatch& match) {
-  if (base::Contains(OmniboxFieldTrial::GetZeroSuggestVariants(
-                         current_page_classification_),
-                     kRemoteNoUrlVariant)) {
-    // Remove the deleted match from the cache, so it is not shown to the user
-    // again. Since we cannot remove just one result, blow away the cache.
-    client()->GetPrefs()->SetString(omnibox::kZeroSuggestCachedResults,
-                                    std::string());
-  }
+  // Remove the deleted match from the cache, so it is not shown to the user
+  // again. Since we cannot remove just one result, blow away the cache.
+  //
+  // Although the cache is currently only used for REMOTE_NO_URL, we have no
+  // easy way of checking the request type after-the-fact. It's safe though, to
+  // always clear the cache even if we are on a different request type.
+  //
+  // TODO(tommycli): It seems quite odd that the cache is saved to a pref, as
+  // if we would want to persist it across restarts. That seems to be directly
+  // contradictory to the fact that ZeroSuggest results can change rapidly.
+  client()->GetPrefs()->SetString(omnibox::kZeroSuggestCachedResults,
+                                  std::string());
   BaseSearchProvider::DeleteMatch(match);
 }
 
 void ZeroSuggestProvider::AddProviderInfo(ProvidersInfo* provider_info) const {
   BaseSearchProvider::AddProviderInfo(provider_info);
-  if (!results_.suggest_results.empty() ||
-      !results_.navigation_results.empty() ||
-      !most_visited_urls_.empty())
+  if (!results_.suggest_results.empty() || !results_.navigation_results.empty())
     provider_info->back().set_times_returned_results_in_session(1);
 }
 
@@ -312,7 +287,7 @@ const TemplateURL* ZeroSuggestProvider::GetTemplateURL(bool is_keyword) const {
 const AutocompleteInput ZeroSuggestProvider::GetInput(bool is_keyword) const {
   // The callers of this method won't look at the AutocompleteInput's
   // |from_omnibox_focus| member, so we can set its value to false.
-  AutocompleteInput input(base::string16(), current_page_classification_,
+  AutocompleteInput input(std::u16string(), current_page_classification_,
                           client()->GetSchemeClassifier());
   input.set_current_url(GURL(current_query_));
   input.set_current_title(current_title_);
@@ -354,7 +329,6 @@ void ZeroSuggestProvider::OnURLLoadComplete(
   loader_.reset();
   done_ = true;
   result_type_running_ = NONE;
-  ++most_visited_request_num_;
   listener_->OnProviderUpdate(results_updated);
 }
 
@@ -416,21 +390,6 @@ AutocompleteMatch ZeroSuggestProvider::NavigationToMatch(
   return match;
 }
 
-void ZeroSuggestProvider::OnMostVisitedUrlsAvailable(
-    size_t orig_request_num,
-    const history::MostVisitedURLList& urls) {
-  if (result_type_running_ != MOST_VISITED ||
-      orig_request_num != most_visited_request_num_) {
-    return;
-  }
-  most_visited_urls_ = urls;
-  done_ = true;
-  ConvertResultsToAutocompleteMatches();
-  result_type_running_ = NONE;
-  ++most_visited_request_num_;
-  listener_->OnProviderUpdate(true);
-}
-
 void ZeroSuggestProvider::OnRemoteSuggestionsLoaderAvailable(
     std::unique_ptr<network::SimpleURLLoader> loader) {
   // RemoteSuggestionsService has already started |loader|, so here it's
@@ -469,62 +428,8 @@ void ZeroSuggestProvider::ConvertResultsToAutocompleteMatches() {
   UMA_HISTOGRAM_COUNTS_1M("ZeroSuggest.URLResults", num_nav_results);
   UMA_HISTOGRAM_COUNTS_1M("ZeroSuggest.AllResults", num_results);
 
-  // Show Most Visited results after ZeroSuggest response is received.
-  if (result_type_running_ == MOST_VISITED) {
-    // Ensure we don't show most visited URL suggestions on NTP.
-    // This allows us to prevent undesired side outcome of presenting
-    // URL suggestions to users who are not in the personalized field trial for
-    // zero query suggestions.
-    if (IsNTPPage(current_page_classification_) ||
-        !current_text_match_.destination_url.is_valid()) {
-      return;
-    }
-    matches_.push_back(current_text_match_);
-
-    // Short-circuit in case we have no MOST_VISITED urls to show.
-    if (most_visited_urls_.empty())
-      return;
-
-    if (base::FeatureList::IsEnabled(omnibox::kMostVisitedTiles)) {
-      AutocompleteMatch match =
-          NavigationToMatch(SearchSuggestionParser::NavigationResult(
-              client()->GetSchemeClassifier(), GURL::EmptyGURL(),
-              AutocompleteMatchType::TILE_NAVSUGGEST, {}, base::string16(),
-              std::string(), false, kMostVisitedTilesRelevance, true,
-              base::ASCIIToUTF16(current_query_)));
-      match.navsuggest_tiles.reserve(most_visited_urls_.size());
-
-      for (const auto& url : most_visited_urls_) {
-        match.navsuggest_tiles.push_back({url.url, url.title});
-      }
-      matches_.push_back(std::move(match));
-    } else {
-      int relevance = 600;
-      for (const auto& url : most_visited_urls_) {
-        SearchSuggestionParser::NavigationResult nav(
-            client()->GetSchemeClassifier(), url.url,
-            AutocompleteMatchType::NAVSUGGEST, {}, url.title, std::string(),
-            false, relevance, true, base::ASCIIToUTF16(current_query_));
-        matches_.push_back(NavigationToMatch(nav));
-        --relevance;
-      }
-    }
-    return;
-  }
-
   if (num_results == 0)
     return;
-
-#if defined(OS_ANDROID) || defined(OS_IOS)
-  // Android needs the verbatim match on non-NTP surfaces to properly present
-  // the Search Ready Omnibox URL edit widget. Desktop specifically does NOT
-  // want to show verbatim matches in remotely-fetched ZeroSuggest anymore.
-  // iOS we are keeping the same as Android for now. No strong reason to change.
-  if (!IsNTPPage(current_page_classification_) &&
-      current_text_match_.destination_url.is_valid()) {
-    matches_.push_back(current_text_match_);
-  }
-#endif
 
   for (MatchMap::const_iterator it(map.begin()); it != map.end(); ++it)
     matches_.push_back(it->second);
@@ -541,18 +446,18 @@ AutocompleteMatch ZeroSuggestProvider::MatchForCurrentText() {
   // that it is in the first suggestion slot and inline autocompleted. It
   // gets dropped as soon as the user types something.
   AutocompleteInput tmp(GetInput(false));
-  tmp.UpdateText(permanent_text_, base::string16::npos, tmp.parts());
-  const base::string16 description =
+  tmp.UpdateText(permanent_text_, std::u16string::npos, tmp.parts());
+  const std::u16string description =
       (base::FeatureList::IsEnabled(omnibox::kDisplayTitleForCurrentUrl))
           ? current_title_
-          : base::string16();
+          : std::u16string();
 
   // We pass a nullptr as the |history_url_provider| parameter now to force
   // VerbatimMatch to do a classification, since the text can be a search query.
   // TODO(tommycli): Simplify this - probably just bypass VerbatimMatchForURL.
-  AutocompleteMatch match = VerbatimMatchForURL(
-      client(), tmp, GURL(current_query_), description,
-      /*history_url_provider=*/nullptr, results_.verbatim_relevance);
+  AutocompleteMatch match =
+      VerbatimMatchForURL(this, client(), tmp, GURL(current_query_),
+                          description, results_.verbatim_relevance);
   match.provider = this;
   return match;
 }
@@ -614,8 +519,9 @@ bool ZeroSuggestProvider::AllowZeroSuggestSuggestions(
 }
 
 void ZeroSuggestProvider::MaybeUseCachedSuggestions() {
-  if (result_type_running_ != REMOTE_NO_URL)
+  if (result_type_running_ != REMOTE_NO_URL) {
     return;
+  }
 
   std::string json_data =
       client()->GetPrefs()->GetString(omnibox::kZeroSuggestCachedResults);
@@ -664,12 +570,6 @@ ZeroSuggestProvider::ResultType ZeroSuggestProvider::TypeOfResultToRun(
       kOmniboxZeroSuggestEligibleHistogramName, static_cast<int>(eligibility),
       static_cast<int>(ZeroSuggestEligibility::ELIGIBLE_MAX_VALUE));
 
-  const auto field_trial_variants =
-      OmniboxFieldTrial::GetZeroSuggestVariants(current_page_classification);
-
-  if (base::Contains(field_trial_variants, kNoneVariant))
-    return NONE;
-
   if (current_page_classification == OmniboxEventProto::CHROMEOS_APP_LIST)
     return REMOTE_NO_URL;
 
@@ -691,52 +591,14 @@ ZeroSuggestProvider::ResultType ZeroSuggestProvider::TypeOfResultToRun(
     }
   }
 
-  // Reactive Zero-Prefix Suggestions (rZPS) on NTP cases.
+  // Default to REMOTE_NO_URL on the NTP, if allowed.
   bool check_authentication_state = !base::FeatureList::IsEnabled(
       omnibox::kOmniboxTrendingZeroPrefixSuggestionsOnNTP);
   bool remote_no_url_allowed = RemoteNoUrlSuggestionsAreAllowed(
       client, template_url_service, check_authentication_state);
-  if (remote_no_url_allowed) {
-    // NTP Omnibox.
-    if ((current_page_classification == OmniboxEventProto::NTP ||
-         current_page_classification ==
-             OmniboxEventProto::INSTANT_NTP_WITH_OMNIBOX_AS_STARTING_FOCUS) &&
-        base::FeatureList::IsEnabled(
-            omnibox::kReactiveZeroSuggestionsOnNTPOmnibox)) {
-      return REMOTE_NO_URL;
-    }
-    // NTP Realbox.
-    if (current_page_classification == OmniboxEventProto::NTP_REALBOX &&
-        base::FeatureList::IsEnabled(
-            omnibox::kReactiveZeroSuggestionsOnNTPRealbox)) {
-      return REMOTE_NO_URL;
-    }
-  }
-
-  if (base::Contains(field_trial_variants, kRemoteNoUrlVariant) &&
-      remote_no_url_allowed) {
+  if (IsNTPPage(current_page_classification) && remote_no_url_allowed) {
     return REMOTE_NO_URL;
   }
-
-  if (base::Contains(field_trial_variants, kRemoteSendUrlVariant) &&
-      can_send_current_url)
-    return REMOTE_SEND_URL;
-
-  if (base::Contains(field_trial_variants, kMostVisitedVariant))
-    return MOST_VISITED;
-
-#if !defined(OS_IOS)
-  // For Desktop and Android, default to REMOTE_NO_URL on the NTP, if allowed.
-  if (IsNTPPage(current_page_classification) && remote_no_url_allowed)
-    return REMOTE_NO_URL;
-#endif
-
-#if defined(OS_ANDROID) || defined(OS_IOS)
-  // For Android and iOS, default to MOST_VISITED everywhere except on the SERP.
-  if (!IsSearchResultsPage(current_page_classification)) {
-    return MOST_VISITED;
-  }
-#endif
 
   return NONE;
 }

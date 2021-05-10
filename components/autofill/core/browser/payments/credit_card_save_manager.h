@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/optional.h"
-#include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
@@ -84,6 +83,7 @@ class CreditCardSaveManager {
    public:
     virtual ~ObserverForTest() {}
     virtual void OnOfferLocalSave() {}
+    virtual void OnOfferUploadSave() {}
     virtual void OnDecideToRequestUploadSave() {}
     virtual void OnReceivedGetUploadDetailsResponse() {}
     virtual void OnSentUploadCardRequest() {}
@@ -167,7 +167,7 @@ class CreditCardSaveManager {
   // and end of the range.
   void OnDidGetUploadDetails(
       AutofillClient::PaymentsRpcResult result,
-      const base::string16& context_token,
+      const std::u16string& context_token,
       std::unique_ptr<base::Value> legal_message,
       std::vector<std::pair<int, int>> supported_card_bin_ranges);
 
@@ -225,13 +225,13 @@ class CreditCardSaveManager {
   // Upload the card details with the user provided cardholder_name.
   // Only relevant for mobile as fix flow is two steps on mobile compared to
   // one step on desktop.
-  void OnUserDidAcceptAccountNameFixFlow(const base::string16& cardholder_name);
+  void OnUserDidAcceptAccountNameFixFlow(const std::u16string& cardholder_name);
 
   // Upload the card details with the user provided expiration date month and
   // year. Only relevant for mobile as fix flow is two steps on mobile compared
   // to one step on desktop.
-  void OnUserDidAcceptExpirationDateFixFlow(const base::string16& month,
-                                            const base::string16& year);
+  void OnUserDidAcceptExpirationDateFixFlow(const std::u16string& month,
+                                            const std::u16string& year);
 #endif  // defined(OS_ANDROID) || defined(OS_IOS)
 
   // Helper function that calls SendUploadCardRequest by setting
@@ -251,7 +251,7 @@ class CreditCardSaveManager {
   // a strike for the given card in order to help deter future offers to save,
   // provided that save was actually offered to the user.
   void OnUserDidIgnoreOrDeclineSave(
-      const base::string16& card_last_four_digits);
+      const std::u16string& card_last_four_digits);
 
   // Used for browsertests. Gives the |observer_for_testing_| a notification
   // a strike change has been made.
@@ -269,6 +269,9 @@ class CreditCardSaveManager {
   // |AutofillMetrics::CardUploadDecisionMetric|.
   void LogCardUploadDecisions(int upload_decision_metrics);
 
+  // Logs the card upload decisions bitmask to chrome://autofill-internals.
+  void LogCardUploadDecisionsToAutofillInternals(int upload_decision_metrics);
+
   // Logs the reason why expiration date was explicitly requested.
   void LogSaveCardRequestExpirationDateReasonMetric();
 
@@ -280,13 +283,13 @@ class CreditCardSaveManager {
   AutofillClient* const client_;
 
   // Handles Payments service requests.
-  // Owned by AutofillManager.
+  // Owned by BrowserAutofillManager.
   payments::PaymentsClient* payments_client_;
 
   std::string app_locale_;
 
   // The personal data manager, used to save and load personal data to/from the
-  // web database.  This is overridden by the AutofillManagerTest.
+  // web database.  This is overridden by the BrowserAutofillManagerTest.
   // Weak reference.
   // May be NULL.  NULL indicates OTR.
   PersonalDataManager* personal_data_manager_;

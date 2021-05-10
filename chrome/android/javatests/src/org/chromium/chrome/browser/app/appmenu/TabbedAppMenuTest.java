@@ -4,18 +4,18 @@
 
 package org.chromium.chrome.browser.app.appmenu;
 
-import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.support.test.InstrumentationRegistry;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.LinearLayout;
 import android.widget.ListView;
 
 import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Matchers;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -26,8 +26,8 @@ import org.chromium.base.Callback;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisableIf;
-import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
@@ -37,21 +37,17 @@ import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.share.ShareUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuTestSupport;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
-import org.chromium.ui.test.util.UiDisableIf;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.IOException;
@@ -95,6 +91,11 @@ public class TabbedAppMenuTest {
         CriteriaHelper.pollInstrumentationThread(
                 () -> Criteria.checkThat(getCurrentFocusedRow(), Matchers.is(0)));
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+    }
+
+    @After
+    public void tearDown() {
+        ActivityTestUtils.clearActivityOrientation(mActivityTestRule.getActivity());
     }
 
     /**
@@ -167,15 +168,12 @@ public class TabbedAppMenuTest {
      * Test that hitting ENTER on the top item actually triggers the top item.
      * Catches regressions for https://crbug.com/191239 for shrunken menus.
      */
-    /*
     @SmallTest
     @Feature({"Browser", "Main"})
-    */
     @Test
-    @DisabledTest(message = "crbug.com/945861")
     public void testKeyboardMenuEnterOnTopItemLandscape() {
-        mActivityTestRule.getActivity().setRequestedOrientation(
-                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        ActivityTestUtils.rotateActivityToOrientation(
+                mActivityTestRule.getActivity(), Configuration.ORIENTATION_LANDSCAPE);
         showAppMenuAndAssertMenuShown();
         moveToBoundary(true, false);
         Assert.assertEquals(0, getCurrentFocusedRow());
@@ -189,8 +187,8 @@ public class TabbedAppMenuTest {
     @SmallTest
     @Feature({"Browser", "Main"})
     public void testKeyboardMenuEnterOnTopItemPortrait() {
-        mActivityTestRule.getActivity().setRequestedOrientation(
-                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        ActivityTestUtils.rotateActivityToOrientation(
+                mActivityTestRule.getActivity(), Configuration.ORIENTATION_PORTRAIT);
         showAppMenuAndAssertMenuShown();
         moveToBoundary(true, false);
         Assert.assertEquals(0, getCurrentFocusedRow());
@@ -244,11 +242,8 @@ public class TabbedAppMenuTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Main", "Bookmark", "RenderTest"})
-    @DisableFeatures({ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP,
-            ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_ICONS})
-    @DisableIf.Device(type = {UiDisableIf.TABLET}) // See https://crbug.com/1065043.
-    public void
-    testBookmarkMenuItem() throws IOException {
+    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    public void testBookmarkMenuItem() throws IOException {
         MenuItem bookmarkStar =
                 AppMenuTestSupport.getMenu(mActivityTestRule.getAppMenuCoordinator())
                         .findItem(R.id.bookmark_this_page_id);
@@ -256,7 +251,7 @@ public class TabbedAppMenuTest {
         Assert.assertEquals("Incorrect content description.",
                 mActivityTestRule.getActivity().getString(R.string.menu_bookmark),
                 bookmarkStar.getTitleCondensed());
-        mRenderTestRule.render(getListView().getChildAt(0), "icon_row");
+        mRenderTestRule.render(getListView().getChildAt(0), "rounded_corner_icon_row");
 
         TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
         AppMenuPropertiesDelegateImpl.setPageBookmarkedForTesting(true);
@@ -269,7 +264,8 @@ public class TabbedAppMenuTest {
         Assert.assertEquals("Incorrect content description for bookmarked page.",
                 mActivityTestRule.getActivity().getString(R.string.edit_bookmark),
                 bookmarkStar.getTitleCondensed());
-        mRenderTestRule.render(getListView().getChildAt(0), "icon_row_page_bookmarked");
+        mRenderTestRule.render(
+                getListView().getChildAt(0), "rounded_corner_icon_row_page_bookmarked");
 
         AppMenuPropertiesDelegateImpl.setPageBookmarkedForTesting(null);
     }
@@ -277,173 +273,44 @@ public class TabbedAppMenuTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Main", "RenderTest"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    @EnableFeatures({ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP + "<Study"})
-    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
-            "force-fieldtrial-params=Study.Group:action_bar/backward_button"})
-    public void
-    testBackButtonMenuItem() throws IOException {
-        MenuItem backArrow = AppMenuTestSupport.getMenu(mActivityTestRule.getAppMenuCoordinator())
-                                     .findItem(R.id.backward_menu_id);
-        Assert.assertFalse("Backward button item should be disabled.", backArrow.isEnabled());
-        Assert.assertEquals("Incorrect content description.",
-                mActivityTestRule.getActivity().getString(R.string.back),
-                backArrow.getTitleCondensed());
-        mRenderTestRule.render(getListView().getChildAt(0), "icon_row_backward_diabled");
-
-        TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
-        mActivityTestRule.loadUrl(TEST_URL2);
-        showAppMenuAndAssertMenuShown();
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-
-        backArrow = AppMenuTestSupport.getMenu(mActivityTestRule.getAppMenuCoordinator())
-                            .findItem(R.id.backward_menu_id);
-        Assert.assertTrue("Backward button item should be enabled.", backArrow.isEnabled());
-
-        LinearLayout actionBar = (LinearLayout) getListView().getChildAt(0);
-        Assert.assertEquals(5, actionBar.getChildCount());
-
-        mRenderTestRule.render(getListView().getChildAt(0), "icon_row_backward_enabled");
-
-        selectMenuItem(R.id.backward_menu_id);
-        TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
-        ShareUtils shareUtils = new ShareUtils();
-        CriteriaHelper.pollUiThread(() -> {
-            Tab tab = mActivityTestRule.getActivity().getActivityTab();
-            Criteria.checkThat(tab, Matchers.notNullValue());
-            Criteria.checkThat(tab.getUrlString(), Matchers.is(TEST_URL));
-            Criteria.checkThat(shareUtils.shouldEnableShare(tab), Matchers.is(false));
-        });
-        showAppMenuAndAssertMenuShown();
-        backArrow = AppMenuTestSupport.getMenu(mActivityTestRule.getAppMenuCoordinator())
-                            .findItem(R.id.backward_menu_id);
-        Assert.assertFalse("Backward button item should be disabled.", backArrow.isEnabled());
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Browser", "Main", "RenderTest"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    @EnableFeatures({ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP + "<Study"})
-    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
-            "force-fieldtrial-params=Study.Group:action_bar/share_button"})
-    public void
-    testShareButtonMenuItem() throws IOException {
-        MenuItem shareButton = AppMenuTestSupport.getMenu(mActivityTestRule.getAppMenuCoordinator())
-                                       .findItem(R.id.share_menu_button_id);
-        Assert.assertFalse("Share button item should be disabled.", shareButton.isEnabled());
-        Assert.assertEquals("Incorrect content description.",
-                mActivityTestRule.getActivity().getString(R.string.share),
-                shareButton.getTitleCondensed());
-        mRenderTestRule.render(getListView().getChildAt(0), "icon_row_share_diabled");
-
-        TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
-        mActivityTestRule.loadUrl(mActivityTestRule.getTestServer().getURL(
-                "/chrome/test/data/android/contextualsearch/tap_test.html"));
-        showAppMenuAndAssertMenuShown();
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-
-        shareButton = AppMenuTestSupport.getMenu(mActivityTestRule.getAppMenuCoordinator())
-                              .findItem(R.id.share_menu_button_id);
-        Assert.assertTrue("Share button item should be enabled.", shareButton.isEnabled());
-
-        LinearLayout actionBar = (LinearLayout) getListView().getChildAt(0);
-        Assert.assertEquals(5, actionBar.getChildCount());
-        mRenderTestRule.render(getListView().getChildAt(0), "icon_row_share_enabled");
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Browser", "Main", "RenderTest"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    @EnableFeatures({ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR + "<Study"})
-    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
-            "force-fieldtrial-params=Study.Group:three_button_action_bar/action_chip_view"})
-    public void
-    testActionChipViewMenuItem() throws IOException {
-        LinearLayout actionBar = (LinearLayout) getListView().getChildAt(0);
-        Assert.assertEquals(3, actionBar.getChildCount());
-        mRenderTestRule.render(getListView().getChildAt(0), "icon_row_three_buttons");
-
-        int downloadRowIndex = findIndexOfMenuItemById(R.id.downloads_row_menu_id);
-        Assert.assertNotEquals("No download row found.", -1, downloadRowIndex);
-        mRenderTestRule.render(
-                getListView().getChildAt(downloadRowIndex), "download_row_action_chip_view");
-
-        MenuItem bookmarkRow = AppMenuTestSupport.getMenu(mActivityTestRule.getAppMenuCoordinator())
-                                       .findItem(R.id.all_bookmarks_row_menu_id);
-        MenuItem bookmarkMenuItem = bookmarkRow.getSubMenu().getItem(1);
-        Assert.assertFalse("Bookmark item should not be checked.", bookmarkMenuItem.isChecked());
-        int bookmarkRowIndex = findIndexOfMenuItemById(R.id.all_bookmarks_row_menu_id);
-        Assert.assertTrue("No bookmark row found.", bookmarkRowIndex != -1);
-        mRenderTestRule.render(
-                getListView().getChildAt(bookmarkRowIndex), "bookmark_row_action_chip_view");
-
-        TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
-        AppMenuPropertiesDelegateImpl.setPageBookmarkedForTesting(true);
-        showAppMenuAndAssertMenuShown();
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-
-        bookmarkRow = AppMenuTestSupport.getMenu(mActivityTestRule.getAppMenuCoordinator())
-                              .findItem(R.id.all_bookmarks_row_menu_id);
-        bookmarkMenuItem = bookmarkRow.getSubMenu().getItem(1);
-        Assert.assertTrue("Bookmark item should be checked.", bookmarkMenuItem.isChecked());
-        mRenderTestRule.render(getListView().getChildAt(bookmarkRowIndex),
-                "bookmark_row_action_chip_view_bookmarked");
-
-        AppMenuPropertiesDelegateImpl.setPageBookmarkedForTesting(null);
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Browser", "Main", "RenderTest"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    @EnableFeatures({ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR + "<Study"})
-    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
-            "force-fieldtrial-params=Study.Group:three_button_action_bar/destination_chip_view"})
-    public void
-    testDestinationChipViewMenuItem() throws IOException {
-        LinearLayout actionBar = (LinearLayout) getListView().getChildAt(0);
-        Assert.assertEquals(3, actionBar.getChildCount());
-        mRenderTestRule.render(getListView().getChildAt(0), "icon_row_three_buttons");
-
-        int downloadRowIndex = findIndexOfMenuItemById(R.id.downloads_row_menu_id);
-        Assert.assertNotEquals("No download row found.", -1, downloadRowIndex);
-        mRenderTestRule.render(
-                getListView().getChildAt(downloadRowIndex), "download_row_destination_chip_view");
-
-        MenuItem bookmarkRow = AppMenuTestSupport.getMenu(mActivityTestRule.getAppMenuCoordinator())
-                                       .findItem(R.id.all_bookmarks_row_menu_id);
-        MenuItem bookmarkMenuItem = bookmarkRow.getSubMenu().getItem(1);
-        Assert.assertFalse("Bookmark item should not be checked.", bookmarkMenuItem.isChecked());
-        int bookmarkRowIndex = findIndexOfMenuItemById(R.id.all_bookmarks_row_menu_id);
-        Assert.assertTrue("No bookmark row found.", bookmarkRowIndex != -1);
-        mRenderTestRule.render(
-                getListView().getChildAt(bookmarkRowIndex), "bookmark_row_destination_chip_view");
-
-        TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
-        AppMenuPropertiesDelegateImpl.setPageBookmarkedForTesting(true);
-        showAppMenuAndAssertMenuShown();
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-
-        bookmarkRow = AppMenuTestSupport.getMenu(mActivityTestRule.getAppMenuCoordinator())
-                              .findItem(R.id.all_bookmarks_row_menu_id);
-        bookmarkMenuItem = bookmarkRow.getSubMenu().getItem(1);
-        Assert.assertTrue("Bookmark item should be checked.", bookmarkMenuItem.isChecked());
-        mRenderTestRule.render(getListView().getChildAt(bookmarkRowIndex),
-                "bookmark_row_destination_chip_view_bookmarked");
-
-        AppMenuPropertiesDelegateImpl.setPageBookmarkedForTesting(null);
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Browser", "Main", "RenderTest"})
-    @EnableFeatures({ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP})
     public void testDividerLineMenuItem() throws IOException {
         int firstDividerLineIndex = findIndexOfMenuItemById(R.id.divider_line_id);
         Assert.assertTrue("No divider line found.", firstDividerLineIndex != -1);
         mRenderTestRule.render(getListView().getChildAt(firstDividerLineIndex), "divider_line");
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Browser", "Main", "RenderTest"})
+    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @EnableFeatures(ChromeFeatureList.APP_MENU_MOBILE_SITE_OPTION)
+    public void testRequestDesktopSiteMenuItem() throws IOException {
+        Tab tab = mActivityTestRule.getActivity().getTabModelSelector().getCurrentTab();
+        boolean isRequestDesktopSite =
+                tab.getWebContents().getNavigationController().getUseDesktopUserAgent();
+        Assert.assertFalse("Default to request mobile site.", isRequestDesktopSite);
+
+        int requestDesktopSiteIndex =
+                findIndexOfMenuItemById(R.id.request_desktop_site_row_menu_id);
+        Assert.assertNotEquals("No request desktop site row found.", -1, requestDesktopSiteIndex);
+        mRenderTestRule.render(
+                getListView().getChildAt(requestDesktopSiteIndex), "request_desktop_site");
+
+        TestThreadUtils.runOnUiThreadBlocking(
+                ()
+                        -> tab.getWebContents().getNavigationController().setUseDesktopUserAgent(
+                                true /* useDesktop */, true /* reloadOnChange */));
+        ChromeTabUtils.waitForTabPageLoaded(tab, TEST_URL);
+        isRequestDesktopSite =
+                tab.getWebContents().getNavigationController().getUseDesktopUserAgent();
+        Assert.assertTrue("Should request desktop site.", isRequestDesktopSite);
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> mAppMenuHandler.hideAppMenu());
+        showAppMenuAndAssertMenuShown();
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+
+        mRenderTestRule.render(
+                getListView().getChildAt(requestDesktopSiteIndex), "request_mobile_site");
     }
 
     private void showAppMenuAndAssertMenuShown() {

@@ -81,7 +81,6 @@
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/reporting_disposition.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/sanitizers.h"
 #include "third_party/blink/renderer/platform/wtf/stack_util.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -92,8 +91,7 @@ namespace blink {
 
 static void ReportFatalErrorInMainThread(const char* location,
                                          const char* message) {
-  DVLOG(1) << "V8 error: " << message << " (" << location << ").";
-  LOG(FATAL);
+  LOG(FATAL)  << "V8 error: " << message << " (" << location << ").";
 }
 
 static void ReportOOMErrorInMainThread(const char* location, bool is_js_heap) {
@@ -379,13 +377,15 @@ static bool ContentSecurityPolicyCodeGenerationCheck(
 
 static std::pair<bool, v8::MaybeLocal<v8::String>>
 TrustedTypesCodeGenerationCheck(v8::Local<v8::Context> context,
-                                v8::Local<v8::Value> source) {
+                                v8::Local<v8::Value> source,
+                                bool is_code_like) {
   v8::Isolate* isolate = context->GetIsolate();
   ExceptionState exception_state(isolate, ExceptionState::kExecutionContext,
                                  "eval", "");
 
   // If the input is not a string or TrustedScript, pass it through.
-  if (!source->IsString() && !V8TrustedScript::HasInstance(source, isolate)) {
+  if (!source->IsString() && !is_code_like &&
+      !V8TrustedScript::HasInstance(source, isolate)) {
     return {true, v8::MaybeLocal<v8::String>()};
   }
 
@@ -400,6 +400,12 @@ TrustedTypesCodeGenerationCheck(v8::Local<v8::Context> context,
     return {false, v8::MaybeLocal<v8::String>()};
   }
 
+  if (is_code_like && string_or_trusted_script.IsString()) {
+    string_or_trusted_script = StringOrTrustedScript::FromTrustedScript(
+        MakeGarbageCollected<TrustedScript>(
+            string_or_trusted_script.GetAsString()));
+  }
+
   String stringified_source = TrustedTypesCheckForScript(
       string_or_trusted_script, ToExecutionContext(context), exception_state);
   if (exception_state.HadException()) {
@@ -412,7 +418,12 @@ TrustedTypesCodeGenerationCheck(v8::Local<v8::Context> context,
 
 static v8::ModifyCodeGenerationFromStringsResult
 CodeGenerationCheckCallbackInMainThread(v8::Local<v8::Context> context,
-                                        v8::Local<v8::Value> source) {
+                                        v8::Local<v8::Value> source,
+                                        bool is_code_like) {
+  // The TC39 "Dynamic Code Brand Check" feature is currently behind a flag.
+  if (!RuntimeEnabledFeatures::TrustedTypesUseCodeLikeEnabled())
+    is_code_like = false;
+
   // With Trusted Types, we always run the TT check first because of reporting,
   // and because a default policy might want to stringify or modify the original
   // source. When TT enforcement is disabled, codegen is always allowed, and we
@@ -420,7 +431,7 @@ CodeGenerationCheckCallbackInMainThread(v8::Local<v8::Context> context,
   bool codegen_allowed_by_tt = false;
   v8::MaybeLocal<v8::String> stringified_source;
   std::tie(codegen_allowed_by_tt, stringified_source) =
-      TrustedTypesCodeGenerationCheck(context, source);
+      TrustedTypesCodeGenerationCheck(context, source, is_code_like);
 
   if (!codegen_allowed_by_tt) {
     return {false, v8::MaybeLocal<v8::String>()};
@@ -450,18 +461,21 @@ static bool WasmCodeGenerationCheckCallbackInMainThread(
                             static_cast<size_t>(source_str.length()));
       memcpy(snippet, *source_str, len * sizeof(UChar));
       snippet[len] = 0;
-      // Wasm code generation is allowed if we have either the wasm-eval
-      // directive or the unsafe-eval directive. However, we only recognize
-      // wasm-eval for certain schemes
-      return policy->AllowWasmEval(ReportingDisposition::kReport,
-                                   ContentSecurityPolicy::kWillThrowException,
-                                   snippet) ||
-             policy->AllowEval(ReportingDisposition::kReport,
-                               ContentSecurityPolicy::kWillThrowException,
-                               snippet);
+      return policy->AllowWasmCodeGeneration(
+          ReportingDisposition::kReport,
+          ContentSecurityPolicy::kWillThrowException, snippet);
     }
   }
   return false;
+}
+
+static bool WasmExceptionsEnabledCallback(v8::Local<v8::Context> context) {
+  ExecutionContext* execution_context = ToExecutionContext(context);
+  if (!execution_context)
+    return false;
+
+  return RuntimeEnabledFeatures::WebAssemblyExceptionsEnabled(
+      execution_context);
 }
 
 static bool WasmSimdEnabledCallback(v8::Local<v8::Context> context) {
@@ -470,14 +484,6 @@ static bool WasmSimdEnabledCallback(v8::Local<v8::Context> context) {
     return false;
 
   return RuntimeEnabledFeatures::WebAssemblySimdEnabled(execution_context);
-}
-
-static bool WasmThreadsEnabledCallback(v8::Local<v8::Context> context) {
-  ExecutionContext* execution_context = ToExecutionContext(context);
-  if (!execution_context)
-    return false;
-
-  return RuntimeEnabledFeatures::WebAssemblyThreadsEnabled(execution_context);
 }
 
 v8::Local<v8::Value> NewRangeException(v8::Isolate* isolate,
@@ -541,7 +547,8 @@ static bool WasmInstanceOverride(
 static v8::MaybeLocal<v8::Promise> HostImportModuleDynamically(
     v8::Local<v8::Context> context,
     v8::Local<v8::ScriptOrModule> v8_referrer,
-    v8::Local<v8::String> v8_specifier) {
+    v8::Local<v8::String> v8_specifier,
+    v8::Local<v8::FixedArray> v8_import_assertions) {
   ScriptState* script_state = ScriptState::From(context);
 
   Modulator* modulator = Modulator::From(script_state);
@@ -586,14 +593,20 @@ static v8::MaybeLocal<v8::Promise> HostImportModuleDynamically(
       referrer_resource_url = KURL(NullURL(), referrer_resource_url_str);
   }
 
+  ModuleRequest module_request(
+      specifier, TextPosition::MinimumPosition(),
+      ModuleRecord::ToBlinkImportAssertions(
+          script_state->GetContext(), v8::Local<v8::Module>(),
+          v8_import_assertions, /*v8_import_assertions_has_positions=*/false));
+
   ReferrerScriptInfo referrer_info =
       ReferrerScriptInfo::FromV8HostDefinedOptions(
           context, v8_referrer->GetHostDefinedOptions());
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
-  modulator->ResolveDynamically(specifier, referrer_resource_url, referrer_info,
-                                resolver);
+  modulator->ResolveDynamically(module_request, referrer_resource_url,
+                                referrer_info, resolver);
   return v8::Local<v8::Promise>::Cast(promise.V8Value());
 }
 
@@ -631,8 +644,8 @@ static void InitializeV8Common(v8::Isolate* isolate) {
   isolate->SetUseCounterCallback(&UseCounterCallback);
   isolate->SetWasmModuleCallback(WasmModuleOverride);
   isolate->SetWasmInstanceCallback(WasmInstanceOverride);
+  isolate->SetWasmExceptionsEnabledCallback(WasmExceptionsEnabledCallback);
   isolate->SetWasmSimdEnabledCallback(WasmSimdEnabledCallback);
-  isolate->SetWasmThreadsEnabledCallback(WasmThreadsEnabledCallback);
   isolate->SetHostImportModuleDynamicallyCallback(HostImportModuleDynamically);
   isolate->SetHostInitializeImportMetaObjectCallback(
       HostGetImportMetaProperties);

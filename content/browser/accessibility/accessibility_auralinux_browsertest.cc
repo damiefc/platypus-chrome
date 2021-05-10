@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -113,7 +113,7 @@ void AccessibilityAuraLinuxBrowserTest::CheckTextAtOffset(
     int expected_start_offset,
     int expected_end_offset,
     const char* expected_text) {
-  testing::Message message;
+  ::testing::Message message;
   message << "While checking at index \'" << offset << "\' for \'"
           << expected_text << "\' at " << expected_start_offset << '-'
           << expected_end_offset << '.';
@@ -254,7 +254,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   int character_count = atk_text_get_character_count(contenteditable_text);
   ASSERT_EQ(13, character_count);
 
-  const base::string16 embedded_character(
+  const std::u16string embedded_character(
       1, ui::AXPlatformNodeAuraLinux::kEmbeddedCharacter);
   const std::vector<const std::string> expected_hypertext = {
       "B", "e", "f", "o", "r", "e", base::UTF16ToUTF8(embedded_character),
@@ -429,7 +429,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   int n_characters = atk_text_get_character_count(atk_text);
   ASSERT_LT(newline_offset, n_characters);
 
-  const base::string16 embedded_character(
+  const std::u16string embedded_character(
       1, ui::AXPlatformNodeAuraLinux::kEmbeddedCharacter);
   std::string expected_string = "Game theory is \"the study of " +
                                 base::UTF16ToUTF8(embedded_character) +
@@ -584,7 +584,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
 
     gfx::Rect combined_extents(x, y, width, height);
     for (int offset = 1; offset < newline_offset; ++offset) {
-      testing::Message message;
+      ::testing::Message message;
       message << "While checking at offset " << offset;
       SCOPED_TRACE(message);
 
@@ -613,7 +613,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
     }
 
     {
-      testing::Message message;
+      ::testing::Message message;
       message << "While checking at offset " << newline_offset + 1;
       SCOPED_TRACE(message);
 
@@ -628,7 +628,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
 
     combined_extents = gfx::Rect(x, y, width, height);
     for (int offset = newline_offset + 2; offset < n_characters; ++offset) {
-      testing::Message message;
+      ::testing::Message message;
       message << "While checking at offset " << offset;
       SCOPED_TRACE(message);
 
@@ -679,7 +679,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
     // Test that non offscreen characters have increasing x coordinates and a
     // height that is greater than 1px.
     {
-      testing::Message message;
+      ::testing::Message message;
       message << "While checking at offset 0";
       SCOPED_TRACE(message);
 
@@ -692,7 +692,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
     }
 
     for (int offset = 1; offset < first_line_end; ++offset) {
-      testing::Message message;
+      ::testing::Message message;
       message << "While checking at offset " << offset;
       SCOPED_TRACE(message);
 
@@ -709,7 +709,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
     }
 
     {
-      testing::Message message;
+      ::testing::Message message;
       message << "While checking at offset " << last_line_start;
       SCOPED_TRACE(message);
 
@@ -722,7 +722,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
     }
 
     for (int offset = last_line_start + 1; offset < n_characters; ++offset) {
-      testing::Message message;
+      ::testing::Message message;
       message << "While checking at offset " << offset;
       SCOPED_TRACE(message);
 
@@ -1316,7 +1316,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest, TestAtkTextListItem) {
 
   EXPECT_TRUE(ATK_IS_TEXT(list_item_1));
 
-  const base::string16 string16_embed(
+  const std::u16string string16_embed(
       1, ui::AXPlatformNodeAuraLinux::kEmbeddedCharacter);
   std::string expected_string = base::UTF16ToUTF8(string16_embed) + "Text 1";
 
@@ -1507,18 +1507,15 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
       shell()->web_contents(), ui::kAXModeComplete,
       ax::mojom::Event::kTextSelectionChanged);
 
-  int length = atk_text_get_character_count(ATK_TEXT(heading));
-  for (int i = 0; i < length; i++) {
-    atk_text_set_caret_offset(ATK_TEXT(heading), i);
-
-    // We aren't getting kTextSelectionChanged or kDocumentSelectionChanged for
-    // the following offsets in the generated content. Recheck this after the
-    // crasher bug is fixed.
-    if (i == 1 || i == 6)
-      continue;
-
+  // Caret can't be set inside generated content, it will go to the closest
+  // allowed place. Ordered the targets so that the caret will always actually
+  // move somewhere between steps, and thus the waiter will always be satisfied.
+  std::vector<int> target_offset = {0, 3, 1, 4, 2, 4, 5, 4, 6};
+  std::vector<int> expect_offset = {2, 3, 2, 4, 2, 4, 2, 4, 2};
+  for (size_t i = 0; i < target_offset.size(); i++) {
+    atk_text_set_caret_offset(ATK_TEXT(heading), target_offset[i]);
     waiter.WaitForNotification();
-    ASSERT_EQ(i, atk_text_get_caret_offset(ATK_TEXT(heading)));
+    ASSERT_EQ(expect_offset[i], atk_text_get_caret_offset(ATK_TEXT(heading)));
   }
 
   g_object_unref(heading);
@@ -2155,6 +2152,22 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
     ASSERT_NE(nullptr, hit_child_node);
     EXPECT_EQ(node->GetId(), hit_child_node->GetDelegate()->GetData().id);
   }
+}
+
+// Tests if it does not DCHECK when textarea has a placeholder break element.
+IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
+                       TestGetTextContainerFromTextArea) {
+  std::string content = std::string("<textarea style=\"height:100px;\">hello") +
+                        std::string("\n") + std::string("</textarea>");
+  LoadInitialAccessibilityTreeFromHtml(content);
+
+  AtkText* atk_text = FindNode(ATK_ROLE_ENTRY);
+  AtkTextRectangle atk_rect;
+  // atk_text_get_range_extents() calls GetTextContainerForPlainTextField() and
+  // DCHECK on checking children counts.
+  atk_text_get_range_extents(atk_text, 0, 7, AtkCoordType::ATK_XY_SCREEN,
+                             &atk_rect);
+  g_object_unref(atk_text);
 }
 
 }  // namespace content

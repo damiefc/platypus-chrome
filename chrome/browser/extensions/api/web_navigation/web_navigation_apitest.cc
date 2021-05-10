@@ -6,7 +6,7 @@
 #include <set>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -37,6 +37,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -50,8 +51,10 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "third_party/blink/public/common/context_menu_data/media_type.h"
+#include "third_party/blink/public/common/chrome_debug_urls.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/switches.h"
+#include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 
 using content::WebContents;
 
@@ -194,7 +197,7 @@ class WebNavigationApiTest : public ExtensionApiTest {
  public:
   WebNavigationApiTest() {
     embedded_test_server()->RegisterRequestHandler(
-        base::Bind(&HandleTestRequest));
+        base::BindRepeating(&HandleTestRequest));
   }
   ~WebNavigationApiTest() override {}
 
@@ -206,42 +209,82 @@ class WebNavigationApiTest : public ExtensionApiTest {
     host_resolver()->AddRule("*", "127.0.0.1");
   }
 
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    ExtensionApiTest::SetUpCommandLine(command_line);
+    // Some builders are flaky due to slower loading interacting
+    // with deferred commits.
+    command_line->AppendSwitch(blink::switches::kAllowPreCommitInput);
+  }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(WebNavigationApiTest);
 };
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Api) {
-  ASSERT_TRUE(RunExtensionTest("webnavigation/api")) << message_;
+class WebNavigationApiBackForwardCacheTest : public WebNavigationApiTest {
+ public:
+  WebNavigationApiBackForwardCacheTest() {
+    feature_list_.InitWithFeaturesAndParameters(
+        {{features::kBackForwardCache,
+          {{"content_injection_supported", "true"},
+           {"all_extensions_allowed", "true"}}}},
+        {features::kBackForwardCacheMemoryControls});
+  }
+  ~WebNavigationApiBackForwardCacheTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+using ContextType = extensions::ExtensionBrowserTest::ContextType;
+
+class WebNavigationApiTestWithContextType
+    : public WebNavigationApiTest,
+      public testing::WithParamInterface<ContextType> {
+ protected:
+  bool RunTest(const char* name) WARN_UNUSED_RESULT {
+    return RunExtensionTest(
+        {.name = name},
+        {.load_as_service_worker = GetParam() == ContextType::kServiceWorker});
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, Api) {
+  ASSERT_TRUE(RunTest("webnavigation/api")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, GetFrame) {
-  ASSERT_TRUE(RunExtensionTest("webnavigation/getFrame")) << message_;
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, GetFrame) {
+  ASSERT_TRUE(RunTest("webnavigation/getFrame")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ClientRedirect) {
-  ASSERT_TRUE(RunExtensionTest("webnavigation/clientRedirect"))
-      << message_;
+INSTANTIATE_TEST_SUITE_P(PersistentBackground,
+                         WebNavigationApiTestWithContextType,
+                         testing::Values(ContextType::kPersistentBackground));
+INSTANTIATE_TEST_SUITE_P(ServiceWorker,
+                         WebNavigationApiTestWithContextType,
+                         testing::Values(ContextType::kServiceWorker));
+
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, ClientRedirect) {
+  ASSERT_TRUE(RunTest("webnavigation/clientRedirect")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ServerRedirect) {
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(RunExtensionTest("webnavigation/serverRedirect"))
-      << message_;
+  ASSERT_TRUE(RunExtensionTest("webnavigation/serverRedirect")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, FormSubmission) {
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, FormSubmission) {
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(RunExtensionTest("webnavigation/formSubmission")) << message_;
+  ASSERT_TRUE(RunTest("webnavigation/formSubmission")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Download) {
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, Download) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   content::DownloadManager* download_manager =
       content::BrowserContext::GetDownloadManager(browser()->profile());
   content::DownloadTestObserverTerminal observer(
       download_manager, 1,
       content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
-  bool result = RunExtensionTest("webnavigation/download");
+  bool result = RunTest("webnavigation/download");
   observer.WaitForFinished();
   ASSERT_TRUE(result) << message_;
 }
@@ -253,8 +296,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ServerRedirectSingleProcess) {
   content::RenderProcessHost::SetMaxRendererProcessCount(1);
 
   // Wait for the extension to set itself up and return control to us.
-  ASSERT_TRUE(
-      RunExtensionTest("webnavigation/serverRedirectSingleProcess"))
+  ASSERT_TRUE(RunExtensionTest("webnavigation/serverRedirectSingleProcess"))
       << message_;
 
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
@@ -277,37 +319,41 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ServerRedirectSingleProcess) {
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ForwardBack) {
-  ASSERT_TRUE(RunExtensionTest("webnavigation/forwardBack")) << message_;
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, ForwardBack) {
+  ASSERT_TRUE(RunTest("webnavigation/forwardBack")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, IFrame) {
-  ASSERT_TRUE(RunExtensionTest("webnavigation/iframe")) << message_;
+IN_PROC_BROWSER_TEST_F(WebNavigationApiBackForwardCacheTest, ForwardBack) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunExtensionTest("webnavigation/backForwardCache")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, IFrame) {
+  ASSERT_TRUE(RunTest("webnavigation/iframe")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, SrcDoc) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/srcdoc")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, OpenTab) {
-  ASSERT_TRUE(RunExtensionTest("webnavigation/openTab")) << message_;
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, OpenTab) {
+  ASSERT_TRUE(RunTest("webnavigation/openTab")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ReferenceFragment) {
-  ASSERT_TRUE(RunExtensionTest("webnavigation/referenceFragment"))
-      << message_;
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, ReferenceFragment) {
+  ASSERT_TRUE(RunTest("webnavigation/referenceFragment")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, SimpleLoad) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/simpleLoad")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Failures) {
-  ASSERT_TRUE(RunExtensionTest("webnavigation/failures")) << message_;
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, Failures) {
+  ASSERT_TRUE(RunTest("webnavigation/failures")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, FilteredTest) {
-  ASSERT_TRUE(RunExtensionTest("webnavigation/filtered")) << message_;
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, FilteredTest) {
+  ASSERT_TRUE(RunTest("webnavigation/filtered")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, UserAction) {
@@ -333,7 +379,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, UserAction) {
   // This corresponds to "Open link in new tab".
   content::ContextMenuParams params;
   params.is_editable = false;
-  params.media_type = blink::ContextMenuDataMediaType::kNone;
+  params.media_type = blink::mojom::ContextMenuDataMediaType::kNone;
   params.page_url = url;
   params.link_url = extension->GetResourceURL("b.html");
 
@@ -353,8 +399,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, UserAction) {
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, RequestOpenTab) {
 
   // Wait for the extension to set itself up and return control to us.
-  ASSERT_TRUE(RunExtensionTest("webnavigation/requestOpenTab"))
-      << message_;
+  ASSERT_TRUE(RunExtensionTest("webnavigation/requestOpenTab")) << message_;
 
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_TRUE(content::WaitForLoadStop(tab));
@@ -376,9 +421,11 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, RequestOpenTab) {
   mouse_event.button = blink::WebMouseEvent::Button::kMiddle;
   mouse_event.SetPositionInWidget(7, 7);
   mouse_event.click_count = 1;
-  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+  tab->GetMainFrame()->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
+      mouse_event);
   mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
-  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+  tab->GetMainFrame()->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
+      mouse_event);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
@@ -409,9 +456,11 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, TargetBlank) {
   mouse_event.button = blink::WebMouseEvent::Button::kLeft;
   mouse_event.SetPositionInWidget(7, 7);
   mouse_event.click_count = 1;
-  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+  tab->GetMainFrame()->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
+      mouse_event);
   mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
-  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+  tab->GetMainFrame()->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
+      mouse_event);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
@@ -420,7 +469,8 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, TargetBlankIncognito) {
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // Wait for the extension to set itself up and return control to us.
-  ASSERT_TRUE(RunExtensionTestIncognito("webnavigation/targetBlank"))
+  ASSERT_TRUE(RunExtensionTest({.name = "webnavigation/targetBlank"},
+                               {.allow_in_incognito = true}))
       << message_;
 
   ResultCatcher catcher;
@@ -440,18 +490,20 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, TargetBlankIncognito) {
   mouse_event.button = blink::WebMouseEvent::Button::kLeft;
   mouse_event.SetPositionInWidget(7, 7);
   mouse_event.click_count = 1;
-  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+  tab->GetMainFrame()->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
+      mouse_event);
   mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
-  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+  tab->GetMainFrame()->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
+      mouse_event);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, History) {
-  ASSERT_TRUE(RunExtensionTest("webnavigation/history")) << message_;
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, History) {
+  ASSERT_TRUE(RunTest("webnavigation/history")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, CrossProcess) {
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, CrossProcess) {
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   LoadExtension(test_data_dir_.AppendASCII("webnavigation").AppendASCII("app"));
@@ -466,7 +518,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, CrossProcess) {
       "empty.html");
   call_script_user_gesture.set_has_user_gesture(true);
 
-  ASSERT_TRUE(RunExtensionTest("webnavigation/crossProcess")) << message_;
+  ASSERT_TRUE(RunTest("webnavigation/crossProcess")) << message_;
 }
 
 // crbug.com/708139.
@@ -487,7 +539,8 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, DISABLED_CrossProcessFragment) {
       << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, CrossProcessHistory) {
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType,
+                       CrossProcessHistory) {
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // See crossProcessHistory/e.html.
@@ -505,34 +558,28 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, CrossProcessHistory) {
       browser(), embedded_test_server()->GetURL("/test6"), "updateHistory()",
       "empty.html");
 
-  ASSERT_TRUE(RunExtensionTest("webnavigation/crossProcessHistory"))
-      << message_;
+  ASSERT_TRUE(RunTest("webnavigation/crossProcessHistory")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, CrossProcessIframe) {
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType,
+                       CrossProcessIframe) {
   content::IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(RunExtensionTest("webnavigation/crossProcessIframe")) << message_;
+  ASSERT_TRUE(RunTest("webnavigation/crossProcessIframe")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, PendingDeletion) {
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, PendingDeletion) {
   content::IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(RunExtensionTest("webnavigation/pendingDeletion")) << message_;
+  ASSERT_TRUE(RunTest("webnavigation/pendingDeletion")) << message_;
 }
 
-// Flaky fails on Win7 Tests (dbg)(1); https://crbug.com/974787.
-#if defined(OS_WIN) && !defined(NDEBUG)
-#define MAYBE_Crash DISABLED_Crash
-#else
-#define MAYBE_Crash Crash
-#endif
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_Crash) {
+IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, Crash) {
   content::ScopedAllowRendererCrashes scoped_allow_renderer_crashes;
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // Wait for the extension to set itself up and return control to us.
-  ASSERT_TRUE(RunExtensionTest("webnavigation/crash")) << message_;
+  ASSERT_TRUE(RunTest("webnavigation/crash")) << message_;
 
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_TRUE(content::WaitForLoadStop(tab));
@@ -545,7 +592,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_Crash) {
 
   content::RenderProcessHostWatcher process_watcher(
       tab, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
-  ui_test_utils::NavigateToURL(browser(), GURL(content::kChromeUICrashURL));
+  ui_test_utils::NavigateToURL(browser(), GURL(blink::kChromeUICrashURL));
   process_watcher.Wait();
 
   url = GURL(embedded_test_server()->GetURL(
@@ -553,6 +600,12 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_Crash) {
   ui_test_utils::NavigateToURL(browser(), url);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
+}
+
+IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Xslt) {
+  content::IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunExtensionTest("webnavigation/xslt")) << message_;
 }
 
 }  // namespace extensions

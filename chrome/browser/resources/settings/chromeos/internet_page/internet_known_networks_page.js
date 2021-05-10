@@ -95,7 +95,7 @@ Polymer({
    */
   currentRouteChanged(route, oldRoute) {
     // Does not apply to this page.
-    if (route != settings.routes.KNOWN_NETWORKS) {
+    if (route !== settings.routes.KNOWN_NETWORKS) {
       return;
     }
 
@@ -164,7 +164,7 @@ Polymer({
    * @private
    */
   networkIsNotPreferred_(networkState) {
-    return networkState.priority == 0;
+    return networkState.priority === 0;
   },
 
   /**
@@ -270,7 +270,14 @@ Polymer({
         console.error('Froget network failed for: ' + this.selectedGuid_);
       }
     });
-    settings.recordSettingChange();
+
+    if (this.networkType === chromeos.networkConfig.mojom.NetworkType.kWiFi) {
+      settings.recordSettingChange(
+          chromeos.settings.mojom.Setting.kForgetWifiNetwork);
+    } else {
+      settings.recordSettingChange();
+    }
+
     /** @type {!CrActionMenuElement} */ (this.$.dotsMenu).close();
   },
 

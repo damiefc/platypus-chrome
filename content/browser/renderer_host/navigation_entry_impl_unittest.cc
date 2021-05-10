@@ -4,22 +4,23 @@
 
 #include "content/browser/renderer_host/navigation_entry_impl.h"
 
+#include <memory>
+#include <string>
 #include <utility>
 
 #include "base/files/file_util.h"
 #include "base/path_service.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_file_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/common/page_state_serialization.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/page_state/page_state_serialization.h"
 
 using base::ASCIIToUTF16;
 
@@ -51,11 +52,11 @@ class TestSSLStatusData : public SSLStatus::UserData {
   DISALLOW_COPY_AND_ASSIGN(TestSSLStatusData);
 };
 
-PageState CreateTestPageState() {
-  ExplodedPageState exploded_state;
+blink::PageState CreateTestPageState() {
+  blink::ExplodedPageState exploded_state;
   std::string encoded_data;
-  EncodePageState(exploded_state, &encoded_data);
-  return PageState::CreateFromEncodedData(encoded_data);
+  blink::EncodePageState(exploded_state, &encoded_data);
+  return blink::PageState::CreateFromEncodedData(encoded_data);
 }
 
 }  // namespace
@@ -65,30 +66,32 @@ class NavigationEntryTest : public testing::Test {
   NavigationEntryTest() : instance_(nullptr) {}
 
   void SetUp() override {
-    entry1_.reset(new NavigationEntryImpl);
+    entry1_ = std::make_unique<NavigationEntryImpl>();
 
     const url::Origin kInitiatorOrigin =
         url::Origin::Create(GURL("https://initiator.example.com"));
 
     instance_ = SiteInstanceImpl::Create(&browser_context_);
-    entry2_.reset(new NavigationEntryImpl(
+    entry2_ = std::make_unique<NavigationEntryImpl>(
         instance_, GURL("test:url"),
         Referrer(GURL("from"), network::mojom::ReferrerPolicy::kDefault),
-        kInitiatorOrigin, ASCIIToUTF16("title"), ui::PAGE_TRANSITION_TYPED,
-        false, nullptr /* blob_url_loader_factory */));
+        kInitiatorOrigin, u"title", ui::PAGE_TRANSITION_TYPED, false,
+        nullptr /* blob_url_loader_factory */);
   }
 
   void TearDown() override {}
 
+ private:
+  BrowserTaskEnvironment task_environment_;
+  TestBrowserContext browser_context_;
+
  protected:
+  // Destructors for SiteInstances must run before |task_environment_| shuts
+  // down.
   std::unique_ptr<NavigationEntryImpl> entry1_;
   std::unique_ptr<NavigationEntryImpl> entry2_;
   // SiteInstances are deleted when their NavigationEntries are gone.
   scoped_refptr<SiteInstanceImpl> instance_;
-
- private:
-  BrowserTaskEnvironment task_environment_;
-  TestBrowserContext browser_context_;
 };
 
 // Test unique ID accessors
@@ -115,54 +118,51 @@ TEST_F(NavigationEntryTest, NavigationEntryURLs) {
   entry1_->SetURL(GURL("http://www.google.com"));
   EXPECT_EQ(GURL("http://www.google.com"), entry1_->GetURL());
   EXPECT_EQ(GURL("http://www.google.com"), entry1_->GetVirtualURL());
-  EXPECT_EQ(ASCIIToUTF16("www.google.com"), entry1_->GetTitleForDisplay());
+  EXPECT_EQ(u"www.google.com", entry1_->GetTitleForDisplay());
 
   // Setting URL with RTL characters causes it to be wrapped in an LTR
   // embedding.
   entry1_->SetURL(GURL("http://www.xn--rgba6eo.com"));
-  EXPECT_EQ(base::WideToUTF16(L"\x202a"
-                              L"www.\x062c\x0648\x062c\x0644"
-                              L".com\x202c"),
-            entry1_->GetTitleForDisplay());
+  EXPECT_EQ(
+      u"\x202a"
+      u"www.\x062c\x0648\x062c\x0644"
+      u".com\x202c",
+      entry1_->GetTitleForDisplay());
 
   // file:/// URLs should only show the filename.
   entry1_->SetURL(GURL("file:///foo/bar baz.txt"));
-  EXPECT_EQ(ASCIIToUTF16("bar baz.txt"), entry1_->GetTitleForDisplay());
+  EXPECT_EQ(u"bar baz.txt", entry1_->GetTitleForDisplay());
 
   // file:/// URLs should *not* be wrapped in an LTR embedding.
   entry1_->SetURL(GURL("file:///foo/%D8%A7%D8%A8 %D8%AC%D8%AF.txt"));
-  EXPECT_EQ(base::WideToUTF16(L"\x0627\x0628"
-                              L" \x062c\x062f"
-                              L".txt"),
-            entry1_->GetTitleForDisplay());
+  EXPECT_EQ(
+      u"\x0627\x0628"
+      u" \x062c\x062f"
+      u".txt",
+      entry1_->GetTitleForDisplay());
 
   // For file:/// URLs, make sure that slashes after the filename are ignored.
   // Regression test for https://crbug.com/503003.
   entry1_->SetURL(GURL("file:///foo/bar baz.txt#foo/bar"));
-  EXPECT_EQ(ASCIIToUTF16("bar baz.txt#foo/bar"), entry1_->GetTitleForDisplay());
+  EXPECT_EQ(u"bar baz.txt#foo/bar", entry1_->GetTitleForDisplay());
   entry1_->SetURL(GURL("file:///foo/bar baz.txt?x=foo/bar"));
-  EXPECT_EQ(ASCIIToUTF16("bar baz.txt?x=foo/bar"),
-            entry1_->GetTitleForDisplay());
+  EXPECT_EQ(u"bar baz.txt?x=foo/bar", entry1_->GetTitleForDisplay());
   entry1_->SetURL(GURL("file:///foo/bar baz.txt#baz/boo?x=foo/bar"));
-  EXPECT_EQ(ASCIIToUTF16("bar baz.txt#baz/boo?x=foo/bar"),
-            entry1_->GetTitleForDisplay());
+  EXPECT_EQ(u"bar baz.txt#baz/boo?x=foo/bar", entry1_->GetTitleForDisplay());
   entry1_->SetURL(GURL("file:///foo/bar baz.txt?x=foo/bar#baz/boo"));
-  EXPECT_EQ(ASCIIToUTF16("bar baz.txt?x=foo/bar#baz/boo"),
-            entry1_->GetTitleForDisplay());
+  EXPECT_EQ(u"bar baz.txt?x=foo/bar#baz/boo", entry1_->GetTitleForDisplay());
   entry1_->SetURL(GURL("file:///foo/bar baz.txt#foo/bar#baz/boo"));
-  EXPECT_EQ(ASCIIToUTF16("bar baz.txt#foo/bar#baz/boo"),
-            entry1_->GetTitleForDisplay());
+  EXPECT_EQ(u"bar baz.txt#foo/bar#baz/boo", entry1_->GetTitleForDisplay());
   entry1_->SetURL(GURL("file:///foo/bar baz.txt?x=foo/bar?y=baz/boo"));
-  EXPECT_EQ(ASCIIToUTF16("bar baz.txt?x=foo/bar?y=baz/boo"),
-            entry1_->GetTitleForDisplay());
+  EXPECT_EQ(u"bar baz.txt?x=foo/bar?y=baz/boo", entry1_->GetTitleForDisplay());
 
   // For chrome-untrusted:// URLs, title is blank.
   entry1_->SetURL(GURL("chrome-untrusted://terminal/html/terminal.html"));
-  EXPECT_EQ(base::string16(), entry1_->GetTitleForDisplay());
+  EXPECT_EQ(std::u16string(), entry1_->GetTitleForDisplay());
 
   // Title affects GetTitleForDisplay
-  entry1_->SetTitle(ASCIIToUTF16("Google"));
-  EXPECT_EQ(ASCIIToUTF16("Google"), entry1_->GetTitleForDisplay());
+  entry1_->SetTitle(u"Google");
+  EXPECT_EQ(u"Google", entry1_->GetTitleForDisplay());
 
   // Setting virtual_url doesn't affect URL
   entry2_->SetVirtualURL(GURL("display:url"));
@@ -171,7 +171,7 @@ TEST_F(NavigationEntryTest, NavigationEntryURLs) {
   EXPECT_EQ(GURL("display:url"), entry2_->GetVirtualURL());
 
   // Having a title set in constructor overrides virtual URL
-  EXPECT_EQ(ASCIIToUTF16("title"), entry2_->GetTitleForDisplay());
+  EXPECT_EQ(u"title", entry2_->GetTitleForDisplay());
 
   // User typed URL is independent of the others
   EXPECT_EQ(GURL(), entry1_->GetUserTypedURL());
@@ -228,8 +228,8 @@ TEST_F(NavigationEntryTest, NavigationEntryAccessors) {
   // Page type
   EXPECT_EQ(PAGE_TYPE_NORMAL, entry1_->GetPageType());
   EXPECT_EQ(PAGE_TYPE_NORMAL, entry2_->GetPageType());
-  entry2_->set_page_type(PAGE_TYPE_INTERSTITIAL);
-  EXPECT_EQ(PAGE_TYPE_INTERSTITIAL, entry2_->GetPageType());
+  entry2_->set_page_type(PAGE_TYPE_ERROR);
+  EXPECT_EQ(PAGE_TYPE_ERROR, entry2_->GetPageType());
 
   // Referrer
   EXPECT_EQ(GURL(), entry1_->GetReferrer().url);
@@ -239,10 +239,10 @@ TEST_F(NavigationEntryTest, NavigationEntryAccessors) {
   EXPECT_EQ(GURL("from2"), entry2_->GetReferrer().url);
 
   // Title
-  EXPECT_EQ(base::string16(), entry1_->GetTitle());
-  EXPECT_EQ(ASCIIToUTF16("title"), entry2_->GetTitle());
-  entry2_->SetTitle(ASCIIToUTF16("title2"));
-  EXPECT_EQ(ASCIIToUTF16("title2"), entry2_->GetTitle());
+  EXPECT_EQ(std::u16string(), entry1_->GetTitle());
+  EXPECT_EQ(u"title", entry2_->GetTitle());
+  entry2_->SetTitle(u"title2");
+  EXPECT_EQ(u"title2", entry2_->GetTitle());
 
   // Transition type
   EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
@@ -266,12 +266,12 @@ TEST_F(NavigationEntryTest, NavigationEntryAccessors) {
   EXPECT_TRUE(entry2_->GetHasPostData());
 
   // Restored
-  EXPECT_EQ(RestoreType::NONE, entry1_->restore_type());
+  EXPECT_EQ(RestoreType::kNotRestored, entry1_->restore_type());
   EXPECT_FALSE(entry1_->IsRestored());
-  EXPECT_EQ(RestoreType::NONE, entry2_->restore_type());
+  EXPECT_EQ(RestoreType::kNotRestored, entry2_->restore_type());
   EXPECT_FALSE(entry2_->IsRestored());
-  entry2_->set_restore_type(RestoreType::LAST_SESSION_EXITED_CLEANLY);
-  EXPECT_EQ(RestoreType::LAST_SESSION_EXITED_CLEANLY, entry2_->restore_type());
+  entry2_->set_restore_type(RestoreType::kRestored);
+  EXPECT_EQ(RestoreType::kRestored, entry2_->restore_type());
   EXPECT_TRUE(entry2_->IsRestored());
 
   // Original URL
@@ -309,7 +309,7 @@ TEST_F(NavigationEntryTest, NavigationEntryAccessors) {
   // Note that calling SetPageState may also set some other FNE members
   // (referrer, initiator, etc.).  This is why it is important to test
   // SetPageState/GetPageState last.
-  PageState test_page_state = CreateTestPageState();
+  blink::PageState test_page_state = CreateTestPageState();
   entry2_->SetPageState(test_page_state);
   EXPECT_EQ(test_page_state.ToEncodedData(),
             entry2_->GetPageState().ToEncodedData());
@@ -363,7 +363,7 @@ TEST_F(NavigationEntryTest, DISABLED_NavigationEntryContentUri) {
   base::FilePath content_uri = base::InsertImageIntoMediaStore(image_path);
 
   entry1_->SetURL(GURL(content_uri.value()));
-  EXPECT_EQ(ASCIIToUTF16("blank.jpg"), entry1_->GetTitleForDisplay());
+  EXPECT_EQ(u"blank.jpg", entry1_->GetTitleForDisplay());
 }
 #endif
 

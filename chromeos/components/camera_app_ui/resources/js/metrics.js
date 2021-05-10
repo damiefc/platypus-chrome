@@ -2,16 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {browserProxy} from './browser_proxy/browser_proxy.js';
 import {assert} from './chrome_util.js';
-// eslint-disable-next-line no-unused-vars
-import {PerfEvent} from './perf.js';
+import * as Comlink from './lib/comlink.js';
+import * as loadTimeData from './models/load_time_data.js';
+import * as localStorage from './models/local_storage.js';
+import {ChromeHelper} from './mojo/chrome_helper.js';
 import * as state from './state.js';
 import {
   Facing,  // eslint-disable-line no-unused-vars
   Mode,
-  Resolution,  // eslint-disable-line no-unused-vars
+  PerfEvent,        // eslint-disable-line no-unused-vars
+  PerfInformation,  // eslint-disable-line no-unused-vars
+  Resolution,       // eslint-disable-line no-unused-vars
 } from './type.js';
+// eslint-disable-next-line no-unused-vars
+import {GAHelperInterface} from './untrusted_helper_interfaces.js';
+import * as util from './util.js';
+import {WaitableEvent} from './waitable_event.js';
 
 /**
  * The tracker ID of the GA metrics.
@@ -25,25 +32,17 @@ const GA_ID = 'UA-134822711-1';
 let baseDimen = null;
 
 /**
- * @type {?Promise}
+ * @type {!WaitableEvent}
  */
-let ready = null;
+const ready = new WaitableEvent();
 
 /**
- * @type {boolean}
+ * @type {!Promise<!GAHelperInterface>}
  */
-let isMetricsEnabled = false;
-
-/**
- * Disable metrics sending if either the logging consent option is disabled or
- * metrics is disabled for current session. (e.g. Running tests)
- * @return {!Promise}
- */
-async function disableMetricsIfNotAllowed() {
-  // This value reflects the logging constent option in OS settings.
-  const canSendMetrics = await browserProxy.isMetricsAndCrashReportingEnabled();
-  window[`ga-disable-${GA_ID}`] = !isMetricsEnabled || !canSendMetrics;
-}
+const gaHelper = (async () => {
+  return /** @type {!GAHelperInterface} */ (
+      await util.createUntrustedJSModule('/js/untrusted_ga_helper.js'));
+})();
 
 /**
  * Send the event to GA backend.
@@ -52,11 +51,6 @@ async function disableMetricsIfNotAllowed() {
  *     information.
  */
 async function sendEvent(event, dimen = null) {
-  assert(window.ga !== null);
-  assert(ready !== null);
-  await ready;
-  await disableMetricsIfNotAllowed();
-
   const assignDimension = (e, d) => {
     d.forEach((value, key) => e[`dimension${key}`] = value);
   };
@@ -66,7 +60,15 @@ async function sendEvent(event, dimen = null) {
   if (dimen !== null) {
     assignDimension(event, dimen);
   }
-  window.ga('send', 'event', event);
+
+  await ready.wait();
+
+  // This value reflects the logging constent option in OS settings.
+  const canSendMetrics =
+      await ChromeHelper.getInstance().isMetricsAndCrashReportingEnabled();
+  if (canSendMetrics) {
+    (await gaHelper).sendGAEvent(event);
+  }
 }
 
 /**
@@ -74,68 +76,33 @@ async function sendEvent(event, dimen = null) {
  * is enabled AND the logging consent option is enabled in OS settings.
  * @param {boolean} enabled True if the metrics is enabled.
  */
-export function setMetricsEnabled(enabled) {
-  assert(ready !== null);
-  isMetricsEnabled = enabled;
+export async function setMetricsEnabled(enabled) {
+  await ready.wait();
+  await (await gaHelper).setMetricsEnabled(GA_ID, enabled);
 }
 
 /**
  * Initializes metrics with parameters.
  */
-export function initMetrics() {
-  ready = (async () => {
-    browserProxy.addDummyHistoryIfNotAvailable();
+export async function initMetrics() {
+  const board = loadTimeData.getBoard();
+  const boardName = /^(x86-)?(\w*)/.exec(board)[0];
+  const match = navigator.appVersion.match(/CrOS\s+\S+\s+([\d.]+)/);
+  const osVer = match ? match[1] : '';
+  baseDimen = new Map([
+    [1, boardName],
+    [2, osVer],
+  ]);
 
-    // GA initialization function which is mostly copied from
-    // https://developers.google.com/analytics/devguides/collection/analyticsjs.
-    (function(i, s, o, g, r) {
-      i['GoogleAnalyticsObject'] = r;
-      i[r] = i[r] || function(...args) {
-        (i[r].q = i[r].q || []).push(args);
-      }, i[r].l = new Date().getTime();
-      const a = s.createElement(o);
-      const m = s.getElementsByTagName(o)[0];
-      a['async'] = 1;
-      a['src'] = g;
-      m.parentNode.insertBefore(a, m);
-    })(window, document, 'script', '../js/lib/analytics.js', 'ga');
+  const GA_LOCAL_STORAGE_KEY = 'google-analytics.analytics.user-id';
+  const clientId = localStorage.getString(GA_LOCAL_STORAGE_KEY);
 
-    const board = await browserProxy.getBoard();
-    const boardName = /^(x86-)?(\w*)/.exec(board)[0];
-    const match = navigator.appVersion.match(/CrOS\s+\S+\s+([\d.]+)/);
-    const osVer = match ? match[1] : '';
-    baseDimen = new Map([
-      [1, boardName],
-      [2, osVer],
-    ]);
+  const setClientId = (id) => {
+    localStorage.set(GA_LOCAL_STORAGE_KEY, id);
+  };
 
-    // By default GA stores the user ID in cookies. Change to store in local
-    // storage instead.
-    const GA_LOCAL_STORAGE_KEY = 'google-analytics.analytics.user-id';
-    const gaLocalStorage =
-        await browserProxy.localStorageGet({[GA_LOCAL_STORAGE_KEY]: null});
-    window.ga('create', GA_ID, {
-      'storage': 'none',
-      'clientId': gaLocalStorage[GA_LOCAL_STORAGE_KEY] || null,
-    });
-    window.ga(
-        (tracker) => browserProxy.localStorageSet(
-            {[GA_LOCAL_STORAGE_KEY]: tracker.get('clientId')}));
-
-    // By default GA uses a dummy image and sets its source to the target URL to
-    // record metrics. Since requesting remote image violates the policy of
-    // a platform app, use navigator.sendBeacon() instead.
-    window.ga('set', 'transport', 'beacon');
-
-    // By default GA only accepts "http://" and "https://" protocol. Bypass the
-    // check here since we are "chrome-extension://".
-    window.ga('set', 'checkProtocolTask', null);
-  })();
-
-  ready.then(async () => {
-    // The metrics is default enabled.
-    await setMetricsEnabled(true);
-  });
+  await (await gaHelper).initGA(GA_ID, clientId, Comlink.proxy(setClientId));
+  ready.signal();
 }
 
 /**
@@ -306,9 +273,9 @@ export class PerfEventParam {
     this.duration;
 
     /**
-     * @type {!Object|undefined} Optional information for the event.
+     * @type {!PerfInformation|undefined} Optional information for the event.
      */
-    this.extras;
+    this.perfInfo;
   }
 }
 
@@ -316,9 +283,9 @@ export class PerfEventParam {
  * Sends perf type event.
  * @param {!PerfEventParam} param
  */
-export function sendPerfEvent({event, duration, extras = {}}) {
-  const resolution = extras['resolution'] || '';
-  const facing = extras['facing'] || '';
+export function sendPerfEvent({event, duration, perfInfo = {}}) {
+  const resolution = perfInfo['resolution'] || '';
+  const facing = perfInfo['facing'] || '';
   sendEvent(
       {
         eventCategory: 'perf',
@@ -400,5 +367,60 @@ export function sendErrorEvent(
         [18, funcName],
         [19, lineNo],
         [20, colNo],
+      ]));
+}
+
+/**
+ * Sends the barcode enabled event.
+ */
+export function sendBarcodeEnabledEvent() {
+  sendEvent({
+    eventCategory: 'barcode',
+    eventAction: 'enable',
+  });
+}
+
+/**
+ * Types of the decoded barcode content.
+ * @enum {string}
+ */
+export const BarcodeContentType = {
+  TEXT: 'text',
+  URL: 'url',
+};
+
+/**
+ * @typedef {{
+ *   contentType: !BarcodeContentType,
+ * }}
+ */
+export let BarcodeDetectedEventParam;
+
+/**
+ * Sends the barcode detected event.
+ * @param {!BarcodeDetectedEventParam} param
+ */
+export function sendBarcodeDetectedEvent({contentType}) {
+  sendEvent({
+    eventCategory: 'barcode',
+    eventAction: 'detect',
+    eventLabel: contentType,
+  });
+}
+
+/**
+ * Sends the open ptz panel event.
+ * @param {{pan: boolean, tilt: boolean, zoom: boolean}} capabilities
+ */
+export function sendOpenPTZPanelEvent(capabilities) {
+  sendEvent(
+      {
+        eventCategory: 'ptz',
+        eventAction: 'open-panel',
+      },
+      new Map([
+        [24, capabilities.pan],
+        [25, capabilities.tilt],
+        [26, capabilities.zoom],
       ]));
 }

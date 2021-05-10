@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/renderer/safe_browsing/phishing_classifier.h"
+#include "components/safe_browsing/content/renderer/phishing_classifier/phishing_classifier.h"
 
 #include <memory>
 #include <string>
@@ -10,14 +10,14 @@
 
 #include "base/bind.h"
 #include "base/run_loop.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_discardable_memory_allocator.h"
 #include "chrome/renderer/chrome_content_renderer_client.h"
-#include "chrome/renderer/safe_browsing/murmurhash3_util.h"
-#include "chrome/renderer/safe_browsing/scorer.h"
 #include "chrome/test/base/chrome_render_view_test.h"
+#include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/renderer/phishing_classifier/features.h"
+#include "components/safe_browsing/content/renderer/phishing_classifier/murmurhash3_util.h"
+#include "components/safe_browsing/content/renderer/phishing_classifier/scorer.h"
 #include "components/safe_browsing/core/proto/client_model.pb.h"
 #include "components/safe_browsing/core/proto/csd.pb.h"
 #include "content/public/renderer/render_frame.h"
@@ -53,7 +53,7 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
         page_link_domain_phishing_(features::kPageLinkDomain +
                                    std::string("phishing.com")),
         page_term_login_(features::kPageTerm + std::string("login")),
-        page_text_(base::ASCIIToUTF16("login")),
+        page_text_(u"login"),
         phishy_score_(PhishingClassifier::kInvalidScore) {}
 
   void SetUp() override {
@@ -120,7 +120,7 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
   }
 
   // Helper method to start phishing classification.
-  void RunPhishingClassifier(const base::string16* page_text) {
+  void RunPhishingClassifier(const std::u16string* page_text) {
     feature_map_.Clear();
 
     classifier_->BeginClassification(
@@ -138,6 +138,7 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
                                   verdict.feature_map(i).value());
     }
     is_phishing_ = verdict.is_phishing();
+    is_dom_match_ = verdict.is_dom_match();
     screenshot_digest_ = verdict.screenshot_digest();
     screenshot_phash_ = verdict.screenshot_phash();
     phash_dimension_size_ = verdict.phash_dimension_size();
@@ -164,7 +165,7 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
   const std::string url_tld_token_net_;
   const std::string page_link_domain_phishing_;
   const std::string page_term_login_;
-  base::string16 page_text_;
+  std::u16string page_text_;
 
   // Outputs of phishing classifier.
   FeatureMap feature_map_;
@@ -173,6 +174,7 @@ class PhishingClassifierTest : public ChromeRenderViewTest {
   std::string screenshot_digest_;
   std::string screenshot_phash_;
   int phash_dimension_size_;
+  bool is_dom_match_;
 
   // A DiscardableMemoryAllocator is needed for certain Skia operations.
   base::TestDiscardableMemoryAllocator test_allocator_;
@@ -272,6 +274,7 @@ TEST_F(PhishingClassifierTest, DisableDetection) {
   EXPECT_FALSE(classifier_->is_ready());
 }
 
+#if BUILDFLAG(FULL_SAFE_BROWSING)
 TEST_F(PhishingClassifierTest, TestSendsVisualHash) {
   LoadHtml(GURL("https://host.net"),
            "<html><body><a href=\"http://safe.com/\">login</a></body></html>");
@@ -287,6 +290,26 @@ TEST_F(PhishingClassifierTest, TestSendsVisualDigest) {
   RunPhishingClassifier(&page_text_);
 
   EXPECT_FALSE(screenshot_digest_.empty());
+}
+#endif
+
+TEST_F(PhishingClassifierTest, TestPhishingPagesAreDomMatches) {
+  LoadHtml(
+      GURL("http://host.net"),
+      "<html><body><a href=\"http://phishing.com/\">login</a></body></html>");
+  RunPhishingClassifier(&page_text_);
+
+  EXPECT_TRUE(is_phishing_);
+  EXPECT_TRUE(is_dom_match_);
+}
+
+TEST_F(PhishingClassifierTest, TestSafePagesAreNotDomMatches) {
+  LoadHtml(GURL("http://host.net"),
+           "<html><body><a href=\"http://safe.com/\">login</a></body></html>");
+  RunPhishingClassifier(&page_text_);
+
+  EXPECT_FALSE(is_phishing_);
+  EXPECT_FALSE(is_dom_match_);
 }
 
 // TODO(jialiul): Add test to verify that classification only starts on GET

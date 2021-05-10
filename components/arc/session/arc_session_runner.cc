@@ -251,6 +251,18 @@ void ArcSessionRunner::SetUserInfo(
     arc_session_->SetUserInfo(cryptohome_id_, user_id_hash_, serial_number_);
 }
 
+void ArcSessionRunner::SetDemoModeDelegate(
+    std::unique_ptr<ArcClientAdapter::DemoModeDelegate> delegate) {
+  demo_mode_delegate_ = std::move(delegate);
+}
+
+void ArcSessionRunner::TrimVmMemory(TrimVmMemoryCallback callback) {
+  if (arc_session_)
+    arc_session_->TrimVmMemory(std::move(callback));
+  else
+    LOG(WARNING) << "TrimVmMemory is called when no ARC session is running";
+}
+
 void ArcSessionRunner::SetRestartDelayForTesting(
     const base::TimeDelta& restart_delay) {
   DCHECK(!arc_session_);
@@ -258,8 +270,6 @@ void ArcSessionRunner::SetRestartDelayForTesting(
   restart_delay_ = restart_delay;
 }
 
-// TODO(b/164816080) add a test to ensure OnSessionStopped is not called
-// when starting ARC session after failed attempt
 void ArcSessionRunner::StartArcSession() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!restart_timer_.IsRunning());
@@ -272,6 +282,7 @@ void ArcSessionRunner::StartArcSession() {
         !serial_number_.empty()) {
       arc_session_->SetUserInfo(cryptohome_id_, user_id_hash_, serial_number_);
     }
+    arc_session_->SetDemoModeDelegate(demo_mode_delegate_.get());
     arc_session_->AddObserver(this);
     arc_session_->StartMiniInstance();
     // Record the UMA only when |restart_after_crash_count_| is zero to avoid

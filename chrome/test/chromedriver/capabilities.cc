@@ -37,8 +37,10 @@ Status ParseBoolean(
     bool* to_set,
     const base::Value& option,
     Capabilities* capabilities) {
-  if (!option.GetAsBoolean(to_set))
+  if (!option.is_bool())
     return Status(kInvalidArgument, "must be a boolean");
+  if (to_set)
+    *to_set = option.GetBool();
   return Status(kOk);
 }
 
@@ -57,34 +59,31 @@ Status ParseString(std::string* to_set,
 Status ParseInterval(int* to_set,
                      const base::Value& option,
                      Capabilities* capabilities) {
-  int parsed_int = 0;
-  if (!option.GetAsInteger(&parsed_int))
+  if (!option.is_int())
     return Status(kInvalidArgument, "must be an integer");
-  if (parsed_int <= 0)
+  if (option.GetInt() <= 0)
     return Status(kInvalidArgument, "must be positive");
-  *to_set = parsed_int;
+  *to_set = option.GetInt();
   return Status(kOk);
 }
 
 Status ParseTimeDelta(base::TimeDelta* to_set,
                       const base::Value& option,
                       Capabilities* capabilities) {
-  int milliseconds = 0;
-  if (!option.GetAsInteger(&milliseconds))
+  if (!option.is_int())
     return Status(kInvalidArgument, "must be an integer");
-  if (milliseconds < 0)
+  if (option.GetInt() < 0)
     return Status(kInvalidArgument, "must be positive or zero");
-  *to_set = base::TimeDelta::FromMilliseconds(milliseconds);
+  *to_set = base::TimeDelta::FromMilliseconds(option.GetInt());
   return Status(kOk);
 }
 
 Status ParseFilePath(base::FilePath* to_set,
                      const base::Value& option,
                      Capabilities* capabilities) {
-  base::FilePath::StringType str;
-  if (!option.GetAsString(&str))
+  if (!option.is_string())
     return Status(kInvalidArgument, "must be a string");
-  *to_set = base::FilePath(str);
+  *to_set = base::FilePath::FromUTF8Unsafe(option.GetString());
   return Status(kOk);
 }
 
@@ -143,7 +142,7 @@ Status ParseMobileEmulation(const base::Value& option,
 
   if (mobile_emulation->HasKey("deviceName")) {
     // Cannot use any other options with deviceName.
-    if (mobile_emulation->size() > 1)
+    if (mobile_emulation->DictSize() > 1)
       return Status(kInvalidArgument, "'deviceName' must be used alone");
 
     std::string device_name;
@@ -304,7 +303,7 @@ Status ParseProxy(bool w3c_compliant,
   } else if (proxy_type == "system") {
     // Chrome default.
   } else if (proxy_type == "pac") {
-    base::CommandLine::StringType proxy_pac_url;
+    std::string proxy_pac_url;
     if (!proxy_dict->GetString("proxyAutoconfigUrl", &proxy_pac_url))
       return Status(kInvalidArgument, "'proxyAutoconfigUrl' must be a string");
     capabilities->switches.SetSwitch("proxy-pac-url", proxy_pac_url);
@@ -407,15 +406,14 @@ Status ParsePortNumber(int* to_set,
                      const base::Value& option,
                      Capabilities* capabilities) {
   int max_port_number = 65535;
-  int parsed_int = 0;
-  if (!option.GetAsInteger(&parsed_int))
+  if (!option.is_int())
     return Status(kInvalidArgument, "must be an integer");
-  if (parsed_int <= 0)
+  if (option.GetInt() <= 0)
     return Status(kInvalidArgument, "must be positive");
-  if (parsed_int > max_port_number)
+  if (option.GetInt() > max_port_number)
     return Status(kInvalidArgument, "must be less than or equal to " +
                                     base::NumberToString(max_port_number));
-  *to_set = parsed_int;
+  *to_set = option.GetInt();
   return Status(kOk);
 }
 
@@ -481,10 +479,9 @@ Status ParseInspectorDomainStatus(
     PerfLoggingPrefs::InspectorDomainStatus* to_set,
     const base::Value& option,
     Capabilities* capabilities) {
-  bool desired_value;
-  if (!option.GetAsBoolean(&desired_value))
+  if (!option.is_bool())
     return Status(kInvalidArgument, "must be a boolean");
-  if (desired_value)
+  if (option.GetBool())
     *to_set = PerfLoggingPrefs::InspectorDomainStatus::kExplicitlyEnabled;
   else
     *to_set = PerfLoggingPrefs::InspectorDomainStatus::kExplicitlyDisabled;
@@ -676,27 +673,19 @@ Switches::Switches(const Switches& other) = default;
 Switches::~Switches() {}
 
 void Switches::SetSwitch(const std::string& name) {
-  SetSwitch(name, NativeString());
+  SetSwitch(name, std::string());
 }
 
 void Switches::SetSwitch(const std::string& name, const std::string& value) {
 #if defined(OS_WIN)
-  SetSwitch(name, base::UTF8ToUTF16(value));
+  switch_map_[name] = base::UTF8ToWide(value);
 #else
   switch_map_[name] = value;
-#endif
-}
-
-void Switches::SetSwitch(const std::string& name, const base::string16& value) {
-#if defined(OS_WIN)
-  switch_map_[name] = value;
-#else
-  SetSwitch(name, base::UTF16ToUTF8(value));
 #endif
 }
 
 void Switches::SetSwitch(const std::string& name, const base::FilePath& value) {
-  SetSwitch(name, value.value());
+  switch_map_[name] = value.value();
 }
 
 void Switches::SetFromSwitches(const Switches& switches) {
@@ -732,7 +721,7 @@ bool Switches::HasSwitch(const std::string& name) const {
 std::string Switches::GetSwitchValue(const std::string& name) const {
   NativeString value = GetSwitchValueNative(name);
 #if defined(OS_WIN)
-  return base::UTF16ToUTF8(value);
+  return base::WideToUTF8(value);
 #else
   return value;
 #endif
@@ -834,6 +823,8 @@ Status Capabilities::Parse(const base::DictionaryValue& desired_caps,
   // W3C defined extension capabilities.
   // See https://w3c.github.io/webauthn/#sctn-automation-webdriver-capability
   parser_map["webauthn:virtualAuthenticators"] =
+      base::BindRepeating(&ParseBoolean, nullptr);
+  parser_map["webauthn:extension:largeBlob"] =
       base::BindRepeating(&ParseBoolean, nullptr);
 
   // ChromeDriver specific capabilities.

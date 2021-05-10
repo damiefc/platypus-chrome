@@ -22,12 +22,52 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histograms>
 
 <variants name="MobileFreInflationSpeedComparison">
-  <variant name=".FasterThanInflation"/>
-  <variant name=".SlowerThanInflation"/>
+  <variant name=".FasterThanInflation"
+      summary="This histogram reports just those timings that were faster
+               than inflation."/>
+  <variant name=".SlowerThanInflation"
+      summary="This histogram reports just those timings that were slower
+               than inflation."/>
 </variants>
 
+<histogram name="Mobile.AppMenu.HighlightMenuItem.Clicked"
+    enum="AppMenuHighlightItem" expires_after="2021-09-19">
+  <owner>shaktisahu@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    Records which menu item was clicked when a user clicks on a menu item from
+    the app menu that was highlighted. Android only.
+  </summary>
+</histogram>
+
+<histogram name="Mobile.AppMenu.HighlightMenuItem.Shown"
+    enum="AppMenuHighlightItem" expires_after="2021-09-19">
+  <owner>shaktisahu@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    Records which menu item was highlighted when the app menu was opened by the
+    user. Android only.
+  </summary>
+</histogram>
+
+<histogram name="Mobile.AppMenu.SimilarSelection"
+    enum="AppMenuSimilarSelectionType" expires_after="M95">
+  <obsolete>
+    Deprecated as of 03/2021.
+  </obsolete>
+  <owner>gangwu@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    Android: This metrics is recorded when users made similar selections on app
+    menu within a period of time. ex. a user selected downloading the current
+    page. After 5 seconds, the user opened the app menu again and selected
+    download manager. In this case, we would consider that Download and Download
+    Manager are similar selections.
+  </summary>
+</histogram>
+
 <histogram name="Mobile.AppMenu.TimeToTakeAction.Abandoned" units="ms"
-    expires_after="M93">
+    expires_after="2021-09-19">
   <owner>gangwu@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -40,7 +80,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Mobile.AppMenu.TimeToTakeAction.SelectedItem" units="ms"
-    expires_after="M93">
+    expires_after="2021-09-19">
   <owner>gangwu@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -60,30 +100,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Mobile.ContextMenu.BookmarkEntry.Actions" enum="IOSMenuAction"
-    expires_after="2021-07-01">
-  <owner>seblalancette@chromium.org</owner>
-  <owner>gambard@chromium.org</owner>
-  <summary>
-    Tracks which action was selected in the context menu shown for Bookmark
-    entries. To view how often this context menu was shown, take a look at this
-    other histogram: Mobile.ContextMenu.EntryPoints. Currently only on iOS.
-  </summary>
-</histogram>
-
-<histogram name="Mobile.ContextMenu.BookmarkFolder.Actions"
-    enum="IOSMenuAction" expires_after="2021-07-01">
-  <owner>seblalancette@chromium.org</owner>
-  <owner>gambard@chromium.org</owner>
-  <summary>
-    Tracks which action was selected in the context menu shown for Bookmark
-    folders. To view how often this context menu was shown, take a look at this
-    other histogram: Mobile.ContextMenu.EntryPoints. Currently only on iOS.
-  </summary>
-</histogram>
-
 <histogram name="Mobile.ContextMenu.EntryPoints" enum="IOSMenuScenario"
-    expires_after="2021-07-01">
+    expires_after="2022-06-01">
   <owner>seblalancette@chromium.org</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
@@ -93,60 +111,28 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Mobile.ContextMenu.HistoryEntry.Actions" enum="IOSMenuAction"
-    expires_after="2021-07-01">
+<histogram name="Mobile.ContextMenu.{EntryPoint}.Actions" enum="IOSMenuAction"
+    expires_after="2022-06-01">
   <owner>seblalancette@chromium.org</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
-    Tracks which action was selected in the context menu shown for History
-    entries. To view how often this context menu was shown, take a look at this
-    other histogram: Mobile.ContextMenu.EntryPoints. Currently only on iOS.
+    Tracks which action was selected in the context menu shown for a
+    {EntryPoint}. To view how often this context menu was shown, take a look at
+    this other histogram: Mobile.ContextMenu.EntryPoints. Currently only on iOS.
   </summary>
-</histogram>
-
-<histogram name="Mobile.ContextMenu.MostVisitedEntry.Actions"
-    enum="IOSMenuAction" expires_after="2021-07-01">
-  <owner>seblalancette@chromium.org</owner>
-  <owner>gambard@chromium.org</owner>
-  <summary>
-    Tracks which action was selected in the context menu shown for Most Visited
-    entries. To view how often this context menu was shown, take a look at this
-    other histogram: Mobile.ContextMenu.EntryPoints. Currently only on iOS.
-  </summary>
-</histogram>
-
-<histogram name="Mobile.ContextMenu.ReadingListEntry.Actions"
-    enum="IOSMenuAction" expires_after="2021-07-01">
-  <owner>seblalancette@chromium.org</owner>
-  <owner>gambard@chromium.org</owner>
-  <summary>
-    Tracks which action was selected in the context menu shown for Reading List
-    entries. To view how often this context menu was shown, take a look at this
-    other histogram: Mobile.ContextMenu.EntryPoints. Currently only on iOS.
-  </summary>
-</histogram>
-
-<histogram name="Mobile.ContextMenu.RecentTabsEntry.Actions"
-    enum="IOSMenuAction" expires_after="2021-07-01">
-  <owner>seblalancette@chromium.org</owner>
-  <owner>gambard@chromium.org</owner>
-  <summary>
-    Tracks which action was selected in the context menu shown for Recent Tabs
-    entries. To view how often this context menu was shown, take a look at this
-    other histogram: Mobile.ContextMenu.EntryPoints. Currently only on iOS.
-  </summary>
-</histogram>
-
-<histogram name="Mobile.ContextMenu.RecentTabsHeader.Actions"
-    enum="IOSMenuAction" expires_after="2021-07-01">
-  <owner>seblalancette@chromium.org</owner>
-  <owner>gambard@chromium.org</owner>
-  <summary>
-    Tracks which action was selected in the context menu shown for Recent Tabs
-    headers/devices. To view how often this context menu was shown, take a look
-    at this other histogram: Mobile.ContextMenu.EntryPoints. Currently only on
-    iOS.
-  </summary>
+  <token key="EntryPoint">
+    <variant name="BookmarkEntry" summary="Bookmark entry"/>
+    <variant name="BookmarkFolder" summary="Bookmark folder"/>
+    <variant name="HistoryEntry" summary="History entry"/>
+    <variant name="MostVisitedEntry" summary="Most Visited entry"/>
+    <variant name="ReadingListEntry" summary="Reading List entry"/>
+    <variant name="RecentTabsEntry" summary="Recent Tabs entry"/>
+    <variant name="RecentTabsHeader" summary="Recent Tabs header/device"/>
+    <variant name="TabGrid" summary="Tab Grid Entry"/>
+    <variant name="WebImage" summary="Image on a Web page"/>
+    <variant name="WebImageLink" summary="Image-Link on a Web page"/>
+    <variant name="WebLink" summary="Link on a Web page"/>
+  </token>
 </histogram>
 
 <histogram base="true" name="Mobile.DefaultBrowser.BrowserCount" units="units"
@@ -211,7 +197,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Badge.Tapped"
-    enum="MobileMessagesBadgeState" expires_after="2021-03-20">
+    enum="MobileMessagesBadgeState" expires_after="2022-05-23">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -220,7 +206,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Banner.Dismiss"
-    enum="MobileMessagesBannerDismissType" expires_after="2021-03-20">
+    enum="MobileMessagesBannerDismissType" expires_after="2022-05-23">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -229,7 +215,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Banner.Event"
-    enum="MobileMessagesBannerEvent" expires_after="2021-03-20">
+    enum="MobileMessagesBannerEvent" expires_after="2022-05-27">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -238,7 +224,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Mobile.Messages.Banner.OnScreenTime" units="ms"
-    expires_after="2021-03-20">
+    expires_after="2022-05-11">
   <owner>sczs@chromium.org</owner>
   <owner>thegreenfrog@google.com</owner>
   <summary>
@@ -249,7 +235,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Mobile.Messages.ConcurrentPresented" units="infobars"
-    expires_after="2021-03-20">
+    expires_after="2022-03-20">
   <owner>sczs@chromium.org</owner>
   <owner>thegreenfrog@chromium.org</owner>
   <summary>
@@ -259,7 +245,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Confirm.Accept.Time" units="ms"
-    expires_after="2021-03-20">
+    expires_after="2022-07-27">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Confirm.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -271,7 +257,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Confirm.Event"
-    enum="MobileMessagesConfirmInfobarEvents" expires_after="2021-03-20">
+    enum="MobileMessagesConfirmInfobarEvents" expires_after="2022-07-27">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Confirm.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -283,7 +269,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Modal.Event"
-    enum="MobileMessagesModalEvent" expires_after="2021-03-20">
+    enum="MobileMessagesModalEvent" expires_after="2022-03-20">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -292,7 +278,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.OverflowRow.Tapped"
-    enum="MobileMessagesInfobarType" expires_after="2021-03-20">
+    enum="MobileMessagesInfobarType" expires_after="2022-03-20">
   <owner>sczs@chromium.org</owner>
   <owner>thegreenfrog@chromium.org</owner>
   <summary>Records a tap on an Infobar overflow menu row.</summary>
@@ -308,7 +294,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Passwords.Modal.Event"
-    enum="MobileMessagesPasswordsModalEvent" expires_after="2021-03-20">
+    enum="MobileMessagesPasswordsModalEvent" expires_after="2022-03-20">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Password.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -317,7 +303,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Passwords.Modal.Present"
-    enum="MobileMessagesPasswordsModalPresent" expires_after="2021-03-20">
+    enum="MobileMessagesPasswordsModalPresent" expires_after="2022-03-20">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Password.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -326,14 +312,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Mobile.Messages.Save.Card.Modal.Event"
-    enum="MobileMessagesSaveCardModalEvent" expires_after="2021-03-20">
+    enum="MobileMessagesSaveCardModalEvent" expires_after="2022-03-20">
   <owner>sczs@chromium.org</owner>
   <owner>thegreenfrog@chromium.org</owner>
   <summary>Records Save Card specific Infobar Modal events.</summary>
 </histogram>
 
 <histogram name="Mobile.Messages.Translate.Banner.Event"
-    enum="MobileMessagesTranslateBannerEvent" expires_after="2021-03-20">
+    enum="MobileMessagesTranslateBannerEvent" expires_after="2022-03-20">
   <owner>sczs@chromium.org</owner>
   <owner>thegreenfrog@chromium.org</owner>
   <summary>
@@ -343,7 +329,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Mobile.Messages.Translate.Modal.Event"
-    enum="MobileMessagesTranslateModalEvent" expires_after="2021-03-20">
+    enum="MobileMessagesTranslateModalEvent" expires_after="2022-03-20">
   <owner>sczs@chromium.org</owner>
   <owner>thegreenfrog@chromium.org</owner>
   <summary>
@@ -353,7 +339,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Mobile.Messages.Translate.Modal.Present"
-    enum="MobileMessagesTranslateModalPresent" expires_after="2021-03-20">
+    enum="MobileMessagesTranslateModalPresent" expires_after="2022-03-20">
   <owner>sczs@chromium.org</owner>
   <owner>thegreenfrog@chromium.org</owner>
   <summary>
@@ -372,19 +358,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Mobile.Share.BookmarkEntry.Actions" enum="IOSShareAction"
-    expires_after="2021-06-01">
-  <owner>seblalancette@chromium.org</owner>
-  <owner>chrome-sharing-core@google.com</owner>
-  <summary>
-    Tracks the sharing actions executed when the sharing scenario was initiated
-    for a bookmark entry. To view how often this sharing scenario was triggered,
-    take a look at: Mobile.Share.EntryPoints. Currently only on iOS.
-  </summary>
-</histogram>
-
 <histogram name="Mobile.Share.EntryPoints" enum="IOSActivityScenario"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>seblalancette@chromium.org</owner>
   <owner>chrome-sharing-core@google.com</owner>
   <summary>
@@ -394,70 +369,25 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Mobile.Share.HistoryEntry.Actions" enum="IOSShareAction"
-    expires_after="2021-06-01">
+<histogram name="Mobile.Share.{EntryPoint}.Actions" enum="IOSShareAction"
+    expires_after="2022-06-01">
   <owner>seblalancette@chromium.org</owner>
   <owner>chrome-sharing-core@google.com</owner>
   <summary>
     Tracks the sharing actions executed when the sharing scenario was initiated
-    for a history entry. To view how often this sharing scenario was triggered,
+    for a {EntryPoint}. To view how often this sharing scenario was triggered,
     take a look at: Mobile.Share.EntryPoints. Currently only on iOS.
   </summary>
-</histogram>
-
-<histogram name="Mobile.Share.MostVisitedEntry.Actions" enum="IOSShareAction"
-    expires_after="2021-06-01">
-  <owner>seblalancette@chromium.org</owner>
-  <owner>chrome-sharing-core@google.com</owner>
-  <summary>
-    Tracks the sharing actions executed when the sharing scenario was initiated
-    for a most visited tile. To view how often this sharing scenario was
-    triggered, take a look at: Mobile.Share.EntryPoints. Currently only on iOS.
-  </summary>
-</histogram>
-
-<histogram name="Mobile.Share.QRCodeImage.Actions" enum="IOSShareAction"
-    expires_after="2021-06-01">
-  <owner>seblalancette@chromium.org</owner>
-  <owner>chrome-sharing-core@google.com</owner>
-  <summary>
-    Tracks the sharing actions executed when the sharing scenario was initiated
-    for the generated QR code image. To view how often this sharing scenario was
-    triggered, take a look at: Mobile.Share.EntryPoints. Currently only on iOS.
-  </summary>
-</histogram>
-
-<histogram name="Mobile.Share.ReadingListEntry.Actions" enum="IOSShareAction"
-    expires_after="2021-06-01">
-  <owner>seblalancette@chromium.org</owner>
-  <owner>chrome-sharing-core@google.com</owner>
-  <summary>
-    Tracks the sharing actions executed when the sharing scenario was initiated
-    for a reading list entry. To view how often this sharing scenario was
-    triggered, take a look at: Mobile.Share.EntryPoints. Currently only on iOS.
-  </summary>
-</histogram>
-
-<histogram name="Mobile.Share.RecentTabsEntry.Actions" enum="IOSShareAction"
-    expires_after="2021-06-01">
-  <owner>seblalancette@chromium.org</owner>
-  <owner>chrome-sharing-core@google.com</owner>
-  <summary>
-    Tracks the sharing actions executed when the sharing scenario was initiated
-    for a recent tab entry. To view how often this sharing scenario was
-    triggered, take a look at: Mobile.Share.EntryPoints. Currently only on iOS.
-  </summary>
-</histogram>
-
-<histogram name="Mobile.Share.TabShareButton.Actions" enum="IOSShareAction"
-    expires_after="2021-06-01">
-  <owner>seblalancette@chromium.org</owner>
-  <owner>chrome-sharing-core@google.com</owner>
-  <summary>
-    Tracks the sharing actions executed when the sharing scenario was initiated
-    from the tab's share button. To view how often this sharing scenario was
-    triggered, take a look at: Mobile.Share.EntryPoints. Currently only on iOS.
-  </summary>
+  <token key="EntryPoint">
+    <variant name="BookmarkEntry" summary="Bookmark entry"/>
+    <variant name="HistoryEntry" summary="History entry"/>
+    <variant name="MostVisitedEntry" summary="Most Visited entry"/>
+    <variant name="QRCodeImage" summary="QR code image"/>
+    <variant name="ReadingListEntry" summary="Reading List entry"/>
+    <variant name="RecentTabsEntry" summary="Recent Tabs entry"/>
+    <variant name="SharedHighlight" summary="highlighted fragment"/>
+    <variant name="TabShareButton" summary="current tab"/>
+  </token>
 </histogram>
 
 <histogram name="Mobile.SystemNotification.Action.Click"
@@ -585,7 +515,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Mobile.SystemNotification.NotifyFailure"
-    enum="SystemNotificationType" expires_after="2021-06-01">
+    enum="SystemNotificationType" expires_after="2021-10-31">
   <owner>knollr@chromium.org</owner>
   <owner>xingliu@chromium.org</owner>
   <summary>
@@ -608,7 +538,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Mobile.Translate.Unused.Count" units="units"
-    expires_after="2021-03-20">
+    expires_after="2022-03-20">
   <owner>sczs@chromium.org</owner>
   <owner>thegreenfrog@chromium.org</owner>
   <summary>
@@ -619,6 +549,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="MobileDownload.Background"
     enum="MobileDownloadBackgroundDownloadEvent" expires_after="2020-10-11">
+  <obsolete>
+    Removed 2020-10.
+  </obsolete>
   <owner>hnakashima@chromium.org</owner>
   <owner>hanxi@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
@@ -650,7 +583,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileDownload.DownloadLaterPromptStatus"
-    enum="DownloadLaterPromptStatus" expires_after="2021-06-01">
+    enum="DownloadLaterPromptStatus" expires_after="2021-10-04">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -660,7 +593,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileDownload.DownloadPromptStatus"
-    enum="DownloadPromptStatus" expires_after="2021-04-01">
+    enum="DownloadPromptStatus" expires_after="2022-02-16">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -670,7 +603,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileDownload.Location.Dialog.DirectoryType"
-    enum="DownloadLocationDirectoryType" expires_after="2021-03-01">
+    enum="DownloadLocationDirectoryType" expires_after="2022-02-16">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -681,7 +614,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileDownload.Location.Dialog.Result"
-    enum="DownloadLocationDialogResult" expires_after="2021-03-01">
+    enum="DownloadLocationDialogResult" expires_after="2022-02-16">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -690,8 +623,22 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="MobileDownload.Location.Dialog.Suggestion.Events"
+    enum="DownloadLocationSuggestionEvent" expires_after="2022-02-16">
+  <owner>xingliu@chromium.org</owner>
+  <owner>clank-downloads@google.com</owner>
+  <summary>Records the download location suggestion event.</summary>
+</histogram>
+
+<histogram name="MobileDownload.Location.Dialog.SuggestionSelected"
+    enum="BooleanSelected" expires_after="2022-02-16">
+  <owner>xingliu@chromium.org</owner>
+  <owner>clank-downloads@google.com</owner>
+  <summary>Records the download location suggestion choice.</summary>
+</histogram>
+
 <histogram name="MobileDownload.Location.Dialog.Type"
-    enum="DownloadLocationDialogType" expires_after="2021-03-01">
+    enum="DownloadLocationDialogType" expires_after="2022-02-16">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -701,7 +648,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileDownload.Location.DirectoryType"
-    enum="DownloadLocationDirectoryType" expires_after="2021-03-01">
+    enum="DownloadLocationDirectoryType" expires_after="2022-02-16">
   <owner>xingliu@chromium.org</owner>
   <owner>dtrainor@chromium.org</owner>
   <owner>qinmin@chromium.org</owner>
@@ -713,14 +660,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileDownload.Location.Download.DirectoryType"
-    enum="DownloadLocationDirectoryType" expires_after="2021-03-01">
+    enum="DownloadLocationDirectoryType" expires_after="2022-02-16">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>Records the directory type when download is completed.</summary>
 </histogram>
 
 <histogram name="MobileDownload.Location.Setting.DirectoryType"
-    enum="DownloadLocationDirectoryType" expires_after="2021-03-01">
+    enum="DownloadLocationDirectoryType" expires_after="2022-02-16">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -751,8 +698,28 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram
+    name="MobileFre.CctTos.EnterprisePolicyCheckSpeed2{MobileFreInflationSpeedComparison}"
+    units="ms" expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: Records the time it takes from ToS fragment attached to the
+    activity to the enterprise policy check completing. This check is often
+    skipped when its result becomes irrelevant.
+    {MobileFreInflationSpeedComparison}
+  </summary>
+  <token key="MobileFreInflationSpeedComparison"
+      variants="MobileFreInflationSpeedComparison"/>
+</histogram>
+
+<histogram
     name="MobileFre.CctTos.EnterprisePolicyCheckSpeed{MobileFreInflationSpeedComparison}"
     units="ms" expires_after="2021-07-31">
+  <obsolete>
+    Deprecated and replaced with MobileFre.CctTos.EnterprisePolicyCheckSpeed2.*.
+    as of 11/2020. The starting time of this metrics is changed to when the
+    fragment attached to the FirstRunActivity.
+  </obsolete>
   <owner>skym@chromium.org</owner>
   <owner>wenyufu@chromium.org</owner>
   <summary>
@@ -766,8 +733,27 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram
+    name="MobileFre.CctTos.IsDeviceOwnedCheckSpeed2{MobileFreInflationSpeedComparison}"
+    units="ms" expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: Records the time it takes from ToS fragment attached to the
+    activity to the device ownership check completing.
+    {MobileFreInflationSpeedComparison}
+  </summary>
+  <token key="MobileFreInflationSpeedComparison"
+      variants="MobileFreInflationSpeedComparison"/>
+</histogram>
+
+<histogram
     name="MobileFre.CctTos.IsDeviceOwnedCheckSpeed{MobileFreInflationSpeedComparison}"
     units="ms" expires_after="2021-07-31">
+  <obsolete>
+    Deprecated and replaced with MobileFre.CctTos.IsDeviceOwnedCheckSpeed2.*. as
+    of 11/2020. The starting time of this metrics is changed to when the
+    fragment attached to the FirstRunActivity.
+  </obsolete>
   <owner>skym@chromium.org</owner>
   <owner>wenyufu@chromium.org</owner>
   <summary>
@@ -789,7 +775,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileFre.ChildAccountStatusDuration" units="ms"
-    expires_after="2021-07-31">
+    expires_after="2021-10-04">
   <owner>skym@chromium.org</owner>
   <owner>wenyufu@chromium.org</owner>
   <summary>
@@ -799,7 +785,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="MobileFre.FragmentInflationSpeed" units="ms"
-    expires_after="2021-07-31">
+    expires_after="2021-10-04">
   <owner>skym@chromium.org</owner>
   <owner>wenyufu@chromium.org</owner>
   <summary>
@@ -812,7 +798,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="MobileFre.FromLaunch" units="ms"
-    expires_after="2021-07-31">
+    expires_after="2021-10-04">
   <owner>skym@chromium.org</owner>
   <owner>wenyufu@chromium.org</owner>
   <summary>
@@ -822,8 +808,74 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram
+    name="MobileFre.Lightweight.EnterprisePolicyCheckSpeed{MobileFreInflationSpeedComparison}"
+    units="ms" expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: Records the time it takes from Lightweight FRE launch to the
+    enterprise policy check completing. This check is often skipped when its
+    result becomes irrelevant. {MobileFreInflationSpeedComparison}
+  </summary>
+  <token key="MobileFreInflationSpeedComparison"
+      variants="MobileFreInflationSpeedComparison"/>
+</histogram>
+
+<histogram
+    name="MobileFre.Lightweight.IsDeviceOwnedCheckSpeed{MobileFreInflationSpeedComparison}"
+    units="ms" expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: Records the time it takes from from Lightweight FRE launch to the
+    device ownership check completing. This check is often skipped when its
+    result becomes irrelevant. {MobileFreInflationSpeedComparison}
+  </summary>
+  <token key="MobileFreInflationSpeedComparison"
+      variants="MobileFreInflationSpeedComparison"/>
+</histogram>
+
+<histogram name="MobileFre.Lightweight.LoadingDuration" units="ms"
+    expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: Records how long it takes waiting from the dialog for Lightweight
+    FRE created to content fully loaded - either ToS is shown or FRE is skipped.
+  </summary>
+</histogram>
+
+<histogram name="MobileFre.NativeInitialized" units="ms"
+    expires_after="2021-10-04">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: The amount of time spent between FRE started and native
+    initialization. Recorded when native is fully initialized.
+  </summary>
+</histogram>
+
+<histogram name="MobileFre.PolicyServiceInitDelayAfterNative{PolicyPresence}"
+    units="ms" expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: The amount of time spent between native initialized and the
+    decision &quot;whether we need to wait to load policy service from
+    native&quot; has been made. The decision is made when no on-device policy is
+    found, or policy service is fully initialized. If the decision has been made
+    before native initialization, 0 will be recorded. Recorded during FRE only,
+    when on-device policy is {PolicyPresence}
+  </summary>
+  <token key="PolicyPresence">
+    <variant name=".WithoutPolicy" summary="not presented."/>
+    <variant name=".WithPolicy" summary="presented."/>
+  </token>
+</histogram>
+
 <histogram name="MobileFre.Progress" enum="MobileFreProgress"
-    expires_after="2021-02-14">
+    expires_after="2021-10-24">
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <owner>droger@chromium.org</owner>
@@ -843,6 +895,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     Android: How the user left the sign-in part of the &quot;first run
     experience&quot; activity (M-38+).
+  </summary>
+</histogram>
+
+<histogram name="MobileFre.TosFragment.SpinnerVisibleDuration" units="ms"
+    expires_after="2021-10-04">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: The amount of time that the small spinner, which become visible
+    after the ToS is accepted, is showing on screen.
   </summary>
 </histogram>
 
@@ -922,7 +984,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileIntent.FirstPartyToInternalScheme" enum="Boolean"
-    expires_after="2021-01-01">
+    expires_after="2021-10-17">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -946,7 +1008,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileOmnibox.LongPressPasteAge" units="ms"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>gangwu@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <summary>
@@ -969,7 +1031,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileOmnibox.PressedClipboardSuggestionAge" units="ms"
-    expires_after="2021-02-14">
+    expires_after="2021-08-29">
   <owner>jdonnelly@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <summary>
@@ -985,7 +1047,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileSignInPromo.BookmarkManager.ImpressionsTilDismiss"
-    units="impressions" expires_after="2021-04-20">
+    units="impressions" expires_after="2022-04-01">
   <owner>jlebel@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -995,7 +1057,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileSignInPromo.BookmarkManager.ImpressionsTilSigninButtons"
-    units="impressions" expires_after="2021-04-20">
+    units="impressions" expires_after="2022-04-01">
   <owner>jlebel@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -1007,7 +1069,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileSignInPromo.BookmarkManager.ImpressionsTilXButton"
-    units="impressions" expires_after="2021-04-20">
+    units="impressions" expires_after="2022-04-01">
   <owner>jlebel@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -1017,7 +1079,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileSignInPromo.SettingsManager.ImpressionsTilDismiss"
-    units="impressions" expires_after="2021-04-20">
+    units="impressions" expires_after="2022-04-01">
   <owner>jlebel@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -1027,7 +1089,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileSignInPromo.SettingsManager.ImpressionsTilSigninButtons"
-    units="impressions" expires_after="2021-04-20">
+    units="impressions" expires_after="2022-04-01">
   <owner>jlebel@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -1039,7 +1101,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileSignInPromo.SettingsManager.ImpressionsTilXButton"
-    units="impressions" expires_after="2021-04-20">
+    units="impressions" expires_after="2022-04-01">
   <owner>jlebel@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -1049,7 +1111,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileStartup.DailyLaunchCount" units="units"
-    expires_after="2021-03-01">
+    expires_after="2021-09-05">
   <owner>tedchoc@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -1081,8 +1143,24 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="MobileStartup.Experimental.LaunchCause" enum="LaunchCause"
+    expires_after="2022-01-07">
+  <obsolete>
+    Removed Experimental label in 02/2021.
+  </obsolete>
+  <owner>mthiesse@chromium.org</owner>
+  <owner>tedchoc@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    Records what caused Chrome to be launched.
+
+    Recorded for all types of ChromeActivity, in all cases where Chrome becomes
+    visible to the user.
+  </summary>
+</histogram>
+
 <histogram name="MobileStartup.IntentToCreationTime" units="ms"
-    expires_after="2021-03-01">
+    expires_after="2021-09-05">
   <owner>tedchoc@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
@@ -1093,8 +1171,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="MobileStartup.LaunchCause" enum="LaunchCause"
+    expires_after="2022-02-23">
+  <owner>mthiesse@chromium.org</owner>
+  <owner>tedchoc@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    Records what caused Chrome to be launched.
+
+    Recorded for all types of ChromeActivity, in all cases where Chrome becomes
+    visible to the user, or intentionally transitions between Chrome Activities.
+  </summary>
+</histogram>
+
 <histogram name="MobileStartup.LaunchType" enum="LaunchType"
-    expires_after="2021-03-01">
+    expires_after="2021-09-05">
   <owner>tedchoc@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>

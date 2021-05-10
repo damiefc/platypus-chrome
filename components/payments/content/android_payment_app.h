@@ -14,6 +14,7 @@
 #include "components/payments/content/android_app_communication.h"
 #include "components/payments/content/payment_app.h"
 #include "components/payments/core/android_app_description.h"
+#include "content/public/browser/global_routing_id.h"
 #include "url/gurl.h"
 
 namespace payments {
@@ -40,24 +41,25 @@ class AndroidPaymentApp : public PaymentApp {
       const GURL& payment_request_origin,
       const std::string& payment_request_id,
       std::unique_ptr<AndroidAppDescription> description,
-      base::WeakPtr<AndroidAppCommunication> communication);
+      base::WeakPtr<AndroidAppCommunication> communication,
+      content::GlobalFrameRoutingId frame_routing_id);
   ~AndroidPaymentApp() override;
 
   AndroidPaymentApp(const AndroidPaymentApp& other) = delete;
   AndroidPaymentApp& operator=(const AndroidPaymentApp& other) = delete;
 
   // PaymentApp implementation.
-  void InvokePaymentApp(Delegate* delegate) override;
+  void InvokePaymentApp(base::WeakPtr<Delegate> delegate) override;
   bool IsCompleteForPayment() const override;
   uint32_t GetCompletenessScore() const override;
   bool CanPreselect() const override;
-  base::string16 GetMissingInfoLabel() const override;
+  std::u16string GetMissingInfoLabel() const override;
   bool HasEnrolledInstrument() const override;
   void RecordUse() override;
   bool NeedsInstallation() const override;
   std::string GetId() const override;
-  base::string16 GetLabel() const override;
-  base::string16 GetSublabel() const override;
+  std::u16string GetLabel() const override;
+  std::u16string GetSublabel() const override;
   const SkBitmap* icon_bitmap() const override;
   bool IsValidForModifier(
       const std::string& method,
@@ -75,7 +77,7 @@ class AndroidPaymentApp : public PaymentApp {
   bool IsPreferred() const override;
 
  private:
-  void OnPaymentAppResponse(Delegate* delegate,
+  void OnPaymentAppResponse(base::WeakPtr<Delegate> delegate,
                             const base::Optional<std::string>& error_message,
                             bool is_activity_result_ok,
                             const std::string& payment_method_identifier,
@@ -88,6 +90,7 @@ class AndroidPaymentApp : public PaymentApp {
   const std::string payment_request_id_;
   const std::unique_ptr<AndroidAppDescription> description_;
   base::WeakPtr<AndroidAppCommunication> communication_;
+  content::GlobalFrameRoutingId frame_routing_id_;
 
   base::WeakPtrFactory<AndroidPaymentApp> weak_ptr_factory_{this};
 };

@@ -38,11 +38,11 @@ bool MayFallbackToU2fWithAppIdExtension(
 bool SetResponseCredential(
     AuthenticatorGetAssertionResponse* response,
     const std::vector<PublicKeyCredentialDescriptor>& allow_list) {
-  if (response->credential()) {
+  if (response->credential) {
     if (!allow_list.empty() &&
         std::none_of(allow_list.cbegin(), allow_list.cend(),
                      [&response](const auto& credential) {
-                       return credential.id() == response->raw_credential_id();
+                       return credential.id() == response->credential->id();
                      })) {
       return false;
     }
@@ -54,16 +54,8 @@ bool SetResponseCredential(
     return false;
   }
 
-  response->SetCredential(allow_list[0]);
+  response->credential = allow_list[0];
   return true;
-}
-
-// HasCredentialSpecificPRFInputs returns true if |options| specifies any PRF
-// inputs that are specific to a credential ID.
-bool HasCredentialSpecificPRFInputs(const CtapGetAssertionOptions& options) {
-  const size_t num = options.prf_inputs.size();
-  return num > 1 ||
-         (num == 1 && options.prf_inputs[0].credential_id.has_value());
 }
 
 // GetDefaultPRFInput returns the default PRF input from |options|, if any.
@@ -199,11 +191,11 @@ void GetAssertionTask::GetAssertion() {
     return;
   }
 
-  // If the filtered allowList is small enough to be sent in a single request,
-  // do so.
-  if (allow_list_batches_.size() == 1 &&
-      !MayFallbackToU2fWithAppIdExtension(*device(), request_) &&
-      !HasCredentialSpecificPRFInputs(options_)) {
+  if (!device()->SupportsCredentialProbing()) {
+    // If the device doesn't support probing then send all credentials in a
+    // single batch.
+    DCHECK_EQ(allow_list_batches_.size(), 1u);
+
     CtapGetAssertionRequest request = request_;
     request.allow_list = allow_list_batches_.front();
     MaybeSetPRFParameters(&request, GetDefaultPRFInput(options_));
@@ -218,9 +210,8 @@ void GetAssertionTask::GetAssertion() {
     return;
   }
 
-  // If the filtered list is too large to be sent at once, or if an App ID might
-  // need to be tested because the site used the appid extension, or if we might
-  // need to send specific PRF inputs, probe the credential IDs silently.
+  // Probe credential IDs so that we can quickly learn whether a credential
+  // is present.
   sign_operation_ =
       std::make_unique<Ctap2DeviceOperation<CtapGetAssertionRequest,
                                             AuthenticatorGetAssertionResponse>>(
@@ -228,7 +219,11 @@ void GetAssertionTask::GetAssertion() {
           base::BindOnce(&GetAssertionTask::HandleResponseToSilentRequest,
                          weak_factory_.GetWeakPtr()),
           base::BindOnce(&ReadCTAPGetAssertionResponse),
-          /*string_fixup_predicate=*/nullptr);
+          // It's possible that an authenticator could have user verification
+          // even if user presence is false, in which case it could return
+          // user data string fields to a probe request and those fields may
+          // need UTF-8 fixup.
+          StringFixupPredicate);
   sign_operation_->Start();
 }
 
@@ -250,23 +245,6 @@ void GetAssertionTask::HandleResponse(
     return;
   }
 
-  if (response_code == CtapDeviceResponseCode::kCtap2ErrInvalidCredential) {
-    // Some authenticators will return this error before waiting for a touch if
-    // they don't recognise a credential. In other cases the result can be
-    // returned immediately.
-    // The request failed in a way that didn't request a touch. Simulate it.
-    dummy_register_operation_ = std::make_unique<Ctap2DeviceOperation<
-        CtapMakeCredentialRequest, AuthenticatorMakeCredentialResponse>>(
-        device(), MakeCredentialTask::GetTouchRequest(device()),
-        base::BindOnce(&GetAssertionTask::HandleDummyMakeCredentialComplete,
-                       weak_factory_.GetWeakPtr()),
-        base::BindOnce(&ReadCTAPMakeCredentialResponse,
-                       device()->DeviceTransport()),
-        /*string_fixup_predicate=*/nullptr);
-    dummy_register_operation_->Start();
-    return;
-  }
-
   if (response_code == CtapDeviceResponseCode::kSuccess) {
     if (!SetResponseCredential(&response_data.value(), allow_list)) {
       FIDO_LOG(DEBUG)
@@ -278,7 +256,7 @@ void GetAssertionTask::HandleResponse(
 
     // Decrypt any hmac-secret response.
     const base::Optional<cbor::Value>& extensions_cbor =
-        response_data->auth_data().extensions();
+        response_data->authenticator_data.extensions();
     if (extensions_cbor) {
       // Parsing has already checked that |extensions_cbor| is a map.
       const cbor::Value::MapValue& extensions = extensions_cbor->GetMap();
@@ -298,7 +276,7 @@ void GetAssertionTask::HandleResponse(
                                    base::nullopt);
           return;
         }
-        response_data->set_hmac_secret(std::move(plaintext.value()));
+        response_data->hmac_secret = std::move(plaintext.value());
       }
     }
   }
@@ -322,13 +300,21 @@ void GetAssertionTask::HandleResponseToSilentRequest(
   // this authentication was a silent authentication (i.e. user touch was not
   // provided), try again with only that credential, user presence enforced and
   // with the original user verification configuration.
-  if (response_code == CtapDeviceResponseCode::kSuccess &&
-      SetResponseCredential(
-          &response_data.value(),
-          allow_list_batches_.at(current_allow_list_batch_ - 1))) {
+  if (response_code == CtapDeviceResponseCode::kSuccess) {
+    if (!SetResponseCredential(
+            &response_data.value(),
+            allow_list_batches_.at(current_allow_list_batch_ - 1))) {
+      // The "recognised" credential was not requested.
+      FIDO_LOG(DEBUG)
+          << "Assertion response has invalid credential information";
+      std::move(callback_).Run(CtapDeviceResponseCode::kCtap2ErrOther,
+                               base::nullopt);
+      return;
+    }
+
     CtapGetAssertionRequest request = request_;
     const PublicKeyCredentialDescriptor& matching_credential =
-        *response_data->credential();
+        *response_data->credential;
     request.allow_list = {matching_credential};
     MaybeSetPRFParameters(
         &request, GetPRFInputForCredential(options_, matching_credential.id()));
@@ -338,42 +324,46 @@ void GetAssertionTask::HandleResponseToSilentRequest(
         device(), std::move(request),
         base::BindOnce(&GetAssertionTask::HandleResponse,
                        weak_factory_.GetWeakPtr(), request.allow_list),
-        base::BindOnce(&ReadCTAPGetAssertionResponse),
-        /*string_fixup_predicate=*/nullptr);
+        base::BindOnce(&ReadCTAPGetAssertionResponse), StringFixupPredicate);
     sign_operation_->Start();
-    return;
-  }
+  } else if (response_code == CtapDeviceResponseCode::kCtap2ErrNoCredentials ||
+             // kCtap2ErrInvalidCredential is not a correct response, but some
+             // authenticators have been observed to return it.
+             response_code ==
+                 CtapDeviceResponseCode::kCtap2ErrInvalidCredential) {
+    // Credential was not recognized.
+    if (current_allow_list_batch_ < allow_list_batches_.size()) {
+      sign_operation_ = std::make_unique<Ctap2DeviceOperation<
+          CtapGetAssertionRequest, AuthenticatorGetAssertionResponse>>(
+          device(), NextSilentRequest(),
+          base::BindOnce(&GetAssertionTask::HandleResponseToSilentRequest,
+                         weak_factory_.GetWeakPtr()),
+          base::BindOnce(&ReadCTAPGetAssertionResponse), StringFixupPredicate);
+      sign_operation_->Start();
+      return;
+    }
 
-  // Credential was not recognized or an error occurred. Probe the next
-  // credential.
-  if (current_allow_list_batch_ < allow_list_batches_.size()) {
-    sign_operation_ = std::make_unique<Ctap2DeviceOperation<
-        CtapGetAssertionRequest, AuthenticatorGetAssertionResponse>>(
-        device(), NextSilentRequest(),
-        base::BindOnce(&GetAssertionTask::HandleResponseToSilentRequest,
+    // None of the credentials were recognized. Fall back to U2F or collect a
+    // dummy touch.
+    if (MayFallbackToU2fWithAppIdExtension(*device(), request_)) {
+      device()->set_supported_protocol(ProtocolVersion::kU2f);
+      U2fSign();
+      return;
+    }
+
+    dummy_register_operation_ = std::make_unique<Ctap2DeviceOperation<
+        CtapMakeCredentialRequest, AuthenticatorMakeCredentialResponse>>(
+        device(), MakeCredentialTask::GetTouchRequest(device()),
+        base::BindOnce(&GetAssertionTask::HandleDummyMakeCredentialComplete,
                        weak_factory_.GetWeakPtr()),
-        base::BindOnce(&ReadCTAPGetAssertionResponse),
+        base::BindOnce(&ReadCTAPMakeCredentialResponse,
+                       device()->DeviceTransport()),
         /*string_fixup_predicate=*/nullptr);
-    sign_operation_->Start();
-    return;
+    dummy_register_operation_->Start();
+  } else {
+    // Some other error.
+    std::move(callback_).Run(response_code, std::move(response_data));
   }
-
-  // None of the credentials were recognized. Fall back to U2F or collect a
-  // dummy touch.
-  if (MayFallbackToU2fWithAppIdExtension(*device(), request_)) {
-    device()->set_supported_protocol(ProtocolVersion::kU2f);
-    U2fSign();
-    return;
-  }
-  dummy_register_operation_ = std::make_unique<Ctap2DeviceOperation<
-      CtapMakeCredentialRequest, AuthenticatorMakeCredentialResponse>>(
-      device(), MakeCredentialTask::GetTouchRequest(device()),
-      base::BindOnce(&GetAssertionTask::HandleDummyMakeCredentialComplete,
-                     weak_factory_.GetWeakPtr()),
-      base::BindOnce(&ReadCTAPMakeCredentialResponse,
-                     device()->DeviceTransport()),
-      /*string_fixup_predicate=*/nullptr);
-  dummy_register_operation_->Start();
 }
 
 void GetAssertionTask::HandleDummyMakeCredentialComplete(
@@ -391,7 +381,8 @@ void GetAssertionTask::MaybeSetPRFParameters(
   }
 
   hmac_secret_request_ = std::make_unique<pin::HMACSecretRequest>(
-      *options_.key, maybe_inputs->salt1, maybe_inputs->salt2);
+      *request->pin_protocol, *options_.pin_key_agreement, maybe_inputs->salt1,
+      maybe_inputs->salt2);
   request->hmac_secret.emplace(hmac_secret_request_->public_key_x962,
                                hmac_secret_request_->encrypted_salts,
                                hmac_secret_request_->salts_auth);

@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/callback_helpers.h"
 #include "base/one_shot_event.h"
 #include "chrome/browser/extensions/convert_web_app.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -13,13 +14,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/components/app_registrar_observer.h"
 #include "chrome/browser/web_applications/components/os_integration_manager.h"
-#include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
 #include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
 #include "chrome/common/extensions/manifest_handlers/app_display_mode_info.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/extensions/manifest_handlers/app_theme_color_info.h"
 #include "chrome/common/extensions/manifest_handlers/linked_app_icons.h"
+#include "components/services/app_service/public/mojom/types.mojom-shared.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/unloaded_extension_reason.h"
@@ -65,6 +66,13 @@ bool BookmarkAppRegistrar::WasInstalledByUser(
   return extension && !extension->was_installed_by_default();
 }
 
+bool BookmarkAppRegistrar::WasInstalledByOem(
+    const web_app::AppId& app_id) const {
+  const Extension* extension = GetEnabledExtension(app_id);
+  return extension && extension->from_bookmark() &&
+         extension->was_installed_by_oem();
+}
+
 int BookmarkAppRegistrar::CountUserInstalledApps() const {
   return CountUserInstalledBookmarkApps(profile());
 }
@@ -78,10 +86,9 @@ void BookmarkAppRegistrar::OnExtensionUninstalled(
     DCHECK(!bookmark_app_being_observed_);
     bookmark_app_being_observed_ = extension;
 
-    NotifyWebAppUninstalled(extension->id());
-    web_app::WebAppProviderBase::GetProviderBase(profile())
-        ->os_integration_manager()
-        .UninstallAllOsHooks(extension->id(), base::DoNothing());
+    NotifyWebAppWillBeUninstalled(extension->id());
+    os_integration_manager().UninstallAllOsHooks(extension->id(),
+                                                  base::DoNothing());
 
     bookmark_app_being_observed_ = nullptr;
   }
@@ -102,9 +109,8 @@ void BookmarkAppRegistrar::OnExtensionUnloaded(
   // can cleanup any state outside the profile dir (e.g., registry settings).
   if (reason == UnloadedExtensionReason::PROFILE_SHUTDOWN) {
     NotifyWebAppProfileWillBeDeleted(extension->id());
-    web_app::WebAppProviderBase::GetProviderBase(profile())
-        ->os_integration_manager()
-        .UninstallAllOsHooks(extension->id(), base::DoNothing());
+    os_integration_manager().UninstallAllOsHooks(extension->id(),
+                                                  base::DoNothing());
   }
 
   bookmark_app_being_observed_ = nullptr;
@@ -159,6 +165,22 @@ const std::string* BookmarkAppRegistrar::GetAppLaunchQueryParams(
 const apps::ShareTarget* BookmarkAppRegistrar::GetAppShareTarget(
     const web_app::AppId& app_id) const {
   return nullptr;
+}
+
+// Only implemented for WebApp. Bookmark apps are going away.
+blink::mojom::CaptureLinks BookmarkAppRegistrar::GetAppCaptureLinks(
+    const web_app::AppId& app_id) const {
+  return blink::mojom::CaptureLinks::kUndefined;
+}
+
+const apps::FileHandlers* BookmarkAppRegistrar::GetAppFileHandlers(
+    const web_app::AppId& app_id) const {
+  return nullptr;
+}
+
+bool BookmarkAppRegistrar::IsAppFileHandlerPermissionBlocked(
+    const web_app::AppId& app_id) const {
+  return false;
 }
 
 base::Optional<GURL> BookmarkAppRegistrar::GetAppScopeInternal(
@@ -239,6 +261,24 @@ std::vector<DisplayMode> BookmarkAppRegistrar::GetAppDisplayModeOverride(
   return std::vector<DisplayMode>();
 }
 
+apps::UrlHandlers BookmarkAppRegistrar::GetAppUrlHandlers(
+    const web_app::AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return std::vector<apps::UrlHandlerInfo>();
+}
+
+GURL BookmarkAppRegistrar::GetAppManifestUrl(
+    const web_app::AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return GURL::EmptyGURL();
+}
+
+base::Time BookmarkAppRegistrar::GetAppLastBadgingTime(
+    const web_app::AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return base::Time();
+}
+
 base::Time BookmarkAppRegistrar::GetAppLastLaunchTime(
     const web_app::AppId& app_id) const {
   const Extension* extension = GetBookmarkAppDchecked(app_id);
@@ -269,7 +309,8 @@ std::vector<WebApplicationIconInfo> BookmarkAppRegistrar::GetAppIconInfos(
     if (icon_info.size != LinkedAppIcons::kAnySize)
       web_app_icon_info.square_size_px = icon_info.size;
     // Legacy bookmark apps only have Purpose::ANY icons.
-    web_app_icon_info.purpose = blink::Manifest::ImageResource::Purpose::ANY;
+    web_app_icon_info.purpose =
+        blink::mojom::ManifestImageResource_Purpose::ANY;
     result.push_back(std::move(web_app_icon_info));
   }
   return result;
@@ -298,7 +339,9 @@ BookmarkAppRegistrar::GetAppShortcutsMenuItemInfos(
     WebApplicationShortcutsMenuItemInfo shortcut_item_info;
     shortcut_item_info.name = linked_item_info.name;
     shortcut_item_info.url = linked_item_info.url;
-    shortcut_item_info.shortcut_icon_infos.reserve(
+
+    std::vector<WebApplicationShortcutsMenuItemInfo::Icon> shortcut_icon_infos;
+    shortcut_icon_infos.reserve(
         linked_item_info.shortcut_item_icon_infos.size());
     for (const WebAppLinkedShortcutItems::ShortcutItemInfo::IconInfo&
              shortcut_item_icon_info :
@@ -306,26 +349,27 @@ BookmarkAppRegistrar::GetAppShortcutsMenuItemInfos(
       WebApplicationShortcutsMenuItemInfo::Icon shortcut_icon_info;
       shortcut_icon_info.square_size_px = shortcut_item_icon_info.size;
       shortcut_icon_info.url = shortcut_item_icon_info.url;
-      shortcut_item_info.shortcut_icon_infos.emplace_back(
-          std::move(shortcut_icon_info));
+      shortcut_icon_infos.emplace_back(std::move(shortcut_icon_info));
     }
+    shortcut_item_info.SetShortcutIconInfosForPurpose(
+        IconPurpose::ANY, std::move(shortcut_icon_infos));
     result.emplace_back(std::move(shortcut_item_info));
   }
   return result;
 }
 
-std::vector<std::vector<SquareSizePx>>
+std::vector<IconSizes>
 BookmarkAppRegistrar::GetAppDownloadedShortcutsMenuIconsSizes(
     const web_app::AppId& app_id) const {
   const Extension* extension = GetBookmarkAppDchecked(app_id);
   return extension ? GetBookmarkAppDownloadedShortcutsMenuIconsSizes(extension)
-                   : std::vector<std::vector<SquareSizePx>>();
+                   : std::vector<IconSizes>();
 }
 
 web_app::RunOnOsLoginMode BookmarkAppRegistrar::GetAppRunOnOsLoginMode(
     const web_app::AppId& app_id) const {
   NOTIMPLEMENTED();
-  return web_app::RunOnOsLoginMode::kUndefined;
+  return web_app::RunOnOsLoginMode::kNotRun;
 }
 
 std::vector<web_app::AppId> BookmarkAppRegistrar::GetAppIds() const {
@@ -340,6 +384,11 @@ std::vector<web_app::AppId> BookmarkAppRegistrar::GetAppIds() const {
 }
 
 web_app::WebAppRegistrar* BookmarkAppRegistrar::AsWebAppRegistrar() {
+  return nullptr;
+}
+
+const web_app::WebAppRegistrar* BookmarkAppRegistrar::AsWebAppRegistrar()
+    const {
   return nullptr;
 }
 

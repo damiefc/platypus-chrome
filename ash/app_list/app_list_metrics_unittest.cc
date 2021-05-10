@@ -9,17 +9,19 @@
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/app_list/app_list_metrics.h"
+#include "ash/app_list/model/app_list_test_model.h"
 #include "ash/app_list/model/search/search_model.h"
 #include "ash/app_list/test/app_list_test_helper.h"
-#include "ash/app_list/test/app_list_test_model.h"
 #include "ash/app_list/views/app_list_item_view.h"
 #include "ash/app_list/views/app_list_main_view.h"
 #include "ash/app_list/views/app_list_view.h"
 #include "ash/app_list/views/apps_container_view.h"
 #include "ash/app_list/views/apps_grid_view.h"
 #include "ash/app_list/views/contents_view.h"
+#include "ash/app_list/views/privacy_container_view.h"
 #include "ash/app_list/views/search_result_container_view.h"
 #include "ash/app_list/views/search_result_page_view.h"
+#include "ash/app_list/views/search_result_tile_item_list_view.h"
 #include "ash/app_list/views/search_result_tile_item_view.h"
 #include "ash/app_list/views/suggestion_chip_container_view.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
@@ -83,9 +85,6 @@ class AppListAppLaunchedMetricTest : public AshTestBase {
 
     search_model_ = Shell::Get()->app_list_controller()->GetSearchModel();
 
-    app_list_test_model_ = static_cast<test::AppListTestModel*>(
-        Shell::Get()->app_list_controller()->GetModel());
-
     shelf_test_api_ = std::make_unique<ShelfViewTestAPI>(
         GetPrimaryShelf()->GetShelfViewForTesting());
   }
@@ -137,15 +136,22 @@ class AppListAppLaunchedMetricTest : public AshTestBase {
     }
     GetAppListTestHelper()->WaitUntilIdle();
 
+    // Mark the privacy notices as dismissed so that the tile items will be the
+    // first search container.
+    ContentsView* contents_view = Shell::Get()
+                                      ->app_list_controller()
+                                      ->presenter()
+                                      ->GetView()
+                                      ->app_list_main_view()
+                                      ->contents_view();
+    Shell::Get()->app_list_controller()->MarkSuggestedContentInfoDismissed();
+    contents_view->search_result_page_view()
+        ->GetPrivacyContainerViewForTest()
+        ->Update();
+
     SearchResultContainerView* search_result_container_view =
-        Shell::Get()
-            ->app_list_controller()
-            ->presenter()
-            ->GetView()
-            ->app_list_main_view()
-            ->contents_view()
-            ->search_results_page_view()
-            ->result_container_views()[0];
+        contents_view->search_result_page_view()
+            ->GetSearchResultTileItemListViewForTest();
 
     // Request focus on the first tile item view.
     search_result_container_view->GetFirstResultView()->RequestFocus();
@@ -158,7 +164,7 @@ class AppListAppLaunchedMetricTest : public AshTestBase {
     // Populate 4 suggestion chips.
     for (size_t i = 0; i < 4; i++) {
       auto search_result_chip = std::make_unique<SearchResult>();
-      search_result_chip->set_display_type(SearchResultDisplayType::kTile);
+      search_result_chip->set_display_type(SearchResultDisplayType::kChip);
       search_result_chip->set_is_recommendation(true);
       search_model_->results()->Add(std::move(search_result_chip));
     }
@@ -184,7 +190,11 @@ class AppListAppLaunchedMetricTest : public AshTestBase {
 
   void PopulateAndLaunchAppInGrid() {
     // Populate apps in the root app grid.
-    app_list_test_model_->PopulateApps(4);
+    AppListModel* model = Shell::Get()->app_list_controller()->GetModel();
+    model->AddItem(std::make_unique<AppListItem>("item 0"));
+    model->AddItem(std::make_unique<AppListItem>("item 1"));
+    model->AddItem(std::make_unique<AppListItem>("item 2"));
+    model->AddItem(std::make_unique<AppListItem>("item 3"));
 
     AppListView::TestApi test_api(
         Shell::Get()->app_list_controller()->presenter()->GetView());
@@ -198,7 +208,6 @@ class AppListAppLaunchedMetricTest : public AshTestBase {
 
  private:
   SearchModel* search_model_ = nullptr;
-  test::AppListTestModel* app_list_test_model_ = nullptr;
   std::unique_ptr<ShelfViewTestAPI> shelf_test_api_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListAppLaunchedMetricTest);
@@ -536,10 +545,10 @@ TEST_F(AppListShowSourceMetricTest, TabletInAppToHome) {
 
   ClickHomeButton();
   histogram_tester.ExpectBucketCount(
-      kAppListToggleMethodHistogram, kShelfButton,
+      "Apps.AppListShowSource", kShelfButton,
       1 /* Number of times app list is shown with a shelf button */);
   histogram_tester.ExpectBucketCount(
-      kAppListToggleMethodHistogram, kTabletMode,
+      "Apps.AppListShowSource", kTabletMode,
       0 /* Number of times app list is shown by tablet mode transition */);
 
   GetAppListTestHelper()->CheckVisibility(true);
@@ -548,9 +557,9 @@ TEST_F(AppListShowSourceMetricTest, TabletInAppToHome) {
   // showing the app list.
   ClickHomeButton();
   histogram_tester.ExpectBucketCount(
-      kAppListToggleMethodHistogram, kShelfButton,
+      "Apps.AppListShowSource", kShelfButton,
       1 /* Number of times app list shown with a shelf button */);
-  histogram_tester.ExpectTotalCount(kAppListToggleMethodHistogram, 1);
+  histogram_tester.ExpectTotalCount("Apps.AppListShowSource", 1);
 }
 
 // Ensure that app list is not recorded as shown when going to tablet mode with
@@ -563,7 +572,7 @@ TEST_F(AppListShowSourceMetricTest, TabletModeWithWindowOpen) {
   GetAppListTestHelper()->CheckVisibility(false);
 
   // Ensure that no AppListShowSource metric was recoreded.
-  histogram_tester.ExpectTotalCount(kAppListToggleMethodHistogram, 0);
+  histogram_tester.ExpectTotalCount("Apps.AppListShowSource", 0);
 }
 
 // Ensure that app list is recorded as shown when going to tablet mode with no
@@ -575,7 +584,7 @@ TEST_F(AppListShowSourceMetricTest, TabletModeWithNoWindowOpen) {
   GetAppListTestHelper()->CheckVisibility(true);
 
   histogram_tester.ExpectBucketCount(
-      kAppListToggleMethodHistogram, kTabletMode,
+      "Apps.AppListShowSource", kTabletMode,
       1 /* Number of times app list shown after entering tablet mode */);
 }
 

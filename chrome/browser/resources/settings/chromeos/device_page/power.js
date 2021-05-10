@@ -234,13 +234,16 @@ Polymer({
    * @private
    */
   hasSingleOption_(idleOptions) {
-    return idleOptions.length == 1;
+    return idleOptions.length === 1;
   },
 
-  /** @private */
-  onAcIdleSelectChange_() {
+  /**
+   * @param {!Event} event
+   * @private
+   */
+  onAcIdleSelectChange_(event) {
     const behavior = /** @type {settings.IdleBehavior} */
-        (parseInt(this.$$('#acIdleSelect').value, 10));
+        (parseInt(event.target.value, 10));
     this.browserProxy_.setIdleBehavior(behavior, true /* whenOnAc */);
     settings.recordSettingChange();
   },
@@ -295,7 +298,7 @@ Polymer({
         // "Suspend" and "do nothing" share the "sleep" label and communicate
         // their state via the toggle state.
         this.lidClosedLabel_ = loadTimeData.getString('powerLidSleepLabel');
-        pref.value = behavior == settings.LidClosedBehavior.SUSPEND;
+        pref.value = behavior === settings.LidClosedBehavior.SUSPEND;
         break;
       case settings.LidClosedBehavior.STOP_SESSION:
         this.lidClosedLabel_ = loadTimeData.getString('powerLidSignOutLabel');
@@ -321,7 +324,7 @@ Polymer({
    * @private
    */
   getIdleOption_(idleBehavior, currIdleBehavior) {
-    const selected = idleBehavior == currIdleBehavior;
+    const selected = idleBehavior === currIdleBehavior;
     switch (idleBehavior) {
       case settings.IdleBehavior.DISPLAY_OFF_SLEEP:
         return {

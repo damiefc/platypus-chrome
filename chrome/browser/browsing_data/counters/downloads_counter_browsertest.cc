@@ -4,6 +4,7 @@
 
 #include "chrome/browser/browsing_data/counters/downloads_counter.h"
 
+#include <memory>
 #include <set>
 
 #include "base/bind.h"
@@ -47,7 +48,7 @@ class DownloadsCounterTest : public InProcessBrowserTest,
     history_->AddObserver(this);
 
     otr_manager_ = content::BrowserContext::GetDownloadManager(
-        browser()->profile()->GetPrimaryOTRProfile());
+        browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true));
     SetDownloadsDeletionPref(true);
     SetDeletionPeriodPref(browsing_data::TimePeriod::ALL_TIME);
   }
@@ -186,7 +187,7 @@ class DownloadsCounterTest : public InProcessBrowserTest,
       return;
 
     DCHECK(!run_loop_ || !run_loop_->running());
-    run_loop_.reset(new base::RunLoop());
+    run_loop_ = std::make_unique<base::RunLoop>();
     run_loop_->Run();
   }
 
@@ -356,8 +357,8 @@ IN_PROC_BROWSER_TEST_F(DownloadsCounterTest, MAYBE_TimeRanges) {
   DownloadsCounter counter(profile);
   counter.Init(profile->GetPrefs(),
                browsing_data::ClearBrowsingDataTab::ADVANCED,
-               base::Bind(&DownloadsCounterTest::ResultCallback,
-                          base::Unretained(this)));
+               base::BindRepeating(&DownloadsCounterTest::ResultCallback,
+                                   base::Unretained(this)));
 
   SetDeletionPeriodPref(browsing_data::TimePeriod::LAST_HOUR);
   EXPECT_EQ(2u, GetResult());

@@ -49,7 +49,8 @@ class GbmPixmapWayland : public gfx::NativePixmap {
                             const gfx::Rect& display_bounds,
                             const gfx::RectF& crop_rect,
                             bool enable_blend,
-                            std::unique_ptr<gfx::GpuFence> gpu_fence) override;
+                            std::vector<gfx::GpuFence> acquire_fences,
+                            std::vector<gfx::GpuFence> release_fences) override;
   gfx::NativePixmapHandle ExportHandle() override;
 
  private:
@@ -69,6 +70,11 @@ class GbmPixmapWayland : public gfx::NativePixmap {
 
   // A unique ID to identify the buffer for this pixmap.
   const uint32_t buffer_id_;
+
+  // Represents the z-axis order of the wayland surface this buffer is attach
+  // to.
+  int32_t z_order_ = 0;
+  bool z_order_set_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(GbmPixmapWayland);
 };

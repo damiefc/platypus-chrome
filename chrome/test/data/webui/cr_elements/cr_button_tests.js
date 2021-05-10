@@ -3,9 +3,11 @@
 // found in the LICENSE file.
 
 // clang-format off
-// #import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-// #import {eventToPromise} from '../test_util.m.js';
-// #import {assertEquals, assertFalse, assertNotEquals, assertTrue} from '../chai_assert.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+
+import {assertEquals, assertFalse, assertNotEquals, assertTrue} from '../chai_assert.js';
+import {eventToPromise} from '../test_util.m.js';
+
 // clang-format on
 
 suite('cr-button', function() {
@@ -99,12 +101,6 @@ suite('cr-button', function() {
     button.hidden = false;
     assertFalse(button.hasAttribute('hidden'));
     assertNotEquals('none', getComputedStyle(button).display);
-  });
-
-  test('tap event is emitted on click', async () => {
-    const wait = test_util.eventToPromise('tap', button);
-    button.click();
-    await wait;
   });
 
   test('space up does not click without space down', () => {

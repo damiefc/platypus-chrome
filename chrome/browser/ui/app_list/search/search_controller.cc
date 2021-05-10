@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/app_list_metrics.h"
@@ -14,15 +15,16 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/metrics_hashes.h"
+#include "base/sequence_token.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/app_list/search/cros_action_history/cros_action_recorder.h"
+#include "chrome/browser/ui/app_list/search/ranking/ranker_delegate.h"
 #include "chrome/browser/ui/app_list/search/search_metrics_observer.h"
 #include "chrome/browser/ui/app_list/search/search_provider.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/chip_ranker.h"
@@ -30,13 +32,14 @@
 #include "chrome/browser/ui/app_list/search/search_result_ranker/ranking_item_util.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/search_result_ranker.h"
 #include "components/metrics/structured/structured_events.h"
+#include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 
 namespace app_list {
 
 namespace {
 
-constexpr char kLogDisplayTypeClickedResultZeroState[] =
-    "Apps.LogDisplayTypeClickedResultZeroState";
 constexpr char kLauncherSearchQueryLengthJumped[] =
     "Apps.LauncherSearchQueryLengthJumped";
 
@@ -73,17 +76,28 @@ SearchController::SearchController(AppListModelUpdater* model_updater,
                                    ash::AppListNotifier* notifier,
                                    Profile* profile)
     : profile_(profile),
-      mixer_(std::make_unique<Mixer>(model_updater)),
       metrics_observer_(std::make_unique<SearchMetricsObserver>(notifier)),
-      list_controller_(list_controller) {}
+      list_controller_(list_controller) {
+  if (app_list_features::IsCategoricalSearchEnabled()) {
+    ranker_ = std::make_unique<RankerDelegate>(profile, model_updater, this);
+    mixer_ = nullptr;
+  } else {
+    mixer_ = std::make_unique<Mixer>(model_updater);
+    ranker_ = nullptr;
+  }
+}
 
 SearchController::~SearchController() {}
 
 void SearchController::InitializeRankers() {
-  mixer_->InitializeRankers(profile_, this);
+  if (ranker_) {
+    // TODO(crbug.com/1199206): Implement.
+  } else {
+    mixer_->InitializeRankers(profile_, this);
+  }
 }
 
-void SearchController::Start(const base::string16& query) {
+void SearchController::Start(const std::u16string& query) {
   dispatching_query_ = true;
   ash::RecordLauncherIssuedSearchQueryLength(query.length());
   if (query.length() > 0) {
@@ -92,8 +106,9 @@ void SearchController::Start(const base::string16& query) {
                                 : last_query_.length() - query.length();
     UMA_HISTOGRAM_BOOLEAN(kLauncherSearchQueryLengthJumped, length_diff > 1);
   }
-  for (const auto& provider : providers_)
+  for (const auto& provider : providers_) {
     provider->Start(query);
+  }
 
   dispatching_query_ = false;
   last_query_ = query;
@@ -116,13 +131,6 @@ void SearchController::OpenResult(ChromeSearchResult* result, int event_flags) {
   // Log the length of the last query that led to the clicked result.
   ash::RecordLauncherClickedSearchQueryLength(last_query_.length());
 
-  // Log the display type of the clicked result in zero-state
-  if (query_for_recommendation_) {
-    UMA_HISTOGRAM_ENUMERATION(kLogDisplayTypeClickedResultZeroState,
-                              result->display_type(),
-                              ash::SearchResultDisplayType::kLast);
-  }
-
   const bool dismiss_view_on_open = result->dismiss_view_on_open();
 
   // Open() may cause |result| to be deleted.
@@ -137,40 +145,71 @@ void SearchController::OpenResult(ChromeSearchResult* result, int event_flags) {
 }
 
 void SearchController::InvokeResultAction(ChromeSearchResult* result,
-                                          int action_index,
-                                          int event_flags) {
+                                          int action_index) {
   // TODO(xiyuan): Hook up with user learning.
-  result->InvokeAction(action_index, event_flags);
+  result->InvokeAction(action_index);
 }
 
 size_t SearchController::AddGroup(size_t max_results) {
-  return mixer_->AddGroup(max_results);
+  if (ranker_) {
+    return 0ul;
+  } else {
+    return mixer_->AddGroup(max_results);
+  }
 }
 
 void SearchController::AddProvider(size_t group_id,
                                    std::unique_ptr<SearchProvider> provider) {
-  provider->set_result_changed_callback(
-      base::Bind(&SearchController::OnResultsChangedWithType,
-                 base::Unretained(this), provider->ResultType()));
-  mixer_->AddProviderToGroup(group_id, provider.get());
+  if (ranker_) {
+    provider->set_controller(this);
+  } else {
+    mixer_->AddProviderToGroup(group_id, provider.get());
+    provider->set_controller(this);
+    provider->set_result_changed_callback(
+        base::BindRepeating(&SearchController::OnResultsChangedWithType,
+                            base::Unretained(this), provider->ResultType()));
+  }
   providers_.emplace_back(std::move(provider));
+}
+
+void SearchController::SetResults(
+    const ash::AppListSearchResultType provider_type,
+    Results results) {
+  DCHECK(ranker_);
+
+  auto ui_thread = content::GetUIThreadTaskRunner({});
+  if (!ui_thread->RunsTasksInCurrentSequence()) {
+    ui_thread->PostTask(
+        FROM_HERE,
+        base::BindOnce(&SearchController::SetResults, base::Unretained(this),
+                       provider_type, std::move(results)));
+    return;
+  }
+
+  results_[provider_type] = std::move(results);
 }
 
 void SearchController::OnResultsChangedWithType(
     ash::AppListSearchResultType result_type) {
+  if (!mixer_)
+    return;
+
   OnResultsChanged();
   if (results_changed_callback_)
     results_changed_callback_.Run(result_type);
 }
 
 void SearchController::OnResultsChanged() {
+  if (!mixer_)
+    return;
+
   if (dispatching_query_)
     return;
 
   size_t num_max_results =
       query_for_recommendation_
-          ? ash::AppListConfig::instance().num_start_page_tiles()
-          : ash::AppListConfig::instance().max_search_results();
+          ? ash::SharedAppListConfig::instance().num_start_page_tiles()
+          : ash::SharedAppListConfig::instance().max_search_results();
   mixer_->MixAndPublish(num_max_results, last_query_);
 }
 
@@ -185,16 +224,14 @@ ChromeSearchResult* SearchController::FindSearchResult(
   return nullptr;
 }
 
-void SearchController::OnSearchResultsDisplayed(
-    const base::string16& trimmed_query,
+void SearchController::OnSearchResultsImpressionMade(
+    const std::u16string& trimmed_query,
     const ash::SearchResultIdWithPositionIndices& results,
     int launched_index) {
-  // Log the impression.
-  mixer_->search_result_ranker()->LogSearchResults(trimmed_query, results,
-                                                   launched_index);
-
   if (trimmed_query.empty()) {
-    mixer_->search_result_ranker()->ZeroStateResultsDisplayed(results);
+    if (mixer_) {
+      mixer_->search_result_ranker()->ZeroStateResultsDisplayed(results);
+    }
 
     // Extract result types for logging.
     std::vector<RankingItemType> result_types;
@@ -202,24 +239,37 @@ void SearchController::OnSearchResultsDisplayed(
       result_types.push_back(
           RankingItemTypeFromSearchResult(*FindSearchResult(result.id)));
     }
-    LogZeroStateResultsListMetrics(result_types, launched_index);
   }
 }
 
 ChromeSearchResult* SearchController::GetResultByTitleForTest(
     const std::string& title) {
-  base::string16 target_title = base::ASCIIToUTF16(title);
-  for (const auto& provider : providers_) {
-    for (const auto& result : provider->results()) {
-      if (result->title() == target_title &&
-          result->result_type() ==
-              ash::AppListSearchResultType::kInstalledApp &&
-          !result->is_recommendation()) {
-        return result.get();
+  std::u16string target_title = base::ASCIIToUTF16(title);
+  if (ranker_) {
+    for (const auto& provider_results : results_) {
+      for (const auto& result : provider_results.second) {
+        if (result->title() == target_title &&
+            result->result_type() ==
+                ash::AppListSearchResultType::kInstalledApp &&
+            !result->is_recommendation()) {
+          return result.get();
+        }
       }
     }
+    return nullptr;
+  } else {
+    for (const auto& provider : providers_) {
+      for (const auto& result : provider->results()) {
+        if (result->title() == target_title &&
+            result->result_type() ==
+                ash::AppListSearchResultType::kInstalledApp &&
+            !result->is_recommendation()) {
+          return result.get();
+        }
+      }
+    }
+    return nullptr;
   }
-  return nullptr;
 }
 
 int SearchController::GetLastQueryLength() const {
@@ -235,13 +285,14 @@ void SearchController::Train(AppLaunchData&& app_launch_data) {
     base::Time::Exploded now_exploded;
     now.LocalExplode(&now_exploded);
 
-    metrics::structured::events::LauncherUsage()
+    metrics::structured::events::launcher_usage::LauncherUsage()
         .SetTarget(NormalizeId(app_launch_data.id))
         .SetApp(last_launched_app_id_)
         .SetSearchQuery(base::UTF16ToUTF8(last_query_))
         .SetSearchQueryLength(last_query_.size())
         .SetProviderType(static_cast<int>(app_launch_data.ranking_item_type))
         .SetHour(now_exploded.hour)
+        .SetScore(app_launch_data.score)
         .Record();
 
     // Only record the last launched app if the hashed logging feature flag is
@@ -255,6 +306,9 @@ void SearchController::Train(AppLaunchData&& app_launch_data) {
     }
   }
 
+  profile_->GetPrefs()->SetBoolean(chromeos::prefs::kLauncherResultEverLaunched,
+                                   true);
+
   // CrOS action recorder.
   CrOSActionRecorder::GetCrosActionRecorder()->RecordAction(
       {base::StrCat(
@@ -264,7 +318,11 @@ void SearchController::Train(AppLaunchData&& app_launch_data) {
                      base::HashMetricName(base::UTF16ToUTF8(last_query_)))}});
 
   // Train all search result ranking models.
-  mixer_->Train(app_launch_data);
+  if (ranker_) {
+    // TODO(crbug.com/1199206): Implement.
+  } else {
+    mixer_->Train(app_launch_data);
+  }
 }
 
 void SearchController::AppListShown() {

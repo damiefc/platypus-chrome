@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
+#include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/components/quick_answers/search_result_parsers/search_response_parser.h"
 
 namespace network {
@@ -53,7 +54,8 @@ class ResultLoader {
       base::OnceCallback<void(std::unique_ptr<QuickAnswer> quick_answer)>;
 
   using BuildRequestCallback = base::OnceCallback<void(
-      std::unique_ptr<network::ResourceRequest> resource_request)>;
+      std::unique_ptr<network::ResourceRequest> resource_request,
+      const std::string& request_body)>;
 
   ResultLoader(network::mojom::URLLoaderFactory* url_loader_factory,
                ResultLoaderDelegate* delegate);
@@ -82,7 +84,8 @@ class ResultLoader {
                             BuildRequestCallback callback) const = 0;
 
   // Process the |response_body| and invoked the callback with |QuickAnswer|.
-  virtual void ProcessResponse(std::unique_ptr<std::string> response_body,
+  virtual void ProcessResponse(const PreprocessedOutput& preprocessed_output,
+                               std::unique_ptr<std::string> response_body,
                                ResponseParserCallback complete_callback) = 0;
 
  private:
@@ -91,8 +94,11 @@ class ResultLoader {
   ResultLoaderDelegate* const delegate_;
 
   void OnBuildRequestComplete(
-      std::unique_ptr<network::ResourceRequest> resource_request);
-  void OnSimpleURLLoaderComplete(std::unique_ptr<std::string> response_body);
+      const PreprocessedOutput& preprocessed_output,
+      std::unique_ptr<network::ResourceRequest> resource_request,
+      const std::string& request_body);
+  void OnSimpleURLLoaderComplete(const PreprocessedOutput& preprocessed_output,
+                                 std::unique_ptr<std::string> response_body);
   void OnResultParserComplete(std::unique_ptr<QuickAnswer> quick_answer);
 
   // Time when the query is issued.

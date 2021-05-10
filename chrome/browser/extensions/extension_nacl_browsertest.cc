@@ -5,7 +5,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/profiles/profile.h"
@@ -30,6 +30,7 @@ using content::PluginService;
 using content::WebContents;
 using extensions::Extension;
 using extensions::Manifest;
+using extensions::mojom::ManifestLocation;
 
 namespace {
 
@@ -184,7 +185,7 @@ IN_PROC_BROWSER_TEST_F(NaClExtensionTest, DISABLED_NonWebStoreExtension) {
 IN_PROC_BROWSER_TEST_F(NaClExtensionTest, DISABLED_ComponentExtension) {
   const Extension* extension = InstallExtension(INSTALL_TYPE_COMPONENT);
   ASSERT_TRUE(extension);
-  ASSERT_EQ(extension->location(), Manifest::COMPONENT);
+  ASSERT_EQ(extension->location(), ManifestLocation::kComponent);
   CheckPluginsCreated(extension, PLUGIN_TYPE_ALL);
 }
 
@@ -193,7 +194,7 @@ IN_PROC_BROWSER_TEST_F(NaClExtensionTest, DISABLED_ComponentExtension) {
 IN_PROC_BROWSER_TEST_F(NaClExtensionTest, DISABLED_UnpackedExtension) {
   const Extension* extension = InstallExtension(INSTALL_TYPE_UNPACKED);
   ASSERT_TRUE(extension);
-  ASSERT_EQ(extension->location(), Manifest::UNPACKED);
+  ASSERT_EQ(extension->location(), ManifestLocation::kUnpacked);
   CheckPluginsCreated(extension, PLUGIN_TYPE_ALL);
 }
 
@@ -272,9 +273,11 @@ IN_PROC_BROWSER_TEST_F(NaClExtensionTest, MainFrameIsRemote) {
       embed.addEventListener('error', function() {
           window.domAutomationController.send(true);
       });
-      document.body.appendChild(embed); )";
+      document.body.appendChild(embed);
+       )";
   bool done;
   EXPECT_TRUE(ExecuteScriptAndExtractBool(subframe, script, &done));
+  EXPECT_TRUE(done);
 
   // If we get here, then it means that the renderer didn't crash (the crash
   // would have prevented the "error" event from firing and so

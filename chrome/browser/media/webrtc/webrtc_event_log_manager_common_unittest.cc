@@ -15,13 +15,13 @@
 #include "base/rand_util.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager_unittest_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/zlib/google/compression_utils.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -662,7 +662,7 @@ TEST_F(GzippedLogFileWriterTest,
   EXPECT_FALSE(base::PathExists(path_));  // Errored files deleted by Close().
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 struct DoesProfileDefaultToLoggingEnabledForUserTypeTestCase {
   user_manager::UserType user_type;
@@ -683,9 +683,9 @@ TEST_P(DoesProfileDefaultToLoggingEnabledForUserTypeParametrizedTest,
   TestingProfile::Builder profile_builder;
   profile_builder.OverridePolicyConnectorIsManagedForTesting(true);
   std::unique_ptr<TestingProfile> testing_profile = profile_builder.Build();
-  std::unique_ptr<testing::NiceMock<chromeos::FakeChromeUserManager>>
-      fake_user_manager_ = std::make_unique<
-          testing::NiceMock<chromeos::FakeChromeUserManager>>();
+  std::unique_ptr<testing::NiceMock<ash::FakeChromeUserManager>>
+      fake_user_manager_ =
+          std::make_unique<testing::NiceMock<ash::FakeChromeUserManager>>();
   // We use a standard Gaia account by default:
   AccountId account_id = AccountId::FromUserEmailGaiaId("name", "id");
 
@@ -700,9 +700,6 @@ TEST_P(DoesProfileDefaultToLoggingEnabledForUserTypeParametrizedTest,
       break;
     case user_manager::USER_TYPE_PUBLIC_ACCOUNT:
       fake_user_manager_->AddPublicAccountUser(account_id);
-      break;
-    case user_manager::USER_TYPE_SUPERVISED:
-      fake_user_manager_->AddSupervisedUser(account_id);
       break;
     case user_manager::USER_TYPE_KIOSK_APP:
       fake_user_manager_->AddKioskAppUser(account_id);
@@ -740,12 +737,11 @@ INSTANTIATE_TEST_CASE_P(
             {user_manager::USER_TYPE_REGULAR, true},
             {user_manager::USER_TYPE_GUEST, false},
             {user_manager::USER_TYPE_PUBLIC_ACCOUNT, false},
-            {user_manager::USER_TYPE_SUPERVISED, false},
             {user_manager::USER_TYPE_KIOSK_APP, false},
             {user_manager::USER_TYPE_CHILD, false},
             {user_manager::USER_TYPE_ARC_KIOSK_APP, false},
             {user_manager::USER_TYPE_ACTIVE_DIRECTORY, false}}));
 
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace webrtc_event_logging

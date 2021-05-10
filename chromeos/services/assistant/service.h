@@ -8,7 +8,6 @@
 #include <memory>
 #include <string>
 
-#include "ash/public/cpp/ambient/ambient_ui_model.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/session/session_activation_observer.h"
 #include "base/callback.h"
@@ -63,9 +62,8 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
       public chromeos::PowerManagerClient::Observer,
       public ash::SessionActivationObserver,
       public ash::AssistantStateObserver,
-      public AssistantManagerService::CommunicationErrorObserver,
       public AssistantManagerService::StateObserver,
-      public ash::AmbientUiModelObserver {
+      public AuthenticationStateObserver {
  public:
   Service(std::unique_ptr<network::PendingSharedURLLoaderFactory>
               pending_url_loader_factory,
@@ -81,6 +79,7 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
   // itself is created, so we do not have time in our tests to grab a handle
   // to |Service| and set this before it is too late.
   static void OverrideS3ServerUriForTesting(const char* uri);
+  static void OverrideDeviceIdForTesting(const char* device_id);
 
   void SetAssistantManagerServiceForTesting(
       std::unique_ptr<AssistantManagerService> assistant_manager_service);
@@ -97,7 +96,7 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
 
   // chromeos::PowerManagerClient::Observer overrides:
   void PowerChanged(const power_manager::PowerSupplyProperties& prop) override;
-  void SuspendDone(const base::TimeDelta& sleep_duration) override;
+  void SuspendDone(base::TimeDelta sleep_duration) override;
 
   // ash::SessionActivationObserver overrides:
   void OnSessionActivated(bool activated) override;
@@ -113,16 +112,11 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
   void OnArcPlayStoreEnabledChanged(bool enabled) override;
   void OnLockedFullScreenStateChanged(bool enabled) override;
 
-  // AssistantManagerService::CommunicationErrorObserver overrides:
-  void OnCommunicationError(
-      AssistantManagerService::CommunicationErrorType error_type) override;
+  // AuthenticationStateObserver overrides:
+  void OnAuthenticationError() override;
 
   // AssistantManagerService::StateObserver overrides:
   void OnStateChanged(AssistantManagerService::State new_state) override;
-
-  // ash::AmbientUiModelObserver overrides:
-  void OnAmbientUiVisibilityChanged(
-      ash::AmbientUiVisibility visibility) override;
 
   void UpdateAssistantManagerState();
 
@@ -153,10 +147,14 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
   // for the device.
   bool ShouldEnableHotword();
 
+  // |ServiceContext| object passed to child classes so they can access some of
+  // our functionality without depending on us.
+  // Note: this is used by the other members here, so it must be defined first
+  // so it is destroyed last.
+  std::unique_ptr<ServiceContext> context_;
+
   signin::IdentityManager* const identity_manager_;
   std::unique_ptr<ScopedAshSessionObserver> scoped_ash_session_observer_;
-  ScopedObserver<ash::AmbientUiModel, ash::AmbientUiModelObserver>
-      ambient_ui_model_observer_{this};
   std::unique_ptr<AssistantManagerService> assistant_manager_service_;
   std::unique_ptr<base::OneShotTimer> token_refresh_timer_;
   int token_refresh_error_backoff_factor = 1;
@@ -178,13 +176,9 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) Service
   // Will be moved into |assistant_manager_service_| when the service is
   // supposed to be created.
   std::unique_ptr<AssistantManagerService>
-      assistant_manager_service_for_testing_ = nullptr;
+      assistant_manager_service_for_testing_;
 
   base::Optional<std::string> access_token_;
-
-  // |ServiceContext| object passed to child classes so they can access some of
-  // our functionality without depending on us.
-  std::unique_ptr<ServiceContext> context_;
 
   // non-null until |assistant_manager_service_| is created.
   std::unique_ptr<network::PendingSharedURLLoaderFactory>

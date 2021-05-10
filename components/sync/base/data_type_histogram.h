@@ -5,8 +5,6 @@
 #ifndef COMPONENTS_SYNC_BASE_DATA_TYPE_HISTOGRAM_H_
 #define COMPONENTS_SYNC_BASE_DATA_TYPE_HISTOGRAM_H_
 
-#include <string>
-
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "components/sync/base/model_type.h"
@@ -22,6 +20,7 @@ enum class UpdateDropReason {
   kTombstoneInFullUpdate,
   kTombstoneForNonexistentInIncrementalUpdate,
   kDecryptionPending,
+  kDecryptionPendingForTooLong,
   kFailedToDecrypt
 };
 

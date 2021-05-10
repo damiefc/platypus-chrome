@@ -17,13 +17,15 @@
 class GURL;
 
 namespace permissions {
+enum class RequestType;
 
 // Default implementation of PermissionRequest, it is assumed that
 // the caller owns it and that it can be deleted once the |delete_callback| is
 // executed.
 class PermissionRequestImpl : public PermissionRequest {
  public:
-  using PermissionDecidedCallback = base::OnceCallback<void(ContentSetting)>;
+  using PermissionDecidedCallback =
+      base::OnceCallback<void(ContentSetting, bool)>;
 
   PermissionRequestImpl(const GURL& request_origin,
                         ContentSettingsType content_settings_type,
@@ -33,24 +35,24 @@ class PermissionRequestImpl : public PermissionRequest {
 
   ~PermissionRequestImpl() override;
 
- private:
-  // PermissionRequest:
-  IconId GetIconId() const override;
-#if defined(OS_ANDROID)
-  base::string16 GetMessageText() const override;
-  base::string16 GetQuietTitleText() const override;
-  base::string16 GetQuietMessageText() const override;
-#endif
+// PermissionRequest:
 #if !defined(OS_ANDROID)
-  base::Optional<base::string16> GetChipText() const override;
+  // Implementors can override this method to customize the message text.
+  std::u16string GetMessageTextFragment() const override;
 #endif
-  base::string16 GetMessageTextFragment() const override;
+
+ private:
+  RequestType GetRequestType() const override;
+#if defined(OS_ANDROID)
+  std::u16string GetMessageText() const override;
+#else
+  base::Optional<std::u16string> GetChipText() const override;
+#endif
   GURL GetOrigin() const override;
-  void PermissionGranted() override;
+  void PermissionGranted(bool is_one_time) override;
   void PermissionDenied() override;
   void Cancelled() override;
   void RequestFinished() override;
-  PermissionRequestType GetPermissionRequestType() const override;
   PermissionRequestGestureType GetGestureType() const override;
   ContentSettingsType GetContentSettingsType() const override;
 

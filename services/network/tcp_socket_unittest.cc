@@ -8,12 +8,12 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
@@ -777,8 +777,7 @@ TEST_P(TCPSocketWithMockSocketTest, ServerAcceptWithObserverReadError) {
   net::IoMode mode = GetParam();
   const net::MockRead kReadError[] = {net::MockRead(mode, net::ERR_TIMED_OUT)};
   std::vector<std::unique_ptr<net::StaticSocketDataProvider>> data_providers;
-  std::unique_ptr<net::StaticSocketDataProvider> provider;
-  provider = std::make_unique<net::StaticSocketDataProvider>(
+  auto provider = std::make_unique<net::StaticSocketDataProvider>(
       kReadError, base::span<net::MockWrite>());
   provider->set_connect_data(net::MockConnect(net::SYNCHRONOUS, net::OK));
   data_providers.push_back(std::move(provider));

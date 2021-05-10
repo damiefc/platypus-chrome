@@ -389,11 +389,13 @@ cr.define('cr_slider', function() {
 
     /** @private */
     onValueMinMaxChange_() {
-      if (this.value === undefined || this.min === undefined ||
-          this.max === undefined) {
-        return;
-      }
-      this.updateValue_(this.value);
+      this.debounce('onValueMinMaxChange', () => {
+        if (this.value === undefined || this.min === undefined ||
+            this.max === undefined) {
+          return;
+        }
+        this.updateValue_(this.value);
+      });
     },
 
     /** @private */
@@ -470,6 +472,7 @@ cr.define('cr_slider', function() {
   });
 
   // #cr_define_end
+  console.warn('crbug/1173575, non-JS module files deprecated.');
   return {
     SliderTick: SliderTick,
   };

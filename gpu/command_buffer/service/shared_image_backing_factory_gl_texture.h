@@ -22,6 +22,10 @@ class Size;
 class ColorSpace;
 }  // namespace gfx
 
+namespace gl {
+class ProgressReporter;
+}  // namespace gl
+
 namespace gpu {
 class SharedImageBacking;
 class SharedImageBatchAccessManager;
@@ -43,7 +47,8 @@ class GPU_GLES2_EXPORT SharedImageBackingFactoryGLTexture
       const GpuDriverBugWorkarounds& workarounds,
       const GpuFeatureInfo& gpu_feature_info,
       ImageFactory* image_factory,
-      SharedImageBatchAccessManager* batch_access_manager);
+      SharedImageBatchAccessManager* batch_access_manager,
+      gl::ProgressReporter* progress_reporter);
   ~SharedImageBackingFactoryGLTexture() override;
 
   // SharedImageBackingFactory implementation.
@@ -71,6 +76,7 @@ class GPU_GLES2_EXPORT SharedImageBackingFactoryGLTexture
       int client_id,
       gfx::GpuMemoryBufferHandle handle,
       gfx::BufferFormat format,
+      gfx::BufferPlane plane,
       SurfaceHandle surface_handle,
       const gfx::Size& size,
       const gfx::ColorSpace& color_space,
@@ -93,6 +99,7 @@ class GPU_GLES2_EXPORT SharedImageBackingFactoryGLTexture
   scoped_refptr<gl::GLImage> MakeGLImage(int client_id,
                                          gfx::GpuMemoryBufferHandle handle,
                                          gfx::BufferFormat format,
+                                         gfx::BufferPlane plane,
                                          SurfaceHandle surface_handle,
                                          const gfx::Size& size);
 
@@ -169,6 +176,10 @@ class GPU_GLES2_EXPORT SharedImageBackingFactoryGLTexture
   bool texture_usage_angle_ = false;
   SharedImageBackingGLCommon::UnpackStateAttribs attribs;
   GpuDriverBugWorkarounds workarounds_;
+
+  // Used to notify the watchdog before a buffer allocation in case it takes
+  // long.
+  gl::ProgressReporter* const progress_reporter_ = nullptr;
 
 #if defined(OS_ANDROID)
   SharedImageBatchAccessManager* batch_access_manager_ = nullptr;

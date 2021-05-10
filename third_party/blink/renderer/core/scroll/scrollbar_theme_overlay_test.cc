@@ -22,7 +22,7 @@ TEST_F(ScrollbarThemeOverlayTest, PaintInvalidation) {
   NiceMock<MockScrollableArea>* mock_scrollable_area =
       MakeGarbageCollected<NiceMock<MockScrollableArea>>(
           ScrollOffset(100, 100));
-  ScrollbarThemeOverlay theme(14, 0);
+  ScrollbarThemeOverlay theme(14, 0, 14, 0);
 
   Scrollbar* vertical_scrollbar = Scrollbar::CreateForTesting(
       mock_scrollable_area, kVerticalScrollbar, &theme);
@@ -120,8 +120,8 @@ TEST_F(ScrollbarThemeOverlayTest, PaintInvalidation) {
   vertical_scrollbar->ClearThumbNeedsRepaint();
   mock_scrollable_area->ClearNeedsPaintInvalidationForScrollControls();
 
-  // Hiding the scrollbar should invalidate the layer (SetNeedsDisplay) but not
-  // trigger repaint of the thumb resouce, since the compositor will give the
+  // Hiding the scrollbar should invalidate the layer (InvalidateAll) but not
+  // trigger repaint of the thumb resource, since the compositor will give the
   // entire layer opacity 0.
   EXPECT_CALL(*mock_scrollable_area, ScrollbarsHiddenIfOverlay())
       .WillOnce(Return(true));

@@ -6,6 +6,8 @@
 
 #include <cups/cups.h>
 
+#include "build/chromeos_buildflags.h"
+
 namespace printing {
 
 constexpr char kIppCollate[] = "multiple-document-handling";  // PWG 5100.19

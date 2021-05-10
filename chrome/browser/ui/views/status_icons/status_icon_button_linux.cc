@@ -10,6 +10,7 @@
 #include "chrome/browser/shell_integration_linux.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/wm_role_names_linux.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect.h"
@@ -31,7 +32,10 @@ class StatusIconWidget : public views::Widget {
 
 }  // namespace
 
-StatusIconButtonLinux::StatusIconButtonLinux() : Button(this) {}
+StatusIconButtonLinux::StatusIconButtonLinux()
+    : Button(base::BindRepeating(
+          [](StatusIconButtonLinux* button) { button->delegate_->OnClick(); },
+          base::Unretained(this))) {}
 
 StatusIconButtonLinux::~StatusIconButtonLinux() = default;
 
@@ -39,7 +43,7 @@ void StatusIconButtonLinux::SetIcon(const gfx::ImageSkia& image) {
   SchedulePaint();
 }
 
-void StatusIconButtonLinux::SetToolTip(const base::string16& tool_tip) {
+void StatusIconButtonLinux::SetToolTip(const std::u16string& tool_tip) {
   SetTooltipText(tool_tip);
 }
 
@@ -56,7 +60,7 @@ void StatusIconButtonLinux::OnSetDelegate() {
   views::Widget::InitParams params;
   params.type = views::Widget::InitParams::TYPE_WINDOW_FRAMELESS;
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
-  params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
+  params.activatable = views::Widget::InitParams::Activatable::kNo;
   params.bounds =
       gfx::Rect(kInitialWindowPos, kInitialWindowPos, width, height);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
@@ -103,11 +107,6 @@ void StatusIconButtonLinux::ShowContextMenuForViewImpl(
                           views::MenuAnchorPosition::kTopLeft, source_type);
 }
 
-void StatusIconButtonLinux::ButtonPressed(Button* sender,
-                                          const ui::Event& event) {
-  delegate_->OnClick();
-}
-
 void StatusIconButtonLinux::PaintButtonContents(gfx::Canvas* canvas) {
   gfx::ScopedCanvas scoped_canvas(canvas);
   canvas->UndoDeviceScaleFactor();
@@ -133,3 +132,6 @@ void StatusIconButtonLinux::PaintButtonContents(gfx::Canvas* canvas) {
   canvas->DrawImageInt(image, 0, 0, image.width(), image.height(), 0, 0,
                        image.width(), image.height(), true, flags);
 }
+
+BEGIN_METADATA(StatusIconButtonLinux, views::Button)
+END_METADATA

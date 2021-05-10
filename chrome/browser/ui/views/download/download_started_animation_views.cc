@@ -8,6 +8,8 @@
 #include "base/time/time.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/color_palette.h"
@@ -32,7 +34,11 @@ namespace {
 class DownloadStartedAnimationViews : public gfx::LinearAnimation,
                                       public views::ImageView {
  public:
+  METADATA_HEADER(DownloadStartedAnimationViews);
   explicit DownloadStartedAnimationViews(content::WebContents* web_contents);
+  DownloadStartedAnimationViews(const DownloadStartedAnimationViews&) = delete;
+  DownloadStartedAnimationViews& operator=(
+      const DownloadStartedAnimationViews&) = delete;
 
  private:
   // Move the animation to wherever it should currently be.
@@ -54,8 +60,6 @@ class DownloadStartedAnimationViews : public gfx::LinearAnimation,
   // with the parent window, but it's so fast that this shouldn't cause too
   // much heartbreak.
   gfx::Rect web_contents_bounds_;
-
-  DISALLOW_COPY_AND_ASSIGN(DownloadStartedAnimationViews);
 };
 
 DownloadStartedAnimationViews::DownloadStartedAnimationViews(
@@ -116,6 +120,9 @@ void DownloadStartedAnimationViews::AnimateToState(double state) {
         std::min(1.0 - pow(GetCurrentValue() - 0.5, 2) * 4.0, 1.0)));
   }
 }
+
+BEGIN_METADATA(DownloadStartedAnimationViews, views::ImageView)
+END_METADATA
 
 }  // namespace
 

@@ -74,7 +74,7 @@ class BackgroundSyncBaseBrowserTest : public ContentBrowserTest {
   void SetIncognitoMode(bool incognito);
   WebContents* web_contents();
   bool LoadTestPage(const std::string& path);
-  bool RunScript(const std::string& script, std::string* result);
+  std::string RunScript(const std::string& script);
   net::EmbeddedTestServer* https_server() { return https_server_.get(); }
 
  private:
@@ -101,8 +101,6 @@ class BackgroundSyncBaseBrowserTest : public ContentBrowserTest {
       const GURL& url,
       base::OnceCallback<void(bool)> callback);
   StoragePartitionImpl* GetStorage();
-  void SetTestClockOnCoreThread(BackgroundSyncContextImpl* sync_context,
-                                base::SimpleTestClock* clock);
 
   Shell* shell_ = nullptr;
   std::unique_ptr<net::EmbeddedTestServer> https_server_;

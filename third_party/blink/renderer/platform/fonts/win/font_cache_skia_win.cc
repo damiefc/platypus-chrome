@@ -40,6 +40,7 @@
 #include <utility>
 
 #include "base/debug/alias.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
@@ -50,7 +51,6 @@
 #include "third_party/blink/renderer/platform/fonts/font_platform_data.h"
 #include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
 #include "third_party/blink/renderer/platform/fonts/win/font_fallback_win.h"
-#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/language.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/skia/include/core/SkFontMgr.h"
@@ -83,27 +83,22 @@ enum FallbackAgreementError {
 void LogUmaHistogramFallbackAgreemenError(
     FallbackAgreementError agreement_error,
     UBlockCode block_code) {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(SparseHistogram, legacy_none_found_histogram,
-                                  ("Blink.Fonts.WinFallback.LegacyNoneFound"));
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(SparseHistogram, win_api_none_found_histogram,
-                                  ("Blink.Fonts.WinFallback.WinAPINoneFound"));
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(
-      SparseHistogram, legacy_win_api_disagree_histogram,
-      ("Blink.Fonts.WinFallback.LegacyWinAPIDisagree"));
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(SparseHistogram, none_found_histogram,
-                                  ("Blink.Fonts.WinFallback.NoFallbackFound"));
   switch (agreement_error) {
     case kLegacyNoneFound:
-      legacy_none_found_histogram.Sample(block_code);
+      base::UmaHistogramSparse("Blink.Fonts.WinFallback.LegacyNoneFound",
+                               block_code);
       break;
     case kWinAPINoneFound:
-      win_api_none_found_histogram.Sample(block_code);
+      base::UmaHistogramSparse("Blink.Fonts.WinFallback.WinAPINoneFound",
+                               block_code);
       break;
     case kLegacyWinAPIDisagree:
-      legacy_win_api_disagree_histogram.Sample(block_code);
+      base::UmaHistogramSparse("Blink.Fonts.WinFallback.LegacyWinAPIDisagree",
+                               block_code);
       break;
     case kNoneFound:
-      none_found_histogram.Sample(block_code);
+      base::UmaHistogramSparse("Blink.Fonts.WinFallback.NoFallbackFound",
+                               block_code);
       break;
   }
 }
@@ -212,21 +207,21 @@ const AtomicString& FontCache::SystemFontFamily() {
 }
 
 // static
-void FontCache::SetMenuFontMetrics(const wchar_t* family_name,
+void FontCache::SetMenuFontMetrics(const AtomicString& family_name,
                                    int32_t font_height) {
   menu_font_family_name_ = new AtomicString(family_name);
   menu_font_height_ = EnsureMinimumFontHeightIfNeeded(font_height);
 }
 
 // static
-void FontCache::SetSmallCaptionFontMetrics(const wchar_t* family_name,
+void FontCache::SetSmallCaptionFontMetrics(const AtomicString& family_name,
                                            int32_t font_height) {
   small_caption_font_family_name_ = new AtomicString(family_name);
   small_caption_font_height_ = EnsureMinimumFontHeightIfNeeded(font_height);
 }
 
 // static
-void FontCache::SetStatusFontMetrics(const wchar_t* family_name,
+void FontCache::SetStatusFontMetrics(const AtomicString& family_name,
                                      int32_t font_height) {
   status_font_family_name_ = new AtomicString(family_name);
   status_font_height_ = EnsureMinimumFontHeightIfNeeded(font_height);
@@ -269,28 +264,28 @@ FontCache::GetFallbackFamilyNameFromHardcodedChoices(
   // large repertoire. Eventually, we need to scan all the fonts
   // on the system to have a Firefox-like coverage.
   // Make sure that all of them are lowercased.
-  const static wchar_t* const kCjkFonts[] = {
-      L"arial unicode ms", L"ms pgothic", L"simsun", L"gulim", L"pmingliu",
-      L"wenquanyi zen hei",  // Partial CJK Ext. A coverage but more widely
+  const static UChar* const kCjkFonts[] = {
+      u"arial unicode ms", u"ms pgothic", u"simsun", u"gulim", u"pmingliu",
+      u"wenquanyi zen hei",  // Partial CJK Ext. A coverage but more widely
                              // known to Chinese users.
-      L"ar pl shanheisun uni", L"ar pl zenkai uni",
-      L"han nom a",  // Complete CJK Ext. A coverage.
-      L"code2000"    // Complete CJK Ext. A coverage.
+      u"ar pl shanheisun uni", u"ar pl zenkai uni",
+      u"han nom a",  // Complete CJK Ext. A coverage.
+      u"code2000"    // Complete CJK Ext. A coverage.
       // CJK Ext. B fonts are not listed here because it's of no use
       // with our current non-BMP character handling because we use
       // Uniscribe for it and that code path does not go through here.
   };
 
-  const static wchar_t* const kCommonFonts[] = {
-      L"tahoma", L"arial unicode ms", L"lucida sans unicode",
-      L"microsoft sans serif", L"palatino linotype",
+  const static UChar* const kCommonFonts[] = {
+      u"tahoma", u"arial unicode ms", u"lucida sans unicode",
+      u"microsoft sans serif", u"palatino linotype",
       // Six fonts below (and code2000 at the end) are not from MS, but
       // once installed, cover a very wide range of characters.
-      L"dejavu serif", L"dejavu sasns", L"freeserif", L"freesans", L"gentium",
-      L"gentiumalt", L"ms pgothic", L"simsun", L"gulim", L"pmingliu",
-      L"code2000"};
+      u"dejavu serif", u"dejavu sasns", u"freeserif", u"freesans", u"gentium",
+      u"gentiumalt", u"ms pgothic", u"simsun", u"gulim", u"pmingliu",
+      u"code2000"};
 
-  const wchar_t* const* pan_uni_fonts = nullptr;
+  const UChar* const* pan_uni_fonts = nullptr;
   int num_fonts = 0;
   if (script == USCRIPT_HAN) {
     pan_uni_fonts = kCjkFonts;
@@ -506,25 +501,25 @@ static bool TypefacesHasWeightSuffix(const AtomicString& family,
                                      AtomicString& adjusted_name,
                                      FontSelectionValue& variant_weight) {
   struct FamilyWeightSuffix {
-    const wchar_t* suffix;
+    const UChar* suffix;
     size_t length;
     FontSelectionValue weight;
   };
   // Mapping from suffix to weight from the DirectWrite documentation.
   // http://msdn.microsoft.com/en-us/library/windows/desktop/dd368082.aspx
   const static FamilyWeightSuffix kVariantForSuffix[] = {
-      {L" thin", 5, FontSelectionValue(100)},
-      {L" extralight", 11, FontSelectionValue(200)},
-      {L" ultralight", 11, FontSelectionValue(200)},
-      {L" light", 6, FontSelectionValue(300)},
-      {L" regular", 8, FontSelectionValue(400)},
-      {L" medium", 7, FontSelectionValue(500)},
-      {L" demibold", 9, FontSelectionValue(600)},
-      {L" semibold", 9, FontSelectionValue(600)},
-      {L" extrabold", 10, FontSelectionValue(800)},
-      {L" ultrabold", 10, FontSelectionValue(800)},
-      {L" black", 6, FontSelectionValue(900)},
-      {L" heavy", 6, FontSelectionValue(900)}};
+      {u" thin", 5, FontSelectionValue(100)},
+      {u" extralight", 11, FontSelectionValue(200)},
+      {u" ultralight", 11, FontSelectionValue(200)},
+      {u" light", 6, FontSelectionValue(300)},
+      {u" regular", 8, FontSelectionValue(400)},
+      {u" medium", 7, FontSelectionValue(500)},
+      {u" demibold", 9, FontSelectionValue(600)},
+      {u" semibold", 9, FontSelectionValue(600)},
+      {u" extrabold", 10, FontSelectionValue(800)},
+      {u" ultrabold", 10, FontSelectionValue(800)},
+      {u" black", 6, FontSelectionValue(900)},
+      {u" heavy", 6, FontSelectionValue(900)}};
   size_t num_variants = base::size(kVariantForSuffix);
   for (size_t i = 0; i < num_variants; i++) {
     const FamilyWeightSuffix& entry = kVariantForSuffix[i];
@@ -544,7 +539,7 @@ static bool TypefacesHasStretchSuffix(const AtomicString& family,
                                       AtomicString& adjusted_name,
                                       FontSelectionValue& variant_stretch) {
   struct FamilyStretchSuffix {
-    const wchar_t* suffix;
+    const UChar* suffix;
     size_t length;
     FontSelectionValue stretch;
   };
@@ -553,15 +548,15 @@ static bool TypefacesHasStretchSuffix(const AtomicString& family,
   // Also includes Narrow as a synonym for Condensed to to support Arial
   // Narrow and other fonts following the same naming scheme.
   const static FamilyStretchSuffix kVariantForSuffix[] = {
-      {L" ultracondensed", 15, UltraCondensedWidthValue()},
-      {L" extracondensed", 15, ExtraCondensedWidthValue()},
-      {L" condensed", 10, CondensedWidthValue()},
-      {L" narrow", 7, CondensedWidthValue()},
-      {L" semicondensed", 14, SemiCondensedWidthValue()},
-      {L" semiexpanded", 13, SemiExpandedWidthValue()},
-      {L" expanded", 9, ExpandedWidthValue()},
-      {L" extraexpanded", 14, ExtraExpandedWidthValue()},
-      {L" ultraexpanded", 14, UltraExpandedWidthValue()}};
+      {u" ultracondensed", 15, UltraCondensedWidthValue()},
+      {u" extracondensed", 15, ExtraCondensedWidthValue()},
+      {u" condensed", 10, CondensedWidthValue()},
+      {u" narrow", 7, CondensedWidthValue()},
+      {u" semicondensed", 14, SemiCondensedWidthValue()},
+      {u" semiexpanded", 13, SemiExpandedWidthValue()},
+      {u" expanded", 9, ExpandedWidthValue()},
+      {u" extraexpanded", 14, ExtraExpandedWidthValue()},
+      {u" ultraexpanded", 14, UltraExpandedWidthValue()}};
   size_t num_variants = base::size(kVariantForSuffix);
   for (size_t i = 0; i < num_variants; i++) {
     const FamilyStretchSuffix& entry = kVariantForSuffix[i];

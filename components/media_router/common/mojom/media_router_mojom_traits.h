@@ -215,12 +215,6 @@ struct EnumTraits<media_router::mojom::SinkIconType,
         return media_router::mojom::SinkIconType::CAST_AUDIO_GROUP;
       case media_router::SinkIconType::CAST_AUDIO:
         return media_router::mojom::SinkIconType::CAST_AUDIO;
-      case media_router::SinkIconType::MEETING:
-        return media_router::mojom::SinkIconType::MEETING;
-      case media_router::SinkIconType::HANGOUT:
-        return media_router::mojom::SinkIconType::HANGOUT;
-      case media_router::SinkIconType::EDUCATION:
-        return media_router::mojom::SinkIconType::EDUCATION;
       case media_router::SinkIconType::WIRED_DISPLAY:
         return media_router::mojom::SinkIconType::WIRED_DISPLAY;
       case media_router::SinkIconType::GENERIC:
@@ -243,15 +237,6 @@ struct EnumTraits<media_router::mojom::SinkIconType,
         return true;
       case media_router::mojom::SinkIconType::CAST_AUDIO:
         *output = media_router::SinkIconType::CAST_AUDIO;
-        return true;
-      case media_router::mojom::SinkIconType::MEETING:
-        *output = media_router::SinkIconType::MEETING;
-        return true;
-      case media_router::mojom::SinkIconType::HANGOUT:
-        *output = media_router::SinkIconType::HANGOUT;
-        return true;
-      case media_router::mojom::SinkIconType::EDUCATION:
-        *output = media_router::SinkIconType::EDUCATION;
         return true;
       case media_router::mojom::SinkIconType::WIRED_DISPLAY:
         *output = media_router::SinkIconType::WIRED_DISPLAY;
@@ -440,6 +425,9 @@ struct EnumTraits<media_router::mojom::RouteRequestResultCode,
       case media_router::RouteRequestResult::DESKTOP_PICKER_FAILED:
         return media_router::mojom::RouteRequestResultCode::
             DESKTOP_PICKER_FAILED;
+      case media_router::RouteRequestResult::ROUTE_ALREADY_TERMINATED:
+        return media_router::mojom::RouteRequestResultCode::
+            ROUTE_ALREADY_TERMINATED;
       default:
         NOTREACHED() << "Unknown RouteRequestResultCode "
                      << static_cast<int>(code);
@@ -483,6 +471,10 @@ struct EnumTraits<media_router::mojom::RouteRequestResultCode,
       case media_router::mojom::RouteRequestResultCode::DESKTOP_PICKER_FAILED:
         *output = media_router::RouteRequestResult::DESKTOP_PICKER_FAILED;
         return true;
+      case media_router::mojom::RouteRequestResultCode::
+          ROUTE_ALREADY_TERMINATED:
+        *output = media_router::RouteRequestResult::ROUTE_ALREADY_TERMINATED;
+        return true;
     }
     return false;
   }
@@ -504,6 +496,10 @@ struct EnumTraits<media_router::mojom::MediaRouteProvider_Id,
         return media_router::mojom::MediaRouteProvider_Id::CAST;
       case media_router::MediaRouteProviderId::DIAL:
         return media_router::mojom::MediaRouteProvider_Id::DIAL;
+      case media_router::MediaRouteProviderId::ANDROID_CAF:
+        return media_router::mojom::MediaRouteProvider_Id::ANDROID_CAF;
+      case media_router::MediaRouteProviderId::TEST:
+        return media_router::mojom::MediaRouteProvider_Id::TEST;
       case media_router::MediaRouteProviderId::UNKNOWN:
         break;
     }
@@ -526,6 +522,12 @@ struct EnumTraits<media_router::mojom::MediaRouteProvider_Id,
         return true;
       case media_router::mojom::MediaRouteProvider_Id::DIAL:
         *provider_id = media_router::MediaRouteProviderId::DIAL;
+        return true;
+      case media_router::mojom::MediaRouteProvider_Id::ANDROID_CAF:
+        *provider_id = media_router::MediaRouteProviderId::ANDROID_CAF;
+        return true;
+      case media_router::mojom::MediaRouteProvider_Id::TEST:
+        *provider_id = media_router::MediaRouteProviderId::TEST;
         return true;
     }
     return false;

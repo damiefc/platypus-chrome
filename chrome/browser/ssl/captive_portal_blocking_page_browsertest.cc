@@ -4,12 +4,13 @@
 
 #include "components/security_interstitials/content/captive_portal_blocking_page.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
@@ -27,7 +28,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -239,9 +239,9 @@ void CaptivePortalBlockingPageTest::TestInterstitial(
       browser()->tab_strip_model()->GetActiveWebContents();
   DCHECK(contents);
 
-  testing_throttle_installer_.reset(new TestingThrottleInstaller(
+  testing_throttle_installer_ = std::make_unique<TestingThrottleInstaller>(
       contents, login_url, std::move(ssl_cert_reporter), is_wifi_connection,
-      wifi_ssid));
+      wifi_ssid);
   // We cancel the navigation with ERR_BLOCKED_BY_CLIENT so it doesn't get
   // handled by the normal SSLErrorNavigationThrotttle since this test only
   // checks the behavior of the Blocking Page, not the integration with that
@@ -301,9 +301,9 @@ void CaptivePortalBlockingPageTest::TestCertReporting(
 
   std::unique_ptr<SSLCertReporter> ssl_cert_reporter =
       certificate_reporting_test_utils::CreateMockSSLCertReporter(
-          base::Bind(&certificate_reporting_test_utils::
-                         SSLCertReporterCallback::ReportSent,
-                     base::Unretained(&reporter_callback)),
+          base::BindRepeating(&certificate_reporting_test_utils::
+                                  SSLCertReporterCallback::ReportSent,
+                              base::Unretained(&reporter_callback)),
           opt_in == certificate_reporting_test_utils::EXTENDED_REPORTING_OPT_IN
               ? certificate_reporting_test_utils::CERT_REPORT_EXPECTED
               : certificate_reporting_test_utils::CERT_REPORT_NOT_EXPECTED);

@@ -22,13 +22,15 @@ ImageContextImpl::ImageContextImpl(
     const gpu::MailboxHolder& mailbox_holder,
     const gfx::Size& size,
     ResourceFormat resource_format,
+    bool maybe_concurrent_reads,
     const base::Optional<gpu::VulkanYCbCrInfo>& ycbcr_info,
     sk_sp<SkColorSpace> color_space)
     : ImageContext(mailbox_holder,
                    size,
                    resource_format,
                    ycbcr_info,
-                   color_space) {}
+                   color_space),
+      maybe_concurrent_reads_(maybe_concurrent_reads) {}
 
 ImageContextImpl::ImageContextImpl(AggregatedRenderPassId render_pass_id,
                                    const gfx::Size& size,
@@ -102,10 +104,12 @@ void ImageContextImpl::BeginAccessIfNecessary(
     std::vector<GrBackendSemaphore>* begin_semaphores,
     std::vector<GrBackendSemaphore>* end_semaphores) {
   // Prepare for accessing shared image.
-  if (mailbox_holder().mailbox.IsSharedImage() &&
-      BeginAccessIfNecessaryForSharedImage(context_state,
-                                           representation_factory,
-                                           begin_semaphores, end_semaphores)) {
+  if (mailbox_holder().mailbox.IsSharedImage()) {
+    if (!BeginAccessIfNecessaryForSharedImage(
+            context_state, representation_factory, begin_semaphores,
+            end_semaphores)) {
+      CreateFallbackImage(context_state);
+    }
     return;
   }
 
@@ -135,7 +139,8 @@ void ImageContextImpl::BeginAccessIfNecessary(
   if (BindOrCopyTextureIfNecessary(texture_base, &texture_size) &&
       texture_size != size()) {
     DLOG(ERROR) << "Failed to fulfill the promise texture - texture "
-                   "size does not match TransferableResource size.";
+                   "size does not match TransferableResource size: "
+                << texture_size.ToString() << " vs " << size().ToString();
     CreateFallbackImage(context_state);
     return;
   }
@@ -198,7 +203,9 @@ bool ImageContextImpl::BeginAccessIfNecessaryForSharedImage(
 
     if (representation->size() != size()) {
       DLOG(ERROR) << "Failed to fulfill the promise texture - SharedImage "
-                     "size does not match TransferableResource size.";
+                     "size does not match TransferableResource size: "
+                  << representation->size().ToString() << " vs "
+                  << size().ToString();
       return false;
     }
 

@@ -17,12 +17,11 @@
 #include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observer.h"
-#include "base/strings/string16.h"
+#include "base/scoped_observation.h"
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/win_util.h"
-#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/platform/ax_fragment_root_delegate_win.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/input_method_observer.h"
@@ -36,7 +35,6 @@
 #include "ui/views/views_export.h"
 #include "ui/views/win/pen_event_processor.h"
 #include "ui/views/win/scoped_enable_unadjusted_mouse_events_win.h"
-#include "ui/views/window/window_resize_utils.h"
 
 namespace gfx {
 class ImageSkia;
@@ -46,9 +44,10 @@ class Insets;
 namespace ui {
 class AXFragmentRootWin;
 class AXSystemCaretWin;
+class SessionChangeObserver;
 class TextInputClient;
 class ViewProp;
-class SessionChangeObserver;
+class WinCursor;
 }  // namespace ui
 
 namespace views {
@@ -160,9 +159,9 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   void SetVisibilityChangedAnimationsEnabled(bool enabled);
 
   // Returns true if the title changed.
-  bool SetTitle(const base::string16& title);
+  bool SetTitle(const std::u16string& title);
 
-  void SetCursor(HCURSOR cursor);
+  void SetCursor(scoped_refptr<ui::WinCursor> cursor);
 
   void FrameTypeChanged();
 
@@ -608,7 +607,7 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
 
   // Updates |rect| to adhere to the |aspect_ratio| of the window. |param|
   // refers to the edge of the window being sized.
-  void SizeRectToAspectRatio(UINT param, gfx::Rect* rect);
+  void SizeWindowToAspectRatio(UINT param, gfx::Rect* rect);
 
   // Get the cursor position, which may be mocked if running a test
   POINT GetCursorPos() const;
@@ -627,7 +626,7 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   bool restored_enabled_;
 
   // The current cursor.
-  HCURSOR current_cursor_;
+  scoped_refptr<ui::WinCursor> current_cursor_;
 
   // The icon created from the bitmap image of the window icon.
   base::win::ScopedHICON window_icon_;
@@ -714,6 +713,14 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // as synthesized mouse messages. For more information please refer to the
   // IsMouseEventFromTouch function.
   static LONG last_touch_or_pen_message_time_;
+
+  // When true, this flag makes us discard window management mouse messages.
+  // Windows sends window management mouse messages at the mouse location when
+  // window states change (e.g. tooltips or status bubbles opening/closing).
+  // Those system generated messages should be ignored while the pen is active
+  // over the client area, where it is not in sync with the mouse position.
+  // Reset to false when we get user mouse input again.
+  static bool is_pen_active_in_client_area_;
 
   // Time the last WM_MOUSEHWHEEL message is received. Please refer to the
   // HandleMouseEventInternal function as to why this is needed.
@@ -812,7 +819,8 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // Populated if the cursor position is being mocked for testing purposes.
   base::Optional<gfx::Point> mock_cursor_position_;
 
-  ScopedObserver<ui::InputMethod, ui::InputMethodObserver> observer_{this};
+  base::ScopedObservation<ui::InputMethod, ui::InputMethodObserver>
+      observation_{this};
 
   // The WeakPtrFactories below (one inside the
   // CR_MSG_MAP_CLASS_DECLARATIONS macro and autohide_factory_) must

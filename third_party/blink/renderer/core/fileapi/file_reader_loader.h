@@ -33,6 +33,7 @@
 
 #include <memory>
 
+#include "base/dcheck_is_on.h"
 #include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "third_party/blink/public/mojom/blob/blob.mojom-blink.h"
@@ -125,7 +126,7 @@ class CORE_EXPORT FileReaderLoader : public mojom::blink::BlobReaderClient {
     // into this bucket. If there are a large number of errors reported here,
     // then there can be a new enumeration reported for mojo pipe errors.
     kMojoPipeUnexpectedReadError = 10,
-    kCount
+    kMaxValue = kMojoPipeUnexpectedReadError,
   };
 
   void Cleanup();

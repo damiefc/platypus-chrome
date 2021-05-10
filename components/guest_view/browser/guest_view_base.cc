@@ -394,7 +394,7 @@ WebContents* GuestViewBase::CreateNewGuestWindow(
 
 void GuestViewBase::OnRenderFrameHostDeleted(int process_id, int routing_id) {}
 
-void GuestViewBase::DidAttach(int guest_proxy_routing_id) {
+void GuestViewBase::DidAttach() {
   DCHECK(attach_in_progress_);
   // Clear this flag here, as functions called below may check attached().
   attach_in_progress_ = false;
@@ -409,23 +409,7 @@ void GuestViewBase::DidAttach(int guest_proxy_routing_id) {
   // Give the derived class an opportunity to perform some actions.
   DidAttachToEmbedder();
 
-  // Inform the associated GuestViewContainer that the contentWindow is ready.
-  GetOwnerRenderWidgetHost()->Send(new GuestViewMsg_GuestAttached(
-      element_instance_id_, guest_proxy_routing_id));
-
   SendQueuedEvents();
-}
-
-// TODO(wjmaclean): Delete this when browser plugin goes away;
-// https://crbug.com/533069 .
-void GuestViewBase::DidDetach() {
-  GuestViewManager::FromBrowserContext(browser_context_)->DetachGuest(this);
-  StopTrackingEmbedderZoomLevel();
-  owner_web_contents()->GetRenderViewHost()->Send(
-      new GuestViewMsg_GuestDetached(element_instance_id_));
-  element_instance_id_ = kInstanceIDNone;
-  if (ShouldDestroyOnDetach())
-    Destroy(true);
 }
 
 WebContents* GuestViewBase::GetOwnerWebContents() {
@@ -480,16 +464,16 @@ void GuestViewBase::SetAttachParams(const base::DictionaryValue& params) {
 }
 
 void GuestViewBase::SetOpener(GuestViewBase* guest) {
-  if (guest && guest->IsViewType(GetViewType())) {
+  if (guest) {
     opener_ = guest->weak_ptr_factory_.GetWeakPtr();
     if (!attached()) {
       opener_lifetime_observer_ =
           std::make_unique<OpenerLifetimeObserver>(this);
     }
-    return;
+  } else {
+    opener_ = base::WeakPtr<GuestViewBase>();
+    opener_lifetime_observer_.reset();
   }
-  opener_ = base::WeakPtr<GuestViewBase>();
-  opener_lifetime_observer_.reset();
 }
 
 void GuestViewBase::SetGuestHost(content::GuestHost* guest_host) {
@@ -567,7 +551,8 @@ double GuestViewBase::PhysicalPixelsToLogicalPixels(int physical_pixels) const {
 }
 
 void GuestViewBase::DidStopLoading() {
-  content::RenderViewHost* rvh = web_contents()->GetRenderViewHost();
+  content::RenderViewHost* rvh =
+      web_contents()->GetMainFrame()->GetRenderViewHost();
 
   if (IsPreferredSizeModeEnabled())
     rvh->EnablePreferredSizeMode();
@@ -748,8 +733,7 @@ void GuestViewBase::AttachToOuterWebContentsFrame(
     int32_t element_instance_id,
     bool is_full_page_plugin) {
   auto completion_callback =
-      base::BindOnce(&GuestViewBase::DidAttach, weak_ptr_factory_.GetWeakPtr(),
-                     MSG_ROUTING_NONE);
+      base::BindOnce(&GuestViewBase::DidAttach, weak_ptr_factory_.GetWeakPtr());
   WillAttach(WebContents::FromRenderFrameHost(embedder_frame), embedder_frame,
              element_instance_id, is_full_page_plugin,
              std::move(completion_callback));
@@ -863,10 +847,11 @@ void GuestViewBase::SetUpSizing(const base::DictionaryValue& params) {
   }
 
   SetSizeParams set_size_params;
-  set_size_params.enable_auto_size.reset(new bool(auto_size_enabled));
-  set_size_params.min_size.reset(new gfx::Size(min_width, min_height));
-  set_size_params.max_size.reset(new gfx::Size(max_width, max_height));
-  set_size_params.normal_size.reset(new gfx::Size(normal_width, normal_height));
+  set_size_params.enable_auto_size = std::make_unique<bool>(auto_size_enabled);
+  set_size_params.min_size = std::make_unique<gfx::Size>(min_width, min_height);
+  set_size_params.max_size = std::make_unique<gfx::Size>(max_width, max_height);
+  set_size_params.normal_size =
+      std::make_unique<gfx::Size>(normal_width, normal_height);
 
   // Call SetSize to apply all the appropriate validation and clipping of
   // values.

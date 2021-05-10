@@ -17,6 +17,33 @@ namespace blink {
 
 using css_test_helpers::ParseDeclarationBlock;
 
+namespace {
+
+// This list does not necessarily need to be exhaustive.
+const CSSPropertyID kVisitedPropertySamples[] = {
+    CSSPropertyID::kInternalVisitedColor,
+    CSSPropertyID::kInternalVisitedBackgroundColor,
+    CSSPropertyID::kInternalVisitedBorderBlockEndColor,
+    CSSPropertyID::kInternalVisitedBorderBlockStartColor,
+    CSSPropertyID::kInternalVisitedBorderBottomColor,
+    CSSPropertyID::kInternalVisitedBorderInlineEndColor,
+    CSSPropertyID::kInternalVisitedBorderInlineStartColor,
+    CSSPropertyID::kInternalVisitedBorderLeftColor,
+    CSSPropertyID::kInternalVisitedBorderRightColor,
+    CSSPropertyID::kInternalVisitedBorderTopColor,
+    CSSPropertyID::kInternalVisitedCaretColor,
+    CSSPropertyID::kInternalVisitedColumnRuleColor,
+    CSSPropertyID::kInternalVisitedFill,
+    CSSPropertyID::kInternalVisitedOutlineColor,
+    CSSPropertyID::kInternalVisitedStroke,
+    CSSPropertyID::kInternalVisitedTextDecorationColor,
+    CSSPropertyID::kInternalVisitedTextEmphasisColor,
+    CSSPropertyID::kInternalVisitedTextFillColor,
+    CSSPropertyID::kInternalVisitedTextStrokeColor,
+};
+
+}  // namespace
+
 class CascadeExpansionTest : public PageTestBase {
  public:
   CascadeExpansion ExpansionAt(const MatchResult& result,
@@ -30,15 +57,25 @@ class CascadeExpansionTest : public PageTestBase {
     Vector<CSSPropertyID> all;
     for (CSSPropertyID id : CSSPropertyIDList()) {
       const CSSProperty& property = CSSProperty::Get(id);
-      if (property.IsShorthand())
-        continue;
-      if (!property.IsAffectedByAll())
+      if (!CascadeExpansion::IsInAllExpansion(id))
         continue;
       if (filter.Rejects(property))
         continue;
       all.push_back(id);
     }
     return all;
+  }
+
+  Vector<CSSPropertyID> VisitedPropertiesInExpansion(CascadeExpansion e) {
+    Vector<CSSPropertyID> visited;
+
+    while (!e.AtEnd()) {
+      if (CSSProperty::Get(e.Id()).IsVisited())
+        visited.push_back(e.Id());
+      e.Next();
+    }
+
+    return visited;
   }
 };
 
@@ -47,7 +84,7 @@ TEST_F(CascadeExpansionTest, UARules) {
   result.AddMatchedProperties(ParseDeclarationBlock("cursor:help;top:1px"));
   result.FinishAddingUARules();
   result.FinishAddingUserRules();
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -69,7 +106,7 @@ TEST_F(CascadeExpansionTest, UserRules) {
   result.AddMatchedProperties(ParseDeclarationBlock("cursor:help"));
   result.AddMatchedProperties(ParseDeclarationBlock("float:left"));
   result.FinishAddingUserRules();
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(2u, result.GetMatchedProperties().size());
 
@@ -98,7 +135,7 @@ TEST_F(CascadeExpansionTest, AuthorRules) {
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("cursor:help;top:1px"));
   result.AddMatchedProperties(ParseDeclarationBlock("float:left"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(2u, result.GetMatchedProperties().size());
 
@@ -133,9 +170,9 @@ TEST_F(CascadeExpansionTest, AllOriginRules) {
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("left:1px"));
   result.AddMatchedProperties(ParseDeclarationBlock("float:left"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
   result.AddMatchedProperties(ParseDeclarationBlock("bottom:2px"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(5u, result.GetMatchedProperties().size());
 
@@ -195,7 +232,7 @@ TEST_F(CascadeExpansionTest, Name) {
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("--x:1px;--y:2px"));
   result.AddMatchedProperties(ParseDeclarationBlock("float:left"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(2u, result.GetMatchedProperties().size());
 
@@ -227,7 +264,7 @@ TEST_F(CascadeExpansionTest, Value) {
   result.AddMatchedProperties(ParseDeclarationBlock("background-color:red"));
   result.FinishAddingUARules();
   result.FinishAddingUserRules();
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -249,7 +286,7 @@ TEST_F(CascadeExpansionTest, LinkOmitted) {
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("color:red"),
                               CSSSelector::kMatchVisited);
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -265,7 +302,7 @@ TEST_F(CascadeExpansionTest, InternalVisited) {
   result.FinishAddingUARules();
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("color:red"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -285,7 +322,7 @@ TEST_F(CascadeExpansionTest, InternalVisitedOmitted) {
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("color:red"),
                               CSSSelector::kMatchLink);
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -301,7 +338,7 @@ TEST_F(CascadeExpansionTest, InternalVisitedWithTrailer) {
   result.FinishAddingUARules();
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("color:red;left:1px"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -323,7 +360,7 @@ TEST_F(CascadeExpansionTest, All) {
   result.FinishAddingUARules();
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("all:unset"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -344,7 +381,7 @@ TEST_F(CascadeExpansionTest, InlineAll) {
   result.FinishAddingUserRules();
   result.AddMatchedProperties(
       ParseDeclarationBlock("left:1px;all:unset;right:1px"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -372,7 +409,7 @@ TEST_F(CascadeExpansionTest, FilterNormalNonInherited) {
   result.FinishAddingUARules();
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("font-size:1px;left:1px"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -392,7 +429,7 @@ TEST_F(CascadeExpansionTest, FilterInternalVisited) {
   result.FinishAddingUARules();
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("color:red"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   CascadeFilter filter(CSSProperty::kVisited, true);
 
@@ -412,7 +449,23 @@ TEST_F(CascadeExpansionTest, FilterFirstLetter) {
   result.AddMatchedProperties(
       ParseDeclarationBlock("object-fit:unset;font-size:1px"),
       CSSSelector::kMatchAll, ValidPropertyFilter::kFirstLetter);
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
+
+  auto e = ExpansionAt(result, 0);
+  ASSERT_FALSE(e.AtEnd());
+  EXPECT_EQ(CSSPropertyID::kFontSize, e.Id());
+  e.Next();
+  EXPECT_TRUE(e.AtEnd());
+}
+
+TEST_F(CascadeExpansionTest, FilterFirstLine) {
+  MatchResult result;
+  result.FinishAddingUARules();
+  result.FinishAddingUserRules();
+  result.AddMatchedProperties(
+      ParseDeclarationBlock("display:none;font-size:1px"),
+      CSSSelector::kMatchAll, ValidPropertyFilter::kFirstLine);
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   auto e = ExpansionAt(result, 0);
   ASSERT_FALSE(e.AtEnd());
@@ -428,7 +481,7 @@ TEST_F(CascadeExpansionTest, FilterCue) {
   result.AddMatchedProperties(
       ParseDeclarationBlock("object-fit:unset;font-size:1px"),
       CSSSelector::kMatchAll, ValidPropertyFilter::kCue);
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   auto e = ExpansionAt(result, 0);
   ASSERT_FALSE(e.AtEnd());
@@ -444,11 +497,30 @@ TEST_F(CascadeExpansionTest, FilterMarker) {
   result.AddMatchedProperties(
       ParseDeclarationBlock("object-fit:unset;font-size:1px"),
       CSSSelector::kMatchAll, ValidPropertyFilter::kMarker);
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   auto e = ExpansionAt(result, 0);
   ASSERT_FALSE(e.AtEnd());
   EXPECT_EQ(CSSPropertyID::kFontSize, e.Id());
+  e.Next();
+  EXPECT_TRUE(e.AtEnd());
+}
+
+TEST_F(CascadeExpansionTest, FilterHighlight) {
+  MatchResult result;
+  result.FinishAddingUARules();
+  result.FinishAddingUserRules();
+  result.AddMatchedProperties(
+      ParseDeclarationBlock("display:block;background-color:lime;"),
+      CSSSelector::kMatchAll, ValidPropertyFilter::kHighlight);
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
+
+  auto e = ExpansionAt(result, 0);
+  ASSERT_FALSE(e.AtEnd());
+  EXPECT_EQ(CSSPropertyID::kBackgroundColor, e.Id());
+  e.Next();
+  ASSERT_FALSE(e.AtEnd());
+  EXPECT_EQ(CSSPropertyID::kInternalVisitedBackgroundColor, e.Id());
   e.Next();
   EXPECT_TRUE(e.AtEnd());
 }
@@ -458,7 +530,7 @@ TEST_F(CascadeExpansionTest, FilterAllNonInherited) {
   result.FinishAddingUARules();
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("all:unset"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -481,7 +553,7 @@ TEST_F(CascadeExpansionTest, Importance) {
   result.FinishAddingUserRules();
   result.AddMatchedProperties(
       ParseDeclarationBlock("cursor:help;display:block !important"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -504,7 +576,7 @@ TEST_F(CascadeExpansionTest, AllImportance) {
   result.FinishAddingUARules();
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("all:unset !important"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -525,7 +597,7 @@ TEST_F(CascadeExpansionTest, AllNonImportance) {
   result.FinishAddingUARules();
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("all:unset"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(1u, result.GetMatchedProperties().size());
 
@@ -541,13 +613,71 @@ TEST_F(CascadeExpansionTest, AllNonImportance) {
   EXPECT_TRUE(e.AtEnd());
 }
 
+TEST_F(CascadeExpansionTest, AllVisitedOnly) {
+  MatchResult result;
+  result.FinishAddingUARules();
+  result.FinishAddingUserRules();
+  result.AddMatchedProperties(ParseDeclarationBlock("all:unset"),
+                              CSSSelector::kMatchVisited,
+                              ValidPropertyFilter::kNoFilter);
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
+
+  ASSERT_EQ(1u, result.GetMatchedProperties().size());
+
+  Vector<CSSPropertyID> visited =
+      VisitedPropertiesInExpansion(ExpansionAt(result, 0));
+
+  for (CSSPropertyID id : kVisitedPropertySamples) {
+    EXPECT_TRUE(visited.Contains(id))
+        << CSSProperty::Get(id).GetPropertyNameString()
+        << " should be in the expansion";
+  }
+}
+
+TEST_F(CascadeExpansionTest, AllVisitedOrLink) {
+  MatchResult result;
+  result.FinishAddingUARules();
+  result.FinishAddingUserRules();
+  result.AddMatchedProperties(ParseDeclarationBlock("all:unset"),
+                              CSSSelector::kMatchAll,
+                              ValidPropertyFilter::kNoFilter);
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
+
+  ASSERT_EQ(1u, result.GetMatchedProperties().size());
+
+  Vector<CSSPropertyID> visited =
+      VisitedPropertiesInExpansion(ExpansionAt(result, 0));
+
+  for (CSSPropertyID id : kVisitedPropertySamples) {
+    EXPECT_TRUE(visited.Contains(id))
+        << CSSProperty::Get(id).GetPropertyNameString()
+        << " should be in the expansion";
+  }
+}
+
+TEST_F(CascadeExpansionTest, AllLinkOnly) {
+  MatchResult result;
+  result.FinishAddingUARules();
+  result.FinishAddingUserRules();
+  result.AddMatchedProperties(ParseDeclarationBlock("all:unset"),
+                              CSSSelector::kMatchLink,
+                              ValidPropertyFilter::kNoFilter);
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
+
+  ASSERT_EQ(1u, result.GetMatchedProperties().size());
+
+  Vector<CSSPropertyID> visited =
+      VisitedPropertiesInExpansion(ExpansionAt(result, 0));
+  EXPECT_EQ(visited.size(), 0u);
+}
+
 TEST_F(CascadeExpansionTest, Position) {
   MatchResult result;
   result.FinishAddingUARules();
   result.FinishAddingUserRules();
   result.AddMatchedProperties(ParseDeclarationBlock("left:1px;top:1px"));
   result.AddMatchedProperties(ParseDeclarationBlock("bottom:1px;right:1px"));
-  result.FinishAddingAuthorRulesForTreeScope();
+  result.FinishAddingAuthorRulesForTreeScope(GetDocument());
 
   ASSERT_EQ(2u, result.GetMatchedProperties().size());
 

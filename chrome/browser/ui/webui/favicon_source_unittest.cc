@@ -7,10 +7,10 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/strcat.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/favicon/history_ui_favicon_request_handler_factory.h"
@@ -80,7 +80,11 @@ class TestFaviconSource : public FaviconSource {
   MOCK_METHOD2(LoadIconBytes, base::RefCountedMemory*(float, int));
 
  protected:
-  ui::NativeTheme* GetNativeTheme() override { return theme_; }
+  // FaviconSource:
+  ui::NativeTheme* GetNativeTheme(
+      const content::WebContents::Getter& wc_getter) override {
+    return theme_;
+  }
 
  private:
   ui::NativeTheme* const theme_;

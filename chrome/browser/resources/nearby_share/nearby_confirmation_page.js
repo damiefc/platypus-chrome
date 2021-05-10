@@ -12,15 +12,18 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
 import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 import 'chrome://resources/mojo/mojo/public/mojom/base/unguessable_token.mojom-lite.js';
-import './nearby_preview.js';
-import './nearby_progress.js';
-import './nearby_share_target_types.mojom-lite.js';
-import './nearby_share.mojom-lite.js';
+import './mojo/nearby_share_target_types.mojom-lite.js';
+import './mojo/nearby_share_share_type.mojom-lite.js';
+import './mojo/nearby_share.mojom-lite.js';
 import './shared/nearby_page_template.m.js';
+import './shared/nearby_preview.m.js';
+import './shared/nearby_progress.m.js';
 import './strings.m.js';
 
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {getDiscoveryManager} from './discovery_manager.js';
 
 /** @implements {nearbyShare.mojom.TransferUpdateListenerInterface} */
 class TransferUpdateListener {
@@ -90,12 +93,41 @@ Polymer({
     },
 
     /**
+     * Preview info for the file(s) to send. Expected to start
+     * as null, then change to a valid object before this component is shown.
+     * @type {?nearbyShare.mojom.PayloadPreview}
+     */
+    payloadPreview: {
+      type: Object,
+      value: null,
+    },
+
+    /**
      * Token to show to the user to confirm the selected share target. Expected
      * to start as null, then change to a valid object via updates from the
      * transferUpdateListener.
      * @private {?string}
      */
     confirmationToken_: {
+      type: String,
+      value: null,
+    },
+
+    /**
+     * Header text for error. The error section is not displayed if this is
+     * falsey.
+     * @private {?string}
+     */
+    errorTitle_: {
+      type: String,
+      value: null,
+    },
+
+    /**
+     * Description text for error, displayed under the error title.
+     * @private {?string}
+     */
+    errorDescription_: {
       type: String,
       value: null,
     },
@@ -109,6 +141,14 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    /**
+     * @private {?nearbyShare.mojom.TransferStatus}
+     */
+    lastTransferStatus_: {
+      type: nearbyShare.mojom.TransferStatus,
+      value: null,
+    },
   },
 
   listeners: {
@@ -119,6 +159,19 @@ Polymer({
 
   /** @private {?TransferUpdateListener} */
   transferUpdateListener_: null,
+
+  /**
+   * @return {!Object} The transferStatus, errorTitle, and errorDescription.
+   * @public
+   */
+  getTransferInfoForTesting() {
+    return {
+      confirmationToken: this.confirmationToken_,
+      transferStatus: this.lastTransferStatus_,
+      errorTitle: this.errorTitle_,
+      errorDescription: this.errorDescription_,
+    };
+  },
 
   /**
    * @param {?nearbyShare.mojom.TransferUpdateListenerPendingReceiver}
@@ -142,6 +195,7 @@ Polymer({
     if (token) {
       this.confirmationToken_ = token;
     }
+    this.lastTransferStatus_ = status;
 
     switch (status) {
       case nearbyShare.mojom.TransferStatus.kAwaitingLocalConfirmation:
@@ -151,7 +205,41 @@ Polymer({
         this.needsConfirmation_ = false;
         break;
       case nearbyShare.mojom.TransferStatus.kInProgress:
-        this.fire('close');
+      case nearbyShare.mojom.TransferStatus.kComplete:
+        getDiscoveryManager().stopDiscovery().then(() => this.fire('close'));
+        break;
+      case nearbyShare.mojom.TransferStatus.kRejected:
+        this.errorTitle_ = this.i18n('nearbyShareErrorCantShare');
+        this.errorDescription_ = this.i18n('nearbyShareErrorRejected');
+        break;
+      case nearbyShare.mojom.TransferStatus.kTimedOut:
+        this.errorTitle_ = this.i18n('nearbyShareErrorTimeOut');
+        this.errorDescription_ = this.i18n('nearbyShareErrorNoResponse');
+        break;
+      case nearbyShare.mojom.TransferStatus.kUnsupportedAttachmentType:
+        this.errorTitle_ = this.i18n('nearbyShareErrorCantShare');
+        this.errorDescription_ =
+            this.i18n('nearbyShareErrorUnsupportedFileType');
+        break;
+      case nearbyShare.mojom.TransferStatus.kMediaUnavailable:
+      case nearbyShare.mojom.TransferStatus.kNotEnoughSpace:
+      case nearbyShare.mojom.TransferStatus.kFailed:
+      case nearbyShare.mojom.TransferStatus.kAwaitingRemoteAcceptanceFailed:
+      case nearbyShare.mojom.TransferStatus.kDecodeAdvertisementFailed:
+      case nearbyShare.mojom.TransferStatus.kMissingTransferUpdateCallback:
+      case nearbyShare.mojom.TransferStatus.kMissingShareTarget:
+      case nearbyShare.mojom.TransferStatus.kMissingEndpointId:
+      case nearbyShare.mojom.TransferStatus.kMissingPayloads:
+      case nearbyShare.mojom.TransferStatus.kPairedKeyVerificationFailed:
+      case nearbyShare.mojom.TransferStatus.kInvalidIntroductionFrame:
+      case nearbyShare.mojom.TransferStatus.kIncompletePayloads:
+      case nearbyShare.mojom.TransferStatus.kFailedToCreateShareTarget:
+      case nearbyShare.mojom.TransferStatus.kFailedToInitiateOutgoingConnection:
+      case nearbyShare.mojom.TransferStatus
+          .kFailedToReadOutgoingConnectionResponse:
+      case nearbyShare.mojom.TransferStatus.kUnexpectedDisconnection:
+        this.errorTitle_ = this.i18n('nearbyShareErrorCantShare');
+        this.errorDescription_ = this.i18n('nearbyShareErrorSomethingWrong');
         break;
     }
   },
@@ -163,7 +251,7 @@ Polymer({
   contactName_() {
     // TODO(crbug.com/1123943): Get contact name from ShareTarget.
     const contactName = null;
-    if (!contactName) {
+    if (!contactName || this.errorTitle_) {
       return '';
     }
     return this.i18n('nearbyShareConfirmationPageAddContactTitle', contactName);
@@ -223,7 +311,8 @@ Polymer({
    * @private
    */
   attachmentTitle_() {
-    // TODO(crbug.com/1123942): Pass attachments to UI.
-    return 'Unknown file';
+    return this.payloadPreview && this.payloadPreview.description ?
+        this.payloadPreview.description :
+        'Unknown file';
   },
 });

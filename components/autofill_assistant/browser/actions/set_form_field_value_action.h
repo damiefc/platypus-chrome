@@ -12,9 +12,11 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/autofill_assistant/browser/action_value.pb.h"
 #include "components/autofill_assistant/browser/actions/action.h"
 #include "components/autofill_assistant/browser/string_conversions_util.h"
 #include "components/autofill_assistant/browser/user_data.h"
+#include "components/autofill_assistant/browser/web/element_finder.h"
 
 namespace autofill_assistant {
 
@@ -29,25 +31,21 @@ class SetFormFieldValueAction : public Action {
   FRIEND_TEST_ALL_PREFIXES(SetFormFieldValueActionTest,
                            PasswordIsClearedFromMemory);
 
-  // TODO(b/154067717): Remove PasswordValueType enum.
-  // Helper enum for |FieldInput| to describe the passwords-related actions.
-  enum class PasswordValueType { NOT_SET, STORED_PASSWORD };
-
   // A field input as extracted from the proto, but already checked for
   // validity.
   struct FieldInput {
     explicit FieldInput(std::unique_ptr<std::vector<UChar32>> keyboard_input);
     explicit FieldInput(std::string value);
-    explicit FieldInput(PasswordValueType password_type);
+    explicit FieldInput(PasswordManagerValue password_manager_value);
     FieldInput(FieldInput&& other);
     ~FieldInput();
 
     // The keys to press if either |keycode| or |keyboard_input| is set, else
     // nullptr.
-    std::unique_ptr<std::vector<UChar32>> keyboard_input = nullptr;
-    // If the action is about passwords, the field describes whether the
-    // password should be retrieved from storage or generated.
-    PasswordValueType password_type = PasswordValueType::NOT_SET;
+    std::unique_ptr<std::vector<UChar32>> keyboard_input;
+    // If the action is about passwords, the field describes whether to use
+    // password or username.
+    PasswordManagerValue password_manager_value;
     // The string to input (for all other cases).
     std::string value;
   };
@@ -56,24 +54,31 @@ class SetFormFieldValueAction : public Action {
   void InternalProcessAction(ProcessActionCallback callback) override;
 
   void OnWaitForElement(const ClientStatus& element_status);
-
-  void OnGetFieldValue(int field_index,
-                       const std::string& requested_value,
-                       const ClientStatus& element_status,
-                       const std::string& actual_value);
-
-  void OnSetFieldValue(int next, const ClientStatus& status);
-
-  void OnSetFieldValueAndCheckFallback(int field_index,
-                                       const std::string& requested_value,
-                                       const ClientStatus& status);
-
-  void OnGetStoredPassword(int field_index, bool success, std::string password);
+  void OnFindElement(const ClientStatus& element_status,
+                     std::unique_ptr<ElementFinder::Result> element_result);
+  void SetFieldValueSequentially(int field_index, const ClientStatus& status);
+  void OnGetPasswordManagerValue(
+      base::OnceCallback<void(const ClientStatus&)> next_field_callback,
+      const ClientStatus& status,
+      const std::string& value);
+  void SetFieldValueAndCheckFallback(
+      const std::string& value,
+      base::OnceCallback<void(const ClientStatus&)> next_field_callback);
+  void OnSetFieldValueAndCheckFallback(
+      base::OnceCallback<void(const ClientStatus&)> next_field_callback,
+      const std::string& requested_value,
+      const ClientStatus& status);
+  void OnGetFieldValue(
+      base::OnceCallback<void(const ClientStatus&)> next_field_callback,
+      const std::string& requested_value,
+      const ClientStatus& element_status,
+      const std::string& actual_value);
 
   void FailAction(const ClientStatus& status, int keypress_index);
   void EndAction(const ClientStatus& status);
 
   Selector selector_;
+  std::unique_ptr<ElementFinder::Result> element_;
   std::vector<FieldInput> field_inputs_;
   ProcessActionCallback process_action_callback_;
   base::WeakPtrFactory<SetFormFieldValueAction> weak_ptr_factory_{this};

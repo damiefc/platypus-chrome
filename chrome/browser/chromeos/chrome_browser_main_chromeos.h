@@ -9,11 +9,31 @@
 
 #include "base/macros.h"
 #include "base/task/cancelable_task_tracker.h"
+// TODO(https://crbug.com/1164001): forward declare when moved to
+// chrome/browser/ash/.
+#include "chrome/browser/ash/app_mode/arc/arc_kiosk_app_manager.h"
+// TODO(https://crbug.com/1164001): forward declare when moved to
+// chrome/browser/ash/.
+#include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
+// TODO(https://crbug.com/1164001): forward declare when moved to
+// chrome/browser/ash/.
+#include "chrome/browser/ash/notifications/low_disk_notification.h"
+// TODO(https://crbug.com/1164001): forward declare when moved to
+// chrome/browser/ash/.
+#include "chrome/browser/ash/notifications/gnubby_notification.h"
+// TODO(https://crbug.com/1164001): forward declare when moved to
+// chrome/browser/ash/.
+#include "chrome/browser/ash/settings/shutdown_policy_forwarder.h"
+// TODO(https://crbug.com/1164001): forward declare when moved to
+// chrome/browser/ash/.
+#include "chrome/browser/ash/system/breakpad_consent_watcher.h"
+// TODO(https://crbug.com/1164001): forward declare when moved to
+// chrome/browser/ash/.
+#include "chrome/browser/ash/wilco_dtc_supportd/wilco_dtc_supportd_manager.h"
 #include "chrome/browser/chrome_browser_main_linux.h"
 #include "chrome/browser/chromeos/external_metrics.h"
 #include "chrome/browser/memory/memory_kills_monitor.h"
 
-class AccessibilityEventRewriterDelegate;
 class AssistantClientImpl;
 class AssistantStateClient;
 class ChromeKeyboardControllerClient;
@@ -27,8 +47,13 @@ class ArcDataSnapshotdManager;
 class ArcServiceLauncher;
 }  // namespace arc
 
+namespace ash {
+class AccessibilityEventRewriterDelegateImpl;
+}
+
 namespace crosapi {
 class BrowserManager;
+class CrosapiManager;
 }  // namespace crosapi
 
 namespace crostini {
@@ -46,28 +71,22 @@ class LockToSingleUserManager;
 
 namespace chromeos {
 
-class ArcKioskAppManager;
 class BulkPrintersCalculatorFactory;
 class CrosUsbDetector;
 class DemoModeResourcesRemover;
-class DiscoverManager;
 class EventRewriterDelegateImpl;
 class FastTransitionObserver;
-class GnubbyNotification;
 class IdleActionWarningObserver;
 class LoginScreenExtensionsLifetimeManager;
 class LoginScreenExtensionsStorageCleaner;
-class LowDiskNotification;
+class MemoryAblationStudy;
 class NetworkChangeManagerClient;
 class NetworkPrefStateObserver;
 class NetworkThrottlingObserver;
 class PowerMetricsReporter;
 class RendererFreezer;
 class SessionTerminationManager;
-class ShutdownPolicyForwarder;
 class SystemTokenCertDBInitializer;
-class WebKioskAppManager;
-class WilcoDtcSupportdManager;
 
 namespace default_app_order {
 class ExternalLoader;
@@ -76,6 +95,10 @@ class ExternalLoader;
 namespace internal {
 class DBusServices;
 }  // namespace internal
+
+namespace platform_keys {
+class KeyPermissionsManager;
+}
 
 namespace power {
 class SmartChargingManager;
@@ -90,7 +113,6 @@ class Controller;
 
 namespace system {
 class DarkResumeController;
-class BreakpadConsentWatcher;
 }  // namespace system
 
 // ChromeBrowserMainParts implementation for chromeos specific code.
@@ -107,7 +129,7 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
   int PreEarlyInitialization() override;
   void PreMainMessageLoopStart() override;
   void PostMainMessageLoopStart() override;
-  void PreMainMessageLoopRun() override;
+  int PreMainMessageLoopRun() override;
 
   // Stages called from PreMainMessageLoopRun.
   void PreProfileInit() override;
@@ -138,7 +160,7 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<EventRewriterDelegateImpl> event_rewriter_delegate_;
 
   // Handles event dispatch to the accessibility component extensions.
-  std::unique_ptr<AccessibilityEventRewriterDelegate>
+  std::unique_ptr<ash::AccessibilityEventRewriterDelegateImpl>
       accessibility_event_rewriter_delegate_;
 
   scoped_refptr<chromeos::ExternalMetrics> external_metrics_;
@@ -160,6 +182,7 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
 
   std::unique_ptr<lock_screen_apps::StateController>
       lock_screen_apps_state_controller_;
+  std::unique_ptr<crosapi::CrosapiManager> crosapi_manager_;
   std::unique_ptr<crosapi::BrowserManager> browser_manager_;
 
   std::unique_ptr<power::SmartChargingManager> smart_charging_manager_;
@@ -172,7 +195,6 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
 
   std::unique_ptr<DemoModeResourcesRemover> demo_mode_resources_remover_;
   std::unique_ptr<crostini::CrosvmMetrics> crosvm_metrics_;
-  std::unique_ptr<DiscoverManager> discover_manager_;
 
   std::unique_ptr<CrosUsbDetector> cros_usb_detector_;
 
@@ -204,6 +226,10 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
 
   std::unique_ptr<arc::data_snapshotd::ArcDataSnapshotdManager>
       arc_data_snapshotd_manager_;
+
+  std::unique_ptr<platform_keys::KeyPermissionsManager>
+      system_token_key_permissions_manager_;
+  std::unique_ptr<MemoryAblationStudy> memory_ablation_study_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainPartsChromeos);
 };

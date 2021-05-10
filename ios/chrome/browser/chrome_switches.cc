@@ -24,10 +24,6 @@ const char kDisableIOSPasswordSuggestions[] =
 const char kDisableThirdPartyKeyboardWorkaround[] =
     "disable-third-party-keyboard-workaround";
 
-// Enables Chrome Browser Cloud Management flow.
-const char kEnableChromeBrowserCloudManagement[] =
-    "enable-chrome-browser-cloud-management";
-
 // Enables enterprise policy support.
 const char kEnableEnterprisePolicy[] = "enable-enterprise-policy";
 
@@ -43,9 +39,8 @@ const char kEnableSpotlightActions[] = "enable-spotlight-actions";
 const char kEnableThirdPartyKeyboardWorkaround[] =
     "enable-third-party-keyboard-workaround";
 
-// Installs the managed bookmarks policy handler.
-const char kInstallManagedBookmarksHandler[] =
-    "install-managed-bookmarks-handler";
+// Enabled the NTP Discover feed.
+const char kEnableDiscoverFeed[] = "enable-discover-feed";
 
 // Installs the URLBlocklist and URLAllowlist handlers.
 const char kInstallURLBlocklistHandlers[] = "install-url-blocklist-handlers";

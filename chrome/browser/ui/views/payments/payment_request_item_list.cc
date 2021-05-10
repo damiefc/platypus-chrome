@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/bind.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
 #include "chrome/browser/ui/views/payments/payment_request_views_util.h"
@@ -51,7 +52,10 @@ PaymentRequestItemList::Item::Item(base::WeakPtr<PaymentRequestSpec> spec,
                                    bool selected,
                                    bool clickable,
                                    bool show_edit_button)
-    : PaymentRequestRowView(this, clickable, kRowInsets),
+    : PaymentRequestRowView(
+          base::BindRepeating(&Item::ButtonPressed, base::Unretained(this)),
+          clickable,
+          kRowInsets),
       spec_(spec),
       state_(state),
       list_(list),
@@ -99,19 +103,20 @@ void PaymentRequestItemList::Item::Init() {
   content->SetCanProcessEventsWithinSubtree(false);
   layout->AddView(std::move(content));
 
-  layout->AddView(CreateCheckmark(selected() && clickable()));
+  layout->AddView(CreateCheckmark(selected() && GetClickable()));
 
   if (extra_view)
     layout->AddView(std::move(extra_view));
 
   if (show_edit_button_) {
-    auto edit_button = views::CreateVectorImageButton(this);
+    auto edit_button = views::CreateVectorImageButton(
+        base::BindRepeating(&Item::EditButtonPressed, base::Unretained(this)));
     const SkColor icon_color =
         color_utils::DeriveDefaultIconColor(SK_ColorBLACK);
     edit_button->SetImage(views::Button::STATE_NORMAL,
                           gfx::CreateVectorIcon(vector_icons::kEditIcon,
                                                 kEditIconSize, icon_color));
-    edit_button->SetInkDropBaseColor(icon_color);
+    edit_button->ink_drop()->SetBaseColor(icon_color);
     edit_button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
     edit_button->SetID(static_cast<int>(DialogViewID::EDIT_ITEM_BUTTON));
     edit_button->SetAccessibleName(
@@ -154,11 +159,19 @@ std::unique_ptr<views::View> PaymentRequestItemList::Item::CreateExtraView() {
   return nullptr;
 }
 
-void PaymentRequestItemList::Item::ButtonPressed(views::Button* sender,
-                                                 const ui::Event& event) {
-  if (sender->GetID() == static_cast<int>(DialogViewID::EDIT_ITEM_BUTTON)) {
-    EditButtonPressed();
-  } else if (selected_) {
+void PaymentRequestItemList::Item::UpdateAccessibleName() {
+  std::u16string accessible_content =
+      selected_ ? l10n_util::GetStringFUTF16(
+                      IDS_PAYMENTS_ROW_ACCESSIBLE_NAME_SELECTED_FORMAT,
+                      GetNameForDataType(), accessible_item_description_)
+                : l10n_util::GetStringFUTF16(
+                      IDS_PAYMENTS_ROW_ACCESSIBLE_NAME_FORMAT,
+                      GetNameForDataType(), accessible_item_description_);
+  SetAccessibleName(accessible_content);
+}
+
+void PaymentRequestItemList::Item::ButtonPressed() {
+  if (selected_) {
     // |dialog()| may be null in tests
     if (list_->dialog())
       list_->dialog()->GoBack();
@@ -167,17 +180,6 @@ void PaymentRequestItemList::Item::ButtonPressed(views::Button* sender,
   } else {
     PerformSelectionFallback();
   }
-}
-
-void PaymentRequestItemList::Item::UpdateAccessibleName() {
-  base::string16 accessible_content =
-      selected_ ? l10n_util::GetStringFUTF16(
-                      IDS_PAYMENTS_ROW_ACCESSIBLE_NAME_SELECTED_FORMAT,
-                      GetNameForDataType(), accessible_item_description_)
-                : l10n_util::GetStringFUTF16(
-                      IDS_PAYMENTS_ROW_ACCESSIBLE_NAME_FORMAT,
-                      GetNameForDataType(), accessible_item_description_);
-  SetAccessibleName(accessible_content);
 }
 
 PaymentRequestItemList::PaymentRequestItemList(

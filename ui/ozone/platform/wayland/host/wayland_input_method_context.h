@@ -6,9 +6,10 @@
 #define UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_INPUT_METHOD_CONTEXT_H_
 
 #include <memory>
-#include <string>
+#include <vector>
 
 #include "base/macros.h"
+#include "base/strings/string_piece.h"
 #include "ui/base/ime/character_composer.h"
 #include "ui/base/ime/linux/linux_input_method_context.h"
 #include "ui/ozone/platform/wayland/host/wayland_keyboard.h"
@@ -35,20 +36,22 @@ class WaylandInputMethodContext : public LinuxInputMethodContext,
   // LinuxInputMethodContext overrides:
   bool DispatchKeyEvent(const ui::KeyEvent& key_event) override;
   void SetCursorLocation(const gfx::Rect& rect) override;
-  void SetSurroundingText(const base::string16& text,
+  void SetSurroundingText(const std::u16string& text,
                           const gfx::Range& selection_range) override;
   void Reset() override;
   void Focus() override;
   void Blur() override;
 
   // ui::ZWPTextInputWrapperClient
-  void OnPreeditString(const std::string& text, int preedit_cursor) override;
-  void OnCommitString(const std::string& text) override;
+  void OnPreeditString(base::StringPiece text,
+                       const std::vector<SpanStyle>& spans,
+                       int32_t preedit_cursor) override;
+  void OnCommitString(base::StringPiece text) override;
   void OnDeleteSurroundingText(int32_t index, uint32_t length) override;
-  void OnKeysym(uint32_t key, uint32_t state, uint32_t modifiers) override;
+  void OnKeysym(uint32_t keysym, uint32_t state, uint32_t modifiers) override;
 
  private:
-  void UpdatePreeditText(const base::string16& preedit_text);
+  void UpdatePreeditText(const std::u16string& preedit_text);
 
   WaylandConnection* const connection_;  // TODO(jani) Handle this better
 

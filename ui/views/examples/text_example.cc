@@ -60,7 +60,7 @@ class TextExample::TextExampleView : public View {
     SchedulePaint();
   }
 
-  void SetText(const base::string16& text) {
+  void SetText(const std::u16string& text) {
     text_ = text;
     SchedulePaint();
   }
@@ -83,6 +83,14 @@ class TextExample::TextExampleView : public View {
     SchedulePaint();
   }
 
+ protected:
+  void OnThemeChanged() override {
+    View::OnThemeChanged();
+    SetBorder(CreateSolidBorder(
+        1, GetNativeTheme()->GetSystemColor(
+               ui::NativeTheme::kColorId_UnfocusedBorderColor)));
+  }
+
  private:
   // The font used for drawing the text.
   gfx::FontList font_list_;
@@ -92,7 +100,7 @@ class TextExample::TextExampleView : public View {
   gfx::FontList base_font_;
 
   // The text to draw.
-  base::string16 text_;
+  std::u16string text_;
 
   // Text flags for passing to |DrawStringRect()|.
   int flags_ = 0;
@@ -106,8 +114,9 @@ TextExample::TextExample() : ExampleBase("Text Styles") {}
 TextExample::~TextExample() = default;
 
 Checkbox* TextExample::AddCheckbox(GridLayout* layout, const char* name) {
-  return layout->AddView(
-      std::make_unique<Checkbox>(base::ASCIIToUTF16(name), this));
+  return layout->AddView(std::make_unique<Checkbox>(
+      base::ASCIIToUTF16(name),
+      base::BindRepeating(&TextExample::UpdateStyle, base::Unretained(this))));
 }
 
 Combobox* TextExample::AddCombobox(GridLayout* layout,
@@ -121,7 +130,7 @@ Combobox* TextExample::AddCombobox(GridLayout* layout,
       std::make_unique<Combobox>(
           std::make_unique<ExampleComboboxModel>(strings, count)),
       kNumColumns - 1, 1);
-  combobox->set_callback(
+  combobox->SetCallback(
       base::BindRepeating(combobox_callback, base::Unretained(this)));
   return combobox;
 }
@@ -182,7 +191,7 @@ void TextExample::CreateExampleView(View* container) {
   weight_cb_ = AddCombobox(layout, "Font Weight", kWeightLabels,
                            base::size(kWeightLabels),
                            &TextExample::WeightComboboxChanged);
-  weight_cb_->SelectValue(base::ASCIIToUTF16("Normal"));
+  weight_cb_->SelectValue(u"Normal");
 
   layout->StartRow(0, 0);
   multiline_checkbox_ = AddCheckbox(layout, "Multiline");
@@ -200,15 +209,12 @@ void TextExample::CreateExampleView(View* container) {
 
   layout->StartRow(1, 1);
   text_view_ = layout->AddView(std::make_unique<TextExampleView>());
-  text_view_->SetBorder(CreateSolidBorder(
-      1, text_view_->GetNativeTheme()->GetSystemColor(
-             ui::NativeTheme::kColorId_UnfocusedBorderColor)));
   layout->AddPaddingRow(0, 8);
 
   TextComboboxChanged();  // Sets initial text content.
 }
 
-void TextExample::ButtonPressed(Button* button, const ui::Event& event) {
+void TextExample::UpdateStyle() {
   int flags = text_view_->GetFlags();
   int style = text_view_->GetStyle();
   SetFlagFromCheckbox(multiline_checkbox_, &flags, gfx::Canvas::MULTI_LINE);
@@ -243,35 +249,33 @@ void TextExample::AlignComboboxChanged() {
 void TextExample::TextComboboxChanged() {
   switch (text_cb_->GetSelectedIndex()) {
     case 0:
-      text_view_->SetText(
-          base::ASCIIToUTF16("The quick brown fox jumps over the lazy dog."));
+      text_view_->SetText(u"The quick brown fox jumps over the lazy dog.");
       break;
     case 1:
-      text_view_->SetText(base::ASCIIToUTF16(
-          "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-          "eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim "
-          "ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut "
-          "aliquip ex ea commodo consequat.\n"
-          "Duis aute irure dolor in reprehenderit in voluptate velit esse "
-          "cillum dolore eu fugiat nulla pariatur.\n"
-          "\n"
-          "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-          "officia deserunt mollit anim id est laborum."));
+      text_view_->SetText(
+          u"Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
+          u"eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut "
+          u"enim ad minim veniam, quis nostrud exercitation ullamco laboris "
+          u"nisi ut aliquip ex ea commodo consequat.\n"
+          u"Duis aute irure dolor in reprehenderit in voluptate velit esse "
+          u"cillum dolore eu fugiat nulla pariatur.\n"
+          u"\n"
+          u"Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
+          u"officia deserunt mollit anim id est laborum.");
       break;
     case 2:
-      text_view_->SetText(base::ASCIIToUTF16(
-          "The quick && &brown fo&x jumps over the lazy dog."));
+      text_view_->SetText(u"The quick && &brown fo&x jumps over the lazy dog.");
       break;
     case 3:
-      text_view_->SetText(base::WideToUTF16(
-          L"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
-          L"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
-          L"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
-          L"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
-          L"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
-          L"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
-          L"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
-          L"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd!"));
+      text_view_->SetText(
+          u"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
+          u"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
+          u"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
+          u"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
+          u"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
+          u"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
+          u"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd! "
+          u"\x5e9\x5dc\x5d5\x5dd \x5d4\x5e2\x5d5\x5dc\x5dd!");
       break;
   }
 }

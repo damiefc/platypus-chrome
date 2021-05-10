@@ -2,14 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertNotReached} from '../chrome_util.js';
+import {assert, assertNotReached} from '../chrome_util.js';
+import {reportError} from '../error.js';
 import {
+  ErrorLevel,
+  ErrorType,
   Facing,
   FpsRangeList,  // eslint-disable-line no-unused-vars
   Resolution,
   ResolutionList,  // eslint-disable-line no-unused-vars
   VideoConfig,     // eslint-disable-line no-unused-vars
 } from '../type.js';
+import {WaitableEvent} from '../waitable_event.js';
+
+import {closeWhenUnload} from './util.js';
 
 /**
  * Parse the entry data according to its type.
@@ -79,6 +85,19 @@ function getMetadataData(metadata, tag) {
 let instance = null;
 
 /**
+ * A ready event which should be signaled once the camera resource is ready.
+ * @type {!WaitableEvent}
+ */
+const readyEvent = new WaitableEvent();
+
+/**
+ * Notified when the camera resource is ready.
+ */
+export function notifyCameraResourceReady() {
+  readyEvent.signal();
+}
+
+/**
  * Operates video capture device through CrOS Camera App Mojo interface.
  */
 export class DeviceOperator {
@@ -103,6 +122,17 @@ export class DeviceOperator {
         this.deviceProvider_.isSupported().then(({isSupported}) => {
           return isSupported;
         });
+
+    /**
+     * Map which maps from device id to the remote of devices. We want to have
+     * only one remote for each devices to avoid unnecessary wastes of resources
+     * and also makes it easier to control the connection.
+     * @type {!Map<string, !cros.mojom.CameraAppDeviceRemote>}
+     * @private
+     */
+    this.devices_ = new Map();
+
+    closeWhenUnload(this.deviceProvider_);
   }
 
   /**
@@ -113,6 +143,11 @@ export class DeviceOperator {
    * @throws {!Error} Thrown when given device id is invalid.
    */
   async getDevice_(deviceId) {
+    const d = this.devices_.get(deviceId);
+    if (d !== undefined) {
+      return d;
+    }
+
     const {device, status} =
         await this.deviceProvider_.getCameraAppDevice(deviceId);
     if (status === cros.mojom.GetCameraAppDeviceStatus.ERROR_INVALID_ID) {
@@ -121,7 +156,26 @@ export class DeviceOperator {
     if (device === null) {
       throw new Error('Unknown error');
     }
+    device.onConnectionError.addListener(() => {
+      this.dropConnection(deviceId);
+    });
+    this.devices_.set(deviceId, device);
     return device;
+  }
+
+  /**
+   * Gets metadata for the given device from its static characteristics.
+   * @param {string} deviceId The id of target camera device.
+   * @param {!cros.mojom.CameraMetadataTag} tag Camera metadata tag to query.
+   * @return {!Promise<!Array<number>>} Promise of the corresponding data
+   *     array.
+   * @throws {!Error} Thrown when given device id is invalid.
+   */
+  async getStaticMetadata(deviceId, tag) {
+    const device = await this.getDevice_(deviceId);
+    const {cameraInfo} = await device.getCameraInfo();
+    const staticMetadata = cameraInfo.staticCameraCharacteristics;
+    return getMetadataData(staticMetadata, tag);
   }
 
   /**
@@ -137,11 +191,8 @@ export class DeviceOperator {
     const typeOutputStream = 0;
     const numElementPerEntry = 4;
 
-    const device = await this.getDevice_(deviceId);
-    const {cameraInfo} = await device.getCameraInfo();
-    const staticMetadata = cameraInfo.staticCameraCharacteristics;
-    const streamConfigs = getMetadataData(
-        staticMetadata,
+    const streamConfigs = await this.getStaticMetadata(
+        deviceId,
         cros.mojom.CameraMetadataTag
             .ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS);
     // The data of |streamConfigs| looks like:
@@ -177,11 +228,8 @@ export class DeviceOperator {
     const oneSecondInNs = 1e9;
     const numElementPerEntry = 4;
 
-    const device = await this.getDevice_(deviceId);
-    const {cameraInfo} = await device.getCameraInfo();
-    const staticMetadata = cameraInfo.staticCameraCharacteristics;
-    const minFrameDurationConfigs = getMetadataData(
-        staticMetadata,
+    const minFrameDurationConfigs = await this.getStaticMetadata(
+        deviceId,
         cros.mojom.CameraMetadataTag
             .ANDROID_SCALER_AVAILABLE_MIN_FRAME_DURATIONS);
     // The data of |minFrameDurationConfigs| looks like:
@@ -222,6 +270,12 @@ export class DeviceOperator {
         return Facing.USER;
       case cros.mojom.CameraFacing.CAMERA_FACING_EXTERNAL:
         return Facing.EXTERNAL;
+      case cros.mojom.CameraFacing.CAMERA_FACING_VIRTUAL_BACK:
+        return Facing.VIRTUAL_ENV;
+      case cros.mojom.CameraFacing.CAMERA_FACING_VIRTUAL_FRONT:
+        return Facing.VIRTUAL_USER;
+      case cros.mojom.CameraFacing.CAMERA_FACING_VIRTUAL_EXTERNAL:
+        return Facing.VIRTUAL_EXT;
       default:
         assertNotReached(`Unexpected facing value: ${facing}`);
     }
@@ -239,11 +293,8 @@ export class DeviceOperator {
   async getSupportedFpsRanges(deviceId) {
     const numElementPerEntry = 2;
 
-    const device = await this.getDevice_(deviceId);
-    const {cameraInfo} = await device.getCameraInfo();
-    const staticMetadata = cameraInfo.staticCameraCharacteristics;
-    const availableFpsRanges = getMetadataData(
-        staticMetadata,
+    const availableFpsRanges = await this.getStaticMetadata(
+        deviceId,
         cros.mojom.CameraMetadataTag
             .ANDROID_CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
     // The data of |availableFpsRanges| looks like:
@@ -263,70 +314,65 @@ export class DeviceOperator {
   }
 
   /**
-   * Sets the stream configurations for target device.
+   * Gets the active array size for given device.
    * @param {string} deviceId The renderer-facing device id of the target camera
    *     which could be retrieved from MediaDeviceInfo.deviceId.
-   * @param {!MediaStreamConstraints} constraints The constraints including fps
-   *     range and the resolution. If frame rate range negotiation is needed,
-   *     the caller should either set exact field or set both min and max fields
-   *     for frame rate property.
-   * @param {{stillCaptureResolution: (!Resolution|undefined)}=} optConfig
-   *     Optional configurations for streams.
-   * @throws {!Error} Thrown when the input contains invalid values or the
-   *     device operation is not supported.
+   * @return {!Promise<!Resolution>} Promise of the active array size.
+   * @throws {!Error} Thrown when fail to parse the metadata or the device
+   *     operation is not supported.
    */
-  async setStreamConfig(deviceId, constraints, optConfig = {}) {
-    let /** number */ minFrameRate = 0;
-    let /** number */ maxFrameRate = 0;
+  async getActiveArraySize(deviceId) {
+    const activeArray = await this.getStaticMetadata(
+        deviceId,
+        cros.mojom.CameraMetadataTag.ANDROID_SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+    assert(activeArray.length === 4);
+    const width = activeArray[2] - activeArray[0];
+    const height = activeArray[3] - activeArray[1];
+    return new Resolution(width, height);
+  }
 
-    if (constraints && constraints.video) {
-      // We only support number type for width and height. If width or height
-      // is other than a number (e.g. ConstrainLong, undefined, etc.), we should
-      // throw an error.
-      if (typeof constraints.video.width !== 'number') {
-        throw new Error('width in constraints is expected to be a number');
-      }
-      if (typeof constraints.video.height !== 'number') {
-        throw new Error('height in constraints is expected to be a number');
-      }
+  /**
+   * Gets the sensor orientation for given device.
+   * @param {string} deviceId The renderer-facing device id of the target camera
+   *     which could be retrieved from MediaDeviceInfo.deviceId.
+   * @return {!Promise<number>} Promise of the sensor orientation.
+   * @throws {!Error} Thrown when fail to parse the metadata or the device
+   *     operation is not supported.
+   */
+  async getSensorOrientation(deviceId) {
+    const sensorOrientation = await this.getStaticMetadata(
+        deviceId, cros.mojom.CameraMetadataTag.ANDROID_SENSOR_ORIENTATION);
+    assert(sensorOrientation.length === 1);
+    return sensorOrientation[0];
+  }
 
-      if (constraints.video.frameRate) {
-        const frameRate = constraints.video.frameRate;
-        if (frameRate.exact) {
-          minFrameRate = frameRate.exact;
-          maxFrameRate = frameRate.exact;
-        } else if (frameRate.min && frameRate.max) {
-          minFrameRate = frameRate.min;
-          maxFrameRate = frameRate.max;
-        }
-        // TODO(wtlee): To set the fps range to the default value, we should
-        // remove the frameRate from constraints instead of using incomplete
-        // range.
-      }
-    }
-
-    const hasSpecifiedFrameRateRange = minFrameRate > 0 && maxFrameRate > 0;
-    // If the frame rate range is specified in |constraints|, we should try to
-    // set the frame rate range and should report error if fails since it is
-    // unexpected.
-    //
-    // Otherwise, if the frame rate is incomplete or totally missing in
-    // |constraints| , we assume the app wants to use default frame rate range.
-    // We set the frame rate range to an invalid range (e.g. 0 fps) so that it
-    // will fallback to use the default one.
+  /**
+   * Sets the frame rate range in VCD. If the range is invalid (e.g. 0 fps), VCD
+   * will fallback to use the default one.
+   * @param {string} deviceId
+   * @param {number} min
+   * @param {number} max
+   * @return {!Promise}
+   */
+  async setFpsRange(deviceId, min, max) {
+    const hasSpecifiedFrameRateRange = min > 0 && max > 0;
     const device = await this.getDevice_(deviceId);
-
-    const {isSuccess} =
-        await device.setFpsRange({start: minFrameRate, end: maxFrameRate});
+    const {isSuccess} = await device.setFpsRange({start: min, end: max});
     if (!isSuccess && hasSpecifiedFrameRateRange) {
-      console.error('Failed to negotiate the frame rate range.');
+      reportError(
+          ErrorType.SET_FPS_RANGE_FAILURE, ErrorLevel.ERROR,
+          new Error('Failed to negotiate the frame rate range.'));
     }
-    if (optConfig.stillCaptureResolution !== undefined) {
-      await device.setStillCaptureResolution({
-        width: optConfig.stillCaptureResolution.width,
-        height: optConfig.stillCaptureResolution.height,
-      });
-    }
+  }
+
+  /**
+   * @param {string} deviceId
+   * @param {!Resolution} resolution
+   * @return {!Promise}
+   */
+  async setStillCaptureResolution(deviceId, resolution) {
+    const device = await this.getDevice_(deviceId);
+    await device.setStillCaptureResolution(resolution);
   }
 
   /**
@@ -356,17 +402,15 @@ export class DeviceOperator {
     const portraitModeTag =
         /** @type{!cros.mojom.CameraMetadataTag} */ (-0x80000000);
 
-    const device = await this.getDevice_(deviceId);
-    const {cameraInfo} = await device.getCameraInfo();
-    return getMetadataData(
-               cameraInfo.staticCameraCharacteristics, portraitModeTag)
-               .length > 0;
+    const portraitMode =
+        await this.getStaticMetadata(deviceId, portraitModeTag);
+    return portraitMode.length > 0;
   }
 
   /**
    * Adds a metadata observer to Camera App Device through Mojo IPC.
    * @param {string} deviceId The id for target camera device.
-   * @param {function(!cros.mojom.CameraMetadata)} callback Callback that
+   * @param {function(!cros.mojom.CameraMetadata): void} callback Callback that
    *     handles the metadata.
    * @param {!cros.mojom.StreamType} streamType Stream type which the observer
    *     gets the metadata from.
@@ -377,6 +421,7 @@ export class DeviceOperator {
   async addMetadataObserver(deviceId, callback, streamType) {
     const observerCallbackRouter =
         new cros.mojom.ResultMetadataObserverCallbackRouter();
+    closeWhenUnload(observerCallbackRouter);
     observerCallbackRouter.onMetadataAvailable.addListener(callback);
 
     const device = await this.getDevice_(deviceId);
@@ -408,13 +453,14 @@ export class DeviceOperator {
    * underlying camera HAL after sensor finishes frame capturing.
    *
    * @param {string} deviceId The id for target camera device.
-   * @param {function()} callback Callback to trigger on shutter done.
+   * @param {function(): void} callback Callback to trigger on shutter done.
    * @return {!Promise<number>} Id for the added observer.
    * @throws {!Error} if fails to construct device connection.
    */
   async addShutterObserver(deviceId, callback) {
     const observerCallbackRouter =
         new cros.mojom.CameraEventObserverCallbackRouter();
+    closeWhenUnload(observerCallbackRouter);
     observerCallbackRouter.onShutterDone.addListener(callback);
 
     const device = await this.getDevice_(deviceId);
@@ -458,11 +504,60 @@ export class DeviceOperator {
   }
 
   /**
+   * Changes whether the camera frame rotation is enabled inside the Chrome OS
+   * video capture device.
+   * @param {string} deviceId The id of target camera device.
+   * @param {boolean} isEnabled Whether to enable the camera frame rotation at
+   *     source.
+   * @return {!Promise<boolean>} Whether the operation was successful.
+   */
+  async setCameraFrameRotationEnabledAtSource(deviceId, isEnabled) {
+    const device = await this.getDevice_(deviceId);
+    const {isSuccess} =
+        await device.setCameraFrameRotationEnabledAtSource(isEnabled);
+    return isSuccess;
+  }
+
+  /**
+   * Gets the clock-wise rotation applied on the raw camera frame in order to
+   * display the camera preview upright in the UI.
+   * @param {string} deviceId The id of target camera device.
+   * @return {!Promise<number>} The camera frame rotation.
+   */
+  async getCameraFrameRotation(deviceId) {
+    const device = await this.getDevice_(deviceId);
+    const {rotation} = await device.getCameraFrameRotation();
+    return rotation;
+  }
+
+  /**
+   * Drops the connection to the video capture device in Chrome.
+   * @param {string} deviceId Id of the target device.
+   */
+  dropConnection(deviceId) {
+    this.devices_.delete(deviceId);
+  }
+
+  /**
+   * Enables/Disables multiple streams on target camera device. The extra
+   * stream will be reported as virtual video device from
+   * navigator.mediaDevices.enumerateDevices().
+   * @param {string} deviceId The id of target camera device.
+   * @param {boolean} enabled True for enabling multiple streams.
+   */
+  async setMultipleStreamsEnabled(deviceId, enabled) {
+    if (deviceId) {
+      await this.deviceProvider_.setMultipleStreamsEnabled(deviceId, enabled);
+    }
+  }
+
+  /**
    * Creates a new instance of DeviceOperator if it is not set. Returns the
    *     exist instance.
    * @return {!Promise<?DeviceOperator>} The singleton instance.
    */
   static async getInstance() {
+    await readyEvent.wait();
     if (instance === null) {
       instance = new DeviceOperator();
     }

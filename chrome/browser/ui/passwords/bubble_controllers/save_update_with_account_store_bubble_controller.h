@@ -8,6 +8,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/passwords/bubble_controllers/password_bubble_controller_base.h"
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
 
@@ -43,8 +44,8 @@ class SaveUpdateWithAccountStoreBubbleController
 
   // Called by the view code when username or password is corrected using
   // the username correction or password selection features in PendingView.
-  void OnCredentialEdited(base::string16 new_username,
-                          base::string16 new_password);
+  void OnCredentialEdited(std::u16string new_username,
+                          std::u16string new_password);
 
   // The password bubble can switch its state between "save" and "update"
   // depending on the user input. |state_| only captures the correct state on
@@ -92,11 +93,11 @@ class SaveUpdateWithAccountStoreBubbleController
   bool DidAuthForAccountStoreOptInFail() const;
 
   // PasswordBubbleControllerBase methods:
-  base::string16 GetTitle() const override;
+  std::u16string GetTitle() const override;
 
   password_manager::ui::State state() const { return state_; }
 
-  const autofill::PasswordForm& pending_password() const {
+  const password_manager::PasswordForm& pending_password() const {
     return pending_password_;
   }
 
@@ -108,10 +109,6 @@ class SaveUpdateWithAccountStoreBubbleController
 
 #if defined(UNIT_TEST)
   void set_clock(base::Clock* clock) { clock_ = clock; }
-
-  void allow_passwords_revealing() {
-    password_revealing_requires_reauth_ = false;
-  }
 
   bool password_revealing_requires_reauth() const {
     return password_revealing_requires_reauth_;
@@ -125,8 +122,8 @@ class SaveUpdateWithAccountStoreBubbleController
   // Origin of the page from where this bubble was triggered.
   url::Origin origin_;
   password_manager::ui::State state_;
-  autofill::PasswordForm pending_password_;
-  std::vector<autofill::PasswordForm> existing_credentials_;
+  password_manager::PasswordForm pending_password_;
+  std::vector<password_manager::PasswordForm> existing_credentials_;
   password_manager::InteractionsStats interaction_stats_;
   password_manager::metrics_util::UIDisplayDisposition display_disposition_;
 

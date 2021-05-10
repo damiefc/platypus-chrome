@@ -12,7 +12,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/synchronization/waitable_event.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -29,7 +29,6 @@ using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 using content::BrowserThread;
 using content::StoragePartition;
-using storage::QuotaClient;
 using storage::QuotaManager;
 
 namespace android_webview {
@@ -173,7 +172,7 @@ StoragePartition* AwQuotaManagerBridge::GetStoragePartition() const {
 
   // AndroidWebview does not use per-site storage partitions.
   StoragePartition* storage_partition =
-      content::BrowserContext::GetDefaultStoragePartition(browser_context_);
+      browser_context_->GetDefaultStoragePartition();
   DCHECK(storage_partition);
   return storage_partition;
 }
@@ -208,14 +207,14 @@ void AwQuotaManagerBridge::DeleteAllDataOnUiThread() {
 void AwQuotaManagerBridge::DeleteOrigin(JNIEnv* env,
                                         const JavaParamRef<jobject>& object,
                                         const JavaParamRef<jstring>& origin) {
-  base::string16 origin_string(
+  std::u16string origin_string(
       base::android::ConvertJavaStringToUTF16(env, origin));
   RunOnUIThread(base::BindOnce(&AwQuotaManagerBridge::DeleteOriginOnUiThread,
                                this, origin_string));
 }
 
 void AwQuotaManagerBridge::DeleteOriginOnUiThread(
-    const base::string16& origin) {
+    const std::u16string& origin) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   StoragePartition* storage_partition = GetStoragePartition();
   storage_partition->ClearDataForOrigin(
@@ -286,7 +285,7 @@ void AwQuotaManagerBridge::GetUsageAndQuotaForOrigin(
     const JavaParamRef<jstring>& origin,
     jint callback_id,
     bool is_quota) {
-  base::string16 origin_string(
+  std::u16string origin_string(
       base::android::ConvertJavaStringToUTF16(env, origin));
   RunOnUIThread(
       base::BindOnce(&AwQuotaManagerBridge::GetUsageAndQuotaForOriginOnUiThread,
@@ -294,7 +293,7 @@ void AwQuotaManagerBridge::GetUsageAndQuotaForOrigin(
 }
 
 void AwQuotaManagerBridge::GetUsageAndQuotaForOriginOnUiThread(
-    const base::string16& origin,
+    const std::u16string& origin,
     jint callback_id,
     bool is_quota) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);

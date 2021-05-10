@@ -33,6 +33,9 @@ class SimRequestBase {
     // if |redirect_url| is non-empty.
     String redirect_url;
 
+    // Referrer URL that should be included in response.
+    String referrer;
+
     WTF::HashMap<String, String> response_http_headers;
 
     // The HTTP status code of the response. |response_http_status| is ignored
@@ -79,6 +82,7 @@ class SimRequestBase {
   KURL url_;
   String redirect_url_;
   String mime_type_;
+  String referrer_;
   bool start_immediately_;
   bool started_;
   WebURLResponse response_;
@@ -115,4 +119,4 @@ class SimSubresourceRequest final : public SimRequestBase {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_TESTING_SIM_SIM_REQUEST_H_

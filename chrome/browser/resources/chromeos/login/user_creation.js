@@ -34,7 +34,7 @@ const SignInMethod = {
 };
 
 Polymer({
-  is: 'user-creation',
+  is: 'user-creation-element',
 
   behaviors: [
     OobeI18nBehavior,
@@ -149,5 +149,12 @@ Polymer({
     }
   },
 
+  onLearnMoreClicked_() {
+    this.$.learnMoreDialog.showDialog();
+  },
+
+  focusLearnMoreLink_() {
+    this.$.learnMoreLink.focus();
+  },
 });
 })();

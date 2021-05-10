@@ -315,19 +315,33 @@ void ServiceWorkerMetrics::RecordActivateEventStatus(
 }
 
 void ServiceWorkerMetrics::RecordInstallEventStatus(
-    blink::ServiceWorkerStatusCode status) {
-  UMA_HISTOGRAM_ENUMERATION("ServiceWorker.InstallEventStatus", status);
+    blink::ServiceWorkerStatusCode status,
+    uint32_t fetch_count) {
+  base::UmaHistogramEnumeration("ServiceWorker.InstallEvent.All.Status",
+                                status);
+  base::UmaHistogramCounts1000("ServiceWorker.InstallEvent.All.FetchCount",
+                               fetch_count);
+  if (fetch_count > 0) {
+    base::UmaHistogramEnumeration("ServiceWorker.InstallEvent.WithFetch.Status",
+                                  status);
+  }
 }
 
 void ServiceWorkerMetrics::RecordEventDuration(EventType event,
                                                base::TimeDelta time,
-                                               bool was_handled) {
+                                               bool was_handled,
+                                               uint32_t fetch_count) {
   switch (event) {
     case EventType::ACTIVATE:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.ActivateEvent.Time", time);
       break;
     case EventType::INSTALL:
-      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.InstallEvent.Time", time);
+      base::UmaHistogramMediumTimes("ServiceWorker.InstallEvent.All.Time",
+                                    time);
+      if (fetch_count) {
+        base::UmaHistogramMediumTimes(
+            "ServiceWorker.InstallEvent.WithFetch.Time", time);
+      }
       break;
     case EventType::FETCH_MAIN_FRAME:
     case EventType::FETCH_SUB_FRAME:
@@ -430,16 +444,6 @@ void ServiceWorkerMetrics::RecordFetchEventStatus(
 
 void ServiceWorkerMetrics::RecordStartWorkerTiming(const StartTimes& times,
                                                    StartSituation situation) {
-  if (!ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
-    // This is in-process timing, so process consistency doesn't matter.
-    constexpr base::TimeDelta kMinTime = base::TimeDelta::FromMicroseconds(1);
-    constexpr base::TimeDelta kMaxTime = base::TimeDelta::FromMilliseconds(100);
-    constexpr int kBuckets = 50;
-    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
-        "ServiceWorker.StartTiming.BrowserThreadHopTime", times.thread_hop_time,
-        kMinTime, kMaxTime, kBuckets);
-  }
-
   // Bail if the timings across processes weren't consistent.
   if (!base::TimeTicks::IsHighResolution() ||
       !base::TimeTicks::IsConsistentAcrossProcesses()) {
@@ -565,8 +569,25 @@ void ServiceWorkerMetrics::RecordLookupRegistrationTime(
   }
 }
 
-void ServiceWorkerMetrics::RecordGetAllOriginsInfoTime(base::TimeDelta time) {
-  base::UmaHistogramMediumTimes("ServiceWorker.GetAllOriginsInfoTime", time);
+void ServiceWorkerMetrics::RecordOfflineCapableReason(
+    blink::ServiceWorkerStatusCode status,
+    int status_code) {
+  if (status == blink::ServiceWorkerStatusCode::kErrorTimeout) {
+    base::UmaHistogramEnumeration("ServiceWorker.OfflineCapable.Reason",
+                                  OfflineCapableReason::kTimeout);
+    return;
+  } else if (status == blink::ServiceWorkerStatusCode::kOk) {
+    if (200 <= status_code && status_code <= 299) {
+      base::UmaHistogramEnumeration("ServiceWorker.OfflineCapable.Reason",
+                                    OfflineCapableReason::kSuccess);
+      return;
+    } else if (300 <= status_code && status_code <= 399) {
+      base::UmaHistogramEnumeration("ServiceWorker.OfflineCapable.Reason",
+                                    OfflineCapableReason::kRedirect);
+      return;
+    }
+  }
+  NOTREACHED();
 }
 
 }  // namespace content

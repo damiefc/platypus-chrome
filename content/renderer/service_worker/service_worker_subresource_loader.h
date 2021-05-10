@@ -8,7 +8,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "content/renderer/service_worker/controller_service_worker_connector.h"
@@ -48,7 +48,6 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
   // to see how each parameter is used.
   ServiceWorkerSubresourceLoader(
       mojo::PendingReceiver<network::mojom::URLLoader>,
-      int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& resource_request,
@@ -172,16 +171,15 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
   // Observes |controller_connector_| while this loader dispatches a fetch event
   // to the controller. If a broken connection is observed, this loader attempts
   // to restart the controller and dispatch the event again.
-  ScopedObserver<ControllerServiceWorkerConnector,
-                 ControllerServiceWorkerConnector::Observer>
-      controller_connector_observer_{this};
+  base::ScopedObservation<ControllerServiceWorkerConnector,
+                          ControllerServiceWorkerConnector::Observer>
+      controller_connector_observation_{this};
   bool fetch_request_restarted_;
   bool body_reading_complete_;
   bool side_data_reading_complete_;
 
   // These are given by the constructor (as the params for
   // URLLoaderFactory::CreateLoaderAndStart).
-  const int routing_id_;
   const int request_id_;
   const uint32_t options_;
   net::MutableNetworkTrafficAnnotationTag traffic_annotation_;
@@ -248,7 +246,6 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoaderFactory
   // network::mojom::URLLoaderFactory overrides:
   void CreateLoaderAndStart(
       mojo::PendingReceiver<network::mojom::URLLoader> receiver,
-      int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& resource_request,

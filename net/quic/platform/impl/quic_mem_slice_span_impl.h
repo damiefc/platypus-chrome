@@ -7,7 +7,6 @@
 
 #include "base/memory/ref_counted.h"
 #include "net/base/io_buffer.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 #include "net/third_party/quiche/src/quic/core/quic_types.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_mem_slice.h"
 
@@ -28,8 +27,8 @@ class QUIC_EXPORT_PRIVATE QuicMemSliceSpanImpl {
 
   ~QuicMemSliceSpanImpl();
 
-  quiche::QuicheStringPiece GetData(size_t index) {
-    return quiche::QuicheStringPiece(buffers_[index]->data(), lengths_[index]);
+  absl::string_view GetData(size_t index) {
+    return absl::string_view(buffers_[index]->data(), lengths_[index]);
   }
 
   template <typename ConsumeFunction>

@@ -17,19 +17,27 @@
 #include "third_party/blink/renderer/platform/heap/heap_allocator.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
+#include "third_party/blink/renderer/platform/supplementable.h"
 
 namespace blink {
 
+class NavigatorBase;
 class ScriptPromise;
 class ScriptState;
 class V8LockGrantedCallback;
 
 class LockManager final : public ScriptWrappable,
+                          public Supplement<NavigatorBase>,
                           public ExecutionContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  explicit LockManager(ExecutionContext*);
+  static const char kSupplementName[];
+
+  // Web-exposed as navigator.locks
+  static LockManager* locks(NavigatorBase&);
+
+  explicit LockManager(NavigatorBase&);
 
   ScriptPromise request(ScriptState*,
                         const String& name,
@@ -74,12 +82,8 @@ class LockManager final : public ScriptWrappable,
   HeapHashSet<Member<LockRequestImpl>> pending_requests_;
   HeapHashSet<Member<Lock>> held_locks_;
 
-  HeapMojoRemote<mojom::blink::LockManager,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
-      service_;
-  HeapMojoRemote<mojom::blink::FeatureObserver,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
-      observer_;
+  HeapMojoRemote<mojom::blink::LockManager> service_;
+  HeapMojoRemote<mojom::blink::FeatureObserver> observer_;
 
   base::Optional<bool> cached_allowed_;
 

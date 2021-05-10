@@ -18,12 +18,13 @@
 #include "mojo/public/cpp/bindings/remote_set.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info_notifier.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
-#include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_container.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom-forward.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_worker_client_registry.mojom.h"
 #include "third_party/blink/public/mojom/timing/worker_timing_container.mojom-forward.h"
 #include "third_party/blink/public/mojom/worker/subresource_loader_updater.mojom.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -31,15 +32,15 @@
 #include "url/gurl.h"
 
 namespace blink {
+class ResourceLoadInfoNotifierWrapper;
+class URLLoaderThrottleProvider;
+class WeakWrapperResourceLoadInfoNotifier;
 class WebFrameRequestBlocker;
+class WebServiceWorkerProviderContext;
+class WebSocketHandshakeThrottleProvider;
 }  // namespace blink
 
 namespace content {
-
-class ResourceDispatcher;
-class ServiceWorkerProviderContext;
-class URLLoaderThrottleProvider;
-class WebSocketHandshakeThrottleProvider;
 
 // This class is used for fetching resource requests from workers (dedicated
 // worker and shared worker). This class is created on the main thread and
@@ -70,8 +71,8 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   // because it might additionally support non-NetworkService schemes (e.g.,
   // chrome-extension://).
   static scoped_refptr<WebWorkerFetchContextImpl> Create(
-      ServiceWorkerProviderContext* provider_context,
-      blink::mojom::RendererPreferences renderer_preferences,
+      blink::WebServiceWorkerProviderContext* provider_context,
+      const blink::RendererPreferences& renderer_preferences,
       mojo::PendingReceiver<blink::mojom::RendererPreferenceWatcher>
           watcher_receiver,
       std::unique_ptr<network::PendingSharedURLLoaderFactory>
@@ -90,10 +91,10 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   scoped_refptr<WebWorkerFetchContextImpl> CloneForNestedWorkerDeprecated(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   // For PlzDedicatedWorker. The cloned fetch context does not inherit some
-  // fields (e.g., ServiceWorkerProviderContext) from this fetch context, and
-  // instead that takes values passed from the browser process.
+  // fields (e.g., blink::WebServiceWorkerProviderContext) from this fetch
+  // context, and instead that takes values passed from the browser process.
   scoped_refptr<WebWorkerFetchContextImpl> CloneForNestedWorker(
-      ServiceWorkerProviderContext* service_worker_provider_context,
+      blink::WebServiceWorkerProviderContext* service_worker_provider_context,
       std::unique_ptr<network::PendingSharedURLLoaderFactory>
           pending_loader_factory,
       std::unique_ptr<network::PendingSharedURLLoaderFactory>
@@ -159,7 +160,7 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   void set_site_for_cookies(const net::SiteForCookies& site_for_cookies);
   void set_top_frame_origin(const blink::WebSecurityOrigin& top_frame_origin);
 
-  void set_client_id(const std::string& client_id);
+  void set_client_id(const blink::WebString& client_id);
 
   using RewriteURLFunction = blink::WebURL (*)(base::StringPiece, bool);
   static void InstallRewriteURLFunction(RewriteURLFunction rewrite_url);
@@ -173,9 +174,8 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
       int request_id,
       mojo::PendingReceiver<blink::mojom::WorkerTimingContainer> receiver);
 
-  blink::CrossVariantMojoRemote<
-      blink::mojom::ResourceLoadInfoNotifierInterfaceBase>
-  CloneResourceLoadInfoNotifier() override;
+  std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+  CreateResourceLoadInfoNotifierWrapper() override;
 
  private:
   class Factory;
@@ -191,7 +191,7 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   //
   // Regarding the rest of params, see the comments on Create().
   WebWorkerFetchContextImpl(
-      blink::mojom::RendererPreferences renderer_preferences,
+      const blink::RendererPreferences& renderer_preferences,
       mojo::PendingReceiver<blink::mojom::RendererPreferenceWatcher>
           watcher_receiver,
       mojo::PendingReceiver<blink::mojom::ServiceWorkerWorkerClient>
@@ -206,8 +206,8 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
           pending_fallback_factory,
       mojo::PendingReceiver<blink::mojom::SubresourceLoaderUpdater>
           pending_subresource_loader_updater,
-      std::unique_ptr<URLLoaderThrottleProvider> throttle_provider,
-      std::unique_ptr<WebSocketHandshakeThrottleProvider>
+      std::unique_ptr<blink::URLLoaderThrottleProvider> throttle_provider,
+      std::unique_ptr<blink::WebSocketHandshakeThrottleProvider>
           websocket_handshake_throttle_provider,
       const std::vector<std::string>& cors_exempt_header_list,
       mojo::PendingRemote<blink::mojom::ResourceLoadInfoNotifier>
@@ -242,7 +242,11 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
           subresource_loader_factories) override;
 
   // Implements blink::mojom::RendererPreferenceWatcher.
-  void NotifyUpdate(blink::mojom::RendererPreferencesPtr new_prefs) override;
+  void NotifyUpdate(const blink::RendererPreferences& new_prefs) override;
+
+  void ResetWeakWrapperResourceLoadInfoNotifier();
+
+  blink::WebVector<blink::WebString> cors_exempt_header_list();
 
   // |receiver_| and |service_worker_worker_client_registry_| may be null if
   // this context can't use service workers. See comments for Create().
@@ -273,17 +277,14 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   // Initialized on the worker thread when InitializeOnWorkerThread() is called.
   // This can be null if the |provider_context| passed to Create() was null or
   // already being destructed (see
-  // ServiceWorkerProviderContext::OnNetworkProviderDestroyed()).
+  // content::ServiceWorkerProviderContext::OnNetworkProviderDestroyed()).
   mojo::Remote<blink::mojom::ServiceWorkerContainerHost>
       service_worker_container_host_;
 
   // The Client#id value of the shared worker or dedicated worker (since
   // dedicated workers are not yet service worker clients, it is the parent
   // document's id in that case). Passed to ControllerServiceWorkerConnector.
-  std::string client_id_;
-
-  // Initialized on the worker thread when InitializeOnWorkerThread() is called.
-  std::unique_ptr<ResourceDispatcher> resource_dispatcher_;
+  blink::WebString client_id_;
 
   // Initialized on the worker thread when InitializeOnWorkerThread() is called.
   // |loader_factory_| is used for regular loading by the worker. In
@@ -322,7 +323,7 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   net::SiteForCookies site_for_cookies_;
   base::Optional<url::Origin> top_frame_origin_;
 
-  blink::mojom::RendererPreferences renderer_preferences_;
+  blink::RendererPreferences renderer_preferences_;
 
   // |preference_watcher_receiver_| and |child_preference_watchers_| are for
   // keeping track of updates in the renderer preferences.
@@ -342,8 +343,8 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   // Blink by GetURLLoaderFactory().
   std::unique_ptr<Factory> web_loader_factory_;
 
-  std::unique_ptr<URLLoaderThrottleProvider> throttle_provider_;
-  std::unique_ptr<WebSocketHandshakeThrottleProvider>
+  std::unique_ptr<blink::URLLoaderThrottleProvider> throttle_provider_;
+  std::unique_ptr<blink::WebSocketHandshakeThrottleProvider>
       websocket_handshake_throttle_provider_;
 
   std::vector<std::string> cors_exempt_header_list_;
@@ -351,10 +352,15 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   mojo::PendingRemote<blink::mojom::ResourceLoadInfoNotifier>
       pending_resource_load_info_notifier_;
 
-  // Used to send the ResourceLoadInfo of the main script for dedicated
-  // workers only when PlzDedicatedWorker is enabled.
+  // Used to notify the loading stats by ResourceLoadInfo struct for dedicated
+  // workers.
   mojo::Remote<blink::mojom::ResourceLoadInfoNotifier>
       resource_load_info_notifier_;
+
+  // Wrap a raw blink::mojom::ResourceLoadInfoNotifier pointer directed at
+  // |resource_load_info_notifier_|'s receiver.
+  std::unique_ptr<blink::WeakWrapperResourceLoadInfoNotifier>
+      weak_wrapper_resource_load_info_notifier_;
 
   blink::AcceptLanguagesWatcher* accept_languages_watcher_ = nullptr;
 

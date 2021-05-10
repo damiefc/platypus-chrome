@@ -10,20 +10,24 @@ import android.content.DialogInterface;
 import android.content.res.Configuration;
 import android.view.View;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.keyboard_accessory.ManualFillingComponent;
+import org.chromium.chrome.browser.keyboard_accessory.ManualFillingComponentSupplier;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabModelSelectorSupplier;
 import org.chromium.components.autofill.AutofillDelegate;
 import org.chromium.components.autofill.AutofillPopup;
 import org.chromium.components.autofill.AutofillSuggestion;
 import org.chromium.content_public.browser.WebContentsAccessibility;
 import org.chromium.ui.DropdownItem;
-import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.WindowAndroid;
 
 /**
@@ -37,8 +41,8 @@ public class AutofillPopupBridge implements AutofillDelegate, DialogInterface.On
     private final Context mContext;
     private WebContentsAccessibility mWebContentsAccessibility;
 
-    public AutofillPopupBridge(View anchorView, long nativeAutofillPopupViewAndroid,
-            WindowAndroid windowAndroid) {
+    public AutofillPopupBridge(@NonNull View anchorView, long nativeAutofillPopupViewAndroid,
+            @NonNull WindowAndroid windowAndroid) {
         mNativeAutofillPopup = nativeAutofillPopupViewAndroid;
         Activity activity = windowAndroid.getActivity().get();
         if (activity == null || notEnoughScreenSpace(activity)) {
@@ -47,10 +51,17 @@ public class AutofillPopupBridge implements AutofillDelegate, DialogInterface.On
         } else {
             mAutofillPopup = new AutofillPopup(activity, anchorView, this);
             mContext = activity;
-            ChromeActivity chromeActivity = (ChromeActivity) activity;
-            chromeActivity.getManualFillingComponent().notifyPopupAvailable(mAutofillPopup);
+
+            Supplier<ManualFillingComponent> manualFillingComponentSupplier =
+                    ManualFillingComponentSupplier.from(windowAndroid);
+            // Could be null if this ctor is called as the activity is being destroyed.
+            if (manualFillingComponentSupplier.hasValue()) {
+                manualFillingComponentSupplier.get().notifyPopupAvailable(mAutofillPopup);
+            }
+
+            Tab currentTab = TabModelSelectorSupplier.getCurrentTabFrom(windowAndroid);
             mWebContentsAccessibility = WebContentsAccessibility.fromWebContents(
-                    chromeActivity.getCurrentWebContents());
+                    currentTab == null ? null : currentTab.getWebContents());
         }
     }
 
@@ -114,14 +125,12 @@ public class AutofillPopupBridge implements AutofillDelegate, DialogInterface.On
 
     @CalledByNative
     private void confirmDeletion(String title, String body) {
-        mDeletionDialog =
-                new UiUtils
-                        .CompatibleAlertDialogBuilder(mContext, R.style.Theme_Chromium_AlertDialog)
-                        .setTitle(title)
-                        .setMessage(body)
-                        .setNegativeButton(R.string.cancel, null)
-                        .setPositiveButton(R.string.ok, this)
-                        .create();
+        mDeletionDialog = new AlertDialog.Builder(mContext, R.style.Theme_Chromium_AlertDialog)
+                                  .setTitle(title)
+                                  .setMessage(body)
+                                  .setNegativeButton(R.string.cancel, null)
+                                  .setPositiveButton(R.string.ok, this)
+                                  .create();
         mDeletionDialog.show();
     }
 
@@ -160,6 +169,7 @@ public class AutofillPopupBridge implements AutofillDelegate, DialogInterface.On
      * @param index Index in the array where to place a new suggestion.
      * @param label First line of the suggestion.
      * @param sublabel Second line of the suggestion.
+     * @param itemTag The offer label of the suggestion.
      * @param iconId The resource ID for the icon associated with the suggestion, or 0 for no icon.
      * @param isIconAtStart {@code true} if {@param iconId} is displayed before {@param label}.
      * @param suggestionId Identifier for the suggestion type.
@@ -170,11 +180,11 @@ public class AutofillPopupBridge implements AutofillDelegate, DialogInterface.On
      */
     @CalledByNative
     private static void addToAutofillSuggestionArray(AutofillSuggestion[] array, int index,
-            String label, String sublabel, int iconId, boolean isIconAtStart,
+            String label, String sublabel, String itemTag, int iconId, boolean isIconAtStart,
             int suggestionId, boolean isDeletable, boolean isLabelMultiline, boolean isLabelBold) {
         int drawableId = iconId == 0 ? DropdownItem.NO_ICON : iconId;
-        array[index] = new AutofillSuggestion(label, sublabel, /*itemTag= */ "", drawableId,
-                isIconAtStart, suggestionId, isDeletable, isLabelMultiline, isLabelBold);
+        array[index] = new AutofillSuggestion(label, sublabel, itemTag, drawableId, isIconAtStart,
+                suggestionId, isDeletable, isLabelMultiline, isLabelBold);
     }
 
     @NativeMethods

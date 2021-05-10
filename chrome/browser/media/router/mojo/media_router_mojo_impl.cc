@@ -10,12 +10,14 @@
 
 #include "base/bind.h"
 #include "base/check_op.h"
+#include "base/containers/contains.h"
 #include "base/guid.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/media/cast_mirroring_service_host.h"
 #include "chrome/browser/media/cast_remoting_connector.h"
 #include "chrome/browser/media/router/event_page_request_manager.h"
@@ -61,7 +63,7 @@ content::WebContents* GetWebContentsFromId(
   Profile* profile = Profile::FromBrowserContext(browser_context);
   Profile* incognito_profile =
       include_incognito && profile->HasPrimaryOTRProfile()
-          ? profile->GetPrimaryOTRProfile()
+          ? profile->GetPrimaryOTRProfile(/*create_if_needed=*/true)
           : nullptr;
   for (auto* target_browser : *BrowserList::GetInstance()) {
     if (target_browser->profile() == profile ||
@@ -80,25 +82,9 @@ content::WebContents* GetWebContentsFromId(
   return nullptr;
 }
 
-MediaRouteProviderId FixProviderId(MediaRouteProviderId provider_id) {
-  // This is a hack to ensure the extension handles the CreateRoute call until
-  // the CastMediaRouteProvider supports it.
-  // TODO(crbug.com/698940): Remove check for Cast when CastMediaRouteProvider
-  // supports route management.
-  // TODO(https://crbug.com/808720): Remove check for DIAL when in-browser DIAL
-  // MRP is fully implemented.
-  if ((provider_id == MediaRouteProviderId::CAST &&
-       !CastMediaRouteProviderEnabled()) ||
-      (provider_id == MediaRouteProviderId::DIAL &&
-       !DialMediaRouteProviderEnabled())) {
-    return MediaRouteProviderId::EXTENSION;
-  }
-  return provider_id;
-}
-
 DesktopMediaPickerController::Params MakeDesktopPickerParams(
     content::WebContents* web_contents) {
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   DCHECK(web_contents);
 #endif
 
@@ -115,63 +101,6 @@ DesktopMediaPickerController::Params MakeDesktopPickerParams(
   params.approve_audio_by_default = true;
 
   return params;
-}
-
-// Records the possible ways a Presentation URL can be used to start a
-// presentation, both by the kind of URL and the type of the sink the URL will
-// be presented on.  "Normal" (https:, file:, or chrome-extension:) URLs are
-// typically implemented by loading them into an offscreen tab for streaming,
-// while Cast and DIAL URLs are sent directly to a compatible device.
-enum class PresentationUrlBySink {
-  kUnknown = 0,
-  kNormalUrlToChromecast = 1,
-  kNormalUrlToExtension = 2,
-  kNormalUrlToWiredDisplay = 3,
-  kCastUrlToChromecast = 4,
-  kDialUrlToDial = 5,
-  // Add new values immediately above this line.  Also update kMaxValue below
-  // and the enum of the same name in tools/metrics/histograms/enums.xml.
-  kMaxValue = kDialUrlToDial,
-};
-
-// NOTE: To record this on Android, will need to move to
-// //components/media_router and refactor to avoid the extensions dependency.
-void RecordPresentationRequestUrlBySink(const MediaSource& source,
-                                        MediaRouteProviderId provider_id) {
-  PresentationUrlBySink value = PresentationUrlBySink::kUnknown;
-  // URLs that can be rendered in offscreen tabs (for cloud or Chromecast
-  // sinks), or on a wired display.
-  bool is_normal_url = source.url().SchemeIs(url::kHttpsScheme) ||
-                       source.url().SchemeIs(extensions::kExtensionScheme) ||
-                       source.url().SchemeIs(url::kFileScheme);
-  switch (provider_id) {
-    case MediaRouteProviderId::EXTENSION:
-      if (is_normal_url) {
-        value = PresentationUrlBySink::kNormalUrlToExtension;
-      }
-      break;
-    case MediaRouteProviderId::WIRED_DISPLAY:
-      if (is_normal_url) {
-        value = PresentationUrlBySink::kNormalUrlToWiredDisplay;
-      }
-      break;
-    case MediaRouteProviderId::CAST:
-      if (source.IsCastPresentationUrl()) {
-        value = PresentationUrlBySink::kCastUrlToChromecast;
-      } else if (is_normal_url) {
-        value = PresentationUrlBySink::kNormalUrlToChromecast;
-      }
-      break;
-    case MediaRouteProviderId::DIAL:
-      if (source.IsDialSource()) {
-        value = PresentationUrlBySink::kDialUrlToDial;
-      }
-      break;
-    case MediaRouteProviderId::UNKNOWN:
-      break;
-  }
-  base::UmaHistogramEnumeration("MediaRouter.PresentationRequest.UrlBySink",
-                                value);
 }
 
 }  // namespace
@@ -284,11 +213,11 @@ void MediaRouterMojoImpl::RouteResponseReceived(
   }
 
   if (is_join) {
-    MediaRouterMojoMetrics::RecordJoinRouteResultCode(provider_id,
-                                                      result->result_code());
+    MediaRouterMetrics::RecordJoinRouteResultCode(provider_id,
+                                                  result->result_code());
   } else {
-    MediaRouterMojoMetrics::RecordCreateRouteResultCode(provider_id,
-                                                        result->result_code());
+    MediaRouterMetrics::RecordCreateRouteResultCode(provider_id,
+                                                    result->result_code());
   }
 
   std::move(callback).Run(std::move(connection), *result);
@@ -307,7 +236,7 @@ void MediaRouterMojoImpl::CreateRoute(const MediaSource::Id& source_id,
   if (!sink) {
     std::unique_ptr<RouteRequestResult> result = RouteRequestResult::FromError(
         "Sink not found", RouteRequestResult::SINK_NOT_FOUND);
-    MediaRouterMojoMetrics::RecordCreateRouteResultCode(
+    MediaRouterMetrics::RecordCreateRouteResultCode(
         MediaRouteProviderId::UNKNOWN, result->result_code());
     std::move(callback).Run(nullptr, *result);
     return;
@@ -329,12 +258,13 @@ void MediaRouterMojoImpl::CreateRoute(const MediaSource::Id& source_id,
   }
 
   MediaRouterMetrics::RecordMediaSinkType(sink->icon_type());
-  const MediaRouteProviderId provider_id = FixProviderId(sink->provider_id());
   // Record which of the possible ways the sink may render the source's
   // presentation URL (if it has one).
   if (source.url().is_valid()) {
-    RecordPresentationRequestUrlBySink(source, provider_id);
+    RecordPresentationRequestUrlBySink(source, sink->provider_id());
   }
+
+  const MediaRouteProviderId provider_id = sink->provider_id();
 
   const std::string presentation_id = MediaRouterBase::CreatePresentationId();
   auto mr_callback = base::BindOnce(
@@ -347,7 +277,7 @@ void MediaRouterMojoImpl::CreateRoute(const MediaSource::Id& source_id,
       provider_id != MediaRouteProviderId::EXTENSION) {
     desktop_picker_.Show(
         MakeDesktopPickerParams(web_contents),
-        {content::DesktopMediaID::TYPE_SCREEN},
+        {DesktopMediaList::Type::kScreen},
         base::BindOnce(&MediaRouterMojoImpl::CreateRouteWithSelectedDesktop,
                        weak_factory_.GetWeakPtr(), provider_id, sink_id,
                        presentation_id, origin, web_contents, timeout,
@@ -375,7 +305,7 @@ void MediaRouterMojoImpl::JoinRoute(const MediaSource::Id& source_id,
   if (!provider_id || !HasJoinableRoute()) {
     std::unique_ptr<RouteRequestResult> result = RouteRequestResult::FromError(
         "Route not found", RouteRequestResult::ROUTE_NOT_FOUND);
-    MediaRouterMojoMetrics::RecordJoinRouteResultCode(
+    MediaRouterMetrics::RecordJoinRouteResultCode(
         provider_id.value_or(MediaRouteProviderId::UNKNOWN),
         result->result_code());
     // TODO(btolsch): This should really move |result| now that there's only a
@@ -426,7 +356,7 @@ void MediaRouterMojoImpl::TerminateRoute(const MediaRoute::Id& route_id) {
   base::Optional<MediaRouteProviderId> provider_id =
       GetProviderIdForRoute(route_id);
   if (!provider_id) {
-    MediaRouterMojoMetrics::RecordJoinRouteResultCode(
+    MediaRouterMetrics::RecordJoinRouteResultCode(
         MediaRouteProviderId::UNKNOWN, RouteRequestResult::ROUTE_NOT_FOUND);
     return;
   }
@@ -549,7 +479,7 @@ bool MediaRouterMojoImpl::MediaSinksQuery::HasObserver(
 }
 
 bool MediaRouterMojoImpl::MediaSinksQuery::HasObservers() const {
-  return observers_.might_have_observers();
+  return !observers_.empty();
 }
 
 void MediaRouterMojoImpl::MediaRoutesQuery::SetRoutesForProvider(
@@ -621,7 +551,7 @@ bool MediaRouterMojoImpl::MediaRoutesQuery::HasObserver(
 }
 
 bool MediaRouterMojoImpl::MediaRoutesQuery::HasObservers() const {
-  return observers_.might_have_observers();
+  return !observers_.empty();
 }
 
 MediaRouterMojoImpl::ProviderSinkAvailability::ProviderSinkAvailability() =
@@ -799,8 +729,16 @@ void MediaRouterMojoImpl::UnregisterMediaRoutesObserver(
   // is not inside the ObserverList iteration.
   it->second->RemoveObserver(observer);
   if (!it->second->HasObservers()) {
-    for (const auto& provider : media_route_providers_)
+    for (const auto& provider : media_route_providers_) {
+      if (!provider.second) {
+        // The provider somehow not existing may be the cause of the crash at
+        // crbug.com/1200786.
+        NOTREACHED() << "Provider is null: "
+                     << ProviderIdToString(provider.first);
+        continue;
+      }
       provider.second->StopObservingMediaRoutes(source_id);
+    }
     routes_queries_.erase(source_id);
   }
 }
@@ -817,7 +755,7 @@ void MediaRouterMojoImpl::RegisterRouteMessageObserver(
     DCHECK(!observer_list->HasObserver(observer));
   }
 
-  bool should_listen = !observer_list->might_have_observers();
+  bool should_listen = observer_list->empty();
   observer_list->AddObserver(observer);
   if (should_listen) {
     base::Optional<MediaRouteProviderId> provider_id =
@@ -840,7 +778,7 @@ void MediaRouterMojoImpl::UnregisterRouteMessageObserver(
     return;
 
   it->second->RemoveObserver(observer);
-  if (!it->second->might_have_observers()) {
+  if (it->second->empty()) {
     message_observers_.erase(route_id);
     base::Optional<MediaRouteProviderId> provider_id =
         GetProviderIdForRoute(route_id);
@@ -913,15 +851,21 @@ void MediaRouterMojoImpl::OnTerminateRouteResult(
     MediaRouteProviderId provider_id,
     const base::Optional<std::string>& error_text,
     RouteRequestResult::ResultCode result_code) {
-  MediaRouterMojoMetrics::RecordMediaRouteProviderTerminateRoute(provider_id,
-                                                                 result_code);
+  MediaRouterMetrics::RecordMediaRouteProviderTerminateRoute(provider_id,
+                                                             result_code);
 }
 
 void MediaRouterMojoImpl::OnRouteAdded(MediaRouteProviderId provider_id,
                                        const MediaRoute& route) {
+  // |routes_queries_| might be added during the iteration. Making a
+  // copy here to avoid the iterator from being invalidated.
+  std::vector<MediaRoutesQuery*> queries;
   for (auto& routes_query : routes_queries_) {
     if (routes_query.second->AddRouteForProvider(provider_id, route))
-      routes_query.second->NotifyObservers();
+      queries.push_back(routes_query.second.get());
+  }
+  for (auto* query : queries) {
+    query->NotifyObservers();
   }
 }
 
@@ -1104,6 +1048,53 @@ const MediaSink* MediaRouterMojoImpl::GetSinkById(
   return nullptr;
 }
 
+// NOTE: To record this on Android, will need to move to
+// //components/media_router and refactor to avoid the extensions dependency.
+void MediaRouterMojoImpl::RecordPresentationRequestUrlBySink(
+    const MediaSource& source,
+    MediaRouteProviderId provider_id) {
+  PresentationUrlBySink value = PresentationUrlBySink::kUnknown;
+  // URLs that can be rendered in offscreen tabs (for cloud or Chromecast
+  // sinks), or on a wired display.
+  bool is_normal_url = source.url().SchemeIs(url::kHttpsScheme) ||
+                       source.url().SchemeIs(extensions::kExtensionScheme) ||
+                       source.url().SchemeIs(url::kFileScheme);
+  switch (provider_id) {
+    case MediaRouteProviderId::EXTENSION:
+      if (source.IsCastPresentationUrl()) {
+        // This "should not happen," but the code that creates media routes is
+        // tricky and we want to catch all possible cases.
+        value = PresentationUrlBySink::kCastUrlToChromecast;
+      } else if (is_normal_url) {
+        value = PresentationUrlBySink::kNormalUrlToExtension;
+      }
+      break;
+    case MediaRouteProviderId::WIRED_DISPLAY:
+      if (is_normal_url) {
+        value = PresentationUrlBySink::kNormalUrlToWiredDisplay;
+      }
+      break;
+    case MediaRouteProviderId::CAST:
+      if (source.IsCastPresentationUrl()) {
+        value = PresentationUrlBySink::kCastUrlToChromecast;
+      } else if (is_normal_url) {
+        value = PresentationUrlBySink::kNormalUrlToChromecast;
+      }
+      break;
+    case MediaRouteProviderId::DIAL:
+      if (source.IsDialSource()) {
+        value = PresentationUrlBySink::kDialUrlToDial;
+      }
+      break;
+    case MediaRouteProviderId::ANDROID_CAF:
+    case MediaRouteProviderId::TEST:
+    case MediaRouteProviderId::UNKNOWN:
+      break;
+  }
+  base::UmaHistogramEnumeration("MediaRouter.PresentationRequest.UrlBySink",
+                                value);
+}
+
 void MediaRouterMojoImpl::CreateRouteWithSelectedDesktop(
     MediaRouteProviderId provider_id,
     const std::string& sink_id,
@@ -1142,7 +1133,7 @@ void MediaRouterMojoImpl::CreateRouteWithSelectedDesktop(
   DCHECK(!pending_stream_request_);
   pending_stream_request_.emplace();
   PendingStreamRequest& request = *pending_stream_request_;
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   DCHECK(web_contents);
   content::RenderFrameHost* const main_frame = web_contents->GetMainFrame();
   request.render_process_id = main_frame->GetProcess()->GetID();

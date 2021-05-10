@@ -6,7 +6,6 @@
 #define CONTENT_BROWSER_MEDIA_AUDIO_LOOPBACK_STREAM_BROKER_H_
 
 #include <cstdint>
-#include <string>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -24,7 +23,7 @@
 
 namespace audio {
 namespace mojom {
-class StreamFactory;
+class AudioStreamFactory;
 }
 }  // namespace audio
 
@@ -51,7 +50,7 @@ class CONTENT_EXPORT AudioLoopbackStreamBroker final
   ~AudioLoopbackStreamBroker() final;
 
   // Creates the stream.
-  void CreateStream(audio::mojom::StreamFactory* factory) final;
+  void CreateStream(media::mojom::AudioStreamFactory* factory) final;
 
   // media::AudioInputStreamObserver implementation.
   void DidStartRecording() final;

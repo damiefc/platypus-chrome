@@ -13,18 +13,18 @@ import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_components/customize_themes/customize_themes.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/polymer/v3_0/paper-styles/shadow.js';
-import '../settings_shared_css.m.js';
+import '../settings_shared_css.js';
 
-import {AvatarIcon} from 'chrome://resources/cr_elements/cr_profile_avatar_selector/cr_profile_avatar_selector.m.js';
+import {AvatarIcon} from 'chrome://resources/cr_elements/cr_profile_avatar_selector/cr_profile_avatar_selector.js';
 import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
 import {routes} from '../route.js';
-import {RouteObserverBehavior, Router} from '../router.m.js';
+import {RouteObserverBehavior, Router} from '../router.js';
 
 import {ManageProfileBrowserProxy, ManageProfileBrowserProxyImpl, ProfileShortcutStatus} from './manage_profile_browser_proxy.js';
-import {SyncStatus} from './sync_browser_proxy.m.js';
+import {SyncStatus} from './sync_browser_proxy.js';
 
 Polymer({
   is: 'settings-manage-profile',
@@ -78,15 +78,6 @@ Polymer({
     isProfileShortcutSettingVisible_: Boolean,
 
     /**
-     * True if the customize themes feature is enabled.
-     * @private
-     */
-    isCustomizeThemesVisible_: {
-      type: Boolean,
-      value: () => loadTimeData.getBoolean('profileThemeSelectorEnabled')
-    },
-
-    /**
      * TODO(dpapad): Move this back to the HTML file when the Polymer2 version
      * of the code is deleted. Because of "\" being a special character in a JS
      * string, can't satisfy both Polymer2 and Polymer3 at the same time from
@@ -121,7 +112,11 @@ Polymer({
   currentRouteChanged() {
     if (Router.getInstance().getCurrentRoute() === routes.MANAGE_PROFILE) {
       if (this.profileName) {
-        this.$.name.value = this.profileName;
+        const profileNameInput =
+            /** @type {CrInputElement} */ (this.$$('#name'));
+        if (profileNameInput) {
+          profileNameInput.value = this.profileName;
+        }
       }
       if (loadTimeData.getBoolean('profileShortcutsEnabled')) {
         this.browserProxy_.getProfileShortcutStatus().then(status => {
@@ -172,7 +167,8 @@ Polymer({
     if (this.profileAvatar_.isGaiaAvatar) {
       this.browserProxy_.setProfileIconToGaiaAvatar();
     } else {
-      this.browserProxy_.setProfileIconToDefaultAvatar(this.profileAvatar_.url);
+      this.browserProxy_.setProfileIconToDefaultAvatar(
+          this.profileAvatar_.index);
     }
   },
 

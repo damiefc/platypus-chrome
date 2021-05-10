@@ -64,12 +64,6 @@ class CORE_EXPORT CSSParserSelector {
     selector_->SetRelation(value);
   }
   void SetForPage() { selector_->SetForPage(); }
-  void SetRelationIsAffectedByPseudoContent() {
-    selector_->SetRelationIsAffectedByPseudoContent();
-  }
-  bool RelationIsAffectedByPseudoContent() const {
-    return selector_->RelationIsAffectedByPseudoContent();
-  }
 
   void UpdatePseudoType(const AtomicString& value,
                         const CSSParserContext& context,
@@ -107,8 +101,6 @@ class CORE_EXPORT CSSParserSelector {
   CSSSelector::RelationType GetImplicitShadowCombinatorForMatching() const;
   bool NeedsImplicitShadowCombinatorForMatching() const;
 
-  bool IsSimple() const;
-
   CSSParserSelector* TagHistory() const { return tag_history_.get(); }
   void SetTagHistory(std::unique_ptr<CSSParserSelector> selector) {
     tag_history_ = std::move(selector);
@@ -126,4 +118,4 @@ class CORE_EXPORT CSSParserSelector {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_CSS_PARSER_CSS_PARSER_SELECTOR_H_

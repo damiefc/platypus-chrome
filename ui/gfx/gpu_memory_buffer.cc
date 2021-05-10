@@ -4,9 +4,28 @@
 
 #include "ui/gfx/gpu_memory_buffer.h"
 
+#include "base/logging.h"
 #include "ui/gfx/generic_shared_memory_id.h"
 
+#if defined(OS_WIN)
+#include <windows.h>
+#include "base/win/scoped_handle.h"
+#endif
+
 namespace gfx {
+
+#if defined(OS_WIN)
+namespace {
+base::win::ScopedHandle CloneDXGIHandle(HANDLE handle) {
+  HANDLE target_handle = nullptr;
+  if (!::DuplicateHandle(GetCurrentProcess(), handle, GetCurrentProcess(),
+                         &target_handle, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
+    DVLOG(1) << "Error duplicating GMB DXGI handle. error=" << GetLastError();
+  }
+  return base::win::ScopedHandle(target_handle);
+}
+}  // namespace
+#endif
 
 GpuMemoryBufferHandle::GpuMemoryBufferHandle() = default;
 
@@ -37,15 +56,29 @@ GpuMemoryBufferHandle GpuMemoryBufferHandle::Clone() const {
 #if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
   handle.native_pixmap_handle = CloneHandleForIPC(native_pixmap_handle);
 #elif defined(OS_MAC)
-  handle.mach_port = mach_port;
+  handle.io_surface = io_surface;
 #elif defined(OS_WIN)
-  NOTIMPLEMENTED();
+  handle.dxgi_handle = CloneDXGIHandle(dxgi_handle.Get());
 #elif defined(OS_ANDROID)
   NOTIMPLEMENTED();
 #endif
   return handle;
 }
 
-void GpuMemoryBuffer::SetColorSpace(const gfx::ColorSpace& color_space) {}
+Size GpuMemoryBuffer::GetSizeOfPlane(gfx::BufferPlane plane) const {
+  switch (plane) {
+    case gfx::BufferPlane::DEFAULT:
+    case gfx::BufferPlane::Y:
+      return GetSize();
+    case gfx::BufferPlane::UV:
+    case gfx::BufferPlane::U:
+    case gfx::BufferPlane::V:
+      return ScaleToFlooredSize(GetSize(), 0.5);
+  }
+}
+
+void GpuMemoryBuffer::SetColorSpace(const ColorSpace& color_space) {}
+
+void GpuMemoryBuffer::SetHDRMetadata(const HDRMetadata& hdr_metadata) {}
 
 }  // namespace gfx

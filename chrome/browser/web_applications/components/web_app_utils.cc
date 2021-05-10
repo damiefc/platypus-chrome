@@ -5,13 +5,25 @@
 #include "chrome/browser/web_applications/components/web_app_utils.h"
 
 #include "base/files/file_path.h"
+#include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/web_applications/components/app_registrar.h"
+#include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/grit/generated_resources.h"
+#include "components/services/app_service/public/cpp/file_handler.h"
+#include "components/site_engagement/content/site_engagement_service.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "url/gurl.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "base/feature_list.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/common/chrome_features.h"
 #include "components/user_manager/user_manager.h"
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace web_app {
 
@@ -22,35 +34,35 @@ constexpr base::FilePath::CharType kTempDirectoryName[] =
     FILE_PATH_LITERAL("Temp");
 
 bool AreWebAppsEnabled(const Profile* profile) {
-  if (!profile)
+  if (!profile || profile->IsSystemProfile())
     return false;
 
   const Profile* original_profile = profile->GetOriginalProfile();
   DCHECK(!original_profile->IsOffTheRecord());
 
-  if (original_profile->IsSystemProfile())
-    return false;
-
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Web Apps should not be installed to the ChromeOS system profiles.
-  if (chromeos::ProfileHelper::IsSigninProfile(original_profile) ||
-      chromeos::ProfileHelper::IsLockScreenAppProfile(original_profile)) {
+  if (!chromeos::ProfileHelper::IsRegularProfile(original_profile)) {
     return false;
   }
   // Disable Web Apps if running any kiosk app.
   auto* user_manager = user_manager::UserManager::Get();
-  if (user_manager && (user_manager->IsLoggedInAsKioskApp() ||
-                       user_manager->IsLoggedInAsArcKioskApp())) {
+  if (user_manager && user_manager->IsLoggedInAsAnyKioskApp()) {
     return false;
   }
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   return true;
 }
 
 bool AreWebAppsUserInstallable(Profile* profile) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // With Lacros, web apps are not installed using the Ash browser.
+  if (base::FeatureList::IsEnabled(features::kWebAppsCrosapi))
+    return false;
+#endif
   return AreWebAppsEnabled(profile) && !profile->IsGuestSession() &&
-         !profile->IsOffTheRecord();
+         !profile->IsEphemeralGuestProfile() && !profile->IsOffTheRecord();
 }
 
 content::BrowserContext* GetBrowserContextForWebApps(
@@ -66,8 +78,11 @@ content::BrowserContext* GetBrowserContextForWebAppMetrics(
   // Use original profile to create only one KeyedService instance.
   Profile* original_profile =
       Profile::FromBrowserContext(context)->GetOriginalProfile();
-  const bool is_web_app_metrics_enabled = AreWebAppsEnabled(original_profile) &&
-                                          !original_profile->IsGuestSession();
+  const bool is_web_app_metrics_enabled =
+      site_engagement::SiteEngagementService::IsEnabled() &&
+      AreWebAppsEnabled(original_profile) &&
+      !original_profile->IsGuestSession() &&
+      !original_profile->IsEphemeralGuestProfile();
   return is_web_app_metrics_enabled ? original_profile : nullptr;
 }
 
@@ -97,9 +112,8 @@ base::FilePath GetWebAppsTempDirectory(
 }
 
 std::string GetProfileCategoryForLogging(Profile* profile) {
-#ifdef OS_CHROMEOS
-  if (chromeos::ProfileHelper::IsSigninProfile(profile) ||
-      chromeos::ProfileHelper::IsLockScreenAppProfile(profile)) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (!chromeos::ProfileHelper::IsRegularProfile(profile)) {
     return "SigninOrLockScreen";
   } else if (user_manager::UserManager::Get()->IsLoggedInAsAnyKioskApp()) {
     return "Kiosk";
@@ -118,11 +132,44 @@ std::string GetProfileCategoryForLogging(Profile* profile) {
 }
 
 bool IsChromeOs() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   return true;
 #else
   return false;
 #endif
+}
+
+std::vector<std::string> GetFileExtensionsHandledByWebApp(Profile* profile,
+                                                          const GURL& url) {
+  auto* provider = WebAppProviderBase::GetProviderBase(profile);
+  if (!provider)
+    return {};
+
+  const AppRegistrar& registrar = provider->registrar();
+  base::Optional<AppId> app_id = registrar.FindAppWithUrlInScope(url);
+  if (!app_id)
+    return {};
+
+  std::set<std::string> extensions = apps::GetFileExtensionsFromFileHandlers(
+      *registrar.GetAppFileHandlers(*app_id));
+  return std::vector<std::string>(extensions.begin(), extensions.end());
+}
+
+std::u16string GetFileExtensionsHandledByWebAppDisplayedAsList(
+    Profile* profile,
+    const GURL& url) {
+  std::vector<std::string> extensions =
+      GetFileExtensionsHandledByWebApp(profile, url);
+
+  // Convert file types from formats like ".txt" to "TXT".
+  std::transform(extensions.begin(), extensions.end(), extensions.begin(),
+                 [](const std::string& extension) {
+                   return base::ToUpperASCII(extension.substr(1));
+                 });
+
+  return base::UTF8ToUTF16(base::JoinString(
+      extensions, l10n_util::GetStringUTF8(
+                      IDS_WEB_APP_FILE_HANDLING_EXTENSION_LIST_SEPARATOR)));
 }
 
 }  // namespace web_app

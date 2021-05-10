@@ -11,7 +11,6 @@
 
 #include "base/android/scoped_java_ref.h"
 #include "base/callback.h"
-#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/scoped_observer.h"
@@ -53,7 +52,7 @@ class DownloadManagerService
   ~DownloadManagerService() override;
 
   // Called to Initialize this object. If |is_profile_added| is false,
-  // it means only the service manager is launched. OnProfileAdded() will
+  // it means only a minimal browser is launched. OnProfileAdded() will
   // be called later when the profile is added.
   void Init(JNIEnv* env, jobject obj, bool is_profile_added);
 
@@ -239,9 +238,9 @@ class DownloadManagerService
   // Called when all pending downloads are loaded.
   void OnPendingDownloadsLoaded();
 
-  typedef base::Callback<void(bool)> ResumeCallback;
-  void set_resume_callback_for_testing(const ResumeCallback& resume_cb) {
-    resume_callback_for_testing_ = resume_cb;
+  using ResumeCallback = base::OnceCallback<void(bool)>;
+  void set_resume_callback_for_testing(ResumeCallback resume_cb) {
+    resume_callback_for_testing_ = std::move(resume_cb);
   }
 
   // Helper method to reset the SimpleDownloadManagerCoordinator if needed.

@@ -50,7 +50,7 @@ class CloudPolicyRefreshSchedulerTest : public testing::Test {
     // Set up the protobuf timestamp to be one minute in the past. Since the
     // protobuf field only has millisecond precision, we convert the actual
     // value back to get a millisecond-clamped time stamp for the checks below.
-    store_.policy_.reset(new em::PolicyData());
+    store_.policy_ = std::make_unique<em::PolicyData>();
     base::Time now = base::Time::NowFromSystemTime();
     base::TimeDelta initial_age =
         base::TimeDelta::FromMinutes(kInitialCacheAgeMinutes);
@@ -546,6 +546,7 @@ static const ClientErrorTestParam kClientErrorTestCases[] = {
     {DM_STATUS_SERVICE_ENTERPRISE_ACCOUNT_IS_NOT_ELIGIBLE_TO_ENROLL, -1, 1},
     {DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED, -1, 1},
     {DM_STATUS_SERVICE_TOO_MANY_REQUESTS, kPolicyRefreshRate, 1},
+    {DM_STATUS_SERVICE_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE, -1, 1},
 };
 
 class CloudPolicyRefreshSchedulerClientErrorTest

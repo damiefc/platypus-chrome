@@ -5,8 +5,8 @@
 #include "chrome/browser/ui/app_list/arc/arc_data_removal_dialog.h"
 
 #include "base/macros.h"
-#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
-#include "chrome/browser/chromeos/arc/session/arc_session_manager_observer.h"
+#include "chrome/browser/ash/arc/session/arc_session_manager.h"
+#include "chrome/browser/ash/arc/session/arc_session_manager_observer.h"
 #include "chrome/browser/ui/app_list/app_service/app_service_app_icon_loader.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -15,6 +15,8 @@
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/insets.h"
@@ -41,17 +43,14 @@ class DataRemovalConfirmationDialog : public views::DialogDelegateView,
                                       public AppIconLoaderDelegate,
                                       public ArcSessionManagerObserver {
  public:
+  METADATA_HEADER(DataRemovalConfirmationDialog);
   DataRemovalConfirmationDialog(
       Profile* profile,
       DataRemovalConfirmationCallback confirm_data_removal);
+  DataRemovalConfirmationDialog(const DataRemovalConfirmationDialog&) = delete;
+  DataRemovalConfirmationDialog& operator=(
+      const DataRemovalConfirmationDialog&) = delete;
   ~DataRemovalConfirmationDialog() override;
-
-  // views::WidgetDelegate:
-  base::string16 GetWindowTitle() const override;
-  ui::ModalType GetModalType() const override;
-
-  // views::View:
-  gfx::Size CalculatePreferredSize() const override;
 
   // AppIconLoaderDelegate:
   void OnAppImageUpdated(const std::string& app_id,
@@ -69,8 +68,6 @@ class DataRemovalConfirmationDialog : public views::DialogDelegateView,
   Profile* const profile_;
 
   DataRemovalConfirmationCallback confirm_callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(DataRemovalConfirmationDialog);
 };
 
 DataRemovalConfirmationDialog* g_current_data_removal_confirmation = nullptr;
@@ -79,6 +76,7 @@ DataRemovalConfirmationDialog::DataRemovalConfirmationDialog(
     Profile* profile,
     DataRemovalConfirmationCallback confirm_callback)
     : profile_(profile), confirm_callback_(std::move(confirm_callback)) {
+  SetTitle(l10n_util::GetStringUTF16(IDS_ARC_DATA_REMOVAL_CONFIRMATION_TITLE));
   SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_ARC_DATA_REMOVAL_CONFIRMATION_OK_BUTTON));
@@ -90,11 +88,16 @@ DataRemovalConfirmationDialog::DataRemovalConfirmationDialog(
   SetCancelCallback(
       base::BindOnce(run_callback, base::Unretained(this), false));
 
+  SetModalType(ui::MODAL_TYPE_WINDOW);
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
+
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
   std::unique_ptr<views::BoxLayout> layout = std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal,
-      provider->GetDialogInsetsForContentType(views::TEXT, views::TEXT),
+      provider->GetDialogInsetsForContentType(views::DialogContentType::kText,
+                                              views::DialogContentType::kText),
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_HORIZONTAL));
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStart);
@@ -130,20 +133,6 @@ DataRemovalConfirmationDialog::~DataRemovalConfirmationDialog() {
   g_current_data_removal_confirmation = nullptr;
 }
 
-base::string16 DataRemovalConfirmationDialog::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(IDS_ARC_DATA_REMOVAL_CONFIRMATION_TITLE);
-}
-
-ui::ModalType DataRemovalConfirmationDialog::GetModalType() const {
-  return ui::MODAL_TYPE_WINDOW;
-}
-
-gfx::Size DataRemovalConfirmationDialog::CalculatePreferredSize() const {
-  const int default_width = views::LayoutProvider::Get()->GetDistanceMetric(
-      DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH);
-  return gfx::Size(default_width, GetHeightForWidth(default_width));
-}
-
 void DataRemovalConfirmationDialog::OnAppImageUpdated(
     const std::string& app_id,
     const gfx::ImageSkia& image) {
@@ -161,6 +150,9 @@ void DataRemovalConfirmationDialog::OnArcPlayStoreEnabledChanged(bool enabled) {
     return;
   CancelDialog();
 }
+
+BEGIN_METADATA(DataRemovalConfirmationDialog, views::DialogDelegateView)
+END_METADATA
 
 }  // namespace
 

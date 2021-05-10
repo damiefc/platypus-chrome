@@ -399,8 +399,7 @@ class CORE_EXPORT RuleFeatureSet {
   const CSSSelector* ExtractInvalidationSetFeaturesFromCompound(
       const CSSSelector&,
       InvalidationSetFeatures&,
-      PositionType,
-      CSSSelector::PseudoType = CSSSelector::kPseudoUnknown);
+      PositionType);
   void ExtractInvalidationSetFeaturesFromSelectorList(const CSSSelector&,
                                                       InvalidationSetFeatures&,
                                                       PositionType);

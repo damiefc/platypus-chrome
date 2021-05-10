@@ -6,17 +6,18 @@
 #include "base/check.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/system/sys_info.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "base/thread_annotations.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/browser/worker_host/shared_worker_service_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -121,12 +122,12 @@ class WorkerTest : public ContentBrowserTest,
   }
 
   void RunTest(Shell* window, const GURL& url, bool expect_failure = false) {
-    const base::string16 ok_title = base::ASCIIToUTF16("OK");
-    const base::string16 fail_title = base::ASCIIToUTF16("FAIL");
+    const std::u16string ok_title = u"OK";
+    const std::u16string fail_title = u"FAIL";
     TitleWatcher title_watcher(window->web_contents(), ok_title);
     title_watcher.AlsoWaitForTitle(fail_title);
     EXPECT_TRUE(NavigateToURL(window, url));
-    base::string16 final_title = title_watcher.WaitAndGetTitle();
+    std::u16string final_title = title_watcher.WaitAndGetTitle();
     EXPECT_EQ(expect_failure ? fail_title : ok_title, final_title);
   }
 
@@ -150,8 +151,10 @@ class WorkerTest : public ContentBrowserTest,
   }
 
   void SetSameSiteCookie(const std::string& host) {
-    StoragePartition* partition = BrowserContext::GetDefaultStoragePartition(
-        shell()->web_contents()->GetBrowserContext());
+    StoragePartition* partition = shell()
+                                      ->web_contents()
+                                      ->GetBrowserContext()
+                                      ->GetDefaultStoragePartition();
     mojo::Remote<network::mojom::CookieManager> cookie_manager;
     partition->GetNetworkContext()->GetCookieManager(
         cookie_manager.BindNewPipeAndPassReceiver());
@@ -200,6 +203,18 @@ class WorkerTest : public ContentBrowserTest,
   void ClearReceivedCookies() {
     base::AutoLock auto_lock(path_cookie_map_lock_);
     path_cookie_map_.clear();
+  }
+
+  SharedWorkerHost* GetSharedWorkerHost(const GURL& url) {
+    StoragePartition* partition = shell()
+                                      ->web_contents()
+                                      ->GetBrowserContext()
+                                      ->GetDefaultStoragePartition();
+    DCHECK(partition);
+    auto* service = static_cast<SharedWorkerServiceImpl*>(
+        partition->GetSharedWorkerService());
+    return service->FindMatchingSharedWorkerHost(
+        url, "", storage::StorageKey(url::Origin::Create(url)));
   }
 
   net::test_server::EmbeddedTestServer* ssl_server() { return &ssl_server_; }
@@ -310,6 +325,39 @@ IN_PROC_BROWSER_TEST_P(WorkerTest, SingleSharedWorker) {
   RunTest(GetTestURL("single_worker.html", "shared=true"));
 }
 
+// Confirm shared worker without COEP is in a different process from a page that
+// is protected by COOP and COEP.
+IN_PROC_BROWSER_TEST_P(WorkerTest, SharedWorkerWithoutCoepInDifferentProcess) {
+  if (!SupportsSharedWorker())
+    return;
+
+  // Navigate to a page living in an isolated process.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), ssl_server()->GetURL("a.test", "/cross-origin-isolated.html")));
+  RenderFrameHostImpl* page_rfh = static_cast<RenderFrameHostImpl*>(
+      shell()->web_contents()->GetMainFrame());
+  auto page_lock = page_rfh->GetSiteInstance()->GetProcessLock();
+  EXPECT_TRUE(page_lock.web_exposed_isolation_info().is_isolated());
+  EXPECT_GT(page_rfh->GetWebExposedIsolationLevel(),
+            RenderFrameHost::WebExposedIsolationLevel::kNotIsolated);
+
+  // Create a shared worker from the cross-origin-isolated page.
+  // The worker must be in a different process because shared workers isn't
+  // protected by COEP header.
+  EXPECT_EQ("Worker connected.", EvalJs(shell(), R"(
+    new Promise(resolve => {
+      const worker = new SharedWorker("/workers/messageport_worker.js");
+      worker.port.onmessage = (e) => resolve(e.data);
+    })
+  )"));
+  auto* host = GetSharedWorkerHost(
+      ssl_server()->GetURL("a.test", "/workers/messageport_worker.js"));
+  RenderProcessHost* worker_rph = host->GetProcessHost();
+  EXPECT_NE(worker_rph, page_rfh->GetProcess());
+  auto worker_lock = host->site_instance()->GetProcessLock();
+  EXPECT_FALSE(worker_lock.web_exposed_isolation_info().is_isolated());
+}
+
 // http://crbug.com/96435
 IN_PROC_BROWSER_TEST_P(WorkerTest, MultipleSharedWorkers) {
   if (!SupportsSharedWorker())
@@ -415,10 +463,10 @@ IN_PROC_BROWSER_TEST_P(WorkerTest, WebSocketSharedWorker) {
 
   // Run test.
   Shell* window = shell();
-  const base::string16 expected_title = base::ASCIIToUTF16("OK");
+  const std::u16string expected_title = u"OK";
   TitleWatcher title_watcher(window->web_contents(), expected_title);
   EXPECT_TRUE(NavigateToURL(window, url));
-  base::string16 final_title = title_watcher.WaitAndGetTitle();
+  std::u16string final_title = title_watcher.WaitAndGetTitle();
   EXPECT_EQ(expected_title, final_title);
 }
 
@@ -490,7 +538,7 @@ IN_PROC_BROWSER_TEST_P(WorkerTest,
   FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
                             ->GetFrameTree()
                             ->root();
-  NavigateFrameToURL(root->child_at(0), test_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), test_url));
   waiter.Run();
 
   // Check cookies sent with each request to "a.test". Frame request should not

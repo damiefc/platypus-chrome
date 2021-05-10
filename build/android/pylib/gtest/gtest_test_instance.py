@@ -2,7 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import HTMLParser
+from __future__ import absolute_import
+
 import json
 import logging
 import os
@@ -11,6 +12,7 @@ import tempfile
 import threading
 import xml.etree.ElementTree
 
+import six
 from devil.android import apk_helper
 from pylib import constants
 from pylib.constants import host_paths
@@ -18,6 +20,7 @@ from pylib.base import base_test_result
 from pylib.base import test_instance
 from pylib.symbols import stack_symbolizer
 from pylib.utils import test_filter
+
 
 with host_paths.SysPath(host_paths.BUILD_COMMON_PATH):
   import unittest_util # pylint: disable=import-error
@@ -85,7 +88,7 @@ _EXTRA_SHARD_SIZE_LIMIT = (
 # results.
 _RE_TEST_STATUS = re.compile(
     # Test state.
-    r'\[ +((?:RUN)|(?:FAILED)|(?:OK)|(?:CRASHED)) +\] ?'
+    r'\[ +((?:RUN)|(?:FAILED)|(?:OK)|(?:CRASHED)|(?:SKIPPED)) +\] ?'
     # Test name.
     r'([^ ]+)?'
     # Optional parameters.
@@ -101,8 +104,9 @@ _RE_TEST_STATUS = re.compile(
 # Crash detection constants.
 _RE_TEST_ERROR = re.compile(r'FAILURES!!! Tests run: \d+,'
                                     r' Failures: \d+, Errors: 1')
-_RE_TEST_CURRENTLY_RUNNING = re.compile(r'\[ERROR:.*?\]'
-                                    r' Currently running: (.*)')
+_RE_TEST_CURRENTLY_RUNNING = re.compile(
+    r'\[ERROR:.*?\] Currently running: (.*)')
+_RE_TEST_DCHECK_FATAL = re.compile(r'\[.*:FATAL:.*\] (.*)')
 _RE_DISABLED = re.compile(r'DISABLED_')
 _RE_FLAKY = re.compile(r'FLAKY_')
 
@@ -174,10 +178,15 @@ def ParseGTestOutput(output, symbolizer, device_abi):
 
   def handle_possibly_unknown_test():
     if test_name is not None:
-      results.append(base_test_result.BaseTestResult(
-          TestNameWithoutDisabledPrefix(test_name),
-          fallback_result_type or base_test_result.ResultType.UNKNOWN,
-          duration, log=symbolize_stack_and_merge_with_log()))
+      results.append(
+          base_test_result.BaseTestResult(
+              TestNameWithoutDisabledPrefix(test_name),
+              # If we get here, that means we started a test, but it did not
+              # produce a definitive test status output, so assume it crashed.
+              # crbug/1191716
+              fallback_result_type or base_test_result.ResultType.CRASH,
+              duration,
+              log=symbolize_stack_and_merge_with_log()))
 
   for l in output:
     matcher = _RE_TEST_STATUS.match(l)
@@ -191,6 +200,8 @@ def ParseGTestOutput(output, symbolizer, device_abi):
         result_type = None
       elif matcher.group(1) == 'OK':
         result_type = base_test_result.ResultType.PASS
+      elif matcher.group(1) == 'SKIPPED':
+        result_type = base_test_result.ResultType.SKIP
       elif matcher.group(1) == 'FAILED':
         result_type = base_test_result.ResultType.FAIL
       elif matcher.group(1) == 'CRASHED':
@@ -200,12 +211,17 @@ def ParseGTestOutput(output, symbolizer, device_abi):
       duration = int(matcher.group(3)) if matcher.group(3) else 0
 
     else:
-      # Needs another matcher here to match crashes, like those of DCHECK.
-      matcher = _RE_TEST_CURRENTLY_RUNNING.match(l)
-      if matcher:
-        test_name = matcher.group(1)
+      # Can possibly add more matchers, such as different results from DCHECK.
+      currently_running_matcher = _RE_TEST_CURRENTLY_RUNNING.match(l)
+      dcheck_matcher = _RE_TEST_DCHECK_FATAL.match(l)
+
+      if currently_running_matcher:
+        test_name = currently_running_matcher.group(1)
         result_type = base_test_result.ResultType.CRASH
-        duration = 0 # Don't know.
+        duration = None  # Don't know. Not using 0 as this is unknown vs 0.
+      elif dcheck_matcher:
+        result_type = base_test_result.ResultType.CRASH
+        duration = None  # Don't know.  Not using 0 as this is unknown vs 0.
 
     if log is not None:
       if not matcher and _STACK_LINE_RE.match(l):
@@ -233,7 +249,7 @@ def ParseGTestXML(xml_content):
   if not xml_content:
     return results
 
-  html = HTMLParser.HTMLParser()
+  html = six.moves.html_parser.HTMLParser()
 
   testsuites = xml.etree.ElementTree.fromstring(xml_content)
   for testsuite in testsuites:
@@ -263,7 +279,7 @@ def ParseGTestJSON(json_content):
 
   json_data = json.loads(json_content)
 
-  openstack = json_data['tests'].items()
+  openstack = list(json_data['tests'].items())
 
   while openstack:
     name, value = openstack.pop()
@@ -273,7 +289,7 @@ def ParseGTestJSON(json_content):
           'actual'] == 'PASS' else base_test_result.ResultType.FAIL
       results.append(base_test_result.BaseTestResult(name, result_type))
     else:
-      openstack += [("%s.%s" % (name, k), v) for k, v in value.iteritems()]
+      openstack += [("%s.%s" % (name, k), v) for k, v in six.iteritems(value)]
 
   return results
 

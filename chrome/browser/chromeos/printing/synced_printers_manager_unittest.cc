@@ -12,7 +12,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/printing/bulk_printers_calculator_factory.h"
@@ -20,9 +20,8 @@
 #include "chrome/browser/chromeos/printing/synced_printers_manager_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/sync/model/fake_model_type_change_processor.h"
 #include "components/sync/model/model_type_store.h"
-#include "components/sync/model/model_type_store_test_util.h"
+#include "components/sync/test/model/model_type_store_test_util.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -38,9 +37,8 @@ constexpr char kTestUri[] = "ipps://printer.chromium.org/ipp/print";
 // Helper class to record observed events.
 class LoggingObserver : public SyncedPrintersManager::Observer {
  public:
-  explicit LoggingObserver(SyncedPrintersManager* source)
-      : observer_(this), manager_(source) {
-    observer_.Add(source);
+  explicit LoggingObserver(SyncedPrintersManager* source) : manager_(source) {
+    observation_.Observe(source);
   }
 
   void OnSavedPrintersChanged() override {
@@ -51,8 +49,9 @@ class LoggingObserver : public SyncedPrintersManager::Observer {
 
  private:
   std::vector<Printer> saved_printers_;
-  ScopedObserver<SyncedPrintersManager, SyncedPrintersManager::Observer>
-      observer_;
+  base::ScopedObservation<SyncedPrintersManager,
+                          SyncedPrintersManager::Observer>
+      observation_{this};
   SyncedPrintersManager* manager_;
 };
 
@@ -125,7 +124,7 @@ TEST_F(SyncedPrintersManagerTest, UpdatePrinter) {
 
   auto printers = manager_->GetSavedPrinters();
   ASSERT_EQ(1U, printers.size());
-  EXPECT_EQ(kTestUri, printers[0].uri().GetNormalized());
+  EXPECT_EQ(kTestUri, printers[0].uri().GetNormalized(false));
 
   ExpectObservedPrinterIdsAre(observer.saved_printers(), {kTestPrinterId});
 }

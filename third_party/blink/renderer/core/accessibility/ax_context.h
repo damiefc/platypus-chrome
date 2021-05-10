@@ -34,10 +34,12 @@ class CORE_EXPORT AXContext {
   // (i.e. document has been initialized and hasn't been detached yet).
   bool HasActiveDocument();
 
+  Document* GetDocument();
+
  protected:
   WeakPersistent<Document> document_;
 };
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_ACCESSIBILITY_AX_CONTEXT_H_

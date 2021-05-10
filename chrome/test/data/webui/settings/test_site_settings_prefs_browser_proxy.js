@@ -23,7 +23,6 @@ import {createOriginInfo, createSiteGroup,createSiteSettingsPrefs, getContentSet
 export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
   constructor() {
     super([
-      'clearFlashPref',
       'fetchBlockAutoplayStatus',
       'fetchZoomLevels',
       'getAllSites',
@@ -45,6 +44,7 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
       'setDefaultValueForContentType',
       'setOriginPermissions',
       'setProtocolDefault',
+      'setProtocolHandlerDefault',
       'updateIncognitoStatus',
       'clearEtldPlus1DataAndCookies',
       'clearOriginDataAndCookies',
@@ -189,11 +189,6 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
     this.setPrefs(this.prefs_);
     this.methodCalled(
         'setOriginPermissions', [origin, contentTypes, blanketSetting]);
-  }
-
-  /** @override */
-  clearFlashPref(origin) {
-    this.methodCalled('clearFlashPref', origin);
   }
 
   /** @override */
@@ -507,8 +502,7 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
   setDefaultCaptureDevice() {}
 
   /** @override */
-  setProtocolHandlerDefault() {}
-
-  /** @override */
-  showAndroidManageAppLinks() {}
+  setProtocolHandlerDefault(value) {
+    this.methodCalled('setProtocolHandlerDefault', value);
+  }
 }

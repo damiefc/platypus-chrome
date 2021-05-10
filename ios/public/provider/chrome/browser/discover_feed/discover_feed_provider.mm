@@ -10,7 +10,8 @@
 
 void DiscoverFeedProvider::StartFeed(
     DiscoverFeedConfiguration* discover_config) {}
-void DiscoverFeedProvider::StartFeed(AuthenticationService* auth_service) {}
+
+void DiscoverFeedProvider::StopFeed() {}
 
 bool DiscoverFeedProvider::IsDiscoverFeedEnabled() {
   return false;
@@ -21,6 +22,15 @@ UIViewController* DiscoverFeedProvider::NewFeedViewController(
   return nil;
 }
 
+UIViewController* DiscoverFeedProvider::NewFeedViewControllerWithScrollDelegate(
+    Browser* browser,
+    id<UIScrollViewDelegate> scrollDelegate) {
+  return nil;
+}
+
+void DiscoverFeedProvider::RemoveFeedViewController(
+    UIViewController* feedViewController) {}
+
 void DiscoverFeedProvider::UpdateTheme() {}
 
 void DiscoverFeedProvider::RefreshFeed() {}
@@ -30,3 +40,4 @@ void DiscoverFeedProvider::UpdateFeedForAccountChange() {}
 void DiscoverFeedProvider::AddObserver(Observer* observer) {}
 void DiscoverFeedProvider::RemoveObserver(Observer* observer) {}
 void DiscoverFeedProvider::LoadMoreFeedArticles() {}
+void DiscoverFeedProvider::FeedWasShown() {}

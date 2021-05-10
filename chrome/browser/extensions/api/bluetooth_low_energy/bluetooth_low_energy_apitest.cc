@@ -25,29 +25,30 @@
 #include "extensions/test/result_catcher.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
-using device::BluetoothUUID;
 using device::BluetoothAdapter;
 using device::BluetoothDevice;
-using device::BluetoothRemoteGattCharacteristic;
 using device::BluetoothGattConnection;
+using device::BluetoothGattNotifySession;
+using device::BluetoothRemoteGattCharacteristic;
 using device::BluetoothRemoteGattDescriptor;
 using device::BluetoothRemoteGattService;
-using device::BluetoothGattNotifySession;
+using device::BluetoothUUID;
 using device::MockBluetoothAdapter;
 using device::MockBluetoothDevice;
 using device::MockBluetoothGattCharacteristic;
 using device::MockBluetoothGattConnection;
 using device::MockBluetoothGattDescriptor;
-using device::MockBluetoothGattService;
 using device::MockBluetoothGattNotifySession;
+using device::MockBluetoothGattService;
 using extensions::BluetoothLowEnergyEventRouter;
 using extensions::ResultCatcher;
+using testing::_;
+using testing::DoAll;
 using testing::Invoke;
 using testing::Return;
 using testing::ReturnRef;
 using testing::ReturnRefOfCopy;
 using testing::SaveArg;
-using testing::_;
 
 namespace {
 
@@ -221,6 +222,12 @@ ACTION_TEMPLATE(InvokeCallbackArgument,
                 HAS_1_TEMPLATE_PARAMS(int, k),
                 AND_1_VALUE_PARAMS(p0)) {
   std::move(std::get<k>(args)).Run(p0);
+}
+
+ACTION_TEMPLATE(InvokeCallbackArgument,
+                HAS_1_TEMPLATE_PARAMS(int, k),
+                AND_2_VALUE_PARAMS(p0, p1)) {
+  std::move(std::get<k>(args)).Run(p0, p1);
 }
 
 ACTION_TEMPLATE(InvokeCallbackWithScopedPtrArg,
@@ -702,11 +709,12 @@ IN_PROC_BROWSER_TEST_F(BluetoothLowEnergyApiTest, ReadCharacteristicValue) {
       .WillRepeatedly(Return(chrc0_.get()));
 
   std::vector<uint8_t> value;
-  EXPECT_CALL(*chrc0_, ReadRemoteCharacteristic_(_, _))
+  EXPECT_CALL(*chrc0_, ReadRemoteCharacteristic_(_))
       .Times(2)
-      .WillOnce(InvokeCallbackArgument<1>(
-          BluetoothRemoteGattService::GATT_ERROR_FAILED))
-      .WillOnce(InvokeCallbackArgument<0>(value));
+      .WillOnce(InvokeCallbackArgument<0>(
+          BluetoothRemoteGattService::GATT_ERROR_FAILED,
+          /*value=*/std::vector<uint8_t>()))
+      .WillOnce(InvokeCallbackArgument<0>(base::nullopt, value));
 
   ExtensionTestMessageListener listener("ready", true);
   listener.set_failure_message("fail");
@@ -967,23 +975,30 @@ IN_PROC_BROWSER_TEST_F(BluetoothLowEnergyApiTest, ReadDescriptorValue) {
       .WillRepeatedly(Return(desc0_.get()));
 
   std::vector<uint8_t> value;
-  EXPECT_CALL(*desc0_, ReadRemoteDescriptor_(_, _))
+  EXPECT_CALL(*desc0_, ReadRemoteDescriptor_(_))
       .Times(8)
-      .WillOnce(InvokeCallbackArgument<1>(
-          BluetoothRemoteGattService::GATT_ERROR_FAILED))
-      .WillOnce(InvokeCallbackArgument<1>(
-          BluetoothRemoteGattService::GATT_ERROR_INVALID_LENGTH))
-      .WillOnce(InvokeCallbackArgument<1>(
-          BluetoothRemoteGattService::GATT_ERROR_NOT_PERMITTED))
-      .WillOnce(InvokeCallbackArgument<1>(
-          BluetoothRemoteGattService::GATT_ERROR_NOT_AUTHORIZED))
-      .WillOnce(InvokeCallbackArgument<1>(
-          BluetoothRemoteGattService::GATT_ERROR_NOT_PAIRED))
-      .WillOnce(InvokeCallbackArgument<1>(
-          BluetoothRemoteGattService::GATT_ERROR_NOT_SUPPORTED))
-      .WillOnce(InvokeCallbackArgument<1>(
-          BluetoothRemoteGattService::GATT_ERROR_IN_PROGRESS))
-      .WillOnce(InvokeCallbackArgument<0>(value));
+      .WillOnce(InvokeCallbackArgument<0>(
+          BluetoothRemoteGattService::GATT_ERROR_FAILED,
+          /*value=*/std::vector<uint8_t>()))
+      .WillOnce(InvokeCallbackArgument<0>(
+          BluetoothRemoteGattService::GATT_ERROR_INVALID_LENGTH,
+          /*value=*/std::vector<uint8_t>()))
+      .WillOnce(InvokeCallbackArgument<0>(
+          BluetoothRemoteGattService::GATT_ERROR_NOT_PERMITTED,
+          /*value=*/std::vector<uint8_t>()))
+      .WillOnce(InvokeCallbackArgument<0>(
+          BluetoothRemoteGattService::GATT_ERROR_NOT_AUTHORIZED,
+          /*value=*/std::vector<uint8_t>()))
+      .WillOnce(InvokeCallbackArgument<0>(
+          BluetoothRemoteGattService::GATT_ERROR_NOT_PAIRED,
+          /*value=*/std::vector<uint8_t>()))
+      .WillOnce(InvokeCallbackArgument<0>(
+          BluetoothRemoteGattService::GATT_ERROR_NOT_SUPPORTED,
+          /*value=*/std::vector<uint8_t>()))
+      .WillOnce(InvokeCallbackArgument<0>(
+          BluetoothRemoteGattService::GATT_ERROR_IN_PROGRESS,
+          /*value=*/std::vector<uint8_t>()))
+      .WillOnce(InvokeCallbackArgument<0>(/*error_code=*/base::nullopt, value));
 
   ExtensionTestMessageListener listener("ready", true);
   listener.set_failure_message("fail");

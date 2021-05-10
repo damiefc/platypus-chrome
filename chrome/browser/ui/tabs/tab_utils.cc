@@ -89,7 +89,7 @@ std::vector<TabAlertState> GetTabAlertStatesForContents(
   return states;
 }
 
-base::string16 GetTabAlertStateText(const TabAlertState alert_state) {
+std::u16string GetTabAlertStateText(const TabAlertState alert_state) {
   switch (alert_state) {
     case TabAlertState::AUDIO_PLAYING:
       return l10n_util::GetStringUTF16(
@@ -128,7 +128,7 @@ base::string16 GetTabAlertStateText(const TabAlertState alert_state) {
           IDS_TOOLTIP_TAB_ALERT_STATE_VR_PRESENTING);
   }
   NOTREACHED();
-  return base::string16();
+  return std::u16string();
 }
 
 TabMutedReason GetTabAudioMutedReason(content::WebContents* contents) {
@@ -182,8 +182,8 @@ bool IsSiteMuted(const TabStripModel& tab_strip, const int index) {
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   HostContentSettingsMap* settings =
       HostContentSettingsMapFactory::GetForProfile(profile);
-  return settings->GetContentSetting(url, url, ContentSettingsType::SOUND,
-                                     std::string()) == CONTENT_SETTING_BLOCK;
+  return settings->GetContentSetting(url, url, ContentSettingsType::SOUND) ==
+         CONTENT_SETTING_BLOCK;
 }
 
 bool AreAllSitesMuted(const TabStripModel& tab_strip,

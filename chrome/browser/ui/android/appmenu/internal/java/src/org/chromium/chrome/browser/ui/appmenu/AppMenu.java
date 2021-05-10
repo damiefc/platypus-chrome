@@ -8,7 +8,9 @@ import android.animation.Animator;
 import android.animation.AnimatorSet;
 import android.content.Context;
 import android.content.res.Resources;
+import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.SystemClock;
@@ -35,12 +37,14 @@ import androidx.annotation.IdRes;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.SysUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.ui.appmenu.internal.R;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightParams;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightShape;
+import org.chromium.ui.widget.ChipView;
 import org.chromium.ui.widget.Toast;
 
 import java.util.ArrayList;
@@ -73,6 +77,7 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
     private AnimatorSet mMenuItemEnterAnimator;
     private long mMenuShownTimeMs;
     private boolean mSelectedItemBeforeDismiss;
+    private Integer mHighlightedItemId;
 
     /**
      * Creates and sets up the App Menu.
@@ -163,15 +168,13 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
      *                              by external apps.
      * @param groupDividerResourceId     The resource id of divider menu items. This will be used to
      *         determine the number of dividers that appear in the menu.
-     * @param circleHighlightItem   Whether the highlighted item should use a circle highlight or
-     *                              not.
      * @param customViewBinders     See {@link AppMenuPropertiesDelegate#getCustomViewBinders()}.
      */
     void show(Context context, final View anchorView, boolean isByPermanentButton,
             int screenRotation, Rect visibleDisplayFrame, int screenHeight,
             @IdRes int footerResourceId, @IdRes int headerResourceId,
             @IdRes int groupDividerResourceId, Integer highlightedItemId,
-            boolean circleHighlightItem, @Nullable List<CustomViewBinder> customViewBinders) {
+            @Nullable List<CustomViewBinder> customViewBinders) {
         mPopup = new PopupWindow(context);
         mPopup.setFocusable(true);
         mPopup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
@@ -197,6 +200,7 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
             mListView = null;
             mFooterView = null;
             mMenuItemEnterAnimator = null;
+            mHighlightedItemId = null;
         });
 
         // Some OEMs don't actually let us change the background... but they still return the
@@ -204,22 +208,17 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
         // drawable here even though our style says @null we should use this padding instead...
         Drawable originalBgDrawable = mPopup.getBackground();
 
-        // Need to explicitly set the background here.  Relying on it being set in the style caused
-        // an incorrectly drawn background.
-        mPopup.setBackgroundDrawable(ApiCompatibilityUtils.getDrawable(
-                context.getResources(), R.drawable.popup_bg_tinted));
+        // Setting this to a transparent ColorDrawable instead of null because setting it to null
+        // prevents the menu from being dismissed by tapping outside or pressing the back button on
+        // Android L.
+        mPopup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        // Make sure that the popup window will be closed when touch outside of it.
+        mPopup.setOutsideTouchable(true);
+
         if (!isByPermanentButton) mPopup.setAnimationStyle(R.style.OverflowMenuAnim);
 
         // Turn off window animations for low end devices.
         if (SysUtils.isLowEndDevice()) mPopup.setAnimationStyle(0);
-
-        Rect bgPadding = new Rect();
-        mPopup.getBackground().getPadding(bgPadding);
-
-        int menuWidth = context.getResources().getDimensionPixelSize(R.dimen.menu_width);
-        int popupWidth = menuWidth + bgPadding.left + bgPadding.right;
-
-        mPopup.setWidth(popupWidth);
 
         mCurrentScreenRotation = screenRotation;
         mIsByPermanentButton = isByPermanentButton;
@@ -235,6 +234,24 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
             }
         }
 
+        // A List adapter for visible items in the Menu. The first row is added as a header to the
+        // list view.
+        mAdapter = new AppMenuAdapter(this, menuItems, LayoutInflater.from(context),
+                highlightedItemId, customViewBinders, mIconBeforeItem);
+
+        ViewGroup contentView =
+                (ViewGroup) LayoutInflater.from(context).inflate(R.layout.app_menu_layout, null);
+        // Setting android:clipToOutline in xml causes an "attribute not found" error.
+        contentView.setClipToOutline(true);
+
+        Rect bgPadding = new Rect();
+        contentView.getBackground().getPadding(bgPadding);
+
+        int menuWidth = context.getResources().getDimensionPixelSize(R.dimen.menu_width);
+        int popupWidth = menuWidth + bgPadding.left + bgPadding.right;
+
+        mPopup.setWidth(popupWidth);
+
         Rect sizingPadding = new Rect(bgPadding);
         if (isByPermanentButton && originalBgDrawable != null) {
             Rect originalPadding = new Rect();
@@ -243,21 +260,22 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
             sizingPadding.bottom = originalPadding.bottom;
         }
 
-        // A List adapter for visible items in the Menu. The first row is added as a header to the
-        // list view.
-        mAdapter = new AppMenuAdapter(this, menuItems, LayoutInflater.from(context),
-                highlightedItemId, customViewBinders, mIconBeforeItem);
-
-        ViewGroup contentView =
-                (ViewGroup) LayoutInflater.from(context).inflate(R.layout.app_menu_layout, null);
         mListView = (ListView) contentView.findViewById(R.id.app_menu_list);
 
         int footerHeight = inflateFooter(footerResourceId, contentView, menuWidth);
         int headerHeight = inflateHeader(headerResourceId, contentView, menuWidth);
 
+        mHighlightedItemId = highlightedItemId;
         if (highlightedItemId != null) {
             View viewToHighlight = contentView.findViewById(highlightedItemId);
-            ViewHighlighter.turnOnHighlight(viewToHighlight, circleHighlightItem);
+            HighlightParams highlightParams = new HighlightParams(HighlightShape.RECTANGLE);
+            // TODO(crbug.com/1152592): ChipView highlighting should be larger than the actual chip.
+            // Currently, the highlighting is constrained to within the chip.
+            if (viewToHighlight instanceof ChipView) {
+                ChipView chipViewToHighlight = (ChipView) viewToHighlight;
+                highlightParams.setCornerRadius(chipViewToHighlight.getCornerRadius());
+            }
+            ViewHighlighter.turnOnHighlight(viewToHighlight, highlightParams);
         }
 
         // Set the adapter after the header is added to avoid crashes on JellyBean.
@@ -351,7 +369,8 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
         if (menuItem.isEnabled()) {
             mSelectedItemBeforeDismiss = true;
             dismiss();
-            mHandler.onOptionsItemSelected(menuItem);
+            mHandler.onOptionsItemSelected(menuItem,
+                    mHighlightedItemId != null && mHighlightedItemId == menuItem.getItemId());
         }
     }
 

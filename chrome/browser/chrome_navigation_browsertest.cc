@@ -7,6 +7,7 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
@@ -15,12 +16,14 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/protocol/devtools_protocol_test_support.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
+#include "chrome/browser/login_detection/login_detection_util.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/tab_contents/navigation_metrics_recorder.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/browser/ui/sad_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/back_forward_menu_model.h"
 #include "chrome/common/chrome_features.h"
@@ -38,6 +41,8 @@
 #include "components/url_formatter/url_formatter.h"
 #include "components/variations/active_field_trials.h"
 #include "components/variations/hashing.h"
+#include "content/common/content_navigation_policy.h"
+#include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/download_manager_delegate.h"
 #include "content/public/browser/navigation_entry.h"
@@ -63,6 +68,7 @@
 #include "extensions/test/test_extension_dir.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/test/spawned_test_server/spawned_test_server.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/network/public/cpp/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -101,6 +107,10 @@ class ChromeNavigationBrowserTest : public InProcessBrowserTest {
   ukm::TestAutoSetUkmRecorder* test_ukm_recorder() {
     return test_ukm_recorder_.get();
   }
+
+ protected:
+  void ExpectHideAndRestoreSadTabWhenNavigationCancels(bool cross_site);
+  void ExpectHideSadTabWhenNavigationCompletes(bool cross_site);
 
  private:
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> test_ukm_recorder_;
@@ -341,36 +351,15 @@ IN_PROC_BROWSER_TEST_F(CtrlClickShouldEndUpInSameProcessTest, SubframeTarget) {
   TestCtrlClick("test-anchor-with-subframe-target");
 }
 
-class ChromeNavigationPortMappedBrowserTest : public InProcessBrowserTest {
- public:
-  ChromeNavigationPortMappedBrowserTest() {}
-  ~ChromeNavigationPortMappedBrowserTest() override {}
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ASSERT_TRUE(embedded_test_server()->Start());
-
-    // Use the command line parameter for the host resolver, so URLs without
-    // explicit port numbers can be mapped under the hood to the port number
-    // the |embedded_test_server| uses. It is required to test with potentially
-    // malformed URLs.
-    std::string port =
-        base::NumberToString(embedded_test_server()->host_port_pair().port());
-    command_line->AppendSwitchASCII(
-        "host-resolver-rules",
-        "MAP * 127.0.0.1:" + port + ", EXCLUDE 127.0.0.1*");
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ChromeNavigationPortMappedBrowserTest);
-};
-
 // Test to verify that spoofing a URL via a redirect from a slightly malformed
 // URL doesn't work.  See also https://crbug.com/657720.
-IN_PROC_BROWSER_TEST_F(ChromeNavigationPortMappedBrowserTest,
+IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
                        ContextMenuNavigationToInvalidUrl) {
   GURL initial_url = embedded_test_server()->GetURL("/title1.html");
   GURL new_tab_url(
       "www.foo.com::/server-redirect?http%3A%2F%2Fbar.com%2Ftitle2.html");
+  EXPECT_TRUE(new_tab_url.is_valid());
+  EXPECT_EQ("www.foo.com", new_tab_url.scheme());
 
   // Navigate to an initial page, to ensure we have a committed document
   // from which to perform a context menu initiated navigation.
@@ -381,7 +370,7 @@ IN_PROC_BROWSER_TEST_F(ChromeNavigationPortMappedBrowserTest,
   // This corresponds to "Open link in new tab".
   content::ContextMenuParams params;
   params.is_editable = false;
-  params.media_type = blink::ContextMenuDataMediaType::kNone;
+  params.media_type = blink::mojom::ContextMenuDataMediaType::kNone;
   params.page_url = initial_url;
   params.link_url = new_tab_url;
 
@@ -391,21 +380,41 @@ IN_PROC_BROWSER_TEST_F(ChromeNavigationPortMappedBrowserTest,
   menu.Init();
   menu.ExecuteCommand(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB, 0);
 
-  // Wait for the new tab to be created and for loading to stop.
+  // Wait for the new tab to be created.
   tab_add.Wait();
   int index_of_new_tab = browser()->tab_strip_model()->count() - 1;
   content::WebContents* new_web_contents =
       browser()->tab_strip_model()->GetWebContentsAt(index_of_new_tab);
-  EXPECT_TRUE(WaitForLoadStop(new_web_contents));
 
-  // Verify that the final URL after the redirects gets committed.
-  EXPECT_EQ(GURL("http://bar.com/title2.html"),
-            new_web_contents->GetLastCommittedURL());
+  // Verify that the load fails (because of the wrong "scheme" - www.foo.com is
+  // not a real scheme).
+  EXPECT_FALSE(WaitForLoadStop(new_web_contents));
+
+  // Verify that the invalid URL was not committed.
+  content::NavigationController& navigation_controller =
+      new_web_contents->GetController();
+  EXPECT_EQ(nullptr, navigation_controller.GetLastCommittedEntry());
+  EXPECT_EQ(0, navigation_controller.GetEntryCount());
+
+  // Verify that the pending entry is still present, even though the navigation
+  // has failed and didn't commit.  We preserve the pending entry if it is a
+  // valid URL in an unmodified blank tab.
+  content::NavigationEntry* pending_entry =
+      navigation_controller.GetPendingEntry();
+  ASSERT_NE(nullptr, pending_entry);
+  EXPECT_EQ(new_tab_url, pending_entry->GetURL());
+
+  // Verify that the pending entry is not shown anymore, after
+  // WebContentsImpl::DidAccessInitialDocument detects that the initial, empty
+  // document was accessed.
+  EXPECT_EQ(pending_entry, navigation_controller.GetVisibleEntry());
+  EXPECT_TRUE(content::ExecuteScript(new_web_contents, "window.x=3"));
+  EXPECT_NE(pending_entry, navigation_controller.GetVisibleEntry());
 }
 
-// Ensure that a failed navigation in a new tab will not leave an invalid
-// visible URL, which may be formatted in an unsafe way in the omnibox.
-// See https://crbug.com/850824.
+// Ensure that URL transformations do not let a webpage populate the Omnibox
+// with a javascript: URL.  See https://crbug.com/850824 and
+// https://crbug.com/1116280.
 IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
                        ClearInvalidPendingURLOnFail) {
   GURL initial_url = embedded_test_server()->GetURL(
@@ -418,12 +427,15 @@ IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
 
   const char* kTestUrls[] = {
       // https://crbug.com/850824
-      "a.a:@javascript:foo()",
+      "o.o:@javascript:foo()",
 
       // https://crbug.com/1116280
       "o.o:@javascript::://foo.com%0Aalert(document.domain)"};
   for (const char* kTestUrl : kTestUrls) {
     SCOPED_TRACE(testing::Message() << "kTestUrl = " << kTestUrl);
+    GURL test_url(kTestUrl);
+    EXPECT_TRUE(test_url.is_valid());
+    EXPECT_EQ("o.o", test_url.scheme());
 
     // Set the test URL.
     const char kUrlSettingTemplate[] = R"(
@@ -443,11 +455,8 @@ IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
     // The load in the new window should fail.
     EXPECT_FALSE(WaitForLoadStop(new_contents));
 
-    // Ensure that there is no pending entry or visible URL.
-    EXPECT_EQ(nullptr, new_contents->GetController().GetPendingEntry());
-    EXPECT_EQ(GURL(), new_contents->GetVisibleURL());
-
     // Ensure that the omnibox doesn't start with javascript: scheme.
+    EXPECT_EQ(test_url, new_contents->GetVisibleURL());
     OmniboxView* omnibox_view =
         browser()->window()->GetLocationBar()->GetOmniboxView();
     std::string omnibox_text = base::UTF16ToASCII(omnibox_view->GetText());
@@ -743,7 +752,9 @@ IN_PROC_BROWSER_TEST_F(
       extension_loader.LoadExtension(ext_dir.UnpackedPath());
   ASSERT_TRUE(extension);
   ASSERT_TRUE(ready_listener.WaitUntilSatisfied());
-  content::BrowserContext::GetDefaultStoragePartition(browser()->profile())
+  browser()
+      ->profile()
+      ->GetDefaultStoragePartition()
       ->FlushNetworkInterfaceForTesting();
 
   // 2. Open a popup containing a cross-site subframe.
@@ -787,48 +798,45 @@ IN_PROC_BROWSER_TEST_F(
   //    this navigation to an about:blank URL.
   //
   // This step would have hit the CHECK from https://crbug.com/1026738.
+  url::Origin cross_site_origin = cross_site_subframe->GetLastCommittedOrigin();
   content::TestNavigationObserver nav_observer(popup, 1);
   ASSERT_TRUE(ExecJs(cross_site_subframe,
                      content::JsReplace("top.location = $1", kRedirectedUrl)));
   nav_observer.Wait();
   EXPECT_EQ(url::kAboutBlankURL, popup->GetLastCommittedURL());
+  EXPECT_EQ(cross_site_origin, popup->GetMainFrame()->GetLastCommittedOrigin());
 
-  // 5. Verify that the about:blank URL is hosted in the same process
+  // 5. Verify that the about:blank URL is hosted in the same SiteInstance
   //    as the navigation initiator (and separate from the opener and the old
-  //    popup process).
-  if (content::AreAllSitesIsolatedForTesting()) {
-    EXPECT_NE(opener->GetSiteInstance(), popup->GetSiteInstance());
-    EXPECT_NE(old_popup_site_instance.get(), popup->GetSiteInstance());
-    EXPECT_EQ(old_subframe_site_instance.get(), popup->GetSiteInstance());
-    EXPECT_NE(url::kAboutBlankURL,
-              popup->GetSiteInstance()->GetSiteURL().scheme());
-    EXPECT_NE(url::kDataScheme,
-              popup->GetSiteInstance()->GetSiteURL().scheme());
-  } else {
+  //    popup SiteInstance).
+  EXPECT_EQ(old_subframe_site_instance.get(), popup->GetSiteInstance());
+  EXPECT_NE(url::kAboutBlankURL,
+            popup->GetSiteInstance()->GetSiteURL().scheme());
+  EXPECT_NE(url::kDataScheme, popup->GetSiteInstance()->GetSiteURL().scheme());
+  if (content::AreDefaultSiteInstancesEnabled()) {
     EXPECT_EQ(opener->GetSiteInstance(), popup->GetSiteInstance());
     EXPECT_EQ(old_popup_site_instance.get(), popup->GetSiteInstance());
-    EXPECT_EQ(old_subframe_site_instance.get(), popup->GetSiteInstance());
-    EXPECT_NE(url::kAboutBlankURL,
-              popup->GetSiteInstance()->GetSiteURL().scheme());
-    EXPECT_NE(url::kDataScheme,
-              popup->GetSiteInstance()->GetSiteURL().scheme());
-  }
-
-  // 6. Verify the origin of the about:blank URL in the popup.
-  //
-  // Blink calculates the origin of an about:blank frame based on the
-  // opener-or-parent (rather than based on the navigation initiator's origin
-  // as required by the spec).
-  // TODO(lukasza): https://crbug.com/585649: Once Blink is fixed, adjust test
-  // expectations below to make sure the initiator's origin has been committed.
-  // Consider also adding verification that the about:blank page can be scripted
-  // by other frames with the initiator's origin.
-  if (content::AreAllSitesIsolatedForTesting()) {
-    // If the opener is a blink::RemoteFrame, then Blink uses an opaque origin.
-    EXPECT_TRUE(popup->GetMainFrame()->GetLastCommittedOrigin().opaque());
   } else {
-    EXPECT_EQ(url::Origin::Create(kOpenerUrl),
-              popup->GetMainFrame()->GetLastCommittedOrigin());
+    EXPECT_NE(opener->GetSiteInstance(), popup->GetSiteInstance());
+    EXPECT_NE(old_popup_site_instance.get(), popup->GetSiteInstance());
+
+    // Verify that full isolation results in a separate process for each
+    // SiteInstance. Otherwise they share a process because none of the sites
+    // require a dedicated process.
+    if (content::AreAllSitesIsolatedForTesting()) {
+      EXPECT_NE(opener->GetSiteInstance()->GetProcess(),
+                popup->GetSiteInstance()->GetProcess());
+      EXPECT_NE(old_popup_site_instance->GetProcess(),
+                popup->GetSiteInstance()->GetProcess());
+    } else {
+      EXPECT_FALSE(opener->GetSiteInstance()->RequiresDedicatedProcess());
+      EXPECT_FALSE(popup->GetSiteInstance()->RequiresDedicatedProcess());
+      EXPECT_FALSE(old_popup_site_instance->RequiresDedicatedProcess());
+      EXPECT_EQ(opener->GetSiteInstance()->GetProcess(),
+                popup->GetSiteInstance()->GetProcess());
+      EXPECT_EQ(old_popup_site_instance->GetProcess(),
+                popup->GetSiteInstance()->GetProcess());
+    }
   }
 }
 
@@ -882,7 +890,9 @@ IN_PROC_BROWSER_TEST_F(
       extension_loader.LoadExtension(ext_dir.UnpackedPath());
   ASSERT_TRUE(extension);
   ASSERT_TRUE(ready_listener.WaitUntilSatisfied());
-  content::BrowserContext::GetDefaultStoragePartition(browser()->profile())
+  browser()
+      ->profile()
+      ->GetDefaultStoragePartition()
       ->FlushNetworkInterfaceForTesting();
 
   // 2. Open a popup containing a cross-site subframe.
@@ -931,19 +941,37 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ(kRedirectTargetUrl, popup->GetLastCommittedURL());
   EXPECT_TRUE(popup->GetMainFrame()->GetLastCommittedOrigin().opaque());
 
-  // 5. Verify that with site-per-process the data: URL is hosted in a brand
-  //    new, separate process (separate from the opener and the previous popup
-  //    process).
-  if (content::AreAllSitesIsolatedForTesting()) {
-    EXPECT_NE(opener->GetSiteInstance(), popup->GetSiteInstance());
-    EXPECT_NE(old_popup_site_instance.get(), popup->GetSiteInstance());
-    EXPECT_EQ(url::kDataScheme,
-              popup->GetSiteInstance()->GetSiteURL().scheme());
-  } else {
+  // 5. Verify that with strict SiteInstances the data: URL is hosted in a brand
+  //    new, separate SiteInstance (separate from the opener and the previous
+  //    popup SiteInstance).
+  if (content::AreDefaultSiteInstancesEnabled()) {
     EXPECT_EQ(opener->GetSiteInstance(), popup->GetSiteInstance());
     EXPECT_EQ(old_popup_site_instance.get(), popup->GetSiteInstance());
     EXPECT_NE(url::kDataScheme,
               popup->GetSiteInstance()->GetSiteURL().scheme());
+  } else {
+    EXPECT_NE(opener->GetSiteInstance(), popup->GetSiteInstance());
+    EXPECT_NE(old_popup_site_instance.get(), popup->GetSiteInstance());
+    EXPECT_EQ(url::kDataScheme,
+              popup->GetSiteInstance()->GetSiteURL().scheme());
+
+    // Verify that full isolation results in a separate process for each
+    // SiteInstance. Otherwise they share a process because none of the sites
+    // require a dedicated process.
+    if (content::AreAllSitesIsolatedForTesting()) {
+      EXPECT_NE(opener->GetSiteInstance()->GetProcess(),
+                popup->GetSiteInstance()->GetProcess());
+      EXPECT_NE(old_popup_site_instance->GetProcess(),
+                popup->GetSiteInstance()->GetProcess());
+    } else {
+      EXPECT_FALSE(opener->GetSiteInstance()->RequiresDedicatedProcess());
+      EXPECT_FALSE(popup->GetSiteInstance()->RequiresDedicatedProcess());
+      EXPECT_FALSE(old_popup_site_instance->RequiresDedicatedProcess());
+      EXPECT_EQ(opener->GetSiteInstance()->GetProcess(),
+                popup->GetSiteInstance()->GetProcess());
+      EXPECT_EQ(old_popup_site_instance->GetProcess(),
+                popup->GetSiteInstance()->GetProcess());
+    }
   }
 }
 
@@ -1517,6 +1545,117 @@ IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
   test_ukm_recorder()->ExpectEntrySourceHasUrl(ukm_entries[0], skippable_url);
 }
 
+// Ensure that starting a navigation out of a sad tab hides the sad tab right
+// away, without waiting for the navigation to commit and restores it again
+// after cancelling.
+void ChromeNavigationBrowserTest::
+    ExpectHideAndRestoreSadTabWhenNavigationCancels(bool cross_site) {
+  // This test only applies when this policy is in place.
+  if (!content::ShouldSkipEarlyCommitPendingForCrashedFrame())
+    return;
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  SadTabHelper* sad_tab_helper = SadTabHelper::FromWebContents(contents);
+
+  GURL url_start(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  GURL url_hung =
+      embedded_test_server()->GetURL(cross_site ? "b.com" : "a.com", "/hung");
+  GURL url_succeed = embedded_test_server()->GetURL(
+      cross_site ? "b.com" : "a.com", "/title2.html");
+  ui_test_utils::NavigateToURL(browser(), url_start);
+
+  // No sad tab should be visible after a successful navigation.
+  ASSERT_FALSE(sad_tab_helper->sad_tab());
+
+  // Kill the renderer process.
+  content::RenderProcessHost* process = contents->GetMainFrame()->GetProcess();
+  content::RenderProcessHostWatcher crash_observer(
+      process, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  process->Shutdown(-1);
+  crash_observer.Wait();
+
+  // Make sure the sad tab is shown.
+  ASSERT_TRUE(sad_tab_helper->sad_tab());
+
+  // Start a navigation that will never finish and wait for request start.
+  content::TestNavigationManager manager(contents, url_hung);
+  contents->GetController().LoadURL(url_hung, content::Referrer(),
+                                    ui::PAGE_TRANSITION_TYPED, std::string());
+  EXPECT_TRUE(manager.WaitForRequestStart());
+
+  // Ensure that the sad tab is hidden at this point.
+  ASSERT_FALSE(sad_tab_helper->sad_tab());
+
+  // Cancel the pending navigation and ensure that the sad tab returns.
+  chrome::Stop(browser());
+  EXPECT_TRUE(sad_tab_helper->sad_tab());
+  // Ensure that the omnibox URL is the crashed one.
+  OmniboxView* omnibox_view =
+      browser()->window()->GetLocationBar()->GetOmniboxView();
+  std::string omnibox_text = base::UTF16ToASCII(omnibox_view->GetText());
+  EXPECT_EQ(omnibox_text, url_start.spec());
+
+  // Make sure the sad tab goes away when we commit successfully.
+  ui_test_utils::NavigateToURL(browser(), url_succeed);
+  EXPECT_FALSE(sad_tab_helper->sad_tab());
+}
+
+// Ensure that starting a navigation out of a sad tab hides the sad tab right
+// away, without waiting for the navigation to commit and restores it again
+// after cancelling.
+IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
+                       RestoreSadTabWhenNavigationCancels_CrossSite) {
+  ExpectHideAndRestoreSadTabWhenNavigationCancels(/*cross_site=*/true);
+}
+
+// Same-site version of above.
+IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
+                       RestoreSadTabWhenNavigationCancels_SameSite) {
+  ExpectHideAndRestoreSadTabWhenNavigationCancels(/*cross_site=*/false);
+}
+
+// Ensure that completing a navigation from a sad tab will clear the sad tab.
+void ChromeNavigationBrowserTest::ExpectHideSadTabWhenNavigationCompletes(
+    bool cross_site) {
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  SadTabHelper* sad_tab_helper = SadTabHelper::FromWebContents(contents);
+
+  GURL url_start(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  GURL url_succeed = embedded_test_server()->GetURL(
+      cross_site ? "b.com" : "a.com", "/title2.html");
+  ui_test_utils::NavigateToURL(browser(), url_start);
+
+  // No sad tab should be visible after a successful navigation.
+  ASSERT_FALSE(sad_tab_helper->sad_tab());
+
+  // Kill the renderer process.
+  content::RenderProcessHost* process = contents->GetMainFrame()->GetProcess();
+  content::RenderProcessHostWatcher crash_observer(
+      process, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  process->Shutdown(-1);
+  crash_observer.Wait();
+
+  // Make sure the sad tab is shown.
+  ASSERT_TRUE(sad_tab_helper->sad_tab());
+
+  // Make sure the sad tab goes away when we commit successfully.
+  ui_test_utils::NavigateToURL(browser(), url_succeed);
+  EXPECT_FALSE(sad_tab_helper->sad_tab());
+}
+
+// Ensure that completing a navigation from a sad tab will clear the sad tab.
+IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
+                       ClearSadTabWhenNavigationCompletes_CrossSite) {
+  ExpectHideSadTabWhenNavigationCompletes(/*cross_site=*/true);
+}
+
+// Same-site version of above.
+IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
+                       ClearSadTabWhenNavigationCompletes_SameSite) {
+  ExpectHideSadTabWhenNavigationCompletes(/*cross_site=*/false);
+}
+
 // TODO(csharrison): These tests should become tentative WPT, once the feature
 // is enabled by default.
 using NavigationConsumingTest = ChromeNavigationBrowserTest;
@@ -1763,6 +1902,13 @@ class SiteIsolationForPasswordSitesBrowserTest
         {features::kSitePerProcess});
   }
 
+  void StartIsolatingSite(Profile* profile, const GURL& url) {
+    content::SiteInstance::StartIsolatingSite(
+        profile, url,
+        content::ChildProcessSecurityPolicy::IsolatedOriginSource::
+            USER_TRIGGERED);
+  }
+
   std::vector<std::string> GetSavedIsolatedSites() {
     return GetSavedIsolatedSites(browser()->profile());
   }
@@ -1956,9 +2102,9 @@ IN_PROC_BROWSER_TEST_F(SiteIsolationForPasswordSitesBrowserTest,
 
   // Isolate saved.com and saved2.com persistently.
   GURL saved_url(embedded_test_server()->GetURL("saved.com", "/title1.html"));
-  content::SiteInstance::StartIsolatingSite(browser()->profile(), saved_url);
+  StartIsolatingSite(browser()->profile(), saved_url);
   GURL saved2_url(embedded_test_server()->GetURL("saved2.com", "/title1.html"));
-  content::SiteInstance::StartIsolatingSite(browser()->profile(), saved2_url);
+  StartIsolatingSite(browser()->profile(), saved2_url);
 
   // Check that saved.com utilizes a dedicated process in future navigations.
   // Open a new tab to force creation of a new BrowsingInstance.
@@ -2007,9 +2153,9 @@ IN_PROC_BROWSER_TEST_F(SiteIsolationForPasswordSitesBrowserTest,
 IN_PROC_BROWSER_TEST_F(SiteIsolationForPasswordSitesBrowserTest,
                        IsolatedSiteIsSavedOnlyOnce) {
   GURL saved_url(embedded_test_server()->GetURL("saved.com", "/title1.html"));
-  content::SiteInstance::StartIsolatingSite(browser()->profile(), saved_url);
-  content::SiteInstance::StartIsolatingSite(browser()->profile(), saved_url);
-  content::SiteInstance::StartIsolatingSite(browser()->profile(), saved_url);
+  StartIsolatingSite(browser()->profile(), saved_url);
+  StartIsolatingSite(browser()->profile(), saved_url);
+  StartIsolatingSite(browser()->profile(), saved_url);
   EXPECT_THAT(GetSavedIsolatedSites(),
               UnorderedElementsAre("http://saved.com"));
 }
@@ -2021,7 +2167,7 @@ IN_PROC_BROWSER_TEST_F(SiteIsolationForPasswordSitesBrowserTest,
                        IncognitoWithIsolatedSites) {
   // Isolate saved.com and verify it's been saved to disk.
   GURL saved_url(embedded_test_server()->GetURL("saved.com", "/title1.html"));
-  content::SiteInstance::StartIsolatingSite(browser()->profile(), saved_url);
+  StartIsolatingSite(browser()->profile(), saved_url);
   EXPECT_THAT(GetSavedIsolatedSites(),
               UnorderedElementsAre("http://saved.com"));
 
@@ -2044,7 +2190,7 @@ IN_PROC_BROWSER_TEST_F(SiteIsolationForPasswordSitesBrowserTest,
   // process, and the site is not persisted for either the main or incognito
   // profiles.
   GURL foo_url(embedded_test_server()->GetURL("foo.com", "/title1.html"));
-  content::SiteInstance::StartIsolatingSite(incognito->profile(), foo_url);
+  StartIsolatingSite(incognito->profile(), foo_url);
 
   AddBlankTabAndShow(incognito);
   ui_test_utils::NavigateToURL(incognito, foo_url);
@@ -2076,7 +2222,7 @@ IN_PROC_BROWSER_TEST_F(SiteIsolationForPasswordSitesBrowserTest,
 
   // Isolate saved.com and verify it's been saved to disk.
   GURL saved_url(https_server.GetURL("saved.com", "/clear_site_data.html"));
-  content::SiteInstance::StartIsolatingSite(browser()->profile(), saved_url);
+  StartIsolatingSite(browser()->profile(), saved_url);
   EXPECT_THAT(GetSavedIsolatedSites(),
               UnorderedElementsAre("https://saved.com"));
 
@@ -2086,4 +2232,194 @@ IN_PROC_BROWSER_TEST_F(SiteIsolationForPasswordSitesBrowserTest,
   ui_test_utils::NavigateToURL(browser(), saved_url);
   EXPECT_THAT(GetSavedIsolatedSites(),
               UnorderedElementsAre("https://saved.com"));
+}
+
+// This test class turns on the feature to dynamically isolate sites where the
+// user logs in via OAuth. This also requires enabling OAuth login detection
+// (which is used by other features as well) and disabling strict site
+// isolation (so that OAuth isolation can be observed on desktop platforms).
+class SiteIsolationForOAuthSitesBrowserTest
+    : public ChromeNavigationBrowserTest {
+ public:
+  SiteIsolationForOAuthSitesBrowserTest()
+      : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
+    feature_list_.InitWithFeatures(
+        {login_detection::kLoginDetection,
+         site_isolation::features::kSiteIsolationForOAuthSites},
+        {features::kSitePerProcess});
+  }
+
+  using IsolatedOriginSource =
+      content::ChildProcessSecurityPolicy::IsolatedOriginSource;
+
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    ChromeNavigationBrowserTest::SetUpCommandLine(command_line);
+
+    // Allow HTTPS server to be used on sites other than localhost.
+    command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
+  }
+
+  void SetUp() override {
+    https_server_.ServeFilesFromSourceDirectory("chrome/test/data");
+    ASSERT_TRUE(https_server_.InitializeAndListen());
+    ChromeNavigationBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    https_server_.StartAcceptingConnections();
+    ChromeNavigationBrowserTest::SetUpOnMainThread();
+  }
+
+  // Login detection only works for HTTPS sites.
+  net::EmbeddedTestServer* https_server() { return &https_server_; }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+  net::EmbeddedTestServer https_server_;
+};
+
+// Simulate a popup-based OAuth login flow, where a client opens a popup to log
+// in via OAuth.  Ensure that the client's site becomes isolated when the OAuth
+// login completes.
+IN_PROC_BROWSER_TEST_F(SiteIsolationForOAuthSitesBrowserTest, PopupFlow) {
+  // Navigate to the OAuth requestor.  It shouldn't be isolated yet.
+  ui_test_utils::NavigateToURL(
+      browser(), https_server()->GetURL("www.oauthclient.com", "/title1.html"));
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_FALSE(contents->GetMainFrame()
+                   ->GetProcess()
+                   ->IsProcessLockedToSiteForTesting());
+
+  using IsolatedOriginSource =
+      content::ChildProcessSecurityPolicy::IsolatedOriginSource;
+  auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
+  EXPECT_FALSE(policy->IsIsolatedSiteFromSource(
+      url::Origin::Create(GURL("https://oauthclient.com")),
+      IsolatedOriginSource::USER_TRIGGERED));
+
+  // Create a popup that emulates an OAuth sign-in flow.
+  content::WebContentsAddedObserver web_contents_added_observer;
+  content::TestNavigationObserver navigation_observer(nullptr, 1);
+  navigation_observer.StartWatchingNewWebContents();
+  ASSERT_TRUE(content::ExecuteScript(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      content::JsReplace(
+          "window.open($1, 'oauth_window', 'width=10,height=10');",
+          https_server()->GetURL("www.oauthprovider.com",
+                                 "/title2.html?client_id=123"))));
+  auto* popup_contents = web_contents_added_observer.GetWebContents();
+  navigation_observer.WaitForNavigationFinished();
+
+  // When the popup is closed, it will be detected as an OAuth login.
+  content::WebContentsDestroyedWatcher destroyed_watcher(popup_contents);
+  EXPECT_TRUE(ExecJs(popup_contents, "window.close()"));
+  destroyed_watcher.Wait();
+
+  // oauthclient.com should now be isolated. Check that it's now registered
+  // with ChildProcessSecurityPolicy (with its eTLD+1).
+  EXPECT_TRUE(policy->IsIsolatedSiteFromSource(
+      url::Origin::Create(GURL("https://oauthclient.com")),
+      IsolatedOriginSource::USER_TRIGGERED));
+
+  // Check that oauthclient.com navigations are site-isolated in future
+  // BrowsingInstances. Note that because there are no other window references
+  // at this point, a new navigation in the main window should force a
+  // BrowsingInstance swap to apply the new isolation.
+  ui_test_utils::NavigateToURL(
+      browser(),
+      https_server()->GetURL("www2.oauthclient.com", "/title1.html"));
+  EXPECT_TRUE(contents->GetMainFrame()
+                  ->GetProcess()
+                  ->IsProcessLockedToSiteForTesting());
+}
+
+// Similar to previous test, but simulate a same-window OAuth login flow, where
+// a client navigates directly to the OAuth provider, which will
+// navigate/redirect back to the client when the login flow completes.
+//
+// Part 2 of this test also verifies that OAuth site isolation persists across
+// restarts.
+IN_PROC_BROWSER_TEST_F(SiteIsolationForOAuthSitesBrowserTest,
+                       PRE_RedirectFlow) {
+  // Navigate to the OAuth requestor.
+  ui_test_utils::NavigateToURL(
+      browser(), https_server()->GetURL("oauthclient.com", "/title1.html"));
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_FALSE(contents->GetMainFrame()
+                   ->GetProcess()
+                   ->IsProcessLockedToSiteForTesting());
+
+  auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
+  EXPECT_FALSE(policy->IsIsolatedSiteFromSource(
+      url::Origin::Create(GURL("https://oauthclient.com")),
+      IsolatedOriginSource::USER_TRIGGERED));
+
+  // Use an interceptor to allow referencing arbitrary paths on
+  // oauthprovider.com without worrying that corresponding test files exist.
+  content::URLLoaderInterceptor interceptor(base::BindLambdaForTesting(
+      [&](content::URLLoaderInterceptor::RequestParams* params) {
+        if (params->url_request.url.host() == "oauthprovider.com") {
+          content::URLLoaderInterceptor::WriteResponse(
+              "chrome/test/data/title2.html", params->client.get());
+          return true;
+        }
+        // Not handled by us.
+        return false;
+      }));
+
+  // Simulate start of OAuth login.
+  ui_test_utils::NavigateToURL(
+      browser(), https_server()->GetURL("oauthprovider.com",
+                                        "/authenticate?client_id=123"));
+
+  // Simulate another OAuth login step.
+  ui_test_utils::NavigateToURL(
+      browser(), https_server()->GetURL("oauthprovider.com",
+                                        "/another_stage?client_id=123"));
+
+  // Simulate completion of OAuth login.
+  ui_test_utils::NavigateToURL(
+      browser(),
+      https_server()->GetURL("oauthclient.com", "/title2.html?code=secret"));
+
+  // oauthclient.com should now be isolated. Check that it's now registered
+  // with ChildProcessSecurityPolicy.
+  EXPECT_TRUE(policy->IsIsolatedSiteFromSource(
+      url::Origin::Create(GURL("https://oauthclient.com")),
+      IsolatedOriginSource::USER_TRIGGERED));
+
+  // Check that oauthclient.com navigations are site-isolated in future
+  // BrowsingInstances. Open a new unrelated window, which forces a new
+  // BrowsingInstance.
+  AddBlankTabAndShow(browser());
+  EXPECT_EQ(2, browser()->tab_strip_model()->count());
+  content::WebContents* new_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_NE(new_contents, contents);
+
+  ui_test_utils::NavigateToURL(
+      browser(), https_server()->GetURL("oauthclient.com", "/title1.html"));
+  EXPECT_TRUE(new_contents->GetMainFrame()
+                  ->GetProcess()
+                  ->IsProcessLockedToSiteForTesting());
+}
+
+// See part 1 of the test above.  This is part 2, which verifies that OAuth
+// site isolation persists across restarts.
+IN_PROC_BROWSER_TEST_F(SiteIsolationForOAuthSitesBrowserTest, RedirectFlow) {
+  auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
+  EXPECT_TRUE(policy->IsIsolatedSiteFromSource(
+      url::Origin::Create(GURL("https://oauthclient.com")),
+      IsolatedOriginSource::USER_TRIGGERED));
+
+  ui_test_utils::NavigateToURL(
+      browser(), https_server()->GetURL("oauthclient.com", "/title1.html"));
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(contents->GetMainFrame()
+                  ->GetProcess()
+                  ->IsProcessLockedToSiteForTesting());
 }

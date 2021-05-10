@@ -75,7 +75,7 @@ bool RelaunchRecommendedBubbleView::Accept() {
   return false;
 }
 
-base::string16 RelaunchRecommendedBubbleView::GetWindowTitle() const {
+std::u16string RelaunchRecommendedBubbleView::GetWindowTitle() const {
   return relaunch_recommended_timer_.GetWindowTitle();
 }
 
@@ -117,18 +117,12 @@ void RelaunchRecommendedBubbleView::Init() {
   base::RecordAction(base::UserMetricsAction("RelaunchRecommendedShown"));
 }
 
-gfx::Size RelaunchRecommendedBubbleView::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
-}
-
 void RelaunchRecommendedBubbleView::VisibilityChanged(
     views::View* starting_from,
     bool is_visible) {
   views::Button::AsButton(GetAnchorView())
-      ->AnimateInkDrop(is_visible ? views::InkDropState::ACTIVATED
+      ->ink_drop()
+      ->AnimateToState(is_visible ? views::InkDropState::ACTIVATED
                                   : views::InkDropState::DEACTIVATED,
                        nullptr);
 }
@@ -154,9 +148,12 @@ RelaunchRecommendedBubbleView::RelaunchRecommendedBubbleView(
       base::BindOnce(&base::RecordAction,
                      base::UserMetricsAction("RelaunchRecommended_Close")));
 
-  chrome::RecordDialogCreation(chrome::DialogIdentifier::RELAUNCH_RECOMMENDED);
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
+
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
-      views::TEXT, views::TEXT));
+      views::DialogContentType::kText, views::DialogContentType::kText));
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::RELAUNCH_RECOMMENDED);
 }
 
 void RelaunchRecommendedBubbleView::UpdateWindowTitle() {

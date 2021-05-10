@@ -170,7 +170,6 @@ void SVGAnimationElement::ParseAttribute(
     if (!ParseValues(params.new_value, values_)) {
       ReportAttributeParsingError(SVGParseStatus::kParsingFailed, name,
                                   params.new_value);
-      return;
     }
     UpdateAnimationMode();
     AnimationAttributeChanged();
@@ -659,7 +658,7 @@ SMILAnimationEffectParameters SVGAnimationElement::ComputeEffectParameters()
   return parameters;
 }
 
-void SVGAnimationElement::ApplyAnimation(SVGAnimationElement* result_element) {
+void SVGAnimationElement::ApplyAnimation(SMILAnimationValue& animation_value) {
   if (animation_valid_ == AnimationValidity::kUnknown) {
     if (CheckAnimationParameters()) {
       animation_valid_ = AnimationValidity::kValid;
@@ -709,8 +708,8 @@ void SVGAnimationElement::ApplyAnimation(SVGAnimationElement* result_element) {
   } else {
     effective_percent = percent;
   }
-  CalculateAnimatedValue(effective_percent, progress_state.repeat,
-                         result_element);
+  CalculateAnimationValue(animation_value, effective_percent,
+                          progress_state.repeat);
 }
 
 bool SVGAnimationElement::OverwritesUnderlyingAnimationValue() const {

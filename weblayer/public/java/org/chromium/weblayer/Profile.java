@@ -13,19 +13,23 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.weblayer_private.interfaces.APICallException;
+import org.chromium.weblayer_private.interfaces.IBrowser;
 import org.chromium.weblayer_private.interfaces.IClientDownload;
 import org.chromium.weblayer_private.interfaces.IDownload;
 import org.chromium.weblayer_private.interfaces.IDownloadCallbackClient;
+import org.chromium.weblayer_private.interfaces.IGoogleAccountAccessTokenFetcherClient;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
+import org.chromium.weblayer_private.interfaces.IOpenUrlCallbackClient;
 import org.chromium.weblayer_private.interfaces.IProfile;
+import org.chromium.weblayer_private.interfaces.IProfileClient;
 import org.chromium.weblayer_private.interfaces.IUserIdentityCallbackClient;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
 import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 
 import java.io.File;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -35,6 +39,7 @@ import java.util.Set;
  */
 public class Profile {
     private static final Map<String, Profile> sProfiles = new HashMap<>();
+    private static final Map<String, Profile> sIncognitoProfiles = new HashMap<>();
 
     /* package */ static Profile of(IProfile impl) {
         ThreadCheck.ensureOnUiThread();
@@ -44,42 +49,95 @@ public class Profile {
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
-        Profile profile = sProfiles.get(name);
+        boolean isIncognito;
+        try {
+            isIncognito = impl.isIncognito();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+        Profile profile;
+        if (isIncognito) {
+            profile = sIncognitoProfiles.get(name);
+        } else {
+            profile = sProfiles.get(name);
+        }
         if (profile != null) {
             return profile;
         }
 
-        return new Profile(name, impl);
+        return new Profile(name, impl, isIncognito);
     }
 
     /**
      * Return all profiles that have been created and not yet called destroyed.
-     * Note returned structure is immutable.
      */
     @NonNull
     public static Collection<Profile> getAllProfiles() {
         ThreadCheck.ensureOnUiThread();
-        return Collections.unmodifiableCollection(sProfiles.values());
+        Set<Profile> profiles = new HashSet<Profile>();
+        profiles.addAll(sProfiles.values());
+        profiles.addAll(sIncognitoProfiles.values());
+        return profiles;
     }
 
     private final String mName;
+    private final boolean mIsIncognito;
     private IProfile mImpl;
     private DownloadCallbackClientImpl mDownloadCallbackClient;
     private final CookieManager mCookieManager;
+    private final PrerenderController mPrerenderController;
 
     // Constructor for test mocking.
     protected Profile() {
         mName = null;
+        mIsIncognito = false;
         mImpl = null;
         mCookieManager = null;
+        mPrerenderController = null;
     }
 
-    private Profile(String name, IProfile impl) {
+    private Profile(String name, IProfile impl, boolean isIncognito) {
         mName = name;
         mImpl = impl;
+        mIsIncognito = isIncognito;
         mCookieManager = CookieManager.create(impl);
+        mPrerenderController = PrerenderController.create(impl);
 
-        sProfiles.put(name, this);
+        if (isIncognito) {
+            sIncognitoProfiles.put(name, this);
+        } else {
+            sProfiles.put(name, this);
+        }
+
+        try {
+            mImpl.setClient(new ProfileClientImpl());
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    IProfile getIProfile() {
+        return mImpl;
+    }
+
+    /**
+     * Returns the name of the profile. While added in 87, this can be used with any version.
+     *
+     * @return The name of the profile.
+     */
+    @NonNull
+    public String getName() {
+        return mName;
+    }
+
+    /**
+     * Returns true if the profile is incognito. While added in 87, this can be used with any
+     * version.
+     *
+     * @return True if the profile is incognito.
+     */
+    public boolean isIncognito() {
+        return mIsIncognito;
     }
 
     /**
@@ -122,7 +180,12 @@ public class Profile {
      * * This object is considered destroyed after this method returns. Calling any other method
      *   after will throw exceptions.
      * * Creating a new profile of the same name before doneCallback runs will throw an exception.
-     * @since 82
+     *
+     * After calling this function, {@link #getAllProfiles()} will not return the Profile, and
+     * {@link #enumerateAllProfileNames} will not return the profile name.
+     *
+     * @param completionCallback Callback that is notified when destruction and deletion of data is
+     * complete.
      */
     public void destroyAndDeleteDataFromDisk(@Nullable Runnable completionCallback) {
         ThreadCheck.ensureOnUiThread();
@@ -131,8 +194,45 @@ public class Profile {
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
-        mImpl = null;
-        sProfiles.remove(mName);
+        onDestroyed();
+    }
+
+    /**
+     * This method provides the same functionality as {@link destroyAndDeleteDataFromDisk}, but
+     * delays until there is no usage of the Profile. If there is no usage of the profile,
+     * destruction and deletion of data on disk is immediate. If there is usage, then destruction
+     * and deletion of data happens when there is no usage of the Profile.  If the process is killed
+     * before deletion of data on disk occurs, then deletion of data happens when WebLayer is
+     * restarted.
+     *
+     * While destruction may be delayed, once this function is called, the profile name will not be
+     * returned from {@link WebLayer#enumerateAllProfileNames}. OTOH, {@link #getAllProfiles()}
+     * returns this profile until there are no more usages.
+     *
+     * If this function is called multiple times before the Profile is destroyed, then every
+     * callback supplied is run once destruction and deletion of data is complete.
+     *
+     * @param completionCallback Callback that is notified when destruction and deletion of data is
+     * complete. If the process is killed before all references are removed, the callback is never
+     * called.
+     *
+     * @throws IllegalStateException If the Profile has already been destroyed. You can check for
+     * that by looking for the profile in {@link #getAllProfiles()}.
+     */
+    public void destroyAndDeleteDataFromDiskSoon(@Nullable Runnable completionCallback) {
+        ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
+        try {
+            mImpl.destroyAndDeleteDataFromDiskSoon(ObjectWrapper.wrap(completionCallback));
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    private void throwIfDestroyed() {
+        if (mImpl == null) {
+            throw new IllegalStateException("Profile can not be used once destroyed");
+        }
     }
 
     @Deprecated
@@ -143,8 +243,16 @@ public class Profile {
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
+        onDestroyed();
+    }
+
+    private void onDestroyed() {
+        if (mIsIncognito) {
+            sIncognitoProfiles.remove(mName);
+        } else {
+            sProfiles.remove(mName);
+        }
         mImpl = null;
-        sProfiles.remove(mName);
     }
 
     /**
@@ -152,8 +260,6 @@ public class Profile {
      * download directory.
      *
      * @param directory the directory to place downloads in.
-     *
-     * @since 81
      */
     public void setDownloadDirectory(@NonNull File directory) {
         ThreadCheck.ensureOnUiThread();
@@ -168,8 +274,6 @@ public class Profile {
      * Allows embedders to control how downloads function.
      *
      * @param callback the callback interface implemented by the embedder.
-     *
-     * @since 83
      */
     public void setDownloadCallback(@Nullable DownloadCallback callback) {
         ThreadCheck.ensureOnUiThread();
@@ -188,8 +292,6 @@ public class Profile {
 
     /**
      * Gets the cookie manager for this profile.
-     *
-     * @since 83
      */
     @NonNull
     public CookieManager getCookieManager() {
@@ -199,13 +301,20 @@ public class Profile {
     }
 
     /**
+     * Gets the prerender controller for this profile.
+     */
+    @NonNull
+    public PrerenderController getPrerenderController() {
+        ThreadCheck.ensureOnUiThread();
+        return mPrerenderController;
+    }
+
+    /**
      * Allows the embedder to set a boolean value for a specific setting, see {@link SettingType}
      * for more details and the possible options.
      *
      * @param type See {@link SettingType}.
      * @param value The value to set for the setting.
-     *
-     * @since 84
      */
     public void setBooleanSetting(@SettingType int type, boolean value) {
         ThreadCheck.ensureOnUiThread();
@@ -219,8 +328,6 @@ public class Profile {
     /**
      * Returns the current value for the given setting type, see {@link SettingType} for more
      * details and the possible options.
-     *
-     * @since 84
      */
     public boolean getBooleanSetting(@SettingType int type) {
         ThreadCheck.ensureOnUiThread();
@@ -238,14 +345,9 @@ public class Profile {
      * @param callback The callback that is supplied the set of ids.
      *
      * @throws IllegalStateException If called on an in memory profile.
-     *
-     * @since 85
      */
     public void getBrowserPersistenceIds(@NonNull Callback<Set<String>> callback) {
         ThreadCheck.ensureOnUiThread();
-        if (WebLayer.getSupportedMajorVersionInternal() < 85) {
-            throw new UnsupportedOperationException();
-        }
         if (mName.isEmpty()) {
             throw new IllegalStateException(
                     "getBrowserPersistenceIds() is not applicable to in-memory profiles");
@@ -268,15 +370,10 @@ public class Profile {
      *
      * @throws IllegalStateException If called on an in memory profile.
      * @throws IllegalArgumentException if {@link ids} contains an empty/null string.
-     *
-     * @since 85
      */
     public void removeBrowserPersistenceStorage(
             @NonNull Set<String> ids, @NonNull Callback<Boolean> callback) {
         ThreadCheck.ensureOnUiThread();
-        if (WebLayer.getSupportedMajorVersionInternal() < 85) {
-            throw new UnsupportedOperationException();
-        }
         if (mName.isEmpty()) {
             throw new IllegalStateException(
                     "removetBrowserPersistenceStorage() is not applicable to in-memory profiles");
@@ -297,15 +394,9 @@ public class Profile {
      * safe to call this multiple times or when it is not certain that the spare renderer will be
      * used, although calling this too eagerly may reduce performance as unnecessary processes are
      * created.
-     *
-     * @since 85
      */
     public void prepareForPossibleCrossOriginNavigation() {
         ThreadCheck.ensureOnUiThread();
-        if (WebLayer.getSupportedMajorVersionInternal() < 85) {
-            throw new UnsupportedOperationException();
-        }
-
         try {
             mImpl.prepareForPossibleCrossOriginNavigation();
         } catch (RemoteException e) {
@@ -319,14 +410,9 @@ public class Profile {
      * @param uri The uri to get the favicon for.
      * @param callback The callback that is notified of the bitmap. The bitmap passed to the
      * callback will be null if one is not available.
-     *
-     * @since 86
      */
     public void getCachedFaviconForPageUri(@NonNull Uri uri, @NonNull Callback<Bitmap> callback) {
         ThreadCheck.ensureOnUiThread();
-        if (WebLayer.getSupportedMajorVersionInternal() < 86) {
-            throw new UnsupportedOperationException();
-        }
         try {
             mImpl.getCachedFaviconForPageUri(
                     uri.toString(), ObjectWrapper.wrap((ValueCallback<Bitmap>) callback::onResult));
@@ -337,17 +423,53 @@ public class Profile {
 
     /**
      * See {@link UserIdentityCallback}.
-     *
-     * @since 87
      */
     public void setUserIdentityCallback(@Nullable UserIdentityCallback callback) {
         ThreadCheck.ensureOnUiThread();
-        if (WebLayer.getSupportedMajorVersionInternal() < 87) {
-            throw new UnsupportedOperationException();
-        }
         try {
             mImpl.setUserIdentityCallbackClient(
                     callback == null ? null : new UserIdentityCallbackClientImpl(callback));
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * See {@link GoogleAccountAccessTokenFetcher}.
+     * @since 89
+     */
+    public void setGoogleAccountAccessTokenFetcher(
+            @Nullable GoogleAccountAccessTokenFetcher fetcher) {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 89) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            mImpl.setGoogleAccountAccessTokenFetcherClient(fetcher == null
+                            ? null
+                            : new GoogleAccountAccessTokenFetcherClientImpl(fetcher));
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * Sets a callback which is invoked to open a new tab that is not associated with any open tab.
+     *
+     * This will be called in cases where a service worker tries to open a tab, e.g. via the Web API
+     * clients.openWindow. If set to null, all such navigation requests will be rejected.
+     *
+     * @since 91
+     */
+    public void setTablessOpenUrlCallback(@Nullable OpenUrlCallback callback) {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 91) {
+            throw new UnsupportedOperationException();
+        }
+
+        try {
+            mImpl.setTablessOpenUrlCallbackClient(
+                    callback == null ? null : new OpenUrlCallbackClientImpl(callback));
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
@@ -358,10 +480,6 @@ public class Profile {
 
         DownloadCallbackClientImpl(DownloadCallback callback) {
             mCallback = callback;
-        }
-
-        public DownloadCallback getCallback() {
-            return mCallback;
         }
 
         @Override
@@ -445,6 +563,57 @@ public class Profile {
                     (ValueCallback<Bitmap>) ObjectWrapper.unwrap(
                             avatarLoadedWrapper, ValueCallback.class);
             mCallback.getAvatar(desiredSize, avatarLoadedCallback);
+        }
+    }
+
+    private static final class GoogleAccountAccessTokenFetcherClientImpl
+            extends IGoogleAccountAccessTokenFetcherClient.Stub {
+        private GoogleAccountAccessTokenFetcher mFetcher;
+
+        GoogleAccountAccessTokenFetcherClientImpl(GoogleAccountAccessTokenFetcher fetcher) {
+            mFetcher = fetcher;
+        }
+
+        @Override
+        public void fetchAccessToken(
+                IObjectWrapper scopesWrapper, IObjectWrapper onTokenFetchedWrapper) {
+            StrictModeWorkaround.apply();
+            Set<String> scopes = ObjectWrapper.unwrap(scopesWrapper, Set.class);
+            ValueCallback<String> valueCallback =
+                    ObjectWrapper.unwrap(onTokenFetchedWrapper, ValueCallback.class);
+
+            mFetcher.fetchAccessToken(scopes, (token) -> valueCallback.onReceiveValue(token));
+        }
+    }
+
+    private static final class OpenUrlCallbackClientImpl extends IOpenUrlCallbackClient.Stub {
+        private final OpenUrlCallback mCallback;
+
+        OpenUrlCallbackClientImpl(OpenUrlCallback callback) {
+            mCallback = callback;
+        }
+
+        @Override
+        public IBrowser getBrowserForNewTab() {
+            StrictModeWorkaround.apply();
+            Browser browser = mCallback.getBrowserForNewTab();
+            return browser == null ? null : browser.getIBrowser();
+        }
+
+        @Override
+        public void onTabAdded(int tabId) {
+            StrictModeWorkaround.apply();
+            Tab tab = Tab.getTabById(tabId);
+            // Tab should have already been created by way of BrowserClient.
+            assert tab != null;
+            mCallback.onTabAdded(tab);
+        }
+    }
+
+    private final class ProfileClientImpl extends IProfileClient.Stub {
+        @Override
+        public void onProfileDestroyed() {
+            onDestroyed();
         }
     }
 }

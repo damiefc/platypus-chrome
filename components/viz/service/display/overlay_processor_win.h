@@ -41,7 +41,10 @@ class VIZ_SERVICE_EXPORT OverlayProcessorWin
   // Returns true if the platform supports hw overlays and surface occluding
   // damage rect needs to be computed since it will be used by overlay
   // processor.
-  bool NeedsSurfaceOccludingDamageRect() const override;
+  bool NeedsSurfaceDamageRectList() const override;
+
+  // Set |is_video_capture_enabled_|.
+  void SetIsVideoCaptureEnabled(bool enabled) override;
 
   void AdjustOutputSurfaceOverlay(base::Optional<OutputSurfaceOverlayPlane>*
                                       output_surface_plane) override {}
@@ -54,6 +57,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorWin
       const SkMatrix44& output_color_matrix,
       const FilterOperationsMap& render_pass_filters,
       const FilterOperationsMap& render_pass_backdrop_filters,
+      SurfaceDamageRectList surface_damage_rect_list,
       OutputSurfaceOverlayPlane* output_surface_plane,
       CandidateList* overlay_candidates,
       gfx::Rect* damage_rect,
@@ -69,14 +73,15 @@ class VIZ_SERVICE_EXPORT OverlayProcessorWin
 
  private:
   OutputSurface* const output_surface_;
-  // Whether direct composition layers are supported by the output surface.
-  const bool supports_dc_layers_;
   // Whether direct composition layers are being used with SetEnableDCLayers().
   bool using_dc_layers_ = false;
   // Number of frames since the last time direct composition layers were used.
   int frames_since_using_dc_layers_ = 0;
+
   // TODO(weiliangc): Eventually fold DCLayerOverlayProcessor into this class.
   std::unique_ptr<DCLayerOverlayProcessor> dc_layer_overlay_processor_;
+
+  bool is_video_capture_enabled_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(OverlayProcessorWin);
 };

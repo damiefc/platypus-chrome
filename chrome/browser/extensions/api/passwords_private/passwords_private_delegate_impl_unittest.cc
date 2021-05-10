@@ -9,12 +9,12 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gmock_move_support.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
@@ -28,10 +28,10 @@
 #include "chrome/browser/password_manager/password_manager_test_util.h"
 #include "chrome/common/extensions/api/passwords_private.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/content/browser/password_manager_log_router_factory.h"
-#include "components/password_manager/core/browser/compromised_credentials_table.h"
+#include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/mock_password_feature_manager.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_list_sorter.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
@@ -49,7 +49,8 @@
 
 using MockReauthCallback = base::MockCallback<
     password_manager::PasswordAccessAuthenticator::ReauthCallback>;
-using PasswordFormList = std::vector<std::unique_ptr<autofill::PasswordForm>>;
+using PasswordFormList =
+    std::vector<std::unique_ptr<password_manager::PasswordForm>>;
 using password_manager::ReauthPurpose;
 using password_manager::TestPasswordStore;
 using ::testing::_;
@@ -175,12 +176,12 @@ std::unique_ptr<KeyedService> BuildPasswordsPrivateEventRouter(
       PasswordsPrivateEventRouter::Create(context));
 }
 
-autofill::PasswordForm CreateSampleForm() {
-  autofill::PasswordForm form;
+password_manager::PasswordForm CreateSampleForm() {
+  password_manager::PasswordForm form;
   form.signon_realm = "http://abc1.com";
   form.url = GURL("http://abc1.com");
-  form.username_value = base::ASCIIToUTF16("test@gmail.com");
-  form.password_value = base::ASCIIToUTF16("test");
+  form.username_value = u"test@gmail.com";
+  form.password_value = u"test";
   return form;
 }
 
@@ -192,7 +193,7 @@ class PasswordsPrivateDelegateImplTest : public testing::Test {
   ~PasswordsPrivateDelegateImplTest() override;
 
   // Sets up a testing password store and fills it with |forms|.
-  void SetUpPasswordStore(std::vector<autofill::PasswordForm> forms);
+  void SetUpPasswordStore(std::vector<password_manager::PasswordForm> forms);
 
   // Sets up a testing EventRouter with a production
   // PasswordsPrivateEventRouter.
@@ -225,8 +226,8 @@ PasswordsPrivateDelegateImplTest::~PasswordsPrivateDelegateImplTest() {
 }
 
 void PasswordsPrivateDelegateImplTest::SetUpPasswordStore(
-    std::vector<autofill::PasswordForm> forms) {
-  for (const autofill::PasswordForm& form : forms) {
+    std::vector<password_manager::PasswordForm> forms) {
+  for (const password_manager::PasswordForm& form : forms) {
     store_->AddLogin(form);
   }
   // Spin the loop to allow PasswordStore tasks being processed.
@@ -250,7 +251,7 @@ TEST_F(PasswordsPrivateDelegateImplTest, GetSavedPasswordsList) {
   delegate.GetSavedPasswordsList(callback.Get());
 
   PasswordFormList list;
-  list.push_back(std::make_unique<autofill::PasswordForm>());
+  list.push_back(std::make_unique<password_manager::PasswordForm>());
 
   EXPECT_CALL(callback, Run);
   delegate.SetPasswordList(list);
@@ -263,10 +264,12 @@ TEST_F(PasswordsPrivateDelegateImplTest,
        PasswordsDuplicatedInStoresHaveSameFrontendId) {
   PasswordsPrivateDelegateImpl delegate(&profile_);
 
-  auto account_password = std::make_unique<autofill::PasswordForm>();
-  account_password->in_store = autofill::PasswordForm::Store::kAccountStore;
-  auto profile_password = std::make_unique<autofill::PasswordForm>();
-  profile_password->in_store = autofill::PasswordForm::Store::kProfileStore;
+  auto account_password = std::make_unique<password_manager::PasswordForm>();
+  account_password->in_store =
+      password_manager::PasswordForm::Store::kAccountStore;
+  auto profile_password = std::make_unique<password_manager::PasswordForm>();
+  profile_password->in_store =
+      password_manager::PasswordForm::Store::kProfileStore;
 
   PasswordFormList list;
   list.push_back(std::move(account_password));
@@ -296,7 +299,7 @@ TEST_F(PasswordsPrivateDelegateImplTest, GetPasswordExceptionsList) {
   delegate.GetPasswordExceptionsList(callback.Get());
 
   PasswordFormList list;
-  list.push_back(std::make_unique<autofill::PasswordForm>());
+  list.push_back(std::make_unique<password_manager::PasswordForm>());
 
   EXPECT_CALL(callback, Run);
   delegate.SetPasswordExceptionList(list);
@@ -309,12 +312,14 @@ TEST_F(PasswordsPrivateDelegateImplTest,
        ExceptionsDuplicatedInStoresHaveSameFrontendId) {
   PasswordsPrivateDelegateImpl delegate(&profile_);
 
-  auto account_exception = std::make_unique<autofill::PasswordForm>();
+  auto account_exception = std::make_unique<password_manager::PasswordForm>();
   account_exception->blocked_by_user = true;
-  account_exception->in_store = autofill::PasswordForm::Store::kAccountStore;
-  auto profile_exception = std::make_unique<autofill::PasswordForm>();
+  account_exception->in_store =
+      password_manager::PasswordForm::Store::kAccountStore;
+  auto profile_exception = std::make_unique<password_manager::PasswordForm>();
   profile_exception->blocked_by_user = true;
-  profile_exception->in_store = autofill::PasswordForm::Store::kProfileStore;
+  profile_exception->in_store =
+      password_manager::PasswordForm::Store::kProfileStore;
 
   PasswordFormList list;
   list.push_back(std::move(account_exception));
@@ -338,7 +343,7 @@ TEST_F(PasswordsPrivateDelegateImplTest,
 }
 
 TEST_F(PasswordsPrivateDelegateImplTest, ChangeSavedPassword) {
-  autofill::PasswordForm sample_form = CreateSampleForm();
+  password_manager::PasswordForm sample_form = CreateSampleForm();
   SetUpPasswordStore({sample_form});
 
   PasswordsPrivateDelegateImpl delegate(&profile_);
@@ -360,9 +365,8 @@ TEST_F(PasswordsPrivateDelegateImplTest, ChangeSavedPassword) {
   int sample_form_id = delegate.GetPasswordIdGeneratorForTesting().GenerateId(
       password_manager::CreateSortKey(sample_form));
 
-  EXPECT_TRUE(delegate.ChangeSavedPassword({sample_form_id},
-                                           base::ASCIIToUTF16("new_user"),
-                                           base::ASCIIToUTF16("new_pass")));
+  EXPECT_TRUE(
+      delegate.ChangeSavedPassword({sample_form_id}, u"new_user", u"new_pass"));
 
   // Spin the loop to allow PasswordStore tasks posted when changing the
   // password to be completed.
@@ -382,7 +386,7 @@ TEST_F(PasswordsPrivateDelegateImplTest, ChangeSavedPassword) {
 // Checking callback result of RequestPlaintextPassword with reason Copy.
 // By implementation for Copy, callback will receive empty string.
 TEST_F(PasswordsPrivateDelegateImplTest, TestCopyPasswordCallbackResult) {
-  autofill::PasswordForm form = CreateSampleForm();
+  password_manager::PasswordForm form = CreateSampleForm();
   SetUpPasswordStore({form});
 
   PasswordsPrivateDelegateImpl delegate(&profile_);
@@ -395,12 +399,12 @@ TEST_F(PasswordsPrivateDelegateImplTest, TestCopyPasswordCallbackResult) {
       .WillOnce(Return(true));
 
   MockPlaintextPasswordCallback password_callback;
-  EXPECT_CALL(password_callback, Run(Eq(base::string16())));
+  EXPECT_CALL(password_callback, Run(Eq(std::u16string())));
   delegate.RequestPlaintextPassword(
       0, api::passwords_private::PLAINTEXT_REASON_COPY, password_callback.Get(),
       nullptr);
 
-  base::string16 result;
+  std::u16string result;
   test_clipboard_->ReadText(ui::ClipboardBuffer::kCopyPaste,
                             /* data_dst = */ nullptr, &result);
   EXPECT_EQ(form.password_value, result);
@@ -473,10 +477,10 @@ TEST_F(PasswordsPrivateDelegateImplTest, TestCopyPasswordCallbackResultFail) {
       0, api::passwords_private::PLAINTEXT_REASON_COPY, password_callback.Get(),
       nullptr);
   // Clipboard should not be modifiend in case Reauth failed
-  base::string16 result;
+  std::u16string result;
   test_clipboard_->ReadText(ui::ClipboardBuffer::kCopyPaste,
                             /* data_dst = */ nullptr, &result);
-  EXPECT_EQ(base::string16(), result);
+  EXPECT_EQ(std::u16string(), result);
   EXPECT_EQ(before_call, test_clipboard_->GetLastModifiedTime());
 
   // Since Reauth had failed password was not copied and metric wasn't recorded
@@ -498,7 +502,7 @@ TEST_F(PasswordsPrivateDelegateImplTest, TestPassedReauthOnView) {
       .WillOnce(Return(true));
 
   MockPlaintextPasswordCallback password_callback;
-  EXPECT_CALL(password_callback, Run(Eq(base::ASCIIToUTF16("test"))));
+  EXPECT_CALL(password_callback, Run(Eq(u"test")));
   delegate.RequestPlaintextPassword(
       0, api::passwords_private::PLAINTEXT_REASON_VIEW, password_callback.Get(),
       nullptr);
@@ -603,12 +607,12 @@ TEST_F(PasswordsPrivateDelegateImplTest,
 TEST_F(PasswordsPrivateDelegateImplTest, TestReauthOnGetPlaintextCompPassword) {
   PasswordsPrivateDelegateImpl delegate(&profile_);
 
-  autofill::PasswordForm form = CreateSampleForm();
-  password_manager::CompromisedCredentials compromised_credentials;
+  password_manager::PasswordForm form = CreateSampleForm();
+  password_manager::InsecureCredential compromised_credentials;
   compromised_credentials.signon_realm = form.signon_realm;
   compromised_credentials.username = form.username_value;
   store_->AddLogin(form);
-  store_->AddCompromisedCredentials(compromised_credentials);
+  store_->AddInsecureCredential(compromised_credentials);
   base::RunLoop().RunUntilIdle();
 
   api::passwords_private::InsecureCredential credential =

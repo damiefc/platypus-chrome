@@ -19,6 +19,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/guest_view/app_view/app_view_guest.h"
+#include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_embedder.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/url_request_util.h"
@@ -30,8 +31,11 @@
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/manifest_handlers/web_accessible_resources_info.h"
 #include "extensions/common/manifest_handlers/webview_info.h"
+#include "extensions/common/mojom/view_type.mojom.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
+#include "services/network/public/cpp/web_sandbox_flags.h"
 #include "ui/base/page_transition_types.h"
 
 namespace extensions {
@@ -43,21 +47,21 @@ namespace {
 bool ShouldBlockNavigationToPlatformAppResource(
     const Extension* platform_app,
     content::WebContents* web_contents) {
-  ViewType view_type = GetViewType(web_contents);
-  DCHECK_NE(VIEW_TYPE_INVALID, view_type);
+  mojom::ViewType view_type = GetViewType(web_contents);
+  DCHECK_NE(mojom::ViewType::kInvalid, view_type);
 
   // Navigation to platform app's background page.
-  if (view_type == VIEW_TYPE_EXTENSION_BACKGROUND_PAGE)
+  if (view_type == mojom::ViewType::kExtensionBackgroundPage)
     return false;
 
   // Navigation within an extension dialog, e.g. this is used by ChromeOS file
   // manager.
-  if (view_type == VIEW_TYPE_EXTENSION_DIALOG)
+  if (view_type == mojom::ViewType::kExtensionDialog)
     return false;
 
   // Navigation within an app window. The app window must belong to the
   // |platform_app|.
-  if (view_type == VIEW_TYPE_APP_WINDOW) {
+  if (view_type == mojom::ViewType::kAppWindow) {
     AppWindowRegistry* registry =
         AppWindowRegistry::Get(web_contents->GetBrowserContext());
     DCHECK(registry);
@@ -67,7 +71,7 @@ bool ShouldBlockNavigationToPlatformAppResource(
   }
 
   // Navigation within a guest web contents.
-  if (view_type == VIEW_TYPE_EXTENSION_GUEST) {
+  if (view_type == mojom::ViewType::kExtensionGuest) {
     // Platform apps can be embedded by other platform apps using an <appview>
     // tag.
     AppViewGuest* app_view = AppViewGuest::FromWebContents(web_contents);
@@ -85,10 +89,10 @@ bool ShouldBlockNavigationToPlatformAppResource(
     return true;
   }
 
-  DCHECK(view_type == VIEW_TYPE_BACKGROUND_CONTENTS ||
-         view_type == VIEW_TYPE_COMPONENT ||
-         view_type == VIEW_TYPE_EXTENSION_POPUP ||
-         view_type == VIEW_TYPE_TAB_CONTENTS)
+  DCHECK(view_type == mojom::ViewType::kBackgroundContents ||
+         view_type == mojom::ViewType::kComponent ||
+         view_type == mojom::ViewType::kExtensionPopup ||
+         view_type == mojom::ViewType::kTabContents)
       << "Unhandled view type: " << view_type;
 
   return true;
@@ -121,7 +125,8 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
     DCHECK(!navigation_handle()->IsSameDocument());
 
     if (host &&
-        host->extension_host_type() == VIEW_TYPE_EXTENSION_BACKGROUND_PAGE &&
+        host->extension_host_type() ==
+            mojom::ViewType::kExtensionBackgroundPage &&
         host->initial_url() != navigation_handle()->GetURL()) {
       return content::NavigationThrottle::CANCEL;
     }
@@ -148,7 +153,7 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
     return content::NavigationThrottle::PROCEED;
   }
 
-  base::UkmSourceId source_id = base::UkmSourceId::FromInt64(
+  ukm::SourceIdObj source_id = ukm::SourceIdObj::FromInt64(
       navigation_handle()->GetNextPageUkmSourceId());
 
   // If the navigation is to an unknown or disabled extension, block it.
@@ -186,7 +191,7 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
     // https://crbug.com/652077.
     bool has_webview_permission =
         target_extension->permissions_data()->HasAPIPermission(
-            APIPermission::kWebView);
+            mojom::APIPermissionID::kWebView);
     if (!has_webview_permission) {
       RecordExtensionResourceAccessResult(
           source_id, url, ExtensionResourceAccessResult::kCancel);
@@ -205,10 +210,16 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
           registry->enabled_extensions().GetByID(owner_extension_id);
 
       content::StoragePartitionConfig storage_partition_config =
-          content::StoragePartitionConfig::CreateDefault();
-      bool is_guest = WebViewGuest::GetGuestPartitionConfigForSite(
-          navigation_handle()->GetStartingSiteInstance()->GetSiteURL(),
-          &storage_partition_config);
+          content::StoragePartitionConfig::CreateDefault(browser_context);
+      bool is_guest = navigation_handle()->GetStartingSiteInstance()->IsGuest();
+      if (is_guest) {
+        is_guest = WebViewGuest::GetGuestPartitionConfigForSite(
+            browser_context,
+            navigation_handle()->GetStartingSiteInstance()->GetSiteURL(),
+            &storage_partition_config);
+      }
+      CHECK_EQ(is_guest,
+               navigation_handle()->GetStartingSiteInstance()->IsGuest());
 
       bool allowed = true;
       url_request_util::AllowCrossRendererResourceLoadHelper(
@@ -270,8 +281,8 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
 
   // Cross-origin-initiator navigations require that the |url| is in the
   // manifest's "web_accessible_resources" section.
-  if (!WebAccessibleResourcesInfo::IsResourceWebAccessible(target_extension,
-                                                           url.path())) {
+  if (!WebAccessibleResourcesInfo::IsResourceWebAccessible(
+          target_extension, url.path(), initiator_origin)) {
     RecordExtensionResourceAccessResult(
         source_id, url, ExtensionResourceAccessResult::kFailure);
     return content::NavigationThrottle::BLOCK_REQUEST;
@@ -312,6 +323,34 @@ ExtensionNavigationThrottle::WillStartRequest() {
 content::NavigationThrottle::ThrottleCheckResult
 ExtensionNavigationThrottle::WillRedirectRequest() {
   return WillStartOrRedirectRequest();
+}
+
+content::NavigationThrottle::ThrottleCheckResult
+ExtensionNavigationThrottle::WillProcessResponse() {
+  if (navigation_handle()->IsServedFromBackForwardCache() ||
+      (navigation_handle()->SandboxFlagsToCommit() &
+       network::mojom::WebSandboxFlags::kPlugins) ==
+          network::mojom::WebSandboxFlags::kNone) {
+    return PROCEED;
+  }
+
+  auto* mime_handler_view_embedder =
+      MimeHandlerViewEmbedder::Get(navigation_handle()->GetFrameTreeNodeId());
+  if (!mime_handler_view_embedder)
+    return PROCEED;
+
+  // If we have a MimeHandlerViewEmbedder, the frame might embed a resource. If
+  // the frame is sandboxed, however, we shouldn't show the embedded resource.
+  // Instead, we should notify the MimeHandlerViewEmbedder (so that it will
+  // delete itself) and commit an error page.
+  // TODO(https://crbug.com/1144913): Currently MimeHandlerViewEmbedder is
+  // created by PluginResponseInterceptorURLLoaderThrottle before the sandbox
+  // flags are ready. This means in some cases we will create it and delete it
+  // soon after that here. We should move MimeHandlerViewEmbedder creation to a
+  // NavigationThrottle instead and check the sandbox flags before creating, so
+  // that we don't have to remove it soon after creation.
+  mime_handler_view_embedder->OnFrameSandboxed();
+  return ThrottleCheckResult(CANCEL, net::ERR_BLOCKED_BY_CLIENT);
 }
 
 const char* ExtensionNavigationThrottle::GetNameForLogging() {

@@ -20,6 +20,7 @@ source_set("service") {
   deps = [
     "//fuchsia/base",
     "//media/fuchsia/mojom",
+    "//third_party/fuchsia-sdk/sdk/pkg/fit-promise",
     "//url",
   ]
 }
@@ -35,13 +36,14 @@ source_set("unittests") {
     "//media",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/fuchsia-sdk/sdk/pkg/fit-promise",
     "//url",
   ]
 
   sources = [
-    "fuchsia_cdm_manager_test.cc",
+    "fuchsia_cdm_manager_unittest.cc",
     "mock_provision_fetcher.cc",
     "mock_provision_fetcher.h",
-    "provisioning_fetcher_impl_test.cc",
+    "provisioning_fetcher_impl_unittest.cc",
   ]
 }

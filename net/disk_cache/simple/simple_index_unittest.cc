@@ -16,7 +16,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/task_runner.h"
 #include "base/test/mock_entropy_provider.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "net/base/cache_type.h"
@@ -114,9 +113,10 @@ class SimpleIndexTest : public net::TestWithTaskEnvironment,
     std::unique_ptr<MockSimpleIndexFile> index_file(
         new MockSimpleIndexFile(CacheType()));
     index_file_ = index_file->AsWeakPtr();
-    index_.reset(new SimpleIndex(/* io_thread = */ nullptr,
-                                 /* cleanup_tracker = */ nullptr, this,
-                                 CacheType(), std::move(index_file)));
+    index_ =
+        std::make_unique<SimpleIndex>(/* io_thread = */ nullptr,
+                                      /* cleanup_tracker = */ nullptr, this,
+                                      CacheType(), std::move(index_file));
 
     index_->Initialize(base::Time());
   }

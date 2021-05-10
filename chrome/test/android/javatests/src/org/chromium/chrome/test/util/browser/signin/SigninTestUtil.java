@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.test.util.browser.signin;
 
-import android.accounts.Account;
-
 import androidx.annotation.Nullable;
 
 import org.junit.Assert;
@@ -14,10 +12,9 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.IdentityServicesProvider;
-import org.chromium.chrome.browser.signin.SigninManager;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
-import org.chromium.components.signin.AccountTrackerService;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
@@ -31,14 +28,13 @@ import java.util.concurrent.TimeoutException;
  */
 public final class SigninTestUtil {
     /**
-     * Returns the currently signed in account.
+     * Returns the currently signed in coreAccountInfo.
      */
-    static Account getCurrentAccount() {
+    static CoreAccountInfo getCurrentAccount() {
         return TestThreadUtils.runOnUiThreadBlockingNoException(() -> {
-            return CoreAccountInfo.getAndroidAccountFrom(
-                    IdentityServicesProvider.get()
-                            .getIdentityManager(Profile.getLastUsedRegularProfile())
-                            .getPrimaryAccountInfo(ConsentLevel.SYNC));
+            return IdentityServicesProvider.get()
+                    .getIdentityManager(Profile.getLastUsedRegularProfile())
+                    .getPrimaryAccountInfo(ConsentLevel.SYNC);
         });
     }
 
@@ -72,7 +68,7 @@ public final class SigninTestUtil {
             Assert.assertEquals(coreAccountInfo,
                     IdentityServicesProvider.get()
                             .getIdentityManager(Profile.getLastUsedRegularProfile())
-                            .getPrimaryAccountInfo(ConsentLevel.NOT_REQUIRED));
+                            .getPrimaryAccountInfo(ConsentLevel.SIGNIN));
         });
     }
 
@@ -125,22 +121,9 @@ public final class SigninTestUtil {
         ThreadUtils.assertOnBackgroundThread();
         CallbackHelper ch = new CallbackHelper();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            AccountTrackerService accountTrackerService =
-                    IdentityServicesProvider.get().getAccountTrackerService(
-                            Profile.getLastUsedRegularProfile());
-            if (accountTrackerService.checkAndSeedSystemAccounts()) {
-                ch.notifyCalled();
-            } else {
-                AccountTrackerService.OnSystemAccountsSeededListener listener =
-                        new AccountTrackerService.OnSystemAccountsSeededListener() {
-                            @Override
-                            public void onSystemAccountsSeedingComplete() {
-                                accountTrackerService.removeSystemAccountsSeededListener(this);
-                                ch.notifyCalled();
-                            }
-                        };
-                accountTrackerService.addSystemAccountsSeededListener(listener);
-            }
+            IdentityServicesProvider.get()
+                    .getAccountTrackerService(Profile.getLastUsedRegularProfile())
+                    .seedAccountsIfNeeded(ch::notifyCalled);
         });
         try {
             ch.waitForFirst("Timed out while waiting for system accounts to seed.");

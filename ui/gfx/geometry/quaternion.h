@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef UI_GFX_GEOMETRY_QUATERNION_
-#define UI_GFX_GEOMETRY_QUATERNION_
+#ifndef UI_GFX_GEOMETRY_QUATERNION_H_
+#define UI_GFX_GEOMETRY_QUATERNION_H_
 
 #include <string>
 
@@ -22,6 +22,8 @@ class GEOMETRY_EXPORT Quaternion {
 
   // Constructs a quaternion representing a rotation between |from| and |to|.
   Quaternion(const Vector3dF& from, const Vector3dF& to);
+
+  static Quaternion FromAxisAngle(double x, double y, double z, double angle);
 
   constexpr double x() const { return x_; }
   void set_x(double x) { x_ = x; }
@@ -47,6 +49,8 @@ class GEOMETRY_EXPORT Quaternion {
   }
 
   Quaternion inverse() const { return {-x_, -y_, -z_, w_}; }
+
+  Quaternion flip() const { return {-x_, -y_, -z_, -w_}; }
 
   // Blends with the given quaternion, |q|, via spherical linear interpolation.
   // Values of |t| in the range [0, 1] will interpolate between |this| and |q|,
@@ -90,4 +94,4 @@ inline Quaternion operator/(const Quaternion& q, double s) {
 
 }  // namespace gfx
 
-#endif  // UI_GFX_GEOMETRY_QUATERNION_
+#endif  // UI_GFX_GEOMETRY_QUATERNION_H_

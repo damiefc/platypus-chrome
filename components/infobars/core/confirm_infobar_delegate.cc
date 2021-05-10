@@ -4,6 +4,7 @@
 
 #include "components/infobars/core/confirm_infobar_delegate.h"
 
+#include "build/build_config.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/strings/grit/ui_strings.h"
 
@@ -26,6 +27,10 @@ ConfirmInfoBarDelegate::GetInfoBarAutomationType() const {
   return CONFIRM_INFOBAR;
 }
 
+std::u16string ConfirmInfoBarDelegate::GetTitleText() const {
+  return std::u16string();
+}
+
 gfx::ElideBehavior ConfirmInfoBarDelegate::GetMessageElideBehavior() const {
   return gfx::ELIDE_TAIL;
 }
@@ -34,7 +39,7 @@ int ConfirmInfoBarDelegate::GetButtons() const {
   return BUTTON_OK | BUTTON_CANCEL;
 }
 
-base::string16 ConfirmInfoBarDelegate::GetButtonLabel(
+std::u16string ConfirmInfoBarDelegate::GetButtonLabel(
     InfoBarButton button) const {
   return l10n_util::GetStringUTF16((button == BUTTON_OK) ? IDS_APP_OK
                                                          : IDS_APP_CANCEL);
@@ -43,6 +48,12 @@ base::string16 ConfirmInfoBarDelegate::GetButtonLabel(
 bool ConfirmInfoBarDelegate::OKButtonTriggersUACPrompt() const {
   return false;
 }
+
+#if defined(OS_IOS)
+bool ConfirmInfoBarDelegate::UseIconBackgroundTint() const {
+  return true;
+}
+#endif
 
 bool ConfirmInfoBarDelegate::Accept() {
   return true;

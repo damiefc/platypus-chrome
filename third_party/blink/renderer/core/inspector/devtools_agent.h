@@ -9,6 +9,7 @@
 
 #include "base/single_thread_task_runner.h"
 #include "base/unguessable_token.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -46,7 +47,8 @@ class CORE_EXPORT DevToolsAgent : public GarbageCollected<DevToolsAgent>,
       ExecutionContext* parent_context,
       WorkerThread*,
       const KURL&,
-      const String& global_scope_name);
+      const String& global_scope_name,
+      const base::Optional<const DedicatedWorkerToken>& token);
   static void WorkerThreadTerminated(ExecutionContext* parent_context,
                                      WorkerThread*);
 
@@ -124,17 +126,12 @@ class CORE_EXPORT DevToolsAgent : public GarbageCollected<DevToolsAgent>,
 
   Client* client_;
   // DevToolsAgent is not tied to ExecutionContext
-  HeapMojoAssociatedReceiver<mojom::blink::DevToolsAgent,
-                             DevToolsAgent,
-                             HeapMojoWrapperMode::kWithoutContextObserver>
+  HeapMojoAssociatedReceiver<mojom::blink::DevToolsAgent, DevToolsAgent>
       associated_receiver_{this, nullptr};
   // DevToolsAgent is not tied to ExecutionContext
-  HeapMojoRemote<mojom::blink::DevToolsAgentHost,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
-      host_remote_{nullptr};
+  HeapMojoRemote<mojom::blink::DevToolsAgentHost> host_remote_{nullptr};
   // DevToolsAgent is not tied to ExecutionContext
-  HeapMojoAssociatedRemote<mojom::blink::DevToolsAgentHost,
-                           HeapMojoWrapperMode::kWithoutContextObserver>
+  HeapMojoAssociatedRemote<mojom::blink::DevToolsAgentHost>
       associated_host_remote_{nullptr};
   Member<InspectedFrames> inspected_frames_;
   Member<CoreProbeSink> probe_sink_;

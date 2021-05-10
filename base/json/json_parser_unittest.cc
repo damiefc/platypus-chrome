@@ -12,7 +12,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -105,9 +104,8 @@ TEST_F(JSONParserTest, ConsumeLiterals) {
   TestLastThree(parser.get());
 
   ASSERT_TRUE(value);
-  bool bool_value = false;
-  EXPECT_TRUE(value->GetAsBoolean(&bool_value));
-  EXPECT_TRUE(bool_value);
+  ASSERT_TRUE(value->is_bool());
+  EXPECT_TRUE(value->GetBool());
 
   // Literal |false|.
   input = "false,|";
@@ -118,8 +116,8 @@ TEST_F(JSONParserTest, ConsumeLiterals) {
   TestLastThree(parser.get());
 
   ASSERT_TRUE(value);
-  EXPECT_TRUE(value->GetAsBoolean(&bool_value));
-  EXPECT_FALSE(bool_value);
+  ASSERT_TRUE(value->is_bool());
+  EXPECT_FALSE(value->GetBool());
 
   // Literal |null|.
   input = "null,|";
@@ -143,9 +141,8 @@ TEST_F(JSONParserTest, ConsumeNumbers) {
   TestLastThree(parser.get());
 
   ASSERT_TRUE(value);
-  int number_i;
-  EXPECT_TRUE(value->GetAsInteger(&number_i));
-  EXPECT_EQ(1234, number_i);
+  ASSERT_TRUE(value->is_int());
+  EXPECT_EQ(1234, value->GetInt());
 
   // Negative integer.
   input = "-1234,|";
@@ -156,8 +153,8 @@ TEST_F(JSONParserTest, ConsumeNumbers) {
   TestLastThree(parser.get());
 
   ASSERT_TRUE(value);
-  EXPECT_TRUE(value->GetAsInteger(&number_i));
-  EXPECT_EQ(-1234, number_i);
+  ASSERT_TRUE(value->is_int());
+  EXPECT_EQ(-1234, value->GetInt());
 
   // Double.
   input = "12.34,|";
@@ -168,9 +165,8 @@ TEST_F(JSONParserTest, ConsumeNumbers) {
   TestLastThree(parser.get());
 
   ASSERT_TRUE(value);
-  double number_d;
-  EXPECT_TRUE(value->GetAsDouble(&number_d));
-  EXPECT_EQ(12.34, number_d);
+  ASSERT_TRUE(value->is_double());
+  EXPECT_EQ(12.34, value->GetDouble());
 
   // Scientific.
   input = "42e3,|";
@@ -181,8 +177,8 @@ TEST_F(JSONParserTest, ConsumeNumbers) {
   TestLastThree(parser.get());
 
   ASSERT_TRUE(value);
-  EXPECT_TRUE(value->GetAsDouble(&number_d));
-  EXPECT_EQ(42000, number_d);
+  ASSERT_TRUE(value->is_double());
+  EXPECT_EQ(42000, value->GetDouble());
 
   // Negative scientific.
   input = "314159e-5,|";
@@ -193,8 +189,8 @@ TEST_F(JSONParserTest, ConsumeNumbers) {
   TestLastThree(parser.get());
 
   ASSERT_TRUE(value);
-  EXPECT_TRUE(value->GetAsDouble(&number_d));
-  EXPECT_EQ(3.14159, number_d);
+  ASSERT_TRUE(value->is_double());
+  EXPECT_EQ(3.14159, value->GetDouble());
 
   // Positive scientific.
   input = "0.42e+3,|";
@@ -205,8 +201,8 @@ TEST_F(JSONParserTest, ConsumeNumbers) {
   TestLastThree(parser.get());
 
   ASSERT_TRUE(value);
-  EXPECT_TRUE(value->GetAsDouble(&number_d));
-  EXPECT_EQ(420, number_d);
+  ASSERT_TRUE(value->is_double());
+  EXPECT_EQ(420, value->GetDouble());
 }
 
 TEST_F(JSONParserTest, ErrorMessages) {

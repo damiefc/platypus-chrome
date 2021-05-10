@@ -14,7 +14,6 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/html/custom/ce_reactions_scope.h"
-#include "third_party/blink/renderer/core/html/custom/v0_custom_element_processing_stack.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/xml/dom_parser.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
@@ -112,7 +111,6 @@ void V8SetReflectedBooleanAttribute(
   v8::Isolate* isolate = info.GetIsolate();
   Element* impl = V8Element::ToImpl(info.Holder());
 
-  V0CustomElementProcessingStack::CallbackDeliveryScope delivery_scope;
   ExceptionState exception_state(isolate, ExceptionState::kSetterContext,
                                  interface_name, idl_attribute_name);
   CEReactionsScope ce_reactions_scope;
@@ -131,7 +129,6 @@ void V8SetReflectedDOMStringAttribute(
     const QualifiedName& content_attr) {
   Element* impl = V8Element::ToImpl(info.Holder());
 
-  V0CustomElementProcessingStack::CallbackDeliveryScope delivery_scope;
   CEReactionsScope ce_reactions_scope;
 
   // Prepare the value to be set.
@@ -147,7 +144,6 @@ void V8SetReflectedNullableDOMStringAttribute(
     const QualifiedName& content_attr) {
   Element* impl = V8Element::ToImpl(info.Holder());
 
-  V0CustomElementProcessingStack::CallbackDeliveryScope delivery_scope;
   CEReactionsScope ce_reactions_scope;
 
   // Prepare the value to be set.
@@ -159,6 +155,49 @@ void V8SetReflectedNullableDOMStringAttribute(
 }
 
 namespace bindings {
+
+void SetupIDLInterfaceTemplate(
+    v8::Isolate* isolate,
+    const WrapperTypeInfo* wrapper_type_info,
+    v8::Local<v8::ObjectTemplate> instance_template,
+    v8::Local<v8::ObjectTemplate> prototype_template,
+    v8::Local<v8::FunctionTemplate> interface_template,
+    v8::Local<v8::FunctionTemplate> parent_interface_template) {
+  v8::Local<v8::String> class_string =
+      V8AtomicString(isolate, wrapper_type_info->interface_name);
+
+  if (!parent_interface_template.IsEmpty())
+    interface_template->Inherit(parent_interface_template);
+  interface_template->ReadOnlyPrototype();
+  interface_template->SetClassName(class_string);
+
+  prototype_template->Set(
+      v8::Symbol::GetToStringTag(isolate), class_string,
+      static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum));
+
+  instance_template->SetInternalFieldCount(kV8DefaultWrapperInternalFieldCount);
+}
+
+void SetupIDLNamespaceTemplate(
+    v8::Isolate* isolate,
+    const WrapperTypeInfo* wrapper_type_info,
+    v8::Local<v8::ObjectTemplate> interface_template) {
+  v8::Local<v8::String> class_string =
+      V8AtomicString(isolate, wrapper_type_info->interface_name);
+
+  interface_template->Set(
+      v8::Symbol::GetToStringTag(isolate), class_string,
+      static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum));
+}
+
+void SetupIDLCallbackInterfaceTemplate(
+    v8::Isolate* isolate,
+    const WrapperTypeInfo* wrapper_type_info,
+    v8::Local<v8::FunctionTemplate> interface_template) {
+  interface_template->RemovePrototype();
+  interface_template->SetClassName(
+      V8AtomicString(isolate, wrapper_type_info->interface_name));
+}
 
 base::Optional<size_t> FindIndexInEnumStringTable(
     v8::Isolate* isolate,
@@ -269,24 +308,22 @@ v8::MaybeLocal<v8::Value> CreateNamedConstructorFunction(
     return v8::Undefined(isolate);
   }
 
-  // Named constructors are not interface objcets (despite that they're
-  // pretending so), but we reuse the cache of interface objects, which just
-  // works because both are V8 function template.
   v8::Local<v8::FunctionTemplate> function_template =
-      per_isolate_data->FindInterfaceTemplate(world, callback_key);
+      per_isolate_data->FindV8Template(world, callback_key)
+          .As<v8::FunctionTemplate>();
   if (function_template.IsEmpty()) {
     function_template = v8::FunctionTemplate::New(
         isolate, callback, v8::Local<v8::Value>(), v8::Local<v8::Signature>(),
         func_length, v8::ConstructorBehavior::kAllow,
         v8::SideEffectType::kHasSideEffect);
     v8::Local<v8::FunctionTemplate> interface_template =
-        wrapper_type_info->DomTemplate(isolate, world);
+        wrapper_type_info->GetV8ClassTemplate(isolate, world)
+            .As<v8::FunctionTemplate>();
     function_template->Inherit(interface_template);
     function_template->SetClassName(V8AtomicString(isolate, func_name));
     function_template->InstanceTemplate()->SetInternalFieldCount(
         kV8DefaultWrapperInternalFieldCount);
-    per_isolate_data->SetInterfaceTemplate(world, callback_key,
-                                           function_template);
+    per_isolate_data->AddV8Template(world, callback_key, function_template);
   }
 
   v8::Local<v8::Context> context = script_state->GetContext();
@@ -355,9 +392,9 @@ v8::Local<v8::Array> EnumerateIndexedProperties(v8::Isolate* isolate,
 void InstallCSSPropertyAttributes(
     v8::Isolate* isolate,
     const DOMWrapperWorld& world,
-    v8::Local<v8::ObjectTemplate> instance_template,
-    v8::Local<v8::ObjectTemplate> prototype_template,
-    v8::Local<v8::FunctionTemplate> interface_template,
+    v8::Local<v8::Template> instance_template,
+    v8::Local<v8::Template> prototype_template,
+    v8::Local<v8::Template> interface_template,
     v8::Local<v8::Signature> signature,
     base::span<const char* const> css_property_names) {
   const String kGetPrefix = "get ";
@@ -372,8 +409,6 @@ void InstallCSSPropertyAttributes(
     v8::Local<v8::FunctionTemplate> set_func = v8::FunctionTemplate::New(
         isolate, CSSPropertyAttributeSet, v8_property_name, signature, 1,
         v8::ConstructorBehavior::kThrow, v8::SideEffectType::kHasSideEffect);
-    get_func->RemovePrototype();
-    set_func->RemovePrototype();
     get_func->SetAcceptAnyReceiver(false);
     set_func->SetAcceptAnyReceiver(false);
     get_func->SetClassName(
@@ -444,9 +479,6 @@ void PerformAttributeSetCEReactionsReflect(
     return;
   }
 
-  // [Reflect]
-  V0CustomElementProcessingStack::CallbackDeliveryScope v0_custom_element_scope;
-  // [CEReactions]
   CEReactionsScope ce_reactions_scope;
 
   Element* blink_receiver = V8Element::ToWrappableUnsafe(info.This());

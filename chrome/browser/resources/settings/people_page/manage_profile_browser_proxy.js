@@ -8,7 +8,7 @@
  */
 
 // clang-format off
-import {AvatarIcon} from 'chrome://resources/cr_elements/cr_profile_avatar_selector/cr_profile_avatar_selector.m.js';
+import {AvatarIcon} from 'chrome://resources/cr_elements/cr_profile_avatar_selector/cr_profile_avatar_selector.js';
 import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
 // clang-format on
 
@@ -38,9 +38,9 @@ export class ManageProfileBrowserProxy {
 
   /**
    * Sets the profile's icon to one of the default avatars.
-   * @param {string} iconUrl The new profile URL.
+   * @param {number} index The new profile avatar index.
    */
-  setProfileIconToDefaultAvatar(iconUrl) {}
+  setProfileIconToDefaultAvatar(index) {}
 
   /**
    * Sets the profile's name.
@@ -80,8 +80,8 @@ export class ManageProfileBrowserProxyImpl {
   }
 
   /** @override */
-  setProfileIconToDefaultAvatar(iconUrl) {
-    chrome.send('setProfileIconToDefaultAvatar', [iconUrl]);
+  setProfileIconToDefaultAvatar(index) {
+    chrome.send('setProfileIconToDefaultAvatar', [index]);
   }
 
   /** @override */

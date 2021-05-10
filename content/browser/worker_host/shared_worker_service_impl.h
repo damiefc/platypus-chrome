@@ -14,14 +14,13 @@
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "components/services/storage/public/cpp/storage_key.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/worker_host/shared_worker_host.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/shared_worker_service.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
-#include "services/network/public/mojom/url_loader_factory.mojom.h"
-#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom.h"
 #include "third_party/blink/public/mojom/worker/shared_worker_connector.mojom.h"
@@ -54,7 +53,8 @@ class CONTENT_EXPORT SharedWorkerServiceImpl : public SharedWorkerService {
   void EnumerateSharedWorkers(Observer* observer) override;
   bool TerminateWorker(const GURL& url,
                        const std::string& name,
-                       const url::Origin& constructor_origin) override;
+                       const storage::StorageKey& storage_key) override;
+  void Shutdown() override;
 
   // Uses |url_loader_factory| to load workers' scripts instead of
   // StoragePartition's URLLoaderFactoryGetter.
@@ -90,14 +90,17 @@ class CONTENT_EXPORT SharedWorkerServiceImpl : public SharedWorkerService {
   friend class SharedWorkerHostTest;
   friend class SharedWorkerServiceImplTest;
   friend class TestSharedWorkerServiceImpl;
+  friend class WorkerTest;
   FRIEND_TEST_ALL_PREFIXES(NetworkServiceRestartBrowserTest, SharedWorker);
 
   // Creates a new worker in the creator's renderer process.
   SharedWorkerHost* CreateWorker(
+      RenderFrameHostImpl& creator,
       const SharedWorkerInstance& instance,
+      std::vector<network::mojom::ContentSecurityPolicyPtr>
+          content_security_policies,
       blink::mojom::FetchClientSettingsObjectPtr
           outside_fetch_client_settings_object,
-      GlobalFrameRoutingId creator_render_frame_host_id,
       const std::string& storage_domain,
       const blink::MessagePortChannel& message_port,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory);
@@ -120,7 +123,7 @@ class CONTENT_EXPORT SharedWorkerServiceImpl : public SharedWorkerService {
   SharedWorkerHost* FindMatchingSharedWorkerHost(
       const GURL& url,
       const std::string& name,
-      const url::Origin& constructor_origin);
+      const storage::StorageKey& storage_key);
 
   void ScriptLoadFailed(
       mojo::PendingRemote<blink::mojom::SharedWorkerClient> client,

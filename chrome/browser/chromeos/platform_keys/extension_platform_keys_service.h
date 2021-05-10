@@ -16,27 +16,20 @@
 #include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
+#include "chromeos/crosapi/mojom/keystore_error.mojom.h"
+#include "chromeos/crosapi/mojom/keystore_service.mojom.h"
 #include "components/keyed_service/core/keyed_service.h"
-
-class PrefService;
+#include "mojo/public/cpp/bindings/remote.h"
 
 namespace content {
 class BrowserContext;
 class WebContents;
 }  // namespace content
 
-namespace extensions {
-class StateStore;
-}
-
 namespace net {
 class X509Certificate;
 typedef std::vector<scoped_refptr<X509Certificate>> CertificateList;
 }  // namespace net
-
-namespace policy {
-class PolicyService;
-}
 
 namespace chromeos {
 
@@ -47,7 +40,7 @@ class ExtensionPlatformKeysService : public KeyedService {
   // can happen by exposing UI to let the user select.
   class SelectDelegate {
    public:
-    using CertificateSelectedCallback = base::Callback<void(
+    using CertificateSelectedCallback = base::OnceCallback<void(
         const scoped_refptr<net::X509Certificate>& selection)>;
 
     SelectDelegate();
@@ -64,7 +57,7 @@ class ExtensionPlatformKeysService : public KeyedService {
     // certificates were requested and are not null.
     virtual void Select(const std::string& extension_id,
                         const net::CertificateList& certs,
-                        const CertificateSelectedCallback& callback,
+                        CertificateSelectedCallback callback,
                         content::WebContents* web_contents,
                         content::BrowserContext* context) = 0;
 
@@ -72,17 +65,9 @@ class ExtensionPlatformKeysService : public KeyedService {
     DISALLOW_ASSIGN(SelectDelegate);
   };
 
-  // Stores registration information in |state_store|, i.e. for each extension
-  // the list of public keys that are valid to be used for signing. See
-  // |ExtensionKeyPermissionsService| for more details.
-  // |browser_context| and |state_store| must not be null and outlive this
-  // object.
+  // |browser_context| must not be null and must outlive this object.
   explicit ExtensionPlatformKeysService(
-      bool profile_is_managed,
-      PrefService* profile_prefs,
-      policy::PolicyService* profile_policies,
-      content::BrowserContext* browser_context,
-      extensions::StateStore* state_store);
+      content::BrowserContext* browser_context);
 
   ~ExtensionPlatformKeysService() override;
 
@@ -93,9 +78,9 @@ class ExtensionPlatformKeysService : public KeyedService {
   // If the generation was successful, |public_key_spki_der| will contain the
   // DER encoding of the SubjectPublicKeyInfo of the generated key. If it
   // failed, |public_key_spki_der| will be empty.
-  using GenerateKeyCallback =
-      base::Callback<void(const std::string& public_key_spki_der,
-                          platform_keys::Status status)>;
+  using GenerateKeyCallback = base::OnceCallback<void(
+      const std::string& public_key_spki_der,
+      base::Optional<crosapi::mojom::KeystoreError> error)>;
 
   // Generates an RSA key pair with |modulus_length_bits| and registers the key
   // to allow a single sign operation by the given extension. |token_id|
@@ -106,7 +91,7 @@ class ExtensionPlatformKeysService : public KeyedService {
   void GenerateRSAKey(platform_keys::TokenId token_id,
                       unsigned int modulus_length_bits,
                       const std::string& extension_id,
-                      const GenerateKeyCallback& callback);
+                      GenerateKeyCallback callback);
 
   // Generates an EC key pair with |named_curve| and registers the key to allow
   // a single sign operation by the given extension. |token_id| specifies the
@@ -117,7 +102,7 @@ class ExtensionPlatformKeysService : public KeyedService {
   void GenerateECKey(platform_keys::TokenId token_id,
                      const std::string& named_curve,
                      const std::string& extension_id,
-                     const GenerateKeyCallback& callback);
+                     GenerateKeyCallback callback);
 
   // Gets the current profile using the BrowserContext object and returns
   // whether the current profile is a sign in profile with
@@ -126,8 +111,8 @@ class ExtensionPlatformKeysService : public KeyedService {
 
   // If signing was successful, |signature| will contain the signature. If it
   // failed, |signature| will be empty.
-  using SignCallback = base::Callback<void(const std::string& signature,
-                                           platform_keys::Status status)>;
+  using SignCallback = base::OnceCallback<void(const std::string& signature,
+                                               platform_keys::Status status)>;
 
   // Digests |data|, applies PKCS1 padding if specified by |hash_algorithm| and
   // chooses the signature algorithm according to |key_type| and signs the data
@@ -147,7 +132,7 @@ class ExtensionPlatformKeysService : public KeyedService {
                   platform_keys::KeyType key_type,
                   platform_keys::HashAlgorithm hash_algorithm,
                   const std::string& extension_id,
-                  const SignCallback& callback);
+                  SignCallback callback);
 
   // Applies PKCS1 padding and afterwards signs the data with the private key
   // matching |public_key_spki_der|. |data| is not digested. If a |token_id|
@@ -165,14 +150,14 @@ class ExtensionPlatformKeysService : public KeyedService {
                        const std::string& data,
                        const std::string& public_key_spki_der,
                        const std::string& extension_id,
-                       const SignCallback& callback);
+                       SignCallback callback);
 
   // If the certificate request could be processed successfully, |matches| will
   // contain the list of matching certificates (maybe empty). If an error
   // occurred, |matches| will be null.
   using SelectCertificatesCallback =
-      base::Callback<void(std::unique_ptr<net::CertificateList> matches,
-                          platform_keys::Status status)>;
+      base::OnceCallback<void(std::unique_ptr<net::CertificateList> matches,
+                              platform_keys::Status status)>;
 
   // Returns a list of certificates matching |request|.
   // 1) all certificates that match the request (like being rooted in one of the
@@ -193,7 +178,7 @@ class ExtensionPlatformKeysService : public KeyedService {
       std::unique_ptr<net::CertificateList> client_certificates,
       bool interactive,
       const std::string& extension_id,
-      const SelectCertificatesCallback& callback,
+      SelectCertificatesCallback callback,
       content::WebContents* web_contents);
 
  private:
@@ -228,6 +213,7 @@ class ExtensionPlatformKeysService : public KeyedService {
   platform_keys::PlatformKeysService* const platform_keys_service_ = nullptr;
   platform_keys::KeyPermissionsService* const key_permissions_service_ =
       nullptr;
+  mojo::Remote<crosapi::mojom::KeystoreService> keystore_service_;
   std::unique_ptr<SelectDelegate> select_delegate_;
   base::queue<std::unique_ptr<Task>> tasks_;
   base::WeakPtrFactory<ExtensionPlatformKeysService> weak_factory_{this};

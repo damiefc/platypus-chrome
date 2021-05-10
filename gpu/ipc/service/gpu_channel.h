@@ -50,6 +50,10 @@ class SharedImageStub;
 class StreamTexture;
 class SyncPointManager;
 
+namespace mojom {
+class GpuChannel;
+}
+
 // Encapsulates an IPC channel between the GPU process and one renderer
 // process. On the renderer side there's a corresponding GpuChannelHost.
 class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
@@ -146,6 +150,7 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
       gfx::GpuMemoryBufferHandle handle,
       const gfx::Size& size,
       gfx::BufferFormat format,
+      gfx::BufferPlane plane,
       SurfaceHandle surface_handle);
 
   void HandleMessage(const IPC::Message& msg);
@@ -156,6 +161,7 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
   void HandleOutOfOrderMessage(const IPC::Message& msg);
 
   void HandleMessageForTesting(const IPC::Message& msg);
+  mojom::GpuChannel& GetGpuChannelForTesting();
 
   ImageDecodeAcceleratorStub* GetImageDecodeAcceleratorStub() const;
 

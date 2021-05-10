@@ -20,7 +20,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.autofill_assistant.proto.ActionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ChipProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ChipType;
@@ -43,6 +42,13 @@ public class AutofillAssistantAutostartTest {
     @Rule
     public CustomTabActivityTestRule mTestRule = new CustomTabActivityTestRule();
 
+    private static final String HTML_DIRECTORY = "/components/test/data/autofill_assistant/html/";
+    private static final String TEST_PAGE = "autofill_assistant_target_website.html";
+
+    private String getTargetWebsiteUrl() {
+        return mTestRule.getTestServer().getURL(HTML_DIRECTORY + TEST_PAGE);
+    }
+
     @Before
     public void setUp() {
         AutofillAssistantPreferencesUtil.setInitialPreferences(true);
@@ -53,10 +59,9 @@ public class AutofillAssistantAutostartTest {
      */
     @Test
     @MediumTest
-    @DisabledTest(message = "https://crbug.com/1134118")
     public void testAutostart() {
         mTestRule.startCustomTabActivityWithIntent(CustomTabsTestUtils.createMinimalCustomTabIntent(
-                InstrumentationRegistry.getTargetContext(), "http://www.example.com"));
+                InstrumentationRegistry.getTargetContext(), getTargetWebsiteUrl()));
 
         AutofillAssistantTestScript script = new AutofillAssistantTestScript(
                 SupportedScriptProto.newBuilder()

@@ -8,13 +8,15 @@ import static com.google.common.truth.Truth.assertThat;
 
 import androidx.test.filters.SmallTest;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
+import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
@@ -29,9 +31,10 @@ import java.util.concurrent.TimeoutException;
  * Tests for Chrome on Android's usage of the PersonalDataManager API.
  */
 @RunWith(BaseJUnit4ClassRunner.class)
+@Batch(Batch.PER_CLASS)
 public class PersonalDataManagerTest {
-    @Rule
-    public final ChromeBrowserTestRule mChromeBrowserTestRule = new ChromeBrowserTestRule();
+    @ClassRule
+    public static final ChromeBrowserTestRule sChromeBrowserTestRule = new ChromeBrowserTestRule();
 
     private AutofillTestHelper mHelper;
 
@@ -40,25 +43,30 @@ public class PersonalDataManagerTest {
         mHelper = new AutofillTestHelper();
     }
 
+    @After
+    public void tearDown() throws TimeoutException {
+        mHelper.clearAllDataForTesting();
+    }
+
     private AutofillProfile createTestProfile() {
-        return new AutofillProfile("" /* guid */, "" /* origin */, "John Major", "Acme Inc.",
-                "123 Main", "California", "Los Angeles", "", "90210", "", "US", "555 123-4567",
-                "jm@example.com", "");
+        return new AutofillProfile("" /* guid */, "" /* origin */, "" /* honorific prefix */,
+                "John Major", "Acme Inc.", "123 Main", "California", "Los Angeles", "", "90210", "",
+                "US", "555 123-4567", "jm@example.com", "");
     }
 
     @Test
     @SmallTest
     @Feature({"Autofill"})
     public void testAddAndEditProfiles() throws TimeoutException {
-        AutofillProfile profile = new AutofillProfile("" /* guid */, "" /* origin */, "John Smith",
-                "Acme Inc.", "1 Main\nApt A", "CA", "San Francisco", "", "94102", "", "US",
-                "4158889999", "john@acme.inc", "");
+        AutofillProfile profile = new AutofillProfile("" /* guid */, "" /* origin */,
+                "" /* honorific prefix */, "John Smith", "Acme Inc.", "1 Main\nApt A", "CA",
+                "San Francisco", "", "94102", "", "US", "4158889999", "john@acme.inc", "");
         String profileOneGUID = mHelper.setProfile(profile);
         Assert.assertEquals(1, mHelper.getNumberOfProfilesForSettings());
 
         AutofillProfile profile2 = new AutofillProfile("" /* guid */, "" /* origin */,
-                "John Hackock", "Acme Inc.", "1 Main\nApt A", "CA", "San Francisco", "", "94102",
-                "", "US", "4158889999", "john@acme.inc", "");
+                "" /* honorific prefix */, "John Hackock", "Acme Inc.", "1 Main\nApt A", "CA",
+                "San Francisco", "", "94102", "", "US", "4158889999", "john@acme.inc", "");
         String profileTwoGUID = mHelper.setProfile(profile2);
         Assert.assertEquals(2, mHelper.getNumberOfProfilesForSettings());
 
@@ -80,9 +88,9 @@ public class PersonalDataManagerTest {
     @SmallTest
     @Feature({"Autofill"})
     public void testUpdateLanguageCodeInProfile() throws TimeoutException {
-        AutofillProfile profile = new AutofillProfile("" /* guid */, "" /* origin */, "John Smith",
-                "Acme Inc.", "1 Main\nApt A", "CA", "San Francisco", "", "94102", "", "US",
-                "4158889999", "john@acme.inc", "fr");
+        AutofillProfile profile = new AutofillProfile("" /* guid */, "" /* origin */,
+                "" /* honorific prefix */, "John Smith", "Acme Inc.", "1 Main\nApt A", "CA",
+                "San Francisco", "", "94102", "", "US", "4158889999", "john@acme.inc", "fr");
         Assert.assertEquals("fr", profile.getLanguageCode());
         String profileOneGUID = mHelper.setProfile(profile);
         Assert.assertEquals(1, mHelper.getNumberOfProfilesForSettings());
@@ -115,17 +123,23 @@ public class PersonalDataManagerTest {
         Assert.assertEquals(0, mHelper.getNumberOfProfilesForSettings());
     }
 
+    private CreditCard createLocalCreditCard(
+            String name, String number, String month, String year) {
+        return new CreditCard("" /*guid*/, "" /*origin*/, true /* isLocal */, false /* isCached */,
+                name, number, "" /*obfuscatedNumber*/, month, year, "" /* basicCardIssuerNetwork */,
+                0 /* issuerIconDrawableId */, "" /* billingAddressId */, "" /* serverId */);
+    }
+
     @Test
     @SmallTest
     @Feature({"Autofill"})
     public void testAddAndEditCreditCards() throws TimeoutException {
-        CreditCard card = new CreditCard(
-                "" /* guid */, "" /* origin */, "Visa", "1234123412341234", "", "5", "2020");
+        CreditCard card = createLocalCreditCard("Visa", "1234123412341234", "5", "2020");
         String cardOneGUID = mHelper.setCreditCard(card);
         Assert.assertEquals(1, mHelper.getNumberOfCreditCardsForSettings());
 
-        CreditCard card2 = new CreditCard("" /* guid */, "" /* origin */, "American Express",
-                "1234123412341234", "", "8", "2020");
+        CreditCard card2 =
+                createLocalCreditCard("American Express", "1234123412341234", "8", "2020");
         String cardTwoGUID = mHelper.setCreditCard(card2);
         Assert.assertEquals(2, mHelper.getNumberOfCreditCardsForSettings());
 
@@ -156,11 +170,11 @@ public class PersonalDataManagerTest {
     @SmallTest
     @Feature({"Autofill"})
     public void testAddAndEditCreditCardNickname() throws TimeoutException {
-        CreditCard cardWithoutNickname = new CreditCard("" /* guid */, "" /* origin */, "Visa",
-                "1234123412341234", "", "5", AutofillTestHelper.nextYear());
+        CreditCard cardWithoutNickname = createLocalCreditCard(
+                "Visa", "1234123412341234", "5", AutofillTestHelper.nextYear());
         String nickname = "test nickname";
-        CreditCard cardWithNickname = new CreditCard("" /* guid */, "" /* origin */,
-                "American Express", "1234123412341234", "", "8", AutofillTestHelper.nextYear());
+        CreditCard cardWithNickname = createLocalCreditCard(
+                "American Express", "1234123412341234", "8", AutofillTestHelper.nextYear());
         cardWithNickname.setNickname(nickname);
 
         String cardWithoutNicknameGuid = mHelper.setCreditCard(cardWithoutNickname);
@@ -176,9 +190,8 @@ public class PersonalDataManagerTest {
     @SmallTest
     @Feature({"Autofill"})
     public void testAddAndDeleteCreditCard() throws TimeoutException {
-        CreditCard card = new CreditCard(
-                "" /* guid */, "Chrome settings" /* origin */,
-                "Visa", "1234123412341234", "", "5", "2020");
+        CreditCard card = createLocalCreditCard("Visa", "1234123412341234", "5", "2020");
+        card.setOrigin("Chrome settings");
         String cardOneGUID = mHelper.setCreditCard(card);
         Assert.assertEquals(1, mHelper.getNumberOfCreditCardsForSettings());
 
@@ -192,14 +205,14 @@ public class PersonalDataManagerTest {
     public void testRespectCountryCodes() throws TimeoutException {
         // The constructor should accept country names and ISO 3166-1-alpha-2 country codes.
         // getCountryCode() should return a country code.
-        AutofillProfile profile1 = new AutofillProfile("" /* guid */, "" /* origin */, "John Smith",
-                "Acme Inc.", "1 Main\nApt A", "Quebec", "Montreal", "", "H3B 2Y5", "", "Canada",
-                "514-670-1234", "john@acme.inc", "");
+        AutofillProfile profile1 = new AutofillProfile("" /* guid */, "" /* origin */,
+                "" /* honorific prefix */, "John Smith", "Acme Inc.", "1 Main\nApt A", "Quebec",
+                "Montreal", "", "H3B 2Y5", "", "Canada", "514-670-1234", "john@acme.inc", "");
         String profileGuid1 = mHelper.setProfile(profile1);
 
-        AutofillProfile profile2 = new AutofillProfile("" /* guid */, "" /* origin */, "Greg Smith",
-                "Ucme Inc.", "123 Bush\nApt 125", "Quebec", "Montreal", "", "H3B 2Y5", "", "CA",
-                "514-670-4321", "greg@ucme.inc", "");
+        AutofillProfile profile2 = new AutofillProfile("" /* guid */, "" /* origin */,
+                "" /* honorific prefix */, "Greg Smith", "Ucme Inc.", "123 Bush\nApt 125", "Quebec",
+                "Montreal", "", "H3B 2Y5", "", "CA", "514-670-4321", "greg@ucme.inc", "");
         String profileGuid2 = mHelper.setProfile(profile2);
 
         Assert.assertEquals(2, mHelper.getNumberOfProfilesForSettings());
@@ -221,10 +234,10 @@ public class PersonalDataManagerTest {
         final String streetAddress2 = streetAddress1 + "\n"
                 + "Fourth floor\n"
                 + "The red bell";
-        AutofillProfile profile =
-                new AutofillProfile("" /* guid */, "" /* origin */, "Monsieur Jean DELHOURME",
-                        "Acme Inc.", streetAddress1, "Tahiti", "Mahina", "Orofara", "98709",
-                        "CEDEX 98703", "French Polynesia", "44.71.53", "john@acme.inc", "");
+        AutofillProfile profile = new AutofillProfile("" /* guid */, "" /* origin */,
+                "" /* honorific prefix */, "Monsieur Jean DELHOURME", "Acme Inc.", streetAddress1,
+                "Tahiti", "Mahina", "Orofara", "98709", "CEDEX 98703", "French Polynesia",
+                "44.71.53", "john@acme.inc", "");
         String profileGuid1 = mHelper.setProfile(profile);
         Assert.assertEquals(1, mHelper.getNumberOfProfilesForSettings());
         AutofillProfile storedProfile1 = mHelper.getProfile(profileGuid1);
@@ -250,20 +263,21 @@ public class PersonalDataManagerTest {
     @SmallTest
     @Feature({"Autofill"})
     public void testLabels() throws TimeoutException {
-        AutofillProfile profile1 = new AutofillProfile("" /* guid */, "" /* origin */, "John Major",
-                "Acme Inc.", "123 Main", "California", "Los Angeles", "", "90210", "", "US",
-                "555 123-4567", "jm@example.com", "");
+        AutofillProfile profile1 = new AutofillProfile("" /* guid */, "" /* origin */,
+                "" /* honorific prefix */, "John Major", "Acme Inc.", "123 Main", "California",
+                "Los Angeles", "", "90210", "", "US", "555 123-4567", "jm@example.com", "");
         // An almost identical profile.
-        AutofillProfile profile2 = new AutofillProfile("" /* guid */, "" /* origin */, "John Major",
-                "Acme Inc.", "123 Main", "California", "Los Angeles", "", "90210", "", "US",
-                "555 123-4567", "jm-work@example.com", "");
+        AutofillProfile profile2 = new AutofillProfile("" /* guid */, "" /* origin */,
+                "" /* honorific prefix */, "John Major", "Acme Inc.", "123 Main", "California",
+                "Los Angeles", "", "90210", "", "US", "555 123-4567", "jm-work@example.com", "");
         // A different profile.
         AutofillProfile profile3 = new AutofillProfile("" /* guid */, "" /* origin */,
-                "Jasper Lundgren", "", "1500 Second Ave", "California", "Hollywood", "", "90068",
-                "", "US", "555 123-9876", "jasperl@example.com", "");
+                "" /* honorific prefix */, "Jasper Lundgren", "", "1500 Second Ave", "California",
+                "Hollywood", "", "90068", "", "US", "555 123-9876", "jasperl@example.com", "");
         // A profile where a lot of stuff is missing.
         AutofillProfile profile4 = new AutofillProfile("" /* guid */, "" /* origin */,
-                "Joe Sergeant", "", "", "Texas", "Fort Worth", "", "", "", "US", "", "", "");
+                "" /* honorific prefix */, "Joe Sergeant", "", "", "Texas", "Fort Worth", "", "",
+                "", "US", "", "", "");
 
         mHelper.setProfile(profile1);
         mHelper.setProfile(profile2);
@@ -291,15 +305,15 @@ public class PersonalDataManagerTest {
     @Feature({"Autofill"})
     public void testProfilesFrecency() throws TimeoutException {
         // Create 3 profiles.
-        AutofillProfile profile1 = new AutofillProfile("" /* guid */, "" /* origin */, "John Major",
-                "Acme Inc.", "123 Main", "California", "Los Angeles", "", "90210", "", "US",
-                "555 123-4567", "jm@example.com", "");
-        AutofillProfile profile2 = new AutofillProfile("" /* guid */, "" /* origin */, "John Major",
-                "Acme Inc.", "123 Main", "California", "Los Angeles", "", "90210", "", "US",
-                "555 123-4567", "jm-work@example.com", "");
+        AutofillProfile profile1 = new AutofillProfile("" /* guid */, "" /* origin */,
+                "" /* honorific prefix */, "John Major", "Acme Inc.", "123 Main", "California",
+                "Los Angeles", "", "90210", "", "US", "555 123-4567", "jm@example.com", "");
+        AutofillProfile profile2 = new AutofillProfile("" /* guid */, "" /* origin */,
+                "" /* honorific prefix */, "John Major", "Acme Inc.", "123 Main", "California",
+                "Los Angeles", "", "90210", "", "US", "555 123-4567", "jm-work@example.com", "");
         AutofillProfile profile3 = new AutofillProfile("" /* guid */, "" /* origin */,
-                "Jasper Lundgren", "", "1500 Second Ave", "California", "Hollywood", "", "90068",
-                "", "US", "555 123-9876", "jasperl@example.com", "");
+                "" /* honorific prefix */, "Jasper Lundgren", "", "1500 Second Ave", "California",
+                "Hollywood", "", "90068", "", "US", "555 123-9876", "jasperl@example.com", "");
 
         String guid1 = mHelper.setProfile(profile1);
         String guid2 = mHelper.setProfile(profile2);
@@ -332,14 +346,14 @@ public class PersonalDataManagerTest {
     @DisabledTest(message = "https://crbug.com/1123852")
     public void testCreditCardsFrecency() throws TimeoutException {
         // Create 3 credit cards.
-        CreditCard card1 = new CreditCard(
-                "" /* guid */, "" /* origin */, "Visa", "1234123412341234", "", "5", "2020");
+        CreditCard card1 = createLocalCreditCard("Visa", "1234123412341234", "5", "2020");
 
-        CreditCard card2 = new CreditCard("" /* guid */, "http://www.example.com" /* origin */,
-                "American Express", "1234123412341234", "", "8", "2020");
+        CreditCard card2 =
+                createLocalCreditCard("American Express", "1234123412341234", "8", "2020");
+        card2.setOrigin("http://www.example.com");
 
-        CreditCard card3 = new CreditCard("" /* guid */, "http://www.example.com" /* origin */,
-                "Mastercard", "1234123412341234", "", "11", "2020");
+        CreditCard card3 = createLocalCreditCard("Mastercard", "1234123412341234", "11", "2020");
+        card3.setOrigin("http://www.example.com");
 
         String guid1 = mHelper.setCreditCard(card1);
         String guid2 = mHelper.setCreditCard(card2);
@@ -498,5 +512,35 @@ public class PersonalDataManagerTest {
         Assert.assertEquals("John Major, Acme Inc., 123 Main, Los Angeles, California 90210, "
                         + "United States",
                 profiles.get(0).getLabel());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Autofill"})
+    public void testClearAllData() throws TimeoutException {
+        CreditCard localCard = new CreditCard("" /* guid */, "" /* origin */, true /* isLocal */,
+                false /* isCached */, "John Doe", "1234123412341234", "", "5", "2020", "Visa",
+                0 /* issuerIconDrawableId */, "" /* billingAddressId */, "" /* serverId */);
+        CreditCard serverCard = new CreditCard("serverGuid" /* guid */, "" /* origin */,
+                false /* isLocal */, false /* isCached */, "John Doe Server", "41111111111111111",
+                "", "3", "2019", "Visa", 0 /* issuerIconDrawableId */, "" /* billingAddressId */,
+                "serverId" /* serverId */);
+        mHelper.addServerCreditCard(serverCard);
+        Assert.assertEquals(1, mHelper.getNumberOfCreditCardsForSettings());
+
+        // Clears all server data.
+        mHelper.clearAllDataForTesting();
+        Assert.assertEquals(0, mHelper.getNumberOfCreditCardsForSettings());
+
+        mHelper.setProfile(createTestProfile());
+        mHelper.setCreditCard(localCard);
+        mHelper.addServerCreditCard(serverCard);
+        Assert.assertEquals(1, mHelper.getNumberOfProfilesForSettings());
+        Assert.assertEquals(2, mHelper.getNumberOfCreditCardsForSettings());
+
+        // Clears all server and local data.
+        mHelper.clearAllDataForTesting();
+        Assert.assertEquals(0, mHelper.getNumberOfProfilesForSettings());
+        Assert.assertEquals(0, mHelper.getNumberOfCreditCardsForSettings());
     }
 }

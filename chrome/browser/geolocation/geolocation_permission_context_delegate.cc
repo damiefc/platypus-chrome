@@ -30,9 +30,9 @@ bool GeolocationPermissionContextDelegate::DecidePermission(
 
   bool permission_set;
   bool new_permission;
-  if (extensions_context_.DecidePermission(
-          web_contents, id, id.request_id(), requesting_origin, user_gesture,
-          callback, &permission_set, &new_permission)) {
+  if (extensions_context_.DecidePermission(web_contents, id, requesting_origin,
+                                           user_gesture, callback,
+                                           &permission_set, &new_permission)) {
     DCHECK_EQ(!!*callback, permission_set);
     if (permission_set) {
       ContentSetting content_setting =
@@ -40,7 +40,7 @@ bool GeolocationPermissionContextDelegate::DecidePermission(
       context->NotifyPermissionSet(
           id, requesting_origin,
           web_contents->GetLastCommittedURL().GetOrigin(), std::move(*callback),
-          false /* persist */, content_setting);
+          /*persist=*/false, content_setting, /*is_one_time=*/false);
     }
     return true;
   }

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/passwords/bubble_controllers/auto_sign_in_bubble_controller.h"
 
+#include <memory>
+
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate_mock.h"
@@ -16,8 +18,8 @@ using ::testing::ReturnRef;
 namespace {
 
 constexpr char kSiteOrigin[] = "http://example.com/login/";
-constexpr char kUsername[] = "Admin";
-constexpr char kPassword[] = "AdminPass";
+constexpr char16_t kUsername[] = u"Admin";
+constexpr char16_t kPassword[] = u"AdminPass";
 constexpr char kUIDismissalReasonGeneralMetric[] =
     "PasswordManager.UIDismissalReason";
 
@@ -32,15 +34,15 @@ class AutoSignInBubbleControllerTest : public ::testing::Test {
         .WillByDefault(Return(nullptr));
     pending_password_.url = GURL(kSiteOrigin);
     pending_password_.signon_realm = kSiteOrigin;
-    pending_password_.username_value = base::ASCIIToUTF16(kUsername);
-    pending_password_.password_value = base::ASCIIToUTF16(kPassword);
+    pending_password_.username_value = kUsername;
+    pending_password_.password_value = kPassword;
   }
   ~AutoSignInBubbleControllerTest() override = default;
 
   PasswordsModelDelegateMock* delegate() { return mock_delegate_.get(); }
   AutoSignInBubbleController* controller() { return controller_.get(); }
 
-  const autofill::PasswordForm& pending_password() const {
+  const password_manager::PasswordForm& pending_password() const {
     return pending_password_;
   }
 
@@ -50,15 +52,15 @@ class AutoSignInBubbleControllerTest : public ::testing::Test {
  private:
   std::unique_ptr<PasswordsModelDelegateMock> mock_delegate_;
   std::unique_ptr<AutoSignInBubbleController> controller_;
-  autofill::PasswordForm pending_password_;
+  password_manager::PasswordForm pending_password_;
 };
 
 void AutoSignInBubbleControllerTest::Init() {
   EXPECT_CALL(*delegate(), GetPendingPassword())
       .WillOnce(ReturnRef(pending_password()));
   EXPECT_CALL(*delegate(), OnBubbleShown());
-  controller_.reset(
-      new AutoSignInBubbleController(mock_delegate_->AsWeakPtr()));
+  controller_ =
+      std::make_unique<AutoSignInBubbleController>(mock_delegate_->AsWeakPtr());
   ASSERT_TRUE(testing::Mock::VerifyAndClearExpectations(delegate()));
 }
 

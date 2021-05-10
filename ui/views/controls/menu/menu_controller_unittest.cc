@@ -13,7 +13,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_action_data.h"
@@ -46,25 +46,32 @@
 #include "ui/aura/client/drag_drop_client_observer.h"
 #include "ui/aura/null_window_targeter.h"
 #include "ui/aura/scoped_window_targeter.h"
+#include "ui/aura/test/test_window_delegate.h"
+#include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/views/controls/menu/menu_pre_target_handler.h"
 #endif
 
-#if defined(USE_X11)
-#include "ui/events/test/events_test_utils_x11.h"
-#include "ui/gfx/x/x11.h"  // nogncheck
-#endif
-
 #if defined(USE_OZONE)
 #include "ui/base/ui_base_features.h"
+#include "ui/ozone/buildflags.h"
 #include "ui/ozone/public/ozone_platform.h"
+#if BUILDFLAG(OZONE_PLATFORM_X11)
+#define USE_OZONE_PLATFORM_X11
+#endif
+#endif
+
+#if defined(USE_X11) || defined(USE_OZONE_PLATFORM_X11)
+#include "ui/events/test/events_test_utils_x11.h"
 #endif
 
 namespace views {
 namespace test {
-
 namespace {
+
+using ::ui::mojom::DragOperation;
 
 bool ShouldIgnoreScreenBoundsForMenus() {
 #if defined(USE_OZONE)
@@ -199,12 +206,12 @@ class TestDragDropClient : public aura::client::DragDropClient {
   ~TestDragDropClient() override = default;
 
   // aura::client::DragDropClient:
-  int StartDragAndDrop(std::unique_ptr<ui::OSExchangeData> data,
-                       aura::Window* root_window,
-                       aura::Window* source_window,
-                       const gfx::Point& screen_location,
-                       int operation,
-                       ui::mojom::DragEventSource source) override;
+  DragOperation StartDragAndDrop(std::unique_ptr<ui::OSExchangeData> data,
+                                 aura::Window* root_window,
+                                 aura::Window* source_window,
+                                 const gfx::Point& screen_location,
+                                 int allowed_operations,
+                                 ui::mojom::DragEventSource source) override;
   void DragCancel() override;
   bool IsDragDropInProgress() override;
 
@@ -219,16 +226,16 @@ class TestDragDropClient : public aura::client::DragDropClient {
   DISALLOW_COPY_AND_ASSIGN(TestDragDropClient);
 };
 
-int TestDragDropClient::StartDragAndDrop(
+DragOperation TestDragDropClient::StartDragAndDrop(
     std::unique_ptr<ui::OSExchangeData> data,
     aura::Window* root_window,
     aura::Window* source_window,
     const gfx::Point& screen_location,
-    int operation,
+    int allowed_operations,
     ui::mojom::DragEventSource source) {
   drag_in_progress_ = true;
   start_drag_and_drop_callback_.Run();
-  return 0;
+  return DragOperation::kNone;
 }
 
 void TestDragDropClient::DragCancel() {
@@ -686,7 +693,7 @@ class MenuControllerTest : public ViewsTestBase,
 
   void MenuHostOnDragComplete(MenuHost* host) { host->OnDragComplete(); }
 
-  void SelectByChar(base::char16 character) {
+  void SelectByChar(char16_t character) {
     menu_controller_->SelectByChar(character);
   }
 
@@ -760,18 +767,21 @@ class MenuControllerTest : public ViewsTestBase,
     return menu_controller_->exit_type_;
   }
 
-  void AddButtonMenuItems() {
+  // Adds a menu item having buttons as children and returns it. If
+  // `single_child` is true, the hosting menu item has only one child button.
+  MenuItemView* AddButtonMenuItems(bool single_child) {
     menu_item()->SetBounds(0, 0, 200, 300);
-    MenuItemView* item_view =
-        menu_item()->AppendMenuItem(5, base::ASCIIToUTF16("Five"));
-    for (size_t i = 0; i < 3; ++i) {
+    MenuItemView* item_view = menu_item()->AppendMenuItem(5, u"Five");
+    const size_t children_count = single_child ? 1 : 3;
+    for (size_t i = 0; i < children_count; ++i) {
       LabelButton* button =
-          new LabelButton(nullptr, base::ASCIIToUTF16("Label"));
+          new LabelButton(Button::PressedCallback(), u"Label");
       // This is an in-menu button. Hence it must be always focusable.
       button->SetFocusBehavior(View::FocusBehavior::ALWAYS);
       item_view->AddChildView(button);
     }
     menu_item()->GetSubmenu()->ShowAt(owner(), menu_item()->bounds(), false);
+    return item_view;
   }
 
   void DestroyMenuItem() { menu_item_.reset(); }
@@ -827,10 +837,10 @@ class MenuControllerTest : public ViewsTestBase,
   void SetupMenuItem() {
     menu_delegate_ = std::make_unique<TestMenuDelegate>();
     menu_item_ = std::make_unique<TestMenuItemViewShown>(menu_delegate_.get());
-    menu_item_->AppendMenuItem(1, base::ASCIIToUTF16("One"));
-    menu_item_->AppendMenuItem(2, base::ASCIIToUTF16("Two"));
-    menu_item_->AppendMenuItem(3, base::ASCIIToUTF16("Three"));
-    menu_item_->AppendMenuItem(4, base::ASCIIToUTF16("Four"));
+    menu_item_->AppendMenuItem(1, u"One");
+    menu_item_->AppendMenuItem(2, u"Two");
+    menu_item_->AppendMenuItem(3, u"Three");
+    menu_item_->AppendMenuItem(4, u"Four");
   }
 
   void SetupMenuController() {
@@ -879,12 +889,16 @@ TEST_F(MenuControllerTest, EventTargeter) {
 }
 #endif  // defined(USE_AURA)
 
-#if defined(USE_X11)
+#if defined(USE_X11) || defined(USE_OZONE_PLATFORM_X11)
 // Tests that touch event ids are released correctly. See crbug.com/439051 for
 // details. When the ids aren't managed correctly, we get stuck down touches.
 TEST_F(MenuControllerTest, TouchIdsReleasedCorrectly) {
-  if (features::IsUsingOzonePlatform())
-    return;
+  // Run this test only for X11 (either Ozone or non-Ozone).
+  if (features::IsUsingOzonePlatform() &&
+      ui::OzonePlatform::GetPlatformNameForTest() != "x11") {
+    GTEST_SKIP();
+  }
+
   TestEventHandler test_event_handler;
   GetRootWindow(owner())->AddPreTargetHandler(&test_event_handler);
 
@@ -907,7 +921,7 @@ TEST_F(MenuControllerTest, TouchIdsReleasedCorrectly) {
 
   GetRootWindow(owner())->RemovePreTargetHandler(&test_event_handler);
 }
-#endif  // defined(USE_X11)
+#endif  // defined(USE_X11) || defined(USE_OZONE_PLATFORM_X11)
 
 // Tests that initial selected menu items are correct when items are enabled or
 // disabled.
@@ -1044,6 +1058,70 @@ TEST_F(MenuControllerTest, VerifyMenuBubblePositionAfterSizeChanges) {
     EXPECT_LE(options.anchor_bounds.y() - border_and_shadow_insets.top() +
                   updated_size.height(),
               monitor_bounds.bottom());
+
+    options.menu_position = MenuItemView::MenuPosition::kAboveBounds;
+    CalculateBubbleMenuBounds(options);
+    EXPECT_EQ(MenuItemView::MenuPosition::kAboveBounds,
+              menu_item()->ActualMenuPosition());
+  }
+}
+
+// Verifies that the context menu bubble position, MenuPosition::kBubbleBelow,
+// does not shift as items are removed. The menu position will shift it items
+// are added and the menu no longer fits in its previous position.
+TEST_F(MenuControllerTest, VerifyMenuBubbleBelowPositionAfterSizeChanges) {
+  constexpr gfx::Rect kMonitorBounds(0, 0, 500, 500);
+  constexpr gfx::Size kMenuSize(100, 200);
+  const gfx::Insets border_and_shadow_insets =
+      BubbleBorder::GetBorderAndShadowInsets(
+          MenuConfig::instance().touchable_menu_shadow_elevation);
+
+  // Calculate the suitable anchor point to ensure that if the menu shows below
+  // the anchor point, the bottom of the menu should be one pixel off the
+  // bottom of the display. It means that there is insufficient space for the
+  // menu below the anchor.
+  const gfx::Point anchor_point(kMonitorBounds.width() / 2,
+                                kMonitorBounds.bottom() + 1 -
+                                    kMenuSize.height() +
+                                    border_and_shadow_insets.top());
+
+  MenuBoundsOptions options;
+  options.menu_anchor = MenuAnchorPosition::kBubbleBelow;
+  options.monitor_bounds = kMonitorBounds;
+  options.anchor_bounds = gfx::Rect(anchor_point, gfx::Size());
+
+  // Case 1: There is insufficient space for the menu below `anchor_point` and
+  // there is no cached menu position. The menu should show above the anchor.
+  {
+    options.menu_size = kMenuSize;
+    ASSERT_GT(options.anchor_bounds.y() - border_and_shadow_insets.top() +
+                  kMenuSize.height(),
+              kMonitorBounds.bottom());
+    CalculateBubbleMenuBounds(options);
+    EXPECT_EQ(MenuItemView::MenuPosition::kAboveBounds,
+              menu_item()->ActualMenuPosition());
+  }
+
+  // Case 2: There is insufficient space for the menu below `anchor_point`. The
+  // cached position is below the anchor. The menu should show above the anchor
+  // point.
+  {
+    options.menu_position = MenuItemView::MenuPosition::kBelowBounds;
+    CalculateBubbleMenuBounds(options);
+    EXPECT_EQ(MenuItemView::MenuPosition::kAboveBounds,
+              menu_item()->ActualMenuPosition());
+  }
+
+  // Case 3: There is enough space for the menu below `anchor_point`. The cached
+  // menu position is above the anchor. The menu should show above the anchor.
+  {
+    // Shrink the menu size. Verify that there is enough space below the anchor
+    // point now.
+    constexpr gfx::Size kUpdatedSize(kMenuSize.width(), kMenuSize.height() / 2);
+    options.menu_size = kUpdatedSize;
+    EXPECT_LE(options.anchor_bounds.y() - border_and_shadow_insets.top() +
+                  kUpdatedSize.height(),
+              kMonitorBounds.bottom());
 
     options.menu_position = MenuItemView::MenuPosition::kAboveBounds;
     CalculateBubbleMenuBounds(options);
@@ -1261,7 +1339,7 @@ TEST_F(MenuControllerTest, SelectByChar) {
 }
 
 TEST_F(MenuControllerTest, SelectChildButtonView) {
-  AddButtonMenuItems();
+  AddButtonMenuItems(/*single_child=*/false);
   View* buttons_view = menu_item()->GetSubmenu()->children()[4];
   ASSERT_NE(nullptr, buttons_view);
   Button* button1 = Button::AsButton(buttons_view->children()[0]);
@@ -1331,7 +1409,7 @@ TEST_F(MenuControllerTest, SelectChildButtonView) {
 }
 
 TEST_F(MenuControllerTest, DeleteChildButtonView) {
-  AddButtonMenuItems();
+  AddButtonMenuItems(/*single_child=*/false);
 
   // Handle searching for 'f'; should find "Four".
   SelectByChar('f');
@@ -1370,10 +1448,44 @@ TEST_F(MenuControllerTest, DeleteChildButtonView) {
   EXPECT_FALSE(button3->IsHotTracked());
 }
 
+// Verifies that the child button is hot tracked after the host menu item is
+// selected by `MenuController::SelectItemAndOpenSubmenu()`.
+TEST_F(MenuControllerTest, ChildButtonHotTrackedAfterMenuItemSelection) {
+  // Add a menu item which owns a button as child.
+  MenuItemView* hosting_menu_item = AddButtonMenuItems(/*single_child=*/true);
+  ASSERT_FALSE(hosting_menu_item->IsSelected());
+  const Button* button = Button::AsButton(hosting_menu_item->children()[0]);
+  EXPECT_FALSE(button->IsHotTracked());
+
+  menu_controller()->SelectItemAndOpenSubmenu(hosting_menu_item);
+  EXPECT_TRUE(hosting_menu_item->IsSelected());
+  EXPECT_TRUE(button->IsHotTracked());
+}
+
+// Verifies that the child button of the menu item which is under mouse hovering
+// is hot tracked (https://crbug.com/1135000).
+TEST_F(MenuControllerTest, ChildButtonHotTrackedAfterMouseMove) {
+  // Add a menu item which owns a button as child.
+  MenuItemView* hosting_menu_item = AddButtonMenuItems(/*single_child=*/true);
+  const Button* button = Button::AsButton(hosting_menu_item->children()[0]);
+  EXPECT_FALSE(button->IsHotTracked());
+
+  SubmenuView* sub_menu = menu_item()->GetSubmenu();
+  gfx::Point location(button->GetBoundsInScreen().CenterPoint());
+  View::ConvertPointFromScreen(sub_menu->GetScrollViewContainer(), &location);
+  ui::MouseEvent event(ui::ET_MOUSE_MOVED, location, location,
+                       ui::EventTimeForNow(), 0, 0);
+  ProcessMouseMoved(sub_menu, event);
+
+  // After the mouse moves to `button`, `button` should be hot tracked.
+  EXPECT_EQ(button, GetHotButton());
+  EXPECT_TRUE(button->IsHotTracked());
+}
+
 // Creates a menu with Button child views, simulates running a nested
 // menu and tests that existing the nested run restores hot-tracked child view.
 TEST_F(MenuControllerTest, ChildButtonHotTrackedWhenNested) {
-  AddButtonMenuItems();
+  AddButtonMenuItems(/*single_child=*/false);
 
   // Handle searching for 'f'; should find "Four".
   SelectByChar('f');
@@ -1641,6 +1753,65 @@ TEST_F(MenuControllerTest, PreserveGestureForOwner) {
   controller->OnGestureEvent(sub_menu, &event2);
   EXPECT_EQ(CountOwnerOnGestureEvent(), 2);
 }
+
+#if defined(USE_AURA)
+// Tests that setting `send_gesture_events_to_owner` flag forwards gesture
+// events to the NativeView specified for gestures and not the owner's
+// NativeView.
+TEST_F(MenuControllerTest, ForwardsEventsToNativeViewForGestures) {
+  aura::test::EventCountDelegate child_delegate;
+  auto child_window = std::make_unique<aura::Window>(&child_delegate);
+  child_window->Init(ui::LAYER_TEXTURED);
+  owner()->GetNativeView()->AddChild(child_window.get());
+
+  MenuController* controller = menu_controller();
+  MenuItemView* item = menu_item();
+
+  // Ensure menu is closed before running with the menu with `child_window` as
+  // the NativeView for gestures.
+  controller->Cancel(MenuController::ExitType::kAll);
+
+  controller->Run(owner(), nullptr, item, gfx::Rect(),
+                  MenuAnchorPosition::kBottomCenter, false, false,
+                  child_window.get());
+  SubmenuView* sub_menu = item->GetSubmenu();
+  sub_menu->ShowAt(owner(), gfx::Rect(0, 0, 100, 100), true,
+                   child_window.get());
+
+  gfx::Point location(sub_menu->bounds().bottom_left().x(),
+                      sub_menu->bounds().bottom_left().y() + 10);
+  ui::GestureEvent event(location.x(), location.y(), 0, ui::EventTimeForNow(),
+                         ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_BEGIN));
+
+  // Gesture events should not be forwarded to either the `child_window` or the
+  // hosts native window if the flag is not set.
+  EXPECT_EQ(0, CountOwnerOnGestureEvent());
+  EXPECT_EQ(0, child_delegate.GetGestureCountAndReset());
+  EXPECT_FALSE(controller->send_gesture_events_to_owner());
+  controller->OnGestureEvent(sub_menu, &event);
+  EXPECT_EQ(0, CountOwnerOnGestureEvent());
+  EXPECT_EQ(0, child_delegate.GetGestureCountAndReset());
+
+  // The `child_window` should receive gestures triggered outside the menu.
+  controller->set_send_gesture_events_to_owner(true);
+  controller->OnGestureEvent(sub_menu, &event);
+  EXPECT_EQ(0, CountOwnerOnGestureEvent());
+  EXPECT_EQ(1, child_delegate.GetGestureCountAndReset());
+
+  ui::GestureEvent event2(location.x(), location.y(), 0, ui::EventTimeForNow(),
+                          ui::GestureEventDetails(ui::ET_GESTURE_END));
+
+  controller->OnGestureEvent(sub_menu, &event2);
+  EXPECT_EQ(0, CountOwnerOnGestureEvent());
+  EXPECT_EQ(1, child_delegate.GetGestureCountAndReset());
+
+  // ET_GESTURE_END resets the `send_gesture_events_to_owner_` flag, so further
+  // gesture events should not be sent to the `child_window`.
+  controller->OnGestureEvent(sub_menu, &event2);
+  EXPECT_EQ(0, CountOwnerOnGestureEvent());
+  EXPECT_EQ(0, child_delegate.GetGestureCountAndReset());
+}
+#endif
 
 // Tests that touch outside menu does not closes the menu when forwarding
 // gesture events to owner.
@@ -2053,9 +2224,9 @@ TEST_P(MenuControllerTest, TestMenuFitsOnSmallScreen) {
 TEST_P(MenuControllerTest, TestSubmenuFitsOnScreen) {
   menu_controller()->set_use_touchable_layout(true);
   MenuItemView* sub_item = menu_item()->GetSubmenu()->GetMenuItemAt(0);
-  sub_item->AppendMenuItem(11, base::ASCIIToUTF16("Subitem.One"));
+  sub_item->AppendMenuItem(11, u"Subitem.One");
 
-  const int menu_width = MenuConfig::instance().touchable_menu_width;
+  const int menu_width = MenuConfig::instance().touchable_menu_min_width;
   const gfx::Size parent_size(menu_width, menu_width);
   const gfx::Size parent_size_wide(menu_width * 2, menu_width);
 
@@ -2140,9 +2311,8 @@ TEST_F(MenuControllerTest, MouseAtMenuItemOnShow) {
   // the menu is shown.
   std::unique_ptr<TestMenuItemViewNotShown> menu_item(
       new TestMenuItemViewNotShown(menu_delegate()));
-  MenuItemView* first_item =
-      menu_item->AppendMenuItem(1, base::ASCIIToUTF16("One"));
-  menu_item->AppendMenuItem(2, base::ASCIIToUTF16("Two"));
+  MenuItemView* first_item = menu_item->AppendMenuItem(1, u"One");
+  menu_item->AppendMenuItem(2, u"Two");
   menu_item->SetController(menu_controller());
 
   // Move the mouse to where the first menu item will be shown,
@@ -2198,7 +2368,7 @@ TEST_F(MenuControllerTest, RunWithoutWidgetDoesntCrash) {
 TEST_F(MenuControllerTest, MenuControllerReplacedDuringDrag) {
   // Build the menu so that the appropriate root window is available to set the
   // drag drop client on.
-  AddButtonMenuItems();
+  AddButtonMenuItems(/*single_child=*/false);
   TestDragDropClient drag_drop_client(base::BindRepeating(
       &MenuControllerTest::TestMenuControllerReplacementDuringDrag,
       base::Unretained(this)));
@@ -2213,7 +2383,7 @@ TEST_F(MenuControllerTest, MenuControllerReplacedDuringDrag) {
 TEST_F(MenuControllerTest, CancelAllDuringDrag) {
   // Build the menu so that the appropriate root window is available to set the
   // drag drop client on.
-  AddButtonMenuItems();
+  AddButtonMenuItems(/*single_child=*/false);
   TestDragDropClient drag_drop_client(base::BindRepeating(
       &MenuControllerTest::TestCancelAllDuringDrag, base::Unretained(this)));
   aura::client::SetDragDropClient(
@@ -2459,7 +2629,7 @@ TEST_F(MenuControllerTest,
 }
 
 TEST_F(MenuControllerTest, SetSelectionIndices_Buttons) {
-  AddButtonMenuItems();
+  AddButtonMenuItems(/*single_child=*/false);
   MenuItemView* const item1 = menu_item()->GetSubmenu()->GetMenuItemAt(0);
   MenuItemView* const item2 = menu_item()->GetSubmenu()->GetMenuItemAt(1);
   MenuItemView* const item3 = menu_item()->GetSubmenu()->GetMenuItemAt(2);
@@ -2501,7 +2671,7 @@ TEST_F(MenuControllerTest, SetSelectionIndices_Buttons) {
 }
 
 TEST_F(MenuControllerTest, SetSelectionIndices_Buttons_SkipHiddenAndDisabled) {
-  AddButtonMenuItems();
+  AddButtonMenuItems(/*single_child=*/false);
   MenuItemView* const item1 = menu_item()->GetSubmenu()->GetMenuItemAt(0);
   MenuItemView* const item2 = menu_item()->GetSubmenu()->GetMenuItemAt(1);
   MenuItemView* const item3 = menu_item()->GetSubmenu()->GetMenuItemAt(2);
@@ -2625,7 +2795,7 @@ TEST_F(MenuControllerTest, AccessibilityEmitsSelectChildrenChanged) {
   EXPECT_EQ(ax_counter.GetCount(ax::mojom::Event::kSelectedChildrenChanged), 2);
 }
 
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
 // This test exercises a Mac-specific behavior, by which hotkeys using modifiers
 // cause menus to close and the hotkeys to be handled by the browser window.
 // This specific test case tries using cmd-ctrl-f, which normally means

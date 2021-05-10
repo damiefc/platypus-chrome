@@ -8,6 +8,7 @@
 
 #include "base/optional.h"
 #include "components/crx_file/id_util.h"
+#include "extensions/common/api/content_scripts.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_constants.h"
 
@@ -102,12 +103,14 @@ struct ExtensionBuilder::ManifestData {
         matches.Append(script.second.begin(), script.second.end());
         scripts_value.Append(
             DictionaryBuilder()
-                .Set(manifest_keys::kJs,
+                .Set(api::content_scripts::ContentScript::kJs,
                      ListBuilder().Append(script.first).Build())
-                .Set(manifest_keys::kMatches, matches.Build())
+                .Set(api::content_scripts::ContentScript::kMatches,
+                     matches.Build())
                 .Build());
       }
-      manifest.Set(manifest_keys::kContentScripts, scripts_value.Build());
+      manifest.Set(api::content_scripts::ManifestKeys::kContentScripts,
+                   scripts_value.Build());
     }
 
     std::unique_ptr<base::DictionaryValue> result = manifest.Build();
@@ -128,7 +131,8 @@ struct ExtensionBuilder::ManifestData {
 };
 
 ExtensionBuilder::ExtensionBuilder()
-    : location_(Manifest::UNPACKED), flags_(Extension::NO_FLAGS) {}
+    : location_(mojom::ManifestLocation::kUnpacked),
+      flags_(Extension::NO_FLAGS) {}
 
 ExtensionBuilder::ExtensionBuilder(const std::string& name, Type type)
     : ExtensionBuilder() {
@@ -208,7 +212,8 @@ ExtensionBuilder& ExtensionBuilder::SetPath(const base::FilePath& path) {
   return *this;
 }
 
-ExtensionBuilder& ExtensionBuilder::SetLocation(Manifest::Location location) {
+ExtensionBuilder& ExtensionBuilder::SetLocation(
+    mojom::ManifestLocation location) {
   location_ = location;
   return *this;
 }

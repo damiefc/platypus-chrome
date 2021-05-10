@@ -14,7 +14,21 @@ const base::Feature kExtensionsCheckup{"ExtensionsCheckup",
 
 // Controls whether we disable extensions for malware.
 const base::Feature kDisableMalwareExtensionsRemotely{
-    "DisableMalwareExtensionsRemotely", base::FEATURE_DISABLED_BY_DEFAULT};
+    "DisableMalwareExtensionsRemotely", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls whether we show an install friction dialog when an Enhanced Safe
+// Browsing user tries to install an extension that is not included in the
+// Safe Browsing CRX allowlist. This feature also controls if we show a warning
+// in 'chrome://extensions' for extensions not included in the allowlist.
+const base::Feature kSafeBrowsingCrxAllowlistShowWarnings{
+    "SafeBrowsingCrxAllowlistShowWarnings", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Automatically disable extensions not included in the Safe Browsing CRX
+// allowlist if the user has turned on Enhanced Safe Browsing (ESB). The
+// extensions can be disabled at ESB opt-in time or when an extension is moved
+// out of the allowlist.
+const base::Feature kSafeBrowsingCrxAllowlistAutoDisable{
+    "SafeBrowsingCrxAllowlistAutoDisable", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Parameters for ExtensionsCheckup feature.
 const char kExtensionsCheckupEntryPointParameter[] = "entry_point";
@@ -48,27 +62,12 @@ const base::Feature kAllowWithholdingExtensionPermissionsOnInstall{
 const base::Feature kContentScriptsMatchOriginAsFallback{
     "ContentScriptsMatchOriginAsFallback", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Whether Manifest Version 3-based extensions are supported.
+const base::Feature kMv3ExtensionsSupported{"Mv3ExtensionsSupported",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Reports Extensions.WebRequest.KeepaliveRequestFinished when enabled.
 const base::Feature kReportKeepaliveUkm{"ReportKeepaliveUkm",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables callers of the GetAuthToken API to request for the unbundled consent
-// UI and populates the scopes parameter in the GetAuthToken callback function.
-const base::Feature kReturnScopesInGetAuthToken{
-    "ReturnScopesInGetAuthToken", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// If enabled, allows the GetAuthToken API to provide the "selected_user_id"
-// parameter to the server, indicating which account to request permissions
-// from.
-const base::Feature kSelectedUserIdInGetAuthToken{
-    "SelectedUserIdInGetAuthToken", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Feature used mostly for exposing a field-trial-param-based mechanism for
-// adding remaining strugglers to the CORB/CORS allowlist which has been
-// deprecated in Chrome 87.
-const base::Feature kCorbCorsAllowlist{"CorbCorsAllowlist",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
-const char kCorbCorsAllowlistParamName[] =
-    "CorbCorsAllowlistDeprecationParamName";
 
 }  // namespace extensions_features

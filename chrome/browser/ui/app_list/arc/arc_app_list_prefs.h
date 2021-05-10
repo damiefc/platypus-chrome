@@ -16,17 +16,19 @@
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/observer_list_types.h"
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/chromeos/arc/policy/arc_policy_bridge.h"
-#include "chrome/browser/chromeos/arc/session/arc_session_manager_observer.h"
+#include "chrome/browser/ash/arc/policy/arc_policy_bridge.h"
+#include "chrome/browser/ash/arc/session/arc_session_manager_observer.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_icon_descriptor.h"
+#include "components/arc/compat_mode/arc_resize_lock_pref_delegate.h"
 #include "components/arc/mojom/app.mojom.h"
+#include "components/arc/mojom/compatibility_mode.mojom.h"
 #include "components/arc/session/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "ui/base/layout.h"
@@ -66,7 +68,8 @@ class ArcAppListPrefs : public KeyedService,
                         public arc::mojom::AppHost,
                         public arc::ConnectionObserver<arc::mojom::AppInstance>,
                         public arc::ArcSessionManagerObserver,
-                        public arc::ArcPolicyBridge::Observer {
+                        public arc::ArcPolicyBridge::Observer,
+                        public arc::ArcResizeLockPrefDelegate {
  public:
   struct AppInfo {
     AppInfo(const std::string& name,
@@ -78,6 +81,8 @@ class ArcAppListPrefs : public KeyedService,
             const base::Time& install_time,
             bool sticky,
             bool notifications_enabled,
+            arc::mojom::ArcResizeLockState resize_lock_state,
+            bool resize_lock_needs_confirmation,
             bool ready,
             bool suspended,
             bool show_in_launcher,
@@ -97,6 +102,11 @@ class ArcAppListPrefs : public KeyedService,
     bool sticky;
     // Whether notifications are enabled for the app.
     bool notifications_enabled;
+    // The resize lock state of the app.
+    arc::mojom::ArcResizeLockState resize_lock_state;
+    // Whether the confirmation dialog is needed when user requests resize if
+    // the app is in the resize-locked mode.
+    bool resize_lock_needs_confirmation;
     // Whether app is ready. Disabled and removed apps are not ready.
     bool ready;
     // Whether app was suspended by policy. It may have or may not have ready
@@ -139,7 +149,7 @@ class ArcAppListPrefs : public KeyedService,
         permissions;
   };
 
-  class Observer {
+  class Observer : public base::CheckedObserver {
    public:
     // Notifies an observer that new app is registered.
     virtual void OnAppRegistered(const std::string& app_id,
@@ -178,7 +188,8 @@ class ArcAppListPrefs : public KeyedService,
     virtual void OnTaskCreated(int32_t task_id,
                                const std::string& package_name,
                                const std::string& activity,
-                               const std::string& intent) {}
+                               const std::string& intent,
+                               int32_t session_id) {}
     // Notifies that task description has been updated.
     virtual void OnTaskDescriptionChanged(
         int32_t task_id,
@@ -220,8 +231,11 @@ class ArcAppListPrefs : public KeyedService,
     // Notifies that ArcAppListPrefs is destroyed.
     virtual void OnArcAppListPrefsDestroyed() {}
 
+    // Notifies that App instance connection is ready.
+    virtual void OnAppConnectionReady() {}
+
    protected:
-    virtual ~Observer() {}
+    ~Observer() override;
   };
 
   static ArcAppListPrefs* Create(Profile* profile);
@@ -250,6 +264,8 @@ class ArcAppListPrefs : public KeyedService,
 
   static void UprevCurrentIconsVersionForTesting();
 
+  ArcAppListPrefs(const ArcAppListPrefs&) = delete;
+  ArcAppListPrefs& operator=(const ArcAppListPrefs&) = delete;
   ~ArcAppListPrefs() override;
 
   // Returns a list of all app ids, including ready and non-ready apps.
@@ -266,6 +282,9 @@ class ArcAppListPrefs : public KeyedService,
   // nullptr if the package is not found.
   std::unique_ptr<PackageInfo> GetPackage(
       const std::string& package_name) const;
+
+  // Returns true if a package with |package_name| is installed.
+  bool IsPackageInstalled(const std::string& package_name) const;
 
   // Constructs path to app local data.
   base::FilePath GetAppPath(const std::string& app_id) const;
@@ -295,8 +314,14 @@ class ArcAppListPrefs : public KeyedService,
       const std::string& app_id,
       const ArcAppIconDescriptor& descriptor) const;
 
+  // Returns and resets launch request time for the given app id.
+  // Returns base::Time() value if launch request time wasn't recorded.
+  base::Time PollLaunchRequestTime(const std::string& app_id);
+
   // Sets last launched time for the requested app.
   void SetLastLaunchTime(const std::string& app_id);
+  void SetLaunchRequestTimeForTesting(const std::string& app_id,
+                                      base::Time timestamp);
 
   // Calls RequestIcon if no request is recorded.
   void MaybeRequestIcon(const std::string& app_id,
@@ -331,6 +356,15 @@ class ArcAppListPrefs : public KeyedService,
 
   // arc::ArcPolicyBridge::Observer:
   void OnPolicySent(const std::string& policy) override;
+
+  // arc::ArcResizeLockPrefDelegate:
+  arc::mojom::ArcResizeLockState GetResizeLockState(
+      const std::string& app_id) const override;
+  void SetResizeLockState(const std::string& app_id,
+                          arc::mojom::ArcResizeLockState state) override;
+  bool GetResizeLockNeedsConfirmation(const std::string& app_id) override;
+  void SetResizeLockNeedsConfirmation(const std::string& app_id,
+                                      bool is_needed) override;
 
   // KeyedService:
   void Shutdown() override;
@@ -372,7 +406,7 @@ class ArcAppListPrefs : public KeyedService,
   bool IsDefaultPackage(const std::string& package_name) const;
 
  private:
-  friend class ChromeLauncherControllerTest;
+  friend class ChromeShelfControllerTest;
   friend class ArcAppModelBuilderTest;
   friend class app_list::ArcAppShortcutsSearchProviderTest;
 
@@ -406,7 +440,8 @@ class ArcAppListPrefs : public KeyedService,
                      const std::string& package_name,
                      const std::string& activity,
                      const base::Optional<std::string>& name,
-                     const base::Optional<std::string>& intent) override;
+                     const base::Optional<std::string>& intent,
+                     int32_t session_id) override;
   // This interface is deprecated and will soon be replaced by
   // OnTaskDescriptionChanged().
   void OnTaskDescriptionUpdated(
@@ -433,6 +468,9 @@ class ArcAppListPrefs : public KeyedService,
 
   void SetDefaultAppsFilterLevel();
   void RegisterDefaultApps();
+
+  // Sets last launched time for the requested app.
+  void SetLastLaunchTimeInternal(const std::string& app_id);
 
   // Returns list of packages from prefs. If |installed| is set to true then
   // returns currently installed packages. If not, returns list of packages that
@@ -551,7 +589,7 @@ class ArcAppListPrefs : public KeyedService,
       app_connection_holder_for_testing_;
 
   // List of observers.
-  base::ObserverList<Observer>::Unchecked observer_list_;
+  base::ObserverList<Observer> observer_list_;
   // Keeps root folder where ARC app icons for different scale factor are
   // stored.
   base::FilePath base_path_;
@@ -603,9 +641,12 @@ class ArcAppListPrefs : public KeyedService,
   // TODO (b/70566216): Remove this once fixed.
   base::OnceClosure app_list_refreshed_callback_;
 
-  base::WeakPtrFactory<ArcAppListPrefs> weak_ptr_factory_{this};
+  // Records launch request time per app id.
+  // Stored runtime and for the current active session only.
+  // Not to be confused with `last_launch_time_`.
+  std::map<const std::string, base::Time> launch_request_times_;
 
-  DISALLOW_COPY_AND_ASSIGN(ArcAppListPrefs);
+  base::WeakPtrFactory<ArcAppListPrefs> weak_ptr_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_UI_APP_LIST_ARC_ARC_APP_LIST_PREFS_H_

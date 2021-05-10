@@ -189,8 +189,12 @@ class ExternalProtocolHandlerTest : public testing::Test {
     ExternalProtocolHandler::SetDelegateForTesting(&delegate_);
     delegate_.set_block_state(block_state);
     delegate_.set_os_state(os_state);
-    int process_id = web_contents_->GetRenderViewHost()->GetProcess()->GetID();
-    int routing_id = web_contents_->GetRenderViewHost()->GetRoutingID();
+    int process_id = web_contents_->GetMainFrame()
+                         ->GetRenderViewHost()
+                         ->GetProcess()
+                         ->GetID();
+    int routing_id =
+        web_contents_->GetMainFrame()->GetRenderViewHost()->GetRoutingID();
     ExternalProtocolHandler::LaunchUrl(url, process_id, routing_id,
                                        ui::PAGE_TRANSITION_LINK, true,
                                        initiating_origin);
@@ -330,7 +334,7 @@ TEST_F(ExternalProtocolHandlerTest, TestGetBlockStateUnknown) {
   EXPECT_TRUE(
       profile_->GetPrefs()
           ->GetDictionary(prefs::kProtocolHandlerPerOriginAllowedProtocols)
-          ->empty());
+          ->DictEmpty());
 }
 
 TEST_F(ExternalProtocolHandlerTest, TestGetBlockStateDefaultBlock) {
@@ -346,7 +350,7 @@ TEST_F(ExternalProtocolHandlerTest, TestGetBlockStateDefaultBlock) {
   EXPECT_TRUE(
       profile_->GetPrefs()
           ->GetDictionary(prefs::kProtocolHandlerPerOriginAllowedProtocols)
-          ->empty());
+          ->DictEmpty());
 }
 
 TEST_F(ExternalProtocolHandlerTest, TestGetBlockStateDefaultDontBlock) {
@@ -356,7 +360,7 @@ TEST_F(ExternalProtocolHandlerTest, TestGetBlockStateDefaultDontBlock) {
   EXPECT_TRUE(
       profile_->GetPrefs()
           ->GetDictionary(prefs::kProtocolHandlerPerOriginAllowedProtocols)
-          ->empty());
+          ->DictEmpty());
 }
 
 TEST_F(ExternalProtocolHandlerTest, TestSetBlockState) {
@@ -382,7 +386,7 @@ TEST_F(ExternalProtocolHandlerTest, TestSetBlockState) {
   EXPECT_TRUE(
       profile_->GetPrefs()
           ->GetDictionary(prefs::kProtocolHandlerPerOriginAllowedProtocols)
-          ->empty());
+          ->DictEmpty());
 
   // Set to DONT_BLOCK for {kScheme_1, example_origin_1}, and make sure it is
   // written to prefs.
@@ -459,7 +463,7 @@ TEST_F(ExternalProtocolHandlerTest, TestSetBlockState) {
   EXPECT_TRUE(
       profile_->GetPrefs()
           ->GetDictionary(prefs::kProtocolHandlerPerOriginAllowedProtocols)
-          ->empty());
+          ->DictEmpty());
 }
 
 TEST_F(ExternalProtocolHandlerTest, TestSetBlockStateWithUntrustowrthyOrigin) {
@@ -475,7 +479,7 @@ TEST_F(ExternalProtocolHandlerTest, TestSetBlockStateWithUntrustowrthyOrigin) {
   EXPECT_TRUE(
       profile_->GetPrefs()
           ->GetDictionary(prefs::kProtocolHandlerPerOriginAllowedProtocols)
-          ->empty());
+          ->DictEmpty());
 
   // Set to DONT_BLOCK for {kScheme, untrustworthy_origin}, and make sure it is
   // not written to prefs. Calling SetBlockState with a non-trustworthy origin
@@ -489,7 +493,7 @@ TEST_F(ExternalProtocolHandlerTest, TestSetBlockStateWithUntrustowrthyOrigin) {
   EXPECT_TRUE(
       profile_->GetPrefs()
           ->GetDictionary(prefs::kProtocolHandlerPerOriginAllowedProtocols)
-          ->empty());
+          ->DictEmpty());
 }
 
 // Test that an opaque initiating origin gets transformed to its precursor

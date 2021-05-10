@@ -7,18 +7,23 @@
 #include <string>
 #include <utility>
 
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
+#include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "chrome/browser/lookalikes/lookalike_url_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/reputation/reputation_service.h"
 #include "chrome/browser/reputation/safety_tip_ui.h"
+#include "components/lookalikes/core/features.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
 #include "components/security_state/core/features.h"
 #include "components/security_state/core/security_state.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/common/page_visibility_state.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "url/gurl.h"
@@ -61,6 +66,7 @@ void OnSafetyTipClosed(ReputationCheckResult result,
                        Profile* profile,
                        const GURL& url,
                        security_state::SafetyTipStatus status,
+                       base::OnceClosure safety_tip_close_callback_for_testing,
                        SafetyTipInteraction action) {
   std::string action_suffix;
   bool warning_dismissed = false;
@@ -96,6 +102,15 @@ void OnSafetyTipClosed(ReputationCheckResult result,
       // Do nothing because the OnSafetyTipClosed should never be called if the
       // safety tip is not shown.
       break;
+    case SafetyTipInteraction::kCloseTab:
+      action_suffix = "CloseTab";
+      break;
+    case SafetyTipInteraction::kSwitchTab:
+      action_suffix = "SwitchTab";
+      break;
+    case SafetyTipInteraction::kStartNewNavigation:
+      action_suffix = "StartNewNavigation";
+      break;
   }
   if (warning_dismissed) {
     ReputationService::Get(profile)->SetUserIgnore(url);
@@ -127,6 +142,10 @@ void OnSafetyTipClosed(ReputationCheckResult result,
       base::TimeDelta::FromHours(1), 100);
 
   RecordHeuristicsUKMData(result, navigation_source_id, action);
+
+  if (!safety_tip_close_callback_for_testing.is_null()) {
+    std::move(safety_tip_close_callback_for_testing).Run();
+  }
 }
 
 // Safety Tips does not use starts_active (since flagged sites are so rare to
@@ -182,13 +201,25 @@ void RecordSafetyTipStatusWithInitiatorOriginInfo(
 
 // Returns whether a safety tip should be shown, according to finch.
 bool IsSafetyTipEnabled(security_state::SafetyTipStatus status) {
-  if (!base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
+  if (!security_state::IsSafetyTipUIFeatureEnabled()) {
     return false;
   }
-  if (status == security_state::SafetyTipStatus::kBadReputation) {
+
+  if (status != security_state::SafetyTipStatus::kBadReputation) {
+    return true;
+  }
+
+  // Safety Tips can be enabled with a few different features that have slightly
+  // different behavior. "Suspicious site" Safety Tips are enabled for the main
+  // Safety Tip feature, |kSafetyTipUI|, by a parameter, and they are always
+  // enabled for the delayed warnings Safety Tip feature (which uses "Suspicious
+  // site" Safety Tips on phishing pages blocking by Safe Browsing.)
+  if (base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
     return kEnableSuspiciousSiteChecks.Get();
   }
-  return true;
+
+  return base::FeatureList::IsEnabled(
+      security_state::features::kSafetyTipUIOnDelayedWarning);
 }
 
 }  // namespace
@@ -197,9 +228,17 @@ ReputationWebContentsObserver::~ReputationWebContentsObserver() = default;
 
 void ReputationWebContentsObserver::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInMainFrame() ||
-      navigation_handle->IsSameDocument() ||
+  if (!navigation_handle->IsInPrimaryMainFrame() ||
       !navigation_handle->HasCommitted() || navigation_handle->IsErrorPage()) {
+    MaybeCallReputationCheckCallback(false);
+    return;
+  }
+
+  // Same doc navigations keep the same status as their predecessor. Update last
+  // navigation entry so that GetSafetyTipInfoForVisibleNavigation() works.
+  if (navigation_handle->IsSameDocument()) {
+    last_safety_tip_navigation_entry_id_ =
+        web_contents()->GetController().GetLastCommittedEntry()->GetUniqueID();
     MaybeCallReputationCheckCallback(false);
     return;
   }
@@ -241,6 +280,11 @@ void ReputationWebContentsObserver::RegisterReputationCheckCallbackForTesting(
   reputation_check_callback_for_testing_ = std::move(callback);
 }
 
+void ReputationWebContentsObserver::RegisterSafetyTipCloseCallbackForTesting(
+    base::OnceClosure callback) {
+  safety_tip_close_callback_for_testing_ = std::move(callback);
+}
+
 ReputationWebContentsObserver::ReputationWebContentsObserver(
     content::WebContents* web_contents)
     : WebContentsObserver(web_contents),
@@ -276,10 +320,11 @@ void ReputationWebContentsObserver::MaybeShowSafetyTip(
 
   ReputationService* service = ReputationService::Get(profile_);
   service->GetReputationStatus(
-      url, base::BindOnce(
-               &ReputationWebContentsObserver::HandleReputationCheckResult,
-               weak_factory_.GetWeakPtr(), navigation_source_id,
-               called_from_visibility_check, record_ukm_if_tip_not_shown));
+      url, web_contents(),
+      base::BindOnce(
+          &ReputationWebContentsObserver::HandleReputationCheckResult,
+          weak_factory_.GetWeakPtr(), navigation_source_id,
+          called_from_visibility_check, record_ukm_if_tip_not_shown));
 }
 
 void ReputationWebContentsObserver::HandleReputationCheckResult(
@@ -336,6 +381,18 @@ void ReputationWebContentsObserver::HandleReputationCheckResult(
     return;
   }
 
+  // Log a console message if it's the first time we're going to open the Safety
+  // Tip. (Otherwise, we'd print the message each time the tab became visible.)
+  if (!called_from_visibility_check) {
+    web_contents()->GetMainFrame()->AddMessageToConsole(
+        blink::mojom::ConsoleMessageLevel::kWarning,
+        base::StringPrintf(
+            "Chrome has determined that %s could be fake or fraudulent.\n\n"
+            "If you believe this is shown in error please visit "
+            "https://g.co/chrome/lookalike-warnings",
+            result.url.host().c_str()));
+  }
+
   if (!IsSafetyTipEnabled(result.safety_tip_status)) {
     // When the feature isn't enabled, we 'ignore' the UI after the first visit
     // to make it easier to disambiguate the control groups' first visit from
@@ -354,13 +411,58 @@ void ReputationWebContentsObserver::HandleReputationCheckResult(
     return;
   }
 
+  if (!base::FeatureList::IsEnabled(
+          lookalikes::features::kLookalikeDigitalAssetLinks) ||
+      !result.suggested_url.is_valid()) {
+    RecordPostFlagCheckHistogram(result.safety_tip_status);
+    ShowSafetyTipDialog(
+        web_contents(), result.safety_tip_status, result.suggested_url,
+        base::BindOnce(OnSafetyTipClosed, result, base::Time::Now(),
+                       navigation_source_id, profile_, result.url,
+                       result.safety_tip_status,
+                       std::move(safety_tip_close_callback_for_testing_)));
+    MaybeCallReputationCheckCallback(true);
+    return;
+  }
+
+  const url::Origin lookalike_origin = url::Origin::Create(result.url);
+  const url::Origin target_origin = url::Origin::Create(result.suggested_url);
+
+  DigitalAssetLinkCrossValidator::ResultCallback callback = base::BindOnce(
+      &ReputationWebContentsObserver::OnDigitalAssetLinkValidationResult,
+      weak_factory_.GetWeakPtr(), result, navigation_source_id);
+  digital_asset_link_validator_ =
+      std::make_unique<DigitalAssetLinkCrossValidator>(
+          profile_, lookalike_origin, target_origin,
+          LookalikeUrlService::kManifestFetchDelay.Get(),
+          LookalikeUrlService::Get(profile_)->clock(), std::move(callback));
+  digital_asset_link_validator_->Start();
+}
+
+void ReputationWebContentsObserver::OnDigitalAssetLinkValidationResult(
+    ReputationCheckResult result,
+    ukm::SourceId navigation_source_id,
+    bool validation_succeeded) {
+  if (validation_succeeded) {
+    // Don't show a safety tip dialog.
+    base::UmaHistogramEnumeration(
+        "Security.SafetyTips.ReputationCheckComplete.DidFinishNavigation",
+        security_state::SafetyTipStatus::kDigitalAssetLinkMatch);
+    RecordPostFlagCheckHistogram(
+        security_state::SafetyTipStatus::kDigitalAssetLinkMatch);
+    MaybeCallReputationCheckCallback(/*heuristics_checked=*/true);
+    return;
+  }
+
   RecordPostFlagCheckHistogram(result.safety_tip_status);
+
   ShowSafetyTipDialog(
       web_contents(), result.safety_tip_status, result.suggested_url,
       base::BindOnce(OnSafetyTipClosed, result, base::Time::Now(),
                      navigation_source_id, profile_, result.url,
-                     result.safety_tip_status));
-  MaybeCallReputationCheckCallback(true);
+                     result.safety_tip_status,
+                     std::move(safety_tip_close_callback_for_testing_)));
+  MaybeCallReputationCheckCallback(/*heuristics_checked=*/true);
 }
 
 void ReputationWebContentsObserver::MaybeCallReputationCheckCallback(

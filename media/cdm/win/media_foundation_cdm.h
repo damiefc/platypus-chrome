@@ -25,6 +25,10 @@ class MediaFoundationCdmSession;
 class MEDIA_EXPORT MediaFoundationCdm : public ContentDecryptionModule,
                                         public CdmContext {
  public:
+  // Checks whether MediaFoundationCdm is available based on OS version. Further
+  // checks need to be made to determine the usability and the capabilities.
+  static bool IsAvailable();
+
   MediaFoundationCdm(
       Microsoft::WRL::ComPtr<IMFContentDecryptionModule> mf_cdm,
       const SessionMessageCB& session_message_cb,
@@ -57,6 +61,7 @@ class MEDIA_EXPORT MediaFoundationCdm : public ContentDecryptionModule,
   CdmContext* GetCdmContext() final;
 
   // CdmContext implementation.
+  bool RequiresMediaFoundationRenderer() final;
   bool GetMediaFoundationCdmProxy(
       GetMediaFoundationCdmProxyCB get_mf_cdm_proxy_cb) final;
 

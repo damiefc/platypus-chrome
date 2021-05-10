@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -268,9 +268,11 @@ void ExternalCacheImpl::CheckCache() {
 
       if (update_url.is_valid()) {
         downloader_->AddPendingExtensionWithVersion(
-            entry.first, update_url, extensions::Manifest::EXTERNAL_POLICY,
-            false, 0, extensions::ManifestFetchData::FetchPriority::BACKGROUND,
-            base::Version(version));
+            entry.first, update_url,
+            extensions::mojom::ManifestLocation::kExternalPolicy, false, 0,
+            extensions::ManifestFetchData::FetchPriority::BACKGROUND,
+            base::Version(version), extensions::Manifest::TYPE_UNKNOWN,
+            std::string());
       }
     }
     if (is_cached) {
@@ -286,7 +288,7 @@ void ExternalCacheImpl::CheckCache() {
     downloader_->StartAllPending(nullptr);
 
   VLOG(1) << "Updated ExternalCacheImpl, there are "
-          << cached_extensions_->size() << " extensions cached";
+          << cached_extensions_->DictSize() << " extensions cached";
 
   UpdateExtensionLoader();
 }

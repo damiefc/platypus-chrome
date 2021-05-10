@@ -26,22 +26,28 @@ namespace ash {
 class UnifiedMediaControlsController;
 
 // Media controls view displayed in quick settings.
-class ASH_EXPORT UnifiedMediaControlsView : public views::Button,
-                                            public views::ButtonListener {
+class ASH_EXPORT UnifiedMediaControlsView : public views::Button {
  public:
   explicit UnifiedMediaControlsView(UnifiedMediaControlsController* controller);
   ~UnifiedMediaControlsView() override = default;
 
-  // ButtonListener implementation.
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   void SetIsPlaying(bool playing);
   void SetArtwork(base::Optional<gfx::ImageSkia> artwork);
-  void SetTitle(const base::string16& title);
-  void SetArtist(const base::string16& artist);
+  void SetTitle(const std::u16string& title);
+  void SetArtist(const std::u16string& artist);
   void UpdateActionButtonAvailability(
       const base::flat_set<media_session::mojom::MediaSessionAction>&
           enabled_actions);
+
+  // views::Button:
+  void OnThemeChanged() override;
+
+  // Show an empty state representing no media is playing.
+  void ShowEmptyState();
+
+  // Called when receiving new media session, update controls to normal state
+  // if necessary.
+  void OnNewMediaSession();
 
   views::ImageView* artwork_view() { return artwork_view_; }
 
@@ -50,19 +56,23 @@ class ASH_EXPORT UnifiedMediaControlsView : public views::Button,
 
   class MediaActionButton : public views::ImageButton {
    public:
-    MediaActionButton(views::ButtonListener* listener,
+    MediaActionButton(UnifiedMediaControlsController* controller,
                       media_session::mojom::MediaSessionAction action,
-                      const base::string16& accessible_name);
+                      const std::u16string& accessible_name);
     ~MediaActionButton() override = default;
 
     void SetAction(media_session::mojom::MediaSessionAction action,
-                   const base::string16& accessible_name);
+                   const std::u16string& accessible_name);
 
     // views::ImageButton:
-    std::unique_ptr<views::InkDrop> CreateInkDrop() override;
-    std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
-        const override;
-    std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
+    void OnThemeChanged() override;
+
+   private:
+    void UpdateVectorIcon();
+
+    // Action that can be taken on the media through the button, it can be paly,
+    // pause or stop the media etc. See MediaSessionAction for all the actions.
+    media_session::mojom::MediaSessionAction action_;
   };
 
   SkPath GetArtworkClipPath();
@@ -70,10 +80,13 @@ class ASH_EXPORT UnifiedMediaControlsView : public views::Button,
   UnifiedMediaControlsController* const controller_ = nullptr;
 
   views::ImageView* artwork_view_ = nullptr;
+  views::ImageView* drop_down_icon_ = nullptr;
   views::Label* title_label_ = nullptr;
   views::Label* artist_label_ = nullptr;
   MediaActionButton* play_pause_button_ = nullptr;
   views::View* button_row_ = nullptr;
+
+  bool is_in_empty_state_ = false;
 };
 
 }  // namespace ash

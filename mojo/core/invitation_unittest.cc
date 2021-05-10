@@ -17,8 +17,9 @@
 #include "base/path_service.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
+#include "base/strings/string_piece.h"
 #include "base/synchronization/lock.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/multiprocess_test.h"
 #include "base/test/task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -97,7 +98,7 @@ void PrepareToPassRemoteEndpoint(PlatformChannel* channel,
 
   if (switch_name.empty())
     switch_name = PlatformChannel::kHandleSwitch;
-  command_line->AppendSwitchASCII(switch_name.as_string(), value);
+  command_line->AppendSwitchASCII(std::string(switch_name), value);
 }
 
 TEST_F(InvitationTest, Create) {

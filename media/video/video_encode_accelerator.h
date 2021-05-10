@@ -19,7 +19,7 @@
 #include "media/base/bitstream_buffer.h"
 #include "media/base/media_export.h"
 #include "media/base/video_bitrate_allocation.h"
-#include "media/base/video_decoder_config.h"
+#include "media/base/video_codecs.h"
 #include "media/base/video_frame.h"
 #include "media/video/h264_parser.h"
 #include "media/video/video_encoder_info.h"
@@ -100,6 +100,8 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
                      const gfx::Size& max_resolution,
                      uint32_t max_framerate_numerator = 0u,
                      uint32_t max_framerate_denominator = 1u);
+    SupportedProfile(const SupportedProfile& other) = default;
+    SupportedProfile& operator=(const SupportedProfile& other) = default;
     ~SupportedProfile();
     VideoCodecProfile profile;
     gfx::Size min_resolution;
@@ -133,9 +135,9 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
     // or as generated (e.g. screen capture).
     enum class ContentType { kCamera, kDisplay };
     // Indicates the storage type of a video frame provided on Encode().
-    // kShmem if a video frame is mapped in user space.
-    // kDmabuf if a video frame is referred by dmabuf.
-    enum class StorageType { kShmem, kDmabuf };
+    // kShmem if a video frame has a shared memory.
+    // kGpuMemoryBuffer if a video frame has a GpuMemoryBuffer.
+    enum class StorageType { kShmem, kGpuMemoryBuffer };
 
     struct MEDIA_EXPORT SpatialLayer {
       // The encoder dimension of the spatial layer.
@@ -342,6 +344,11 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
   // Returns true if the encoder support flush. This method must be called after
   // VEA has been initialized.
   virtual bool IsFlushSupported();
+
+  // Returns true if the encoder supports automatic resize of GPU backed frames
+  // to the size provided during encoder configuration.
+  // This method must be called after VEA has been initialized.
+  virtual bool IsGpuFrameResizeSupported();
 
  protected:
   // Do not delete directly; use Destroy() or own it with a scoped_ptr, which

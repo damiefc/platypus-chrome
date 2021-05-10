@@ -7,11 +7,12 @@
 #include <stddef.h>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/big_endian.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/power_monitor/power_monitor.h"
@@ -73,8 +74,8 @@ class H264VideoToolboxEncoder::VideoFrameFactoryImpl
       DVLOG(1) << "MaybeCreateFrame: Detected frame size change.";
       cast_environment_->PostTask(
           CastEnvironment::MAIN, FROM_HERE,
-          base::Bind(&H264VideoToolboxEncoder::UpdateFrameSize, encoder_,
-                     frame_size));
+          base::BindOnce(&H264VideoToolboxEncoder::UpdateFrameSize, encoder_,
+                         frame_size));
       pool_frame_size_ = frame_size;
       pool_.reset();
       return nullptr;
@@ -170,7 +171,7 @@ H264VideoToolboxEncoder::H264VideoToolboxEncoder(
           : STATUS_UNSUPPORTED_CODEC;
   cast_environment_->PostTask(
       CastEnvironment::MAIN, FROM_HERE,
-      base::Bind(status_change_cb_, operational_status));
+      base::BindOnce(status_change_cb_, operational_status));
 
   if (operational_status == STATUS_INITIALIZED) {
     // Create the shared video frame factory. It persists for the combined
@@ -181,7 +182,7 @@ H264VideoToolboxEncoder::H264VideoToolboxEncoder(
             weak_factory_.GetWeakPtr(), cast_environment_));
 
     // Register for power state changes.
-    base::PowerMonitor::AddObserver(this);
+    base::PowerMonitor::AddPowerSuspendObserver(this);
     VLOG(1) << "Registered for power state changes.";
   }
 }
@@ -191,7 +192,7 @@ H264VideoToolboxEncoder::~H264VideoToolboxEncoder() {
 
   // Unregister the power observer. It is valid to remove an observer that was
   // not added.
-  base::PowerMonitor::RemoveObserver(this);
+  base::PowerMonitor::RemovePowerSuspendObserver(this);
 }
 
 void H264VideoToolboxEncoder::ResetCompressionSession() {
@@ -204,7 +205,7 @@ void H264VideoToolboxEncoder::ResetCompressionSession() {
   // Notify that we're resetting the encoder.
   cast_environment_->PostTask(
       CastEnvironment::MAIN, FROM_HERE,
-      base::Bind(status_change_cb_, STATUS_CODEC_REINIT_PENDING));
+      base::BindOnce(status_change_cb_, STATUS_CODEC_REINIT_PENDING));
 
   // Destroy the current session, if any.
   DestroyCompressionSession();
@@ -263,7 +264,7 @@ void H264VideoToolboxEncoder::ResetCompressionSession() {
     // Notify that reinitialization has failed.
     cast_environment_->PostTask(
         CastEnvironment::MAIN, FROM_HERE,
-        base::Bind(status_change_cb_, STATUS_CODEC_INIT_FAILED));
+        base::BindOnce(status_change_cb_, STATUS_CODEC_INIT_FAILED));
     return;
   }
 
@@ -280,7 +281,7 @@ void H264VideoToolboxEncoder::ResetCompressionSession() {
   // Notify that reinitialization is done.
   cast_environment_->PostTask(
       CastEnvironment::MAIN, FROM_HERE,
-      base::Bind(status_change_cb_, STATUS_INITIALIZED));
+      base::BindOnce(status_change_cb_, STATUS_INITIALIZED));
 }
 
 void H264VideoToolboxEncoder::ConfigureCompressionSession() {
@@ -502,7 +503,7 @@ void H264VideoToolboxEncoder::CompressionCallback(void* encoder_opaque,
     DLOG(ERROR) << " encoding failed: " << status;
     encoder->cast_environment_->PostTask(
         CastEnvironment::MAIN, FROM_HERE,
-        base::Bind(encoder->status_change_cb_, STATUS_CODEC_RUNTIME_ERROR));
+        base::BindOnce(encoder->status_change_cb_, STATUS_CODEC_RUNTIME_ERROR));
   } else if ((info & kVTEncodeInfo_FrameDropped)) {
     DVLOG(2) << " frame dropped";
   } else {
@@ -556,7 +557,7 @@ void H264VideoToolboxEncoder::CompressionCallback(void* encoder_opaque,
   encoder->cast_environment_->GetTaskRunner(CastEnvironment::MAIN)
       ->PostTask(FROM_HERE,
                  base::BindOnce(std::move(request->frame_encoded_callback),
-                                base::Passed(&encoded_frame)));
+                                std::move(encoded_frame)));
 }
 
 }  // namespace cast

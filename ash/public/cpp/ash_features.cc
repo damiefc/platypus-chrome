@@ -8,19 +8,27 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "build/build_config.h"
-#include "chromeos/constants/chromeos_switches.h"
 
 namespace ash {
 namespace features {
 
+const base::Feature kArcGhostWindow{"ArcGhostWindow",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kAllowAmbientEQ{"AllowAmbientEQ",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kArcResizeLock{"ArcResizeLock",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kAutoNightLight{"AutoNightLight",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kCaptureMode{"CaptureMode",
-                                 base::FEATURE_DISABLED_BY_DEFAULT};
+                                 base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kCompositingBasedThrottling{
+    "CompositingBasedThrottling", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kContextualNudges{"ContextualNudges",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
@@ -37,11 +45,8 @@ const base::Feature kDisplayIdentification{"DisplayIdentification",
 const base::Feature kDockedMagnifier{"DockedMagnifier",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kDragToSnapInClamshellMode{
-    "DragToSnapInClamshellMode", base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kEnhancedDeskAnimations{"EnhancedDeskAnimations",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kFullRestore{"FullRestore",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kLimitAltTabToActiveDesk{"LimitAltTabToActiveDesk",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
@@ -66,19 +71,7 @@ const base::Feature kInteractiveWindowCycleList{
     "InteractiveWindowCycleList", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kManagedDeviceUIRedesign{"ManagedDeviceUIRedesign",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kMediaSessionNotification{"MediaSessionNotification",
-                                              base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kMediaNotificationsCounter{
-    "MediaNotificationsCounter", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kMovablePartialScreenshot{
-    "MovablePartialScreenshot", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kMultiDisplayOverviewAndSplitView{
-    "MultiDisplayOverviewAndSplitView", base::FEATURE_ENABLED_BY_DEFAULT};
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kNightLight{"NightLight", base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -86,7 +79,7 @@ const base::Feature kNotificationExpansionAnimation{
     "NotificationExpansionAnimation", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kNotificationExperimentalShortTimeouts{
-    "NotificationExperimentalShortTimeouts", base::FEATURE_DISABLED_BY_DEFAULT};
+    "NotificationExperimentalShortTimeouts", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kNotificationScrollBar{"NotificationScrollBar",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
@@ -118,26 +111,44 @@ const base::Feature kEnableBackgroundBlur{"EnableBackgroundBlur",
 const base::Feature kHideShelfControlsInTabletMode{
     "HideShelfControlsInTabletMode", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kSystemTrayMicGainSetting{"SystemTrayMicGainSetting",
-                                              base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kReverseScrollGestures{"EnableReverseScrollGestures",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kFullscreenAlertBubble{"EnableFullscreenBubble",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kStylusBatteryStatus{"StylusBatteryStatus",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kWebUITabStripTabDragIntegration{
     "WebUITabStripTabDragIntegration", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kShelfAppScaling{"ShelfAppScaling",
-                                     base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kWindowsFollowCursor{"WindowsFollowCursor",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kNotificationsInContextMenu{
     "NotificationsInContextMenu", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kMaintainShelfStateWhenEnteringOverview{
-    "MaintainShelfStateWhenEnteringOverview", base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kTemporaryHoldingSpace{"TemporaryHoldingSpace",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kHoldingSpaceArcIntegration{
+    "HoldingSpaceArcIntegration", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kDragUnpinnedAppToPin{"DragUnpinnedAppToPin",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kScalableStatusArea{"ScalableStatusArea",
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kShowDateInTrayButton{"ShowDateInTrayButton",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kKeyboardBasedDisplayArrangementInSettings{
+    "KeyboardBasedDisplayArrangementInSettings",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
+bool IsArcGhostWindowEnabled() {
+  return base::FeatureList::IsEnabled(kFullRestore) &&
+         base::FeatureList::IsEnabled(kArcGhostWindow);
+}
 
 bool IsAllowAmbientEQEnabled() {
   return base::FeatureList::IsEnabled(kAllowAmbientEQ);
@@ -145,6 +156,10 @@ bool IsAllowAmbientEQEnabled() {
 
 bool IsAltTabLimitedToActiveDesk() {
   return base::FeatureList::IsEnabled(kLimitAltTabToActiveDesk);
+}
+
+bool IsArcResizeLockEnabled() {
+  return base::FeatureList::IsEnabled(kArcResizeLock);
 }
 
 bool IsPerDeskShelfEnabled() {
@@ -159,17 +174,25 @@ bool IsCaptureModeEnabled() {
   return base::FeatureList::IsEnabled(kCaptureMode);
 }
 
+bool IsCompositingBasedThrottlingEnabled() {
+  return base::FeatureList::IsEnabled(kCompositingBasedThrottling);
+}
+
 bool IsDarkLightModeEnabled() {
   return base::FeatureList::IsEnabled(kDarkLightMode);
 }
 
-bool IsEnhancedDeskAnimations() {
-  return base::FeatureList::IsEnabled(kEnhancedDeskAnimations);
+bool IsFullRestoreEnabled() {
+  return base::FeatureList::IsEnabled(kFullRestore);
 }
 
 bool IsHideArcMediaNotificationsEnabled() {
-  return base::FeatureList::IsEnabled(kMediaSessionNotification) &&
-         base::FeatureList::IsEnabled(kHideArcMediaNotifications);
+  return base::FeatureList::IsEnabled(kHideArcMediaNotifications);
+}
+
+bool IsKeyboardBasedDisplayArrangementInSettingsEnabled() {
+  return base::FeatureList::IsEnabled(
+      kKeyboardBasedDisplayArrangementInSettings);
 }
 
 bool IsLockScreenNotificationsEnabled() {
@@ -237,21 +260,20 @@ bool IsBackgroundBlurEnabled() {
 #endif
 }
 
-bool IsDragFromShelfToHomeOrOverviewEnabled() {
-  // The kDragFromShelfToHomeOrOverview feature is only enabled on the devices
-  // that have hotseat enabled.
-  return chromeos::switches::ShouldShowShelfHotseat();
-}
-
 bool IsReduceDisplayNotificationsEnabled() {
   return base::FeatureList::IsEnabled(kReduceDisplayNotifications);
 }
 
 bool IsHideShelfControlsInTabletModeEnabled() {
-  if (!IsDragFromShelfToHomeOrOverviewEnabled())
-    return false;
-
   return base::FeatureList::IsEnabled(kHideShelfControlsInTabletMode);
+}
+
+bool IsReverseScrollGesturesEnabled() {
+  return base::FeatureList::IsEnabled(kReverseScrollGestures);
+}
+
+bool IsFullscreenAlertBubbleEnabled() {
+  return base::FeatureList::IsEnabled(kFullscreenAlertBubble);
 }
 
 bool AreContextualNudgesEnabled() {
@@ -260,8 +282,8 @@ bool AreContextualNudgesEnabled() {
   return base::FeatureList::IsEnabled(kContextualNudges);
 }
 
-bool IsSystemTrayMicGainSettingEnabled() {
-  return base::FeatureList::IsEnabled(kSystemTrayMicGainSetting);
+bool IsStylusBatteryStatusEnabled() {
+  return base::FeatureList::IsEnabled(kStylusBatteryStatus);
 }
 
 bool IsDisplayIdentificationEnabled() {
@@ -276,29 +298,29 @@ bool IsDisplayAlignmentAssistanceEnabled() {
   return base::FeatureList::IsEnabled(kDisplayAlignAssist);
 }
 
-bool IsMovablePartialScreenshotEnabled() {
-  return base::FeatureList::IsEnabled(kMovablePartialScreenshot);
-}
-
-bool IsAppScalingEnabled() {
-  return base::FeatureList::IsEnabled(kShelfAppScaling) &&
-         chromeos::switches::ShouldShowShelfHotseat();
-}
-
 bool IsNotificationsInContextMenuEnabled() {
   return base::FeatureList::IsEnabled(kNotificationsInContextMenu);
 }
 
-bool IsMaintainShelfStateWhenEnteringOverviewEnabled() {
-  return base::FeatureList::IsEnabled(kMaintainShelfStateWhenEnteringOverview);
-}
-
-bool IsTemporaryHoldingSpaceEnabled() {
-  return base::FeatureList::IsEnabled(kTemporaryHoldingSpace);
+bool IsHoldingSpaceArcIntegrationEnabled() {
+  return base::FeatureList::IsEnabled(kHoldingSpaceArcIntegration);
 }
 
 bool IsDragUnpinnedAppToPinEnabled() {
   return base::FeatureList::IsEnabled(kDragUnpinnedAppToPin);
+}
+
+bool IsScalableStatusAreaEnabled() {
+  return base::FeatureList::IsEnabled(kScalableStatusArea);
+}
+
+bool IsShowDateInTrayButtonEnabled() {
+  return IsScalableStatusAreaEnabled() &&
+         base::FeatureList::IsEnabled(kShowDateInTrayButton);
+}
+
+bool DoWindowsFollowCursor() {
+  return base::FeatureList::IsEnabled(kWindowsFollowCursor);
 }
 
 namespace {

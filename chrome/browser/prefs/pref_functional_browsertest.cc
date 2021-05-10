@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
@@ -124,13 +125,13 @@ IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestJavascriptEnableDisable) {
       prefs::kWebKitJavascriptEnabled));
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/javaScriptTitle.html"));
-  EXPECT_EQ(base::ASCIIToUTF16("Title from script javascript enabled"),
+  EXPECT_EQ(u"Title from script javascript enabled",
             browser()->tab_strip_model()->GetActiveWebContents()->GetTitle());
   browser()->profile()->GetPrefs()->SetBoolean(prefs::kWebKitJavascriptEnabled,
                                                false);
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/javaScriptTitle.html"));
-  EXPECT_EQ(base::ASCIIToUTF16("This is html title"),
+  EXPECT_EQ(u"This is html title",
             browser()->tab_strip_model()->GetActiveWebContents()->GetTitle());
 }
 
@@ -243,7 +244,7 @@ IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestPrivacySecurityPrefs) {
 
 // Verify that we have some Local State prefs.
 IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestHaveLocalStatePrefs) {
-  EXPECT_TRUE(g_browser_process->local_state()
-                  ->GetPreferenceValues(PrefService::INCLUDE_DEFAULTS)
-                  .get());
+  base::Value prefs = g_browser_process->local_state()->GetPreferenceValues(
+      PrefService::INCLUDE_DEFAULTS);
+  EXPECT_TRUE(prefs.is_dict());
 }

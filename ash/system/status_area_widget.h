@@ -19,7 +19,6 @@ class Window;
 }
 
 namespace ash {
-class BloomTray;
 class DictationButtonTray;
 class HoldingSpaceTray;
 class ImeMenuTray;
@@ -103,6 +102,9 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   // |overview_button_tray_|.
   TrayBackgroundView* GetSystemTrayAnchor() const;
 
+  // Called by media tray to calculate anchor rect.
+  gfx::Rect GetMediaTrayAnchorRect() const;
+
   StatusAreaWidgetDelegate* status_area_widget_delegate() {
     return status_area_widget_delegate_;
   }
@@ -133,6 +135,10 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
 
   Shelf* shelf() { return shelf_; }
 
+  const std::vector<TrayBackgroundView*>& tray_buttons() const {
+    return tray_buttons_;
+  }
+
   LoginStatus login_status() const { return login_status_; }
 
   // Returns true if the shelf should be visible. This is used when the
@@ -148,7 +154,6 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   void SchedulePaint();
 
   // Overridden from views::Widget:
-  const ui::NativeTheme* GetNativeTheme() const override;
   bool OnNativeWidgetActivationChanged(bool active) override;
 
   // TODO(jamescook): Introduce a test API instead of these methods.
@@ -159,14 +164,15 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
     return virtual_keyboard_tray_.get();
   }
 
-  BloomTray* bloom_tray_for_testing() { return bloom_tray_.get(); }
-
   CollapseState collapse_state() const { return collapse_state_; }
   void set_collapse_state_for_test(CollapseState state) {
     collapse_state_ = state;
   }
 
  private:
+  friend class MediaTrayTest;
+  friend class TrayBackgroundViewTest;
+
   struct LayoutInputs {
     gfx::Rect bounds;
     CollapseState collapse_state = CollapseState::NOT_COLLAPSIBLE;
@@ -203,12 +209,13 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   // Adds a new tray button to the status area.
   void AddTrayButton(TrayBackgroundView* tray_button);
 
-  // Update the colors used for the tray buttons.
-  void UpdateAfterColorModeChange();
-
   // Called when in the collapsed state to calculate and update the visibility
   // of each tray button.
   void CalculateButtonVisibilityForCollapsedState();
+
+  // Move the `stop_recording_button_tray_` to the front so that it's more
+  // visible.
+  void EnsureTrayOrder();
 
   // Calculates and returns the appropriate collapse state depending on
   // current conditions.
@@ -226,7 +233,6 @@ class ASH_EXPORT StatusAreaWidget : public SessionObserver,
   std::unique_ptr<PhoneHubTray> phone_hub_tray_;
   std::unique_ptr<StopRecordingButtonTray> stop_recording_button_tray_;
   std::unique_ptr<VirtualKeyboardTray> virtual_keyboard_tray_;
-  std::unique_ptr<BloomTray> bloom_tray_;
   std::unique_ptr<ImeMenuTray> ime_menu_tray_;
   std::unique_ptr<SelectToSpeakTray> select_to_speak_tray_;
   std::unique_ptr<HoldingSpaceTray> holding_space_tray_;

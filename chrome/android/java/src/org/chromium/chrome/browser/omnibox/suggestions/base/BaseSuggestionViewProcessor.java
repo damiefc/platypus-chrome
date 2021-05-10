@@ -11,18 +11,18 @@ import android.text.Spannable;
 import android.text.style.StyleSpan;
 
 import androidx.annotation.DrawableRes;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.MatchClassificationStyle;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion.MatchClassification;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionProcessor;
-import org.chromium.chrome.browser.omnibox.suggestions.SuggestionViewDelegate;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProperties.Action;
-import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
+import org.chromium.components.favicon.LargeIconBridge;
+import org.chromium.components.omnibox.AutocompleteMatch;
+import org.chromium.components.omnibox.AutocompleteMatch.MatchClassification;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
 
@@ -121,7 +121,7 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
      * @param position The position of the button in the list.
      */
     protected void setTabSwitchOrRefineAction(
-            PropertyModel model, OmniboxSuggestion suggestion, int position) {
+            PropertyModel model, AutocompleteMatch suggestion, int position) {
         @DrawableRes
         int icon = 0;
         String iconString = null;
@@ -146,12 +146,34 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
                                 iconString, action)));
     }
 
-    @Override
-    public void populateModel(OmniboxSuggestion suggestion, PropertyModel model, int position) {
-        SuggestionViewDelegate delegate =
-                mSuggestionHost.createSuggestionViewDelegate(this, model, suggestion, position);
+    /**
+     * Process the click event.
+     *
+     * @param suggestion Selected suggestion.
+     * @param position Position of the suggestion on the list.
+     */
+    protected void onSuggestionClicked(@NonNull AutocompleteMatch suggestion, int position) {
+        mSuggestionHost.onSuggestionClicked(suggestion, position, suggestion.getUrl());
+    }
 
-        model.set(BaseSuggestionViewProperties.SUGGESTION_DELEGATE, delegate);
+    /**
+     * Process the long-click event.
+     *
+     * @param suggestion Selected suggestion.
+     * @param position Position of the suggestion on the list.
+     */
+    protected void onSuggestionLongClicked(@NonNull AutocompleteMatch suggestion, int position) {
+        mSuggestionHost.onSuggestionLongClicked(suggestion, position);
+    }
+
+    @Override
+    public void populateModel(AutocompleteMatch suggestion, PropertyModel model, int position) {
+        model.set(BaseSuggestionViewProperties.ON_CLICK,
+                () -> onSuggestionClicked(suggestion, position));
+        model.set(BaseSuggestionViewProperties.ON_LONG_CLICK,
+                () -> onSuggestionLongClicked(suggestion, position));
+        model.set(BaseSuggestionViewProperties.ON_FOCUS_VIA_SELECTION,
+                () -> mSuggestionHost.setOmniboxEditingText(suggestion.getFillIntoEdit()));
         model.set(BaseSuggestionViewProperties.DENSITY, mDensity);
         setCustomActions(model, null);
     }

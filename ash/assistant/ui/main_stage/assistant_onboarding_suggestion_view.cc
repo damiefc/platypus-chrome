@@ -7,9 +7,11 @@
 #include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/assistant/util/resource_util.h"
+#include "base/bind.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chromeos/services/assistant/public/cpp/assistant_service.h"
+#include "chromeos/services/libassistant/public/cpp/assistant_suggestion.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/background.h"
@@ -66,14 +68,13 @@ SkColor GetForegroundColor(int index) {
 
 // AssistantOnboardingSuggestionView -------------------------------------------
 
-// static
-constexpr char AssistantOnboardingSuggestionView::kClassName[];
-
 AssistantOnboardingSuggestionView::AssistantOnboardingSuggestionView(
     AssistantViewDelegate* delegate,
     const chromeos::assistant::AssistantSuggestion& suggestion,
     int index)
-    : views::Button(this),
+    : views::Button(base::BindRepeating(
+          &AssistantOnboardingSuggestionView::OnButtonPressed,
+          base::Unretained(this))),
       delegate_(delegate),
       suggestion_id_(suggestion.id),
       index_(index) {
@@ -82,10 +83,6 @@ AssistantOnboardingSuggestionView::AssistantOnboardingSuggestionView(
 
 AssistantOnboardingSuggestionView::~AssistantOnboardingSuggestionView() =
     default;
-
-const char* AssistantOnboardingSuggestionView::GetClassName() const {
-  return kClassName;
-}
 
 int AssistantOnboardingSuggestionView::GetHeightForWidth(int width) const {
   return kPreferredHeightDip;
@@ -116,16 +113,11 @@ void AssistantOnboardingSuggestionView::RemoveLayerBeneathView(
   ink_drop_container_->RemoveLayerBeneathView(layer);
 }
 
-void AssistantOnboardingSuggestionView::ButtonPressed(views::Button* sender,
-                                                      const ui::Event& event) {
-  delegate_->OnSuggestionPressed(suggestion_id_);
-}
-
-const gfx::ImageSkia& AssistantOnboardingSuggestionView::GetIcon() const {
+gfx::ImageSkia AssistantOnboardingSuggestionView::GetIcon() const {
   return icon_->GetImage();
 }
 
-const base::string16& AssistantOnboardingSuggestionView::GetText() const {
+const std::u16string& AssistantOnboardingSuggestionView::GetText() const {
   return label_->GetText();
 }
 
@@ -143,11 +135,11 @@ void AssistantOnboardingSuggestionView::InitLayout(
   focus_ring()->SetColor(gfx::kGoogleBlue300);
 
   // Ink Drop.
-  SetInkDropMode(InkDropMode::ON);
+  ink_drop()->SetMode(views::InkDropHost::InkDropMode::ON);
   SetHasInkDropActionOnClick(true);
-  SetInkDropBaseColor(GetForegroundColor(index_));
-  SetInkDropVisibleOpacity(kInkDropVisibleOpacity);
-  SetInkDropHighlightOpacity(kInkDropHighlightOpacity);
+  ink_drop()->SetBaseColor(GetForegroundColor(index_));
+  ink_drop()->SetVisibleOpacity(kInkDropVisibleOpacity);
+  ink_drop()->SetHighlightOpacity(kInkDropHighlightOpacity);
 
   // Installing this highlight path generator will set the desired shape for
   // both ink drop effects as well as our focus ring.
@@ -226,5 +218,12 @@ void AssistantOnboardingSuggestionView::UpdateIcon(const gfx::ImageSkia& icon) {
   if (!icon.isNull())
     icon_->SetImage(icon);
 }
+
+void AssistantOnboardingSuggestionView::OnButtonPressed() {
+  delegate_->OnSuggestionPressed(suggestion_id_);
+}
+
+BEGIN_METADATA(AssistantOnboardingSuggestionView, views::Button)
+END_METADATA
 
 }  // namespace ash

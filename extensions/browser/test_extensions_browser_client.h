@@ -14,11 +14,13 @@
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/update_client/update_client.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/updater/extension_cache.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
 
 namespace extensions {
 class KioskDelegate;
@@ -53,7 +55,7 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
 
   // Sets a factory to respond to calls of the CreateUpdateClient method.
   void SetUpdateClientFactory(
-      const base::Callback<update_client::UpdateClient*(void)>& factory);
+      base::RepeatingCallback<update_client::UpdateClient*(void)> factory);
 
   // Sets the main browser context. Only call if a BrowserContext was not
   // already provided. |main_context| must not be an incognito context.
@@ -74,7 +76,7 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
       content::BrowserContext* context) override;
   content::BrowserContext* GetOriginalContext(
       content::BrowserContext* context) override;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   std::string GetUserIdHashFromContext(
       content::BrowserContext* context) override;
 #endif
@@ -98,14 +100,15 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
       mojo::PendingRemote<network::mojom::URLLoaderClient> client,
       bool send_cors_header) override;
 
-  bool AllowCrossRendererResourceLoad(const GURL& url,
-                                      blink::mojom::ResourceType resource_type,
-                                      ui::PageTransition page_transition,
-                                      int child_id,
-                                      bool is_incognito,
-                                      const Extension* extension,
-                                      const ExtensionSet& extensions,
-                                      const ProcessMap& process_map) override;
+  bool AllowCrossRendererResourceLoad(
+      const network::ResourceRequest& request,
+      network::mojom::RequestDestination destination,
+      ui::PageTransition page_transition,
+      int child_id,
+      bool is_incognito,
+      const Extension* extension,
+      const ExtensionSet& extensions,
+      const ProcessMap& process_map) override;
   PrefService* GetPrefServiceForContext(
       content::BrowserContext* context) override;
   void GetEarlyExtensionPrefsObservers(
@@ -165,7 +168,8 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
 
   std::unique_ptr<ExtensionCache> extension_cache_;
 
-  base::Callback<update_client::UpdateClient*(void)> update_client_factory_;
+  base::RepeatingCallback<update_client::UpdateClient*(void)>
+      update_client_factory_;
 };
 
 }  // namespace extensions

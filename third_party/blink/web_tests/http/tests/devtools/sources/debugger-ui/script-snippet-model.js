@@ -4,13 +4,15 @@
 
 (async function() {
   TestRunner.addResult(`Tests script snippet model.\n`);
-  await TestRunner.loadModule('console_test_runner');
-  await TestRunner.loadModule('sources_test_runner');
+  await TestRunner.loadModule('console'); await TestRunner.loadTestModule('console_test_runner');
+  await TestRunner.loadModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
+  await TestRunner.loadLegacyModule('snippets');
 
   await TestRunner.showPanel('sources');
   await TestRunner.loadHTML('<p></p>');
 
   const workspace = Workspace.workspace;
+  const snippetsProject = Snippets.ScriptSnippetFileSystem.findSnippetsProject();
   SourcesTestRunner.runDebuggerTestSuite([
     async function testCreateEditRenameRemove(next) {
       function uiSourceCodeAdded(event) {
@@ -33,11 +35,11 @@
       workspace.addEventListener(
           Workspace.Workspace.Events.UISourceCodeRemoved, uiSourceCodeRemoved);
 
-      const uiSourceCode1 = await Snippets.project.createFile('', null, '');
+      const uiSourceCode1 = await snippetsProject.createFile('', null, '');
       TestRunner.addResult('Snippet content:');
       await printUiSourceCode(uiSourceCode1);
       TestRunner.addResult('Snippet1 created.');
-      const uiSourceCode2 = await Snippets.project.createFile('', null, '');
+      const uiSourceCode2 = await snippetsProject.createFile('', null, '');
       TestRunner.addResult('Snippet content:');
       await printUiSourceCode(uiSourceCode2);
       TestRunner.addResult('Snippet2 created.');
@@ -62,7 +64,7 @@
           workspace.uiSourceCodes().filter(uiSourceCode => uiSourceCode.url().startsWith('snippet://')).length);
 
       TestRunner.addResult('Add third..');
-      const uiSourceCode3 = await Snippets.project.createFile('', null, '');
+      const uiSourceCode3 = await snippetsProject.createFile('', null, '');
       TestRunner.addResult('Content of third snippet:');
       await printUiSourceCode(uiSourceCode3);
       TestRunner.addResult(
@@ -92,11 +94,11 @@
     },
 
     async function testEvaluate(next) {
-      const uiSourceCode1 = await Snippets.project.createFile('', null, '');
+      const uiSourceCode1 = await snippetsProject.createFile('', null, '');
       await uiSourceCode1.rename('Snippet1');
       uiSourceCode1.setWorkingCopy('// This snippet does nothing.\nvar i=2+2;\n');
 
-      const uiSourceCode2 = await Snippets.project.createFile('', null, '');
+      const uiSourceCode2 = await snippetsProject.createFile('', null, '');
       await uiSourceCode2.rename('Snippet2');
       uiSourceCode2.setWorkingCopy(`// This snippet creates a function that does nothing and returns it.
 function doesNothing() {
@@ -105,7 +107,7 @@ function doesNothing() {
 doesNothing;
 `);
 
-      const uiSourceCode3 = await Snippets.project.createFile('', null, '');
+      const uiSourceCode3 = await snippetsProject.createFile('', null, '');
       uiSourceCode3.rename('Snippet3');
       uiSourceCode3.setWorkingCopy('// This snippet uses Command Line API.\n$$("p").length');
 
@@ -143,7 +145,7 @@ doesNothing;
     },
 
     async function testEvaluateEditReload(next) {
-      const uiSourceCode1 = await Snippets.project.createFile('', null, '');
+      const uiSourceCode1 = await snippetsProject.createFile('', null, '');
       await uiSourceCode1.rename('Snippet1');
       uiSourceCode1.setWorkingCopy('// This snippet does nothing.\nvar i=2+2;\n');
 
@@ -172,7 +174,7 @@ doesNothing;
         // Take the only execution context from the worker's RuntimeModel.
         UI.context.setFlavor(SDK.ExecutionContext, this.executionContexts()[0]);
 
-        const uiSourceCode1 = await Snippets.project.createFile('', null, '');
+        const uiSourceCode1 = await snippetsProject.createFile('', null, '');
         await uiSourceCode1.rename('Snippet1');
         uiSourceCode1.setWorkingCopy('2 + 2');
 
@@ -187,11 +189,11 @@ doesNothing;
     },
 
     async function testDangerousNames(next) {
-      const uiSourceCode1 = await Snippets.project.createFile('', null, '');
+      const uiSourceCode1 = await snippetsProject.createFile('', null, '');
       await uiSourceCode1.rename('toString');
       await SourcesTestRunner.showUISourceCodePromise(uiSourceCode1);
 
-      const uiSourceCode2 = await Snippets.project.createFile('', null, '');
+      const uiSourceCode2 = await snippetsProject.createFile('', null, '');
       await uiSourceCode2.rename('myfile.toString');
       await SourcesTestRunner.showUISourceCodePromise(uiSourceCode2);
 

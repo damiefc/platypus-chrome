@@ -11,6 +11,7 @@
 
 #include "base/json/string_escape.h"
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -36,7 +37,8 @@ bool JSONWriter::WriteWithOptions(const Value& node,
                                   size_t max_depth) {
   json->clear();
   // Is there a better way to estimate the size of the output?
-  json->reserve(1024);
+  if (json->capacity() < 1024)
+    json->reserve(1024);
 
   JSONWriter writer(options, json, max_depth);
   bool result = writer.BuildJSONString(node, 0U);
@@ -61,8 +63,6 @@ JSONWriter::JSONWriter(int options, std::string* json, size_t max_depth)
 
 bool JSONWriter::BuildJSONString(const Value& node, size_t depth) {
   internal::StackMarker depth_check(max_depth_, &stack_depth_);
-  if (depth_check.IsTooDeep())
-    return false;
 
   switch (node.type()) {
     case Value::Type::NONE:
@@ -113,6 +113,9 @@ bool JSONWriter::BuildJSONString(const Value& node, size_t depth) {
       return true;
 
     case Value::Type::LIST: {
+      if (depth_check.IsTooDeep())
+        return false;
+
       json_string_->push_back('[');
       if (pretty_print_)
         json_string_->push_back(' ');
@@ -142,6 +145,9 @@ bool JSONWriter::BuildJSONString(const Value& node, size_t depth) {
     }
 
     case Value::Type::DICTIONARY: {
+      if (depth_check.IsTooDeep())
+        return false;
+
       json_string_->push_back('{');
       if (pretty_print_)
         json_string_->append(kPrettyPrintLineEnding);
@@ -187,15 +193,9 @@ bool JSONWriter::BuildJSONString(const Value& node, size_t depth) {
       // Successful only if we're allowed to omit it.
       DLOG_IF(ERROR, !omit_binary_values_) << "Cannot serialize binary value.";
       return omit_binary_values_;
-
-    // TODO(crbug.com/859477): Remove after root cause is found.
-    case Value::Type::DEAD:
-      CHECK(false);
-      return false;
   }
 
-  // TODO(crbug.com/859477): Revert to NOTREACHED() after root cause is found.
-  CHECK(false);
+  NOTREACHED();
   return false;
 }
 

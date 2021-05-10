@@ -30,25 +30,29 @@ std::unique_ptr<NavigationURLLoader> NavigationURLLoader::Create(
     scoped_refptr<PrefetchedSignedExchangeCache>
         prefetched_signed_exchange_cache,
     NavigationURLLoaderDelegate* delegate,
-    bool is_served_from_back_forward_cache,
+    LoaderType loader_type,
     mojo::PendingRemote<network::mojom::CookieAccessObserver> cookie_observer,
+    mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>
+        url_loader_network_observer,
+    mojo::PendingRemote<network::mojom::DevToolsObserver> devtools_observer,
     std::vector<std::unique_ptr<NavigationLoaderInterceptor>>
         initial_interceptors) {
   if (g_loader_factory) {
     return g_loader_factory->CreateLoader(
         storage_partition, std::move(request_info),
         std::move(navigation_ui_data), service_worker_handle, delegate,
-        is_served_from_back_forward_cache);
+        loader_type);
   }
 
-  if (is_served_from_back_forward_cache)
+  if (loader_type == LoaderType::kNoop)
     return CachedNavigationURLLoader::Create(std::move(request_info), delegate);
 
   return std::make_unique<NavigationURLLoaderImpl>(
       browser_context, storage_partition, std::move(request_info),
       std::move(navigation_ui_data), service_worker_handle, appcache_handle,
       std::move(prefetched_signed_exchange_cache), delegate,
-      std::move(cookie_observer), std::move(initial_interceptors));
+      std::move(cookie_observer), std::move(url_loader_network_observer),
+      std::move(devtools_observer), std::move(initial_interceptors));
 }
 
 void NavigationURLLoader::SetFactoryForTesting(

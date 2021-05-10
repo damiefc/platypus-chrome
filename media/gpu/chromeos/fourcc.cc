@@ -6,7 +6,6 @@
 
 #include "base/logging.h"
 #include "base/notreached.h"
-#include "base/strings/stringprintf.h"
 #include "media/gpu/macros.h"
 
 #if BUILDFLAG(USE_V4L2_CODEC)
@@ -98,6 +97,7 @@ base::Optional<Fourcc> Fourcc::FromVideoPixelFormat(
       case PIXEL_FORMAT_Y16:
       case PIXEL_FORMAT_XR30:
       case PIXEL_FORMAT_XB30:
+      case PIXEL_FORMAT_RGBAF16:
       case PIXEL_FORMAT_UNKNOWN:
         break;
     }
@@ -139,6 +139,7 @@ base::Optional<Fourcc> Fourcc::FromVideoPixelFormat(
       case PIXEL_FORMAT_XR30:
       case PIXEL_FORMAT_XB30:
       case PIXEL_FORMAT_BGRA:
+      case PIXEL_FORMAT_RGBAF16:
       case PIXEL_FORMAT_UNKNOWN:
         break;
     }

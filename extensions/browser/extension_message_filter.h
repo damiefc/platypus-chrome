@@ -8,10 +8,11 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
+#include "base/sequenced_task_runner_helpers.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -19,6 +20,10 @@ class GURL;
 struct ExtensionMsg_ExternalConnectionInfo;
 struct ExtensionMsg_TabTargetConnectionInfo;
 struct ServiceWorkerIdentifier;
+
+namespace base {
+class DictionaryValue;
+}
 
 namespace content {
 class BrowserContext;
@@ -93,9 +98,6 @@ class ExtensionMessageFilter : public content::BrowserMessageFilter {
       base::Optional<ServiceWorkerIdentifier> sw_identifier,
       const base::DictionaryValue& filter,
       bool lazy);
-  void OnExtensionShouldSuspendAck(const std::string& extension_id,
-                                   int sequence_id);
-  void OnExtensionSuspendAck(const std::string& extension_id);
   void OnExtensionTransferBlobsAck(const std::vector<std::string>& blob_uuids);
   void OnExtensionWakeEventPage(int request_id,
                                 const std::string& extension_id);
@@ -125,8 +127,7 @@ class ExtensionMessageFilter : public content::BrowserMessageFilter {
 
   const int render_process_id_;
 
-  std::unique_ptr<KeyedServiceShutdownNotifier::Subscription>
-      shutdown_notifier_;
+  base::CallbackListSubscription shutdown_notifier_subscription_;
 
   // Only access from the UI thread.
   content::BrowserContext* browser_context_;

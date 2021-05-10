@@ -8,6 +8,7 @@
 #include <set>
 
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/containers/mru_cache.h"
 #include "base/containers/span.h"
 #include "base/feature_list.h"
@@ -16,15 +17,14 @@
 #include "base/i18n/break_iterator.h"
 #include "base/i18n/char_iterator.h"
 #include "base/i18n/rtl.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
 #include "base/trace_event/trace_event.h"
@@ -191,8 +191,7 @@ GraphemeProperties RetrieveGraphemeProperties(const base::StringPiece16& text,
                                               bool retrieve_block) {
   GraphemeProperties properties;
   bool first_char = true;
-  base::i18n::UTF16CharIterator iter(text.data(), text.length());
-  while (!iter.end()) {
+  for (base::i18n::UTF16CharIterator iter(text); !iter.end(); iter.Advance()) {
     const UChar32 codepoint = iter.get();
 
     if (first_char) {
@@ -209,8 +208,6 @@ GraphemeProperties RetrieveGraphemeProperties(const base::StringPiece16& text,
       properties.has_pictographic = true;
     if (IsEmojiRelatedCodepoint(codepoint))
       properties.has_emoji = true;
-
-    iter.Advance();
   }
 
   return properties;
@@ -243,7 +240,7 @@ bool AreGraphemePropertiesCompatible(const GraphemeProperties& first,
 // (see: UNICODE TEXT SEGMENTATION (http://unicode.org/reports/tr29/).
 // Breaks between |run_start| and |run_end| and force break after the grapheme
 // starting at |run_break|.
-size_t FindRunBreakingCharacter(const base::string16& text,
+size_t FindRunBreakingCharacter(const std::u16string& text,
                                 UScriptCode script,
                                 size_t run_start,
                                 size_t run_break,
@@ -303,7 +300,7 @@ size_t FindRunBreakingCharacter(const base::string16& text,
 // Consider 3 characters with the script values {Kana}, {Hira, Kana}, {Kana}.
 // Without script extensions only the first script in each set would be taken
 // into account, resulting in 3 runs where 1 would be enough.
-size_t ScriptInterval(const base::string16& text,
+size_t ScriptInterval(const std::u16string& text,
                       size_t start,
                       size_t length,
                       UScriptCode* script) {
@@ -311,7 +308,8 @@ size_t ScriptInterval(const base::string16& text,
 
   UScriptCode scripts[kMaxScripts] = { USCRIPT_INVALID_CODE };
 
-  base::i18n::UTF16CharIterator char_iterator(text.c_str() + start, length);
+  base::i18n::UTF16CharIterator char_iterator(
+      base::StringPiece16(text.c_str() + start, length));
   size_t scripts_size = GetScriptExtensions(char_iterator.get(), scripts);
   *script = scripts[0];
 
@@ -344,7 +342,7 @@ void MarkFontAsTried(sk_sp<SkTypeface> typeface,
 }
 
 // Whether |segment| corresponds to the newline character.
-bool IsNewlineSegment(const base::string16& text,
+bool IsNewlineSegment(const std::u16string& text,
                       const internal::LineSegment& segment) {
   const size_t offset = segment.char_range.start();
   const size_t length = segment.char_range.length();
@@ -357,7 +355,7 @@ bool IsNewlineSegment(const base::string16& text,
 // incremented if the caret is right after the newline character, i.e, the
 // cursor affinity is |CURSOR_BACKWARD| while containing the newline character.
 size_t LineIndexForNewline(const size_t line_index,
-                           const base::string16& text,
+                           const std::u16string& text,
                            const internal::LineSegment& segment,
                            const SelectionModel& caret) {
   bool at_newline = IsNewlineSegment(text, segment) &&
@@ -413,7 +411,7 @@ class HarfBuzzLineBreaker {
                       float min_height,
                       float glyph_height_for_test,
                       WordWrapBehavior word_wrap_behavior,
-                      const base::string16& text,
+                      const std::u16string& text,
                       const BreakList<size_t>* words,
                       const internal::TextRunList& run_list)
       : max_width_((max_width == 0) ? SK_ScalarMax : SkIntToScalar(max_width)),
@@ -742,7 +740,7 @@ class HarfBuzzLineBreaker {
   const float min_height_;
   const float glyph_height_for_test_;
   const WordWrapBehavior word_wrap_behavior_;
-  const base::string16& text_;
+  const std::u16string& text_;
   const BreakList<size_t>* const words_;
   const internal::TextRunList& run_list_;
 
@@ -1186,7 +1184,7 @@ namespace {
 
 // Input for the stateless implementation of ShapeRunWithFont.
 struct ShapeRunWithFontInput {
-  ShapeRunWithFontInput(const base::string16& full_text,
+  ShapeRunWithFontInput(const std::u16string& full_text,
                         const TextRunHarfBuzz::FontParams& font_params,
                         Range full_range,
                         bool obscured,
@@ -1255,7 +1253,7 @@ struct ShapeRunWithFontInput {
   bool subpixel_rendering_suppressed;
 
   // The parts of the input text that may be read by hb_buffer_add_utf16.
-  base::string16 text;
+  std::u16string text;
   // The conversion of the input range to a range within |text|.
   Range range;
   // The hash is cached to avoid repeated calls.
@@ -1383,7 +1381,7 @@ RenderTextHarfBuzz::RenderTextHarfBuzz()
 
 RenderTextHarfBuzz::~RenderTextHarfBuzz() {}
 
-const base::string16& RenderTextHarfBuzz::GetDisplayText() {
+const std::u16string& RenderTextHarfBuzz::GetDisplayText() {
   // TODO(krb): Consider other elision modes for multiline.
   if ((multiline() && (max_lines() == 0 || elide_behavior() != ELIDE_TAIL)) ||
       elide_behavior() == NO_ELIDE || elide_behavior() == FADE_TAIL) {
@@ -1421,11 +1419,11 @@ SizeF RenderTextHarfBuzz::GetLineSizeF(const SelectionModel& caret) {
 std::vector<Rect> RenderTextHarfBuzz::GetSubstringBounds(const Range& range) {
   EnsureLayout();
   DCHECK(!update_display_run_list_);
-  DCHECK(Range(0, text().length()).Contains(range));
+  DCHECK(range.IsBoundedBy(Range(0, text().length())));
   const Range grapheme_range = ExpandRangeToGraphemeBoundary(range);
   const Range display_range(TextIndexToDisplayIndex(grapheme_range.start()),
                             TextIndexToDisplayIndex(grapheme_range.end()));
-  DCHECK(Range(0, GetDisplayText().length()).Contains(display_range));
+  DCHECK(IsValidDisplayRange(display_range));
 
   std::vector<Rect> rects;
   if (display_range.is_empty())
@@ -1447,6 +1445,7 @@ std::vector<Rect> RenderTextHarfBuzz::GetSubstringBounds(const Range& range) {
     if (line.segments.size() > 1 && IsNewlineSegment(line.segments[0]))
       line_start_x += line.segments[0].width();
 
+    std::vector<Rect> current_line_rects;
     for (const internal::LineSegment& segment : line.segments) {
       const Range intersection = segment.char_range.Intersect(display_range);
       DCHECK(!intersection.is_reversed());
@@ -1459,9 +1458,12 @@ std::vector<Rect> RenderTextHarfBuzz::GetSubstringBounds(const Range& range) {
         int end_x = base::ClampCeil(selected_span.end() - line_start_x);
         Rect rect(start_x, 0, end_x - start_x,
                   base::ClampCeil(line.size.height()));
-        rects.push_back(rect + GetLineOffset(line_index));
+        current_line_rects.push_back(rect + GetLineOffset(line_index));
       }
     }
+    MergeIntersectingRects(current_line_rects);
+    rects.insert(rects.end(), current_line_rects.begin(),
+                 current_line_rects.end());
   }
   return rects;
 }
@@ -1495,6 +1497,7 @@ RangeF RenderTextHarfBuzz::GetCursorSpan(const Range& text_range) {
 
   Range display_range(TextIndexToDisplayIndex(valid_range.start()),
                       TextIndexToDisplayIndex(next_grapheme_start));
+  DCHECK(IsValidDisplayRange(display_range));
 
   // Although highly likely, there's no guarantee that a single text run is used
   // for the entire cursor span. For example, Unicode Variation Selectors are
@@ -1671,7 +1674,7 @@ void RenderTextHarfBuzz::EnsureLayout() {
 
   if (update_display_run_list_) {
     DCHECK(text_elided());
-    const base::string16& display_text = GetDisplayText();
+    const std::u16string& display_text = GetDisplayText();
     display_run_list_ = std::make_unique<internal::TextRunList>();
 
     if (!display_text.empty())
@@ -1734,7 +1737,7 @@ void RenderTextHarfBuzz::DrawVisualText(internal::SkiaTextRenderer* renderer,
   }
 
   internal::TextRunList* run_list = GetRunList();
-  const base::string16& display_text = GetDisplayText();
+  const std::u16string& display_text = GetDisplayText();
   for (size_t i = 0; i < shaped_text->lines().size(); ++i) {
     const internal::Line& line = shaped_text->lines()[i];
     const Vector2d origin = GetLineOffset(i) + Vector2d(0, line.baseline);
@@ -1828,7 +1831,7 @@ SelectionModel RenderTextHarfBuzz::LastSelectionModelInsideRun(
   return SelectionModel(position, CURSOR_FORWARD);
 }
 
-void RenderTextHarfBuzz::ItemizeAndShapeText(const base::string16& text,
+void RenderTextHarfBuzz::ItemizeAndShapeText(const std::u16string& text,
                                              internal::TextRunList* run_list) {
   CommonizedRunsMap commonized_run_map;
   ItemizeTextToRuns(text, run_list, &commonized_run_map);
@@ -1845,7 +1848,7 @@ void RenderTextHarfBuzz::ItemizeAndShapeText(const base::string16& text,
 }
 
 void RenderTextHarfBuzz::ItemizeTextToRuns(
-    const base::string16& text,
+    const std::u16string& text,
     internal::TextRunList* out_run_list,
     CommonizedRunsMap* out_commonized_run_map) {
   TRACE_EVENT1("ui", "RenderTextHarfBuzz::ItemizeTextToRuns", "text_length",
@@ -1939,34 +1942,10 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
     // Move to the next direction sequence.
     bidi_run_start = bidi_run_end;
   }
-
-  // Add trace event to track incorrect usage of fallback fonts.
-  // TODO(https://crbug.com/995789): Remove the following code when the issue
-  // is fixed.
-  bool tracing_enabled;
-  TRACE_EVENT_CATEGORY_GROUP_ENABLED("fonts", &tracing_enabled);
-  if (tracing_enabled) {
-    std::string logging_str;
-    for (const auto& iter : *out_commonized_run_map) {
-      const internal::TextRunHarfBuzz::FontParams& font_params = iter.first;
-      for (const auto* run : iter.second) {
-        base::i18n::UTF16CharIterator text_iter(
-            text.c_str() + run->range.start(), run->range.length());
-        const UChar32 first_char = text_iter.get();
-        const UBlockCode first_block = ublock_getCode(first_char);
-        const char* script_name = uscript_getShortName(font_params.script);
-        base::StringAppendF(&logging_str, "block=%d script=%s\n",
-                            static_cast<int>(first_block),
-                            script_name ? script_name : "");
-      }
-    }
-    TRACE_EVENT_INSTANT1("fonts", "RenderTextHarfBuzz::ItemizeTextToRuns::Runs",
-                         TRACE_EVENT_SCOPE_THREAD, "runs", logging_str);
-  }
 }
 
 void RenderTextHarfBuzz::ShapeRuns(
-    const base::string16& text,
+    const std::u16string& text,
     const internal::TextRunHarfBuzz::FontParams& font_params,
     std::vector<internal::TextRunHarfBuzz*> runs) {
   TRACE_EVENT1("ui", "RenderTextHarfBuzz::ShapeRuns", "run_count", runs.size());
@@ -2151,7 +2130,7 @@ void RenderTextHarfBuzz::ShapeRuns(
 }
 
 void RenderTextHarfBuzz::ShapeRunsWithFont(
-    const base::string16& text,
+    const std::u16string& text,
     const internal::TextRunHarfBuzz::FontParams& font_params,
     std::vector<internal::TextRunHarfBuzz*>* in_out_runs) {
   // ShapeRunWithFont can be extremely slow, so use cached results if possible.
@@ -2206,7 +2185,7 @@ void RenderTextHarfBuzz::EnsureLayoutRunList() {
     device_scale_factor_ = device_scale_factor;
     layout_run_list_.Reset();
 
-    const base::string16& text = GetLayoutText();
+    const std::u16string& text = GetLayoutText();
     if (!text.empty())
       ItemizeAndShapeText(text, &layout_run_list_);
 
@@ -2232,6 +2211,28 @@ internal::TextRunList* RenderTextHarfBuzz::GetRunList() {
 
 const internal::TextRunList* RenderTextHarfBuzz::GetRunList() const {
   return const_cast<RenderTextHarfBuzz*>(this)->GetRunList();
+}
+
+bool RenderTextHarfBuzz::IsValidDisplayRange(Range display_range) {
+  // The |display_text_| is an elided version of |layout_text_|. Removing
+  // codepoints from the text may break the conversion for codepoint offsets
+  // between text to display_text offset. For elding behaviors that truncate
+  // codepoint at the end, the conversion will work just fine. But for eliding
+  // behavior that truncate at the beginning of middle of the text, the offsets
+  // are completely wrong and should not be used.
+  // TODO(http://crbug.com/1085014): Fix eliding for the broken cases.
+  switch (elide_behavior()) {
+    case NO_ELIDE:
+    case FADE_TAIL:
+      return display_range.IsBoundedBy(Range(0, GetDisplayText().length()));
+    case TRUNCATE:
+    case ELIDE_TAIL:
+      return display_range.IsBoundedBy(Range(0, GetLayoutText().length()));
+    case ELIDE_HEAD:
+    case ELIDE_MIDDLE:
+    case ELIDE_EMAIL:
+      return !text_elided();
+  }
 }
 
 bool RenderTextHarfBuzz::GetDecoratedTextForRange(

@@ -12,7 +12,6 @@
 
 #include "base/base_paths.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/containers/queue.h"
 #include "base/files/file.h"
@@ -30,9 +29,8 @@
 #include "base/pickle.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_io_thread.h"
 #include "base/test/test_shared_memory_util.h"
@@ -836,7 +834,7 @@ class IPCChannelProxyMojoTest : public IPCChannelMojoTestBase {
  public:
   void Init(const std::string& client_name) {
     IPCChannelMojoTestBase::Init(client_name);
-    runner_.reset(new ChannelProxyRunner(TakeHandle(), true));
+    runner_ = std::make_unique<ChannelProxyRunner>(TakeHandle(), true);
   }
   void CreateProxy(IPC::Listener* listener) { runner_->CreateProxy(listener); }
   void RunProxy() {
@@ -941,7 +939,7 @@ TEST_F(IPCChannelProxyMojoTest, ProxyThreadAssociatedInterface) {
 class ChannelProxyClient {
  public:
   void Init(mojo::ScopedMessagePipeHandle handle) {
-    runner_.reset(new ChannelProxyRunner(std::move(handle), false));
+    runner_ = std::make_unique<ChannelProxyRunner>(std::move(handle), false);
   }
 
   void CreateProxy(IPC::Listener* listener) { runner_->CreateProxy(listener); }
@@ -1232,7 +1230,7 @@ class SimpleTestClientImpl : public IPC::mojom::SimpleTestClient,
   void set_sync_sender(IPC::Sender* sync_sender) { sync_sender_ = sync_sender; }
 
   void WaitForValueRequest() {
-    run_loop_.reset(new base::RunLoop);
+    run_loop_ = std::make_unique<base::RunLoop>();
     run_loop_->Run();
   }
 

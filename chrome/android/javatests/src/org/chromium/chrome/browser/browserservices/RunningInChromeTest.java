@@ -33,8 +33,10 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.dependency_injection.ChromeActivityCommonsModule;
 import org.chromium.chrome.browser.dependency_injection.ModuleOverridesRule;
@@ -47,7 +49,6 @@ import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.notifications.MockNotificationManagerProxy;
 import org.chromium.components.browser_ui.notifications.MockNotificationManagerProxy.NotificationEntry;
 import org.chromium.components.embedder_support.util.Origin;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServerRule;
 
@@ -86,7 +87,9 @@ public class RunningInChromeTest {
                     compositorViewHolderSupplier, tabCreatorManager, tabCreatorSupplier,
                     isPromotableToTabSupplier, statusBarColorController, screenOrientationProvider,
                     notificationManagerProxySupplier, tabContentManagerSupplier,
-                    compositorViewHolderInitializer) -> {
+                    activityTabStartupMetricsTrackerSupplier, compositorViewHolderInitializer,
+                    chromeActivityNativeDelegate, modalDialogManagerSupplier,
+                    browserControlsStateProvider, savedInstanceStateSupplier) -> {
                 return new ChromeActivityCommonsModule(activity, bottomSheetController,
                         tabModelSelectorSupplier, browserControlsManager,
                         browserControlsVisibilityManager, browserControlsSizer, fullscreenManager,
@@ -97,7 +100,10 @@ public class RunningInChromeTest {
                         screenOrientationProvider,
                         ()
                                 -> mMockNotificationManager,
-                        tabContentManagerSupplier, compositorViewHolderInitializer);
+                        tabContentManagerSupplier, activityTabStartupMetricsTrackerSupplier,
+                        compositorViewHolderInitializer, chromeActivityNativeDelegate,
+                        modalDialogManagerSupplier, browserControlsStateProvider,
+                        savedInstanceStateSupplier);
             });
 
     @Rule
@@ -121,12 +127,13 @@ public class RunningInChromeTest {
         mMockNotificationManager.setNotificationsEnabled(false);
 
         mStore = new BrowserServicesStore(
-                ChromeApplication.getComponent().resolveSharedPreferencesManager());
+                ChromeApplicationImpl.getComponent().resolveSharedPreferencesManager());
         mStore.removeTwaDisclosureAcceptanceForPackage(PACKAGE_NAME);
     }
 
     @Test
     @MediumTest
+    @FlakyTest(message = "https://crbug.com/1164424")
     public void showsNewRunningInChrome() throws TimeoutException {
         launch(createTrustedWebActivityIntent(mTestPage));
 

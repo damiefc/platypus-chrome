@@ -8,6 +8,7 @@
 
 #include "components/metrics/metrics_provider.h"
 #import "ios/public/provider/chrome/browser/mailto/mailto_handler_provider.h"
+#import "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
 #import "ios/public/provider/chrome/browser/text_zoom_provider.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -65,39 +66,15 @@ ChromeBrowserProvider::GetChromeTrustedVaultService() {
   return nullptr;
 }
 
-GeolocationUpdaterProvider*
-ChromeBrowserProvider::GetGeolocationUpdaterProvider() {
-  return nullptr;
-}
-
 std::string ChromeBrowserProvider::GetRiskData() {
   return std::string();
-}
-
-void ChromeBrowserProvider::AddSerializableData(
-    web::SerializableUserDataManager* user_data_manager,
-    web::WebState* web_state) {}
-
-bool ChromeBrowserProvider::MightBlockUrlDuringRestore() {
-  return false;
-}
-
-bool ChromeBrowserProvider::ShouldBlockUrlDuringRestore(
-    const GURL& url,
-    web::WebState* web_state) {
-  return false;
 }
 
 UITextField* ChromeBrowserProvider::CreateStyledTextField() const {
   return nil;
 }
 
-void ChromeBrowserProvider::AttachTabHelpers(web::WebState* web_state) const {}
-
 void ChromeBrowserProvider::AttachBrowserAgents(Browser* browser) const {}
-
-void ChromeBrowserProvider::ScheduleDeferredStartupTasks(
-    ChromeBrowserState* browser_state) const {}
 
 VoiceSearchProvider* ChromeBrowserProvider::GetVoiceSearchProvider() const {
   return nullptr;

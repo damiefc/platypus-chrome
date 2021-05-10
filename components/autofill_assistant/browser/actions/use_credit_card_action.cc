@@ -12,7 +12,6 @@
 #include "base/callback.h"
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
@@ -32,7 +31,6 @@ UseCreditCardAction::UseCreditCardAction(ActionDelegate* delegate,
     : Action(delegate, proto) {
   DCHECK(proto.has_use_card());
   selector_ = Selector(proto.use_card().form_field_element());
-  selector_.MustBeVisible();
 }
 
 UseCreditCardAction::~UseCreditCardAction() = default;
@@ -97,14 +95,11 @@ void UseCreditCardAction::InternalProcessAction(
   FillFormWithData();
 }
 
-void UseCreditCardAction::EndAction(
-    const ClientStatus& final_status,
-    const base::Optional<ClientStatus>& optional_details_status) {
-  UpdateProcessedAction(final_status);
-  if (optional_details_status.has_value() && !optional_details_status->ok()) {
-    processed_action_proto_->mutable_status_details()->MergeFrom(
-        optional_details_status->details());
-  }
+void UseCreditCardAction::EndAction(const ClientStatus& status) {
+  if (fallback_handler_)
+    action_stopwatch_.TransferToWaitTime(fallback_handler_->TotalWaitTime());
+
+  UpdateProcessedAction(status);
   std::move(process_action_callback_).Run(std::move(processed_action_proto_));
 }
 
@@ -115,9 +110,12 @@ void UseCreditCardAction::FillFormWithData() {
     return;
   }
 
-  delegate_->ShortWaitForElement(
-      selector_, base::BindOnce(&UseCreditCardAction::OnWaitForElement,
-                                weak_ptr_factory_.GetWeakPtr()));
+  delegate_->ShortWaitForElementWithSlowWarning(
+      selector_,
+      base::BindOnce(&UseCreditCardAction::OnWaitForElementTimed,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     base::BindOnce(&UseCreditCardAction::OnWaitForElement,
+                                    weak_ptr_factory_.GetWeakPtr())));
 }
 
 void UseCreditCardAction::OnWaitForElement(const ClientStatus& element_status) {
@@ -130,15 +128,19 @@ void UseCreditCardAction::OnWaitForElement(const ClientStatus& element_status) {
   delegate_->GetFullCard(credit_card_.get(),
                          base::BindOnce(&UseCreditCardAction::OnGetFullCard,
                                         weak_ptr_factory_.GetWeakPtr()));
+  action_stopwatch_.StartWaitTime();
 }
 
 void UseCreditCardAction::OnGetFullCard(
+    const ClientStatus& status,
     std::unique_ptr<autofill::CreditCard> card,
-    const base::string16& cvc) {
-  if (!card) {
-    EndAction(ClientStatus(GET_FULL_CARD_FAILED));
+    const std::u16string& cvc) {
+  action_stopwatch_.StartActiveTime();
+  if (!status.ok()) {
+    EndAction(status);
     return;
   }
+  DCHECK(card);
 
   std::vector<RequiredField> required_fields;
   for (const auto& required_field_proto : proto_.use_card().required_fields()) {
@@ -180,6 +182,7 @@ void UseCreditCardAction::OnGetFullCard(
 
 void UseCreditCardAction::ExecuteFallback(const ClientStatus& status) {
   DCHECK(fallback_handler_ != nullptr);
+  action_stopwatch_.TransferToWaitTime(fallback_handler_->TotalWaitTime());
   fallback_handler_->CheckAndFallbackRequiredFields(
       status, base::BindOnce(&UseCreditCardAction::EndAction,
                              weak_ptr_factory_.GetWeakPtr()));

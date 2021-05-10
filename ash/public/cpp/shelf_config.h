@@ -7,6 +7,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/app_list/app_list_controller_observer.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/style/ash_color_provider.h"
@@ -19,11 +20,16 @@
 #include "ui/display/display_observer.h"
 #include "ui/gfx/animation/tween.h"
 
+namespace session_manager {
+enum class SessionState;
+}  // namespace session_manager
+
 namespace ash {
 
 // Provides layout and drawing config for the Shelf. Note That some of these
 // values could change at runtime.
 class ASH_EXPORT ShelfConfig : public TabletModeObserver,
+                               public SessionObserver,
                                public AppListControllerObserver,
                                public display::DisplayObserver,
                                public VirtualKeyboardModel::Observer,
@@ -56,6 +62,9 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   // TabletModeObserver:
   void OnTabletModeStarting() override;
   void OnTabletModeEnding() override;
+
+  // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
 
   // DisplayObserver:
   void OnDisplayMetricsChanged(const display::Display& display,
@@ -124,16 +133,10 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   // The extra padding added to status area tray buttons on the shelf.
   int status_area_hit_region_padding() const;
 
-  // Returns whether the in app shelf should be shown.
-  bool is_in_app() const;
-
   // The threshold relative to the size of the shelf that is used to determine
   // if the shelf visibility should change during a drag.
   float drag_hide_ratio_threshold() const;
 
-  SkColor shelf_control_permanent_highlight_background() const {
-    return shelf_control_permanent_highlight_background_;
-  }
   SkColor shelf_focus_border_color() const { return shelf_focus_border_color_; }
   int workspace_area_visible_inset() const {
     return workspace_area_visible_inset_;
@@ -144,7 +147,6 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   int hidden_shelf_in_screen_portion() const {
     return hidden_shelf_in_screen_portion_;
   }
-  SkColor shelf_icon_color() const { return shelf_icon_color_; }
   int status_indicator_offset_from_shelf_edge() const {
     return status_indicator_offset_from_shelf_edge_;
   }
@@ -172,6 +174,8 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   }
 
   bool is_dense() const { return is_dense_; }
+
+  bool is_in_app() const { return is_in_app_; }
 
   bool shelf_controls_shown() const { return shelf_controls_shown_; }
 
@@ -239,6 +243,11 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   // Updates shelf config - called when the accessibility state changes.
   void UpdateConfigForAccessibilityState();
 
+  // Calculates the intended in-app state with the provided app list and virtual
+  // keyboard visibility.
+  bool CalculateIsInApp(bool app_list_visible,
+                        bool virtual_keyboard_shown) const;
+
   // Whether the in app shelf should be shown in overview mode.
   bool use_in_app_shelf_in_overview_;
 
@@ -250,6 +259,9 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
 
   // Whether shelf is currently standard or dense.
   bool is_dense_;
+
+  // Whether the shelf is currently in in-app state.
+  bool is_in_app_;
 
   // Whether the shelf buttons (navigation controls, and overview tray button)
   // should be shown.
@@ -282,8 +294,6 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   const int app_icon_group_margin_tablet_;
   const int app_icon_group_margin_clamshell_;
 
-  const SkColor shelf_control_permanent_highlight_background_;
-
   const SkColor shelf_focus_border_color_;
 
   // We reserve a small area on the edge of the workspace area to ensure that
@@ -296,10 +306,6 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
 
   // Portion of the shelf that's within the screen bounds when auto-hidden.
   const int hidden_shelf_in_screen_portion_;
-
-  // The foreground color of the icons used in the shelf (launcher,
-  // notifications, etc).
-  const SkColor shelf_icon_color_;
 
   // The distance between the edge of the shelf and the status indicators.
   const int status_indicator_offset_from_shelf_edge_;

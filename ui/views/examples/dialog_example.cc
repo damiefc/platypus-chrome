@@ -58,12 +58,12 @@ class DialogExample::Delegate : public virtual DialogType {
 
     if (parent_->has_extra_button_->GetChecked()) {
       DialogDelegate::SetExtraView(std::make_unique<views::MdTextButton>(
-          nullptr, parent_->extra_button_label_->GetText()));
+          Button::PressedCallback(), parent_->extra_button_label_->GetText()));
     }
   }
 
  protected:
-  base::string16 GetWindowTitle() const override {
+  std::u16string GetWindowTitle() const override {
     return parent_->title_->GetText();
   }
 
@@ -110,11 +110,11 @@ class DialogExample::Dialog : public Delegate<DialogDelegateView> {
 DialogExample::DialogExample()
     : ExampleBase("Dialog"),
       mode_model_({
-          base::ASCIIToUTF16("Modeless"),
-          base::ASCIIToUTF16("Window Modal"),
-          base::ASCIIToUTF16("Child Modal"),
-          base::ASCIIToUTF16("System Modal"),
-          base::ASCIIToUTF16("Fake Modeless (non-bubbles)"),
+          ui::SimpleComboboxModel::Item(u"Modeless"),
+          ui::SimpleComboboxModel::Item(u"Window Modal"),
+          ui::SimpleComboboxModel::Item(u"Child Modal"),
+          ui::SimpleComboboxModel::Item(u"System Modal"),
+          ui::SimpleComboboxModel::Item(u"Fake Modeless (non-bubbles)"),
       }) {}
 
 DialogExample::~DialogExample() = default;
@@ -153,14 +153,14 @@ void DialogExample::CreateExampleView(View* container) {
 
   StartRowWithLabel(layout, "Modal Type");
   mode_ = layout->AddView(std::make_unique<Combobox>(&mode_model_));
-  mode_->set_callback(base::BindRepeating(&DialogExample::OnPerformAction,
-                                          base::Unretained(this)));
+  mode_->SetCallback(base::BindRepeating(&DialogExample::OnPerformAction,
+                                         base::Unretained(this)));
   mode_->SetSelectedIndex(ui::MODAL_TYPE_CHILD);
 
   StartRowWithLabel(layout, "Bubble");
   AddCheckbox(layout, &bubble_);
   AddCheckbox(layout, &persistent_bubble_);
-  persistent_bubble_->SetText(base::ASCIIToUTF16("Persistent"));
+  persistent_bubble_->SetText(u"Persistent");
 
   column_set = layout->AddColumnSet(kButtonsColumnId);
   column_set->AddColumn(GridLayout::CENTER, GridLayout::CENTER, kStretchy,
@@ -169,8 +169,10 @@ void DialogExample::CreateExampleView(View* container) {
       kFixed, kButtonsColumnId, kFixed,
       provider->GetDistanceMetric(views::DISTANCE_UNRELATED_CONTROL_VERTICAL));
 
-  show_ = layout->AddView(
-      std::make_unique<views::MdTextButton>(this, base::ASCIIToUTF16("Show")));
+  show_ = layout->AddView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating(&DialogExample::ShowButtonPressed,
+                          base::Unretained(this)),
+      u"Show"));
 }
 
 void DialogExample::StartRowWithLabel(GridLayout* layout, const char* label) {
@@ -194,7 +196,10 @@ void DialogExample::StartTextfieldRow(GridLayout* layout,
 }
 
 void DialogExample::AddCheckbox(GridLayout* layout, Checkbox** member) {
-  auto checkbox = std::make_unique<Checkbox>(base::string16(), this);
+  auto callback = member == &bubble_ ? &DialogExample::BubbleCheckboxPressed
+                                     : &DialogExample::OtherCheckboxPressed;
+  auto checkbox = std::make_unique<Checkbox>(
+      std::u16string(), base::BindRepeating(callback, base::Unretained(this)));
   checkbox->SetChecked(true);
   *member = layout->AddView(std::move(checkbox));
 }
@@ -243,49 +248,48 @@ void DialogExample::ResizeDialog() {
   widget->OnSizeConstraintsChanged();
 }
 
-void DialogExample::ButtonPressed(Button* sender, const ui::Event& event) {
-  if (sender == show_) {
-    if (bubble_->GetChecked()) {
-      // |bubble| will be destroyed by its widget when the widget is destroyed.
-      Bubble* bubble = new Bubble(this, sender);
-      last_dialog_ = bubble;
-      BubbleDialogDelegateView::CreateBubble(bubble);
-    } else {
-      // |dialog| will be destroyed by its widget when the widget is destroyed.
-      Dialog* dialog = new Dialog(this);
-      last_dialog_ = dialog;
-      dialog->InitDelegate();
+void DialogExample::ShowButtonPressed() {
+  if (bubble_->GetChecked()) {
+    // |bubble| will be destroyed by its widget when the widget is destroyed.
+    Bubble* bubble = new Bubble(this, show_);
+    last_dialog_ = bubble;
+    BubbleDialogDelegateView::CreateBubble(bubble);
+  } else {
+    // |dialog| will be destroyed by its widget when the widget is destroyed.
+    Dialog* dialog = new Dialog(this);
+    last_dialog_ = dialog;
+    dialog->InitDelegate();
 
-      // constrained_window::CreateBrowserModalDialogViews() allows dialogs to
-      // be created as MODAL_TYPE_WINDOW without specifying a parent.
-      gfx::NativeView parent = nullptr;
-      if (mode_->GetSelectedIndex() != kFakeModeless)
-        parent = example_view()->GetWidget()->GetNativeView();
+    // constrained_window::CreateBrowserModalDialogViews() allows dialogs to
+    // be created as MODAL_TYPE_WINDOW without specifying a parent.
+    gfx::NativeView parent = nullptr;
+    if (mode_->GetSelectedIndex() != kFakeModeless)
+      parent = example_view()->GetWidget()->GetNativeView();
 
-      DialogDelegate::CreateDialogWidget(
-          dialog, example_view()->GetWidget()->GetNativeWindow(), parent);
-    }
-    last_dialog_->GetWidget()->Show();
-    return;
+    DialogDelegate::CreateDialogWidget(
+        dialog, example_view()->GetWidget()->GetNativeWindow(), parent);
   }
+  last_dialog_->GetWidget()->Show();
+}
 
-  if (sender == bubble_) {
-    if (bubble_->GetChecked() && GetModalType() != ui::MODAL_TYPE_CHILD) {
-      mode_->SetSelectedIndex(ui::MODAL_TYPE_CHILD);
-      LogStatus("You nearly always want Child Modal for bubbles.");
-    }
-    persistent_bubble_->SetEnabled(bubble_->GetChecked());
-    OnPerformAction();  // Validate the modal type.
-
-    if (!bubble_->GetChecked() && GetModalType() == ui::MODAL_TYPE_CHILD) {
-      // Do something reasonable when simply unchecking bubble and re-enable.
-      mode_->SetSelectedIndex(ui::MODAL_TYPE_WINDOW);
-      OnPerformAction();
-    }
-    return;
+void DialogExample::BubbleCheckboxPressed() {
+  if (bubble_->GetChecked() && GetModalType() != ui::MODAL_TYPE_CHILD) {
+    mode_->SetSelectedIndex(ui::MODAL_TYPE_CHILD);
+    LogStatus("You nearly always want Child Modal for bubbles.");
   }
+  persistent_bubble_->SetEnabled(bubble_->GetChecked());
+  OnPerformAction();  // Validate the modal type.
 
-  // Other buttons are all checkboxes. Update the dialog if there is one.
+  if (!bubble_->GetChecked() && GetModalType() == ui::MODAL_TYPE_CHILD) {
+    // Do something reasonable when simply unchecking bubble and re-enable.
+    mode_->SetSelectedIndex(ui::MODAL_TYPE_WINDOW);
+    OnPerformAction();
+  }
+}
+
+void DialogExample::OtherCheckboxPressed() {
+  // Buttons other than show and bubble are pressed. They are all checkboxes.
+  // Update the dialog if there is one.
   if (last_dialog_) {
     last_dialog_->DialogModelChanged();
     ResizeDialog();
@@ -293,7 +297,7 @@ void DialogExample::ButtonPressed(Button* sender, const ui::Event& event) {
 }
 
 void DialogExample::ContentsChanged(Textfield* sender,
-                                    const base::string16& new_contents) {
+                                    const std::u16string& new_contents) {
   if (!last_dialog_)
     return;
 
@@ -313,7 +317,7 @@ void DialogExample::ContentsChanged(Textfield* sender,
 
 void DialogExample::OnPerformAction() {
   bool enable = bubble_->GetChecked() || GetModalType() != ui::MODAL_TYPE_CHILD;
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
   enable = enable && GetModalType() != ui::MODAL_TYPE_SYSTEM;
 #endif
   show_->SetEnabled(enable);

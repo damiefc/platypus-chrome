@@ -4,15 +4,18 @@
 
 #include "chrome/browser/nearby_sharing/nearby_notification_manager.h"
 
+#include <string>
+
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/image_decoder/image_decoder.h"
@@ -22,6 +25,8 @@
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service.h"
+#include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service_factory.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
@@ -43,8 +48,8 @@ constexpr char kNearbyNotifier[] = "nearby";
 message_center::Notification CreateNearbyNotification(const std::string& id) {
   message_center::Notification notification(
       message_center::NOTIFICATION_TYPE_SIMPLE, id,
-      /*title=*/base::string16(),
-      /*message=*/base::string16(),
+      /*title=*/std::u16string(),
+      /*message=*/std::u16string(),
       /*icon=*/gfx::Image(),
       l10n_util::GetStringUTF16(IDS_NEARBY_NOTIFICATION_SOURCE),
       /*origin_url=*/GURL(),
@@ -53,13 +58,8 @@ message_center::Notification CreateNearbyNotification(const std::string& id) {
       /*optional_fields=*/{},
       /*delegate=*/nullptr);
   notification.set_vector_small_image(kNearbyShareIcon);
-
-  // TODO(crbug.com/1102348): Also show settings for other platforms once there
-  // is a nearby settings page in Chrome browser.
-#if defined(OS_CHROMEOS)
   notification.set_settings_button_handler(
       message_center::SettingsButtonHandler::DELEGATE);
-#endif
 
   return notification;
 }
@@ -90,54 +90,102 @@ TextAttachment::Type GetCommonTextAttachmentType(
   return type;
 }
 
-int GetFileAttachmentsStringId(const std::vector<FileAttachment>& files) {
+int GetFileAttachmentsCapitalizedStringId(
+    const std::vector<FileAttachment>& files) {
   switch (GetCommonFileAttachmentType(files)) {
     case FileAttachment::Type::kApp:
-      return IDS_NEARBY_FILE_ATTACHMENTS_APPS;
+      return IDS_NEARBY_FILE_ATTACHMENTS_CAPITALIZED_APPS;
     case FileAttachment::Type::kImage:
-      return IDS_NEARBY_FILE_ATTACHMENTS_IMAGES;
+      return IDS_NEARBY_FILE_ATTACHMENTS_CAPITALIZED_IMAGES;
     case FileAttachment::Type::kUnknown:
-      return IDS_NEARBY_FILE_ATTACHMENTS_UNKNOWN;
+      return IDS_NEARBY_FILE_ATTACHMENTS_CAPITALIZED_UNKNOWN;
     case FileAttachment::Type::kVideo:
-      return IDS_NEARBY_FILE_ATTACHMENTS_VIDEOS;
+      return IDS_NEARBY_FILE_ATTACHMENTS_CAPITALIZED_VIDEOS;
     default:
-      return IDS_NEARBY_UNKNOWN_ATTACHMENTS;
+      return IDS_NEARBY_CAPITALIZED_UNKNOWN_ATTACHMENTS;
   }
 }
 
-int GetTextAttachmentsStringId(const std::vector<TextAttachment>& texts) {
+int GetFileAttachmentsNotCapitalizedStringId(
+    const std::vector<FileAttachment>& files) {
+  switch (GetCommonFileAttachmentType(files)) {
+    case FileAttachment::Type::kApp:
+      return IDS_NEARBY_FILE_ATTACHMENTS_NOT_CAPITALIZED_APPS;
+    case FileAttachment::Type::kImage:
+      return IDS_NEARBY_FILE_ATTACHMENTS_NOT_CAPITALIZED_IMAGES;
+    case FileAttachment::Type::kUnknown:
+      return IDS_NEARBY_FILE_ATTACHMENTS_NOT_CAPITALIZED_UNKNOWN;
+    case FileAttachment::Type::kVideo:
+      return IDS_NEARBY_FILE_ATTACHMENTS_NOT_CAPITALIZED_VIDEOS;
+    default:
+      return IDS_NEARBY_NOT_CAPITALIZED_UNKNOWN_ATTACHMENTS;
+  }
+}
+
+int GetTextAttachmentsCapitalizedStringId(
+    const std::vector<TextAttachment>& texts) {
   switch (GetCommonTextAttachmentType(texts)) {
     case TextAttachment::Type::kAddress:
-      return IDS_NEARBY_TEXT_ATTACHMENTS_ADDRESSES;
+      return IDS_NEARBY_TEXT_ATTACHMENTS_CAPITALIZED_ADDRESSES;
     case TextAttachment::Type::kPhoneNumber:
-      return IDS_NEARBY_TEXT_ATTACHMENTS_PHONE_NUMBERS;
+      return IDS_NEARBY_TEXT_ATTACHMENTS_CAPITALIZED_PHONE_NUMBERS;
     case TextAttachment::Type::kText:
-      return IDS_NEARBY_TEXT_ATTACHMENTS_UNKNOWN;
+      return IDS_NEARBY_TEXT_ATTACHMENTS_CAPITALIZED_UNKNOWN;
     case TextAttachment::Type::kUrl:
-      return IDS_NEARBY_TEXT_ATTACHMENTS_LINKS;
+      return IDS_NEARBY_TEXT_ATTACHMENTS_CAPITALIZED_LINKS;
     default:
-      return IDS_NEARBY_UNKNOWN_ATTACHMENTS;
+      return IDS_NEARBY_TEXT_ATTACHMENTS_CAPITALIZED_UNKNOWN;
   }
 }
 
-base::string16 GetAttachmentsString(const ShareTarget& share_target) {
+int GetTextAttachmentsNotCapitalizedStringId(
+    const std::vector<TextAttachment>& texts) {
+  switch (GetCommonTextAttachmentType(texts)) {
+    case TextAttachment::Type::kAddress:
+      return IDS_NEARBY_TEXT_ATTACHMENTS_NOT_CAPITALIZED_ADDRESSES;
+    case TextAttachment::Type::kPhoneNumber:
+      return IDS_NEARBY_TEXT_ATTACHMENTS_NOT_CAPITALIZED_PHONE_NUMBERS;
+    case TextAttachment::Type::kText:
+      return IDS_NEARBY_TEXT_ATTACHMENTS_NOT_CAPITALIZED_UNKNOWN;
+    case TextAttachment::Type::kUrl:
+      return IDS_NEARBY_TEXT_ATTACHMENTS_NOT_CAPITALIZED_LINKS;
+    default:
+      return IDS_NEARBY_TEXT_ATTACHMENTS_NOT_CAPITALIZED_UNKNOWN;
+  }
+}
+
+std::u16string GetAttachmentsString(const ShareTarget& share_target,
+                                    bool use_capitalized_attachments) {
   size_t file_count = share_target.file_attachments.size();
   size_t text_count = share_target.text_attachments.size();
-  int resource_id = IDS_NEARBY_UNKNOWN_ATTACHMENTS;
+  int resource_id = use_capitalized_attachments
+                        ? IDS_NEARBY_CAPITALIZED_UNKNOWN_ATTACHMENTS
+                        : IDS_NEARBY_NOT_CAPITALIZED_UNKNOWN_ATTACHMENTS;
 
   if (file_count > 0 && text_count == 0)
-    resource_id = GetFileAttachmentsStringId(share_target.file_attachments);
+    resource_id = use_capitalized_attachments
+                      ? GetFileAttachmentsCapitalizedStringId(
+                            share_target.file_attachments)
+                      : GetFileAttachmentsNotCapitalizedStringId(
+                            share_target.file_attachments);
 
   if (text_count > 0 && file_count == 0)
-    resource_id = GetTextAttachmentsStringId(share_target.text_attachments);
+    resource_id = use_capitalized_attachments
+                      ? GetTextAttachmentsCapitalizedStringId(
+                            share_target.text_attachments)
+                      : GetTextAttachmentsNotCapitalizedStringId(
+                            share_target.text_attachments);
 
   return l10n_util::GetPluralStringFUTF16(resource_id, text_count + file_count);
 }
 
-base::string16 FormatNotificationTitle(const ShareTarget& share_target,
-                                       int resource_id) {
-  base::string16 attachments = GetAttachmentsString(share_target);
-  base::string16 device_name = base::ASCIIToUTF16(share_target.device_name);
+std::u16string FormatNotificationTitle(const ShareTarget& share_target,
+                                       int resource_id,
+                                       bool use_capitalized_attachments) {
+  std::u16string attachments =
+      GetAttachmentsString(share_target, use_capitalized_attachments);
+
+  std::u16string device_name = base::UTF8ToUTF16(share_target.device_name);
   size_t attachment_count = share_target.file_attachments.size() +
                             share_target.text_attachments.size();
 
@@ -146,45 +194,63 @@ base::string16 FormatNotificationTitle(const ShareTarget& share_target,
       {attachments, device_name}, /*offsets=*/nullptr);
 }
 
-base::string16 GetProgressNotificationTitle(const ShareTarget& share_target) {
+std::u16string GetProgressNotificationTitle(const ShareTarget& share_target) {
   return FormatNotificationTitle(
-      share_target, share_target.is_incoming
-                        ? IDS_NEARBY_NOTIFICATION_RECEIVE_PROGRESS_TITLE
-                        : IDS_NEARBY_NOTIFICATION_SEND_PROGRESS_TITLE);
+      share_target,
+      share_target.is_incoming ? IDS_NEARBY_NOTIFICATION_RECEIVE_PROGRESS_TITLE
+                               : IDS_NEARBY_NOTIFICATION_SEND_PROGRESS_TITLE,
+      /*use_capitalized_attachments=*/false);
 }
 
-base::string16 GetSuccessNotificationTitle(const ShareTarget& share_target) {
+std::u16string GetSuccessNotificationTitle(const ShareTarget& share_target) {
   return FormatNotificationTitle(
-      share_target, share_target.is_incoming
-                        ? IDS_NEARBY_NOTIFICATION_RECEIVE_SUCCESS_TITLE
-                        : IDS_NEARBY_NOTIFICATION_SEND_SUCCESS_TITLE);
+      share_target,
+      share_target.is_incoming ? IDS_NEARBY_NOTIFICATION_RECEIVE_SUCCESS_TITLE
+                               : IDS_NEARBY_NOTIFICATION_SEND_SUCCESS_TITLE,
+      /*use_capitalized_attachments=*/true);
 }
 
-base::string16 GetFailureNotificationTitle(const ShareTarget& share_target) {
+std::u16string GetFailureNotificationTitle(const ShareTarget& share_target) {
   return FormatNotificationTitle(
-      share_target, share_target.is_incoming
-                        ? IDS_NEARBY_NOTIFICATION_RECEIVE_FAILURE_TITLE
-                        : IDS_NEARBY_NOTIFICATION_SEND_FAILURE_TITLE);
+      share_target,
+      share_target.is_incoming ? IDS_NEARBY_NOTIFICATION_RECEIVE_FAILURE_TITLE
+                               : IDS_NEARBY_NOTIFICATION_SEND_FAILURE_TITLE,
+      /*use_capitalized_attachments=*/false);
 }
 
-base::string16 GetConnectionRequestNotificationMessage(
+base::Optional<std::u16string> GetFailureNotificationMessage(
+    TransferMetadata::Status status) {
+  switch (status) {
+    case TransferMetadata::Status::kTimedOut:
+      return l10n_util::GetStringUTF16(IDS_NEARBY_ERROR_TIME_OUT);
+    case TransferMetadata::Status::kNotEnoughSpace:
+      return l10n_util::GetStringUTF16(IDS_NEARBY_ERROR_NOT_ENOUGH_SPACE);
+    case TransferMetadata::Status::kUnsupportedAttachmentType:
+      return l10n_util::GetStringUTF16(IDS_NEARBY_ERROR_UNSUPPORTED_FILE_TYPE);
+    default:
+      return base::nullopt;
+  }
+}
+
+std::u16string GetConnectionRequestNotificationMessage(
     const ShareTarget& share_target,
     const TransferMetadata& transfer_metadata) {
-  base::string16 attachments = GetAttachmentsString(share_target);
-  base::string16 device_name = base::ASCIIToUTF16(share_target.device_name);
+  std::u16string attachments =
+      GetAttachmentsString(share_target, /*use_capitalized_attachments=*/false);
+  std::u16string device_name = base::UTF8ToUTF16(share_target.device_name);
 
   size_t attachment_count = share_target.file_attachments.size() +
                             share_target.text_attachments.size();
-  base::string16 message = base::ReplaceStringPlaceholders(
+  std::u16string message = base::ReplaceStringPlaceholders(
       l10n_util::GetPluralStringFUTF16(
           IDS_NEARBY_NOTIFICATION_CONNECTION_REQUEST_MESSAGE, attachment_count),
       {device_name, attachments}, /*offsets=*/nullptr);
 
   if (transfer_metadata.token()) {
-    base::string16 token = l10n_util::GetStringFUTF16(
+    std::u16string token = l10n_util::GetStringFUTF16(
         IDS_NEARBY_SECURE_CONNECTION_ID,
         base::UTF8ToUTF16(*transfer_metadata.token()));
-    message = base::StrCat({message, base::UTF8ToUTF16("\n"), token});
+    message = base::StrCat({message, u"\n", token});
   }
 
   return message;
@@ -197,8 +263,15 @@ gfx::Image GetImageFromShareTarget(const ShareTarget& share_target) {
 
 NearbyNotificationManager::ReceivedContentType GetReceivedContentType(
     const ShareTarget& share_target) {
-  if (!share_target.text_attachments.empty())
+  if (!share_target.text_attachments.empty()) {
+    const TextAttachment& file = share_target.text_attachments[0];
+    if (share_target.text_attachments.size() == 1 &&
+        file.type() == sharing::mojom::TextMetadata::Type::kUrl) {
+      return NearbyNotificationManager::ReceivedContentType::kSingleUrl;
+    }
+
     return NearbyNotificationManager::ReceivedContentType::kText;
+  }
 
   if (share_target.file_attachments.size() != 1)
     return NearbyNotificationManager::ReceivedContentType::kFiles;
@@ -212,8 +285,10 @@ NearbyNotificationManager::ReceivedContentType GetReceivedContentType(
 
 class ProgressNotificationDelegate : public NearbyNotificationDelegate {
  public:
-  explicit ProgressNotificationDelegate(NearbyNotificationManager* manager)
-      : manager_(manager) {}
+  explicit ProgressNotificationDelegate(NearbyNotificationManager* manager,
+                                        bool awaiting_remote_acceptance)
+      : manager_(manager),
+        awaiting_remote_acceptance_(awaiting_remote_acceptance) {}
   ~ProgressNotificationDelegate() override = default;
 
   // NearbyNotificationDelegate:
@@ -224,23 +299,36 @@ class ProgressNotificationDelegate : public NearbyNotificationDelegate {
       return;
     // Clicking on the only (cancel) button cancels the transfer.
     DCHECK_EQ(0, *action_index);
-    manager_->CancelTransfer();
+
+    // In the receiving case, the progress notification is showed after the
+    // transfer is accepted, but before the |TransferMetadata::Status| is
+    // actually |kInProgress|. In this case, it is more appropriate to reject
+    // the transfer, but as far as the user is concerned, it looks like a
+    // cancellation.
+    if (awaiting_remote_acceptance_)
+      manager_->RejectTransfer();
+    else
+      manager_->CancelTransfer();
   }
 
   void OnClose(const std::string& notification_id) override {
-    manager_->CancelTransfer();
+    if (awaiting_remote_acceptance_)
+      manager_->RejectTransfer();
+    else
+      manager_->CancelTransfer();
   }
 
  private:
   NearbyNotificationManager* manager_;
+  bool awaiting_remote_acceptance_ = false;
 };
 
 class ConnectionRequestNotificationDelegate
     : public NearbyNotificationDelegate {
  public:
-  ConnectionRequestNotificationDelegate(NearbyNotificationManager* manager,
-                                        bool has_accept_button)
-      : manager_(manager), has_accept_button_(has_accept_button) {}
+  explicit ConnectionRequestNotificationDelegate(
+      NearbyNotificationManager* manager)
+      : manager_(manager) {}
   ~ConnectionRequestNotificationDelegate() override = default;
 
   // NearbyNotificationDelegate:
@@ -249,12 +337,6 @@ class ConnectionRequestNotificationDelegate
     // Clicking on the notification is a noop.
     if (!action_index)
       return;
-
-    if (!has_accept_button_) {
-      DCHECK_EQ(0, *action_index);
-      manager_->RejectTransfer();
-      return;
-    }
 
     switch (*action_index) {
       case 0:
@@ -275,7 +357,6 @@ class ConnectionRequestNotificationDelegate
 
  private:
   NearbyNotificationManager* manager_;
-  bool has_accept_button_;
 };
 
 class ReceivedImageDecoder : public ImageDecoder::ImageRequest {
@@ -351,16 +432,21 @@ class SuccessNotificationDelegate : public NearbyNotificationDelegate {
   // NearbyNotificationDelegate:
   void OnClick(const std::string& notification_id,
                const base::Optional<int>& action_index) override {
-    // Ignore clicks on notification body.
-    if (!action_index)
-      return;
-
     switch (type_) {
       case NearbyNotificationManager::ReceivedContentType::kText:
-        DCHECK_EQ(0, *action_index);
-        CopyTextToClipboard();
+        if (action_index.has_value() && action_index.value() == 0) {
+          // Don't overwrite clipboard if user clicks notification body
+          CopyTextToClipboard();
+        }
+        break;
+      case NearbyNotificationManager::ReceivedContentType::kSingleUrl:
+        OpenTextLink();
         break;
       case NearbyNotificationManager::ReceivedContentType::kSingleImage:
+        if (!action_index.has_value()) {
+          OpenDownloadsFolder();
+          break;
+        }
         switch (*action_index) {
           case 0:
             OpenDownloadsFolder();
@@ -374,7 +460,6 @@ class SuccessNotificationDelegate : public NearbyNotificationDelegate {
         }
         break;
       case NearbyNotificationManager::ReceivedContentType::kFiles:
-        DCHECK_EQ(0, *action_index);
         OpenDownloadsFolder();
         break;
     }
@@ -399,6 +484,16 @@ class SuccessNotificationDelegate : public NearbyNotificationDelegate {
       std::move(testing_callback_)
           .Run(NearbyNotificationManager::SuccessNotificationAction::
                    kOpenDownloads);
+    }
+  }
+
+  void OpenTextLink() {
+    const std::string& url = share_target_.text_attachments[0].text_body();
+    manager_->OpenURL(GURL(url));
+
+    if (testing_callback_) {
+      std::move(testing_callback_)
+          .Run(NearbyNotificationManager::SuccessNotificationAction::kOpenUrl);
     }
   }
 
@@ -477,6 +572,24 @@ void UpdateOnboardingDismissedTime(PrefService* pref_service) {
                         base::Time::Now());
 }
 
+bool ShouldClearNotification(
+    base::Optional<TransferMetadata::Status> last_status,
+    TransferMetadata::Status new_status) {
+  if (!last_status)
+    return true;
+
+  // While receiving and waiting for the sender to accept, we are showing a
+  // progress notification with 0% progress. We need not close the
+  // progress notification when we move to showing determinate progress.
+  if (*last_status == TransferMetadata::Status::kAwaitingRemoteAcceptance &&
+      new_status == TransferMetadata::Status::kInProgress)
+    return false;
+
+  // In all other cases, if the status has changed, the previous notification
+  // should be cleared.
+  return *last_status != new_status;
+}
+
 }  // namespace
 
 // static
@@ -495,6 +608,7 @@ NearbyNotificationManager::NearbyNotificationManager(
   DCHECK(notification_display_service_);
   DCHECK(nearby_service_);
   DCHECK(pref_service_);
+  nearby_service_->AddObserver(this);
   nearby_service_->RegisterReceiveSurface(
       this, NearbySharingService::ReceiveSurfaceState::kBackground);
   nearby_service_->RegisterSendSurface(
@@ -502,6 +616,7 @@ NearbyNotificationManager::NearbyNotificationManager(
 }
 
 NearbyNotificationManager::~NearbyNotificationManager() {
+  nearby_service_->RemoveObserver(this);
   nearby_service_->UnregisterReceiveSurface(this);
   nearby_service_->UnregisterSendSurface(this, this);
 }
@@ -509,28 +624,41 @@ NearbyNotificationManager::~NearbyNotificationManager() {
 void NearbyNotificationManager::OnTransferUpdate(
     const ShareTarget& share_target,
     const TransferMetadata& transfer_metadata) {
-  NS_LOG(VERBOSE) << __func__ << ": Nearby notification manager: "
-                  << "Transfer update for share target with ID "
-                  << share_target.id << ": "
-                  << TransferMetadata::StatusToString(
-                         transfer_metadata.status());
-
   if (!share_target_)
     share_target_ = share_target;
   DCHECK_EQ(share_target_->id, share_target.id);
+
+  if (ShouldClearNotification(last_transfer_status_,
+                              transfer_metadata.status())) {
+    // Close any previous notifications, to allow subsequent high-priority
+    // notifications to pop up.
+    CloseTransfer();
+  }
+  last_transfer_status_ = transfer_metadata.status();
 
   switch (transfer_metadata.status()) {
     case TransferMetadata::Status::kInProgress:
       ShowProgress(share_target, transfer_metadata);
       break;
-    case TransferMetadata::Status::kRejected:
+    case TransferMetadata::Status::kCancelled:
+      // Only show the notification if the remote cancelled.
+      if (!nearby_service_->DidLocalUserCancelTransfer(share_target))
+        ShowCancelled(share_target);
+      break;
     case TransferMetadata::Status::kAwaitingRemoteAcceptanceFailed:
     case TransferMetadata::Status::kExternalProviderLaunched:
-    case TransferMetadata::Status::kCancelled:
-      CloseTransfer();
+      // Any previous notifications have been closed with the status change
+      // check above that called CloseTransfer(). No notification is currently
+      // shown for these statuses, so break.
+      break;
+    case TransferMetadata::Status::kAwaitingRemoteAcceptance:
+      // Only incoming transfers are handled via notifications.
+      if (share_target.is_incoming)
+        // Show a progress notification with 0% progress while
+        // waiting for the sender to accept.
+        ShowProgress(share_target, transfer_metadata);
       break;
     case TransferMetadata::Status::kAwaitingLocalConfirmation:
-    case TransferMetadata::Status::kAwaitingRemoteAcceptance:
       // Only incoming transfers are handled via notifications.
       if (share_target.is_incoming)
         ShowConnectionRequest(share_target, transfer_metadata);
@@ -538,20 +666,37 @@ void NearbyNotificationManager::OnTransferUpdate(
     case TransferMetadata::Status::kComplete:
       ShowSuccess(share_target);
       break;
+    case TransferMetadata::Status::kRejected:
     case TransferMetadata::Status::kTimedOut:
     case TransferMetadata::Status::kFailed:
     case TransferMetadata::Status::kNotEnoughSpace:
     case TransferMetadata::Status::kUnsupportedAttachmentType:
-      ShowFailure(share_target);
+    case TransferMetadata::Status::kDecodeAdvertisementFailed:
+    case TransferMetadata::Status::kMissingTransferUpdateCallback:
+    case TransferMetadata::Status::kMissingShareTarget:
+    case TransferMetadata::Status::kMissingEndpointId:
+    case TransferMetadata::Status::kMissingPayloads:
+    case TransferMetadata::Status::kPairedKeyVerificationFailed:
+    case TransferMetadata::Status::kInvalidIntroductionFrame:
+    case TransferMetadata::Status::kIncompletePayloads:
+    case TransferMetadata::Status::kFailedToCreateShareTarget:
+    case TransferMetadata::Status::kFailedToInitiateOutgoingConnection:
+    case TransferMetadata::Status::kFailedToReadOutgoingConnectionResponse:
+    case TransferMetadata::Status::kUnexpectedDisconnection:
+      ShowFailure(share_target, transfer_metadata);
       break;
-    default:
-      if (transfer_metadata.is_final_status())
-        ShowFailure(share_target);
+    case TransferMetadata::Status::kUnknown:
+    case TransferMetadata::Status::kConnecting:
+    case TransferMetadata::Status::kMediaUnavailable:
+    case TransferMetadata::Status::kMediaDownloading:
+      // Ignore
       break;
   }
 
-  if (transfer_metadata.is_final_status())
+  if (transfer_metadata.is_final_status()) {
     share_target_.reset();
+    last_transfer_status_.reset();
+  }
 }
 
 void NearbyNotificationManager::OnShareTargetDiscovered(
@@ -561,6 +706,16 @@ void NearbyNotificationManager::OnShareTargetDiscovered(
 
 void NearbyNotificationManager::OnShareTargetLost(ShareTarget share_target) {
   // Nothing to do here.
+}
+
+void NearbyNotificationManager::OnNearbyProcessStopped() {
+  if (share_target_ && last_transfer_status_) {
+    ShowFailure(
+        *share_target_,
+        TransferMetadataBuilder().set_status(*last_transfer_status_).build());
+  }
+  share_target_ = base::nullopt;
+  last_transfer_status_ = base::nullopt;
 }
 
 void NearbyNotificationManager::ShowProgress(
@@ -573,19 +728,22 @@ void NearbyNotificationManager::ShowProgress(
   notification.set_type(message_center::NOTIFICATION_TYPE_PROGRESS);
   notification.set_title(GetProgressNotificationTitle(share_target));
   notification.set_never_timeout(true);
+  notification.set_priority(message_center::NotificationPriority::MAX_PRIORITY);
 
-  // Show indeterminate progress while waiting for remote device to accept.
+  // Show 0% progress while waiting for remote device to accept.
   if (transfer_metadata.status() == TransferMetadata::Status::kInProgress)
     notification.set_progress(transfer_metadata.progress());
   else
-    notification.set_progress(-1);
+    notification.set_progress(0);
 
   std::vector<message_center::ButtonInfo> notification_actions;
   notification_actions.emplace_back(l10n_util::GetStringUTF16(IDS_APP_CANCEL));
   notification.set_buttons(notification_actions);
 
   delegate_map_[notification.id()] =
-      std::make_unique<ProgressNotificationDelegate>(this);
+      std::make_unique<ProgressNotificationDelegate>(
+          this, /*awaiting_remote_acceptance=*/transfer_metadata.status() ==
+                    TransferMetadata::Status::kAwaitingRemoteAcceptance);
 
   notification_display_service_->Display(
       NotificationHandler::Type::NEARBY_SHARE, notification,
@@ -605,23 +763,17 @@ void NearbyNotificationManager::ShowConnectionRequest(
       GetConnectionRequestNotificationMessage(share_target, transfer_metadata));
   notification.set_icon(GetImageFromShareTarget(share_target));
   notification.set_never_timeout(true);
-
-  bool show_accept_button =
-      transfer_metadata.status() ==
-      TransferMetadata::Status::kAwaitingLocalConfirmation;
+  notification.set_priority(message_center::NotificationPriority::MAX_PRIORITY);
 
   std::vector<message_center::ButtonInfo> notification_actions;
-  if (show_accept_button) {
-    notification_actions.emplace_back(
-        l10n_util::GetStringUTF16(IDS_NEARBY_NOTIFICATION_RECEIVE_ACTION));
-  }
+  notification_actions.emplace_back(
+      l10n_util::GetStringUTF16(IDS_NEARBY_NOTIFICATION_ACCEPT_ACTION));
   notification_actions.emplace_back(
       l10n_util::GetStringUTF16(IDS_NEARBY_NOTIFICATION_DECLINE_ACTION));
   notification.set_buttons(notification_actions);
 
   delegate_map_[notification.id()] =
-      std::make_unique<ConnectionRequestNotificationDelegate>(
-          this, show_accept_button);
+      std::make_unique<ConnectionRequestNotificationDelegate>(this);
 
   notification_display_service_->Display(
       NotificationHandler::Type::NEARBY_SHARE, notification,
@@ -704,6 +856,10 @@ void NearbyNotificationManager::ShowIncomingSuccess(
       notification_actions.emplace_back(l10n_util::GetStringUTF16(
           IDS_NEARBY_NOTIFICATION_ACTION_COPY_TO_CLIPBOARD));
       break;
+    case ReceivedContentType::kSingleUrl:
+      notification_actions.emplace_back(
+          l10n_util::GetStringUTF16(IDS_NEARBY_NOTIFICATION_ACTION_OPEN_URL));
+      break;
     case ReceivedContentType::kSingleImage:
       notification_actions.emplace_back(l10n_util::GetStringUTF16(
           IDS_NEARBY_NOTIFICATION_ACTION_OPEN_FOLDER));
@@ -725,14 +881,48 @@ void NearbyNotificationManager::ShowIncomingSuccess(
   notification_display_service_->Display(
       NotificationHandler::Type::NEARBY_SHARE, notification,
       /*metadata=*/nullptr);
+
+  ash::HoldingSpaceKeyedService* holding_space_keyed_service =
+      ash::HoldingSpaceKeyedServiceFactory::GetInstance()->GetService(profile_);
+  if (holding_space_keyed_service) {
+    for (const auto& file : share_target.file_attachments) {
+      if (file.file_path().has_value())
+        holding_space_keyed_service->AddNearbyShare(file.file_path().value());
+    }
+  }
 }
 
-void NearbyNotificationManager::ShowFailure(const ShareTarget& share_target) {
+void NearbyNotificationManager::ShowFailure(
+    const ShareTarget& share_target,
+    const TransferMetadata& transfer_metadata) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   message_center::Notification notification =
       CreateNearbyNotification(kNearbyNotificationId);
   notification.set_title(GetFailureNotificationTitle(share_target));
+
+  base::Optional<std::u16string> message =
+      GetFailureNotificationMessage(transfer_metadata.status());
+  if (message) {
+    notification.set_message(*message);
+  }
+
+  delegate_map_.erase(kNearbyNotificationId);
+
+  notification_display_service_->Display(
+      NotificationHandler::Type::NEARBY_SHARE, notification,
+      /*metadata=*/nullptr);
+}
+
+void NearbyNotificationManager::ShowCancelled(const ShareTarget& share_target) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  message_center::Notification notification =
+      CreateNearbyNotification(kNearbyNotificationId);
+
+  notification.set_title(base::ReplaceStringPlaceholders(
+      l10n_util::GetStringUTF16(IDS_NEARBY_NOTIFICATION_SENDER_CANCELLED),
+      {base::UTF8ToUTF16(share_target.device_name)}, /*offsets=*/nullptr));
 
   delegate_map_.erase(kNearbyNotificationId);
 
@@ -760,6 +950,10 @@ NearbyNotificationDelegate* NearbyNotificationManager::GetNotificationDelegate(
     return nullptr;
 
   return iter->second.get();
+}
+
+void NearbyNotificationManager::OpenURL(GURL url) {
+  nearby_service_->OpenURL(url);
 }
 
 void NearbyNotificationManager::CancelTransfer() {

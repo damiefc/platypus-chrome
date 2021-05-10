@@ -6,12 +6,12 @@
 #include <stdint.h>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chromeos/dbus/shill/fake_shill_third_party_vpn_driver_client.h"
@@ -77,11 +77,11 @@ class TestShillThirdPartyVpnDriverClient
     : public FakeShillThirdPartyVpnDriverClient {
  public:
   void SetParameters(const std::string& object_path_value,
-                     const base::DictionaryValue& parameters,
+                     const base::Value& parameters,
                      StringCallback callback,
                      ErrorCallback error_callback) override {
     set_parameters_counter_++;
-    parameters_ = parameters.DeepCopy();
+    parameters_ = parameters.Clone();
     FakeShillThirdPartyVpnDriverClient::SetParameters(
         object_path_value, parameters, std::move(callback),
         std::move(error_callback));
@@ -110,7 +110,7 @@ class TestShillThirdPartyVpnDriverClient
   }
 
   int set_parameters_counter_ = 0;
-  base::DictionaryValue* parameters_ = nullptr;
+  base::Value parameters_;
   int update_connection_state_counter_ = 0;
   uint32_t connection_state_;
   int send_packet_counter_ = 0;
@@ -143,9 +143,10 @@ class VpnProviderApiTest : public extensions::ExtensionApiTest {
     content::RunAllPendingInMessageLoop();
   }
 
-  bool RunExtensionTest(const std::string& test_name) {
+  bool RunTest(const std::string& test_name) {
     GURL url = extension_->GetResourceURL("basic.html?#" + test_name);
-    return RunExtensionSubtest("vpn_provider", url.spec());
+    return RunExtensionTest(
+        {.name = "vpn_provider", .page_url = url.spec().c_str()});
   }
 
   std::string GetKey(const std::string& config_name) {
@@ -187,7 +188,15 @@ class VpnProviderApiTest : public extensions::ExtensionApiTest {
   void TriggerInternalRemove() {
     NetworkHandler::Get()->network_configuration_handler()->RemoveConfiguration(
         GetSingleServicePath(), /*remove_confirmer=*/base::nullopt,
-        base::DoNothing(), base::Bind(DoNothingFailureCallback));
+        base::DoNothing(), base::BindOnce(DoNothingFailureCallback));
+  }
+
+  bool HasService(const std::string& service_path) const {
+    std::string profile_path;
+    base::Value properties =
+        ShillProfileClient::Get()->GetTestInterface()->GetService(
+            service_path, &profile_path);
+    return properties.is_dict();
   }
 
  protected:
@@ -201,24 +210,20 @@ class VpnProviderApiTest : public extensions::ExtensionApiTest {
 IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, ComboSuite) {
   LoadVpnExtension();
   AddNetworkProfileForUser();
-  EXPECT_TRUE(RunExtensionTest("comboSuite"));
+  EXPECT_TRUE(RunTest("comboSuite"));
 }
 
 IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CreateConfigWithoutNetworkProfile) {
   LoadVpnExtension();
-  EXPECT_TRUE(RunExtensionTest("createConfigWithoutNetworkProfile"));
+  EXPECT_TRUE(RunTest("createConfigWithoutNetworkProfile"));
 }
 
 IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CreateConfig) {
   LoadVpnExtension();
   AddNetworkProfileForUser();
-  EXPECT_TRUE(RunExtensionTest("createConfigSuccess"));
+  EXPECT_TRUE(RunTest("createConfigSuccess"));
   EXPECT_TRUE(DoesConfigExist(kTestConfig));
-  const std::string service_path = GetSingleServicePath();
-  std::string profile_path;
-  base::DictionaryValue properties;
-  EXPECT_TRUE(ShillProfileClient::Get()->GetTestInterface()->GetService(
-      service_path, &profile_path, &properties));
+  EXPECT_TRUE(HasService(GetSingleServicePath()));
 }
 
 IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, DestroyConfig) {
@@ -227,15 +232,11 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, DestroyConfig) {
   EXPECT_TRUE(CreateConfigForTest(kTestConfig));
   EXPECT_TRUE(DoesConfigExist(kTestConfig));
   const std::string service_path = GetSingleServicePath();
-  std::string profile_path;
-  base::DictionaryValue properties;
-  EXPECT_TRUE(ShillProfileClient::Get()->GetTestInterface()->GetService(
-      service_path, &profile_path, &properties));
+  EXPECT_TRUE(HasService(service_path));
 
-  EXPECT_TRUE(RunExtensionTest("destroyConfigSuccess"));
+  EXPECT_TRUE(RunTest("destroyConfigSuccess"));
   EXPECT_FALSE(DoesConfigExist(kTestConfig));
-  EXPECT_FALSE(ShillProfileClient::Get()->GetTestInterface()->GetService(
-      service_path, &profile_path, &properties));
+  EXPECT_FALSE(HasService(service_path));
 }
 
 IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, DestroyConnectedConfig) {
@@ -245,10 +246,7 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, DestroyConnectedConfig) {
   EXPECT_TRUE(CreateConfigForTest(kTestConfig));
   EXPECT_TRUE(DoesConfigExist(kTestConfig));
   const std::string service_path = GetSingleServicePath();
-  std::string profile_path;
-  base::DictionaryValue properties;
-  EXPECT_TRUE(ShillProfileClient::Get()->GetTestInterface()->GetService(
-      service_path, &profile_path, &properties));
+  EXPECT_TRUE(HasService(service_path));
   EXPECT_FALSE(IsConfigConnected());
 
   const std::string object_path = shill::kObjectPathBase + GetKey(kTestConfig);
@@ -256,14 +254,13 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, DestroyConnectedConfig) {
                                   api_vpn::PLATFORM_MESSAGE_CONNECTED);
   EXPECT_TRUE(IsConfigConnected());
 
-  EXPECT_TRUE(RunExtensionTest("destroyConnectedConfigSetup"));
+  EXPECT_TRUE(RunTest("destroyConnectedConfigSetup"));
 
   extensions::ResultCatcher catcher;
 
   EXPECT_TRUE(DestroyConfigForTest(kTestConfig));
   EXPECT_FALSE(DoesConfigExist(kTestConfig));
-  EXPECT_FALSE(ShillProfileClient::Get()->GetTestInterface()->GetService(
-      service_path, &profile_path, &properties));
+  EXPECT_FALSE(HasService(service_path));
 
   ASSERT_TRUE(catcher.GetNextResult());
 }
@@ -271,13 +268,9 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, DestroyConnectedConfig) {
 IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, VpnSuccess) {
   LoadVpnExtension();
   AddNetworkProfileForUser();
-  EXPECT_TRUE(RunExtensionTest("createConfigConnectAndDisconnect"));
+  EXPECT_TRUE(RunTest("createConfigConnectAndDisconnect"));
   EXPECT_TRUE(DoesConfigExist(kTestConfig));
-  const std::string service_path = GetSingleServicePath();
-  std::string profile_path;
-  base::DictionaryValue properties;
-  EXPECT_TRUE(ShillProfileClient::Get()->GetTestInterface()->GetService(
-      service_path, &profile_path, &properties));
+  EXPECT_TRUE(HasService(GetSingleServicePath()));
   EXPECT_FALSE(IsConfigConnected());
 
   const std::string object_path = shill::kObjectPathBase + GetKey(kTestConfig);
@@ -296,10 +289,10 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, VpnSuccess) {
   EXPECT_EQ(api_vpn::VPN_CONNECTION_STATE_CONNECTED,
             test_client_->update_connection_state_counter_);
   for (size_t i = 0; i < base::size(kParameterValues); ++i) {
-    std::string value;
-    EXPECT_TRUE(
-        test_client_->parameters_->GetString(kParameterKeys[i], &value));
-    EXPECT_EQ(kParameterValues[i], value);
+    const std::string* value =
+        test_client_->parameters_.FindStringKey(kParameterKeys[i]);
+    ASSERT_TRUE(value);
+    EXPECT_EQ(kParameterValues[i], *value);
   }
   const char kPacket[] = "feebdaed";
   std::vector<char> packet(&kPacket[0], &kPacket[8]);
@@ -319,7 +312,7 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, VpnSuccess) {
 IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, ConfigInternalRemove) {
   LoadVpnExtension();
   AddNetworkProfileForUser();
-  EXPECT_TRUE(RunExtensionTest("configInternalRemove"));
+  EXPECT_TRUE(RunTest("configInternalRemove"));
   EXPECT_TRUE(DoesConfigExist(kTestConfig));
 
   extensions::ResultCatcher catcher;
@@ -331,7 +324,7 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, ConfigInternalRemove) {
 IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CheckEvents) {
   LoadVpnExtension();
   AddNetworkProfileForUser();
-  EXPECT_TRUE(RunExtensionTest("expectEvents"));
+  EXPECT_TRUE(RunTest("expectEvents"));
   EXPECT_TRUE(DoesConfigExist(kTestConfig));
 
   extensions::ResultCatcher catcher;
@@ -358,8 +351,8 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, ConfigPersistence) {
   NetworkHandler::Get()
       ->network_configuration_handler()
       ->CreateShillConfiguration(properties,
-                                 base::Bind(DoNothingSuccessCallback),
-                                 base::Bind(DoNothingFailureCallback));
+                                 base::BindOnce(DoNothingSuccessCallback),
+                                 base::BindOnce(DoNothingFailureCallback));
   content::RunAllPendingInMessageLoop();
   EXPECT_TRUE(DoesConfigExist(kTestConfig));
 }
@@ -367,33 +360,26 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, ConfigPersistence) {
 IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CreateUninstall) {
   LoadVpnExtension();
   AddNetworkProfileForUser();
-  EXPECT_TRUE(RunExtensionTest("createConfigSuccess"));
+  EXPECT_TRUE(RunTest("createConfigSuccess"));
   EXPECT_TRUE(DoesConfigExist(kTestConfig));
 
   const std::string service_path = GetSingleServicePath();
-  std::string profile_path;
-  base::DictionaryValue properties;
-  EXPECT_TRUE(ShillProfileClient::Get()->GetTestInterface()->GetService(
-      service_path, &profile_path, &properties));
+  EXPECT_TRUE(HasService(service_path));
 
   UninstallExtension(extension_id_);
   content::RunAllPendingInMessageLoop();
   EXPECT_FALSE(DoesConfigExist(kTestConfig));
-  EXPECT_FALSE(ShillProfileClient::Get()->GetTestInterface()->GetService(
-      service_path, &profile_path, &properties));
+  EXPECT_FALSE(HasService(service_path));
 }
 
 IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CreateDisable) {
   LoadVpnExtension();
   AddNetworkProfileForUser();
-  EXPECT_TRUE(RunExtensionTest("createConfigSuccess"));
+  EXPECT_TRUE(RunTest("createConfigSuccess"));
   EXPECT_TRUE(DoesConfigExist(kTestConfig));
 
   const std::string service_path = GetSingleServicePath();
-  std::string profile_path;
-  base::DictionaryValue properties;
-  EXPECT_TRUE(ShillProfileClient::Get()->GetTestInterface()->GetService(
-      service_path, &profile_path, &properties));
+  EXPECT_TRUE(HasService(service_path));
 
   extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(profile())->extension_service();
@@ -401,29 +387,24 @@ IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CreateDisable) {
       extension_id_, extensions::disable_reason::DISABLE_USER_ACTION);
   content::RunAllPendingInMessageLoop();
   EXPECT_FALSE(DoesConfigExist(kTestConfig));
-  EXPECT_FALSE(ShillProfileClient::Get()->GetTestInterface()->GetService(
-      service_path, &profile_path, &properties));
+  EXPECT_FALSE(HasService(service_path));
 }
 
 IN_PROC_BROWSER_TEST_F(VpnProviderApiTest, CreateBlocklist) {
   LoadVpnExtension();
   AddNetworkProfileForUser();
-  EXPECT_TRUE(RunExtensionTest("createConfigSuccess"));
+  EXPECT_TRUE(RunTest("createConfigSuccess"));
   EXPECT_TRUE(DoesConfigExist(kTestConfig));
 
   const std::string service_path = GetSingleServicePath();
-  std::string profile_path;
-  base::DictionaryValue properties;
-  EXPECT_TRUE(ShillProfileClient::Get()->GetTestInterface()->GetService(
-      service_path, &profile_path, &properties));
+  EXPECT_TRUE(HasService(service_path));
 
   extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(profile())->extension_service();
   extension_service->BlocklistExtensionForTest(extension_id_);
   content::RunAllPendingInMessageLoop();
   EXPECT_FALSE(DoesConfigExist(kTestConfig));
-  EXPECT_FALSE(ShillProfileClient::Get()->GetTestInterface()->GetService(
-      service_path, &profile_path, &properties));
+  EXPECT_FALSE(HasService(service_path));
 }
 
 }  // namespace chromeos

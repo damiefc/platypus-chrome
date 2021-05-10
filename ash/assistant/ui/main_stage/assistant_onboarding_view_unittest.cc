@@ -22,7 +22,6 @@
 #include "ash/public/cpp/session/user_info.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/scoped_feature_list.h"
@@ -36,6 +35,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/view_utils.h"
 
 namespace ash {
 
@@ -64,7 +64,7 @@ void FindDescendentByClassName(views::View* parent, T** result) {
     auto* candidate = children.front();
     children.pop();
 
-    if (candidate->GetClassName() == T::kClassName) {
+    if (views::IsViewClass<T>(candidate)) {
       *result = static_cast<T*>(candidate);
       return;
     }
@@ -423,8 +423,7 @@ TEST_F(AssistantOnboardingViewTest, ShouldHandleSuggestionUpdates) {
   // Verify view state is updated to reflect model state.
   auto suggestion_views = GetOnboardingSuggestionViews();
   ASSERT_EQ(suggestion_views.size(), 1u);
-  EXPECT_EQ(suggestion_views.at(0)->GetText(),
-            base::UTF8ToUTF16("Forced suggestion"));
+  EXPECT_EQ(suggestion_views.at(0)->GetText(), u"Forced suggestion");
 }
 
 TEST_F(AssistantOnboardingViewTest, ShouldHandleLocalIcons) {

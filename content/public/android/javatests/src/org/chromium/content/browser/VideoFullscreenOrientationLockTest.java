@@ -18,12 +18,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.content_public.browser.test.ContentJUnit4ClassRunner;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
-import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
@@ -106,9 +107,8 @@ public class VideoFullscreenOrientationLockTest {
     private Rect fullscreenButtonBounds(Rect videoRect) {
         Rect panel = buttonPanelBounds(videoRect);
 
-        // In these tests, we have no overflow items, so the fullscreen button is the rightmost
-        // button in the panel.
-        int right = panel.right;
+        // The fullscreen button is the second rightmost button in the panel.
+        int right = panel.right - BUTTON_WIDTH;
         int left = right - BUTTON_WIDTH;
         return new Rect(left, panel.top, right, panel.bottom);
     }
@@ -170,6 +170,7 @@ public class VideoFullscreenOrientationLockTest {
     @Test
     @MediumTest
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    @DisabledTest(message = "https://crbug.com/1105614")
     public void testEnterExitFullscreenWithAPI() throws Exception {
         // Start playback to guarantee it's properly loaded.
         Assert.assertTrue(DOMUtils.isMediaPaused(mActivityTestRule.getWebContents(), VIDEO_ID));

@@ -25,7 +25,8 @@ common_namespace_rewrites = [
   "cr.ui.focusWithoutInk|focusWithoutInk",
   "cr.ui.KeyboardShortcutList|KeyboardShortcutList",
   "cr.ui.Store|Store",
-  "Polymer.dom.flush|flush",
+  "Polymer.dom.|",
+  "Polymer.dom(|dom(",
   "Polymer.IronA11yAnnouncer|IronA11yAnnouncer",
   "Polymer.PaperRippleBehavior|PaperRippleBehavior",
   "Polymer.RenderStatus.afterNextRender|afterNextRender",
@@ -46,6 +47,8 @@ template("js_modulizer") {
           [ "$target_gen_dir/" + get_path_info(_input, "name") + ".m.js" ]
     }
 
+    data = outputs
+
     args = [
              "--in_folder",
              rebase_path(".", root_build_dir),
@@ -59,8 +62,9 @@ template("js_modulizer") {
       args += invoker.namespace_rewrites
     }
 
-    if (defined(invoker.deps)) {
-      deps = invoker.deps
+    # TODO(crbug.com/1030998) Remove when File Manager uses JS modules only.
+    if (defined(invoker.preserve_offsets)) {
+      args += [ "--preserve_offsets" ] + invoker.preserve_offsets
     }
   }
 }

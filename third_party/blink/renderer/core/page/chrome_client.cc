@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
+#include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/page/frame_tree.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/scoped_page_pauser.h"
@@ -52,9 +53,10 @@ void ChromeClient::InstallSupplements(LocalFrame& frame) {
   CoreInitializer::GetInstance().InstallSupplements(frame);
 }
 
-void ChromeClient::SetWindowRectWithAdjustment(const IntRect& pending_rect,
-                                               LocalFrame& frame,
-                                               LocalFrame& requesting_frame) {
+IntRect ChromeClient::CalculateWindowRectWithAdjustment(
+    const IntRect& pending_rect,
+    LocalFrame& frame,
+    LocalFrame& requesting_frame) {
   IntRect screen(GetScreenInfo(frame).available_rect);
   IntRect window = pending_rect;
 
@@ -112,7 +114,13 @@ void ChromeClient::SetWindowRectWithAdjustment(const IntRect& pending_rect,
                       WebFeature::kDOMWindowSetWindowRectCrossScreen);
   }
 
-  SetWindowRect(window, frame);
+  return window;
+}
+
+void ChromeClient::SetWindowRectWithAdjustment(const IntRect& pending_rect,
+                                               LocalFrame& frame) {
+  IntRect rect = CalculateWindowRectWithAdjustment(pending_rect, frame, frame);
+  SetWindowRect(rect, frame);
 }
 
 bool ChromeClient::CanOpenUIElementIfDuringPageDismissal(
@@ -140,16 +148,16 @@ Page* ChromeClient::CreateWindow(
     const AtomicString& frame_name,
     const WebWindowFeatures& features,
     network::mojom::blink::WebSandboxFlags sandbox_flags,
-    const FeaturePolicyFeatureState& opener_feature_state,
-    const SessionStorageNamespaceId& session_storage_namespace_id) {
+    const SessionStorageNamespaceId& session_storage_namespace_id,
+    bool& consumed_user_gesture) {
   if (!CanOpenUIElementIfDuringPageDismissal(
           frame->Tree().Top(), UIElementType::kPopup, g_empty_string)) {
     return nullptr;
   }
 
   return CreateWindowDelegate(frame, r, frame_name, features, sandbox_flags,
-                              opener_feature_state,
-                              session_storage_namespace_id);
+                              session_storage_namespace_id,
+                              consumed_user_gesture);
 }
 
 template <typename Delegate>
@@ -276,6 +284,20 @@ void ChromeClient::SetToolTip(LocalFrame& frame,
   last_mouse_over_node_ = result.InnerNodeOrImageMapImage();
   current_tool_tip_text_for_test_ = last_tool_tip_text_;
   SetToolTip(frame, tool_tip, tool_tip_direction);
+}
+
+void ChromeClient::ElementFocusedFromKeypress(LocalFrame& frame,
+                                              const Element* element) {
+  String tooltip_text = element->title();
+  if (tooltip_text.IsNull())
+    tooltip_text = element->DefaultToolTip();
+
+  LayoutObject* layout_object = element->GetLayoutObject();
+  if (!tooltip_text.IsNull() && layout_object) {
+    TextDirection tooltip_direction = layout_object->StyleRef().Direction();
+    UpdateTooltipFromKeyboard(frame, tooltip_text, tooltip_direction,
+                              element->BoundsInViewport());
+  }
 }
 
 void ChromeClient::ClearToolTip(LocalFrame& frame) {

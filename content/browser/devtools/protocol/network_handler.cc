@@ -43,6 +43,7 @@
 #include "content/browser/web_package/signed_exchange_envelope.h"
 #include "content/browser/web_package/signed_exchange_error.h"
 #include "content/common/navigation_params.h"
+#include "content/common/navigation_params.mojom.h"
 #include "content/common/web_package/signed_exchange_utils.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -81,13 +82,15 @@
 #include "services/network/public/cpp/data_element.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/http_raw_request_response_info.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
+#include "services/network/public/mojom/client_security_state.mojom-shared.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
-#include "third_party/blink/public/common/loader/network_utils.h"
 #include "third_party/blink/public/common/loader/referrer_utils.h"
 #include "third_party/blink/public/platform/resource_request_blocked_reason.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
+#include "url/third_party/mozilla/url_parse.h"
 
 namespace content {
 namespace protocol {
@@ -124,21 +127,45 @@ Network::CertificateTransparencyCompliance SerializeCTPolicyCompliance(
   return Network::CertificateTransparencyComplianceEnum::Unknown;
 }
 
+namespace {
+Network::CookiePriority BuildCookiePriority(net::CookiePriority priority) {
+  switch (priority) {
+    case net::CookiePriority::COOKIE_PRIORITY_HIGH:
+      return Network::CookiePriorityEnum::High;
+    case net::CookiePriority::COOKIE_PRIORITY_MEDIUM:
+      return Network::CookiePriorityEnum::Medium;
+    case net::CookiePriority::COOKIE_PRIORITY_LOW:
+      return Network::CookiePriorityEnum::Low;
+  }
+}
+Network::CookieSourceScheme BuildCookieSourceScheme(
+    net::CookieSourceScheme scheme) {
+  switch (scheme) {
+    case net::CookieSourceScheme::kUnset:
+      return Network::CookieSourceSchemeEnum::Unset;
+    case net::CookieSourceScheme::kNonSecure:
+      return Network::CookieSourceSchemeEnum::NonSecure;
+    case net::CookieSourceScheme::kSecure:
+      return Network::CookieSourceSchemeEnum::Secure;
+  }
+}
+base::Optional<Network::CookieSameSite> BuildCookieSameSite(
+    net::CookieSameSite same_site) {
+  switch (same_site) {
+    case net::CookieSameSite::STRICT_MODE:
+      return Network::CookieSameSiteEnum::Strict;
+    case net::CookieSameSite::LAX_MODE:
+      return Network::CookieSameSiteEnum::Lax;
+    case net::CookieSameSite::NO_RESTRICTION:
+      return Network::CookieSameSiteEnum::None;
+    case net::CookieSameSite::UNSPECIFIED:
+      return base::nullopt;
+  }
+}
+}  // namespace
+
 std::unique_ptr<Network::Cookie> BuildCookie(
     const net::CanonicalCookie& cookie) {
-  String cp;
-  switch (cookie.Priority()) {
-    case net::CookiePriority::COOKIE_PRIORITY_HIGH:
-      cp = Network::CookiePriorityEnum::High;
-      break;
-    case net::CookiePriority::COOKIE_PRIORITY_MEDIUM:
-      cp = Network::CookiePriorityEnum::Medium;
-      break;
-    case net::CookiePriority::COOKIE_PRIORITY_LOW:
-      cp = Network::CookiePriorityEnum::Low;
-      break;
-  }
-
   std::unique_ptr<Network::Cookie> devtools_cookie =
       Network::Cookie::Create()
           .SetName(cookie.Name())
@@ -152,22 +179,18 @@ std::unique_ptr<Network::Cookie> BuildCookie(
           .SetHttpOnly(cookie.IsHttpOnly())
           .SetSecure(cookie.IsSecure())
           .SetSession(!cookie.IsPersistent())
-          .SetPriority(cp)
+          .SetPriority(BuildCookiePriority(cookie.Priority()))
+          .SetSameParty(cookie.IsSameParty())
+          .SetSourceScheme(BuildCookieSourceScheme(cookie.SourceScheme()))
+          .SetSourcePort(cookie.SourcePort())
           .Build();
 
-  switch (cookie.SameSite()) {
-    case net::CookieSameSite::STRICT_MODE:
-      devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::Strict);
-      break;
-    case net::CookieSameSite::LAX_MODE:
-      devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::Lax);
-      break;
-    case net::CookieSameSite::NO_RESTRICTION:
-      devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::None);
-      break;
-    case net::CookieSameSite::UNSPECIFIED:
-      break;
+  base::Optional<Network::CookieSourceScheme> maybe_same_site =
+      BuildCookieSameSite(cookie.SameSite());
+  if (maybe_same_site) {
+    devtools_cookie->SetSameSite(*maybe_same_site);
   }
+
   return devtools_cookie;
 }
 
@@ -215,6 +238,7 @@ class CookieRetrieverNetworkService
   std::unordered_map<std::string, net::CanonicalCookie> all_cookies_;
 };
 
+namespace {
 std::vector<net::CanonicalCookie> FilterCookies(
     const std::vector<net::CanonicalCookie>& cookies,
     const std::string& name,
@@ -256,26 +280,56 @@ void DeleteFilteredCookies(network::mojom::CookieManager* cookie_manager,
   }
 }
 
-std::unique_ptr<net::CanonicalCookie> MakeCookieFromProtocolValues(
-    const std::string& name,
-    const std::string& value,
-    const std::string& url_spec,
-    const std::string& domain,
-    const std::string& path,
-    bool secure,
-    bool http_only,
-    const std::string& same_site,
-    double expires,
-    const std::string& priority) {
+absl::variant<net::CookieSourceScheme, Response> GetSourceSchemeFromProtocol(
+    const std::string& source_scheme) {
+  if (source_scheme == Network::CookieSourceSchemeEnum::Unset) {
+    return net::CookieSourceScheme::kUnset;
+  } else if (source_scheme == Network::CookieSourceSchemeEnum::NonSecure) {
+    return net::CookieSourceScheme::kNonSecure;
+  } else if (source_scheme == Network::CookieSourceSchemeEnum::Secure) {
+    return net::CookieSourceScheme::kSecure;
+  }
+  return Response::InvalidParams("Invalid cookie source scheme");
+}
+
+absl::variant<int, Response> GetCookieSourcePort(int source_port) {
+  // Only {url::PORT_UNSPECIFIED, [1,65535]} are valid.
+  if (source_port == url::PORT_UNSPECIFIED ||
+      (source_port >= 1 && source_port <= 65535)) {
+    return source_port;
+  }
+
+  return Response::InvalidParams("Invalid source port");
+}
+
+}  // namespace
+
+absl::variant<std::unique_ptr<net::CanonicalCookie>, Response>
+MakeCookieFromProtocolValues(const std::string& name,
+                             const std::string& value,
+                             const std::string& url_spec,
+                             const std::string& domain,
+                             const std::string& path,
+                             bool secure,
+                             bool http_only,
+                             const std::string& same_site,
+                             double expires,
+                             const std::string& priority,
+                             bool same_party,
+                             const Maybe<std::string>& source_scheme,
+                             const Maybe<int>& source_port) {
   std::string normalized_domain = domain;
 
-  if (url_spec.empty() && domain.empty())
-    return nullptr;
+  if (url_spec.empty() && domain.empty()) {
+    return Response::InvalidParams(
+        "At least one of the url or domain needs to be specified");
+  }
 
+  GURL source_url;
   if (!url_spec.empty()) {
-    GURL source_url = GURL(url_spec);
+    source_url = GURL(url_spec);
     if (!source_url.SchemeIsHTTPOrHTTPS())
-      return nullptr;
+      return Response::InvalidParams("URL must have scheme http or https");
 
     secure = secure || source_url.SchemeIsCryptographic();
     if (normalized_domain.empty())
@@ -319,9 +373,58 @@ std::unique_ptr<net::CanonicalCookie> MakeCookieFromProtocolValues(
   else if (priority == Network::CookiePriorityEnum::Low)
     cp = net::CookiePriority::COOKIE_PRIORITY_LOW;
 
-  return net::CanonicalCookie::CreateSanitizedCookie(
-      url, name, value, normalized_domain, path, base::Time(), expiration_date,
-      base::Time(), secure, http_only, css, cp);
+  std::unique_ptr<net::CanonicalCookie> cookie =
+      net::CanonicalCookie::CreateSanitizedCookie(
+          url, name, value, normalized_domain, path, base::Time(),
+          expiration_date, base::Time(), secure, http_only, css, cp,
+          same_party);
+
+  if (!cookie)
+    return Response::InvalidParams("Sanitizing cookie failed");
+
+  // Update the cookie's sourceScheme unless it's undefined in which case we'll
+  // keep the value that was implied from `url` via CreateSanitizedCookie.
+  if (source_scheme.isJust()) {
+    auto cookie_source_scheme_or_error =
+        GetSourceSchemeFromProtocol(source_scheme.fromJust());
+    if (absl::holds_alternative<Response>(cookie_source_scheme_or_error)) {
+      return absl::get<Response>(std::move(cookie_source_scheme_or_error));
+    }
+    net::CookieSourceScheme cookie_source_scheme =
+        absl::get<net::CookieSourceScheme>(cookie_source_scheme_or_error);
+    if (cookie->IsSecure() &&
+        cookie_source_scheme == net::CookieSourceScheme::kNonSecure) {
+      return Response::InvalidParams(
+          "Secure attribute cannot be set for a cookie with an insecure source "
+          "scheme");
+    }
+
+    cookie->SetSourceScheme(cookie_source_scheme);
+  }
+
+  // Update the cookie's port unless it's undefined in which case we'll
+  // keep the value that was implied from `url` via CreateSanitizedCookie.
+  if (source_port.isJust()) {
+    auto cookie_source_port_or_error =
+        GetCookieSourcePort(source_port.fromJust());
+    if (absl::holds_alternative<Response>(cookie_source_port_or_error)) {
+      return absl::get<Response>(std::move(cookie_source_port_or_error));
+    }
+    int port_value = absl::get<int>(cookie_source_port_or_error);
+
+    // If the url has a port specified it must match the source_port value.
+    // Otherwise this set cookie request is considered malformed.
+    // Note: Default port values (https: 443, http: 80) are ignored. They will
+    // be treated as if they were not specified.
+    if (source_url.has_port() && source_url.IntPort() != port_value) {
+      return Response::InvalidParams(
+          "Source port does not match the url's specified port");
+    }
+
+    cookie->SetSourcePort(port_value);
+  }
+
+  return cookie;
 }
 
 std::vector<GURL> ComputeCookieURLs(RenderFrameHostImpl* frame_host,
@@ -400,7 +503,7 @@ String securityState(const GURL& url, const net::CertStatus& cert_status) {
   if (!url.SchemeIsCryptographic()) {
     // Some origins are considered secure even though they're not cryptographic,
     // so treat them as secure in the UI.
-    if (blink::network_utils::IsOriginSecure(url))
+    if (network::IsUrlPotentiallyTrustworthy(url))
       return Security::SecurityStateEnum::Secure;
     return Security::SecurityStateEnum::Insecure;
   }
@@ -520,14 +623,15 @@ bool GetPostData(
     return false;
   for (const auto& element : *elements) {
     // TODO(caseq): Also support blobs.
-    if (element.type() != network::mojom::DataElementType::kBytes)
+    if (element.type() != network::DataElement::Tag::kBytes)
       return false;
-    auto bytes = protocol::Binary::fromSpan(
-        reinterpret_cast<const uint8_t*>(element.bytes()), element.length());
+    const std::vector<uint8_t>& bytes =
+        element.As<network::DataElementBytes>().bytes();
     auto data_entry = protocol::Network::PostDataEntry::Create().Build();
-    data_entry->SetBytes(std::move(bytes));
+    data_entry->SetBytes(
+        protocol::Binary::fromSpan(bytes.data(), bytes.size()));
     data_entries->push_back(std::move(data_entry));
-    result->append(element.bytes(), element.length());
+    result->append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
   }
   return true;
 }
@@ -582,18 +686,34 @@ GetProtocolBlockedSetCookieReason(net::CookieInclusionStatus status) {
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT)) {
-    blockedReasons->push_back(
-        Network::SetCookieBlockedReasonEnum::SameSiteStrict);
+    if (status.HasDowngradeWarning()) {
+      blockedReasons->push_back(
+          Network::SetCookieBlockedReasonEnum::SchemefulSameSiteStrict);
+    } else {
+      blockedReasons->push_back(
+          Network::SetCookieBlockedReasonEnum::SameSiteStrict);
+    }
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)) {
-    blockedReasons->push_back(Network::SetCookieBlockedReasonEnum::SameSiteLax);
+    if (status.HasDowngradeWarning()) {
+      blockedReasons->push_back(
+          Network::SetCookieBlockedReasonEnum::SchemefulSameSiteLax);
+    } else {
+      blockedReasons->push_back(
+          Network::SetCookieBlockedReasonEnum::SameSiteLax);
+    }
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::
               EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX)) {
-    blockedReasons->push_back(
-        Network::SetCookieBlockedReasonEnum::SameSiteUnspecifiedTreatedAsLax);
+    if (status.HasDowngradeWarning()) {
+      blockedReasons->push_back(Network::SetCookieBlockedReasonEnum::
+                                    SchemefulSameSiteUnspecifiedTreatedAsLax);
+    } else {
+      blockedReasons->push_back(
+          Network::SetCookieBlockedReasonEnum::SameSiteUnspecifiedTreatedAsLax);
+    }
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_SAMESITE_NONE_INSECURE)) {
@@ -604,6 +724,11 @@ GetProtocolBlockedSetCookieReason(net::CookieInclusionStatus status) {
           net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES)) {
     blockedReasons->push_back(
         Network::SetCookieBlockedReasonEnum::UserPreferences);
+  }
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_SAMEPARTY_CROSS_PARTY_CONTEXT)) {
+    blockedReasons->push_back(
+        Network::SetCookieBlockedReasonEnum::SamePartyFromCrossPartyContext);
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE)) {
@@ -628,6 +753,11 @@ GetProtocolBlockedSetCookieReason(net::CookieInclusionStatus status) {
           net::CookieInclusionStatus::EXCLUDE_INVALID_PREFIX)) {
     blockedReasons->push_back(
         Network::SetCookieBlockedReasonEnum::InvalidPrefix);
+  }
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_INVALID_SAMEPARTY)) {
+    blockedReasons->push_back(Network::SetCookieBlockedReasonEnum::
+                                  SamePartyConflictsWithOtherAttributes);
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_UNKNOWN_ERROR)) {
@@ -657,17 +787,33 @@ GetProtocolBlockedCookieReason(net::CookieInclusionStatus status) {
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT)) {
-    blockedReasons->push_back(Network::CookieBlockedReasonEnum::SameSiteStrict);
+    if (status.HasDowngradeWarning()) {
+      blockedReasons->push_back(
+          Network::CookieBlockedReasonEnum::SchemefulSameSiteStrict);
+    } else {
+      blockedReasons->push_back(
+          Network::CookieBlockedReasonEnum::SameSiteStrict);
+    }
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)) {
-    blockedReasons->push_back(Network::CookieBlockedReasonEnum::SameSiteLax);
+    if (status.HasDowngradeWarning()) {
+      blockedReasons->push_back(
+          Network::CookieBlockedReasonEnum::SchemefulSameSiteLax);
+    } else {
+      blockedReasons->push_back(Network::CookieBlockedReasonEnum::SameSiteLax);
+    }
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::
               EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX)) {
-    blockedReasons->push_back(
-        Network::CookieBlockedReasonEnum::SameSiteUnspecifiedTreatedAsLax);
+    if (status.HasDowngradeWarning()) {
+      blockedReasons->push_back(Network::CookieBlockedReasonEnum::
+                                    SchemefulSameSiteUnspecifiedTreatedAsLax);
+    } else {
+      blockedReasons->push_back(
+          Network::CookieBlockedReasonEnum::SameSiteUnspecifiedTreatedAsLax);
+    }
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_SAMESITE_NONE_INSECURE)) {
@@ -678,6 +824,11 @@ GetProtocolBlockedCookieReason(net::CookieInclusionStatus status) {
           net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES)) {
     blockedReasons->push_back(
         Network::CookieBlockedReasonEnum::UserPreferences);
+  }
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_SAMEPARTY_CROSS_PARTY_CONTEXT)) {
+    blockedReasons->push_back(
+        Network::CookieBlockedReasonEnum::SamePartyFromCrossPartyContext);
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_UNKNOWN_ERROR)) {
@@ -730,6 +881,19 @@ BuildProtocolAssociatedCookies(const net::CookieAccessResultList& net_list) {
     }
   }
   return protocol_list;
+}
+
+using SourceTypeEnum = net::SourceStream::SourceType;
+namespace ContentEncodingEnum = protocol::Network::ContentEncodingEnum;
+base::Optional<SourceTypeEnum> SourceTypeFromProtocol(
+    const protocol::Network::ContentEncoding& encoding) {
+  if (ContentEncodingEnum::Gzip == encoding)
+    return SourceTypeEnum::TYPE_GZIP;
+  if (ContentEncodingEnum::Br == encoding)
+    return SourceTypeEnum::TYPE_BROTLI;
+  if (ContentEncodingEnum::Deflate == encoding)
+    return SourceTypeEnum::TYPE_DEFLATE;
+  return base::nullopt;
 }
 
 }  // namespace
@@ -1042,7 +1206,7 @@ std::vector<NetworkHandler*> NetworkHandler::ForAgentHost(
 }
 
 void NetworkHandler::Wire(UberDispatcher* dispatcher) {
-  frontend_.reset(new Network::Frontend(dispatcher->channel()));
+  frontend_ = std::make_unique<Network::Frontend>(dispatcher->channel());
   Network::Dispatcher::wire(dispatcher, this);
 }
 
@@ -1074,11 +1238,31 @@ Response NetworkHandler::Disable() {
   url_loader_interceptor_.reset();
   SetNetworkConditions(nullptr);
   extra_headers_.clear();
+  ClearAcceptedEncodingsOverride();
   return Response::FallThrough();
 }
 
 Response NetworkHandler::SetCacheDisabled(bool cache_disabled) {
   cache_disabled_ = cache_disabled;
+  return Response::FallThrough();
+}
+
+Response NetworkHandler::SetAcceptedEncodings(
+    std::unique_ptr<Array<Network::ContentEncoding>> encodings) {
+  std::set<net::SourceStream::SourceType> accepted_stream_types;
+  for (auto encoding : *encodings) {
+    auto type = SourceTypeFromProtocol(encoding);
+    if (!type)
+      return Response::InvalidParams("Unknown encoding type: " + encoding);
+    accepted_stream_types.insert(type.value());
+  }
+  accepted_stream_types_ = std::move(accepted_stream_types);
+
+  return Response::FallThrough();
+}
+
+Response NetworkHandler::ClearAcceptedEncodingsOverride() {
+  accepted_stream_types_ = base::nullopt;
   return Response::FallThrough();
 }
 
@@ -1171,26 +1355,28 @@ void NetworkHandler::SetCookie(const std::string& name,
                                Maybe<std::string> same_site,
                                Maybe<double> expires,
                                Maybe<std::string> priority,
+                               Maybe<bool> same_party,
+                               Maybe<std::string> source_scheme,
+                               Maybe<int> source_port,
                                std::unique_ptr<SetCookieCallback> callback) {
   if (!storage_partition_) {
     callback->sendFailure(Response::InternalError());
     return;
   }
 
-  if (!url.isJust() && !domain.isJust()) {
-    callback->sendFailure(Response::InvalidParams(
-        "At least one of the url and domain needs to be specified"));
-  }
-
-  std::unique_ptr<net::CanonicalCookie> cookie = MakeCookieFromProtocolValues(
+  auto cookie_or_error = MakeCookieFromProtocolValues(
       name, value, url.fromMaybe(""), domain.fromMaybe(""), path.fromMaybe(""),
       secure.fromMaybe(false), http_only.fromMaybe(false),
-      same_site.fromMaybe(""), expires.fromMaybe(-1), priority.fromMaybe(""));
+      same_site.fromMaybe(""), expires.fromMaybe(-1), priority.fromMaybe(""),
+      same_party.fromMaybe(false), source_scheme, source_port);
 
-  if (!cookie) {
-    callback->sendFailure(Response::InvalidParams(kInvalidCookieFields));
+  if (absl::holds_alternative<Response>(cookie_or_error)) {
+    callback->sendFailure(absl::get<Response>(std::move(cookie_or_error)));
     return;
   }
+  std::unique_ptr<net::CanonicalCookie> cookie =
+      absl::get<std::unique_ptr<net::CanonicalCookie>>(
+          std::move(cookie_or_error));
 
   net::CookieOptions options;
   // Permit it to set a SameSite cookie if it wants to.
@@ -1211,18 +1397,30 @@ void NetworkHandler::SetCookies(
     base::OnceCallback<void(bool)> callback) {
   std::vector<std::unique_ptr<net::CanonicalCookie>> net_cookies;
   for (const std::unique_ptr<Network::CookieParam>& cookie : *cookies) {
-    std::unique_ptr<net::CanonicalCookie> net_cookie =
-        MakeCookieFromProtocolValues(
-            cookie->GetName(), cookie->GetValue(), cookie->GetUrl(""),
-            cookie->GetDomain(""), cookie->GetPath(""),
-            cookie->GetSecure(false), cookie->GetHttpOnly(false),
-            cookie->GetSameSite(""), cookie->GetExpires(-1),
-            cookie->GetPriority(""));
-    if (!net_cookie) {
+    // We need to pass Maybe<> to the function below, but we can't directly
+    // get to the `cookie`'s Maybe<> so instead we recreate them.
+    const Maybe<std::string> source_scheme =
+        cookie->HasSourceScheme()
+            ? Maybe<std::string>(cookie->GetSourceScheme(""))
+            : Maybe<std::string>();
+    const Maybe<int> source_port = cookie->HasSourcePort()
+                                       ? Maybe<int>(cookie->GetSourcePort(0))
+                                       : Maybe<int>();
+
+    auto net_cookie_or_error = MakeCookieFromProtocolValues(
+        cookie->GetName(), cookie->GetValue(), cookie->GetUrl(""),
+        cookie->GetDomain(""), cookie->GetPath(""), cookie->GetSecure(false),
+        cookie->GetHttpOnly(false), cookie->GetSameSite(""),
+        cookie->GetExpires(-1), cookie->GetPriority(""),
+        cookie->GetSameParty(false), source_scheme, source_port);
+    if (absl::holds_alternative<Response>(net_cookie_or_error)) {
+      // TODO: Investiage whether we can report the error as a protocol error
+      // (this might be a breaking CDP change).
       std::move(callback).Run(false);
       return;
     }
-    net_cookies.push_back(std::move(net_cookie));
+    net_cookies.push_back(absl::get<std::unique_ptr<net::CanonicalCookie>>(
+        std::move(net_cookie_or_error)));
   }
 
   base::RepeatingClosure barrier_closure = base::BarrierClosure(
@@ -1558,8 +1756,6 @@ String blockedReason(blink::ResourceRequestBlockedReason reason) {
       return protocol::Network::BlockedReasonEnum::ContentType;
     case blink::ResourceRequestBlockedReason::kOther:
       return protocol::Network::BlockedReasonEnum::Other;
-    case blink::ResourceRequestBlockedReason::kCollapsedByClient:
-      return protocol::Network::BlockedReasonEnum::CollapsedByClient;
     case blink::ResourceRequestBlockedReason::kCoepFrameResourceNeedsCoepHeader:
       return protocol::Network::BlockedReasonEnum::
           CoepFrameResourceNeedsCoepHeader;
@@ -1575,6 +1771,11 @@ String blockedReason(blink::ResourceRequestBlockedReason reason) {
           CorpNotSameOriginAfterDefaultedToSameOriginByCoep;
     case blink::ResourceRequestBlockedReason::kCorpNotSameSite:
       return protocol::Network::BlockedReasonEnum::CorpNotSameSite;
+    case blink::ResourceRequestBlockedReason::kConversionRequest:
+      // This is actually never reached, as the conversion request
+      // is marked as successful and no blocking reason is reported.
+      NOTREACHED();
+      return protocol::Network::BlockedReasonEnum::Other;
   }
   NOTREACHED();
   return protocol::Network::BlockedReasonEnum::Other;
@@ -1606,9 +1807,59 @@ Maybe<String> GetBlockedReasonFor(
   if (status.error_code != net::ERR_BLOCKED_BY_CLIENT &&
       status.error_code != net::ERR_BLOCKED_BY_RESPONSE)
     return Maybe<String>();
-  return blockedReason(static_cast<blink::ResourceRequestBlockedReason>(
-      status.extended_error_code));
+
+  if (status.extended_error_code <=
+      static_cast<int>(blink::ResourceRequestBlockedReason::kMax)) {
+    return blockedReason(static_cast<blink::ResourceRequestBlockedReason>(
+        status.extended_error_code));
+  }
+
+  // TODO(karandeepb): Embedder would know how to interpret the
+  // `status.extended_error_code` in this case. For now just return Other.
+  return {protocol::Network::BlockedReasonEnum::Other};
 }
+
+String GetTrustTokenOperationType(
+    network::mojom::TrustTokenOperationType type) {
+  switch (type) {
+    case network::mojom::TrustTokenOperationType::kIssuance:
+      return protocol::Network::TrustTokenOperationTypeEnum::Issuance;
+    case network::mojom::TrustTokenOperationType::kRedemption:
+      return protocol::Network::TrustTokenOperationTypeEnum::Redemption;
+    case network::mojom::TrustTokenOperationType::kSigning:
+      return protocol::Network::TrustTokenOperationTypeEnum::Signing;
+  }
+}
+
+String GetTrustTokenRefreshPolicy(
+    network::mojom::TrustTokenRefreshPolicy policy) {
+  switch (policy) {
+    case network::mojom::TrustTokenRefreshPolicy::kUseCached:
+      return protocol::Network::TrustTokenParams::RefreshPolicyEnum::UseCached;
+    case network::mojom::TrustTokenRefreshPolicy::kRefresh:
+      return protocol::Network::TrustTokenParams::RefreshPolicyEnum::Refresh;
+  }
+}
+
+std::unique_ptr<protocol::Network::TrustTokenParams> BuildTrustTokenParams(
+    const network::mojom::TrustTokenParams& params) {
+  auto protocol_params =
+      protocol::Network::TrustTokenParams::Create()
+          .SetType(GetTrustTokenOperationType(params.type))
+          .SetRefreshPolicy(GetTrustTokenRefreshPolicy(params.refresh_policy))
+          .Build();
+
+  if (!params.issuers.empty()) {
+    auto issuers = std::make_unique<protocol::Array<protocol::String>>();
+    for (const auto& issuer : params.issuers) {
+      issuers->push_back(issuer.Serialize());
+    }
+    protocol_params->SetIssuers(std::move(issuers));
+  }
+
+  return protocol_params;
+}
+
 }  // namespace
 
 void NetworkHandler::NavigationRequestWillBeSent(
@@ -1618,7 +1869,7 @@ void NetworkHandler::NavigationRequestWillBeSent(
     return;
 
   net::HttpRequestHeaders headers;
-  headers.AddHeadersFromString(nav_request.begin_params()->headers);
+  headers.AddHeadersFromString(nav_request.begin_params().headers);
   std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
   for (net::HttpRequestHeaders::Iterator it(headers); it.GetNext();)
     headers_dict->setString(it.name(), it.value());
@@ -1668,7 +1919,7 @@ void NetworkHandler::NavigationRequestWillBeSent(
 
   std::unique_ptr<Network::Initiator> initiator;
   const base::Optional<base::Value>& initiator_optional =
-      nav_request.begin_params()->devtools_initiator;
+      nav_request.begin_params().devtools_initiator;
   if (initiator_optional.has_value()) {
     initiator = protocol::ValueTypeConverter<Network::Initiator>::FromValue(
         *toProtocolValue(&initiator_optional.value(), 1000));
@@ -1683,6 +1934,13 @@ void NetworkHandler::NavigationRequestWillBeSent(
   double current_wall_time = base::Time::Now().ToDoubleT();
   std::string frame_token =
       nav_request.frame_tree_node()->devtools_frame_token().ToString();
+
+  const mojom::BeginNavigationParams& begin_params = nav_request.begin_params();
+  if (begin_params.trust_token_params) {
+    request->SetTrustTokenParams(
+        BuildTrustTokenParams(*begin_params.trust_token_params));
+  }
+
   frontend_->RequestWillBeSent(
       id, id, url_without_fragment, std::move(request), current_ticks,
       current_wall_time, std::move(initiator), std::move(redirect_response),
@@ -1690,12 +1948,14 @@ void NetworkHandler::NavigationRequestWillBeSent(
       common_params.has_user_gesture);
 }
 
-void NetworkHandler::RequestSent(const std::string& request_id,
-                                 const std::string& loader_id,
-                                 const network::ResourceRequest& request,
-                                 const char* initiator_type,
-                                 const base::Optional<GURL>& initiator_url,
-                                 base::TimeTicks timestamp) {
+void NetworkHandler::RequestSent(
+    const std::string& request_id,
+    const std::string& loader_id,
+    const network::ResourceRequest& request,
+    const char* initiator_type,
+    const base::Optional<GURL>& initiator_url,
+    const std::string& initiator_devtools_request_id,
+    base::TimeTicks timestamp) {
   if (!enabled_)
     return;
   std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
@@ -1705,6 +1965,8 @@ void NetworkHandler::RequestSent(const std::string& request_id,
       Network::Initiator::Create().SetType(initiator_type).Build();
   if (initiator_url)
     initiator->SetUrl(initiator_url->spec());
+  if (initiator_devtools_request_id.size())
+    initiator->SetRequestId(initiator_devtools_request_id);
   std::string url_fragment;
   std::string url_without_fragment =
       ExtractFragment(request.url, &url_fragment);
@@ -1718,6 +1980,10 @@ void NetworkHandler::RequestSent(const std::string& request_id,
           .Build();
   if (!url_fragment.empty())
     request_object->SetUrlFragment(url_fragment);
+  if (request.trust_token_params.has_value()) {
+    request_object->SetTrustTokenParams(
+        BuildTrustTokenParams(request.trust_token_params.value()));
+  }
   frontend_->RequestWillBeSent(
       request_id, loader_id, url_without_fragment, std::move(request_object),
       timestamp.since_origin().InSecondsF(), base::Time::Now().ToDoubleT(),
@@ -1725,6 +1991,94 @@ void NetworkHandler::RequestSent(const std::string& request_id,
       std::string(Network::ResourceTypeEnum::Other),
       Maybe<std::string>() /* frame_id */, request.has_user_gesture);
 }
+
+namespace {
+String BuildCorsError(network::mojom::CorsError cors_error) {
+  switch (cors_error) {
+    case network::mojom::CorsError::kDisallowedByMode:
+      return protocol::Network::CorsErrorEnum::DisallowedByMode;
+
+    case network::mojom::CorsError::kInvalidResponse:
+      return protocol::Network::CorsErrorEnum::InvalidResponse;
+
+    case network::mojom::CorsError::kWildcardOriginNotAllowed:
+      return protocol::Network::CorsErrorEnum::WildcardOriginNotAllowed;
+
+    case network::mojom::CorsError::kMissingAllowOriginHeader:
+      return protocol::Network::CorsErrorEnum::MissingAllowOriginHeader;
+
+    case network::mojom::CorsError::kMultipleAllowOriginValues:
+      return protocol::Network::CorsErrorEnum::MultipleAllowOriginValues;
+
+    case network::mojom::CorsError::kInvalidAllowOriginValue:
+      return protocol::Network::CorsErrorEnum::InvalidAllowOriginValue;
+
+    case network::mojom::CorsError::kAllowOriginMismatch:
+      return protocol::Network::CorsErrorEnum::AllowOriginMismatch;
+
+    case network::mojom::CorsError::kInvalidAllowCredentials:
+      return protocol::Network::CorsErrorEnum::InvalidAllowCredentials;
+
+    case network::mojom::CorsError::kCorsDisabledScheme:
+      return protocol::Network::CorsErrorEnum::CorsDisabledScheme;
+
+    case network::mojom::CorsError::kPreflightInvalidStatus:
+      return protocol::Network::CorsErrorEnum::PreflightInvalidStatus;
+
+    case network::mojom::CorsError::kPreflightDisallowedRedirect:
+      return protocol::Network::CorsErrorEnum::PreflightDisallowedRedirect;
+
+    case network::mojom::CorsError::kPreflightWildcardOriginNotAllowed:
+      return protocol::Network::CorsErrorEnum::
+          PreflightWildcardOriginNotAllowed;
+
+    case network::mojom::CorsError::kPreflightMissingAllowOriginHeader:
+      return protocol::Network::CorsErrorEnum::
+          PreflightMissingAllowOriginHeader;
+
+    case network::mojom::CorsError::kPreflightMultipleAllowOriginValues:
+      return protocol::Network::CorsErrorEnum::
+          PreflightMultipleAllowOriginValues;
+
+    case network::mojom::CorsError::kPreflightInvalidAllowOriginValue:
+      return protocol::Network::CorsErrorEnum::PreflightInvalidAllowOriginValue;
+
+    case network::mojom::CorsError::kPreflightAllowOriginMismatch:
+      return protocol::Network::CorsErrorEnum::PreflightAllowOriginMismatch;
+
+    case network::mojom::CorsError::kPreflightInvalidAllowCredentials:
+      return protocol::Network::CorsErrorEnum::PreflightInvalidAllowCredentials;
+
+    case network::mojom::CorsError::kPreflightMissingAllowExternal:
+      return protocol::Network::CorsErrorEnum::PreflightMissingAllowExternal;
+
+    case network::mojom::CorsError::kPreflightInvalidAllowExternal:
+      return protocol::Network::CorsErrorEnum::PreflightInvalidAllowExternal;
+
+    case network::mojom::CorsError::kInvalidAllowMethodsPreflightResponse:
+      return protocol::Network::CorsErrorEnum::
+          InvalidAllowMethodsPreflightResponse;
+
+    case network::mojom::CorsError::kInvalidAllowHeadersPreflightResponse:
+      return protocol::Network::CorsErrorEnum::
+          InvalidAllowHeadersPreflightResponse;
+
+    case network::mojom::CorsError::kMethodDisallowedByPreflightResponse:
+      return protocol::Network::CorsErrorEnum::
+          MethodDisallowedByPreflightResponse;
+
+    case network::mojom::CorsError::kHeaderDisallowedByPreflightResponse:
+      return protocol::Network::CorsErrorEnum::
+          HeaderDisallowedByPreflightResponse;
+
+    case network::mojom::CorsError::kRedirectContainsCredentials:
+      return protocol::Network::CorsErrorEnum::RedirectContainsCredentials;
+
+    case network::mojom::CorsError::kInsecurePrivateNetwork:
+      return protocol::Network::CorsErrorEnum::InsecurePrivateNetwork;
+  }
+}
+}  // namespace
 
 void NetworkHandler::ResponseReceived(
     const std::string& request_id,
@@ -1757,7 +2111,10 @@ void NetworkHandler::LoadingComplete(
             static_cast<double>(base::Time::kMicrosecondsPerSecond),
         resource_type, net::ErrorToString(status.error_code),
         status.error_code == net::Error::ERR_ABORTED,
-        GetBlockedReasonFor(status));
+        GetBlockedReasonFor(status),
+        status.cors_error_status
+            ? BuildCorsErrorStatus(*status.cors_error_status)
+            : Maybe<protocol::Network::CorsErrorStatus>());
     return;
   }
   frontend_->LoadingFinished(
@@ -2099,13 +2456,23 @@ bool NetworkHandler::MaybeCreateProxyForInterception(
              intercepting_factory);
 }
 
-void NetworkHandler::ApplyOverrides(net::HttpRequestHeaders* headers,
-                                    bool* skip_service_worker,
-                                    bool* disable_cache) {
+void NetworkHandler::ApplyOverrides(
+    net::HttpRequestHeaders* headers,
+    bool* skip_service_worker,
+    bool* disable_cache,
+    base::Optional<std::vector<net::SourceStream::SourceType>>*
+        accepted_stream_types) {
   for (auto& entry : extra_headers_)
     headers->SetHeader(entry.first, entry.second);
   *skip_service_worker |= bypass_service_worker_;
   *disable_cache |= cache_disabled_;
+  if (!accepted_stream_types_)
+    return;
+  if (!*accepted_stream_types)
+    *accepted_stream_types = std::vector<net::SourceStream::SourceType>();
+  (*accepted_stream_types)
+      ->insert((*accepted_stream_types)->end(), accepted_stream_types_->begin(),
+               accepted_stream_types_->end());
 }
 
 void NetworkHandler::RequestIntercepted(
@@ -2184,6 +2551,9 @@ makeCrossOriginEmbedderPolicyValue(
   switch (value) {
     case network::mojom::CrossOriginEmbedderPolicyValue::kNone:
       return protocol::Network::CrossOriginEmbedderPolicyValueEnum::None;
+    case network::mojom::CrossOriginEmbedderPolicyValue::kCredentialless:
+      return protocol::Network::CrossOriginEmbedderPolicyValueEnum::
+          CorsOrCredentialless;
     case network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp:
       return protocol::Network::CrossOriginEmbedderPolicyValueEnum::RequireCorp;
   }
@@ -2207,7 +2577,7 @@ makeCrossOriginOpenerPolicyStatus(
   return protocol_coop;
 }
 std::unique_ptr<protocol::Network::CrossOriginEmbedderPolicyStatus>
-makeCrossOriginOpenerEmbedderStatus(
+makeCrossOriginEmbedderPolicyStatus(
     const network::CrossOriginEmbedderPolicy& coep) {
   auto protocol_coep =
       protocol::Network::CrossOriginEmbedderPolicyStatus::Create()
@@ -2229,52 +2599,49 @@ makeCrossOriginOpenerEmbedderStatus(
 DispatchResponse NetworkHandler::GetSecurityIsolationStatus(
     Maybe<String> frame_id,
     std::unique_ptr<protocol::Network::SecurityIsolationStatus>* out_info) {
-  if (!frame_id.isJust() || !host_) {
-    // TODO(sigurds): Support for workers.
-    return Response::InvalidParams("Currently only frames are supported");
+  scoped_refptr<DevToolsAgentHostImpl> host =
+      DevToolsAgentHostImpl::GetForId(host_id_);
+  std::string id = frame_id.fromMaybe("");
+  auto maybe_coep = host->cross_origin_embedder_policy(id);
+  auto maybe_coop = host->cross_origin_opener_policy(id);
+  auto status = protocol::Network::SecurityIsolationStatus::Create().Build();
+  if (maybe_coep) {
+    status->SetCoep(makeCrossOriginEmbedderPolicyStatus(*maybe_coep));
   }
-  FrameTreeNode* frame_tree_node = FrameTreeNodeFromDevToolsFrameToken(
-      host_->frame_tree_node(), frame_id.takeJust());
-  if (!frame_tree_node) {
-    return Response::InvalidParams("No frame with given id found");
+  if (maybe_coop) {
+    status->SetCoop(makeCrossOriginOpenerPolicyStatus(*maybe_coop));
   }
-  RenderFrameHostImpl* rfhi = frame_tree_node->current_frame_host();
-
-  auto coep =
-      makeCrossOriginOpenerEmbedderStatus(rfhi->cross_origin_embedder_policy());
-  auto coop =
-      makeCrossOriginOpenerPolicyStatus(rfhi->cross_origin_opener_policy());
-
-  *out_info = protocol::Network::SecurityIsolationStatus::Create()
-                  .SetCoep(std::move(coep))
-                  .SetCoop(std::move(coop))
-                  .Build();
+  *out_info = std::move(status);
   return Response::Success();
 }
 
 void NetworkHandler::OnRequestWillBeSentExtraInfo(
     const std::string& devtools_request_id,
     const net::CookieAccessResultList& request_cookie_list,
-    const std::vector<network::mojom::HttpRawHeaderPairPtr>& request_headers) {
+    const std::vector<network::mojom::HttpRawHeaderPairPtr>& request_headers,
+    const network::mojom::ClientSecurityStatePtr& security_state) {
   if (!enabled_)
     return;
 
   frontend_->RequestWillBeSentExtraInfo(
       devtools_request_id, BuildProtocolAssociatedCookies(request_cookie_list),
-      GetRawHeaders(request_headers));
+      GetRawHeaders(request_headers),
+      MaybeBuildClientSecurityState(security_state));
 }
 
 void NetworkHandler::OnResponseReceivedExtraInfo(
     const std::string& devtools_request_id,
     const net::CookieAndLineAccessResultList& response_cookie_list,
     const std::vector<network::mojom::HttpRawHeaderPairPtr>& response_headers,
-    const base::Optional<std::string>& response_headers_text) {
+    const base::Optional<std::string>& response_headers_text,
+    network::mojom::IPAddressSpace resource_address_space) {
   if (!enabled_)
     return;
 
   frontend_->ResponseReceivedExtraInfo(
       devtools_request_id, BuildProtocolBlockedSetCookies(response_cookie_list),
       GetRawHeaders(response_headers),
+      BuildIpAddressSpace(resource_address_space),
       response_headers_text.has_value() ? response_headers_text.value()
                                         : Maybe<String>());
 }
@@ -2402,7 +2769,8 @@ void NetworkHandler::LoadNetworkResource(
 
     auto params = URLLoaderFactoryParamsHelper::CreateForFrame(
         frame, frame->GetLastCommittedOrigin(),
-        mojo::Clone(frame->last_committed_client_security_state()),
+        frame->GetIsolationInfoForSubresources(),
+        frame->BuildClientSecurityState(),
         /**coep_reporter=*/mojo::NullRemote(), frame->GetProcess(),
         network::mojom::TrustTokenRedemptionPolicy::kForbid,
         "NetworkHandler::LoadNetworkResource");
@@ -2413,8 +2781,7 @@ void NetworkHandler::LoadNetworkResource(
     auto loader = DevToolsNetworkResourceLoader::Create(
         std::move(url_loader_factory), std::move(gurl),
         frame->GetLastCommittedOrigin(), frame->ComputeSiteForCookies(),
-        caching, include_credentials, frame->GetRoutingID(),
-        std::move(complete_callback));
+        caching, include_credentials, std::move(complete_callback));
     loaders_.emplace(std::move(loader), std::move(callback));
     return;
   }
@@ -2430,12 +2797,126 @@ void NetworkHandler::LoadNetworkResource(
       auto loader = DevToolsNetworkResourceLoader::Create(
           std::move(url_loader_factory), std::move(gurl),
           std::move(info.origin), std::move(info.site_for_cookies), caching,
-          include_credentials, MSG_ROUTING_NONE, std::move(complete_callback));
+          include_credentials, std::move(complete_callback));
       loaders_.emplace(std::move(loader), std::move(callback));
       return;
     }
   }
   callback->sendFailure(Response::ServerError("Target not supported"));
+}
+
+namespace {
+
+String GetTrustTokenOperationStatus(
+    network::mojom::TrustTokenOperationStatus status) {
+  switch (status) {
+    case network::mojom::TrustTokenOperationStatus::kOk:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::Ok;
+    case network::mojom::TrustTokenOperationStatus::kInvalidArgument:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          InvalidArgument;
+    case network::mojom::TrustTokenOperationStatus::kFailedPrecondition:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          FailedPrecondition;
+    case network::mojom::TrustTokenOperationStatus::kResourceExhausted:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          ResourceExhausted;
+    case network::mojom::TrustTokenOperationStatus::kAlreadyExists:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          AlreadyExists;
+    case network::mojom::TrustTokenOperationStatus::kUnavailable:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          Unavailable;
+    case network::mojom::TrustTokenOperationStatus::kBadResponse:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          BadResponse;
+    case network::mojom::TrustTokenOperationStatus::kInternalError:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          InternalError;
+    case network::mojom::TrustTokenOperationStatus::kUnknownError:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          UnknownError;
+    case network::mojom::TrustTokenOperationStatus::
+        kOperationSuccessfullyFulfilledLocally:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          FulfilledLocally;
+  }
+}
+
+}  // namespace
+
+void NetworkHandler::OnTrustTokenOperationDone(
+    const std::string& devtools_request_id,
+    const network::mojom::TrustTokenOperationResult& result) {
+  if (!enabled_)
+    return;
+
+  Maybe<String> top_level_origin;
+  if (result.top_level_origin) {
+    top_level_origin = result.top_level_origin->Serialize();
+  }
+  Maybe<String> issuer;
+  if (result.issuer) {
+    issuer = result.issuer->Serialize();
+  }
+
+  frontend()->TrustTokenOperationDone(
+      GetTrustTokenOperationStatus(result.status),
+      GetTrustTokenOperationType(result.type), devtools_request_id,
+      std::move(top_level_origin), std::move(issuer),
+      result.issued_token_count);
+}
+
+String NetworkHandler::BuildPrivateNetworkRequestPolicy(
+    network::mojom::PrivateNetworkRequestPolicy policy) {
+  switch (policy) {
+    case network::mojom::PrivateNetworkRequestPolicy::kAllow:
+      return protocol::Network::PrivateNetworkRequestPolicyEnum::Allow;
+    case network::mojom::PrivateNetworkRequestPolicy::
+        kBlockFromInsecureToMorePrivate:
+      return protocol::Network::PrivateNetworkRequestPolicyEnum::
+          BlockFromInsecureToMorePrivate;
+    case network::mojom::PrivateNetworkRequestPolicy::
+        kWarnFromInsecureToMorePrivate:
+      return protocol::Network::PrivateNetworkRequestPolicyEnum::
+          WarnFromInsecureToMorePrivate;
+  }
+}
+
+String NetworkHandler::BuildIpAddressSpace(
+    network::mojom::IPAddressSpace space) {
+  switch (space) {
+    case network::mojom::IPAddressSpace::kLocal:
+      return protocol::Network::IPAddressSpaceEnum::Local;
+    case network::mojom::IPAddressSpace::kPrivate:
+      return protocol::Network::IPAddressSpaceEnum::Private;
+    case network::mojom::IPAddressSpace::kPublic:
+      return protocol::Network::IPAddressSpaceEnum::Public;
+    case network::mojom::IPAddressSpace::kUnknown:
+      return protocol::Network::IPAddressSpaceEnum::Unknown;
+  }
+}
+
+Maybe<protocol::Network::ClientSecurityState>
+NetworkHandler::MaybeBuildClientSecurityState(
+    const network::mojom::ClientSecurityStatePtr& state) {
+  if (!state) {
+    return {};
+  }
+  return protocol::Network::ClientSecurityState::Create()
+      .SetPrivateNetworkRequestPolicy(BuildPrivateNetworkRequestPolicy(
+          state->private_network_request_policy))
+      .SetInitiatorIPAddressSpace(BuildIpAddressSpace(state->ip_address_space))
+      .SetInitiatorIsSecureContext(state->is_web_secure_context)
+      .Build();
+}
+
+std::unique_ptr<protocol::Network::CorsErrorStatus>
+NetworkHandler::BuildCorsErrorStatus(const network::CorsErrorStatus& status) {
+  return protocol::Network::CorsErrorStatus::Create()
+      .SetCorsError(BuildCorsError(status.cors_error))
+      .SetFailedParameter(status.failed_parameter)
+      .Build();
 }
 
 }  // namespace protocol

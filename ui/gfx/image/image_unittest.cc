@@ -18,7 +18,7 @@
 #if defined(OS_IOS)
 #include "base/mac/foundation_util.h"
 #include "skia/ext/skia_utils_ios.h"
-#elif defined(OS_APPLE)
+#elif defined(OS_MAC)
 #include "base/mac/foundation_util.h"
 #include "skia/ext/skia_utils_mac.h"
 #endif
@@ -437,7 +437,7 @@ TEST_F(ImageTest, SkBitmapConversionPreservesOrientation) {
   bitmap.eraseARGB(255, 0, 255, 0);
 
   // Paint the upper half of the image in red (lower half is in green).
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   SkPaint red;
   red.setColor(SK_ColorRED);
   canvas.drawRect(SkRect::MakeWH(width, height / 2), red);
@@ -478,7 +478,7 @@ TEST_F(ImageTest, SkBitmapConversionPreservesTransparency) {
   bitmap.eraseARGB(0, 0, 255, 0);
 
   // Paint the upper half of the image in red (lower half is transparent).
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   SkPaint red;
   red.setColor(SK_ColorRED);
   canvas.drawRect(SkRect::MakeWH(width, height / 2), red);

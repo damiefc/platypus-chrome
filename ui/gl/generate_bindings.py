@@ -1209,7 +1209,9 @@ GL_FUNCTIONS = [
     'GLsync sync, GLenum pname, GLsizei bufSize, GLsizei* length,'
     'GLint* values', },
 { 'return_type': 'void',
-  'names': ['glGetTexLevelParameterfv'],
+  'versions': [{ 'name': 'glGetTexLevelParameterfv' },
+               {'name': 'glGetTexLevelParameterfvANGLE',
+                'extensions': ['GL_ANGLE_get_tex_level_parameter']}],
   'arguments': 'GLenum target, GLint level, GLenum pname, GLfloat* params', },
 { 'return_type': 'void',
   'versions': [{'name': 'glGetTexLevelParameterfvRobustANGLE',
@@ -1218,7 +1220,9 @@ GL_FUNCTIONS = [
       'GLenum target, GLint level, GLenum pname, GLsizei bufSize, '
       'GLsizei* length, GLfloat* params', },
 { 'return_type': 'void',
-  'names': ['glGetTexLevelParameteriv'],
+  'versions': [{ 'name': 'glGetTexLevelParameteriv' },
+               {'name': 'glGetTexLevelParameterivANGLE',
+                'extensions': ['GL_ANGLE_get_tex_level_parameter']}],
   'arguments': 'GLenum target, GLint level, GLenum pname, GLint* params', },
 { 'return_type': 'void',
   'versions': [{'name': 'glGetTexLevelParameterivRobustANGLE',
@@ -2918,6 +2922,7 @@ FUNCTION_SETS = [
       'GLES2/gl2chromium.h',
       'GLES2/gl2extchromium.h'
     ], [
+      "GL_ANGLE_robust_resource_initialization",
       "GL_ARB_texture_swizzle",
       "GL_EXT_texture_swizzle",
       "GL_EXT_texture_format_BGRA8888",
@@ -3413,7 +3418,7 @@ void DriverEGL::InitializeExtensionBindings() {
     file.write('%s Trace%sApi::%sFn(%s) {\n' %
         (return_type, set_name.upper(), function_name, arguments))
     argument_names = MakeArgNames(arguments)
-    file.write('  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "Trace%sAPI::%s")\n' %
+    file.write('  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "Trace%sAPI::%s");\n' %
                (set_name.upper(), function_name))
     if return_type == 'void':
       file.write('  %s_api_->%sFn(%s);\n' %

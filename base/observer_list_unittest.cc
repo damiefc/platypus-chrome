@@ -4,6 +4,13 @@
 
 #include "base/observer_list.h"
 
+// observer_list.h is a widely included header and its size has significant
+// impact on build time. Try not to raise this limit unless necessary. See
+// https://chromium.googlesource.com/chromium/src/+/HEAD/docs/wmax_tokens.md
+#ifndef NACL_TC_REV
+#pragma clang max_tokens_here 475000
+#endif
+
 #include <memory>
 
 #include "base/strings/string_piece.h"
@@ -364,7 +371,7 @@ TYPED_TEST(ObserverListTest, CompactsWhenNoActiveIterator) {
   EXPECT_TRUE(col.HasObserver(&a));
   EXPECT_FALSE(col.HasObserver(&c));
 
-  EXPECT_TRUE(col.might_have_observers());
+  EXPECT_TRUE(!col.empty());
 
   using It = typename ObserverListConstFoo::const_iterator;
 
@@ -379,45 +386,45 @@ TYPED_TEST(ObserverListTest, CompactsWhenNoActiveIterator) {
     EXPECT_EQ(itb, it);
     EXPECT_EQ(++it, col.end());
 
-    EXPECT_TRUE(col.might_have_observers());
+    EXPECT_TRUE(!col.empty());
     EXPECT_EQ(&*ita, &a);
     EXPECT_EQ(&*itb, &b);
 
     ol.RemoveObserver(&a);
-    EXPECT_TRUE(col.might_have_observers());
+    EXPECT_TRUE(!col.empty());
     EXPECT_FALSE(col.HasObserver(&a));
     EXPECT_EQ(&*itb, &b);
 
     ol.RemoveObserver(&b);
-    EXPECT_TRUE(col.might_have_observers());
+    EXPECT_FALSE(!col.empty());
     EXPECT_FALSE(col.HasObserver(&a));
     EXPECT_FALSE(col.HasObserver(&b));
 
     it = It();
     ita = It();
-    EXPECT_TRUE(col.might_have_observers());
+    EXPECT_FALSE(!col.empty());
     ita = itb;
     itb = It();
-    EXPECT_TRUE(col.might_have_observers());
+    EXPECT_FALSE(!col.empty());
     ita = It();
-    EXPECT_FALSE(col.might_have_observers());
+    EXPECT_FALSE(!col.empty());
   }
 
   ol.AddObserver(&a);
   ol.AddObserver(&b);
-  EXPECT_TRUE(col.might_have_observers());
+  EXPECT_TRUE(!col.empty());
   ol.Clear();
-  EXPECT_FALSE(col.might_have_observers());
+  EXPECT_FALSE(!col.empty());
 
   ol.AddObserver(&a);
   ol.AddObserver(&b);
-  EXPECT_TRUE(col.might_have_observers());
+  EXPECT_TRUE(!col.empty());
   {
     const It it = col.begin();
     ol.Clear();
-    EXPECT_TRUE(col.might_have_observers());
+    EXPECT_FALSE(!col.empty());
   }
-  EXPECT_FALSE(col.might_have_observers());
+  EXPECT_FALSE(!col.empty());
 }
 
 TYPED_TEST(ObserverListTest, DisruptSelf) {
@@ -1001,7 +1008,7 @@ TEST_F(CheckedObserverListTest, CheckedObserver) {
     // On the non-death fork, no UAF occurs since the deleted observer is never
     // notified, but also the observer list still has |l2| in it. Check that.
     list->RemoveObserver(&l1);
-    EXPECT_TRUE(list->might_have_observers());
+    EXPECT_TRUE(!list->empty());
 
     // Now (in the non-death fork()) there's a problem. To delete |it|, we need
     // to compact the list, but that needs to iterate, which would CHECK again.

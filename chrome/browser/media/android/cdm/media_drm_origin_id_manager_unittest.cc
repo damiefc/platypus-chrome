@@ -9,11 +9,11 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/unguessable_token.h"
@@ -403,7 +403,8 @@ TEST_F(MediaDrmOriginIdManagerTest, ProvisioningAfterExpiration) {
 TEST_F(MediaDrmOriginIdManagerTest, Incognito) {
   // No MediaDrmOriginIdManager should be created for an incognito profile.
   Initialize();
-  auto* incognito_profile = profile_->GetPrimaryOTRProfile();
+  auto* incognito_profile =
+      profile_->GetPrimaryOTRProfile(/*create_if_needed=*/true);
   EXPECT_FALSE(
       MediaDrmOriginIdManagerFactory::GetForProfile(incognito_profile));
 }

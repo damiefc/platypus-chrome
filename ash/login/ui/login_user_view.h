@@ -11,7 +11,8 @@
 #include "ash/login/ui/login_user_menu_view.h"
 #include "ash/public/cpp/login_types.h"
 #include "base/macros.h"
-#include "ui/views/controls/button/button.h"
+#include "base/scoped_observation.h"
+#include "ui/display/manager/display_configurator.h"
 #include "ui/views/view.h"
 
 namespace ash {
@@ -22,7 +23,7 @@ class LoginButton;
 // Display the user's profile icon, name, and a menu icon in various layout
 // styles.
 class ASH_EXPORT LoginUserView : public views::View,
-                                 public views::ButtonListener {
+                                 public display::DisplayConfigurator::Observer {
  public:
   // TestApi is used for tests to get internal implementation details.
   class ASH_EXPORT TestApi {
@@ -32,7 +33,7 @@ class ASH_EXPORT LoginUserView : public views::View,
 
     LoginDisplayStyle display_style() const;
 
-    const base::string16& displayed_name() const;
+    const std::u16string& displayed_name() const;
 
     views::View* user_label() const;
     views::View* tap_button() const;
@@ -73,16 +74,19 @@ class ASH_EXPORT LoginUserView : public views::View,
   // Enables or disables tapping the view.
   void SetTapEnabled(bool enabled);
 
+  // DisplayConfigurator::Observer
+  void OnPowerStateChanged(chromeos::DisplayPowerState power_state) override;
+
   const LoginUserInfo& current_user() const { return current_user_; }
+
+  void UpdateDropdownIcon();
 
   // views::View:
   const char* GetClassName() const override;
   gfx::Size CalculatePreferredSize() const override;
   void Layout() override;
   void RequestFocus() override;
-
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  void OnThemeChanged() override;
 
  private:
   class UserImage;
@@ -91,6 +95,8 @@ class ASH_EXPORT LoginUserView : public views::View,
 
   // Called when hover state changes.
   void OnHover(bool has_hover);
+
+  void DropdownButtonPressed();
 
   // Updates UI element values so they reflect the data in |current_user_|.
   void UpdateCurrentUserState();
@@ -130,6 +136,10 @@ class ASH_EXPORT LoginUserView : public views::View,
   // True if the view must be opaque (ie, opacity = 1) regardless of input
   // state.
   bool force_opaque_ = false;
+
+  base::ScopedObservation<display::DisplayConfigurator,
+                          display::DisplayConfigurator::Observer>
+      display_observation_{this};
 
   DISALLOW_COPY_AND_ASSIGN(LoginUserView);
 };

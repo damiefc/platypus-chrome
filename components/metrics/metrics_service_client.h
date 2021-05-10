@@ -11,8 +11,8 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "components/metrics/metrics_log_store.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_reporting_default_state.h"
 #include "third_party/metrics_proto/system_profile.pb.h"
@@ -66,6 +66,9 @@ class MetricsServiceClient {
   // Returns the release channel (e.g. stable, beta, etc) of the application.
   virtual SystemProfileProto::Channel GetChannel() = 0;
 
+  // Returns true if the application is on the extended stable channel.
+  virtual bool IsExtendedStableChannel() = 0;
+
   // Returns the version of the application as a string.
   virtual std::string GetVersionString() = 0;
 
@@ -74,9 +77,6 @@ class MetricsServiceClient {
   // |serialized_environment| are consumed by the call, but the caller maintains
   // ownership.
   virtual void OnEnvironmentUpdate(std::string* serialized_environment) {}
-
-  // Called by the metrics service to record a clean shutdown.
-  virtual void OnLogCleanShutdown() {}
 
   // Called prior to a metrics log being closed, allowing the client to collect
   // extra histograms that will go in that log. Asynchronous API - the client
@@ -158,6 +158,9 @@ class MetricsServiceClient {
 
   // Checks if the cloned install detector says that client ids should be reset.
   virtual bool ShouldResetClientIdsOnClonedInstall();
+
+  // Specifies local log storage requirements and restrictions.
+  virtual MetricsLogStore::StorageLimits GetStorageLimits() const;
 
   // Sets the callback to run MetricsServiceManager::UpdateRunningServices.
   void SetUpdateRunningServicesCallback(const base::RepeatingClosure& callback);

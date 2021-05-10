@@ -21,10 +21,18 @@ void InitAndEnableRenderDocumentFeature(
 
 std::vector<std::string> RenderDocumentFeatureLevelValues() {
   return {
-      GetRenderDocumentLevelName(RenderDocumentLevel::kDisabled),
       GetRenderDocumentLevelName(RenderDocumentLevel::kCrashedFrame),
       GetRenderDocumentLevelName(RenderDocumentLevel::kSubframe),
   };
+}
+
+std::string GetRenderDocumentLevelNameForTestParams(
+    std::string render_document_level) {
+  if (render_document_level ==
+      GetRenderDocumentLevelName(RenderDocumentLevel::kCrashedFrame)) {
+    return "RDCrashedFrame";
+  }
+  return "RDSubframe";
 }
 
 }  // namespace content

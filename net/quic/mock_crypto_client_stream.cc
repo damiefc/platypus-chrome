@@ -4,16 +4,19 @@
 
 #include "net/quic/mock_crypto_client_stream.h"
 
+#include "net/base/ip_endpoint.h"
+#include "net/quic/address_utils.h"
 #include "net/quic/mock_decrypter.h"
 #include "net/quic/mock_encrypter.h"
+#include "net/quic/quic_chromium_client_session.h"
 #include "net/third_party/quiche/src/quic/core/crypto/null_decrypter.h"
 #include "net/third_party/quiche/src/quic/core/crypto/null_encrypter.h"
 #include "net/third_party/quiche/src/quic/core/crypto/quic_decrypter.h"
 #include "net/third_party/quiche/src/quic/core/crypto/quic_encrypter.h"
 #include "net/third_party/quiche/src/quic/core/http/quic_spdy_client_session_base.h"
 #include "net/third_party/quiche/src/quic/core/quic_utils.h"
-#include "net/third_party/quiche/src/quic/platform/api/quic_ptr_util.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_config_peer.h"
+#include "net/third_party/quiche/src/quic/test_tools/quic_connection_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
@@ -47,7 +50,6 @@ using quic::QuicSpdyClientSessionBase;
 using quic::QuicTagVector;
 using quic::QuicTime;
 using quic::TransportParameters;
-using quiche::QuicheStringPiece;
 using std::string;
 
 namespace net {
@@ -90,6 +92,19 @@ void MockCryptoClientStream::OnHandshakeMessage(
 }
 
 bool MockCryptoClientStream::CryptoConnect() {
+  IPEndPoint local_ip;
+  static_cast<QuicChromiumClientSession*>(session())
+      ->GetDefaultSocket()
+      ->GetLocalAddress(&local_ip);
+  session()->connection()->SetSelfAddress(ToQuicSocketAddress(local_ip));
+
+  IPEndPoint peer_ip;
+  static_cast<QuicChromiumClientSession*>(session())
+      ->GetDefaultSocket()
+      ->GetPeerAddress(&peer_ip);
+  quic::test::QuicConnectionPeer::SetEffectivePeerAddress(
+      session()->connection(), ToQuicSocketAddress(peer_ip));
+
   if (session()->connection()->version().KnowsWhichDecrypterToUse()) {
     session()->connection()->InstallDecrypter(
         ENCRYPTION_FORWARD_SECURE,
@@ -127,6 +142,9 @@ bool MockCryptoClientStream::CryptoConnect() {
               std::make_unique<MockDecrypter>(Perspective::IS_CLIENT));
         }
         session()->connection()->SetEncrypter(
+            ENCRYPTION_FORWARD_SECURE,
+            std::make_unique<MockEncrypter>(Perspective::IS_CLIENT));
+        session()->connection()->SetEncrypter(
             ENCRYPTION_ZERO_RTT,
             std::make_unique<MockEncrypter>(Perspective::IS_CLIENT));
       } else {
@@ -142,6 +160,9 @@ bool MockCryptoClientStream::CryptoConnect() {
         if (session()->version().UsesHttp3()) {
           SetConfigNegotiated();
         }
+        session()->connection()->SetEncrypter(
+            ENCRYPTION_FORWARD_SECURE,
+            std::make_unique<NullEncrypter>(Perspective::IS_CLIENT));
         session()->OnNewEncryptionKeyAvailable(
             ENCRYPTION_ZERO_RTT,
             std::make_unique<NullEncrypter>(Perspective::IS_CLIENT));
@@ -221,7 +242,7 @@ bool MockCryptoClientStream::CryptoConnect() {
     case COLD_START_WITH_CHLO_SENT: {
       handshake_confirmed_ = false;
       encryption_established_ = false;
-      SendHandshakeMessage(GetDummyCHLOMessage());
+      SendHandshakeMessage(GetDummyCHLOMessage(), ENCRYPTION_INITIAL);
       break;
     }
   }
@@ -235,6 +256,11 @@ bool MockCryptoClientStream::encryption_established() const {
 
 bool MockCryptoClientStream::one_rtt_keys_available() const {
   return handshake_confirmed_;
+}
+
+quic::HandshakeState MockCryptoClientStream::GetHandshakeState() const {
+  return handshake_confirmed_ ? quic::HANDSHAKE_CONFIRMED
+                              : quic::HANDSHAKE_START;
 }
 
 bool MockCryptoClientStream::EarlyDataAccepted() const {
@@ -352,7 +378,7 @@ void MockCryptoClientStream::SetConfigNegotiated() {
     config.SetStatelessResetTokenToSend(
         quic::QuicUtils::GenerateStatelessResetToken(connection_id));
   }
-  if (session()->version().AuthenticatesHandshakeConnectionIds()) {
+  if (session()->version().UsesTls()) {
     if (session()->perspective() == Perspective::IS_CLIENT) {
       config.SetOriginalConnectionIdToSend(
           session()->connection()->connection_id());

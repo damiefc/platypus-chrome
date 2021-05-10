@@ -5,11 +5,10 @@
 #ifndef BASE_TRACE_EVENT_HEAP_PROFILER_ALLOCATION_CONTEXT_TRACKER_H_
 #define BASE_TRACE_EVENT_HEAP_PROFILER_ALLOCATION_CONTEXT_TRACKER_H_
 
+#include <atomic>
 #include <vector>
 
-#include "base/atomicops.h"
 #include "base/base_export.h"
-#include "base/macros.h"
 #include "base/trace_event/heap_profiler_allocation_context.h"
 
 namespace base {
@@ -64,15 +63,14 @@ class BASE_EXPORT AllocationContextTracker {
     // A little lag after heap profiling is enabled or disabled is fine, it is
     // more important that the check is as cheap as possible when capturing is
     // not enabled, so do not issue a memory barrier in the fast path.
-    if (subtle::NoBarrier_Load(&capture_mode_) ==
-            static_cast<int32_t>(CaptureMode::DISABLED))
+    if (capture_mode_.load(std::memory_order_relaxed) == CaptureMode::DISABLED)
       return CaptureMode::DISABLED;
 
     // In the slow path, an acquire load is required to pair with the release
     // store in |SetCaptureMode|. This is to ensure that the TLS slot for
     // the thread-local allocation context tracker has been initialized if
     // |capture_mode| returns something other than DISABLED.
-    return static_cast<CaptureMode>(subtle::Acquire_Load(&capture_mode_));
+    return capture_mode_.load(std::memory_order_acquire);
   }
 
   // Returns the thread-local instance, creating one if necessary. Returns
@@ -83,6 +81,9 @@ class BASE_EXPORT AllocationContextTracker {
   // Set the thread name in the AllocationContextTracker of the current thread
   // if capture is enabled.
   static void SetCurrentThreadName(const char* name);
+
+  AllocationContextTracker(const AllocationContextTracker&) = delete;
+  AllocationContextTracker& operator=(const AllocationContextTracker&) = delete;
 
   // Starts and ends a new ignore scope between which the allocations are
   // ignored by the heap profiler. GetContextSnapshot() returns false when
@@ -122,21 +123,19 @@ class BASE_EXPORT AllocationContextTracker {
  private:
   AllocationContextTracker();
 
-  static subtle::Atomic32 capture_mode_;
+  static std::atomic<CaptureMode> capture_mode_;
 
   // The pseudo stack where frames are |TRACE_EVENT| names or inserted PCs.
   std::vector<StackFrame> tracked_stack_;
 
   // The thread name is used as the first entry in the pseudo stack.
-  const char* thread_name_;
+  const char* thread_name_ = nullptr;
 
   // Stack of tasks' contexts. Context serves as a different dimension than
   // pseudo stack to cluster allocations.
   std::vector<const char*> task_contexts_;
 
-  uint32_t ignore_scope_depth_;
-
-  DISALLOW_COPY_AND_ASSIGN(AllocationContextTracker);
+  uint32_t ignore_scope_depth_ = 0;
 };
 
 }  // namespace trace_event

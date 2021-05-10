@@ -6,7 +6,6 @@
 #define IOS_CHROME_BROWSER_UI_FULLSCREEN_FULLSCREEN_MEDIATOR_H_
 
 #import <Foundation/Foundation.h>
-#include <memory>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -56,6 +55,10 @@ class FullscreenMediator : public FullscreenModelObserver {
 
   // Instructs the mediator to stop observing its model.
   void Disconnect();
+
+  // Instructs the mediator to signal the need to resize the horizontal insets.
+  // TODO(crbug.com/1114054) remove after fixing multiwindow resizing issue.
+  void ResizeHorizontalInsets();
 
  private:
   // FullscreenModelObserver:

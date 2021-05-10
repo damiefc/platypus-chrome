@@ -5,8 +5,6 @@
 #ifndef CHROME_BROWSER_STORAGE_DURABLE_STORAGE_PERMISSION_CONTEXT_H_
 #define CHROME_BROWSER_STORAGE_DURABLE_STORAGE_PERMISSION_CONTEXT_H_
 
-#include <vector>
-
 #include "base/macros.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/permissions/permission_context_base.h"
@@ -29,7 +27,8 @@ class DurableStoragePermissionContext
       permissions::BrowserPermissionCallback callback) override;
   void UpdateContentSetting(const GURL& requesting_origin,
                             const GURL& embedding_origin,
-                            ContentSetting content_setting) override;
+                            ContentSetting content_setting,
+                            bool is_one_time) override;
   bool IsRestrictedToSecureOrigins() const override;
 
  private:

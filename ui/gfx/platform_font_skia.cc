@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "third_party/skia/include/core/SkFont.h"
 #include "third_party/skia/include/core/SkFontMetrics.h"
 #include "third_party/skia/include/core/SkFontStyle.h"
@@ -36,9 +37,9 @@ namespace {
 // GNOME/KDE is a non-scalable one. The name should be listed in the
 // IsFallbackFontAllowed function in skia/ext/SkFontHost_fontconfig_direct.cpp.
 #if defined(OS_ANDROID)
-const char* kFallbackFontFamilyName = "serif";
+const char kFallbackFontFamilyName[] = "serif";
 #else
-const char* kFallbackFontFamilyName = "sans";
+const char kFallbackFontFamilyName[] = "sans";
 #endif
 
 constexpr SkGlyphID kUnsupportedGlyph = 0;
@@ -171,7 +172,7 @@ bool PlatformFontSkia::InitDefaultFont() {
     delegate->GetDefaultFontDescription(&family, &size_pixels, &style, &weight,
                                         &params);
   } else if (default_font_description_) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
     // On ChromeOS, a FontList font description string is stored as a
     // translatable resource and passed in via SetDefaultFontDescription().
     FontRenderParamsQuery query;

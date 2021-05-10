@@ -75,12 +75,20 @@ class ScreenshotShareSheetMediator {
     public void performNoArgOperation(
             @ScreenshotShareSheetViewProperties.NoArgOperation int operation) {
         if (NoArgOperation.SHARE == operation) {
+            ScreenshotShareSheetMetrics.logScreenshotAction(
+                    ScreenshotShareSheetMetrics.ScreenshotShareSheetAction.SHARE);
             share();
         } else if (NoArgOperation.SAVE == operation) {
+            ScreenshotShareSheetMetrics.logScreenshotAction(
+                    ScreenshotShareSheetMetrics.ScreenshotShareSheetAction.SAVE);
             mSaveRunnable.run();
         } else if (NoArgOperation.DELETE == operation) {
+            ScreenshotShareSheetMetrics.logScreenshotAction(
+                    ScreenshotShareSheetMetrics.ScreenshotShareSheetAction.DELETE);
             mCloseDialogRunnable.run();
         } else if (NoArgOperation.INSTALL == operation) {
+            ScreenshotShareSheetMetrics.logScreenshotAction(
+                    ScreenshotShareSheetMetrics.ScreenshotShareSheetAction.EDIT);
             mInstallCallback.onResult(mCloseDialogRunnable);
         }
     }
@@ -111,12 +119,12 @@ class ScreenshotShareSheetMediator {
                     params, new ChromeShareExtras.Builder().build(), System.currentTimeMillis());
         };
 
-        generateTemporaryUriFromBitmap(mContext, title, bitmap, callback);
+        generateTemporaryUriFromBitmap(title, bitmap, callback);
         mCloseDialogRunnable.run();
     }
 
     protected void generateTemporaryUriFromBitmap(
-            Context context, String fileName, Bitmap bitmap, Callback<Uri> callback) {
-        ShareImageFileUtils.generateTemporaryUriFromBitmap(context, fileName, bitmap, callback);
+            String fileName, Bitmap bitmap, Callback<Uri> callback) {
+        ShareImageFileUtils.generateTemporaryUriFromBitmap(fileName, bitmap, callback);
     }
 }

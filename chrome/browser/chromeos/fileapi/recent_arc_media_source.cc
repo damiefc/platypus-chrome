@@ -16,10 +16,10 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/strings/string_util.h"
-#include "chrome/browser/chromeos/arc/arc_util.h"
-#include "chrome/browser/chromeos/arc/fileapi/arc_documents_provider_root.h"
-#include "chrome/browser/chromeos/arc/fileapi/arc_documents_provider_root_map.h"
-#include "chrome/browser/chromeos/arc/fileapi/arc_documents_provider_util.h"
+#include "chrome/browser/ash/arc/arc_util.h"
+#include "chrome/browser/ash/arc/fileapi/arc_documents_provider_root.h"
+#include "chrome/browser/ash/arc/fileapi/arc_documents_provider_root_map.h"
+#include "chrome/browser/ash/arc/fileapi/arc_documents_provider_util.h"
 #include "chrome/browser/chromeos/fileapi/recent_file.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/arc/mojom/file_system.mojom.h"
@@ -34,7 +34,11 @@ namespace chromeos {
 namespace {
 
 const char kAndroidDownloadDirPrefix[] = "/storage/emulated/0/Download/";
-const char kAndroidMyFilesDirPrefix[] = "/storage/MyFiles/";
+// The path of the MyFiles directory inside Android. The UUID "0000....2019" is
+// defined in components/arc/volume_mounter/arc_volume_mounter_bridge.cc.
+// TODO(crbug.com/929031): Move MyFiles constants to a common place.
+const char kAndroidMyFilesDirPrefix[] =
+    "/storage/0000000000000000000000000000CAFEF00D2019/";
 
 const char kMediaDocumentsProviderAuthority[] =
     "com.android.providers.media.documents";

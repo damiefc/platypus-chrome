@@ -51,8 +51,9 @@ class CastMediaNotificationItem
   void SetView(media_message_center::MediaNotificationView* view) override;
   void OnMediaSessionActionButtonPressed(
       media_session::mojom::MediaSessionAction action) override;
+  void SeekTo(base::TimeDelta time) override {}
   void Dismiss() override;
-  bool SourceIsCast() override;
+  media_message_center::SourceType SourceType() override;
 
   // media_router::mojom::MediaStatusObserver:
   void OnMediaStatusUpdated(
@@ -64,6 +65,12 @@ class CastMediaNotificationItem
   // than once per instance.
   mojo::PendingRemote<media_router::mojom::MediaStatusObserver>
   GetObserverPendingRemote();
+
+  const media_router::MediaRoute::Id route_id() const {
+    return media_route_id_;
+  }
+  Profile* profile() { return profile_; }
+  bool is_active() const { return is_active_; }
 
   base::WeakPtr<CastMediaNotificationItem> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
@@ -115,10 +122,13 @@ class CastMediaNotificationItem
   void RecordMetadataMetrics() const;
 
   bool recorded_metadata_metrics_ = false;
+  // The notification is shown when active.
+  bool is_active_ = true;
 
   media_message_center::MediaNotificationController* const
       notification_controller_;
   media_message_center::MediaNotificationView* view_ = nullptr;
+  Profile* const profile_;
 
   std::unique_ptr<CastMediaSessionController> session_controller_;
   const media_router::MediaRoute::Id media_route_id_;

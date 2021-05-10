@@ -11,6 +11,7 @@
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "media/audio/audio_output_device.h"
 #include "media/base/audio_renderer_sink.h"
 #include "media/mojo/mojom/audio_data_pipe.mojom.h"
@@ -118,8 +119,8 @@ class FakeOutputStreamFactory : public audio::FakeStreamFactory {
   }
 
   void Bind(mojo::ScopedMessagePipeHandle handle) {
-    receiver_.Bind(
-        mojo::PendingReceiver<audio::mojom::StreamFactory>(std::move(handle)));
+    receiver_.Bind(mojo::PendingReceiver<media::mojom::AudioStreamFactory>(
+        std::move(handle)));
   }
 
   StrictMock<MockStream> stream_;
@@ -176,7 +177,7 @@ class AudioServiceOutputDeviceTest : public testing::Test {
     task_env_.RunUntilIdle();
   }
 
-  mojo::PendingRemote<audio::mojom::StreamFactory> MakeFactoryRemote() {
+  mojo::PendingRemote<media::mojom::AudioStreamFactory> MakeFactoryRemote() {
     return stream_factory_->receiver_.BindNewPipeAndPassRemote();
   }
 
@@ -203,7 +204,7 @@ TEST_F(AudioServiceOutputDeviceTest, CreatePlayPause) {
 }
 
 // Flaky on Linux Chromium OS ASan LSan (https://crbug.com/889845)
-#if defined(OS_CHROMEOS) && defined(ADDRESS_SANITIZER)
+#if BUILDFLAG(IS_CHROMEOS_ASH) && defined(ADDRESS_SANITIZER)
 #define MAYBE_VerifyDataFlow DISABLED_VerifyDataFlow
 #else
 #define MAYBE_VerifyDataFlow VerifyDataFlow

@@ -32,7 +32,6 @@ import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.password_check.PasswordCheck;
 import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
-import org.chromium.chrome.browser.password_check.PasswordCheckPreference;
 import org.chromium.chrome.browser.password_check.PasswordCheckReferrer;
 import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
 import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
@@ -40,12 +39,12 @@ import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
-import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.webauthn.CableAuthenticatorModuleProvider;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.SearchUtils;
+import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
@@ -106,7 +105,7 @@ public class PasswordSettings
     private Preference mSecurityKey;
     private ChromeSwitchPreference mSavePasswordsSwitch;
     private ChromeSwitchPreference mAutoSignInSwitch;
-    private PasswordCheckPreference mCheckPasswords;
+    private ChromeBasePreference mCheckPasswords;
     private TextMessagePreference mEmptyView;
     private boolean mSearchRecorded;
     private Menu mMenu;
@@ -174,7 +173,7 @@ public class PasswordSettings
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mPasswordCheck = PasswordCheckFactory.getOrCreate();
+        mPasswordCheck = PasswordCheckFactory.getOrCreate(new SettingsLauncherImpl());
     }
 
     @Override
@@ -350,6 +349,10 @@ public class PasswordSettings
             passwordParent.addPreference(preference);
         }
         mNoPasswords = passwordParent.getPreferenceCount() == 0;
+        if (mMenu != null) {
+            mMenu.findItem(R.id.export_passwords)
+                    .setEnabled(!mNoPasswords && !mExportFlow.isActive());
+        }
         if (mNoPasswords) {
             if (count == 0) displayEmptyScreenMessage(); // Show if the list was already empty.
             if (mSearchQuery == null) {
@@ -453,6 +456,14 @@ public class PasswordSettings
                     Intent.ACTION_VIEW, Uri.parse(PasswordUIView.getAccountDashboardURL()));
             intent.setPackage(getActivity().getPackageName());
             getActivity().startActivity(intent);
+        } else if (ChromeFeatureList.isEnabled(ChromeFeatureList.EDIT_PASSWORDS_IN_SETTINGS)) {
+            boolean isBlockedCredential =
+                    !preference.getExtras().containsKey(PasswordSettings.PASSWORD_LIST_NAME);
+            PasswordManagerHandlerProvider.getInstance()
+                    .getPasswordManagerHandler()
+                    .showPasswordEntryEditingView(getActivity(), new SettingsLauncherImpl(),
+                            preference.getExtras().getInt(PasswordSettings.PASSWORD_LIST_ID),
+                            isBlockedCredential);
         } else {
             // Launch preference activity with PasswordEntryViewer fragment with
             // intent extras specifying the object.
@@ -510,18 +521,15 @@ public class PasswordSettings
     }
 
     private void createCheckPasswords() {
-        final int numCheckLaunched =
-                getPrefService().getInteger(Pref.SETTINGS_LAUNCHED_PASSWORD_CHECKS);
-        mCheckPasswords = new PasswordCheckPreference(getStyledContext(), numCheckLaunched < 3);
+        mCheckPasswords = new ChromeBasePreference(getStyledContext());
         mCheckPasswords.setKey(PREF_CHECK_PASSWORDS);
         mCheckPasswords.setTitle(R.string.passwords_check_title);
         mCheckPasswords.setOrder(ORDER_CHECK_PASSWORDS);
         mCheckPasswords.setSummary(R.string.passwords_check_description);
         // Add a listener which launches a settings page for the leak password check
         mCheckPasswords.setOnPreferenceClickListener(preference -> {
-            getPrefService().setInteger(
-                    Pref.SETTINGS_LAUNCHED_PASSWORD_CHECKS, numCheckLaunched + 1);
-            PasswordCheck passwordCheck = PasswordCheckFactory.getOrCreate();
+            PasswordCheck passwordCheck =
+                    PasswordCheckFactory.getOrCreate(new SettingsLauncherImpl());
             passwordCheck.showUi(getStyledContext(), PasswordCheckReferrer.PASSWORD_SETTINGS);
             // Return true to notify the click was handled
             return true;

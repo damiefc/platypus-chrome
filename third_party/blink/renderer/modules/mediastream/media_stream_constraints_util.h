@@ -9,6 +9,7 @@
 
 #include "media/base/video_facing.h"
 #include "media/capture/video_capture_types.h"
+#include "third_party/blink/public/mojom/mediastream/media_devices.mojom-blink.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_sets.h"
 #include "third_party/blink/renderer/modules/mediastream/video_track_adapter_settings.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -204,13 +205,14 @@ class MODULES_EXPORT AudioCaptureSettings {
   explicit AudioCaptureSettings(const char* failed_constraint_name);
 
   // Creates an object with the given values.
-  explicit AudioCaptureSettings(
+  AudioCaptureSettings(
       std::string device_id,
       const base::Optional<int>& requested_buffer_size,
       bool disable_local_echo,
       bool enable_automatic_output_device_selection,
       ProcessingType processing_type,
-      const AudioProcessingProperties& audio_processing_properties);
+      const AudioProcessingProperties& audio_processing_properties,
+      int num_channels);
   AudioCaptureSettings(const AudioCaptureSettings& other);
   AudioCaptureSettings& operator=(const AudioCaptureSettings& other);
   AudioCaptureSettings(AudioCaptureSettings&& other);
@@ -244,6 +246,10 @@ class MODULES_EXPORT AudioCaptureSettings {
     DCHECK(HasValue());
     return audio_processing_properties_;
   }
+  int num_channels() const {
+    DCHECK(HasValue());
+    return num_channels_;
+  }
 
  private:
   const char* failed_constraint_name_;
@@ -253,6 +259,7 @@ class MODULES_EXPORT AudioCaptureSettings {
   bool render_to_associated_sink_;
   ProcessingType processing_type_;
   AudioProcessingProperties audio_processing_properties_;
+  int num_channels_;
 };
 
 // Method to get boolean value of constraint with |name| from constraints.
@@ -339,7 +346,7 @@ MODULES_EXPORT MediaStreamSource::Capabilities
 ComputeCapabilitiesForVideoSource(
     const String& device_id,
     const media::VideoCaptureFormats& formats,
-    media::VideoFacingMode facing_mode,
+    mojom::blink::FacingMode facing_mode,
     bool is_device_capture,
     const base::Optional<std::string>& group_id = base::nullopt);
 

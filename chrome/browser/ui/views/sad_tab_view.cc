@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -18,6 +19,7 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -40,7 +42,7 @@ constexpr int kMinColumnWidth = 120;
 constexpr int kTitleBottomSpacing = 13;
 
 std::unique_ptr<views::Label> CreateFormattedLabel(
-    const base::string16& message) {
+    const std::u16string& message) {
   auto label = std::make_unique<views::Label>(
       message, views::style::CONTEXT_LABEL, views::style::STYLE_SECONDARY);
 
@@ -53,7 +55,7 @@ std::unique_ptr<views::Label> CreateFormattedLabel(
 
 // Return a string describing the error code. Keep in sync with the
 // CrashExitCodes in /tools/metrics/histograms/enums.xml.
-base::string16 ErrorToString(int error_code) {
+std::u16string ErrorToString(int error_code) {
   std::string error_string;
   switch (std::abs(error_code)) {
     case 1:
@@ -556,7 +558,7 @@ SadTabView::SadTabView(content::WebContents* web_contents, SadTabKind kind)
 
   auto help_link = std::make_unique<views::Link>(
       l10n_util::GetStringUTF16(GetHelpLinkTitle()));
-  help_link->set_callback(base::BindRepeating(
+  help_link->SetCallback(base::BindRepeating(
       &SadTab::PerformAction, base::Unretained(this), Action::HELP_LINK));
   layout->StartRowWithPadding(views::GridLayout::kFixedSize, column_set_id,
                               views::GridLayout::kFixedSize,
@@ -564,7 +566,9 @@ SadTabView::SadTabView(content::WebContents* web_contents, SadTabKind kind)
   layout->AddView(std::move(help_link), 1.0, 1.0, views::GridLayout::LEADING,
                   views::GridLayout::CENTER);
   auto action_button = std::make_unique<views::MdTextButton>(
-      this, l10n_util::GetStringUTF16(GetButtonTitle()));
+      base::BindRepeating(&SadTabView::PerformAction, base::Unretained(this),
+                          Action::BUTTON),
+      l10n_util::GetStringUTF16(GetButtonTitle()));
   action_button->SetProminent(true);
   action_button_ =
       layout->AddView(std::move(action_button), 1.0, 1.0,
@@ -598,11 +602,6 @@ void SadTabView::ReinstallInWebView() {
     owner_ = nullptr;
   }
   AttachToWebView();
-}
-
-void SadTabView::ButtonPressed(views::Button* sender, const ui::Event& event) {
-  DCHECK_EQ(action_button_, sender);
-  PerformAction(Action::BUTTON);
 }
 
 void SadTabView::OnPaint(gfx::Canvas* canvas) {

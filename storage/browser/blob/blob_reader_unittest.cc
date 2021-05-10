@@ -13,8 +13,8 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -22,7 +22,7 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_runner.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -73,14 +73,14 @@ class FakeFileStreamReader : public FileStreamReader {
   explicit FakeFileStreamReader(const std::string& contents)
       : buffer_(base::MakeRefCounted<DrainableIOBuffer>(
             base::MakeRefCounted<net::StringIOBuffer>(
-                std::unique_ptr<std::string>(new std::string(contents))),
+                std::make_unique<std::string>(contents)),
             contents.size())),
         net_error_(net::OK),
         size_(contents.size()) {}
   FakeFileStreamReader(const std::string& contents, uint64_t size)
       : buffer_(base::MakeRefCounted<DrainableIOBuffer>(
             base::MakeRefCounted<net::StringIOBuffer>(
-                std::unique_ptr<std::string>(new std::string(contents))),
+                std::make_unique<std::string>(contents)),
             contents.size())),
         net_error_(net::OK),
         size_(size) {}
@@ -673,7 +673,7 @@ TEST_F(BlobReaderTest, ReadableDataHandleSingle) {
 
   mojo::ScopedDataPipeProducerHandle producer;
   mojo::ScopedDataPipeConsumerHandle consumer;
-  MojoResult pipe_result = mojo::CreateDataPipe(nullptr, &producer, &consumer);
+  MojoResult pipe_result = mojo::CreateDataPipe(nullptr, producer, consumer);
   ASSERT_EQ(MOJO_RESULT_OK, pipe_result);
 
   int bytes_read = net::ERR_UNEXPECTED;
@@ -720,7 +720,7 @@ TEST_F(BlobReaderTest, ReadableDataHandleSingleRange) {
 
   mojo::ScopedDataPipeProducerHandle producer;
   mojo::ScopedDataPipeConsumerHandle consumer;
-  MojoResult pipe_result = mojo::CreateDataPipe(nullptr, &producer, &consumer);
+  MojoResult pipe_result = mojo::CreateDataPipe(nullptr, producer, consumer);
   ASSERT_EQ(MOJO_RESULT_OK, pipe_result);
 
   int bytes_read = net::ERR_UNEXPECTED;
@@ -801,7 +801,7 @@ TEST_F(BlobReaderTest, FileRange) {
   ExpectLocalFileCall(kPath, kTime, 0, reader.release());
 
   // We create the reader again with the offset after the seek.
-  reader.reset(new FakeFileStreamReader(kRangeData));
+  reader = std::make_unique<FakeFileStreamReader>(kRangeData);
   reader->SetAsyncRunner(base::ThreadTaskRunnerHandle::Get().get());
   ExpectLocalFileCall(kPath, kTime, kOffset, reader.release());
 

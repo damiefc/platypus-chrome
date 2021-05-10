@@ -14,7 +14,6 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/metrics/ukm_source_id.h"
 #include "base/optional.h"
 #include "base/values.h"
 #include "content/public/browser/global_routing_id.h"
@@ -24,7 +23,9 @@
 #include "ipc/ipc_message.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -46,25 +47,24 @@ struct WebRequestInfoInitParams {
       int render_process_id,
       int render_frame_id,
       std::unique_ptr<ExtensionNavigationUIData> navigation_ui_data,
-      int32_t routing_id,
+      int32_t view_routing_id,
       const network::ResourceRequest& request,
       bool is_download,
       bool is_async,
       bool is_service_worker_script,
       base::Optional<int64_t> navigation_id,
-      base::UkmSourceId ukm_source_id);
+      ukm::SourceIdObj ukm_source_id);
 
   ~WebRequestInfoInitParams();
 
   uint64_t id = 0;
   GURL url;
   int render_process_id = -1;
-  int routing_id = MSG_ROUTING_NONE;
+  int view_routing_id = MSG_ROUTING_NONE;
   int frame_id = -1;
   std::string method;
   bool is_navigation_request = false;
   base::Optional<url::Origin> initiator;
-  blink::mojom::ResourceType type = blink::mojom::ResourceType::kSubResource;
   WebRequestResourceType web_request_type = WebRequestResourceType::OTHER;
   bool is_async = false;
   net::HttpRequestHeaders extra_request_headers;
@@ -76,7 +76,7 @@ struct WebRequestInfoInitParams {
   ExtensionApiFrameIdMap::FrameData frame_data;
   bool is_service_worker_script = false;
   base::Optional<int64_t> navigation_id;
-  base::UkmSourceId ukm_source_id = base::kInvalidUkmSourceId;
+  ukm::SourceIdObj ukm_source_id = ukm::kInvalidSourceIdObj;
   content::GlobalFrameRoutingId parent_routing_id;
 
  private:
@@ -108,7 +108,7 @@ struct WebRequestInfo {
   const int render_process_id;
 
   // The routing ID of the object which initiated the request, if applicable.
-  const int routing_id = MSG_ROUTING_NONE;
+  const int view_routing_id = MSG_ROUTING_NONE;
 
   // The render frame ID of the frame which initiated this request, or -1 if
   // the request was not initiated by a frame.
@@ -128,11 +128,7 @@ struct WebRequestInfo {
   // initiate this request.
   ExtensionApiFrameIdMap::FrameData frame_data;
 
-  // The type of the request (e.g. main frame, subresource, XHR, etc).
-  const blink::mojom::ResourceType type;
-
-  // A partially mirrored copy of |type| which is slightly less granular and
-  // which also identifies WebSocket requests separately from other types.
+  // The resource type being requested.
   const WebRequestResourceType web_request_type = WebRequestResourceType::OTHER;
 
   // Indicates if this request is asynchronous.
@@ -182,10 +178,12 @@ struct WebRequestInfo {
   const base::Optional<int64_t> navigation_id;
 
   // UKM source to associate metrics with for this request.
-  const base::UkmSourceId ukm_source_id;
+  const ukm::SourceIdObj ukm_source_id;
 
   // ID of the RenderFrameHost corresponding to the parent frame. Only valid for
   // document subresource and sub-frame requests.
+  // TODO(karandeepb, mcnee): For subresources, having "parent" in the name is
+  // misleading. This should be renamed to indicate that this is the initiator.
   const content::GlobalFrameRoutingId parent_routing_id;
 
  private:

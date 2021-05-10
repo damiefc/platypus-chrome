@@ -4,7 +4,7 @@
 
 #include "content/renderer/categorized_worker_pool.h"
 #include "base/sequenced_task_runner.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/sequenced_task_runner_test_template.h"
 #include "base/test/task_runner_test_template.h"
 #include "base/threading/platform_thread.h"
@@ -21,7 +21,9 @@ class CategorizedWorkerPoolTestDelegate {
  public:
   CategorizedWorkerPoolTestDelegate() = default;
 
-  void StartTaskRunner() { categorized_worker_pool_->Start(kNumThreads); }
+  void StartTaskRunner() {
+    categorized_worker_pool_->Start(kNumThreads, nullptr);
+  }
 
   scoped_refptr<CategorizedWorkerPool> GetTaskRunner() {
     return categorized_worker_pool_;
@@ -40,7 +42,9 @@ class CategorizedWorkerPoolSequencedTestDelegate {
  public:
   CategorizedWorkerPoolSequencedTestDelegate() = default;
 
-  void StartTaskRunner() { categorized_worker_pool_->Start(kNumThreads); }
+  void StartTaskRunner() {
+    categorized_worker_pool_->Start(kNumThreads, nullptr);
+  }
 
   scoped_refptr<base::SequencedTaskRunner> GetTaskRunner() {
     return categorized_worker_pool_->CreateSequencedTaskRunner();
@@ -62,7 +66,9 @@ class CategorizedWorkerPoolTaskGraphRunnerTestDelegate {
  public:
   CategorizedWorkerPoolTaskGraphRunnerTestDelegate() = default;
 
-  void StartTaskGraphRunner() { categorized_worker_pool_->Start(NumThreads); }
+  void StartTaskGraphRunner() {
+    categorized_worker_pool_->Start(NumThreads, nullptr);
+  }
 
   cc::TaskGraphRunner* GetTaskGraphRunner() {
     return categorized_worker_pool_->GetTaskGraphRunner();
@@ -81,7 +87,9 @@ class CategorizedWorkerPoolTaskGraphRunnerTestDelegate {
 
 class CategorizedWorkerPoolTest : public testing::Test {
  protected:
-  CategorizedWorkerPoolTest() { categorized_worker_pool_->Start(kNumThreads); }
+  CategorizedWorkerPoolTest() {
+    categorized_worker_pool_->Start(kNumThreads, nullptr);
+  }
 
   ~CategorizedWorkerPoolTest() override {
     cc::Task::Vector completed_tasks;

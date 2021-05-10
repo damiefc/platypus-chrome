@@ -4,7 +4,6 @@
 
 package org.chromium.components.paintpreview.player.frame;
 
-import android.graphics.Bitmap;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.util.Size;
@@ -13,6 +12,9 @@ import android.view.View;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.UnguessableToken;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.SequencedTaskRunner;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.components.paintpreview.player.PlayerCompositorDelegate;
 import org.chromium.components.paintpreview.player.PlayerGestureListener;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -28,8 +30,8 @@ import java.util.List;
  * <li>Maintaining a viewport {@link Rect} that represents the current user-visible section of this
  * frame. The dimension of the viewport is constant and is equal to the initial values received on
  * {@link #setLayoutDimensions}.</li>
- * <li>Constructing a matrix of {@link Bitmap} tiles that represents the content of this frame for a
- * given scale factor. Each tile is as big as the view port.</li>
+ * <li>Constructing a matrix of {@link CompressibleBitmap} tiles that represents the content of this
+ * frame for a given scale factor. Each tile is as big as the view port.</li>
  * <li>Requesting bitmaps from Paint Preview compositor.</li>
  * <li>Updating the viewport on touch gesture notifications (scrolling and scaling).<li/>
  * <li>Determining which sub-frames are visible given the current viewport and showing them.<li/>
@@ -70,10 +72,11 @@ class PlayerFrameMediator implements PlayerFrameViewDelegate, PlayerFrameMediato
     private final PlayerFrameBitmapStateController mBitmapStateController;
 
     private PlayerGestureListener mGestureListener;
+    private Runnable mInitialViewportSizeAvailable;
 
     PlayerFrameMediator(PropertyModel model, PlayerCompositorDelegate compositorDelegate,
             PlayerGestureListener gestureListener, UnguessableToken frameGuid, Size contentSize,
-            int initialScrollX, int initialScrollY) {
+            int initialScrollX, int initialScrollY, Runnable initialViewportSizeAvailable) {
         mBitmapScaleMatrix = new Matrix();
         mModel = model;
         mModel.set(PlayerFrameProperties.SCALE_MATRIX, mBitmapScaleMatrix);
@@ -85,10 +88,17 @@ class PlayerFrameMediator implements PlayerFrameViewDelegate, PlayerFrameMediato
         mInitialScaleFactor = 0f;
         mGuid = frameGuid;
         mContentSize = contentSize;
+        SequencedTaskRunner taskRunner =
+                PostTask.createSequencedTaskRunner(TaskTraits.USER_VISIBLE);
         mBitmapStateController = new PlayerFrameBitmapStateController(
-                mGuid, mViewport, mContentSize, mCompositorDelegate, this);
+                mGuid, mViewport, mContentSize, mCompositorDelegate, this, taskRunner);
         mViewport.offset(initialScrollX, initialScrollY);
         mViewport.setScale(0f);
+        mInitialViewportSizeAvailable = initialViewportSizeAvailable;
+    }
+
+    void destroy() {
+        mBitmapStateController.destroy();
     }
 
     @VisibleForTesting
@@ -156,16 +166,22 @@ class PlayerFrameMediator implements PlayerFrameViewDelegate, PlayerFrameMediato
         final float scaleFactor = mViewport.getScale();
         updateViewportSize(
                 width, height, (scaleFactor == 0f) ? getInitialScaleFactor() : scaleFactor);
+
+        if (mInitialViewportSizeAvailable != null) {
+            mInitialViewportSizeAvailable.run();
+            mInitialViewportSizeAvailable = null;
+        }
     }
 
     @Override
-    public void onTap(int x, int y) {
+    public void onTap(int x, int y, boolean isAbsolute) {
         // x and y are in the View's coordinate system (scaled). This needs to be adjusted to the
         // absolute coordinate system for hit testing.
         final float scaleFactor = mViewport.getScale();
-        GURL url = mCompositorDelegate.onClick(mGuid,
-                Math.round((float) (mViewport.getTransX() + x) / scaleFactor),
-                Math.round((float) (mViewport.getTransY() + y) / scaleFactor));
+        float translationX = isAbsolute ? 0f : mViewport.getTransX();
+        float translationY = isAbsolute ? 0f : mViewport.getTransY();
+        GURL url = mCompositorDelegate.onClick(mGuid, Math.round((translationX + x) / scaleFactor),
+                Math.round((translationY + y) / scaleFactor));
         mGestureListener.onTap(url);
     }
 
@@ -247,9 +263,6 @@ class PlayerFrameMediator implements PlayerFrameViewDelegate, PlayerFrameMediato
             mModel.set(PlayerFrameProperties.VIEWPORT, viewportRect);
         }
 
-        // Clear the required bitmaps matrix. It will be updated in #requestBitmapForTile.
-        activeLoadingState.clearRequiredBitmaps();
-
         // Request bitmaps for tiles inside the view port that don't already have a bitmap.
         activeLoadingState.requestBitmapForRect(viewportRect);
     }
@@ -271,7 +284,7 @@ class PlayerFrameMediator implements PlayerFrameViewDelegate, PlayerFrameMediato
     }
 
     @Override
-    public void updateBitmapMatrix(Bitmap[][] bitmapMatrix) {
+    public void updateBitmapMatrix(CompressibleBitmap[][] bitmapMatrix) {
         mModel.set(PlayerFrameProperties.BITMAP_MATRIX, bitmapMatrix);
     }
 

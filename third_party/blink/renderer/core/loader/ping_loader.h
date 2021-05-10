@@ -32,8 +32,6 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_PING_LOADER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_PING_LOADER_H_
 
-#include <memory>
-
 #include "third_party/blink/public/platform/web_url_loader_client.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -45,11 +43,13 @@ namespace blink {
 
 class Blob;
 class DOMArrayBufferView;
+class DOMArrayBuffer;
 class EncodedFormData;
 class FormData;
 class LocalFrame;
 class KURL;
 class ScriptState;
+class URLSearchParams;
 
 // Issue an asynchronous, one-directional request at some resources, ignoring
 // any response. The request is made independent of any LocalFrame staying
@@ -84,6 +84,14 @@ class CORE_EXPORT PingLoader {
                          LocalFrame*,
                          const KURL&,
                          DOMArrayBufferView*);
+  static bool SendBeacon(const ScriptState&,
+                         LocalFrame*,
+                         const KURL&,
+                         DOMArrayBuffer*);
+  static bool SendBeacon(const ScriptState&,
+                         LocalFrame*,
+                         const KURL&,
+                         URLSearchParams*);
   static bool SendBeacon(const ScriptState&, LocalFrame*, const KURL&, Blob*);
   static bool SendBeacon(const ScriptState&,
                          LocalFrame*,

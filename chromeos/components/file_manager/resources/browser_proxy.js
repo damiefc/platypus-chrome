@@ -2,20 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-class BrowserProxy {
-  constructor() {
-    /** @type {chromeos.fileManager.mojom.PageCallbackRouter} */
-    this.callbackRouter = new chromeos.fileManager.mojom.PageCallbackRouter();
-    /** @type {chromeos.fileManager.mojom.PageHandlerRemote} */
-    this.handler = new chromeos.fileManager.mojom.PageHandlerRemote();
+import {PageCallbackRouter, PageHandlerFactory, PageHandlerRemote} from './file_manager.mojom-webui.js';
 
-    const factory = chromeos.fileManager.mojom.PageHandlerFactory.getRemote();
-    factory.createPageHandler(
+export class BrowserProxy {
+  constructor() {
+    /** @type {!PageCallbackRouter} */
+    this.callbackRouter = new PageCallbackRouter();
+    /** @type {!PageHandlerRemote} */
+    this.handler = new PageHandlerRemote();
+
+    const factoryRemote = PageHandlerFactory.getRemote();
+    factoryRemote.createPageHandler(
         this.callbackRouter.$.bindNewPipeAndPassRemote(),
         this.handler.$.bindNewPipeAndPassReceiver());
   }
 }
-
-// For demo purpose a global variable is fine I guess.
-// I'll defer to people who know how to JS to do it in a proper way.
-const theBrowserProxy = new BrowserProxy();

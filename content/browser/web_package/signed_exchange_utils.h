@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/optional.h"
+#include "base/strings/string_piece.h"
 #include "content/browser/web_package/signed_exchange_consts.h"
 #include "content/browser/web_package/signed_exchange_error.h"
 #include "content/browser/web_package/signed_exchange_signature_verifier.h"
@@ -33,7 +34,7 @@ struct URLWithRawString {
   std::string raw_string;
   URLWithRawString() = default;
   URLWithRawString(base::StringPiece url_string)
-      : url(url_string), raw_string(url_string.as_string()) {}
+      : url(url_string), raw_string(url_string) {}
 };
 
 // Utility method to call SignedExchangeDevToolsProxy::ReportError() and
@@ -58,9 +59,6 @@ bool IsSignedExchangeReportingForDistributorsEnabled();
 bool ShouldHandleAsSignedHTTPExchange(
     const GURL& request_url,
     const network::mojom::URLResponseHead& head);
-
-// Returns true if |response| has "X-Content-Type-Options: nosniff" header.
-bool HasNoSniffHeader(const network::mojom::URLResponseHead& response);
 
 // Extracts the signed exchange version [1] from |content_type|, and converts it
 // to SignedExchanveVersion. Returns nullopt if the mime type is not a variant

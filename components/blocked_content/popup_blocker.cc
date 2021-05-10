@@ -18,6 +18,7 @@
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom-shared.h"
 
 namespace blocked_content {
 namespace {
@@ -44,8 +45,7 @@ PopupBlockType ShouldBlockPopup(content::WebContents* web_contents,
       opener_url ? *opener_url : web_contents->GetLastCommittedURL();
   ContentSetting cs;
   if (url.is_valid()) {
-    cs = settings_map->GetContentSetting(url, url, ContentSettingsType::POPUPS,
-                                         std::string());
+    cs = settings_map->GetContentSetting(url, url, ContentSettingsType::POPUPS);
   } else {
     cs = settings_map->GetDefaultContentSetting(ContentSettingsType::POPUPS,
                                                 nullptr);
@@ -59,8 +59,9 @@ PopupBlockType ShouldBlockPopup(content::WebContents* web_contents,
 
   // This is trusted user action (e.g. shift-click), so make sure it is not
   // blocked.
-  if (open_url_params && open_url_params->triggering_event_info !=
-                             blink::TriggeringEventInfo::kFromUntrustedEvent) {
+  if (open_url_params &&
+      open_url_params->triggering_event_info !=
+          blink::mojom::TriggeringEventInfo::kFromUntrustedEvent) {
     return PopupBlockType::kNotBlocked;
   }
 

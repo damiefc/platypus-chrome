@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include <map>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -28,6 +29,7 @@
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/timer/timer.h"
 #include "net/base/proxy_server.h"
@@ -1215,7 +1217,8 @@ ProxyConfigServiceLinux::Delegate::Delegate(
     case base::nix::DESKTOP_ENVIRONMENT_KDE3:
     case base::nix::DESKTOP_ENVIRONMENT_KDE4:
     case base::nix::DESKTOP_ENVIRONMENT_KDE5:
-      setting_getter_.reset(new SettingGetterImplKDE(env_var_getter_.get()));
+      setting_getter_ =
+          std::make_unique<SettingGetterImplKDE>(env_var_getter_.get());
       break;
     case base::nix::DESKTOP_ENVIRONMENT_XFCE:
     case base::nix::DESKTOP_ENVIRONMENT_OTHER:

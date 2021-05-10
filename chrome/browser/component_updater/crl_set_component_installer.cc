@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
@@ -157,10 +157,6 @@ std::string CRLSetPolicy::GetName() const {
 update_client::InstallerAttributes CRLSetPolicy::GetInstallerAttributes()
     const {
   return update_client::InstallerAttributes();
-}
-
-std::vector<std::string> CRLSetPolicy::GetMimeTypes() const {
-  return std::vector<std::string>();
 }
 
 void RegisterCRLSetComponent(ComponentUpdateService* cus) {

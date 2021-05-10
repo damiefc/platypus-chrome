@@ -18,8 +18,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/chromeos/arc/process/arc_process.h"
-#include "chrome/browser/chromeos/arc/process/arc_process_service.h"
+#include "chrome/browser/ash/arc/process/arc_process.h"
+#include "chrome/browser/ash/arc/process/arc_process_service.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom-forward.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
@@ -281,14 +281,6 @@ class TabManagerDelegate::MemoryStat {
 
   // Returns estimated memory to be freed if the process |handle| is killed.
   virtual int EstimatedMemoryFreedKB(base::ProcessHandle handle);
-
- private:
-  // Returns the low memory margin system config. Low memory condition is
-  // reported if available memory is under the number.
-  static int LowMemoryMarginKB();
-
-  // Reads in an integer.
-  static int ReadIntFromFile(const char* file_name, int default_val);
 };
 
 }  // namespace resource_coordinator

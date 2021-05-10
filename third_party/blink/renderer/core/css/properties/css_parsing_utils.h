@@ -45,6 +45,7 @@ namespace css_parsing_utils {
 
 enum class AllowInsetAndSpread { kAllow, kForbid };
 enum class AllowTextValue { kAllow, kForbid };
+enum class AllowPathValue { kAllow, kForbid };
 enum class DefaultFill { kFill, kNoFill };
 enum class ParsingStyle { kLegacy, kNotLegacy };
 enum class TrackListType { kGridTemplate, kGridTemplateNoRepeat, kGridAuto };
@@ -87,6 +88,12 @@ CSSPrimitiveValue* ConsumeLength(CSSParserTokenRange&,
 CSSPrimitiveValue* ConsumePercent(CSSParserTokenRange&,
                                   const CSSParserContext&,
                                   ValueRange);
+
+// Any percentages are converted to numbers.
+CSSPrimitiveValue* ConsumeNumberOrPercent(CSSParserTokenRange&,
+                                          const CSSParserContext&,
+                                          ValueRange);
+
 CSSPrimitiveValue* ConsumeAlphaValue(CSSParserTokenRange&,
                                      const CSSParserContext&);
 CSSPrimitiveValue* ConsumeLengthOrPercent(
@@ -416,7 +423,9 @@ CSSValue* ConsumeOffsetPath(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumePathOrNone(CSSParserTokenRange&);
 CSSValue* ConsumeOffsetRotate(CSSParserTokenRange&, const CSSParserContext&);
 
-CSSValue* ConsumeBasicShape(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* ConsumeBasicShape(CSSParserTokenRange&,
+                            const CSSParserContext&,
+                            AllowPathValue);
 bool ConsumeRadii(CSSValue* horizontal_radii[4],
                   CSSValue* vertical_radii[4],
                   CSSParserTokenRange&,
@@ -441,10 +450,21 @@ CSSValue* ConsumeBorderColorSide(CSSParserTokenRange&,
 CSSValue* ConsumeBorderWidth(CSSParserTokenRange&,
                              const CSSParserContext&,
                              UnitlessQuirk);
-CSSValue* ParsePaintStroke(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* ConsumeSVGPaint(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ParseSpacing(CSSParserTokenRange&, const CSSParserContext&);
 
 UnitlessQuirk UnitlessUnlessShorthand(const CSSParserLocalContext&);
+
+// https://drafts.csswg.org/css-counter-styles-3/#typedef-counter-style-name
+CSSCustomIdentValue* ConsumeCounterStyleName(CSSParserTokenRange&,
+                                             const CSSParserContext&);
+AtomicString ConsumeCounterStyleNameInPrelude(CSSParserTokenRange&,
+                                              const CSSParserContext&);
+
+// When parsing a counter style name, it should be ASCII lowercased if it's an
+// ASCII case-insensitive match of any predefined counter style name.
+bool ShouldLowerCaseCounterStyleNameOnParse(const AtomicString&,
+                                            const CSSParserContext&);
 
 // Template implementations are at the bottom of the file for readability.
 

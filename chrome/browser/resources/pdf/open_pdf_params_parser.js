@@ -4,17 +4,18 @@
 
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {FittingType, NamedDestinationMessageData, Point} from './constants.js';
+import {Size} from './viewport.js';
 
 /**
  * @typedef {{
  *   url: (string|undefined),
  *   zoom: (number|undefined),
  *   view: (!FittingType|undefined),
- *   viewPosition: (!Point|undefined),
+ *   viewPosition: (number|undefined),
  *   position: (!Object|undefined),
  * }}
  */
-let OpenPdfParams;
+export let OpenPdfParams;
 
 // Parses the open pdf parameters passed in the url to set initial viewport
 // settings for opening the pdf.
@@ -27,6 +28,28 @@ export class OpenPdfParamsParser {
   constructor(getNamedDestinationCallback) {
     /** @private {!function(string):!Promise<!NamedDestinationMessageData>} */
     this.getNamedDestinationCallback_ = getNamedDestinationCallback;
+
+    /** @private {!Size} */
+    this.viewportDimensions_;
+  }
+
+  /**
+   * Calculate the zoom level needed for making viewport focus on a rectangular
+   * area in the PDF document.
+   * @param {!Size} size The dimensions of the rectangular area to be focused
+   *     on.
+   * @return {number} The zoom level needed for focusing on the rectangular
+   *     area. A zoom level of 0 indicates that the zoom level cannot be
+   *     calculated with the given information.
+   * @private
+   */
+  calculateRectZoomLevel_(size) {
+    if (size.height === 0 || size.width === 0) {
+      return 0;
+    }
+    return Math.min(
+        this.viewportDimensions_.height / size.height,
+        this.viewportDimensions_.width / size.width);
   }
 
   /**
@@ -115,21 +138,41 @@ export class OpenPdfParamsParser {
       const x = parseFloat(viewModeComponents[1]);
       const y = parseFloat(viewModeComponents[2]);
       const zoom = parseFloat(viewModeComponents[3]);
-      // If |x|, |y| or |zoom| is NaN, the values of the current positions and
-      // zoom level are retained.
-      if (!Number.isNaN(x) && !Number.isNaN(y) && !Number.isNaN(zoom)) {
+
+      // If zoom is originally 0 for the XYZ view, it is guaranteed to be
+      // transformed into "null" by the backend.
+      assert(zoom !== 0);
+
+      if (!Number.isNaN(zoom)) {
+        params['zoom'] = zoom;
+      }
+      if (!Number.isNaN(x) || !Number.isNaN(y)) {
         params['position'] = {x: x, y: y};
-        // A zoom of 0 should be treated as a zoom of null (See table 151 in ISO
-        // 32000-1 standard for more details about syntax of "XYZ".
-        if (zoom !== 0) {
-          params['zoom'] = zoom;
-        }
       }
       return params;
     }
 
     if (viewMode === 'fitr' && viewModeComponents.length === 5) {
-      // TODO(crbug.com/535978): Add support for fit type "FitR" in nameddest.
+      assert(this.viewportDimensions_ !== undefined);
+      let x1 = parseFloat(viewModeComponents[1]);
+      let y1 = parseFloat(viewModeComponents[2]);
+      let x2 = parseFloat(viewModeComponents[3]);
+      let y2 = parseFloat(viewModeComponents[4]);
+      if (!Number.isNaN(x1) && !Number.isNaN(y1) && !Number.isNaN(x2) &&
+          !Number.isNaN(y2)) {
+        if (x1 > x2) {
+          [x1, x2] = [x2, x1];
+        }
+        if (y1 > y2) {
+          [y1, y2] = [y2, y1];
+        }
+        const rectSize = {width: x2 - x1, height: y2 - y1};
+        params['position'] = {x: x1, y: y1};
+        const zoom = this.calculateRectZoomLevel_(rectSize);
+        if (zoom !== 0) {
+          params['zoom'] = zoom;
+        }
+      }
       return params;
     }
 
@@ -161,6 +204,14 @@ export class OpenPdfParamsParser {
   }
 
   /**
+   * Store current viewport's dimensions.
+   * @param {!Size} dimensions
+   */
+  setViewportDimensions(dimensions) {
+    this.viewportDimensions_ = dimensions;
+  }
+
+  /**
    * @param {string} url that needs to be parsed.
    * @return {boolean} Whether the toolbar UI element should be shown.
    */
@@ -174,17 +225,16 @@ export class OpenPdfParamsParser {
    * See http://www.adobe.com/content/dam/Adobe/en/devnet/acrobat/
    * pdfs/pdf_open_parameters.pdf for details.
    * @param {string} url that needs to be parsed.
-   * @param {function(!OpenPdfParams)} callback function to be called with
-   *     viewport info.
+   * @return {!Promise<!OpenPdfParams>}
    */
-  getViewportFromUrlParams(url, callback) {
+  async getViewportFromUrlParams(url) {
     const params = {};
     params['url'] = url;
 
     const urlParams = this.parseUrlParams_(url);
 
     if (urlParams.has('page')) {
-      // |pageNumber| is 1-based, but goToPage() take a zero-based page number.
+      // |pageNumber| is 1-based, but goToPage() take a zero-based page index.
       const pageNumber = parseInt(urlParams.get('page'), 10);
       if (!Number.isNaN(pageNumber) && pageNumber > 0) {
         params['page'] = pageNumber - 1;
@@ -204,22 +254,23 @@ export class OpenPdfParamsParser {
     }
 
     if (params.page === undefined && urlParams.has('nameddest')) {
-      this.getNamedDestinationCallback_(
-              /** @type {string} */ (urlParams.get('nameddest')))
-          .then(data => {
-            if (data.pageNumber !== -1) {
-              params.page = data.pageNumber;
-            }
-            if (data.namedDestinationView) {
-              Object.assign(
-                  params,
-                  this.parseNameddestViewParam_(
-                      /** @type {string} */ (data.namedDestinationView)));
-            }
-            callback(params);
-          });
-    } else {
-      callback(params);
+      const data = await this.getNamedDestinationCallback_(
+          /** @type {string} */ (urlParams.get('nameddest')));
+
+      if (data.pageNumber !== -1) {
+        params.page = data.pageNumber;
+      }
+
+      if (data.namedDestinationView) {
+        Object.assign(
+            params,
+            this.parseNameddestViewParam_(
+                /** @type {string} */ (data.namedDestinationView)));
+      }
+
+      return params;
     }
+
+    return Promise.resolve(params);
   }
 }

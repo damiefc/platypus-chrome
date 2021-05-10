@@ -11,6 +11,7 @@
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/command_buffer/service/external_vk_image_gl_representation.h"
+#include "gpu/command_buffer/service/external_vk_image_overlay_representation.h"
 #include "gpu/command_buffer/service/external_vk_image_skia_representation.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info.h"
@@ -69,6 +70,7 @@ static const struct {
     {GL_RED, GL_HALF_FLOAT_OES, 2},                // LUMINANCE_F16
     {GL_RGBA, GL_HALF_FLOAT_OES, 8},               // RGBA_F16
     {GL_RED, GL_UNSIGNED_SHORT, 2},                // R16_EXT
+    {GL_RG, GL_UNSIGNED_SHORT, 4},                 // RG16_EXT
     {GL_RGBA, GL_UNSIGNED_BYTE, 4},                // RGBX_8888
     {GL_BGRA, GL_UNSIGNED_BYTE, 4},                // BGRX_8888
     {GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, 4},  // RGBA_1010102
@@ -127,8 +129,9 @@ bool UseSeparateGLTexture(SharedContextState* context_state,
   if (format != viz::ResourceFormat::BGRA_8888)
     return false;
 
-  const auto* version_info = context_state->real_context()->GetVersionInfo();
-  const auto& ext = gl::g_current_gl_driver->ext;
+  auto* gl_context = context_state->real_context();
+  const auto* version_info = gl_context->GetVersionInfo();
+  const auto& ext = gl_context->GetCurrentGL()->Driver->ext;
   if (!ext.b_GL_EXT_texture_format_BGRA8888)
     return true;
 
@@ -146,12 +149,21 @@ bool UseSeparateGLTexture(SharedContextState* context_state,
   return true;
 }
 
+bool UseTexStorage2D(SharedContextState* context_state) {
+  auto* gl_context = context_state->real_context();
+  const auto* version_info = gl_context->GetVersionInfo();
+  const auto& ext = gl_context->GetCurrentGL()->Driver->ext;
+  return ext.b_GL_EXT_texture_storage || ext.b_GL_ARB_texture_storage ||
+         version_info->is_es3 || version_info->IsAtLeastGL(4, 2);
+}
+
 bool UseMinimalUsageFlags(SharedContextState* context_state) {
   return context_state->support_gl_external_object_flags();
 }
 
 void WaitSemaphoresOnGrContext(GrDirectContext* gr_context,
                                std::vector<ExternalSemaphore>* semaphores) {
+  DCHECK(!gr_context->abandoned());
   std::vector<GrBackendSemaphore> backend_senampres;
   backend_senampres.reserve(semaphores->size());
   for (auto& semaphore : *semaphores) {
@@ -184,8 +196,9 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
   auto* device_queue = context_state->vk_context_provider()->GetDeviceQueue();
   VkFormat vk_format = ToVkFormat(format);
   constexpr auto kUsageNeedsColorAttachment =
-      SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_RASTER |
-      SHARED_IMAGE_USAGE_OOP_RASTERIZATION | SHARED_IMAGE_USAGE_WEBGPU;
+      SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
+      SHARED_IMAGE_USAGE_RASTER | SHARED_IMAGE_USAGE_OOP_RASTERIZATION |
+      SHARED_IMAGE_USAGE_WEBGPU;
   VkImageUsageFlags vk_usage = VK_IMAGE_USAGE_SAMPLED_BIT;
   if (usage & kUsageNeedsColorAttachment) {
     vk_usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -218,22 +231,22 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
     }
   }
 
-  auto* vulkan_implementation =
-      context_state->vk_context_provider()->GetVulkanImplementation();
-  VkImageCreateFlags vk_flags = 0;
-
-  // In protected mode mark the image as protected, except when the image needs
-  // GLES2, but not Raster usage. ANGLE currently doesn't support protected
-  // images. Some clients request GLES2 and Raster usage (e.g. see
-  // GpuMemoryBufferVideoFramePool). In that case still allocate protected
-  // image, which ensures that image can still usable, but it may not work in
-  // some scenarios (e.g. when the video frame is used in WebGL).
-  // TODO(https://crbug.com/angleproject/4833)
-  if (vulkan_implementation->enforce_protected_memory() &&
-      (!(usage & SHARED_IMAGE_USAGE_GLES2) ||
-       (usage & SHARED_IMAGE_USAGE_RASTER))) {
-    vk_flags |= VK_IMAGE_CREATE_PROTECTED_BIT;
+  if (is_external && (usage & SHARED_IMAGE_USAGE_WEBGPU)) {
+    // The following additional usage flags are provided for Dawn:
+    //
+    // - TRANSFER_SRC: Used for copies from this image.
+    // - TRANSFER_DST: Used for copies to this image or clears.
+    vk_usage |=
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
   }
+
+  if (usage & SHARED_IMAGE_USAGE_DISPLAY) {
+    // Skia currently requires all VkImages it uses to support transfers
+    vk_usage |=
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  }
+
+  VkImageCreateFlags vk_flags = 0;
 
   std::unique_ptr<VulkanImage> image;
   if (is_external) {
@@ -250,7 +263,7 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
   bool use_separate_gl_texture =
       UseSeparateGLTexture(context_state.get(), format);
   auto backing = std::make_unique<ExternalVkImageBacking>(
-      util::PassKey<ExternalVkImageBacking>(), mailbox, format, size,
+      base::PassKey<ExternalVkImageBacking>(), mailbox, format, size,
       color_space, surface_origin, alpha_type, usage, std::move(context_state),
       std::move(image), command_pool, use_separate_gl_texture);
 
@@ -296,7 +309,7 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::CreateFromGMB(
     bool use_separate_gl_texture =
         UseSeparateGLTexture(context_state.get(), resource_format);
     auto backing = std::make_unique<ExternalVkImageBacking>(
-        util::PassKey<ExternalVkImageBacking>(), mailbox, resource_format, size,
+        base::PassKey<ExternalVkImageBacking>(), mailbox, resource_format, size,
         color_space, surface_origin, alpha_type, usage,
         std::move(context_state), std::move(image), command_pool,
         use_separate_gl_texture);
@@ -327,7 +340,7 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::CreateFromGMB(
 }
 
 ExternalVkImageBacking::ExternalVkImageBacking(
-    util::PassKey<ExternalVkImageBacking>,
+    base::PassKey<ExternalVkImageBacking>,
     const Mailbox& mailbox,
     viz::ResourceFormat format,
     const gfx::Size& size,
@@ -361,8 +374,10 @@ ExternalVkImageBacking::~ExternalVkImageBacking() {
   if (write_semaphore_)
     semaphores.emplace_back(std::move(write_semaphore_));
 
-  WaitSemaphoresOnGrContext(context_state()->gr_context(), &semaphores);
-  ReturnPendingSemaphoresWithFenceHelper(std::move(semaphores));
+  if (!semaphores.empty() && !context_state()->gr_context()->abandoned()) {
+    WaitSemaphoresOnGrContext(context_state()->gr_context(), &semaphores);
+    ReturnPendingSemaphoresWithFenceHelper(std::move(semaphores));
+  }
 
   fence_helper()->EnqueueVulkanObjectCleanupForSubmittedWork(std::move(image_));
   backend_texture_ = GrBackendTexture();
@@ -569,6 +584,10 @@ void ExternalVkImageBacking::AddSemaphoresToPendingListOrRelease(
   }
 }
 
+scoped_refptr<gfx::NativePixmap> ExternalVkImageBacking::GetNativePixmap() {
+  return image_->native_pixmap();
+}
+
 void ExternalVkImageBacking::ReturnPendingSemaphoresWithFenceHelper(
     std::vector<ExternalSemaphore> semaphores) {
   std::move(semaphores.begin(), semaphores.end(),
@@ -644,7 +663,6 @@ GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
 #endif
   }
 
-  GLuint internal_format = viz::TextureStorageFormat(format());
   GLuint texture_service_id = 0;
   api->glGenTexturesFn(1, &texture_service_id);
   gl::ScopedTextureBinder scoped_texture_binder(GL_TEXTURE_2D,
@@ -655,13 +673,24 @@ GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
   api->glTexParameteriFn(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   if (use_separate_gl_texture()) {
     DCHECK(!memory_object);
-    api->glTexStorage2DEXTFn(GL_TEXTURE_2D, 1, internal_format, size().width(),
-                             size().height());
+    if (UseTexStorage2D(context_state_.get())) {
+      GLuint internal_format = viz::TextureStorageFormat(format());
+      api->glTexStorage2DEXTFn(GL_TEXTURE_2D, 1, internal_format,
+                               size().width(), size().height());
+    } else {
+      auto gl_format = kFormatTable[format()].gl_format;
+      auto gl_type = kFormatTable[format()].gl_type;
+      if (gl_format == GL_ZERO || gl_type == GL_ZERO)
+        LOG(FATAL) << "Not support format: " << format();
+      api->glTexImage2DFn(GL_TEXTURE_2D, 0, gl_format, size().width(),
+                          size().height(), 0, gl_format, gl_type, nullptr);
+    }
   } else {
     DCHECK(memory_object);
     // If ANGLE_memory_object_flags is supported, use that to communicate the
     // exact create and usage flags the image was created with.
     DCHECK(image_->usage() != 0);
+    GLuint internal_format = viz::TextureStorageFormat(format());
     if (UseMinimalUsageFlags(context_state())) {
       api->glTexStorageMemFlags2DANGLEFn(
           GL_TEXTURE_2D, 1, internal_format, size().width(), size().height(),
@@ -753,6 +782,13 @@ ExternalVkImageBacking::ProduceSkia(
   DCHECK(context_state->GrContextIsVulkan());
   return std::make_unique<ExternalVkImageSkiaRepresentation>(manager, this,
                                                              tracker);
+}
+
+std::unique_ptr<SharedImageRepresentationOverlay>
+ExternalVkImageBacking::ProduceOverlay(SharedImageManager* manager,
+                                       MemoryTypeTracker* tracker) {
+  return std::make_unique<ExternalVkImageOverlayRepresentation>(manager, this,
+                                                                tracker);
 }
 
 void ExternalVkImageBacking::InstallSharedMemory(

@@ -11,18 +11,20 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/video_frame.h"
 #include "media/capture/video/create_video_capture_device_factory.h"
 #include "media/capture/video/mock_video_capture_device_client.h"
 #include "media/capture/video_capture_types.h"
@@ -48,14 +50,14 @@
 #include "media/capture/video/android/video_capture_device_factory_android.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "media/capture/video/chromeos/camera_buffer_factory.h"
 #include "media/capture/video/chromeos/camera_hal_dispatcher_impl.h"
 #include "media/capture/video/chromeos/public/cros_features.h"
 #include "media/capture/video/chromeos/video_capture_device_chromeos_halv3.h"
 #include "media/capture/video/chromeos/video_capture_device_factory_chromeos.h"
-#include "media/gpu/test/local_gpu_memory_buffer_manager.h"
+#include "media/gpu/test/local_gpu_memory_buffer_manager.h"  // nogncheck
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #endif
 
@@ -65,9 +67,19 @@
   DISABLED_UsingRealWebcam_AllocateBadSize
 // We will always get YUYV from the Mac AVFoundation implementations.
 #define MAYBE_UsingRealWebcam_CaptureMjpeg DISABLED_UsingRealWebcam_CaptureMjpeg
-#define MAYBE_UsingRealWebcam_TakePhoto UsingRealWebcam_TakePhoto
-#define MAYBE_UsingRealWebcam_GetPhotoState UsingRealWebcam_GetPhotoState
-#define MAYBE_UsingRealWebcam_CaptureWithSize UsingRealWebcam_CaptureWithSize
+
+// TODO(crbug.com/1128470): Re-enable as soon as issues with resource access
+// are fixed.
+#define MAYBE_UsingRealWebcam_TakePhoto DISABLED_UsingRealWebcam_TakePhoto
+// TODO(crbug.com/1128470): Re-enable as soon as issues with resource access
+// are fixed.
+#define MAYBE_UsingRealWebcam_GetPhotoState \
+  DISABLED_UsingRealWebcam_GetPhotoState
+// TODO(crbug.com/1128470): Re-enable as soon as issues with resource access
+// are fixed.
+#define MAYBE_UsingRealWebcam_CaptureWithSize \
+  DISABLED_UsingRealWebcam_CaptureWithSize
+
 #define MAYBE_UsingRealWebcam_CheckPhotoCallbackRelease \
   UsingRealWebcam_CheckPhotoCallbackRelease
 #elif defined(OS_WIN) || defined(OS_FUCHSIA)
@@ -93,20 +105,16 @@
 #define MAYBE_UsingRealWebcam_CaptureWithSize UsingRealWebcam_CaptureWithSize
 #define MAYBE_UsingRealWebcam_CheckPhotoCallbackRelease \
   UsingRealWebcam_CheckPhotoCallbackRelease
-#elif defined(OS_CHROMEOS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
 #define MAYBE_UsingRealWebcam_AllocateBadSize \
   DISABLED_UsingRealWebcam_AllocateBadSize
 #define MAYBE_UsingRealWebcam_CaptureMjpeg UsingRealWebcam_CaptureMjpeg
-// Flaky: https://crbug.com/1096082
-#define MAYBE_UsingRealWebcam_TakePhoto DISABLED_UsingRealWebcam_TakePhoto
-#define MAYBE_UsingRealWebcam_GetPhotoState \
-  DISABLED_UsingRealWebcam_GetPhotoState
-// Flaky crash: https://crbug.com/1069608
-#define MAYBE_UsingRealWebcam_CaptureWithSize \
-  DISABLED_UsingRealWebcam_CaptureWithSize
+#define MAYBE_UsingRealWebcam_TakePhoto UsingRealWebcam_TakePhoto
+#define MAYBE_UsingRealWebcam_GetPhotoState UsingRealWebcam_GetPhotoState
+#define MAYBE_UsingRealWebcam_CaptureWithSize UsingRealWebcam_CaptureWithSize
 #define MAYBE_UsingRealWebcam_CheckPhotoCallbackRelease \
   UsingRealWebcam_CheckPhotoCallbackRelease
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 // UsingRealWebcam_AllocateBadSize will hang when a real camera is attached and
 // if more than one test is trying to use the camera (even across processes). Do
 // NOT renable this test without fixing the many bugs associated with it:
@@ -193,9 +201,9 @@ class MockImageCaptureClient
       // The first two bytes must be the SOI marker.
       // The next two bytes must be a marker, such as APPn, DTH etc.
       // cf. Section B.2 at https://www.w3.org/Graphics/JPEG/itu-t81.pdf
-      EXPECT_EQ(0xFF, blob->data[0]);         // First SOI byte
-      EXPECT_EQ(0xD8, blob->data[1]);         // Second SOI byte
-      EXPECT_EQ(0xFF, blob->data[2]);         // First byte of the next marker
+      EXPECT_EQ(0xFF, blob->data[0]);  // First SOI byte
+      EXPECT_EQ(0xD8, blob->data[1]);  // Second SOI byte
+      EXPECT_EQ(0xFF, blob->data[2]);  // First byte of the next marker
       OnCorrectPhotoTaken();
     } else if (strcmp("image/png", blob->mime_type.c_str()) == 0) {
       ASSERT_GT(blob->data.size(), 4u);
@@ -269,7 +277,7 @@ class VideoCaptureDeviceTest
         main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
         video_capture_client_(CreateDeviceClient()),
         image_capture_client_(new MockImageCaptureClient()) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     local_gpu_memory_buffer_manager_ =
         std::make_unique<LocalGpuMemoryBufferManager>();
     VideoCaptureDeviceFactoryChromeOS::SetGpuBufferManager(
@@ -288,7 +296,7 @@ class VideoCaptureDeviceTest
   }
 
   void SetUp() override {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     chromeos::PowerManagerClient::InitializeFake();
 #endif
 #if defined(OS_ANDROID)
@@ -303,14 +311,15 @@ class VideoCaptureDeviceTest
   }
 
   void TearDown() override {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     chromeos::PowerManagerClient::Shutdown();
 #endif
   }
 
 #if defined(OS_WIN)
   bool UseWinMediaFoundation() {
-    return std::get<1>(GetParam()) == WIN_MEDIA_FOUNDATION;
+    return std::get<1>(GetParam()) == WIN_MEDIA_FOUNDATION &&
+           VideoCaptureDeviceFactoryWin::PlatformSupportsMediaFoundation();
   }
 #endif
 
@@ -356,8 +365,8 @@ class VideoCaptureDeviceTest
   }
 
   void WaitForCapturedFrame() {
-    run_loop_.reset(
-        new base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed));
+    run_loop_ = std::make_unique<base::RunLoop>(
+        base::RunLoop::Type::kNestableTasksAllowed);
     run_loop_->Run();
   }
 
@@ -458,15 +467,14 @@ class VideoCaptureDeviceTest
   std::unique_ptr<MockVideoCaptureDeviceClient> video_capture_client_;
   const scoped_refptr<MockImageCaptureClient> image_capture_client_;
   VideoCaptureFormat last_format_;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   std::unique_ptr<LocalGpuMemoryBufferManager> local_gpu_memory_buffer_manager_;
 #endif
   std::unique_ptr<VideoCaptureDeviceFactory> video_capture_device_factory_;
 };
 
-// Causes a flaky crash on Chrome OS. https://crbug.com/1069608
 // Cause hangs on Windows Debug. http://crbug.com/417824
-#if defined(OS_CHROMEOS) || (defined(OS_WIN) && !defined(NDEBUG))
+#if (defined(OS_WIN) && !defined(NDEBUG))
 #define MAYBE_OpenInvalidDevice DISABLED_OpenInvalidDevice
 #else
 #define MAYBE_OpenInvalidDevice OpenInvalidDevice
@@ -653,7 +661,7 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_UsingRealWebcam_CaptureMjpeg) {
                              base::Unretained(this)));
 }
 void VideoCaptureDeviceTest::RunCaptureMjpegTestCase() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (media::ShouldUseCrosCameraService()) {
     VLOG(1)
         << "Skipped on Chrome OS device where HAL v3 camera service is used";
@@ -689,17 +697,12 @@ void VideoCaptureDeviceTest::RunCaptureMjpegTestCase() {
   // @ 30 fps, so we don't care about the exact resolution we get.
   EXPECT_EQ(last_format().pixel_format, PIXEL_FORMAT_MJPEG);
   EXPECT_GE(static_cast<size_t>(1280 * 720),
-            last_format().ImageAllocationSize());
+            media::VideoFrame::AllocationSize(last_format().pixel_format,
+                                              last_format().frame_size));
   device->StopAndDeAllocate();
 }
 
-// Flaky on ChromeOS. See https://crbug.com/1096082
-#if defined(OS_CHROMEOS)
-#define MAYBE_NoCameraSupportsPixelFormatMax \
-  DISABLED_NoCameraSupportsPixelFormatMax
-#else
 #define MAYBE_NoCameraSupportsPixelFormatMax NoCameraSupportsPixelFormatMax
-#endif
 WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_NoCameraSupportsPixelFormatMax) {
   RunTestCase(base::BindOnce(
       &VideoCaptureDeviceTest::RunNoCameraSupportsPixelFormatMaxTestCase,

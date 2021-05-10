@@ -32,7 +32,6 @@
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/radio_node_list_or_element.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_submit_event_init.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -64,6 +63,8 @@
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/loader/form_submission.h"
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
+#include "third_party/blink/renderer/core/page/chrome_client.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -79,8 +80,8 @@ HTMLFormElement::HTMLFormElement(Document& document)
       has_elements_associated_by_form_attribute_(false),
       did_finish_parsing_children_(false),
       is_in_reset_function_(false) {
-  static unsigned next_nique_renderer_form_id = 0;
-  unique_renderer_form_id_ = next_nique_renderer_form_id++;
+  static unsigned next_unique_renderer_form_id = 1;
+  unique_renderer_form_id_ = next_unique_renderer_form_id++;
 
   UseCounter::Count(document, WebFeature::kFormElement);
 }
@@ -470,9 +471,18 @@ void HTMLFormElement::ScheduleFormSubmission(
     return;
   }
 
-  if (!GetExecutionContext()->GetContentSecurityPolicy()->AllowFormAction(
-          form_submission->Action())) {
-    return;
+  if (form_submission->Action().ProtocolIsJavaScript()) {
+    // For javascript URLs we need to do the CSP check for 'form-action' here.
+    // All other schemes are checked in the browser.
+    //
+    // TODO(antoniosartori): Should we keep the 'form-action' check for
+    // javascript: URLs? For 'frame-src' and 'navigate-to', we do not check
+    // javascript: URLs. Reading the specification, it looks like 'form-action'
+    // should not apply to javascript: URLs.
+    if (!GetExecutionContext()->GetContentSecurityPolicy()->AllowFormAction(
+            form_submission->Action())) {
+      return;
+    }
   }
 
   UseCounter::Count(GetDocument(), WebFeature::kFormsSubmitted);
@@ -579,6 +589,8 @@ void HTMLFormElement::reset() {
   }
 
   is_in_reset_function_ = false;
+  if (frame->GetPage())
+    frame->GetPage()->GetChromeClient().FormElementReset(*this);
 }
 
 void HTMLFormElement::ParseAttribute(

@@ -112,8 +112,7 @@ GURL AndroidSmsPairingStateTrackerImpl::GetPairingUrl() {
 
 network::mojom::CookieManager*
 AndroidSmsPairingStateTrackerImpl::GetCookieManager() {
-  return content::BrowserContext::GetStoragePartitionForSite(profile_,
-                                                             GetPairingUrl())
+  return profile_->GetStoragePartitionForUrl(GetPairingUrl())
       ->GetCookieManagerForBrowserProcess();
 }
 

@@ -24,9 +24,11 @@
 #include "base/process/process_handle.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
-#include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+
+// TODO(thestig): Update GetPageSize() callers and remove.
+#include "base/memory/page_size.h"
 
 #if defined(OS_APPLE)
 #include <mach/mach.h>
@@ -43,6 +45,9 @@
 #endif
 
 namespace base {
+
+class DictionaryValue;
+class Value;
 
 // Full declaration is in process_metrics_iocounters.h.
 struct IoCounters;
@@ -194,14 +199,6 @@ class BASE_EXPORT ProcessMetrics {
   // otherwise.
   bool GetIOCounters(IoCounters* io_counters) const;
 
-  // Returns the number of bytes transferred to/from disk per second, across all
-  // threads of the process, in the interval since the last time the method was
-  // called.
-  //
-  // Since this API measures usage over an interval, it will return zero on the
-  // first call, and an actual value only on the second and subsequent calls.
-  uint64_t GetDiskUsageBytesPerSecond();
-
   // Returns the cumulative disk usage in bytes across all threads of the
   // process since process start.
   uint64_t GetCumulativeDiskUsageInBytes();
@@ -249,9 +246,6 @@ class BASE_EXPORT ProcessMetrics {
 #if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID) || \
     defined(OS_AIX)
   CPU::CoreType GetCoreType(int core_index);
-
-  // Initialized on the first call to GetCoreType().
-  base::Optional<std::vector<CPU::CoreType>> core_index_to_type_;
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID) ||
         // defined(OS_AIX)
 
@@ -290,14 +284,12 @@ class BASE_EXPORT ProcessMetrics {
   uint64_t last_energy_impact_time_;
 #endif
 
-#if !defined(OS_IOS)
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
   // Queries the port provider if it's set.
   mach_port_t TaskForPid(ProcessHandle process) const;
 
   PortProvider* port_provider_;
-#endif  // defined(OS_APPLE)
-#endif  // !defined(OS_IOS)
+#endif  // defined(OS_MAC)
 
   DISALLOW_COPY_AND_ASSIGN(ProcessMetrics);
 };
@@ -305,12 +297,6 @@ class BASE_EXPORT ProcessMetrics {
 // Returns the memory committed by the system in KBytes.
 // Returns 0 if it can't compute the commit charge.
 BASE_EXPORT size_t GetSystemCommitCharge();
-
-// Returns the number of bytes in a memory page. Do not use this to compute
-// the number of pages in a block of memory for calling mincore(). On some
-// platforms, e.g. iOS, mincore() uses a different page size from what is
-// returned by GetPageSize().
-BASE_EXPORT size_t GetPageSize();
 
 // Returns the maximum number of file descriptors that can be open by a process
 // at once. If the number is unavailable, a conservative best guess is returned.
@@ -336,7 +322,7 @@ BASE_EXPORT void IncreaseFdLimitTo(unsigned int max_descriptors);
 // GetSystemMemoryInfo(). Total/free swap memory are available on all platforms
 // except on Mac. Buffers/cached/active_anon/inactive_anon/active_file/
 // inactive_file/dirty/reclaimable/pswpin/pswpout/pgmajfault are available on
-// Linux/Android/Chrome OS. Shmem/slab/gem_objects/gem_size are Chrome OS only.
+// Linux/Android/Chrome OS. Shmem/slab are Chrome OS only.
 // Speculative/file_backed/purgeable are Mac and iOS only.
 // Free is absent on Windows (see "avail_phys" below).
 struct BASE_EXPORT SystemMemoryInfoKB {
@@ -389,13 +375,10 @@ struct BASE_EXPORT SystemMemoryInfoKB {
 #endif  // defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS) ||
         // defined(OS_AIX) defined(OS_FUCHSIA)
 
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   int shmem = 0;
   int slab = 0;
-  // Gem data will be -1 if not supported.
-  int gem_objects = -1;
-  long long gem_size = -1;
-#endif  // defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if defined(OS_APPLE)
   int speculative = 0;
@@ -494,7 +477,7 @@ BASE_EXPORT TimeDelta GetUserCpuTimeSinceBoot();
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID) ||
         // defined(OS_AIX)
 
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 // Data from files in directory /sys/block/zram0 about ZRAM usage.
 struct BASE_EXPORT SwapInfo {
   SwapInfo()
@@ -531,7 +514,23 @@ BASE_EXPORT bool ParseZramStat(StringPiece stat_data, SwapInfo* swap_info);
 // Fills in the provided |swap_data| structure.
 // Returns true on success or false for a parsing error.
 BASE_EXPORT bool GetSwapInfo(SwapInfo* swap_info);
-#endif  // defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+
+// Data about GPU memory usage. These fields will be -1 if not supported.
+struct BASE_EXPORT GraphicsMemoryInfoKB {
+  // Serializes the platform specific fields to value.
+  std::unique_ptr<Value> ToValue() const;
+
+  int gpu_objects = -1;
+  int64_t gpu_memory_size = -1;
+};
+
+// Report on Chrome OS graphics memory. Returns true on success.
+// /run/debugfs_gpu is a bind mount into /sys/kernel/debug and synchronously
+// reading the in-memory files in /sys is fast in most cases. On platform that
+// reading the graphics memory info is slow, this function returns false.
+BASE_EXPORT bool GetGraphicsMemoryInfo(GraphicsMemoryInfoKB* gpu_meminfo);
+
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 struct BASE_EXPORT SystemPerformanceInfo {
   SystemPerformanceInfo();
@@ -592,8 +591,9 @@ class BASE_EXPORT SystemMetrics {
   VmStatInfo vmstat_info_;
   SystemDiskInfo disk_info_;
 #endif
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   SwapInfo swap_info_;
+  GraphicsMemoryInfoKB gpu_memory_info_;
 #endif
 #if defined(OS_WIN)
   SystemPerformanceInfo performance_;

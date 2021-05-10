@@ -28,7 +28,6 @@
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 
 namespace blink {
 namespace {
@@ -56,8 +55,7 @@ namespace {
 bool ValidateOptions(blink::PushSubscriptionOptions* options,
                      ExceptionState& exception_state) {
   DOMArrayBuffer* buffer = options->applicationServerKey();
-  if (!base::CheckedNumeric<wtf_size_t>(buffer->ByteLengthAsSizeT())
-           .IsValid()) {
+  if (!base::CheckedNumeric<wtf_size_t>(buffer->ByteLength()).IsValid()) {
     exception_state.ThrowRangeError(
         "ApplicationServerKey size exceeded the maximum supported size");
     return false;

@@ -79,7 +79,8 @@ void PixelTestOutputSurface::SwapBuffers(viz::OutputSurfaceFrame frame) {
 void PixelTestOutputSurface::SwapBuffersCallback() {
   base::TimeTicks now = base::TimeTicks::Now();
   gfx::SwapTimings timings = {now, now};
-  client_->DidReceiveSwapBuffersAck(timings);
+  client_->DidReceiveSwapBuffersAck(timings,
+                                    /*release_fence=*/gfx::GpuFenceHandle());
   client_->DidReceivePresentationFeedback(
       gfx::PresentationFeedback(base::TimeTicks::Now(), base::TimeDelta(), 0));
 }
@@ -110,12 +111,4 @@ gfx::OverlayTransform PixelTestOutputSurface::GetDisplayTransform() {
   return gfx::OVERLAY_TRANSFORM_NONE;
 }
 
-scoped_refptr<gpu::GpuTaskSchedulerHelper>
-PixelTestOutputSurface::GetGpuTaskSchedulerHelper() {
-  return nullptr;
-}
-
-gpu::MemoryTracker* PixelTestOutputSurface::GetMemoryTracker() {
-  return nullptr;
-}
 }  // namespace cc

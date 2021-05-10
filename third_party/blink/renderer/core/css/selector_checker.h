@@ -30,7 +30,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_SELECTOR_CHECKER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_SELECTOR_CHECKER_H_
 
+#include "base/dcheck_is_on.h"
 #include "third_party/blink/renderer/core/css/css_selector.h"
+#include "third_party/blink/renderer/core/css/style_request.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
 
@@ -43,15 +45,10 @@ class ComputedStyle;
 class Element;
 class PartNames;
 
-class SelectorChecker {
+class CORE_EXPORT SelectorChecker {
   STACK_ALLOCATED();
 
  public:
-  enum VisitedMatchType : uint8_t {
-    kVisitedMatchDisabled,
-    kVisitedMatchEnabled
-  };
-
   enum Mode {
     // Used when matching selectors inside style recalc. This mode will set
     // restyle flags across the tree during matching which impact how style
@@ -78,28 +75,27 @@ class SelectorChecker {
     kQueryingRules,
   };
 
-  struct Init {
-    STACK_ALLOCATED();
+  explicit inline SelectorChecker(const Mode& mode)
+      : element_style_(nullptr),
+        scrollbar_(nullptr),
+        part_names_(nullptr),
+        pseudo_argument_(g_null_atom),
+        scrollbar_part_(kNoPart),
+        mode_(mode),
+        is_ua_rule_(false) {}
+  inline SelectorChecker(ComputedStyle* element_style,
+                         PartNames* part_names,
+                         const StyleRequest& style_request,
+                         const Mode& mode,
+                         const bool& is_ua_rule)
+      : element_style_(element_style),
+        scrollbar_(style_request.scrollbar),
+        part_names_(part_names),
+        pseudo_argument_(style_request.pseudo_argument),
+        scrollbar_part_(style_request.scrollbar_part),
+        mode_(mode),
+        is_ua_rule_(is_ua_rule) {}
 
-   public:
-    Mode mode = kResolvingStyle;
-    bool is_ua_rule = false;
-    ComputedStyle* element_style = nullptr;
-    CustomScrollbar* scrollbar = nullptr;
-    ScrollbarPart scrollbar_part = kNoPart;
-    PartNames* part_names = nullptr;
-  };
-
-  explicit SelectorChecker(const Init& init)
-      : element_style_(init.element_style),
-        scrollbar_(init.scrollbar),
-        part_names_(init.part_names),
-        scrollbar_part_(init.scrollbar_part),
-        mode_(init.mode) {
-#if DCHECK_IS_ON()
-    is_ua_rule_ = init.is_ua_rule;
-#endif
-  }
   SelectorChecker(const SelectorChecker&) = delete;
   SelectorChecker& operator=(const SelectorChecker&) = delete;
 
@@ -110,32 +106,28 @@ class SelectorChecker {
 
    public:
     // Initial selector constructor
-    SelectorCheckingContext(Element* element,
-                            VisitedMatchType visited_match_type)
-        : element(element), visited_match_type(visited_match_type) {}
+    explicit SelectorCheckingContext(Element* element) : element(element) {}
 
     const CSSSelector* selector = nullptr;
     Element* element = nullptr;
     Element* previous_element = nullptr;
     const ContainerNode* scope = nullptr;
-    VisitedMatchType visited_match_type;
     PseudoId pseudo_id = kPseudoIdNone;
     bool is_sub_selector = false;
     bool in_rightmost_compound = true;
     bool has_scrollbar_pseudo = false;
     bool has_selection_pseudo = false;
     bool treat_shadow_host_as_normal_scope = false;
-    bool is_from_vtt = false;
+    Element* vtt_originating_element = nullptr;
+    bool in_nested_complex_selector = false;
+    bool is_inside_visited_link = false;
   };
 
   struct MatchResult {
     STACK_ALLOCATED();
 
    public:
-    MatchResult() : dynamic_pseudo(kPseudoIdNone), specificity(0) {}
-
-    PseudoId dynamic_pseudo;
-    unsigned specificity;
+    PseudoId dynamic_pseudo{kPseudoIdNone};
   };
 
   bool Match(const SelectorCheckingContext& context, MatchResult& result) const;
@@ -154,7 +146,6 @@ class SelectorChecker {
   // to by the context are a match. Delegates most of the work to the Check*
   // methods below.
   bool CheckOne(const SelectorCheckingContext&, MatchResult&) const;
-  bool CheckOneForVTT(const SelectorCheckingContext&, MatchResult&) const;
 
   enum MatchStatus {
     kSelectorMatches,
@@ -181,48 +172,35 @@ class SelectorChecker {
   // to try (e.g. same element, parent, sibling) depends on the combinators in
   // the selectors.
   MatchStatus MatchSelector(const SelectorCheckingContext&, MatchResult&) const;
-  MatchStatus MatchSelectorForVTT(const SelectorCheckingContext&,
-                                  MatchResult&) const;
   MatchStatus MatchForSubSelector(const SelectorCheckingContext&,
                                   MatchResult&) const;
-  MatchStatus MatchForSubSelectorForVTT(const SelectorCheckingContext&,
-                                        MatchResult&) const;
   MatchStatus MatchForRelation(const SelectorCheckingContext&,
                                MatchResult&) const;
-  MatchStatus MatchForRelationForVTT(const SelectorCheckingContext&,
-                                     MatchResult&) const;
   MatchStatus MatchForPseudoContent(const SelectorCheckingContext&,
                                     const Element&,
                                     MatchResult&) const;
   MatchStatus MatchForPseudoShadow(const SelectorCheckingContext&,
                                    const ContainerNode*,
                                    MatchResult&) const;
-  bool MatchVTTBlockSelector(const SelectorCheckingContext& context,
-                             MatchResult& result) const;
   bool CheckPseudoClass(const SelectorCheckingContext&, MatchResult&) const;
-  bool CheckPseudoClassForVTT(const SelectorCheckingContext&,
-                              MatchResult&) const;
   bool CheckPseudoElement(const SelectorCheckingContext&, MatchResult&) const;
-  bool CheckPseudoElementForVTT(const SelectorCheckingContext&,
-                                MatchResult&) const;
   bool CheckScrollbarPseudoClass(const SelectorCheckingContext&,
                                  MatchResult&) const;
   bool CheckPseudoHost(const SelectorCheckingContext&, MatchResult&) const;
   bool CheckPseudoNot(const SelectorCheckingContext&, MatchResult&) const;
-  bool CheckPseudoNotForVTT(const SelectorCheckingContext&, MatchResult&) const;
 
   ComputedStyle* element_style_;
   CustomScrollbar* scrollbar_;
   PartNames* part_names_;
+  const String pseudo_argument_;
   ScrollbarPart scrollbar_part_;
   Mode mode_;
-#if DCHECK_IS_ON()
   bool is_ua_rule_;
-#else
-  static constexpr bool is_ua_rule_ = true;
+#if DCHECK_IS_ON()
+  mutable bool inside_match_ = false;
 #endif
 };
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_CSS_SELECTOR_CHECKER_H_

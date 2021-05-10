@@ -19,6 +19,7 @@ import android.support.test.InstrumentationRegistry;
 import android.view.KeyEvent;
 import android.view.ViewGroup;
 
+import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Matchers;
@@ -35,58 +36,60 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
 import org.chromium.base.ContentUriUtils;
 import org.chromium.base.IntentUtils;
-import org.chromium.base.test.params.ParameterAnnotations;
-import org.chromium.base.test.params.ParameterSet;
-import org.chromium.base.test.params.ParameterizedRunner;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.CriteriaNotSatisfiedException;
+import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.FileProviderHelper;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.locale.DefaultSearchEngineDialogHelperUtils;
-import org.chromium.chrome.browser.locale.DefaultSearchEnginePromoDialog;
-import org.chromium.chrome.browser.locale.DefaultSearchEnginePromoDialog.DefaultSearchEnginePromoDialogObserver;
 import org.chromium.chrome.browser.locale.LocaleManager;
+import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.UrlBar;
-import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinatorTestUtils;
-import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteResult;
 import org.chromium.chrome.browser.omnibox.suggestions.CachedZeroSuggestionsManager;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionBuilderForTest;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionUiType;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdown;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionView;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
+import org.chromium.chrome.browser.search_engines.DefaultSearchEngineDialogHelperUtils;
+import org.chromium.chrome.browser.search_engines.DefaultSearchEnginePromoDialog;
+import org.chromium.chrome.browser.search_engines.DefaultSearchEnginePromoDialog.DefaultSearchEnginePromoDialogObserver;
+import org.chromium.chrome.browser.search_engines.SearchEnginePromoType;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.searchwidget.SearchActivity.SearchActivityDelegate;
 import org.chromium.chrome.browser.share.clipboard.ClipboardImageFileProvider;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
+import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.MultiActivityTestRule;
-import org.chromium.chrome.test.util.ActivityUtils;
+import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.components.omnibox.AutocompleteMatch;
+import org.chromium.components.omnibox.AutocompleteMatchBuilder;
+import org.chromium.components.omnibox.AutocompleteResult;
 import org.chromium.components.search_engines.TemplateUrl;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
-import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.KeyUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.ui.base.Clipboard;
+import org.chromium.ui.test.util.UiDisableIf;
 import org.chromium.url.GURL;
 
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeoutException;
@@ -102,18 +105,12 @@ import java.util.concurrent.TimeoutException;
  *
  *                    + Add microphone tests somehow (vague query + confident query).
  */
-@RunWith(ParameterizedRunner.class)
-@ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
+@RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class SearchActivityTest {
     private static final long OMNIBOX_SHOW_TIMEOUT_MS = 5000L;
     private static final String TEST_PNG_IMAGE_FILE_EXTENSION = ".png";
     private static final int INVALID_INDEX = -1;
-
-    @ParameterAnnotations.ClassParameter
-    private static List<ParameterSet> sClassParams =
-            Arrays.asList(new ParameterSet().value(false).name("DisableRecyclerView"),
-                    new ParameterSet().value(true).name("EnableRecyclerView"));
 
     private static class TestDelegate
             extends SearchActivityDelegate implements DefaultSearchEnginePromoDialogObserver {
@@ -187,27 +184,15 @@ public class SearchActivityTest {
     VoiceRecognitionHandler mHandler;
 
     private TestDelegate mTestDelegate;
-    private boolean mEnableRecyclerView;
-
-    public SearchActivityTest(boolean enableRecyclerView) {
-        mEnableRecyclerView = enableRecyclerView;
-    }
 
     @Before
     public void setUp() {
-        if (mEnableRecyclerView) {
-            Features.getInstance().enable(ChromeFeatureList.OMNIBOX_SUGGESTIONS_RECYCLER_VIEW);
-        } else {
-            Features.getInstance().disable(ChromeFeatureList.OMNIBOX_SUGGESTIONS_RECYCLER_VIEW);
-        }
-        Features.ensureCommandLineIsUpToDate();
-
         MockitoAnnotations.initMocks(this);
         doReturn(true).when(mHandler).isVoiceSearchEnabled();
 
         mTestDelegate = new TestDelegate();
         SearchActivity.setDelegateForTests(mTestDelegate);
-        DefaultSearchEnginePromoDialog.setObserverForTests(mTestDelegate);
+        DefaultSearchEnginePromoDialog.setObserverForTests2(mTestDelegate);
     }
 
     @After
@@ -218,6 +203,7 @@ public class SearchActivityTest {
 
     @Test
     @SmallTest
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // see crbug.com/1177417
     public void testOmniboxSuggestionContainerAppears() throws Exception {
         SearchActivity searchActivity = startSearchActivity();
 
@@ -266,6 +252,10 @@ public class SearchActivityTest {
                 return null;
             }
         }, url);
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        LaunchCauseMetrics.LAUNCH_CAUSE_HISTOGRAM,
+                        LaunchCauseMetrics.LaunchCause.HOME_SCREEN_WIDGET));
     }
 
     @Test
@@ -277,8 +267,11 @@ public class SearchActivityTest {
         final SearchActivityLocationBarLayout locationBar =
                 (SearchActivityLocationBarLayout) searchActivity.findViewById(
                         R.id.search_location_bar);
-        locationBar.setVoiceRecognitionHandlerForTesting(mHandler);
-        locationBar.beginQuery(/* isVoiceSearchIntent= */ true, /* optionalText= */ null);
+
+        LocationBarCoordinator locationBarCoordinator =
+                searchActivity.getLocationBarCoordinatorForTesting();
+        locationBarCoordinator.setVoiceRecognitionHandlerForTesting(mHandler);
+        locationBar.beginQuery(/* isVoiceSearchIntent= */ true, /* optionalText= */ null, mHandler);
         verify(mHandler, times(0))
                 .startVoiceRecognition(
                         VoiceRecognitionHandler.VoiceInteractionSource.SEARCH_WIDGET);
@@ -302,6 +295,7 @@ public class SearchActivityTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "crbug/1171794")
     public void testTypeBeforeNativeIsLoaded() throws Exception {
         // Wait for the activity to load, but don't let it load the native library.
         mTestDelegate.shouldDelayLoadingNative = true;
@@ -386,19 +380,19 @@ public class SearchActivityTest {
         });
 
         // Cache some mock results to show.
-        OmniboxSuggestion mockSuggestion =
-                OmniboxSuggestionBuilderForTest.searchWithType(OmniboxSuggestionType.SEARCH_SUGGEST)
+        AutocompleteMatch mockSuggestion =
+                AutocompleteMatchBuilder.searchWithType(OmniboxSuggestionType.SEARCH_SUGGEST)
                         .setDisplayText("https://google.com")
                         .setDescription("https://google.com")
                         .setUrl(new GURL("https://google.com"))
                         .build();
-        OmniboxSuggestion mockSuggestion2 =
-                OmniboxSuggestionBuilderForTest.searchWithType(OmniboxSuggestionType.SEARCH_SUGGEST)
+        AutocompleteMatch mockSuggestion2 =
+                AutocompleteMatchBuilder.searchWithType(OmniboxSuggestionType.SEARCH_SUGGEST)
                         .setDisplayText("https://android.com")
                         .setDescription("https://android.com")
                         .setUrl(new GURL("https://android.com"))
                         .build();
-        List<OmniboxSuggestion> list = new ArrayList<>();
+        List<AutocompleteMatch> list = new ArrayList<>();
         list.add(mockSuggestion);
         list.add(mockSuggestion2);
         AutocompleteResult data = new AutocompleteResult(list, null);
@@ -420,6 +414,7 @@ public class SearchActivityTest {
 
     @Test
     @SmallTest
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // see crbug.com/1177417
     public void testTypeBeforeDeferredInitialization() throws Exception {
         // Start the Activity.  It should pause and assume that a promo dialog has appeared.
         mTestDelegate.shouldDelayDeferredInitialization = true;
@@ -530,6 +525,7 @@ public class SearchActivityTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "crbug/1166647")
     public void testNewIntentDiscardsQuery() {
         final SearchActivity searchActivity = startSearchActivity();
         setUrlBarText(searchActivity, "first query");
@@ -552,6 +548,7 @@ public class SearchActivityTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "https://crbug.com/1144676")
     @Features.
     EnableFeatures({ChromeFeatureList.OMNIBOX_ENABLE_CLIPBOARD_PROVIDER_IMAGE_SUGGESTIONS})
     public void testImageSearch() throws InterruptedException, Exception {
@@ -568,14 +565,13 @@ public class SearchActivityTest {
         OmniboxTestUtils.waitForOmniboxSuggestions(locationBar, OMNIBOX_SHOW_TIMEOUT_MS);
         waitForSuggestionType(locationBar, OmniboxSuggestionType.CLIPBOARD_IMAGE);
         OmniboxSuggestionsDropdown suggestionsDropdown =
-                AutocompleteCoordinatorTestUtils.getSuggestionsDropdown(
-                        locationBar.getAutocompleteCoordinator());
+                locationBar.getAutocompleteCoordinator().getSuggestionsDropdownForTest();
 
         int imageSuggestionIndex = INVALID_INDEX;
         // Find the index of the image clipboard suggestion.
-        for (int i = 0; i < suggestionsDropdown.getItemCount(); ++i) {
-            OmniboxSuggestion suggestion = AutocompleteCoordinatorTestUtils.getOmniboxSuggestionAt(
-                    locationBar.getAutocompleteCoordinator(), i);
+        for (int i = 0; i < suggestionsDropdown.getDropdownItemViewCountForTest(); ++i) {
+            AutocompleteMatch suggestion =
+                    locationBar.getAutocompleteCoordinator().getSuggestionAt(i);
             if (suggestion != null
                     && suggestion.getType() == OmniboxSuggestionType.CLIPBOARD_IMAGE) {
                 imageSuggestionIndex = i;
@@ -585,8 +581,8 @@ public class SearchActivityTest {
         Assert.assertNotEquals("Cannot find the image clipboard Omnibox suggestion", INVALID_INDEX,
                 imageSuggestionIndex);
 
-        OmniboxSuggestion imageSuggestion = AutocompleteCoordinatorTestUtils.getOmniboxSuggestionAt(
-                locationBar.getAutocompleteCoordinator(), imageSuggestionIndex);
+        AutocompleteMatch imageSuggestion =
+                locationBar.getAutocompleteCoordinator().getSuggestionAt(imageSuggestionIndex);
         Assert.assertNotNull("The image clipboard suggestion should contains post content type.",
                 imageSuggestion.getPostContentType());
         Assert.assertNotEquals(
@@ -600,7 +596,7 @@ public class SearchActivityTest {
 
 
         // Make sure the new tab is launched.
-        final ChromeTabbedActivity cta = ActivityUtils.waitForActivity(
+        final ChromeTabbedActivity cta = ActivityTestUtils.waitForActivity(
                 InstrumentationRegistry.getInstrumentation(), ChromeTabbedActivity.class,
                 new Callable<Void>() {
                     @Override
@@ -626,6 +622,7 @@ public class SearchActivityTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "https://crbug.com/1144676")
     @Features.
     EnableFeatures({ChromeFeatureList.OMNIBOX_ENABLE_CLIPBOARD_PROVIDER_IMAGE_SUGGESTIONS})
     public void testImageSearch_OnlyTrustedIntentCanPost() throws InterruptedException, Exception {
@@ -642,14 +639,13 @@ public class SearchActivityTest {
         OmniboxTestUtils.waitForOmniboxSuggestions(locationBar, OMNIBOX_SHOW_TIMEOUT_MS);
         waitForSuggestionType(locationBar, OmniboxSuggestionType.CLIPBOARD_IMAGE);
         OmniboxSuggestionsDropdown suggestionsDropdown =
-                AutocompleteCoordinatorTestUtils.getSuggestionsDropdown(
-                        locationBar.getAutocompleteCoordinator());
+                locationBar.getAutocompleteCoordinator().getSuggestionsDropdownForTest();
 
         int imageSuggestionIndex = INVALID_INDEX;
         // Find the index of the image clipboard suggestion.
-        for (int i = 0; i < suggestionsDropdown.getItemCount(); ++i) {
-            OmniboxSuggestion suggestion = AutocompleteCoordinatorTestUtils.getOmniboxSuggestionAt(
-                    locationBar.getAutocompleteCoordinator(), i);
+        for (int i = 0; i < suggestionsDropdown.getDropdownItemViewCountForTest(); ++i) {
+            AutocompleteMatch suggestion =
+                    locationBar.getAutocompleteCoordinator().getSuggestionAt(i);
             if (suggestion != null
                     && suggestion.getType() == OmniboxSuggestionType.CLIPBOARD_IMAGE) {
                 imageSuggestionIndex = i;
@@ -659,8 +655,8 @@ public class SearchActivityTest {
         Assert.assertNotEquals("Cannot find the image clipboard Omnibox suggestion", INVALID_INDEX,
                 imageSuggestionIndex);
 
-        OmniboxSuggestion imageSuggestion = AutocompleteCoordinatorTestUtils.getOmniboxSuggestionAt(
-                locationBar.getAutocompleteCoordinator(), imageSuggestionIndex);
+        AutocompleteMatch imageSuggestion =
+                locationBar.getAutocompleteCoordinator().getSuggestionAt(imageSuggestionIndex);
 
         Intent intent =
                 new Intent(Intent.ACTION_VIEW, Uri.parse(imageSuggestion.getUrl().getSpec()));
@@ -670,7 +666,7 @@ public class SearchActivityTest {
         intent.putExtra(IntentHandler.EXTRA_POST_DATA, imageSuggestion.getPostData());
 
         final ChromeTabbedActivity cta =
-                ActivityUtils.waitForActivity(InstrumentationRegistry.getInstrumentation(),
+                ActivityTestUtils.waitForActivity(InstrumentationRegistry.getInstrumentation(),
                         ChromeTabbedActivity.class, new Callable<Void>() {
                             @Override
                             public Void call() {
@@ -686,6 +682,29 @@ public class SearchActivityTest {
                     TemplateUrlServiceFactory.get().isSearchResultsPageFromDefaultSearchProvider(
                             tab.getUrl()),
                     Matchers.is(false));
+        });
+    }
+
+    @Test
+    @MediumTest
+    public void testSetUrl_urlBarTextEmpty() throws Exception {
+        final SearchActivity searchActivity = startSearchActivity();
+        mTestDelegate.shouldDelayNativeInitializationCallback.waitForCallback(0);
+        mTestDelegate.showSearchEngineDialogIfNeededCallback.waitForCallback(0);
+        mTestDelegate.onFinishDeferredInitializationCallback.waitForCallback(0);
+
+        LocationBarCoordinator locationBarCoordinator =
+                searchActivity.getLocationBarCoordinatorForTesting();
+        UrlBar urlBar = (UrlBar) searchActivity.findViewById(R.id.url_bar);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            locationBarCoordinator.onUrlChangedForTesting();
+            Assert.assertTrue(urlBar.getText().toString().isEmpty());
+        });
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            locationBarCoordinator.clearOmniboxFocus();
+            locationBarCoordinator.onUrlChangedForTesting();
+            Assert.assertTrue(urlBar.getText().toString().isEmpty());
         });
     }
 
@@ -710,14 +729,12 @@ public class SearchActivityTest {
         CriteriaHelper.pollUiThread(() -> {
             // Find the index of clipboard suggestion in the dropdown list.
             final int clipboardSuggestionIndexInDropdown =
-                    AutocompleteCoordinatorTestUtils.getIndexForFirstSuggestionOfType(
-                            locationBar.getAutocompleteCoordinator(),
-                            OmniboxSuggestionUiType.CLIPBOARD_SUGGESTION);
+                    OmniboxTestUtils.getIndexForFirstSuggestionOfType(
+                            locationBar, OmniboxSuggestionUiType.CLIPBOARD_SUGGESTION);
             Criteria.checkThat("Cannot find the clipboard Omnibox suggestion in ModelList.",
                     clipboardSuggestionIndexInDropdown, Matchers.not(INVALID_INDEX));
             OmniboxSuggestionsDropdown dropdown =
-                    AutocompleteCoordinatorTestUtils.getSuggestionsDropdown(
-                            locationBar.getAutocompleteCoordinator());
+                    locationBar.getAutocompleteCoordinator().getSuggestionsDropdownForTest();
             ViewGroup viewGroup = dropdown.getViewGroup();
             BaseSuggestionView baseSuggestionView =
                     (BaseSuggestionView) viewGroup.getChildAt(clipboardSuggestionIndexInDropdown);
@@ -759,27 +776,26 @@ public class SearchActivityTest {
 
     private void waitForChromeTabbedActivityToStart(Callable<Void> trigger, String expectedUrl)
             throws Exception {
-        final ChromeTabbedActivity cta = ActivityUtils.waitForActivity(
+        final ChromeTabbedActivity cta = ActivityTestUtils.waitForActivity(
                 InstrumentationRegistry.getInstrumentation(), ChromeTabbedActivity.class, trigger);
 
         CriteriaHelper.pollUiThread(() -> {
             Tab tab = cta.getActivityTab();
             Criteria.checkThat(tab, Matchers.notNullValue());
-            Criteria.checkThat(tab.getUrlString(), Matchers.is(expectedUrl));
+            Criteria.checkThat(tab.getUrl().getSpec(), Matchers.is(expectedUrl));
         });
+        mActivityTestRule.setActivity(cta);
     }
 
     private void waitForSuggestionType(final SearchActivityLocationBarLayout locationBar,
             final @OmniboxSuggestionType int type) {
         CriteriaHelper.pollUiThread(() -> {
             OmniboxSuggestionsDropdown suggestionsDropdown =
-                    AutocompleteCoordinatorTestUtils.getSuggestionsDropdown(
-                            locationBar.getAutocompleteCoordinator());
+                    locationBar.getAutocompleteCoordinator().getSuggestionsDropdownForTest();
             Criteria.checkThat(suggestionsDropdown, Matchers.notNullValue());
-            for (int i = 0; i < suggestionsDropdown.getItemCount(); i++) {
-                OmniboxSuggestion suggestion =
-                        AutocompleteCoordinatorTestUtils.getOmniboxSuggestionAt(
-                                locationBar.getAutocompleteCoordinator(), i);
+            for (int i = 0; i < suggestionsDropdown.getDropdownItemViewCountForTest(); i++) {
+                AutocompleteMatch suggestion =
+                        locationBar.getAutocompleteCoordinator().getSuggestionAt(i);
                 if (suggestion != null && suggestion.getType() == type) return;
             }
             throw new CriteriaNotSatisfiedException("No suggestions of type: " + type);

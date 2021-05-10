@@ -16,6 +16,7 @@
 #include "components/viz/test/fake_surface_observer.h"
 #include "components/viz/test/mock_compositor_frame_sink_client.h"
 #include "components/viz/test/surface_id_allocator_set.h"
+#include "components/viz/test/test_surface_id_allocator.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -711,7 +712,7 @@ TEST_F(SurfaceSynchronizationTest, ResourcesOnlyReturnedOnce) {
   // the child submits a CompositorFrame. The CompositorFrame also has
   // resources in its resource list.
   TransferableResource resource;
-  resource.id = 1337;
+  resource.id = ResourceId(1337);
   resource.format = ALPHA_8;
   resource.filter = 1234;
   resource.size = gfx::Size(1234, 5678);
@@ -741,10 +742,13 @@ TEST_F(SurfaceSynchronizationTest, ResourcesOnlyReturnedOnce) {
   EXPECT_FALSE(parent_surface()->HasPendingFrame());
   EXPECT_THAT(parent_surface()->activation_dependencies(), IsEmpty());
 
-  std::vector<ReturnedResource> returned_resources = {
-      resource.ToReturnedResource()};
-  EXPECT_CALL(support_client_,
-              DidReceiveCompositorFrameAck(returned_resources));
+  std::vector<ReturnedResource> returned_resources;
+  ResourceId id = resource.ToReturnedResource().id;
+  EXPECT_CALL(support_client_, DidReceiveCompositorFrameAck(_))
+      .WillOnce([=](std::vector<ReturnedResource> got) {
+        EXPECT_EQ(1u, got.size());
+        EXPECT_EQ(id, got[0].id);
+      });
 
   // The parent submits a CompositorFrame without any dependencies. That
   // frame should activate immediately, replacing the earlier frame. The
@@ -1275,16 +1279,18 @@ TEST_F(SurfaceSynchronizationTest, LatencyInfoNotCarriedOver) {
 TEST_F(SurfaceSynchronizationTest, ReturnResourcesWithAck) {
   const SurfaceId parent_id = MakeSurfaceId(kParentFrameSink, 1);
   TransferableResource resource;
-  resource.id = 1234;
+  resource.id = ResourceId(1234);
   parent_support().SubmitCompositorFrame(
       parent_id.local_surface_id(),
       MakeCompositorFrame(empty_surface_ids(), empty_surface_ranges(),
                           {resource}));
-  std::vector<ReturnedResource> returned_resources =
-      TransferableResource::ReturnResources({resource});
+  ResourceId id = resource.ToReturnedResource().id;
   EXPECT_CALL(support_client_, ReclaimResources(_)).Times(0);
-  EXPECT_CALL(support_client_,
-              DidReceiveCompositorFrameAck(Eq(returned_resources)));
+  EXPECT_CALL(support_client_, DidReceiveCompositorFrameAck(_))
+      .WillOnce([=](std::vector<ReturnedResource> got) {
+        EXPECT_EQ(1u, got.size());
+        EXPECT_EQ(id, got[0].id);
+      });
   parent_support().SubmitCompositorFrame(parent_id.local_surface_id(),
                                          MakeDefaultCompositorFrame());
 }
@@ -1298,7 +1304,7 @@ TEST_F(SurfaceSynchronizationTest, SubmitToDestroyedSurface) {
   // Create the child surface by submitting a frame to it.
   EXPECT_EQ(nullptr, GetSurfaceForId(child_id));
   TransferableResource resource;
-  resource.id = 1234;
+  resource.id = ResourceId(1234);
   child_support1().SubmitCompositorFrame(
       child_id.local_surface_id(),
       MakeCompositorFrame(empty_surface_ids(), empty_surface_ranges(),
@@ -1337,9 +1343,12 @@ TEST_F(SurfaceSynchronizationTest, SubmitToDestroyedSurface) {
                                          MakeDefaultCompositorFrame());
 
   {
-    std::vector<ReturnedResource> returned_resources =
-        TransferableResource::ReturnResources({resource});
-    EXPECT_CALL(support_client_, ReclaimResources(Eq(returned_resources)));
+    ResourceId id = resource.ToReturnedResource().id;
+    EXPECT_CALL(support_client_, ReclaimResources(_))
+        .WillOnce([=](std::vector<ReturnedResource> got) {
+          EXPECT_EQ(1u, got.size());
+          EXPECT_EQ(id, got[0].id);
+        });
     frame_sink_manager().surface_manager()->GarbageCollectSurfaces();
     testing::Mock::VerifyAndClearExpectations(&support_client_);
   }
@@ -3199,6 +3208,168 @@ TEST_F(SurfaceSynchronizationTest,
   // should be taken into account.
   EXPECT_EQ(1u, parent_surface()->activation_dependencies().size());
   EXPECT_EQ(child1_id1, *parent_surface()->activation_dependencies().begin());
+}
+
+// Tests that when a new CompositorFrame for an Embedded Surface arrives, and is
+// not immediately ACKed, that when a CompositorFrame from its Embedder arrives
+// with new ActivationDependencies, that the UnACKed frame receives and ACK so
+// that that client can begin frame production to satistfy the new dependencies.
+// (https://crbug.com/1203804)
+TEST_F(SurfaceSynchronizationTest,
+       UnAckedSurfaceArrivesBeforeNewActivationDependencies) {
+  TestSurfaceIdAllocator parent_id(kParentFrameSink);
+  TestSurfaceIdAllocator child_id(kChildFrameSink1);
+
+  parent_support().SubmitCompositorFrame(
+      parent_id.local_surface_id(),
+      MakeCompositorFrame({child_id}, {SurfaceRange(base::nullopt, child_id)},
+                          std::vector<TransferableResource>()));
+  // |parent_support| is blocked on |child_id|.
+  EXPECT_TRUE(parent_surface()->has_deadline());
+  EXPECT_FALSE(parent_surface()->HasActiveFrame());
+  EXPECT_TRUE(parent_surface()->HasPendingFrame());
+  EXPECT_THAT(parent_surface()->activation_dependencies(),
+              UnorderedElementsAre(child_id));
+
+  child_support1().SubmitCompositorFrame(
+      child_id.local_surface_id(),
+      MakeCompositorFrame(empty_surface_ids(), empty_surface_ranges(),
+                          std::vector<TransferableResource>()));
+  // |child_surface| should now be active.
+  EXPECT_TRUE(child_surface1()->HasActiveFrame());
+  EXPECT_FALSE(child_surface1()->HasPendingFrame());
+  EXPECT_THAT(child_surface1()->activation_dependencies(), IsEmpty());
+  EXPECT_FALSE(child_surface1()->HasUnackedActiveFrame());
+
+  // |parent_surface| should now be active.
+  EXPECT_TRUE(parent_surface()->HasActiveFrame());
+  EXPECT_FALSE(parent_surface()->HasPendingFrame());
+  EXPECT_THAT(parent_surface()->activation_dependencies(), IsEmpty());
+
+  // We start tracking that surfaces will damage the display. This will lead to
+  // frames not being immediately ACKed.
+  surface_observer().set_damage_display(true);
+  // Submit second frame at the same LocalSurfaceId.
+  EXPECT_CALL(support_client_, DidReceiveCompositorFrameAck(_)).Times(0);
+  child_support1().SubmitCompositorFrame(
+      child_id.local_surface_id(),
+      MakeCompositorFrame(empty_surface_ids(), empty_surface_ranges(),
+                          std::vector<TransferableResource>()));
+  testing::Mock::VerifyAndClearExpectations(&support_client_);
+  // |child_surface| should still have an active frame, which will be the newly
+  // submitted frame.
+  EXPECT_TRUE(child_surface1()->HasActiveFrame());
+  EXPECT_FALSE(child_surface1()->HasPendingFrame());
+  EXPECT_THAT(child_surface1()->activation_dependencies(), IsEmpty());
+  // There should also be an un-acked frame, which was just submitted.
+  EXPECT_TRUE(child_surface1()->HasUnackedActiveFrame());
+
+  // Submit new |parent_surface|, with ActivationDependencies that are newer
+  // than the currently unACKed |child_surface|.
+  parent_id.Increment();
+  child_id.Increment();
+
+  parent_support().SubmitCompositorFrame(
+      parent_id.local_surface_id(),
+      MakeCompositorFrame({child_id}, {SurfaceRange(base::nullopt, child_id)},
+                          std::vector<TransferableResource>()));
+  // |parent_support| is blocked on |child_id2| the previous parent_surface
+  // should still be active.
+  EXPECT_TRUE(parent_surface()->has_deadline());
+  EXPECT_FALSE(parent_surface()->HasActiveFrame());
+  EXPECT_TRUE(parent_surface()->HasPendingFrame());
+  EXPECT_THAT(parent_surface()->activation_dependencies(),
+              UnorderedElementsAre(child_id));
+  EXPECT_FALSE(child_surface1()->HasUnackedActiveFrame());
+
+  // Submitting a new child frame for the newer dependencies should activate the
+  // parent frame.
+  child_support1().SubmitCompositorFrame(
+      child_id.local_surface_id(),
+      MakeCompositorFrame(empty_surface_ids(), empty_surface_ranges(),
+                          std::vector<TransferableResource>()));
+  EXPECT_TRUE(child_surface1()->HasActiveFrame());
+  EXPECT_FALSE(child_surface1()->HasPendingFrame());
+  EXPECT_THAT(child_surface1()->activation_dependencies(), IsEmpty());
+  EXPECT_TRUE(parent_surface()->HasActiveFrame());
+  EXPECT_FALSE(parent_surface()->HasPendingFrame());
+}
+
+// Tests that when a CompositorFrame for an Embedded Surface arrives after its
+// Embedder has submitted new ActivationDependencies, that it is immediately
+// ACKed, even if normally it would not be due to damage. This way we don't have
+// an Embedder blocked on an unACKed frame. (https://crbug.com/1203804)
+TEST_F(SurfaceSynchronizationTest,
+       UnAckedOldActivationDependencyArrivesAfterNewDependencies) {
+  TestSurfaceIdAllocator parent_id(kParentFrameSink);
+  TestSurfaceIdAllocator child_id(kChildFrameSink1);
+
+  parent_support().SubmitCompositorFrame(
+      parent_id.local_surface_id(),
+      MakeCompositorFrame({child_id}, {SurfaceRange(base::nullopt, child_id)},
+                          std::vector<TransferableResource>()));
+  // |parent_support| is blocked on |child_id|.
+  EXPECT_TRUE(parent_surface()->has_deadline());
+  EXPECT_FALSE(parent_surface()->HasActiveFrame());
+  EXPECT_TRUE(parent_surface()->HasPendingFrame());
+  EXPECT_THAT(parent_surface()->activation_dependencies(),
+              UnorderedElementsAre(child_id));
+
+  child_support1().SubmitCompositorFrame(
+      child_id.local_surface_id(),
+      MakeCompositorFrame(empty_surface_ids(), empty_surface_ranges(),
+                          std::vector<TransferableResource>()));
+  // |child_surface| should now be active.
+  EXPECT_TRUE(child_surface1()->HasActiveFrame());
+  EXPECT_FALSE(child_surface1()->HasPendingFrame());
+  EXPECT_THAT(child_surface1()->activation_dependencies(), IsEmpty());
+  EXPECT_FALSE(child_surface1()->HasUnackedActiveFrame());
+
+  // |parent_surface| should now be active.
+  EXPECT_TRUE(parent_surface()->HasActiveFrame());
+  EXPECT_FALSE(parent_surface()->HasPendingFrame());
+  EXPECT_THAT(parent_surface()->activation_dependencies(), IsEmpty());
+
+  // Submit new |parent_surface|, with ActivationDependencies that are newer
+  // than the currently |child_surface|.
+  parent_id.Increment();
+  LocalSurfaceId old_child_id = child_id.local_surface_id();
+  child_id.Increment();
+
+  EXPECT_CALL(support_client_, DidReceiveCompositorFrameAck(_)).Times(0);
+  parent_support().SubmitCompositorFrame(
+      parent_id.local_surface_id(),
+      MakeCompositorFrame({child_id}, {SurfaceRange(base::nullopt, child_id)},
+                          std::vector<TransferableResource>()));
+  testing::Mock::VerifyAndClearExpectations(&support_client_);
+  // |parent_support| is blocked on |child_id2| the previous |parent_surface|
+  // should still be active.
+  EXPECT_TRUE(parent_surface()->has_deadline());
+  EXPECT_FALSE(parent_surface()->HasActiveFrame());
+  EXPECT_TRUE(parent_surface()->HasPendingFrame());
+  EXPECT_THAT(parent_surface()->activation_dependencies(),
+              UnorderedElementsAre(child_id));
+  // There should not be an unACKed |child_surface|.
+  EXPECT_FALSE(child_surface1()->HasUnackedActiveFrame());
+
+  // We start tracking that surfaces will damage the display. This will lead to
+  // frames not being immediately ACKed.
+  surface_observer().set_damage_display(true);
+  // Submitting a CompositorFrame to the old SurfaceId, which is no longer the
+  // dependency, should lead to an immediate ACK.
+  EXPECT_CALL(support_client_, DidReceiveCompositorFrameAck(_)).Times(1);
+  child_support1().SubmitCompositorFrame(
+      old_child_id,
+      MakeCompositorFrame(empty_surface_ids(), empty_surface_ranges(),
+                          std::vector<TransferableResource>()));
+  testing::Mock::VerifyAndClearExpectations(&support_client_);
+  // |child_surface| should still have an active frame.
+  EXPECT_TRUE(child_surface1()->HasActiveFrame());
+  EXPECT_FALSE(child_surface1()->HasPendingFrame());
+  EXPECT_THAT(child_surface1()->activation_dependencies(), IsEmpty());
+  // Since we are blocking our embedder, we should have been ACKed to allow for
+  // frame production to begin on the new dependency.
+  EXPECT_FALSE(child_surface1()->HasUnackedActiveFrame());
 }
 
 }  // namespace viz

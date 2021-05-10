@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/location.h"
@@ -31,7 +31,6 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_config.h"
-#include "chromeos/dbus/cryptohome/cryptohome_client.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/pipe_reader.h"
 #include "dbus/bus.h"
@@ -531,6 +530,28 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
                        std::move(error_callback)));
   }
 
+  void GetKernelFeatureList(KernelFeatureListCallback callback) override {
+    dbus::MethodCall method_call(debugd::kDebugdInterface,
+                                 debugd::kKernelFeatureList);
+    dbus::MessageWriter writer(&method_call);
+    debugdaemon_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&DebugDaemonClientImpl::OnKernelFeatureList,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
+
+  void KernelFeatureEnable(const std::string& name,
+                           KernelFeatureEnableCallback callback) override {
+    dbus::MethodCall method_call(debugd::kDebugdInterface,
+                                 debugd::kKernelFeatureEnable);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(name);
+    debugdaemon_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&DebugDaemonClientImpl::OnKernelFeatureEnable,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
+
   void StartPluginVmDispatcher(const std::string& owner_id,
                                const std::string& lang,
                                PluginVmDispatcherCallback callback) override {
@@ -691,6 +712,54 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
       logs[key] = value;
     }
     std::move(callback).Run(!sub_reader.HasMoreData() && !broken, logs);
+  }
+
+  void OnKernelFeatureList(KernelFeatureListCallback callback,
+                           dbus::Response* response) {
+    if (!response) {
+      std::move(callback).Run(false, "error: No Response");
+      return;
+    }
+
+    std::string csv;
+    bool result = false;
+
+    dbus::MessageReader reader(response);
+    if (!reader.PopBool(&result) || !reader.PopString(&csv)) {
+      std::move(callback).Run(false, "error: Failed to read response");
+      return;
+    }
+
+    if (!result) {
+      std::move(callback).Run(false, csv);
+      return;
+    }
+
+    std::move(callback).Run(true, csv);
+  }
+
+  void OnKernelFeatureEnable(KernelFeatureEnableCallback callback,
+                             dbus::Response* response) {
+    if (!response) {
+      std::move(callback).Run(false, "error: No Response");
+      return;
+    }
+
+    std::string err_str;
+    bool result = false;
+
+    dbus::MessageReader reader(response);
+    if (!reader.PopBool(&result) || !reader.PopString(&err_str)) {
+      std::move(callback).Run(false, "error: Failed to read response");
+      return;
+    }
+
+    if (!result) {
+      std::move(callback).Run(false, err_str);
+      return;
+    }
+
+    std::move(callback).Run(true, err_str);
   }
 
   void OnBigFeedbackLogsResponse(base::WeakPtr<PipeReaderWrapper> pipe_reader,

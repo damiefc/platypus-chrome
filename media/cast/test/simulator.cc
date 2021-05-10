@@ -66,7 +66,6 @@
 #include "media/base/video_frame.h"
 #include "media/cast/cast_config.h"
 #include "media/cast/cast_environment.h"
-#include "media/cast/cast_receiver.h"
 #include "media/cast/cast_sender.h"
 #include "media/cast/logging/encoding_event_subscriber.h"
 #include "media/cast/logging/logging_defines.h"
@@ -80,6 +79,7 @@
 #include "media/cast/test/fake_media_source.h"
 #include "media/cast/test/loopback_transport.h"
 #include "media/cast/test/proto/network_simulation_model.pb.h"
+#include "media/cast/test/receiver/cast_receiver.h"
 #include "media/cast/test/skewed_tick_clock.h"
 #include "media/cast/test/utility/audio_utility.h"
 #include "media/cast/test/utility/default_config.h"
@@ -260,8 +260,8 @@ void GotVideoFrame(GotVideoFrameOutput* metrics_output,
                    bool continuous) {
   ++metrics_output->counter;
   cast_receiver->RequestDecodedVideoFrame(
-      base::Bind(&GotVideoFrame, metrics_output, yuv_output,
-                 video_frame_tracker, cast_receiver));
+      base::BindRepeating(&GotVideoFrame, metrics_output, yuv_output,
+                          video_frame_tracker, cast_receiver));
 
   // If |video_frame_tracker| is available that means we're computing
   // quality metrices.
@@ -284,7 +284,7 @@ void GotAudioFrame(int* counter,
                    bool is_continuous) {
   ++*counter;
   cast_receiver->RequestDecodedAudioFrame(
-      base::Bind(&GotAudioFrame, counter, cast_receiver));
+      base::BindRepeating(&GotAudioFrame, counter, cast_receiver));
 }
 
 // Run simulation once.
@@ -386,9 +386,9 @@ void RunSimulation(const base::FilePath& source_path,
     std::copy(ipp_model.average_rate().begin(),
               ipp_model.average_rate().end(),
               average_rates.begin());
-    ipp.reset(new test::InterruptedPoissonProcess(
-        average_rates,
-        ipp_model.coef_burstiness(), ipp_model.coef_variance(), 0));
+    ipp = std::make_unique<test::InterruptedPoissonProcess>(
+        average_rates, ipp_model.coef_burstiness(), ipp_model.coef_variance(),
+        0);
     receiver_to_sender->Initialize(ipp->NewBuffer(128 * 1024),
                                    transport_sender->PacketReceiverForTesting(),
                                    task_runner, &testing_clock);
@@ -416,7 +416,8 @@ void RunSimulation(const base::FilePath& source_path,
                                quality_test);
   std::unique_ptr<EncodedVideoFrameTracker> video_frame_tracker;
   if (quality_test) {
-    video_frame_tracker.reset(new EncodedVideoFrameTracker(&media_source));
+    video_frame_tracker =
+        std::make_unique<EncodedVideoFrameTracker>(&media_source);
     sender_env->logger()->Subscribe(video_frame_tracker.get());
   }
 
@@ -426,18 +427,17 @@ void RunSimulation(const base::FilePath& source_path,
   // Start receiver.
   int audio_frame_count = 0;
   cast_receiver->RequestDecodedVideoFrame(
-      base::Bind(&GotVideoFrame, &metrics_output, yuv_output_path,
-                 video_frame_tracker.get(), cast_receiver.get()));
-  cast_receiver->RequestDecodedAudioFrame(
-      base::Bind(&GotAudioFrame, &audio_frame_count, cast_receiver.get()));
+      base::BindRepeating(&GotVideoFrame, &metrics_output, yuv_output_path,
+                          video_frame_tracker.get(), cast_receiver.get()));
+  cast_receiver->RequestDecodedAudioFrame(base::BindRepeating(
+      &GotAudioFrame, &audio_frame_count, cast_receiver.get()));
 
   // Initializing audio and video senders.
   cast_sender->InitializeAudio(audio_sender_config,
                                base::BindOnce(&LogAudioOperationalStatus));
   cast_sender->InitializeVideo(media_source.get_video_config(),
-                               base::Bind(&LogVideoOperationalStatus),
-                               CreateDefaultVideoEncodeAcceleratorCallback(),
-                               CreateDefaultVideoEncodeMemoryCallback());
+                               base::BindRepeating(&LogVideoOperationalStatus),
+                               base::DoNothing());
   task_runner->RunTasks();
 
   // Truncate YUV files to prepare for writing.

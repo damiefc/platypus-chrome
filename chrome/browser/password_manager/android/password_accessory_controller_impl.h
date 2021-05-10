@@ -10,16 +10,17 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "chrome/browser/password_manager/android/all_passwords_bottom_sheet_helper.h"
 #include "chrome/browser/password_manager/android/password_accessory_controller.h"
 #include "components/autofill/core/browser/ui/accessory_sheet_data.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-forward.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/password_manager/core/browser/credential_cache.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
+#include "components/security_state/core/security_state.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "url/gurl.h"
 
@@ -41,7 +42,10 @@ class PasswordAccessoryControllerImpl
   ~PasswordAccessoryControllerImpl() override;
 
   // AccessoryController:
-  void OnFillingTriggered(const autofill::UserInfo::Field& selection) override;
+  void RegisterFillingSourceObserver(FillingSourceObserver observer) override;
+  base::Optional<autofill::AccessorySheetData> GetSheetData() const override;
+  void OnFillingTriggered(autofill::FieldGlobalId focused_field_id,
+                          const autofill::UserInfo::Field& selection) override;
   void OnOptionSelected(autofill::AccessoryAction selected_action) override;
   void OnToggleChanged(autofill::AccessoryAction toggled_action,
                        bool enabled) override;
@@ -79,8 +83,40 @@ class PasswordAccessoryControllerImpl
       password_manager::ContentPasswordManagerDriver* driver,
       autofill::mojom::FocusedFieldType focused_field_type);
 
+  // Returns true if the current site attached to `web_contents_` has a SECURE
+  // security level.
+  bool IsSecureSite() const;
+
+#if defined(UNIT_TEST)
+  // Used for testing to set `security_level_for_testing_`.
+  void SetSecurityLevelForTesting(
+      security_state::SecurityLevel security_level) {
+    security_level_for_testing_ = security_level;
+  }
+#endif
+
  private:
   friend class content::WebContentsUserData<PasswordAccessoryControllerImpl>;
+
+  // This struct is used to remember the meta information about the last focused
+  // field.
+  struct LastFocusedFieldInfo {
+    LastFocusedFieldInfo(url::Origin focused_origin,
+                         autofill::mojom::FocusedFieldType focused_field,
+                         bool manual_generation_available);
+
+    // Records the origin at the time of focusing the field to double-check that
+    // the frame origin hasn't changed.
+    url::Origin origin;
+
+    // Records the last focused field type to infer whether the accessory is
+    // available and whether passwords or usernames will be fillable.
+    autofill::mojom::FocusedFieldType focused_field_type =
+        autofill::mojom::FocusedFieldType::kUnknown;
+
+    // If true, manual generation will be available for the focused field.
+    bool is_manual_generation_available = false;
+  };
 
   // This constructor can also be used by |CreateForWebContentsForTesting|
   // to inject a fake |ManualFillingController| and a fake
@@ -92,18 +128,17 @@ class PasswordAccessoryControllerImpl
       password_manager::PasswordManagerClient* password_client);
 
   // Enables or disables saving for the focused origin. This involves removing
-  // or adding blacklisted entry in the |PasswordStore|.
+  // or adding blocklisted entry in the |PasswordStore|.
   void ChangeCurrentOriginSavePasswordsStatus(bool enabled);
 
   // Returns true if |suggestion| matches a credential for |origin|.
-  bool AppearsInSuggestions(const base::string16& suggestion,
+  bool AppearsInSuggestions(const std::u16string& suggestion,
                             bool is_password,
                             const url::Origin& origin) const;
 
-  // Returns true if `field_type` and `origin` of a focused field allow to show
+  // Returns true if the `origin` of a focused field allows to show
   // the option toggle to recover from a "never save" state.
-  bool ShouldShowRecoveryToggle(autofill::mojom::FocusedFieldType field_type,
-                                const url::Origin& origin) const;
+  bool ShouldShowRecoveryToggle(const url::Origin& origin) const;
 
   // Lazy-initializes and returns the ManualFillingController for the current
   // |web_contents_|. The lazy initialization allows injecting mocks for tests.
@@ -118,10 +153,6 @@ class PasswordAccessoryControllerImpl
   // the Bottom Sheet view is destroyed.
   void AllPasswordsSheetDismissed();
 
-  // ------------------------------------------------------------------------
-  // Members - Make sure to NEVER store state related to a single frame here!
-  // ------------------------------------------------------------------------
-
   // The tab for which this class is scoped.
   content::WebContents* web_contents_ = nullptr;
 
@@ -135,14 +166,27 @@ class PasswordAccessoryControllerImpl
   // for the currently focused origin.
   password_manager::PasswordManagerClient* password_client_ = nullptr;
 
+  // Information about the currently focused field. This is the only place
+  // allowed to store frame-specific data. If a new field is focused or focus is
+  // lost, this data needs to be reset to base::nullopt to make sure that data
+  // related to a former frame isn't displayed incorrectly in a different one.
+  base::Optional<LastFocusedFieldInfo> last_focused_field_info_ = base::nullopt;
+
+  // The observer to notify if available suggestions change.
+  FillingSourceObserver source_observer_;
+
   // Controller for the all passwords bottom sheet. Created on demand during the
   // first call to |ShowAllPasswords()|.
   std::unique_ptr<AllPasswordsBottomSheetController>
       all_passords_bottom_sheet_controller_;
 
-  // Records the last focused field type that `RefreshSuggestionsForField()` was
-  // called with.
-  autofill::mojom::FocusedFieldType last_focused_field_type_;
+  // Helper for determining whether a bottom sheet showing passwords is useful.
+  AllPasswordsBottomSheetHelper all_passwords_helper_{
+      password_client_->GetProfilePasswordStore()};
+
+  // Security level used for testing only.
+  security_state::SecurityLevel security_level_for_testing_ =
+      security_state::NONE;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 

@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -270,7 +270,7 @@ void ForeignSessionHandler::InitializeForeignSessions() {
   initial_session_list_ = GetForeignSessions();
 }
 
-base::string16 ForeignSessionHandler::FormatSessionTime(
+std::u16string ForeignSessionHandler::FormatSessionTime(
     const base::Time& time) {
   // Return a time like "1 hour ago", "2 days ago", etc.
   base::Time now = base::Time::Now();

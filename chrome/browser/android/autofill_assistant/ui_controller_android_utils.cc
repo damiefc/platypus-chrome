@@ -6,6 +6,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/notreached.h"
+#include "chrome/android/features/autofill_assistant/jni_headers/AssistantChip_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantColor_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantDateTime_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantDialogButton_jni.h"
@@ -13,9 +14,11 @@
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantDrawable_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantInfoPopup_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantValue_jni.h"
+#include "chrome/browser/android/tab_android.h"
 #include "components/autofill_assistant/browser/generic_ui_java_generated_enums.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "url/android/gurl_android.h"
 
 namespace autofill_assistant {
 namespace ui_controller_android_utils {
@@ -107,15 +110,14 @@ base::Optional<int> GetPixelSize(
   switch (proto.size_case()) {
     case ClientDimensionProto::kDp:
       return Java_AssistantDimension_getPixelSizeDp(env, jcontext, proto.dp());
-      break;
     case ClientDimensionProto::kWidthFactor:
       return Java_AssistantDimension_getPixelSizeWidthFactor(
           env, jcontext, proto.width_factor());
-      break;
     case ClientDimensionProto::kHeightFactor:
       return Java_AssistantDimension_getPixelSizeHeightFactor(
           env, jcontext, proto.height_factor());
-      break;
+    case ClientDimensionProto::kSizeInPixel:
+      return proto.size_in_pixel();
     case ClientDimensionProto::SIZE_NOT_SET:
       return base::nullopt;
   }
@@ -199,10 +201,11 @@ base::android::ScopedJavaLocalRef<jobject> CreateJavaDrawable(
       int diameter_size_in_pixel =
           ui_controller_android_utils::GetPixelSizeOrDefault(
               env, jcontext, proto.favicon().diameter_size(), 0);
+      GURL url = proto.favicon().has_website_url()
+                     ? GURL(proto.favicon().website_url())
+                     : user_model->GetCurrentURL();
       return Java_AssistantDrawable_createFromFavicon(
-          env,
-          base::android::ConvertUTF8ToJavaString(
-              env, user_model->GetCurrentURL().spec()),
+          env, url::GURLAndroid::FromNativeGURL(env, url),
           diameter_size_in_pixel, proto.favicon().force_monogram());
     }
     case DrawableProto::DRAWABLE_NOT_SET:
@@ -389,10 +392,10 @@ void ShowJavaInfoPopup(JNIEnv* env,
 
 std::string SafeConvertJavaStringToNative(
     JNIEnv* env,
-    const base::android::JavaParamRef<jstring>& jstring) {
+    const base::android::JavaRef<jstring>& jstring) {
   std::string native_string;
   if (jstring) {
-    base::android::ConvertJavaStringToUTF8(env, jstring, &native_string);
+    native_string = base::android::ConvertJavaStringToUTF8(env, jstring);
   }
   return native_string;
 }
@@ -423,6 +426,95 @@ int ToJavaBottomSheetState(BottomSheetState state) {
   }
 }
 
-}  // namespace ui_controller_android_utils
+base::android::ScopedJavaLocalRef<jobject> CreateJavaAssistantChip(
+    JNIEnv* env,
+    const ChipProto& chip) {
+  switch (chip.type()) {
+    default:  // Other chip types are not supported.
+      return nullptr;
 
+    case HIGHLIGHTED_ACTION:
+    case DONE_ACTION:
+      return Java_AssistantChip_createHighlightedAssistantChip(
+          env, chip.icon(),
+          base::android::ConvertUTF8ToJavaString(env, chip.text()),
+          /* disabled = */ false, chip.sticky(), /* visible = */ true,
+          chip.has_content_description()
+              ? base::android::ConvertUTF8ToJavaString(
+                    env, chip.content_description())
+              : nullptr);
+
+    case NORMAL_ACTION:
+    case CANCEL_ACTION:
+    case CLOSE_ACTION:
+    case FEEDBACK_ACTION:
+      return Java_AssistantChip_createHairlineAssistantChip(
+          env, chip.icon(),
+          base::android::ConvertUTF8ToJavaString(env, chip.text()),
+          /* disabled = */ false, chip.sticky(), /* visible = */ true,
+          chip.has_content_description()
+              ? base::android::ConvertUTF8ToJavaString(
+                    env, chip.content_description())
+              : nullptr);
+  }
+}
+
+base::android::ScopedJavaLocalRef<jobject> CreateJavaAssistantChipList(
+    JNIEnv* env,
+    const std::vector<ChipProto>& chips) {
+  auto jlist = Java_AssistantChip_createChipList(env);
+  for (const auto& chip : chips) {
+    auto jchip = CreateJavaAssistantChip(env, chip);
+    if (!jchip) {
+      return nullptr;
+    }
+    Java_AssistantChip_addChipToList(env, jlist, jchip);
+  }
+  return jlist;
+}
+
+std::map<std::string, std::string> CreateStringMapFromJava(
+    JNIEnv* env,
+    const base::android::JavaRef<jobjectArray>& names,
+    const base::android::JavaRef<jobjectArray>& values) {
+  std::vector<std::string> names_vector;
+  base::android::AppendJavaStringArrayToStringVector(env, names, &names_vector);
+  std::vector<std::string> values_vector;
+  base::android::AppendJavaStringArrayToStringVector(env, values,
+                                                     &values_vector);
+  std::map<std::string, std::string> result;
+  DCHECK_EQ(names_vector.size(), values_vector.size());
+  for (size_t i = 0; i < names_vector.size(); ++i) {
+    result.insert(std::make_pair(names_vector[i], values_vector[i]));
+  }
+  return result;
+}
+
+std::unique_ptr<TriggerContext> CreateTriggerContext(
+    JNIEnv* env,
+    content::WebContents* web_contents,
+    const base::android::JavaRef<jstring>& jexperiment_ids,
+    const base::android::JavaRef<jobjectArray>& jparameter_names,
+    const base::android::JavaRef<jobjectArray>& jparameter_values,
+    jboolean onboarding_shown,
+    jboolean is_direct_action,
+    const base::android::JavaRef<jstring>& jinitial_url) {
+  return std::make_unique<TriggerContext>(
+      std::make_unique<ScriptParameters>(
+          CreateStringMapFromJava(env, jparameter_names, jparameter_values)),
+      SafeConvertJavaStringToNative(env, jexperiment_ids),
+      IsCustomTab(web_contents), onboarding_shown, is_direct_action,
+      SafeConvertJavaStringToNative(env, jinitial_url));
+}
+
+bool IsCustomTab(content::WebContents* web_contents) {
+  auto* tab_android = TabAndroid::FromWebContents(web_contents);
+  if (!tab_android) {
+    return false;
+  }
+
+  return tab_android->IsCustomTab();
+}
+
+}  // namespace ui_controller_android_utils
 }  // namespace autofill_assistant

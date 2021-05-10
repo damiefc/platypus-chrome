@@ -8,20 +8,18 @@
  * rest of the code.
  */
 
-goog.provide('EarconEngine');
-
 /**
  * EarconEngine generates ChromeVox's earcons using the web audio API.
  */
-EarconEngine = class {
+export class EarconEngine {
   constructor() {
     // Public control parameters. All of these are meant to be adjustable.
 
-    /** @type {number} The master volume, as an amplification factor. */
-    this.masterVolume = 1.0;
+    /** @type {number} The output volume, as an amplification factor. */
+    this.outputVolume = 1.0;
 
     /** @type {number} The base relative pitch adjustment, in half-steps. */
-    this.masterPitch = -4;
+    this.basePitch = -4;
 
     /** @type {number} The click volume, as an amplification factor. */
     this.clickVolume = 0.4;
@@ -35,11 +33,11 @@ EarconEngine = class {
     /** @type {number} The base delay for repeated sounds, in seconds. */
     this.baseDelay = 0.045;
 
-    /** @type {number} The master stereo panning, from -1 to 1. */
-    this.masterPan = EarconEngine.CENTER_PAN_;
+    /** @type {number} The base stereo panning, from -1 to 1. */
+    this.basePan = EarconEngine.CENTER_PAN_;
 
-    /** @type {number} The master reverb level as an amplification factor. */
-    this.masterReverb = 0.4;
+    /** @type {number} The base reverb level as an amplification factor. */
+    this.baseReverb = 0.4;
 
     /**
      * @type {string} The choice of the reverb impulse response to use.
@@ -121,6 +119,16 @@ EarconEngine = class {
     /** @private {boolean} */
     this.persistProgressTicks_ = false;
 
+    /**
+     * Maps a earcon name to the last source input audio for that
+     * earcon.
+     * @private {!Object<!Earcon, !AudioNode|undefined>}
+     */
+    this.lastEarconSources_ = {};
+
+    /** @private {!Earcon|undefined} */
+    this.currentTrackedEarcon_;
+
     // Initialization: load the base sound data files asynchronously.
     const allSoundFilesToLoad =
         EarconEngine.SOUNDS.concat(EarconEngine.REVERBS);
@@ -129,6 +137,113 @@ EarconEngine = class {
                                       EarconEngine.BASE_URL + sound + '.wav';
                                   this.loadSound(sound, url);
                                 }).bind(this));
+  }
+
+  /**
+   * A high-level way to ask the engine to play a specific earcon.
+   * @param {!Earcon} earcon The earcon to play.
+   */
+  playEarcon(earcon) {
+    // These earcons are not tracked by the engine via their audio sources.
+    switch (earcon) {
+      case Earcon.CHROMEVOX_LOADED:
+        this.cancelProgressPersistent();
+        return;
+      case Earcon.CHROMEVOX_LOADING:
+        this.startProgressPersistent();
+        return;
+      case Earcon.PAGE_FINISH_LOADING:
+        this.cancelProgress();
+        return;
+      case Earcon.PAGE_START_LOADING:
+        this.startProgress();
+        return;
+      case Earcon.POP_UP_BUTTON:
+        this.onPopUpButton();
+        return;
+
+      // TODO(dmazzoni): decide if we want new earcons for these
+      // or not. We may choose to not have earcons for some of these.
+      case Earcon.LIST_ITEM:
+      case Earcon.LONG_DESC:
+      case Earcon.MATH:
+      case Earcon.OBJECT_CLOSE:
+      case Earcon.OBJECT_ENTER:
+      case Earcon.OBJECT_EXIT:
+      case Earcon.OBJECT_OPEN:
+      case Earcon.OBJECT_SELECT:
+      case Earcon.RECOVER_FOCUS:
+        return;
+    }
+
+    // These earcons are tracked by the engine via their audio sources.
+    if (this.lastEarconSources_[earcon] !== undefined) {
+      // Playback of |earcon| is in progress.
+      return;
+    }
+
+    this.currentTrackedEarcon_ = earcon;
+    switch (earcon) {
+      case Earcon.ALERT_MODAL:
+      case Earcon.ALERT_NONMODAL:
+        this.onAlert();
+        break;
+      case Earcon.BUTTON:
+        this.onButton();
+        break;
+      case Earcon.CHECK_OFF:
+        this.onCheckOff();
+        break;
+      case Earcon.CHECK_ON:
+        this.onCheckOn();
+        break;
+      case Earcon.EDITABLE_TEXT:
+        this.onTextField();
+        break;
+      case Earcon.INVALID_KEYPRESS:
+        this.onWrap();
+        break;
+      case Earcon.LINK:
+        this.onLink();
+        break;
+      case Earcon.LISTBOX:
+        this.onSelect();
+        break;
+      case Earcon.SELECTION:
+        this.onSelection();
+        break;
+      case Earcon.SELECTION_REVERSE:
+        this.onSelectionReverse();
+        break;
+      case Earcon.SKIP:
+        this.onSkim();
+        break;
+      case Earcon.SLIDER:
+        this.onSlider();
+        break;
+      case Earcon.SMART_STICKY_MODE_OFF:
+        this.onSmartStickyModeOff();
+        break;
+      case Earcon.SMART_STICKY_MODE_ON:
+        this.onSmartStickyModeOn();
+        break;
+      case Earcon.NO_POINTER_ANCHOR:
+        this.onNoPointerAnchor();
+        break;
+      case Earcon.WRAP:
+      case Earcon.WRAP_EDGE:
+        this.onWrap();
+        break;
+    }
+    this.currentTrackedEarcon_ = undefined;
+
+    // Clear source once it finishes playing.
+    const source = this.lastEarconSources_[earcon];
+    if (source !== undefined) {
+      source.onended = () => {
+        delete this.lastEarconSources_[earcon];
+      };
+    }
   }
 
   /**
@@ -155,7 +270,7 @@ EarconEngine = class {
 
   /**
    * Return an AudioNode containing the final processing that all
-   * sounds go through: master volume / gain, panning, and reverb.
+   * sounds go through: output volume / gain, panning, and reverb.
    * The chain is hooked up to the destination automatically, so you
    * just need to connect your source to the return value from this
    * method.
@@ -165,12 +280,12 @@ EarconEngine = class {
    *          reverb: (number | undefined)}} properties
    *     An object where you can override the default
    *     gain, pan, and reverb, otherwise these are taken from
-   *     masterVolume, masterPan, and masterReverb.
+   *     outputVolume, basePan, and baseReverb.
    * @return {!AudioNode} The filters to be applied to all sounds, connected
    *     to the destination node.
    */
   createCommonFilters(properties) {
-    let gain = this.masterVolume;
+    let gain = this.outputVolume;
     if (properties.gain) {
       gain *= properties.gain;
     }
@@ -179,11 +294,11 @@ EarconEngine = class {
     const first = gainNode;
     let last = gainNode;
 
-    let pan = this.masterPan;
+    let pan = this.basePan;
     if (properties.pan !== undefined) {
       pan = properties.pan;
     }
-    if (pan != 0) {
+    if (pan !== 0) {
       const panNode = this.context_.createPanner();
       panNode.setPosition(pan, 0, 0);
       panNode.setOrientation(0, 0, 1);
@@ -191,7 +306,7 @@ EarconEngine = class {
       last = panNode;
     }
 
-    let reverb = this.masterReverb;
+    let reverb = this.baseReverb;
     if (properties.reverb !== undefined) {
       reverb = properties.reverb;
     }
@@ -249,17 +364,19 @@ EarconEngine = class {
       opt_properties = /** @type {undefined} */ ({});
     }
 
-    let pitch = this.masterPitch;
+    let pitch = this.basePitch;
     if (opt_properties.pitch) {
       pitch += opt_properties.pitch;
     }
-    if (pitch != 0) {
+    if (pitch !== 0) {
       source.playbackRate.value = Math.pow(EarconEngine.HALF_STEP, pitch);
     }
 
     const destination = this.createCommonFilters(opt_properties);
     source.connect(destination);
-
+    if (this.currentTrackedEarcon_) {
+      this.lastEarconSources_[this.currentTrackedEarcon_] = source;
+    }
     if (opt_properties.time) {
       source.start(this.context_.currentTime + opt_properties.time);
     } else {
@@ -426,7 +543,7 @@ EarconEngine = class {
    * and the decay time |decay|, in seconds.
    *
    * As with other functions, |pan| and |reverb| can be used to override
-   * masterPan and masterReverb.
+   * basePan and baseReverb.
    *
    * @param {{gain: number,
    *          freq: number,
@@ -461,6 +578,9 @@ EarconEngine = class {
     let gain = properties.gain;
     for (let i = 0; i < properties.overtones; i++) {
       const osc = this.context_.createOscillator();
+      if (this.currentTrackedEarcon_) {
+        this.lastEarconSources_[this.currentTrackedEarcon_] = osc;
+      }
       osc.frequency.value = properties.freq * (i + 1);
 
       if (properties.endFreq) {
@@ -540,7 +660,7 @@ EarconEngine = class {
           const gain = overtoneGain * freqDecay;
           const freq = (i + 1) * 220 *
               Math.pow(EarconEngine.HALF_STEP, pitches[j] + this.sweepPitch);
-          if (j == 0) {
+          if (j === 0) {
             osc.frequency.setValueAtTime(freq, startTime);
             gainNode.gain.setValueAtTime(gain, startTime);
           } else {
@@ -602,6 +722,8 @@ EarconEngine = class {
       overtones: 3,
       overtoneFactor: 0.1
     });
+
+    this.currentTrackedEarcon_ = undefined;
   }
 
   /**
@@ -753,16 +875,16 @@ EarconEngine = class {
     // pan position.
     x = (2 * x - 1) * EarconEngine.MAX_PAN_ABS_X_POSITION;
 
-    this.masterPan = x;
+    this.basePan = x;
   }
 
   /**
    * Resets panning to default (centered).
    */
   resetPan() {
-    this.masterPan = EarconEngine.CENTER_PAN_;
+    this.basePan = EarconEngine.CENTER_PAN_;
   }
-};
+}
 
 /**
  * @type {Array<string>} The list of sound data files to load.

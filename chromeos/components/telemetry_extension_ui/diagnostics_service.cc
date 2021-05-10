@@ -65,11 +65,8 @@ void DiagnosticsService::GetRoutineUpdate(
 }
 
 void DiagnosticsService::RunBatteryCapacityRoutine(
-    uint32_t low_mah,
-    uint32_t high_mah,
     RunBatteryCapacityRoutineCallback callback) {
   GetService()->RunBatteryCapacityRoutine(
-      low_mah, high_mah,
       base::BindOnce(
           [](health::mojom::DiagnosticsService::
                  RunBatteryCapacityRoutineCallback callback,
@@ -80,11 +77,8 @@ void DiagnosticsService::RunBatteryCapacityRoutine(
 }
 
 void DiagnosticsService::RunBatteryHealthRoutine(
-    uint32_t maximum_cycle_count,
-    uint32_t percent_battery_wear_allowed,
     RunBatteryHealthRoutineCallback callback) {
   GetService()->RunBatteryHealthRoutine(
-      maximum_cycle_count, percent_battery_wear_allowed,
       base::BindOnce(
           [](health::mojom::DiagnosticsService::RunBatteryHealthRoutineCallback
                  callback,
@@ -124,7 +118,7 @@ void DiagnosticsService::RunCpuCacheRoutine(
     uint32_t length_seconds,
     RunCpuCacheRoutineCallback callback) {
   GetService()->RunCpuCacheRoutine(
-      length_seconds,
+      cros_healthd::mojom::NullableUint32::New(length_seconds),
       base::BindOnce(
           [](health::mojom::DiagnosticsService::RunCpuCacheRoutineCallback
                  callback,
@@ -138,7 +132,7 @@ void DiagnosticsService::RunCpuStressRoutine(
     uint32_t length_seconds,
     RunCpuStressRoutineCallback callback) {
   GetService()->RunCpuStressRoutine(
-      length_seconds,
+      cros_healthd::mojom::NullableUint32::New(length_seconds),
       base::BindOnce(
           [](health::mojom::DiagnosticsService::RunCpuStressRoutineCallback
                  callback,
@@ -152,7 +146,7 @@ void DiagnosticsService::RunFloatingPointAccuracyRoutine(
     uint32_t length_seconds,
     RunFloatingPointAccuracyRoutineCallback callback) {
   GetService()->RunFloatingPointAccuracyRoutine(
-      length_seconds,
+      cros_healthd::mojom::NullableUint32::New(length_seconds),
       base::BindOnce(
           [](health::mojom::DiagnosticsService::
                  RunFloatingPointAccuracyRoutineCallback callback,
@@ -206,12 +200,13 @@ void DiagnosticsService::RunDiskReadRoutine(
           std::move(callback)));
 }
 
+// TODO(b/173425436): Remove |max_num| from this routine.
 void DiagnosticsService::RunPrimeSearchRoutine(
     uint32_t length_seconds,
     uint64_t max_num,
     RunPrimeSearchRoutineCallback callback) {
   GetService()->RunPrimeSearchRoutine(
-      length_seconds, max_num,
+      cros_healthd::mojom::NullableUint32::New(length_seconds),
       base::BindOnce(
           [](health::mojom::DiagnosticsService::RunPrimeSearchRoutineCallback
                  callback,

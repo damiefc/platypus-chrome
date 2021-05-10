@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/constants/devicetype.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -20,7 +21,6 @@
 #include "chrome/browser/chromeos/power/ml/recent_events_counter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chromeos/constants/devicetype.h"
 #include "chromeos/dbus/power_manager/backlight.pb.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/session_manager/core/session_manager_observer.h"
@@ -188,9 +188,10 @@ SmartChargingManager::SmartChargingManager(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(detector);
   DCHECK(session_manager);
-  user_activity_observer_.Add(detector);
-  power_manager_client_observer_.Add(chromeos::PowerManagerClient::Get());
-  session_manager_observer_.Add(session_manager);
+  user_activity_observation_.Observe(detector);
+  power_manager_client_observation_.Observe(
+      chromeos::PowerManagerClient::Get());
+  session_manager_observation_.Observe(session_manager);
   blocking_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
       {base::TaskPriority::BEST_EFFORT, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
@@ -326,13 +327,13 @@ void SmartChargingManager::SuspendImminent(
 
 void SmartChargingManager::LidEventReceived(
     const chromeos::PowerManagerClient::LidState state,
-    const base::TimeTicks& /* timestamp */) {
+    base::TimeTicks /* timestamp */) {
   lid_state_ = state;
 }
 
 void SmartChargingManager::TabletModeEventReceived(
     const chromeos::PowerManagerClient::TabletMode mode,
-    const base::TimeTicks& /* timestamp */) {
+    base::TimeTicks /* timestamp */) {
   tablet_mode_ = mode;
 }
 

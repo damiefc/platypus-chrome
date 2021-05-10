@@ -16,14 +16,23 @@
 #include "ui/ozone/platform/wayland/host/wayland_data_source.h"
 #include "ui/ozone/platform/wayland/host/wayland_window_manager.h"
 
+struct wl_cursor;
+struct wl_event_queue;
+
 namespace gfx {
 class Point;
 }
 
+namespace wl {
+class WaylandProxy;
+}
+
 namespace ui {
 
+class DeviceHotplugEventObserver;
 class WaylandBufferManagerHost;
 class WaylandCursor;
+class WaylandCursorBufferListener;
 class WaylandDrm;
 class WaylandEventSource;
 class WaylandKeyboard;
@@ -31,11 +40,16 @@ class WaylandOutputManager;
 class WaylandPointer;
 class WaylandShm;
 class WaylandTouch;
+class WaylandZAuraShell;
+class WaylandZcrCursorShapes;
+class WaylandZwpPointerGestures;
 class WaylandZwpLinuxDmabuf;
 class WaylandDataDeviceManager;
 class WaylandCursorPosition;
 class WaylandWindowDragController;
 class GtkPrimarySelectionDeviceManager;
+class GtkShell1;
+class ZwpPrimarySelectionDeviceManager;
 class XdgForeignWrapper;
 
 class WaylandConnection {
@@ -56,18 +70,33 @@ class WaylandConnection {
   // Schedules a flush of the Wayland connection.
   void ScheduleFlush();
 
+  // Calls wl_display_roundtrip_queue. Might be required during initialization
+  // of some objects that should block until they are initialized.
+  void RoundTripQueue();
+
   // Sets a callback that that shutdowns the browser in case of unrecoverable
   // error. Called by WaylandEventWatcher.
   void SetShutdownCb(base::OnceCallback<void()> shutdown_cb);
 
+  // A correct display must be chosen when creating objects or calling
+  // roundrips.  That is, all the methods that deal with polling, pulling event
+  // queues, etc, must use original display. All the other methods that create
+  // various wayland objects must use |display_wrapper_| so that the new objects
+  // are associated with the correct event queue. Otherwise, they will use a
+  // default event queue, which we do not use. See the comment below about the
+  // |event_queue_|.
   wl_display* display() const { return display_.get(); }
+  wl_display* display_wrapper() const {
+    return reinterpret_cast<wl_display*>(wrapped_display_.get());
+  }
   wl_compositor* compositor() const { return compositor_.get(); }
+  // The server version of the compositor interface (might be higher than the
+  // version binded).
   uint32_t compositor_version() const { return compositor_version_; }
   wl_subcompositor* subcompositor() const { return subcompositor_.get(); }
   wp_viewporter* viewporter() const { return viewporter_.get(); }
   xdg_wm_base* shell() const { return shell_.get(); }
   zxdg_shell_v6* shell_v6() const { return shell_v6_.get(); }
-  zaura_shell* aura_shell() const { return aura_shell_.get(); }
   wl_seat* seat() const { return seat_.get(); }
   wp_presentation* presentation() const { return presentation_.get(); }
   zwp_text_input_manager_v1* text_input_manager_v1() const {
@@ -80,6 +109,9 @@ class WaylandConnection {
   zxdg_decoration_manager_v1* xdg_decoration_manager_v1() const {
     return xdg_decoration_manager_.get();
   }
+  zcr_extended_drag_v1* extended_drag_v1() const {
+    return extended_drag_v1_.get();
+  }
 
   void set_serial(uint32_t serial, EventType event_type) {
     serial_ = {serial, event_type};
@@ -87,8 +119,18 @@ class WaylandConnection {
   uint32_t serial() const { return serial_.serial; }
   EventSerial event_serial() const { return serial_; }
 
+  void set_pointer_enter_serial(uint32_t serial) {
+    pointer_enter_serial_ = serial;
+  }
+  uint32_t pointer_enter_serial() const { return pointer_enter_serial_; }
+
+  void SetPlatformCursor(wl_cursor* cursor_data, int buffer_scale);
+
+  void SetCursorBufferListener(WaylandCursorBufferListener* listener);
+
   void SetCursorBitmap(const std::vector<SkBitmap>& bitmaps,
-                       const gfx::Point& location);
+                       const gfx::Point& hotspot_in_dips,
+                       int buffer_scale);
 
   WaylandEventSource* event_source() const { return event_source_.get(); }
 
@@ -116,6 +158,12 @@ class WaylandConnection {
     return buffer_manager_host_.get();
   }
 
+  WaylandZAuraShell* zaura_shell() const { return zaura_shell_.get(); }
+
+  WaylandZcrCursorShapes* zcr_cursor_shapes() const {
+    return zcr_cursor_shapes_.get();
+  }
+
   WaylandZwpLinuxDmabuf* zwp_dmabuf() const { return zwp_dmabuf_.get(); }
 
   WaylandDrm* drm() const { return drm_.get(); }
@@ -130,8 +178,16 @@ class WaylandConnection {
     return data_device_manager_.get();
   }
 
-  GtkPrimarySelectionDeviceManager* primary_selection_device_manager() const {
-    return primary_selection_device_manager_.get();
+  GtkPrimarySelectionDeviceManager* gtk_primary_selection_device_manager()
+      const {
+    return gtk_primary_selection_device_manager_.get();
+  }
+
+  GtkShell1* gtk_shell1() { return gtk_shell1_.get(); }
+
+  ZwpPrimarySelectionDeviceManager* zwp_primary_selection_device_manager()
+      const {
+    return zwp_primary_selection_device_manager_.get();
   }
 
   WaylandDataDragController* data_drag_controller() const {
@@ -151,6 +207,8 @@ class WaylandConnection {
   wl::Object<wl_surface> CreateSurface();
 
  private:
+  friend class WaylandConnectionTestApi;
+
   void Flush();
   void UpdateInputDevices(wl_seat* seat, uint32_t capabilities);
 
@@ -161,6 +219,8 @@ class WaylandConnection {
   // Creates WaylandKeyboard with the currently acquired protocol objects, if
   // possible. Returns true iff WaylandKeyboard was created.
   bool CreateKeyboard();
+
+  DeviceHotplugEventObserver* GetHotplugEventObserver();
 
   // wl_registry_listener
   static void Global(void* data,
@@ -182,6 +242,8 @@ class WaylandConnection {
 
   uint32_t compositor_version_ = 0;
   wl::Object<wl_display> display_;
+  wl::Object<wl_proxy> wrapped_display_;
+  wl::Object<wl_event_queue> event_queue_;
   wl::Object<wl_registry> registry_;
   wl::Object<wl_compositor> compositor_;
   wl::Object<wl_subcompositor> subcompositor_;
@@ -192,10 +254,10 @@ class WaylandConnection {
   wl::Object<wp_viewporter> viewporter_;
   wl::Object<zcr_keyboard_extension_v1> keyboard_extension_v1_;
   wl::Object<zwp_text_input_manager_v1> text_input_manager_v1_;
-  wl::Object<zaura_shell> aura_shell_;
   wl::Object<zwp_linux_explicit_synchronization_v1>
       linux_explicit_synchronization_;
   wl::Object<zxdg_decoration_manager_v1> xdg_decoration_manager_;
+  wl::Object<zcr_extended_drag_v1> extended_drag_v1_;
 
   // Event source instance. Must be declared before input objects so it
   // outlives them so thus being able to properly handle their destruction.
@@ -208,27 +270,46 @@ class WaylandConnection {
 
   std::unique_ptr<WaylandCursor> cursor_;
   std::unique_ptr<WaylandDataDeviceManager> data_device_manager_;
-  std::unique_ptr<WaylandClipboard> clipboard_;
   std::unique_ptr<WaylandOutputManager> wayland_output_manager_;
   std::unique_ptr<WaylandCursorPosition> wayland_cursor_position_;
+  std::unique_ptr<WaylandZAuraShell> zaura_shell_;
+  std::unique_ptr<WaylandZcrCursorShapes> zcr_cursor_shapes_;
+  std::unique_ptr<WaylandZwpPointerGestures> wayland_zwp_pointer_gestures_;
   std::unique_ptr<WaylandZwpLinuxDmabuf> zwp_dmabuf_;
   std::unique_ptr<WaylandDrm> drm_;
   std::unique_ptr<WaylandShm> shm_;
   std::unique_ptr<WaylandBufferManagerHost> buffer_manager_host_;
   std::unique_ptr<XdgForeignWrapper> xdg_foreign_;
 
+  // Clipboard-related objects. |clipboard_| must be declared after all
+  // DeviceManager instances it depends on, otherwise tests may crash with
+  // UAFs while attempting to access already destroyed manager pointers.
   std::unique_ptr<GtkPrimarySelectionDeviceManager>
-      primary_selection_device_manager_;
+      gtk_primary_selection_device_manager_;
+  std::unique_ptr<ZwpPrimarySelectionDeviceManager>
+      zwp_primary_selection_device_manager_;
+  std::unique_ptr<WaylandClipboard> clipboard_;
+
+  std::unique_ptr<GtkShell1> gtk_shell1_;
 
   std::unique_ptr<WaylandDataDragController> data_drag_controller_;
   std::unique_ptr<WaylandWindowDragController> window_drag_controller_;
 
+  // Helper class that lets input emulation access some data of objects
+  // that Wayland holds. For example, wl_surface and others. It's only
+  // created when platform window test config is set.
+  std::unique_ptr<wl::WaylandProxy> wayland_proxy_;
+
   // Manages Wayland windows.
   WaylandWindowManager wayland_window_manager_;
+
+  WaylandCursorBufferListener* listener_ = nullptr;
 
   bool scheduled_flush_ = false;
 
   EventSerial serial_;
+
+  uint32_t pointer_enter_serial_ = 0;
 };
 
 }  // namespace ui

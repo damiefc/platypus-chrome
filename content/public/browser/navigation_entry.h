@@ -12,7 +12,6 @@
 
 #include "base/memory/ref_counted_memory.h"
 #include "base/optional.h"
-#include "base/strings/string16.h"
 #include "base/supports_user_data.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -24,9 +23,12 @@
 
 class GURL;
 
+namespace blink {
+class PageState;
+}
+
 namespace content {
 
-class PageState;
 struct FaviconStatus;
 struct ReplacedNavigationEntryData;
 struct SSLStatus;
@@ -94,8 +96,8 @@ class NavigationEntry : public base::SupportsUserData {
   // observers when the visible title changes. Only call
   // NavigationEntry::SetTitle() below directly when this entry is known not to
   // be visible.
-  virtual void SetTitle(const base::string16& title) = 0;
-  virtual const base::string16& GetTitle() = 0;
+  virtual void SetTitle(const std::u16string& title) = 0;
+  virtual const std::u16string& GetTitle() = 0;
 
   // Page state is an opaque blob created by Blink that represents the state of
   // the page. This includes form entries and scroll position for each frame.
@@ -105,14 +107,14 @@ class NavigationEntry : public base::SupportsUserData {
   // NOTE: This state is saved to disk and used to restore previous states.  If
   // the format is modified in the future, we should still be able to deal with
   // older versions.
-  virtual void SetPageState(const PageState& state) = 0;
-  virtual PageState GetPageState() = 0;
+  virtual void SetPageState(const blink::PageState& state) = 0;
+  virtual blink::PageState GetPageState() = 0;
 
   // Page-related helpers ------------------------------------------------------
 
   // Returns the title to be displayed on the tab. This could be the title of
   // the page if it is available or the URL.
-  virtual const base::string16& GetTitleForDisplay() = 0;
+  virtual const std::u16string& GetTitleForDisplay() = 0;
 
   // Returns true if the current tab is in view source mode. This will be false
   // if there is no navigation.

@@ -7,8 +7,6 @@
 
 #include <stddef.h>
 
-#include <vector>
-
 #include "base/time/time.h"
 #include "cc/cc_export.h"
 #include "cc/debug/layer_tree_debug_state.h"
@@ -59,7 +57,6 @@ class CC_EXPORT LayerTreeSettings {
   base::TimeDelta scrollbar_fade_duration;
   base::TimeDelta scrollbar_thinning_duration;
   bool scrollbar_flash_after_any_scroll_update = false;
-  bool scrollbar_flash_when_mouse_enter = false;
   SkColor solid_color_scrollbar_color = SK_ColorWHITE;
   base::TimeDelta scroll_animation_duration_for_testing;
   bool timeout_and_draw_when_animation_checkerboards = true;
@@ -198,10 +195,11 @@ class CC_EXPORT LayerTreeSettings {
   // See crbug.com/1008483.
   bool enable_transform_interop = false;
 
-  // When enabled, the compositor specifies a frame rate preference that would
-  // allow the display to run at a low refresh rate matching the playback rate
-  // for videos updating onscreen.
-  bool force_preferred_interval_for_video = false;
+  // Enables ThrottleDecider which produces a list of FrameSinkIds that are
+  // candidates for throttling.
+  // LayerTreeHostSingleThreadClient::FrameSinksToThrottleUpdated() will be
+  // called with candidates.
+  bool enable_compositing_based_throttling = false;
 };
 
 class CC_EXPORT LayerListSettings : public LayerTreeSettings {

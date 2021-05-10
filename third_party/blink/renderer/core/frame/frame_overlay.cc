@@ -51,6 +51,11 @@ FrameOverlay::FrameOverlay(LocalFrame* local_frame,
                            std::unique_ptr<FrameOverlay::Delegate> delegate)
     : frame_(local_frame), delegate_(std::move(delegate)) {
   DCHECK(frame_);
+  frame_->View()->SetVisualViewportOrOverlayNeedsRepaint();
+}
+
+FrameOverlay::~FrameOverlay() {
+  frame_->View()->SetVisualViewportOrOverlayNeedsRepaint();
 }
 
 void FrameOverlay::UpdatePrePaint() {
@@ -85,7 +90,6 @@ void FrameOverlay::UpdatePrePaint() {
     parent_layer->AddChild(layer_.get());
   layer_->SetLayerState(DefaultPropertyTreeState(), IntPoint());
   layer_->SetSize(gfx::Size(Size()));
-  layer_->SetNeedsDisplay();
 }
 
 IntSize FrameOverlay::Size() const {
@@ -98,6 +102,14 @@ IntSize FrameOverlay::Size() const {
 IntRect FrameOverlay::ComputeInterestRect(const GraphicsLayer* graphics_layer,
                                           const IntRect&) const {
   DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
+  DCHECK(!RuntimeEnabledFeatures::CullRectUpdateEnabled());
+  return IntRect(IntPoint(), Size());
+}
+
+IntRect FrameOverlay::PaintableRegion(
+    const GraphicsLayer* graphics_layer) const {
+  DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
+  DCHECK(RuntimeEnabledFeatures::CullRectUpdateEnabled());
   return IntRect(IntPoint(), Size());
 }
 
@@ -112,7 +124,11 @@ void FrameOverlay::PaintContents(const GraphicsLayer* graphics_layer,
 }
 
 void FrameOverlay::GraphicsLayersDidChange() {
-  frame_->View()->SetForeignLayerListNeedsUpdate();
+  frame_->View()->SetPaintArtifactCompositorNeedsUpdate();
+}
+
+PaintArtifactCompositor* FrameOverlay::GetPaintArtifactCompositor() {
+  return frame_->View()->GetPaintArtifactCompositor();
 }
 
 void FrameOverlay::ServiceScriptedAnimations(

@@ -12,6 +12,7 @@
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "gpu/vulkan/vulkan_surface.h"
+#include "skia/ext/legacy_display_globals.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkFont.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -75,11 +76,11 @@ void VulkanDemo::Run() {
   run_loop_ = nullptr;
 }
 
-void VulkanDemo::OnBoundsChanged(const gfx::Rect& new_bounds) {
-  if (vulkan_surface_->image_size() == new_bounds.size())
+void VulkanDemo::OnBoundsChanged(const BoundsChange& change) {
+  if (vulkan_surface_->image_size() == change.bounds.size())
     return;
   auto generation = vulkan_surface_->swap_chain_generation();
-  vulkan_surface_->Reshape(new_bounds.size(), gfx::OVERLAY_TRANSFORM_NONE);
+  vulkan_surface_->Reshape(change.bounds.size(), gfx::OVERLAY_TRANSFORM_NONE);
   if (vulkan_surface_->swap_chain_generation() != generation) {
     // Size has been changed, we need to clear all surfaces which will be
     // recreated later.
@@ -114,12 +115,15 @@ void VulkanDemo::CreateSkSurface() {
 
   if (!sk_surface) {
     SkSurfaceProps surface_props =
-        SkSurfaceProps(0, SkSurfaceProps::kLegacyFontHost_InitType);
+        skia::LegacyDisplayGlobals::GetSkSurfaceProps();
+
     GrVkImageInfo vk_image_info;
     vk_image_info.fImage = scoped_write_->image();
     vk_image_info.fImageLayout = scoped_write_->image_layout();
     vk_image_info.fImageTiling = VK_IMAGE_TILING_OPTIMAL;
     vk_image_info.fFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    vk_image_info.fImageUsageFlags = scoped_write_->image_usage();
+    vk_image_info.fSampleCount = 1;
     vk_image_info.fLevelCount = 1;
     const auto& size = vulkan_surface_->image_size();
     GrBackendRenderTarget render_target(size.width(), size.height(), 0,

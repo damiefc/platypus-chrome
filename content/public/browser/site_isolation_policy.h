@@ -38,19 +38,27 @@ class CONTENT_EXPORT SiteIsolationPolicy {
   // Returns true if error page isolation is enabled.
   static bool IsErrorPageIsolationEnabled(bool in_main_frame);
 
-  // Returns true if the PDF compositor should be enabled to allow out-of-
-  // process iframes (OOPIF's) to print properly.
-  static bool ShouldPdfCompositorBeEnabledForOopifs();
-
   // Returns true if isolated origins may be added at runtime in response
-  // to hints such as users typing in a password or (in the future) an origin
-  // opting itself into isolation via a header.
+  // to hints such as users typing in a password or sites serving headers like
+  // Cross-Origin-Opener-Policy.
   static bool AreDynamicIsolatedOriginsEnabled();
 
   // Returns true if isolated origins preloaded with the browser should be
   // applied.  For example, this is used to apply memory limits to preloaded
   // isolated origins on Android.
   static bool ArePreloadedIsolatedOriginsEnabled();
+
+  // Returns true if the "Origin-Agent-Cluster" header should result in a
+  // separate process for isolated origins.  This is used to turn off opt-in
+  // origin isolation on low-memory Android devices.
+  static bool IsProcessIsolationForOriginAgentClusterEnabled();
+
+  // Returns true if the OriginAgentCluster header will be respected.
+  static bool IsOriginAgentClusterEnabled();
+
+  // Returns true if Cross-Origin-Opener-Policy headers may be used as
+  // heuristics for turning on site isolation.
+  static bool IsSiteIsolationForCOOPEnabled();
 
   // Applies isolated origins from all available sources, including the
   // command-line switch, field trials, enterprise policy, and the embedder.

@@ -29,10 +29,10 @@ from .namespace import Namespace
 from .operation import OperationGroup
 from .reference import RefByIdFactory
 from .typedef import Typedef
-from .union import Union
+from .union import BackwardCompatibleUnion
+from .union import NewUnion
 from .user_defined_type import StubUserDefinedType
 from .user_defined_type import UserDefinedType
-from .validator import validate_after_resolve_references
 
 
 class IdlCompiler(object):
@@ -84,11 +84,6 @@ class IdlCompiler(object):
         assert not self._did_run
         self._did_run = True
 
-        # Remove the interface members that are specific to the old bindings
-        # generator, i.e. that are not necessary for (or even harmful to) the
-        # new bindings generator.
-        self._remove_legacy_interface_members()
-
         # Merge partial definitions.
         self._record_defined_in_partial_and_mixin()
         self._propagate_extattrs_per_idl_fragment()
@@ -123,10 +118,10 @@ class IdlCompiler(object):
         # Resolve references.
         self._resolve_references_to_idl_def()
         self._resolve_references_to_idl_type()
-        validate_after_resolve_references(self._ir_map)
 
         # Build union API objects.
         self._create_public_unions()
+        self._create_backward_compatible_public_unions()
 
         return Database(self._db)
 
@@ -134,23 +129,6 @@ class IdlCompiler(object):
         # You can make this function return make_copy(ir) for debugging
         # purpose, etc.
         return ir  # Skip copying as an optimization.
-
-    def _remove_legacy_interface_members(self):
-        old_irs = self._ir_map.irs_of_kinds(
-            IRMap.IR.Kind.INTERFACE, IRMap.IR.Kind.INTERFACE_MIXIN,
-            IRMap.IR.Kind.PARTIAL_INTERFACE,
-            IRMap.IR.Kind.PARTIAL_INTERFACE_MIXIN)
-
-        not_disabled = (
-            lambda x: 'DisableInNewIDLCompiler' not in x.extended_attributes)
-
-        self._ir_map.move_to_new_phase()
-
-        for old_ir in old_irs:
-            new_ir = make_copy(old_ir)
-            self._ir_map.add(new_ir)
-            new_ir.attributes = filter(not_disabled, new_ir.attributes)
-            new_ir.operations = filter(not_disabled, new_ir.operations)
 
     def _record_defined_in_partial_and_mixin(self):
         old_irs = self._ir_map.irs_of_kinds(
@@ -231,7 +209,7 @@ class IdlCompiler(object):
                       only_to_members_of_partial_or_mixin=False)
             propagate_to_exposure(propagate)
 
-            map(process_member_like, ir.iter_all_members())
+            list(map(process_member_like, ir.iter_all_members()))
 
         def process_member_like(ir):
             propagate = functools.partial(propagate_extattr, ir=ir)
@@ -244,6 +222,11 @@ class IdlCompiler(object):
             propagate(('Exposed', 'add_global_name_and_feature'))
             propagate(('RuntimeEnabled', 'add_runtime_enabled_feature'))
             propagate(('ContextEnabled', 'add_context_enabled_feature'))
+            propagate(('CrossOriginIsolated', 'set_only_in_coi_contexts'),
+                      default_value=True)
+            propagate(
+                ('DirectSocketEnabled', 'set_only_in_direct_socket_contexts'),
+                default_value=True)
             propagate(('SecureContext', 'set_only_in_secure_contexts'),
                       default_value=True)
 
@@ -257,7 +240,7 @@ class IdlCompiler(object):
 
         self._ir_map.move_to_new_phase()
 
-        map(process_interface_like, old_irs)
+        list(map(process_interface_like, old_irs))
 
     def _determine_blink_headers(self):
         irs = self._ir_map.irs_of_kinds(
@@ -286,7 +269,27 @@ class IdlCompiler(object):
                                     posixpath.extsep.join([filename, 'h']))
             new_ir.code_generator_info.set_blink_headers([header])
 
+    def _check_existence_of_non_partials(self, non_partial_kind, partial_kind):
+        non_partials = self._ir_map.find_by_kind(non_partial_kind)
+        partials = self._ir_map.find_by_kind(partial_kind)
+        for identifier, partial_irs in partials.items():
+            if not non_partials.get(identifier):
+                locations = ''.join(
+                    map(lambda ir: '  {}\n'.format(ir.debug_info.location),
+                        partial_irs))
+                raise ValueError(
+                    '{} {} is defined without a non-partial definition.\n'
+                    '{}'.format(partial_irs[0].kind, identifier, locations))
+
     def _merge_partial_interface_likes(self):
+        self._check_existence_of_non_partials(IRMap.IR.Kind.INTERFACE,
+                                              IRMap.IR.Kind.PARTIAL_INTERFACE)
+        self._check_existence_of_non_partials(
+            IRMap.IR.Kind.INTERFACE_MIXIN,
+            IRMap.IR.Kind.PARTIAL_INTERFACE_MIXIN)
+        self._check_existence_of_non_partials(IRMap.IR.Kind.NAMESPACE,
+                                              IRMap.IR.Kind.PARTIAL_NAMESPACE)
+
         irs = self._ir_map.irs_of_kinds(IRMap.IR.Kind.INTERFACE,
                                         IRMap.IR.Kind.INTERFACE_MIXIN,
                                         IRMap.IR.Kind.NAMESPACE)
@@ -304,6 +307,9 @@ class IdlCompiler(object):
         self._merge_interface_like_irs(ir_sets_to_merge)
 
     def _merge_partial_dictionaries(self):
+        self._check_existence_of_non_partials(IRMap.IR.Kind.DICTIONARY,
+                                              IRMap.IR.Kind.PARTIAL_DICTIONARY)
+
         old_dictionaries = self._ir_map.find_by_kind(IRMap.IR.Kind.DICTIONARY)
         old_partial_dictionaries = self._ir_map.find_by_kind(
             IRMap.IR.Kind.PARTIAL_DICTIONARY)
@@ -422,9 +428,9 @@ class IdlCompiler(object):
             assert not new_interface.deriveds
             derived_set = identifier_to_derived_set.get(
                 new_interface.identifier, set())
-            new_interface.deriveds = map(
-                lambda id_: self._ref_to_idl_def_factory.create(id_),
-                sorted(derived_set))
+            new_interface.deriveds = list(
+                map(lambda id_: self._ref_to_idl_def_factory.create(id_),
+                    sorted(derived_set)))
 
     def _supplement_missing_html_constructor_operation(self):
         # Temporary mitigation of misuse of [HTMLConstructor]
@@ -517,7 +523,8 @@ class IdlCompiler(object):
                         OperationGroup.IR, item.operations)
 
     def _propagate_extattrs_to_overload_group(self):
-        ANY_OF = ('CrossOrigin', 'Custom', 'LegacyLenientThis',
+        ANY_OF = ('CrossOrigin', 'CrossOriginIsolated', 'Custom',
+                  'DirectSocketEnabled', 'LegacyLenientThis',
                   'LegacyUnforgeable', 'NoAllocDirectCall', 'NotEnumerable',
                   'PerWorldBindings', 'SecureContext', 'Unscopable')
 
@@ -553,7 +560,8 @@ class IdlCompiler(object):
             self._ir_map.add(new_ir)
 
             for group in new_ir.iter_all_overload_groups():
-                exposures = map(lambda overload: overload.exposure, group)
+                exposures = list(map(lambda overload: overload.exposure,
+                                     group))
 
                 # [Exposed]
                 if any(not exposure.global_names_and_features
@@ -564,6 +572,7 @@ class IdlCompiler(object):
                         for entry in exposure.global_names_and_features:
                             group.exposure.add_global_name_and_feature(
                                 entry.global_name, entry.feature)
+
 
                 # [RuntimeEnabled]
                 if any(not exposure.runtime_enabled_features
@@ -582,6 +591,20 @@ class IdlCompiler(object):
                     for exposure in exposures:
                         for name in exposure.context_enabled_features:
                             group.exposure.add_context_enabled_feature(name)
+
+                # [CrossOriginIsolated]
+                if any(not exposure.only_in_coi_contexts
+                       for exposure in exposures):
+                    pass  # Exposed by default.
+                else:
+                    group.exposure.set_only_in_coi_contexts(True)
+
+                # [DirectSocketEnabled]
+                if any(not exposure.only_in_direct_socket_contexts
+                       for exposure in exposures):
+                    pass  # Exposed by default.
+                else:
+                    group.exposure.set_only_in_direct_socket_contexts(True)
 
                 # [SecureContext]
                 if any(exposure.only_in_secure_contexts is False
@@ -653,8 +676,8 @@ class IdlCompiler(object):
             constructs = set()
             for global_name in global_names:
                 constructs.update(exposed_map.get(global_name, []))
-            new_ir.exposed_constructs = map(
-                self._ref_to_idl_def_factory.create, sorted(constructs))
+            new_ir.exposed_constructs = list(
+                map(self._ref_to_idl_def_factory.create, sorted(constructs)))
 
             assert not new_ir.legacy_window_aliases
             if new_ir.identifier != 'Window':
@@ -743,6 +766,39 @@ class IdlCompiler(object):
 
         self._idl_type_factory.for_each(collect_unions)
 
+        grouped_unions = {}  # {unique token: list of union types}
+        for union_type in all_union_types:
+            token = NewUnion.unique_token(union_type)
+            grouped_unions.setdefault(token, []).append(union_type)
+
+        irs = {}  # {token: Union.IR}
+        for token, union_types in grouped_unions.items():
+            irs[token] = NewUnion.IR(token, union_types)
+
+        all_typedefs = self._db.find_by_kind(DatabaseBody.Kind.TYPEDEF)
+        for typedef in all_typedefs.values():
+            if not typedef.idl_type.is_union:
+                continue
+            token = NewUnion.unique_token(typedef.idl_type)
+            irs[token].typedefs.append(typedef)
+
+        for ir_i in irs.values():
+            for ir_j in irs.values():
+                if ir_i.contains(ir_j):
+                    ir_i.sub_union_irs.append(ir_j)
+
+        for ir in sorted(irs.values()):
+            self._db.register(DatabaseBody.Kind.NEW_UNION, NewUnion(ir))
+
+    def _create_backward_compatible_public_unions(self):
+        all_union_types = []  # all instances of UnionType
+
+        def collect_unions(idl_type):
+            if idl_type.is_union:
+                all_union_types.append(idl_type)
+
+        self._idl_type_factory.for_each(collect_unions)
+
         def unique_key(union_type):
             """
             Returns an unique (but meaningless) key.  Returns the same key for
@@ -780,6 +836,6 @@ class IdlCompiler(object):
         for key, union_types in grouped_unions.items():
             self._db.register(
                 DatabaseBody.Kind.UNION,
-                Union(
-                    union_types=union_types,
-                    typedef_backrefs=grouped_typedefs.get(key, [])))
+                BackwardCompatibleUnion(union_types=union_types,
+                                        typedef_backrefs=grouped_typedefs.get(
+                                            key, [])))

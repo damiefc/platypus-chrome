@@ -5,6 +5,8 @@
 #ifndef CC_TEST_FAKE_PROXY_H_
 #define CC_TEST_FAKE_PROXY_H_
 
+#include <memory>
+
 #include "base/single_thread_task_runner.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/proxy.h"
@@ -39,7 +41,6 @@ class FakeProxy : public Proxy {
   void SetMutator(std::unique_ptr<LayerTreeMutator> mutator) override;
   void SetPaintWorkletLayerPainter(
       std::unique_ptr<PaintWorkletLayerPainter> painter) override;
-  bool SupportsImplScrolling() const override;
   bool MainFrameWillHappenForTesting() override;
   void UpdateBrowserControlsState(BrowserControlsState constraints,
                                   BrowserControlsState current,
@@ -47,7 +48,7 @@ class FakeProxy : public Proxy {
   void RequestBeginMainFrameNotExpected(bool new_state) override {}
   void SetSourceURL(ukm::SourceId source_id, const GURL& url) override {}
   void SetUkmSmoothnessDestination(
-      UkmSmoothnessDataShared* ukm_smoothness_data) override {}
+      base::WritableSharedMemoryMapping ukm_smoothness_data) override {}
   void ClearHistory() override {}
   void SetRenderFrameObserver(
       std::unique_ptr<RenderFrameMetadataObserver> observer) override {}

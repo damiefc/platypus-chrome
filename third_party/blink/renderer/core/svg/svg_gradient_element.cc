@@ -107,7 +107,9 @@ void SVGGradientElement::CollectStyleForPresentationAttribute(
   SVGElement::CollectStyleForPresentationAttribute(name, value, style);
 }
 
-void SVGGradientElement::SvgAttributeChanged(const QualifiedName& attr_name) {
+void SVGGradientElement::SvgAttributeChanged(
+    const SvgAttributeChangedParams& params) {
+  const QualifiedName& attr_name = params.name;
   if (attr_name == svg_names::kGradientTransformAttr) {
     InvalidateSVGPresentationAttributeStyle();
     SetNeedsStyleRecalc(kLocalStyleChange,
@@ -128,7 +130,7 @@ void SVGGradientElement::SvgAttributeChanged(const QualifiedName& attr_name) {
     return;
   }
 
-  SVGElement::SvgAttributeChanged(attr_name);
+  SVGElement::SvgAttributeChanged(params);
 }
 
 Node::InsertionNotificationRequest SVGGradientElement::InsertedInto(
@@ -154,7 +156,7 @@ void SVGGradientElement::ChildrenChanged(const ChildrenChange& change) {
 
 void SVGGradientElement::InvalidateGradient(
     LayoutInvalidationReasonForTracing reason) {
-  if (auto* layout_object = ToLayoutSVGResourceContainer(GetLayoutObject()))
+  if (auto* layout_object = To<LayoutSVGResourceContainer>(GetLayoutObject()))
     layout_object->InvalidateCacheAndMarkForLayout(reason);
 }
 

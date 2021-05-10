@@ -12,7 +12,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -37,6 +37,7 @@ mojom::DocumentPtr MakeDocument(const FakeFileSystemInstance::Document& doc) {
   document->supports_delete = doc.supports_delete;
   document->supports_rename = doc.supports_rename;
   document->dir_supports_create = doc.dir_supports_create;
+  document->supports_thumbnail = doc.supports_thumbnail;
   return document;
 }
 
@@ -64,11 +65,24 @@ constexpr size_t kMaxBytesToReadFromPipe = 8 * 1024;  // 8KB;
 
 constexpr base::FilePath::CharType FakeFileSystemInstance::kFakeAndroidPath[];
 
+constexpr gfx::Size FakeFileSystemInstance::kDefaultThumbnailSize;
+
 FakeFileSystemInstance::File::File(const std::string& url,
                                    const std::string& content,
                                    const std::string& mime_type,
                                    Seekable seekable)
     : url(url), content(content), mime_type(mime_type), seekable(seekable) {}
+
+FakeFileSystemInstance::File::File(const std::string& url,
+                                   const std::string& content,
+                                   const std::string& mime_type,
+                                   Seekable seekable,
+                                   int64_t size_override)
+    : url(url),
+      content(content),
+      mime_type(mime_type),
+      seekable(seekable),
+      size_override(size_override) {}
 
 FakeFileSystemInstance::File::File(const File& that) = default;
 
@@ -91,7 +105,8 @@ FakeFileSystemInstance::Document::Document(
                last_modified,
                true,
                true,
-               true) {}
+               true,
+               false) {}
 
 FakeFileSystemInstance::Document::Document(
     const std::string& authority,
@@ -103,7 +118,8 @@ FakeFileSystemInstance::Document::Document(
     uint64_t last_modified,
     bool supports_delete,
     bool supports_rename,
-    bool dir_supports_create)
+    bool dir_supports_create,
+    bool supports_thumbnail)
     : authority(authority),
       document_id(document_id),
       parent_document_id(parent_document_id),
@@ -113,7 +129,8 @@ FakeFileSystemInstance::Document::Document(
       last_modified(last_modified),
       supports_delete(supports_delete),
       supports_rename(supports_rename),
-      dir_supports_create(dir_supports_create) {}
+      dir_supports_create(dir_supports_create),
+      supports_thumbnail(supports_thumbnail) {}
 
 FakeFileSystemInstance::Document::Document(const Document& that) = default;
 
@@ -122,11 +139,15 @@ FakeFileSystemInstance::Document::~Document() = default;
 FakeFileSystemInstance::Root::Root(const std::string& authority,
                                    const std::string& root_id,
                                    const std::string& document_id,
-                                   const std::string& title)
+                                   const std::string& title,
+                                   int64_t available_bytes,
+                                   int64_t capacity_bytes)
     : authority(authority),
       root_id(root_id),
       document_id(document_id),
-      title(title) {}
+      title(title),
+      available_bytes(available_bytes),
+      capacity_bytes(capacity_bytes) {}
 
 FakeFileSystemInstance::Root::Root(const Root& that) = default;
 
@@ -173,7 +194,10 @@ void FakeFileSystemInstance::AddRecentDocument(const std::string& root_id,
 
 void FakeFileSystemInstance::AddRoot(const Root& root) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  roots_.push_back(root);
+  roots_list_.push_back(root);
+  RootKey key(root.authority, root.root_id);
+  DCHECK_EQ(0u, roots_.count(key));
+  roots_.insert(std::make_pair(key, root));
 }
 
 void FakeFileSystemInstance::SetGetLastChangeTimeCallback(
@@ -226,6 +250,13 @@ bool FakeFileSystemInstance::DocumentExists(const std::string& authority,
   std::string document_id =
       FindChildDocumentId(authority, root_document_id, path_components);
   return DocumentExists(authority, document_id);
+}
+
+bool FakeFileSystemInstance::RootExists(const std::string& authority,
+                                        const std::string& root_id) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  RootKey key(authority, root_id);
+  return roots_.find(key) != roots_.end();
 }
 
 FakeFileSystemInstance::Document FakeFileSystemInstance::GetDocument(
@@ -312,7 +343,7 @@ void FakeFileSystemInstance::GetFileSize(const std::string& url,
   }
   const File& file = iter->second;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), file.content.size()));
+      FROM_HERE, base::BindOnce(std::move(callback), file.size()));
 }
 
 void FakeFileSystemInstance::GetMimeType(const std::string& url,
@@ -367,6 +398,41 @@ void FakeFileSystemInstance::OpenFileToWrite(const std::string& url,
           ? CreateRegularFileDescriptor(file, base::File::Flags::FLAG_OPEN |
                                                   base::File::Flags::FLAG_WRITE)
           : CreateStreamFileDescriptorToWrite(file.url);
+  mojo::ScopedHandle wrapped_handle =
+      mojo::WrapPlatformHandle(mojo::PlatformHandle(std::move(fd)));
+  DCHECK(wrapped_handle.is_valid());
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), std::move(wrapped_handle)));
+}
+
+void FakeFileSystemInstance::OpenThumbnail(const std::string& url,
+                                           const gfx::Size& size_hint,
+                                           OpenThumbnailCallback callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  auto iter = files_.find(url);
+  if (iter == files_.end()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), mojo::ScopedHandle()));
+    return;
+  }
+  const File& file = iter->second;
+  if (file.thumbnail_content.empty()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), mojo::ScopedHandle()));
+    return;
+  }
+  // This validates that size_hint parameter is propagated properly from the
+  // client, so OpenThumbnail should always be called with same default value in
+  // tests.
+  if (size_hint != kDefaultThumbnailSize) {
+    LOG(ERROR) << "Unexpected thumbnail size hint: " << size_hint.width() << "x"
+               << size_hint.height();
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), mojo::ScopedHandle()));
+    return;
+  }
+  base::ScopedFD fd = CreateStreamFileDescriptorToRead(file.thumbnail_content);
   mojo::ScopedHandle wrapped_handle =
       mojo::WrapPlatformHandle(mojo::PlatformHandle(std::move(fd)));
   DCHECK(wrapped_handle.is_valid());
@@ -436,11 +502,29 @@ void FakeFileSystemInstance::GetRecentDocuments(
 void FakeFileSystemInstance::GetRoots(GetRootsCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   std::vector<mojom::RootPtr> roots;
-  for (const Root& root : roots_)
+  for (const Root& root : roots_list_)
     roots.emplace_back(MakeRoot(root));
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback),
                                 base::make_optional(std::move(roots))));
+}
+
+void FakeFileSystemInstance::GetRootSize(const std::string& authority,
+                                         const std::string& root_id,
+                                         GetRootSizeCallback callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  auto iter = roots_.find(RootKey(authority, root_id));
+  if (iter == roots_.end()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), mojom::RootSizePtr()));
+    return;
+  }
+  const Root& root = iter->second;
+  mojom::RootSizePtr root_size = mojom::RootSize::New();
+  root_size->available_bytes = root.available_bytes;
+  root_size->capacity_bytes = root.capacity_bytes;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), std::move(root_size)));
 }
 
 void FakeFileSystemInstance::DeleteDocument(const std::string& authority,
@@ -639,6 +723,14 @@ void FakeFileSystemInstance::ReindexDirectory(
 
 void FakeFileSystemInstance::OpenUrlsWithPermission(
     mojom::OpenUrlsRequestPtr request,
+    OpenUrlsWithPermissionCallback callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  handled_url_requests_.emplace_back(std::move(request));
+}
+
+void FakeFileSystemInstance::OpenUrlsWithPermissionAndWindowInfo(
+    mojom::OpenUrlsRequestPtr request,
+    mojom::WindowInfoPtr window_info,
     OpenUrlsWithPermissionCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   handled_url_requests_.emplace_back(std::move(request));

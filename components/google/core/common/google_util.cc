@@ -15,8 +15,8 @@
 #include "base/no_destructor.h"
 #include "base/stl_util.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -146,7 +146,7 @@ bool HasGoogleSearchQueryParam(base::StringPiece str) {
   url::Component query(0, static_cast<int>(str.length())), key, value;
   while (url::ExtractQueryKeyValue(str.data(), &query, &key, &value)) {
     base::StringPiece key_str = str.substr(key.begin, key.len);
-    if (key_str == "q" || key_str == "as_q")
+    if (key_str == "q" || key_str == "as_q" || key_str == "imgurl")
       return true;
   }
   return false;
@@ -182,7 +182,7 @@ std::string GetGoogleCountryCode(const GURL& google_homepage_url) {
   // so use Spain instead.
   if (country_code == "cat")
     return "es";
-  return country_code.as_string();
+  return std::string(country_code);
 }
 
 GURL GetGoogleSearchURL(const GURL& google_homepage_url) {
@@ -258,7 +258,7 @@ bool IsGoogleSearchUrl(const GURL& url) {
   // Make sure the path is a known search path.
   base::StringPiece path(url.path_piece());
   bool is_home_page_base = IsPathHomePageBase(path);
-  if (!is_home_page_base && (path != "/search"))
+  if (!is_home_page_base && path != "/search" && path != "/imgres")
     return false;
 
   // Check for query parameter in URL parameter and hash fragment, depending on
@@ -341,6 +341,44 @@ const std::vector<std::string>& GetGoogleRegistrableDomains() {
       }());
 
   return *kGoogleRegisterableDomains;
+}
+
+GURL AppendToAsyncQueryParam(const GURL& url,
+                             const std::string& key,
+                             const std::string& value) {
+  const std::string param_name = "async";
+  const std::string key_value = key + ":" + value;
+  bool replaced = false;
+  const std::string input = url.query();
+  url::Component cursor(0, input.size());
+  std::string output;
+  url::Component key_range, value_range;
+  while (url::ExtractQueryKeyValue(input.data(), &cursor, &key_range,
+                                   &value_range)) {
+    const base::StringPiece key(input.data() + key_range.begin, key_range.len);
+    std::string key_value_pair(input, key_range.begin,
+                               value_range.end() - key_range.begin);
+    if (!replaced && key == param_name) {
+      // Check |replaced| as only the first match should be replaced.
+      replaced = true;
+      key_value_pair += "," + key_value;
+    }
+    if (!output.empty()) {
+      output += "&";
+    }
+
+    output += key_value_pair;
+  }
+  if (!replaced) {
+    if (!output.empty()) {
+      output += "&";
+    }
+
+    output += (param_name + "=" + key_value);
+  }
+  GURL::Replacements replacements;
+  replacements.SetQueryStr(output);
+  return url.ReplaceComponents(replacements);
 }
 
 }  // namespace google_util

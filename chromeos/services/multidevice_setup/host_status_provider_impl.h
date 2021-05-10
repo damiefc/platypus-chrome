@@ -11,7 +11,6 @@
 #include "chromeos/services/multidevice_setup/host_backend_delegate.h"
 #include "chromeos/services/multidevice_setup/host_status_provider.h"
 #include "chromeos/services/multidevice_setup/host_verifier.h"
-#include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
 
 namespace chromeos {
 
@@ -70,7 +69,9 @@ class HostStatusProviderImpl : public HostStatusProvider,
   // device_sync::DeviceSyncClient::Observer:
   void OnNewDevicesSynced() override;
 
-  void CheckForUpdatedStatusAndNotifyIfChanged();
+  void CheckForUpdatedStatusAndNotifyIfChanged(
+      bool force_notify_host_status_change);
+
   HostStatusWithDevice GetCurrentStatus();
 
   EligibleHostDevicesProvider* eligible_host_devices_provider_;

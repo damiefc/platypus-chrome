@@ -95,7 +95,7 @@ class LayoutSVGShape : public LayoutSVGModelObject {
 
   bool HasNonScalingStroke() const {
     NOT_DESTROYED();
-    return StyleRef().SvgStyle().VectorEffect() == VE_NON_SCALING_STROKE;
+    return StyleRef().VectorEffect() == EVectorEffect::kNonScalingStroke;
   }
   const Path& NonScalingStrokePath() const {
     NOT_DESTROYED();
@@ -231,8 +231,13 @@ class LayoutSVGShape : public LayoutSVGModelObject {
   bool transform_uses_reference_box_ : 1;
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutSVGShape, IsSVGShape());
+template <>
+struct DowncastTraits<LayoutSVGShape> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsSVGShape();
+  }
+};
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_SVG_LAYOUT_SVG_SHAPE_H_

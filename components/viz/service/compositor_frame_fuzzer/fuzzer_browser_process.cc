@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/surface_draw_quad.h"
@@ -130,8 +130,8 @@ CompositorFrame FuzzerBrowserProcess::BuildBrowserUICompositorFrame(
   renderer_sqs->SetAll(gfx::Transform(1.0, 0.0, 0.0, 1.0, 0, 80),
                        gfx::Rect(kRendererFrameSize),
                        gfx::Rect(kRendererFrameSize),
-                       /*rounded_corner_bounds=*/gfx::RRectF(),
-                       gfx::Rect(kRendererFrameSize), /*is_clipped=*/false,
+                       /*mask_filter_info=*/gfx::MaskFilterInfo(),
+                       /*clip_rect=*/base::nullopt,
                        /*are_contents_opaque=*/false, /*opacity=*/1,
                        SkBlendMode::kSrcOver, /*sorting_context_id=*/0);
   auto* surface_quad = pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
@@ -144,9 +144,8 @@ CompositorFrame FuzzerBrowserProcess::BuildBrowserUICompositorFrame(
   auto* toolbar_sqs = pass->CreateAndAppendSharedQuadState();
   toolbar_sqs->SetAll(
       gfx::Transform(), gfx::Rect(kTopBarSize), gfx::Rect(kTopBarSize),
-      /*rounded_corner_bounds=*/gfx::RRectF(), gfx::Rect(kTopBarSize),
-      /*is_clipped=*/false, /*are_contents_opaque=*/false,
-      /*opacity=*/1, SkBlendMode::kSrcOver,
+      /*mask_filter_info=*/gfx::MaskFilterInfo(), /*clip_rect=*/base::nullopt,
+      /*are_contents_opaque=*/false, /*opacity=*/1, SkBlendMode::kSrcOver,
       /*sorting_context_id=*/0);
   auto* color_quad = pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
   color_quad->SetNew(toolbar_sqs, gfx::Rect(kTopBarSize),

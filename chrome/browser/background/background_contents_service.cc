@@ -18,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "chrome/browser/apps/platform_apps/app_load_service.h"
 #include "chrome/browser/background/background_contents_service_factory.h"
@@ -60,11 +61,6 @@
 #include "ui/message_center/public/cpp/notification_types.h"
 #include "ui/message_center/public/cpp/notifier_id.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/login/user_flow.h"
-#include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
-#endif
-
 using content::SiteInstance;
 using content::WebContents;
 using extensions::BackgroundInfo;
@@ -97,7 +93,7 @@ class CrashNotificationDelegate : public message_center::NotificationDelegate {
         extension_id_(extension->id()) {}
 
   void Click(const base::Optional<int>& button_index,
-             const base::Optional<base::string16>& reply) override {
+             const base::Optional<std::u16string>& reply) override {
     // Pass arguments by value as HandleClick() might destroy *this.
     HandleClick(is_hosted_app_, is_platform_app_, extension_id_, profile_);
     // *this might be destroyed now, do not access any members anymore!
@@ -148,7 +144,7 @@ class CrashNotificationDelegate : public message_center::NotificationDelegate {
 
 void NotificationImageReady(const std::string extension_name,
                             const std::string extension_id,
-                            const base::string16 message,
+                            const std::u16string message,
                             scoped_refptr<CrashNotificationDelegate> delegate,
                             Profile* profile,
                             const gfx::Image& icon) {
@@ -166,8 +162,8 @@ void NotificationImageReady(const std::string extension_name,
   // the same origin when OnExtensionUnloaded() is called.
   std::string id = kCrashedNotificationPrefix + extension_id;
   message_center::Notification notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE, id, base::string16(), message,
-      notification_icon, base::string16(), GURL("chrome://extension-crash"),
+      message_center::NOTIFICATION_TYPE_SIMPLE, id, std::u16string(), message,
+      notification_icon, std::u16string(), GURL("chrome://extension-crash"),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
                                  kNotifierId),
       {}, delegate);
@@ -179,7 +175,7 @@ void NotificationImageReady(const std::string extension_name,
 // Show a popup notification balloon with a crash message for a given app/
 // extension.
 void ShowBalloon(const Extension* extension, Profile* profile) {
-  const base::string16 message = l10n_util::GetStringFUTF16(
+  const std::u16string message = l10n_util::GetStringFUTF16(
       extension->is_app() ? IDS_BACKGROUND_CRASHED_APP_BALLOON_MESSAGE
                           : IDS_BACKGROUND_CRASHED_EXTENSION_BALLOON_MESSAGE,
       base::UTF8ToUTF16(extension->name()));
@@ -580,9 +576,9 @@ void BackgroundContentsService::LoadBackgroundContents(
 
   BackgroundContents* contents = CreateBackgroundContents(
       SiteInstance::CreateForURL(profile_, url), nullptr, true, frame_name,
-      application_id, std::string(), nullptr);
+      application_id, content::StoragePartitionId(profile_), nullptr);
 
-  contents->CreateRenderViewSoon(url);
+  contents->CreateRendererSoon(url);
 }
 
 BackgroundContents* BackgroundContentsService::CreateBackgroundContents(
@@ -591,7 +587,7 @@ BackgroundContents* BackgroundContentsService::CreateBackgroundContents(
     bool is_new_browsing_instance,
     const std::string& frame_name,
     const std::string& application_id,
-    const std::string& partition_id,
+    const content::StoragePartitionId& partition_id,
     content::SessionStorageNamespace* session_storage_namespace) {
   auto contents = std::make_unique<BackgroundContents>(
       std::move(site), opener, is_new_browsing_instance, this, partition_id,
@@ -657,7 +653,7 @@ void BackgroundContentsService::UnregisterBackgroundContents(
   DCHECK(IsTracked(background_contents));
   const std::string& appid = GetParentApplicationId(background_contents);
   DictionaryPrefUpdate update(prefs_, prefs::kRegisteredBackgroundContents);
-  update.Get()->RemoveWithoutPathExpansion(appid, nullptr);
+  update.Get()->RemoveKey(appid);
 }
 
 void BackgroundContentsService::ShutdownAssociatedBackgroundContents(
@@ -775,12 +771,6 @@ void BackgroundContentsService::HandleExtensionCrashed(
       extensions::Manifest::IsComponentLocation(extension->location()) ||
       extensions::Manifest::IsPolicyLocation(extension->location());
   if (!force_installed) {
-#if defined(OS_CHROMEOS)
-    chromeos::UserFlow* user_flow =
-        chromeos::ChromeUserManager::Get()->GetCurrentUserFlow();
-    if (!user_flow->AllowsNotificationBalloons())
-      return;
-#endif
     ShowBalloon(extension, profile_);
   } else {
     // Restart the extension.

@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
@@ -83,7 +84,8 @@ std::unique_ptr<base::Value> RawDataPresenter::Result() {
 
 void RawDataPresenter::FeedNextBytes(const char* bytes, size_t size) {
   subtle::AppendKeyValuePair(keys::kRequestBodyRawBytesKey,
-                             Value::CreateWithCopiedBuffer(bytes, size),
+                             base::Value::ToUniquePtrValue(base::Value(
+                                 base::as_bytes(base::make_span(bytes, size)))),
                              list_.get());
 }
 
@@ -135,8 +137,8 @@ std::unique_ptr<base::Value> ParsedDataPresenter::Result() {
 
 // static
 std::unique_ptr<ParsedDataPresenter> ParsedDataPresenter::CreateForTests() {
-  static const std::string form_type("application/x-www-form-urlencoded");
-  return base::WrapUnique(new ParsedDataPresenter(form_type));
+  return base::WrapUnique(
+      new ParsedDataPresenter("application/x-www-form-urlencoded"));
 }
 
 ParsedDataPresenter::ParsedDataPresenter(const std::string& form_type)

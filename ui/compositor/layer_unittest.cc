@@ -22,7 +22,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -39,6 +39,7 @@
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/subtree_capture_id.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -220,10 +221,13 @@ class LayerWithRealCompositorTest : public testing::TestWithParam<bool> {
     ReadbackHolder() : run_loop_(std::make_unique<base::RunLoop>()) {}
 
     void OutputRequestCallback(std::unique_ptr<viz::CopyOutputResult> result) {
-      if (result->IsEmpty())
+      if (result->IsEmpty()) {
         result_.reset();
-      else
-        result_ = std::make_unique<SkBitmap>(result->AsSkBitmap());
+      } else {
+        auto scoped_bitmap = result->ScopedAccessSkBitmap();
+        result_ =
+            std::make_unique<SkBitmap>(scoped_bitmap.GetOutScopedBitmap());
+      }
       run_loop_->Quit();
     }
 
@@ -563,11 +567,9 @@ TEST(LayerStandaloneTest, ReleaseMailboxOnDestruction) {
   auto resource = viz::TransferableResource::MakeGL(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
       size, false /* is_overlay_candidate */);
-  layer->SetTransferableResource(
-      resource,
-      viz::SingleReleaseCallback::Create(
-          base::BindOnce(ReturnMailbox, &callback_run)),
-      gfx::Size(10, 10));
+  layer->SetTransferableResource(resource,
+                                 base::BindOnce(ReturnMailbox, &callback_run),
+                                 gfx::Size(10, 10));
   EXPECT_FALSE(callback_run);
   layer.reset();
   EXPECT_TRUE(callback_run);
@@ -584,12 +586,14 @@ TEST_F(LayerWithDelegateTest, ConvertPointToLayer_Simple) {
   DrawTree(l1.get());
 
   gfx::PointF point1_in_l2_coords(5, 5);
-  Layer::ConvertPointToLayer(l2.get(), l1.get(), &point1_in_l2_coords);
+  Layer::ConvertPointToLayer(l2.get(), l1.get(), /*use_target_transform=*/true,
+                             &point1_in_l2_coords);
   gfx::PointF point1_in_l1_coords(15, 15);
   EXPECT_EQ(point1_in_l1_coords, point1_in_l2_coords);
 
   gfx::PointF point2_in_l1_coords(5, 5);
-  Layer::ConvertPointToLayer(l1.get(), l2.get(), &point2_in_l1_coords);
+  Layer::ConvertPointToLayer(l1.get(), l2.get(), /*use_target_transform=*/true,
+                             &point2_in_l1_coords);
   gfx::PointF point2_in_l2_coords(-5, -5);
   EXPECT_EQ(point2_in_l2_coords, point2_in_l1_coords);
 }
@@ -609,12 +613,14 @@ TEST_F(LayerWithDelegateTest, ConvertPointToLayer_Medium) {
   DrawTree(l1.get());
 
   gfx::PointF point1_in_l3_coords(5, 5);
-  Layer::ConvertPointToLayer(l3.get(), l1.get(), &point1_in_l3_coords);
+  Layer::ConvertPointToLayer(l3.get(), l1.get(), /*use_target_transform=*/true,
+                             &point1_in_l3_coords);
   gfx::PointF point1_in_l1_coords(25, 25);
   EXPECT_EQ(point1_in_l1_coords, point1_in_l3_coords);
 
   gfx::PointF point2_in_l1_coords(5, 5);
-  Layer::ConvertPointToLayer(l1.get(), l3.get(), &point2_in_l1_coords);
+  Layer::ConvertPointToLayer(l1.get(), l3.get(), /*use_target_transform=*/true,
+                             &point2_in_l1_coords);
   gfx::PointF point2_in_l3_coords(-15, -15);
   EXPECT_EQ(point2_in_l3_coords, point2_in_l1_coords);
 }
@@ -755,6 +761,7 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   layer->SetClipRect(clip_rect);
   layer->SetRoundedCornerRadius({1, 2, 4, 5});
   layer->SetIsFastRoundedCorner(true);
+  layer->SetSubtreeCaptureId(viz::SubtreeCaptureId(1));
 
   auto clone = layer->Clone();
 
@@ -772,6 +779,10 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   EXPECT_EQ(clip_rect, clone->clip_rect());
   EXPECT_EQ(layer->rounded_corner_radii(), clone->rounded_corner_radii());
   EXPECT_EQ(layer->is_fast_rounded_corner(), clone->is_fast_rounded_corner());
+
+  // However, the SubtreeCaptureId is not cloned.
+  EXPECT_TRUE(layer->GetSubtreeCaptureId().is_valid());
+  EXPECT_FALSE(clone->GetSubtreeCaptureId().is_valid());
 
   layer->SetTransform(gfx::Transform());
   layer->SetColor(SK_ColorGREEN);
@@ -839,6 +850,25 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   EXPECT_FALSE(clone->visible());
   EXPECT_EQ(0.0f, clone->opacity());
   EXPECT_EQ(SK_ColorGREEN, clone->background_color());
+}
+
+TEST_F(LayerWithDelegateTest, CloneDamagedRegion) {
+  std::unique_ptr<Layer> layer = CreateLayer(LAYER_TEXTURED);
+  // Set a delegate so that the damage region is accumulated.
+  DrawTreeLayerDelegate delegate(gfx::Rect(0, 0, 10, 10));
+  layer->set_delegate(&delegate);
+
+  cc::Region damaged_region;
+  damaged_region.Union(gfx::Rect(10, 10, 5, 5));
+  damaged_region.Union(gfx::Rect(20, 20, 7, 7));
+
+  for (auto rect : damaged_region)
+    layer->SchedulePaint(rect);
+
+  ASSERT_EQ(damaged_region, layer->damaged_region());
+
+  auto clone = layer->Clone();
+  EXPECT_EQ(damaged_region, clone->damaged_region());
 }
 
 TEST_F(LayerWithDelegateTest, Mirroring) {
@@ -999,6 +1029,8 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
   constexpr gfx::RoundedCornersF kCornerRadii(1, 2, 3, 4);
   l1->SetRoundedCornerRadius(kCornerRadii);
   l1->SetIsFastRoundedCorner(true);
+  constexpr viz::SubtreeCaptureId kSubtreeCaptureId(22);
+  l1->SetSubtreeCaptureId(kSubtreeCaptureId);
 
   EXPECT_EQ(gfx::Point3F(), l1->cc_layer_for_testing()->transform_origin());
   EXPECT_TRUE(l1->cc_layer_for_testing()->DrawsContent());
@@ -1008,6 +1040,9 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
   EXPECT_TRUE(l1->cc_layer_for_testing()->HasRoundedCorner());
   EXPECT_EQ(l1->cc_layer_for_testing()->corner_radii(), kCornerRadii);
   EXPECT_TRUE(l1->cc_layer_for_testing()->is_fast_rounded_corner());
+  EXPECT_EQ(kSubtreeCaptureId,
+            l1->cc_layer_for_testing()->subtree_capture_id());
+  EXPECT_EQ(kSubtreeCaptureId, l1->GetSubtreeCaptureId());
 
   cc::Layer* before_layer = l1->cc_layer_for_testing();
 
@@ -1017,8 +1052,7 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
       size, false /* is_overlay_candidate */);
   l1->SetTransferableResource(resource,
-                              viz::SingleReleaseCallback::Create(base::BindOnce(
-                                  ReturnMailbox, &callback1_run)),
+                              base::BindOnce(ReturnMailbox, &callback1_run),
                               gfx::Size(10, 10));
 
   EXPECT_NE(before_layer, l1->cc_layer_for_testing());
@@ -1031,6 +1065,9 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
   EXPECT_TRUE(l1->cc_layer_for_testing()->HasRoundedCorner());
   EXPECT_EQ(l1->cc_layer_for_testing()->corner_radii(), kCornerRadii);
   EXPECT_TRUE(l1->cc_layer_for_testing()->is_fast_rounded_corner());
+  EXPECT_EQ(kSubtreeCaptureId,
+            l1->cc_layer_for_testing()->subtree_capture_id());
+  EXPECT_EQ(kSubtreeCaptureId, l1->GetSubtreeCaptureId());
   EXPECT_FALSE(callback1_run);
 
   bool callback2_run = false;
@@ -1038,8 +1075,7 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
       size, false /* is_overlay_candidate */);
   l1->SetTransferableResource(resource,
-                              viz::SingleReleaseCallback::Create(base::BindOnce(
-                                  ReturnMailbox, &callback2_run)),
+                              base::BindOnce(ReturnMailbox, &callback2_run),
                               gfx::Size(10, 10));
   EXPECT_TRUE(callback1_run);
   EXPECT_FALSE(callback2_run);
@@ -1064,8 +1100,7 @@ TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
       size, false /* is_overlay_candidate */);
   l1->SetTransferableResource(resource,
-                              viz::SingleReleaseCallback::Create(base::BindOnce(
-                                  ReturnMailbox, &callback3_run)),
+                              base::BindOnce(ReturnMailbox, &callback3_run),
                               gfx::Size(10, 10));
 
   EXPECT_NE(before_layer, l1->cc_layer_for_testing());
@@ -1387,9 +1422,8 @@ TEST_F(LayerWithNullDelegateTest, EmptyDamagedRect) {
   auto resource = viz::TransferableResource::MakeGL(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken(),
       size, false /* is_overlay_candidate */);
-  root->SetTransferableResource(
-      resource, viz::SingleReleaseCallback::Create(std::move(callback)),
-      gfx::Size(10, 10));
+  root->SetTransferableResource(resource, std::move(callback),
+                                gfx::Size(10, 10));
   compositor()->SetRootLayer(root.get());
 
   root->SetBounds(gfx::Rect(0, 0, 10, 10));
@@ -1431,8 +1465,7 @@ TEST_F(LayerWithNullDelegateTest, UpdateDamageInDeferredPaint) {
   EXPECT_EQ(bound1, root->damaged_region_for_testing());
   root->SendDamagedRects();
   EXPECT_EQ(gfx::Rect(), root->cc_layer_for_testing()->update_rect());
-  root->PaintContentsToDisplayList(
-      cc::ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  root->PaintContentsToDisplayList();
   EXPECT_EQ(gfx::Rect(), LastInvalidation());
 
   // During deferring paint request, a new invalid_rect will be accumulated.
@@ -1443,8 +1476,7 @@ TEST_F(LayerWithNullDelegateTest, UpdateDamageInDeferredPaint) {
   EXPECT_EQ(bound_union, root->damaged_region_for_testing().bounds());
   root->SendDamagedRects();
   EXPECT_EQ(gfx::Rect(), root->cc_layer_for_testing()->update_rect());
-  root->PaintContentsToDisplayList(
-      cc::ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  root->PaintContentsToDisplayList();
   EXPECT_EQ(gfx::Rect(), LastInvalidation());
 
   // Remove deferring paint request.
@@ -1454,8 +1486,7 @@ TEST_F(LayerWithNullDelegateTest, UpdateDamageInDeferredPaint) {
   // paint, i.e. union of bound1 and bound2.
   root->SendDamagedRects();
   EXPECT_EQ(bound_union, root->cc_layer_for_testing()->update_rect());
-  root->PaintContentsToDisplayList(
-      cc::ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  root->PaintContentsToDisplayList();
   EXPECT_EQ(bound_union, LastInvalidation());
 }
 
@@ -1851,7 +1882,13 @@ TEST_P(LayerWithRealCompositorTest, ModifyHierarchy) {
 }
 
 // Checks that basic background blur is working.
-TEST_P(LayerWithRealCompositorTest, BackgroundBlur) {
+// TODO(crbug.com/1174372) Flaky on Windows
+#if defined(OS_WIN)
+#define MAYBE_BackgroundBlur DISABLED_BackgroundBlur
+#else
+#define MAYBE_BackgroundBlur BackgroundBlur
+#endif
+TEST_P(LayerWithRealCompositorTest, MAYBE_BackgroundBlur) {
   viz::ParentLocalSurfaceIdAllocator allocator;
   allocator.GenerateId();
   GetCompositor()->SetScaleAndSize(1.0f, gfx::Size(200, 200),
@@ -2287,9 +2324,7 @@ TEST_F(LayerWithDelegateTest, TransferableResourceMirroring) {
   bool release_callback_run = false;
 
   layer->SetTransferableResource(
-      resource,
-      viz::SingleReleaseCallback::Create(
-          base::BindOnce(ReturnMailbox, &release_callback_run)),
+      resource, base::BindOnce(ReturnMailbox, &release_callback_run),
       gfx::Size(10, 10));
   EXPECT_FALSE(release_callback_run);
   EXPECT_TRUE(layer->has_external_content());
@@ -2320,9 +2355,7 @@ TEST_F(LayerWithDelegateTest, TransferableResourceMirroring) {
   // Setting a transferable resource on the source layer should set it on the
   // mirror layers as well.
   layer->SetTransferableResource(
-      resource,
-      viz::SingleReleaseCallback::Create(
-          base::BindOnce(ReturnMailbox, &release_callback_run)),
+      resource, base::BindOnce(ReturnMailbox, &release_callback_run),
       gfx::Size(10, 10));
   EXPECT_FALSE(release_callback_run);
   EXPECT_TRUE(layer->has_external_content());

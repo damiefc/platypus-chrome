@@ -116,7 +116,8 @@ bool FindBarHost::MaybeForwardKeyEventToWebpage(
   // input. Otherwise Up and Down arrow key strokes get eaten. "Nom Nom Nom".
   contents->ClearFocusedElement();
   NativeWebKeyboardEvent event(key_event);
-  contents->GetRenderViewHost()
+  contents->GetMainFrame()
+      ->GetRenderViewHost()
       ->GetWidget()
       ->ForwardKeyboardEventWithLatencyInfo(event, *key_event.latency());
   return true;
@@ -144,7 +145,7 @@ void FindBarHost::SetFocusAndSelection() {
 
 void FindBarHost::ClearResults(
     const find_in_page::FindNotificationDetails& results) {
-  find_bar_view()->UpdateForResult(results, base::string16());
+  find_bar_view()->UpdateForResult(results, std::u16string());
 }
 
 void FindBarHost::StopAnimation() {
@@ -156,12 +157,12 @@ void FindBarHost::MoveWindowIfNecessary() {
 }
 
 void FindBarHost::SetFindTextAndSelectedRange(
-    const base::string16& find_text,
+    const std::u16string& find_text,
     const gfx::Range& selected_range) {
   find_bar_view()->SetFindTextAndSelectedRange(find_text, selected_range);
 }
 
-base::string16 FindBarHost::GetFindText() const {
+std::u16string FindBarHost::GetFindText() const {
   return find_bar_view()->GetFindText();
 }
 
@@ -171,7 +172,7 @@ gfx::Range FindBarHost::GetSelectedRange() const {
 
 void FindBarHost::UpdateUIForFindResult(
     const find_in_page::FindNotificationDetails& result,
-    const base::string16& find_text) {
+    const std::u16string& find_text) {
   if (!find_text.empty())
     find_bar_view()->UpdateForResult(result, find_text);
   else
@@ -279,11 +280,11 @@ bool FindBarHost::GetFindBarWindowInfo(gfx::Point* position,
   return true;
 }
 
-base::string16 FindBarHost::GetFindSelectedText() const {
+std::u16string FindBarHost::GetFindSelectedText() const {
   return find_bar_view()->GetFindSelectedText();
 }
 
-base::string16 FindBarHost::GetMatchCountText() const {
+std::u16string FindBarHost::GetMatchCountText() const {
   return find_bar_view()->GetMatchCountText();
 }
 
@@ -396,13 +397,13 @@ ax::mojom::Role FindBarHost::GetAccessibleWindowRole() {
   return ax::mojom::Role::kDialog;
 }
 
-base::string16 FindBarHost::GetAccessibleWindowTitle() const {
+std::u16string FindBarHost::GetAccessibleWindowTitle() const {
   // This can be called in tests by AccessibilityChecker before the controller
   // is registered with this object. So to handle that case, we need to bail out
   // if there is no controller.
   const FindBarController* const controller = GetFindBarController();
   if (!controller)
-    return base::string16();
+    return std::u16string();
   return l10n_util::GetStringFUTF16(
       IDS_FIND_IN_PAGE_ACCESSIBLE_TITLE,
       browser_view()->browser()->GetWindowTitleForCurrentTab(false));

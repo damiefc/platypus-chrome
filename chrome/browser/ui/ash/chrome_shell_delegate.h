@@ -38,16 +38,23 @@ class ChromeShellDelegate : public ash::ShellDelegate {
       override;
   void BindFingerprint(
       mojo::PendingReceiver<device::mojom::Fingerprint> receiver) override;
-  void BindNavigableContentsFactory(
-      mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver)
-      override;
   void BindMultiDeviceSetup(
       mojo::PendingReceiver<
           chromeos::multidevice_setup::mojom::MultiDeviceSetup> receiver)
       override;
-  media_session::mojom::MediaSessionService* GetMediaSessionService() override;
+  media_session::MediaSessionService* GetMediaSessionService() override;
   std::unique_ptr<ash::NearbyShareDelegate> CreateNearbyShareDelegate(
       ash::NearbyShareController* controller) const override;
+  bool IsSessionRestoreInProgress() const override;
+  bool IsUiDevToolsStarted() const override;
+  void StartUiDevTools() override;
+  void StopUiDevTools() override;
+  int GetUiDevToolsPort() const override;
+  bool IsLoggingRedirectDisabled() const override;
+  base::FilePath GetPrimaryUserDownloadsFolder() const override;
+
+  static void SetDisableLoggingRedirectForTesting(bool value);
+  static void ResetDisableLoggingRedirectForTesting();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeShellDelegate);

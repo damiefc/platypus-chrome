@@ -84,6 +84,10 @@ class BASE_EXPORT StackTrace {
   StackTrace(const _CONTEXT* context);
 #endif
 
+  // Returns true if this current test environment is expected to have
+  // symbolized frames when printing a stack trace.
+  static bool WillSymbolizeToStreamForTesting();
+
   // Copying and assignment are allowed with the default functions.
 
   // Gets an array of instruction pointer values. |*count| will be set to the
@@ -99,7 +103,7 @@ class BASE_EXPORT StackTrace {
   // each output line.
   void PrintWithPrefix(const char* prefix_string) const;
 
-#if !defined(__UCLIBC__) & !defined(_AIX)
+#if !defined(__UCLIBC__) && !defined(_AIX)
   // Resolves backtrace to symbols and write to stream.
   void OutputToStream(std::ostream* os) const;
   // Resolves backtrace to symbols and write to stream, with the provided
@@ -152,7 +156,7 @@ BASE_EXPORT size_t CollectStackTrace(void** trace, size_t count);
 // scanning area at the origin of the stack, wasting time and not finding any
 // frames (since Android libraries don't have frame pointers). Scanning is not
 // enabled on other posix platforms due to legacy reasons.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 constexpr bool kEnableScanningByDefault = true;
 #else
 constexpr bool kEnableScanningByDefault = false;

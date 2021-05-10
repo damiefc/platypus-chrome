@@ -13,16 +13,15 @@
 #include "base/callback_list.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/optional.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "chrome/browser/banners/app_banner_manager.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_commands_global_registry.h"
 #include "chrome/browser/extensions/extension_keybinding_registry.h"
-#include "chrome/browser/metrics/browser_window_histogram_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
@@ -36,13 +35,13 @@
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/top_controls_slide_controller.h"
 #include "chrome/browser/ui/views/frame/web_contents_close_handler.h"
-#include "chrome/browser/ui/views/in_product_help/reopen_tab_promo_controller.h"
 #include "chrome/browser/ui/views/intent_picker_bubble_view.h"
-#include "chrome/browser/ui/views/load_complete_listener.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/common/buildflags.h"
 #include "components/infobars/core/infobar_container.h"
+#include "components/webapps/browser/banners/app_banner_manager.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/gfx/native_widget_types.h"
@@ -52,6 +51,10 @@
 #include "ui/views/widget/widget_observer.h"
 #include "ui/views/window/client_view.h"
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ui/compositor/throughput_tracker.h"
+#endif
+
 // NOTE: For more information about the objects and files in this directory,
 // view: http://dev.chromium.org/developers/design-documents/browser-window
 
@@ -59,12 +62,13 @@ class AccessibilityFocusHighlight;
 class BookmarkBarView;
 class Browser;
 class ContentsLayoutManager;
-class DownloadShelfView;
 class ExclusiveAccessBubbleViews;
+class ExtensionsSidePanelController;
 class FeaturePromoControllerViews;
 class FullscreenControlHost;
 class InfoBarContainerView;
 class LocationBarView;
+class SidePanel;
 class StatusBubbleViews;
 class TabSearchButton;
 class TabStrip;
@@ -77,16 +81,9 @@ class TopControlsSlideControllerTest;
 class WebContentsCloseHandler;
 class WebUITabStripContainerView;
 
-namespace extensions {
-class Command;
-class Extension;
-}
-
-#if defined(OS_CHROMEOS)
 namespace ui {
-class ThroughputTracker;
-}
-#endif
+class NativeTheme;
+}  // namespace ui
 
 namespace version_info {
 enum class Channel;
@@ -110,17 +107,16 @@ class BrowserView : public BrowserWindow,
                     public views::WidgetObserver,
                     public views::ClientView,
                     public infobars::InfoBarContainer::Delegate,
-                    public LoadCompleteListener::Delegate,
                     public ExclusiveAccessContext,
                     public ExclusiveAccessBubbleViewsContext,
                     public extensions::ExtensionKeybindingRegistry::Delegate,
                     public ImmersiveModeController::Observer,
-                    public banners::AppBannerManager::Observer {
+                    public webapps::AppBannerManager::Observer {
  public:
-  // The browser view's class name.
-  static const char kViewClassName[];
-
+  METADATA_HEADER(BrowserView);
   explicit BrowserView(std::unique_ptr<Browser> browser);
+  BrowserView(const BrowserView&) = delete;
+  BrowserView& operator=(const BrowserView&) = delete;
   ~BrowserView() override;
 
   void set_frame(BrowserFrame* frame) { frame_ = frame; }
@@ -150,6 +146,8 @@ class BrowserView : public BrowserWindow,
     return top_controls_slide_controller_.get();
   }
 
+  void SetDownloadShelfForTest(DownloadShelf* download_shelf);
+
   // This suppresses the slide behaviors of top-controls and so the top controls
   // will stay showing under any situation. This is only for testing behaviors
   // of top controls which should be visible always.
@@ -177,6 +175,16 @@ class BrowserView : public BrowserWindow,
 
   // Container for the web contents.
   views::View* contents_container() { return contents_container_; }
+
+  SidePanel* right_aligned_side_panel() { return right_aligned_side_panel_; }
+
+  SidePanel* left_aligned_side_panel_for_testing() {
+    return left_aligned_side_panel_;
+  }
+
+  ExtensionsSidePanelController* extensions_side_panel_controller() {
+    return extensions_side_panel_controller_.get();
+  }
 
   void set_contents_border_widget(views::Widget* contents_border_widget) {
     GetBrowserViewLayout()->set_contents_border_widget(contents_border_widget);
@@ -224,21 +232,19 @@ class BrowserView : public BrowserWindow,
   TabSearchButton* GetTabSearchButton();
 
   // Returns true if various window components are visible.
-  bool IsTabStripVisible() const;
-
-  bool IsInfoBarVisible() const;
+  bool GetTabStripVisible() const;
 
   // Returns true if the profile associated with this Browser window is
   // incognito.
-  bool IsIncognito() const;
+  bool GetIncognito() const;
 
   // Returns true if the profile associated with this Browser window is
   // a guest session.
-  bool IsGuestSession() const;
+  bool GetGuestSession() const;
 
   // Returns true if the profile associated with this Browser window is
   // not incognito or a guest session.
-  bool IsRegularOrGuestSession() const;
+  bool GetRegularOrGuestSession() const;
 
   // Provides the containing frame with the accelerator for the specified
   // command id. This can be used to provide menu item shortcut hints etc.
@@ -259,29 +265,29 @@ class BrowserView : public BrowserWindow,
 
   // Returns true if the Browser object associated with this BrowserView
   // supports tabs, such as all normal browsers, and tabbed apps like terminal.
-  bool CanSupportTabStrip() const;
+  bool GetSupportsTabStrip() const;
 
   // Returns true if the Browser object associated with this BrowserView is a
   // normal window (i.e. a browser window, not an app or popup).
-  bool IsBrowserTypeNormal() const { return browser_->is_type_normal(); }
+  bool GetIsNormalType() const;
 
   // Returns true if the Browser object associated with this BrowserView is a
   // for an installed web app.
-  bool IsBrowserTypeWebApp() const;
+  bool GetIsWebAppType() const;
 
   // Returns true if the top browser controls (a.k.a. top-chrome UIs) are
   // allowed to slide up and down with the gesture scrolls on the current tab's
   // page.
-  bool IsTopControlsSlideBehaviorEnabled() const;
+  bool GetTopControlsSlideBehaviorEnabled() const;
 
 #if defined(OS_WIN)
   // Returns whether the browser can ever display a titlebar. Used in Windows
   // touch mode. Possibly expand to ChromeOS if we add a titlebar back there in
   // touch mode.
-  bool CanShowWindowTitle() const;
+  bool GetSupportsTitle() const;
 
   // Returns whether the browser can ever display a window icon.
-  bool CanShowWindowIcon() const;
+  bool GetSupportsIcon() const;
 #endif
 
   // Returns the current shown ratio of the top browser controls.
@@ -298,6 +304,10 @@ class BrowserView : public BrowserWindow,
   // Restores the focused view. This is also used to set the initial focus
   // when a new browser window is created.
   void RestoreFocus();
+
+  // Called during the widget's fullscreen state changes without going through
+  // FullscreenController. This method does any processing which was skipped.
+  void FullscreenStateChanging();
 
   // Called after the widget's fullscreen state is changed without going through
   // FullscreenController. This method does any processing which was skipped.
@@ -320,15 +330,17 @@ class BrowserView : public BrowserWindow,
       base::RepeatingCallback<void(WindowOpenDisposition)>;
   using OnLinkOpeningFromGestureCallbackList =
       base::RepeatingCallbackList<OnLinkOpeningFromGestureCallback::RunType>;
-  using OnLinkOpeningFromGestureSubscription =
-      std::unique_ptr<OnLinkOpeningFromGestureCallbackList::Subscription>;
 
   // Listens to the "link opened from gesture" event. Callback will be called
   // when a link is opened from user interaction in the same browser window, but
   // before the tabstrip is actually modified. Useful for doing certain types
   // of animations (e.g. "flying link" animation in tablet mode).
-  OnLinkOpeningFromGestureSubscription AddOnLinkOpeningFromGestureCallback(
+  base::CallbackListSubscription AddOnLinkOpeningFromGestureCallback(
       OnLinkOpeningFromGestureCallback callback);
+
+  // Returns true when the window controls overlay should be displayed instead
+  // of a full titlebar. This is only supported for desktop web apps.
+  bool IsWindowControlsOverlayEnabled() const;
 
   // BrowserWindow:
   void Show() override;
@@ -349,6 +361,7 @@ class BrowserView : public BrowserWindow,
                                 float ratio) override;
   bool DoBrowserControlsShrinkRendererSize(
       const content::WebContents* contents) const override;
+  ui::NativeTheme* GetNativeTheme() override;
   int GetTopControlsHeight() const override;
   void SetTopControlsGestureScrollInProgress(bool in_progress) override;
   StatusBubble* GetStatusBubble() override;
@@ -394,7 +407,7 @@ class BrowserView : public BrowserWindow,
   autofill::AutofillBubbleHandler* GetAutofillBubbleHandler() override;
   void ExecutePageActionIconForTesting(PageActionIconType type) override;
   LocationBar* GetLocationBar() const override;
-  void SetFocusToLocationBar(bool select_all) override;
+  void SetFocusToLocationBar(bool is_user_initiated) override;
   void UpdateReloadStopState(bool is_loading, bool force) override;
   void UpdateToolbar(content::WebContents* contents) override;
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override;
@@ -433,6 +446,10 @@ class BrowserView : public BrowserWindow,
       content::WebContents* contents,
       send_tab_to_self::SendTabToSelfBubbleController* controller,
       bool is_user_gesture) override;
+  sharing_hub::SharingHubBubbleView* ShowSharingHubBubble(
+      content::WebContents* contents,
+      sharing_hub::SharingHubBubbleController* controller,
+      bool is_user_gesture) override;
   ShowTranslateBubbleResult ShowTranslateBubble(
       content::WebContents* contents,
       translate::TranslateStep step,
@@ -442,7 +459,7 @@ class BrowserView : public BrowserWindow,
       bool is_user_gesture) override;
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
   void ShowOneClickSigninConfirmation(
-      const base::string16& email,
+      const std::u16string& email,
       base::OnceCallback<void(bool)> confirmed_callback) override;
 #endif
   // TODO(beng): Not an override, move somewhere else.
@@ -452,7 +469,7 @@ class BrowserView : public BrowserWindow,
   void ConfirmBrowserCloseWithPendingDownloads(
       int download_count,
       Browser::DownloadCloseType dialog_type,
-      const base::Callback<void(bool)>& callback) override;
+      base::OnceCallback<void(bool)> callback) override;
   void UserChangedTheme(BrowserThemeChangeType theme_change_type) override;
   void ShowAppMenu() override;
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
@@ -467,9 +484,12 @@ class BrowserView : public BrowserWindow,
       AvatarBubbleMode mode,
       signin_metrics::AccessPoint access_point,
       bool is_source_keyboard) override;
-  void ShowHatsBubble(const std::string& site_id) override;
-  void ExecuteExtensionCommand(const extensions::Extension* extension,
-                               const extensions::Command& command) override;
+  void MaybeShowProfileSwitchIPH() override;
+  void ShowHatsDialog(
+      const std::string& site_id,
+      base::OnceClosure success_callback,
+      base::OnceClosure failure_callback,
+      const std::map<std::string, bool>& product_specific_data) override;
   ExclusiveAccessContext* GetExclusiveAccessContext() override;
   std::string GetWorkspace() const override;
   bool IsVisibleOnAllWorkspaces() const override;
@@ -505,8 +525,8 @@ class BrowserView : public BrowserWindow,
 
   // views::WidgetDelegate:
   bool CanActivate() const override;
-  base::string16 GetWindowTitle() const override;
-  base::string16 GetAccessibleWindowTitle() const override;
+  std::u16string GetWindowTitle() const override;
+  std::u16string GetAccessibleWindowTitle() const override;
   views::View* GetInitiallyFocusedView() override;
   bool ShouldShowWindowTitle() const override;
   gfx::ImageSkia GetWindowAppIcon() override;
@@ -527,6 +547,9 @@ class BrowserView : public BrowserWindow,
   views::Widget* GetWidget() override;
   const views::Widget* GetWidget() const override;
   void GetAccessiblePanes(std::vector<View*>* panes) override;
+  bool ShouldDescendIntoChildForEventHandling(
+      gfx::NativeView child,
+      const gfx::Point& location) override;
 
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
@@ -543,7 +566,6 @@ class BrowserView : public BrowserWindow,
   void InfoBarContainerStateChanged(bool is_animating) override;
 
   // views::View:
-  const char* GetClassName() const override;
   void Layout() override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   void ViewHierarchyChanged(
@@ -588,13 +610,13 @@ class BrowserView : public BrowserWindow,
   void OnImmersiveFullscreenExited() override;
   void OnImmersiveModeControllerDestroyed() override;
 
-  // banners::AppBannerManager::Observer:
+  // webapps::AppBannerManager::Observer:
   void OnInstallableWebAppStatusUpdated() override;
 
   // Creates an accessible tab label for screen readers that includes the tab
   // status for the given tab index. This takes the form of
   // "Page title - Tab state".
-  base::string16 GetAccessibleTabLabel(bool include_app_name, int index) const;
+  std::u16string GetAccessibleTabLabel(bool include_app_name, int index) const;
 
   // Testing interface:
   views::View* GetContentsContainerForTest() { return contents_container_; }
@@ -613,6 +635,8 @@ class BrowserView : public BrowserWindow,
 
   // Create and open the tab search bubble.
   void CreateTabSearchBubble() override;
+  // Closes the tab search bubble if open for the given browser instance.
+  void CloseTabSearchBubble() override;
 
   AccessibilityFocusHighlight* GetAccessibilityFocusHighlightForTesting() {
     return accessibility_focus_highlight_.get();
@@ -625,6 +649,7 @@ class BrowserView : public BrowserWindow,
   friend class TopControlsSlideControllerTest;
   FRIEND_TEST_ALL_PREFIXES(BrowserViewTest, BrowserView);
   FRIEND_TEST_ALL_PREFIXES(BrowserViewTest, AccessibleWindowTitle);
+  class AccessibilityModeObserver;
 
   // If the browser is in immersive full screen mode, it will reveal the
   // tabstrip for a short duration. This is useful for shortcuts that perform
@@ -638,9 +663,10 @@ class BrowserView : public BrowserWindow,
   // Callback for the loading animation(s) associated with this view.
   void LoadingAnimationCallback();
 
-  // LoadCompleteListener::Delegate implementation. Creates the JumpList after
-  // the first page load.
-  void OnLoadCompleted() override;
+#if defined(OS_WIN)
+  // Creates the JumpList.
+  void CreateJumpList();
+#endif
 
   // Returns the BrowserViewLayout.
   BrowserViewLayout* GetBrowserViewLayout() const;
@@ -728,10 +754,10 @@ class BrowserView : public BrowserWindow,
                                    int* command_id) const;
 
   // Updates AppBannerManager::Observer to observe |new_manager| exclusively.
-  void ObserveAppBannerManager(banners::AppBannerManager* new_manager);
+  void ObserveAppBannerManager(webapps::AppBannerManager* new_manager);
 
   // Called by GetAccessibleWindowTitle, split out to make it testable.
-  base::string16 GetAccessibleWindowTitleForChannelAndProfile(
+  std::u16string GetAccessibleWindowTitleForChannelAndProfile(
       version_info::Channel,
       Profile* profile) const;
 
@@ -811,6 +837,13 @@ class BrowserView : public BrowserWindow,
   // the webui based tabstrip, when applicable. see https://crbug.com/989131.
   WebUITabStripContainerView* webui_tab_strip_ = nullptr;
 
+  // Allows us to react to changes in accessibility mode.
+  // TODO(dfried): this is only used to disable WebUI tabstrip (see above) while
+  // that mode has accessibile mode issues (e.g. crbug.com/1136185,
+  // crbug.com/1136236). Having an observer object allows for the browser to
+  // change mode if it enters or leaves accessibility mode.
+  std::unique_ptr<AccessibilityModeObserver> accessibility_mode_observer_;
+
   // The Toolbar containing the navigation buttons, menus and the address bar.
   ToolbarView* toolbar_ = nullptr;
 
@@ -834,8 +867,8 @@ class BrowserView : public BrowserWindow,
   // NativeView.
   View* find_bar_host_view_ = nullptr;
 
-  // The download shelf view (view at the bottom of the page).
-  DownloadShelfView* download_shelf_ = nullptr;
+  // The download shelf.
+  DownloadShelf* download_shelf_ = nullptr;
 
   // The InfoBarContainerView that contains InfoBars for the current tab.
   InfoBarContainerView* infobar_container_ = nullptr;
@@ -849,6 +882,18 @@ class BrowserView : public BrowserWindow,
   // The view managing the devtools and contents positions.
   // Handled by ContentsLayoutManager.
   views::View* contents_container_ = nullptr;
+
+  // The side panel aligned to the right side of the browser window.
+  SidePanel* right_aligned_side_panel_ = nullptr;
+  views::View* right_aligned_side_panel_separator_ = nullptr;
+
+  // The side panel aligned to the left side of the browser window.
+  SidePanel* left_aligned_side_panel_ = nullptr;
+  views::View* left_aligned_side_panel_separator_ = nullptr;
+
+  // A controller that handles extensions hosted in the left aligned side panel.
+  std::unique_ptr<ExtensionsSidePanelController>
+      extensions_side_panel_controller_;
 
   // Provides access to the toolbar buttons this browser view uses. Buttons may
   // appear in a hosted app frame or in a tabbed UI toolbar.
@@ -881,11 +926,6 @@ class BrowserView : public BrowserWindow,
 
   std::unique_ptr<ExclusiveAccessBubbleViews> exclusive_access_bubble_;
 
-#if defined(OS_WIN)
-  // Helper class to listen for completion of first page load.
-  std::unique_ptr<LoadCompleteListener> load_complete_listener_;
-#endif
-
   // The timer used to update frames for tab-loading animations.
   base::RepeatingTimer loading_animation_timer_;
 
@@ -915,7 +955,7 @@ class BrowserView : public BrowserWindow,
 
   std::unique_ptr<ImmersiveModeController> immersive_mode_controller_;
 
-  std::unique_ptr<ui::TouchUiController::Subscription> subscription_ =
+  base::CallbackListSubscription subscription_ =
       ui::TouchUiController::Get()->RegisterCallback(
           base::BindRepeating(&BrowserView::TouchModeChanged,
                               base::Unretained(this)));
@@ -926,8 +966,6 @@ class BrowserView : public BrowserWindow,
   std::unique_ptr<ExtensionKeybindingRegistryViews>
       extension_keybinding_registry_;
 
-  std::unique_ptr<BrowserWindowHistogramHelper> histogram_helper_;
-
   std::unique_ptr<FullscreenControlHost> fullscreen_control_host_;
 
   // If the Window Placement experiment is enabled and fullscreen is requested
@@ -935,12 +973,12 @@ class BrowserView : public BrowserWindow,
   // exited to restore the original pre-fullscreen bounds of the window.
   base::OnceClosure restore_pre_fullscreen_bounds_callback_;
 
-  ReopenTabPromoController reopen_tab_promo_controller_{this};
+  base::ScopedObservation<webapps::AppBannerManager,
+                          webapps::AppBannerManager::Observer>
+      app_banner_manager_observation_{this};
 
-  ScopedObserver<banners::AppBannerManager, banners::AppBannerManager::Observer>
-      app_banner_manager_observer_{this};
-
-  ScopedObserver<views::Widget, views::WidgetObserver> widget_observer_{this};
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
 
   bool interactive_resize_in_progress_ = false;
 
@@ -953,15 +991,13 @@ class BrowserView : public BrowserWindow,
 
   OnLinkOpeningFromGestureCallbackList link_opened_from_gesture_callbacks_;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // |loading_animation_tracker_| is used to measure animation smoothness for
   // tab loading animation.
   base::Optional<ui::ThroughputTracker> loading_animation_tracker_;
 #endif
 
   mutable base::WeakPtrFactory<BrowserView> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserView);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_VIEW_H_

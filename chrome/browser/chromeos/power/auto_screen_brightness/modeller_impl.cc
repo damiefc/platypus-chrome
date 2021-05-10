@@ -6,6 +6,7 @@
 
 #include <cmath>
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -24,7 +25,6 @@
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/power/auto_screen_brightness/utils.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
@@ -375,10 +375,6 @@ ModellerImpl::ModellerImpl(
     const base::TickClock* tick_clock,
     bool is_testing)
     : is_testing_(is_testing),
-      als_reader_observer_(this),
-      brightness_monitor_observer_(this),
-      model_config_loader_observer_(this),
-      user_activity_observer_(this),
       blocking_task_runner_(blocking_task_runner),
       trainer_(trainer.release(),
                base::OnTaskRunnerDeleter(blocking_task_runner_)),
@@ -401,11 +397,11 @@ ModellerImpl::ModellerImpl(
     return;
   }
 
-  als_reader_observer_.Add(als_reader);
-  brightness_monitor_observer_.Add(brightness_monitor);
-  model_config_loader_observer_.Add(model_config_loader);
+  als_reader_observation_.Observe(als_reader);
+  brightness_monitor_observation_.Observe(brightness_monitor);
+  model_config_loader_observation_.Observe(model_config_loader);
 
-  user_activity_observer_.Add(user_activity_detector);
+  user_activity_observation_.Observe(user_activity_detector);
 
   base::PostTaskAndReplyWithResult(
       blocking_task_runner_.get(), FROM_HERE,

@@ -8,10 +8,11 @@ import android.app.Activity;
 import android.os.Handler;
 import android.view.View;
 
-import org.chromium.base.Function;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightParams;
 import org.chromium.components.browser_ui.widget.textbubble.TextBubble;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.widget.ViewRectProvider;
@@ -40,13 +41,10 @@ import org.chromium.ui.widget.ViewRectProvider;
 public class UserEducationHelper {
     private final Activity mActivity;
     private final Handler mHandler;
-    private final Function<Profile, Tracker> mTrackerFromProfileFactory;
 
-    public UserEducationHelper(Activity activity, Handler handler,
-            Function<Profile, Tracker> trackerFromProfileFactory) {
+    public UserEducationHelper(Activity activity, Handler handler) {
         mActivity = activity;
         mHandler = handler;
-        mTrackerFromProfileFactory = trackerFromProfileFactory;
     }
 
     /**
@@ -60,7 +58,7 @@ public class UserEducationHelper {
         // incognito profile) instead of always using regular profile. Currently always original
         // profile is used not to start popping IPH messages as soon as opening an incognito tab.
         Profile profile = Profile.getLastUsedRegularProfile();
-        final Tracker tracker = mTrackerFromProfileFactory.apply(profile);
+        final Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
         tracker.addOnInitializedCallback(success -> showIPH(tracker, iphCommand));
     }
 
@@ -72,7 +70,7 @@ public class UserEducationHelper {
         if (mActivity.isFinishing() || mActivity.isDestroyed()) return;
 
         String featureName = iphCommand.featureName;
-        if (!tracker.shouldTriggerHelpUI(featureName)) return;
+        if (featureName != null && !tracker.shouldTriggerHelpUI(featureName)) return;
         String contentString = iphCommand.contentString;
         String accessibilityString = iphCommand.accessibilityText;
         assert (!contentString.isEmpty());
@@ -81,21 +79,22 @@ public class UserEducationHelper {
                 ? iphCommand.viewRectProvider
                 : new ViewRectProvider(anchorView);
 
+        HighlightParams highlightParams = iphCommand.highlightParams;
         TextBubble textBubble =
                 new TextBubble(mActivity, anchorView, contentString, accessibilityString, true,
                         rectProvider, ChromeAccessibilityUtil.get().isAccessibilityEnabled());
         textBubble.setDismissOnTouchInteraction(iphCommand.dismissOnTouch);
         textBubble.addOnDismissListener(() -> mHandler.postDelayed(() -> {
-            tracker.dismissed(featureName);
+            if (featureName != null) tracker.dismissed(featureName);
             iphCommand.onDismissCallback.run();
-            if (iphCommand.shouldHighlight) {
+            if (highlightParams != null) {
                 ViewHighlighter.turnOffHighlight(anchorView);
             }
         }, ViewHighlighter.IPH_MIN_DELAY_BETWEEN_TWO_HIGHLIGHTS));
         textBubble.setAutoDismissTimeout(iphCommand.autoDismissTimeout);
 
-        if (iphCommand.shouldHighlight) {
-            ViewHighlighter.turnOnHighlight(anchorView, iphCommand.circleHighlight);
+        if (highlightParams != null) {
+            ViewHighlighter.turnOnHighlight(anchorView, highlightParams);
         }
 
         rectProvider.setInsetPx(iphCommand.insetRect);

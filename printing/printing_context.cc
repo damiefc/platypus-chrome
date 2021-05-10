@@ -8,6 +8,7 @@
 
 #include "base/check.h"
 #include "base/notreached.h"
+#include "build/chromeos_buildflags.h"
 #include "printing/page_setup.h"
 #include "printing/print_job_constants.h"
 #include "printing/print_settings_conversion.h"

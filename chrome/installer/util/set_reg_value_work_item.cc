@@ -149,7 +149,7 @@ bool SetRegValueWorkItem::DoImpl() {
   }
 
   // If there's something to be saved, save it.
-  if (result == ERROR_SUCCESS) {
+  if (result == ERROR_SUCCESS && (rollback_enabled() || get_value_callback_)) {
     if (!size) {
       previous_type_ = type;
     } else {
@@ -191,6 +191,18 @@ bool SetRegValueWorkItem::DoImpl() {
   if (result != ERROR_SUCCESS) {
     VLOG(1) << "Failed to write value " << key_path_ << " error: " << result;
     return false;
+  }
+
+  if (VLOG_IS_ON(1)) {
+    if (type_ == REG_SZ) {
+      std::wstring value_str;
+      BinaryDataToString(value_, &value_str);
+      VLOG(1) << "Successfully wrote value " << value_str << " into "
+              << key_path_;
+
+    } else {
+      VLOG(1) << "Successfully wrote into " << key_path_;
+    }
   }
 
   status_ = previous_type_ ? VALUE_OVERWRITTEN : NEW_VALUE_CREATED;

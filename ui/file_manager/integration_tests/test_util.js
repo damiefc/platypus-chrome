@@ -431,6 +431,7 @@ class TestEntryInfo {
   constructor(options) {
     this.type = options.type;
     this.sourceFileName = options.sourceFileName || '';
+    this.thumbnailFileName = options.thumbnailFileName || '';
     this.targetPath = options.targetPath;
     this.teamDriveName = options.teamDriveName || '';
     this.computerName = options.computerName || '';
@@ -484,6 +485,7 @@ const ENTRIES = {
   world: new TestEntryInfo({
     type: EntryType.FILE,
     sourceFileName: 'video.ogv',
+    thumbnailFileName: 'image.png',
     targetPath: 'world.ogv',
     mimeType: 'video/ogg',
     lastModifiedTime: 'Jul 4, 2012, 10:35 AM',
@@ -539,6 +541,7 @@ const ENTRIES = {
   desktop: new TestEntryInfo({
     type: EntryType.FILE,
     sourceFileName: 'image.png',
+    thumbnailFileName: 'image.png',
     targetPath: 'My Desktop Background.png',
     mimeType: 'image/png',
     lastModifiedTime: 'Jan 18, 2038, 1:02 AM',
@@ -691,6 +694,28 @@ const ENTRIES = {
     pinned: true
   }),
 
+  sharedDirectory: new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: 'Shared',
+    sharedOption: SharedOption.SHARED,
+    lastModifiedTime: 'Jan 1, 2000, 1:00 AM',
+    nameText: 'Shared',
+    sizeText: '--',
+    typeText: 'Folder'
+  }),
+
+  sharedDirectoryFile: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'text.txt',
+    targetPath: 'Shared/file.txt',
+    mimeType: 'text/plain',
+    sharedOption: SharedOption.SHARED,
+    lastModifiedTime: 'Jan 1, 2000, 1:00 AM',
+    nameText: 'file.txt',
+    sizeText: '51 bytes',
+    typeText: 'Plain text'
+  }),
+
   newlyAdded: new TestEntryInfo({
     type: EntryType.FILE,
     sourceFileName: 'music.ogg',
@@ -768,6 +793,17 @@ const ENTRIES = {
     typeText: 'PDF document',
   }),
 
+  popupPdf: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'popup.pdf',
+    targetPath: 'popup.pdf',
+    mimeType: 'application/pdf',
+    lastModifiedTime: 'Jul 4, 2000, 10:42 AM',
+    nameText: 'popup.pdf',
+    sizeText: '538 bytes',
+    typeText: 'PDF document',
+  }),
+
   imgPdf: new TestEntryInfo({
     type: EntryType.FILE,
     sourceFileName: 'img.pdf',
@@ -841,6 +877,15 @@ const ENTRIES = {
     targetPath: 'D/E/F',
     lastModifiedTime: 'Jan 1, 2000, 1:00 AM',
     nameText: 'F',
+    sizeText: '--',
+    typeText: 'Folder'
+  }),
+
+  dotTrash: new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: '.Trash',
+    lastModifiedTime: 'Jan 1, 2000, 1:00 AM',
+    nameText: '.Trash',
     sizeText: '--',
     typeText: 'Folder'
   }),
@@ -1323,7 +1368,7 @@ const ENTRIES = {
     typeText: 'Plain text'
   }),
 
-  sharedDirectory: new TestEntryInfo({
+  sharedWithMeDirectory: new TestEntryInfo({
     type: EntryType.DIRECTORY,
     targetPath: 'Shared Directory',
     sharedOption: SharedOption.SHARED_WITH_ME,
@@ -1333,7 +1378,7 @@ const ENTRIES = {
     typeText: 'Folder'
   }),
 
-  sharedDirectoryFile: new TestEntryInfo({
+  sharedWithMeDirectoryFile: new TestEntryInfo({
     type: EntryType.FILE,
     sourceFileName: 'text.txt',
     targetPath: 'Shared Directory/file.txt',

@@ -5,9 +5,9 @@
 #include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
 
 #include "base/logging.h"
+#include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
+#include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_setup_controller.h"
-#include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -16,12 +16,6 @@
 namespace policy {
 
 namespace {
-
-// Well-known requisition types.
-const char kNoRequisition[] = "none";
-const char kRemoraRequisition[] = "remora";
-const char kSharkRequisition[] = "shark";
-const char kRialtoRequisition[] = "rialto";
 
 // Fetches a machine statistic value from StatisticsProvider, returns an empty
 // string on failure.
@@ -48,6 +42,12 @@ bool GetMachineFlag(const std::string& key, bool default_value) {
 }
 
 }  // namespace
+
+// static
+const char EnrollmentRequisitionManager::kNoRequisition[] = "none";
+const char EnrollmentRequisitionManager::kRemoraRequisition[] = "remora";
+const char EnrollmentRequisitionManager::kSharkRequisition[] = "shark";
+const char EnrollmentRequisitionManager::kRialtoRequisition[] = "rialto";
 
 // static
 void EnrollmentRequisitionManager::Initialize() {

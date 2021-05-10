@@ -14,7 +14,7 @@
 #include "base/time/default_clock.h"
 #include "components/consent_auditor/pref_names.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/sync/model/fake_model_type_controller_delegate.h"
+#include "components/sync/test/model/fake_model_type_controller_delegate.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ArcPlayTermsOfServiceConsent =
@@ -197,7 +197,7 @@ TEST_F(ConsentAuditorImplTest, LocalConsentPrefRepresentation) {
   EXPECT_EQ(kCurrentAppLocale, locale);
 
   // They are two separate records; the latter did not overwrite the former.
-  EXPECT_EQ(2u, consents->size());
+  EXPECT_EQ(2u, consents->DictSize());
   EXPECT_TRUE(
       consents->FindKeyOfType("feature1", base::Value::Type::DICTIONARY));
 
@@ -224,7 +224,7 @@ TEST_F(ConsentAuditorImplTest, LocalConsentPrefRepresentation) {
   EXPECT_EQ(kFeature2NewAppLocale, locale);
 
   // We still have two records.
-  EXPECT_EQ(2u, consents->size());
+  EXPECT_EQ(2u, consents->DictSize());
 }
 
 TEST_F(ConsentAuditorImplTest, RecordGaiaConsentAsUserConsent) {

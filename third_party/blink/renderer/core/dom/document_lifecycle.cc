@@ -32,7 +32,6 @@
 
 #include "base/notreached.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 
 #if DCHECK_IS_ON()
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -42,10 +41,6 @@ namespace blink {
 
 static DocumentLifecycle::DeprecatedTransition* g_deprecated_transition_stack =
     nullptr;
-
-// TODO(skyostil): Come up with a better way to store cross-frame lifecycle
-// related data to avoid this being a global setting.
-static unsigned g_allow_throttling_count = 0;
 
 DocumentLifecycle::Scope::Scope(DocumentLifecycle& lifecycle,
                                 LifecycleState final_state)
@@ -64,26 +59,6 @@ DocumentLifecycle::DeprecatedTransition::DeprecatedTransition(
 
 DocumentLifecycle::DeprecatedTransition::~DeprecatedTransition() {
   g_deprecated_transition_stack = previous_;
-}
-
-DocumentLifecycle::AllowThrottlingScope::AllowThrottlingScope(
-    DocumentLifecycle& lifecycle) {
-  g_allow_throttling_count++;
-}
-
-DocumentLifecycle::AllowThrottlingScope::~AllowThrottlingScope() {
-  DCHECK_GT(g_allow_throttling_count, 0u);
-  g_allow_throttling_count--;
-}
-
-DocumentLifecycle::DisallowThrottlingScope::DisallowThrottlingScope(
-    DocumentLifecycle& lifecycle) {
-  saved_count_ = g_allow_throttling_count;
-  g_allow_throttling_count = 0;
-}
-
-DocumentLifecycle::DisallowThrottlingScope::~DisallowThrottlingScope() {
-  g_allow_throttling_count = saved_count_;
 }
 
 DocumentLifecycle::DocumentLifecycle()
@@ -110,8 +85,6 @@ bool DocumentLifecycle::CanAdvanceTo(LifecycleState next_state) const {
         return true;
       break;
     case kVisualUpdatePending:
-      if (next_state == kInPreLayout)
-        return true;
       if (next_state == kInStyleRecalc)
         return true;
       if (next_state == kInPerformLayout)
@@ -128,9 +101,6 @@ bool DocumentLifecycle::CanAdvanceTo(LifecycleState next_state) const {
         return true;
       // We can notify layout objects that subtrees changed.
       if (next_state == kInLayoutSubtreeChange)
-        return true;
-      // We can synchronously perform layout.
-      if (next_state == kInPreLayout)
         return true;
       if (next_state == kInPerformLayout)
         return true;
@@ -153,8 +123,6 @@ bool DocumentLifecycle::CanAdvanceTo(LifecycleState next_state) const {
       if (next_state == kInStyleRecalc)
         return true;
       // We can synchronously perform layout.
-      if (next_state == kInPreLayout)
-        return true;
       if (next_state == kInPerformLayout)
         return true;
       // Can move back to style clean.
@@ -169,20 +137,10 @@ bool DocumentLifecycle::CanAdvanceTo(LifecycleState next_state) const {
           next_state == kInCompositingAssignmentsUpdate)
         return true;
       break;
-    case kInPreLayout:
-      if (next_state == kInStyleRecalc)
-        return true;
-      if (next_state == kStyleClean)
-        return true;
-      if (next_state == kInPreLayout)
-        return true;
-      break;
     case kInPerformLayout:
       return next_state == kAfterPerformLayout;
     case kAfterPerformLayout:
-      // We can synchronously recompute layout in AfterPerformLayout.
-      // FIXME: Ideally, we would unnest this recursion into a loop.
-      if (next_state == kInPreLayout)
+      if (next_state == kInPerformLayout)
         return true;
       if (next_state == kLayoutClean)
         return true;
@@ -190,9 +148,6 @@ bool DocumentLifecycle::CanAdvanceTo(LifecycleState next_state) const {
     case kLayoutClean:
       // We can synchronously recalc style.
       if (next_state == kInStyleRecalc)
-        return true;
-      // We can synchronously perform layout.
-      if (next_state == kInPreLayout)
         return true;
       if (next_state == kInPerformLayout)
         return true;
@@ -247,8 +202,6 @@ bool DocumentLifecycle::CanAdvanceTo(LifecycleState next_state) const {
       // We can return to style re-calc, layout, or the start of compositing.
       if (next_state == kInStyleRecalc)
         return true;
-      if (next_state == kInPreLayout)
-        return true;
       if (next_state == kInCompositingInputsUpdate)
         return true;
       if (next_state == kInCompositingAssignmentsUpdate)
@@ -266,8 +219,6 @@ bool DocumentLifecycle::CanAdvanceTo(LifecycleState next_state) const {
       break;
     case kCompositingAssignmentsClean:
       if (next_state == kInStyleRecalc)
-        return true;
-      if (next_state == kInPreLayout)
         return true;
       if (next_state == kInCompositingInputsUpdate)
         return true;
@@ -292,8 +243,6 @@ bool DocumentLifecycle::CanAdvanceTo(LifecycleState next_state) const {
         return true;
       if (next_state == kInStyleRecalc)
         return true;
-      if (next_state == kInPreLayout)
-        return true;
       if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
           next_state == kInCompositingInputsUpdate)
         return true;
@@ -314,8 +263,6 @@ bool DocumentLifecycle::CanAdvanceTo(LifecycleState next_state) const {
       break;
     case kPaintClean:
       if (next_state == kInStyleRecalc)
-        return true;
-      if (next_state == kInPreLayout)
         return true;
       if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
           next_state == kInCompositingInputsUpdate)
@@ -371,7 +318,6 @@ static WTF::String StateAsDebugString(
     DEBUG_STRING_CASE(kStyleClean);
     DEBUG_STRING_CASE(kInLayoutSubtreeChange);
     DEBUG_STRING_CASE(kLayoutSubtreeChangeClean);
-    DEBUG_STRING_CASE(kInPreLayout);
     DEBUG_STRING_CASE(kInPerformLayout);
     DEBUG_STRING_CASE(kAfterPerformLayout);
     DEBUG_STRING_CASE(kLayoutClean);
@@ -420,10 +366,6 @@ void DocumentLifecycle::EnsureStateAtMost(LifecycleState state) {
 #endif
   CHECK(state_ == state || !check_no_transition_);
   state_ = state;
-}
-
-bool DocumentLifecycle::ThrottlingAllowed() const {
-  return g_allow_throttling_count;
 }
 
 }  // namespace blink

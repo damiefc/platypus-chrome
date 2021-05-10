@@ -5,7 +5,6 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
@@ -14,6 +13,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/origin_util.h"
@@ -32,6 +32,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
+#include "third_party/blink/public/common/chrome_debug_urls.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "url/url_constants.h"
 
@@ -47,7 +48,7 @@ EvalJsResult GetOriginFromRenderer(FrameTreeNode* node) {
 
 class FrameTreeBrowserTest : public ContentBrowserTest {
  public:
-  FrameTreeBrowserTest() {}
+  FrameTreeBrowserTest() = default;
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -128,7 +129,8 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, FrameTreeAfterCrash) {
       shell(), embedded_test_server()->GetURL("/frame_tree/top.html")));
 
   // Ensure the view and frame are live.
-  RenderViewHost* rvh = shell()->web_contents()->GetRenderViewHost();
+  RenderViewHost* rvh =
+      shell()->web_contents()->GetMainFrame()->GetRenderViewHost();
   RenderFrameHostImpl* rfh1 =
       static_cast<RenderFrameHostImpl*>(rvh->GetMainFrame());
   EXPECT_TRUE(rvh->IsRenderViewLive());
@@ -173,7 +175,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, NavigateWithLeftoverFrames) {
 
   // Hang the renderer so that it doesn't send any FrameDetached messages.
   // (This navigation will never complete, so don't wait for it.)
-  shell()->LoadURL(GURL(kChromeUIHangURL));
+  shell()->LoadURL(GURL(blink::kChromeUIHangURL));
 
   // Check that the frame tree still has children.
   WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
@@ -208,7 +210,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, IsRenderFrameLive) {
 
   // Load a same-site page into iframe and it should still be live.
   GURL http_url(embedded_test_server()->GetURL("/title1.html"));
-  NavigateFrameToURL(root->child_at(0), http_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), http_url));
   EXPECT_TRUE(
       root->current_frame_host()->render_view_host()->IsRenderViewLive());
   EXPECT_TRUE(root->current_frame_host()->IsRenderFrameLive());
@@ -246,7 +248,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, OriginSetOnNavigation) {
 
   // Navigate the iframe cross-origin.
   GURL frame_url(embedded_test_server()->GetURL("b.com", "/title1.html"));
-  NavigateFrameToURL(root->child_at(0), frame_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), frame_url));
   EXPECT_EQ(frame_url, root->child_at(0)->current_url());
   EXPECT_EQ(frame_url.GetOrigin().spec(),
             root->child_at(0)->current_origin().Serialize() + '/');
@@ -307,7 +309,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, NavigateGrandchildToBlob) {
   EXPECT_TRUE(NavigateToURL(
       shell(), embedded_test_server()->GetURL(
                    "a.com", "/cross_site_iframe_factory.html?a(b(a))")));
-  std::string reference_tree = FrameTreeVisualizer().DepictFrameTree(root);
+  std::string reference_tree = DepictFrameTree(*root);
 
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b(c))"));
@@ -345,7 +347,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, NavigateGrandchildToBlob) {
   EXPECT_EQ(url::kHttpScheme, target->current_origin().scheme());
   EXPECT_EQ("This is blob content.",
             EvalJs(target, "document.body.children[0].innerHTML"));
-  EXPECT_EQ(reference_tree, FrameTreeVisualizer().DepictFrameTree(root));
+  EXPECT_EQ(reference_tree, DepictFrameTree(*root));
 }
 
 IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, NavigateChildToAboutBlank) {
@@ -602,7 +604,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, SandboxFlagsSetForMainFrame) {
 
   // Navigating the main frame to a different URL should clear sandbox flags.
   GURL unsandboxed_url(embedded_test_server()->GetURL("/title1.html"));
-  NavigateFrameToURL(root, unsandboxed_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root, unsandboxed_url));
 
   // Verify that sandbox flags are cleared properly for the root FrameTreeNode
   // and RenderFrameHost.
@@ -712,7 +714,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest,
   // should retain those flags set by the frame owner.
   GURL frame_url(embedded_test_server()->GetURL("/title1.html"));
 
-  NavigateFrameToURL(root->child_at(0), frame_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), frame_url));
   EXPECT_EQ(network::mojom::WebSandboxFlags::kNone,
             root->child_at(0)->effective_frame_policy().sandbox_flags);
   EXPECT_EQ(network::mojom::WebSandboxFlags::kNone,
@@ -720,7 +722,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest,
   EXPECT_EQ(root->child_at(0)->active_sandbox_flags(),
             root->child_at(0)->current_frame_host()->active_sandbox_flags());
 
-  NavigateFrameToURL(root->child_at(1), frame_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(1), frame_url));
   EXPECT_EQ(network::mojom::WebSandboxFlags::kAll &
                 ~network::mojom::WebSandboxFlags::kScripts &
                 ~network::mojom::WebSandboxFlags::kAutomaticFeatures &
@@ -801,7 +803,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest,
 
 class CrossProcessFrameTreeBrowserTest : public ContentBrowserTest {
  public:
-  CrossProcessFrameTreeBrowserTest() {}
+  CrossProcessFrameTreeBrowserTest() = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     IsolateAllSitesForTesting(command_line);
@@ -834,12 +836,12 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
 
   // Load same-site page into iframe.
   GURL http_url(embedded_test_server()->GetURL("/title1.html"));
-  NavigateFrameToURL(root->child_at(0), http_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), http_url));
 
   // Load cross-site page into iframe.
   GURL cross_site_url(
       embedded_test_server()->GetURL("foo.com", "/title2.html"));
-  NavigateFrameToURL(root->child_at(0), cross_site_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), cross_site_url));
 
   // Ensure that we have created a new process for the subframe.
   ASSERT_EQ(2U, root->child_count());
@@ -848,7 +850,7 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
   RenderViewHost* rvh = child->current_frame_host()->render_view_host();
   RenderProcessHost* rph = child->current_frame_host()->GetProcess();
 
-  EXPECT_NE(shell()->web_contents()->GetRenderViewHost(), rvh);
+  EXPECT_NE(shell()->web_contents()->GetMainFrame()->GetRenderViewHost(), rvh);
   EXPECT_NE(shell()->web_contents()->GetSiteInstance(), child_instance);
   EXPECT_NE(shell()->web_contents()->GetMainFrame()->GetProcess(), rph);
 
@@ -898,7 +900,7 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
   // Load cross-site page into the first frame.
   GURL cross_site_url(
       embedded_test_server()->GetURL("foo.com", "/title2.html"));
-  NavigateFrameToURL(root->child_at(0), cross_site_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), cross_site_url));
 
   EXPECT_EQ(root->child_at(0)->current_origin().Serialize() + '/',
             cross_site_url.GetOrigin().spec());
@@ -1240,7 +1242,7 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
 // it from outsiders.
 class IsolateIcelandFrameTreeBrowserTest : public ContentBrowserTest {
  public:
-  IsolateIcelandFrameTreeBrowserTest() {}
+  IsolateIcelandFrameTreeBrowserTest() = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // Blink suppresses navigations to blob URLs of origins different from the
@@ -1276,7 +1278,7 @@ IN_PROC_BROWSER_TEST_F(IsolateIcelandFrameTreeBrowserTest,
 
   // The navigation targets an invalid blob url; that's intentional to trigger
   // an error response. The response should commit in a process dedicated to
-  // http://b.is.
+  // http://b.is or error pages, depending on policy.
   EXPECT_EQ(
       "done",
       EvalJs(
@@ -1293,12 +1295,17 @@ IN_PROC_BROWSER_TEST_F(IsolateIcelandFrameTreeBrowserTest,
       AreDefaultSiteInstancesEnabled()
           ? SiteInstanceImpl::GetDefaultSiteURL().spec()
           : "http://a.com/";
+  const std::string kExpectedSubframeSiteURL =
+      SiteIsolationPolicy::IsErrorPageIsolationEnabled(/*in_main_frame*/ false)
+          ? "chrome-error://chromewebdata/"
+          : "http://b.is/";
   EXPECT_EQ(base::StringPrintf(" Site A ------------ proxies for B\n"
                                "   +--Site B ------- proxies for A\n"
                                "Where A = %s\n"
-                               "      B = http://b.is/",
-                               kExpectedSiteURL.c_str()),
-            FrameTreeVisualizer().DepictFrameTree(root));
+                               "      B = %s",
+                               kExpectedSiteURL.c_str(),
+                               kExpectedSubframeSiteURL.c_str()),
+            DepictFrameTree(*root));
 }
 
 }  // namespace content

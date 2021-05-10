@@ -18,7 +18,6 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "chrome/updater/tools/certificate_tag.h"
 
 namespace updater {
@@ -150,7 +149,7 @@ int CertificateTagMain(int argc, char** argv) {
     std::vector<uint8_t> tag_contents;
     if (base::StartsWith(args.set_superfluous_cert_tag, kPrefix,
                          base::CompareCase::INSENSITIVE_ASCII)) {
-      const base::StringPiece hex_chars(
+      const auto hex_chars = base::MakeStringPiece(
           std::begin(args.set_superfluous_cert_tag) + base::size(kPrefix) - 1,
           std::end(args.set_superfluous_cert_tag));
       if (!base::HexStringToBytes(hex_chars, &tag_contents)) {

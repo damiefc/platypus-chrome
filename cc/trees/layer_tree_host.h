@@ -37,9 +37,9 @@
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/layer_list_iterator.h"
 #include "cc/metrics/begin_main_frame_metrics.h"
-#include "cc/metrics/event_metrics.h"
 #include "cc/metrics/events_metrics_manager.h"
 #include "cc/metrics/frame_sequence_tracker.h"
+#include "cc/metrics/web_vital_metrics.h"
 #include "cc/paint/node_id.h"
 #include "cc/trees/browser_controls_params.h"
 #include "cc/trees/compositor_mode.h"
@@ -52,37 +52,41 @@
 #include "cc/trees/swap_promise_manager.h"
 #include "cc/trees/target_property.h"
 #include "cc/trees/viewport_layers.h"
-#include "components/viz/common/delegated_ink_metadata.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "ui/gfx/delegated_ink_metadata.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/overlay_transform.h"
 
 namespace gfx {
 struct PresentationFeedback;
+class RenderingPipeline;
 }
 
 namespace cc {
 
+class DocumentTransitionRequest;
 class HeadsUpDisplayLayer;
 class Layer;
 class LayerTreeHostImpl;
 class LayerTreeHostImplClient;
 class LayerTreeHostSingleThreadClient;
 class LayerTreeMutator;
-class PaintWorkletLayerPainter;
 class MutatorEvents;
 class MutatorHost;
-struct PendingPageScaleAnimation;
+class PaintWorkletLayerPainter;
+class RasterDarkModeFilter;
 class RenderFrameMetadataObserver;
 class RenderingStatsInstrumentation;
-struct OverscrollBehavior;
 class TaskGraphRunner;
 class UIResourceManager;
 class UkmRecorderFactory;
-struct RenderingStats;
+
 struct CompositorCommitData;
+struct OverscrollBehavior;
+struct PendingPageScaleAnimation;
+struct RenderingStats;
 
 // Returned from LayerTreeHost::DeferMainFrameUpdate. Automatically un-defers on
 // destruction.
@@ -110,6 +114,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
     LayerTreeSettings const* settings = nullptr;
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner;
     MutatorHost* mutator_host = nullptr;
+    RasterDarkModeFilter* dark_mode_filter = nullptr;
+    gfx::RenderingPipeline* main_thread_pipeline = nullptr;
+    gfx::RenderingPipeline* compositor_thread_pipeline = nullptr;
 
     // The image worker task runner is used to schedule image decodes. The
     // compositor thread may make sync calls to this thread, analogous to the
@@ -183,7 +190,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   SwapPromiseManager* GetSwapPromiseManager();
 
   std::unique_ptr<EventsMetricsManager::ScopedMonitor>
-  GetScopedEventMetricsMonitor(std::unique_ptr<EventMetrics> event_metrics);
+  GetScopedEventMetricsMonitor(
+      EventsMetricsManager::ScopedMonitor::DoneCallback done_callback);
   void ClearEventsMetrics();
 
   size_t saved_events_metrics_count_for_testing() const {
@@ -281,7 +289,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // Synchronously performs a complete main frame update, commit and compositor
   // frame. Used only in single threaded mode when the compositor's internal
   // scheduling is disabled.
-  void Composite(base::TimeTicks frame_begin_time, bool raster);
+  void CompositeForTest(base::TimeTicks frame_begin_time, bool raster);
 
   // Requests a redraw (compositor frame) for the given rect.
   void SetNeedsRedrawRect(const gfx::Rect& damage_rect);
@@ -340,14 +348,6 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void SetRootLayer(scoped_refptr<Layer> root_layer);
   Layer* root_layer() { return root_layer_.get(); }
   const Layer* root_layer() const { return root_layer_.get(); }
-
-  // Sets the root layer which is not managed by blink, and we will initialize
-  // its paint properties using PropertyTreeBuilder. For ui::Compositor, because
-  // for now we always use PropertyTreeBulder, this function is equivalent to
-  // SetRootLayer().
-  // TODO(crbug.com/925855): This is temporary. Eventually we should let the
-  // caller inform blink about the layer and remove the function.
-  void SetNonBlinkManagedRootLayer(scoped_refptr<Layer> root_layer);
 
   struct ViewportPropertyIds {
     int overscroll_elasticity_transform = TransformTree::kInvalidNodeId;
@@ -408,9 +408,26 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
       float device_scale_factor,
       const viz::LocalSurfaceId& local_surface_id_from_parent);
 
-  void SetViewportVisibleRect(const gfx::Rect& visible_rect);
+  // VisualDeviceViewportIntersectionRect is the intersection of this
+  // compositor's viewport with the "visible size", aka this compositor's
+  // viewport intersection with the global viewport (i.e.
+  // VisualDeviceViewportSize). It is also specified in the device viewport
+  // coordinate space.
+  void SetVisualDeviceViewportIntersectionRect(
+      const gfx::Rect& intersection_rect);
+
+  // VisualDeviceViewportSize is the size of the global viewport across all
+  // compositors that are part of the scene that this compositor contributes to
+  // (i.e. the visual viewport), allowing for that scene to be broken up into
+  // multiple compositors that each contribute to the whole (e.g. cross-origin
+  // iframes are isolated from each other). This is a size instead of a rect
+  // because each compositor doesn't know its position relative to other
+  // compositors. This is specified in device viewport coordinate space.
+  void SetVisualDeviceViewportSize(const gfx::Size&);
 
   gfx::Rect device_viewport_rect() const { return device_viewport_rect_; }
+
+  void UpdateViewportIsMobileOptimized(bool is_viewport_mobile_optimized);
 
   void SetBrowserControlsParams(const BrowserControlsParams& params);
   void SetBrowserControlsShownRatio(float top_ratio, float bottom_ratio);
@@ -615,6 +632,11 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time,
                                ActiveFrameSequenceTrackers trackers);
   void NotifyThroughputTrackerResults(CustomTrackerResults results);
+  void NotifyTransitionRequestsFinished(
+      const std::vector<uint32_t>& sequence_ids);
+  // Called during impl side initialization.
+  gfx::RenderingPipeline* TakeMainPipeline();
+  gfx::RenderingPipeline* TakeCompositorPipeline();
 
   LayerTreeHostClient* client() { return client_; }
   LayerTreeHostSchedulingClient* scheduling_client() {
@@ -668,15 +690,13 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
                                  ElementListType list_type,
                                  const PropertyAnimationState& mask,
                                  const PropertyAnimationState& state) override;
-  void AnimationScalesChanged(ElementId element_id,
-                              ElementListType list_type,
-                              float maximum_scale,
-                              float starting_scale) override;
+  void MaximumScaleChanged(ElementId element_id,
+                           ElementListType list_type,
+                           float maximum_scale) override;
 
   void OnCustomPropertyMutated(
-      ElementId element_id,
-      const std::string& custom_property_name,
-      PaintWorkletInput::PropertyValue custom_property_value) override {}
+      PaintWorkletInput::PropertyKey property_key,
+      PaintWorkletInput::PropertyValue property_value) override {}
 
   void ScrollOffsetAnimationFinished() override {}
   gfx::ScrollOffset GetScrollOffsetForAnimation(
@@ -717,15 +737,19 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   }
 
   void SetDelegatedInkMetadata(
-      std::unique_ptr<viz::DelegatedInkMetadata> metadata) {
-    delegated_ink_metadata_ = std::move(metadata);
-  }
-  viz::DelegatedInkMetadata* DelegatedInkMetadataForTesting() {
+      std::unique_ptr<gfx::DelegatedInkMetadata> metadata);
+  gfx::DelegatedInkMetadata* DelegatedInkMetadataForTesting() {
     return delegated_ink_metadata_.get();
   }
 
   void DidObserveFirstScrollDelay(base::TimeDelta first_scroll_delay,
                                   base::TimeTicks first_scroll_timestamp);
+
+  void AddDocumentTransitionRequest(
+      std::unique_ptr<DocumentTransitionRequest> request);
+
+  std::vector<std::unique_ptr<DocumentTransitionRequest>>
+  TakeDocumentTransitionRequestsForTesting();
 
  protected:
   LayerTreeHost(InitParams params, CompositorMode mode);
@@ -770,9 +794,6 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   enum { kNumFramesToConsiderBeforeRemovingSlowPathFlag = 60 };
 
   void ApplyViewportChanges(const CompositorCommitData& commit_data);
-  void RecordManipulationTypeCounts(const CompositorCommitData& commit_data);
-  void SendOverscrollAndScrollEndEventsFromImplSide(
-      const CompositorCommitData& commit_data);
   void ApplyPageScaleDeltaFromImplSide(float page_scale_delta);
   void InitializeProxy(std::unique_ptr<Proxy> proxy);
 
@@ -828,7 +849,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // destroyed midway which causes a crash. crbug.com/654672
   bool inside_main_frame_ = false;
 
+  // State cached until impl side is initialized.
   TaskGraphRunner* task_graph_runner_;
+  gfx::RenderingPipeline* main_thread_pipeline_;
+  gfx::RenderingPipeline* compositor_thread_pipeline_;
 
   uint32_t num_consecutive_frames_without_slow_paths_ = 0;
 
@@ -868,8 +892,14 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   LayerSelection selection_;
 
   gfx::Rect device_viewport_rect_;
+  gfx::Rect visual_device_viewport_intersection_rect_;
+  gfx::Size visual_device_viewport_size_;
 
-  gfx::Rect viewport_visible_rect_;
+  // Set to true if viewport is mobile optimized by using meta tag
+  // <meta name="viewport" content="width=device-width">
+  // or
+  // <meta name="viewport" content="initial-scale=1.0">
+  bool is_viewport_mobile_optimized_ = false;
 
   bool have_scroll_event_handlers_ = false;
   EventListenerProperties event_listener_properties_
@@ -911,14 +941,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // for every layer during property tree building.
   bool has_copy_request_ = false;
 
-  // When settings_.use_layer_lists is true, paint properties are generated by
-  // blink and we don't use PropertyTreeBuilder, except that the root layer
-  // is set by SetNonBlinkManagedRootLayer().
-  // TODO(crbug.com/925855): Remove this field when removing
-  // SetNonBlinkManagedRootLayer().
-  bool force_use_property_tree_builder_ = false;
-
   MutatorHost* mutator_host_;
+
+  RasterDarkModeFilter* dark_mode_filter_;
 
   std::vector<std::pair<PaintImage, base::OnceCallback<void(bool)>>>
       queued_image_decodes_;
@@ -957,9 +982,15 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // stroke. std::unique_ptr was specifically chosen so that it would be cleared
   // as it is forwarded along the pipeline to avoid old information incorrectly
   // sticking around and potentially being reused.
-  std::unique_ptr<viz::DelegatedInkMetadata> delegated_ink_metadata_;
+  std::unique_ptr<gfx::DelegatedInkMetadata> delegated_ink_metadata_;
 
-  base::MappedReadOnlyRegion ukm_smoothness_mapping_;
+  // A list of document transitions that need to be transported from Blink to
+  // Viz, as a CompositorFrameTransitionDirective.
+  std::vector<std::unique_ptr<DocumentTransitionRequest>>
+      document_transition_requests_;
+
+  // A list of callbacks that need to be invoked when they are processed.
+  base::flat_map<uint32_t, base::OnceClosure> document_transition_callbacks_;
 
   // Used to vend weak pointers to LayerTreeHost to ScopedDeferMainFrameUpdate
   // objects.

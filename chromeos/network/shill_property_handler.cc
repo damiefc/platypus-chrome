@@ -10,7 +10,7 @@
 #include <sstream>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
 #include "base/strings/string_split.h"
@@ -378,7 +378,7 @@ void ShillPropertyHandler::ManagerPropertyChanged(const std::string& key,
     if (value.GetAsString(&prohibited_technologies))
       UpdateProhibitedTechnologies(prohibited_technologies);
   } else if (key == shill::kProfilesProperty) {
-    listener_->ProfileListChanged();
+    listener_->ProfileListChanged(value);
   } else if (key == shill::kCheckPortalListProperty) {
     std::string check_portal_list;
     if (value.GetAsString(&check_portal_list))
@@ -398,10 +398,9 @@ void ShillPropertyHandler::UpdateProperties(ManagedState::ManagedType type,
   std::set<std::string> new_requested_updates;
   NET_LOG(DEBUG) << "UpdateProperties: " << ManagedState::TypeToString(type)
                  << ": " << entries.GetSize();
-  for (base::ListValue::const_iterator iter = entries.begin();
-       iter != entries.end(); ++iter) {
+  for (const auto& entry : entries.GetList()) {
     std::string path;
-    iter->GetAsString(&path);
+    entry.GetAsString(&path);
     if (path.empty())
       continue;
 
@@ -423,7 +422,7 @@ void ShillPropertyHandler::UpdateObserved(ManagedState::ManagedType type,
       (type == ManagedState::MANAGED_TYPE_NETWORK) ? observed_networks_
                                                    : observed_devices_;
   ShillPropertyObserverMap new_observed;
-  for (const auto& entry : entries) {
+  for (const auto& entry : entries.GetList()) {
     std::string path;
     entry.GetAsString(&path);
     if (path.empty())
@@ -631,9 +630,8 @@ void ShillPropertyHandler::RequestIPConfigsList(
   const base::ListValue* ip_configs;
   if (!ip_config_list_value.GetAsList(&ip_configs))
     return;
-  for (base::ListValue::const_iterator iter = ip_configs->begin();
-       iter != ip_configs->end(); ++iter) {
-    RequestIPConfig(type, path, *iter);
+  for (const auto& entry : ip_configs->GetList()) {
+    RequestIPConfig(type, path, entry);
   }
 }
 

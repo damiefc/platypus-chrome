@@ -4,6 +4,8 @@
 
 #include "ui/events/event_handler.h"
 
+#include "base/logging.h"
+#include "base/strings/string_util.h"
 #include "ui/events/event.h"
 #include "ui/events/event_dispatcher.h"
 
@@ -27,6 +29,7 @@ EventHandler::~EventHandler() {
 }
 
 void EventHandler::OnEvent(Event* event) {
+  VLOG(5) << GetLogContext() << "::OnEvent(" << event->ToString() << ")";
   if (event->IsKeyEvent())
     OnKeyEvent(event->AsKeyEvent());
   else if (event->IsMouseEvent())
@@ -57,6 +60,10 @@ void EventHandler::OnGestureEvent(GestureEvent* event) {
 }
 
 void EventHandler::OnCancelMode(CancelModeEvent* event) {
+}
+
+base::StringPiece EventHandler::GetLogContext() const {
+  return "(Unknown EventHandler)"; // Please override
 }
 
 }  // namespace ui

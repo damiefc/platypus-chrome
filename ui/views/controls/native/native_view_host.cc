@@ -10,6 +10,7 @@
 #include "base/check.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/cursor/cursor.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/controls/native/native_view_host_wrapper.h"
 #include "ui/views/painter.h"
@@ -54,7 +55,15 @@ void NativeViewHost::Detach() {
 }
 
 void NativeViewHost::SetParentAccessible(gfx::NativeViewAccessible accessible) {
+  if (!native_wrapper_)
+    return;
   native_wrapper_->SetParentAccessible(accessible);
+}
+
+gfx::NativeViewAccessible NativeViewHost::GetParentAccessible() {
+  if (!native_wrapper_)
+    return nullptr;
+  return native_wrapper_->GetParentAccessible();
 }
 
 bool NativeViewHost::SetCornerRadii(const gfx::RoundedCornersF& corner_radii) {

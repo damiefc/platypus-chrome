@@ -17,7 +17,6 @@
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_autofill_form_data_entry.h"
 #include "chrome/common/importer/importer_data_types.h"
-#include "components/autofill/core/common/password_form.h"
 
 namespace {
 
@@ -39,7 +38,7 @@ ExternalProcessImporterBridge::ExternalProcessImporterBridge(
 
 void ExternalProcessImporterBridge::AddBookmarks(
     const std::vector<ImportedBookmarkEntry>& bookmarks,
-    const base::string16& first_folder_name) {
+    const std::u16string& first_folder_name) {
   observer_->OnBookmarksImportStart(first_folder_name, bookmarks.size());
 
   // |bookmarks_left| is required for the checks below as Windows has a
@@ -110,7 +109,7 @@ void ExternalProcessImporterBridge::SetKeywords(
 }
 
 void ExternalProcessImporterBridge::SetPasswordForm(
-    const autofill::PasswordForm& form) {
+    const importer::ImportedPasswordForm& form) {
   observer_->OnPasswordFormImportReady(form);
 }
 
@@ -153,7 +152,7 @@ void ExternalProcessImporterBridge::NotifyEnded() {
   observer_->OnImportFinished(true, std::string());
 }
 
-base::string16 ExternalProcessImporterBridge::GetLocalizedString(
+std::u16string ExternalProcessImporterBridge::GetLocalizedString(
     int message_id) {
   DCHECK(localized_strings_.count(message_id));
   return base::UTF8ToUTF16(localized_strings_[message_id]);

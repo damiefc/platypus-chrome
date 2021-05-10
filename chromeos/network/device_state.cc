@@ -8,7 +8,6 @@
 
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chromeos/network/network_event_log.h"
 #include "chromeos/network/shill_property_util.h"
@@ -66,6 +65,16 @@ bool DeviceState::PropertyChanged(const std::string& key,
       return false;
     scan_results_.swap(parsed_results);
     return true;
+  } else if (key == shill::kSIMSlotInfoProperty) {
+    if (!value.is_list())
+      return false;
+    CellularSIMSlotInfos parsed_results;
+    if (!network_util::ParseCellularSIMSlotInfo(value.GetList(),
+                                                &parsed_results)) {
+      return false;
+    }
+    sim_slot_infos_.swap(parsed_results);
+    return true;
   } else if (key == shill::kSIMLockStatusProperty) {
     const base::DictionaryValue* dict = nullptr;
     if (!value.GetAsDictionary(&dict))
@@ -102,6 +111,13 @@ bool DeviceState::PropertyChanged(const std::string& key,
     return GetStringValue(key, value, &mdn_);
   } else if (key == shill::kSIMPresentProperty) {
     return GetBooleanValue(key, value, &sim_present_);
+  } else if (key == shill::kCellularApnListProperty) {
+    if (!value.is_list())
+      return false;
+    apn_list_ = value.Clone();
+    return true;
+  } else if (key == shill::kInhibitedProperty) {
+    return GetBooleanValue(key, value, &inhibited_);
   } else if (key == shill::kEapAuthenticationCompletedProperty) {
     return GetBooleanValue(key, value, &eap_authentication_completed_);
   } else if (key == shill::kIPConfigsProperty) {
@@ -167,6 +183,21 @@ bool DeviceState::IsSimLocked() const {
     return false;
   return sim_lock_type_ == shill::kSIMLockPin ||
          sim_lock_type_ == shill::kSIMLockPuk;
+}
+
+bool DeviceState::HasAPN(const std::string& access_point_name) const {
+  for (const auto& apn : apn_list_.GetList()) {
+    // bogus empty entries in the list might have been converted to a list while
+    // traveling over D-Bus, skip them rather than crashing below.
+    if (!apn.is_dict())
+      continue;
+
+    const std::string* apn_name = apn.FindStringKey(shill::kApnProperty);
+    if (apn_name && *apn_name == access_point_name) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace chromeos

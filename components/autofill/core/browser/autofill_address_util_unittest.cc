@@ -1,0 +1,136 @@
+// Copyright 2021 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "components/autofill/core/browser/autofill_address_util.h"
+
+#include "base/guid.h"
+#include "components/autofill/core/browser/autofill_test_utils.h"
+#include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/resource/resource_bundle.h"
+
+namespace autofill {
+
+class GetEnvelopeStyleAddressTest : public ::testing::Test {
+ public:
+  void SetUp() override {
+    orig_resource_bundle_ =
+        ui::ResourceBundle::SwapSharedInstanceForTesting(nullptr);
+    ui::ResourceBundle::InitSharedInstanceWithLocale(
+        GetLocale(), /*delegate=*/nullptr,
+        ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
+  }
+
+  void TearDown() override {
+    ui::ResourceBundle::CleanupSharedInstance();
+    ui::ResourceBundle::SwapSharedInstanceForTesting(orig_resource_bundle_);
+  }
+
+  std::string GetLocale() { return "en-US"; }
+
+ private:
+  ui::ResourceBundle* orig_resource_bundle_;
+};
+
+TEST_F(GetEnvelopeStyleAddressTest, Sanity) {
+  AutofillProfile profile = test::GetFullProfile();
+  std::u16string address =
+      GetEnvelopeStyleAddress(profile, GetLocale(), /*include_country=*/true);
+
+  // The exact format of the address depends on the format in the
+  // libaddressinput library. Let's avoid testing the exact format, but test
+  // some more highlevel conditions that are less probable to change.
+
+  // The full name should be part of the envelope style address.
+  EXPECT_NE(address.find(profile.GetInfo(NAME_FULL, GetLocale())),
+            std::string::npos);
+
+  // City should be part of the envelope style address.
+  EXPECT_NE(address.find(profile.GetInfo(ADDRESS_HOME_CITY, GetLocale())),
+            std::string::npos);
+
+  // Check that some literals are properly returned.
+  // The US envelope style address should contain a comma.
+  EXPECT_NE(address.find(u","), std::string::npos);
+
+  // The US envelope style address should contains at least one newline.
+  EXPECT_NE(address.find(u"\n"), std::string::npos);
+
+  // The country should be returned.
+  EXPECT_NE(address.find(u"United States"), std::string::npos);
+
+  // The country shouldn't be returned when include_country=false.
+  EXPECT_EQ(
+      GetEnvelopeStyleAddress(profile, GetLocale(), /*include_country=*/false)
+          .find(u"United States"),
+      std::string::npos);
+}
+
+TEST_F(GetEnvelopeStyleAddressTest, EmptyFullname) {
+  AutofillProfile profile(base::GenerateGUID(), /*origin=*/"");
+  test::SetProfileInfo(&profile, /*first_name=*/"", /*middle_name=*/"",
+                       /*last_name=*/"", "johndoe@hades.com", "Underworld",
+                       "666 Erebus St.", "Apt 8", "Elysium", "CA", "91111",
+                       "US", "16502111111");
+
+  std::u16string address =
+      GetEnvelopeStyleAddress(profile, GetLocale(), /*include_country=*/true);
+  // The US envelope style address should *not* start with a new line.
+  EXPECT_NE(address.front(), '\n');
+}
+
+// Tests that when the company is empty, the envelope style address doesn't
+// contain empty lines.
+TEST_F(GetEnvelopeStyleAddressTest, EmptyCompanyShouldHaveNoEmptyLines) {
+  AutofillProfile profile(base::GenerateGUID(), /*origin=*/"");
+  test::SetProfileInfo(&profile, "FirstName", "MiddleName", "LastName",
+                       "johndoe@hades.com", /*company=*/"", "666 Erebus St.",
+                       "Apt 8", "Elysium", "CA", "91111", "US", "16502111111");
+
+  std::u16string address =
+      GetEnvelopeStyleAddress(profile, GetLocale(), /*include_country=*/true);
+  // There should be no consecutive new lines.
+  EXPECT_EQ(address.find(u"\n\n"), std::string::npos);
+}
+
+// Tests that when the state is empty, the envelope style address doesn't
+// contains consecutive white spaces.
+TEST_F(GetEnvelopeStyleAddressTest,
+       EmptyStateShouldHaveNoConsecutiveWhitespaces) {
+  AutofillProfile profile(base::GenerateGUID(), /*origin=*/"");
+  test::SetProfileInfo(&profile, "FirstName", "MiddleName", "LastName",
+                       "johndoe@hades.com", "Underworld", "666 Erebus St.",
+                       "Apt 8", "Elysium", /*state=*/"", "91111", "US",
+                       "16502111111");
+
+  std::u16string address =
+      GetEnvelopeStyleAddress(profile, GetLocale(), /*include_country=*/true);
+  // There should be no consecutive white spaces.
+  EXPECT_EQ(address.find(u"  "), std::string::npos);
+}
+
+TEST(GetDescriptionForProfileToSave, NameAndAddress) {
+  AutofillProfile profile = test::GetFullProfile();
+  std::u16string description = GetDescriptionForProfileToSave(profile, "en-US");
+  // Should contain full name and address line 1.
+  EXPECT_EQ(description, u"John H. Doe, 666 Erebus St.");
+}
+
+TEST(GetDescriptionForProfileToUpdate, LabelAndDetails) {
+  AutofillProfile profile = test::GetFullProfile();
+  std::u16string description =
+      GetDescriptionForProfileToUpdate(profile, "en-US");
+  // Should contain full name as label and address line 1, separated by hyphen.
+  EXPECT_EQ(description, u"John H. Doe — 666 Erebus St.");
+}
+
+TEST(GetDescriptionForProfileToUpdate, NoLabelOnlyDetails) {
+  AutofillProfile profile = test::GetFullProfile();
+  profile.SetInfo(NAME_FULL, u"", "en-US");
+  std::u16string description =
+      GetDescriptionForProfileToUpdate(profile, "en-US");
+  // Should contain no label, but 2 components: address lines 1 & 2.
+  EXPECT_EQ(description, u"666 Erebus St., Apt 8");
+}
+
+}  // namespace autofill

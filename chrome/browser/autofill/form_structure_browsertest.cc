@@ -14,6 +14,7 @@
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -25,11 +26,13 @@
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
-#include "components/autofill/core/browser/autofill_manager.h"
+#include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/browser/data_driven_test.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/pattern_provider/pattern_configuration_parser.h"
 #include "components/autofill/core/common/autofill_features.h"
-#include "components/autofill/core/common/renderer_id.h"
+#include "components/autofill/core/common/autofill_payments_features.h"
+#include "components/autofill/core/common/unique_ids.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "net/http/http_status_code.h"
@@ -92,17 +95,36 @@ std::vector<base::FilePath> GetTestFiles() {
 }
 
 std::string FormStructuresToString(
-    const std::map<FormRendererId, std::unique_ptr<FormStructure>>& forms) {
+    const std::map<FormGlobalId, std::unique_ptr<FormStructure>>& forms) {
   std::string forms_string;
-  // The forms are sorted by renderer ID, which should make the order
+  // The forms are sorted by their global ID, which should make the order
   // deterministic.
   for (const auto& kv : forms) {
     const auto* form = kv.second.get();
+    std::map<std::string, int> section_to_index;
     for (const auto& field : *form) {
+      // Normalize the section by replacing the unique but platform-dependent
+      // integers in |field->section| with consecutive unique integers.
+      std::string section = field->section;
+      size_t last_underscore = section.find_last_of('_');
+      size_t second_last_underscore =
+          section.find_last_of('_', last_underscore - 1);
+      size_t next_dash = section.find_first_of('-', second_last_underscore);
+      int new_section_index = static_cast<int>(section_to_index.size() + 1);
+      int section_index =
+          section_to_index.insert(std::make_pair(section, new_section_index))
+              .first->second;
+      if (second_last_underscore != std::string::npos &&
+          next_dash != std::string::npos) {
+        section = base::StringPrintf(
+            "%s%d%s", section.substr(0, second_last_underscore + 1).c_str(),
+            section_index, section.substr(next_dash).c_str());
+      }
+
       forms_string += base::JoinString(
           {field->Type().ToString(), base::UTF16ToUTF8(field->name),
            base::UTF16ToUTF8(field->label), base::UTF16ToUTF8(field->value),
-           field->section},
+           section},
           base::StringPiece(" | "));
       forms_string += "\n";
     }
@@ -149,17 +171,26 @@ FormStructureBrowserTest::FormStructureBrowserTest()
     : DataDrivenTest(GetTestDataDir()) {
   feature_list_.InitWithFeatures(
       // Enabled
-      {
-          // TODO(crbug.com/1098943): Remove once experiment is over.
-          autofill::features::kAutofillEnableSupportForMoreStructureInNames,
-          // TODO(crbug.com/1125978): Remove once launched.
-          autofill::features::kAutofillEnableSupportForMoreStructureInAddresses,
-      },
+      {// TODO(crbug.com/1098943): Remove once experiment is over.
+       features::kAutofillEnableSupportForMoreStructureInNames,
+       // TODO(crbug.com/1125978): Remove once launched.
+       features::kAutofillEnableSupportForMoreStructureInAddresses,
+       // TODO(crbug.com/896689): Remove once launched.
+       features::kAutofillNameSectionsWithRendererIds,
+       // TODO(crbug.com/1076175) Remove once launched.
+       features::kAutofillUseNewSectioningMethod,
+       // Remove once launched
+       features::kAutofillEnableAugmentedPhoneCountryCode,
+       // TODO(crbug.com/1157405) Remove once launched.
+       features::kAutofillEnableDependentLocalityParsing,
+       // TODO(crbug.com/1150895) Remove once launched.
+       features::kAutofillParsingPatternsLanguageDetection,
+       // TODO(crbug/1165780): Remove once shared labels are launched.
+       features::kAutofillEnableSupportForParsingWithSharedLabels,
+       // TODO(crbug/1190334): Remove once launched.
+       features::kAutofillParseMerchantPromoCodeFields},
       // Disabled
-      {autofill::features::kAutofillEnforceMinRequiredFieldsForHeuristics,
-       autofill::features::kAutofillEnforceMinRequiredFieldsForQuery,
-       autofill::features::kAutofillEnforceMinRequiredFieldsForUpload,
-       autofill::features::kAutofillRestrictUnownedFieldsToFormlessCheckout});
+      {});
 }
 
 FormStructureBrowserTest::~FormStructureBrowserTest() {}
@@ -206,7 +237,8 @@ void FormStructureBrowserTest::GenerateResults(const std::string& input,
       ContentAutofillDriverFactory::FromWebContents(web_contents)
           ->DriverForFrame(web_contents->GetMainFrame());
   ASSERT_NE(nullptr, autofill_driver);
-  AutofillManager* autofill_manager = autofill_driver->autofill_manager();
+  BrowserAutofillManager* autofill_manager =
+      autofill_driver->browser_autofill_manager();
   ASSERT_NE(nullptr, autofill_manager);
   *output = FormStructuresToString(autofill_manager->form_structures());
 }

@@ -10,12 +10,6 @@ import("//testing/test.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
-# Reset sources_assignment_filter for the BUILD.gn file to prevent
-# regression during the migration of Chromium away from the feature.
-# See docs/no_sources_assignment_filter.md for more information.
-# TODO(crbug.com/1018739): remove this when migration is done.
-set_sources_assignment_filter([])
-
 buildflag_header("ipc_buildflags") {
   header = "ipc_buildflags.h"
 
@@ -74,6 +68,8 @@ component("ipc") {
       "message_filter_router.h",
       "message_router.cc",
       "message_router.h",
+      "trace_ipc_message.cc",
+      "trace_ipc_message.h",
     ]
   }
 
@@ -98,6 +94,7 @@ component("ipc") {
     "//mojo/public/cpp/base",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
+    "//services/tracing/public/cpp",
   ]
 
   if (!is_nacl_nonsfi) {
@@ -110,14 +107,6 @@ component("ipc") {
 
   if (enable_ipc_fuzzer) {
     public_configs = [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
-  }
-
-  if (!is_nacl && !is_ios) {
-    sources += [
-      "trace_ipc_message.cc",
-      "trace_ipc_message.h",
-    ]
-    public_deps += [ "//services/tracing/public/cpp" ]
   }
 }
 
@@ -203,10 +192,7 @@ mojom_component("mojom") {
   output_prefix = "ipc_mojom"
   macro_prefix = "IPC_MOJOM"
   sources = [ "ipc.mojom" ]
-  public_deps = [
-    "//mojo/public/interfaces/bindings",
-    "//mojo/public/mojom/base",
-  ]
+  public_deps = [ "//mojo/public/interfaces/bindings" ]
 
   cpp_typemaps = [
     {
@@ -223,10 +209,7 @@ mojom_component("mojom") {
         "//ipc/message_view.cc",
         "//ipc/message_view.h",
       ]
-      traits_public_deps = [
-        "//ipc:message_support",
-        "//mojo/public/cpp/base:shared_typemap_traits",
-      ]
+      traits_public_deps = [ "//ipc:message_support" ]
     },
   ]
 

@@ -54,8 +54,10 @@ chrome.test.runTests([
               },
               ConnectionState: 'NotConnected',
               GUID: 'stub_cellular1_guid',
+              IPAddressConfigType: chrome.networking.onc.IPConfigType.DHCP,
               Metered: true,
               Name: 'cellular1',
+              NameServersConfigType: chrome.networking.onc.IPConfigType.DHCP,
               Source: 'User',
               Type: 'Cellular',
             }, result);
@@ -86,20 +88,6 @@ chrome.test.runTests([
       chrome.networking.onc.getVisibleNetworks('All',
           chrome.test.callbackFail(expectedError));
       chrome.networking.onc.getEnabledNetworkTypes(
-          chrome.test.callbackFail(expectedError));
-      var stubVerificationProperties = {
-        certificate: '',
-        publicKey: '',
-        nonce: '',
-        signedData: '',
-        deviceSerial: '',
-        deviceSsid: '',
-        deviceBssid: ''
-      };
-      chrome.networking.onc.verifyDestination(
-          stubVerificationProperties, chrome.test.callbackFail(expectedError));
-      chrome.networking.onc.verifyAndEncryptData(
-          stubVerificationProperties, '',
           chrome.test.callbackFail(expectedError));
     }
 ]);

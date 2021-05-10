@@ -46,12 +46,12 @@
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
 #include "third_party/blink/public/platform/web_client_hints_type.h"
 #include "third_party/blink/public/platform/web_document_subresource_filter.h"
-#include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/ad_tracker.h"
 #include "third_party/blink/renderer/core/frame/frame_owner.h"
 #include "third_party/blink/renderer/core/frame/frame_types.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -73,6 +73,7 @@
 #include "third_party/blink/renderer/platform/loader/testing/mock_resource.h"
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
 #include "third_party/blink/renderer/platform/testing/histogram_tester.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/reporting_disposition.h"
@@ -100,7 +101,7 @@ class FixedPolicySubresourceFilter : public WebDocumentSubresourceFilter {
       : policy_(policy), filtered_load_counter_(filtered_load_counter) {}
 
   LoadPolicy GetLoadPolicy(const WebURL& resource_url,
-                           mojom::RequestContextType) override {
+                           mojom::blink::RequestContextType) override {
     return policy_;
   }
 
@@ -121,17 +122,18 @@ class FrameFetchContextTest : public testing::Test {
  protected:
   void SetUp() override { RecreateFetchContext(); }
 
-  void RecreateFetchContext(const KURL& url = KURL(),
-                            const String& feature_policy_header = String()) {
+  void RecreateFetchContext(
+      const KURL& url = KURL(),
+      const String& permissions_policy_header = String()) {
     dummy_page_holder = nullptr;
     dummy_page_holder = std::make_unique<DummyPageHolder>(IntSize(500, 500));
     dummy_page_holder->GetPage().SetDeviceScaleFactorDeprecated(1.0);
     if (url.IsValid()) {
-      auto params = WebNavigationParams::CreateWithHTMLBuffer(
+      auto params = WebNavigationParams::CreateWithHTMLBufferForTesting(
           SharedBuffer::Create(), url);
-      if (!feature_policy_header.IsEmpty()) {
+      if (!permissions_policy_header.IsEmpty()) {
         params->response.SetHttpHeaderField(http_names::kFeaturePolicy,
-                                            feature_policy_header);
+                                            permissions_policy_header);
       }
       dummy_page_holder->GetFrame().Loader().CommitNavigation(
           std::move(params), nullptr /* extra_data */);
@@ -212,7 +214,8 @@ class FrameFetchContextSubresourceFilterTest : public FrameFetchContextTest {
     ResourceRequest request(KURL("http://example.com/"));
     FetchInitiatorInfo initiator_info;
     EXPECT_EQ(expect_is_ad, GetFetchContext()->CalculateIfAdSubresource(
-                                request, ResourceType::kMock, initiator_info));
+                                request, base::nullopt /* alias_url */,
+                                ResourceType::kMock, initiator_info));
     return reason;
   }
 
@@ -273,7 +276,6 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
  protected:
   void ModifyRequestForCSP(ResourceRequest& resource_request,
                            mojom::RequestContextFrameType frame_type) {
-    document->GetFrame()->Loader().RecordLatestRequiredCSP();
     document->GetFrame()->Loader().ModifyRequestForCSP(
         resource_request,
         &document->Fetcher()->GetProperties().GetFetchClientSettingsObject(),
@@ -281,12 +283,12 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
   }
 
   void ExpectUpgrade(const char* input, const char* expected) {
-    ExpectUpgrade(input, mojom::RequestContextType::SCRIPT,
+    ExpectUpgrade(input, mojom::blink::RequestContextType::SCRIPT,
                   mojom::RequestContextFrameType::kNone, expected);
   }
 
   void ExpectUpgrade(const char* input,
-                     mojom::RequestContextType request_context,
+                     mojom::blink::RequestContextType request_context,
                      mojom::RequestContextFrameType frame_type,
                      const char* expected) {
     const KURL input_url(input);
@@ -312,7 +314,8 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
     const KURL input_url(input);
 
     ResourceRequest resource_request(input_url);
-    resource_request.SetRequestContext(mojom::RequestContextType::SCRIPT);
+    resource_request.SetRequestContext(
+        mojom::blink::RequestContextType::SCRIPT);
 
     ModifyRequestForCSP(resource_request, frame_type);
 
@@ -340,7 +343,7 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
     // autoupgrade images, setting the context to AUDIO to ensure the upgrade
     // flow runs, this can be switched back to IMAGE once autoupgrades launch
     // for them.
-    resource_request.SetRequestContext(mojom::RequestContextType::AUDIO);
+    resource_request.SetRequestContext(mojom::blink::RequestContextType::AUDIO);
 
     RecreateFetchContext(main_frame_url);
     document->domWindow()->GetSecurityContext().SetInsecureRequestPolicy(
@@ -350,20 +353,6 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
                         mojom::RequestContextFrameType::kNone);
 
     EXPECT_EQ(expected_value, resource_request.IsAutomaticUpgrade());
-  }
-
-  void ExpectSetRequiredCSPRequestHeader(
-      const char* input,
-      mojom::RequestContextFrameType frame_type,
-      const AtomicString& expected_required_csp) {
-    const KURL input_url(input);
-    ResourceRequest resource_request(input_url);
-    resource_request.SetRequestContext(mojom::RequestContextType::SCRIPT);
-
-    ModifyRequestForCSP(resource_request, frame_type);
-
-    EXPECT_EQ(expected_required_csp,
-              resource_request.HttpHeaderField(http_names::kSecRequiredCSP));
   }
 
   void SetFrameOwnerBasedOnFrameType(mojom::RequestContextFrameType frame_type,
@@ -413,33 +402,33 @@ TEST_F(FrameFetchContextModifyRequestTest, UpgradeInsecureResourceRequests) {
         .ClearInsecureNavigationsToUpgradeForTest();
 
     // We always upgrade for FrameTypeNone.
-    ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
+    ExpectUpgrade(test.original, mojom::blink::RequestContextType::SCRIPT,
                   mojom::RequestContextFrameType::kNone, test.upgraded);
 
     // We never upgrade for FrameTypeNested. This is done on the browser
     // process.
-    ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
+    ExpectUpgrade(test.original, mojom::blink::RequestContextType::SCRIPT,
                   mojom::RequestContextFrameType::kNested, test.original);
 
     // We do not upgrade for FrameTypeTopLevel or FrameTypeAuxiliary...
-    ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
+    ExpectUpgrade(test.original, mojom::blink::RequestContextType::SCRIPT,
                   mojom::RequestContextFrameType::kTopLevel, test.original);
-    ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
+    ExpectUpgrade(test.original, mojom::blink::RequestContextType::SCRIPT,
                   mojom::RequestContextFrameType::kAuxiliary, test.original);
 
     // unless the request context is RequestContextForm.
-    ExpectUpgrade(test.original, mojom::RequestContextType::FORM,
+    ExpectUpgrade(test.original, mojom::blink::RequestContextType::FORM,
                   mojom::RequestContextFrameType::kTopLevel, test.upgraded);
-    ExpectUpgrade(test.original, mojom::RequestContextType::FORM,
+    ExpectUpgrade(test.original, mojom::blink::RequestContextType::FORM,
                   mojom::RequestContextFrameType::kAuxiliary, test.upgraded);
 
     // Or unless the host of the resource is in the document's
     // InsecureNavigationsSet:
     document->domWindow()->GetSecurityContext().AddInsecureNavigationUpgrade(
         example_origin->Host().Impl()->GetHash());
-    ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
+    ExpectUpgrade(test.original, mojom::blink::RequestContextType::SCRIPT,
                   mojom::RequestContextFrameType::kTopLevel, test.upgraded);
-    ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
+    ExpectUpgrade(test.original, mojom::blink::RequestContextType::SCRIPT,
                   mojom::RequestContextFrameType::kAuxiliary, test.upgraded);
   }
 }
@@ -550,44 +539,6 @@ TEST_F(FrameFetchContextModifyRequestTest, SendUpgradeInsecureRequestHeader) {
   }
 }
 
-TEST_F(FrameFetchContextModifyRequestTest, SendRequiredCSPHeader) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(network::features::kOutOfBlinkCSPEE);
-
-  struct TestCase {
-    const char* to_request;
-    mojom::RequestContextFrameType frame_type;
-  } tests[] = {
-      {"https://example.test/page.html",
-       mojom::RequestContextFrameType::kAuxiliary},
-      {"https://example.test/page.html",
-       mojom::RequestContextFrameType::kNested},
-      {"https://example.test/page.html", mojom::RequestContextFrameType::kNone},
-      {"https://example.test/page.html",
-       mojom::RequestContextFrameType::kTopLevel}};
-
-  auto* iframe = MakeGarbageCollected<HTMLIFrameElement>(*document);
-  const AtomicString& required_csp = AtomicString("default-src 'none'");
-  const AtomicString& another_required_csp = AtomicString("default-src 'self'");
-
-  for (const auto& test : tests) {
-    SetFrameOwnerBasedOnFrameType(test.frame_type, iframe, required_csp);
-    ExpectSetRequiredCSPRequestHeader(
-        test.to_request, test.frame_type,
-        test.frame_type == mojom::RequestContextFrameType::kNested
-            ? required_csp
-            : g_null_atom);
-
-    SetFrameOwnerBasedOnFrameType(test.frame_type, iframe,
-                                  another_required_csp);
-    ExpectSetRequiredCSPRequestHeader(
-        test.to_request, test.frame_type,
-        test.frame_type == mojom::RequestContextFrameType::kNested
-            ? another_required_csp
-            : g_null_atom);
-  }
-}
-
 class FrameFetchContextHintsTest : public FrameFetchContextTest {
  public:
   FrameFetchContextHintsTest() = default;
@@ -648,10 +599,9 @@ TEST_F(FrameFetchContextHintsTest, MonitorDeviceMemorySecureTransport) {
   ExpectHeader("https://www.example.com/1.gif", "DPR", false, "");
   ExpectHeader("https://www.example.com/1.gif", "Width", false, "");
   ExpectHeader("https://www.example.com/1.gif", "Viewport-Width", false, "");
-  // Without a feature policy header, the client hints should be sent only to
-  // the first party origins.
-  // Device-memory is a legacy hint that's sent on Android regardless of Feature
-  // Policy delegation.
+  // Without a permissions policy header, the client hints should be sent only
+  // to the first party origins. Device-memory is a legacy hint that's sent on
+  // Android regardless of Permissions Policy delegation.
 #if defined(OS_ANDROID)
   ExpectHeader("https://www.someother-example.com/1.gif", "Device-Memory", true,
                "4");
@@ -772,15 +722,17 @@ TEST_F(FrameFetchContextHintsTest, MonitorLangHint) {
                "\"en-US\"");
   ExpectHeader("http://www.example.com/1.gif", "Sec-CH-Lang", false, "");
 
+  // TODO(crbug.com/924969): A refactoring exposed a bug in the languages
+  // override that effects the `Sec-CH-Lang` hint.
   document->domWindow()->navigator()->SetLanguagesForTesting("en,de,fr");
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-Lang", true,
-               "\"en\", \"de\", \"fr\"");
+               "\"en-US\"");
   ExpectHeader("http://www.example.com/1.gif", "Sec-CH-Lang", false, "");
 
   document->domWindow()->navigator()->SetLanguagesForTesting(
       "en-US,fr_FR,de-DE,es");
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-Lang", true,
-               "\"en-US\", \"fr-FR\", \"de-DE\", \"es\"");
+               "\"en-US\"");
   ExpectHeader("http://www.example.com/1.gif", "Sec-CH-Lang", false, "");
 }
 
@@ -925,9 +877,11 @@ TEST_F(FrameFetchContextHintsTest, MonitorAllHints) {
   ExpectHeader("https://www.example.com/1.gif", "Width", true, "400", 400);
   ExpectHeader("https://www.example.com/1.gif", "Viewport-Width", true, "500");
 
+  // TODO(crbug.com/924969): A refactoring exposed a bug in the languages
+  // override setup that effects the `Sec-CH-Lang` hint.
   document->domWindow()->navigator()->SetLanguagesForTesting("en,de,fr");
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-Lang", true,
-               "\"en\", \"de\", \"fr\"");
+               "\"en-US\"");
 
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA", true, "");
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Arch", true, "");
@@ -956,8 +910,9 @@ TEST_F(FrameFetchContextHintsTest, MonitorAllHints) {
 }
 
 // Verify that the client hints should be attached for third-party subresources
-// fetched over secure transport, when specifically allowed by feature policy.
-TEST_F(FrameFetchContextHintsTest, MonitorAllHintsFeaturePolicy) {
+// fetched over secure transport, when specifically allowed by permissions
+// policy.
+TEST_F(FrameFetchContextHintsTest, MonitorAllHintsPermissionsPolicy) {
   RecreateFetchContext(
       KURL("https://www.example.com/"),
       "ch-dpr *; ch-device-memory *; ch-downlink *; ch-ect *; ch-lang *;"
@@ -984,13 +939,15 @@ TEST_F(FrameFetchContextHintsTest, MonitorAllHintsFeaturePolicy) {
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
 
   // Verify that all client hints are sent to a third-party origin, with this
-  // feature policy header.
+  // permissions policy header.
   ExpectHeader("https://www.example.net/1.gif", "DPR", true, "1");
   ExpectHeader("https://www.example.net/1.gif", "Device-Memory", true, "4");
 
+  // TODO(crbug.com/924969): A refactoring exposed a bug in the languages
+  // override setup that effects the `Sec-CH-Lang` hint.
   document->domWindow()->navigator()->SetLanguagesForTesting("en,de,fr");
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-Lang", true,
-               "\"en\", \"de\", \"fr\"");
+               "\"en-US\"");
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-UA", true, "");
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-UA-Arch", true, "");
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-UA-Platform", true, "");
@@ -1021,7 +978,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorAllHintsFeaturePolicy) {
 
 // Verify that only the specifically allowed client hints are attached for
 // third-party subresources fetched over secure transport.
-TEST_F(FrameFetchContextHintsTest, MonitorSomeHintsFeaturePolicy) {
+TEST_F(FrameFetchContextHintsTest, MonitorSomeHintsPermissionsPolicy) {
   RecreateFetchContext(KURL("https://www.example.com/"),
                        "ch-device-memory 'self' https://www.example.net");
   document->GetSettings()->SetScriptEnabled(true);
@@ -1030,11 +987,11 @@ TEST_F(FrameFetchContextHintsTest, MonitorSomeHintsFeaturePolicy) {
   preferences.SetShouldSend(network::mojom::WebClientHintsType::kDpr);
   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(4096);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
-  // With a feature policy header, the client hints should be sent to the
+  // With a permissions policy header, the client hints should be sent to the
   // declared third party origins.
   ExpectHeader("https://www.example.net/1.gif", "Device-Memory", true, "4");
-  // Device-memory is a legacy hint that's sent on Android regardless of Feature
-  // Policy delegation.
+  // Device-memory is a legacy hint that's sent on Android regardless of
+  // Permissions Policy delegation.
 #if defined(OS_ANDROID)
   ExpectHeader("https://www.someother-example.com/1.gif", "Device-Memory", true,
                "4");
@@ -1048,8 +1005,8 @@ TEST_F(FrameFetchContextHintsTest, MonitorSomeHintsFeaturePolicy) {
   // Other hints not declared in the policy are still not attached.
   ExpectHeader("https://www.example.net/1.gif", "downlink", false, "");
   ExpectHeader("https://www.example.net/1.gif", "ect", false, "");
-  // DPR is a legacy hint that's sent on Android regardless of Feature Policy
-  // delegation.
+  // DPR is a legacy hint that's sent on Android regardless of Permissions
+  // Policy delegation.
 #if defined(OS_ANDROID)
   ExpectHeader("https://www.example.net/1.gif", "DPR", true, "1");
 #else
@@ -1067,9 +1024,10 @@ TEST_F(FrameFetchContextHintsTest, MonitorSomeHintsFeaturePolicy) {
 }
 
 // Verify that the client hints are not attached for third-party subresources
-// fetched over insecure transport, even when specifically allowed by feature
-// policy.
-TEST_F(FrameFetchContextHintsTest, MonitorHintsFeaturePolicyInsecureContext) {
+// fetched over insecure transport, even when specifically allowed by
+// permissions policy.
+TEST_F(FrameFetchContextHintsTest,
+       MonitorHintsPermissionsPolicyInsecureContext) {
   RecreateFetchContext(KURL("https://www.example.com/"), "ch-device-memory *");
   document->GetSettings()->SetScriptEnabled(true);
   ExpectHeader("https://www.example.com/1.gif", "Device-Memory", false, "");
@@ -1276,8 +1234,9 @@ TEST_F(FrameFetchContextMockedLocalFrameClientTest,
 
   ResourceRequest request(KURL("https://localhost/"));
   WebScopedVirtualTimePauser virtual_time_pauser;
-  GetFetchContext()->PrepareRequest(request, FetchInitiatorInfo(),
-                                    virtual_time_pauser, ResourceType::kRaw);
+  ResourceLoaderOptions options(nullptr /* world */);
+  GetFetchContext()->PrepareRequest(request, options, virtual_time_pauser,
+                                    ResourceType::kRaw);
 
   EXPECT_EQ("hi", request.HttpHeaderField(http_names::kUserAgent));
 }
@@ -1285,7 +1244,7 @@ TEST_F(FrameFetchContextMockedLocalFrameClientTest,
 TEST_F(FrameFetchContextTest, AddResourceTimingWhenDetached) {
   scoped_refptr<ResourceTimingInfo> info = ResourceTimingInfo::Create(
       "type", base::TimeTicks() + base::TimeDelta::FromSecondsD(0.3),
-      mojom::RequestContextType::UNSPECIFIED,
+      mojom::blink::RequestContextType::UNSPECIFIED,
       network::mojom::RequestDestination::kEmpty);
 
   dummy_page_holder = nullptr;
@@ -1383,8 +1342,7 @@ TEST_F(FrameFetchContextTest, SameSiteBackForwardCache) {
   base::FieldTrialParams params;
 
   {
-    RuntimeEnabledFeatures::SetBackForwardCacheExperimentHTTPHeaderEnabled(
-        false);
+    ScopedBackForwardCacheExperimentHTTPHeaderForTest back_forward_cache(false);
     params[features::kBackForwardCacheABExperimentGroup] = "foo";
     base::test::ScopedFeatureList scoped_feature_list;
     scoped_feature_list.InitAndEnableFeatureWithParameters(
@@ -1400,8 +1358,7 @@ TEST_F(FrameFetchContextTest, SameSiteBackForwardCache) {
   }
 
   {
-    RuntimeEnabledFeatures::SetBackForwardCacheExperimentHTTPHeaderEnabled(
-        true);
+    ScopedBackForwardCacheExperimentHTTPHeaderForTest back_forward_cache(true);
     ResourceRequest resource_request("http://www.example.com");
     GetFetchContext()->AddAdditionalRequestHeaders(resource_request);
 
@@ -1438,6 +1395,67 @@ TEST_F(FrameFetchContextTest, SameSiteBackForwardCache) {
     // BackForwardCacheSameSite experiment group is "enabled".
     EXPECT_EQ("enabled",
               resource_request.HttpHeaderField("Sec-bfcache-experiment"));
+  }
+}
+
+// Tests that CanRequestCanRequestBasedOnSubresourceFilterOnly will block ads
+// or not correctly, depending on the FilterPolicy.
+TEST_F(FrameFetchContextSubresourceFilterTest,
+       CanRequestBasedOnSubresourceFilterOnly) {
+  const struct {
+    WebDocumentSubresourceFilter::LoadPolicy policy;
+    base::Optional<ResourceRequestBlockedReason> expected_block_reason;
+  } kTestCases[] = {
+      {WebDocumentSubresourceFilter::kDisallow,
+       ResourceRequestBlockedReason::kSubresourceFilter},
+      {WebDocumentSubresourceFilter::kWouldDisallow, base::nullopt},
+      {WebDocumentSubresourceFilter::kAllow, base::nullopt}};
+
+  for (const auto& test : kTestCases) {
+    SetFilterPolicy(test.policy);
+
+    KURL url("http://ads.com/some_script.js");
+    ResourceRequest resource_request(url);
+    resource_request.SetRequestContext(
+        mojom::blink::RequestContextType::SCRIPT);
+    resource_request.SetRequestorOrigin(GetTopFrameOrigin());
+
+    ResourceLoaderOptions options(nullptr /* world */);
+
+    EXPECT_EQ(test.expected_block_reason,
+              GetFetchContext()->CanRequestBasedOnSubresourceFilterOnly(
+                  ResourceType::kScript, resource_request, url, options,
+                  ReportingDisposition::kReport, base::nullopt));
+  }
+}
+
+// Tests that CalculateIfAdSubresource with an alias URL will tag ads
+// correctly according to the SubresourceFilter mode.
+TEST_F(FrameFetchContextSubresourceFilterTest,
+       CalculateIfAdSubresourceWithAliasURL) {
+  const struct {
+    WebDocumentSubresourceFilter::LoadPolicy policy;
+    bool expected_to_be_tagged_ad;
+  } kTestCases[] = {{WebDocumentSubresourceFilter::kDisallow, true},
+                    {WebDocumentSubresourceFilter::kWouldDisallow, true},
+                    {WebDocumentSubresourceFilter::kAllow, false}};
+
+  for (const auto& test : kTestCases) {
+    SetFilterPolicy(test.policy);
+
+    KURL url("http://www.example.com");
+    KURL alias_url("http://ads.com/some_script.js");
+    ResourceRequest resource_request(url);
+    resource_request.SetRequestContext(
+        mojom::blink::RequestContextType::SCRIPT);
+    resource_request.SetRequestorOrigin(GetTopFrameOrigin());
+
+    ResourceLoaderOptions options(nullptr /* world */);
+
+    EXPECT_EQ(test.expected_to_be_tagged_ad,
+              GetFetchContext()->CalculateIfAdSubresource(
+                  resource_request, alias_url, ResourceType::kScript,
+                  options.initiator_info));
   }
 }
 

@@ -50,11 +50,10 @@ static inline float DimensionForLengthMode(SVGLengthMode mode,
   return 0;
 }
 
-static float ConvertValueFromPercentageToUserUnits(
-    const SVGLength& value,
-    const FloatSize& viewport_size) {
-  return CSSPrimitiveValue::ClampToCSSLengthRange(value.ScaleByPercentage(
-      DimensionForLengthMode(value.UnitMode(), viewport_size)));
+static float ConvertValueFromPercentageToUserUnits(const SVGLength& value,
+                                                   float viewport_dimension) {
+  return CSSPrimitiveValue::ClampToCSSLengthRange(
+      value.ScaleByPercentage(viewport_dimension));
 }
 
 static const ComputedStyle* ComputedStyleForLengthResolving(
@@ -168,12 +167,13 @@ FloatRect SVGLengthContext::ResolveRectangle(const SVGElement* context,
                                              const SVGLength& height) {
   DCHECK_NE(SVGUnitTypes::kSvgUnitTypeUnknown, type);
   if (type != SVGUnitTypes::kSvgUnitTypeUserspaceonuse) {
-    const FloatSize& viewport_size = viewport.Size();
     return FloatRect(
-        ConvertValueFromPercentageToUserUnits(x, viewport_size) + viewport.X(),
-        ConvertValueFromPercentageToUserUnits(y, viewport_size) + viewport.Y(),
-        ConvertValueFromPercentageToUserUnits(width, viewport_size),
-        ConvertValueFromPercentageToUserUnits(height, viewport_size));
+        ConvertValueFromPercentageToUserUnits(x, viewport.Width()) +
+            viewport.X(),
+        ConvertValueFromPercentageToUserUnits(y, viewport.Height()) +
+            viewport.Y(),
+        ConvertValueFromPercentageToUserUnits(width, viewport.Width()),
+        ConvertValueFromPercentageToUserUnits(height, viewport.Height()));
   }
 
   SVGLengthContext length_context(context);
@@ -266,9 +266,8 @@ float SVGLengthContext::ValueForLength(const Length& length,
                                        float zoom,
                                        float dimension) {
   DCHECK_NE(zoom, 0);
-  // isIntrinsic can occur for 'width' and 'height', but has no
-  // real meaning for svg.
-  if (length.IsIntrinsic())
+  // Only "specified" lengths have meaning for SVG.
+  if (!length.IsSpecified())
     return 0;
   return FloatValueForLength(length, dimension * zoom) / zoom;
 }

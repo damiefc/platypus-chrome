@@ -11,7 +11,6 @@
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/values.h"
 #include "components/viz/common/viz_common_export.h"
 
 namespace base {
@@ -27,7 +26,7 @@ class VIZ_COMMON_EXPORT DelayBasedTimeSourceClient {
   virtual void OnTimerTick() = 0;
 
  protected:
-  virtual ~DelayBasedTimeSourceClient() {}
+  virtual ~DelayBasedTimeSourceClient() = default;
 };
 
 // This timer implements a time source that achieves the specified interval

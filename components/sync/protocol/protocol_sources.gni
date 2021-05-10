@@ -32,7 +32,6 @@ sync_protocol_bases = [
   "managed_user_setting_specifics",
   "managed_user_shared_setting_specifics",
   "managed_user_specifics",
-  "managed_user_whitelist_specifics",
   "model_type_state",
   "model_type_store_schema_descriptor",
   "nigori_local_data",
@@ -62,6 +61,7 @@ sync_protocol_bases = [
   "user_consent_specifics",
   "user_consent_types",
   "user_event_specifics",
+  "vault",
   "web_app_specifics",
   "wifi_configuration_specifics",
 ]

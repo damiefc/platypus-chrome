@@ -7,15 +7,14 @@
 
 #include <stddef.h>
 
-#include <memory>
-
 #include "components/viz/common/quads/draw_quad.h"
+#include "components/viz/common/resources/resource_id.h"
 #include "components/viz/common/viz_common_export.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/hdr_metadata.h"
 #include "ui/gfx/video_types.h"
-#include "ui/gl/hdr_metadata.h"
 
 namespace viz {
 
@@ -44,10 +43,10 @@ class VIZ_COMMON_EXPORT YUVVideoDrawQuad : public DrawQuad {
               const gfx::RectF& uv_tex_coord_rect,
               const gfx::Size& ya_tex_size,
               const gfx::Size& uv_tex_size,
-              unsigned y_plane_resource_id,
-              unsigned u_plane_resource_id,
-              unsigned v_plane_resource_id,
-              unsigned a_plane_resource_id,
+              ResourceId y_plane_resource_id,
+              ResourceId u_plane_resource_id,
+              ResourceId v_plane_resource_id,
+              ResourceId a_plane_resource_id,
               const gfx::ColorSpace& video_color_space,
               float offset,
               float multiplier,
@@ -64,16 +63,16 @@ class VIZ_COMMON_EXPORT YUVVideoDrawQuad : public DrawQuad {
               const gfx::RectF& uv_tex_coord_rect,
               const gfx::Size& ya_tex_size,
               const gfx::Size& uv_tex_size,
-              unsigned y_plane_resource_id,
-              unsigned u_plane_resource_id,
-              unsigned v_plane_resource_id,
-              unsigned a_plane_resource_id,
+              ResourceId y_plane_resource_id,
+              ResourceId u_plane_resource_id,
+              ResourceId v_plane_resource_id,
+              ResourceId a_plane_resource_id,
               const gfx::ColorSpace& video_color_space,
               float offset,
               float multiplier,
               uint32_t bits_per_channel,
               gfx::ProtectedVideoType protected_video_type,
-              gl::HDRMetadata hdr_metadata);
+              gfx::HDRMetadata hdr_metadata);
 
   gfx::RectF ya_tex_coord_rect;
   gfx::RectF uv_tex_coord_rect;
@@ -86,7 +85,7 @@ class VIZ_COMMON_EXPORT YUVVideoDrawQuad : public DrawQuad {
   gfx::ColorSpace video_color_space;
   gfx::ProtectedVideoType protected_video_type =
       gfx::ProtectedVideoType::kClear;
-  gl::HDRMetadata hdr_metadata;
+  gfx::HDRMetadata hdr_metadata;
 
   static const YUVVideoDrawQuad* MaterialCast(const DrawQuad*);
 

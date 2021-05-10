@@ -9,7 +9,6 @@ import android.transition.ChangeBounds;
 import android.transition.Fade;
 import android.transition.TransitionManager;
 import android.transition.TransitionSet;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -17,6 +16,7 @@ import android.widget.ScrollView;
 
 import androidx.annotation.Nullable;
 
+import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.autofill_assistant.R;
@@ -30,8 +30,11 @@ import org.chromium.chrome.browser.autofill_assistant.generic_ui.AssistantGeneri
 import org.chromium.chrome.browser.autofill_assistant.header.AssistantHeaderCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.header.AssistantHeaderModel;
 import org.chromium.chrome.browser.autofill_assistant.infobox.AssistantInfoBoxCoordinator;
+import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantCollectUserDataCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantCollectUserDataModel;
+import org.chromium.chrome.browser.image_fetcher.ImageFetcherConfig;
+import org.chromium.chrome.browser.image_fetcher.ImageFetcherFactory;
 import org.chromium.chrome.browser.ui.TabObscuringHandler;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
@@ -54,6 +57,7 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
     private static final int CHANGE_BOUNDS_TRANSITION_TIME_MS = 250;
 
     private final AssistantModel mModel;
+    private final AssistantOverlayCoordinator mOverlayCoordinator;
     private final BottomSheetController mBottomSheetController;
     private final TabObscuringHandler mTabObscuringHandler;
     private final AssistantBottomSheetContent mContent;
@@ -74,6 +78,7 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
     private final ObservableSupplierImpl<Integer> mInsetSupplier = new ObservableSupplierImpl<>();
     private AssistantInfoBoxCoordinator mInfoBoxCoordinator;
     private AssistantCollectUserDataCoordinator mPaymentRequestCoordinator;
+    private final AssistantGenericUiCoordinator mPersistentGenericUiCoordinator;
     private final AssistantGenericUiCoordinator mGenericUiCoordinator;
 
     // The transition triggered whenever the layout of the BottomSheet content changes.
@@ -96,19 +101,14 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
     /** A token held while the assistant is obscuring all tabs. */
     private int mObscuringToken;
 
-    /** Height of the sheet's shadow used to compute the resize offset. */
-    private int mShadowHeight;
-
     AssistantBottomBarCoordinator(Activity activity, AssistantModel model,
-            BottomSheetController controller,
+            AssistantOverlayCoordinator overlayCoordinator, BottomSheetController controller,
             ApplicationViewportInsetSupplier applicationViewportInsetSupplier,
             TabObscuringHandler tabObscuringHandler) {
         mModel = model;
+        mOverlayCoordinator = overlayCoordinator;
         mBottomSheetController = controller;
         mTabObscuringHandler = tabObscuringHandler;
-
-        mShadowHeight = activity.getResources().getDimensionPixelSize(
-                R.dimen.bottom_sheet_toolbar_shadow_height);
 
         mWindowApplicationInsetSupplier = applicationViewportInsetSupplier;
         mWindowApplicationInsetSupplier.addSupplier(mInsetSupplier);
@@ -116,13 +116,15 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
         BottomSheetContent currentSheetContent = controller.getCurrentSheetContent();
         if (currentSheetContent instanceof AssistantBottomSheetContent) {
             mContent = (AssistantBottomSheetContent) currentSheetContent;
+            mContent.setDelegate(model::getBottomBarDelegate);
         } else {
             mContent = new AssistantBottomSheetContent(activity, model::getBottomBarDelegate);
         }
 
         // Replace or set the content to the actual Autofill Assistant views.
-        mRootViewContainer = (AssistantRootViewContainer) LayoutInflater.from(activity).inflate(
-                R.layout.autofill_assistant_bottom_sheet_content, /* root= */ null);
+        mRootViewContainer =
+                (AssistantRootViewContainer) LayoutUtils.createInflater(activity).inflate(
+                        R.layout.autofill_assistant_bottom_sheet_content, /* root= */ null);
         mScrollableContent = mRootViewContainer.findViewById(R.id.scrollable_content);
         ViewGroup scrollableContentContainer =
                 mScrollableContent.findViewById(R.id.scrollable_content_container);
@@ -139,7 +141,9 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
         // Instantiate child components.
         mHeaderCoordinator = new AssistantHeaderCoordinator(activity, model.getHeaderModel());
         mInfoBoxCoordinator = new AssistantInfoBoxCoordinator(activity, model.getInfoBoxModel());
-        mDetailsCoordinator = new AssistantDetailsCoordinator(activity, model.getDetailsModel());
+        mDetailsCoordinator = new AssistantDetailsCoordinator(activity, model.getDetailsModel(),
+                ImageFetcherFactory.createImageFetcher(ImageFetcherConfig.DISK_CACHE_ONLY,
+                        AutofillAssistantUiController.getProfile()));
         mPaymentRequestCoordinator =
                 new AssistantCollectUserDataCoordinator(activity, model.getCollectUserDataModel());
         mFormCoordinator = new AssistantFormCoordinator(activity, model.getFormModel());
@@ -148,6 +152,8 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
         mPeekHeightCoordinator = new AssistantPeekHeightCoordinator(activity, this, controller,
                 mContent.getToolbarView(), mHeaderCoordinator.getView(),
                 mActionsCoordinator.getView(), AssistantPeekHeightCoordinator.PeekMode.HANDLE);
+        mPersistentGenericUiCoordinator =
+                new AssistantGenericUiCoordinator(activity, model.getPersistentGenericUiModel());
         mGenericUiCoordinator =
                 new AssistantGenericUiCoordinator(activity, model.getGenericUiModel());
 
@@ -171,6 +177,7 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
         mRootViewContainer.addView(mHeaderCoordinator.getView(), 0);
         scrollableContentContainer.addView(mInfoBoxCoordinator.getView());
         scrollableContentContainer.addView(mDetailsCoordinator.getView());
+        scrollableContentContainer.addView(mPersistentGenericUiCoordinator.getView());
         scrollableContentContainer.addView(mPaymentRequestCoordinator.getView());
         scrollableContentContainer.addView(mFormCoordinator.getView());
         scrollableContentContainer.addView(mGenericUiCoordinator.getView());
@@ -180,6 +187,7 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
         int childSpacing = activity.getResources().getDimensionPixelSize(
                 R.dimen.autofill_assistant_bottombar_vertical_spacing);
         setChildMarginTop(mDetailsCoordinator.getView(), childSpacing);
+        setChildMarginTop(mPersistentGenericUiCoordinator.getView(), childSpacing);
         setChildMarginTop(mPaymentRequestCoordinator.getView(), childSpacing);
         setChildMarginTop(mFormCoordinator.getView(), childSpacing);
         setChildMarginTop(mGenericUiCoordinator.getView(), childSpacing);
@@ -204,6 +212,14 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
                 // BottomSheet assertion.
                 if (newState != BottomSheetController.SheetState.SCROLLING) {
                     maybeShowHeaderChips();
+                }
+
+                if (newState == SheetState.HIDDEN) {
+                    mOverlayCoordinator.suppress();
+                }
+                if (newState == SheetState.PEEK || newState == SheetState.HALF
+                        || newState == SheetState.FULL) {
+                    mOverlayCoordinator.restore();
                 }
             }
 
@@ -355,12 +371,14 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
 
     /** Request showing the Assistant bottom bar view and expand the sheet. */
     public void showContent(boolean shouldExpand, boolean animate) {
+        freezeBottomSheetAnimation();
         BottomSheetUtils.showContentAndMaybeExpand(
                 mBottomSheetController, mContent, shouldExpand, animate);
     }
 
     /** Hide the Assistant bottom bar view. */
     public void hide() {
+        freezeBottomSheetAnimation();
         mBottomSheetController.hideContent(mContent, /* animate= */ true);
     }
 
@@ -450,11 +468,7 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
             return;
         }
 
-        // In order to align the bottom of a website with the top of the bottom sheet, we need to
-        // remove the shadow height from the sheet's current offset. Note that mShadowHeight is
-        // different from the sheet controller's getTopShadowHeight().
-        int offset = mBottomSheetController.getCurrentOffset() - mShadowHeight;
-        setVisualViewportResizing(offset);
+        setVisualViewportResizing(mBottomSheetController.getCurrentOffset());
     }
 
     private void resetVisualViewportHeight() {
@@ -472,5 +486,17 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
         }
 
         mInsetSupplier.set(resizing);
+    }
+
+    /**
+     * Freeze the bottom sheet animation before expanding/collapsing it, in order to prevent crash
+     * (see b/179131022).
+     */
+    private void freezeBottomSheetAnimation() {
+        Callback<Integer> offsetController = mContent.getOffsetController();
+        if (offsetController == null) {
+            return;
+        }
+        offsetController.onResult(mBottomSheetController.getCurrentOffset());
     }
 }

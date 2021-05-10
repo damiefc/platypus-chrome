@@ -31,9 +31,9 @@ class ChromeLocationBarModelDelegate : public LocationBarModelDelegate {
   bool ShouldPreventElision() override;
 
   // LocationBarModelDelegate:
-  base::string16 FormattedStringWithEquivalentMeaning(
+  std::u16string FormattedStringWithEquivalentMeaning(
       const GURL& url,
-      const base::string16& formatted_url) const override;
+      const std::u16string& formatted_url) const override;
   bool GetURL(GURL* url) const override;
   bool ShouldDisplayURL() const override;
   security_state::SecurityLevel GetSecurityLevel() const override;
@@ -84,12 +84,6 @@ class ChromeLocationBarModelDelegate : public LocationBarModelDelegate {
 
   // Helper method that returns the state of URL elision in the omnibox.
   ElisionConfig GetElisionConfig() const;
-
-  // Records ElisionConfig in UMA histogram once for this object.
-  void RecordElisionConfig();
-
-  // Whether elision metrics have already been recorded for this object.
-  bool elision_config_recorded_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeLocationBarModelDelegate);
 };

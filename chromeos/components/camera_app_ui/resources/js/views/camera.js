@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {browserProxy} from '../browser_proxy/browser_proxy.js';
+import * as animate from '../animation.js';
 import {
   assert,
   assertInstanceof,
+  assertString,
 } from '../chrome_util.js';
 import {
   PhotoConstraintsPreferrer,  // eslint-disable-line no-unused-vars
@@ -14,7 +15,10 @@ import {
 // eslint-disable-next-line no-unused-vars
 import {DeviceInfoUpdater} from '../device/device_info_updater.js';
 import * as dom from '../dom.js';
+import * as error from '../error.js';
 import * as metrics from '../metrics.js';
+import * as loadTimeData from '../models/load_time_data.js';
+import * as localStorage from '../models/local_storage.js';
 // eslint-disable-next-line no-unused-vars
 import {ResultSaver} from '../models/result_saver.js';
 import {ChromeHelper} from '../mojo/chrome_helper.js';
@@ -25,24 +29,31 @@ import {PerfLogger} from '../perf.js';
 import * as sound from '../sound.js';
 import * as state from '../state.js';
 import * as toast from '../toast.js';
+import {ErrorLevel, ErrorType} from '../type.js';
 import {
+  CanceledError,
   Facing,
   Mode,
+  Resolution,  // eslint-disable-line no-unused-vars
   ViewName,
 } from '../type.js';
 import * as util from '../util.js';
+import {windowController} from '../window_controller.js';
 
 import {Layout} from './camera/layout.js';
-import {   // eslint-disable-line no-unused-vars
+import {
   Modes,
   PhotoHandler,  // eslint-disable-line no-unused-vars
+  setAvc1Parameters,
   Video,
   VideoHandler,  // eslint-disable-line no-unused-vars
 } from './camera/mode/index.js';
 import {Options} from './camera/options.js';
 import {Preview} from './camera/preview.js';
 import * as timertick from './camera/timertick.js';
+import {VideoEncoderOptions} from './camera/video_encoder_options.js';
 import {View} from './view.js';
+import {WarningType} from './warning.js';
 
 /**
  * Thrown when app window suspended during stream reconfiguration.
@@ -116,6 +127,21 @@ export class Camera extends View {
     this.options_ = new Options(infoUpdater, this.start.bind(this));
 
     /**
+     * @type {!VideoEncoderOptions}
+     * @private
+     */
+    this.videoEncoderOptions_ =
+        new VideoEncoderOptions((parameters) => setAvc1Parameters(parameters));
+
+    /**
+     * Clock-wise rotation that needs to be applied to the recorded video in
+     * order for the video to be replayed in upright orientation.
+     * @type {number}
+     * @private
+     */
+    this.outputVideoRotation_ = 0;
+
+    /**
      * @type {!ResultSaver}
      * @protected
      */
@@ -128,6 +154,14 @@ export class Camera extends View {
      * @private
      */
     this.activeDeviceId_ = null;
+
+    /**
+     * The last time of all screen state turning from OFF to ON during the app
+     * execution. Sets to -Infinity for no such time since app is opened.
+     * @type {number}
+     * @private
+     */
+    this.lastScreenOnTime_ = -Infinity;
 
     /**
      * Modes for the camera.
@@ -181,8 +215,26 @@ export class Camera extends View {
 
     /**
      * @type {!HTMLElement}
+     * @private
      */
     this.banner_ = dom.get('#banner', HTMLElement);
+
+    /**
+     * @type {!HTMLElement}
+     * @private
+     */
+    this.ptzToast_ = dom.get('#ptz-toast', HTMLElement);
+
+    /**
+     * @type {!HTMLButtonElement}
+     */
+    this.openPTZPanel_ = dom.get('#open-ptz-panel', HTMLButtonElement);
+
+    /**
+     * @const {!Set<function(): *>}
+     * @private
+     */
+    this.configureCompleteListener_ = new Set();
 
     /**
      * Gets type of ways to trigger shutter from click event.
@@ -198,16 +250,16 @@ export class Camera extends View {
           metrics.ShutterType.MOUSE;
     };
 
-    document.querySelector('#start-takephoto')
+    dom.get('#start-takephoto', HTMLButtonElement)
         .addEventListener('click', (e) => {
           const mouseEvent = assertInstanceof(e, MouseEvent);
           this.beginTake_(getShutterType(mouseEvent));
         });
 
-    document.querySelector('#stop-takephoto')
+    dom.get('#stop-takephoto', HTMLButtonElement)
         .addEventListener('click', () => this.endTake_());
 
-    const videoShutter = document.querySelector('#recordvideo');
+    const videoShutter = dom.get('#recordvideo', HTMLButtonElement);
     videoShutter.addEventListener('click', (e) => {
       if (!state.get(state.State.TAKING)) {
         this.beginTake_(getShutterType(assertInstanceof(e, MouseEvent)));
@@ -216,12 +268,13 @@ export class Camera extends View {
       }
     });
 
-    document.querySelector('#video-snapshot').addEventListener('click', () => {
-      const videoMode = assertInstanceof(this.modes_.current, Video);
-      videoMode.takeSnapshot();
-    });
+    dom.get('#video-snapshot', HTMLButtonElement)
+        .addEventListener('click', () => {
+          const videoMode = assertInstanceof(this.modes_.current, Video);
+          videoMode.takeSnapshot();
+        });
 
-    const pauseShutter = document.querySelector('#pause-recordvideo');
+    const pauseShutter = dom.get('#pause-recordvideo', HTMLButtonElement);
     pauseShutter.addEventListener('click', () => {
       const videoMode = assertInstanceof(this.modes_.current, Video);
       videoMode.togglePaused();
@@ -244,19 +297,23 @@ export class Camera extends View {
 
     dom.get('#banner-close', HTMLButtonElement)
         .addEventListener('click', () => {
-          util.animateCancel(this.banner_);
+          animate.cancel(this.banner_);
         });
 
+    this.initOpenPTZPanel_();
+
     // Monitor the states to stop camera when locked/minimized.
-    browserProxy.addOnLockListener((isLocked) => {
-      this.locked_ = isLocked;
+    const idleDetector = new window.IdleDetector();
+    idleDetector.addEventListener('change', () => {
+      this.locked_ = idleDetector.screenState === 'locked';
       if (this.locked_) {
         this.start();
       }
     });
-
-    browserProxy.addOnMinimizedListener(() => {
-      this.start();
+    idleDetector.start().catch((e) => {
+      error.reportError(
+          ErrorType.IDLE_DETECTOR_FAILURE, ErrorLevel.ERROR,
+          assertInstanceof(e, Error));
     });
 
     document.addEventListener('visibilitychange', () => {
@@ -292,14 +349,80 @@ export class Camera extends View {
         await helper.initExternalScreenMonitor(updateExternalScreen);
     updateExternalScreen(hasExternalScreen);
 
-    const checkScreenOff = () => {
+    const handleScreenStateChange = () => {
       if (this.screenOff_) {
         this.start();
+      } else {
+        this.lastScreenOnTime_ = performance.now();
       }
     };
 
-    state.addObserver(state.State.SCREEN_OFF_AUTO, checkScreenOff);
-    state.addObserver(state.State.HAS_EXTERNAL_SCREEN, checkScreenOff);
+    state.addObserver(state.State.SCREEN_OFF_AUTO, handleScreenStateChange);
+    state.addObserver(state.State.HAS_EXTERNAL_SCREEN, handleScreenStateChange);
+
+    this.initVideoEncoderOptions_();
+  }
+
+  /**
+   * @private
+   */
+  initOpenPTZPanel_() {
+    this.openPTZPanel_.addEventListener('click', () => {
+      nav.open(ViewName.PTZ_PANEL, this.preview_.stream);
+      highlight(false);
+    });
+
+    // Highlight effect for PTZ button.
+    const highlight = (enabled) => {
+      this.ptzToast_.classList.toggle('hidden', !enabled);
+      this.openPTZPanel_.classList.toggle('rippling', enabled);
+      if (enabled) {
+        this.ptzToast_.focus();
+        setTimeout(() => highlight(false), 10000);
+      }
+    };
+
+    this.addConfigureCompleteListener_(async () => {
+      if (!this.preview_.isSupportPTZ()) {
+        highlight(false);
+        return;
+      }
+
+      const ptzToastKey = 'isPTZToastShown';
+      if (localStorage.getBool(ptzToastKey)) {
+        return;
+      }
+      localStorage.set(ptzToastKey, true);
+
+      const {bottom, right} =
+          dom.get('#open-ptz-panel', HTMLButtonElement).getBoundingClientRect();
+      this.ptzToast_.style.bottom = `${window.innerHeight - bottom}px`;
+      this.ptzToast_.style.left = `${right + 20}px`;
+      highlight(true);
+    });
+  }
+
+  /**
+   * @private
+   */
+  initVideoEncoderOptions_() {
+    const options = this.videoEncoderOptions_;
+    this.addConfigureCompleteListener_(() => {
+      if (state.get(Mode.VIDEO)) {
+        const {width, height, frameRate} =
+            this.preview_.stream.getVideoTracks()[0].getSettings();
+        options.updateValues(new Resolution(width, height), frameRate);
+      }
+    });
+    options.initialize();
+  }
+
+  /**
+   * @param {function(): *} listener
+   * @private
+   */
+  addConfigureCompleteListener_(listener) {
+    this.configureCompleteListener_.add(listener);
   }
 
   /**
@@ -334,7 +457,7 @@ export class Camera extends View {
    * @return {boolean}
    */
   isSuspended() {
-    return this.locked_ || browserProxy.isMinimized() ||
+    return this.locked_ || windowController.isMinimized() ||
         state.get(state.State.SUSPEND) || this.screenOff_ ||
         this.isTabletBackground_();
   }
@@ -349,15 +472,13 @@ export class Camera extends View {
           .forEach((btn) => btn.offsetParent && btn.focus());
     };
     (async () => {
-      const values =
-          await browserProxy.localStorageGet({isFolderChangeMsgShown: false});
+      const shown = localStorage.getBool('isFolderChangeMsgShown');
       await this.configuring_;
-      if (!values['isFolderChangeMsgShown']) {
-        browserProxy.localStorageSet({isFolderChangeMsgShown: true});
-        util.animateOnce(this.banner_, focusOnShutterButton);
-      } else {
-        focusOnShutterButton();
+      if (!shown) {
+        localStorage.set('isFolderChangeMsgShown', true);
+        await animate.play(this.banner_);
       }
+      focusOnShutterButton();
     })();
   }
 
@@ -370,7 +491,8 @@ export class Camera extends View {
    * @protected
    */
   beginTake_(shutterType) {
-    if (!state.get(state.State.STREAMING) || state.get(state.State.TAKING)) {
+    if (state.get(state.State.CAMERA_CONFIGURING) ||
+        state.get(state.State.TAKING)) {
       return null;
     }
 
@@ -380,14 +502,30 @@ export class Camera extends View {
     this.take_ = (async () => {
       let hasError = false;
       try {
+        // Record and keep the rotation only at the instance the user starts the
+        // capture. Users may change the device orientation while taking video.
+        const cameraFrameRotation = await (async () => {
+          const deviceOperator = await DeviceOperator.getInstance();
+          if (deviceOperator === null) {
+            return 0;
+          }
+          assert(this.activeDeviceId_ !== null);
+          return await deviceOperator.getCameraFrameRotation(
+              this.activeDeviceId_);
+        })();
+        // Translate the camera frame rotation back to the UI rotation, which is
+        // what we need to rotate the captured video with.
+        this.outputVideoRotation_ = (360 - cameraFrameRotation) % 360;
         await timertick.start();
         await this.modes_.current.startCapture();
       } catch (e) {
         hasError = true;
-        if (e && e.message === 'cancel') {
+        if (e instanceof CanceledError) {
           return;
         }
-        console.error(e);
+        error.reportError(
+            ErrorType.START_CAPTURE_FAILURE, ErrorLevel.ERROR,
+            assertInstanceof(e, Error));
       } finally {
         this.take_ = null;
         state.set(
@@ -407,6 +545,14 @@ export class Camera extends View {
     timertick.cancel();
     this.modes_.current.stopCapture();
     return Promise.resolve(this.take_);
+  }
+
+  /**
+   * @return {number}
+   */
+  getPreviewAspectRatio() {
+    const {videoWidth, videoHeight} = this.preview_.video;
+    return videoWidth / videoHeight;
   }
 
   /**
@@ -431,15 +577,15 @@ export class Camera extends View {
    * @override
    */
   createVideoSaver() {
-    return this.resultSaver_.startSaveVideo();
+    return this.resultSaver_.startSaveVideo(this.outputVideoRotation_);
   }
 
   /**
    * @override
    */
   playShutterEffect() {
-    sound.play('#sound-shutter');
-    util.animateOnce(this.preview_.video);
+    sound.play(dom.get('#sound-shutter', HTMLAudioElement));
+    animate.play(this.preview_.video);
   }
 
   /**
@@ -516,7 +662,7 @@ export class Camera extends View {
           await this.endTake_();
         }
       } finally {
-        this.preview_.stop();
+        await this.stopStreams_();
       }
       return this.start_();
     })();
@@ -525,51 +671,66 @@ export class Camera extends View {
 
   /**
    * Try start stream reconfiguration with specified mode and device id.
-   * @param {?string} deviceId
+   * @param {?string} deviceId Null if the default camera should be started.
    * @param {!Mode} mode
    * @return {!Promise<boolean>} If found suitable stream and reconfigure
    *     successfully.
    */
   async startWithMode_(deviceId, mode) {
     const deviceOperator = await DeviceOperator.getInstance();
-    let resolCandidates = null;
-    if (deviceOperator !== null) {
-      if (deviceId !== null) {
-        resolCandidates = this.modes_.getResolutionCandidates(mode, deviceId);
-      } else {
-        console.error(
-            'Null device id present on HALv3 device. Fallback to v1.');
-      }
-    }
-    if (resolCandidates === null) {
-      resolCandidates = this.modes_.getResolutionCandidatesV1(mode, deviceId);
+    let resolCandidates;
+    if (deviceOperator) {
+      resolCandidates =
+          this.modes_.getResolutionCandidates(mode, assertString(deviceId));
+    } else {
+      resolCandidates = this.modes_.getFakeResolutionCandidates(mode, deviceId);
     }
     for (const {resolution: captureR, previewCandidates} of resolCandidates) {
       for (const constraints of previewCandidates) {
         if (this.isSuspended()) {
           throw new CameraSuspendedError();
         }
+        const factory = this.modes_.getModeFactory(mode);
         try {
-          if (deviceOperator !== null) {
-            assert(deviceId !== null);
-            const optConfigs =
-                mode === Mode.VIDEO ? {} : {stillCaptureResolution: captureR};
-            await deviceOperator.setStreamConfig(
-                deviceId, constraints, optConfigs);
-            await deviceOperator.setCaptureIntent(
-                deviceId, this.modes_.getCaptureIntent(mode));
+          factory.prepareDevice(constraints, captureR);
+
+          // Sets 2500 ms delay between screen resumed and open camera preview.
+          // TODO(b/173679752): Removes this workaround after fix delay on
+          // kernel side.
+          if (loadTimeData.getBoard() === 'zork') {
+            const screenOnTime = performance.now() - this.lastScreenOnTime_;
+            const delay = 2500 - screenOnTime;
+            if (delay > 0) {
+              await util.sleep(delay);
+            }
           }
-          const stream = await navigator.mediaDevices.getUserMedia(constraints);
-          await this.preview_.start(stream);
+          const stream = await this.preview_.open(constraints);
+
           this.facingMode_ = await this.options_.updateValues(stream);
+          factory.setPreviewStream(stream);
+          factory.setFacing(this.facingMode_);
           await this.modes_.updateModeSelectionUI(deviceId);
           await this.modes_.updateMode(
-              mode, stream, this.facingMode_, deviceId, captureR);
-          nav.close(ViewName.WARNING, 'no-camera');
+              mode, factory, stream, this.facingMode_, deviceId, captureR);
+          for (const l of this.configureCompleteListener_) {
+            l();
+          }
+          nav.close(ViewName.WARNING, WarningType.NO_CAMERA);
           return true;
         } catch (e) {
-          this.preview_.stop();
-          console.error(e);
+          await factory.clear();
+          await this.stopStreams_();
+
+          let errorToReport = e;
+          // Since OverconstrainedError is not an Error instance.
+          if (e instanceof OverconstrainedError) {
+            errorToReport =
+                new Error(`${e.message} (constraint = ${e.constraint})`);
+            errorToReport.name = 'OverconstrainedError';
+          }
+          error.reportError(
+              ErrorType.START_CAMERA_FAILURE, ErrorLevel.ERROR,
+              assertInstanceof(errorToReport, Error));
         }
       }
     }
@@ -628,11 +789,13 @@ export class Camera extends View {
       state.set(state.State.CAMERA_CONFIGURING, false);
 
       return true;
-    } catch (error) {
+    } catch (e) {
       this.activeDeviceId_ = null;
-      if (!(error instanceof CameraSuspendedError)) {
-        console.error(error);
-        nav.open(ViewName.WARNING, 'no-camera');
+      if (!(e instanceof CameraSuspendedError)) {
+        error.reportError(
+            ErrorType.START_CAMERA_FAILURE, ErrorLevel.ERROR,
+            assertInstanceof(e, Error));
+        nav.open(ViewName.WARNING, WarningType.NO_CAMERA);
       }
       // Schedule to retry.
       if (this.retryStartTimeout_) {
@@ -646,5 +809,16 @@ export class Camera extends View {
       this.perfLogger_.interrupt();
       return false;
     }
+  }
+
+  /**
+   * Stop extra stream and preview stream.
+   * @private
+   */
+  async stopStreams_() {
+    // Stopping preview will wait device close. Therefore, we clear
+    // mode before stopping preview to close extra stream first.
+    await this.modes_.clear();
+    await this.preview_.close();
   }
 }

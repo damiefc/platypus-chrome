@@ -7,6 +7,7 @@
 #include <map>
 
 #include "base/guid.h"
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "content/public/renderer/render_frame.h"
@@ -16,9 +17,17 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/features/feature.h"
+#include "extensions/common/mojom/event_router.mojom.h"
+#include "extensions/common/mojom/frame.mojom.h"
+#include "extensions/renderer/dispatcher.h"
+#include "extensions/renderer/extension_frame_helper.h"
+#include "extensions/renderer/extensions_renderer_client.h"
 #include "extensions/renderer/message_target.h"
+#include "extensions/renderer/native_extension_bindings_system.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/worker_thread_dispatcher.h"
+#include "ipc/ipc_sync_channel.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace extensions {
@@ -30,14 +39,17 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
   MainThreadIPCMessageSender() : render_thread_(content::RenderThread::Get()) {}
   ~MainThreadIPCMessageSender() override {}
 
-  void SendRequestIPC(
-      ScriptContext* context,
-      std::unique_ptr<ExtensionHostMsg_Request_Params> params) override {
+  void SendRequestIPC(ScriptContext* context,
+                      mojom::RequestParamsPtr params) override {
     content::RenderFrame* frame = context->GetRenderFrame();
     if (!frame)
       return;
 
-    frame->Send(new ExtensionHostMsg_Request(frame->GetRoutingID(), *params));
+    int request_id = params->request_id;
+    ExtensionFrameHelper::Get(frame)->GetLocalFrameHost()->Request(
+        std::move(params),
+        base::BindOnce(&MainThreadIPCMessageSender::OnResponse,
+                       weak_ptr_factory_.GetWeakPtr(), request_id));
   }
 
   void SendOnRequestResponseReceivedIPC(int request_id) override {}
@@ -48,9 +60,15 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
     DCHECK(!context->IsForServiceWorker());
     DCHECK_EQ(kMainThreadId, content::WorkerThread::GetCurrentId());
 
-    render_thread_->Send(new ExtensionHostMsg_AddListener(
-        context->GetExtensionID(), context->url(), event_name,
-        blink::mojom::kInvalidServiceWorkerVersionId, kMainThreadId));
+    if (!context->GetExtensionID().empty()) {
+      GetEventRouter()->AddListenerForRenderer(
+          mojom::EventListenerParam::NewExtensionId(context->GetExtensionID()),
+          event_name);
+    } else {
+      GetEventRouter()->AddListenerForRenderer(
+          mojom::EventListenerParam::NewListenerUrl(context->url()),
+          event_name);
+    }
   }
 
   void SendRemoveUnfilteredEventListenerIPC(
@@ -171,7 +189,29 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
   }
 
  private:
+  void OnResponse(int request_id,
+                  bool success,
+                  base::Value response,
+                  const std::string& error) {
+    ExtensionsRendererClient::Get()
+        ->GetDispatcher()
+        ->bindings_system()
+        ->HandleResponse(request_id, success,
+                         base::Value::AsListValue(response), error);
+  }
+
+  mojom::EventRouter* GetEventRouter() {
+    if (!event_router_remote_.is_bound()) {
+      render_thread_->GetChannel()->GetRemoteAssociatedInterface(
+          &event_router_remote_);
+    }
+    return event_router_remote_.get();
+  }
+
   content::RenderThread* const render_thread_;
+  mojo::AssociatedRemote<mojom::EventRouter> event_router_remote_;
+
+  base::WeakPtrFactory<MainThreadIPCMessageSender> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(MainThreadIPCMessageSender);
 };
@@ -184,9 +224,8 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
         service_worker_version_id_(service_worker_version_id) {}
   ~WorkerThreadIPCMessageSender() override {}
 
-  void SendRequestIPC(
-      ScriptContext* context,
-      std::unique_ptr<ExtensionHostMsg_Request_Params> params) override {
+  void SendRequestIPC(ScriptContext* context,
+                      mojom::RequestParamsPtr params) override {
     DCHECK(!context->GetRenderFrame());
     DCHECK(context->IsForServiceWorker());
     DCHECK_NE(kMainThreadId, content::WorkerThread::GetCurrentId());

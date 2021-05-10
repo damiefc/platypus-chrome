@@ -6,6 +6,7 @@
 
 #include "chrome/browser/ui/views/payments/payment_request_views_util.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -13,13 +14,10 @@
 
 namespace payments {
 
-// static
-constexpr char PaymentRequestRowView::kClassName[];
-
-PaymentRequestRowView::PaymentRequestRowView(views::ButtonListener* listener,
+PaymentRequestRowView::PaymentRequestRowView(PressedCallback callback,
                                              bool clickable,
                                              const gfx::Insets& insets)
-    : views::Button(listener),
+    : views::Button(std::move(callback)),
       clickable_(clickable),
       insets_(insets),
       previous_row_(nullptr) {
@@ -34,8 +32,8 @@ PaymentRequestRowView::PaymentRequestRowView(views::ButtonListener* listener,
 
 PaymentRequestRowView::~PaymentRequestRowView() {}
 
-const char* PaymentRequestRowView::GetClassName() const {
-  return kClassName;
+bool PaymentRequestRowView::GetClickable() const {
+  return clickable_;
 }
 
 void PaymentRequestRowView::SetActiveBackground() {
@@ -73,7 +71,7 @@ void PaymentRequestRowView::SetIsHighlighted(bool highlighted) {
 
 void PaymentRequestRowView::StateChanged(ButtonState old_state) {
   Button::StateChanged(old_state);
-  if (!clickable())
+  if (!GetClickable())
     return;
 
   SetIsHighlighted(GetState() == views::Button::STATE_HOVERED ||
@@ -81,17 +79,21 @@ void PaymentRequestRowView::StateChanged(ButtonState old_state) {
 }
 
 void PaymentRequestRowView::OnFocus() {
-  if (clickable()) {
+  if (GetClickable()) {
     SetIsHighlighted(true);
     SchedulePaint();
   }
 }
 
 void PaymentRequestRowView::OnBlur() {
-  if (clickable()) {
+  if (GetClickable()) {
     SetIsHighlighted(false);
     SchedulePaint();
   }
 }
+
+BEGIN_METADATA(PaymentRequestRowView, views::Button)
+ADD_READONLY_PROPERTY_METADATA(bool, Clickable)
+END_METADATA
 
 }  // namespace payments

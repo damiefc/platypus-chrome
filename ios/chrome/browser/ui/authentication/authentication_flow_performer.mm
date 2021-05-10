@@ -123,7 +123,7 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
   _watchdogTimer->Start(
       FROM_HERE,
       base::TimeDelta::FromSeconds(kAuthenticationFlowTimeoutSeconds),
-      base::Bind(onTimeout));
+      base::BindOnce(onTimeout));
 }
 
 - (BOOL)stopWatchdogTimer {
@@ -180,10 +180,11 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 }
 
 - (void)signOutBrowserState:(ChromeBrowserState*)browserState {
+  __weak __typeof(_delegate) weakDelegate = _delegate;
   AuthenticationServiceFactory::GetForBrowserState(browserState)
       ->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS,
                 /*force_clear_browsing_data=*/false, ^{
-                  [_delegate didSignOut];
+                  [weakDelegate didSignOut];
                 });
 }
 
@@ -264,7 +265,8 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
         IdentityManagerFactory::GetForBrowserState(browserState);
     base::Optional<AccountInfo> primary_account_info =
         identity_manager->FindExtendedAccountInfoForAccountWithRefreshToken(
-            identity_manager->GetPrimaryAccountInfo());
+            identity_manager->GetPrimaryAccountInfo(
+                signin::ConsentLevel::kSync));
     DCHECK(primary_account_info);
     NSString* hostedDomain =
         base::SysUTF8ToNSString(primary_account_info->hosted_domain);
@@ -321,19 +323,18 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
       activeWebState && (activeWebState->GetVisibleURL().GetOrigin() ==
                          GaiaUrls::GetInstance()->gaia_url());
   int64_t dispatchDelaySecs = activeWebStateHasGaiaOrigin ? 1 : 0;
-
-  [handler
-      removeBrowsingDataForBrowserState:browserState
-                             timePeriod:browsing_data::TimePeriod::ALL_TIME
-                             removeMask:BrowsingDataRemoveMask::REMOVE_ALL
-                        completionBlock:^{
-                          dispatch_after(
-                              dispatch_time(DISPATCH_TIME_NOW,
-                                            dispatchDelaySecs * NSEC_PER_SEC),
-                              dispatch_get_main_queue(), ^{
-                                [_delegate didClearData];
-                              });
-                        }];
+  __weak __typeof(_delegate) weakDelegate = _delegate;
+  [handler removeBrowsingDataForBrowserState:browserState
+                                  timePeriod:browsing_data::TimePeriod::ALL_TIME
+                                  removeMask:BrowsingDataRemoveMask::REMOVE_ALL
+                             completionBlock:^{
+                               dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                                            dispatchDelaySecs *
+                                                                NSEC_PER_SEC),
+                                              dispatch_get_main_queue(), ^{
+                                                [weakDelegate didClearData];
+                                              });
+                             }];
 }
 
 - (BOOL)shouldHandleMergeCaseForIdentity:(ChromeIdentity*)identity

@@ -16,12 +16,12 @@
 #include <utility>
 
 #include "base/containers/adapters.h"
+#include "base/containers/contains.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
@@ -31,6 +31,7 @@
 #include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "cc/base/synced_property.h"
+#include "cc/document_transition/document_transition_request.h"
 #include "cc/input/page_scale_animation.h"
 #include "cc/input/scrollbar_animation_controller.h"
 #include "cc/layers/effect_tree_layer_list_iterator.h"
@@ -559,7 +560,7 @@ void LayerTreeImpl::PushPropertyTreesTo(LayerTreeImpl* target_tree) {
 
   target_tree->SetPropertyTrees(&property_trees_);
 
-  std::vector<EventMetrics> events_metrics;
+  EventMetrics::List events_metrics;
   events_metrics.swap(events_metrics_from_main_thread_);
   target_tree->AppendEventsMetricsFromMainThread(std::move(events_metrics));
 }
@@ -660,6 +661,9 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
                          delegated_ink_metadata_->point().ToString());
     target_tree->set_delegated_ink_metadata(std::move(delegated_ink_metadata_));
   }
+
+  for (auto& request : TakeDocumentTransitionRequests())
+    target_tree->AddDocumentTransitionRequest(std::move(request));
 }
 
 void LayerTreeImpl::HandleTickmarksVisibilityChange() {
@@ -964,9 +968,8 @@ void LayerTreeImpl::UpdateTransformAnimation(ElementId element_id,
                                                                   list_type);
       if (node->has_potential_animation != has_potential_animation) {
         node->has_potential_animation = has_potential_animation;
-        mutator_host()->GetAnimationScales(element_id, list_type,
-                                           &node->maximum_animation_scale,
-                                           &node->starting_animation_scale);
+        node->maximum_animation_scale =
+            mutator_host()->MaximumScale(element_id, list_type);
         transform_tree.set_needs_update(true);
         set_needs_update_draw_properties();
       }
@@ -1194,6 +1197,7 @@ void LayerTreeImpl::SetDeviceViewportRect(
   if (device_viewport_rect == device_viewport_rect_)
     return;
   device_viewport_rect_ = device_viewport_rect;
+  device_viewport_rect_changed_ = true;
 
   set_needs_update_draw_properties();
   if (!IsActiveTree())
@@ -1450,6 +1454,8 @@ bool LayerTreeImpl::UpdateDrawProperties(
     image_animation_controller()->UpdateStateFromDrivers();
   }
 
+  device_viewport_rect_changed_ = false;
+
   DCHECK(!needs_update_draw_properties_)
       << "CalcDrawProperties should not set_needs_update_draw_properties()";
   return true;
@@ -1485,7 +1491,7 @@ LayerImpl* LayerTreeImpl::LayerById(int id) const {
   return iter != layer_id_map_.end() ? iter->second : nullptr;
 }
 
-// TODO(masonfreed): If this shows up on profiles, this could use
+// TODO(masonf): If this shows up on profiles, this could use
 // a layer_element_map_ approach similar to LayerById().
 LayerImpl* LayerTreeImpl::LayerByElementId(ElementId element_id) const {
   auto it =
@@ -2143,7 +2149,6 @@ static void FindClosestMatchingLayer(const gfx::PointF& screen_space_point,
                                      LayerImpl* root_layer,
                                      const Functor& func,
                                      FindClosestMatchingLayerState* state) {
-  base::ElapsedTimer timer;
   // We want to iterate from front to back when hit testing.
   for (auto* layer : base::Reversed(*root_layer->layer_tree_impl())) {
     if (!func(layer))
@@ -2172,12 +2177,6 @@ static void FindClosestMatchingLayer(const gfx::PointF& screen_space_point,
       state->closest_distance = distance_to_intersection;
       state->closest_match = layer;
     }
-  }
-  if (const char* client_name = GetClientNameForMetrics()) {
-    UMA_HISTOGRAM_COUNTS_1M(
-        base::StringPrintf("Compositing.%s.HitTestTimeToFindClosestLayer",
-                           client_name),
-        timer.Elapsed().InMicroseconds());
   }
 }
 
@@ -2629,16 +2628,17 @@ LayerTreeImpl::TakePendingPageScaleAnimation() {
 }
 
 void LayerTreeImpl::AppendEventsMetricsFromMainThread(
-    std::vector<EventMetrics> events_metrics) {
+    EventMetrics::List events_metrics) {
   events_metrics_from_main_thread_.reserve(
       events_metrics_from_main_thread_.size() + events_metrics.size());
   events_metrics_from_main_thread_.insert(
-      events_metrics_from_main_thread_.end(), events_metrics.begin(),
-      events_metrics.end());
+      events_metrics_from_main_thread_.end(),
+      std::make_move_iterator(events_metrics.begin()),
+      std::make_move_iterator(events_metrics.end()));
 }
 
-std::vector<EventMetrics> LayerTreeImpl::TakeEventsMetrics() {
-  std::vector<EventMetrics> main_event_metrics_result;
+EventMetrics::List LayerTreeImpl::TakeEventsMetrics() {
+  EventMetrics::List main_event_metrics_result;
   main_event_metrics_result.swap(events_metrics_from_main_thread_);
   return main_event_metrics_result;
 }
@@ -2667,6 +2667,22 @@ std::string LayerTreeImpl::LayerListAsJson() const {
   }
   value.EndArray();
   return value.ToFormattedJSON();
+}
+
+void LayerTreeImpl::AddDocumentTransitionRequest(
+    std::unique_ptr<DocumentTransitionRequest> request) {
+  document_transition_requests_.push_back(std::move(request));
+  // We need to send the request to viz.
+  SetNeedsRedraw();
+}
+
+std::vector<std::unique_ptr<DocumentTransitionRequest>>
+LayerTreeImpl::TakeDocumentTransitionRequests() {
+  return std::move(document_transition_requests_);
+}
+
+bool LayerTreeImpl::HasDocumentTransitionRequests() const {
+  return !document_transition_requests_.empty();
 }
 
 }  // namespace cc

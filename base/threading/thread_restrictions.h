@@ -11,6 +11,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/threading/hang_watcher.h"
+#include "build/build_config.h"
 
 // -----------------------------------------------------------------------------
 // Usage documentation
@@ -97,17 +98,25 @@
 // that's okay.
 
 class BrowserProcessImpl;
+class ChromeJsErrorReportProcessor;
 class ChromeNSSCryptoModuleDelegate;
 class HistogramSynchronizer;
 class KeyStorageLinux;
 class NativeBackendKWallet;
 class NativeDesktopMediaList;
+class Profile;
+
+Profile* GetLastProfileMac();
 
 namespace android_webview {
 class AwFormDatabaseService;
 class CookieManager;
 class ScopedAllowInitGLBindings;
 class VizCompositorThreadRunnerWebView;
+}
+namespace ash {
+class MojoUtils;
+class BrowserDataMigrator;
 }
 namespace audio {
 class OutputDevice;
@@ -118,6 +127,8 @@ class RTCVideoDecoderAdapter;
 class RTCVideoEncoder;
 class SourceStream;
 class VideoFrameResourceProvider;
+class WebRtcVideoFrameAdapter;
+class LegacyWebRtcVideoFrameAdapter;
 class WorkerThread;
 namespace scheduler {
 class WorkerThread;
@@ -129,7 +140,6 @@ class TileTaskManagerImpl;
 }
 namespace chromeos {
 class BlockingMethodCaller;
-class MojoUtils;
 namespace system {
 class StatisticsProviderImpl;
 }
@@ -138,23 +148,25 @@ namespace chrome_browser_net {
 class Predictor;
 }
 namespace chrome_cleaner {
+class ResetShortcutsComponent;
 class SystemReportComponent;
 }
 namespace content {
 class BrowserGpuChannelHostFactory;
 class BrowserMainLoop;
-class BrowserProcessSubThread;
+class BrowserProcessIOThread;
 class BrowserShutdownProfileDumper;
 class BrowserTestBase;
 class CategorizedWorkerPool;
 class DesktopCaptureDevice;
+class EmergencyTraceFinalisationCoordinator;
 class InProcessUtilityThread;
 class NestedMessagePumpAndroid;
 class NetworkServiceInstancePrivate;
 class PepperPrintSettingsManagerImpl;
+class RTCVideoDecoder;
 class RenderProcessHostImpl;
 class RenderWidgetHostViewMac;
-class RTCVideoDecoder;
 class SandboxHostLinux;
 class ScopedAllowWaitForDebugURL;
 class ServiceWorkerContextClient;
@@ -172,6 +184,9 @@ class CronetURLRequestContext;
 }  // namespace cronet
 namespace dbus {
 class Bus;
+}
+namespace device {
+class UsbContext;
 }
 namespace disk_cache {
 class BackendImpl;
@@ -224,6 +239,9 @@ class ScopedIPCSupport;
 }
 namespace printing {
 class LocalPrinterHandlerDefault;
+#if defined(OS_MAC)
+class PrintBackendServiceImpl;
+#endif
 class PrintJobWorker;
 class PrinterQuery;
 }
@@ -233,7 +251,6 @@ class FinancialPing;
 namespace syncer {
 class GetLocalChangesRequest;
 class HttpBridge;
-class ModelSafeWorker;
 }
 namespace ui {
 class CommandBufferClientImpl;
@@ -263,13 +280,10 @@ class ScopedAllowThreadJoinForProxyResolverV8Tracing;
 
 namespace remoting {
 class AutoThread;
+class ScopedBypassIOThreadRestrictions;
 namespace protocol {
 class ScopedAllowThreadJoinForWebRtcTransport;
 }
-}
-
-namespace resource_coordinator {
-class TabManagerDelegate;
 }
 
 namespace service_manager {
@@ -314,6 +328,7 @@ class JavaHandlerThread;
 }
 
 namespace internal {
+class GetAppOutputScopedAllowBaseSyncPrimitives;
 class JobTaskSource;
 class TaskTracker;
 }
@@ -321,7 +336,6 @@ class TaskTracker;
 class AdjustOOMScoreHelper;
 class FileDescriptorWatcher;
 class FilePath;
-class GetAppOutputScopedAllowBaseSyncPrimitives;
 class ScopedAllowThreadRecallForStackSamplingProfiler;
 class SimpleThread;
 class StackSamplingProfiler;
@@ -381,9 +395,10 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class AdjustOOMScoreHelper;
   friend class StackSamplingProfiler;
   friend class android_webview::ScopedAllowInitGLBindings;
+  friend class ash::MojoUtils;  // http://crbug.com/1055467
+  friend class ash::BrowserDataMigrator;
   friend class blink::DiskDataAllocator;
-  friend class chromeos::MojoUtils;  // http://crbug.com/1055467
-  friend class content::BrowserProcessSubThread;
+  friend class content::BrowserProcessIOThread;
   friend class content::NetworkServiceInstancePrivate;
   friend class content::PepperPrintSettingsManagerImpl;
   friend class content::RenderProcessHostImpl;
@@ -396,8 +411,11 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class module_installer::ScopedAllowModulePakLoad;
   friend class mojo::CoreLibraryInitializer;
   friend class printing::LocalPrinterHandlerDefault;
+#if defined(OS_MAC)
+  friend class printing::PrintBackendServiceImpl;
+#endif
   friend class printing::PrintJobWorker;
-  friend class resource_coordinator::TabManagerDelegate;  // crbug.com/778703
+  friend class remoting::ScopedBypassIOThreadRestrictions;  // crbug.com/1144161
   friend class web::WebSubThread;
   friend class weblayer::BrowserContextImpl;
   friend class weblayer::ContentBrowserClientImpl;
@@ -405,6 +423,7 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class weblayer::WebLayerPathProvider;
 
   friend bool PathProviderWin(int, FilePath*);
+  friend Profile* ::GetLastProfileMac();  // crbug.com/1176734
 
   ScopedAllowBlocking(const Location& from_here = Location::Current());
   ~ScopedAllowBlocking();
@@ -447,14 +466,17 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   // Allowed usage:
   friend class SimpleThread;
   friend class ::ChromeNSSCryptoModuleDelegate;
-  friend class base::GetAppOutputScopedAllowBaseSyncPrimitives;
+  friend class base::internal::GetAppOutputScopedAllowBaseSyncPrimitives;
   friend class blink::SourceStream;
   friend class blink::WorkerThread;
   friend class blink::scheduler::WorkerThread;
+  friend class chrome_cleaner::ResetShortcutsComponent;
   friend class chrome_cleaner::SystemReportComponent;
+  friend class ::ChromeJsErrorReportProcessor;
   friend class content::BrowserMainLoop;
-  friend class content::BrowserProcessSubThread;
+  friend class content::BrowserProcessIOThread;
   friend class content::ServiceWorkerContextClient;
+  friend class device::UsbContext;
   friend class functions::ExecScriptScopedAllowBaseSyncPrimitives;
   friend class history_report::HistoryReportJniBridge;
   friend class internal::TaskTracker;
@@ -469,7 +491,6 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
       LaunchXdgUtilityScopedAllowBaseSyncPrimitives;
   friend class syncer::HttpBridge;
   friend class syncer::GetLocalChangesRequest;
-  friend class syncer::ModelSafeWorker;
   friend class webrtc::DesktopConfigurationMonitor;
 
   // Usage that should be fixed:
@@ -516,9 +537,12 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   friend class base::StackSamplingProfiler;
   friend class blink::RTCVideoDecoderAdapter;
   friend class blink::RTCVideoEncoder;
+  friend class blink::WebRtcVideoFrameAdapter;
+  friend class blink::LegacyWebRtcVideoFrameAdapter;
   friend class cc::TileTaskManagerImpl;
   friend class content::CategorizedWorkerPool;
   friend class content::DesktopCaptureDevice;
+  friend class content::EmergencyTraceFinalisationCoordinator;
   friend class content::InProcessUtilityThread;
   friend class content::RTCVideoDecoder;
   friend class content::SandboxHostLinux;
@@ -574,7 +598,7 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   // Since this object is used to indicate that sync primitives will be used to
   // wait for an event ignore the current operation for hang watching purposes
   // since the wait time duration is unknown.
-  base::HangWatchScopeDisabled hang_watch_scope_disabled_;
+  base::IgnoreHangsInScope hang_watch_scope_disabled_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedAllowBaseSyncPrimitivesOutsideBlockingScope);
 };

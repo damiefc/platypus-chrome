@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+from __future__ import print_function
 import json
 import logging
 import os
@@ -248,7 +249,7 @@ class ScriptsSmokeTest(unittest.TestCase):
     except AssertionError:
       try:
         with open(os.path.join(tempdir, benchmark, 'benchmark_log.txt')) as fh:
-          print fh.read()
+          print(fh.read())
       # pylint: disable=bare-except
       except:
         # pylint: enable=bare-except
@@ -371,6 +372,7 @@ class ScriptsSmokeTest(unittest.TestCase):
     class FakeCommandGenerator(object):
       def __init__(self):
         self.executable_name = 'binary_that_doesnt_exist'
+        self._ignore_shard_env_vars = False
 
       def generate(self, unused_path):
         return [self.executable_name]

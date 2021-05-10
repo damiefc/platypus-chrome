@@ -8,20 +8,22 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#include "base/test/bind.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/animation/animation_host.h"
-#include "cc/animation/timing_function.h"
+#include "cc/document_transition/document_transition_request.h"
 #include "cc/input/scroll_elasticity_helper.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/heads_up_display_layer.h"
@@ -66,6 +68,7 @@
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "components/viz/common/quads/compositor_frame_transition_directive.h"
 #include "components/viz/common/quads/compositor_render_pass_draw_quad.h"
 #include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/quads/tile_draw_quad.h"
@@ -79,6 +82,7 @@
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
+#include "ui/gfx/animation/keyframe/timing_function.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
@@ -913,8 +917,7 @@ class LayerTreeHostTestInvisibleLayersSkipRenderPass
 
   void AddBackgroundBlurFilter(Layer* layer) {
     FilterOperations filters;
-    filters.Append(FilterOperation::CreateBlurFilter(
-        30, SkBlurImageFilter::kClamp_TileMode));
+    filters.Append(FilterOperation::CreateBlurFilter(30, SkTileMode::kClamp));
     layer->SetBackdropFilters(filters);
   }
 
@@ -2995,7 +2998,7 @@ class LayerTreeHostTestDamageWithScale : public LayerTreeHostTest {
         &client_, std::move(recording));
     root_layer_->SetBounds(gfx::Size(50, 50));
 
-    recording.reset(new FakeRecordingSource);
+    recording = std::make_unique<FakeRecordingSource>();
     child_layer_ = FakePictureLayer::CreateWithRecordingSource(
         &client_, std::move(recording));
     child_layer_->SetBounds(gfx::Size(25, 25));
@@ -3044,14 +3047,15 @@ class LayerTreeHostTestDamageWithScale : public LayerTreeHostTest {
                 host_impl->active_tree()->LayerById(child_layer_->id()));
         // We remove tilings pretty aggressively if they are not ideal. Add this
         // back in so that we can compare
-        // child_layer_impl->visible_drawable_content_rect() to the damage.
+        // child_layer_impl->GetEnclosingVisibleRectInTargetSpace to the damage.
         child_layer_impl->AddTilingUntilNextDraw(1.3f);
 
-        EXPECT_EQ(gfx::Rect(25, 25), root_damage_rect);
-        EXPECT_EQ(child_layer_impl->visible_drawable_content_rect(),
+        EXPECT_EQ(gfx::Rect(26, 26), root_damage_rect);
+        EXPECT_EQ(child_layer_impl->GetEnclosingVisibleRectInTargetSpace(),
                   root_damage_rect);
-        EXPECT_TRUE(child_layer_impl->visible_drawable_content_rect().Contains(
-            gfx::Rect(child_layer_->bounds())));
+        EXPECT_TRUE(
+            child_layer_impl->GetEnclosingVisibleRectInTargetSpace().Contains(
+                gfx::Rect(child_layer_->bounds())));
         break;
       }
       default:
@@ -3744,15 +3748,17 @@ SINGLE_AND_MULTI_THREAD_TEST_F(
 // updates, i.e. abort commits after the paint stage and only request layer
 // tree updates for layout.
 //
-// The tests sends four Begin(Main)Frames in sequence: three animate_only
-// Begin(Main)Frames followed by a normal Begin(Main)Frame. The first three
-// should result in aborted commits, whereas the last one should complete the
+// The tests sends five Begin(Main)Frames in sequence: four animate_only
+// Begin(Main)Frames followed by a normal Begin(Main)Frame. The first frame
+// has animate_only force to false by CompositorFrameSinkSupport, since it
+// needs a complete frame to assure surface activation. Frames 2-4 should
+// result in aborted commits, whereas the last one should complete the
 // previously aborted commits.
 //
-// Between BeginMainFrames 2 and 3, the client also requests a new commit
-// (SetNeedsCommit), but not between BeginMainFrames 1 and 2. In multi-threaded
+// Between BeginMainFrames 3 and 4, the client also requests a new commit
+// (SetNeedsCommit), but not between BeginMainFrames 1-3. In multi-threaded
 // mode, ProxyMain will run the animate pipeline stage only for BeginMainFrames
-// 1 and 3, as no new commit was requested between 1 and 2.
+// 2 and 4, as no new commit was requested between 2 and 3.
 //
 // The test uses the full-pipeline mode to ensure that each BeginFrame also
 // incurs a BeginMainFrame.
@@ -3809,31 +3815,52 @@ class LayerTreeHostTestAnimateOnlyBeginFrames
 
   void DidSendBeginMainFrameOnThread(LayerTreeHostImpl* host_impl) override {
     ++sent_begin_main_frame_count_;
-    EXPECT_EQ(begin_frame_count_, sent_begin_main_frame_count_);
+    EXPECT_GE(begin_frame_count_, sent_begin_main_frame_count_);
+  }
+
+  void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
+                                  const viz::BeginFrameArgs& args) override {
+    EXPECT_EQ(args.animate_only,
+              (begin_frame_count_ >= 2 && begin_frame_count_ <= 4));
   }
 
   void DidFinishImplFrameOnThread(LayerTreeHostImpl* host_impl) override {
+    EXPECT_LE(sent_begin_main_frame_count_, begin_frame_count_);
     if (begin_frame_count_ < 3) {
-      if (begin_frame_count_ == 2) {
-        // Request another commit before sending the third BeginMainFrame.
-        PostSetNeedsCommitToMainThread();
-      }
-
       // Send another animation_only BeginFrame.
       PostIssueBeginFrame(true);
     } else if (begin_frame_count_ == 3) {
+      MainThreadTaskRunner()->PostTaskAndReply(
+          FROM_HERE,
+          base::BindOnce(&LayerTreeHostTestAnimateOnlyBeginFrames::
+                             SetNeedsCommitOnMainThread,
+                         base::Unretained(this)),
+          base::BindOnce(
+              &LayerTreeHostTestAnimateOnlyBeginFrames::PostIssueBeginFrame,
+              base::Unretained(this), true));
+    } else if (begin_frame_count_ == 4) {
       PostIssueBeginFrame(false);
     }
   }
 
+  void SetNeedsCommitOnMainThread() { layer_tree_host()->SetNeedsCommit(); }
+
   void UpdateLayerTreeHost() override { ++update_layer_tree_host_count_; }
 
-  void DidCommit() override {
+  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    if (begin_frame_count_ == 1)
+      host_impl->NotifyReadyToDraw();
+
     ++commit_count_;
 
+    // First commit is due to first frame having animate_only forced to false
+    // in ordser to create the surface.
+    if (commit_count_ == 1)
+      return;
+
     // Fourth BeginMainFrame should lead to commit.
-    EXPECT_EQ(4, begin_frame_count_);
-    EXPECT_EQ(4, sent_begin_main_frame_count_);
+    EXPECT_EQ(5, begin_frame_count_);
+    EXPECT_EQ(3, sent_begin_main_frame_count_);
 
     EndTest();
   }
@@ -3843,23 +3870,15 @@ class LayerTreeHostTestAnimateOnlyBeginFrames
   }
 
   void AfterTest() override {
-    EXPECT_EQ(1, commit_count_);
-    EXPECT_EQ(4, begin_frame_count_);
-    EXPECT_EQ(4, sent_begin_main_frame_count_);
+    EXPECT_EQ(2, commit_count_);
+    EXPECT_EQ(5, begin_frame_count_);
+    EXPECT_EQ(3, sent_begin_main_frame_count_);
 
-    if (HasImplThread()) {
-      // ProxyMain aborts the second BeginMainFrame before running the animate
-      // pipeline stage, since no further updates were made since the first one.
-      // Thus, we expect not to be called for the second BeginMainFrame.
-      EXPECT_EQ(3, will_begin_main_frame_count_);
-      EXPECT_EQ(3, update_layer_tree_host_count_);
-    } else {
-      EXPECT_EQ(4, will_begin_main_frame_count_);
-      EXPECT_EQ(4, update_layer_tree_host_count_);
-    }
+    EXPECT_EQ(3, will_begin_main_frame_count_);
+    EXPECT_EQ(3, update_layer_tree_host_count_);
 
     // The final commit should not have been aborted.
-    EXPECT_EQ(1, ready_to_commit_count_);
+    EXPECT_EQ(2, ready_to_commit_count_);
   }
 
  protected:
@@ -6719,7 +6738,7 @@ class LayerTreeHostTestSynchronousCompositeSwapPromise
         new TestSwapPromise(&swap_promise_result_[0]));
     layer_tree_host()->GetSwapPromiseManager()->QueueSwapPromise(
         std::move(swap_promise0));
-    layer_tree_host()->Composite(base::TimeTicks::Now(), raster);
+    layer_tree_host()->CompositeForTest(base::TimeTicks::Now(), raster);
 
     // Fail to swap (no damage) if not reclaiming resources from the Display.
     std::unique_ptr<SwapPromise> swap_promise1(
@@ -6727,7 +6746,7 @@ class LayerTreeHostTestSynchronousCompositeSwapPromise
     layer_tree_host()->GetSwapPromiseManager()->QueueSwapPromise(
         std::move(swap_promise1));
     layer_tree_host()->SetNeedsCommit();
-    layer_tree_host()->Composite(base::TimeTicks::Now(), raster);
+    layer_tree_host()->CompositeForTest(base::TimeTicks::Now(), raster);
 
     // Fail to draw (not visible).
     std::unique_ptr<SwapPromise> swap_promise2(
@@ -6736,7 +6755,7 @@ class LayerTreeHostTestSynchronousCompositeSwapPromise
         std::move(swap_promise2));
     layer_tree_host()->SetNeedsDisplayOnAllLayers();
     layer_tree_host()->SetVisible(false);
-    layer_tree_host()->Composite(base::TimeTicks::Now(), raster);
+    layer_tree_host()->CompositeForTest(base::TimeTicks::Now(), raster);
 
     EndTest();
   }
@@ -7978,10 +7997,10 @@ class LayerTreeHostTestQueueImageDecode : public LayerTreeHostTest {
       return;
     first_ = false;
 
-    image_ = DrawImage(CreateDiscardablePaintImage(gfx::Size(400, 400)),
-                       SkIRect::MakeWH(400, 400), kNone_SkFilterQuality,
-                       SkMatrix::I(), PaintImage::kDefaultFrameIndex,
-                       gfx::ColorSpace());
+    image_ =
+        DrawImage(CreateDiscardablePaintImage(gfx::Size(400, 400)), false,
+                  SkIRect::MakeWH(400, 400), kNone_SkFilterQuality, SkM44(),
+                  PaintImage::kDefaultFrameIndex, gfx::ColorSpace());
     auto callback = base::BindRepeating(
         &LayerTreeHostTestQueueImageDecode::ImageDecodeFinished,
         base::Unretained(this));
@@ -8252,7 +8271,7 @@ class LayerTreeHostTestImageAnimationDrawImage
 
  private:
   void AddImageOp(const PaintImage& image) override {
-    content_layer_client_.add_draw_image(image, gfx::Point(0, 0), PaintFlags());
+    content_layer_client_.add_draw_image(image, gfx::Point(0, 0));
   }
 };
 
@@ -8274,7 +8293,7 @@ class LayerTreeHostTestImageAnimationDrawRecordShader
     : public LayerTreeHostTestImageAnimation {
   void AddImageOp(const PaintImage& image) override {
     auto record = sk_make_sp<PaintOpBuffer>();
-    record->push<DrawImageOp>(image, 0.f, 0.f, nullptr);
+    record->push<DrawImageOp>(image, 0.f, 0.f);
     PaintFlags flags;
     flags.setShader(PaintShader::MakePaintRecord(
         record, SkRect::MakeWH(500, 500), SkTileMode::kClamp,
@@ -8289,7 +8308,7 @@ class LayerTreeHostTestImageAnimationPaintFilter
     : public LayerTreeHostTestImageAnimation {
   void AddImageOp(const PaintImage& image) override {
     auto record = sk_make_sp<PaintOpBuffer>();
-    record->push<DrawImageOp>(image, 0.f, 0.f, nullptr);
+    record->push<DrawImageOp>(image, 0.f, 0.f);
     PaintFlags flags;
     flags.setImageFilter(
         sk_make_sp<RecordPaintFilter>(record, SkRect::MakeWH(500, 500)));
@@ -8365,12 +8384,9 @@ class LayerTreeHostTestImageDecodingHints : public LayerTreeHostTest {
             .set_id(3)
             .set_decoding_mode(PaintImage::DecodingMode::kUnspecified)
             .TakePaintImage();
-    content_layer_client_.add_draw_image(async_image, gfx::Point(0, 0),
-                                         PaintFlags());
-    content_layer_client_.add_draw_image(sync_image, gfx::Point(1, 2),
-                                         PaintFlags());
-    content_layer_client_.add_draw_image(unspecified_image, gfx::Point(3, 4),
-                                         PaintFlags());
+    content_layer_client_.add_draw_image(async_image, gfx::Point(0, 0));
+    content_layer_client_.add_draw_image(sync_image, gfx::Point(1, 2));
+    content_layer_client_.add_draw_image(unspecified_image, gfx::Point(3, 4));
 
     layer_tree_host()->SetRootLayer(
         FakePictureLayer::Create(&content_layer_client_));
@@ -8802,7 +8818,7 @@ MULTI_THREAD_TEST_F(LayerTreeHostTopControlsDeltaTriggersViewportUpdate);
 // Tests that custom sequence throughput tracking result is reported to
 // LayerTreeHostClient.
 constexpr MutatorHost::TrackedAnimationSequenceId kSequenceId = 1u;
-class LayerTreeHostCustomThrougputTrackerTest : public LayerTreeHostTest {
+class LayerTreeHostCustomThroughputTrackerTest : public LayerTreeHostTest {
  public:
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
@@ -8835,7 +8851,7 @@ class LayerTreeHostCustomThrougputTrackerTest : public LayerTreeHostTest {
   }
 };
 
-SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostCustomThrougputTrackerTest);
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostCustomThroughputTrackerTest);
 
 // Confirm that DelegatedInkMetadata set on the LTH propagates to the
 // CompositorFrameMetadata and RenderFrameMetadata, and then both are correctly
@@ -8886,11 +8902,12 @@ class LayerTreeHostTestDelegatedInkMetadataOnAndOff
     gfx::PointF point = gfx::PointF(135, 45);
     gfx::RectF area = gfx::RectF(173, 438);
     base::TimeTicks timestamp = base::TimeTicks::Now();
+    bool is_hovering = true;
 
-    expected_metadata_ =
-        viz::DelegatedInkMetadata(point, diameter, color, timestamp, area);
+    expected_metadata_ = gfx::DelegatedInkMetadata(
+        point, diameter, color, timestamp, area, is_hovering);
     layer_tree_host()->SetDelegatedInkMetadata(
-        std::make_unique<viz::DelegatedInkMetadata>(
+        std::make_unique<gfx::DelegatedInkMetadata>(
             expected_metadata_.value()));
   }
 
@@ -8904,24 +8921,35 @@ class LayerTreeHostTestDelegatedInkMetadataOnAndOff
 
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
     if (expected_metadata_.has_value()) {
+      EXPECT_EQ(metadata_frame_time_, impl->CurrentBeginFrameArgs().frame_time);
       // Now try again with no metadata to confirm everything is cleared out.
       expected_metadata_.reset();
     }
   }
 
-  void ExpectMetadata(bool had_delegated_ink_metadata,
-                      viz::DelegatedInkMetadata* actual_metadata) {
+  void ExpectMetadata(base::Optional<DelegatedInkBrowserMetadata>
+                          browser_delegated_ink_metadata,
+                      gfx::DelegatedInkMetadata* actual_metadata) {
     if (expected_metadata_.has_value()) {
-      EXPECT_TRUE(had_delegated_ink_metadata);
+      EXPECT_TRUE(browser_delegated_ink_metadata.has_value());
       EXPECT_TRUE(actual_metadata);
+      EXPECT_TRUE(
+          browser_delegated_ink_metadata.value().delegated_ink_is_hovering);
       EXPECT_EQ(expected_metadata_->point(), actual_metadata->point());
       EXPECT_EQ(expected_metadata_->color(), actual_metadata->color());
       EXPECT_EQ(expected_metadata_->diameter(), actual_metadata->diameter());
       EXPECT_EQ(expected_metadata_->presentation_area(),
                 actual_metadata->presentation_area());
       EXPECT_EQ(expected_metadata_->timestamp(), actual_metadata->timestamp());
+      EXPECT_EQ(expected_metadata_->is_hovering(),
+                actual_metadata->is_hovering());
+
+      // Record the frame time from the metadata so we can confirm that it
+      // matches the LayerTreeHostImpl's frame time in DrawLayersOnThread.
+      EXPECT_GT(actual_metadata->frame_time(), base::TimeTicks::Min());
+      metadata_frame_time_ = actual_metadata->frame_time();
     } else {
-      EXPECT_FALSE(had_delegated_ink_metadata);
+      EXPECT_FALSE(browser_delegated_ink_metadata.has_value());
       EXPECT_FALSE(actual_metadata);
       EndTest();
     }
@@ -8933,15 +8961,16 @@ class LayerTreeHostTestDelegatedInkMetadataOnAndOff
       const RenderFrameMetadata& render_frame_metadata,
       viz::CompositorFrameMetadata* compositor_frame_metadata,
       bool force_send) override {
-    ExpectMetadata(render_frame_metadata.has_delegated_ink_metadata,
+    ExpectMetadata(render_frame_metadata.delegated_ink_metadata,
                    compositor_frame_metadata->delegated_ink_metadata.get());
   }
 
  private:
-  base::Optional<viz::DelegatedInkMetadata> expected_metadata_;
+  base::Optional<gfx::DelegatedInkMetadata> expected_metadata_;
   FakeContentLayerClient client_;
   scoped_refptr<Layer> layer_;
   bool set_needs_display_ = true;
+  base::TimeTicks metadata_frame_time_;
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestDelegatedInkMetadataOnAndOff);
@@ -8977,12 +9006,35 @@ class LayerTreeHostTestEventsMetrics : public LayerTreeHostTest {
 
  private:
   void SimulateEventOnMain() {
-    auto scoped_event_monitor =
-        layer_tree_host()->GetScopedEventMetricsMonitor(EventMetrics::Create(
-            ui::ET_GESTURE_SCROLL_UPDATE,
-            EventMetrics::ScrollUpdateType::kContinued, base::TimeTicks::Now(),
-            ui::ScrollInputType::kWheel));
-    layer_tree_host()->SetNeedsAnimate();
+    base::SimpleTestTickClock tick_clock;
+    tick_clock.Advance(base::TimeDelta::FromMicroseconds(10));
+    base::TimeTicks event_time = tick_clock.NowTicks();
+    tick_clock.Advance(base::TimeDelta::FromMicroseconds(10));
+    std::unique_ptr<EventMetrics> metrics = EventMetrics::CreateForTesting(
+        ui::ET_GESTURE_SCROLL_UPDATE,
+        EventMetrics::ScrollUpdateType::kContinued, ui::ScrollInputType::kWheel,
+        event_time, &tick_clock);
+    DCHECK_NE(metrics, nullptr);
+    {
+      tick_clock.Advance(base::TimeDelta::FromMicroseconds(10));
+      metrics->SetDispatchStageTimestamp(
+          EventMetrics::DispatchStage::kRendererCompositorStarted);
+      auto done_callback = base::BindOnce(
+          [](std::unique_ptr<EventMetrics> metrics,
+             base::SimpleTestTickClock* tick_clock, bool handled) {
+            tick_clock->Advance(base::TimeDelta::FromMicroseconds(10));
+            metrics->SetDispatchStageTimestamp(
+                EventMetrics::DispatchStage::kRendererCompositorFinished);
+            std::unique_ptr<EventMetrics> result =
+                handled ? std::move(metrics) : nullptr;
+            return result;
+          },
+          std::move(metrics), &tick_clock);
+      auto scoped_event_monitor =
+          layer_tree_host()->GetScopedEventMetricsMonitor(
+              std::move(done_callback));
+      layer_tree_host()->SetNeedsAnimate();
+    }
     EXPECT_SCOPED(VerifyMainSavedEventsMetricsCountOnMain(1));
   }
 
@@ -9291,7 +9343,8 @@ class LayerTreeHostTestIgnoreEventsMetricsForNoUpdate
   State state_ = State::kWaitingForFirstFrameActivation;
 };
 
-MULTI_THREAD_TEST_F(LayerTreeHostTestIgnoreEventsMetricsForNoUpdate);
+// TODO(crbug.com/1191878): Disabled because test is flaky on Linux and CrOS.
+// MULTI_THREAD_TEST_F(LayerTreeHostTestIgnoreEventsMetricsForNoUpdate);
 
 class LayerTreeHostUkmSmoothnessMetric : public LayerTreeTest {
  public:
@@ -9337,7 +9390,7 @@ class LayerTreeHostUkmSmoothnessMetric : public LayerTreeTest {
     }
 
     // Mark every frame as a dropped frame affecting smoothness.
-    host_impl->dropped_frame_counter()->AddDroppedFrameAffectingSmoothness();
+    host_impl->dropped_frame_counter()->OnEndFrame(viz::BeginFrameArgs(), true);
     host_impl->SetNeedsRedraw();
     --frames_counter_;
   }
@@ -9349,6 +9402,130 @@ class LayerTreeHostUkmSmoothnessMetric : public LayerTreeTest {
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostUkmSmoothnessMetric);
+
+class LayerTreeHostUkmSmoothnessMemoryOwnership : public LayerTreeTest {
+ public:
+  LayerTreeHostUkmSmoothnessMemoryOwnership() = default;
+  ~LayerTreeHostUkmSmoothnessMemoryOwnership() override = default;
+
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    settings->commit_to_active_tree = false;
+  }
+
+  void BeginTest() override {
+    // Start with requesting main-frames.
+    PostSetNeedsCommitToMainThread();
+  }
+
+  void AfterTest() override {
+  }
+
+  void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
+                                  const viz::BeginFrameArgs& args) override {
+    host_impl->dropped_frame_counter()->OnFcpReceived();
+    host_impl->SetNeedsCommit();
+  }
+
+  void DidFinishImplFrameOnThread(LayerTreeHostImpl* host_impl) override {
+    if (TestEnded())
+      return;
+
+    if (frames_counter_ == 0) {
+      EndTest();
+      return;
+    }
+
+    // Mark every frame as a dropped frame affecting smoothness.
+    host_impl->dropped_frame_counter()->OnEndFrame(viz::BeginFrameArgs(), true);
+    host_impl->SetNeedsRedraw();
+    --frames_counter_;
+  }
+
+  void DidBeginMainFrame() override {
+    // Re-request the shared memory region in each frame.
+    shmem_region_ = layer_tree_host()->CreateSharedMemoryForSmoothnessUkm();
+  }
+
+ private:
+  const uint32_t kTotalFramesForTest = 50;
+  uint32_t frames_counter_ = kTotalFramesForTest;
+  base::ReadOnlySharedMemoryRegion shmem_region_;
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostUkmSmoothnessMemoryOwnership);
+
+class LayerTreeHostTestDocumentTransitionsPropagatedToMetadata
+    : public LayerTreeHostTest {
+ protected:
+  void SetupTree() override {
+    SetInitialRootBounds(gfx::Size(10, 10));
+    LayerTreeHostTest::SetupTree();
+  }
+
+  void BeginTest() override {
+    layer_tree_host()->AddDocumentTransitionRequest(
+        DocumentTransitionRequest::CreatePrepare(
+            DocumentTransitionRequest::Effect::kExplode,
+            /*document_tag=*/0, /*shared_element_count=*/0,
+            base::BindLambdaForTesting([this]() { CommitLambdaCalled(); })));
+    layer_tree_host()->AddDocumentTransitionRequest(
+        DocumentTransitionRequest::CreateStart(
+            /*document_tag=*/0, /*shared_element_count=*/0,
+            base::BindLambdaForTesting([this]() { CommitLambdaCalled(); })));
+  }
+
+  void CommitLambdaCalled() { ++num_lambda_calls_; }
+
+  void DisplayReceivedCompositorFrameOnThread(
+      const viz::CompositorFrame& frame) override {
+    ASSERT_EQ(2u, frame.metadata.transition_directives.size());
+    const auto& save = frame.metadata.transition_directives[0];
+    submitted_sequence_ids_.push_back(save.sequence_id());
+
+    EXPECT_EQ(save.type(),
+              viz::CompositorFrameTransitionDirective::Type::kSave);
+    EXPECT_EQ(save.effect(),
+              viz::CompositorFrameTransitionDirective::Effect::kExplode);
+
+    const auto& animate = frame.metadata.transition_directives[1];
+    EXPECT_GT(animate.sequence_id(), save.sequence_id());
+    EXPECT_EQ(animate.type(),
+              viz::CompositorFrameTransitionDirective::Type::kAnimate);
+    submitted_sequence_ids_.push_back(animate.sequence_id());
+  }
+
+  void DidReceiveCompositorFrameAck() override {
+    layer_tree_host()->NotifyTransitionRequestsFinished(
+        submitted_sequence_ids_);
+    EndTest();
+  }
+
+  void AfterTest() override { EXPECT_EQ(2, num_lambda_calls_); }
+
+  std::vector<uint32_t> submitted_sequence_ids_;
+  int num_lambda_calls_ = 0;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(
+    LayerTreeHostTestDocumentTransitionsPropagatedToMetadata);
+
+class LayerTreeHostTestDebugStateDowngrade : public LayerTreeHostTest {
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    settings->initial_debug_state.show_fps_counter = true;
+  }
+
+  void BeginTest() override {
+    LayerTreeHost* host = layer_tree_host();
+    LayerTreeDebugState state = host->GetDebugState();
+    EXPECT_TRUE(state.show_fps_counter);
+    state.show_fps_counter = false;
+    host->SetDebugState(state);
+    EXPECT_FALSE(host->GetDebugState().show_fps_counter);
+    EndTest();
+  }
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestDebugStateDowngrade);
 
 }  // namespace
 }  // namespace cc

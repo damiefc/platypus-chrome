@@ -4,8 +4,10 @@
 
 #include "remoting/client/chromoting_client_runtime.h"
 
+#include <memory>
+
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_pump_type.h"
@@ -35,8 +37,8 @@ ChromotingClientRuntime::ChromotingClientRuntime() {
   DCHECK(!base::CurrentThread::Get());
 
   VLOG(1) << "Starting main message loop";
-  ui_task_executor_.reset(
-      new base::SingleThreadTaskExecutor(base::MessagePumpType::UI));
+  ui_task_executor_ = std::make_unique<base::SingleThreadTaskExecutor>(
+      base::MessagePumpType::UI);
 
 #if defined(DEBUG)
   net::URLFetcher::SetIgnoreCertificateRequests(true);

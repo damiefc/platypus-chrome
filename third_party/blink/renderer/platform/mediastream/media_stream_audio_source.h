@@ -101,6 +101,9 @@ class PLATFORM_EXPORT MediaStreamAudioSource
   bool disable_local_echo() const { return disable_local_echo_; }
   bool RenderToAssociatedSinkEnabled() const;
 
+  // Checks all tracks acting as consumers and returns true if all are disabled.
+  bool AllTracksAreDisabled();
+
   // Returns a unique class identifier. Some subclasses override and use this
   // method to provide safe down-casting to their type.
   virtual void* GetClassIdentifier() const;
@@ -174,6 +177,10 @@ class PLATFORM_EXPORT MediaStreamAudioSource
   // Gets the TaskRunner for the main thread, for subclasses that need it.
   base::SingleThreadTaskRunner* GetTaskRunner() const;
 
+  // Maximum number of channels preferred by any connected track or -1 if
+  // unknown.
+  int NumPreferredChannels() const;
+
  private:
   // MediaStreamSource override.
   void DoStopSource() final;
@@ -183,6 +190,11 @@ class PLATFORM_EXPORT MediaStreamAudioSource
   // audio data. The "stop callback" that was provided to the track calls
   // this.
   void StopAudioDeliveryTo(MediaStreamAudioTrack* track);
+
+  // Number of MediaStreamAudioTracks added as consumers.
+  int NumConsumers() const;
+
+  void LogMessage(const std::string& message);
 
   // True if the source of audio is a local device. False if the source is
   // remote (e.g., streamed-in from a server).

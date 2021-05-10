@@ -11,9 +11,9 @@
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
-#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "components/history/core/browser/history_service_observer.h"
+#include "components/safe_browsing/core/common/safebrowsing_constants.h"
 #include "components/safe_browsing/core/common/thread_utils.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/core/proto/csd.pb.h"
@@ -41,6 +41,10 @@ const int kCleanUpIntervalInitSecond = 120;
 
 // The interval between every cleanup task.
 const int kCleanUpIntervalSecond = 1800;
+
+// The longest duration that a cache can be stored. If a cache is stored
+// longer than the upper bound, it will be evicted.
+const int kCacheDurationUpperBoundSecond = 7 * 24 * 60 * 60;  // 7 days
 
 // A helper class to include all match params. It is used as a centralized
 // place to determine if the current cache entry should be considered as a
@@ -179,6 +183,12 @@ bool IsCacheExpired(int cache_creation_time, int cache_duration) {
          static_cast<double>(cache_creation_time + cache_duration);
 }
 
+bool IsCacheOlderThanUpperBound(int cache_creation_time) {
+  return base::Time::Now().ToDoubleT() >
+         static_cast<double>(cache_creation_time +
+                             kCacheDurationUpperBoundSecond);
+}
+
 template <class T>
 size_t RemoveExpiredEntries(base::Value* verdict_dictionary,
                             const char* proto_name) {
@@ -189,7 +199,8 @@ size_t RemoveExpiredEntries(base::Value* verdict_dictionary,
     T verdict;
     if (!ParseVerdictEntry<T>(&item.second, &verdict_received_time, &verdict,
                               proto_name) ||
-        IsCacheExpired(verdict_received_time, verdict.cache_duration_sec())) {
+        IsCacheExpired(verdict_received_time, verdict.cache_duration_sec()) ||
+        IsCacheOlderThanUpperBound(verdict_received_time)) {
       expired_keys.push_back(item.first);
     }
   }
@@ -270,7 +281,7 @@ typename T::VerdictType GetMostMatchingCachedVerdictWithPathMatching(
   GURL hostname = GetHostNameWithHTTPScheme(url);
   std::unique_ptr<base::DictionaryValue> cache_dictionary =
       base::DictionaryValue::From(content_settings->GetWebsiteSetting(
-          hostname, GURL(), contents_setting_type, std::string(), nullptr));
+          hostname, GURL(), contents_setting_type, nullptr));
 
   if (!cache_dictionary || cache_dictionary->empty())
     return T::VERDICT_TYPE_UNSPECIFIED;
@@ -372,17 +383,18 @@ VerdictCacheManager::VerdictCacheManager(
       stored_verdict_count_real_time_url_check_(base::nullopt),
       content_settings_(content_settings) {
   if (history_service)
-    history_service_observer_.Add(history_service);
+    history_service_observation_.Observe(history_service);
   if (!content_settings->IsOffTheRecord()) {
     ScheduleNextCleanUpAfterInterval(
         base::TimeDelta::FromSeconds(kCleanUpIntervalInitSecond));
   }
-  CacheArtificialVerdict();
+  CacheArtificialRealTimeUrlVerdict();
+  CacheArtificialPhishGuardVerdict();
 }
 
 void VerdictCacheManager::Shutdown() {
   CleanUpExpiredVerdicts();
-  history_service_observer_.RemoveAll();
+  history_service_observation_.Reset();
   weak_factory_.InvalidateWeakPtrs();
 }
 
@@ -401,8 +413,7 @@ void VerdictCacheManager::CachePhishGuardVerdict(
 
   std::unique_ptr<base::DictionaryValue> cache_dictionary =
       base::DictionaryValue::From(content_settings_->GetWebsiteSetting(
-          hostname, GURL(), ContentSettingsType::PASSWORD_PROTECTION,
-          std::string(), nullptr));
+          hostname, GURL(), ContentSettingsType::PASSWORD_PROTECTION, nullptr));
 
   if (!cache_dictionary)
     cache_dictionary = std::make_unique<base::DictionaryValue>();
@@ -436,7 +447,7 @@ void VerdictCacheManager::CachePhishGuardVerdict(
       GetCacheExpression(verdict),
       base::Value::FromUniquePtrValue(std::move(verdict_entry)));
   content_settings_->SetWebsiteSettingDefaultScope(
-      hostname, GURL(), ContentSettingsType::PASSWORD_PROTECTION, std::string(),
+      hostname, GURL(), ContentSettingsType::PASSWORD_PROTECTION,
       std::move(cache_dictionary));
 }
 
@@ -472,7 +483,7 @@ size_t VerdictCacheManager::GetStoredPhishGuardVerdictCount(
 
   ContentSettingsForOneType settings;
   content_settings_->GetSettingsForOneType(
-      ContentSettingsType::PASSWORD_PROTECTION, std::string(), &settings);
+      ContentSettingsType::PASSWORD_PROTECTION, &settings);
   stored_verdict_count_password_on_focus_ = 0;
   stored_verdict_count_password_entry_ = 0;
   for (const ContentSettingPatternSource& source : settings) {
@@ -495,8 +506,7 @@ size_t VerdictCacheManager::GetStoredRealTimeUrlCheckVerdictCount() {
 
   ContentSettingsForOneType settings;
   content_settings_->GetSettingsForOneType(
-      ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA, std::string(),
-      &settings);
+      ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA, &settings);
   stored_verdict_count_real_time_url_check_ = 0;
   for (const ContentSettingPatternSource& source : settings) {
     for (const auto& item : source.setting_value.DictItems()) {
@@ -536,7 +546,7 @@ void VerdictCacheManager::CacheRealTimeUrlVerdict(
     std::unique_ptr<base::DictionaryValue> cache_dictionary =
         base::DictionaryValue::From(content_settings_->GetWebsiteSetting(
             hostname, GURL(), ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA,
-            std::string(), nullptr));
+            nullptr));
 
     if (!cache_dictionary)
       cache_dictionary = std::make_unique<base::DictionaryValue>();
@@ -565,7 +575,7 @@ void VerdictCacheManager::CacheRealTimeUrlVerdict(
 
     content_settings_->SetWebsiteSettingDefaultScope(
         hostname, GURL(), ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA,
-        std::string(), std::move(cache_dictionary));
+        std::move(cache_dictionary));
   }
   base::UmaHistogramCounts10000(
       "SafeBrowsing.RT.CacheManager.RealTimeVerdictCount",
@@ -608,8 +618,7 @@ void VerdictCacheManager::CleanUpExpiredPhishGuardVerdicts() {
 
   ContentSettingsForOneType password_protection_settings;
   content_settings_->GetSettingsForOneType(
-      ContentSettingsType::PASSWORD_PROTECTION, std::string(),
-      &password_protection_settings);
+      ContentSettingsType::PASSWORD_PROTECTION, &password_protection_settings);
 
   int removed_count = 0;
   for (ContentSettingPatternSource& source : password_protection_settings) {
@@ -633,7 +642,7 @@ void VerdictCacheManager::CleanUpExpiredPhishGuardVerdicts() {
     // |cache_dictionary|.
     content_settings_->SetWebsiteSettingCustomScope(
         source.primary_pattern, source.secondary_pattern,
-        ContentSettingsType::PASSWORD_PROTECTION, std::string(),
+        ContentSettingsType::PASSWORD_PROTECTION,
         cache_dictionary->DictEmpty() ? nullptr : std::move(cache_dictionary));
 
     if ((++removed_count) == kMaxRemovedEntriesCount) {
@@ -648,7 +657,7 @@ void VerdictCacheManager::CleanUpExpiredRealTimeUrlCheckVerdicts() {
   }
   ContentSettingsForOneType safe_browsing_url_check_data_settings;
   content_settings_->GetSettingsForOneType(
-      ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA, std::string(),
+      ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA,
       &safe_browsing_url_check_data_settings);
 
   int removed_count = 0;
@@ -668,7 +677,7 @@ void VerdictCacheManager::CleanUpExpiredRealTimeUrlCheckVerdicts() {
     // |cache_dictionary|.
     content_settings_->SetWebsiteSettingCustomScope(
         source.primary_pattern, source.secondary_pattern,
-        ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA, std::string(),
+        ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA,
         cache_dictionary->DictEmpty() ? nullptr : std::move(cache_dictionary));
 
     if ((++removed_count) == kMaxRemovedEntriesCount) {
@@ -681,7 +690,8 @@ void VerdictCacheManager::CleanUpExpiredRealTimeUrlCheckVerdicts() {
 void VerdictCacheManager::OnURLsDeleted(
     history::HistoryService* history_service,
     const history::DeletionInfo& deletion_info) {
-  base::PostTask(FROM_HERE, CreateTaskTraits(ThreadID::UI),
+  GetTaskRunner(ThreadID::UI)
+      ->PostTask(FROM_HERE,
                  base::BindRepeating(
                      &VerdictCacheManager::RemoveContentSettingsOnURLsDeleted,
                      GetWeakPtr(), deletion_info.IsAllHistory(),
@@ -691,7 +701,8 @@ void VerdictCacheManager::OnURLsDeleted(
 // Overridden from history::HistoryServiceObserver.
 void VerdictCacheManager::HistoryServiceBeingDeleted(
     history::HistoryService* history_service) {
-  history_service_observer_.Remove(history_service);
+  DCHECK(history_service_observation_.IsObservingSource(history_service));
+  history_service_observation_.Reset();
 }
 
 bool VerdictCacheManager::RemoveExpiredPhishGuardVerdicts(
@@ -791,11 +802,10 @@ void VerdictCacheManager::RemoveContentSettingsOnURLsDeleted(
         GetStoredRealTimeUrlCheckVerdictCount() -
         GetRealTimeUrlCheckVerdictCountForURL(url_key);
     content_settings_->SetWebsiteSettingDefaultScope(
-        url_key, GURL(), ContentSettingsType::PASSWORD_PROTECTION,
-        std::string(), nullptr);
+        url_key, GURL(), ContentSettingsType::PASSWORD_PROTECTION, nullptr);
     content_settings_->SetWebsiteSettingDefaultScope(
         url_key, GURL(), ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA,
-        std::string(), nullptr);
+        nullptr);
   }
 }
 
@@ -806,8 +816,7 @@ size_t VerdictCacheManager::GetPhishGuardVerdictCountForURL(
          trigger_type == LoginReputationClientRequest::PASSWORD_REUSE_EVENT);
   std::unique_ptr<base::DictionaryValue> cache_dictionary =
       base::DictionaryValue::From(content_settings_->GetWebsiteSetting(
-          url, GURL(), ContentSettingsType::PASSWORD_PROTECTION, std::string(),
-          nullptr));
+          url, GURL(), ContentSettingsType::PASSWORD_PROTECTION, nullptr));
   if (!cache_dictionary || cache_dictionary->empty())
     return 0;
 
@@ -833,7 +842,7 @@ size_t VerdictCacheManager::GetRealTimeUrlCheckVerdictCountForURL(
   std::unique_ptr<base::DictionaryValue> cache_dictionary =
       base::DictionaryValue::From(content_settings_->GetWebsiteSetting(
           url, GURL(), ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA,
-          std::string(), nullptr));
+          nullptr));
   if (!cache_dictionary || cache_dictionary->empty())
     return 0;
   base::Value* verdict_dictionary =
@@ -841,7 +850,7 @@ size_t VerdictCacheManager::GetRealTimeUrlCheckVerdictCountForURL(
   return verdict_dictionary ? verdict_dictionary->DictSize() : 0;
 }
 
-void VerdictCacheManager::CacheArtificialVerdict() {
+void VerdictCacheManager::CacheArtificialRealTimeUrlVerdict() {
   std::string phishing_url_string =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           kUnsafeUrlFlag);
@@ -868,6 +877,32 @@ void VerdictCacheManager::CacheArtificialVerdict() {
                                      {history::URLRow(artificial_unsafe_url)});
   CacheRealTimeUrlVerdict(artificial_unsafe_url, response, base::Time::Now(),
                           /*store_old_cache=*/false);
+}
+
+void VerdictCacheManager::CacheArtificialPhishGuardVerdict() {
+  std::string phishing_url_string =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          kArtificialCachedPhishGuardVerdictFlag);
+  if (phishing_url_string.empty())
+    return;
+
+  GURL artificial_unsafe_url(phishing_url_string);
+  if (!artificial_unsafe_url.is_valid())
+    return;
+
+  has_artificial_unsafe_url_ = true;
+
+  ReusedPasswordAccountType reused_password_account_type;
+  reused_password_account_type.set_account_type(
+      ReusedPasswordAccountType::SAVED_PASSWORD);
+
+  LoginReputationClientResponse verdict;
+  verdict.set_verdict_type(LoginReputationClientResponse::PHISHING);
+  verdict.set_cache_expression(artificial_unsafe_url.GetContent());
+  verdict.set_cache_duration_sec(3000);
+  CachePhishGuardVerdict(LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
+                         reused_password_account_type, verdict,
+                         base::Time::Now());
 }
 
 void VerdictCacheManager::StopCleanUpTimerForTesting() {

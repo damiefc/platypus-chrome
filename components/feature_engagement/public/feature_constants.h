@@ -23,9 +23,13 @@ extern const base::Feature kIPHFocusModeFeature;
 extern const base::Feature kIPHGlobalMediaControlsFeature;
 extern const base::Feature kIPHLiveCaptionFeature;
 extern const base::Feature kIPHPasswordsAccountStorageFeature;
+extern const base::Feature kIPHReadingListDiscoveryFeature;
+extern const base::Feature kIPHReadingListEntryPointFeature;
 extern const base::Feature kIPHReopenTabFeature;
 extern const base::Feature kIPHWebUITabStripFeature;
 extern const base::Feature kIPHDesktopSnoozeFeature;
+extern const base::Feature kIPHDesktopPwaInstallFeature;
+extern const base::Feature kIPHProfileSwitchFeature;
 #endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
 
@@ -33,6 +37,8 @@ extern const base::Feature kIPHDesktopSnoozeFeature;
 // should also be declared in:
 // org.chromium.components.feature_engagement.FeatureConstants.
 #if defined(OS_ANDROID)
+extern const base::Feature kIPHAddToHomescreenMessageFeature;
+extern const base::Feature kIPHAddToHomescreenTextBubbleFeature;
 extern const base::Feature kIPHDataSaverDetailFeature;
 extern const base::Feature kIPHDataSaverMilestonePromoFeature;
 extern const base::Feature kIPHDataSaverPreviewFeature;
@@ -48,6 +54,7 @@ extern const base::Feature kIPHContextualSearchPromoteTapFeature;
 extern const base::Feature kIPHContextualSearchPromotePanelOpenFeature;
 extern const base::Feature kIPHContextualSearchOptInFeature;
 extern const base::Feature kIPHContextualSearchTappedButShouldLongpressFeature;
+extern const base::Feature kIPHContextualSearchInPanelHelpFeature;
 extern const base::Feature kIPHDownloadSettingsFeature;
 extern const base::Feature kIPHDownloadInfoBarDownloadContinuingFeature;
 extern const base::Feature kIPHDownloadInfoBarDownloadsAreFasterFeature;
@@ -61,21 +68,36 @@ extern const base::Feature kIPHKeyboardAccessoryAddressFillingFeature;
 extern const base::Feature kIPHKeyboardAccessoryBarSwipingFeature;
 extern const base::Feature kIPHKeyboardAccessoryPasswordFillingFeature;
 extern const base::Feature kIPHKeyboardAccessoryPaymentFillingFeature;
-extern const base::Feature kIPHNewTabPageButtonFeature;
+extern const base::Feature kIPHKeyboardAccessoryPaymentOfferFeature;
+extern const base::Feature kIPHMicToolbarFeature;
+extern const base::Feature kIPHNewTabPageHomeButtonFeature;
+extern const base::Feature kIPHPageInfoFeature;
 extern const base::Feature kIPHPreviewsOmniboxUIFeature;
 extern const base::Feature kIPHQuietNotificationPromptsFeature;
+extern const base::Feature kIPHReadLaterContextMenuFeature;
+extern const base::Feature kIPHReadLaterAppMenuBookmarkThisPageFeature;
+extern const base::Feature kIPHReadLaterAppMenuBookmarksFeature;
+extern const base::Feature kIPHReadLaterBottomSheetFeature;
 extern const base::Feature kIPHTabGroupsQuicklyComparePagesFeature;
 extern const base::Feature kIPHTabGroupsTapToSeeAnotherTabFeature;
 extern const base::Feature kIPHTabGroupsYourTabsAreTogetherFeature;
 extern const base::Feature kIPHTabGroupsDragAndDropFeature;
+extern const base::Feature kIPHTabSwitcherButtonFeature;
 extern const base::Feature kIPHTranslateMenuButtonFeature;
-extern const base::Feature kIPHVideoTutorialDownloadFeature;
-extern const base::Feature kIPHVideoTutorialSearchFeature;
+extern const base::Feature kIPHVideoTutorialNTPChromeIntroFeature;
+extern const base::Feature kIPHVideoTutorialNTPDownloadFeature;
+extern const base::Feature kIPHVideoTutorialNTPSearchFeature;
+extern const base::Feature kIPHVideoTutorialNTPVoiceSearchFeature;
+extern const base::Feature kIPHVideoTutorialNTPSummaryFeature;
 extern const base::Feature kIPHExploreSitesTileFeature;
 extern const base::Feature kIPHFeedHeaderMenuFeature;
 extern const base::Feature kIPHChromeReengagementNotification1Feature;
 extern const base::Feature kIPHChromeReengagementNotification2Feature;
 extern const base::Feature kIPHChromeReengagementNotification3Feature;
+extern const base::Feature kIPHPwaInstallAvailableFeature;
+extern const base::Feature kIPHShareScreenshotFeature;
+extern const base::Feature kIPHWebFeedFollowFeature;
+extern const base::Feature kIPHWebFeedPostFollowDialogFeature;
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_IOS)

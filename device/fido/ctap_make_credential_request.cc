@@ -10,6 +10,7 @@
 
 #include "base/numerics/safe_conversions.h"
 #include "components/cbor/values.h"
+#include "device/fido/device_response_converter.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_parsing_utils.h"
 
@@ -148,19 +149,16 @@ base::Optional<CtapMakeCredentialRequest> CtapMakeCredentialRequest::Parse(
           return base::nullopt;
         }
         request.hmac_secret = extension.second.GetBool();
-      } else if (extension_name == kExtensionAndroidClientData) {
-        base::Optional<AndroidClientDataExtensionInput>
-            android_client_data_ext =
-                AndroidClientDataExtensionInput::Parse(extension.second);
-        if (!android_client_data_ext) {
-          return base::nullopt;
-        }
-        request.android_client_data_ext = std::move(*android_client_data_ext);
       } else if (extension_name == kExtensionLargeBlobKey) {
         if (!extension.second.is_bool() || !extension.second.GetBool()) {
           return base::nullopt;
         }
         request.large_blob_key = true;
+      } else if (extension_name == kExtensionCredBlob) {
+        if (!extension.second.is_bytestring()) {
+          return base::nullopt;
+        }
+        request.cred_blob = extension.second.GetBytestring();
       }
     }
   }
@@ -205,7 +203,12 @@ base::Optional<CtapMakeCredentialRequest> CtapMakeCredentialRequest::Parse(
             std::numeric_limits<uint8_t>::max()) {
       return base::nullopt;
     }
-    request.pin_protocol = pin_protocol_it->second.GetUnsigned();
+    base::Optional<PINUVAuthProtocol> pin_protocol =
+        ToPINUVAuthProtocol(pin_protocol_it->second.GetUnsigned());
+    if (!pin_protocol) {
+      return base::nullopt;
+    }
+    request.pin_protocol = *pin_protocol;
   }
 
   const auto enterprise_attestation_it = request_map.find(cbor::Value(10));
@@ -286,9 +289,8 @@ AsCTAPRequestValuePair(const CtapMakeCredentialRequest& request) {
                        static_cast<int64_t>(*request.cred_protect));
   }
 
-  if (request.android_client_data_ext) {
-    extensions.emplace(kExtensionAndroidClientData,
-                       AsCBOR(*request.android_client_data_ext));
+  if (request.cred_blob) {
+    extensions.emplace(kExtensionCredBlob, *request.cred_blob);
   }
 
   if (!extensions.empty()) {
@@ -300,7 +302,8 @@ AsCTAPRequestValuePair(const CtapMakeCredentialRequest& request) {
   }
 
   if (request.pin_protocol) {
-    cbor_map[cbor::Value(9)] = cbor::Value(*request.pin_protocol);
+    cbor_map[cbor::Value(9)] =
+        cbor::Value(static_cast<uint8_t>(*request.pin_protocol));
   }
 
   cbor::Value::MapValue option_map;

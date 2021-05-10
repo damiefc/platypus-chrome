@@ -20,6 +20,7 @@
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/system/data_pipe_producer.h"
 #include "mojo/public/cpp/system/string_data_source.h"
+#include "net/base/network_isolation_key.h"
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -59,6 +60,8 @@ class SignedExchangeLoaderTest : public testing::TestWithParam<bool> {
     ~MockURLLoaderClient() override {}
 
     // network::mojom::URLLoaderClient overrides:
+    MOCK_METHOD1(OnReceiveEarlyHints,
+                 void(const network::mojom::EarlyHintsPtr));
     MOCK_METHOD1(OnReceiveResponse,
                  void(const network::mojom::URLResponseHeadPtr));
     MOCK_METHOD2(OnReceiveRedirect,
@@ -111,7 +114,6 @@ class SignedExchangeLoaderTest : public testing::TestWithParam<bool> {
 
     void CreateLoaderAndStart(
         mojo::PendingReceiver<network::mojom::URLLoader> receiver,
-        int32_t routing_id,
         int32_t request_id,
         uint32_t options,
         const network::ResourceRequest& url_request,
@@ -181,7 +183,7 @@ TEST_P(SignedExchangeLoaderTest, Simple) {
   mojo::ScopedDataPipeProducerHandle producer_handle;
   mojo::ScopedDataPipeConsumerHandle consumer_handle;
   MojoResult rv =
-      mojo::CreateDataPipe(nullptr, &producer_handle, &consumer_handle);
+      mojo::CreateDataPipe(nullptr, producer_handle, consumer_handle);
   ASSERT_EQ(MOJO_RESULT_OK, rv);
   std::unique_ptr<SignedExchangeLoader> signed_exchange_loader =
       std::make_unique<SignedExchangeLoader>(
@@ -191,8 +193,8 @@ TEST_P(SignedExchangeLoaderTest, Simple) {
           false /* should_redirect_to_fallback */, nullptr /* devtools_proxy */,
           nullptr /* reporter */, CreateMockPingLoaderFactory(),
           base::BindRepeating(&SignedExchangeLoaderTest::ThrottlesGetter),
-          FrameTreeNode::kFrameTreeNodeInvalidId, nullptr /* metric_recorder */,
-          std::string() /* accept_langs */,
+          net::NetworkIsolationKey(), FrameTreeNode::kFrameTreeNodeInvalidId,
+          nullptr /* metric_recorder */, std::string() /* accept_langs */,
           false /* keep_entry_for_prefetch_cache */);
 
   EXPECT_CALL(mock_loader, PauseReadingBodyFromNet());

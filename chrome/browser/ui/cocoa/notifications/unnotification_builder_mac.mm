@@ -9,10 +9,14 @@
 
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsobject.h"
-
-#include "chrome/browser/ui/cocoa/notifications/notification_constants_mac.h"
+#include "chrome/services/mac_notifications/public/cpp/notification_constants_mac.h"
 
 @implementation UNNotificationBuilder
+
+- (void)setIconPath:(NSString*)iconPath {
+  [_notificationData setObject:iconPath
+                        forKey:notification_constants::kNotificationIconPath];
+}
 
 - (UNMutableNotificationContent*)buildUserNotification {
   base::scoped_nsobject<UNMutableNotificationContent> toast(
@@ -37,6 +41,15 @@
           ? [_notificationData
                 objectForKey:notification_constants::kNotificationOrigin]
           : @"";
+
+  // This uses a private API to prevent notifications from dismissing on default
+  // action instead of clicking on a button
+  if ([toast respondsToSelector:@selector
+             (shouldPreventNotificationDismissalAfterDefaultAction)]) {
+    [toast setValue:@YES
+             forKey:@"shouldPreventNotificationDismissalAfterDefaultAction"];
+  }
+
   DCHECK(
       [_notificationData objectForKey:notification_constants::kNotificationId]);
   NSString* notificationId =
@@ -56,6 +69,30 @@
       objectForKey:notification_constants::kNotificationIncognito]);
   NSNumber* incognito = [_notificationData
       objectForKey:notification_constants::kNotificationIncognito];
+
+  // Icon
+  if ([_notificationData
+          objectForKey:notification_constants::kNotificationIconPath]) {
+    NSURL* url = [NSURL
+        fileURLWithPath:
+            [_notificationData
+                objectForKey:notification_constants::kNotificationIconPath]];
+    // When the files are saved using NotificationImageRetainer, they're saved
+    // without the .png extension. So |options| here is used to tell the system
+    // that the file is of type PNG, as NotificationImageRetainer converts files
+    // to PNG before writing them.
+    UNNotificationAttachment* attachment = [UNNotificationAttachment
+        attachmentWithIdentifier:notificationId
+                             URL:url
+                         options:@{
+                           UNNotificationAttachmentOptionsTypeHintKey :
+                               (__bridge NSString*)kUTTypePNG
+                         }
+                           error:nil];
+
+    if (attachment != nil)
+      [toast setAttachments:@[ attachment ]];
+  }
 
   [toast setUserInfo:@{
     notification_constants::kNotificationOrigin : origin,

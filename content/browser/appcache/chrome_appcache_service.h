@@ -5,9 +5,6 @@
 #ifndef CONTENT_BROWSER_APPCACHE_CHROME_APPCACHE_SERVICE_H_
 #define CONTENT_BROWSER_APPCACHE_CHROME_APPCACHE_SERVICE_H_
 
-#include <map>
-#include <memory>
-
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -47,7 +44,7 @@ class CONTENT_EXPORT ChromeAppCacheService
       public AppCacheServiceImpl,
       public AppCachePolicy {
  public:
-  ChromeAppCacheService(storage::QuotaManagerProxy* proxy,
+  ChromeAppCacheService(scoped_refptr<storage::QuotaManagerProxy> proxy,
                         base::WeakPtr<StoragePartitionImpl> partition);
 
   // If |cache_path| is empty we will use in-memory structs.

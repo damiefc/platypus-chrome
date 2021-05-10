@@ -7,7 +7,8 @@
 #include <array>
 
 #include "base/check.h"
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
+#include "base/metrics/histogram_functions.h"
 
 namespace chromeos {
 namespace phonehub {
@@ -16,12 +17,21 @@ namespace {
 // Status values which are considered "final" - i.e., once the status of an
 // operation changes to one of these values, the operation has completed. These
 // status values indicate either a success or a fatal error.
-constexpr std::array<NotificationAccessSetupOperation::Status, 3>
+constexpr std::array<NotificationAccessSetupOperation::Status, 4>
     kOperationFinishedStatus{
         NotificationAccessSetupOperation::Status::kTimedOutConnecting,
         NotificationAccessSetupOperation::Status::kConnectionDisconnected,
         NotificationAccessSetupOperation::Status::kCompletedSuccessfully,
+        NotificationAccessSetupOperation::Status::
+            kProhibitedFromProvidingAccess,
     };
+
+// Used for metrics; do not change.
+constexpr size_t kNumSetupDurationHistogramBuckets = 50;
+constexpr base::TimeDelta kSetupDurationHistogramMinTime =
+    base::TimeDelta::FromSeconds(1);
+constexpr base::TimeDelta kSetupDurationHistogramMaxTime =
+    base::TimeDelta::FromMinutes(10);
 
 }  // namespace
 
@@ -40,10 +50,26 @@ NotificationAccessSetupOperation::NotificationAccessSetupOperation(
 }
 
 NotificationAccessSetupOperation::~NotificationAccessSetupOperation() {
+  if (current_status_) {
+    base::UmaHistogramEnumeration("PhoneHub.NotificationAccessSetup.LastStatus",
+                                  *current_status_);
+  }
+
   std::move(destructor_callback_).Run();
 }
 
 void NotificationAccessSetupOperation::NotifyStatusChanged(Status new_status) {
+  base::UmaHistogramEnumeration("PhoneHub.NotificationAccessSetup.AllStatuses",
+                                new_status);
+  if (new_status == Status::kCompletedSuccessfully) {
+    base::UmaHistogramCustomTimes(
+        "PhoneHub.NotificationAccessSetup.SuccessfulSetupDuration",
+        base::TimeTicks::Now() - start_timestamp_,
+        kSetupDurationHistogramMinTime, kSetupDurationHistogramMaxTime,
+        kNumSetupDurationHistogramBuckets);
+  }
+  current_status_ = new_status;
+
   delegate_->OnStatusChange(new_status);
 }
 
@@ -65,6 +91,10 @@ std::ostream& operator<<(std::ostream& stream,
       break;
     case NotificationAccessSetupOperation::Status::kCompletedSuccessfully:
       stream << "[Completed successfully]";
+      break;
+    case NotificationAccessSetupOperation::Status::
+        kProhibitedFromProvidingAccess:
+      stream << "[Prohibited from providing access]";
       break;
   }
 

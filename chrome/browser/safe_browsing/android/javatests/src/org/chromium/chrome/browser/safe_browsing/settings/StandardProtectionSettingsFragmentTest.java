@@ -14,7 +14,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -23,7 +22,6 @@ import org.chromium.chrome.browser.safe_browsing.SafeBrowsingState;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.components.prefs.PrefService;
@@ -103,7 +101,7 @@ public class StandardProtectionSettingsFragmentTest {
     @SmallTest
     @Feature({"SafeBrowsing"})
     public void testSwitchPasswordLeakDetectionPreference() {
-        mBrowserTestRule.addAndSignInTestAccount();
+        mBrowserTestRule.addTestAccountThenSigninAndEnableSync();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             SafeBrowsingBridge.setSafeBrowsingState(SafeBrowsingState.STANDARD_PROTECTION);
         });
@@ -179,9 +177,8 @@ public class StandardProtectionSettingsFragmentTest {
     @Test
     @SmallTest
     @Feature({"SafeBrowsing"})
-    @Features.EnableFeatures(ChromeFeatureList.SAFE_BROWSING_ENHANCED_PROTECTION_ENABLED)
     public void testPreferencesDisabledInEnhancedProtectionMode() {
-        mBrowserTestRule.addAndSignInTestAccount();
+        mBrowserTestRule.addTestAccountThenSigninAndEnableSync();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             SafeBrowsingBridge.setSafeBrowsingState(SafeBrowsingState.ENHANCED_PROTECTION);
         });
@@ -203,7 +200,7 @@ public class StandardProtectionSettingsFragmentTest {
     @SmallTest
     @Feature({"SafeBrowsing"})
     public void testPreferencesDisabledInNoProtectionMode() {
-        mBrowserTestRule.addAndSignInTestAccount();
+        mBrowserTestRule.addTestAccountThenSigninAndEnableSync();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             SafeBrowsingBridge.setSafeBrowsingState(SafeBrowsingState.NO_SAFE_BROWSING);
         });
@@ -226,7 +223,7 @@ public class StandardProtectionSettingsFragmentTest {
     @Feature({"SafeBrowsing"})
     @Policies.Add({ @Policies.Item(key = "PasswordLeakDetectionEnabled", string = "true") })
     public void testPasswordLeakDetectionPolicyManaged() {
-        mBrowserTestRule.addAndSignInTestAccount();
+        mBrowserTestRule.addTestAccountThenSigninAndEnableSync();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             ChromeBrowserInitializer.getInstance().handleSynchronousStartup();
             SafeBrowsingBridge.setSafeBrowsingState(SafeBrowsingState.STANDARD_PROTECTION);
@@ -248,7 +245,7 @@ public class StandardProtectionSettingsFragmentTest {
     @Feature({"SafeBrowsing"})
     @Policies.Add({ @Policies.Item(key = "SafeBrowsingExtendedReportingEnabled", string = "true") })
     public void testExtendedReportingPolicyManaged() {
-        mBrowserTestRule.addAndSignInTestAccount();
+        mBrowserTestRule.addTestAccountThenSigninAndEnableSync();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             ChromeBrowserInitializer.getInstance().handleSynchronousStartup();
             SafeBrowsingBridge.setSafeBrowsingState(SafeBrowsingState.STANDARD_PROTECTION);

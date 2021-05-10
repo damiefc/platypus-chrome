@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "build/chromeos_buildflags.h"
 #include "device/bluetooth/public/cpp/bluetooth_uuid.h"
 #include "device/bluetooth/test/fake_remote_gatt_service.h"
 
@@ -51,6 +52,11 @@ void FakePeripheral::SetServiceUUIDs(UUIDSet service_uuids) {
     DCHECK(inserted);
   }
   device_uuids_.ReplaceServiceUUIDs(gatt_services);
+}
+
+void FakePeripheral::SetManufacturerData(
+    ManufacturerDataMap manufacturer_data) {
+  manufacturer_data_ = std::move(manufacturer_data);
 }
 
 void FakePeripheral::SetNextGATTConnectionResponse(uint16_t code) {
@@ -170,8 +176,8 @@ base::Optional<std::string> FakePeripheral::GetName() const {
   return name_;
 }
 
-base::string16 FakePeripheral::GetNameForDisplay() const {
-  return base::string16();
+std::u16string FakePeripheral::GetNameForDisplay() const {
+  return std::u16string();
 }
 
 bool FakePeripheral::IsPaired() const {
@@ -200,6 +206,13 @@ bool FakePeripheral::IsConnecting() const {
   NOTREACHED();
   return false;
 }
+
+#if defined(OS_CHROMEOS)
+bool FakePeripheral::IsBlockedByPolicy() const {
+  NOTREACHED();
+  return false;
+}
+#endif
 
 bool FakePeripheral::ExpectingPinCode() const {
   NOTREACHED();
@@ -358,7 +371,7 @@ void FakePeripheral::DispatchDiscoveryResponse() {
 void FakePeripheral::DisconnectGatt() {
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void FakePeripheral::ExecuteWrite(base::OnceClosure callback,
                                   ExecuteWriteErrorCallback error_callback) {
   NOTIMPLEMENTED();

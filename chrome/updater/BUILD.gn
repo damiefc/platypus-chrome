@@ -25,6 +25,19 @@ group("updater") {
   }
 }
 
+group("all") {
+  testonly = true
+
+  if (is_win || is_mac) {
+    deps = [
+      ":updater",
+      ":updater_tests",
+      ":updater_tests_system",
+      "//chrome/updater/test/test_app",
+    ]
+  }
+}
+
 # Conditional build is needed, otherwise the analyze script on Linux
 # requires all targets and it is going to include the targets below.
 if (is_win || is_mac) {
@@ -39,47 +52,56 @@ if (is_win || is_mac) {
       "action_handler.h",
       "constants.cc",
       "constants.h",
-      "control_service.h",
       "crash_client.cc",
       "crash_client.h",
       "crash_reporter.cc",
       "crash_reporter.h",
-      "patcher.cc",
-      "patcher.h",
+      "enum_traits.h",
       "persisted_data.cc",
       "persisted_data.h",
       "policy_manager.cc",
       "policy_manager.h",
       "registration_data.cc",
       "registration_data.h",
-      "service_scope.h",
       "splash_screen.h",
-      "unzipper.cc",
-      "unzipper.h",
       "update_service.cc",
       "update_service.h",
+      "update_service_internal.h",
+      "updater_scope.h",
       "util.cc",
       "util.h",
     ]
 
     deps = [
+      ":branding_header",
       ":version_header",
       "//base",
       "//components/crash/core/common:crash_key_lib",
       "//components/prefs",
       "//components/update_client",
-      "//courgette:bsdiff",
-      "//courgette:courgette_lib",
       "//third_party/crashpad/crashpad/client",
       "//third_party/crashpad/crashpad/handler",
-      "//third_party/zlib/google:zip",
       "//url",
     ]
+
+    if (is_mac) {
+      sources += [
+        "mac/mac_util.h",
+        "mac/mac_util.mm",
+      ]
+
+      deps += [ "//chrome/common/mac:launchd" ]
+
+      frameworks = [ "Foundation.framework" ]
+    }
   }
 
   # Use this source set for code which has platform-specific modules.
   source_set("lib") {
     sources = [
+      "activity.cc",
+      "activity.h",
+      "activity_impl.h",
       "app/app.cc",
       "app/app.h",
       "app/app_install.cc",
@@ -92,14 +114,17 @@ if (is_win || is_mac) {
       "app/app_update.h",
       "app/app_wake.cc",
       "app/app_wake.h",
+      "check_for_updates_task.cc",
+      "check_for_updates_task.h",
       "configurator.cc",
       "configurator.h",
-      "control_service_in_process.cc",
-      "control_service_in_process.h",
       "crx_downloader_factory.h",
       "external_constants.cc",
       "external_constants.h",
-      "external_constants_impl.h",
+      "external_constants_builder.cc",
+      "external_constants_builder.h",
+      "external_constants_override.cc",
+      "external_constants_override.h",
       "installer.cc",
       "installer.h",
       "lib_util.h",
@@ -111,14 +136,22 @@ if (is_win || is_mac) {
       "setup.h",
       "tag.cc",
       "tag.h",
-      "update_service_in_process.cc",
-      "update_service_in_process.h",
+      "update_service_impl.cc",
+      "update_service_impl.h",
+      "update_service_impl_inactive.cc",
+      "update_service_impl_inactive.h",
+      "update_service_internal_impl.cc",
+      "update_service_internal_impl.h",
+      "update_service_internal_impl_inactive.cc",
+      "update_service_internal_impl_inactive.h",
       "updater.cc",
       "updater.h",
     ]
 
     if (is_mac) {
       sources += [
+        "activity_impl_mac.cc",
+        "app/app_install_mac.mm",
         "app/server/mac/app_server.h",
         "app/server/mac/server.h",
         "app/server/mac/server.mm",
@@ -127,15 +160,14 @@ if (is_win || is_mac) {
         "app/server/mac/service_protocol.mm",
         "app/server/mac/update_service_wrappers.h",
         "app/server/mac/update_service_wrappers.mm",
-        "external_constants_mac.mm",
         "installer_mac.cc",
         "launchd_util.cc",
         "launchd_util.h",
         "lib_util_mac.mm",
-        "mac/control_service_out_of_process.h",
-        "mac/control_service_out_of_process.mm",
-        "mac/update_service_out_of_process.h",
-        "mac/update_service_out_of_process.mm",
+        "mac/update_service_internal_proxy.h",
+        "mac/update_service_internal_proxy.mm",
+        "mac/update_service_proxy.h",
+        "mac/update_service_proxy.mm",
         "prefs_mac.mm",
         "service_factory_mac.mm",
         "setup_mac.mm",
@@ -144,6 +176,8 @@ if (is_win || is_mac) {
 
     if (is_win) {
       sources += [
+        "activity_impl_win.cc",
+        "app/app_install_win.cc",
         "app/server/win/com_classes.cc",
         "app/server/win/com_classes.h",
         "app/server/win/com_classes_legacy.cc",
@@ -152,8 +186,6 @@ if (is_win || is_mac) {
         "app/server/win/server.h",
         "app/server/win/service_main.cc",
         "app/server/win/service_main.h",
-        "external_constants_win.cc",
-        "installer_win.cc",
         "lib_util_win.cc",
         "prefs_win.cc",
         "service_factory_win.cc",
@@ -164,25 +196,34 @@ if (is_win || is_mac) {
 
     deps = [
       ":base",
+      ":branding_header",
       ":version_header",
       "//base",
       "//base:i18n",
-      "//chrome/updater/device_management",
       "//components/crash/core/common:crash_key",
       "//components/crx_file:crx_file",
       "//components/prefs",
       "//components/update_client",
+      "//components/update_client:in_process_patcher",
+      "//components/update_client:in_process_unzipper",
       "//components/version_info",
       "//third_party/boringssl",
       "//url",
     ]
 
     if (is_win) {
+      # //chrome/updater:lib and //chrome/updater/win:lib behave as one unit
+      # for linking purposes. Targets depending on the latter must use
+      # the former as a dependency.
+      allow_circular_includes_from = [ "//chrome/updater/win:lib" ]
       deps += [
+        "//chrome/installer/util:with_no_strings",
         "//chrome/updater/app/server/win:updater_idl_idl",
+        "//chrome/updater/app/server/win:updater_internal_idl_idl",
+        "//chrome/updater/app/server/win:updater_legacy_idl_idl",
         "//chrome/updater/win:constants",
-        "//chrome/updater/win:lib",
       ]
+      public_deps = [ "//chrome/updater/win:lib" ]
     }
 
     if (is_mac) {
@@ -209,9 +250,25 @@ if (is_win || is_mac) {
     }
   }
 
-  process_version("version_header") {
+  source_set("version_header") {
+    sources = [ "updater_version.h" ]
+  }
+
+  process_version("updater_version_cc") {
     sources = [ "//chrome/VERSION" ]
 
+    template_file = "updater_version.cc.in"
+    output = "$target_gen_dir/updater_version.cc"
+  }
+
+  process_version("updater_version_cc_offset") {
+    sources = [ "//chrome/VERSION" ]
+
+    template_file = "updater_version_offset.cc.in"
+    output = "$target_gen_dir/updater_version_offset.cc"
+  }
+
+  process_version("branding_header") {
     extra_args = [
       "-e",
       "COMPANY_FULLNAME=\"$updater_company_full_name\"",
@@ -227,10 +284,18 @@ if (is_win || is_mac) {
       "BROWSER_NAME=\"$browser_name\"",
       "-e",
       "MAC_BROWSER_BUNDLE_IDENTIFIER=\"$mac_browser_bundle_identifier\"",
+      "-e",
+      "UPDATE_CHECK_URL=\"$update_check_url\"",
+      "-e",
+      "CRASH_UPLOAD_URL=\"$crash_upload_url\"",
+      "-e",
+      "CRASH_STAGING_UPLOAD_URL=\"$crash_staging_upload_url\"",
+      "-e",
+      "DEVICE_MANAGEMENT_SERVER_URL=\"$device_management_server_url\"",
     ]
 
-    template_file = "updater_version.h.in"
-    output = "$target_gen_dir/updater_version.h"
+    template_file = "updater_branding.h.in"
+    output = "$target_gen_dir/updater_branding.h"
   }
 
   source_set("updater_tests_support") {
@@ -248,34 +313,72 @@ if (is_win || is_mac) {
     ]
   }
 
-  # These tests are run serially since they mutate system state.
-  test("updater_tests") {
-    testonly = true
+  source_set("browser_sources") {
+    sources = [
+      "//chrome/updater/constants.cc",
+      "//chrome/updater/constants.h",
+      "//chrome/updater/enum_traits.h",
+      "//chrome/updater/registration_data.cc",
+      "//chrome/updater/registration_data.h",
+      "//chrome/updater/update_service.cc",
+      "//chrome/updater/update_service.h",
+    ]
 
+    deps = [
+      ":branding_header",
+      "//base",
+      "//components/update_client",
+    ]
+
+    if (is_mac) {
+      sources += [
+        "//chrome/updater/app/server/mac/service_protocol.h",
+        "//chrome/updater/app/server/mac/service_protocol.mm",
+        "//chrome/updater/app/server/mac/update_service_wrappers.h",
+        "//chrome/updater/app/server/mac/update_service_wrappers.mm",
+      ]
+    }
+
+    visibility = [
+      "//chrome/browser/ui:ui",
+      "//chrome/browser/updater:*",
+    ]
+  }
+
+  source_set("updater_test_sources") {
+    testonly = true
     sources = [
       "app/app_server_unittest.cc",
-      "external_constants_unittest.cc",
-      "external_constants_unittest.h",
+      "enum_traits_unittest.cc",
+      "external_constants_builder_unittest.cc",
+      "external_constants_override_unittest.cc",
       "lib_util_unittest.cc",
       "persisted_data_unittest.cc",
       "policy_manager_unittest.cc",
       "policy_service_unittest.cc",
       "prefs_unittest.cc",
-      "run_all_unittests.cc",
-      "service_scope_unittest.cc",
       "tag_unittest.cc",
+      "test/integration_test_commands.h",
+      "test/integration_test_commands_system.cc",
+      "test/integration_test_commands_user.cc",
       "test/integration_tests.cc",
-      "test/integration_tests.h",
+      "test/integration_tests_impl.cc",
+      "test/integration_tests_impl.h",
+      "test/server.cc",
+      "test/server.h",
       "unittest_util_unittest.cc",
+      "update_service_unittest.cc",
+      "updater_scope_unittest.cc",
       "updater_unittest.cc",
-      "util_unittest.cc",
     ]
 
     deps = [
       ":base",
+      ":branding_header",
       ":lib",
       ":updater",
       ":updater_tests_support",
+      ":updater_version_cc",
       ":version_header",
       "//base",
       "//base/test:test_support",
@@ -286,19 +389,20 @@ if (is_win || is_mac) {
       "//chrome/updater/tools:unittest",
       "//components/prefs:test_support",
       "//components/update_client",
+      "//net:test_support",
       "//testing/gtest",
+      "//third_party/re2",
       "//url",
     ]
 
     if (is_win) {
-      sources += [
-        "external_constants_win_unittest.cc",
-        "test/integration_tests_win.cc",
-      ]
+      sources += [ "test/integration_tests_win.cc" ]
 
       deps += [
+        "//chrome/updater/app/server/win:updater_idl_idl",
+        "//chrome/updater/app/server/win:updater_internal_idl_idl",
+        "//chrome/updater/app/server/win:updater_legacy_idl_idl",
         "//chrome/updater/win:constants",
-        "//chrome/updater/win:lib",
         "//chrome/updater/win:updater_tests",
       ]
 
@@ -310,10 +414,9 @@ if (is_win || is_mac) {
 
     if (is_mac) {
       sources += [
-        "external_constants_mac_unittest.mm",
         "mac/scoped_xpc_service_mock.h",
         "mac/scoped_xpc_service_mock.mm",
-        "mac/update_service_out_of_process_test.mm",
+        "mac/update_service_proxy_test.mm",
         "test/integration_tests_mac.mm",
       ]
 
@@ -336,16 +439,73 @@ if (is_win || is_mac) {
     }
   }
 
-  group("updater_integration_tests") {
+  # These tests are run serially since they mutate system state.
+  test("updater_tests") {
     testonly = true
 
-    data = [
-      "//chrome/updater/run_updater_tests.py",
-      "//chrome/updater/test/",
-      "//testing/scripts/common.py",
-      "//testing/scripts/run_isolated_script_test.py",
-      "//testing/xvfb.py",
-      "//third_party/catapult/third_party/typ/",
+    sources = [
+      "run_all_unittests.cc",
+      "test/integration_test_commands_factory_user.cc",
+    ]
+
+    deps = [
+      ":updater_test_sources",
+      "//base/test:test_support",
+      "//chrome/common:constants",
+      "//testing/gtest",
+    ]
+    if (is_win) {
+      deps += [ "//chrome/updater/win:updater_tests" ]
+    }
+
+    data_deps = [ "//chrome/updater/test/test_app" ]
+    if (is_mac) {
+      data_deps += [ "//chrome/updater/mac:updater_bundle" ]
+    }
+  }
+
+  test("updater_tests_system") {
+    testonly = true
+
+    sources = [
+      "run_all_unittests.cc",
+      "test/integration_test_commands_factory_system.cc",
+    ]
+
+    deps = [
+      ":updater_test_sources",
+      "//base/test:test_support",
+      "//chrome/common:constants",
+      "//testing/gtest",
+    ]
+    if (is_win) {
+      deps += [ "//chrome/updater/win:updater_tests" ]
+    }
+
+    data_deps = [ ":updater_integration_tests_helper" ]
+    if (is_mac) {
+      data_deps += [
+        "//chrome/updater/mac:updater_bundle",
+        "//chrome/updater/test/test_app",
+      ]
+    }
+  }
+
+  executable("updater_integration_tests_helper") {
+    testonly = true
+
+    sources = [
+      "test/integration_test_commands_factory_system.cc",
+      "test/integration_tests_helper.cc",
+    ]
+
+    deps = [
+      ":base",
+      ":lib",
+      ":updater_test_sources",
+      "//base",
+      "//base/test:test_support",
+      "//url",
     ]
   }
 }

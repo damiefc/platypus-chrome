@@ -5,13 +5,23 @@
 #include "chrome/browser/webshare/share_service_impl.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "base/feature_list.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+
+#if defined(OS_MAC)
+#include "chrome/browser/webshare/mac/sharing_service_operation.h"
+#endif
+
+#if defined(OS_WIN)
+#include "chrome/browser/webshare/win/share_operation.h"
+#endif
 
 // IsDangerousFilename() and IsDangerousMimeType() should be kept in sync with
 // //third_party/blink/renderer/modules/webshare/FILE_TYPES.md
@@ -20,7 +30,7 @@
 ShareServiceImpl::ShareServiceImpl(content::RenderFrameHost& render_frame_host)
     : content::WebContentsObserver(
           content::WebContents::FromRenderFrameHost(&render_frame_host)),
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       sharesheet_client_(web_contents()),
 #endif
       render_frame_host_(&render_frame_host) {
@@ -55,7 +65,7 @@ bool ShareServiceImpl::IsDangerousFilename(base::StringPiece name) {
       ".jpg",    // image/jpeg
       ".m4a",    // audio/x-m4a
       ".m4v",    // video/mp4
-      ".mp3",    // audio/mp3
+      ".mp3",    // audio/mpeg audio/mp3
       ".mp4",    // video/mp4
       ".mpeg",   // video/mpeg
       ".mpg",    // video/mpeg
@@ -91,9 +101,10 @@ bool ShareServiceImpl::IsDangerousFilename(base::StringPiece name) {
 
 // static
 bool ShareServiceImpl::IsDangerousMimeType(base::StringPiece content_type) {
-  constexpr std::array<const char*, 25> kPermitted = {
+  constexpr std::array<const char*, 26> kPermitted = {
       "audio/flac",
       "audio/mp3",
+      "audio/mpeg",
       "audio/ogg",
       "audio/wav",
       "audio/webm",
@@ -134,11 +145,13 @@ void ShareServiceImpl::Share(const std::string& title,
   content::WebContents* const web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host_);
   if (!web_contents) {
+    VLOG(1) << "Cannot share after navigating away";
     std::move(callback).Run(blink::mojom::ShareError::PERMISSION_DENIED);
     return;
   }
 
   if (files.size() > kMaxSharedFileCount) {
+    VLOG(1) << "Share too large: " << files.size() << " files";
     std::move(callback).Run(blink::mojom::ShareError::PERMISSION_DENIED);
     return;
   }
@@ -151,6 +164,8 @@ void ShareServiceImpl::Share(const std::string& title,
 
     if (IsDangerousFilename(file->name) ||
         IsDangerousMimeType(file->blob->content_type)) {
+      VLOG(1) << "File type is not supported: " << file->name
+              << " has mime type " << file->blob->content_type;
       std::move(callback).Run(blink::mojom::ShareError::PERMISSION_DENIED);
       return;
     }
@@ -162,13 +177,39 @@ void ShareServiceImpl::Share(const std::string& title,
     // the blobs.
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   sharesheet_client_.Share(title, text, share_url, std::move(files),
                            std::move(callback));
+#elif defined(OS_MAC)
+  auto sharing_service_operation =
+      std::make_unique<webshare::SharingServiceOperation>(
+          title, text, share_url, std::move(files), web_contents);
+
+  // grab a safe reference to |sharing_service_operation| before calling move on
+  // it.
+  webshare::SharingServiceOperation* sharing_service_operation_ptr =
+      sharing_service_operation.get();
+
+  // Wrap the |callback| in a binding that owns the |sharing_service_operation|
+  // so its lifetime can be preserved till its done.
+  sharing_service_operation_ptr->Share(base::BindOnce(
+      [](std::unique_ptr<webshare::SharingServiceOperation>
+             sharing_service_operation,
+         ShareCallback callback,
+         blink::mojom::ShareError result) { std::move(callback).Run(result); },
+      std::move(sharing_service_operation), std::move(callback)));
+#elif defined(OS_WIN)
+  auto share_operation = std::make_unique<webshare::ShareOperation>(
+      title, text, share_url, std::move(files), web_contents);
+  auto* const share_operation_ptr = share_operation.get();
+  share_operation_ptr->Run(base::BindOnce(
+      [](std::unique_ptr<webshare::ShareOperation> share_operation,
+         ShareCallback callback,
+         blink::mojom::ShareError result) { std::move(callback).Run(result); },
+      std::move(share_operation), std::move(callback)));
 #else
-  // TODO(crbug.com/1035527): Add implementation for OS_WIN
-  NOTIMPLEMENTED();
-  std::move(callback).Run(blink::mojom::ShareError::OK);
+  NOTREACHED();
+  std::move(callback).Run(blink::mojom::ShareError::INTERNAL_ERROR);
 #endif
 }
 

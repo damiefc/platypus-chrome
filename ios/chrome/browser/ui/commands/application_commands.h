@@ -7,6 +7,9 @@
 
 #import <Foundation/Foundation.h>
 
+#include "ios/public/provider/chrome/browser/user_feedback/user_feedback_sender.h"
+
+class GURL;
 @class OpenNewTabCommand;
 @class ShowSigninCommand;
 @class StartVoiceSearchCommand;
@@ -32,6 +35,12 @@ enum class KeyRetrievalTriggerForUMA;
     (UIViewController*)baseViewController;
 
 // TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
+// Shows the Sync settings UI, presenting from |baseViewController|.
+// If |baseViewController| is nil BVC will be used as presenterViewController.
+- (void)showSyncSettingsFromViewController:
+    (UIViewController*)baseViewController;
+
+// TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
 // Shows the sync encryption passphrase UI, presenting from
 // |baseViewController|.
 - (void)showSyncPassphraseSettingsFromViewController:
@@ -52,6 +61,11 @@ enum class KeyRetrievalTriggerForUMA;
 
 // Shows the list of credit cards in the settings.
 - (void)showCreditCardSettingsFromViewController:
+    (UIViewController*)baseViewController;
+
+// Shows the settings page informing the user how to set Chrome as the default
+// browser.
+- (void)showDefaultBrowserSettingsFromViewController:
     (UIViewController*)baseViewController;
 
 @end
@@ -75,6 +89,9 @@ enum class KeyRetrievalTriggerForUMA;
 // TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
 // Shows the advanced sign-in settings.
 - (void)showAdvancedSigninSettingsFromViewController:
+    (UIViewController*)baseViewController;
+
+- (void)showLocationPermissionsFromViewController:
     (UIViewController*)baseViewController;
 
 // Presents the Trusted Vault reauth dialog.
@@ -103,8 +120,13 @@ enum class KeyRetrievalTriggerForUMA;
 // Prepare to show the TabSwitcher UI.
 - (void)prepareTabSwitcher;
 
-// Shows the TabSwitcher UI.
-- (void)displayTabSwitcher;
+// Shows the TabSwitcher UI. When the thumb strip is enabled, shows the
+// TabSwitcher UI, specifically in its grid layout.
+- (void)displayTabSwitcherInGridLayout;
+
+// Same as displayTabSwitcherInGridLayout, but also force tab switcher to
+// regular tabs page.
+- (void)displayRegularTabSwitcherInGridLayout;
 
 // TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
 // Shows the Autofill Settings UI, presenting from |baseViewController|.
@@ -113,12 +135,14 @@ enum class KeyRetrievalTriggerForUMA;
 
 // Shows the Report an Issue UI, presenting from |baseViewController|.
 - (void)showReportAnIssueFromViewController:
-    (UIViewController*)baseViewController;
+            (UIViewController*)baseViewController
+                                     sender:(UserFeedbackSender)sender;
 
 // Shows the Report an Issue UI, presenting from |baseViewController|, using
 // |specificProductData| for additional product data to be sent in the report.
 - (void)
     showReportAnIssueFromViewController:(UIViewController*)baseViewController
+                                 sender:(UserFeedbackSender)sender
                     specificProductData:(NSDictionary<NSString*, NSString*>*)
                                             specificProductData;
 
@@ -132,14 +156,19 @@ enum class KeyRetrievalTriggerForUMA;
 - (void)showSignin:(ShowSigninCommand*)command
     baseViewController:(UIViewController*)baseViewController;
 
-// TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
-// Shows the Add Account UI, presenting from |baseViewController|.
-- (void)showAddAccountFromViewController:(UIViewController*)baseViewController;
+// Signs the user out and dismisses UI for any in-progress sign-in.
+- (void)forceSignOut;
 
 // TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
 // Shows the consistency promo UI that allows users to sign in to Chrome using
 // the default accounts on the device.
+// Redirects to |url| when the sign-in flow is complete.
 - (void)showConsistencyPromoFromViewController:
+            (UIViewController*)baseViewController
+                                           URL:(const GURL&)url;
+
+// Shows a notification with the signed-in user account.
+- (void)showSigninAccountNotificationFromViewController:
     (UIViewController*)baseViewController;
 
 // Sets whether the UI is displaying incognito content.

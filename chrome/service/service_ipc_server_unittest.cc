@@ -4,10 +4,11 @@
 
 #include "chrome/service/service_ipc_server.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
@@ -86,7 +87,8 @@ class ServiceIPCServerTest : public ::testing::Test {
   base::Thread io_thread_;
   base::WaitableEvent shutdown_event_;
   std::unique_ptr<ServiceIPCServer> server_;
-  service_manager::InterfaceProvider remote_interfaces_;
+  service_manager::InterfaceProvider remote_interfaces_{
+      base::ThreadTaskRunnerHandle::Get()};
   mojo::Remote<chrome::mojom::ServiceProcess> service_process_;
 };
 
@@ -101,9 +103,8 @@ void ServiceIPCServerTest::SetUp() {
   options.message_pump_type = base::MessagePumpType::IO;
   ASSERT_TRUE(io_thread_.StartWithOptions(options));
 
-  server_.reset(new ServiceIPCServer(&service_process_client_,
-                                     io_thread_.task_runner(),
-                                     &shutdown_event_));
+  server_ = std::make_unique<ServiceIPCServer>(
+      &service_process_client_, io_thread_.task_runner(), &shutdown_event_);
   server_->Init();
 }
 

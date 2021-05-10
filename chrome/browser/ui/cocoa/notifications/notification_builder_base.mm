@@ -6,11 +6,24 @@
 
 #import <AppKit/AppKit.h>
 
+#include "chrome/services/mac_notifications/public/cpp/notification_operation.h"
+
 @implementation NotificationBuilderBase
 
-- (instancetype)init {
+- (instancetype)initWithCloseLabel:(NSString*)closeLabel
+                      optionsLabel:(NSString*)optionsLabel
+                     settingsLabel:(NSString*)settingsLabel {
   if ((self = [super init])) {
     _notificationData.reset([[NSMutableDictionary alloc] init]);
+    [_notificationData
+        setObject:closeLabel
+           forKey:notification_constants::kNotificationCloseButtonTag];
+    [_notificationData
+        setObject:optionsLabel
+           forKey:notification_constants::kNotificationOptionsButtonTag];
+    [_notificationData
+        setObject:settingsLabel
+           forKey:notification_constants::kNotificationSettingsButtonTag];
   }
   return self;
 }
@@ -44,18 +57,6 @@
   }
 }
 
-- (void)setIcon:(NSImage*)icon {
-  if (icon) {
-    if ([icon conformsToProtocol:@protocol(NSSecureCoding)]) {
-      [_notificationData setObject:icon
-                            forKey:notification_constants::kNotificationImage];
-    } else {  // NSImage only conforms to NSSecureCoding from 10.10 onwards.
-      [_notificationData setObject:[icon TIFFRepresentation]
-                            forKey:notification_constants::kNotificationImage];
-    }
-  }
-}
-
 - (void)setButtons:(NSString*)primaryButton
     secondaryButton:(NSString*)secondaryButton {
   DCHECK(primaryButton.length);
@@ -68,11 +69,10 @@
   }
 }
 
-- (void)setTag:(NSString*)tag {
-  if (tag.length) {
-    [_notificationData setObject:tag
-                          forKey:notification_constants::kNotificationTag];
-  }
+- (void)setIdentifier:(NSString*)identifier {
+  DCHECK(identifier.length);
+  [_notificationData setObject:identifier
+                        forKey:notification_constants::kNotificationIdentifier];
 }
 
 - (void)setOrigin:(NSString*)origin {
@@ -109,10 +109,34 @@
                         forKey:notification_constants::kNotificationType];
 }
 
+- (void)setRenotify:(BOOL)renotify {
+  [_notificationData setObject:[NSNumber numberWithBool:renotify]
+                        forKey:notification_constants::kNotificationRenotify];
+}
+
 - (void)setShowSettingsButton:(BOOL)showSettingsButton {
   [_notificationData
       setObject:[NSNumber numberWithBool:showSettingsButton]
          forKey:notification_constants::kNotificationHasSettingsButton];
+}
+
+- (void)setIcon:(NSImage*)icon {
+  if (!icon)
+    return;
+
+  [_notificationData setObject:icon
+                        forKey:notification_constants::kNotificationIcon];
+}
+
+- (void)setClosedFromAlert:(BOOL)fromAlert {
+  [_notificationData
+      setObject:@(static_cast<int>(NotificationOperation::NOTIFICATION_CLOSE))
+         forKey:notification_constants::kNotificationOperation];
+  [_notificationData
+      setObject:@(notification_constants::kNotificationInvalidButtonIndex)
+         forKey:notification_constants::kNotificationButtonIndex];
+  [_notificationData setObject:@(fromAlert)
+                        forKey:notification_constants::kNotificationIsAlert];
 }
 
 - (NSDictionary*)buildDictionary {

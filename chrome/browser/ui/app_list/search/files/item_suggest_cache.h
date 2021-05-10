@@ -72,6 +72,28 @@ class ItemSuggestCache {
   // Whether or not to override configuration of the cache with an experiment.
   static const base::Feature kExperiment;
 
+  // Possible outcomes of a call to the ItemSuggest API. These values persist to
+  // logs. Entries should not be renumbered and numeric values should never be
+  // reused.
+  enum class Status {
+    kOk = 0,
+    kDisabledByExperiment = 1,
+    kDisabledByPolicy = 2,
+    kInvalidServerUrl = 3,
+    kNoIdentityManager = 4,
+    kGoogleAuthError = 5,
+    kNetError = 6,
+    kResponseTooLarge = 7,
+    k3xxStatus = 8,
+    k4xxStatus = 9,
+    k5xxStatus = 10,
+    kEmptyResponse = 11,
+    kNoResultsInResponse = 12,
+    kJsonParseFailure = 13,
+    kJsonConversionFailure = 14,
+    kMaxValue = kJsonConversionFailure,
+  };
+
  private:
   // Whether or not the ItemSuggestCache is enabled.
   static constexpr base::FeatureParam<bool> kEnabled{&kExperiment, "enabled",
@@ -81,8 +103,16 @@ class ItemSuggestCache {
       &kExperiment, "server_url",
       "https://appsitemsuggest-pa.googleapis.com/v1/items"};
 
+  // Specifies the ItemSuggest backend that should be used to serve our
+  // requests.
+  static constexpr base::FeatureParam<std::string> kModelName{
+      &kExperiment, "model_name", "quick_access"};
+
   static constexpr base::FeatureParam<int> kMinMinutesBetweenUpdates{
       &kExperiment, "min_minutes_between_updates", 15};
+
+  // Returns the body for the itemsuggest request. Affected by |kExperiment|.
+  std::string GetRequestBody();
 
   void OnTokenReceived(GoogleServiceAuthError error,
                        signin::AccessTokenInfo token_info);

@@ -97,8 +97,8 @@ SyncFileSystemDeleteFileSystemFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &url));
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
-      BrowserContext::GetStoragePartition(
-          browser_context(), render_frame_host()->GetSiteInstance())
+      browser_context()
+          ->GetStoragePartition(render_frame_host()->GetSiteInstance())
           ->GetFileSystemContext();
   storage::FileSystemURL file_system_url(
       file_system_context->CrackURL(GURL(url)));
@@ -108,8 +108,8 @@ SyncFileSystemDeleteFileSystemFunction::Run() {
       BindOnce(
           &storage::FileSystemContext::DeleteFileSystem, file_system_context,
           url::Origin::Create(source_url().GetOrigin()), file_system_url.type(),
-          Bind(&SyncFileSystemDeleteFileSystemFunction::DidDeleteFileSystem,
-               this)));
+          BindOnce(&SyncFileSystemDeleteFileSystemFunction::DidDeleteFileSystem,
+                   this)));
   return RespondLater();
 }
 
@@ -136,7 +136,7 @@ void SyncFileSystemDeleteFileSystemFunction::DidDeleteFileSystem(
     return;
   }
 
-  Respond(OneArgument(std::make_unique<base::Value>(true)));
+  Respond(OneArgument(base::Value(true)));
 }
 
 ExtensionFunction::ResponseAction
@@ -162,8 +162,8 @@ SyncFileSystemRequestFileSystemFunction::Run() {
 storage::FileSystemContext*
 SyncFileSystemRequestFileSystemFunction::GetFileSystemContext() {
   DCHECK(render_frame_host());
-  return BrowserContext::GetStoragePartition(
-             browser_context(), render_frame_host()->GetSiteInstance())
+  return browser_context()
+      ->GetStoragePartition(render_frame_host()->GetSiteInstance())
       ->GetFileSystemContext();
 }
 
@@ -191,7 +191,7 @@ void SyncFileSystemRequestFileSystemFunction::DidOpenFileSystem(
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("name", file_system_name);
   dict->SetString("root", root_url.spec());
-  Respond(OneArgument(std::move(dict)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(dict))));
 }
 
 ExtensionFunction::ResponseAction SyncFileSystemGetFileStatusFunction::Run() {
@@ -199,8 +199,8 @@ ExtensionFunction::ResponseAction SyncFileSystemGetFileStatusFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &url));
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
-      BrowserContext::GetStoragePartition(
-          browser_context(), render_frame_host()->GetSiteInstance())
+      browser_context()
+          ->GetStoragePartition(render_frame_host()->GetSiteInstance())
           ->GetFileSystemContext();
   storage::FileSystemURL file_system_url(
       file_system_context->CrackURL(GURL(url)));
@@ -212,7 +212,7 @@ ExtensionFunction::ResponseAction SyncFileSystemGetFileStatusFunction::Run() {
 
   sync_file_system_service->GetFileSyncStatus(
       file_system_url,
-      Bind(&SyncFileSystemGetFileStatusFunction::DidGetFileStatus, this));
+      BindOnce(&SyncFileSystemGetFileStatusFunction::DidGetFileStatus, this));
   return RespondLater();
 }
 
@@ -242,8 +242,8 @@ ExtensionFunction::ResponseAction SyncFileSystemGetFileStatusesFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(args_->GetList(0, &file_entry_urls));
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
-      BrowserContext::GetStoragePartition(
-          browser_context(), render_frame_host()->GetSiteInstance())
+      browser_context()
+          ->GetStoragePartition(render_frame_host()->GetSiteInstance())
           ->GetFileSystemContext();
 
   // Map each file path->SyncFileStatus in the callback map.
@@ -264,8 +264,8 @@ ExtensionFunction::ResponseAction SyncFileSystemGetFileStatusesFunction::Run() {
 
     sync_file_system_service->GetFileSyncStatus(
         file_system_url,
-        Bind(&SyncFileSystemGetFileStatusesFunction::DidGetFileStatus, this,
-             file_system_url));
+        BindOnce(&SyncFileSystemGetFileStatusesFunction::DidGetFileStatus, this,
+                 file_system_url));
   }
 
   return RespondLater();
@@ -312,7 +312,8 @@ void SyncFileSystemGetFileStatusesFunction::DidGetFileStatus(
 
     status_array->Append(std::move(dict));
   }
-  Respond(OneArgument(std::move(status_array)));
+  Respond(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(status_array))));
 }
 
 ExtensionFunction::ResponseAction
@@ -321,15 +322,15 @@ SyncFileSystemGetUsageAndQuotaFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &url));
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
-      BrowserContext::GetStoragePartition(
-          browser_context(), render_frame_host()->GetSiteInstance())
+      browser_context()
+          ->GetStoragePartition(render_frame_host()->GetSiteInstance())
           ->GetFileSystemContext();
   storage::FileSystemURL file_system_url(
       file_system_context->CrackURL(GURL(url)));
 
   scoped_refptr<storage::QuotaManager> quota_manager =
-      BrowserContext::GetStoragePartition(
-          browser_context(), render_frame_host()->GetSiteInstance())
+      browser_context()
+          ->GetStoragePartition(render_frame_host()->GetSiteInstance())
           ->GetQuotaManager();
 
   content::GetIOThreadTaskRunner({})->PostTask(
@@ -338,8 +339,8 @@ SyncFileSystemGetUsageAndQuotaFunction::Run() {
           &storage::QuotaManager::GetUsageAndQuotaForWebApps, quota_manager,
           url::Origin::Create(source_url()),
           storage::FileSystemTypeToQuotaStorageType(file_system_url.type()),
-          Bind(&SyncFileSystemGetUsageAndQuotaFunction::DidGetUsageAndQuota,
-               this)));
+          BindOnce(&SyncFileSystemGetUsageAndQuotaFunction::DidGetUsageAndQuota,
+                   this)));
 
   return RespondLater();
 }
@@ -386,9 +387,8 @@ SyncFileSystemSetConflictResolutionPolicyFunction::Run() {
 
 ExtensionFunction::ResponseAction
 SyncFileSystemGetConflictResolutionPolicyFunction::Run() {
-  return RespondNow(
-      OneArgument(std::make_unique<base::Value>(sync_file_system::ToString(
-          sync_file_system::CONFLICT_RESOLUTION_POLICY_LAST_WRITE_WIN))));
+  return RespondNow(OneArgument(base::Value(sync_file_system::ToString(
+      sync_file_system::CONFLICT_RESOLUTION_POLICY_LAST_WRITE_WIN))));
 }
 
 ExtensionFunction::ResponseAction

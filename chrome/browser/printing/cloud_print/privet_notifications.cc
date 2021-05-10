@@ -9,12 +9,13 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/local_discovery/service_discovery_shared_client.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/notification_handler.h"
@@ -27,7 +28,6 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/webui/local_discovery/local_discovery_ui_handler.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -86,7 +86,7 @@ void PrivetNotificationsListener::DeviceChanged(
   }
 
   std::unique_ptr<DeviceContext>& device_context = devices_seen_[name];
-  device_context.reset(new DeviceContext);
+  device_context = std::make_unique<DeviceContext>();
   device_context->notification_may_be_active = false;
   device_context->registered = !description.id.empty();
 
@@ -233,10 +233,7 @@ void PrivetNotificationService::AddNotification(
   // existing notification but not add a new one.
   const bool notification_exists =
       base::Contains(displayed_notifications, kPrivetNotificationID);
-  const bool add_new_notification =
-      device_added &&
-      !local_discovery::LocalDiscoveryUIHandler::GetHasVisible();
-  if (!notification_exists && !add_new_notification)
+  if (!notification_exists && !device_added)
     return;
 
   message_center::RichNotificationData rich_notification_data;
@@ -247,11 +244,11 @@ void PrivetNotificationService::AddNotification(
       message_center::ButtonInfo(l10n_util::GetStringUTF16(
           IDS_LOCAL_DISCOVERY_NOTIFICATIONS_DISABLE_BUTTON_LABEL)));
 
-  base::string16 title = l10n_util::GetPluralStringFUTF16(
+  std::u16string title = l10n_util::GetPluralStringFUTF16(
       IDS_LOCAL_DISCOVERY_NOTIFICATION_TITLE_PRINTER, devices_active);
-  base::string16 body = l10n_util::GetPluralStringFUTF16(
+  std::u16string body = l10n_util::GetPluralStringFUTF16(
       IDS_LOCAL_DISCOVERY_NOTIFICATION_CONTENTS_PRINTER, devices_active);
-  base::string16 product_name =
+  std::u16string product_name =
       l10n_util::GetStringUTF16(IDS_LOCAL_DISCOVERY_SERVICE_NAME_PRINTER);
 
   Profile* profile = Profile::FromBrowserContext(profile_);
@@ -278,16 +275,16 @@ void PrivetNotificationService::PrivetRemoveNotification() {
 }
 
 void PrivetNotificationService::Start() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   auto* identity_manager = IdentityManagerFactory::GetForProfileIfExists(
       Profile::FromBrowserContext(profile_));
 
   // Only show notifications for signed-in accounts. https://crbug.com/349098
-  if (!identity_manager || !identity_manager->HasPrimaryAccount(
-                               signin::ConsentLevel::kNotRequired)) {
+  if (!identity_manager ||
+      !identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
     return;
   }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   enable_privet_notification_member_.Init(
       prefs::kLocalDiscoveryNotificationsEnabled,
@@ -325,18 +322,19 @@ void PrivetNotificationService::OnNotificationsEnabledChanged() {
 void PrivetNotificationService::StartLister() {
   service_discovery_client_ =
       local_discovery::ServiceDiscoverySharedClient::GetInstance();
-  device_lister_.reset(
-      new PrivetDeviceListerImpl(service_discovery_client_.get(), this));
+  device_lister_ = std::make_unique<PrivetDeviceListerImpl>(
+      service_discovery_client_.get(), this);
   device_lister_->Start();
   device_lister_->DiscoverNewDevices();
 
   std::unique_ptr<PrivetHTTPAsynchronousFactory> http_factory(
       PrivetHTTPAsynchronousFactory::CreateInstance(
-          content::BrowserContext::GetDefaultStoragePartition(profile_)
+          profile_->GetDefaultStoragePartition()
               ->GetURLLoaderFactoryForBrowserProcess()));
 
-  privet_notifications_listener_.reset(
-      new PrivetNotificationsListener(std::move(http_factory), this));
+  privet_notifications_listener_ =
+      std::make_unique<PrivetNotificationsListener>(std::move(http_factory),
+                                                    this);
 }
 
 PrivetNotificationDelegate*
@@ -352,7 +350,7 @@ PrivetNotificationDelegate::~PrivetNotificationDelegate() {
 
 void PrivetNotificationDelegate::Click(
     const base::Optional<int>& button_index,
-    const base::Optional<base::string16>& reply) {
+    const base::Optional<std::u16string>& reply) {
   if (!button_index)
     return;
 

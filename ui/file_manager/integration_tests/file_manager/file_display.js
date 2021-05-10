@@ -268,14 +268,28 @@ testcase.fileDisplayUsbPartition = async () => {
   chrome.test.assertEq(
       'removable', fakeUsb.attributes['volume-type-for-testing']);
 
-  // Check unpartitioned USB does not have partitions as tree children.
-  const itemEntriesQuery =
-      ['[entry-label="fake-usb"] .tree-children .tree-item'];
-  const itemEntries = await remoteCall.callRemoteTestUtil(
-      'queryAllElements', appId, itemEntriesQuery);
-  chrome.test.assertEq(1, itemEntries.length);
-  const childVolumeType = itemEntries[0].attributes['volume-type-for-testing'];
-  chrome.test.assertTrue('removable' !== childVolumeType);
+  if (await isSinglePartitionFormat(appId)) {
+    // Check unpartitioned USB has single partition as tree child.
+    const itemEntriesQuery =
+        ['[entry-label="FAKEUSB"] .tree-children .tree-item'];
+    const itemEntries = await remoteCall.callRemoteTestUtil(
+        'queryAllElements', appId, itemEntriesQuery);
+    chrome.test.assertEq(1, itemEntries.length);
+    const childVolumeType =
+        itemEntries[0].attributes['volume-type-for-testing'];
+
+    chrome.test.assertTrue('removable' == childVolumeType);
+  } else {
+    // Check unpartitioned USB does not have partitions as tree children.
+    const itemEntriesQuery =
+        ['[entry-label="fake-usb"] .tree-children .tree-item'];
+    const itemEntries = await remoteCall.callRemoteTestUtil(
+        'queryAllElements', appId, itemEntriesQuery);
+    chrome.test.assertEq(1, itemEntries.length);
+    const childVolumeType =
+        itemEntries[0].attributes['volume-type-for-testing'];
+    chrome.test.assertTrue('removable' !== childVolumeType);
+  }
 };
 
 /**
@@ -502,8 +516,13 @@ testcase.fileDisplayWithoutVolumesThenMountDownloads = async () => {
   await remoteCall.waitForElement(appId, '[volume-type-icon="downloads"]');
   const downloadsRow = ['Downloads', '--', 'Folder'];
   const crostiniRow = ['Linux files', '--', 'Folder'];
+  const trashRow = ['Trash', '--', 'Folder'];
+  const expectedRows = [downloadsRow, crostiniRow, trashRow];
+  if (await sendTestMessage({name: 'isTrashEnabled'}) !== 'true') {
+    expectedRows.pop();
+  }
   await remoteCall.waitForFiles(
-      appId, [downloadsRow, crostiniRow],
+      appId, expectedRows,
       {ignoreFileSize: true, ignoreLastModifiedTime: true});
 };
 
@@ -699,7 +718,11 @@ testcase.fileDisplayUnmountDriveWithSharedWithMeSelected = async () => {
     ['Play files', '--', 'Folder'],
     ['Downloads', '--', 'Folder'],
     ['Linux files', '--', 'Folder'],
+    ['Trash', '--', 'Folder'],
   ];
+  if (await sendTestMessage({name: 'isTrashEnabled'}) !== 'true') {
+    expectedRows.pop();
+  }
   await remoteCall.waitForFiles(
       appId, expectedRows, {ignoreLastModifiedTime: true});
 };
@@ -760,7 +783,11 @@ async function unmountRemovableVolume(removableDirectory) {
     ['Play files', '--', 'Folder'],
     ['Downloads', '--', 'Folder'],
     ['Linux files', '--', 'Folder'],
+    ['Trash', '--', 'Folder'],
   ];
+  if (await sendTestMessage({name: 'isTrashEnabled'}) !== 'true') {
+    expectedRows.pop();
+  }
   await remoteCall.waitForFiles(
       appId, expectedRows, {ignoreLastModifiedTime: true});
 }

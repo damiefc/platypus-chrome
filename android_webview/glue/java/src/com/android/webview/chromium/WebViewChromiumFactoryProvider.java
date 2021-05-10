@@ -14,7 +14,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.SystemClock;
 import android.provider.Settings;
-import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.PacProcessor;
@@ -31,6 +30,7 @@ import android.webkit.WebViewProvider;
 
 import com.android.webview.chromium.WebViewDelegateFactory.WebViewDelegate;
 
+import org.chromium.android_webview.ApkType;
 import org.chromium.android_webview.AwBrowserContext;
 import org.chromium.android_webview.AwBrowserProcess;
 import org.chromium.android_webview.AwContentsStatics;
@@ -52,12 +52,13 @@ import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.VerifiesOnN;
 import org.chromium.base.annotations.VerifiesOnP;
-import org.chromium.base.library_loader.NativeLibraries;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.ScopedSysTraceEvent;
-import org.chromium.components.autofill.AutofillProvider;
+import org.chromium.build.BuildConfig;
+import org.chromium.build.NativeLibraries;
 import org.chromium.components.embedder_support.application.ClassLoaderContextWrapperFactory;
 import org.chromium.components.embedder_support.application.FirebaseConfig;
+import org.chromium.components.version_info.VersionConstants;
 import org.chromium.content_public.browser.LGEmailActionModeWorkaround;
 
 import java.io.File;
@@ -79,6 +80,10 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
     private static final String SUPPORT_LIB_GLUE_AND_BOUNDARY_INTERFACE_PREFIX =
             "org.chromium.support_lib_";
+
+    // This is an ID hardcoded by WebLayer for resources stored in locale splits. See
+    // WebLayerImpl.java for more info.
+    private static final int SHARED_LIBRARY_MAX_ID = 36;
 
     /**
      * This holds objects of classes that are defined in N and above to ensure that run-time class
@@ -104,9 +109,6 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
     private static WebViewChromiumFactoryProvider sSingleton;
     // Used to indicate if WebLayer and WebView are running in the same process.
     private static boolean sWebLayerRunningInSameProcess;
-    // Used to detect if we enter initialization for a second time, e.g. because an app caught and
-    // discarded an exception thrown by a previous failed initialization attempt.
-    private static volatile boolean sInitAlreadyStarted;
 
     private final WebViewChromiumRunQueue mRunQueue = new WebViewChromiumRunQueue(
             () -> { return WebViewChromiumFactoryProvider.this.mAwInit.hasStarted(); });
@@ -245,13 +247,9 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
     @SuppressWarnings("NoContextGetApplicationContext")
     private void initialize(WebViewDelegate webViewDelegate) {
-        long startTime = SystemClock.elapsedRealtime();
+        long startTime = SystemClock.uptimeMillis();
         try (ScopedSysTraceEvent e1 =
                         ScopedSysTraceEvent.scoped("WebViewChromiumFactoryProvider.initialize")) {
-            RecordHistogram.recordBooleanHistogram(
-                    "Android.WebView.Startup.InitAlreadyStarted", sInitAlreadyStarted);
-            sInitAlreadyStarted = true;
-
             PackageInfo packageInfo;
             try (ScopedSysTraceEvent e2 = ScopedSysTraceEvent.scoped(
                          "WebViewChromiumFactoryProvider.getLoadedPackageInfo")) {
@@ -261,6 +259,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                 packageInfo = WebViewFactory.getLoadedPackageInfo();
             }
             AwBrowserProcess.setWebViewPackageName(packageInfo.packageName);
+            AwBrowserProcess.initializeApkType(packageInfo.applicationInfo);
 
             mAwInit = createAwInit();
             mWebViewDelegate = webViewDelegate;
@@ -290,6 +289,11 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                         "com.android.webview.WebViewDonorPackage", resourcePackage);
             }
             int packageId = webViewDelegate.getPackageId(ctx.getResources(), resourcePackage);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                    && AwBrowserProcess.getApkType() != ApkType.TRICHROME
+                    && packageId > SHARED_LIBRARY_MAX_ID) {
+                throw new RuntimeException("Package ID too high for WebView: " + packageId);
+            }
 
             mAwInit.setUpResourcesOnBackgroundThread(packageId, ctx);
 
@@ -312,6 +316,18 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
             if (multiProcess) {
                 CommandLine cl = CommandLine.getInstance();
                 cl.appendSwitch(AwSwitches.WEBVIEW_SANDBOXED_RENDERER);
+            }
+            // Using concatenation rather than %s to allow values to be inlined by R8.
+            Log.i(TAG,
+                    "Loaded version=" + VersionConstants.PRODUCT_VERSION + " minSdkVersion="
+                            + BuildConfig.MIN_SDK_VERSION + " isBundle=" + ProductConfig.IS_BUNDLE
+                            + " multiprocess=%s packageId=%s",
+                    multiProcess, packageId);
+
+            // Enable modern SameSite cookie behavior if the app targets at least S.
+            if (BuildInfo.targetsAtLeastS()) {
+                CommandLine cl = CommandLine.getInstance();
+                cl.appendSwitch(AwSwitches.WEBVIEW_ENABLE_MODERN_COOKIE_SAME_SITE);
             }
 
             int applicationFlags = ctx.getApplicationInfo().flags;
@@ -394,7 +410,15 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
         RecordHistogram.recordTimesHistogram(
                 "Android.WebView.Startup.CreationTime.Stage1.FactoryInit",
-                SystemClock.elapsedRealtime() - startTime);
+                SystemClock.uptimeMillis() - startTime);
+
+        if (BuildInfo.isAtLeastS()) {
+            // TODO: Use the framework constants as indices in timestamps array.
+            startTime = mWebViewDelegate.getTimestamps()[0];
+            RecordHistogram.recordTimesHistogram(
+                    "Android.WebView.Startup.CreationTime.TotalFactoryInitTime",
+                    SystemClock.uptimeMillis() - startTime);
+        }
     }
 
     /* package */ static void checkStorageIsNotDeviceProtected(Context context) {
@@ -532,7 +556,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         return new WebViewChromium(this, webView, privateAccess, mShouldDisableThreadChecking);
     }
 
-    // Workaround for IME thread crashes on grandfathered OEM apps.
+    // Workaround for IME thread crashes on legacy OEM apps.
     private boolean shouldDisableThreadChecking(Context context) {
         String appName = context.getPackageName();
         int versionCode = PackageUtils.getPackageVersion(context, appName);
@@ -626,11 +650,6 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                      "WebViewChromiumFactoryProvider.insideCreateWebViewContentsClientAdapter")) {
             return new WebViewContentsClientAdapter(webView, context, mWebViewDelegate);
         }
-    }
-
-    AutofillProvider createAutofillProvider(Context context, ViewGroup containerView) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null;
-        return new AutofillProvider(context, containerView, "Android WebView");
     }
 
     void startYourEngines(boolean onMainThread) {

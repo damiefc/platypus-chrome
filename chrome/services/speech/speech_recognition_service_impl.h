@@ -11,7 +11,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "services/network/url_loader_factory.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 
 namespace speech {
 
@@ -42,6 +42,13 @@ class SpeechRecognitionServiceImpl
       mojo::PendingReceiver<media::mojom::SpeechRecognitionRecognizer> receiver,
       mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient>
           client,
+      media::mojom::SpeechRecognitionOptionsPtr options,
+      BindRecognizerCallback callback) override;
+  void BindAudioSourceFetcher(
+      mojo::PendingReceiver<media::mojom::AudioSourceFetcher> fetcher_receiver,
+      mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient>
+          client,
+      media::mojom::SpeechRecognitionOptionsPtr options,
       BindRecognizerCallback callback) override;
 
  protected:

@@ -15,7 +15,6 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
-#include "chrome/browser/geolocation/geolocation_system_permission_mac.h"
 #include "chrome/browser/permissions/quiet_notification_permission_ui_state.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -30,14 +29,14 @@
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/no_state_prefetch/browser/no_state_prefetch_manager.h"
 #include "components/permissions/features.h"
 #include "components/permissions/notification_permission_ui_selector.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permission_request_manager.h"
-#include "components/permissions/permission_uma_util.h"
+#include "components/permissions/request_type.h"
 #include "components/permissions/test/mock_permission_prompt_factory.h"
 #include "components/permissions/test/mock_permission_request.h"
-#include "components/prerender/browser/prerender_manager.h"
 #include "content/public/browser/cookie_access_details.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -51,7 +50,9 @@
 #include "ui/gfx/color_palette.h"
 
 #if defined(OS_MAC)
-#include "chrome/browser/geolocation/geolocation_system_permission_mac.h"
+#include "services/device/public/cpp/geolocation/geolocation_manager.h"
+#include "services/device/public/cpp/geolocation/location_system_permission_status.h"
+#include "services/device/public/cpp/test/fake_geolocation_manager.h"
 #endif
 
 using content_settings::PageSpecificContentSettings;
@@ -83,8 +84,8 @@ class TestQuietNotificationPermissionUiSelector
 class ContentSettingImageModelTest : public BrowserWithTestWindowTest {
  public:
   ContentSettingImageModelTest()
-      : request_("test1",
-                 permissions::PermissionRequestType::PERMISSION_NOTIFICATIONS,
+      : request_(u"test1",
+                 permissions::RequestType::kNotifications,
                  permissions::PermissionRequestGestureType::GESTURE) {}
   ~ContentSettingImageModelTest() override {}
 
@@ -103,7 +104,8 @@ class ContentSettingImageModelTest : public BrowserWithTestWindowTest {
   }
 
   void WaitForBubbleToBeShown() {
-    manager_->DocumentOnLoadCompletedInMainFrame();
+    manager_->DocumentOnLoadCompletedInMainFrame(
+        web_contents()->GetMainFrame());
     base::RunLoop().RunUntilIdle();
   }
 
@@ -119,22 +121,6 @@ class ContentSettingImageModelTest : public BrowserWithTestWindowTest {
 bool HasIcon(const ContentSettingImageModel& model) {
   return !model.GetIcon(gfx::kPlaceholderColor).IsEmpty();
 }
-
-#if defined(OS_MAC)
-class FakeSystemGeolocationPermissionsManager
-    : public GeolocationSystemPermissionManager {
- public:
-  FakeSystemGeolocationPermissionsManager() = default;
-
-  ~FakeSystemGeolocationPermissionsManager() override = default;
-
-  SystemPermissionStatus GetSystemPermission() override { return fake_status_; }
-  void SetStatus(SystemPermissionStatus status) { fake_status_ = status; }
-
- private:
-  SystemPermissionStatus fake_status_ = SystemPermissionStatus::kAllowed;
-};
-#endif
 
 TEST_F(ContentSettingImageModelTest, Update) {
   PageSpecificContentSettings::CreateForWebContents(
@@ -170,7 +156,7 @@ TEST_F(ContentSettingImageModelTest, RPHUpdate) {
 
   chrome::PageSpecificContentSettingsDelegate::FromWebContents(web_contents())
       ->set_pending_protocol_handler(ProtocolHandler::CreateProtocolHandler(
-          "mailto", GURL("http://www.google.com/")));
+          "mailto", GURL("https://www.google.com/")));
   content_setting_image_model->Update(web_contents());
   EXPECT_TRUE(content_setting_image_model->is_visible());
 }
@@ -238,8 +224,8 @@ TEST_F(ContentSettingImageModelTest, SensorAccessed) {
   content_settings =
       PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
 
-  // Allowing by default but blocking (e.g. due to a feature policy) causes the
-  // indicator to be shown.
+  // Allowing by default but blocking (e.g. due to a permissions policy) causes
+  // the indicator to be shown.
   HostContentSettingsMapFactory::GetForProfile(profile())
       ->SetDefaultContentSetting(ContentSettingsType::SENSORS,
                                  CONTENT_SETTING_ALLOW);
@@ -292,14 +278,13 @@ TEST_F(ContentSettingImageModelTest, SensorAccessed) {
 TEST_F(ContentSettingImageModelTest, GeolocationAccessPermissionsChanged) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(features::kMacCoreLocationImplementation);
-  auto test_location_permission_manager =
-      std::make_unique<FakeSystemGeolocationPermissionsManager>();
-  FakeSystemGeolocationPermissionsManager* location_permission_manager =
-      test_location_permission_manager.get();
+  auto test_geolocation_manager =
+      std::make_unique<device::FakeGeolocationManager>();
+  device::FakeGeolocationManager* geolocation_manager =
+      test_geolocation_manager.get();
   TestingBrowserProcess::GetGlobal()
       ->GetTestPlatformPart()
-      ->SetLocationPermissionManager(
-          std::move(test_location_permission_manager));
+      ->SetGeolocationManager(std::move(test_geolocation_manager));
 
   PageSpecificContentSettings::CreateForWebContents(
       web_contents(),
@@ -318,6 +303,9 @@ TEST_F(ContentSettingImageModelTest, GeolocationAccessPermissionsChanged) {
   EXPECT_FALSE(content_setting_image_model->is_visible());
   EXPECT_TRUE(content_setting_image_model->get_tooltip().empty());
 
+  geolocation_manager->SetSystemPermission(
+      device::LocationSystemPermissionStatus::kAllowed);
+
   settings_map->SetDefaultContentSetting(ContentSettingsType::GEOLOCATION,
                                          CONTENT_SETTING_ALLOW);
   content_settings->OnContentAllowed(ContentSettingsType::GEOLOCATION);
@@ -331,8 +319,6 @@ TEST_F(ContentSettingImageModelTest, GeolocationAccessPermissionsChanged) {
   settings_map->SetDefaultContentSetting(ContentSettingsType::GEOLOCATION,
                                          CONTENT_SETTING_BLOCK);
   content_settings->OnContentBlocked(ContentSettingsType::GEOLOCATION);
-  //   content_settings->OnGeolocationPermissionSet(requesting_origin,
-  //                                                /*allowed=*/false);
   content_setting_image_model->Update(web_contents());
   EXPECT_TRUE(content_setting_image_model->is_visible());
   EXPECT_TRUE(HasIcon(*content_setting_image_model));
@@ -341,7 +327,8 @@ TEST_F(ContentSettingImageModelTest, GeolocationAccessPermissionsChanged) {
             l10n_util::GetStringUTF16(IDS_BLOCKED_GEOLOCATION_MESSAGE));
   EXPECT_EQ(content_setting_image_model->explanatory_string_id(), 0);
 
-  location_permission_manager->SetStatus(SystemPermissionStatus::kDenied);
+  geolocation_manager->SetSystemPermission(
+      device::LocationSystemPermissionStatus::kDenied);
   content_setting_image_model->Update(web_contents());
   EXPECT_TRUE(content_setting_image_model->is_visible());
   EXPECT_FALSE(content_setting_image_model->get_tooltip().empty());
@@ -357,6 +344,61 @@ TEST_F(ContentSettingImageModelTest, GeolocationAccessPermissionsChanged) {
             l10n_util::GetStringUTF16(IDS_BLOCKED_GEOLOCATION_MESSAGE));
   EXPECT_EQ(content_setting_image_model->explanatory_string_id(),
             IDS_GEOLOCATION_TURNED_OFF);
+}
+
+TEST_F(ContentSettingImageModelTest, GeolocationAccessPermissionsUndetermined) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kMacCoreLocationImplementation);
+  auto test_geolocation_manager =
+      std::make_unique<device::FakeGeolocationManager>();
+  test_geolocation_manager->SetSystemPermission(
+      device::LocationSystemPermissionStatus::kNotDetermined);
+  TestingBrowserProcess::GetGlobal()
+      ->GetTestPlatformPart()
+      ->SetGeolocationManager(std::move(test_geolocation_manager));
+
+  PageSpecificContentSettings::CreateForWebContents(
+      web_contents(),
+      std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
+          web_contents()));
+  GURL requesting_origin = GURL("https://www.example.com");
+  NavigateAndCommit(controller_, requesting_origin);
+  PageSpecificContentSettings* content_settings =
+      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+  HostContentSettingsMap* settings_map =
+      HostContentSettingsMapFactory::GetForProfile(profile());
+
+  auto content_setting_image_model =
+      ContentSettingImageModel::CreateForContentType(
+          ContentSettingImageModel::ImageType::GEOLOCATION);
+  EXPECT_FALSE(content_setting_image_model->is_visible());
+  EXPECT_TRUE(content_setting_image_model->get_tooltip().empty());
+
+  // When OS level permission is not determined the UI should show as if it is
+  // blocked. However, the explanatory string is not displayed since we aren't
+  // completely sure yet.
+  settings_map->SetDefaultContentSetting(ContentSettingsType::GEOLOCATION,
+                                         CONTENT_SETTING_ALLOW);
+  content_settings->OnContentAllowed(ContentSettingsType::GEOLOCATION);
+  content_setting_image_model->Update(web_contents());
+  EXPECT_TRUE(content_setting_image_model->is_visible());
+  EXPECT_FALSE(content_setting_image_model->get_tooltip().empty());
+  EXPECT_EQ(content_setting_image_model->get_tooltip(),
+            l10n_util::GetStringUTF16(IDS_BLOCKED_GEOLOCATION_MESSAGE));
+  EXPECT_EQ(content_setting_image_model->explanatory_string_id(), 0);
+
+  // When site permission is blocked it should not make any difference what the
+  // OS level permission is.
+  settings_map->SetDefaultContentSetting(ContentSettingsType::GEOLOCATION,
+                                         CONTENT_SETTING_BLOCK);
+  content_settings->OnContentBlocked(ContentSettingsType::GEOLOCATION);
+  content_setting_image_model->Update(web_contents());
+  EXPECT_TRUE(content_setting_image_model->is_visible());
+  EXPECT_TRUE(HasIcon(*content_setting_image_model));
+  EXPECT_FALSE(content_setting_image_model->get_tooltip().empty());
+  EXPECT_EQ(content_setting_image_model->get_tooltip(),
+            l10n_util::GetStringUTF16(IDS_BLOCKED_GEOLOCATION_MESSAGE));
+  EXPECT_EQ(content_setting_image_model->explanatory_string_id(), 0);
 }
 #endif
 
@@ -457,7 +499,7 @@ TEST_F(ContentSettingImageModelTest, SensorAccessPermissionsChanged) {
                                            CONTENT_SETTING_BLOCK);
     settings_map->SetContentSettingDefaultScope(
         web_contents()->GetURL(), web_contents()->GetURL(),
-        ContentSettingsType::SENSORS, std::string(), CONTENT_SETTING_ALLOW);
+        ContentSettingsType::SENSORS, CONTENT_SETTING_ALLOW);
     content_settings->OnContentAllowed(ContentSettingsType::SENSORS);
     content_setting_image_model->Update(web_contents());
 
@@ -480,7 +522,7 @@ TEST_F(ContentSettingImageModelTest, SensorAccessPermissionsChanged) {
                                            CONTENT_SETTING_ALLOW);
     settings_map->SetContentSettingDefaultScope(
         web_contents()->GetURL(), web_contents()->GetURL(),
-        ContentSettingsType::SENSORS, std::string(), CONTENT_SETTING_BLOCK);
+        ContentSettingsType::SENSORS, CONTENT_SETTING_BLOCK);
     content_settings->OnContentBlocked(ContentSettingsType::SENSORS);
     content_setting_image_model->Update(web_contents());
 

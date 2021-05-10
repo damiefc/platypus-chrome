@@ -8,6 +8,10 @@ package chromeos.phonehub.proto;
 
 option optimize_for = LITE_RUNTIME;
 
+// This enum is tied directly to a UMA enum defined in
+// //tools/metrics/histograms/enums.xml, and should always reflect it (do not
+// change one without changing the other). Entries should be never modified
+// or deleted. Only additions possible.
 enum MessageType {
   PROVIDE_CROS_STATE = 0;
   PHONE_STATUS_SNAPSHOT = 1;
@@ -81,6 +85,21 @@ enum NotificationImportance {
   HIGH = 5;
 }
 
+enum ProfileType {
+  DEFAULT_PROFILE = 0;
+  WORK_PROFILE = 1;
+}
+
+enum DoNotDisturbCapability {
+  DO_NOT_DISTURB_NORMAL = 0;
+  DO_NOT_DISTURB_NOT_ALLOWED = 1;
+}
+
+enum FindMyDeviceCapability {
+  NORMAL = 0;
+  NOT_ALLOWED = 1;
+}
+
 message PhoneProperties {
   int32 battery_percentage = 1;
   ChargingState charging_state = 2;
@@ -96,6 +115,15 @@ message PhoneProperties {
   NotificationAccessState notification_access_state = 8;
 
   FindMyDeviceRingStatus ring_status = 9;
+
+  ProfileType profile_type = 10;
+
+  FindMyDeviceCapability find_my_device_capability = 11;
+
+  DoNotDisturbCapability do_not_disturb_capability = 12;
+
+  int32 android_version = 13;
+  int64 gmscore_version = 14;
 }
 
 message App {

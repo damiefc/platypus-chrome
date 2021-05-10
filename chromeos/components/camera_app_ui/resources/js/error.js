@@ -2,43 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// eslint-disable-next-line no-unused-vars
+import {AppWindow} from './app_window.js';
 import {assertInstanceof} from './chrome_util.js';
 import * as metrics from './metrics.js';
-
-/**
- * Types of error used in ERROR metrics.
- * @enum {string}
- */
-export const ErrorType = {
-  BROKEN_THUMBNAIL: 'broken-thumbnail',
-  UNCAUGHT_PROMISE: 'uncaught-promise',
-};
-
-/**
- * Error level used in ERROR metrics.
- * @enum {string}
- */
-export const ErrorLevel = {
-  WARNING: 'WARNING',
-  ERROR: 'ERROR',
-};
-
-/**
- * Error reported in testing run.
- * @typedef {{
- *   type: !ErrorType,
- *   level: !ErrorLevel,
- *   stack: string,
- *   time: number,
- * }}
- */
-let ErrorInfo;  // eslint-disable-line no-unused-vars
-
-/**
- * Callback for reporting error in testing run.
- * @typedef {function(!ErrorInfo)}
- */
-export let TestingErrorCallback;
+import {
+  ErrorInfo,  // eslint-disable-line no-unused-vars
+  ErrorLevel,
+  ErrorType,
+} from './type.js';
 
 /**
  * Code location of stack frame.
@@ -50,20 +22,6 @@ export let TestingErrorCallback;
  *  }}
  */
 export let StackFrame;
-
-/**
- * Throws when a method is not implemented.
- */
-export class NotImplementedError extends Error {
-  /**
-   * @param {string=} message
-   * @public
-   */
-  constructor(message = 'Method is not implemented') {
-    super(message);
-    this.name = this.constructor.name;
-  }
-}
 
 /**
  * Converts v8 CallSite object to StackFrame.
@@ -138,17 +96,14 @@ export function formatErrorStack(error) {
 }
 
 /**
- * @type {?TestingErrorCallback}
+ * @type {?AppWindow}
  */
-let onTestingError = null;
+const appWindow = window['appWindow'];
 
 /**
  * Initializes error collecting functions.
- * @param {?TestingErrorCallback} onError Callback for reporting error in
- *     testing run. Set to null in non testing run.
  */
-export function initialize(onError) {
-  onTestingError = onError;
+export function initialize() {
   window.addEventListener('unhandledrejection', (e) => {
     reportError(
         ErrorType.UNCAUGHT_PROMISE, ErrorLevel.ERROR,
@@ -193,8 +148,9 @@ export function reportError(type, level, error) {
   }
   triggeredErrorSet.add(hash);
 
-  if (onTestingError !== null) {
-    onTestingError({type, level, stack: formatErrorStack(error), time});
+  if (appWindow !== null) {
+    appWindow.reportError(
+        {type, level, stack: formatErrorStack(error), time, name: errorName});
     return;
   }
   metrics.sendErrorEvent(

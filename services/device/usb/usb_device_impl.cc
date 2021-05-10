@@ -37,9 +37,9 @@ UsbDeviceImpl::UsbDeviceImpl(ScopedLibusbDeviceRef platform_device,
                 descriptor.idVendor,
                 descriptor.idProduct,
                 descriptor.bcdDevice,
-                base::string16(),
-                base::string16(),
-                base::string16(),
+                std::u16string(),
+                std::u16string(),
+                std::u16string(),
                 libusb_get_bus_number(platform_device.get()),
                 libusb_get_port_number(platform_device.get())),
       platform_device_(std::move(platform_device)) {
@@ -81,11 +81,12 @@ void UsbDeviceImpl::ReadAllConfigurations() {
       if (!usb_descriptor.Parse(base::make_span(buffer, rv)))
         USB_LOG(EVENT) << "Config descriptor index " << i << " was corrupt.";
       free(buffer);
-
-      // Update the configurations.
-      device_info_->configurations =
-          std::move(usb_descriptor.device_info->configurations);
     }
+
+    // The only populated field in |usb_descriptor| is the parsed configuration
+    // descriptor info.
+    device_info_->configurations =
+        std::move(usb_descriptor.device_info->configurations);
   } else {
     USB_LOG(EVENT) << "Failed to get device descriptor: "
                    << ConvertPlatformUsbErrorToString(rv);

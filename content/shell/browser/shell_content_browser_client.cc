@@ -20,6 +20,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequence_local_storage_slot.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/login_delegate.h"
@@ -45,6 +46,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/ssl/client_cert_identity.h"
+#include "services/device/public/cpp/geolocation/location_system_permission_status.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
@@ -60,12 +62,16 @@
 #include "content/shell/android/shell_descriptors.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "content/public/browser/context_factory.h"
 #endif
 
 #if defined(OS_ANDROID)
 #include "components/crash/content/browser/crash_handler_host_linux.h"
+#endif
+
+#if defined(OS_MAC)
+#include "services/device/public/cpp/test/fake_geolocation_manager.h"
 #endif
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
@@ -82,7 +88,9 @@ namespace content {
 
 namespace {
 
-ShellContentBrowserClient* g_browser_client;
+ShellContentBrowserClient* g_browser_client = nullptr;
+
+bool g_enable_expect_ct_for_testing = false;
 
 #if defined(OS_ANDROID)
 int GetCrashSignalFD(const base::CommandLine& command_line) {
@@ -111,7 +119,7 @@ class ShellControllerImpl : public mojom::ShellController {
       std::move(callback).Run(base::nullopt);
   }
 
-  void ExecuteJavaScript(const base::string16& script,
+  void ExecuteJavaScript(const std::u16string& script,
                          ExecuteJavaScriptCallback callback) override {
     CHECK(!Shell::windows().empty());
     WebContents* contents = Shell::windows()[0]->web_contents();
@@ -165,6 +173,11 @@ ShellContentBrowserClient* ShellContentBrowserClient::Get() {
 
 ShellContentBrowserClient::ShellContentBrowserClient() {
   DCHECK(!g_browser_client);
+#if defined(OS_MAC)
+  location_manager_ = std::make_unique<device::FakeGeolocationManager>();
+  location_manager_->SetSystemPermission(
+      device::LocationSystemPermissionStatus::kAllowed);
+#endif
   g_browser_client = this;
 }
 
@@ -195,13 +208,6 @@ bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {
     if (url.scheme_piece() == supported_protocol)
       return true;
   }
-  return false;
-}
-
-bool ShellContentBrowserClient::ShouldTerminateOnServiceQuit(
-    const service_manager::Identity& id) {
-  if (should_terminate_on_service_quit_callback_)
-    return std::move(should_terminate_on_service_quit_callback_).Run(id);
   return false;
 }
 
@@ -237,6 +243,14 @@ void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
     }
   }
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
+}
+
+device::GeolocationManager* ShellContentBrowserClient::GetGeolocationManager() {
+#if defined(OS_MAC)
+  return location_manager_.get();
+#else
+  return nullptr;
+#endif
 }
 
 std::string ShellContentBrowserClient::GetAcceptLangs(BrowserContext* context) {
@@ -284,13 +298,20 @@ SpeechRecognitionManagerDelegate*
 }
 
 void ShellContentBrowserClient::OverrideWebkitPrefs(
-    RenderViewHost* render_view_host,
+    WebContents* web_contents,
     blink::web_pref::WebPreferences* prefs) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kForceDarkMode)) {
-    prefs->preferred_color_scheme = blink::PreferredColorScheme::kDark;
+    prefs->preferred_color_scheme = blink::mojom::PreferredColorScheme::kDark;
   } else {
-    prefs->preferred_color_scheme = blink::PreferredColorScheme::kLight;
+    prefs->preferred_color_scheme = blink::mojom::PreferredColorScheme::kLight;
+  }
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kForceHighContrast)) {
+    prefs->preferred_contrast = blink::mojom::PreferredContrast::kMore;
+  } else {
+    prefs->preferred_contrast = blink::mojom::PreferredContrast::kNoPreference;
   }
 
   if (override_web_preferences_callback_)
@@ -302,9 +323,9 @@ base::FilePath ShellContentBrowserClient::GetFontLookupTableCacheDir() {
       FILE_PATH_LITERAL("FontLookupTableCache"));
 }
 
-DevToolsManagerDelegate*
-ShellContentBrowserClient::GetDevToolsManagerDelegate() {
-  return new ShellDevToolsManagerDelegate(browser_context());
+std::unique_ptr<content::DevToolsManagerDelegate>
+ShellContentBrowserClient::CreateDevToolsManagerDelegate() {
+  return std::make_unique<ShellDevToolsManagerDelegate>(browser_context());
 }
 
 void ShellContentBrowserClient::ExposeInterfacesToRenderer(
@@ -373,9 +394,13 @@ std::unique_ptr<LoginDelegate> ShellContentBrowserClient::CreateLoginDelegate(
 base::DictionaryValue ShellContentBrowserClient::GetNetLogConstants() {
   base::DictionaryValue client_constants;
   client_constants.SetString("name", "content_shell");
-  client_constants.SetString(
-      "command_line",
-      base::CommandLine::ForCurrentProcess()->GetCommandLineString());
+  base::CommandLine::StringType command_line =
+      base::CommandLine::ForCurrentProcess()->GetCommandLineString();
+#if defined(OS_WIN)
+  client_constants.SetString("command_line", base::WideToUTF8(command_line));
+#else
+  client_constants.SetString("command_line", command_line);
+#endif
   base::DictionaryValue constants;
   constants.SetKey("clientInfo", std::move(client_constants));
   return constants;
@@ -428,7 +453,8 @@ void ShellContentBrowserClient::ConfigureNetworkContextParams(
     bool in_memory,
     const base::FilePath& relative_partition_path,
     network::mojom::NetworkContextParams* network_context_params,
-    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+    cert_verifier::mojom::CertVerifierCreationParams*
+        cert_verifier_creation_params) {
   ConfigureNetworkContextParamsForShell(context, network_context_params,
                                         cert_verifier_creation_params);
 }
@@ -440,6 +466,8 @@ ShellContentBrowserClient::GetNetworkContextsParentDirectory() {
 
 void ShellContentBrowserClient::BindBrowserControlInterface(
     mojo::ScopedMessagePipeHandle pipe) {
+  if (!pipe.is_valid())
+    return;
   mojo::MakeSelfOwnedReceiver(
       std::make_unique<ShellControllerImpl>(),
       mojo::PendingReceiver<mojom::ShellController>(std::move(pipe)));
@@ -454,10 +482,16 @@ ShellBrowserContext*
   return shell_browser_main_parts_->off_the_record_browser_context();
 }
 
+void ShellContentBrowserClient::set_enable_expect_ct_for_testing(
+    bool enable_expect_ct_for_testing) {
+  g_enable_expect_ct_for_testing = enable_expect_ct_for_testing;
+}
+
 void ShellContentBrowserClient::ConfigureNetworkContextParamsForShell(
     BrowserContext* context,
     network::mojom::NetworkContextParams* context_params,
-    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+    cert_verifier::mojom::CertVerifierCreationParams*
+        cert_verifier_creation_params) {
   context_params->allow_any_cors_exempt_header_for_browser =
       allow_any_cors_exempt_header_for_browser_;
   context_params->user_agent = GetUserAgent();
@@ -467,6 +501,29 @@ void ShellContentBrowserClient::ConfigureNetworkContextParamsForShell(
           "cors_exempt_header_list");
   if (!exempt_header.empty())
     context_params->cors_exempt_header_list.push_back(exempt_header);
+
+  if (g_enable_expect_ct_for_testing) {
+    context_params->enforce_chrome_ct_policy = true;
+    context_params->ct_log_update_time = base::Time::Now();
+    context_params->enable_expect_ct_reporting = true;
+  }
+}
+
+void ShellContentBrowserClient::GetHyphenationDictionary(
+    base::OnceCallback<void(const base::FilePath&)> callback) {
+  // If we have the source tree, return the dictionary files in the tree.
+  base::FilePath dir;
+  if (base::PathService::Get(base::DIR_SOURCE_ROOT, &dir)) {
+    dir = dir.AppendASCII("third_party")
+              .AppendASCII("hyphenation-patterns")
+              .AppendASCII("hyb");
+    std::move(callback).Run(dir);
+  }
+  // No need to callback if there were no dictionaries.
+}
+
+bool ShellContentBrowserClient::HasErrorPage(int http_status_code) {
+  return http_status_code >= 400 && http_status_code < 600;
 }
 
 }  // namespace content

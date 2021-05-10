@@ -126,7 +126,10 @@ MutableCSSPropertyValueSet::SetResult StringKeyframe::SetCSSPropertyValue(
     // Per specification we only keep properties around which are parsable.
     auto* resolver = MakeGarbageCollected<PropertyResolver>(
         property, property_value_set, is_logical);
-    input_properties_.Set(PropertyHandle(property), resolver);
+    if (resolver->IsValid()) {
+      input_properties_.Set(PropertyHandle(property), resolver);
+      InvalidateCssPropertyMap();
+    }
   }
 
   return result;
@@ -337,7 +340,7 @@ bool StringKeyframe::CSSPropertySpecificKeyframe::
                                     const ComputedStyle* parent_style) const {
   compositor_keyframe_value_cache_ =
       StyleResolver::CreateCompositorKeyframeValueSnapshot(
-          element, base_style, parent_style, property, value_.Get());
+          element, base_style, parent_style, property, value_.Get(), offset_);
   return true;
 }
 
@@ -402,8 +405,12 @@ PropertyResolver::PropertyResolver(
     css_property_value_set_ = property_value_set->ImmutableCopyIfNeeded();
 }
 
+bool PropertyResolver::IsValid() const {
+  return css_value_ || css_property_value_set_;
+}
+
 const CSSValue* PropertyResolver::CssValue() {
-  DCHECK(css_value_ || css_property_value_set_);
+  DCHECK(IsValid());
 
   if (css_value_)
     return css_value_;

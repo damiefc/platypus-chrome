@@ -152,8 +152,8 @@ const flat_rule::UrlRule* ExtensionUrlPatternIndexMatcher::GetMatchingRule(
 
   return matchers_[index].FindMatch(
       *params.url, params.first_party_origin, params.element_type,
-      flat_rule::ActivationType_NONE, params.is_third_party,
-      kDisableGenericRules, strategy);
+      flat_rule::ActivationType_NONE, params.method, params.is_third_party,
+      kDisableGenericRules, params.embedder_conditions_matcher, strategy);
 }
 
 std::vector<const url_pattern_index::flat::UrlRule*>
@@ -170,8 +170,8 @@ ExtensionUrlPatternIndexMatcher::GetAllMatchingRules(
 
   return matchers_[index].FindAllMatches(
       *params.url, params.first_party_origin, params.element_type,
-      flat_rule::ActivationType_NONE, params.is_third_party,
-      kDisableGenericRules);
+      flat_rule::ActivationType_NONE, params.method, params.is_third_party,
+      kDisableGenericRules, params.embedder_conditions_matcher);
 }
 
 }  // namespace declarative_net_request

@@ -14,6 +14,13 @@
 
 namespace content {
 
+class DedicatedWorkerHost;
+
+// The WorkerDevToolsAgentHost is the devtools host class for dedicated workers,
+// (but not shared or service workers), and worklets. It does not have a pointer
+// to a DedicatedWorkerHost object, but in case the host is for a dedicated
+// worker (and not a worklet) then the devtools_worker_token_ is identical to
+// the DedicatedWorkerToken of the dedicated worker.
 class WorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
  public:
   WorkerDevToolsAgentHost(
@@ -35,10 +42,13 @@ class WorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
   bool Activate() override;
   void Reload() override;
   bool Close() override;
+  base::Optional<network::CrossOriginEmbedderPolicy>
+  cross_origin_embedder_policy(const std::string& id) override;
 
  private:
   ~WorkerDevToolsAgentHost() override;
   void Disconnected();
+  DedicatedWorkerHost* GetDedicatedWorkerHost();
 
   // DevToolsAgentHostImpl overrides.
   bool AttachSession(DevToolsSession* session, bool acquire_wake_lock) override;
@@ -56,4 +66,4 @@ class WorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
 
 }  // namespace content
 
-#endif  // CONTENT_BROWSER_DEVTOOLS_DEDICATED_WORKER_DEVTOOLS_AGENT_HOST_H_
+#endif  // CONTENT_BROWSER_DEVTOOLS_WORKER_DEVTOOLS_AGENT_HOST_H_

@@ -25,7 +25,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_SVG_SVG_LAYOUT_SUPPORT_H_
 
 #include "third_party/blink/renderer/core/layout/layout_object.h"
-#include "third_party/blink/renderer/core/style/svg_computed_style_defs.h"
 #include "third_party/blink/renderer/platform/graphics/dash_array.h"
 #include "third_party/blink/renderer/platform/transforms/affine_transform.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
@@ -35,7 +34,6 @@ namespace blink {
 class AffineTransform;
 class FloatPoint;
 class FloatRect;
-class LayoutGeometryMap;
 class LayoutBoxModelObject;
 class LayoutObject;
 class ComputedStyle;
@@ -47,16 +45,6 @@ class CORE_EXPORT SVGLayoutSupport {
   STATIC_ONLY(SVGLayoutSupport);
 
  public:
-  // Shares child layouting code between
-  // LayoutSVGRoot/LayoutSVG(Hidden)Container
-  static void LayoutChildren(LayoutObject*,
-                             bool force_layout,
-                             bool screen_scaling_factor_changed,
-                             bool layout_size_changed);
-
-  // Layout resources used by this node.
-  static void LayoutResourcesIfNeeded(const LayoutObject&);
-
   // Helper function determining whether overflow is hidden.
   static bool IsOverflowHidden(const LayoutObject&);
   static bool IsOverflowHidden(const ComputedStyle&);
@@ -82,19 +70,6 @@ class CORE_EXPORT SVGLayoutSupport {
                                  const FloatRect& reference_box,
                                  const HitTestLocation&);
 
-  // Shared child hit-testing code between LayoutSVGRoot/LayoutSVGContainer.
-  static bool HitTestChildren(LayoutObject* last_child,
-                              HitTestResult&,
-                              const HitTestLocation&,
-                              const PhysicalOffset& accumulated_offset,
-                              HitTestAction);
-
-  static void ComputeContainerBoundingBoxes(const LayoutObject* container,
-                                            FloatRect& object_bounding_box,
-                                            bool& object_bounding_box_valid,
-                                            FloatRect& stroke_bounding_box,
-                                            FloatRect& local_visual_rect);
-
   // Important functions used by nearly all SVG layoutObjects centralizing
   // coordinate transformations / visual rect calculations
   static FloatRect LocalVisualRect(const LayoutObject&);
@@ -116,10 +91,6 @@ class CORE_EXPORT SVGLayoutSupport {
                                  const LayoutBoxModelObject* ancestor,
                                  TransformState&,
                                  MapCoordinatesFlags);
-  static const LayoutObject* PushMappingToContainer(
-      const LayoutObject*,
-      const LayoutBoxModelObject* ancestor_to_stop_at,
-      LayoutGeometryMap&);
 
   // Shared between SVG layoutObjects and resources.
   static void ApplyStrokeStyleToStrokeData(StrokeData&,
@@ -144,8 +115,6 @@ class CORE_EXPORT SVGLayoutSupport {
   // Determines whether a svg node should isolate or not based on ComputedStyle.
   static bool WillIsolateBlendingDescendantsForStyle(const ComputedStyle&);
   static bool WillIsolateBlendingDescendantsForObject(const LayoutObject*);
-  template <typename LayoutObjectType>
-  static bool ComputeHasNonIsolatedBlendingDescendants(const LayoutObjectType*);
   static bool IsIsolationRequired(const LayoutObject*);
 
   static AffineTransform DeprecatedCalculateTransformToLayer(
@@ -156,12 +125,6 @@ class CORE_EXPORT SVGLayoutSupport {
                                                 const FloatPoint&);
 
   static void NotifySVGRootOfChangedCompositingReasons(const LayoutObject*);
-
- private:
-  static void UpdateObjectBoundingBox(FloatRect& object_bounding_box,
-                                      bool& object_bounding_box_valid,
-                                      LayoutObject* other,
-                                      FloatRect other_bounding_box);
 };
 
 class SubtreeContentTransformScope {
@@ -179,20 +142,6 @@ class SubtreeContentTransformScope {
   static AffineTransform::Transform current_content_transformation_;
   AffineTransform saved_content_transformation_;
 };
-
-template <typename LayoutObjectType>
-bool SVGLayoutSupport::ComputeHasNonIsolatedBlendingDescendants(
-    const LayoutObjectType* object) {
-  for (LayoutObject* child = object->FirstChild(); child;
-       child = child->NextSibling()) {
-    if (child->IsBlendingAllowed() && child->StyleRef().HasBlendMode())
-      return true;
-    if (child->HasNonIsolatedBlendingDescendants() &&
-        !WillIsolateBlendingDescendantsForObject(child))
-      return true;
-  }
-  return false;
-}
 
 }  // namespace blink
 

@@ -37,7 +37,6 @@
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -119,10 +118,9 @@ bool NeedsLayoutStylePropagation(const ComputedStyle& layout_style,
          layout_style.Direction() != propagated_style.Direction();
 }
 
-scoped_refptr<ComputedStyle> CreateLayoutStyle(
-    const ComputedStyle& style,
-    const ComputedStyle& propagated_style) {
-  scoped_refptr<ComputedStyle> layout_style = ComputedStyle::Clone(style);
+ComputedStyle* CreateLayoutStyle(const ComputedStyle& style,
+                                 const ComputedStyle& propagated_style) {
+  ComputedStyle* layout_style = ComputedStyle::Clone(style);
   layout_style->SetDirection(propagated_style.Direction());
   layout_style->SetWritingMode(propagated_style.GetWritingMode());
   return layout_style;
@@ -130,8 +128,8 @@ scoped_refptr<ComputedStyle> CreateLayoutStyle(
 
 }  // namespace
 
-scoped_refptr<const ComputedStyle> HTMLHtmlElement::LayoutStyleForElement(
-    scoped_refptr<const ComputedStyle> style) {
+const ComputedStyle* HTMLHtmlElement::LayoutStyleForElement(
+    const ComputedStyle* style) {
   DCHECK(style);
   DCHECK(GetDocument().InStyleRecalc());
   if (const Element* body_element = GetDocument().body()) {
@@ -166,7 +164,7 @@ void HTMLHtmlElement::PropagateWritingModeAndDirectionFromBody() {
 }
 
 void HTMLHtmlElement::AttachLayoutTree(AttachContext& context) {
-  scoped_refptr<const ComputedStyle> original_style = GetComputedStyle();
+  const ComputedStyle* original_style = GetComputedStyle();
   if (original_style)
     SetComputedStyle(LayoutStyleForElement(original_style));
 

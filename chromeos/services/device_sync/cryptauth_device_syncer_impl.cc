@@ -384,23 +384,24 @@ void CryptAuthDeviceSyncerImpl::OnGetFeatureStatusesFinished(
     CryptAuthDeviceSyncResult::ResultCode device_sync_result_code) {
   DCHECK_EQ(State::kWaitingForFeatureStatuses, state_);
 
-  // We require that the local device feature statuses are returned; the local
-  // device is needed in the registry.
-  if (!base::Contains(id_to_device_software_feature_info_map,
-                      request_context_.device_id())) {
-    FinishAttempt(CryptAuthDeviceSyncResult::ResultCode::
-                      kErrorMissingLocalDeviceFeatureStatuses);
-    return;
-  }
-
   switch (CryptAuthDeviceSyncResult::GetResultType(device_sync_result_code)) {
     case CryptAuthDeviceSyncResult::ResultType::kNonFatalError:
       did_non_fatal_error_occur_ = true;
       FALLTHROUGH;
     case CryptAuthDeviceSyncResult::ResultType::kSuccess:
+      // We require that the local device feature statuses are returned; the
+      // local device is needed in the registry.
+      if (!base::Contains(id_to_device_software_feature_info_map,
+                          request_context_.device_id())) {
+        FinishAttempt(CryptAuthDeviceSyncResult::ResultCode::
+                          kErrorMissingLocalDeviceFeatureStatuses);
+        return;
+      }
+
       BuildNewDeviceRegistry(id_to_device_software_feature_info_map);
       AttemptNextStep();
       return;
+
     case CryptAuthDeviceSyncResult::ResultType::kFatalError:
       FinishAttempt(device_sync_result_code);
       return;
@@ -536,6 +537,11 @@ void CryptAuthDeviceSyncerImpl::ProcessEncryptedDeviceMetadata() {
       CryptAuthKeyBundle::Name::kDeviceSyncBetterTogetherGroupKey);
   DCHECK(group_key);
   if (group_key->private_key().empty()) {
+    PA_LOG(INFO)
+        << "CryptAuthDeviceSyncerImpl::" << __func__
+        << ": Missing group private key needed to decrypt device metadata. "
+        << "Finishing DeviceSync attempt and waiting for GCM message from "
+        << "CryptAuth when the group private key becomes available.";
     CryptAuthDeviceSyncResult::ResultCode result_code =
         did_non_fatal_error_occur_
             ? CryptAuthDeviceSyncResult::ResultCode::kFinishedWithNonFatalErrors

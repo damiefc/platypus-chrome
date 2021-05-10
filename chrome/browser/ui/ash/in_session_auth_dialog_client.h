@@ -14,6 +14,10 @@
 #include "chromeos/login/auth/extended_authenticator.h"
 #include "chromeos/login/auth/user_context.h"
 
+namespace aura {
+class Window;
+}
+
 class AccountId;
 
 // Handles method calls sent from Ash to ChromeOS.
@@ -46,6 +50,7 @@ class InSessionAuthDialogClient : public ash::InSessionAuthDialogClient,
       base::OnceCallback<void(bool)> callback) override;
   void AuthenticateUserWithFingerprint(
       base::OnceCallback<void(bool, ash::FingerprintState)> callback) override;
+  aura::Window* OpenInSessionAuthHelpPage() const override;
 
   // AuthStatusConsumer:
   void OnAuthFailure(const chromeos::AuthFailure& error) override;
@@ -82,7 +87,7 @@ class InSessionAuthDialogClient : public ash::InSessionAuthDialogClient,
 
   void OnFingerprintAuthDone(
       base::OnceCallback<void(bool, ash::FingerprintState)> callback,
-      cryptohome::CryptohomeErrorCode error);
+      user_data_auth::CryptohomeErrorCode error);
 
   // Used to authenticate the user to unlock supervised users.
   scoped_refptr<chromeos::ExtendedAuthenticator> extended_authenticator_;

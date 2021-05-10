@@ -135,7 +135,7 @@ class ServiceWorkerPaymentAppFinderBrowserTest : public InProcessBrowserTest {
         browser()->tab_strip_model()->GetActiveWebContents();
     content::BrowserContext* context = web_contents->GetBrowserContext();
     auto downloader = std::make_unique<TestDownloader>(
-        content::BrowserContext::GetDefaultStoragePartition(context)
+        context->GetDefaultStoragePartition()
             ->GetURLLoaderFactoryForBrowserProcess());
     downloader->AddTestServerURL("https://alicepay.com/",
                                  alicepay_.GetURL("alicepay.com", "/"));
@@ -406,32 +406,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerPaymentAppFinderBrowserTest,
 
     EXPECT_TRUE(installable_apps().empty());
     EXPECT_TRUE(apps().empty());
-    EXPECT_TRUE(error_message().empty()) << error_message();
-  }
-}
-
-// A payment app can use "basic-card" payment method.
-IN_PROC_BROWSER_TEST_F(ServiceWorkerPaymentAppFinderBrowserTest, BasicCard) {
-  InstallPaymentAppForMethod("basic-card");
-
-  {
-    GetAllPaymentAppsForMethods({"basic-card", "https://alicepay.com/webpay",
-                                 "https://bobpay.com/webpay"});
-
-    EXPECT_TRUE(installable_apps().empty());
-    ASSERT_EQ(1U, apps().size());
-    ExpectPaymentAppWithMethod("basic-card");
-    EXPECT_TRUE(error_message().empty()) << error_message();
-  }
-
-  // Repeat lookups should have identical results.
-  {
-    GetAllPaymentAppsForMethods({"basic-card", "https://alicepay.com/webpay",
-                                 "https://bobpay.com/webpay"});
-
-    EXPECT_TRUE(installable_apps().empty());
-    ASSERT_EQ(1U, apps().size());
-    ExpectPaymentAppWithMethod("basic-card");
     EXPECT_TRUE(error_message().empty()) << error_message();
   }
 }

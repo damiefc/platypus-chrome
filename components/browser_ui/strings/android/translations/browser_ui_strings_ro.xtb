@@ -7,20 +7,23 @@
 <translation id="1124772482545689468">Utilizator</translation>
 <translation id="1178581264944972037">Întrerupe</translation>
 <translation id="1181037720776840403">Elimină</translation>
+<translation id="1195941046451948919">Sigur vrei să resetezi toate permisiunile pentru acest site?</translation>
 <translation id="1201402288615127009">Înainte</translation>
 <translation id="1242008676835033345">Încorporat în <ph name="WEBSITE_URL" /></translation>
 <translation id="1272079795634619415">Oprește</translation>
 <translation id="1289742167380433257">Pentru a-ți salva datele, Google a optimizat imaginile din această pagină.</translation>
 <translation id="129382876167171263">Fișierele salvate de site-uri apar aici</translation>
+<translation id="1317194122196776028">Uită site-ul</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" /> – <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">Site-ul <ph name="SITE_NAME" /> a fost adăugat</translation>
 <translation id="1383876407941801731">Caută</translation>
 <translation id="1384959399684842514">Descărcare întreruptă</translation>
-<translation id="1431402976894535801">Împiedică site-urile să-ți detecteze prezența</translation>
+<translation id="1415402041810619267">Adresă URL trunchiată</translation>
 <translation id="1446450296470737166">Control complet dispozitive MIDI</translation>
 <translation id="1509960214886564027">Este posibil ca funcțiile de pe mai multe site-uri să fie întrerupte</translation>
 <translation id="1620510694547887537">Cameră</translation>
-<translation id="1647391597548383849">Accesează camera foto</translation>
+<translation id="1644574205037202324">Istoric</translation>
+<translation id="1647582022260550163">Sigur vrei să resetezi permisiunile și să ștergi cookie-urile și datele privind site-ul?</translation>
 <translation id="1660204651932907780">Permite site-urilor să redea sunet (recomandat)</translation>
 <translation id="1677097821151855053">Cookie-urile și alte date ale site-urilor sunt folosite pentru a te reține, de exemplu, pentru a te conecta sau pentru a personaliza anunțuri. Pentru a gestiona cookie-urile pentru toate site-urile, consultă <ph name="BEGIN_LINK" />Setări<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">Ștergi datele site-ului?</translation>
@@ -44,7 +47,6 @@
 <translation id="2146738493024040262">Deschide aplicația instantanee</translation>
 <translation id="2148716181193084225">Astăzi</translation>
 <translation id="2182457891543959921">Întreabă înainte de a permite site-urilor să creeze o hartă 3D a lucrurilor din jur sau să urmărească poziția camerei video (recomandat)</translation>
-<translation id="2187243482123994665">Prezența utilizatorului</translation>
 <translation id="2212565012507486665">Permite cookie-urile</translation>
 <translation id="2228071138934252756">Pentru a permite aplicației <ph name="APP_NAME" /> să acceseze camera, activează camera și în <ph name="BEGIN_LINK" />Setările Android<ph name="END_LINK" />.</translation>
 <translation id="2241634353105152135">Numai o singură dată</translation>
@@ -54,7 +56,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> și încă <ph name="NUM_MORE" /> sunt permise}few{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> și încă <ph name="NUM_MORE" /> sunt permise}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> și încă <ph name="NUM_MORE" /> sunt permise}}</translation>
 <translation id="2434158240863470628">Descărcare finalizată <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Accesul la locație</translation>
 <translation id="2482878487686419369">Notificări</translation>
 <translation id="2490684707762498678">Gestionate de <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Ajutor și feedback</translation>
@@ -82,17 +83,17 @@
 <translation id="3114012059975132928">Player video</translation>
 <translation id="3115898365077584848">Afișează informațiile</translation>
 <translation id="3123473560110926937">Blocate pe anumite site-uri</translation>
-<translation id="3165371858310906303">Întreabă-mă atunci când un site vrea să-mi detecteze prezența</translation>
 <translation id="3198916472715691905">Date stocate: <ph name="STORAGE_AMOUNT" /></translation>
 <translation id="321187648315454507">Pentru a permite aplicației <ph name="APP_NAME" /> să îți trimită notificări, activează notificările și în <ph name="BEGIN_LINK" />Setările Android<ph name="END_LINK" />.</translation>
 <translation id="3227137524299004712">Microfon</translation>
 <translation id="3277252321222022663">Permite accesul site-urilor la senzori (recomandat)</translation>
 <translation id="3295602654194328831">Ascunde informațiile</translation>
+<translation id="3328801116991980348">Informații despre site</translation>
 <translation id="3333961966071413176">Toată agenda</translation>
 <translation id="3386292677130313581">Întreabă înainte de a permite site-urilor să afle locația (recomandat)</translation>
 <translation id="3538390592868664640">Împiedică site-urile să creeze o hartă 3D a lucrurilor din jur sau să urmărească poziția camerei video</translation>
+<translation id="3551268116566418498">Ieși din modul incognito?</translation>
 <translation id="3586500876634962664">Folosirea camerei și a microfonului</translation>
-<translation id="3587482841069643663">Toate</translation>
 <translation id="358794129225322306">Permite unui site să descarce automat mai multe fișiere.</translation>
 <translation id="3594780231884063836">Dezactivează sunetul videoclipului</translation>
 <translation id="3596414637720633074">Blochează cookie-urile terță parte în modul incognito</translation>
@@ -100,9 +101,11 @@
 <translation id="3744111561329211289">Sincronizare în fundal</translation>
 <translation id="3763247130972274048">Atinge de două ori videoclipul spre stânga sau spre dreapta pentru a derula cu 10 secunde</translation>
 <translation id="381841723434055211">Numere de telefon</translation>
+<translation id="3835233591525155343">Folosirea dispozitivului</translation>
 <translation id="385051799172605136">Înapoi</translation>
 <translation id="3859306556332390985">Derulează înainte</translation>
 <translation id="3955193568934677022">Permite site-urilor să redea conținutul protejat (recomandat)</translation>
+<translation id="3967822245660637423">Descărcare finalizată</translation>
 <translation id="3987993985790029246">Copiază linkul</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">Titlu</translation>
@@ -116,17 +119,20 @@
 <translation id="429312253194641664">Un site redă fișiere media</translation>
 <translation id="42981349822642051">Extinde</translation>
 <translation id="4336434711095810371">Șterge toate datele</translation>
+<translation id="4402755511846832236">Împiedică site-urile să detecteze când folosești activ dispozitivul</translation>
 <translation id="4433925000917964731">Pagină Lite oferită de Google</translation>
 <translation id="4434045419905280838">Ferestre pop-up și redirecționări</translation>
 <translation id="445467742685312942">Permite site-urilor să redea conținut protejat</translation>
 <translation id="4468959413250150279">Dezactivează sunetul pentru un anumit site.</translation>
 <translation id="4479647676395637221">Întreabă înainte de a permite site-urilor să folosească camera foto (recomandat)</translation>
+<translation id="4505788138578415521">Adresă URL extinsă</translation>
 <translation id="4534723447064627427">Pentru a permite aplicației <ph name="APP_NAME" /> să acceseze microfonul, activează microfonul și în <ph name="BEGIN_LINK" />Setările Android<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Detalii</translation>
 <translation id="4645575059429386691">Gestionat de părintele tău</translation>
 <translation id="4670064810192446073">Realitate virtuală</translation>
 <translation id="4708011789095599544">Sigur vrei să ștergi cookie-urile și alte date privind site-ul pentru acest site?</translation>
 <translation id="4751476147751820511">Senzori de mișcare sau de lumină</translation>
+<translation id="4836046166855586901">Anunță-mă dacă un site vrea să afle când folosesc activ dispozitivul</translation>
 <translation id="4883854917563148705">Setările gestionate nu pot fi resetate</translation>
 <translation id="4887024562049524730">Întreabă înainte de a permite site-urilor să folosească dispozitivul de realitate virtuală și datele conexe (recomandat)</translation>
 <translation id="4962975101802056554">Revocă toate permisiunile pentru dispozitiv</translation>
@@ -135,9 +141,11 @@
 <translation id="4996978546172906250">Trimite prin</translation>
 <translation id="5039804452771397117">Permite</translation>
 <translation id="5048398596102334565">Permite accesul site-urilor la senzorii de mișcare (recomandat)</translation>
+<translation id="5050380848339752099">Site-ul este pe cale să permită accesul la informații unei aplicații în afara modului incognito.</translation>
 <translation id="5063480226653192405">Utilizare</translation>
 <translation id="5100237604440890931">Afișare restrânsă – dă clic pentru a extinde.</translation>
 <translation id="5123685120097942451">Filă incognito</translation>
+<translation id="5186036860380548585">Opțiunea este disponibilă în partea de sus a ecranului</translation>
 <translation id="5197729504361054390">Persoanele de contact pe care le selectezi vor fi trimise site-ului <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />.</translation>
 <translation id="528192093759286357">Trage din partea de sus și atinge butonul Înapoi pentru a ieși din ecranul complet.</translation>
 <translation id="5300589172476337783">Afișează</translation>
@@ -147,7 +155,6 @@
 <translation id="5335288049665977812">Permite site-urilor să ruleze JavaScript (recomandat)</translation>
 <translation id="534295439873310000">Dispozitive NFC</translation>
 <translation id="5354152178998424783">Astfel, se vor șterge <ph name="DATASIZE" /> din datele și cookie-urile stocate de site-uri.</translation>
-<translation id="5384883051496921101">Site-ul este pe cale să permită accesul la informații unei aplicații în afara modului incognito.</translation>
 <translation id="5391532827096253100">Conexiunea la acest site nu este sigură. Informații despre site</translation>
 <translation id="5394307150471348411">{DETAIL_COUNT,plural, =1{(+ încă 1)}few{(+ încă #)}other{(+ încă #)}}</translation>
 <translation id="5403592356182871684">Nume</translation>
@@ -172,6 +179,7 @@
 <translation id="5916664084637901428">Activat</translation>
 <translation id="5922853908706496913">Se permite accesul la ecran</translation>
 <translation id="5939518447894949180">Resetează</translation>
+<translation id="5975083100439434680">Micșorează</translation>
 <translation id="5976059395673079613"><ph name="PERMISSION" /> – <ph name="WARNING_MESSAGE" /></translation>
 <translation id="6015775454662021376">Gestionează accesul acestui site la dispozitivul tău</translation>
 <translation id="6040143037577758943">Închide</translation>
@@ -264,6 +272,7 @@
 <translation id="8249310407154411074">Mută la început</translation>
 <translation id="8261506727792406068">Șterge</translation>
 <translation id="8300705686683892304">Gestionate de aplicație</translation>
+<translation id="8324158725704657629">Nu mai întreba</translation>
 <translation id="8372893542064058268">Permite sincronizarea în fundal pentru un anumit site.</translation>
 <translation id="8376384591331888629">Inclusiv cookie-urile terță parte de pe acest site</translation>
 <translation id="83792324527827022">Un site folosește camera foto și microfonul</translation>
@@ -274,7 +283,7 @@
 <translation id="8444433999583714703">Pentru a permite aplicației <ph name="APP_NAME" /> să acceseze locația, activează locația și în <ph name="BEGIN_LINK" />Setările Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Revocă permisiunea de accesare a dispozitivului</translation>
 <translation id="8451050538944905715">{NUM_SELECTED,plural, =1{Un cookie folosit}few{# cookie-uri folosite}other{# de cookie-uri folosite}}</translation>
-<translation id="8463851957836045671">Site-ul este rapid</translation>
+<translation id="8487700953926739672">Disponibil offline</translation>
 <translation id="851751545965956758">Blochează conectarea site-urilor la dispozitive</translation>
 <translation id="8525306231823319788">Ecran complet</translation>
 <translation id="857943718398505171">Acordată (recomandat)</translation>
@@ -290,18 +299,18 @@
 <translation id="8801436777607969138">Blochează JavaScript pentru un anumit site.</translation>
 <translation id="8816026460808729765">Blochează întotdeauna accesul site-urilor la senzori</translation>
 <translation id="8847988622838149491">USB</translation>
+<translation id="8903921497873541725">Mărește</translation>
 <translation id="8921772741368021346"><ph name="POSITION" />/<ph name="DURATION" /></translation>
 <translation id="8926666909099850184">NFC este dezactivat pentru acest dispozitiv. Activează-l în <ph name="BEGIN_LINK" />Setări Android<ph name="END_LINK" />.</translation>
-<translation id="8929372349074745002">Site-ul se deschide și reacționează rapid în majoritatea cazurilor.</translation>
 <translation id="8941729603749328384">www.example.com</translation>
-<translation id="894871326938397531">Ieși din modul incognito?</translation>
 <translation id="8958424370300090006">Blochează cookie-urile pentru un anumit site.</translation>
 <translation id="8959122750345127698">Navigarea nu este accesibilă: <ph name="URL" /></translation>
+<translation id="8986362086234534611">Șterge</translation>
 <translation id="9019902583201351841">Gestionat de părinții tăi</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> și încă <ph name="NUM_MORE" />}few{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> și încă <ph name="NUM_MORE" />}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> și încă <ph name="NUM_MORE" />}}</translation>
 <translation id="913657688200966289">Activează permisiunile pentru <ph name="APP_NAME" /> din <ph name="BEGIN_LINK" />Setări Android<ph name="END_LINK" />.</translation>
-<translation id="945632385593298557">Accesează microfonul</translation>
+<translation id="930525582205581608">Elimini acest site?</translation>
 <translation id="965817943346481315">Blochează dacă site-ul afișează anunțuri deranjante sau înșelătoare (recomandat)</translation>
 <translation id="967624055006145463">Date stocate</translation>
 </translationbundle>

@@ -38,6 +38,9 @@ public class BaseCarouselSuggestionView extends LinearLayout {
         setClickable(false);
         setFocusable(false);
         setOrientation(VERTICAL);
+        final int verticalPad =
+                getResources().getDimensionPixelSize(R.dimen.omnibox_carousel_suggestion_padding);
+        setPaddingRelative(0, verticalPad, 0, verticalPad);
 
         mHeader = new HeaderView(context);
         mHeader.setLayoutParams(
@@ -45,6 +48,7 @@ public class BaseCarouselSuggestionView extends LinearLayout {
         mHeader.getIconView().setVisibility(GONE);
         mHeader.setClickable(false);
         mHeader.setFocusable(false);
+        mHeader.setVisibility(View.GONE);
         addView(mHeader);
 
         mRecyclerView = new RecyclerView(context);
@@ -105,8 +109,18 @@ public class BaseCarouselSuggestionView extends LinearLayout {
         return mHeader.getTextView();
     }
 
+    /** @return Header element. */
+    View getHeaderView() {
+        return mHeader;
+    }
+
     /** @return Adapter used with the embedded RecyclerView. */
     SimpleRecyclerViewAdapter getAdapter() {
         return (SimpleRecyclerViewAdapter) mRecyclerView.getAdapter();
+    }
+
+    /** @return Recycler view used by the Carousel suggestion. */
+    public RecyclerView getRecyclerViewForTest() {
+        return mRecyclerView;
     }
 }

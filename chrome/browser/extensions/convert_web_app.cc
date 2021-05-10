@@ -21,19 +21,18 @@
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
 #include "chrome/common/extensions/manifest_handlers/app_theme_color_info.h"
 #include "chrome/common/extensions/manifest_handlers/linked_app_icons.h"
-#include "chrome/common/web_application_info.h"
 #include "content/public/common/url_constants.h"
 #include "crypto/sha2.h"
 #include "extensions/common/constants.h"
@@ -140,7 +139,7 @@ base::Value CreateWebAppFileHandlersForBookmarkApp(
 
 std::unique_ptr<base::DictionaryValue> CreateURLHandlersForBookmarkApp(
     const GURL& scope_url,
-    const base::string16& title) {
+    const std::u16string& title) {
   auto matches = std::make_unique<base::ListValue>();
   matches->AppendString(scope_url.GetOrigin().Resolve(scope_url.path()).spec() +
                         "*");
@@ -212,7 +211,7 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
     const base::Time& create_time,
     const base::FilePath& extensions_dir,
     int extra_creation_flags,
-    Manifest::Location install_source) {
+    mojom::ManifestLocation install_source) {
   base::FilePath install_temp_dir =
       file_util::GetInstallTempDir(extensions_dir);
   if (install_temp_dir.empty()) {
@@ -288,7 +287,7 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
   for (const WebApplicationIconInfo& icon_info : web_app.icon_infos) {
     DCHECK(icon_info.url.is_valid());
     // Web apps in Extensions system supports Purpose::ANY icons only.
-    if (icon_info.purpose != blink::Manifest::ImageResource::Purpose::ANY)
+    if (icon_info.purpose != blink::mojom::ManifestImageResource_Purpose::ANY)
       continue;
     std::unique_ptr<base::DictionaryValue> linked_icon(
         new base::DictionaryValue());
@@ -300,7 +299,7 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
   }
   auto icons = std::make_unique<base::DictionaryValue>();
   for (const std::pair<const SquareSizePx, SkBitmap>& icon :
-       web_app.icon_bitmaps_any) {
+       web_app.icon_bitmaps.any) {
     std::string size = base::StringPrintf("%i", icon.first);
     std::string icon_path = base::StringPrintf("%s/%s.png", kIconsDirName,
                                                size.c_str());
@@ -325,7 +324,8 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
                                       shortcut.url.spec());
       // Add shortcut item icons information.
       auto shortcut_item_icons = std::make_unique<base::ListValue>();
-      for (const auto& icon : shortcut.shortcut_icon_infos) {
+      for (const auto& icon :
+           shortcut.GetShortcutIconInfosForPurpose(IconPurpose::ANY)) {
         DCHECK(icon.url.is_valid());
         std::unique_ptr<base::DictionaryValue> shortcut_item_icon(
             new base::DictionaryValue());
@@ -346,14 +346,14 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
     // WebAppManifest's shortcuts vector.
     auto shortcuts_icons = std::make_unique<base::DictionaryValue>();
     for (const auto& shortcut_icon_bitmaps :
-         web_app.shortcuts_menu_icons_bitmaps) {
+         web_app.shortcuts_menu_icon_bitmaps) {
       // |shortcut_icons| is a mapping of filepath keyed to SquareSizePx
       // specified in the WebAppManifest for every icon written to disk for the
       // current shortcut in web_app.shortcuts_menu_item_infos. A shortcut in
       // the WebAppManifest can have different icons for different sizes.
       auto shortcut_icons = std::make_unique<base::DictionaryValue>();
-      std::string curr_icon = base::NumberToString(shortcuts_icons->size());
-      for (const auto& icon : shortcut_icon_bitmaps) {
+      std::string curr_icon = base::NumberToString(shortcuts_icons->DictSize());
+      for (const auto& icon : shortcut_icon_bitmaps.any) {
         std::string size = base::NumberToString(icon.first);
         std::string icon_path =
             base::StringPrintf("%s/%s/%s.png", kShortcutIconsDirName,
@@ -387,7 +387,7 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
     return nullptr;
   }
   for (const std::pair<const SquareSizePx, SkBitmap>& icon :
-       web_app.icon_bitmaps_any) {
+       web_app.icon_bitmaps.any) {
     DCHECK_NE(icon.second.colorType(), kUnknown_SkColorType);
 
     base::FilePath icon_file =
@@ -412,8 +412,8 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
       !web_app.shortcuts_menu_item_infos.empty()) {
     base::FilePath shortcut_icons_dir =
         temp_dir.GetPath().AppendASCII(kShortcutIconsDirName);
-    for (size_t i = 0; i < web_app.shortcuts_menu_icons_bitmaps.size(); ++i) {
-      if (web_app.shortcuts_menu_icons_bitmaps[i].empty())
+    for (size_t i = 0; i < web_app.shortcuts_menu_icon_bitmaps.size(); ++i) {
+      if (web_app.shortcuts_menu_icon_bitmaps[i].any.empty())
         continue;
 
       base::FilePath icon_dir =
@@ -423,7 +423,7 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
       }
 
       for (const std::pair<const SquareSizePx, SkBitmap>& icon :
-           web_app.shortcuts_menu_icons_bitmaps[i]) {
+           web_app.shortcuts_menu_icon_bitmaps[i].any) {
         DCHECK_NE(icon.second.colorType(), kUnknown_SkColorType);
 
         base::FilePath icon_file =

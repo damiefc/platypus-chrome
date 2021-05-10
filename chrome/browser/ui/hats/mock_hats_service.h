@@ -22,16 +22,25 @@ class MockHatsService : public HatsService {
   explicit MockHatsService(Profile* profile);
   ~MockHatsService() override;
 
-  MOCK_METHOD(void, LaunchSurvey, (const std::string& trigger), (override));
+  MOCK_METHOD(void,
+              LaunchSurvey,
+              (const std::string& trigger,
+               base::OnceClosure success_callback,
+               base::OnceClosure failure_callback,
+               (const std::map<std::string, bool>&)survey_specific_data),
+              (override));
   MOCK_METHOD(bool,
               LaunchDelayedSurvey,
-              (const std::string& trigger, int timeout_ms),
+              (const std::string& trigger,
+               int timeout_ms,
+               (const std::map<std::string, bool>&)survey_specific_data),
               (override));
   MOCK_METHOD(bool,
               LaunchDelayedSurveyForWebContents,
               (const std::string& trigger,
                content::WebContents* web_contents,
-               int timeout_ms),
+               int timeout_ms,
+               (const std::map<std::string, bool>&)survey_specific_data),
               (override));
   MOCK_METHOD(void, HatsNextDialogClosed, (), (override));
 };

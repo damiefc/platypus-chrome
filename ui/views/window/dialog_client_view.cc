@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "build/build_config.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -53,7 +55,10 @@ gfx::Size GetBoundingSizeForVerticalStack(const gfx::Size& size1,
 // Simple container to bubble child view changes up the view hierarchy.
 class DialogClientView::ButtonRowContainer : public View {
  public:
+  METADATA_HEADER(ButtonRowContainer);
   explicit ButtonRowContainer(DialogClientView* owner) : owner_(owner) {}
+  ButtonRowContainer(const ButtonRowContainer&) = delete;
+  ButtonRowContainer& operator=(const ButtonRowContainer&) = delete;
 
   // View:
   void ChildPreferredSizeChanged(View* child) override {
@@ -65,12 +70,10 @@ class DialogClientView::ButtonRowContainer : public View {
 
  private:
   DialogClientView* const owner_;
-
-  DISALLOW_COPY_AND_ASSIGN(ButtonRowContainer);
 };
 
-///////////////////////////////////////////////////////////////////////////////
-// DialogClientView, public:
+BEGIN_METADATA(DialogClientView, ButtonRowContainer, View)
+END_METADATA
 
 DialogClientView::DialogClientView(Widget* owner, View* contents_view)
     : ClientView(owner, contents_view),
@@ -95,18 +98,31 @@ void DialogClientView::SetButtonRowInsets(const gfx::Insets& insets) {
     UpdateDialogButtons();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// DialogClientView, View overrides:
-
 gfx::Size DialogClientView::CalculatePreferredSize() const {
-  gfx::Size contents_size = ClientView::CalculatePreferredSize();
   const gfx::Insets& content_margins = GetDialogDelegate()->margins();
+
+  gfx::Size contents_size;
+  const int fixed_width = GetDialogDelegate()->fixed_width();
+  if (fixed_width) {
+    const int content_width = fixed_width - content_margins.width();
+    contents_size = gfx::Size(content_width,
+                              ClientView::GetHeightForWidth(content_width));
+  } else {
+    contents_size = ClientView::CalculatePreferredSize();
+  }
   contents_size.Enlarge(content_margins.width(), content_margins.height());
   return GetBoundingSizeForVerticalStack(
       contents_size, button_row_container_->GetPreferredSize());
 }
 
 gfx::Size DialogClientView::GetMinimumSize() const {
+  // TODO(pbos): Try to find a way for ClientView::GetMinimumSize() to be
+  // fixed-width aware. For now this uses min-size = preferred size for
+  // fixed-width dialogs (even though min height might not be preferred height).
+  // Fixing this might require View::GetMinHeightForWidth().
+  if (GetDialogDelegate()->fixed_width())
+    return CalculatePreferredSize();
+
   return GetBoundingSizeForVerticalStack(
       ClientView::GetMinimumSize(), button_row_container_->GetMinimumSize());
 }
@@ -149,7 +165,9 @@ void DialogClientView::Layout() {
 bool DialogClientView::AcceleratorPressed(const ui::Accelerator& accelerator) {
   DCHECK_EQ(accelerator.key_code(), ui::VKEY_ESCAPE);
 
-  GetWidget()->CloseWithReason(Widget::ClosedReason::kEscKeyPressed);
+  if (DialogDelegate* delegate = GetDialogDelegate())
+    delegate->CancelDialog();
+
   return true;
 }
 
@@ -198,31 +216,9 @@ void DialogClientView::OnThemeChanged() {
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// DialogClientView, ButtonListener implementation:
-
-void DialogClientView::ButtonPressed(Button* sender, const ui::Event& event) {
-  // Check for a valid delegate to avoid handling events after destruction.
-  if (!GetDialogDelegate())
-    return;
-
-  if (input_protector_.IsPossiblyUnintendedInteraction(event))
-    return;
-
-  if (sender == ok_button_)
-    GetDialogDelegate()->AcceptDialog();
-  else if (sender == cancel_button_)
-    GetDialogDelegate()->CancelDialog();
-  else
-    NOTREACHED();
-}
-
 void DialogClientView::ResetViewShownTimeStampForTesting() {
   input_protector_.ResetForTesting();
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// DialogClientView, private:
 
 DialogDelegate* DialogClientView::GetDialogDelegate() const {
   return GetWidget()->widget_delegate()->AsDialogDelegate();
@@ -256,7 +252,7 @@ void DialogClientView::UpdateDialogButton(LabelButton** member,
   const bool is_default = delegate->GetDefaultDialogButton() == type &&
                           (type != ui::DIALOG_BUTTON_CANCEL ||
                            PlatformStyle::kDialogDefaultButtonCanBeCancel);
-  const base::string16 title = delegate->GetDialogButtonLabel(type);
+  const std::u16string title = delegate->GetDialogButtonLabel(type);
 
   if (*member) {
     LabelButton* button = *member;
@@ -266,7 +262,10 @@ void DialogClientView::UpdateDialogButton(LabelButton** member,
     return;
   }
 
-  auto button = std::make_unique<MdTextButton>(this, title);
+  auto button = std::make_unique<MdTextButton>(
+      base::BindRepeating(&DialogClientView::ButtonPressed,
+                          base::Unretained(this), type),
+      title);
   button->SetProminent(is_default);
   button->SetIsDefault(is_default);
   button->SetEnabled(delegate->IsDialogButtonEnabled(type));
@@ -278,6 +277,15 @@ void DialogClientView::UpdateDialogButton(LabelButton** member,
   button->SetGroup(kButtonGroup);
 
   *member = button_row_container_->AddChildView(std::move(button));
+}
+
+void DialogClientView::ButtonPressed(ui::DialogButton type,
+                                     const ui::Event& event) {
+  DialogDelegate* const delegate = GetDialogDelegate();
+  if (delegate && !input_protector_.IsPossiblyUnintendedInteraction(event)) {
+    (type == ui::DIALOG_BUTTON_OK) ? delegate->AcceptDialog()
+                                   : delegate->CancelDialog();
+  }
 }
 
 int DialogClientView::GetExtraViewSpacing() const {

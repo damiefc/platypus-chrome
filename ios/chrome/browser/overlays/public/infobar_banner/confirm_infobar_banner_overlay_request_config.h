@@ -5,7 +5,8 @@
 #ifndef IOS_CHROME_BROWSER_OVERLAYS_PUBLIC_INFOBAR_BANNER_CONFIRM_INFOBAR_BANNER_OVERLAY_REQUEST_CONFIG_H_
 #define IOS_CHROME_BROWSER_OVERLAYS_PUBLIC_INFOBAR_BANNER_CONFIRM_INFOBAR_BANNER_OVERLAY_REQUEST_CONFIG_H_
 
-#include "base/strings/string16.h"
+#include <string>
+
 #include "ios/chrome/browser/overlays/public/overlay_request_config.h"
 #include "ios/chrome/browser/overlays/public/overlay_user_data.h"
 #include "ui/gfx/image/image.h"
@@ -23,17 +24,23 @@ class ConfirmBannerRequestConfig
  public:
   ~ConfirmBannerRequestConfig() override;
 
+  // The title text.
+  std::u16string title_text() const { return title_text_; }
+
   // The message text.
-  base::string16 message_text() const { return message_text_; }
+  std::u16string message_text() const { return message_text_; }
 
   // The button label text.
-  base::string16 button_label_text() const { return button_label_text_; }
+  std::u16string button_label_text() const { return button_label_text_; }
 
   // The infobar's icon image.
   gfx::Image icon_image() const { return icon_image_; }
 
   // Whether to present the Infobar's banner for a longer amount of time.
   bool is_high_priority() const { return is_high_priority_; }
+
+  // Whether to use a background tint for the icon image.
+  bool use_icon_background_tint() const { return use_icon_background_tint_; }
 
  private:
   OVERLAY_USER_DATA_SETUP(ConfirmBannerRequestConfig);
@@ -45,9 +52,12 @@ class ConfirmBannerRequestConfig
   // The InfoBar causing this banner.
   infobars::InfoBar* infobar_ = nullptr;
   // Configuration data extracted from |infobar_|'s confirm delegate.
-  base::string16 message_text_;
-  base::string16 button_label_text_;
+  std::u16string title_text_;
+  std::u16string message_text_;
+  std::u16string button_label_text_;
   gfx::Image icon_image_;
+  // True if the icon image should apply a background tint.
+  bool use_icon_background_tint_ = true;
   // True if the infobar's banner should be presented for a longer time.
   bool is_high_priority_ = false;
 };

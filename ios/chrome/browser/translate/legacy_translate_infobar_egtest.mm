@@ -13,7 +13,6 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_manager.h"
@@ -261,7 +260,7 @@ using translate::LanguageDetectionController;
       base::UTF8ToUTF16("__gCrWeb.message.invokeOnHost({"
                         "  'command': 'translate.status',"
                         "  'errorCode': 0,"
-                        "  'originalPageLanguage': 'fr',"
+                        "  'pageSourceLanguage': 'fr',"
                         "  'translationTime': 0});"));
 }
 

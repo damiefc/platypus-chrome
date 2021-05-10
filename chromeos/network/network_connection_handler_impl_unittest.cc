@@ -15,9 +15,13 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/task_environment.h"
+#include "chromeos/network/cellular_connection_handler.h"
+#include "chromeos/network/cellular_inhibitor.h"
+#include "chromeos/network/cellular_utils.h"
 #include "chromeos/network/managed_network_configuration_handler_impl.h"
 #include "chromeos/network/network_cert_loader.h"
 #include "chromeos/network/network_configuration_handler.h"
+#include "chromeos/network/network_connection_handler.h"
 #include "chromeos/network/network_connection_observer.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_profile_handler.h"
@@ -25,6 +29,9 @@
 #include "chromeos/network/network_state_test_helper.h"
 #include "chromeos/network/onc/onc_utils.h"
 #include "chromeos/network/prohibited_technologies_handler.h"
+#include "chromeos/network/stub_cellular_networks_provider.h"
+#include "chromeos/network/system_token_cert_db_storage.h"
+#include "chromeos/network/test_cellular_esim_profile_handler.h"
 #include "components/onc/onc_constants.h"
 #include "crypto/scoped_nss_types.h"
 #include "crypto/scoped_test_nss_db.h"
@@ -44,6 +51,16 @@ namespace {
 const char kSuccessResult[] = "success";
 
 const char kTetherGuid[] = "tether-guid";
+
+const char kTestCellularGuid[] = "cellular_guid";
+const char kTestCellularDevicePath[] = "cellular_path";
+const char kTestCellularDeviceName[] = "cellular_name";
+const char kTestCellularServicePath[] = "cellular_service_path";
+
+const char kTestCellularName[] = "cellular_name";
+const char kTestIccid[] = "1234567890123456789";
+const char kTestEuiccPath[] = "/org/chromium/Hermes/Euicc/1";
+const char kTestEid[] = "123456789012345678901234567890123";
 
 class TestNetworkConnectionObserver : public NetworkConnectionObserver {
  public:
@@ -133,24 +150,25 @@ class FakeTetherDelegate : public NetworkConnectionHandler::TetherDelegate {
 
 class NetworkConnectionHandlerImplTest : public testing::Test {
  public:
-  NetworkConnectionHandlerImplTest()
-      : task_environment_(base::test::TaskEnvironment::MainThreadType::UI) {}
-
+  NetworkConnectionHandlerImplTest() = default;
   ~NetworkConnectionHandlerImplTest() override = default;
 
   void SetUp() override {
     ASSERT_TRUE(test_nssdb_.is_open());
 
     // Use the same DB for public and private slot.
-    test_nsscertdb_.reset(new net::NSSCertDatabaseChromeOS(
+    test_nsscertdb_ = std::make_unique<net::NSSCertDatabaseChromeOS>(
         crypto::ScopedPK11Slot(PK11_ReferenceSlot(test_nssdb_.slot())),
-        crypto::ScopedPK11Slot(PK11_ReferenceSlot(test_nssdb_.slot()))));
+        crypto::ScopedPK11Slot(PK11_ReferenceSlot(test_nssdb_.slot())));
 
+    SystemTokenCertDbStorage::Initialize();
     NetworkCertLoader::Initialize();
-    NetworkCertLoader::ForceHardwareBackedForTesting();
+    NetworkCertLoader::ForceAvailableForNetworkAuthForTesting();
 
     LoginState::Initialize();
+  }
 
+  void Init(bool use_cellular_connection_handler = true) {
     network_config_handler_.reset(
         NetworkConfigurationHandler::InitializeForTest(
             helper_.network_state_handler(),
@@ -165,17 +183,39 @@ class NetworkConnectionHandlerImplTest : public testing::Test {
         network_config_handler_.get(), nullptr /* network_device_handler */,
         nullptr /* prohibited_tecnologies_handler */);
 
-    network_connection_handler_.reset(new NetworkConnectionHandlerImpl());
-    network_connection_handler_->Init(helper_.network_state_handler(),
-                                      network_config_handler_.get(),
-                                      managed_config_handler_.get());
+    cellular_inhibitor_ = std::make_unique<CellularInhibitor>();
+    cellular_inhibitor_->Init(helper_.network_state_handler(),
+                              helper_.network_device_handler());
+
+    cellular_esim_profile_handler_ =
+        std::make_unique<TestCellularESimProfileHandler>();
+    cellular_esim_profile_handler_->Init(helper_.network_state_handler(),
+                                         cellular_inhibitor_.get());
+
+    stub_cellular_networks_provider_ =
+        std::make_unique<StubCellularNetworksProvider>();
+    stub_cellular_networks_provider_->Init(
+        helper_.network_state_handler(), cellular_esim_profile_handler_.get());
+
+    cellular_connection_handler_.reset(new CellularConnectionHandler());
+    cellular_connection_handler_->Init(helper_.network_state_handler(),
+                                       cellular_inhibitor_.get(),
+                                       cellular_esim_profile_handler_.get());
+
+    network_connection_handler_ =
+        std::make_unique<NetworkConnectionHandlerImpl>();
+    network_connection_handler_->Init(
+        helper_.network_state_handler(), network_config_handler_.get(),
+        managed_config_handler_.get(),
+        use_cellular_connection_handler ? cellular_connection_handler_.get()
+                                        : nullptr);
     network_connection_observer_.reset(new TestNetworkConnectionObserver);
     network_connection_handler_->AddObserver(
         network_connection_observer_.get());
 
     task_environment_.RunUntilIdle();
 
-    fake_tether_delegate_.reset(new FakeTetherDelegate());
+    fake_tether_delegate_ = std::make_unique<FakeTetherDelegate>();
   }
 
   void TearDown() override {
@@ -190,6 +230,7 @@ class NetworkConnectionHandlerImplTest : public testing::Test {
     LoginState::Shutdown();
 
     NetworkCertLoader::Shutdown();
+    SystemTokenCertDbStorage::Shutdown();
   }
 
  protected:
@@ -297,9 +338,125 @@ class NetworkConnectionHandlerImplTest : public testing::Test {
     return helper_.ConfigureService(shill_json_string);
   }
 
+  std::string ConfigureVpnServiceWithProviderType(
+      const std::string& vpn_provider_type) {
+    const std::string kVpnGuid = "vpn_guid";
+    const std::string kShillJsonStringTemplate =
+        R"({"GUID": "$1", "Type": "vpn", "State": "idle",
+            "Provider": {"Type": "$2", "Host": "host"}})";
+
+    const std::string shill_json_string = base::ReplaceStringPlaceholders(
+        kShillJsonStringTemplate, {kVpnGuid, vpn_provider_type},
+        /*offsets=*/nullptr);
+    return ConfigureService(shill_json_string);
+  }
+
   std::string GetServiceStringProperty(const std::string& service_path,
                                        const std::string& key) {
     return helper_.GetServiceStringProperty(service_path, key);
+  }
+
+  void QueueEuiccErrorStatus() {
+    helper_.hermes_euicc_test()->QueueHermesErrorStatus(
+        HermesResponseStatus::kErrorUnknown);
+  }
+
+  void SetCellularServiceConnectable() {
+    helper_.service_test()->SetServiceProperty(kTestCellularServicePath,
+                                               shill::kConnectableProperty,
+                                               base::Value(true));
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void SetCellularServiceState(const std::string& state) {
+    helper_.service_test()->SetServiceProperty(
+        kTestCellularServicePath, shill::kStateProperty, base::Value(state));
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void SetCellularServiceOutOfCredits() {
+    helper_.service_test()->SetServiceProperty(kTestCellularServicePath,
+                                               shill::kOutOfCreditsProperty,
+                                               base::Value(true));
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void SetCellularSimLocked() {
+    // Simulate a locked SIM.
+    base::Value sim_lock_status(base::Value::Type::DICTIONARY);
+    sim_lock_status.SetKey(shill::kSIMLockTypeProperty,
+                           base::Value(shill::kSIMLockPin));
+    helper_.device_test()->SetDeviceProperty(
+        kTestCellularDevicePath, shill::kSIMLockStatusProperty,
+        std::move(sim_lock_status), /*notify_changed=*/true);
+
+    // Set the cellular service to be the active profile.
+    base::Value::ListStorage sim_slot_infos;
+    base::Value slot_info_item(base::Value::Type::DICTIONARY);
+    slot_info_item.SetKey(shill::kSIMSlotInfoICCID, base::Value(kTestIccid));
+    slot_info_item.SetBoolKey(shill::kSIMSlotInfoPrimary, true);
+    sim_slot_infos.push_back(std::move(slot_info_item));
+    helper_.device_test()->SetDeviceProperty(
+        kTestCellularDevicePath, shill::kSIMSlotInfoProperty,
+        base::Value(sim_slot_infos), /*notify_changed=*/true);
+
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void AddNonConnectablePSimService() {
+    AddCellularDevice();
+    AddCellularService(/*has_eid=*/false);
+  }
+
+  void AddNonConnectableESimService() {
+    AddCellularDevice();
+    AddCellularService(/*has_eid=*/true);
+  }
+
+  void AddCellularServiceWithESimProfile(bool is_stub = false) {
+    AddCellularDevice();
+
+    // Add EUICC which will hold the profile.
+    helper_.hermes_manager_test()->AddEuicc(dbus::ObjectPath(kTestEuiccPath),
+                                            kTestEid, /*is_active=*/true,
+                                            /*physical_slot=*/0);
+
+    HermesEuiccClient::TestInterface::AddCarrierProfileBehavior behavior =
+        is_stub ? HermesEuiccClient::TestInterface::AddCarrierProfileBehavior::
+                      kAddProfileWithoutService
+                : HermesEuiccClient::TestInterface::AddCarrierProfileBehavior::
+                      kAddProfileWithService;
+
+    helper_.hermes_euicc_test()->AddCarrierProfile(
+        dbus::ObjectPath(kTestCellularServicePath),
+        dbus::ObjectPath(kTestEuiccPath), kTestIccid, kTestCellularName,
+        "service_provider", "activation_code", kTestCellularServicePath,
+        hermes::profile::State::kInactive,
+        hermes::profile::ProfileClass::kOperational, behavior);
+    base::RunLoop().RunUntilIdle();
+  }
+
+  // Used when testing a code that accesses NetworkHandler::Get() directly (e.g.
+  // when checking if VPN is disabled by policy when attempting to connect to a
+  // VPN network). NetworkStateTestHelper can not be used here. That's because
+  // NetworkStateTestHelper initializes a NetworkStateHandler for testing, but
+  // NetworkHandler::Initialize() constructs its own NetworkStateHandler
+  // instance and NetworkHandler::Get() uses it.
+  // Note: Tests using this method must call NetworkHandler::Shutdown() before
+  // returning.
+  void ProhibitVpnForNetworkHandler() {
+    NetworkHandler::Initialize();
+    NetworkHandler::Get()
+        ->prohibited_technologies_handler()
+        ->AddGloballyProhibitedTechnology(shill::kTypeVPN);
+  }
+
+  void AdvanceClock(base::TimeDelta time_delta) {
+    task_environment_.FastForwardBy(time_delta);
+  }
+
+  void SetShillConnectError(const std::string& error_name) {
+    helper_.service_test()->SetErrorForNextConnectionAttempt(error_name);
   }
 
   NetworkStateHandler* network_state_handler() {
@@ -316,13 +473,44 @@ class NetworkConnectionHandlerImplTest : public testing::Test {
   }
 
  private:
-  base::test::TaskEnvironment task_environment_;
+  void AddCellularDevice() {
+    helper_.device_test()->AddDevice(
+        kTestCellularDevicePath, shill::kTypeCellular, kTestCellularDeviceName);
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void AddCellularService(bool has_eid) {
+    // Add idle, non-connectable network.
+    helper_.service_test()->AddService(
+        kTestCellularServicePath, kTestCellularGuid, kTestCellularName,
+        shill::kTypeCellular, shill::kStateIdle, /*visible=*/true);
+    base::RunLoop().RunUntilIdle();
+
+    if (has_eid) {
+      helper_.service_test()->SetServiceProperty(
+          kTestCellularServicePath, shill::kEidProperty, base::Value(kTestEid));
+    }
+
+    helper_.service_test()->SetServiceProperty(kTestCellularServicePath,
+                                               shill::kIccidProperty,
+                                               base::Value(kTestIccid));
+    base::RunLoop().RunUntilIdle();
+  }
+
+  base::test::TaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   NetworkStateTestHelper helper_{false /* use_default_devices_and_services */};
   std::unique_ptr<NetworkConfigurationHandler> network_config_handler_;
   std::unique_ptr<NetworkConnectionHandler> network_connection_handler_;
   std::unique_ptr<TestNetworkConnectionObserver> network_connection_observer_;
   std::unique_ptr<ManagedNetworkConfigurationHandlerImpl>
       managed_config_handler_;
+  std::unique_ptr<CellularInhibitor> cellular_inhibitor_;
+  std::unique_ptr<TestCellularESimProfileHandler>
+      cellular_esim_profile_handler_;
+  std::unique_ptr<StubCellularNetworksProvider>
+      stub_cellular_networks_provider_;
+  std::unique_ptr<CellularConnectionHandler> cellular_connection_handler_;
   std::unique_ptr<NetworkProfileHandler> network_profile_handler_;
   crypto::ScopedTestNSSDB test_nssdb_;
   std::unique_ptr<net::NSSCertDatabaseChromeOS> test_nsscertdb_;
@@ -356,6 +544,8 @@ const char* kPolicyWifi0 =
 
 TEST_F(NetworkConnectionHandlerImplTest,
        NetworkConnectionHandlerConnectSuccess) {
+  Init();
+
   std::string wifi0_service_path = ConfigureService(kConfigWifi0Connectable);
   ASSERT_FALSE(wifi0_service_path.empty());
   Connect(wifi0_service_path);
@@ -371,6 +561,8 @@ TEST_F(NetworkConnectionHandlerImplTest,
 
 TEST_F(NetworkConnectionHandlerImplTest,
        NetworkConnectionHandlerConnectBlockedByManagedOnly) {
+  Init();
+
   std::string wifi0_service_path = ConfigureService(kConfigWifi0Connectable);
   ASSERT_FALSE(wifi0_service_path.empty());
   base::DictionaryValue global_config;
@@ -391,6 +583,8 @@ TEST_F(NetworkConnectionHandlerImplTest,
 
 TEST_F(NetworkConnectionHandlerImplTest,
        NetworkConnectionHandlerConnectBlockedBySSID) {
+  Init();
+
   std::string wifi0_service_path = ConfigureService(kConfigWifi0Connectable);
   ASSERT_FALSE(wifi0_service_path.empty());
 
@@ -419,6 +613,8 @@ TEST_F(NetworkConnectionHandlerImplTest,
 // Handles basic failure cases.
 TEST_F(NetworkConnectionHandlerImplTest,
        NetworkConnectionHandlerConnectFailure) {
+  Init();
+
   Connect(kNoNetwork);
   EXPECT_EQ(NetworkConnectionHandler::kErrorConfigureFailed,
             GetResultAndReset());
@@ -452,6 +648,50 @@ TEST_F(NetworkConnectionHandlerImplTest,
             network_connection_observer()->GetResult(wifi3_service_path));
 }
 
+TEST_F(NetworkConnectionHandlerImplTest,
+       IgnoreConnectInProgressError_Succeeds) {
+  Init();
+
+  AddCellularServiceWithESimProfile();
+  // Verify the result is not returned and observers are not called if shill
+  // returns InProgress error.
+  SetShillConnectError(shill::kErrorResultInProgress);
+  Connect(kTestCellularServicePath);
+  EXPECT_TRUE(GetResultAndReset().empty());
+  EXPECT_TRUE(network_connection_observer()
+                  ->GetResult(kTestCellularServicePath)
+                  .empty());
+
+  // Verify that connect request returns when service state changes to
+  // connected.
+  SetCellularServiceState(shill::kStateOnline);
+  EXPECT_EQ(kSuccessResult,
+            network_connection_observer()->GetResult(kTestCellularServicePath));
+  EXPECT_EQ(kSuccessResult, GetResultAndReset());
+}
+
+TEST_F(NetworkConnectionHandlerImplTest, IgnoreConnectInProgressError_Fails) {
+  Init();
+
+  AddCellularServiceWithESimProfile();
+  SetShillConnectError(shill::kErrorResultInProgress);
+  Connect(kTestCellularServicePath);
+  EXPECT_TRUE(GetResultAndReset().empty());
+  EXPECT_TRUE(network_connection_observer()
+                  ->GetResult(kTestCellularServicePath)
+                  .empty());
+
+  // Set cellular service to connecting state.
+  SetCellularServiceState(shill::kStateAssociation);
+
+  // Verify the connect request fails with error when returned and observers are
+  // not called if shill returns InProgress error.
+  SetCellularServiceState(shill::kStateIdle);
+  EXPECT_EQ(NetworkConnectionHandler::kErrorConnectFailed,
+            network_connection_observer()->GetResult(kTestCellularServicePath));
+  EXPECT_EQ(NetworkConnectionHandler::kErrorConnectFailed, GetResultAndReset());
+}
+
 namespace {
 
 const char* kPolicyWithCertPatternTemplate =
@@ -477,6 +717,8 @@ const char* kPolicyWithCertPatternTemplate =
 
 // Handle certificates.
 TEST_F(NetworkConnectionHandlerImplTest, ConnectCertificateMissing) {
+  Init();
+
   StartNetworkCertLoader();
   SetupPolicy(base::StringPrintf(kPolicyWithCertPatternTemplate, "unknown"),
               base::DictionaryValue(),  // no global config
@@ -488,6 +730,8 @@ TEST_F(NetworkConnectionHandlerImplTest, ConnectCertificateMissing) {
 }
 
 TEST_F(NetworkConnectionHandlerImplTest, ConnectWithCertificateSuccess) {
+  Init();
+
   StartNetworkCertLoader();
   scoped_refptr<net::X509Certificate> cert = ImportTestClientCert();
   ASSERT_TRUE(cert.get());
@@ -501,9 +745,10 @@ TEST_F(NetworkConnectionHandlerImplTest, ConnectWithCertificateSuccess) {
   EXPECT_EQ(kSuccessResult, GetResultAndReset());
 }
 
-// Disabled, see http://crbug.com/396729.
 TEST_F(NetworkConnectionHandlerImplTest,
-       DISABLED_ConnectWithCertificateRequestedBeforeCertsAreLoaded) {
+       ConnectWithCertificateRequestedWhenCertsCanNotBeAvailable) {
+  Init();
+
   scoped_refptr<net::X509Certificate> cert = ImportTestClientCert();
   ASSERT_TRUE(cert.get());
 
@@ -511,6 +756,31 @@ TEST_F(NetworkConnectionHandlerImplTest,
                                  cert->subject().common_name.c_str()),
               base::DictionaryValue(),  // no global config
               true);                    // load as user policy
+
+  Connect(ServicePathFromGuid("wifi4"));
+
+  // Connect request came when no client certificates can exist because
+  // NetworkCertLoader doesn't have a NSSCertDatabase configured and also has
+  // not notified that a NSSCertDatabase is being initialized.
+  EXPECT_EQ(NetworkConnectionHandler::kErrorCertificateRequired,
+            GetResultAndReset());
+}
+
+TEST_F(NetworkConnectionHandlerImplTest,
+       ConnectWithCertificateRequestedBeforeCertsAreLoaded) {
+  Init();
+
+  scoped_refptr<net::X509Certificate> cert = ImportTestClientCert();
+  ASSERT_TRUE(cert.get());
+
+  SetupPolicy(base::StringPrintf(kPolicyWithCertPatternTemplate,
+                                 cert->subject().common_name.c_str()),
+              base::DictionaryValue(),  // no global config
+              true);                    // load as user policy
+
+  // Mark that a user slot NSSCertDatabase is being initialized so that
+  // NetworkConnectionHandler attempts to wait for certificates to be loaded.
+  NetworkCertLoader::Get()->MarkUserNSSDBWillBeInitialized();
 
   Connect(ServicePathFromGuid("wifi4"));
 
@@ -528,7 +798,42 @@ TEST_F(NetworkConnectionHandlerImplTest,
 }
 
 TEST_F(NetworkConnectionHandlerImplTest,
+       ConnectWithCertificateRequestedBeforeCertsAreLoaded_NeverLoaded) {
+  const base::TimeDelta kMaxCertLoadTimeSeconds =
+      base::TimeDelta::FromSeconds(15);
+
+  Init();
+
+  scoped_refptr<net::X509Certificate> cert = ImportTestClientCert();
+  ASSERT_TRUE(cert.get());
+
+  SetupPolicy(base::StringPrintf(kPolicyWithCertPatternTemplate,
+                                 cert->subject().common_name.c_str()),
+              base::DictionaryValue(),  // no global config
+              true);                    // load as user policy
+
+  // Mark that a user slot NSSCertDatabase is being initialized so that
+  // NetworkConnectionHandler attempts to wait for certificates to be loaded.
+  NetworkCertLoader::Get()->MarkUserNSSDBWillBeInitialized();
+
+  Connect(ServicePathFromGuid("wifi4"));
+
+  // Connect request came before the cert loader loaded certificates, so the
+  // connect request should have been throttled until the certificates are
+  // loaded.
+  EXPECT_EQ("", GetResultAndReset());
+
+  AdvanceClock(kMaxCertLoadTimeSeconds);
+
+  // The result should indicate a certificate load timeout.
+  EXPECT_EQ(NetworkConnectionHandler::kErrorCertLoadTimeout,
+            GetResultAndReset());
+}
+
+TEST_F(NetworkConnectionHandlerImplTest,
        NetworkConnectionHandlerDisconnectSuccess) {
+  Init();
+
   std::string wifi1_service_path = ConfigureService(kConfigWifi1Connected);
   ASSERT_FALSE(wifi1_service_path.empty());
   Disconnect(wifi1_service_path);
@@ -538,6 +843,8 @@ TEST_F(NetworkConnectionHandlerImplTest,
 
 TEST_F(NetworkConnectionHandlerImplTest,
        NetworkConnectionHandlerDisconnectFailure) {
+  Init();
+
   Connect(kNoNetwork);
   EXPECT_EQ(NetworkConnectionHandler::kErrorConfigureFailed,
             GetResultAndReset());
@@ -549,6 +856,8 @@ TEST_F(NetworkConnectionHandlerImplTest,
 }
 
 TEST_F(NetworkConnectionHandlerImplTest, ConnectToTetherNetwork_Success) {
+  Init();
+
   network_state_handler()->SetTetherTechnologyState(
       NetworkStateHandler::TECHNOLOGY_ENABLED);
   network_state_handler()->AddTetherNetworkState(
@@ -570,6 +879,8 @@ TEST_F(NetworkConnectionHandlerImplTest, ConnectToTetherNetwork_Success) {
 }
 
 TEST_F(NetworkConnectionHandlerImplTest, ConnectToTetherNetwork_Failure) {
+  Init();
+
   network_state_handler()->SetTetherTechnologyState(
       NetworkStateHandler::TECHNOLOGY_ENABLED);
   network_state_handler()->AddTetherNetworkState(
@@ -592,36 +903,75 @@ TEST_F(NetworkConnectionHandlerImplTest, ConnectToTetherNetwork_Failure) {
 }
 
 TEST_F(NetworkConnectionHandlerImplTest,
-       ConnectToVpnNetworkWhenProhibited_Failure) {
-  // This test tests a code that accesses NetworkHandler::Get() directly (when
-  // checking if VPN is disabled by policy when attempting to connect to a VPN
-  // network), so NetworkStateTestHelper can not be used here. That's because
-  // NetworkStateTestHelper initializes a NetworkStateHandler for testing, but
-  // NetworkHandler::Initialize() constructs its own NetworkStateHandler
-  // instance and NetworkHandler::Get() uses it.
-  NetworkHandler::Initialize();
-  NetworkHandler::Get()
-      ->prohibited_technologies_handler()
-      ->AddGloballyProhibitedTechnology(shill::kTypeVPN);
+       ConnectToL2tpIpsecVpnNetworkWhenProhibited_Failure) {
+  Init();
 
-  const std::string kVpnGuid = "vpn_guid";
-  const std::string kShillJsonStringTemplate =
-      R"({"GUID": "$1", "Type": "vpn", "State": "idle",
-            "Provider": {"Type": "l2tpipsec", "Host": "host"}})";
+  ProhibitVpnForNetworkHandler();
 
-  const std::string shill_json_string =
-      base::ReplaceStringPlaceholders(kShillJsonStringTemplate, {kVpnGuid},
-                                      /*offsets=*/nullptr);
-  const std::string vpn_service_path = ConfigureService(shill_json_string);
+  const std::string vpn_service_path =
+      ConfigureVpnServiceWithProviderType(shill::kProviderL2tpIpsec);
   ASSERT_FALSE(vpn_service_path.empty());
 
   Connect(/*service_path=*/vpn_service_path);
   EXPECT_EQ(NetworkConnectionHandler::kErrorBlockedByPolicy,
             GetResultAndReset());
+
+  NetworkHandler::Shutdown();
+}
+
+TEST_F(NetworkConnectionHandlerImplTest,
+       ConnectToOpenVpnNetworkWhenProhibited_Failure) {
+  Init();
+
+  ProhibitVpnForNetworkHandler();
+
+  const std::string vpn_service_path =
+      ConfigureVpnServiceWithProviderType(shill::kProviderOpenVpn);
+  ASSERT_FALSE(vpn_service_path.empty());
+
+  Connect(/*service_path=*/vpn_service_path);
+  EXPECT_EQ(NetworkConnectionHandler::kErrorBlockedByPolicy,
+            GetResultAndReset());
+
+  NetworkHandler::Shutdown();
+}
+
+TEST_F(NetworkConnectionHandlerImplTest,
+       ConnectToThirdPartyVpnNetworkWhenProhibited_Success) {
+  Init();
+
+  ProhibitVpnForNetworkHandler();
+
+  const std::string vpn_service_path =
+      ConfigureVpnServiceWithProviderType(shill::kProviderThirdPartyVpn);
+  ASSERT_FALSE(vpn_service_path.empty());
+
+  Connect(/*service_path=*/vpn_service_path);
+  EXPECT_EQ(kSuccessResult, GetResultAndReset());
+
+  NetworkHandler::Shutdown();
+}
+
+TEST_F(NetworkConnectionHandlerImplTest,
+       ConnectToArcVpnNetworkWhenProhibited_Success) {
+  Init();
+
+  ProhibitVpnForNetworkHandler();
+
+  const std::string vpn_service_path =
+      ConfigureVpnServiceWithProviderType(shill::kProviderArcVpn);
+  ASSERT_FALSE(vpn_service_path.empty());
+
+  Connect(/*service_path=*/vpn_service_path);
+  EXPECT_EQ(kSuccessResult, GetResultAndReset());
+
+  NetworkHandler::Shutdown();
 }
 
 TEST_F(NetworkConnectionHandlerImplTest,
        ConnectToTetherNetwork_NoTetherDelegate) {
+  Init();
+
   network_state_handler()->SetTetherTechnologyState(
       NetworkStateHandler::TECHNOLOGY_ENABLED);
   network_state_handler()->AddTetherNetworkState(
@@ -643,6 +993,8 @@ TEST_F(NetworkConnectionHandlerImplTest,
 }
 
 TEST_F(NetworkConnectionHandlerImplTest, DisconnectFromTetherNetwork_Success) {
+  Init();
+
   network_state_handler()->SetTetherTechnologyState(
       NetworkStateHandler::TECHNOLOGY_ENABLED);
   network_state_handler()->AddTetherNetworkState(
@@ -665,6 +1017,8 @@ TEST_F(NetworkConnectionHandlerImplTest, DisconnectFromTetherNetwork_Success) {
 }
 
 TEST_F(NetworkConnectionHandlerImplTest, DisconnectFromTetherNetwork_Failure) {
+  Init();
+
   network_state_handler()->SetTetherTechnologyState(
       NetworkStateHandler::TECHNOLOGY_ENABLED);
   network_state_handler()->AddTetherNetworkState(
@@ -689,6 +1043,8 @@ TEST_F(NetworkConnectionHandlerImplTest, DisconnectFromTetherNetwork_Failure) {
 
 TEST_F(NetworkConnectionHandlerImplTest,
        DisconnectFromTetherNetwork_NoTetherDelegate) {
+  Init();
+
   network_state_handler()->SetTetherTechnologyState(
       NetworkStateHandler::TECHNOLOGY_ENABLED);
   network_state_handler()->AddTetherNetworkState(
@@ -708,6 +1064,112 @@ TEST_F(NetworkConnectionHandlerImplTest,
   EXPECT_TRUE(network_connection_observer()->GetRequested(kTetherGuid));
   EXPECT_EQ(NetworkConnectionHandler::kErrorTetherAttemptWithNoDelegate,
             network_connection_observer()->GetResult(kTetherGuid));
+}
+
+// Regression test for b/186381398.
+TEST_F(NetworkConnectionHandlerImplTest,
+       PSimProfile_NoCellularConnectionHandler) {
+  Init(/*use_cellular_connection_handler=*/false);
+  AddNonConnectablePSimService();
+  SetCellularServiceConnectable();
+  Connect(kTestCellularServicePath);
+  EXPECT_EQ(kSuccessResult, GetResultAndReset());
+}
+
+TEST_F(NetworkConnectionHandlerImplTest, PSimProfile_NotConnectable) {
+  Init();
+  AddNonConnectablePSimService();
+
+  Connect(kTestCellularServicePath);
+  SetCellularServiceConnectable();
+  EXPECT_EQ(kSuccessResult, GetResultAndReset());
+}
+
+TEST_F(NetworkConnectionHandlerImplTest, PSimProfile_OutOfCredits) {
+  Init();
+  AddNonConnectablePSimService();
+
+  SetCellularServiceOutOfCredits();
+  Connect(kTestCellularServicePath);
+  EXPECT_EQ(NetworkConnectionHandler::kErrorCellularOutOfCredits,
+            GetResultAndReset());
+}
+
+TEST_F(NetworkConnectionHandlerImplTest, SimLocked) {
+  Init();
+  AddNonConnectablePSimService();
+  SetCellularSimLocked();
+  SetCellularServiceConnectable();
+
+  Connect(kTestCellularServicePath);
+  EXPECT_EQ(NetworkConnectionHandler::kErrorSimLocked, GetResultAndReset());
+}
+
+TEST_F(NetworkConnectionHandlerImplTest, ESimProfile_AlreadyConnectable) {
+  Init();
+  AddCellularServiceWithESimProfile();
+
+  // Set the service to be connectable before trying to connect. This does not
+  // invoke the CellularConnectionHandler flow since the profile is already
+  // enabled.
+  SetCellularServiceConnectable();
+  Connect(kTestCellularServicePath);
+  EXPECT_EQ(kSuccessResult, GetResultAndReset());
+}
+
+TEST_F(NetworkConnectionHandlerImplTest, ESimProfile_EnableProfile) {
+  Init();
+  AddCellularServiceWithESimProfile();
+
+  // Do not set the service to be connectable before trying to connect. When a
+  // connection is initiated, we attempt to enable the profile via Hermes.
+  Connect(kTestCellularServicePath);
+  SetCellularServiceConnectable();
+  EXPECT_EQ(kSuccessResult, GetResultAndReset());
+}
+
+TEST_F(NetworkConnectionHandlerImplTest, ESimProfile_StubToShillBacked) {
+  Init();
+  AddCellularServiceWithESimProfile(/*is_stub=*/true);
+
+  // Connect to a stub path. Internally, this should wait until a connectable
+  // Shill-backed service is created.
+  Connect(GenerateStubCellularServicePath(kTestIccid));
+
+  // Now, create a non-stub service and make it connectable.
+  AddNonConnectableESimService();
+  SetCellularServiceConnectable();
+
+  EXPECT_EQ(kSuccessResult, GetResultAndReset());
+
+  // A connection was requested to the stub service path, not the actual one.
+  EXPECT_TRUE(network_connection_observer()->GetRequested(
+      GenerateStubCellularServicePath(kTestIccid)));
+  EXPECT_FALSE(
+      network_connection_observer()->GetRequested(kTestCellularServicePath));
+
+  // However, the connection success was part of the actual service path, not
+  // the stub one.
+  EXPECT_EQ(std::string(), network_connection_observer()->GetResult(
+                               GenerateStubCellularServicePath(kTestIccid)));
+  EXPECT_EQ(kSuccessResult,
+            network_connection_observer()->GetResult(kTestCellularServicePath));
+}
+
+TEST_F(NetworkConnectionHandlerImplTest, ESimProfile_EnableProfile_Fails) {
+  Init();
+  AddCellularServiceWithESimProfile();
+
+  // Queue an error which should cause enabling the profile to fail.
+  QueueEuiccErrorStatus();
+
+  // Do not set the service to be connectable before trying to connect. When a
+  // connection is initiated, we attempt to enable the profile via Hermes.
+  Connect(kTestCellularServicePath);
+
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(NetworkConnectionHandler::kErrorESimProfileIssue,
+            GetResultAndReset());
 }
 
 }  // namespace chromeos

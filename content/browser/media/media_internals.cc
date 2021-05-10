@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <string>
 #include <tuple>
 #include <utility>
 
@@ -17,7 +18,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
@@ -50,7 +50,7 @@
 
 namespace {
 
-base::string16 SerializeUpdate(const std::string& function,
+std::u16string SerializeUpdate(const std::string& function,
                                const base::Value* value) {
   return content::WebUI::GetJavascriptCall(
       function, std::vector<const base::Value*>(1, value));
@@ -360,7 +360,7 @@ void MediaInternals::Observe(int type,
 // Converts the |event| to a |update|. Returns whether the conversion succeeded.
 static bool ConvertEventToUpdate(int render_process_id,
                                  const media::MediaLogRecord& event,
-                                 base::string16* update) {
+                                 std::u16string* update) {
   DCHECK(update);
 
   base::DictionaryValue dict;
@@ -419,7 +419,7 @@ void MediaInternals::OnMediaEvents(
   // Notify observers that |event| has occurred.
   for (const auto& event : events) {
     if (CanUpdate()) {
-      base::string16 update;
+      std::u16string update;
       if (ConvertEventToUpdate(render_process_id, event, &update))
         SendUpdate(update);
     }
@@ -459,7 +459,7 @@ void MediaInternals::SendHistoricalMediaEvents() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   for (const auto& saved_events : saved_events_by_process_) {
     for (const auto& event : saved_events.second) {
-      base::string16 update;
+      std::u16string update;
       if (ConvertEventToUpdate(saved_events.first, event, &update))
         SendUpdate(update);
     }
@@ -505,13 +505,13 @@ void MediaInternals::SendGeneralAudioInformation() {
   set_explicit_feature_data(
       features::kAudioServiceSandbox,
       GetContentClient()->browser()->ShouldSandboxAudioService());
-  base::string16 audio_info_update =
+  std::u16string audio_info_update =
       SerializeUpdate("media.updateGeneralAudioInformation", &audio_info_data);
   SendUpdate(audio_info_update);
 }
 
 void MediaInternals::SendAudioStreamData() {
-  base::string16 audio_stream_update;
+  std::u16string audio_stream_update;
   {
     base::AutoLock auto_lock(lock_);
     audio_stream_update = SerializeUpdate("media.onReceiveAudioStreamData",
@@ -626,7 +626,7 @@ MediaInternals::CreateAudioLogImpl(
                                         render_frame_id);
 }
 
-void MediaInternals::SendUpdate(const base::string16& update) {
+void MediaInternals::SendUpdate(const std::u16string& update) {
   // SendUpdate() may be called from any thread, but must run on the UI thread.
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
     GetUIThreadTaskRunner({})->PostTask(
@@ -642,19 +642,9 @@ void MediaInternals::SendUpdate(const base::string16& update) {
 void MediaInternals::SaveEvent(int process_id,
                                const media::MediaLogRecord& event) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-// Save the event and limit the total number per renderer. At the time of
-// writing, 512 events of the kind: { "property": value } together consume
-// ~88kb of memory on linux.
-#if defined(OS_ANDROID)
-  const size_t kEventLimit = 128;
-#else
-  const size_t kEventLimit = 512;
-#endif
-
   auto& saved_events = saved_events_by_process_[process_id];
   saved_events.push_back(event);
-  if (saved_events.size() > kEventLimit) {
+  if (saved_events.size() > media::MediaLog::kLogLimit) {
     // Remove all events for a given player as soon as we have to remove a
     // single event for that player to avoid showing incomplete players.
     const int id_to_remove = saved_events.front().id;

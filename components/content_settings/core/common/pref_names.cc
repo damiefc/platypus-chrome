@@ -37,8 +37,6 @@ const char kManagedDefaultNotificationsSetting[] =
     "profile.managed_default_content_settings.notifications";
 const char kManagedDefaultMediaStreamSetting[] =
     "profile.managed_default_content_settings.media_stream";
-const char kManagedDefaultPluginsSetting[] =
-    "profile.managed_default_content_settings.plugins";
 const char kManagedDefaultPopupsSetting[] =
     "profile.managed_default_content_settings.popups";
 const char kManagedDefaultSensorsSetting[] =
@@ -47,6 +45,8 @@ const char kManagedDefaultWebBluetoothGuardSetting[] =
     "profile.managed_default_content_settings.web_bluetooth_guard";
 const char kManagedDefaultWebUsbGuardSetting[] =
     "profile.managed_default_content_settings.web_usb_guard";
+const char kManagedDefaultFileHandlingGuardSetting[] =
+    "profile.managed_default_content_settings.file_handling_guard";
 const char kManagedDefaultFileSystemReadGuardSetting[] =
     "profile.managed_default_content_settings.file_system_read_guard";
 const char kManagedDefaultFileSystemWriteGuardSetting[] =
@@ -84,10 +84,6 @@ const char kManagedNotificationsAllowedForUrls[] =
     "profile.managed_notifications_allowed_for_urls";
 const char kManagedNotificationsBlockedForUrls[] =
     "profile.managed_notifications_blocked_for_urls";
-const char kManagedPluginsAllowedForUrls[] =
-    "profile.managed_plugins_allowed_for_urls";
-const char kManagedPluginsBlockedForUrls[] =
-    "profile.managed_plugins_blocked_for_urls";
 const char kManagedPopupsAllowedForUrls[] =
     "profile.managed_popups_allowed_for_urls";
 const char kManagedPopupsBlockedForUrls[] =
@@ -101,6 +97,10 @@ const char kManagedWebUsbAllowDevicesForUrls[] =
 const char kManagedWebUsbAskForUrls[] = "profile.managed_web_usb_ask_for_urls";
 const char kManagedWebUsbBlockedForUrls[] =
     "profile.managed_web_usb_blocked_for_urls";
+const char kManagedFileHandlingAllowedForUrls[] =
+    "profile.managed_file_handling_allowed_for_urls";
+const char kManagedFileHandlingBlockedForUrls[] =
+    "profile.managed_file_handling_blocked_for_urls";
 const char kManagedFileSystemReadAskForUrls[] =
     "profile.managed_file_system_read_ask_for_urls";
 const char kManagedFileSystemReadBlockedForUrls[] =
@@ -117,10 +117,23 @@ const char kManagedSerialBlockedForUrls[] =
 const char kManagedInsecurePrivateNetworkAllowedForUrls[] =
     "profile.managed_insecure_private_network_allowed_for_urls";
 
-// Boolean indicating whether the quiet UX is enabled for notification
+// Boolean indicating whether the quiet UI is enabled for notification
 // permission requests.
 const char kEnableQuietNotificationPermissionUi[] =
     "profile.content_settings.enable_quiet_permission_ui.notifications";
+
+// Enum indicating by which method the quiet UI has been enabled for
+// notification permission requests. This is stored as of M88 and will be
+// backfilled if the quiet UI is enabled but this preference has no value.
+const char kQuietNotificationPermissionUiEnablingMethod[] =
+    "profile.content_settings.enable_quiet_permission_ui_enabling_method."
+    "notifications";
+
+// Time value indicating when the quiet notification UI was last disabled by the
+// user. Only permission action history after this point is taken into account
+// for adaptive quiet UI activation.
+const char kQuietNotificationPermissionUiDisabledTime[] =
+    "profile.content_settings.disable_quiet_permission_ui_time.notifications";
 
 #if defined(OS_ANDROID)
 // Enable vibration for web notifications.

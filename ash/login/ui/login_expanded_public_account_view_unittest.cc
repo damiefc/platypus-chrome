@@ -12,7 +12,7 @@
 #include "ash/login/ui/views_utils.h"
 #include "ash/public/cpp/login_types.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/ranges/algorithm.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -303,22 +303,22 @@ TEST_P(LoginExpandedPublicAccountViewTest, ChangeWarningLabel) {
   LoginExpandedPublicAccountView::TestApi test_api(public_account_);
   views::Label* label = test_api.monitoring_warning_label();
   test_api.ResetUserForTest();
-  const base::string16 default_warning = l10n_util::GetStringUTF16(
+  const std::u16string default_warning = l10n_util::GetStringUTF16(
       IDS_ASH_LOGIN_PUBLIC_ACCOUNT_MONITORING_WARNING);
   EXPECT_EQ(label->GetText(), default_warning);
 
   public_account_->SetShowFullManagementDisclosure(false);
   EXPECT_EQ(label->GetText(), default_warning);
   const std::string domain =
-      user_.public_account_info->device_enterprise_domain.value();
+      user_.public_account_info->device_enterprise_manager.value();
   public_account_->UpdateForUser(user_);
-  const base::string16 soft_warning = l10n_util::GetStringFUTF16(
+  const std::u16string soft_warning = l10n_util::GetStringFUTF16(
       IDS_ASH_LOGIN_MANAGED_SESSION_MONITORING_SOFT_WARNING,
       base::UTF8ToUTF16(domain));
   EXPECT_EQ(label->GetText(), soft_warning);
 
   public_account_->SetShowFullManagementDisclosure(true);
-  const base::string16 full_warning = l10n_util::GetStringFUTF16(
+  const std::u16string full_warning = l10n_util::GetStringFUTF16(
       IDS_ASH_LOGIN_MANAGED_SESSION_MONITORING_FULL_WARNING,
       base::UTF8ToUTF16(domain));
   EXPECT_EQ(label->GetText(), full_warning);

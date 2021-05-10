@@ -9,7 +9,9 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/event_utils.h"
@@ -25,6 +27,7 @@
 #include "ui/message_center/views/notification_header_view.h"
 #include "ui/message_center/views/padded_button.h"
 #include "ui/message_center/views/proportional_image_view.h"
+#include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_observer.h"
 #include "ui/views/animation/test/ink_drop_impl_test_api.h"
@@ -32,6 +35,7 @@
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/radio_button.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/test/button_test_api.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/widget_utils.h"
@@ -50,7 +54,7 @@ class NotificationTestDelegate : public NotificationDelegate {
   NotificationTestDelegate() = default;
 
   void Click(const base::Optional<int>& button_index,
-             const base::Optional<base::string16>& reply) override {
+             const base::Optional<std::u16string>& reply) override {
     if (!button_index && !reply && !expecting_click_)
       ADD_FAILURE() << "Click should not be invoked with a button index.";
     if (button_index && !reply && !expecting_button_click_)
@@ -62,7 +66,7 @@ class NotificationTestDelegate : public NotificationDelegate {
 
     clicked_ = true;
     clicked_button_index_ = button_index.value_or(false);
-    submitted_reply_string_ = reply.value_or(base::string16());
+    submitted_reply_string_ = reply.value_or(std::u16string());
   }
 
   void Reset() {
@@ -75,7 +79,7 @@ class NotificationTestDelegate : public NotificationDelegate {
 
   bool clicked() const { return clicked_; }
   int clicked_button_index() const { return clicked_button_index_; }
-  const base::string16& submitted_reply_string() const {
+  const std::u16string& submitted_reply_string() const {
     return submitted_reply_string_;
   }
   bool disable_notification_called() { return disable_notification_called_; }
@@ -92,7 +96,7 @@ class NotificationTestDelegate : public NotificationDelegate {
 
   bool clicked_ = false;
   int clicked_button_index_ = -1;
-  base::string16 submitted_reply_string_;
+  std::u16string submitted_reply_string_;
   bool expecting_click_ = false;
   bool expecting_button_click_ = false;
   bool expecting_reply_submission_ = false;
@@ -194,8 +198,7 @@ std::unique_ptr<Notification> NotificationViewMDTest::CreateSimpleNotification()
 
   std::unique_ptr<Notification> notification = std::make_unique<Notification>(
       NOTIFICATION_TYPE_BASE_FORMAT, std::string(kDefaultNotificationId),
-      base::UTF8ToUTF16("title"), base::UTF8ToUTF16("message"),
-      CreateTestImage(80, 80), base::UTF8ToUTF16("display source"), GURL(),
+      u"title", u"message", CreateTestImage(80, 80), u"display source", GURL(),
       NotifierId(NotifierType::APPLICATION, "extension_id"), data, delegate_);
   notification->set_small_image(CreateTestImage(16, 16));
   notification->set_image(CreateTestImage(320, 240));
@@ -223,7 +226,8 @@ void NotificationViewMDTest::TearDown() {
   DCHECK(notification_view_ || delete_on_preferred_size_changed_ ||
          delete_on_notification_removed_);
   if (notification_view_) {
-    notification_view_->SetInkDropMode(MessageView::InkDropMode::OFF);
+    notification_view_->ink_drop()->SetMode(
+        views::InkDropHost::InkDropMode::OFF);
     static_cast<views::View*>(notification_view_)->RemoveObserver(this);
     notification_view_->GetWidget()->Close();
     notification_view_ = nullptr;
@@ -268,7 +272,7 @@ const SkBitmap NotificationViewMDTest::CreateBitmap(int width,
 }
 
 std::vector<ButtonInfo> NotificationViewMDTest::CreateButtons(int number) {
-  ButtonInfo info(base::ASCIIToUTF16("Test button."));
+  ButtonInfo info(u"Test button.");
   return std::vector<ButtonInfo>(number, info);
 }
 
@@ -399,8 +403,8 @@ TEST_F(NotificationViewMDTest, CreateOrUpdateTest) {
 
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
   notification->set_image(gfx::Image());
-  notification->set_title(base::string16());
-  notification->set_message(base::string16());
+  notification->set_title(std::u16string());
+  notification->set_message(std::u16string());
   notification->set_icon(gfx::Image());
 
   notification_view()->CreateOrUpdateViews(*notification);
@@ -420,7 +424,7 @@ TEST_F(NotificationViewMDTest, UpdateViewsOrderingTest) {
                    notification_view()->message_view_));
 
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
-  notification->set_title(base::string16());
+  notification->set_title(std::u16string());
 
   notification_view()->CreateOrUpdateViews(*notification);
 
@@ -429,7 +433,7 @@ TEST_F(NotificationViewMDTest, UpdateViewsOrderingTest) {
   EXPECT_EQ(0, notification_view()->left_content_->GetIndexOf(
                    notification_view()->message_view_));
 
-  notification->set_title(base::UTF8ToUTF16("title"));
+  notification->set_title(u"title");
 
   notification_view()->CreateOrUpdateViews(*notification);
 
@@ -612,7 +616,7 @@ TEST_F(NotificationViewMDTest, TestInlineReply) {
   delegate_->set_expecting_reply_submission(true);
 
   std::vector<ButtonInfo> buttons = CreateButtons(2);
-  buttons[1].placeholder = base::string16();
+  buttons[1].placeholder = std::u16string();
   notification->set_buttons(buttons);
   UpdateNotificationViews(*notification);
   notification_view()->GetWidget()->Show();
@@ -660,7 +664,7 @@ TEST_F(NotificationViewMDTest, TestInlineReply) {
   generator.PressKey(ui::VKEY_RETURN, ui::EF_NONE);
   generator.ReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
   EXPECT_EQ(1, delegate_->clicked_button_index());
-  EXPECT_EQ(base::ASCIIToUTF16("test"), delegate_->submitted_reply_string());
+  EXPECT_EQ(u"test", delegate_->submitted_reply_string());
 
   // Reset values.
   delegate_->Reset();
@@ -675,7 +679,7 @@ TEST_F(NotificationViewMDTest, TestInlineReply) {
 
   // Nothing should be submitted at this point.
   EXPECT_EQ(-1, delegate_->clicked_button_index());
-  EXPECT_EQ(base::string16(), delegate_->submitted_reply_string());
+  EXPECT_EQ(std::u16string(), delegate_->submitted_reply_string());
 
   // Click the button again and focus on the inline textfield.
   generator.ClickLeftButton();
@@ -693,14 +697,14 @@ TEST_F(NotificationViewMDTest, TestInlineReply) {
   generator.MoveMouseTo(cursor_location);
   generator.ClickLeftButton();
   EXPECT_EQ(1, delegate_->clicked_button_index());
-  EXPECT_EQ(base::ASCIIToUTF16("test"), delegate_->submitted_reply_string());
+  EXPECT_EQ(u"test", delegate_->submitted_reply_string());
 }
 
 TEST_F(NotificationViewMDTest, TestInlineReplyRemovedByUpdate) {
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
 
   std::vector<ButtonInfo> buttons = CreateButtons(2);
-  buttons[1].placeholder = base::string16();
+  buttons[1].placeholder = std::u16string();
   notification->set_buttons(buttons);
   UpdateNotificationViews(*notification);
   notification_view()->GetWidget()->Show();
@@ -750,7 +754,7 @@ TEST_F(NotificationViewMDTest, TestInlineReplyActivateWithKeyPress) {
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
 
   std::vector<ButtonInfo> buttons = CreateButtons(2);
-  buttons[1].placeholder = base::string16();
+  buttons[1].placeholder = std::u16string();
   notification->set_buttons(buttons);
   UpdateNotificationViews(*notification);
   notification_view()->GetWidget()->Show();
@@ -856,7 +860,7 @@ TEST_F(NotificationViewMDTest, MAYBE_DisableSlideForcibly) {
 }
 
 // Pinning notification is ChromeOS only feature.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 TEST_F(NotificationViewMDTest, SlideOutPinned) {
   notification_view()->SetIsNested();
@@ -927,8 +931,7 @@ TEST_F(NotificationViewMDTest, SnoozeButton) {
   rich_data.should_show_snooze_button = true;
   std::unique_ptr<Notification> notification = std::make_unique<Notification>(
       message_center::NOTIFICATION_TYPE_CUSTOM, kDefaultNotificationId,
-      base::UTF8ToUTF16("title"), base::UTF8ToUTF16("message"), gfx::Image(),
-      base::UTF8ToUTF16("display source"), GURL(),
+      u"title", u"message", gfx::Image(), u"display source", GURL(),
       message_center::NotifierId(message_center::NotifierType::ARC_APPLICATION,
                                  "test_app_id"),
       rich_data, nullptr);
@@ -939,7 +942,7 @@ TEST_F(NotificationViewMDTest, SnoozeButton) {
             notification_view()->GetControlButtonsView()->snooze_button());
 }
 
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 TEST_F(NotificationViewMDTest, ExpandLongMessage) {
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
@@ -948,11 +951,11 @@ TEST_F(NotificationViewMDTest, ExpandLongMessage) {
   // message_view_.
   // Without doing this, inappropriate fix such as
   // message_view_->GetPreferredSize() returning gfx::Size() can pass.
-  notification->set_title(base::string16());
-  notification->set_message(base::ASCIIToUTF16(
-      "consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore "
-      "et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud "
-      "exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."));
+  notification->set_title(std::u16string());
+  notification->set_message(
+      u"consectetur adipiscing elit, sed do eiusmod tempor incididunt ut "
+      u"labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud "
+      u"exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.");
 
   UpdateNotificationViews(*notification);
   EXPECT_FALSE(notification_view()->expanded_);
@@ -991,8 +994,10 @@ TEST_F(NotificationViewMDTest, ExpandLongMessage) {
 }
 
 TEST_F(NotificationViewMDTest, TestAccentColor) {
+  // TODO(pkasting): These hardcoded colors are fragile and should be obtained
+  // dynamically.
   const SkColor kNotificationBackgroundColor = SK_ColorWHITE;
-  const SkColor kActionButtonBackgroundColor = SkColorSetRGB(0xEE, 0xEE, 0xEE);
+  const SkColor kActionButtonBackgroundColor = SkColorSetRGB(0xF2, 0xF2, 0xF2);
   const SkColor kActionButtonTextColor =
       DeriveMinContrastColor(gfx::kGoogleBlue600, kActionButtonBackgroundColor);
 
@@ -1001,7 +1006,12 @@ TEST_F(NotificationViewMDTest, TestAccentColor) {
 
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
   notification->set_buttons(CreateButtons(2));
+
+  // The code below is not prepared to deal with dark mode.
+  notification_view()->GetWidget()->GetNativeTheme()->set_use_dark_colors(
+      false);
   UpdateNotificationViews(*notification);
+
   notification_view()->GetWidget()->Show();
 
   // Action buttons are hidden by collapsed state.
@@ -1009,9 +1019,18 @@ TEST_F(NotificationViewMDTest, TestAccentColor) {
     notification_view()->ToggleExpanded();
   EXPECT_TRUE(notification_view()->actions_row_->GetVisible());
 
+  auto* theme = notification_view()->GetNativeTheme();
   auto app_icon_color_matches = [&](SkColor color) {
     SkBitmap expected =
-        notification->GenerateMaskedSmallIcon(kSmallImageSizeMD, color)
+        notification
+            ->GenerateMaskedSmallIcon(
+                kSmallImageSizeMD, color,
+                theme->GetSystemColor(
+                    ui::NativeTheme::
+                        kColorId_MessageCenterSmallImageMaskBackground),
+                theme->GetSystemColor(
+                    ui::NativeTheme::
+                        kColorId_MessageCenterSmallImageMaskForeground))
             .AsBitmap();
     SkBitmap actual = *notification_view()
                            ->header_row_->app_icon_view_for_testing()
@@ -1196,7 +1215,7 @@ TEST_F(NotificationViewMDTest, InlineSettings) {
   generator.ClickLeftButton();
   EXPECT_TRUE(notification_view()->settings_row_->GetVisible());
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   // By clicking settings button again, it will toggle. Skip this on ChromeOS as
   // the control_buttons_view gets hidden when the inline settings are shown.
   generator.ClickLeftButton();
@@ -1256,14 +1275,14 @@ TEST_F(NotificationViewMDTest, InlineSettingsInkDropAnimation) {
   generator.ClickLeftButton();
   EXPECT_TRUE(notification_view()->settings_row_->GetVisible());
 
-  notification_view()->GetInkDrop()->AddObserver(this);
+  notification_view()->ink_drop()->GetInkDrop()->AddObserver(this);
 
   // Resize the widget by 1px to simulate the expand animation.
   gfx::Rect size = notification_view()->GetWidget()->GetWindowBoundsInScreen();
   size.Inset(0, 0, 0, 1);
   notification_view()->GetWidget()->SetBounds(size);
 
-  notification_view()->GetInkDrop()->RemoveObserver(this);
+  notification_view()->ink_drop()->GetInkDrop()->RemoveObserver(this);
 
   // The ink drop animation should still be running.
   EXPECT_FALSE(ink_drop_stopped());
@@ -1293,8 +1312,8 @@ TEST_F(NotificationViewMDTest, InkDropClipRect) {
   // Toggle inline settings to show ink drop background.
   notification_view()->ToggleInlineSettings(DummyEvent());
 
-  auto* ink_drop =
-      static_cast<views::InkDropImpl*>(notification_view()->GetInkDrop());
+  auto* ink_drop = static_cast<views::InkDropImpl*>(
+      notification_view()->ink_drop()->GetInkDrop());
   views::test::InkDropImplTestApi ink_drop_test_api(ink_drop);
   gfx::Rect clip_rect = ink_drop_test_api.GetRootLayer()->clip_rect();
 
@@ -1356,18 +1375,18 @@ TEST_F(NotificationViewMDTest, TestClickExpanded) {
 TEST_F(NotificationViewMDTest, TestDeleteOnToggleExpanded) {
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
   notification->set_type(NotificationType::NOTIFICATION_TYPE_SIMPLE);
-  notification->set_title(base::string16());
-  notification->set_message(base::ASCIIToUTF16(
-      "consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore "
-      "et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud "
-      "exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."));
+  notification->set_title(std::u16string());
+  notification->set_message(
+      u"consectetur adipiscing elit, sed do eiusmod tempor incididunt ut "
+      u"labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud "
+      u"exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.");
   UpdateNotificationViews(*notification);
   EXPECT_FALSE(notification_view()->expanded_);
 
   // The view can be deleted by PreferredSizeChanged(). https://crbug.com/918933
   set_delete_on_preferred_size_changed(true);
-  notification_view()->ButtonPressed(notification_view()->header_row_,
-                                     DummyEvent());
+  views::test::ButtonTestApi(notification_view()->header_row_)
+      .NotifyClick(DummyEvent());
 }
 
 TEST_F(NotificationViewMDTest, TestDeleteOnDisableNotification) {
@@ -1381,28 +1400,28 @@ TEST_F(NotificationViewMDTest, TestDeleteOnDisableNotification) {
   // After DisableNotification() is called, |notification_view| can be deleted.
   // https://crbug.com/924922
   set_delete_on_notification_removed(true);
-  notification_view()->ButtonPressed(notification_view()->settings_done_button_,
-                                     DummyEvent());
+  views::test::ButtonTestApi(notification_view()->settings_done_button_)
+      .NotifyClick(DummyEvent());
 }
 
 TEST_F(NotificationViewMDTest, TestLongTitleAndMessage) {
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
   notification->set_type(NotificationType::NOTIFICATION_TYPE_SIMPLE);
-  notification->set_title(base::ASCIIToUTF16("title"));
-  notification->set_message(base::ASCIIToUTF16(
-      "consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore "
-      "et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud "
-      "exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."));
+  notification->set_title(u"title");
+  notification->set_message(
+      u"consectetur adipiscing elit, sed do eiusmod tempor incididunt ut "
+      u"labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud "
+      u"exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.");
   UpdateNotificationViews(*notification);
   notification_view()->ToggleExpanded();
 
   // Get the height of the message view with a short title.
   const int message_height = notification_view()->message_view_->height();
 
-  notification->set_title(base::ASCIIToUTF16(
-      "consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore "
-      "et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud "
-      "exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."));
+  notification->set_title(
+      u"consectetur adipiscing elit, sed do eiusmod tempor incididunt ut "
+      u"labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud "
+      u"exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.");
   UpdateNotificationViews(*notification);
 
   // The height of the message view should stay the same with a long title.
@@ -1410,7 +1429,7 @@ TEST_F(NotificationViewMDTest, TestLongTitleAndMessage) {
 }
 
 TEST_F(NotificationViewMDTest, AppNameExtension) {
-  base::string16 app_name = base::UTF8ToUTF16("extension name");
+  std::u16string app_name = u"extension name";
   std::unique_ptr<Notification> notification = CreateSimpleNotification();
   notification->set_context_message(app_name);
 
@@ -1420,14 +1439,13 @@ TEST_F(NotificationViewMDTest, AppNameExtension) {
 }
 
 TEST_F(NotificationViewMDTest, AppNameSystemNotification) {
-  base::string16 app_name = base::UTF8ToUTF16("system notification");
+  std::u16string app_name = u"system notification";
   message_center::MessageCenter::Get()->SetSystemNotificationAppName(app_name);
   RichNotificationData data;
   data.settings_button_handler = SettingsButtonHandler::INLINE;
   auto notification = std::make_unique<Notification>(
       NOTIFICATION_TYPE_BASE_FORMAT, std::string(kDefaultNotificationId),
-      base::UTF8ToUTF16("title"), base::UTF8ToUTF16("message"), gfx::Image(),
-      base::string16(), GURL(),
+      u"title", u"message", gfx::Image(), std::u16string(), GURL(),
       NotifierId(NotifierType::SYSTEM_COMPONENT, "system"), data, nullptr);
 
   UpdateNotificationViews(*notification);
@@ -1441,7 +1459,7 @@ TEST_F(NotificationViewMDTest, AppNameWebNotification) {
 
   UpdateNotificationViews(*notification);
 
-  EXPECT_EQ(base::UTF8ToUTF16("example.com"),
+  EXPECT_EQ(u"example.com",
             notification_view()->header_row_->app_name_for_testing());
 }
 

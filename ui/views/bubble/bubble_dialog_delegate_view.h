@@ -9,31 +9,24 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/scoped_observer.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
-#include "ui/base/accelerators/accelerator.h"
 #include "ui/base/class_property.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/bubble/bubble_border.h"
+#include "ui/views/bubble/bubble_frame_view.h"
+#include "ui/views/metadata/view_factory.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/views/window/dialog_delegate.h"
 
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
 #include "ui/base/cocoa/bubble_closer.h"
 #endif
 
 namespace gfx {
 class Rect;
-}
-
-namespace ui {
-class Accelerator;
-}  // namespace ui
-
-namespace ui_devtools {
-class PageAgentViews;
 }
 
 namespace views {
@@ -49,10 +42,10 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate,
     UNKNOWN,
   };
 
-  BubbleDialogDelegate();
-  BubbleDialogDelegate(View* anchor_view,
-                       BubbleBorder::Arrow arrow,
-                       BubbleBorder::Shadow shadow);
+  BubbleDialogDelegate(
+      View* anchor_view,
+      BubbleBorder::Arrow arrow,
+      BubbleBorder::Shadow shadow = BubbleBorder::DIALOG_SHADOW);
   BubbleDialogDelegate(const BubbleDialogDelegate& other) = delete;
   BubbleDialogDelegate& operator=(const BubbleDialogDelegate& other) = delete;
   ~BubbleDialogDelegate() override;
@@ -63,6 +56,10 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate,
       Widget* widget) override;
   ClientView* CreateClientView(Widget* widget) override;
   ax::mojom::Role GetAccessibleWindowRole() override;
+
+  // Create and initialize the bubble Widget with proper bounds.
+  static Widget* CreateBubble(
+      std::unique_ptr<BubbleDialogDelegate> bubble_delegate);
 
   //////////////////////////////////////////////////////////////////////////////
   // The anchor view and rectangle:
@@ -88,15 +85,6 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate,
   virtual gfx::Rect GetAnchorRect() const;
   const base::Optional<gfx::Rect>& anchor_rect() const { return anchor_rect_; }
   void SetAnchorRect(const gfx::Rect& rect);
-
-  // The anchor view insets are applied to the anchor view's bounds. This is
-  // used to align the bubble properly with the visual center of the anchor View
-  // when the anchor View's visual center is not the same as the center of its
-  // bounding box.
-  // TODO(https://crbug.com/869928): Remove this concept in favor of
-  // View::GetAnchorBoundsInScreen().
-  const gfx::Insets& anchor_view_insets() const { return anchor_view_insets_; }
-  void set_anchor_view_insets(const gfx::Insets& i) { anchor_view_insets_ = i; }
 
   //////////////////////////////////////////////////////////////////////////////
   // The anchor widget:
@@ -185,6 +173,9 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate,
   gfx::NativeView parent_window() const { return parent_window_; }
   void set_parent_window(gfx::NativeView window) { parent_window_ = window; }
 
+  bool has_parent() { return has_parent_; }
+  void set_has_parent(bool has_parent) { has_parent_ = has_parent; }
+
   // Whether the bubble accepts mouse events or not.
   bool accept_events() const { return accept_events_; }
   void set_accept_events(bool accept_events) { accept_events_ = accept_events; }
@@ -235,10 +226,22 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate,
   virtual void OnBeforeBubbleWidgetInit(Widget::InitParams* params,
                                         Widget* widget) const {}
 
- protected:
-  // Create and initialize the bubble Widget with proper bounds.
-  static Widget* CreateBubble(BubbleDialogDelegate* bubble_delegate);
+  // Get the maximum available screen space to place a bubble anchored to
+  // |anchor_view| at |arrow|. If offscreen adjustment is on, this would return
+  // the max space corresponding to the possible arrow positions of the bubble.
+  static gfx::Size GetMaxAvailableScreenSpaceToPlaceBubble(
+      View* anchor_view,
+      BubbleBorder::Arrow arrow,
+      bool adjust_if_offscreen,
+      BubbleFrameView::PreferredArrowAdjustment arrow_adjustment);
 
+  // Get the available space to place a bubble anchored to |anchor_rect| at
+  // |arrow| inside |screen_rect|.
+  static gfx::Size GetAvailableSpaceToPlaceBubble(BubbleBorder::Arrow arrow,
+                                                  gfx::Rect anchor_rect,
+                                                  gfx::Rect screen_rect);
+
+ protected:
   // Override this method if you want to position the bubble regardless of its
   // anchor, while retaining the other anchor view logic.
   virtual gfx::Rect GetBubbleBounds();
@@ -258,6 +261,7 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate,
 
   // Override this to perform initialization after the Widget is created but
   // before it is shown.
+  // TODO(pbos): Turn this into a (Once?)Callback and add set_init(cb).
   virtual void Init() {}
 
   // TODO(ellyjones): Replace uses of this with uses of set_color(), and/or
@@ -299,7 +303,6 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate,
 
   friend class BubbleBorderDelegate;
   friend class BubbleWindowTargeter;
-  friend class ui_devtools::PageAgentViews;
 
   // Notify the BubbleDialogDelegate about changes in the anchor Widget. You do
   // not need to call these yourself.
@@ -315,10 +318,6 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate,
 
   void OnDeactivate();
 
-  // Set from UI DevTools to prevent bubbles from closing in
-  // OnWidgetActivationChanged().
-  static bool devtools_dismiss_override_;
-
   gfx::Insets title_margins_;
   BubbleBorder::Arrow arrow_ = BubbleBorder::NONE;
   BubbleBorder::Shadow shadow_;
@@ -328,15 +327,11 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate,
   std::unique_ptr<AnchorViewObserver> anchor_view_observer_;
   std::unique_ptr<AnchorWidgetObserver> anchor_widget_observer_;
   std::unique_ptr<BubbleWidgetObserver> bubble_widget_observer_;
-  std::unique_ptr<Widget::PaintAsActiveCallbackList::Subscription>
-      paint_as_active_subscription_;
+  base::CallbackListSubscription paint_as_active_subscription_;
   std::unique_ptr<Widget::PaintAsActiveLock> paint_as_active_lock_;
   bool adjust_if_offscreen_ = true;
   bool focus_traversable_from_anchor_view_ = true;
   ViewTracker highlighted_button_tracker_;
-
-  // Insets applied to the |anchor_view_| bounds.
-  gfx::Insets anchor_view_insets_;
 
   // A flag controlling bubble closure on deactivation.
   bool close_on_deactivate_ = true;
@@ -350,10 +345,13 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate,
   bool accept_events_ = true;
   gfx::NativeView parent_window_ = nullptr;
 
+  // By default, all BubbleDialogDelegates have parent windows.
+  bool has_parent_ = true;
+
   // Pointer to this bubble's ClientView.
   ClientView* client_view_ = nullptr;
 
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
   // Special handler for close_on_deactivate() on Mac. Window (de)activation is
   // suppressed by the WindowServer when clicking rapidly, so the bubble must
   // monitor clicks as well for the desired behavior.
@@ -362,8 +360,9 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate,
 };
 
 // BubbleDialogDelegateView is a BubbleDialogDelegate that is also a View.
-// If you can, it is better to subclass View and construct a
-// BubbleDialogDelegate instance as a member of your subclass.
+// TODO(pbos): Finish moving functionality from BubbleDialogDelegateView into
+// BubbleDialogDelegate, then document here that it's better to subclass View
+// and construct a BubbleDialogDelegate.
 class VIEWS_EXPORT BubbleDialogDelegateView : public BubbleDialogDelegate,
                                               public View {
  public:
@@ -382,7 +381,8 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public BubbleDialogDelegate,
       View* anchor_view,
       BubbleBorder::Arrow arrow,
       BubbleBorder::Shadow shadow = BubbleBorder::DIALOG_SHADOW);
-
+  BubbleDialogDelegateView(const BubbleDialogDelegateView&) = delete;
+  BubbleDialogDelegateView& operator=(const BubbleDialogDelegateView&) = delete;
   ~BubbleDialogDelegateView() override;
 
   // BubbleDialogDelegate:
@@ -392,7 +392,6 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public BubbleDialogDelegate,
   Widget* GetWidget() override;
   const Widget* GetWidget() const override;
   void AddedToWidget() override;
-  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 
  protected:
   // Disallow overrides of GetMinimumSize and GetMaximumSize(). These would only
@@ -408,19 +407,19 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public BubbleDialogDelegate,
   // Perform view initialization on the contents for bubble sizing.
   void Init() override;
 
-  // Allows the up and down arrow keys to tab between items.
-  void EnableUpDownKeyboardAccelerators();
-
  private:
   FRIEND_TEST_ALL_PREFIXES(BubbleDelegateTest, CreateDelegate);
   FRIEND_TEST_ALL_PREFIXES(BubbleDelegateTest, NonClientHitTest);
 
   // Update the bubble color from the NativeTheme unless it was explicitly set.
   void UpdateColorsFromTheme();
-
-  DISALLOW_COPY_AND_ASSIGN(BubbleDialogDelegateView);
 };
 
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, BubbleDialogDelegateView, View)
+END_VIEW_BUILDER
+
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, BubbleDialogDelegateView)
 
 #endif  // UI_VIEWS_BUBBLE_BUBBLE_DIALOG_DELEGATE_VIEW_H_

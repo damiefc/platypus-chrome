@@ -5,10 +5,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/format_macros.h"
 #include "base/hash/md5.h"
@@ -62,7 +63,7 @@ namespace {
 // The number of packets to read and then decode from each file.
 const size_t kDecodeRuns = 3;
 
-enum AudioDecoderType {
+enum TestAudioDecoderType {
   FFMPEG,
 #if defined(OS_ANDROID)
   MEDIA_CODEC,
@@ -123,7 +124,7 @@ void SetDiscardPadding(AVPacket* packet,
 }  // namespace
 
 class AudioDecoderTest
-    : public TestWithParam<std::tuple<AudioDecoderType, TestParams>> {
+    : public TestWithParam<std::tuple<TestAudioDecoderType, TestParams>> {
  public:
   AudioDecoderTest()
       : decoder_type_(std::get<0>(GetParam())),
@@ -133,13 +134,13 @@ class AudioDecoderTest
         last_decode_status_(DecodeStatus::DECODE_ERROR) {
     switch (decoder_type_) {
       case FFMPEG:
-        decoder_.reset(new FFmpegAudioDecoder(
-            task_environment_.GetMainThreadTaskRunner(), &media_log_));
+        decoder_ = std::make_unique<FFmpegAudioDecoder>(
+            task_environment_.GetMainThreadTaskRunner(), &media_log_);
         break;
 #if defined(OS_ANDROID)
       case MEDIA_CODEC:
-        decoder_.reset(new MediaCodecAudioDecoder(
-            task_environment_.GetMainThreadTaskRunner()));
+        decoder_ = std::make_unique<MediaCodecAudioDecoder>(
+            task_environment_.GetMainThreadTaskRunner());
         break;
 #endif
     }
@@ -177,8 +178,8 @@ class AudioDecoderTest
     base::RunLoop run_loop;
     decoder_->Decode(
         std::move(buffer),
-        base::Bind(&AudioDecoderTest::DecodeFinished, base::Unretained(this),
-                   run_loop.QuitClosure()));
+        base::BindOnce(&AudioDecoderTest::DecodeFinished,
+                       base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
     ASSERT_FALSE(pending_decode_);
   }
@@ -192,9 +193,9 @@ class AudioDecoderTest
   void Initialize() {
     // Load the test data file.
     data_ = ReadTestDataFile(params_.filename);
-    protocol_.reset(
-        new InMemoryUrlProtocol(data_->data(), data_->data_size(), false));
-    reader_.reset(new AudioFileReader(protocol_.get()));
+    protocol_ = std::make_unique<InMemoryUrlProtocol>(
+        data_->data(), data_->data_size(), false);
+    reader_ = std::make_unique<AudioFileReader>(protocol_.get());
     ASSERT_TRUE(reader_->OpenDemuxerForTesting());
 
     // Load the first packet and check its timestamp.
@@ -246,15 +247,15 @@ class AudioDecoderTest
 
   void InitializeDecoderWithResult(const AudioDecoderConfig& config,
                                    bool success) {
-    decoder_->Initialize(
-        config, nullptr,
-        base::BindOnce(
-            [](bool success, Status status) {
-              EXPECT_EQ(status.is_ok(), success);
-            },
-            success),
-        base::Bind(&AudioDecoderTest::OnDecoderOutput, base::Unretained(this)),
-        base::DoNothing());
+    decoder_->Initialize(config, nullptr,
+                         base::BindOnce(
+                             [](bool success, Status status) {
+                               EXPECT_EQ(status.is_ok(), success);
+                             },
+                             success),
+                         base::BindRepeating(&AudioDecoderTest::OnDecoderOutput,
+                                             base::Unretained(this)),
+                         base::DoNothing());
     base::RunLoop().RunUntilIdle();
   }
 
@@ -301,12 +302,12 @@ class AudioDecoderTest
     decoded_audio_.push_back(std::move(buffer));
   }
 
-  void DecodeFinished(const base::Closure& quit_closure, Status status) {
+  void DecodeFinished(base::OnceClosure quit_closure, Status status) {
     EXPECT_TRUE(pending_decode_);
     EXPECT_FALSE(pending_reset_);
     pending_decode_ = false;
     last_decode_status_ = std::move(status);
-    quit_closure.Run();
+    std::move(quit_closure).Run();
   }
 
   void ResetFinished() {
@@ -392,7 +393,7 @@ class AudioDecoderTest
   const Status& last_decode_status() const { return last_decode_status_; }
 
  private:
-  const AudioDecoderType decoder_type_;
+  const TestAudioDecoderType decoder_type_;
 
   // Current TestParams used to initialize the test and decoder. The initial
   // valie is std::get<1>(GetParam()). Could be overridden by set_param() so

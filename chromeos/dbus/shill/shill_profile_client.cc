@@ -45,11 +45,21 @@ class ShillProfileClientImpl : public ShillProfileClient {
   }
 
   void GetProperties(const dbus::ObjectPath& profile_path,
-                     DictionaryValueCallbackWithoutStatus callback,
+                     base::OnceCallback<void(base::Value result)> callback,
                      ErrorCallback error_callback) override;
+  void SetProperty(const dbus::ObjectPath& profile_path,
+                   const std::string& name,
+                   const base::Value& property,
+                   base::OnceClosure callback,
+                   ErrorCallback error_callback) override;
+  void SetObjectPathProperty(const dbus::ObjectPath& profile_path,
+                             const std::string& name,
+                             const dbus::ObjectPath& property,
+                             base::OnceClosure callback,
+                             ErrorCallback error_callback) override;
   void GetEntry(const dbus::ObjectPath& profile_path,
                 const std::string& entry_path,
-                DictionaryValueCallbackWithoutStatus callback,
+                base::OnceCallback<void(base::Value result)> callback,
                 ErrorCallback error_callback) override;
   void DeleteEntry(const dbus::ObjectPath& profile_path,
                    const std::string& entry_path,
@@ -89,27 +99,59 @@ ShillClientHelper* ShillProfileClientImpl::GetHelper(
 
 void ShillProfileClientImpl::GetProperties(
     const dbus::ObjectPath& profile_path,
-    DictionaryValueCallbackWithoutStatus callback,
+    base::OnceCallback<void(base::Value result)> callback,
     ErrorCallback error_callback) {
   dbus::MethodCall method_call(shill::kFlimflamProfileInterface,
                                shill::kGetPropertiesFunction);
   GetHelper(profile_path)
-      ->CallDictionaryValueMethodWithErrorCallback(
-          &method_call, std::move(callback), std::move(error_callback));
+      ->CallValueMethodWithErrorCallback(&method_call, std::move(callback),
+                                         std::move(error_callback));
+}
+
+void ShillProfileClientImpl::SetProperty(const dbus::ObjectPath& profile_path,
+                                         const std::string& name,
+                                         const base::Value& property,
+                                         base::OnceClosure callback,
+                                         ErrorCallback error_callback) {
+  dbus::MethodCall method_call(shill::kFlimflamProfileInterface,
+                               shill::kSetPropertyFunction);
+  dbus::MessageWriter writer(&method_call);
+  writer.AppendString(name);
+  ShillClientHelper::AppendValueDataAsVariant(&writer, property);
+  GetHelper(profile_path)
+      ->CallVoidMethodWithErrorCallback(&method_call, std::move(callback),
+                                        std::move(error_callback));
+}
+
+void ShillProfileClientImpl::SetObjectPathProperty(
+    const dbus::ObjectPath& profile_path,
+    const std::string& name,
+    const dbus::ObjectPath& property,
+    base::OnceClosure callback,
+    ErrorCallback error_callback) {
+  dbus::MethodCall method_call(shill::kFlimflamProfileInterface,
+                               shill::kSetPropertyFunction);
+
+  dbus::MessageWriter writer(&method_call);
+  writer.AppendString(name);
+  writer.AppendVariantOfObjectPath(property);
+  GetHelper(profile_path)
+      ->CallVoidMethodWithErrorCallback(&method_call, std::move(callback),
+                                        std::move(error_callback));
 }
 
 void ShillProfileClientImpl::GetEntry(
     const dbus::ObjectPath& profile_path,
     const std::string& entry_path,
-    DictionaryValueCallbackWithoutStatus callback,
+    base::OnceCallback<void(base::Value result)> callback,
     ErrorCallback error_callback) {
   dbus::MethodCall method_call(shill::kFlimflamProfileInterface,
                                shill::kGetEntryFunction);
   dbus::MessageWriter writer(&method_call);
   writer.AppendString(entry_path);
   GetHelper(profile_path)
-      ->CallDictionaryValueMethodWithErrorCallback(
-          &method_call, std::move(callback), std::move(error_callback));
+      ->CallValueMethodWithErrorCallback(&method_call, std::move(callback),
+                                         std::move(error_callback));
 }
 
 void ShillProfileClientImpl::DeleteEntry(const dbus::ObjectPath& profile_path,

@@ -7,6 +7,7 @@
 
 #include "ash/ash_export.h"
 #include "base/callback_forward.h"
+#include "base/time/time.h"
 
 namespace ash {
 
@@ -19,11 +20,13 @@ class ASH_EXPORT AutotestAmbientApi {
   AutotestAmbientApi& operator=(const AutotestAmbientApi&) = delete;
   ~AutotestAmbientApi();
 
-  // Wait for the photo transition animation completes |num_completions| times.
-  // |refresh_interval_s| is the photo refresh interval.
-  void WaitForPhotoTransitionAnimationCompleted(int refresh_interval_s,
-                                                int num_completions,
-                                                base::OnceClosure on_complete);
+  // Wait |timeout| for |num_completions| photo transitions to complete. Calls
+  // |on_complete| if successful and |on_timeout| if |timeout| elapses before
+  // enough photo transitions occur.
+  void WaitForPhotoTransitionAnimationCompleted(int num_completions,
+                                                base::TimeDelta timeout,
+                                                base::OnceClosure on_complete,
+                                                base::OnceClosure on_timeout);
 };
 
 }  // namespace ash

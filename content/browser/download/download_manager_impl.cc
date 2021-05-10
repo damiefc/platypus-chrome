@@ -8,8 +8,9 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/debug/alias.h"
 #include "base/files/file_util.h"
 #include "base/i18n/case_conversion.h"
@@ -17,8 +18,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/supports_user_data.h"
 #include "base/synchronization/lock.h"
@@ -75,16 +74,16 @@
 #include "net/base/upload_bytes_element_reader.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/url_util.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
-#include "third_party/blink/public/common/loader/network_utils.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/loader/referrer_utils.h"
 #include "third_party/blink/public/common/loader/throttling_url_loader.h"
 
-#if defined(USE_X11)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "base/nix/xdg_util.h"
-#include "ui/base/ui_base_features.h"
 #endif
 
 namespace content {
@@ -112,7 +111,17 @@ StoragePartitionImpl* GetStoragePartition(BrowserContext* context,
       site_instance = render_frame_host_->GetSiteInstance();
   }
   return static_cast<StoragePartitionImpl*>(
-      BrowserContext::GetStoragePartition(context, site_instance));
+      context->GetStoragePartition(site_instance));
+}
+
+// TODO(acolwell): Update DownloadManager and related code to pass around
+// StoragePartitionConfig objects instead of site URLs.
+StoragePartitionImpl* GetStoragePartitionForSiteUrl(BrowserContext* context,
+                                                    const GURL& site_url) {
+  auto partition_config = SiteInfo::GetStoragePartitionConfigForUrl(
+      context, site_url, /*is_site_url=*/true);
+  return static_cast<StoragePartitionImpl*>(
+      context->GetStoragePartition(partition_config));
 }
 
 void OnDownloadStarted(
@@ -219,7 +228,7 @@ class DownloadItemFactoryImpl : public download::DownloadItemFactory {
   }
 };
 
-#if defined(USE_X11)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 base::FilePath GetTemporaryDownloadDirectory() {
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   return base::nix::GetXDGDirectory(env.get(), "XDG_DATA_HOME", ".local/share");
@@ -254,7 +263,7 @@ CreatePendingSharedURLLoaderFactory(StoragePartitionImpl* storage_partition,
         rfh->GetSiteInstance()->GetBrowserContext(), rfh,
         rfh->GetProcess()->GetID(),
         ContentBrowserClient::URLLoaderFactoryType::kDownload, url::Origin(),
-        base::nullopt /* navigation_id */, base::kInvalidUkmSourceId,
+        base::nullopt /* navigation_id */, ukm::kInvalidSourceIdObj,
         &maybe_proxy_factory_receiver, nullptr /* header_client */,
         nullptr /* bypass_redirect_checks */, nullptr /* disable_secure_dns */,
         nullptr /* factory_override */);
@@ -270,17 +279,6 @@ CreatePendingSharedURLLoaderFactory(StoragePartitionImpl* storage_partition,
   return std::make_unique<NetworkDownloadPendingURLLoaderFactory>(
       storage_partition->url_loader_factory_getter(),
       std::move(proxy_factory_remote), std::move(proxy_factory_receiver));
-}
-
-std::unique_ptr<network::PendingSharedURLLoaderFactory>
-CreatePendingSharedURLLoaderFactoryFromURLLoaderFactory(
-    std::unique_ptr<network::mojom::URLLoaderFactory> factory) {
-  mojo::PendingRemote<network::mojom::URLLoaderFactory> factory_remote;
-  mojo::MakeSelfOwnedReceiver(std::move(factory),
-                              factory_remote.InitWithNewPipeAndPassReceiver());
-
-  return std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(
-      std::move(factory_remote));
 }
 
 void RecordDownloadOpenerType(RenderFrameHost* current,
@@ -331,20 +329,19 @@ DownloadManagerImpl::DownloadManagerImpl(BrowserContext* browser_context)
   download::SetIOTaskRunner(GetIOThreadTaskRunner({}));
 
   if (!in_progress_manager_) {
-    auto* proto_db_provider =
-        BrowserContext::GetDefaultStoragePartition(browser_context)
-            ->GetProtoDatabaseProvider();
+    auto* proto_db_provider = browser_context->GetDefaultStoragePartition()
+                                  ->GetProtoDatabaseProvider();
     in_progress_manager_ =
         std::make_unique<download::InProgressDownloadManager>(
             this, base::FilePath(), proto_db_provider,
-            base::BindRepeating(&blink::network_utils::IsOriginSecure),
+            base::BindRepeating(&network::IsUrlPotentiallyTrustworthy),
             base::BindRepeating(&DownloadRequestUtils::IsURLSafe),
             /*wake_lock_provider_binder=*/base::NullCallback());
   } else {
     in_progress_manager_->SetDelegate(this);
     in_progress_manager_->set_download_start_observer(nullptr);
     in_progress_manager_->set_is_origin_secure_cb(
-        base::BindRepeating(&blink::network_utils::IsOriginSecure));
+        base::BindRepeating(&network::IsUrlPotentiallyTrustworthy));
   }
 }
 
@@ -571,13 +568,12 @@ bool DownloadManagerImpl::InterceptDownload(
 
 base::FilePath DownloadManagerImpl::GetDefaultDownloadDirectory() {
   base::FilePath default_download_directory;
-#if defined(USE_X11)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // TODO(thomasanderson,crbug.com/784010): Remove this when all Linux
   // distros with versions of GTK lower than 3.14.7 are no longer
   // supported.  This should happen when support for Ubuntu Trusty and
   // Debian Jessie are removed.
-  if (!features::IsUsingOzonePlatform())
-    default_download_directory = GetTemporaryDownloadDirectory();
+  default_download_directory = GetTemporaryDownloadDirectory();
 #endif
 
   if (delegate_ && default_download_directory.empty()) {
@@ -682,6 +678,15 @@ DownloadManagerImpl::GetQuarantineConnectionCallback() {
     return base::NullCallback();
 
   return delegate_->GetQuarantineConnectionCallback();
+}
+
+std::unique_ptr<download::DownloadItemRenameHandler>
+DownloadManagerImpl::GetRenameHandlerForDownload(
+    download::DownloadItemImpl* download_item) {
+  if (!delegate_)
+    return nullptr;
+
+  return delegate_->GetRenameHandlerForDownload(download_item);
 }
 
 void DownloadManagerImpl::StartDownload(
@@ -936,8 +941,6 @@ void DownloadManagerImpl::DownloadUrl(
       params->download_source());
   auto* rfh = RenderFrameHost::FromID(params->render_process_host_id(),
                                       params->render_frame_host_routing_id());
-  if (rfh)
-    params->set_frame_tree_node_id(rfh->GetFrameTreeNodeId());
   BeginDownloadInternal(std::move(params), std::move(blob_url_loader_factory),
                         true,
                         rfh ? rfh->GetSiteInstance()->GetSiteURL() : GURL());
@@ -1295,7 +1298,7 @@ void DownloadManagerImpl::BeginResourceDownloadOnChecksComplete(
         std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(
             FileURLLoaderFactory::Create(
                 browser_context_->GetPath(),
-                browser_context_->GetSharedCorsOriginAccessList(),
+                BrowserContext::GetSharedCorsOriginAccessList(browser_context_),
                 // USER_VISIBLE because download should progress
                 // even when there is high priority work to do.
                 base::TaskPriority::USER_VISIBLE));
@@ -1306,9 +1309,7 @@ void DownloadManagerImpl::BeginResourceDownloadOnChecksComplete(
                                         base::flat_set<std::string>()));
   } else if (rfh && params->url().SchemeIsFileSystem()) {
     StoragePartitionImpl* storage_partition =
-        static_cast<StoragePartitionImpl*>(
-            BrowserContext::GetStoragePartitionForSite(browser_context_,
-                                                       site_url));
+        GetStoragePartitionForSiteUrl(browser_context_, site_url);
 
     pending_url_loader_factory =
         std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(
@@ -1320,42 +1321,27 @@ void DownloadManagerImpl::BeginResourceDownloadOnChecksComplete(
     pending_url_loader_factory =
         std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(
             DataURLLoaderFactory::CreateForOneSpecificUrl(params->url()));
-  } else if (rfh && !blink::network_utils::IsURLHandledByNetworkService(
-                        params->url())) {
-    ContentBrowserClient::NonNetworkURLLoaderFactoryDeprecatedMap
-        non_network_uniquely_owned_factories;
+  } else if (rfh && !network::IsURLHandledByNetworkService(params->url())) {
     ContentBrowserClient::NonNetworkURLLoaderFactoryMap
         non_network_url_loader_factories;
-
     GetContentClient()
         ->browser()
         ->RegisterNonNetworkSubresourceURLLoaderFactories(
             params->render_process_host_id(),
             params->render_frame_host_routing_id(),
-            &non_network_uniquely_owned_factories,
             &non_network_url_loader_factories);
-    auto it = non_network_uniquely_owned_factories.find(params->url().scheme());
-    if (it != non_network_uniquely_owned_factories.end()) {
+    auto it = non_network_url_loader_factories.find(params->url().scheme());
+    if (it != non_network_url_loader_factories.end()) {
       pending_url_loader_factory =
-          CreatePendingSharedURLLoaderFactoryFromURLLoaderFactory(
+          std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(
               std::move(it->second));
     } else {
-      auto it2 = non_network_url_loader_factories.find(params->url().scheme());
-      if (it2 != non_network_url_loader_factories.end()) {
-        pending_url_loader_factory =
-            std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(
-                std::move(it2->second));
-      } else {
-        DLOG(ERROR) << "No URLLoaderFactory found to download "
-                    << params->url();
-        return;
-      }
+      DLOG(ERROR) << "No URLLoaderFactory found to download " << params->url();
+      return;
     }
   } else {
     StoragePartitionImpl* storage_partition =
-        static_cast<StoragePartitionImpl*>(
-            BrowserContext::GetStoragePartitionForSite(browser_context_,
-                                                       site_url));
+        GetStoragePartitionForSiteUrl(browser_context_, site_url);
     pending_url_loader_factory =
         CreatePendingSharedURLLoaderFactory(storage_partition, rfh, true);
   }
@@ -1386,7 +1372,7 @@ void DownloadManagerImpl::BeginDownloadInternal(
   // a new factory if we don't have one already.
   if (!blob_url_loader_factory && params->url().SchemeIsBlob()) {
     blob_url_loader_factory = ChromeBlobStorageContext::URLLoaderFactoryForUrl(
-        BrowserContext::GetStoragePartitionForSite(browser_context_, site_url),
+        GetStoragePartitionForSiteUrl(browser_context_, site_url),
         params->url());
   }
 

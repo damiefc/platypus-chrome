@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_CROSTINI_CROSTINI_UPGRADER_UI_DELEGATE_H_
 #define CHROME_BROWSER_CHROMEOS_CROSTINI_CROSTINI_UPGRADER_UI_DELEGATE_H_
 
-#include "base/callback_forward.h"
-#include "base/strings/string16.h"
+#include <string>
+
 #include "chrome/browser/ui/webui/chromeos/crostini_upgrader/crostini_upgrader.mojom.h"
 
 namespace content {

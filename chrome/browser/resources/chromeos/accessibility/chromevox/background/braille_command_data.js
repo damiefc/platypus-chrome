@@ -62,7 +62,7 @@ BrailleCommandData.makeShortcutText = function(pattern, opt_chord) {
   let msgid;
   if (dots.length > 1) {
     msgid = 'braille_dots';
-  } else if (dots.length == 1) {
+  } else if (dots.length === 1) {
     msgid = 'braille_dot';
   }
 
@@ -83,7 +83,7 @@ BrailleCommandData.makeShortcutText = function(pattern, opt_chord) {
 BrailleCommandData.getDots = function(command) {
   for (let key in BrailleCommandData.DOT_PATTERN_TO_COMMAND) {
     key = parseInt(key, 10);
-    if (command == BrailleCommandData.DOT_PATTERN_TO_COMMAND[key]) {
+    if (command === BrailleCommandData.DOT_PATTERN_TO_COMMAND[key]) {
       return key;
     }
   }
@@ -144,7 +144,7 @@ BrailleCommandData.init_ = function() {
   map([1, 4, 5, 6], 'toggleKeyboardHelp');
 
   // All cells.
-  map([1, 2, 3, 4, 5, 6], 'toggleDarkScreen');
+  map([1, 2, 3, 4, 5, 6], 'toggleScreen');
 
   // s.
   map([1, 2, 3, 4, 5], 'toggleSpeechOnOrOff');

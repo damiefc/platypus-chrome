@@ -6,34 +6,26 @@
 
 #include <memory>
 
-#include "ash/public/cpp/ambient/ambient_client.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
-#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
-#include "chrome/test/base/chrome_ash_test_base.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "content/public/test/browser_task_environment.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 constexpr char kTestProfileName[] = "user@gmail.com";
 constexpr char kTestGaiaId[] = "1234567890";
 
-class AmbientClientImplTest : public ChromeAshTestBase {
+class AmbientClientImplTest : public testing::Test {
  public:
   AmbientClientImplTest() = default;
   ~AmbientClientImplTest() override = default;
 
   void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        chromeos::features::kAmbientModeFeature);
-    // Needed by ash.
     ambient_client_ = std::make_unique<AmbientClientImpl>();
-    AshTestBase::SetUp();
-
     ASSERT_TRUE(data_dir_.CreateUniqueTempDir());
     profile_manager_ = std::make_unique<TestingProfileManager>(
         TestingBrowserProcess::GetGlobal());
@@ -47,7 +39,7 @@ class AmbientClientImplTest : public ChromeAshTestBase {
     identity_test_env_adaptor_ =
         std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile_);
     user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
-        std::make_unique<chromeos::FakeChromeUserManager>());
+        std::make_unique<ash::FakeChromeUserManager>());
   }
 
   void TearDown() override {
@@ -57,14 +49,13 @@ class AmbientClientImplTest : public ChromeAshTestBase {
     profile_ = nullptr;
     profile_manager_->DeleteTestingProfile(kTestProfileName);
     profile_manager_.reset();
-    AshTestBase::TearDown();
   }
 
  protected:
   TestingProfile* profile() { return profile_; }
 
-  chromeos::FakeChromeUserManager* GetFakeUserManager() const {
-    return static_cast<chromeos::FakeChromeUserManager*>(
+  ash::FakeChromeUserManager* GetFakeUserManager() const {
+    return static_cast<ash::FakeChromeUserManager*>(
         user_manager::UserManager::Get());
   }
 
@@ -82,13 +73,13 @@ class AmbientClientImplTest : public ChromeAshTestBase {
 
   void MaybeMakeAccountAsPrimaryAccount(const AccountId& account_id) {
     if (!identity_test_env()->identity_manager()->HasPrimaryAccount(
-            signin::ConsentLevel::kNotRequired)) {
+            signin::ConsentLevel::kSignin)) {
       identity_test_env()->MakeUnconsentedPrimaryAccountAvailable(
           account_id.GetUserEmail());
     }
   }
 
-  base::test::ScopedFeatureList scoped_feature_list_;
+  content::BrowserTaskEnvironment task_environment_;
   base::ScopedTempDir data_dir_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
   // Owned by |profile_manager_|

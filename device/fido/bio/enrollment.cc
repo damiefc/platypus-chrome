@@ -12,7 +12,6 @@ namespace device {
 
 static void SetPinAuth(BioEnrollmentRequest* request,
                        const pin::TokenResponse& token) {
-  request->pin_protocol = 1;
   request->modality = BioEnrollmentModality::kFingerprint;
 
   std::vector<uint8_t> pin_auth;
@@ -24,7 +23,8 @@ static void SetPinAuth(BioEnrollmentRequest* request,
 
   pin_auth.insert(pin_auth.begin(), static_cast<int>(*request->modality));
 
-  request->pin_auth = token.PinAuth(std::move(pin_auth));
+  std::tie(request->pin_protocol, request->pin_auth) =
+      token.PinAuth(std::move(pin_auth));
 }
 
 // static
@@ -169,7 +169,8 @@ base::Optional<BioEnrollmentResponse> BioEnrollmentResponse::Parse(
   it = response_map.find(cbor::Value(static_cast<int>(
       BioEnrollmentResponseKey::kMaxCaptureSamplesRequiredForEnroll)));
   if (it != response_map.end()) {
-    if (!it->second.is_unsigned()) {
+    if (!it->second.is_unsigned() ||
+        it->second.GetUnsigned() > std::numeric_limits<uint8_t>::max()) {
       return base::nullopt;
     }
     response.max_samples_for_enroll = it->second.GetUnsigned();
@@ -203,7 +204,8 @@ base::Optional<BioEnrollmentResponse> BioEnrollmentResponse::Parse(
   it = response_map.find(cbor::Value(
       static_cast<int>(BioEnrollmentResponseKey::kRemainingSamples)));
   if (it != response_map.end()) {
-    if (!it->second.is_unsigned()) {
+    if (!it->second.is_unsigned() ||
+        it->second.GetUnsigned() > std::numeric_limits<uint8_t>::max()) {
       return base::nullopt;
     }
     response.remaining_samples = it->second.GetUnsigned();
@@ -252,6 +254,16 @@ base::Optional<BioEnrollmentResponse> BioEnrollmentResponse::Parse(
     response.template_infos = std::move(template_infos);
   }
 
+  it = response_map.find(cbor::Value(
+      static_cast<int>(BioEnrollmentResponseKey::kMaxTemplateFriendlyName)));
+  if (it != response_map.end()) {
+    if (!it->second.is_unsigned() ||
+        it->second.GetUnsigned() > std::numeric_limits<uint32_t>::max()) {
+      return base::nullopt;
+    }
+    response.max_template_friendly_name = it->second.GetUnsigned();
+  }
+
   return std::move(response);
 }
 
@@ -288,7 +300,8 @@ AsCTAPRequestValuePair(const BioEnrollmentRequest& request) {
   }
 
   if (request.pin_protocol) {
-    map.emplace(static_cast<int>(Key::kPinProtocol), *request.pin_protocol);
+    map.emplace(static_cast<int>(Key::kPinProtocol),
+                static_cast<uint8_t>(*request.pin_protocol));
   }
 
   if (request.pin_auth) {

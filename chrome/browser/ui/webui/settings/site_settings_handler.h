@@ -11,7 +11,9 @@
 #include <string>
 
 #include "base/containers/flat_set.h"
-#include "base/scoped_observer.h"
+#include "base/optional.h"
+#include "base/scoped_multi_source_observation.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browsing_data/cookies_tree_model.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
@@ -20,7 +22,7 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/permissions/chooser_context_base.h"
+#include "components/permissions/object_permission_context_base.h"
 #include "components/prefs/pref_store.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "ppapi/buildflags/buildflags.h"
@@ -38,7 +40,7 @@ class SiteSettingsHandler
     : public SettingsPageUIHandler,
       public content_settings::Observer,
       public ProfileObserver,
-      public permissions::ChooserContextBase::PermissionObserver,
+      public permissions::ObjectPermissionContextBase::PermissionObserver,
       public CookiesTreeModel::Observer {
  public:
   explicit SiteSettingsHandler(Profile* profile,
@@ -68,7 +70,7 @@ class SiteSettingsHandler
   void TreeNodeChanged(ui::TreeModel* model, ui::TreeModelNode* node) override;
   void TreeModelEndBatch(CookiesTreeModel* model) override;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Alert the Javascript that the |kEnableDRM| pref has changed.
   void OnPrefEnableDrmChanged();
 #endif
@@ -76,19 +78,17 @@ class SiteSettingsHandler
   // content_settings::Observer:
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type,
-                               const std::string& resource_identifier) override;
+                               ContentSettingsType content_type) override;
 
   // ProfileObserver:
   void OnOffTheRecordProfileCreated(Profile* off_the_record) override;
   void OnProfileWillBeDestroyed(Profile* profile) override;
 
-  // ChooserContextBase::PermissionObserver implementation:
-  void OnChooserObjectPermissionChanged(
-      ContentSettingsType guard_content_settings_type,
+  // ObjectPermissionContextBase::PermissionObserver implementation:
+  void OnObjectPermissionChanged(
+      base::Optional<ContentSettingsType> guard_content_settings_type,
       ContentSettingsType data_content_settings_type) override;
 
-  // content::HostZoomMap subscription.
   void OnZoomLevelChanged(const content::HostZoomMap::ZoomLevelChange& change);
 
  private:
@@ -121,6 +121,8 @@ class SiteSettingsHandler
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, IncognitoExceptions);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
                            ResetCategoryPermissionForEmbargoedOrigins);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
+                           ResetCategoryPermissionForInvalidOrigins);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, Origins);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, Patterns);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, PatternsAndContentType);
@@ -208,14 +210,13 @@ class SiteSettingsHandler
   void HandleGetOriginPermissions(const base::ListValue* args);
   void HandleSetOriginPermissions(const base::ListValue* args);
 
-  // Clears the Flash data setting used to remember if the user has changed the
-  // Flash permission for an origin.
-  void HandleClearFlashPref(const base::ListValue* args);
-
   // Handles setting and resetting an origin permission.
   void HandleResetCategoryPermissionForPattern(const base::ListValue* args);
   void HandleSetCategoryPermissionForPattern(const base::ListValue* args);
 
+  // TODO(andypaicu, crbug.com/880684): Update to only expect a list of three
+  // arguments, replacing the current (requesting,embedding) arguments with
+  // simply (origin) and update all call sites.
   // Handles resetting a chooser exception for the given site.
   void HandleResetChooserExceptionForSite(const base::ListValue* args);
 
@@ -267,11 +268,11 @@ class SiteSettingsHandler
   Profile* profile_;
   web_app::AppRegistrar& app_registrar_;
 
-  ScopedObserver<Profile, ProfileObserver> observed_profiles_{this};
+  base::ScopedMultiSourceObservation<Profile, ProfileObserver>
+      observed_profiles_{this};
 
   // Keeps track of events related to zooming.
-  std::unique_ptr<content::HostZoomMap::Subscription>
-      host_zoom_map_subscription_;
+  base::CallbackListSubscription host_zoom_map_subscription_;
 
   // The host for which to fetch usage.
   std::string usage_host_;
@@ -280,13 +281,15 @@ class SiteSettingsHandler
   std::string clearing_origin_;
 
   // Change observer for content settings.
-  ScopedObserver<HostContentSettingsMap, content_settings::Observer> observer_{
-      this};
+  base::ScopedMultiSourceObservation<HostContentSettingsMap,
+                                     content_settings::Observer>
+      observations_{this};
 
   // Change observer for chooser permissions.
-  ScopedObserver<permissions::ChooserContextBase,
-                 permissions::ChooserContextBase::PermissionObserver>
-      chooser_observer_{this};
+  base::ScopedMultiSourceObservation<
+      permissions::ObjectPermissionContextBase,
+      permissions::ObjectPermissionContextBase::PermissionObserver>
+      chooser_observations_{this};
 
   // Change observer for prefs.
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;

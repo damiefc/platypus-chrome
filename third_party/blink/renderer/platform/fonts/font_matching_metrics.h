@@ -164,6 +164,12 @@ class PLATFORM_EXPORT FontMatchingMetrics {
       FontDescription::GenericFamilyType generic_family_type,
       const AtomicString& resulting_font_name);
 
+  // Reports for each shaped emoji segment the number of total clusters and the
+  // number of clusters that either contain a .notdef/tofu glyph or that is
+  // shaped as multiple glyphs, which means the emoji displays incorrectly.
+  void ReportEmojiSegmentGlyphCoverage(unsigned num_clusters,
+                                       unsigned num_broken_clusters);
+
   // Called on page unload and forces metrics to be flushed.
   void PublishAllMetrics();
 
@@ -179,6 +185,11 @@ class PLATFORM_EXPORT FontMatchingMetrics {
   // and otherwise) to UKM. Recorded on page unload.
   void PublishUkmMetrics();
 
+  // Publishes the ratio of correctly shaped to incorrectly shaped emoji
+  // segments during the lifetime of this metrics recorder, which usually is
+  // coupled to the lifetime of a document or WorkerGlobalContext.
+  void PublishEmojiGlyphMetrics();
+
  private:
   void IdentifiabilityMetricsTimerFired(TimerBase*);
 
@@ -193,10 +204,19 @@ class PLATFORM_EXPORT FontMatchingMetrics {
                                       IdentifiableTokenKeyHashTraits>;
 
   // Adds a digest of the |font_data|'s typeface to |hash_map| using the key
-  // |input_key|, unless that key is already present.
+  // |input_key|, unless that key is already present. If |font_data| is not
+  // nullptr, then the typeface digest will also be saved with its PostScript
+  // name in |font_load_postscript_name_|.
   void InsertFontHashIntoMap(IdentifiableTokenKey input_key,
                              SimpleFontData* font_data,
-                             TokenToTokenHashMap hash_map);
+                             TokenToTokenHashMap& hash_map);
+
+  // Reports a local font's existence was looked up by a name, but its actual
+  // font data may or may not have been loaded. This only includes lookups where
+  // the name is allowed to match PostScript names and full font names, but not
+  // family names.
+  void ReportLocalFontExistenceByUniqueNameOnly(const AtomicString& font_name,
+                                                bool font_exists);
 
   // Constructs a builder with a hash of the FontSelectionRequest already added.
   IdentifiableTokenBuilder GetTokenBuilderWithFontSelectionRequest(
@@ -207,6 +227,11 @@ class PLATFORM_EXPORT FontMatchingMetrics {
   int64_t GetHashForFontData(SimpleFontData* font_data);
 
   void Initialize();
+
+  // Get a token that uniquely represents the typeface's PostScript name. May
+  // represent the empty string if no PostScript name was found.
+  IdentifiableToken GetPostScriptNameTokenForFontData(
+      SimpleFontData* font_data);
 
   // Font family names successfully matched.
   HashSet<AtomicString> successful_font_families_;
@@ -235,13 +260,16 @@ class PLATFORM_EXPORT FontMatchingMetrics {
   TokenToTokenHashMap font_lookups_by_fallback_character_;
   TokenToTokenHashMap font_lookups_as_last_resort_;
   TokenToTokenHashMap generic_font_lookups_;
+  TokenToTokenHashMap font_load_postscript_name_;
+  TokenToTokenHashMap local_font_existence_by_unique_name_only_;
+
+  uint64_t total_emoji_clusters_shaped_ = 0;
+  uint64_t total_broken_emoji_clusters_ = 0;
 
   ukm::UkmRecorder* const ukm_recorder_;
   const ukm::SourceId source_id_;
 
   TaskRunnerTimer<FontMatchingMetrics> identifiability_metrics_timer_;
-
-  const bool identifiability_study_enabled_;
 };
 
 }  // namespace blink

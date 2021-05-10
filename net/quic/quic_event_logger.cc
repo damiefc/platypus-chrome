@@ -4,6 +4,7 @@
 
 #include "net/quic/quic_event_logger.h"
 
+#include "base/strings/string_number_conversions.h"
 #include "net/cert/x509_certificate.h"
 #include "net/log/net_log_values.h"
 #include "net/quic/address_utils.h"
@@ -24,20 +25,19 @@ base::Value NetLogQuicPacketParams(const quic::QuicSocketAddress& self_address,
   return dict;
 }
 
-base::Value NetLogQuicPacketSentParams(
-    const quic::SerializedPacket& serialized_packet,
-    quic::TransmissionType transmission_type,
-    quic::QuicTime sent_time) {
+base::Value NetLogQuicPacketSentParams(quic::QuicPacketNumber packet_number,
+                                       quic::QuicPacketLength packet_length,
+                                       quic::TransmissionType transmission_type,
+                                       quic::EncryptionLevel encryption_level,
+                                       quic::QuicTime sent_time) {
   base::Value dict(base::Value::Type::DICTIONARY);
   dict.SetStringKey("transmission_type",
                     quic::TransmissionTypeToString(transmission_type));
-  dict.SetKey("packet_number",
-              NetLogNumberValue(serialized_packet.packet_number.ToUint64()));
-  dict.SetIntKey("size", serialized_packet.encrypted_length);
+  dict.SetKey("packet_number", NetLogNumberValue(packet_number.ToUint64()));
+  dict.SetIntKey("size", packet_length);
   dict.SetKey("sent_time_us", NetLogNumberValue(sent_time.ToDebuggingValue()));
-  dict.SetStringKey(
-      "encryption_level",
-      quic::EncryptionLevelToString(serialized_packet.encryption_level));
+  dict.SetStringKey("encryption_level",
+                    quic::EncryptionLevelToString(encryption_level));
   return dict;
 }
 
@@ -175,6 +175,26 @@ base::Value NetLogQuicConnectionCloseFrameParams(
     const quic::QuicConnectionCloseFrame* frame) {
   base::Value dict(base::Value::Type::DICTIONARY);
   dict.SetIntKey("quic_error", frame->quic_error_code);
+  if (frame->wire_error_code != frame->quic_error_code) {
+    dict.SetIntKey("quic_wire_error", frame->wire_error_code);
+  }
+  std::string close_type;
+  switch (frame->close_type) {
+    case quic::GOOGLE_QUIC_CONNECTION_CLOSE:
+      close_type = "gQUIC";
+      break;
+    case quic::IETF_QUIC_TRANSPORT_CONNECTION_CLOSE:
+      close_type = "Transport";
+      break;
+    case quic::IETF_QUIC_APPLICATION_CONNECTION_CLOSE:
+      close_type = "Application";
+      break;
+  }
+  dict.SetStringKey("close_type", close_type);
+  if (frame->transport_close_frame_type != 0) {
+    dict.SetKey("transport_close_frame_type",
+                NetLogNumberValue(frame->transport_close_frame_type));
+  }
   dict.SetStringKey("details", frame->error_details);
   return dict;
 }
@@ -358,7 +378,7 @@ base::Value NetLogQuicStopSendingFrameParams(
     const quic::QuicStopSendingFrame* frame) {
   base::Value dict(base::Value::Type::DICTIONARY);
   dict.SetIntKey("stream_id", frame->stream_id);
-  dict.SetIntKey("error_code", frame->error_code);
+  dict.SetIntKey("quic_rst_stream_error", frame->error_code);
   return dict;
 }
 
@@ -547,13 +567,19 @@ void QuicEventLogger::OnStreamFrameCoalesced(
 }
 
 void QuicEventLogger::OnPacketSent(
-    const quic::SerializedPacket& serialized_packet,
+    quic::QuicPacketNumber packet_number,
+    quic::QuicPacketLength packet_length,
+    bool /*has_crypto_handshake*/,
     quic::TransmissionType transmission_type,
+    quic::EncryptionLevel encryption_level,
+    const quic::QuicFrames& /*retransmittable_frames*/,
+    const quic::QuicFrames& /*nonretransmittable_frames*/,
     quic::QuicTime sent_time) {
   if (!net_log_.IsCapturing())
     return;
   net_log_.AddEvent(NetLogEventType::QUIC_SESSION_PACKET_SENT, [&] {
-    return NetLogQuicPacketSentParams(serialized_packet, transmission_type,
+    return NetLogQuicPacketSentParams(packet_number, packet_length,
+                                      transmission_type, encryption_level,
                                       sent_time);
   });
 }
@@ -642,7 +668,9 @@ void QuicEventLogger::OnDuplicatePacket(quic::QuicPacketNumber packet_number) {
       [&] { return NetLogQuicDuplicatePacketParams(packet_number); });
 }
 
-void QuicEventLogger::OnPacketHeader(const quic::QuicPacketHeader& header) {
+void QuicEventLogger::OnPacketHeader(const quic::QuicPacketHeader& header,
+                                     quic::QuicTime /*receive_time*/,
+                                     quic::EncryptionLevel /*level*/) {
   if (!net_log_.IsCapturing())
     return;
   net_log_.AddEvent(NetLogEventType::QUIC_SESSION_PACKET_AUTHENTICATED);
@@ -842,7 +870,7 @@ void QuicEventLogger::OnVersionNegotiationPacket(
 void QuicEventLogger::OnCryptoHandshakeMessageReceived(
     const quic::CryptoHandshakeMessage& message) {
   if (message.tag() == quic::kSHLO) {
-    quiche::QuicheStringPiece address;
+    absl::string_view address;
     quic::QuicSocketAddressCoder decoder;
     if (message.GetStringPiece(quic::kCADR, &address) &&
         decoder.Decode(address.data(), address.size())) {

@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "extensions/browser/extension_prefs.h"
@@ -31,7 +31,7 @@ AppWindowGeometryCache::AppWindowGeometryCache(content::BrowserContext* context,
                                                ExtensionPrefs* prefs)
     : prefs_(prefs),
       sync_delay_(base::TimeDelta::FromMilliseconds(kSyncTimeoutMilliseconds)) {
-  extension_registry_observer_.Add(ExtensionRegistry::Get(context));
+  extension_registry_observation_.Observe(ExtensionRegistry::Get(context));
 }
 
 AppWindowGeometryCache::~AppWindowGeometryCache() {}

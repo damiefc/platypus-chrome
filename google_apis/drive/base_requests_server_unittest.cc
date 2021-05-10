@@ -24,7 +24,7 @@
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
-#include "services/network/test/test_network_service_client.h"
+#include "services/network/test/fake_test_cert_verifier_params_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace google_apis {
@@ -43,18 +43,21 @@ class BaseRequestsServerTest : public testing::Test {
         network_service_remote.BindNewPipeAndPassReceiver());
     network::mojom::NetworkContextParamsPtr context_params =
         network::mojom::NetworkContextParams::New();
+    // Use a dummy CertVerifier that always passes cert verification, since
+    // these unittests don't need to test CertVerifier behavior.
+    context_params->cert_verifier_params =
+        network::FakeTestCertVerifierParamsFactory::GetCertVerifierParams();
     network_service_remote->CreateNetworkContext(
         network_context_.BindNewPipeAndPassReceiver(),
         std::move(context_params));
 
-    mojo::PendingRemote<network::mojom::NetworkServiceClient>
-        network_service_client_remote;
-    network_service_client_ =
-        std::make_unique<network::TestNetworkServiceClient>(
-            network_service_client_remote.InitWithNewPipeAndPassReceiver());
-    network_service_remote->SetClient(
-        std::move(network_service_client_remote),
-        network::mojom::NetworkServiceParams::New());
+    mojo::PendingReceiver<network::mojom::URLLoaderNetworkServiceObserver>
+        default_observer_receiver;
+    network::mojom::NetworkServiceParamsPtr network_service_params =
+        network::mojom::NetworkServiceParams::New();
+    network_service_params->default_observer =
+        default_observer_receiver.InitWithNewPipeAndPassRemote();
+    network_service_remote->SetParams(std::move(network_service_params));
 
     network::mojom::URLLoaderFactoryParamsPtr params =
         network::mojom::URLLoaderFactoryParams::New();
@@ -76,10 +79,9 @@ class BaseRequestsServerTest : public testing::Test {
         TRAFFIC_ANNOTATION_FOR_TESTS);
 
     ASSERT_TRUE(test_server_.InitializeAndListen());
-    test_server_.RegisterRequestHandler(
-        base::Bind(&test_util::HandleDownloadFileRequest,
-                   test_server_.base_url(),
-                   base::Unretained(&http_request_)));
+    test_server_.RegisterRequestHandler(base::BindRepeating(
+        &test_util::HandleDownloadFileRequest, test_server_.base_url(),
+        base::Unretained(&http_request_)));
     test_server_.StartAcceptingConnections();
   }
 
@@ -93,7 +95,6 @@ class BaseRequestsServerTest : public testing::Test {
   net::EmbeddedTestServer test_server_;
   std::unique_ptr<RequestSender> request_sender_;
   std::unique_ptr<network::mojom::NetworkService> network_service_;
-  std::unique_ptr<network::mojom::NetworkServiceClient> network_service_client_;
   mojo::Remote<network::mojom::NetworkContext> network_context_;
   mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory_;
   scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>

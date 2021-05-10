@@ -5,7 +5,7 @@
 #include "base/base_switches.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -86,9 +86,8 @@ class PrefetchBrowserTest : public InProcessBrowserTest {
   bool RunPrefetchExperiment(bool expect_success, Browser* browser) {
     GURL url = embedded_test_server()->GetURL(kPrefetchPage);
 
-    const base::string16 expected_title =
-        expect_success ? base::ASCIIToUTF16("link onload")
-                       : base::ASCIIToUTF16("link onerror");
+    const std::u16string expected_title =
+        expect_success ? u"link onload" : u"link onerror";
     content::TitleWatcher title_watcher(
         browser->tab_strip_model()->GetActiveWebContents(), expected_title);
     ui_test_utils::NavigateToURL(browser, url);
@@ -132,9 +131,10 @@ IN_PROC_BROWSER_TEST_F(PrefetchBrowserTest, PreferenceWorks) {
 // Bug 339909: When in incognito mode the browser crashed due to an
 // uninitialized preference member. Verify that it no longer does.
 IN_PROC_BROWSER_TEST_F(PrefetchBrowserTest, IncognitoTest) {
-  Profile* incognito_profile = browser()->profile()->GetPrimaryOTRProfile();
+  Profile* incognito_profile =
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true);
   Browser* incognito_browser =
-      new Browser(Browser::CreateParams(incognito_profile, true));
+      Browser::Create(Browser::CreateParams(incognito_profile, true));
 
   // Navigate just to have a tab in this window, otherwise there is no
   // WebContents for the incognito browser.
@@ -182,7 +182,7 @@ IN_PROC_BROWSER_TEST_F(PrefetchBrowserTest, RedirectedPrefetch) {
   ASSERT_TRUE(https_server.Start());
 
   GURL url = https_server.GetURL("www.google.com", kRedirectPrefetchPage);
-  const base::string16 expected_title = base::ASCIIToUTF16("done");
+  const std::u16string expected_title = u"done";
   content::TitleWatcher title_watcher(
       browser()->tab_strip_model()->GetActiveWebContents(), expected_title);
   ui_test_utils::NavigateToURL(browser(), url);
@@ -249,7 +249,7 @@ IN_PROC_BROWSER_TEST_F(PrefetchBrowserTest, PrefetchCachingPeriod) {
   ASSERT_TRUE(http_server.Start());
 
   GURL url = http_server.GetURL("localhost", kPrefetchCachingPeriodPage);
-  const base::string16 expected_title = base::ASCIIToUTF16("done");
+  const std::u16string expected_title = u"done";
   content::TitleWatcher title_watcher(
       browser()->tab_strip_model()->GetActiveWebContents(), expected_title);
   ui_test_utils::NavigateToURL(browser(), url);
@@ -299,7 +299,7 @@ IN_PROC_BROWSER_TEST_F(PrefetchBrowserTest, PrefetchCachingPeriodWithAge) {
   ASSERT_TRUE(http_server.Start());
 
   GURL url = http_server.GetURL("localhost", kPrefetchCachingPeriodPage);
-  const base::string16 expected_title = base::ASCIIToUTF16("done");
+  const std::u16string expected_title = u"done";
   content::TitleWatcher title_watcher(
       browser()->tab_strip_model()->GetActiveWebContents(), expected_title);
   ui_test_utils::NavigateToURL(browser(), url);

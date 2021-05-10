@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
-import android.accounts.Account;
 import android.view.View;
 
 import androidx.test.filters.MediumTest;
@@ -25,14 +24,17 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.BookmarkTestRule;
+import org.chromium.chrome.test.util.BookmarkTestUtil;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
-import org.chromium.components.signin.ProfileDataSource;
 import org.chromium.components.signin.test.util.FakeProfileDataSource;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.NightModeTestUtils;
@@ -44,14 +46,13 @@ import org.chromium.ui.test.util.UiDisableIf;
 @RunWith(ParameterizedRunner.class)
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@DisableFeatures({ChromeFeatureList.DEPRECATE_MENAGERIE_API})
 @DisableIf.Device(type = {UiDisableIf.TABLET})
 public class BookmarkPersonalizedPromoRenderTest {
     // FakeProfileDataSource is required to create the ProfileDataCache entry with sync_off badge
     // for Sync promo.
-    private final FakeProfileDataSource mFakeProfileDataSource = new FakeProfileDataSource();
-
     private final AccountManagerTestRule mAccountManagerTestRule =
-            new AccountManagerTestRule(mFakeProfileDataSource);
+            new AccountManagerTestRule(new FakeProfileDataSource());
 
     private final ChromeTabbedActivityTestRule mActivityTestRule =
             new ChromeTabbedActivityTestRule();
@@ -66,7 +67,7 @@ public class BookmarkPersonalizedPromoRenderTest {
 
     @Rule
     public final ChromeRenderTestRule mRenderTestRule =
-            ChromeRenderTestRule.Builder.withPublicCorpus().build();
+            ChromeRenderTestRule.Builder.withPublicCorpus().setRevision(2).build();
 
     @ParameterAnnotations.UseMethodParameterBefore(NightModeTestUtils.NightModeParams.class)
     public void setupNightMode(boolean nightModeEnabled) {
@@ -83,12 +84,11 @@ public class BookmarkPersonalizedPromoRenderTest {
     public void setUp() {
         // Native side needs to loaded before signing in test account.
         mActivityTestRule.startMainActivityOnBlankPage();
-        Account account = mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
-        TestThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> mFakeProfileDataSource.setProfileData(account.name,
-                                new ProfileDataSource.ProfileData(
-                                        account.name, null, "Full Name", "Given Name")));
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            BookmarkModel bookmarkModel = new BookmarkModel(Profile.getLastUsedRegularProfile());
+            bookmarkModel.loadFakePartnerBookmarkShimForTesting();
+        });
+        BookmarkTestUtil.waitForBookmarkModelLoaded();
     }
 
     @After
@@ -107,6 +107,7 @@ public class BookmarkPersonalizedPromoRenderTest {
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     public void testPersonalizedSigninPromoInBookmarkPage(boolean nightModeEnabled)
             throws Exception {
+        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_EMAIL);
         BookmarkPromoHeader.forcePromoStateForTests(
                 BookmarkPromoHeader.PromoState.PROMO_SIGNIN_PERSONALIZED);
         mBookmarkTestRule.showBookmarkManager(mActivityTestRule.getActivity());
@@ -118,6 +119,7 @@ public class BookmarkPersonalizedPromoRenderTest {
     @Feature("RenderTest")
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     public void testPersonalizedSyncPromoInBookmarkPage(boolean nightModeEnabled) throws Exception {
+        mAccountManagerTestRule.addTestAccountThenSignin();
         BookmarkPromoHeader.forcePromoStateForTests(
                 BookmarkPromoHeader.PromoState.PROMO_SYNC_PERSONALIZED);
         mBookmarkTestRule.showBookmarkManager(mActivityTestRule.getActivity());

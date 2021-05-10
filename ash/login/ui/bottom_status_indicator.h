@@ -5,8 +5,9 @@
 #ifndef ASH_LOGIN_UI_BOTTOM_STATUS_INDICATOR_H_
 #define ASH_LOGIN_UI_BOTTOM_STATUS_INDICATOR_H_
 
+#include <string>
+
 #include "ash/style/ash_color_provider.h"
-#include "base/strings/string16.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/view.h"
@@ -17,8 +18,7 @@ struct VectorIcon;
 
 namespace ash {
 
-class BottomStatusIndicator : public views::LabelButton,
-                              public views::ButtonListener {
+class BottomStatusIndicator : public views::LabelButton {
  public:
   using TappedCallback = base::RepeatingClosure;
 
@@ -32,14 +32,10 @@ class BottomStatusIndicator : public views::LabelButton,
 
   void set_role_for_accessibility(ax::mojom::Role role) { role_ = role; }
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // views::View:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
  private:
-  TappedCallback on_tapped_callback_;
   ax::mojom::Role role_ = ax::mojom::Role::kStaticText;
 };
 

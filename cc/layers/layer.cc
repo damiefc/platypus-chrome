@@ -15,8 +15,10 @@
 #include "base/location.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "cc/base/features.h"
 #include "cc/base/simple_enclosed_region.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/picture_layer.h"
@@ -51,13 +53,13 @@ struct SameSizeAsLayer : public base::RefCounted<SameSizeAsLayer> {
     SkColor background_color;
     Region non_fast_scrollable_region;
     TouchActionRegion touch_action_region;
+    Region wheel_event_region;
     ElementId element_id;
   } inputs;
   void* layer_tree_inputs;
   int int_fields[6];
   gfx::Vector2dF offset;
   unsigned bitfields;
-  SkColor safe_opaque_background_color;
   void* debug_info;
 };
 
@@ -85,19 +87,13 @@ Layer::Inputs::Inputs(int layer_id)
 Layer::Inputs::~Inputs() = default;
 
 Layer::LayerTreeInputs::LayerTreeInputs()
-    : mask_layer(nullptr),
-      opacity(1.f),
-      blend_mode(SkBlendMode::kSrcOver),
-      masks_to_bounds(false),
+    : masks_to_bounds(false),
       is_fast_rounded_corner(false),
       user_scrollable_horizontal(true),
       user_scrollable_vertical(true),
       trilinear_filtering(false),
       hide_layer_and_subtree(false),
-      scrollable(false),
-      backdrop_filter_quality(1.0f),
-      mirror_count(0),
-      corner_radii({0, 0, 0, 0}) {}
+      scrollable(false) {}
 
 Layer::LayerTreeInputs::~LayerTreeInputs() = default;
 
@@ -126,8 +122,7 @@ Layer::Layer()
       needs_show_scrollbars_(false),
       has_transform_node_(false),
       has_clip_node_(false),
-      subtree_has_copy_request_(false),
-      safe_opaque_background_color_(0) {}
+      subtree_has_copy_request_(false) {}
 
 Layer::~Layer() {
   // Our parent should be holding a reference to us so there should be no
@@ -494,25 +489,41 @@ void Layer::SetBackgroundColor(SkColor background_color) {
 
 void Layer::SetSafeOpaqueBackgroundColor(SkColor background_color) {
   DCHECK(IsPropertyChangeAllowed());
-  SkColor opaque_color = SkColorSetA(background_color, 255);
-  if (safe_opaque_background_color_ == opaque_color)
+  SkColor opaque_color = SkColorSetA(background_color, SK_AlphaOPAQUE);
+  auto& inputs = EnsureLayerTreeInputs();
+  if (inputs.safe_opaque_background_color == opaque_color)
     return;
-  safe_opaque_background_color_ = opaque_color;
+  inputs.safe_opaque_background_color = opaque_color;
   SetNeedsPushProperties();
 }
 
 SkColor Layer::SafeOpaqueBackgroundColor() const {
   if (contents_opaque()) {
-    // TODO(936906): We should uncomment this DCHECK, since the
-    // |safe_opaque_background_color_| could be transparent if it is never set
-    // (the default is 0). But to do that, one test needs to be fixed.
-    // DCHECK_EQ(SkColorGetA(safe_opaque_background_color_), SK_AlphaOPAQUE);
-    return safe_opaque_background_color_;
+    if (!layer_tree_host_ || !layer_tree_host_->IsUsingLayerLists()) {
+      // In layer tree mode, PropertyTreeBuilder should have calculated the safe
+      // opaque background color and called SetSafeOpaqueBackgroundColor().
+      DCHECK(layer_tree_inputs());
+      DCHECK_EQ(SkColorGetA(layer_tree_inputs()->safe_opaque_background_color),
+                SK_AlphaOPAQUE);
+      return layer_tree_inputs()->safe_opaque_background_color;
+    }
+    // In layer list mode, the PropertyTreeBuilder algorithm doesn't apply
+    // because it depends on the layer tree hierarchy. Instead we use
+    // background_color() if it's not transparent, or layer_tree_host_'s
+    // background_color(), with the alpha channel forced to be opaque.
+    SkColor color = background_color() == SK_ColorTRANSPARENT
+                        ? layer_tree_host_->background_color()
+                        : background_color();
+    return SkColorSetA(color, SK_AlphaOPAQUE);
   }
-  SkColor color = background_color();
-  if (SkColorGetA(color) == 255)
-    color = SK_ColorTRANSPARENT;
-  return color;
+  if (SkColorGetA(background_color()) == SK_AlphaOPAQUE) {
+    // The layer is not opaque while the background color is, meaning that the
+    // background color doesn't cover the whole layer. Use SK_ColorTRANSPARENT
+    // to avoid intrusive checkerboard where the layer is not covered by the
+    // background color.
+    return SK_ColorTRANSPARENT;
+  }
+  return background_color();
 }
 
 void Layer::SetMasksToBounds(bool masks_to_bounds) {
@@ -549,8 +560,8 @@ void Layer::SetClipRect(const gfx::Rect& clip_rect) {
         effect_tree_index() != EffectTree::kInvalidNodeId) {
       if (EffectNode* node =
               property_trees->effect_tree.Node(effect_tree_index())) {
-        node->rounded_corner_bounds =
-            gfx::RRectF(effective_clip_rect, corner_radii());
+        node->mask_filter_info =
+            gfx::MaskFilterInfo(effective_clip_rect, corner_radii());
         node->effect_changed = true;
         property_trees->effect_tree.set_needs_update(true);
       }
@@ -656,8 +667,8 @@ void Layer::SetRoundedCorner(const gfx::RoundedCornersF& corner_radii) {
   EffectNode* node = nullptr;
   if (property_trees && effect_tree_index() != EffectTree::kInvalidNodeId &&
       (node = property_trees->effect_tree.Node(effect_tree_index()))) {
-    node->rounded_corner_bounds =
-        gfx::RRectF(EffectiveClipRect(), corner_radii);
+    node->mask_filter_info =
+        gfx::MaskFilterInfo(EffectiveClipRect(), corner_radii);
     node->effect_changed = true;
     property_trees->effect_tree.set_needs_update(true);
   } else {
@@ -993,6 +1004,22 @@ void Layer::SetDidScrollCallback(
   EnsureLayerTreeInputs().did_scroll_callback = std::move(callback);
 }
 
+void Layer::SetSubtreeCaptureId(viz::SubtreeCaptureId subtree_id) {
+  DCHECK(IsPropertyChangeAllowed());
+
+  auto& inputs = EnsureLayerTreeInputs();
+  if (inputs.subtree_capture_id == subtree_id)
+    return;
+
+  DCHECK(!inputs.subtree_capture_id.is_valid() || !subtree_id.is_valid())
+      << "Not allowed to change from a valid ID to another valid ID, as it may "
+         "already be in use.";
+
+  inputs.subtree_capture_id = subtree_id;
+  SetPropertyTreesNeedRebuild();
+  SetNeedsCommit();
+}
+
 void Layer::SetScrollable(const gfx::Size& bounds) {
   DCHECK(IsPropertyChangeAllowed());
   auto& inputs = EnsureLayerTreeInputs();
@@ -1070,6 +1097,15 @@ void Layer::SetTouchActionRegion(TouchActionRegion touch_action_region) {
 
   inputs_.touch_action_region = std::move(touch_action_region);
   SetPropertyTreesNeedRebuild();
+  SetNeedsCommit();
+}
+
+void Layer::SetWheelEventRegion(Region wheel_event_region) {
+  DCHECK(IsPropertyChangeAllowed());
+  if (inputs_.wheel_event_region == wheel_event_region)
+    return;
+
+  inputs_.wheel_event_region = std::move(wheel_event_region);
   SetNeedsCommit();
 }
 
@@ -1294,7 +1330,7 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   layer->SetElementId(inputs_.element_id);
   layer->SetHasTransformNode(has_transform_node_);
   layer->SetBackgroundColor(inputs_.background_color);
-  layer->SetSafeOpaqueBackgroundColor(safe_opaque_background_color_);
+  layer->SetSafeOpaqueBackgroundColor(SafeOpaqueBackgroundColor());
   layer->SetBounds(inputs_.bounds);
   layer->SetTransformTreeIndex(transform_tree_index());
   layer->SetEffectTreeIndex(effect_tree_index());
@@ -1310,17 +1346,20 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   layer->set_may_contain_video(may_contain_video_);
   layer->SetNonFastScrollableRegion(inputs_.non_fast_scrollable_region);
   layer->SetTouchActionRegion(inputs_.touch_action_region);
-  // TODO(sunxd): Pass the correct region for wheel event handlers, see
-  // https://crbug.com/841364.
+
+  // TODO(https://crbug.com/841364): This block is optimized to avoid checks
+  // for kWheelEventRegions. It will be simplified once kWheelEventRegions
+  // feature flag is removed.
   EventListenerProperties mouse_wheel_props =
       layer_tree_host()->event_listener_properties(
           EventListenerClass::kMouseWheel);
-  if (mouse_wheel_props == EventListenerProperties::kBlocking ||
-      mouse_wheel_props == EventListenerProperties::kBlockingAndPassive) {
+  if ((mouse_wheel_props == EventListenerProperties::kBlocking ||
+       mouse_wheel_props == EventListenerProperties::kBlockingAndPassive) &&
+      !base::FeatureList::IsEnabled(::features::kWheelEventRegions))
     layer->SetWheelEventHandlerRegion(Region(gfx::Rect(bounds())));
-  } else {
-    layer->SetWheelEventHandlerRegion(Region());
-  }
+  else
+    layer->SetWheelEventHandlerRegion(inputs_.wheel_event_region);
+
   layer->SetContentsOpaque(inputs_.contents_opaque);
   layer->SetContentsOpaqueForText(inputs_.contents_opaque_for_text);
   layer->SetShouldCheckBackfaceVisibility(should_check_backface_visibility_);

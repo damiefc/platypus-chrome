@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/core/input/gesture_manager.h"
 
-#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/public_buildflags.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -22,6 +21,7 @@
 #include "third_party/blink/renderer/core/input/input_device_capabilities.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/page/scrolling/text_fragment_handler.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
 
@@ -273,7 +273,7 @@ WebInputEventResult GestureManager::HandleGestureTap(
   if (current_hit_test.InnerNode()) {
     LocalFrame& main_frame = frame_->LocalFrameRoot();
     if (main_frame.View()) {
-      main_frame.View()->UpdateAllLifecyclePhases(
+      main_frame.View()->UpdateAllLifecyclePhasesExceptPaint(
           DocumentUpdateReason::kHitTest);
     }
     adjusted_point = frame_view->ConvertFromRootFrame(tapped_position);
@@ -298,13 +298,6 @@ WebInputEventResult GestureManager::HandleGestureTap(
   WebInputEventResult click_event_result = WebInputEventResult::kNotHandled;
   if (tapped_element) {
     if (current_hit_test.InnerNode()) {
-      // Updates distribution because a mouseup (or mousedown) event listener
-      // can make the tree dirty at dispatchMouseEvent() invocation above.
-      // Unless distribution is updated, commonAncestor would hit DCHECK.  Both
-      // tappedNonTextNode and currentHitTest.innerNode()) don't need to be
-      // updated because commonAncestor() will exit early if their documents are
-      // different.
-      tapped_element->UpdateDistributionForFlatTreeTraversal();
       Node* click_target_node = current_hit_test.InnerNode()->CommonAncestor(
           *tapped_element, event_handling_util::ParentForClickEvent);
       auto* click_target_element = DynamicTo<Element>(click_target_node);
@@ -341,6 +334,13 @@ WebInputEventResult GestureManager::HandleGestureTap(
     ShowUnhandledTapUIIfNeeded(dom_tree_changed, style_changed, tapped_node,
                                tapped_element, tapped_position_in_viewport);
   }
+  if (RuntimeEnabledFeatures::TextFragmentTapOpensContextMenuEnabled() &&
+      TextFragmentHandler::IsOverTextFragment(current_hit_test)) {
+    if (event_result == WebInputEventResult::kNotHandled) {
+      return SendContextMenuEventForGesture(targeted_event);
+    }
+  }
+
   return event_result;
 }
 
@@ -483,10 +483,9 @@ WebInputEventResult GestureManager::HandleGestureShowPress() {
   const LocalFrameView::ScrollableAreaSet* areas = view->ScrollableAreas();
   if (!areas)
     return WebInputEventResult::kNotHandled;
-  for (const PaintLayerScrollableArea* scrollable_area : *areas) {
-    ScrollAnimatorBase* animator = scrollable_area->ExistingScrollAnimator();
-    if (scrollable_area->ScrollsOverflow() && animator)
-      animator->CancelAnimation();
+  for (PaintLayerScrollableArea* scrollable_area : *areas) {
+    if (scrollable_area->ScrollsOverflow())
+      scrollable_area->CancelScrollAnimation();
   }
   return WebInputEventResult::kNotHandled;
 }

@@ -1,6 +1,8 @@
 include_rules = [
+  "+chromeos/strings/grit/chromeos_strings.h",
   "+chromeos/services",
-  "+chromeos/ui/chromeos_ui_constants.h",
+  "+chromeos/crosapi/mojom",
+  "+chromeos/ui/base/chromeos_ui_constants.h",
   "+cc/metrics",
   "+components/prefs",
   "+services/data_decoder/public",

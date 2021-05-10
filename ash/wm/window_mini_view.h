@@ -6,7 +6,7 @@
 #define ASH_WM_WINDOW_MINI_VIEW_H_
 
 #include "ash/ash_export.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/views/controls/button/button.h"
@@ -70,13 +70,11 @@ class ASH_EXPORT WindowMiniView : public views::View,
   // margins and layouts of certain elements.
   virtual gfx::Rect GetHeaderBounds() const;
   virtual gfx::Size GetPreviewViewSize() const;
-  // Allows subclasses to resize/add shadow to the image that will appear as the
-  // icon. Defaults to do resize the image to |kIconSize|.
-  virtual gfx::ImageSkia ModifyIcon(gfx::ImageSkia* image) const;
 
   // views::View:
   void Layout() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  void OnThemeChanged() override;
 
   // aura::WindowObserver:
   void OnWindowPropertyChanged(aura::Window* window,
@@ -108,7 +106,8 @@ class ASH_EXPORT WindowMiniView : public views::View,
   // Optionally shows a preview of |window_|.
   WindowPreviewView* preview_view_ = nullptr;
 
-  ScopedObserver<aura::Window, aura::WindowObserver> window_observer_{this};
+  base::ScopedObservation<aura::Window, aura::WindowObserver>
+      window_observation_{this};
 };
 
 }  // namespace ash

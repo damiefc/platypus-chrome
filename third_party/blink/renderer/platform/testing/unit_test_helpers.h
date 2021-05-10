@@ -81,6 +81,9 @@ String AccessibilityTestDataPath(const String& relative_path = String());
 // specified.
 String BlinkWebTestsFontsTestDataPath(const String& relative_path = String());
 
+// Returns the directory of hyphenation dictionaries for testing.
+base::FilePath HyphenationDictionaryDir();
+
 scoped_refptr<SharedBuffer> ReadFromFile(const String& path);
 
 class LineReader {
@@ -98,4 +101,4 @@ class LineReader {
 }  // namespace test
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_TESTING_UNIT_TEST_HELPERS_H_

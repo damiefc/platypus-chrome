@@ -4,20 +4,24 @@
 
 #include "ui/views/test/view_metadata_test_utils.h"
 
-#include "base/strings/string16.h"
+#include <string>
+
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/views/metadata/metadata_types.h"
+#include "ui/base/metadata/metadata_types.h"
 
 namespace views {
 namespace test {
 
 void TestViewMetadata(View* view) {
-  metadata::ClassMetaData* meta_data = view->GetClassMetaData();
+  ui::metadata::ClassMetaData* meta_data = view->GetClassMetaData();
   EXPECT_NE(meta_data, nullptr);
   for (auto* property : *meta_data) {
-    base::string16 value = property->GetValueAsString(view);
-    if (property->GetPropertyFlags() != metadata::PropertyFlags::kReadOnly)
+    std::u16string value = property->GetValueAsString(view);
+    ui::metadata::PropertyFlags flags = property->GetPropertyFlags();
+    if (!(flags & ui::metadata::PropertyFlags::kReadOnly) &&
+        !!(flags & ui::metadata::PropertyFlags::kSerializable)) {
       property->SetValueAsString(view, value);
+    }
   }
 }
 

@@ -25,13 +25,15 @@ extern const base::Feature kThrottleDelayable;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kDelayRequestsOnMultiplexedConnections;
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kRequestInitiatorSiteLock;
-COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kPauseBrowserInitiatedHeavyTrafficForP2P;
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kPauseLowPriorityBrowserRequestsOnWeakSignal;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCORBProtectionSniffing;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kProactivelyThrottleLowPriorityRequests;
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kCrossOriginEmbedderPolicyCredentialless;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginOpenerPolicy;
 COMPONENT_EXPORT(NETWORK_CPP)
@@ -41,7 +43,7 @@ extern const base::Feature kCrossOriginOpenerPolicyReportingOriginTrial;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginOpenerPolicyAccessReporting;
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kCrossOriginEmbedderPolicy;
+extern const base::Feature kCrossOriginOpenerPolicyByDefault;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginIsolated;
 COMPONENT_EXPORT(NETWORK_CPP)
@@ -56,23 +58,7 @@ extern const base::FeatureParam<std::string>
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kDisableKeepaliveFetch;
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature
-    kDeriveOriginFromUrlForNeitherGetNorHeadRequestWhenHavingSpecialAccess;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kEmergencyLegacyCookieAccess;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const char kEmergencyLegacyCookieAccessParamName[];
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<std::string> kEmergencyLegacyCookieAccessParam;
-
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kCorbAllowlistAlsoAppliesToOorCors;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const char kCorbAllowlistAlsoAppliesToOorCorsParamName[];
-COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kRequestInitiatorSiteLockEnfocement;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kCertVerifierService;
 
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kTrustTokens;
@@ -86,15 +72,20 @@ enum class TrustTokenOriginTrialSpec {
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::FeatureParam<TrustTokenOriginTrialSpec>
     kTrustTokenOperationsRequiringOriginTrial;
-
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kOutOfBlinkCSPEE;
+extern const base::FeatureParam<bool> kPlatformProvidedTrustTokenIssuance;
 
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kWebSocketReassembleShortMessages;
 
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kFirstPartySets;
+extern const base::Feature kAcceptCHFrame;
+
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kFtpProtocol;
+
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kSCTAuditingRetryAndPersistReports;
 
 }  // namespace features
 }  // namespace network

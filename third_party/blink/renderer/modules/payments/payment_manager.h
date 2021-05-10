@@ -39,10 +39,6 @@ class MODULES_EXPORT PaymentManager final : public ScriptWrappable {
       ScriptState*,
       const Vector<V8PaymentDelegation>& delegations,
       ExceptionState&);
-  // TODO(crbug.com/1050474): Remove Vector<String> version.
-  ScriptPromise enableDelegations(ScriptState*,
-                                  const Vector<String>& stringified_delegations,
-                                  ExceptionState&);  // DEPRECATED
 
  private:
   void OnServiceConnectionError();
@@ -51,9 +47,7 @@ class MODULES_EXPORT PaymentManager final : public ScriptWrappable {
       payments::mojom::blink::PaymentHandlerStatus status);
 
   Member<ServiceWorkerRegistration> registration_;
-  HeapMojoRemote<payments::mojom::blink::PaymentManager,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
-      manager_;
+  HeapMojoRemote<payments::mojom::blink::PaymentManager> manager_;
   Member<PaymentInstruments> instruments_;
   String user_hint_;
   Member<ScriptPromiseResolver> enable_delegations_resolver_;

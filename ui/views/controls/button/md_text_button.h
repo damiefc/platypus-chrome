@@ -20,10 +20,7 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
   METADATA_HEADER(MdTextButton);
 
   explicit MdTextButton(PressedCallback callback = PressedCallback(),
-                        const base::string16& text = base::string16(),
-                        int button_context = style::CONTEXT_BUTTON_MD);
-  explicit MdTextButton(ButtonListener* listener,
-                        const base::string16& text = base::string16(),
+                        const std::u16string& text = std::u16string(),
                         int button_context = style::CONTEXT_BUTTON_MD);
   ~MdTextButton() override;
 
@@ -41,15 +38,13 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
   float GetCornerRadius() const;
 
   // See |custom_padding_|.
-  void SetCustomPadding(const gfx::Insets& padding);
+  void SetCustomPadding(const base::Optional<gfx::Insets>& padding);
+  base::Optional<gfx::Insets> GetCustomPadding() const;
 
   // LabelButton:
   void OnThemeChanged() override;
-  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
-      const override;
-  SkColor GetInkDropBaseColor() const override;
   void SetEnabledTextColors(base::Optional<SkColor> color) override;
-  void SetText(const base::string16& text) override;
+  void SetText(const std::u16string& text) override;
   PropertyEffects UpdateStyleToIndicateDefaultStatus() override;
   void StateChanged(ButtonState old_state) override;
 
@@ -80,6 +75,15 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
   DISALLOW_COPY_AND_ASSIGN(MdTextButton);
 };
 
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, MdTextButton, LabelButton)
+VIEW_BUILDER_PROPERTY(bool, Prominent)
+VIEW_BUILDER_PROPERTY(base::Optional<SkColor>, BgColorOverride)
+VIEW_BUILDER_PROPERTY(float, CornerRadius)
+VIEW_BUILDER_PROPERTY(base::Optional<gfx::Insets>, CustomPadding)
+END_VIEW_BUILDER
+
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, MdTextButton)
 
 #endif  // UI_VIEWS_CONTROLS_BUTTON_MD_TEXT_BUTTON_H_

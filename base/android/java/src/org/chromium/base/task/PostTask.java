@@ -7,7 +7,6 @@ package org.chromium.base.task;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.base.annotations.RemovableInRelease;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -94,7 +93,7 @@ public class PostTask {
             TaskTraits postedTraits = taskTraits.withExplicitDestination();
             PostTaskJni.get().postDelayedTask(postedTraits.mPriority, postedTraits.mMayBlock,
                     postedTraits.mUseThreadPool, postedTraits.mExtensionId,
-                    postedTraits.mExtensionData, task, delay);
+                    postedTraits.mExtensionData, task, delay, task.getClass().getName());
         }
     }
 
@@ -248,14 +247,9 @@ public class PostTask {
         }
     }
 
-    // This is here to make C++ tests work.
+    // TODO(agrieve): Move this to a test-only java file.
     @CalledByNative
     private static void onNativeSchedulerShutdownForTesting() {
-        onNativeSchedulerShutdownForTestingImpl();
-    }
-
-    @RemovableInRelease
-    private static void onNativeSchedulerShutdownForTestingImpl() {
         synchronized (sPreNativeTaskRunnerLock) {
             sPreNativeTaskRunners = new ArrayList<>();
         }
@@ -269,6 +263,7 @@ public class PostTask {
     @NativeMethods
     interface Natives {
         void postDelayedTask(int priority, boolean mayBlock, boolean useThreadPool,
-                byte extensionId, byte[] extensionData, Runnable task, long delay);
+                byte extensionId, byte[] extensionData, Runnable task, long delay,
+                String runnableClassName);
     }
 }

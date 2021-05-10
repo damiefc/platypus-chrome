@@ -197,7 +197,6 @@ bool NeedsBoundaryKeyframe(StringKeyframe* candidate,
 
 StringKeyframeEffectModel* CreateKeyframeEffectModel(
     StyleResolver* resolver,
-    const Element* animating_element,
     Element& element,
     const ComputedStyle* style,
     const ComputedStyle* parent_style,
@@ -432,15 +431,13 @@ AnimationTimeDelta IterationElapsedTime(const AnimationEffect& effect,
   return iteration_duration * (iteration_boundary - iteration_start);
 }
 
-CSSScrollTimeline* CreateCSSScrollTimeline(Element* element,
-                                           StyleRuleScrollTimeline* rule) {
-  if (!rule)
-    return nullptr;
-  CSSScrollTimeline::Options options(element, *rule);
+CSSScrollTimeline* CreateCSSScrollTimeline(
+    Document& document,
+    CSSScrollTimeline::Options&& options) {
   if (!options.IsValid())
     return nullptr;
   auto* scroll_timeline =
-      MakeGarbageCollected<CSSScrollTimeline>(&element->GetDocument(), options);
+      MakeGarbageCollected<CSSScrollTimeline>(&document, std::move(options));
   // It's is not allowed for a style resolve to create timelines that
   // needs timing updates (i.e. AnimationTimeline::NeedsAnimationTimingUpdate()
   // must return false). Servicing animations after creation preserves this
@@ -450,18 +447,49 @@ CSSScrollTimeline* CreateCSSScrollTimeline(Element* element,
   return scroll_timeline;
 }
 
+CSSScrollTimeline* FindMatchingCachedTimeline(
+    Document& document,
+    const AtomicString& name,
+    const CSSScrollTimeline::Options& options) {
+  auto* cached_timeline = DynamicTo<CSSScrollTimeline>(
+      document.GetDocumentAnimations().FindCachedCSSScrollTimeline(name));
+  if (cached_timeline && cached_timeline->Matches(options))
+    return cached_timeline;
+  return nullptr;
+}
+
 AnimationTimeline* ComputeTimeline(Element* element,
                                    const StyleNameOrKeyword& timeline_name,
-                                   StyleRuleScrollTimeline* rule) {
+                                   StyleRuleScrollTimeline* rule,
+                                   AnimationTimeline* existing_timeline) {
+  Document& document = element->GetDocument();
   if (timeline_name.IsKeyword()) {
     if (timeline_name.GetKeyword() == CSSValueID::kAuto)
-      return &element->GetDocument().Timeline();
+      return &document.Timeline();
     DCHECK_EQ(timeline_name.GetKeyword(), CSSValueID::kNone);
     return nullptr;
   }
   if (rule) {
-    if (auto* timeline = CreateCSSScrollTimeline(element, rule))
+    CSSScrollTimeline::Options options(document, *rule);
+
+    const AtomicString& name = timeline_name.GetName().GetValue();
+    // When multiple animations refer to the same @scroll-timeline, the same
+    // CSSScrollTimeline instance should be shared.
+    if (auto* timeline = FindMatchingCachedTimeline(document, name, options))
       return timeline;
+    // When the incoming options match the existing timeline (associated with
+    // an existing animation), we can continue to use the existing timeline,
+    // since creating a new timeline from the options would just yield an
+    // identical timeline.
+    if (auto* timeline = DynamicTo<CSSScrollTimeline>(existing_timeline)) {
+      if (timeline->Matches(options))
+        return existing_timeline;
+    }
+    if (auto* timeline =
+            CreateCSSScrollTimeline(document, std::move(options))) {
+      document.GetDocumentAnimations().CacheCSSScrollTimeline(*timeline);
+      return timeline;
+    }
   }
   return nullptr;
 }
@@ -517,9 +545,12 @@ bool ComputedValuesEqual(const PropertyHandle& property,
         ComputedStyleUtils::ComputedPropertyValue(property.GetCSSProperty(), a);
     const CSSValue* b_val =
         ComputedStyleUtils::ComputedPropertyValue(property.GetCSSProperty(), b);
-    DCHECK(a_val);
-    DCHECK(b_val);
-    return *a_val == *b_val;
+    // Computed values can be null if not able to parse.
+    if (a_val && b_val)
+      return *a_val == *b_val;
+    // Fallback to the zoom-unaware comparator if either value could not be
+    // parsed.
+    return CSSPropertyEquality::PropertiesEqual(property, a, b);
   }
 }
 
@@ -527,13 +558,13 @@ bool ComputedValuesEqual(const PropertyHandle& property,
 
 void CSSAnimations::CalculateCompositorAnimationUpdate(
     CSSAnimationUpdate& update,
-    const Element* animating_element,
+    const Element& animating_element,
     Element& element,
     const ComputedStyle& style,
     const ComputedStyle* parent_style,
     bool was_viewport_resized) {
   ElementAnimations* element_animations =
-      animating_element ? animating_element->GetElementAnimations() : nullptr;
+      animating_element.GetElementAnimations();
 
   // If the change in style is only due to the Blink-side animation update, we
   // do not need to update the compositor-side animations. The compositor is
@@ -542,7 +573,7 @@ void CSSAnimations::CalculateCompositorAnimationUpdate(
   if (!element_animations || element_animations->IsAnimationStyleChange())
     return;
 
-  const ComputedStyle* old_style = animating_element->GetComputedStyle();
+  const ComputedStyle* old_style = animating_element.GetComputedStyle();
   if (!old_style || old_style->IsEnsuredInDisplayNone() ||
       !old_style->ShouldCompositeForCurrentAnimations()) {
     return;
@@ -588,13 +619,13 @@ void CSSAnimations::CalculateCompositorAnimationUpdate(
 }
 
 void CSSAnimations::CalculateAnimationUpdate(CSSAnimationUpdate& update,
-                                             const Element* animating_element,
+                                             const Element& animating_element,
                                              Element& element,
                                              const ComputedStyle& style,
                                              const ComputedStyle* parent_style,
                                              StyleResolver* resolver) {
   ElementAnimations* element_animations =
-      animating_element ? animating_element->GetElementAnimations() : nullptr;
+      animating_element.GetElementAnimations();
 
   bool is_animation_style_change =
       element_animations && element_animations->IsAnimationStyleChange();
@@ -611,8 +642,7 @@ void CSSAnimations::CalculateAnimationUpdate(CSSAnimationUpdate& update,
 
   // Rebuild the keyframe model for a CSS animation if it may have been
   // invalidated by a change to the text direction or writing mode.
-  const ComputedStyle* old_style =
-      animating_element ? animating_element->GetComputedStyle() : nullptr;
+  const ComputedStyle* old_style = animating_element.GetComputedStyle();
   bool logical_property_mapping_change =
       !old_style || old_style->Direction() != style.Direction() ||
       old_style->GetWritingMode() != style.GetWritingMode();
@@ -647,7 +677,7 @@ void CSSAnimations::CalculateAnimationUpdate(CSSAnimationUpdate& update,
       if (name == CSSAnimationData::InitialName())
         continue;
 
-      // Find n where this is the nth occurence of this animation name.
+      // Find n where this is the nth occurrence of this animation name.
       wtf_size_t name_index = 0;
       for (wtf_size_t j = 0; j < i; j++) {
         if (name_list[j] == name)
@@ -693,7 +723,6 @@ void CSSAnimations::CalculateAnimationUpdate(CSSAnimationUpdate& update,
 
       if (existing_animation) {
         cancel_running_animation_flags[existing_animation_index] = false;
-
         CSSAnimation* animation =
             DynamicTo<CSSAnimation>(existing_animation->animation.Get());
         animation->SetAnimationIndex(i);
@@ -713,22 +742,46 @@ void CSSAnimations::CalculateAnimationUpdate(CSSAnimationUpdate& update,
             toggle_pause_state = true;
         }
 
-        // TODO(crbug.com/1097053): Support updating timelines.
+        bool will_be_playing =
+            toggle_pause_state ? animation->Paused() : animation->Playing();
+
+        AnimationTimeline* timeline = existing_animation->Timeline();
+        if (!is_animation_style_change && !animation->GetIgnoreCSSTimeline()) {
+          timeline = ComputeTimeline(&element, timeline_name,
+                                     scroll_timeline_rule, timeline);
+        }
+
         if (keyframes_rule != existing_animation->style_rule ||
             keyframes_rule->Version() !=
                 existing_animation->style_rule_version ||
             existing_animation->specified_timing != specified_timing ||
-            is_paused != was_paused || logical_property_mapping_change) {
+            is_paused != was_paused || logical_property_mapping_change ||
+            timeline != existing_animation->Timeline()) {
           DCHECK(!is_animation_style_change);
+
+          base::Optional<TimelinePhase> inherited_phase;
+          base::Optional<AnimationTimeDelta> inherited_time;
+
+          if (timeline) {
+            inherited_phase = base::make_optional(timeline->Phase());
+            inherited_time = animation->UnlimitedCurrentTime();
+
+            if (will_be_playing &&
+                ((timeline != existing_animation->Timeline()) ||
+                 animation->ResetsCurrentTimeOnResume())) {
+              if (!timeline->IsMonotonicallyIncreasing())
+                inherited_time = timeline->CurrentTime();
+            }
+          }
+
           update.UpdateAnimation(
               existing_animation_index, animation,
               *MakeGarbageCollected<InertEffect>(
-                  CreateKeyframeEffectModel(resolver, animating_element,
-                                            element, &style, parent_style, name,
+                  CreateKeyframeEffectModel(resolver, element, &style,
+                                            parent_style, name,
                                             keyframe_timing_function.get(), i),
-                  timing, is_paused, animation->UnlimitedCurrentTime(),
-                  base::nullopt),
-              specified_timing, keyframes_rule,
+                  timing, is_paused, inherited_time, inherited_phase),
+              specified_timing, keyframes_rule, timeline,
               animation_data->PlayStateList());
           if (toggle_pause_state)
             update.ToggleAnimationIndexPaused(existing_animation_index);
@@ -736,22 +789,21 @@ void CSSAnimations::CalculateAnimationUpdate(CSSAnimationUpdate& update,
       } else {
         DCHECK(!is_animation_style_change);
         AnimationTimeline* timeline =
-            ComputeTimeline(&element, timeline_name, scroll_timeline_rule);
+            ComputeTimeline(&element, timeline_name, scroll_timeline_rule,
+                            nullptr /* existing_timeline */);
         base::Optional<TimelinePhase> inherited_phase;
-        base::Optional<double> inherited_time;
-        if (timeline) {
-          if (timeline->IsMonotonicallyIncreasing()) {
-            inherited_time = 0;
-          } else {
-            inherited_phase = base::make_optional(timeline->Phase());
-            inherited_time = timeline->CurrentTimeSeconds();
-          }
+        base::Optional<AnimationTimeDelta> inherited_time =
+            AnimationTimeDelta();
+
+        if (timeline && !timeline->IsMonotonicallyIncreasing()) {
+          inherited_phase = base::make_optional(timeline->Phase());
+          inherited_time = timeline->CurrentTime();
         }
         update.StartAnimation(
             name, name_index, i,
             *MakeGarbageCollected<InertEffect>(
-                CreateKeyframeEffectModel(resolver, animating_element, element,
-                                          &style, parent_style, name,
+                CreateKeyframeEffectModel(resolver, element, &style,
+                                          parent_style, name,
                                           keyframe_timing_function.get(), i),
                 timing, is_paused, inherited_time, inherited_phase),
             specified_timing, keyframes_rule, timeline,
@@ -868,6 +920,10 @@ void CSSAnimations::MaybeApplyPendingUpdate(Element* element) {
         effect->SetModel(entry.effect->Model());
       effect->UpdateSpecifiedTiming(entry.effect->SpecifiedTiming());
     }
+    if (entry.animation->timeline() != entry.timeline) {
+      entry.animation->setTimeline(entry.timeline);
+      To<CSSAnimation>(*entry.animation).ResetIgnoreCSSTimeline();
+    }
 
     running_animations_[entry.index]->Update(entry);
   }
@@ -927,7 +983,8 @@ void CSSAnimations::MaybeApplyPendingUpdate(Element* element) {
     // After cancellation, transitions must be downgraded or they'll fail
     // to be considered when retriggering themselves. This can happen if
     // the transition is captured through getAnimations then played.
-    if (auto* effect = DynamicTo<KeyframeEffect>(animation->effect()))
+    effect = DynamicTo<KeyframeEffect>(animation->effect());
+    if (effect)
       effect->DowngradeToNormal();
     animation->Update(kTimingUpdateOnDemand);
   }
@@ -980,7 +1037,9 @@ void CSSAnimations::MaybeApplyPendingUpdate(Element* element) {
 
     // Set the current time as the start time for retargeted transitions
     if (retargeted_compositor_transitions.Contains(property)) {
-      animation->setStartTime(element->GetDocument().Timeline().currentTime());
+      CSSNumberish current_time;
+      element->GetDocument().Timeline().currentTime(current_time);
+      animation->setStartTime(current_time);
     }
     animation->Update(kTimingUpdateOnDemand);
     running_transition->animation = animation;
@@ -1001,8 +1060,8 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
   if (property.IsCSSCustomProperty()) {
     if (state.update.ActiveInterpolationsForCustomAnimations().Contains(
             property) ||
-        (state.animating_element->GetElementAnimations() &&
-         state.animating_element->GetElementAnimations()
+        (state.animating_element.GetElementAnimations() &&
+         state.animating_element.GetElementAnimations()
              ->CssAnimations()
              .previous_active_interpolations_for_custom_animations_.Contains(
                  property))) {
@@ -1010,8 +1069,8 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
     }
   } else if (state.update.ActiveInterpolationsForStandardAnimations().Contains(
                  property) ||
-             (state.animating_element->GetElementAnimations() &&
-              state.animating_element->GetElementAnimations()
+             (state.animating_element.GetElementAnimations() &&
+              state.animating_element.GetElementAnimations()
                   ->CssAnimations()
                   .previous_active_interpolations_for_standard_animations_
                   .Contains(property))) {
@@ -1029,7 +1088,7 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
         if (!state.transition_data) {
           if (!running_transition->animation->FinishedInternal()) {
             UseCounter::Count(
-                state.animating_element->GetDocument(),
+                state.animating_element.GetDocument(),
                 WebFeature::kCSSTransitionCancelledByRemovingStyle);
           }
           // TODO(crbug.com/934700): Add a return to this branch to correctly
@@ -1040,8 +1099,8 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
         }
       }
       state.update.CancelTransition(property);
-      DCHECK(!state.animating_element->GetElementAnimations() ||
-             !state.animating_element->GetElementAnimations()
+      DCHECK(!state.animating_element.GetElementAnimations() ||
+             !state.animating_element.GetElementAnimations()
                   ->IsAnimationStyleChange());
 
       if (ComputedValuesEqual(
@@ -1058,7 +1117,7 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
     return;
 
   const PropertyRegistry* registry =
-      state.animating_element->GetDocument().GetPropertyRegistry();
+      state.animating_element.GetDocument().GetPropertyRegistry();
   if (property.IsCSSCustomProperty()) {
     if (!registry || !registry->Registration(property.CustomPropertyName())) {
       return;
@@ -1069,7 +1128,7 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
   // we are transitioning from if the final destination is changing.
   if (!state.before_change_style) {
     ElementAnimations* element_animations =
-        state.animating_element->GetElementAnimations();
+        state.animating_element.GetElementAnimations();
     if (element_animations) {
       const ComputedStyle* base_style = element_animations->BaseComputedStyle();
       if (base_style) {
@@ -1092,8 +1151,7 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
     return;
   }
 
-  CSSInterpolationTypesMap map(registry,
-                               state.animating_element->GetDocument());
+  CSSInterpolationTypesMap map(registry, state.animating_element.GetDocument());
   CSSInterpolationEnvironment old_environment(map, *state.before_change_style);
   CSSInterpolationEnvironment new_environment(map, state.style);
   const InterpolationType* transition_type = nullptr;
@@ -1139,14 +1197,14 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
   }
 
   const ComputedStyle* reversing_adjusted_start_value =
-      state.before_change_style.get();
+      state.before_change_style;
   double reversing_shortening_factor = 1;
   if (interrupted_transition) {
     AnimationEffect* effect = interrupted_transition->animation->effect();
     const base::Optional<double> interrupted_progress =
         effect ? effect->Progress() : base::nullopt;
     if (interrupted_progress) {
-      reversing_adjusted_start_value = interrupted_transition->to.get();
+      reversing_adjusted_start_value = interrupted_transition->to;
       reversing_shortening_factor =
           clampTo((interrupted_progress.value() *
                    interrupted_transition->reversing_shortening_factor) +
@@ -1179,9 +1237,9 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
 
   if (property.GetCSSProperty().IsCompositableProperty()) {
     CompositorKeyframeValue* from = CompositorKeyframeValueFactory::Create(
-        property, *state.before_change_style);
-    CompositorKeyframeValue* to =
-        CompositorKeyframeValueFactory::Create(property, state.style);
+        property, *state.before_change_style, start_keyframe->Offset().value());
+    CompositorKeyframeValue* to = CompositorKeyframeValueFactory::Create(
+        property, state.style, end_keyframe->Offset().value());
     start_keyframe->SetCompositorValue(from);
     end_keyframe->SetCompositorValue(to);
   }
@@ -1193,10 +1251,10 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
   state.update.StartTransition(
       property, state.before_change_style, state.cloned_style,
       reversing_adjusted_start_value, reversing_shortening_factor,
-      *MakeGarbageCollected<InertEffect>(model, timing, false, 0,
-                                         base::nullopt));
-  DCHECK(!state.animating_element->GetElementAnimations() ||
-         !state.animating_element->GetElementAnimations()
+      *MakeGarbageCollected<InertEffect>(model, timing, false,
+                                         AnimationTimeDelta(), base::nullopt));
+  DCHECK(!state.animating_element.GetElementAnimations() ||
+         !state.animating_element.GetElementAnimations()
               ->IsAnimationStyleChange());
 }
 
@@ -1228,7 +1286,7 @@ void CSSAnimations::CalculateTransitionUpdateForStandardProperty(
   }
 
   CSSPropertyID resolved_id =
-      resolveCSSPropertyID(transition_property.unresolved_property);
+      ResolveCSSPropertyID(transition_property.unresolved_property);
   bool animate_all = resolved_id == CSSPropertyID::kAll;
   const StylePropertyShorthand& property_list =
       animate_all ? PropertiesForTransitionAll()
@@ -1239,7 +1297,7 @@ void CSSAnimations::CalculateTransitionUpdateForStandardProperty(
     CSSPropertyID longhand_id =
         property_list.length() ? property_list.properties()[i]->PropertyID()
                                : resolved_id;
-    DCHECK_GE(longhand_id, firstCSSProperty);
+    DCHECK_GE(longhand_id, kFirstCSSProperty);
     const CSSProperty& property =
         CSSProperty::Get(longhand_id)
             .ResolveDirectionAwareProperty(style.Direction(),
@@ -1257,16 +1315,13 @@ void CSSAnimations::CalculateTransitionUpdateForStandardProperty(
 
 void CSSAnimations::CalculateTransitionUpdate(CSSAnimationUpdate& update,
                                               PropertyPass property_pass,
-                                              Element* animating_element,
+                                              Element& animating_element,
                                               const ComputedStyle& style) {
-  if (!animating_element)
-    return;
-
-  if (animating_element->GetDocument().FinishingOrIsPrinting())
+  if (animating_element.GetDocument().FinishingOrIsPrinting())
     return;
 
   ElementAnimations* element_animations =
-      animating_element->GetElementAnimations();
+      animating_element.GetElementAnimations();
   const TransitionMap* active_transitions =
       element_animations ? &element_animations->CssAnimations().transitions_
                          : nullptr;
@@ -1277,7 +1332,7 @@ void CSSAnimations::CalculateTransitionUpdate(CSSAnimationUpdate& update,
 
   HashSet<PropertyHandle> listed_properties;
   bool any_transition_had_transition_all = false;
-  const ComputedStyle* old_style = animating_element->GetComputedStyle();
+  const ComputedStyle* old_style = animating_element.GetComputedStyle();
   if (!animation_style_recalc && style.Display() != EDisplay::kNone &&
       old_style && !old_style->IsEnsuredInDisplayNone()) {
     TransitionUpdateState state = {update,
@@ -1340,12 +1395,12 @@ void CSSAnimations::CalculateTransitionUpdate(CSSAnimationUpdate& update,
                                           animating_element);
 }
 
-scoped_refptr<const ComputedStyle> CSSAnimations::CalculateBeforeChangeStyle(
-    Element* animating_element,
+const ComputedStyle* CSSAnimations::CalculateBeforeChangeStyle(
+    Element& animating_element,
     const ComputedStyle& base_style) {
   ActiveInterpolationsMap interpolations_map;
   ElementAnimations* element_animations =
-      animating_element->GetElementAnimations();
+      animating_element.GetElementAnimations();
   if (element_animations) {
     const TransitionMap& transition_map =
         element_animations->CssAnimations().transitions_;
@@ -1365,19 +1420,27 @@ scoped_refptr<const ComputedStyle> CSSAnimations::CalculateBeforeChangeStyle(
                     a, b, Animation::CompareAnimationsOrdering::kPointerOrder);
               });
 
-    // Sample animations and add to the interpolations map.
+    // Sample animations and add to the interpolatzions map.
     for (Animation* animation : animations) {
-      base::Optional<double> current_time = animation->currentTime();
-      if (!current_time)
+      CSSNumberish current_time_numberish;
+      animation->currentTime(current_time_numberish);
+      if (current_time_numberish.IsNull())
         continue;
+
+      // CSSNumericValue is not yet supported, verify that it is not used
+      DCHECK(!current_time_numberish.IsCSSNumericValue());
+
+      base::Optional<AnimationTimeDelta> current_time =
+          AnimationTimeDelta::FromMillisecondsD(
+              current_time_numberish.GetAsDouble());
 
       auto* effect = DynamicTo<KeyframeEffect>(animation->effect());
       if (!effect)
         continue;
 
       auto* inert_animation_for_sampling = MakeGarbageCollected<InertEffect>(
-          effect->Model(), effect->SpecifiedTiming(), false,
-          current_time.value() / 1000, base::nullopt);
+          effect->Model(), effect->SpecifiedTiming(), false, current_time,
+          base::nullopt);
 
       HeapVector<Member<Interpolation>> sample;
       inert_animation_for_sampling->Sample(sample);
@@ -1395,9 +1458,9 @@ scoped_refptr<const ComputedStyle> CSSAnimations::CalculateBeforeChangeStyle(
     }
   }
 
-  StyleResolver& resolver = animating_element->GetDocument().GetStyleResolver();
+  StyleResolver& resolver = animating_element.GetDocument().GetStyleResolver();
   return resolver.BeforeChangeStyleForTransitionUpdate(
-      *animating_element, base_style, interpolations_map);
+      animating_element, base_style, interpolations_map);
 }
 
 void CSSAnimations::Cancel() {
@@ -1463,9 +1526,9 @@ void AdoptActiveAnimationInterpolations(
 
 void CSSAnimations::CalculateAnimationActiveInterpolations(
     CSSAnimationUpdate& update,
-    const Element* animating_element) {
+    const Element& animating_element) {
   ElementAnimations* element_animations =
-      animating_element ? animating_element->GetElementAnimations() : nullptr;
+      animating_element.GetElementAnimations();
   EffectStack* effect_stack =
       element_animations ? &element_animations->GetEffectStack() : nullptr;
 
@@ -1503,9 +1566,9 @@ EffectStack::PropertyHandleFilter PropertyFilter(
 void CSSAnimations::CalculateTransitionActiveInterpolations(
     CSSAnimationUpdate& update,
     PropertyPass property_pass,
-    const Element* animating_element) {
+    const Element& animating_element) {
   ElementAnimations* element_animations =
-      animating_element ? animating_element->GetElementAnimations() : nullptr;
+      animating_element.GetElementAnimations();
   EffectStack* effect_stack =
       element_animations ? &element_animations->GetEffectStack() : nullptr;
 
@@ -1632,10 +1695,9 @@ void CSSAnimations::AnimationEventDelegate::OnEventCondition(
       previous_phase_ != Timing::kPhaseAfter) {
     // TODO(crbug.com/1059968): Determine if animation direction or playback
     // rate factor into the calculation of the elapsed time.
-    double cancel_time = animation_node.GetCancelTime();
+    AnimationTimeDelta cancel_time = animation_node.GetCancelTime();
     MaybeDispatch(Document::kAnimationCancelListener,
-                  event_type_names::kAnimationcancel,
-                  AnimationTimeDelta::FromSecondsD(cancel_time));
+                  event_type_names::kAnimationcancel, cancel_time);
   }
 
   if (!phase_change && current_phase == Timing::kPhaseActive &&
@@ -1795,6 +1857,7 @@ bool CSSAnimations::IsAnimationAffectingProperty(const CSSProperty& property) {
     case CSSPropertyID::kAnimationPlayState:
     case CSSPropertyID::kAnimationTimeline:
     case CSSPropertyID::kAnimationTimingFunction:
+    case CSSPropertyID::kContentVisibility:
     case CSSPropertyID::kContain:
     case CSSPropertyID::kDirection:
     case CSSPropertyID::kDisplay:
@@ -1864,6 +1927,13 @@ void CSSAnimations::Trace(Visitor* visitor) const {
   visitor->Trace(running_animations_);
   visitor->Trace(previous_active_interpolations_for_standard_animations_);
   visitor->Trace(previous_active_interpolations_for_custom_animations_);
+}
+
+void CSSAnimations::RunningTransition::Trace(Visitor* visitor) const {
+  visitor->Trace(animation);
+  visitor->Trace(from);
+  visitor->Trace(to);
+  visitor->Trace(reversing_adjusted_start_value);
 }
 
 }  // namespace blink

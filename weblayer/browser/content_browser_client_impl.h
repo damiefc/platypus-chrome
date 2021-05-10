@@ -12,18 +12,22 @@
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
+#include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/content_browser_client.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 
 class PrefService;
+
+namespace storage {
+class StorageKey;
+}  // namespace storage
 
 namespace weblayer {
 
 class FeatureListCreator;
 class SafeBrowsingService;
 struct MainParams;
-
-blink::UserAgentMetadata GetUserAgentMetadata();
 
 class ContentBrowserClientImpl : public content::ContentBrowserClient {
  public:
@@ -35,24 +39,60 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
       const content::MainFunctionParams& parameters) override;
   std::string GetApplicationLocale() override;
   std::string GetAcceptLangs(content::BrowserContext* context) override;
+  bool AllowAppCache(const GURL& manifest_url,
+                     const GURL& site_for_cookies,
+                     const base::Optional<url::Origin>& top_frame_origin,
+                     content::BrowserContext* context) override;
+  content::AllowServiceWorkerResult AllowServiceWorker(
+      const GURL& scope,
+      const GURL& site_for_cookies,
+      const base::Optional<url::Origin>& top_frame_origin,
+      const GURL& script_url,
+      content::BrowserContext* context) override;
+  bool AllowSharedWorker(const GURL& worker_url,
+                         const GURL& site_for_cookies,
+                         const base::Optional<url::Origin>& top_frame_origin,
+                         const std::string& name,
+                         const storage::StorageKey& storage_key,
+                         content::BrowserContext* context,
+                         int render_process_id,
+                         int render_frame_id) override;
+  void AllowWorkerFileSystem(
+      const GURL& url,
+      content::BrowserContext* browser_context,
+      const std::vector<content::GlobalFrameRoutingId>& render_frames,
+      base::OnceCallback<void(bool)> callback) override;
+  bool AllowWorkerIndexedDB(
+      const GURL& url,
+      content::BrowserContext* browser_context,
+      const std::vector<content::GlobalFrameRoutingId>& render_frames) override;
+  bool AllowWorkerCacheStorage(
+      const GURL& url,
+      content::BrowserContext* browser_context,
+      const std::vector<content::GlobalFrameRoutingId>& render_frames) override;
+  bool AllowWorkerWebLocks(
+      const GURL& url,
+      content::BrowserContext* browser_context,
+      const std::vector<content::GlobalFrameRoutingId>& render_frames) override;
   content::WebContentsViewDelegate* GetWebContentsViewDelegate(
       content::WebContents* web_contents) override;
   bool CanShutdownGpuProcessNowOnIOThread() override;
-  content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
+  std::unique_ptr<content::DevToolsManagerDelegate>
+  CreateDevToolsManagerDelegate() override;
   void LogWebFeatureForCurrentPage(content::RenderFrameHost* render_frame_host,
                                    blink::mojom::WebFeature feature) override;
   std::string GetProduct() override;
   std::string GetUserAgent() override;
   blink::UserAgentMetadata GetUserAgentMetadata() override;
-  void OverrideWebkitPrefs(content::RenderViewHost* render_view_host,
+  void OverrideWebkitPrefs(content::WebContents* web_contents,
                            blink::web_pref::WebPreferences* prefs) override;
   void ConfigureNetworkContextParams(
       content::BrowserContext* context,
       bool in_memory,
       const base::FilePath& relative_partition_path,
       network::mojom::NetworkContextParams* network_context_params,
-      network::mojom::CertVerifierCreationParams* cert_verifier_creation_params)
-      override;
+      cert_verifier::mojom::CertVerifierCreationParams*
+          cert_verifier_creation_params) override;
   void OnNetworkServiceCreated(
       network::mojom::NetworkService* network_service) override;
   std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
@@ -70,8 +110,11 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
       content::PageVisibilityState* visibility_state) override;
   bool ShouldDisableSiteIsolation() override;
   std::vector<std::string> GetAdditionalSiteIsolationModes() override;
-  void PersistIsolatedOrigin(content::BrowserContext* context,
-                             const url::Origin& origin) override;
+  void PersistIsolatedOrigin(
+      content::BrowserContext* context,
+      const url::Origin& origin,
+      content::ChildProcessSecurityPolicy::IsolatedOriginSource source)
+      override;
   base::OnceClosure SelectClientCertificate(
       content::WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
@@ -93,6 +136,10 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
   content::ControllerPresentationServiceDelegate*
   GetControllerPresentationServiceDelegate(
       content::WebContents* web_contents) override;
+  void OpenURL(
+      content::SiteInstance* site_instance,
+      const content::OpenURLParams& params,
+      base::OnceCallback<void(content::WebContents*)> callback) override;
   std::vector<std::unique_ptr<content::NavigationThrottle>>
   CreateThrottlesForNavigation(content::NavigationHandle* handle) override;
   content::GeneratedCodeCacheSettings GetGeneratedCodeCacheSettings(
@@ -116,15 +163,32 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
   scoped_refptr<content::QuotaPermissionContext> CreateQuotaPermissionContext()
       override;
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS) || defined(OS_ANDROID)
   void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
       int child_process_id,
       content::PosixFileDescriptorInfo* mappings) override;
-#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#endif  // defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS) ||
+        // defined(OS_ANDROID)
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
 #if defined(OS_ANDROID)
+  bool WillCreateURLLoaderFactory(
+      content::BrowserContext* browser_context,
+      content::RenderFrameHost* frame,
+      int render_process_id,
+      URLLoaderFactoryType type,
+      const url::Origin& request_initiator,
+      base::Optional<int64_t> navigation_id,
+      ukm::SourceIdObj ukm_source_id,
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
+      mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
+          header_client,
+      bool* bypass_redirect_checks,
+      bool* disable_secure_dns,
+      network::mojom::URLLoaderFactoryOverridePtr* factory_override) override;
   WideColorGamutHeuristic GetWideColorGamutHeuristic() override;
   std::unique_ptr<content::LoginDelegate> CreateLoginDelegate(
       const net::AuthChallengeInfo& auth_info,
@@ -141,6 +205,9 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
   content::SpeechRecognitionManagerDelegate*
   CreateSpeechRecognitionManagerDelegate() override;
   ukm::UkmService* GetUkmService() override;
+  bool HasErrorPage(int http_status_code) override;
+  bool IsClipboardPasteAllowed(
+      content::RenderFrameHost* render_frame_host) override;
 
   void CreateFeatureListAndFieldTrials();
 

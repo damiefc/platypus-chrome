@@ -9,9 +9,8 @@
 #include <random>
 #include <vector>
 
-#include "base/bind_helpers.h"
 #include "base/callback.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using VideoFrame = media::VideoFrame;
@@ -40,7 +39,7 @@ class VideoPlaybackRoughnessReporterTest : public ::testing::Test {
                                       int frame_size = 100) {
     scoped_refptr<VideoFrame> result = media::VideoFrame::CreateColorFrame(
         gfx::Size(frame_size, frame_size), 0x80, 0x80, 0x80, base::TimeDelta());
-    result->metadata()->wallclock_frame_duration = duration;
+    result->metadata().wallclock_frame_duration = duration;
     return result;
   }
 

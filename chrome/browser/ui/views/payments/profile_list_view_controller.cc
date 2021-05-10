@@ -32,15 +32,6 @@ namespace payments {
 
 namespace {
 
-enum class ProfileListViewControllerTags : int {
-  // The tag for the button that triggers the "add address"
-  // flow. Starts at |PAYMENT_REQUEST_COMMON_TAG_MAX| not to conflict
-  // with tags common to all views.
-  ADD_SHIPPING_ADDRESS_BUTTON = static_cast<int>(
-      PaymentRequestCommonTags::PAYMENT_REQUEST_COMMON_TAG_MAX),
-  ADD_CONTACT_BUTTON,
-};
-
 class ProfileItem : public PaymentRequestItemList::Item {
  public:
   // Constructs an object owned by |parent_list|, representing one element in
@@ -73,7 +64,7 @@ class ProfileItem : public PaymentRequestItemList::Item {
  private:
   // PaymentRequestItemList::Item:
   std::unique_ptr<views::View> CreateContentView(
-      base::string16* accessible_content) override {
+      std::u16string* accessible_content) override {
     DCHECK(profile_);
     DCHECK(accessible_content);
 
@@ -86,7 +77,7 @@ class ProfileItem : public PaymentRequestItemList::Item {
     }
   }
 
-  base::string16 GetNameForDataType() override {
+  std::u16string GetNameForDataType() override {
     return controller_->GetSheetTitle();
   }
 
@@ -94,12 +85,12 @@ class ProfileItem : public PaymentRequestItemList::Item {
     // In order to be selectable, a profile entry needs to be enabled, and the
     // profile valid according to the controller. If either condition is false,
     // PerformSelectionFallback() is called.
-    return clickable() && controller_->IsValidProfile(*profile_);
+    return GetClickable() && controller_->IsValidProfile(*profile_);
   }
 
   void PerformSelectionFallback() override {
     // If enabled, the editor is opened to complete the invalid profile.
-    if (clickable())
+    if (GetClickable())
       controller_->ShowEditor(profile_);
   }
 
@@ -135,7 +126,7 @@ class ShippingProfileViewController : public ProfileListViewController,
   // ProfileListViewController:
   std::unique_ptr<views::View> GetLabel(
       autofill::AutofillProfile* profile,
-      base::string16* accessible_content) override {
+      std::u16string* accessible_content) override {
     return GetShippingAddressLabelWithMissingInfo(
         AddressStyleType::DETAILED, state()->GetApplicationLocale(), *profile,
         *(state()->profile_comparator()), accessible_content,
@@ -155,10 +146,10 @@ class ShippingProfileViewController : public ProfileListViewController,
         BackNavigationType::kPaymentSheet,
         /*on_edited=*/
         base::BindOnce(&PaymentRequestState::SetSelectedShippingProfile,
-                       state()->AsWeakPtr(), profile),
+                       state(), profile),
         /*on_added=*/
         base::BindOnce(&PaymentRequestState::AddAutofillShippingProfile,
-                       state()->AsWeakPtr(), /*selected=*/true),
+                       state(), /*selected=*/true),
         profile);
   }
 
@@ -191,18 +182,13 @@ class ShippingProfileViewController : public ProfileListViewController,
         !spec()->selected_shipping_option_error().empty());
   }
 
-  base::string16 GetSheetTitle() override {
+  std::u16string GetSheetTitle() override {
     return spec() ? GetShippingAddressSectionString(spec()->shipping_type())
-                  : base::string16();
+                  : std::u16string();
   }
 
-  base::string16 GetSecondaryButtonLabel() override {
+  std::u16string GetSecondaryButtonLabel() override {
     return l10n_util::GetStringUTF16(IDS_PAYMENTS_ADD_ADDRESS);
-  }
-
-  int GetSecondaryButtonTag() override {
-    return static_cast<int>(
-        ProfileListViewControllerTags::ADD_SHIPPING_ADDRESS_BUTTON);
   }
 
   int GetSecondaryButtonId() override {
@@ -259,7 +245,7 @@ class ContactProfileViewController : public ProfileListViewController {
   // ProfileListViewController:
   std::unique_ptr<views::View> GetLabel(
       autofill::AutofillProfile* profile,
-      base::string16* accessible_content) override {
+      std::u16string* accessible_content) override {
     DCHECK(profile);
     return GetContactInfoLabel(
         AddressStyleType::DETAILED, state()->GetApplicationLocale(), *profile,
@@ -278,11 +264,11 @@ class ContactProfileViewController : public ProfileListViewController {
     dialog()->ShowContactInfoEditor(
         BackNavigationType::kPaymentSheet,
         /*on_edited=*/
-        base::BindOnce(&PaymentRequestState::SetSelectedContactProfile,
-                       state()->AsWeakPtr(), profile),
+        base::BindOnce(&PaymentRequestState::SetSelectedContactProfile, state(),
+                       profile),
         /*on_added=*/
-        base::BindOnce(&PaymentRequestState::AddAutofillContactProfile,
-                       state()->AsWeakPtr(), /*selected=*/true),
+        base::BindOnce(&PaymentRequestState::AddAutofillContactProfile, state(),
+                       /*selected=*/true),
         profile);
   }
 
@@ -302,17 +288,13 @@ class ContactProfileViewController : public ProfileListViewController {
     return DialogViewID::CONTACT_INFO_SHEET_LIST_VIEW;
   }
 
-  base::string16 GetSheetTitle() override {
+  std::u16string GetSheetTitle() override {
     return l10n_util::GetStringUTF16(
         IDS_PAYMENT_REQUEST_CONTACT_INFO_SECTION_NAME);
   }
 
-  base::string16 GetSecondaryButtonLabel() override {
+  std::u16string GetSecondaryButtonLabel() override {
     return l10n_util::GetStringUTF16(IDS_PAYMENTS_ADD_CONTACT);
-  }
-
-  int GetSecondaryButtonTag() override {
-    return static_cast<int>(ProfileListViewControllerTags::ADD_CONTACT_BUTTON);
   }
 
   int GetSecondaryButtonId() override {
@@ -374,6 +356,16 @@ void ProfileListViewController::PopulateList() {
   }
 }
 
+bool ProfileListViewController::ShouldShowPrimaryButton() {
+  return false;
+}
+
+PaymentRequestSheetController::ButtonCallback
+ProfileListViewController::GetSecondaryButtonCallback() {
+  return base::BindRepeating(&ProfileListViewController::ShowEditor,
+                             base::Unretained(this), nullptr);
+}
+
 void ProfileListViewController::FillContentView(views::View* content_view) {
   auto layout = std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical);
@@ -387,14 +379,6 @@ void ProfileListViewController::FillContentView(views::View* content_view) {
   std::unique_ptr<views::View> list_view = list_.CreateListView();
   list_view->SetID(static_cast<int>(GetDialogViewId()));
   content_view->AddChildView(list_view.release());
-}
-
-void ProfileListViewController::ButtonPressed(views::Button* sender,
-                                              const ui::Event& event) {
-  if (sender->tag() == GetSecondaryButtonTag())
-    ShowEditor(nullptr);
-  else
-    PaymentRequestSheetController::ButtonPressed(sender, event);
 }
 
 }  // namespace payments

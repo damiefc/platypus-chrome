@@ -35,12 +35,11 @@ std::set<std::string> HostsFromOrigins(std::set<HostPortPair> origins) {
 std::unique_ptr<quic::ProofVerifier> CreateProofVerifier(
     const NetworkIsolationKey& isolation_key,
     URLRequestContext* context,
-    const QuicTransportClient::Parameters& parameters) {
+    const WebTransportParameters& parameters) {
   if (parameters.server_certificate_fingerprints.empty()) {
     return std::make_unique<ProofVerifierChromium>(
         context->cert_verifier(), context->ct_policy_enforcer(),
-        context->transport_security_state(),
-        context->cert_transparency_verifier(), context->sct_auditing_delegate(),
+        context->transport_security_state(), context->sct_auditing_delegate(),
         HostsFromOrigins(
             context->quic_context()->params()->origins_to_force_quic_on),
         isolation_key);
@@ -60,18 +59,13 @@ std::unique_ptr<quic::ProofVerifier> CreateProofVerifier(
 }
 }  // namespace
 
-QuicTransportClient::Parameters::Parameters() = default;
-QuicTransportClient::Parameters::~Parameters() = default;
-QuicTransportClient::Parameters::Parameters(const Parameters&) = default;
-QuicTransportClient::Parameters::Parameters(Parameters&&) = default;
-
 QuicTransportClient::QuicTransportClient(
     const GURL& url,
     const url::Origin& origin,
-    Visitor* visitor,
+    WebTransportClientVisitor* visitor,
     const NetworkIsolationKey& isolation_key,
     URLRequestContext* context,
-    const Parameters& parameters)
+    const WebTransportParameters& parameters)
     : url_(url),
       origin_(origin),
       isolation_key_(isolation_key),
@@ -95,8 +89,6 @@ QuicTransportClient::QuicTransportClient(
 
 QuicTransportClient::~QuicTransportClient() = default;
 
-QuicTransportClient::Visitor::~Visitor() = default;
-
 void QuicTransportClient::Connect() {
   if (state_ != NEW || next_connect_state_ != CONNECT_STATE_NONE) {
     NOTREACHED();
@@ -108,7 +100,15 @@ void QuicTransportClient::Connect() {
   DoLoop(OK);
 }
 
-quic::QuicTransportClientSession* QuicTransportClient::session() {
+const QuicTransportError& QuicTransportClient::error() const {
+  return error_;
+}
+
+quic::WebTransportSession* QuicTransportClient::session() {
+  return quic_session();
+}
+
+quic::QuicTransportClientSession* QuicTransportClient::quic_session() {
   if (session_ == nullptr || !session_->IsSessionReady())
     return nullptr;
   return session_.get();
@@ -275,8 +275,9 @@ void QuicTransportClient::CreateConnection() {
       quic::QuicUtils::CreateRandomConnectionId(
           quic_context_->random_generator());
   connection_ = std::make_unique<quic::QuicConnection>(
-      connection_id, ToQuicSocketAddress(server_address),
-      quic_context_->helper(), alarm_factory_.get(),
+      connection_id, quic::QuicSocketAddress(),
+      ToQuicSocketAddress(server_address), quic_context_->helper(),
+      alarm_factory_.get(),
       new QuicChromiumPacketWriter(socket_.get(), task_runner_),
       /* owns_writer */ true, quic::Perspective::IS_CLIENT,
       supported_versions_);
@@ -284,7 +285,8 @@ void QuicTransportClient::CreateConnection() {
 
   session_ = std::make_unique<quic::QuicTransportClientSession>(
       connection_.get(), this, InitializeQuicConfig(*quic_context_->params()),
-      supported_versions_, url_, &crypto_config_, origin_, this);
+      supported_versions_, url_, &crypto_config_, origin_, this,
+      std::make_unique<DatagramObserverProxy>(this));
 
   packet_reader_ = std::make_unique<QuicChromiumPacketReader>(
       socket_.get(), quic_context_->clock(), this, kQuicYieldAfterPacketsRead,
@@ -310,8 +312,8 @@ int QuicTransportClient::DoConfirmConnection() {
   return OK;
 }
 
-void QuicTransportClient::TransitionToState(State next_state) {
-  const State last_state = state_;
+void QuicTransportClient::TransitionToState(WebTransportState next_state) {
+  const WebTransportState last_state = state_;
   state_ = next_state;
   switch (next_state) {
     case CONNECTING:
@@ -381,8 +383,7 @@ void QuicTransportClient::OnIncomingUnidirectionalStreamAvailable() {
   visitor_->OnIncomingUnidirectionalStreamAvailable();
 }
 
-void QuicTransportClient::OnDatagramReceived(
-    quiche::QuicheStringPiece datagram) {
+void QuicTransportClient::OnDatagramReceived(absl::string_view datagram) {
   visitor_->OnDatagramReceived(base::StringViewToStringPiece(datagram));
 }
 
@@ -394,12 +395,13 @@ void QuicTransportClient::OnCanCreateNewOutgoingUnidirectionalStream() {
   visitor_->OnCanCreateNewOutgoingUnidirectionalStream();
 }
 
-void QuicTransportClient::OnReadError(int result,
+bool QuicTransportClient::OnReadError(int result,
                                       const DatagramClientSocket* socket) {
   error_.net_error = result;
   connection_->CloseConnection(quic::QUIC_PACKET_READ_ERROR,
                                ErrorToString(result),
                                quic::ConnectionCloseBehavior::SILENT_CLOSE);
+  return false;
 }
 
 bool QuicTransportClient::OnPacket(
@@ -478,6 +480,13 @@ void QuicTransportClient::OnConnectionClosed(
   }
 
   TransitionToState(FAILED);
+}
+
+void QuicTransportClient::DatagramObserverProxy::OnDatagramProcessed(
+    absl::optional<quic::MessageStatus> status) {
+  client_->visitor_->OnDatagramProcessed(
+      status.has_value() ? base::Optional<quic::MessageStatus>(*status)
+                         : base::Optional<quic::MessageStatus>());
 }
 
 }  // namespace net

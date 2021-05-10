@@ -7,7 +7,7 @@
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "components/crx_file/id_util.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/extension_builder.h"
@@ -674,7 +674,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest,
     connectable_extension =
         ExtensionBuilder()
             .SetManifest(manifest.Build())
-            .SetLocation(Manifest::INTERNAL)
+            .SetLocation(mojom::ManifestLocation::kInternal)
             .SetID(crx_file::id_util::GenerateId("connectable"))
             .Build();
   }
@@ -863,8 +863,8 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestUpdatingPermissions) {
   {
     // Add back the `idle` permission, and also add `power`.
     APIPermissionSet apis;
-    apis.insert(APIPermission::kPower);
-    apis.insert(APIPermission::kIdle);
+    apis.insert(mojom::APIPermissionID::kPower);
+    apis.insert(mojom::APIPermissionID::kIdle);
     extension->permissions_data()->SetPermissions(
         std::make_unique<PermissionSet>(std::move(apis),
                                         ManifestPermissionSet(),

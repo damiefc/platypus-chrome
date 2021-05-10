@@ -6,10 +6,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -20,7 +21,9 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "net/base/net_errors.h"
+#include "net/base/net_info_source_list.h"
 #include "net/base/network_isolation_key.h"
 #include "net/base/proxy_delegate.h"
 #include "net/base/url_util.h"
@@ -46,7 +49,9 @@
 #elif defined(OS_MAC)
 #include "net/proxy_resolution/proxy_config_service_mac.h"
 #include "net/proxy_resolution/proxy_resolver_mac.h"
-#elif defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#elif defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "net/proxy_resolution/proxy_config_service_linux.h"
 #elif defined(OS_ANDROID)
 #include "net/proxy_resolution/proxy_config_service_android.h"
@@ -59,8 +64,10 @@ namespace net {
 
 namespace {
 
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
 #if defined(OS_WIN) || defined(OS_APPLE) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+    (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 constexpr net::NetworkTrafficAnnotationTag kSystemProxyConfigTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("proxy_config_system", R"(
       semantics {
@@ -285,7 +292,7 @@ class ProxyResolverFactoryForNullResolver : public ProxyResolverFactory {
                           std::unique_ptr<ProxyResolver>* resolver,
                           CompletionOnceCallback callback,
                           std::unique_ptr<Request>* request) override {
-    resolver->reset(new ProxyResolverNull());
+    *resolver = std::make_unique<ProxyResolverNull>();
     return OK;
   }
 
@@ -303,7 +310,7 @@ class ProxyResolverFactoryForPacResult : public ProxyResolverFactory {
                           std::unique_ptr<ProxyResolver>* resolver,
                           CompletionOnceCallback callback,
                           std::unique_ptr<Request>* request) override {
-    resolver->reset(new ProxyResolverFromPacString(pac_string_));
+    *resolver = std::make_unique<ProxyResolverFromPacString>(pac_string_);
     return OK;
   }
 
@@ -343,7 +350,7 @@ base::Value NetLogFinishedResolvingProxyParams(const ProxyInfo* result) {
   return dict;
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 class UnsetProxyConfigService : public ProxyConfigService {
  public:
   UnsetProxyConfigService() = default;
@@ -432,8 +439,8 @@ class ConfiguredProxyResolutionService::InitProxyResolver {
     proxy_resolver_ = proxy_resolver;
     proxy_resolver_factory_ = proxy_resolver_factory;
 
-    decider_.reset(
-        new PacFileDecider(pac_file_fetcher, dhcp_pac_file_fetcher, net_log));
+    decider_ = std::make_unique<PacFileDecider>(pac_file_fetcher,
+                                                dhcp_pac_file_fetcher, net_log);
     decider_->set_quick_check_enabled(quick_check_enabled_);
     config_ = config;
     wait_delay_ = wait_delay;
@@ -710,8 +717,8 @@ class ConfiguredProxyResolutionService::PacFileDeciderPoller {
 
     // Start the PAC file decider to see if anything has changed.
     // TODO(eroman): Pass a proper NetLog rather than nullptr.
-    decider_.reset(
-        new PacFileDecider(pac_file_fetcher_, dhcp_pac_file_fetcher_, nullptr));
+    decider_ = std::make_unique<PacFileDecider>(
+        pac_file_fetcher_, dhcp_pac_file_fetcher_, nullptr);
     decider_->set_quick_check_enabled(quick_check_enabled_);
     int result = decider_->Start(
         config_, TimeDelta(), proxy_resolver_expects_pac_bytes_,
@@ -1117,13 +1124,13 @@ void ConfiguredProxyResolutionService::OnInitProxyResolverComplete(int result) {
   // this decision. If the contents of the PAC script change, or if the
   // result of proxy auto-discovery changes, this poller will notice it and
   // will trigger a re-initialization using the newly discovered PAC.
-  script_poller_.reset(new PacFileDeciderPoller(
+  script_poller_ = std::make_unique<PacFileDeciderPoller>(
       base::BindRepeating(
           &ConfiguredProxyResolutionService::InitializeUsingDecidedConfig,
           base::Unretained(this)),
       fetched_config_.value(), resolver_factory_->expects_pac_bytes(),
       pac_file_fetcher_.get(), dhcp_pac_file_fetcher_.get(), result,
-      init_proxy_resolver_->script_data(), nullptr));
+      init_proxy_resolver_->script_data(), nullptr);
   script_poller_->set_quick_check_enabled(quick_check_enabled_);
 
   init_proxy_resolver_.reset();
@@ -1179,8 +1186,9 @@ void ConfiguredProxyResolutionService::ReportSuccess(const ProxyInfo& result) {
         const ProxyRetryInfo& proxy_retry_info = iter.second;
         proxy_delegate_->OnFallback(bad_proxy, proxy_retry_info.net_error);
       }
-    } else if (existing->second.bad_until < iter.second.bad_until)
+    } else if (existing->second.bad_until < iter.second.bad_until) {
       existing->second.bad_until = iter.second.bad_until;
+    }
   }
   if (net_log_) {
     net_log_->AddGlobalEntry(NetLogEventType::BAD_PROXY_LIST_REPORTED, [&] {
@@ -1347,22 +1355,22 @@ void ConfiguredProxyResolutionService::ForceReloadProxyConfig() {
   ApplyProxyConfigIfAvailable();
 }
 
-base::Value ConfiguredProxyResolutionService::GetProxyNetLogValues(
-    int info_sources) {
+base::Value ConfiguredProxyResolutionService::GetProxyNetLogValues() {
   base::Value net_info_dict(base::Value::Type::DICTIONARY);
 
-  if (info_sources & NET_INFO_PROXY_SETTINGS) {
+  // Log Proxy Settings.
+  {
     base::Value dict(base::Value::Type::DICTIONARY);
     if (fetched_config_)
       dict.SetKey("original", fetched_config_->value().ToValue());
     if (config_)
       dict.SetKey("effective", config_->value().ToValue());
 
-    net_info_dict.SetKey(NetInfoSourceToString(NET_INFO_PROXY_SETTINGS),
-                         std::move(dict));
+    net_info_dict.SetKey(kNetInfoProxySettings, std::move(dict));
   }
 
-  if (info_sources & NET_INFO_BAD_PROXIES) {
+  // Log Bad Proxies.
+  {
     base::Value list(base::Value::Type::LIST);
 
     for (const auto& it : proxy_retry_info_) {
@@ -1377,8 +1385,7 @@ base::Value ConfiguredProxyResolutionService::GetProxyNetLogValues(
       list.Append(std::move(dict));
     }
 
-    net_info_dict.SetKey(NetInfoSourceToString(NET_INFO_BAD_PROXIES),
-                         std::move(list));
+    net_info_dict.SetKey(kNetInfoBadProxies, std::move(list));
   }
 
   return net_info_dict;
@@ -1403,12 +1410,12 @@ ConfiguredProxyResolutionService::CreateSystemProxyConfigService(
 #elif defined(OS_MAC)
   return std::make_unique<ProxyConfigServiceMac>(
       main_task_runner, kSystemProxyConfigTrafficAnnotation);
-#elif defined(OS_CHROMEOS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
   LOG(ERROR) << "ProxyConfigService for ChromeOS should be created in "
              << "profile_io_data.cc::CreateProxyConfigService and this should "
              << "be used only for examples.";
   return std::make_unique<UnsetProxyConfigService>();
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   std::unique_ptr<ProxyConfigServiceLinux> linux_config_service(
       new ProxyConfigServiceLinux());
 
@@ -1515,7 +1522,7 @@ void ConfiguredProxyResolutionService::InitializeUsingLastFetchedConfig() {
   // If we changed networks recently, we should delay running proxy auto-config.
   TimeDelta wait_delay = stall_proxy_autoconfig_until_ - TimeTicks::Now();
 
-  init_proxy_resolver_.reset(new InitProxyResolver());
+  init_proxy_resolver_ = std::make_unique<InitProxyResolver>();
   init_proxy_resolver_->set_quick_check_enabled(quick_check_enabled_);
   int rv = init_proxy_resolver_->Start(
       &resolver_, resolver_factory_.get(), pac_file_fetcher_.get(),
@@ -1540,7 +1547,7 @@ void ConfiguredProxyResolutionService::InitializeUsingDecidedConfig(
 
   current_state_ = STATE_WAITING_FOR_INIT_PROXY_RESOLVER;
 
-  init_proxy_resolver_.reset(new InitProxyResolver());
+  init_proxy_resolver_ = std::make_unique<InitProxyResolver>();
   int rv = init_proxy_resolver_->StartSkipDecider(
       &resolver_, resolver_factory_.get(), effective_config, decider_result,
       script_data,
@@ -1557,13 +1564,27 @@ void ConfiguredProxyResolutionService::OnIPAddressChanged() {
   stall_proxy_autoconfig_until_ =
       TimeTicks::Now() + stall_proxy_auto_config_delay_;
 
+  // With a new network connection, using the proper proxy configuration for the
+  // new connection may be essential for URL requests to work properly. Reset
+  // the config to ensure new URL requests are blocked until the potential new
+  // proxy configuration is loaded.
   State previous_state = ResetProxyConfig(false);
   if (previous_state != STATE_NONE)
     ApplyProxyConfigIfAvailable();
 }
 
 void ConfiguredProxyResolutionService::OnDNSChanged() {
-  OnIPAddressChanged();
+  // Do not fully reset proxy config on DNS change notifications. Instead,
+  // inform the poller that it would be a good time to check for changes.
+  //
+  // While a change to DNS servers in use could lead to different WPAD results,
+  // and thus a different proxy configuration, it is extremely unlikely to ever
+  // be essential for that changed proxy configuration to be picked up
+  // immediately. Either URL requests on the connection are generally working
+  // fine without the proxy, or requests are already broken, leaving little harm
+  // in letting a couple more requests fail until Chrome picks up the new proxy.
+  if (script_poller_.get())
+    script_poller_->OnLazyPoll();
 }
 
 }  // namespace net

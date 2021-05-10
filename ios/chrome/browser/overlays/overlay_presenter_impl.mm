@@ -311,11 +311,8 @@ void OverlayPresenterImpl::OverlayWasDismissed(
   // The OverlayPresenter remains as the delegate for
   // |detached_presenting_request_queue_| to ensure that |presented_request_| is
   // not deleted before the dismissal of its UI is finished.  Since the UI is
-  // now being dismissed, the delegate can be reset.
-  if (detached_presenting_request_queue_) {
-    detached_presenting_request_queue_->SetDelegate(nullptr);
-    detached_presenting_request_queue_ = nullptr;
-  }
+  // now being dismissed, this reference is not needed anymore.
+  detached_presenting_request_queue_ = nullptr;
 
   // Notify the observers that the overlay UI was hidden.
   for (auto& observer : observers_) {
@@ -506,6 +503,14 @@ void OverlayPresenterImpl::
   DCHECK_EQ(presentation_context_, presentation_context);
   if (!presenting_)
     PresentOverlayForActiveRequest();
+}
+
+void OverlayPresenterImpl::OverlayPresentationContextDidEnableUI(
+    OverlayPresentationContext* presentation_context) {
+  DCHECK_EQ(presentation_context_, presentation_context);
+  if (!presenting_) {
+    PresentOverlayForActiveRequest();
+  }
 }
 
 void OverlayPresenterImpl::OverlayPresentationContextDidMoveToWindow(

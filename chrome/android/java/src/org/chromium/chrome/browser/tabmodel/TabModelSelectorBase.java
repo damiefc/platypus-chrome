@@ -88,6 +88,9 @@ public abstract class TabModelSelectorBase implements TabModelSelector, Incognit
 
         mIncognitoTabModel.addIncognitoObserver(this);
 
+        incognitoModel.setActive(mStartIncognito);
+        normalModel.setActive(!mStartIncognito);
+
         notifyChanged();
     }
 
@@ -107,6 +110,8 @@ public abstract class TabModelSelectorBase implements TabModelSelector, Incognit
 
         TabModel newModel = mTabModels.get(newIndex);
         TabModel previousModel = mTabModels.get(mActiveModelIndex);
+        previousModel.setActive(false);
+        newModel.setActive(true);
         mActiveModelIndex = newIndex;
         for (TabModelSelectorObserver listener : mObservers) {
             listener.onTabModelSelected(newModel, previousModel);
@@ -260,9 +265,6 @@ public abstract class TabModelSelectorBase implements TabModelSelector, Incognit
     }
 
     @Override
-    public void mergeState() {}
-
-    @Override
     public void destroy() {
         removeObserver(mTabModelFilterProvider);
         mTabModelFilterProvider.destroy();
@@ -295,6 +297,16 @@ public abstract class TabModelSelectorBase implements TabModelSelector, Incognit
         }
     }
 
+    /**
+     * Notifies all the listeners that a tab has been hidden to switch to another.
+     * @param tab The tab that has been hidden.
+     */
+    protected void notifyTabHidden(Tab tab) {
+        for (TabModelSelectorObserver listener : mObservers) {
+            listener.onTabHidden(tab);
+        }
+    }
+
     protected TabCreatorManager getTabCreatorManager() {
         return mTabCreatorManager;
     }
@@ -312,6 +324,11 @@ public abstract class TabModelSelectorBase implements TabModelSelector, Incognit
     @Override
     public void addIncognitoTabModelObserver(IncognitoTabModelObserver incognitoObserver) {
         mIncognitoObservers.addObserver(incognitoObserver);
+    }
+
+    @Override
+    public void removeIncognitoTabModelObserver(IncognitoTabModelObserver incognitoObserver) {
+        mIncognitoObservers.removeObserver(incognitoObserver);
     }
 
     @Override

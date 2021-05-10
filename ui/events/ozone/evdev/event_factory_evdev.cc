@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -23,6 +24,7 @@
 #include "ui/events/ozone/evdev/input_device_factory_evdev_proxy.h"
 #include "ui/events/ozone/evdev/input_injector_evdev.h"
 #include "ui/events/ozone/evdev/touch_evdev_types.h"
+#include "ui/events/ozone/features.h"
 #include "ui/events/ozone/gamepad/gamepad_provider_ozone.h"
 
 namespace ui {
@@ -193,13 +195,14 @@ EventFactoryEvdev::EventFactoryEvdev(CursorDelegateEvdev* cursor,
                 base::BindRepeating(&EventFactoryEvdev::DispatchUiEvent,
                                     base::Unretained(this))),
       cursor_(cursor),
-      input_controller_(&keyboard_, &button_map_),
+      input_controller_(&keyboard_,
+                        &mouse_button_map_,
+                        &pointing_stick_button_map_),
       touch_id_generator_(0) {
   DCHECK(device_manager_);
 }
 
-EventFactoryEvdev::~EventFactoryEvdev() {
-}
+EventFactoryEvdev::~EventFactoryEvdev() = default;
 
 void EventFactoryEvdev::Init() {
   DCHECK(!initialized_);
@@ -244,7 +247,8 @@ void EventFactoryEvdev::DispatchMouseMoveEvent(
   event.set_location_f(location);
   event.set_root_location_f(location);
   event.set_source_device_id(params.device_id);
-  if (params.ordinal_delta.has_value()) {
+  if (params.ordinal_delta.has_value() &&
+      base::FeatureList::IsEnabled(kEnableOrdinalMotion)) {
     ui::MouseEvent::DispatcherApi(&event).set_movement(
         params.ordinal_delta.value());
   }
@@ -261,8 +265,11 @@ void EventFactoryEvdev::DispatchMouseButtonEvent(
 
   // Mouse buttons can be remapped, touchpad taps & clicks cannot.
   unsigned int button = params.button;
-  if (params.allow_remap)
-    button = button_map_.GetMappedButton(button);
+  if (params.map_type == MouseButtonMapType::kMouse) {
+    button = mouse_button_map_.GetMappedButton(button);
+  } else if (params.map_type == MouseButtonMapType::kPointingStick) {
+    button = pointing_stick_button_map_.GetMappedButton(button);
+  }
 
   int modifier = MODIFIER_NONE;
   switch (button) {

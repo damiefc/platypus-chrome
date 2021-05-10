@@ -14,6 +14,7 @@
 #include "base/callback_forward.h"
 #include "base/optional.h"
 #include "device/fido/cable/v2_constants.h"
+#include "device/fido/fido_constants.h"
 
 namespace instance_id {
 class InstanceIDDriver;
@@ -26,6 +27,19 @@ namespace authenticator {
 // Registration represents a subscription to events from the tunnel service.
 class Registration {
  public:
+  // Type enumerates the types of registrations that are maintained.
+  enum class Type {
+    // LINKING is for link information shared with desktops after scanning a QR
+    // code. If the user chooses to unlink devices then this registration can be
+    // rotated by calling |RotateContactID|. That will cause the server to
+    // inform clients that the registration is no longer valid and that they
+    // should forget about it.
+    LINKING,
+    // SYNC is for information shared via the Sync service. This is separate so
+    // that unlinking devices doesn't break sync peers.
+    SYNC,
+  };
+
   // An Event contains the information sent by the tunnel service when a peer is
   // trying to connect.
   struct Event {
@@ -34,13 +48,24 @@ class Registration {
     Event(const Event&) = delete;
     Event& operator=(const Event&) = delete;
 
+    Type source;
+    FidoRequestType request_type;
     std::array<uint8_t, kTunnelIdSize> tunnel_id;
     std::array<uint8_t, kRoutingIdSize> routing_id;
-    std::vector<uint8_t> pairing_id;
+    std::array<uint8_t, kPairingIDSize> pairing_id;
     std::array<uint8_t, kClientNonceSize> client_nonce;
   };
 
   virtual ~Registration();
+
+  // PrepareContactID indicates that |contact_id| will soon be called. In order
+  // to save resources for the case when |contact_id| is never used,
+  // registration will be deferred until this is called.
+  virtual void PrepareContactID() = 0;
+
+  // RotateContactID invalidates the current contact ID and prepares a fresh
+  // one.
+  virtual void RotateContactID() = 0;
 
   // contact_id returns an opaque token that may be placed in pairing data for
   // desktops to later connect to. |nullopt| will be returned if the value is
@@ -54,6 +79,8 @@ class Registration {
 // requests a tunnel.
 std::unique_ptr<Registration> Register(
     instance_id::InstanceIDDriver* instance_id_driver,
+    Registration::Type type,
+    base::OnceCallback<void()> on_ready,
     base::RepeatingCallback<void(std::unique_ptr<Registration::Event>)>
         event_callback);
 

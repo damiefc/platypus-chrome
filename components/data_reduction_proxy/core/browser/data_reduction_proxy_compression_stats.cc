@@ -130,7 +130,7 @@ void MoveAndClearDictionaryPrefs(PrefService* pref_service,
   base::DictionaryValue* pref_dict_src = pref_update_src.Get();
   pref_dict_dst->Clear();
   pref_dict_dst->Swap(pref_dict_src);
-  DCHECK(pref_dict_src->empty());
+  DCHECK(pref_dict_src->DictEmpty());
 }
 
 void MaybeInitWeeklyAggregateDataUsePrefs(const base::Time& now,
@@ -374,7 +374,7 @@ void DataReductionProxyCompressionStats::RecordDataUseWithMimeType(
     int32_t service_hash_code) {
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("loading",
-               "DataReductionProxyCompressionStats::RecordDataUseWithMimeType")
+               "DataReductionProxyCompressionStats::RecordDataUseWithMimeType");
 
   IncreaseInt64Pref(data_reduction_proxy::prefs::kHttpReceivedContentLength,
                     data_used);

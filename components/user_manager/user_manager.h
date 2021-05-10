@@ -9,7 +9,6 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager_export.h"
 #include "components/user_manager/user_type.h"
@@ -82,17 +81,17 @@ class USER_MANAGER_EXPORT UserManager {
   // Data retrieved from user account.
   class UserAccountData {
    public:
-    UserAccountData(const base::string16& display_name,
-                    const base::string16& given_name,
+    UserAccountData(const std::u16string& display_name,
+                    const std::u16string& given_name,
                     const std::string& locale);
     ~UserAccountData();
-    const base::string16& display_name() const { return display_name_; }
-    const base::string16& given_name() const { return given_name_; }
+    const std::u16string& display_name() const { return display_name_; }
+    const std::u16string& given_name() const { return given_name_; }
     const std::string& locale() const { return locale_; }
 
    private:
-    const base::string16 display_name_;
-    const base::string16 given_name_;
+    const std::u16string display_name_;
+    const std::u16string given_name_;
     const std::string locale_;
 
     DISALLOW_COPY_AND_ASSIGN(UserAccountData);
@@ -224,7 +223,7 @@ class USER_MANAGER_EXPORT UserManager {
   // Saves user's displayed name in local state preferences.
   // Ignored If there is no such user.
   virtual void SaveUserDisplayName(const AccountId& account_id,
-                                   const base::string16& display_name) = 0;
+                                   const std::u16string& display_name) = 0;
 
   // Updates data upon User Account download.
   virtual void UpdateUserAccountData(const AccountId& account_id,
@@ -233,7 +232,7 @@ class USER_MANAGER_EXPORT UserManager {
   // Returns the display name for user |account_id| if it is known (was
   // previously set by a |SaveUserDisplayName| call).
   // Otherwise, returns an empty string.
-  virtual base::string16 GetUserDisplayName(
+  virtual std::u16string GetUserDisplayName(
       const AccountId& account_id) const = 0;
 
   // Saves user's displayed (non-canonical) email in local state preferences.
@@ -278,9 +277,6 @@ class USER_MANAGER_EXPORT UserManager {
   // Returns true if we're logged in as a Guest.
   virtual bool IsLoggedInAsGuest() const = 0;
 
-  // Returns true if we're logged in as a legacy supervised user.
-  virtual bool IsLoggedInAsSupervisedUser() const = 0;
-
   // Returns true if we're logged in as a kiosk app.
   virtual bool IsLoggedInAsKioskApp() const = 0;
 
@@ -320,9 +316,6 @@ class USER_MANAGER_EXPORT UserManager {
       const gfx::ImageSkia& profile_image) = 0;
   virtual void NotifyUsersSignInConstraintsChanged() = 0;
 
-  // Returns true if supervised users allowed.
-  virtual bool AreSupervisedUsersAllowed() const = 0;
-
   // Returns true if guest user is allowed.
   virtual bool IsGuestSessionAllowed() const = 0;
 
@@ -333,7 +326,7 @@ class USER_MANAGER_EXPORT UserManager {
 
   // Returns true if |user| is allowed depending on device policies.
   // Accepted user types: USER_TYPE_REGULAR, USER_TYPE_GUEST,
-  // USER_TYPE_SUPERVISED, USER_TYPE_CHILD.
+  // USER_TYPE_SUPERVISED_DEPRECATED, USER_TYPE_CHILD.
   virtual bool IsUserAllowed(const User& user) const = 0;
 
   // Returns "Local State" PrefService instance.
@@ -361,8 +354,10 @@ class USER_MANAGER_EXPORT UserManager {
   // Returns true if |account_id| is Stub user.
   virtual bool IsStubAccountId(const AccountId& account_id) const = 0;
 
-  // Returns true if |account_id| is supervised.
-  virtual bool IsSupervisedAccountId(const AccountId& account_id) const = 0;
+  // Returns true if |account_id| is deprecated supervised.
+  // TODO(crbug/1155729): Check it is not used anymore and remove it.
+  virtual bool IsDeprecatedSupervisedAccountId(
+      const AccountId& account_id) const = 0;
 
   virtual bool IsDeviceLocalAccountMarkedForRemoval(
       const AccountId& account_id) const = 0;
@@ -375,7 +370,7 @@ class USER_MANAGER_EXPORT UserManager {
   virtual const gfx::ImageSkia& GetResourceImagekiaNamed(int id) const = 0;
 
   // Returns string from resources bundle.
-  virtual base::string16 GetResourceStringUTF16(int string_id) const = 0;
+  virtual std::u16string GetResourceStringUTF16(int string_id) const = 0;
 
   // Schedules CheckAndResolveLocale using given task runner and
   // |on_resolved_callback| as reply callback.

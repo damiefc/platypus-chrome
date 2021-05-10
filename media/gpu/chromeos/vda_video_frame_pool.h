@@ -5,8 +5,6 @@
 #ifndef MEDIA_GPU_CHROMEOS_VDA_VIDEO_FRAME_POOL_H_
 #define MEDIA_GPU_CHROMEOS_VDA_VIDEO_FRAME_POOL_H_
 
-#include <vector>
-
 #include "base/containers/queue.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -66,7 +64,8 @@ class VdaVideoFramePool : public DmabufVideoFramePool {
                                              const gfx::Size& coded_size,
                                              const gfx::Rect& visible_rect,
                                              const gfx::Size& natural_size,
-                                             size_t max_num_frames) override;
+                                             size_t max_num_frames,
+                                             bool use_protected) override;
   scoped_refptr<VideoFrame> GetFrame() override;
   bool IsExhausted() override;
   void NotifyWhenFrameAvailable(base::OnceClosure cb) override;

@@ -17,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
+#include "base/time/clock.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/image_fetcher/image_decoder_impl.h"
@@ -26,10 +27,7 @@
 #include "chrome/browser/search/chrome_colors/chrome_colors_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/instant_service_observer.h"
-#include "chrome/browser/search/local_ntp_source.h"
 #include "chrome/browser/search/most_visited_iframe_source.h"
-#include "chrome/browser/search/ntp_features.h"
-#include "chrome/browser/search/ntp_icon_source.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/themes/theme_properties.h"
@@ -47,7 +45,10 @@
 #include "components/ntp_tiles/constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/search/ntp_features.h"
+#include "components/search/search_provider_observer.h"
 #include "components/sync_preferences/pref_service_syncable.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -164,7 +165,7 @@ void CopyFileToProfilePath(const base::FilePath& from_path,
                            const base::FilePath& profile_path) {
   base::CopyFile(from_path,
                  profile_path.AppendASCII(
-                     chrome::kChromeSearchLocalNtpBackgroundFilename));
+                     chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
 }
 
 // |GetBitmapMainColor| just wraps |CalculateKMeanColorOfBitmap|.
@@ -210,8 +211,9 @@ InstantService::InstantService(Profile* profile)
                               weak_ptr_factory_.GetWeakPtr()));
     }
 
-    // 9 tiles are required for the custom links feature in order to balance the
-    // Most Visited rows (this is due to an additional "Add" button).
+    // If custom links are enabled, an additional tile may be returned making up
+    // to ntp_tiles::kMaxNumCustomLinks custom links including the
+    // "Add shortcut" button.
     most_visited_sites_->SetMostVisitedURLsObserver(
         this, ntp_tiles::kMaxNumMostVisited);
     most_visited_sites_->EnableCustomLinks(IsCustomLinksEnabled());
@@ -224,17 +226,16 @@ InstantService::InstantService(Profile* profile)
   background_service_ = NtpBackgroundServiceFactory::GetForProfile(profile_);
 
   // Listen for theme installation.
-  registrar_.Add(this, chrome::NOTIFICATION_BROWSER_THEME_CHANGED,
-                 content::Source<ThemeService>(
-                     ThemeServiceFactory::GetForProfile(profile_)));
+  ThemeServiceFactory::GetForProfile(profile_)->AddObserver(this);
 
-  // Set up the data sources that Instant uses on the NTP.
+  // TODO(crbug.com/1192394): multiple WebUI pages depend on the theme source
+  // without adding it themselves. This is not causing an issue because the
+  // theme source is being added here. The source should be added where it is
+  // used and then the following can be removed.
   content::URLDataSource::Add(profile_,
                               std::make_unique<ThemeSource>(profile_));
-  content::URLDataSource::Add(profile_,
-                              std::make_unique<LocalNtpSource>(profile_));
-  content::URLDataSource::Add(profile_,
-                              std::make_unique<NtpIconSource>(profile_));
+
+  // Set up the data sources that Instant uses on the NTP.
   content::URLDataSource::Add(
       profile_, std::make_unique<FaviconSource>(
                     profile_, chrome::FaviconUrlFormat::kFaviconLegacy));
@@ -250,7 +251,7 @@ InstantService::InstantService(Profile* profile)
 
   image_fetcher_ = std::make_unique<image_fetcher::ImageFetcherImpl>(
       std::make_unique<ImageDecoderImpl>(),
-      content::BrowserContext::GetDefaultStoragePartition(profile_)
+      profile_->GetDefaultStoragePartition()
           ->GetURLLoaderFactoryForBrowserProcess());
 
   theme_observer_.Add(native_theme_);
@@ -281,6 +282,11 @@ void InstantService::OnNewTabPageOpened() {
   if (most_visited_sites_) {
     most_visited_sites_->Refresh();
   }
+}
+
+void InstantService::OnThemeChanged() {
+  theme_ = nullptr;
+  UpdateNtpTheme();
 }
 
 void InstantService::DeleteMostVisitedItem(const GURL& url) {
@@ -371,7 +377,10 @@ bool InstantService::ToggleMostVisitedOrCustomLinks() {
   // user has never customized their shortcuts.
   //
   // For more details, see custom_links_mananger.h and most_visited_sites.h.
-  if (!was_initialized && !most_visited_sites_->IsCustomLinksInitialized()) {
+  if ((!was_initialized && !most_visited_sites_->IsCustomLinksInitialized()) ||
+      // Ensure that the add shortcut button status is correct when there is no
+      // custom link.
+      most_visited_sites_->GetCustomLinkNum() == 0) {
     NotifyAboutMostVisitedInfo();
   }
 
@@ -413,15 +422,6 @@ void InstantService::UpdateBackgroundFromSync() {
 
 void InstantService::UpdateMostVisitedInfo() {
   NotifyAboutMostVisitedInfo();
-}
-
-void InstantService::SendNewTabPageURLToRenderer(
-    content::RenderProcessHost* rph) {
-  if (auto* channel = rph->GetChannel()) {
-    mojo::AssociatedRemote<search::mojom::SearchBouncer> client;
-    channel->GetRemoteAssociatedInterface(&client);
-    client->SetNewTabPageURL(search::GetNewTabPageURL(profile_));
-  }
 }
 
 void InstantService::ResetCustomBackgroundInfo() {
@@ -517,6 +517,8 @@ void InstantService::Shutdown() {
   if (most_visited_sites_) {
     most_visited_sites_.reset();
   }
+
+  ThemeServiceFactory::GetForProfile(profile_)->RemoveObserver(this);
 }
 
 void InstantService::OnNextCollectionImageAvailable() {
@@ -550,12 +552,6 @@ void InstantService::Observe(int type,
                              const content::NotificationDetails& details) {
   switch (type) {
     case content::NOTIFICATION_RENDERER_PROCESS_CREATED: {
-      content::RenderProcessHost* rph =
-          content::Source<content::RenderProcessHost>(source).ptr();
-      Profile* renderer_profile =
-          static_cast<Profile*>(rph->GetBrowserContext());
-      if (profile_ == renderer_profile)
-        SendNewTabPageURLToRenderer(rph);
       break;
     }
     case content::NOTIFICATION_RENDERER_PROCESS_TERMINATED: {
@@ -567,10 +563,6 @@ void InstantService::Observe(int type,
         OnRendererProcessTerminated(rph->GetID());
       break;
     }
-    case chrome::NOTIFICATION_BROWSER_THEME_CHANGED:
-      theme_ = nullptr;
-      UpdateNtpTheme();
-      break;
     default:
       NOTREACHED() << "Unexpected notification type in InstantService.";
   }
@@ -765,7 +757,7 @@ void InstantService::ApplyOrResetCustomBackgroundNtpTheme() {
     // Add a timestamp to the url to prevent the browser from using a cached
     // version when "Upload an image" is used multiple times.
     std::string time_string = std::to_string(base::Time::Now().ToTimeT());
-    std::string local_string(chrome::kChromeSearchLocalNtpBackgroundUrl);
+    std::string local_string(chrome::kChromeUIUntrustedNewTabPageBackgroundUrl);
     GURL timestamped_url(local_string + "?ts=" + time_string);
     GetInitializedNtpTheme()->custom_background_url = timestamped_url;
     GetInitializedNtpTheme()->custom_background_attribution_line_1 =
@@ -959,7 +951,7 @@ bool InstantService::IsCustomBackgroundPrefValid(GURL& custom_background_url) {
 
 void InstantService::RemoveLocalBackgroundImageCopy() {
   base::FilePath path = profile_->GetPath().AppendASCII(
-      chrome::kChromeSearchLocalNtpBackgroundFilename);
+      chrome::kChromeUIUntrustedNewTabPageBackgroundFilename);
   base::ThreadPool::PostTask(
       FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
       base::BindOnce(base::GetDeleteFileCallback(), path));

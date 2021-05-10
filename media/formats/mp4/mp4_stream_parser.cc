@@ -60,17 +60,17 @@ EncryptionScheme GetEncryptionScheme(const ProtectionSchemeInfo& sinf) {
   return EncryptionScheme::kUnencrypted;
 }
 
-gl::MasteringMetadata ConvertMdcvToMasteringMetadata(
+gfx::MasteringMetadata ConvertMdcvToMasteringMetadata(
     const MasteringDisplayColorVolume& mdcv) {
-  gl::MasteringMetadata mastering_metadata;
+  gfx::MasteringMetadata mastering_metadata;
 
-  mastering_metadata.primary_r = gl::MasteringMetadata::Chromaticity(
+  mastering_metadata.primary_r = gfx::MasteringMetadata::Chromaticity(
       mdcv.display_primaries_rx, mdcv.display_primaries_ry);
-  mastering_metadata.primary_g = gl::MasteringMetadata::Chromaticity(
+  mastering_metadata.primary_g = gfx::MasteringMetadata::Chromaticity(
       mdcv.display_primaries_gx, mdcv.display_primaries_gy);
-  mastering_metadata.primary_b = gl::MasteringMetadata::Chromaticity(
+  mastering_metadata.primary_b = gfx::MasteringMetadata::Chromaticity(
       mdcv.display_primaries_bx, mdcv.display_primaries_by);
-  mastering_metadata.white_point = gl::MasteringMetadata::Chromaticity(
+  mastering_metadata.white_point = gfx::MasteringMetadata::Chromaticity(
       mdcv.white_point_x, mdcv.white_point_y);
 
   mastering_metadata.luminance_max = mdcv.max_display_mastering_luminance;
@@ -279,7 +279,7 @@ VideoTransformation MP4StreamParser::CalculateRotation(
 }
 
 bool MP4StreamParser::ParseMoov(BoxReader* reader) {
-  moov_.reset(new Movie);
+  moov_ = std::make_unique<Movie>();
   RCHECK(moov_->Parse(reader));
   runs_.reset();
   audio_track_ids_.clear();
@@ -544,7 +544,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
 
       if (entry.mastering_display_color_volume ||
           entry.content_light_level_information) {
-        gl::HDRMetadata hdr_metadata;
+        gfx::HDRMetadata hdr_metadata;
         if (entry.mastering_display_color_volume) {
           hdr_metadata.mastering_metadata = ConvertMdcvToMasteringMetadata(
               *entry.mastering_display_color_volume);
@@ -652,7 +652,7 @@ bool MP4StreamParser::ParseMoof(BoxReader* reader) {
   MovieFragment moof;
   RCHECK(moof.Parse(reader));
   if (!runs_)
-    runs_.reset(new TrackRunIterator(moov_.get(), media_log_));
+    runs_ = std::make_unique<TrackRunIterator>(moov_.get(), media_log_);
   RCHECK(runs_->Init(moof));
   RCHECK(ComputeHighestEndOffset(moof));
 
@@ -872,10 +872,10 @@ ParseResult MP4StreamParser::EnqueueSample(BufferQueueMap* buffers) {
   if (decrypt_config) {
     if (!subsamples.empty()) {
       // Create a new config with the updated subsamples.
-      decrypt_config.reset(
-          new DecryptConfig(decrypt_config->encryption_scheme(),
-                            decrypt_config->key_id(), decrypt_config->iv(),
-                            subsamples, decrypt_config->encryption_pattern()));
+      decrypt_config = std::make_unique<DecryptConfig>(
+          decrypt_config->encryption_scheme(), decrypt_config->key_id(),
+          decrypt_config->iv(), subsamples,
+          decrypt_config->encryption_pattern());
     }
     // else, use the existing config.
   }

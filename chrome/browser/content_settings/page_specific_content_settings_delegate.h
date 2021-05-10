@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_CONTENT_SETTINGS_PAGE_SPECIFIC_CONTENT_SETTINGS_DELEGATE_H_
 #define CHROME_BROWSER_CONTENT_SETTINGS_PAGE_SPECIFIC_CONTENT_SETTINGS_DELEGATE_H_
 
+#include "build/build_config.h"
+#include "chrome/browser/browsing_data/access_context_audit_service.h"
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
 
@@ -108,6 +110,9 @@ class PageSpecificContentSettingsDelegate
   // The setting on the pending protocol handler registration. Persisted in case
   // the user opens the bubble and makes changes multiple times.
   ContentSetting pending_protocol_handler_setting_ = CONTENT_SETTING_DEFAULT;
+
+  std::unique_ptr<AccessContextAuditService::CookieAccessHelper>
+      cookie_access_helper_;
 };
 
 }  // namespace chrome

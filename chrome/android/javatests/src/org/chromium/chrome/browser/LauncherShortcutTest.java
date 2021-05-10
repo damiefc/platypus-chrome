@@ -31,16 +31,15 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
-import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.Arrays;
@@ -81,7 +80,7 @@ public class LauncherShortcutTest {
         mActivityTestRule.startMainActivityOnBlankPage();
         mTabModelSelector = mActivityTestRule.getActivity().getTabModelSelector();
 
-        TabModelSelectorObserver tabModelSelectorObserver = new EmptyTabModelSelectorObserver() {
+        TabModelSelectorObserver tabModelSelectorObserver = new TabModelSelectorObserver() {
             @Override
             public void onNewTabCreated(Tab tab, @TabCreationState int creationState) {
                 mTabAddedCallback.notifyCalled();
@@ -119,7 +118,7 @@ public class LauncherShortcutTest {
 
         Assert.assertTrue(
                 "Tab should be an NTP. Tab url: " + ChromeTabUtils.getUrlOnUiThread(activityTab),
-                NewTabPage.isNTPUrl(ChromeTabUtils.getUrlOnUiThread(activityTab)));
+                UrlUtilities.isNTPUrl(ChromeTabUtils.getUrlOnUiThread(activityTab)));
 
         // Verify tab model.
         Assert.assertEquals("Incorrect tab model selected.", incognito,
@@ -157,9 +156,12 @@ public class LauncherShortcutTest {
 
     @Test
     @SmallTest
-    public void testDynamicShortcuts() {
+    public void testDynamicShortcuts() throws TimeoutException {
         IncognitoUtils.setEnabledForTesting(true);
-        LauncherShortcutActivity.updateIncognitoShortcut(mActivityTestRule.getActivity());
+        CallbackHelper callbackHelper = new CallbackHelper();
+        LauncherShortcutActivity.updateIncognitoShortcutForTesting(
+                mActivityTestRule.getActivity(), callbackHelper::notifyCalled);
+        callbackHelper.waitForFirst();
         ShortcutManager shortcutManager =
                 mActivityTestRule.getActivity().getSystemService(ShortcutManager.class);
         List<ShortcutInfo> shortcuts = shortcutManager.getDynamicShortcuts();
@@ -169,12 +171,18 @@ public class LauncherShortcutTest {
                 shortcuts.get(0).getId());
 
         IncognitoUtils.setEnabledForTesting(false);
-        LauncherShortcutActivity.updateIncognitoShortcut(mActivityTestRule.getActivity());
+        callbackHelper = new CallbackHelper();
+        LauncherShortcutActivity.updateIncognitoShortcutForTesting(
+                mActivityTestRule.getActivity(), callbackHelper::notifyCalled);
+        callbackHelper.waitForFirst();
         shortcuts = shortcutManager.getDynamicShortcuts();
         Assert.assertEquals("Incorrect number of dynamic shortcuts.", 0, shortcuts.size());
 
         IncognitoUtils.setEnabledForTesting(true);
-        LauncherShortcutActivity.updateIncognitoShortcut(mActivityTestRule.getActivity());
+        callbackHelper = new CallbackHelper();
+        LauncherShortcutActivity.updateIncognitoShortcutForTesting(
+                mActivityTestRule.getActivity(), callbackHelper::notifyCalled);
+        callbackHelper.waitForFirst();
         shortcuts = shortcutManager.getDynamicShortcuts();
         Assert.assertEquals("Incorrect number of dynamic shortcuts after re-enabling incognito.", 1,
                 shortcuts.size());
@@ -182,18 +190,24 @@ public class LauncherShortcutTest {
 
     @Test
     @SmallTest
-    public void testDynamicShortcuts_LanguageChange() {
+    public void testDynamicShortcuts_LanguageChange() throws TimeoutException {
         IncognitoUtils.setEnabledForTesting(true);
-        LauncherShortcutActivity.updateIncognitoShortcut(mActivityTestRule.getActivity());
+        CallbackHelper callbackHelper = new CallbackHelper();
+        LauncherShortcutActivity.updateIncognitoShortcutForTesting(
+                mActivityTestRule.getActivity(), callbackHelper::notifyCalled);
+        callbackHelper.waitForFirst();
         ShortcutManager shortcutManager =
                 mActivityTestRule.getActivity().getSystemService(ShortcutManager.class);
         List<ShortcutInfo> shortcuts = shortcutManager.getDynamicShortcuts();
         Assert.assertEquals("Incorrect number of dynamic shortcuts.", 1, shortcuts.size());
         Assert.assertEquals(
-                "Incorrect label", "New incognito tab", shortcuts.get(0).getLongLabel());
+                "Incorrect label", "New Incognito tab", shortcuts.get(0).getLongLabel());
 
         LauncherShortcutActivity.setDynamicShortcutStringForTesting("Foo");
-        LauncherShortcutActivity.updateIncognitoShortcut(mActivityTestRule.getActivity());
+        callbackHelper = new CallbackHelper();
+        LauncherShortcutActivity.updateIncognitoShortcutForTesting(
+                mActivityTestRule.getActivity(), callbackHelper::notifyCalled);
+        callbackHelper.waitForFirst();
         shortcuts = shortcutManager.getDynamicShortcuts();
         Assert.assertEquals(
                 "Incorrect number of dynamic shortcuts after updating.", 1, shortcuts.size());

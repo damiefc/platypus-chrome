@@ -10,10 +10,7 @@
 
 #include "base/callback.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service_delegate.h"
-
-namespace base {
-class FilePath;
-}  // namespace base
+#include "chrome/browser/ui/ash/holding_space/holding_space_util.h"
 
 namespace user_prefs {
 class PrefRegistrySyncable;
@@ -22,7 +19,7 @@ class PrefRegistrySyncable;
 namespace ash {
 
 class HoldingSpaceItem;
-class HoldingSpaceThumbnailLoader;
+class ThumbnailLoader;
 
 using HoldingSpaceItemPtr = std::unique_ptr<HoldingSpaceItem>;
 
@@ -37,19 +34,13 @@ class HoldingSpacePersistenceDelegate
   // NOTE: Any changes to persistence must be backwards compatible.
   static constexpr char kPersistencePath[] = "ash.holding_space.items";
 
-  // Callback to invoke when the specified holding space item has been restored
-  // from persistence.
-  using ItemRestoredCallback =
-      base::RepeatingCallback<void(HoldingSpaceItemPtr)>;
-
   // Callback to invoke when holding space persistence has been restored.
   using PersistenceRestoredCallback = base::OnceClosure;
 
   HoldingSpacePersistenceDelegate(
-      Profile* profile,
+      HoldingSpaceKeyedService* service,
       HoldingSpaceModel* model,
-      HoldingSpaceThumbnailLoader* thumbnail_loader,
-      ItemRestoredCallback item_restored_callback,
+      ThumbnailLoader* thumbnail_loader,
       PersistenceRestoredCallback persistence_restored_callback);
   HoldingSpacePersistenceDelegate(const HoldingSpacePersistenceDelegate&) =
       delete;
@@ -63,21 +54,17 @@ class HoldingSpacePersistenceDelegate
  private:
   // HoldingSpaceKeyedServiceDelegate:
   void Init() override;
-  void OnHoldingSpaceItemAdded(const HoldingSpaceItem* item) override;
-  void OnHoldingSpaceItemRemoved(const HoldingSpaceItem* item) override;
+  void OnHoldingSpaceItemsAdded(
+      const std::vector<const HoldingSpaceItem*>& items) override;
+  void OnHoldingSpaceItemsRemoved(
+      const std::vector<const HoldingSpaceItem*>& items) override;
+  void OnHoldingSpaceItemUpdated(const HoldingSpaceItem* item) override;
 
   // Restores the holding space model from persistent storage.
   void RestoreModelFromPersistence();
-  void RestoreModelByValidity(
-      std::vector<HoldingSpaceItemPtr> holding_space_items,
-      std::vector<base::FilePath> valid_file_paths,
-      std::vector<base::FilePath> invalid_file_paths);
 
   // Owned by `HoldingSpaceKeyedService`.
-  HoldingSpaceThumbnailLoader* const thumbnail_loader_;
-
-  // Callback to invoke when an item has been restored from persistence.
-  ItemRestoredCallback item_restored_callback_;
+  ThumbnailLoader* const thumbnail_loader_;
 
   // Callback to invoke when holding space persistence has been restored.
   PersistenceRestoredCallback persistence_restored_callback_;

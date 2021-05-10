@@ -67,6 +67,7 @@ class LayoutFrameSet final : public LayoutBox {
  public:
   LayoutFrameSet(HTMLFrameSetElement*);
   ~LayoutFrameSet() override;
+  void Trace(Visitor*) const override;
 
   LayoutObject* FirstChild() const {
     NOT_DESTROYED();
@@ -159,7 +160,10 @@ class LayoutFrameSet final : public LayoutBox {
   }
   MinMaxSizes ComputeIntrinsicLogicalWidths() const final {
     NOT_DESTROYED();
-    return MinMaxSizes();
+    MinMaxSizes sizes;
+    LayoutUnit scrollbar_thickness = ComputeLogicalScrollbars().InlineSum();
+    sizes += BorderAndPaddingLogicalWidth() + scrollbar_thickness;
+    return sizes;
   }
 
   bool IsChildAllowed(LayoutObject*, const ComputedStyle&) const override;
@@ -186,7 +190,12 @@ class LayoutFrameSet final : public LayoutBox {
   bool is_resizing_;
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutFrameSet, IsFrameSet());
+template <>
+struct DowncastTraits<LayoutFrameSet> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsFrameSet();
+  }
+};
 
 }  // namespace blink
 

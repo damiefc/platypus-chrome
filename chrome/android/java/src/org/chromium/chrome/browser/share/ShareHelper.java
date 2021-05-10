@@ -27,11 +27,15 @@ import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.lens.LensController;
+import org.chromium.chrome.browser.lens.LensEntryPoint;
+import org.chromium.chrome.browser.lens.LensIntentParams;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.components.browser_ui.share.ShareParams;
 import org.chromium.components.browser_ui.share.ShareParams.TargetChosenCallback;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.url.GURL;
 
 import java.util.List;
 
@@ -124,25 +128,35 @@ public class ShareHelper extends org.chromium.components.browser_ui.share.ShareH
      * @param isIncognito Whether the current tab is in incognito mode.
      * @param srcUrl The 'src' attribute of the image.
      * @param titleOrAltText The 'title' or, if empty, the 'alt' attribute of the image.
-     * @param isShoppingIntent Whether the Lens intent is a shopping intent.
-     * @param requiresConfirmation Whether the request requires an confirmation dialog.
+     * @param pageUrl The page url.
+     * @param lensEntryPoint The entry point that launches the Lens app.
+     * @param requiresConfirmation Whether the request requires an account dialog.
      */
     public static void shareImageWithGoogleLens(final WindowAndroid window, Uri imageUri,
-            boolean isIncognito, String srcUrl, String titleOrAltText, boolean isShoppingIntent,
-            boolean requiresConfirmation) {
-        Intent shareIntent = LensUtils.getShareWithGoogleLensIntent(imageUri, isIncognito,
-                SystemClock.elapsedRealtimeNanos(), srcUrl, titleOrAltText,
-                isShoppingIntent ? LensUtils.IntentType.SHOPPING : LensUtils.IntentType.DEFAULT,
-                requiresConfirmation);
-        try {
-            // Pass an empty callback to ensure the triggered activity can identify the source
-            // of the intent (startActivityForResult allows app identification).
-            fireIntent(window, shareIntent, (w, resultCode, data) -> {});
-        } catch (ActivityNotFoundException e) {
-            // The initial version check should guarantee that the activity is available. However,
-            // the exception may be thrown in test environments after mocking out the version check.
-            if (Boolean.TRUE.equals(sIgnoreActivityNotFoundException)) return;
-            throw e;
+            boolean isIncognito, GURL srcUrl, String titleOrAltText, GURL pageUrl,
+            @LensEntryPoint int lensEntryPoint, boolean requiresConfirmation) {
+        if (LensUtils.useDirectIntentSdkIntegration(ContextUtils.getApplicationContext())
+                || LensUtils.useLensIntentApi()) {
+            LensIntentParams intentParams = LensUtils.buildLensIntentParams(imageUri, isIncognito,
+                    srcUrl.getValidSpecOrEmpty(), titleOrAltText, pageUrl.getValidSpecOrEmpty(),
+                    lensEntryPoint, requiresConfirmation);
+            LensController.getInstance().startLens(window, intentParams);
+        } else {
+            Intent shareIntent =
+                    LensUtils.getShareWithGoogleLensIntent(ContextUtils.getApplicationContext(),
+                            imageUri, isIncognito, SystemClock.elapsedRealtimeNanos(), srcUrl,
+                            titleOrAltText, pageUrl, lensEntryPoint, requiresConfirmation);
+            try {
+                // Pass an empty callback to ensure the triggered activity can identify the source
+                // of the intent (startActivityForResult allows app identification).
+                fireIntent(window, shareIntent, (w, resultCode, data) -> {});
+            } catch (ActivityNotFoundException e) {
+                // The initial version check should guarantee that the activity is available.
+                // However, the exception may be thrown in test environments after mocking out the
+                // version check.
+                if (Boolean.TRUE.equals(sIgnoreActivityNotFoundException)) return;
+                throw e;
+            }
         }
     }
 
@@ -216,11 +230,9 @@ public class ShareHelper extends org.chromium.components.browser_ui.share.ShareH
      */
     @VisibleForTesting
     public static void setLastShareComponentName(ComponentName component) {
-        SharedPreferencesManager preferencesManager = SharedPreferencesManager.getInstance();
-        preferencesManager.writeString(
-                ChromePreferenceKeys.SHARING_LAST_SHARED_PACKAGE_NAME, component.getPackageName());
-        preferencesManager.writeString(
-                ChromePreferenceKeys.SHARING_LAST_SHARED_CLASS_NAME, component.getClassName());
+        SharedPreferencesManager.getInstance().writeString(
+                ChromePreferenceKeys.SHARING_LAST_SHARED_COMPONENT_NAME,
+                component.flattenToString());
     }
 
     /**
@@ -276,15 +288,11 @@ public class ShareHelper extends org.chromium.components.browser_ui.share.ShareH
     @Nullable
     public static ComponentName getLastShareComponentName() {
         SharedPreferencesManager preferencesManager = SharedPreferencesManager.getInstance();
-        String packageName = preferencesManager.readString(
-                ChromePreferenceKeys.SHARING_LAST_SHARED_PACKAGE_NAME, null);
-        String className = preferencesManager.readString(
-                ChromePreferenceKeys.SHARING_LAST_SHARED_CLASS_NAME, null);
-        return createComponentName(packageName, className);
-    }
-
-    private static ComponentName createComponentName(String packageName, String className) {
-        if (packageName == null || className == null) return null;
-        return new ComponentName(packageName, className);
+        String name = preferencesManager.readString(
+                ChromePreferenceKeys.SHARING_LAST_SHARED_COMPONENT_NAME, null);
+        if (name == null) {
+            return null;
+        }
+        return ComponentName.unflattenFromString(name);
     }
 }

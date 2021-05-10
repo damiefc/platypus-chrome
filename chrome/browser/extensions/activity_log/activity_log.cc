@@ -27,14 +27,14 @@
 #include "chrome/browser/extensions/activity_log/fullstream_ui_policy.h"
 #include "chrome/browser/extensions/api/activity_log_private/activity_log_private_api.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/prerender/prerender_manager_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "components/prerender/browser/prerender_manager.h"
+#include "components/no_state_prefetch/browser/no_state_prefetch_manager.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -45,8 +45,10 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_system_provider.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_messages.h"
+#include "extensions/common/mojom/renderer.mojom.h"
 #include "third_party/re2/src/re2/re2.h"
 #include "url/gurl.h"
 
@@ -482,7 +484,7 @@ ActivityLog::ActivityLog(content::BrowserContext* context)
 
   observers_ = base::MakeRefCounted<base::ObserverListThreadSafe<Observer>>();
 
-  extension_registry_observer_.Add(ExtensionRegistry::Get(profile_));
+  extension_registry_observation_.Observe(ExtensionRegistry::Get(profile_));
   CheckActive(true);  // use cached
   extension_system_->ready().Post(
       FROM_HERE, base::BindOnce(&ActivityLog::OnExtensionSystemReady,
@@ -679,10 +681,11 @@ void ActivityLog::OnScriptsExecuted(content::WebContents* web_contents,
       action->set_page_incognito(
           web_contents->GetBrowserContext()->IsOffTheRecord());
 
-      const prerender::PrerenderManager* prerender_manager =
-          prerender::PrerenderManagerFactory::GetForBrowserContext(profile_);
-      if (prerender_manager &&
-          prerender_manager->IsWebContentsPrerendering(web_contents))
+      const prerender::NoStatePrefetchManager* no_state_prefetch_manager =
+          prerender::NoStatePrefetchManagerFactory::GetForBrowserContext(
+              profile_);
+      if (no_state_prefetch_manager &&
+          no_state_prefetch_manager->IsWebContentsPrerendering(web_contents))
         action->mutable_other()->SetBoolean(constants::kActionPrerender, true);
       for (auto it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
         action->mutable_args()->AppendString(*it2);
@@ -785,9 +788,15 @@ void ActivityLog::CheckActive(bool use_cached) {
            content::RenderProcessHost::AllHostsIterator());
        !iter.IsAtEnd(); iter.Advance()) {
     content::RenderProcessHost* host = iter.GetCurrentValue();
-    if (profile_->IsSameOrParent(
+    if (host->IsInitializedAndNotDead() &&
+        profile_->IsSameOrParent(
             Profile::FromBrowserContext(host->GetBrowserContext()))) {
-      host->Send(new ExtensionMsg_SetActivityLoggingEnabled(is_active_));
+      mojom::Renderer* renderer =
+          RendererStartupHelperFactory::GetForBrowserContext(
+              host->GetBrowserContext())
+              ->GetRenderer(host);
+      if (renderer)
+        renderer->SetActivityLoggingEnabled(is_active_);
     }
   }
 }

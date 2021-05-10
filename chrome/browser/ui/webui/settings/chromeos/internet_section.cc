@@ -4,9 +4,11 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/internet_section.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/network_config_service.h"
 #include "base/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/ui/webui/chromeos/cellular_setup/cellular_setup_localized_strings_provider.h"
@@ -20,7 +22,6 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -30,6 +31,15 @@
 namespace chromeos {
 namespace settings {
 namespace {
+
+// These values are persisted to logs. Entries should not be renumbered
+// and numeric values should never be reused. They describe the discovery
+// state of a network.
+enum class NetworkDiscoveryState {
+  kExistingNetwork = 0,
+  kNewNetwork = 1,
+  kMaxValue = kNewNetwork,
+};
 
 const std::vector<SearchConcept>& GetNetworkSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
@@ -225,6 +235,19 @@ const std::vector<SearchConcept>& GetWifiMeteredSearchConcepts() {
   return *tags;
 }
 
+const std::vector<SearchConcept>& GetWifiHiddenSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_HIDDEN_NETWORK,
+       mojom::kWifiDetailsSubpagePath,
+       mojom::SearchResultIcon::kWifi,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kWifiHidden},
+       {IDS_OS_SETTINGS_TAG_HIDDEN_NETWORK_ALT1, SearchConcept::kAltTagEnd}},
+  });
+  return *tags;
+}
+
 const std::vector<SearchConcept>& GetCellularSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_CELLULAR,
@@ -330,9 +353,10 @@ const std::vector<SearchConcept>& GetCellularConnectedSearchConcepts() {
   return *tags;
 }
 
-// TODO(1093185): Merge GetCellularSetupSearchConcepts() with
+// TODO(1093185): Merge GetCellularSetupAndDetailMenuSearchConcepts() with
 // GetCellularConnectedSearchConcepts() when flag is enabled.
-const std::vector<SearchConcept>& GetCellularSetupSearchConcepts() {
+const std::vector<SearchConcept>&
+GetCellularSetupAndDetailMenuSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_ADD_CELLULAR,
        mojom::kMobileDataNetworksSubpagePath,
@@ -342,6 +366,22 @@ const std::vector<SearchConcept>& GetCellularSetupSearchConcepts() {
        {.setting = mojom::Setting::kCellularAddNetwork},
        {IDS_OS_SETTINGS_TAG_ADD_CELLULAR_ALT1,
         IDS_OS_SETTINGS_TAG_ADD_CELLULAR_ALT2, SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_CELLULAR_REMOVE_PROFILE,
+       mojom::kCellularDetailsSubpagePath,
+       mojom::SearchResultIcon::kCellular,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kCellularRemoveESimNetwork},
+       {IDS_OS_SETTINGS_TAG_CELLULAR_REMOVE_PROFILE_ALT1,
+        SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_CELLULAR_RENAME_PROFILE,
+       mojom::kCellularDetailsSubpagePath,
+       mojom::SearchResultIcon::kCellular,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kCellularRenameESimNetwork},
+       {IDS_OS_SETTINGS_TAG_CELLULAR_RENAME_PROFILE_ALT1,
+        SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
@@ -448,6 +488,7 @@ const std::vector<mojom::Setting>& GetWifiDetailsSettings() {
       mojom::Setting::kWifiProxy,
       mojom::Setting::kWifiAutoConnectToNetwork,
       mojom::Setting::kWifiMetered,
+      mojom::Setting::kWifiHidden,
   });
   return *settings;
 }
@@ -464,6 +505,8 @@ const std::vector<mojom::Setting>& GetCellularDetailsSettings() {
       mojom::Setting::kCellularAutoConnectToNetwork,
       mojom::Setting::kCellularMetered,
       mojom::Setting::kCellularAddNetwork,
+      mojom::Setting::kCellularRemoveESimNetwork,
+      mojom::Setting::kCellularRenameESimNetwork,
   });
   return *settings;
 }
@@ -556,6 +599,7 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"internetDeviceEnabling", IDS_SETTINGS_INTERNET_DEVICE_ENABLING},
       {"internetDeviceDisabling", IDS_SETTINGS_INTERNET_DEVICE_DISABLING},
       {"internetDeviceInitializing", IDS_SETTINGS_INTERNET_DEVICE_INITIALIZING},
+      {"internetDeviceBusy", IDS_SETTINGS_INTERNET_DEVICE_BUSY},
       {"internetJoinType", IDS_SETTINGS_INTERNET_JOIN_TYPE},
       {"internetKnownNetworksPageTitle", IDS_SETTINGS_INTERNET_KNOWN_NETWORKS},
       {"internetMobileSearching", IDS_SETTINGS_INTERNET_MOBILE_SEARCH},
@@ -589,7 +633,18 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_SETTINGS_NETWORK_ALLOW_DATA_ROAMING_ENABLED_ROAMING},
       {"networkAllowDataRoamingDisabled",
        IDS_SETTINGS_SETTINGS_NETWORK_ALLOW_DATA_ROAMING_DISABLED},
+      {"networkVpnPreferences", IDS_SETTINGS_INTERNET_NETWORK_VPN_PREFERENCES},
       {"networkAlwaysOnVpn", IDS_SETTINGS_INTERNET_NETWORK_ALWAYS_ON_VPN},
+      {"networkAlwaysOnVpnEnableSublabel",
+       IDS_SETTINGS_INTERNET_NETWORK_ALWAYS_ON_VPN_ENABLE_SUBLABEL},
+      {"networkAlwaysOnVpnEnableLabel",
+       IDS_SETTINGS_INTERNET_NETWORK_ALWAYS_ON_VPN_ENABLE_LABEL},
+      {"networkAlwaysOnVpnLockdownLabel",
+       IDS_SETTINGS_INTERNET_NETWORK_ALWAYS_ON_VPN_LOCKDOWN_LABEL},
+      {"networkAlwaysOnVpnLockdownSublabel",
+       IDS_SETTINGS_INTERNET_NETWORK_ALWAYS_ON_VPN_LOCKDOWN_SUBLABEL},
+      {"networkAlwaysOnVpnService",
+       IDS_SETTINGS_INTERNET_NETWORK_ALWAYS_ON_VPN_SERVICE},
       {"networkAutoConnect", IDS_SETTINGS_INTERNET_NETWORK_AUTO_CONNECT},
       {"networkAutoConnectCellular",
        IDS_SETTINGS_INTERNET_NETWORK_AUTO_CONNECT_CELLULAR},
@@ -600,6 +655,8 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"networkButtonForget", IDS_SETTINGS_INTERNET_BUTTON_FORGET},
       {"networkButtonViewAccount", IDS_SETTINGS_INTERNET_BUTTON_VIEW_ACCOUNT},
       {"networkConnectNotAllowed", IDS_SETTINGS_INTERNET_CONNECT_NOT_ALLOWED},
+      {"networkHidden", IDS_SETTINGS_INTERNET_NETWORK_HIDDEN},
+      {"networkHiddenSublabel", IDS_SETTINGS_INTERNET_NETWORK_HIDDEN_SUBLABEL},
       {"networkIPAddress", IDS_SETTINGS_INTERNET_NETWORK_IP_ADDRESS},
       {"networkIPConfigAuto", IDS_SETTINGS_INTERNET_NETWORK_IP_CONFIG_AUTO},
       {"networkMetered", IDS_SETTINGS_INTERNET_NETWORK_METERED},
@@ -608,6 +665,10 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"networkPrefer", IDS_SETTINGS_INTERNET_NETWORK_PREFER},
       {"networkPrimaryUserControlled",
        IDS_SETTINGS_INTERNET_NETWORK_PRIMARY_USER_CONTROLLED},
+      {"networkDetailMenuRemoveESim",
+       IDS_SETTINGS_INTERNET_NETWORK_MENU_REMOVE},
+      {"networkDetailMenuRenameESim",
+       IDS_SETTINGS_INTERNET_NETWORK_MENU_RENAME},
       {"networkScanningLabel", IDS_NETWORK_SCANNING_MESSAGE},
       {"networkSectionAdvanced",
        IDS_SETTINGS_INTERNET_NETWORK_SECTION_ADVANCED},
@@ -624,10 +685,6 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"networkSharedNotOwner", IDS_SETTINGS_INTERNET_NETWORK_SHARED_NOT_OWNER},
       {"networkVpnBuiltin", IDS_NETWORK_TYPE_VPN_BUILTIN},
       {"networkOutOfRange", IDS_SETTINGS_INTERNET_WIFI_NETWORK_OUT_OF_RANGE},
-      {"cellularContactSpecificCarrier",
-       IDS_SETTINGS_INTERNET_CELLULAR_CONTACT_SPECIFIC_CARRIER},
-      {"cellularContactDefaultCarrier",
-       IDS_SETTINGS_INTERNET_CELLULAR_CONTACT_DEFAULT_CARRIER},
       {"cellularSetupDialogTitle",
        IDS_SETTINGS_INTERNET_CELLULAR_SETUP_DIALOG_TITLE},
       {"tetherPhoneOutOfRange",
@@ -671,16 +728,84 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"tetherConnectionConnectButton",
        IDS_SETTINGS_INTERNET_TETHER_CONNECTION_CONNECT_BUTTON},
       {"tetherEnableBluetooth", IDS_ENABLE_BLUETOOTH},
+      {"cellularNetworkEsimLabel", IDS_SETTINGS_INTERNET_ESIM_LABEL},
+      {"cellularNetworkPsimLabel", IDS_SETTINGS_INTERNET_PSIM_LABEL},
+      {"pSimNotInsertedLabel", IDS_SETTINGS_INTERNET_PSIM_NOT_INSERTED_LABEL},
+      {"eSimNetworkNotSetup",
+       IDS_SETTINGS_INTERNET_ESIM_NOT_SETUP_WITH_SETUP_LINK},
+      {"cellularNetworkTetherLabel", IDS_SETTINGS_INTERNET_TETHER_LABEL},
+      {"showEidPopupButtonLabel",
+       IDS_SETTINGS_INTERNET_SHOW_EID_POPUP_BUTTON_LABEL},
+      {"eSimNoConnectionErrorToast",
+       IDS_SETTINGS_INTERNET_ESIM_NO_CONNECTION_ERROR_TOAST},
+      {"eSimMobileDataNotEnabledErrorToast",
+       IDS_SETTINGS_INTERNET_ESIM_MOBILE_DATA_NOT_ENABLED_ERROR_TOAST},
+      {"eSimProfileLimitReachedErrorToast",
+       IDS_SETTINGS_INTERNET_ESIM_PROFILE_LIMIT_REACHED_ERROR_TOAST},
+      {"eSimInstallErrorDialogTitle",
+       IDS_SETTINGS_INTERNET_NETWORK_INSTALL_ERROR_DIALOG_TITLE},
+      {"eSimInstallErrorDialogConfirmationCodeMessage",
+       IDS_SETTINGS_INTERNET_NETWORK_INSTALL_ERROR_DIALOG_CONFIRMATION_CODE_MESSAGE},
+      {"eSimInstallErrorDialogConfirmationCodeError",
+       IDS_CELLULAR_SETUP_ESIM_PAGE_INSTALL_ERROR_DIALOG_CONFIRMATION_CODE_ERROR},
+      {"eSimInstallErrorDialogGenericErrorMessage",
+       IDS_SETTINGS_INTERNET_NETWORK_INSTALL_ERROR_DIALOG_GENERIC_ERROR_MESSAGE},
+      {"eSimRenameProfileDialogLabel",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_DIALOG_RENAME_PROFILE},
+      {"eSimRenameProfileDialogDone",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_DIALOG_DONE},
+      {"eSimRenameProfileDialogCancel",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_DIALOG_CANCEL},
+      {"eSimRenameProfileInputSubtitle",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_INPUT_SUBTITLE},
+      {"eSimRenameProfileInputCharacterCount",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_INPUT_CHARACTER_COUNT},
+      {"eSimRenameProfileDoneBtnA11yLabel",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_DONE_BUTTON_A11Y_LABEL},
+      {"eSimRenameProfileInputA11yLabel",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_INPUT_A11Y_LABEL},
+      {"eSimRenameProfileDialogError",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_DIALOG_ERROR_MESSAGE},
+      {"eSimRenameProfileDialogErrorToast",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_DIALOG_ERROR_TOAST},
+      {"eSimRemoveProfileDialogCancel",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_CANCEL},
+      {"esimRemoveProfileDialogTitle",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_TITLE},
+      {"eSimRemoveProfileDialogDescription",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_DESCRIPTION},
+      {"eSimRemoveProfileDialogRemove",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_REMOVE},
+      {"eSimRemoveProfileDialogError",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_ERROR_MESSAGE},
+      {"eSimRemoveProfileDialogOkay",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_OKAY},
+      {"eSimRemoveProfileCancelA11yLabel",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_A11Y_CANCEL},
+      {"eSimRemoveProfileRemoveA11yLabel",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_A11Y_REMOVE},
+      {"eSimDialogConnectionWarning",
+       IDS_SETTINGS_INTERNET_ESIM_DIALOG_CONNECTION_WARNING},
+      {"cellularNetworkInstallingProfile",
+       IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_INSTALLING_PROFILE},
+      {"cellularNetworkRemovingProfile",
+       IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_REMOVING_PROFILE},
+      {"cellularNetworkRenamingProfile",
+       IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_RENAMING_PROFILE},
+      {"cellularNetworkConnectingToProfile",
+       IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_CONNECTING_TO_PROFILE},
+      {"cellularNetworRefreshingProfileListProfile",
+       IDS_SETTINGS_INTERNET_NETWORK_CELLULAR_REFRESHING_PROFILE_LIST},
   };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  html_source->AddLocalizedStrings(kLocalizedStrings);
 
   network_element::AddLocalizedStrings(html_source);
   network_element::AddOncLocalizedStrings(html_source);
   network_element::AddDetailsLocalizedStrings(html_source);
   network_element::AddConfigLocalizedStrings(html_source);
   network_element::AddErrorLocalizedStrings(html_source);
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kUpdatedCellularActivationUi)) {
+  cellular_setup::AddNonStringLoadTimeData(html_source);
+  if (features::IsCellularActivationUiEnabled()) {
     cellular_setup::AddLocalizedStrings(html_source);
   }
 
@@ -689,13 +814,15 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "showMeteredToggle",
       base::FeatureList::IsEnabled(::features::kMeteredShowToggle));
+  html_source->AddBoolean(
+      "showHiddenToggle",
+      base::FeatureList::IsEnabled(::features::kShowHiddenNetworkToggle));
 
   html_source->AddString("networkGoogleNameserversLearnMoreUrl",
                          chrome::kGoogleNameserversLearnMoreURL);
-  html_source->AddBoolean(
-      "updatedCellularActivationUi",
-      base::FeatureList::IsEnabled(
-          chromeos::features::kUpdatedCellularActivationUi));
+
+  html_source->AddString("wifiHiddenNetworkLearnMoreUrl",
+                         chrome::kWifiHiddenNetworkURL);
 
   html_source->AddString(
       "networkNotSynced",
@@ -716,6 +843,11 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       "internetNoNetworksMobileData",
       l10n_util::GetStringFUTF16(
           IDS_SETTINGS_INTERNET_LOOKING_FOR_MOBILE_NETWORK,
+          GetHelpUrlWithBoard(chrome::kInstantTetheringLearnMoreURL)));
+  html_source->AddString(
+      "tetherNetworkNotSetup",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_INTERNET_TETHER_NOT_SETUP_WITH_LEARN_MORE_LINK,
           GetHelpUrlWithBoard(chrome::kInstantTetheringLearnMoreURL)));
 }
 
@@ -741,8 +873,22 @@ std::string InternetSection::GetSectionPath() const {
 
 bool InternetSection::LogMetric(mojom::Setting setting,
                                 base::Value& value) const {
-  // Unimplemented.
-  return false;
+  switch (setting) {
+    case mojom::Setting::kWifiHidden:
+      base::UmaHistogramBoolean("ChromeOS.Settings.Wifi.Hidden",
+                                value.GetBool());
+      return true;
+    case mojom::Setting::kWifiAddNetwork:
+      // An added wifi network an empty GUID means the user manually
+      // configured and added a new wifi.
+      base::UmaHistogramEnumeration(
+          "ChromeOS.Settings.Wifi.AddNetwork",
+          value.GetString().empty() ? NetworkDiscoveryState::kNewNetwork
+                                    : NetworkDiscoveryState::kExistingNetwork);
+      return true;
+    default:
+      return false;
+  }
 }
 
 void InternetSection::RegisterHierarchy(HierarchyGenerator* generator) const {
@@ -939,7 +1085,7 @@ void InternetSection::FetchNetworkList() {
           network_config::mojom::FilterType::kVisible,
           network_config::mojom::NetworkType::kAll,
           network_config::mojom::kNoLimit),
-      base::Bind(&InternetSection::OnNetworkList, base::Unretained(this)));
+      base::BindOnce(&InternetSection::OnNetworkList, base::Unretained(this)));
 }
 
 void InternetSection::OnNetworkList(
@@ -952,9 +1098,10 @@ void InternetSection::OnNetworkList(
   updater.RemoveSearchTags(GetEthernetNotConnectedSearchConcepts());
   updater.RemoveSearchTags(GetWifiConnectedSearchConcepts());
   updater.RemoveSearchTags(GetWifiMeteredSearchConcepts());
+  updater.RemoveSearchTags(GetWifiHiddenSearchConcepts());
   updater.RemoveSearchTags(GetCellularSearchConcepts());
   updater.RemoveSearchTags(GetCellularConnectedSearchConcepts());
-  updater.RemoveSearchTags(GetCellularSetupSearchConcepts());
+  updater.RemoveSearchTags(GetCellularSetupAndDetailMenuSearchConcepts());
   updater.RemoveSearchTags(GetCellularMeteredSearchConcepts());
   updater.RemoveSearchTags(GetInstantTetheringConnectedSearchConcepts());
   updater.RemoveSearchTags(GetVpnConnectedSearchConcepts());
@@ -988,6 +1135,8 @@ void InternetSection::OnNetworkList(
         updater.AddSearchTags(GetWifiConnectedSearchConcepts());
         if (base::FeatureList::IsEnabled(::features::kMeteredShowToggle))
           updater.AddSearchTags(GetWifiMeteredSearchConcepts());
+        if (base::FeatureList::IsEnabled(::features::kShowHiddenNetworkToggle))
+          updater.AddSearchTags(GetWifiHiddenSearchConcepts());
         break;
 
       case NetworkType::kCellular:
@@ -996,10 +1145,8 @@ void InternetSection::OnNetworkList(
         if (base::FeatureList::IsEnabled(::features::kMeteredShowToggle))
           updater.AddSearchTags(GetCellularMeteredSearchConcepts());
 
-        if (base::FeatureList::IsEnabled(
-                chromeos::features::kUpdatedCellularActivationUi)) {
-          updater.AddSearchTags(GetCellularSetupSearchConcepts());
-        }
+        if (features::IsCellularActivationUiEnabled())
+          updater.AddSearchTags(GetCellularSetupAndDetailMenuSearchConcepts());
         break;
 
       case NetworkType::kTether:

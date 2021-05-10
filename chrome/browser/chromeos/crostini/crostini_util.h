@@ -9,14 +9,18 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/optional.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/crostini/crostini_simple_types.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
+
+namespace aura {
+class Window;
+}  // namespace aura
 
 namespace base {
 class FilePath;
@@ -41,15 +45,27 @@ extern const char kCrostiniTerminalSystemAppId[];
 extern const char kCrostiniDefaultVmName[];
 extern const char kCrostiniDefaultContainerName[];
 extern const char kCrostiniDefaultUsername[];
-// In order to be compatible with sync folder id must match standard.
-// Generated using crx_file::id_util::GenerateId("LinuxAppsFolder")
-extern const char kCrostiniFolderId[];
 extern const char kCrostiniDefaultImageServerUrl[];
 extern const char kCrostiniStretchImageAlias[];
 extern const char kCrostiniBusterImageAlias[];
 extern const char kCrostiniDlcName[];
 
 extern const base::FilePath::CharType kHomeDirectory[];
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class CrostiniAppLaunchAppType {
+  // An app which isn't in the CrostiniAppRegistry. This shouldn't happen.
+  kUnknownApp = 0,
+
+  // The main terminal app.
+  kTerminal = 1,
+
+  // An app for which there is something in the CrostiniAppRegistry.
+  kRegisteredApp = 2,
+
+  kMaxValue = kRegisteredApp,
+};
 
 struct LinuxPackageInfo;
 
@@ -110,15 +126,6 @@ std::string DefaultContainerUserNameForProfile(Profile* profile);
 // Returns the mount directory within the container where paths from the Chrome
 // OS host such as within Downloads are shared with the container.
 base::FilePath ContainerChromeOSBaseDirectory();
-
-// The Terminal opens Crosh but overrides the Browser's app_name so that we can
-// identify it as the Crostini Terminal. In the future, we will also use these
-// for Crostini apps marked Terminal=true in their .desktop file.
-std::string AppNameFromCrostiniAppId(const std::string& id);
-
-// Returns nullopt for a non-Crostini app name.
-base::Optional<std::string> CrostiniAppIdFromAppName(
-    const std::string& app_name);
 
 // Returns a list of ports currently being forwarded in Crostini as a JSON
 // object.
@@ -190,7 +197,7 @@ void RemoveLxdContainerFromPrefs(Profile* profile,
 // Returns a string to be displayed in a notification with the estimated time
 // left for an operation to run which started and time |start| and is current
 // at |percent| way through.
-base::string16 GetTimeRemainingMessage(base::TimeTicks start, int percent);
+std::u16string GetTimeRemainingMessage(base::TimeTicks start, int percent);
 
 // Returns a pref value stored for a specific container.
 const base::Value* GetContainerPrefValue(Profile* profile,
@@ -204,6 +211,12 @@ void UpdateContainerPref(Profile* profile,
                          base::Value value);
 
 const ContainerId& DefaultContainerId();
+
+bool IsCrostiniWindow(const aura::Window* window);
+
+void RecordAppLaunchHistogram(CrostiniAppLaunchAppType app_type);
+void RecordAppLaunchResultHistogram(CrostiniAppLaunchAppType type,
+                                    crostini::CrostiniResult reason);
 
 }  // namespace crostini
 

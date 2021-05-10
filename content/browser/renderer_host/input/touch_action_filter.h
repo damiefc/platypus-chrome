@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_INPUT_TOUCH_ACTION_FILTER_H_
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_TOUCH_ACTION_FILTER_H_
 
+#include <string>
+
 #include "base/macros.h"
 #include "base/optional.h"
 #include "cc/input/touch_action.h"
@@ -92,7 +94,8 @@ class CONTENT_EXPORT TouchActionFilter {
   friend class SitePerProcessBrowserTouchActionTest;
 
   bool ShouldSuppressScrolling(const blink::WebGestureEvent&,
-                               cc::TouchAction touch_action);
+                               cc::TouchAction touch_action,
+                               bool is_active_touch_action);
   FilterGestureEventResult FilterScrollEventAndResetState();
   FilterGestureEventResult FilterPinchEventAndResetState();
   void ResetTouchAction();
@@ -152,5 +155,6 @@ class CONTENT_EXPORT TouchActionFilter {
   DISALLOW_COPY_AND_ASSIGN(TouchActionFilter);
 };
 
-}
+}  // namespace content
+
 #endif  // CONTENT_BROWSER_RENDERER_HOST_INPUT_TOUCH_ACTION_FILTER_H_

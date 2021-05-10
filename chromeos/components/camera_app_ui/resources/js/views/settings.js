@@ -3,8 +3,6 @@
 // found in the LICENSE file.
 
 // eslint-disable-next-line no-unused-vars
-import {browserProxy} from '../browser_proxy/browser_proxy.js';
-// eslint-disable-next-line no-unused-vars
 import {Camera3DeviceInfo} from '../device/camera3_device_info.js';
 import {
   PhotoConstraintsPreferrer,  // eslint-disable-line no-unused-vars
@@ -13,6 +11,8 @@ import {
 // eslint-disable-next-line no-unused-vars
 import {DeviceInfoUpdater} from '../device/device_info_updater.js';
 import * as dom from '../dom.js';
+import * as loadTimeData from '../models/load_time_data.js';
+import {ChromeHelper} from '../mojo/chrome_helper.js';
 import * as nav from '../nav.js';
 import * as state from '../state.js';
 import {
@@ -58,30 +58,55 @@ export class BaseSettings extends View {
   constructor(name, itemHandlers = {}) {
     super(name, true, true);
 
-    this.root.querySelector('.menu-header button')
+    dom.getFrom(this.root, '.menu-header button', HTMLButtonElement)
         .addEventListener('click', () => this.leave());
-    this.root.querySelectorAll('.menu-item').forEach((element) => {
-      /** @type {function(!Event=)|undefined} */
+    dom.getAllFrom(this.root, '.menu-item', HTMLElement).forEach((element) => {
       const handler = itemHandlers[element.id];
-      if (handler) {
+      if (handler !== undefined) {
         element.addEventListener('click', handler);
       }
     });
+
+    /**
+     * The default focus element when focus on view is reset.
+     * @const {!HTMLElement}
+     * @private
+     */
+    this.defaultFocus_ =
+        dom.getFrom(this.rootElement_, '[tabindex]', HTMLElement);
+
+    /**
+     * The DOM element to be focused when the focus on view is reset by calling
+     * |focus()|.
+     * @type {!HTMLElement}
+     * @private
+     */
+    this.focusElement_ = this.defaultFocus_;
   }
 
   /**
    * @override
    */
   focus() {
-    this.rootElement_.querySelector('[tabindex]').focus();
+    this.focusElement_.focus();
+  }
+
+  /**
+   * @override
+   */
+  leaving() {
+    this.focusElement_ = this.defaultFocus_;
+    return super.leaving();
   }
 
   /**
    * Opens sub-settings.
+   * @param {!HTMLElement} opener The DOM element triggering the open.
    * @param {!ViewName} name Name of settings view.
    * @private
    */
-  openSubSettings(name) {
+  openSubSettings(opener, name) {
+    this.focusElement_ = opener;
     // Dismiss primary-settings if sub-settings was dismissed by background
     // click.
     nav.open(name).then((cond) => cond && cond['bkgnd'] && this.leave(cond));
@@ -96,17 +121,21 @@ export class PrimarySettings extends BaseSettings {
    * @public
    */
   constructor() {
+    const openHandler = (openerId, viewName) => {
+      const opener = dom.get(`#${openerId}`, HTMLElement);
+      return {[openerId]: () => this.openSubSettings(opener, viewName)};
+    };
     super(ViewName.SETTINGS, {
-      'settings-gridtype': () => this.openSubSettings(ViewName.GRID_SETTINGS),
-      'settings-timerdur': () => this.openSubSettings(ViewName.TIMER_SETTINGS),
-      'settings-resolution': () =>
-          this.openSubSettings(ViewName.RESOLUTION_SETTINGS),
-      'settings-expert': () => this.openSubSettings(ViewName.EXPERT_SETTINGS),
+      ...openHandler('settings-gridtype', ViewName.GRID_SETTINGS),
+      ...openHandler('settings-timerdur', ViewName.TIMER_SETTINGS),
+      ...openHandler('settings-resolution', ViewName.RESOLUTION_SETTINGS),
+      ...openHandler('settings-expert', ViewName.EXPERT_SETTINGS),
       'settings-feedback': () => {
         // Prevent setting view overlapping preview when sending app window
         // feedback screenshot b/155938542.
         this.leave();
-        browserProxy.openFeedback();
+        ChromeHelper.getInstance().openFeedbackDialog(
+            loadTimeData.getI18nMessage('feedback_description_placeholder'));
       },
       'settings-help': () => util.openHelp(),
     });
@@ -226,20 +255,6 @@ export class ResolutionSettings extends BaseSettings {
     this.backVideoItem_ = dom.get('#settings-back-videores', HTMLElement);
 
     /**
-     * @type {!HTMLTemplateElement}
-     * @private
-     */
-    this.resItemTempl_ =
-        dom.get('#resolution-item-template', HTMLTemplateElement);
-
-    /**
-     * @type {!HTMLTemplateElement}
-     * @private
-     */
-    this.extcamItemTempl_ =
-        dom.get('#extcam-resolution-item-template', HTMLTemplateElement);
-
-    /**
      * Device setting of front camera. Null if no front camera.
      * @type {?DeviceSetting}
      * @private
@@ -247,7 +262,7 @@ export class ResolutionSettings extends BaseSettings {
     this.frontSetting_ = null;
 
     /**
-     * Device setting of back camera. Null if no front camera.
+     * Device setting of back camera. Null if no back camera.
      * @type {?DeviceSetting}
      * @private
      */
@@ -357,11 +372,11 @@ export class ResolutionSettings extends BaseSettings {
     if (resolutions.some(
             (findR) => !findR.equals(r) && r.aspectRatioEquals(findR) &&
                 toMegapixel(r) === toMegapixel(findR))) {
-      return browserProxy.getI18nMessage(
+      return loadTimeData.getI18nMessage(
           'label_detail_photo_resolution', r.width / d, r.height / d, r.width,
           r.height, toMegapixel(r));
     } else {
-      return browserProxy.getI18nMessage(
+      return loadTimeData.getI18nMessage(
           'label_photo_resolution', r.width / d, r.height / d, toMegapixel(r));
     }
   }
@@ -373,7 +388,7 @@ export class ResolutionSettings extends BaseSettings {
    * @private
    */
   videoOptTextTempl_(r) {
-    return browserProxy.getI18nMessage(
+    return loadTimeData.getI18nMessage(
         'label_video_resolution', r.height, r.width);
   }
 
@@ -407,7 +422,7 @@ export class ResolutionSettings extends BaseSettings {
     const prepItem = (item, id, {prefResol, resols}, optTextTempl) => {
       item.dataset['deviceId'] = id;
       item.classList.toggle('multi-option', resols.length > 1);
-      item.querySelector('.description>span').textContent =
+      dom.getFrom(item, '.description>span', HTMLSpanElement).textContent =
           optTextTempl(prefResol, resols);
     };
 
@@ -454,9 +469,8 @@ export class ResolutionSettings extends BaseSettings {
       let /** !HTMLElement */ photoItem;
       let /** !HTMLElement */ videoItem;
       if (deviceId !== focusedId) {
-        const extItem = /** @type {!HTMLElement} */ (
-            document.importNode(this.extcamItemTempl_.content, true));
-        util.setupI18nElements(extItem);
+        const extItem =
+            util.instantiateTemplate('#extcam-resolution-item-template');
         [titleItem, photoItem, videoItem] =
             dom.getAllFrom(extItem, '.menu-item', HTMLElement);
 
@@ -466,7 +480,7 @@ export class ResolutionSettings extends BaseSettings {
           }
         });
         photoItem.setAttribute('aria-describedby', `${deviceId}-photores-desc`);
-        photoItem.querySelector('.description').id =
+        dom.getFrom(photoItem, '.description', HTMLElement).id =
             `${deviceId}-photores-desc`;
         videoItem.addEventListener('click', () => {
           if (videoItem.classList.contains('multi-option')) {
@@ -474,7 +488,7 @@ export class ResolutionSettings extends BaseSettings {
           }
         });
         videoItem.setAttribute('aria-describedby', `${deviceId}-videores-desc`);
-        videoItem.querySelector('.description').id =
+        dom.getFrom(videoItem, '.description', HTMLElement).id =
             `${deviceId}-videores-desc`;
         if (index < focusIdx) {
           this.resMenu_.insertBefore(extItem, fTitle);
@@ -521,7 +535,7 @@ export class ResolutionSettings extends BaseSettings {
           this.resMenu_, `.menu-item.photo-item[data-device-id="${deviceId}"]`,
           HTMLElement);
     }
-    photoItem.querySelector('.description>span').textContent =
+    dom.getFrom(photoItem, '.description>span', HTMLSpanElement).textContent =
         this.photoOptTextTempl_(photo.prefResol, photo.resols);
 
     // Update setting option if it's opened.
@@ -556,7 +570,7 @@ export class ResolutionSettings extends BaseSettings {
           this.resMenu_, `.menu-item.video-item[data-device-id="${deviceId}"]`,
           HTMLElement);
     }
-    videoItem.querySelector('.description>span').textContent =
+    dom.getFrom(videoItem, '.description>span', HTMLSpanElement).textContent =
         this.videoOptTextTempl_(video.prefResol);
 
     // Update setting option if it's opened.
@@ -585,7 +599,7 @@ export class ResolutionSettings extends BaseSettings {
         resolItem, this.photoResMenu_, this.photoOptTextTempl_,
         (r) => this.photoPreferrer_.changePreferredResolution(deviceId, r),
         photo.resols, photo.prefResol);
-    this.openSubSettings(ViewName.PHOTO_RESOLUTION_SETTINGS);
+    this.openSubSettings(resolItem, ViewName.PHOTO_RESOLUTION_SETTINGS);
   }
 
   /**
@@ -601,7 +615,7 @@ export class ResolutionSettings extends BaseSettings {
         resolItem, this.videoResMenu_, this.videoOptTextTempl_,
         (r) => this.videoPreferrer_.changePreferredResolution(deviceId, r),
         video.resols, video.prefResol);
-    this.openSubSettings(ViewName.VIDEO_RESOLUTION_SETTINGS);
+    this.openSubSettings(resolItem, ViewName.VIDEO_RESOLUTION_SETTINGS);
   }
 
   /**
@@ -611,7 +625,7 @@ export class ResolutionSettings extends BaseSettings {
    * @param {function(!Resolution, !ResolutionList): string} optTextTempl
    *     Template generating text content for each resolution option from its
    *     width and height.
-   * @param {function(!Resolution)} onChange Called when selected option
+   * @param {function(!Resolution): void} onChange Called when selected option
    *     changed with resolution of newly selected option.
    * @param {!ResolutionList} resolutions Resolutions of its width and height to
    *     be updated with.
@@ -619,18 +633,17 @@ export class ResolutionSettings extends BaseSettings {
    * @private
    */
   updateMenu_(resolItem, menu, optTextTempl, onChange, resolutions, selectedR) {
-    const captionText = resolItem.querySelector('.description>span');
+    const captionText =
+        dom.getFrom(resolItem, '.description>span', HTMLSpanElement);
     captionText.textContent = '';
-    menu.querySelectorAll('.menu-item')
+    dom.getAllFrom(menu, '.menu-item', HTMLLabelElement)
         .forEach((element) => element.parentNode.removeChild(element));
 
     resolutions.forEach((r) => {
-      const item = /** @type {!HTMLElement} */ (
-          document.importNode(this.resItemTempl_.content, true));
-      const label = dom.getFrom(item, 'label', HTMLLabelElement);
-      util.setInkdropEffect(label);
+      const item = util.instantiateTemplate('#resolution-item-template');
       const input = dom.getFrom(item, 'input', HTMLInputElement);
-      item.querySelector('span').textContent = optTextTempl(r, resolutions);
+      dom.getFrom(item, 'span', HTMLSpanElement).textContent =
+          optTextTempl(r, resolutions);
       input.name = menu.dataset['name'];
       input.dataset['width'] = r.width.toString();
       input.dataset['height'] = r.height.toString();
@@ -640,7 +653,7 @@ export class ResolutionSettings extends BaseSettings {
       }
       input.disabled = state.get(state.State.CAMERA_CONFIGURING) ||
           state.get(state.State.TAKING);
-      input.addEventListener('change', (event) => {
+      input.addEventListener('change', () => {
         if (input.checked) {
           captionText.textContent = optTextTempl(r, resolutions);
           onChange(r);

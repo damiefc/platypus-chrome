@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/optional.h"
 #include "base/test/task_environment.h"
 #include "components/query_tiles/internal/tile_service_impl.h"
@@ -49,7 +49,7 @@ class MockInitializableTileService : public InitializableTileService {
   MOCK_METHOD(void, OnTileClicked, (const std::string&), (override));
   MOCK_METHOD(void,
               OnQuerySelected,
-              (const base::Optional<std::string>&, const base::string16&),
+              (const base::Optional<std::string>&, const std::u16string&),
               (override));
 
   // Callback stubs.

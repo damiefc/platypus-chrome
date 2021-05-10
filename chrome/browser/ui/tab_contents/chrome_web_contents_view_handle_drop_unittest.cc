@@ -12,13 +12,13 @@
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/enterprise/connectors/connectors_manager.h"
+#include "chrome/browser/enterprise/connectors/analysis/content_analysis_delegate.h"
+#include "chrome/browser/enterprise/connectors/analysis/fake_content_analysis_delegate.h"
+#include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/policy/dm_token_utils.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_dialog_delegate.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_test_utils.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/fake_deep_scanning_dialog_delegate.h"
 #include "chrome/browser/ui/tab_contents/chrome_web_contents_view_handle_drop.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -40,15 +40,6 @@ class ChromeWebContentsViewDelegateHandleOnPerformDrop : public testing::Test {
         {enterprise_connectors::kEnterpriseConnectorsEnabled}, {});
   }
 
-  void SetUp() override {
-    enterprise_connectors::ConnectorsManager::GetInstance()->SetUpForTesting();
-  }
-
-  void TearDown() override {
-    enterprise_connectors::ConnectorsManager::GetInstance()
-        ->TearDownForTesting();
-  }
-
   void RunUntilDone() { run_loop_->Run(); }
 
   content::WebContents* contents() {
@@ -60,12 +51,33 @@ class ChromeWebContentsViewDelegateHandleOnPerformDrop : public testing::Test {
   }
 
   void EnableDeepScanning(bool enable, bool scan_succeeds) {
-    SetScanPolicies(enable ? safe_browsing::CHECK_UPLOADS
-                           : safe_browsing::CHECK_NONE);
+    if (enable) {
+      static constexpr char kEnabled[] = R"(
+          {
+              "service_provider": "google",
+              "enable": [
+                {
+                  "url_list": ["*"],
+                  "tags": ["dlp"]
+                }
+              ],
+              "block_until_verdict": 1
+          })";
+      safe_browsing::SetAnalysisConnector(
+          profile_->GetPrefs(), enterprise_connectors::FILE_ATTACHED, kEnabled);
+      safe_browsing::SetAnalysisConnector(
+          profile_->GetPrefs(), enterprise_connectors::BULK_DATA_ENTRY,
+          kEnabled);
+    } else {
+      safe_browsing::ClearAnalysisConnector(
+          profile_->GetPrefs(), enterprise_connectors::FILE_ATTACHED);
+      safe_browsing::ClearAnalysisConnector(
+          profile_->GetPrefs(), enterprise_connectors::BULK_DATA_ENTRY);
+    }
 
-    run_loop_.reset(new base::RunLoop());
+    run_loop_ = std::make_unique<base::RunLoop>();
 
-    using FakeDelegate = safe_browsing::FakeDeepScanningDialogDelegate;
+    using FakeDelegate = enterprise_connectors::FakeContentAnalysisDelegate;
     auto is_encrypted_callback =
         base::BindRepeating([](const base::FilePath&) { return false; });
 
@@ -85,12 +97,12 @@ class ChromeWebContentsViewDelegateHandleOnPerformDrop : public testing::Test {
                            enterprise_connectors::ContentAnalysisResponse::
                                Result::TriggeredRule::BLOCK);
         });
-    safe_browsing::DeepScanningDialogDelegate::SetFactoryForTesting(
+    enterprise_connectors::ContentAnalysisDelegate::SetFactoryForTesting(
         base::BindRepeating(
-            &safe_browsing::FakeDeepScanningDialogDelegate::Create,
+            &enterprise_connectors::FakeContentAnalysisDelegate::Create,
             run_loop_->QuitClosure(), callback, is_encrypted_callback,
             "dm_token"));
-    safe_browsing::DeepScanningDialogDelegate::DisableUIForTesting();
+    enterprise_connectors::ContentAnalysisDelegate::DisableUIForTesting();
   }
 
   // Common code for running the test cases.
@@ -132,12 +144,6 @@ class ChromeWebContentsViewDelegateHandleOnPerformDrop : public testing::Test {
   std::string small_text() const { return "random small text"; }
 
  private:
-  void SetScanPolicies(safe_browsing::CheckContentComplianceValues state) {
-    safe_browsing::SetDlpPolicyForConnectors(state);
-    safe_browsing::SetDelayDeliveryUntilVerdictPolicyForConnectors(
-        safe_browsing::DELAY_UPLOADS);
-  }
-
   content::BrowserTaskEnvironment task_environment_;
   base::test::ScopedFeatureList scoped_feature_list_;
   TestingProfileManager profile_manager_{TestingBrowserProcess::GetGlobal()};
@@ -234,11 +240,14 @@ TEST_F(ChromeWebContentsViewDelegateHandleOnPerformDrop, Files) {
   base::FilePath path_1 = temp_dir.GetPath().AppendASCII("Foo.doc");
   base::FilePath path_2 = temp_dir.GetPath().AppendASCII("Bar.doc");
 
-  base::File file_1(path_1, base::File::FLAG_CREATE | base::File::FLAG_READ);
-  base::File file_2(path_2, base::File::FLAG_CREATE | base::File::FLAG_READ);
+  base::File file_1(path_1, base::File::FLAG_CREATE | base::File::FLAG_WRITE);
+  base::File file_2(path_2, base::File::FLAG_CREATE | base::File::FLAG_WRITE);
 
   ASSERT_TRUE(file_1.IsValid());
   ASSERT_TRUE(file_2.IsValid());
+
+  file_1.WriteAtCurrentPos("foo content", 11);
+  file_2.WriteAtCurrentPos("bar content", 11);
 
   content::DropData data;
   data.filenames.emplace_back(path_1, path_1);
@@ -261,13 +270,17 @@ TEST_F(ChromeWebContentsViewDelegateHandleOnPerformDrop, Directories) {
   base::FilePath path_2 = temp_dir.GetPath().AppendASCII("Bar.doc");
   base::FilePath path_3 = temp_dir.GetPath().AppendASCII("Baz.doc");
 
-  base::File file_1(path_1, base::File::FLAG_CREATE | base::File::FLAG_READ);
-  base::File file_2(path_2, base::File::FLAG_CREATE | base::File::FLAG_READ);
-  base::File file_3(path_3, base::File::FLAG_CREATE | base::File::FLAG_READ);
+  base::File file_1(path_1, base::File::FLAG_CREATE | base::File::FLAG_WRITE);
+  base::File file_2(path_2, base::File::FLAG_CREATE | base::File::FLAG_WRITE);
+  base::File file_3(path_3, base::File::FLAG_CREATE | base::File::FLAG_WRITE);
 
   ASSERT_TRUE(file_1.IsValid());
   ASSERT_TRUE(file_2.IsValid());
   ASSERT_TRUE(file_3.IsValid());
+
+  file_1.WriteAtCurrentPos("foo content", 11);
+  file_2.WriteAtCurrentPos("bar content", 11);
+  file_3.WriteAtCurrentPos("baz content", 11);
 
   content::DropData data;
   data.filenames.emplace_back(temp_dir.GetPath(), temp_dir.GetPath());

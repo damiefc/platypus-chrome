@@ -25,6 +25,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/http/http_util.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -137,9 +138,9 @@ CloudSpeechRecognitionClientUnitTest::CloudSpeechRecognitionClientUnitTest() =
 
 void CloudSpeechRecognitionClientUnitTest::SetUp() {
   client_under_test_ = std::make_unique<CloudSpeechRecognitionClient>(
-      media::BindToCurrentLoop(
-          base::Bind(&CloudSpeechRecognitionClientUnitTest::OnRecognitionEvent,
-                     base::Unretained(this))),
+      media::BindToCurrentLoop(base::BindRepeating(
+          &CloudSpeechRecognitionClientUnitTest::OnRecognitionEvent,
+          base::Unretained(this))),
       nullptr);
 
   speech_recognition_service_impl_ =
@@ -183,16 +184,15 @@ void CloudSpeechRecognitionClientUnitTest::InitializeUpstreamPipeIfNecessary() {
           GetUpstreamRequest();
       EXPECT_TRUE(upstream_request);
       EXPECT_TRUE(upstream_request->request.request_body);
-      EXPECT_EQ(1u, upstream_request->request.request_body->elements()->size());
-      EXPECT_EQ(
-          network::mojom::DataElementType::kChunkedDataPipe,
-          (*upstream_request->request.request_body->elements())[0].type());
-      network::TestURLLoaderFactory::PendingRequest* mutable_upstream_request =
-          const_cast<network::TestURLLoaderFactory::PendingRequest*>(
-              upstream_request);
-      chunked_data_pipe_getter_.Bind((*mutable_upstream_request->request
-                                           .request_body->elements_mutable())[0]
-                                         .ReleaseChunkedDataPipeGetter());
+      auto& mutable_elements =
+          *upstream_request->request.request_body->elements_mutable();
+      ASSERT_EQ(1u, mutable_elements.size());
+      ASSERT_EQ(network::DataElement::Tag::kChunkedDataPipe,
+                mutable_elements[0].type());
+      chunked_data_pipe_getter_.Bind(
+          mutable_elements[0]
+              .As<network::DataElementChunkedDataPipe>()
+              .ReleaseChunkedDataPipeGetter());
     }
 
     constexpr size_t kDataPipeCapacity = 256;
@@ -201,9 +201,8 @@ void CloudSpeechRecognitionClientUnitTest::InitializeUpstreamPipeIfNecessary() {
         kDataPipeCapacity};
     mojo::ScopedDataPipeProducerHandle producer_end;
     mojo::ScopedDataPipeConsumerHandle consumer_end;
-    CHECK_EQ(
-        MOJO_RESULT_OK,
-        mojo::CreateDataPipe(&data_pipe_options, &producer_end, &consumer_end));
+    CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(&data_pipe_options,
+                                                  producer_end, consumer_end));
     chunked_data_pipe_getter_->StartReading(std::move(producer_end));
     upstream_data_pipe_ = std::move(consumer_end);
   }
@@ -296,7 +295,7 @@ void CloudSpeechRecognitionClientUnitTest::
   mojo::ScopedDataPipeProducerHandle producer_end;
   mojo::ScopedDataPipeConsumerHandle consumer_end;
   CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(&data_pipe_options,
-                                                &producer_end, &consumer_end));
+                                                producer_end, consumer_end));
   downstream_request->client->OnStartLoadingResponseBody(
       std::move(consumer_end));
   downstream_data_pipe_ = std::move(producer_end);

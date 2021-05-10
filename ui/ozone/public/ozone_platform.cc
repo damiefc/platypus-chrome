@@ -11,9 +11,13 @@
 #include "base/no_destructor.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/events/devices/device_data_manager.h"
+#include "ui/ozone/common/base_keyboard_hook.h"
 #include "ui/ozone/platform_object.h"
 #include "ui/ozone/platform_selection.h"
+#include "ui/ozone/public/platform_global_shortcut_listener.h"
+#include "ui/ozone/public/platform_menu_utils.h"
 #include "ui/ozone/public/platform_screen.h"
+#include "ui/ozone/public/platform_user_input_monitor.h"
 
 namespace ui {
 
@@ -85,7 +89,7 @@ OzonePlatform* OzonePlatform::GetInstance() {
 }
 
 // static
-const char* OzonePlatform::GetPlatformName() {
+std::string OzonePlatform::GetPlatformNameForTest() {
   return GetOzonePlatformName();
 }
 
@@ -98,9 +102,32 @@ PlatformGLEGLUtility* OzonePlatform::GetPlatformGLEGLUtility() {
   return nullptr;
 }
 
-int OzonePlatform::GetKeyModifiers() const {
-  // Platform may override this to provide the current state of modifier keys.
-  return 0;
+PlatformMenuUtils* OzonePlatform::GetPlatformMenuUtils() {
+  return nullptr;
+}
+
+PlatformUtils* OzonePlatform::GetPlatformUtils() {
+  return nullptr;
+}
+
+PlatformGlobalShortcutListener*
+OzonePlatform::GetPlatformGlobalShortcutListener(
+    PlatformGlobalShortcutListenerDelegate* delegate) {
+  return nullptr;
+}
+
+std::unique_ptr<PlatformKeyboardHook> OzonePlatform::CreateKeyboardHook(
+    PlatformKeyboardHookTypes type,
+    base::RepeatingCallback<void(KeyEvent* event)> callback,
+    base::Optional<base::flat_set<DomCode>> dom_codes,
+    gfx::AcceleratedWidget accelerated_widget) {
+  switch (type) {
+    case PlatformKeyboardHookTypes::kModifier:
+      return std::make_unique<BaseKeyboardHook>(std::move(dom_codes),
+                                                std::move(callback));
+    case PlatformKeyboardHookTypes::kMedia:
+      return nullptr;
+  }
 }
 
 bool OzonePlatform::IsNativePixmapConfigSupported(
@@ -129,6 +156,12 @@ void OzonePlatform::AddInterfaces(mojo::BinderMap* binders) {}
 void OzonePlatform::AfterSandboxEntry() {
   // This should not be called in single-process mode.
   DCHECK(!single_process_);
+}
+
+std::unique_ptr<PlatformUserInputMonitor>
+OzonePlatform::GetPlatformUserInputMonitor(
+    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner) {
+  return {};
 }
 
 void OzonePlatform::PostMainMessageLoopStart(

@@ -20,7 +20,11 @@
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/content/test_content_payment_request_delegate.h"
 #include "components/payments/core/journey_logger.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/browser_task_environment.h"
+#include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_web_contents_factory.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/payments/payment_request.mojom.h"
@@ -33,13 +37,18 @@ class PaymentRequestStateTest : public testing::Test,
  protected:
   PaymentRequestStateTest()
       : num_on_selected_information_changed_called_(0),
-        test_payment_request_delegate_(&test_personal_data_manager_),
+        test_payment_request_delegate_(/*task_executor=*/nullptr,
+                                       &test_personal_data_manager_),
         journey_logger_(test_payment_request_delegate_.IsOffTheRecord(),
                         ukm::UkmRecorder::GetNewSourceID()),
         address_(autofill::test::GetFullProfile()),
         credit_card_visa_(autofill::test::GetCreditCard()) {
     scoped_feature_list_.InitAndDisableFeature(
         features::kServiceWorkerPaymentApps);
+
+    // Must be initialized after scoped_feature_list_ (crbug.com/1172599)
+    web_contents_ = web_contents_factory_.CreateWebContents(&context_);
+
     test_personal_data_manager_.SetAutofillCreditCardEnabled(true);
     test_personal_data_manager_.SetAutofillProfileEnabled(true);
     test_personal_data_manager_.SetAutofillWalletImportEnabled(true);
@@ -73,15 +82,15 @@ class PaymentRequestStateTest : public testing::Test,
       std::vector<mojom::PaymentMethodDataPtr> method_data) {
     if (!details->total)
       details->total = mojom::PaymentItem::New();
+    details->id = "test_id";
     // The spec will be based on the |options| and |details| passed in.
     spec_ = std::make_unique<PaymentRequestSpec>(
         std::move(options), std::move(details), std::move(method_data),
         /*observer=*/nullptr, "en-US");
     PaymentAppServiceFactory::SetForTesting(
-        std::make_unique<PaymentAppService>(/*context=*/nullptr));
+        std::make_unique<PaymentAppService>(&context_));
     state_ = std::make_unique<PaymentRequestState>(
-        /*web_contents=*/nullptr,
-        /*render_frame_host=*/nullptr, GURL("https://example.com"),
+        web_contents_->GetMainFrame(), GURL("https://example.com"),
         GURL("https://example.com/pay"),
         url::Origin::Create(GURL("https://example.com")), spec_->AsWeakPtr(),
         weak_ptr_factory_.GetWeakPtr(), "en-US", &test_personal_data_manager_,
@@ -106,6 +115,7 @@ class PaymentRequestStateTest : public testing::Test,
     shipping_options.push_back(std::move(option));
     mojom::PaymentDetailsPtr details = mojom::PaymentDetails::New();
     details->shipping_options = std::move(shipping_options);
+    details->id = "test_id";
     return details;
   }
 
@@ -136,6 +146,10 @@ class PaymentRequestStateTest : public testing::Test,
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
+  content::BrowserTaskEnvironment task_environment_;
+  content::TestBrowserContext context_;
+  content::TestWebContentsFactory web_contents_factory_;
+  content::WebContents* web_contents_;  // Owned by `web_contents_factory_`.
   std::unique_ptr<PaymentRequestState> state_;
   std::unique_ptr<PaymentRequestSpec> spec_;
   int num_on_selected_information_changed_called_;

@@ -39,10 +39,6 @@ web::WebUIIOSDataSource* CreatePolicyUIHtmlSource() {
       {"labelAssetId", IDS_POLICY_LABEL_ASSET_ID},
       {"labelClientId", IDS_POLICY_LABEL_CLIENT_ID},
       {"labelDirectoryApiId", IDS_POLICY_LABEL_DIRECTORY_API_ID},
-      {"labelEnterpriseDisplayDomain",
-       IDS_POLICY_LABEL_ENTERPRISE_DISPLAY_DOMAIN},
-      {"labelEnterpriseEnrollmentDomain",
-       IDS_POLICY_LABEL_ENTERPRISE_ENROLLMENT_DOMAIN},
       {"labelGaiaId", IDS_POLICY_LABEL_GAIA_ID},
       {"labelIsAffiliated", IDS_POLICY_LABEL_IS_AFFILIATED},
       {"labelLocation", IDS_POLICY_LABEL_LOCATION},
@@ -60,6 +56,7 @@ web::WebUIIOSDataSource* CreatePolicyUIHtmlSource() {
       {"labelStatus", IDS_POLICY_LABEL_STATUS},
       {"labelTimeSinceLastRefresh", IDS_POLICY_LABEL_TIME_SINCE_LAST_REFRESH},
       {"labelUsername", IDS_POLICY_LABEL_USERNAME},
+      {"labelManagedBy", IDS_POLICY_LABEL_MANAGED_BY},
       {"labelVersion", IDS_POLICY_LABEL_VERSION},
       {"noPoliciesSet", IDS_POLICY_NO_POLICIES_SET},
       {"offHoursActive", IDS_POLICY_OFFHOURS_ACTIVE},
@@ -77,6 +74,9 @@ web::WebUIIOSDataSource* CreatePolicyUIHtmlSource() {
       {"statusDevice", IDS_POLICY_STATUS_DEVICE},
       {"statusMachine", IDS_POLICY_STATUS_MACHINE},
       {"statusUser", IDS_POLICY_STATUS_USER},
+      {"labelLastCloudReportSentTimestamp",
+       IDS_POLICY_LABEL_LAST_CLOUD_REPORT_SENT_TIMESTAMP},
+
   };
   source->AddLocalizedStrings(kStrings);
   source->UseStringsJs();

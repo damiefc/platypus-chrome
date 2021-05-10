@@ -11,14 +11,16 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/current_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
+#include "cc/layers/surface_layer.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
-#include "content/common/frame_messages.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -29,6 +31,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/slow_http_response.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/did_commit_navigation_interceptor.h"
@@ -58,6 +61,8 @@ namespace {
             "forced compositing (or forced-disabled compositing) mode.");  \
     return;  \
   }
+
+}  // namespace
 
 // Common base class for browser tests.  This is subclassed three times: Once to
 // test the browser in forced-compositing mode; once to test with compositing
@@ -94,7 +99,8 @@ class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
   }
 
   RenderViewHost* GetRenderViewHost() const {
-    RenderViewHost* const rvh = shell()->web_contents()->GetRenderViewHost();
+    RenderViewHost* const rvh =
+        shell()->web_contents()->GetMainFrame()->GetRenderViewHost();
     CHECK(rvh);
     return rvh;
   }
@@ -160,7 +166,7 @@ class CommitBeforeSwapAckSentHelper : public DidCommitNavigationInterceptor {
   bool WillProcessDidCommitNavigation(
       RenderFrameHost* render_frame_host,
       NavigationRequest* navigation_request,
-      ::FrameHostMsg_DidCommitProvisionalLoad_Params* params,
+      mojom::DidCommitProvisionalLoadParamsPtr* params,
       mojom::DidCommitProvisionalLoadInterfaceParamsPtr* interface_params)
       override {
     frame_observer_->WaitForAnyFrameSubmission();
@@ -271,10 +277,14 @@ IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
 
 #if defined(OS_ANDROID)
   // Navigating while hidden should not generate a new surface. As the old one
-  // is maintained as the fallback.
+  // is maintained as the fallback. The DelegatedFrameHost should have not have
+  // a valid active viz::LocalSurfaceId until the first surface after navigation
+  // has been embedded.
   EXPECT_TRUE(dfh->HasPrimarySurface());
   EXPECT_FALSE(dfh->IsPrimarySurfaceEvicted());
-  EXPECT_EQ(initial_local_surface_id, dfh->SurfaceId().local_surface_id());
+  EXPECT_EQ(initial_local_surface_id,
+            dfh->content_layer_for_testing()->surface_id().local_surface_id());
+  EXPECT_FALSE(dfh->SurfaceId().local_surface_id().is_valid());
 #endif
 
   // Showing the view should lead to a new surface being embedded.
@@ -291,7 +301,147 @@ IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
   EXPECT_NE(initial_local_surface_id, new_local_surface_id);
 #endif
 }
+
+// Tests that if navigation fails, when re-using a RenderWidgetHostViewBase, and
+// while it is hidden, that the fallback surface if invalidated. Then that when
+// becoming visible, that a new valid surface is produced.
+IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
+                       NoFallbackAfterHiddenNavigationFails) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  // Creates the initial RenderWidgetHostViewBase, and connects to a
+  // CompositorFrameSink.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("/page_with_animation.html")));
+  RenderWidgetHostViewBase* rwhvb = GetRenderWidgetHostView();
+  ASSERT_TRUE(rwhvb);
+  viz::LocalSurfaceId rwhvb_local_surface_id = rwhvb->GetLocalSurfaceId();
+  EXPECT_TRUE(rwhvb_local_surface_id.is_valid());
+
+  // Hide the view before performing the next navigation.
+  shell()->web_contents()->WasHidden();
+#if defined(OS_ANDROID)
+  // On Android we want to ensure that we maintain the currently embedded
+  // surface. So that there is something to display when returning to the tab.
+  RenderWidgetHostViewAndroid* rwhva =
+      static_cast<RenderWidgetHostViewAndroid*>(rwhvb);
+  ui::DelegatedFrameHostAndroid* dfh =
+      rwhva->delegated_frame_host_for_testing();
+  EXPECT_TRUE(dfh->HasPrimarySurface());
+  EXPECT_FALSE(dfh->IsPrimarySurfaceEvicted());
+  viz::LocalSurfaceId initial_local_surface_id =
+      dfh->SurfaceId().local_surface_id();
+  EXPECT_TRUE(initial_local_surface_id.is_valid());
+#endif
+
+  // Perform a navigation to the same content source. This will reuse the
+  // existing RenderWidgetHostViewBase.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("/page_with_animation.html")));
+  EXPECT_FALSE(rwhvb->GetLocalSurfaceId().is_valid());
+
+  // Surface Synchronization can lead to several different Surfaces being
+  // embedded during a navigation. Ending once the Browser and Renderer have
+  // agreed to a set of VisualProperties.
+  //
+  // If this takes too long we hit a timeout that attempts to reset us back to
+  // the initial surface. So that some content state can be presented.
+  //
+  // If a navigation were to fail, then this would be invoked before any new
+  // surface is embedded. For which we expect it to clear out the fallback
+  // surfaces. As we cannot fallback to a surface from before navigation.
+  rwhvb->ResetFallbackToFirstNavigationSurface();
+  EXPECT_FALSE(rwhvb->HasFallbackSurface());
+
+#if defined(OS_ANDROID)
+  // Navigating while hidden should not generate a new surface.
+  // The failed navigation above will lead to the primary surface being evicted.
+  // The DelegatedFrameHost should have not have a valid active
+  // viz::LocalSurfaceId until the first surface after navigation has been
+  // embedded.
+  EXPECT_FALSE(dfh->HasPrimarySurface());
+  EXPECT_TRUE(dfh->IsPrimarySurfaceEvicted());
+  EXPECT_FALSE(dfh->content_layer_for_testing()->surface_id().is_valid());
+  EXPECT_FALSE(dfh->SurfaceId().local_surface_id().is_valid());
+#endif
+
+  // Showing the view should lead to a new surface being embedded.
+  shell()->web_contents()->WasShown();
+  viz::LocalSurfaceId new_rwhvb_local_surface_id = rwhvb->GetLocalSurfaceId();
+  EXPECT_TRUE(new_rwhvb_local_surface_id.is_valid());
+  EXPECT_NE(rwhvb_local_surface_id, new_rwhvb_local_surface_id);
+#if defined(OS_ANDROID)
+  EXPECT_TRUE(dfh->HasPrimarySurface());
+  EXPECT_FALSE(dfh->IsPrimarySurfaceEvicted());
+  viz::LocalSurfaceId new_local_surface_id =
+      dfh->SurfaceId().local_surface_id();
+  EXPECT_TRUE(new_local_surface_id.is_valid());
+  EXPECT_NE(initial_local_surface_id, new_local_surface_id);
+#endif
+}
+
 #endif  // !defined(OS_MAC)
+
+namespace {
+
+std::unique_ptr<net::test_server::HttpResponse> HandleSlowStyleSheet(
+    const net::test_server::HttpRequest& request) {
+  // The CSS stylesheet we want to be slow will have this path.
+  if (request.relative_url != "/slow-response")
+    return nullptr;
+  return std::make_unique<SlowHttpResponse>(SlowHttpResponse::NoResponse());
+}
+
+class DOMContentLoadedObserver : public WebContentsObserver {
+ public:
+  explicit DOMContentLoadedObserver(WebContents* web_contents)
+      : WebContentsObserver(web_contents) {}
+
+  bool Wait() {
+    run_loop_.Run();
+    return dom_content_loaded_ && !did_paint_;
+  }
+
+ private:
+  // WebContentsObserver:
+  void DOMContentLoaded(RenderFrameHost* render_frame_host) override {
+    dom_content_loaded_ = true;
+    run_loop_.Quit();
+  }
+  void DidFirstVisuallyNonEmptyPaint() override { did_paint_ = true; }
+
+  base::RunLoop run_loop_;
+  bool did_paint_{false};
+  bool dom_content_loaded_{false};
+};
+
+}  // namespace
+
+IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
+                       ColorSchemeMetaBackground) {
+  embedded_test_server()->RegisterRequestHandler(
+      base::BindRepeating(&HandleSlowStyleSheet));
+  ASSERT_TRUE(embedded_test_server()->Start());
+  DOMContentLoadedObserver observer(shell()->web_contents());
+  shell()->LoadURL(
+      embedded_test_server()->GetURL("/dark_color_scheme_meta_slow.html"));
+  EXPECT_TRUE(observer.Wait());
+  auto bg_color = GetRenderWidgetHostView()->content_background_color();
+  ASSERT_TRUE(bg_color.has_value());
+  EXPECT_EQ(SkColorSetRGB(18, 18, 18), bg_color.value());
+}
+
+IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
+                       NoColorSchemeMetaBackground) {
+  embedded_test_server()->RegisterRequestHandler(
+      base::BindRepeating(&HandleSlowStyleSheet));
+  ASSERT_TRUE(embedded_test_server()->Start());
+  DOMContentLoadedObserver observer(shell()->web_contents());
+  shell()->LoadURL(
+      embedded_test_server()->GetURL("/no_color_scheme_meta_slow.html"));
+  EXPECT_TRUE(observer.Wait());
+  auto bg_color = GetRenderWidgetHostView()->content_background_color();
+  ASSERT_FALSE(bg_color.has_value());
+}
 
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewBrowserTestBase,
                        CompositorWorksWhenReusingRenderer) {
@@ -334,7 +484,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewBrowserTestBase,
   EXPECT_EQ(web_contents->GetMainFrame()->GetProcess(),
             new_web_contents->GetMainFrame()->GetProcess());
   MainThreadFrameObserver observer(
-      web_contents->GetRenderViewHost()->GetWidget());
+      web_contents->GetMainFrame()->GetRenderViewHost()->GetWidget());
   for (int i = 0; i < 5; ++i)
     observer.Wait();
 }
@@ -810,7 +960,7 @@ IN_PROC_BROWSER_TEST_P(
   PerformTestWithLeftRightRects(html_rect_size, copy_rect, output_size);
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // On ChromeOS there is no software compositing.
 static const auto kTestCompositingModes = testing::Values(GL_COMPOSITING);
 #else
@@ -831,5 +981,4 @@ INSTANTIATE_TEST_SUITE_P(
 
 #endif  // !defined(OS_ANDROID)
 
-}  // namespace
 }  // namespace content

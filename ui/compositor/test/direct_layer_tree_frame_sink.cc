@@ -118,7 +118,8 @@ void DirectLayerTreeFrameSink::SubmitCompositorFrame(
 }
 
 void DirectLayerTreeFrameSink::DidNotProduceFrame(
-    const viz::BeginFrameAck& ack) {
+    const viz::BeginFrameAck& ack,
+    cc::FrameSkippedReason reason) {
   DCHECK(!ack.has_damage);
   DCHECK(ack.frame_id.IsSequenceValid());
   support_->DidNotProduceFrame(ack);
@@ -158,19 +159,19 @@ DirectLayerTreeFrameSink::GetPreferredFrameIntervalForFrameSinkId(
 }
 
 void DirectLayerTreeFrameSink::DidReceiveCompositorFrameAck(
-    const std::vector<viz::ReturnedResource>& resources) {
+    std::vector<viz::ReturnedResource> resources) {
   // Submitting a CompositorFrame can synchronously draw and dispatch a frame
   // ack. PostTask to ensure the client is notified on a new stack frame.
   compositor_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(
           &DirectLayerTreeFrameSink::DidReceiveCompositorFrameAckInternal,
-          weak_factory_.GetWeakPtr(), resources));
+          weak_factory_.GetWeakPtr(), std::move(resources)));
 }
 
 void DirectLayerTreeFrameSink::DidReceiveCompositorFrameAckInternal(
-    const std::vector<viz::ReturnedResource>& resources) {
-  client_->ReclaimResources(resources);
+    std::vector<viz::ReturnedResource> resources) {
+  client_->ReclaimResources(std::move(resources));
   client_->DidReceiveCompositorFrameAck();
 }
 
@@ -183,7 +184,8 @@ void DirectLayerTreeFrameSink::OnBeginFrame(
   if (!needs_begin_frames_) {
     // OnBeginFrame() can be called just to deliver presentation feedback, so
     // report that we didn't use this BeginFrame.
-    DidNotProduceFrame(viz::BeginFrameAck(args, false));
+    DidNotProduceFrame(viz::BeginFrameAck(args, false),
+                       cc::FrameSkippedReason::kNoDamage);
     return;
   }
 
@@ -191,8 +193,8 @@ void DirectLayerTreeFrameSink::OnBeginFrame(
 }
 
 void DirectLayerTreeFrameSink::ReclaimResources(
-    const std::vector<viz::ReturnedResource>& resources) {
-  client_->ReclaimResources(resources);
+    std::vector<viz::ReturnedResource> resources) {
+  client_->ReclaimResources(std::move(resources));
 }
 
 void DirectLayerTreeFrameSink::OnBeginFramePausedChanged(bool paused) {

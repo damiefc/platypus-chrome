@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,6 +23,7 @@
 #include "base/trace_event/trace_event.h"
 #include "cc/metrics/begin_main_frame_metrics.h"
 #include "cc/metrics/event_metrics.h"
+#include "cc/test/fake_compositor_frame_reporting_controller.h"
 #include "cc/test/scheduler_test_common.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/test/begin_frame_args_test.h"
@@ -172,7 +174,8 @@ class FakeSchedulerClient : public SchedulerClient,
 
     if (swap_will_happen_if_draw_happens_) {
       last_begin_frame_ack_ = scheduler_->CurrentBeginFrameAckForActiveTree();
-      scheduler_->DidSubmitCompositorFrame(0, EventMetricsSet());
+      scheduler_->DidSubmitCompositorFrame(0, EventMetricsSet(),
+                                           /*has_missing_content=*/false);
 
       if (automatic_ack_)
         scheduler_->DidReceiveCompositorFrameAck();
@@ -359,19 +362,19 @@ class SchedulerTest : public testing::Test {
  public:
   SchedulerTest()
       : task_runner_(base::MakeRefCounted<SchedulerTestTaskRunner>()),
-        fake_external_begin_frame_source_(nullptr),
-        fake_compositor_timing_history_(nullptr) {}
+        fake_external_begin_frame_source_(nullptr) {}
 
   ~SchedulerTest() override = default;
 
  protected:
   TestScheduler* CreateScheduler(BeginFrameSourceType bfs_type) {
     viz::BeginFrameSource* frame_source = nullptr;
-    unthrottled_frame_source_.reset(new viz::BackToBackBeginFrameSource(
-        std::make_unique<viz::FakeDelayBasedTimeSource>(
-            task_runner_->GetMockTickClock(), task_runner_.get())));
-    fake_external_begin_frame_source_.reset(
-        new viz::FakeExternalBeginFrameSource(1.0, false));
+    unthrottled_frame_source_ =
+        std::make_unique<viz::BackToBackBeginFrameSource>(
+            std::make_unique<viz::FakeDelayBasedTimeSource>(
+                task_runner_->GetMockTickClock(), task_runner_.get()));
+    fake_external_begin_frame_source_ =
+        std::make_unique<viz::FakeExternalBeginFrameSource>(1.0, false);
     fake_external_begin_frame_source_->SetClient(client_.get());
     synthetic_frame_source_ = std::make_unique<viz::DelayBasedBeginFrameSource>(
         std::make_unique<viz::FakeDelayBasedTimeSource>(
@@ -394,10 +397,14 @@ class SchedulerTest : public testing::Test {
         fake_compositor_timing_history = FakeCompositorTimingHistory::Create(
             scheduler_settings_.using_synchronous_renderer_compositor);
     fake_compositor_timing_history_ = fake_compositor_timing_history.get();
+    reporting_controller =
+        std::make_unique<FakeCompositorFrameReportingController>();
+    reporting_controller->SetDroppedFrameCounter(&dropped_counter);
 
-    scheduler_.reset(new TestScheduler(
+    scheduler_ = std::make_unique<TestScheduler>(
         task_runner_->GetMockTickClock(), client_.get(), scheduler_settings_, 0,
-        task_runner_.get(), std::move(fake_compositor_timing_history)));
+        task_runner_.get(), std::move(fake_compositor_timing_history),
+        reporting_controller.get());
     client_->set_scheduler(scheduler_.get());
     scheduler_->SetBeginFrameSource(frame_source);
 
@@ -586,6 +593,8 @@ class SchedulerTest : public testing::Test {
   std::unique_ptr<FakeSchedulerClient> client_;
   std::unique_ptr<TestScheduler> scheduler_;
   FakeCompositorTimingHistory* fake_compositor_timing_history_;
+  DroppedFrameCounter dropped_counter;
+  std::unique_ptr<CompositorFrameReportingController> reporting_controller;
 };
 
 TEST_F(SchedulerTest, InitializeLayerTreeFrameSinkDoesNotBeginImplFrame) {
@@ -3068,7 +3077,8 @@ TEST_F(SchedulerTest, SynchronousCompositorAnimation) {
   AdvanceFrame();
   EXPECT_ACTIONS("WillBeginImplFrame",
                  "ScheduledActionInvalidateLayerTreeFrameSink");
-  EXPECT_FALSE(client_->IsInsideBeginImplFrame());
+  // Finish frame is deferred until next draw since there was invalidation.
+  EXPECT_TRUE(client_->IsInsideBeginImplFrame());
   client_->Reset();
 
   // Android onDraw. This doesn't consume the single begin frame request.
@@ -3089,7 +3099,8 @@ TEST_F(SchedulerTest, SynchronousCompositorAnimation) {
   AdvanceFrame();
   EXPECT_ACTIONS("WillBeginImplFrame",
                  "ScheduledActionInvalidateLayerTreeFrameSink");
-  EXPECT_FALSE(client_->IsInsideBeginImplFrame());
+  // Finish frame is deferred until next draw since there was invalidation.
+  EXPECT_TRUE(client_->IsInsideBeginImplFrame());
   client_->Reset();
 
   // Android onDraw.
@@ -3140,12 +3151,12 @@ TEST_F(SchedulerTest, InvalidateLayerTreeFrameSinkWhenCannotDraw) {
   // Do not invalidate in next BeginFrame.
   EXPECT_SCOPED(AdvanceFrame());
   EXPECT_ACTIONS("WillBeginImplFrame");
-  client_->Reset();
 
   // Redraw is not cleared.
   EXPECT_TRUE(scheduler_->RedrawPending());
 
   scheduler_->SetCanDraw(true);
+  client_->Reset();
 
   // Do invalidate in next BeginFrame.
   EXPECT_SCOPED(AdvanceFrame());
@@ -3332,15 +3343,8 @@ TEST_F(SchedulerTest, SynchronousCompositorCommitAndVerifyBeginFrameAcks) {
   args = SendNextBeginFrame();
   EXPECT_ACTIONS("WillBeginImplFrame",
                  "ScheduledActionInvalidateLayerTreeFrameSink");
-  EXPECT_FALSE(client_->IsInsideBeginImplFrame());
-
-  // No damage, since not drawn yet.
-  // TODO(eseckler): In the future, |has_damage = false| will prevent us from
-  // filtering this ack (in CompositorExternalBeginFrameSource) and instead
-  // forwarding the one attached to the later submitted CompositorFrame.
-  has_damage = false;
-  EXPECT_EQ(viz::BeginFrameAck(args, has_damage),
-            client_->last_begin_frame_ack());
+  // Finish frame is deferred until next draw since there was invalidation.
+  EXPECT_TRUE(client_->IsInsideBeginImplFrame());
   client_->Reset();
 
   // Android onDraw.
@@ -3901,7 +3905,9 @@ TEST_F(SchedulerTest, BeginFrameAckForFinishedImplFrame) {
   has_damage = false;
   EXPECT_EQ(viz::BeginFrameAck(args, has_damage),
             client_->last_begin_frame_ack());
-  EXPECT_EQ(FrameSkippedReason::kNoDamage,
+  // The pending tree is not activated yet so the frame is still waiting on
+  // Main thread update
+  EXPECT_EQ(FrameSkippedReason::kWaitingOnMain,
             client_->last_frame_skipped_reason());
 }
 

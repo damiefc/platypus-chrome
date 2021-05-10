@@ -933,7 +933,7 @@ error::Error DoScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                        GLenum filter,
                                        const GLfloat* bounds_rect);
 error::Error DoScheduleCALayerInUseQueryCHROMIUM(
-    GLuint n,
+    GLsizei n,
     const volatile GLuint* textures);
 error::Error DoScheduleDCLayerCHROMIUM(GLuint texture_0,
                                        GLuint texture_1,
@@ -1084,29 +1084,7 @@ error::Error DoSetDrawRectangleCHROMIUM(GLint x,
                                         GLint width,
                                         GLint height);
 error::Error DoSetEnableDCLayersCHROMIUM(GLboolean enable);
-error::Error DoBeginRasterCHROMIUM(GLuint texture_id,
-                                   GLuint sk_color,
-                                   GLuint msaa_sample_count,
-                                   GLboolean can_use_lcd_text,
-                                   GLint color_type);
-error::Error DoRasterCHROMIUM(GLuint raster_shm_id,
-                              GLuint raster_shm_offset,
-                              GLsizeiptr raster_shm_size,
-                              GLuint font_shm_id,
-                              GLuint font_shm_offset,
-                              GLsizeiptr font_shm_size);
-error::Error DoEndRasterCHROMIUM();
-error::Error DoCreateTransferCacheEntryINTERNAL(GLuint entry_type,
-                                                GLuint entry_id,
-                                                GLuint handle_shm_id,
-                                                GLuint handle_shm_offset,
-                                                GLuint data_shm_id,
-                                                GLuint data_shm_offset,
-                                                GLuint data_size);
-error::Error DoUnlockTransferCacheEntryINTERNAL(GLuint entry_type,
-                                                GLuint entry_id);
-error::Error DoDeleteTransferCacheEntryINTERNAL(GLuint entry_type,
-                                                GLuint entry_id);
+
 error::Error DoWindowRectanglesEXT(GLenum mode,
                                    GLsizei n,
                                    const volatile GLint* box);

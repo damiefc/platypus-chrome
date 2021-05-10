@@ -4,8 +4,10 @@
 
 #include "components/captive_portal/content/captive_portal_tab_reloader.h"
 
-#include "base/bind_helpers.h"
+#include <memory>
+
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "components/captive_portal/content/captive_portal_service.h"
@@ -56,8 +58,9 @@ class CaptivePortalTabReloaderTest : public content::RenderViewHostTestHarness {
   // testing::Test:
   void SetUp() override {
     content::RenderViewHostTestHarness::SetUp();
-    tab_reloader_.reset(
-        new testing::StrictMock<TestCaptivePortalTabReloader>(web_contents()));
+    tab_reloader_ =
+        std::make_unique<testing::StrictMock<TestCaptivePortalTabReloader>>(
+            web_contents());
 
     // Most tests don't run the message loop, so don't use a timer for them.
     tab_reloader_->set_slow_ssl_load_time(base::TimeDelta());

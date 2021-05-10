@@ -4,8 +4,9 @@
 
 #import <Foundation/Foundation.h>
 
+#include <string>
+
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -40,18 +41,23 @@ class FindBarPlatformHelperMac : public FindBarPlatformHelper {
         removeObserver:find_pasteboard_notification_observer_];
   }
 
-  void OnUserChangedFindText(base::string16 text) override {
+  void OnUserChangedFindText(std::u16string text) override {
     if (find_bar_controller_->web_contents()
             ->GetBrowserContext()
             ->IsOffTheRecord()) {
       return;
     }
 
-    [[FindPasteboard sharedInstance]
-        setFindText:base::SysUTF16ToNSString(text)];
+    {
+      base::AutoReset<bool> resetter(&sending_own_notification_, true);
+      [[FindPasteboard sharedInstance]
+          setFindText:base::SysUTF16ToNSString(text)];
+    }
   }
 
  private:
+  bool sending_own_notification_ = false;
+
   void UpdateFindBarControllerFromPasteboard() {
     content::WebContents* active_web_contents =
         find_bar_controller_->web_contents();
@@ -73,8 +79,10 @@ class FindBarPlatformHelperMac : public FindBarPlatformHelper {
       }
     }
 
-    NSString* find_text = [[FindPasteboard sharedInstance] findText];
-    find_bar_controller_->SetText(base::SysNSStringToUTF16(find_text));
+    if (!sending_own_notification_) {
+      NSString* find_text = [[FindPasteboard sharedInstance] findText];
+      find_bar_controller_->SetText(base::SysNSStringToUTF16(find_text));
+    }
   }
 
   id find_pasteboard_notification_observer_;

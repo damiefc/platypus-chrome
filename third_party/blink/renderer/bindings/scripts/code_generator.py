@@ -13,6 +13,7 @@ import re
 import sys
 
 from idl_types import set_ancestors, IdlType
+from itertools import groupby
 from v8_globals import includes
 from v8_interface import constant_filters
 from v8_types import set_component_dirs
@@ -43,6 +44,7 @@ TEMPLATES_DIR = os.path.normpath(
 # after path[0] == invoking script dir
 sys.path.insert(1, THIRD_PARTY_DIR)
 import jinja2
+from jinja2.filters import make_attrgetter, environmentfilter
 
 
 def generate_indented_conditional(code, conditional):
@@ -58,6 +60,22 @@ def exposed_if(code, exposed_test):
         return code
     return generate_indented_conditional(
         code, 'execution_context && (%s)' % exposed_test)
+
+
+# [CrossOriginIsolated]
+def cross_origin_isolated_if(code, cross_origin_isolated_test):
+    if not cross_origin_isolated_test:
+        return code
+    return generate_indented_conditional(
+        code, 'execution_context && (%s)' % cross_origin_isolated_test)
+
+
+# [DirectSocketEnabled]
+def direct_socket_enabled_if(code, direct_socket_enabled_test):
+    if not direct_socket_enabled_test:
+        return code
+    return generate_indented_conditional(
+        code, 'execution_context && (%s)' % direct_socket_enabled_test)
 
 
 # [SecureContext]
@@ -88,6 +106,13 @@ def runtime_enabled_if(code, name):
     return generate_indented_conditional(code, function)
 
 
+@environmentfilter
+def do_stringify_key_group_by(environment, value, attribute):
+    expr = make_attrgetter(environment, attribute)
+    key = lambda item: '' if expr(item) is None else str(expr(item))
+    return groupby(sorted(value, key=key), expr)
+
+
 def initialize_jinja_env(cache_dir):
     jinja_env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(TEMPLATES_DIR),
@@ -98,25 +123,20 @@ def initialize_jinja_env(cache_dir):
         lstrip_blocks=True,  # so can indent control flow tags
         trim_blocks=True)
     jinja_env.filters.update({
-        'blink_capitalize':
-        capitalize,
-        'exposed':
-        exposed_if,
-        'format_blink_cpp_source_code':
-        format_blink_cpp_source_code,
-        'format_remove_duplicates':
-        format_remove_duplicates,
-        'origin_trial_enabled':
-        origin_trial_enabled_if,
-        'runtime_enabled':
-        runtime_enabled_if,
-        'runtime_enabled_function':
-        v8_utilities.runtime_enabled_function,
-        'secure_context':
-        secure_context_if
+        'blink_capitalize': capitalize,
+        'exposed': exposed_if,
+        'format_blink_cpp_source_code': format_blink_cpp_source_code,
+        'format_remove_duplicates': format_remove_duplicates,
+        'origin_trial_enabled': origin_trial_enabled_if,
+        'runtime_enabled': runtime_enabled_if,
+        'runtime_enabled_function': v8_utilities.runtime_enabled_function,
+        'cross_origin_isolated': cross_origin_isolated_if,
+        'direct_socket_enabled': direct_socket_enabled_if,
+        'secure_context': secure_context_if
     })
     jinja_env.filters.update(constant_filters())
     jinja_env.filters.update(method_filters())
+    jinja_env.filters["stringifykeygroupby"] = do_stringify_key_group_by
     return jinja_env
 
 
@@ -187,6 +207,9 @@ class CodeGeneratorBase(object):
                 dependency = idl_filename_to_component(include_path)
                 assert is_valid_component_dependency(component, dependency)
             includes.add(include_path)
+
+        context['header_forward_decls'] = sorted(
+            context.get('header_forward_decls', set()))
 
         cpp_includes = set(context.get('cpp_includes', []))
         context['cpp_includes'] = normalize_and_sort_includes(cpp_includes

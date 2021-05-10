@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/hash/hash.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
@@ -502,13 +502,6 @@ void CommandBufferStub::OnAsyncFlush(
   CommandBuffer::State pre_state = command_buffer_->GetState();
   UpdateActiveUrl();
 
-  MailboxManager* mailbox_manager =
-      channel_->gpu_channel_manager()->mailbox_manager();
-  if (mailbox_manager->UsesSync()) {
-    for (const auto& sync_token : sync_token_fences)
-      mailbox_manager->PullTextureUpdates(sync_token);
-  }
-
   {
     auto* gr_shader_cache = channel_->gpu_channel_manager()->gr_shader_cache();
     base::Optional<raster::GrShaderCache::ScopedCacheUse> cache_use;
@@ -589,11 +582,6 @@ void CommandBufferStub::OnSignalQuery(uint32_t query_id, uint32_t id) {
 void CommandBufferStub::OnFenceSyncRelease(uint64_t release) {
   SyncToken sync_token(CommandBufferNamespace::GPU_IO, command_buffer_id_,
                        release);
-  MailboxManager* mailbox_manager =
-      channel_->gpu_channel_manager()->mailbox_manager();
-  if (mailbox_manager->UsesSync() && MakeCurrent())
-    mailbox_manager->PushTextureUpdates(sync_token);
-
   command_buffer_->SetReleaseCount(release);
   sync_point_client_state_->ReleaseFenceSync(release);
 }
@@ -649,15 +637,14 @@ void CommandBufferStub::RemoveDestructionObserver(
   destruction_observers_.RemoveObserver(observer);
 }
 
-std::unique_ptr<MemoryTracker> CommandBufferStub::CreateMemoryTracker(
-    const GPUCreateCommandBufferConfig& init_params) const {
+std::unique_ptr<MemoryTracker> CommandBufferStub::CreateMemoryTracker() const {
   MemoryTrackerFactory current_factory = GetMemoryTrackerFactory();
   if (current_factory)
-    return current_factory.Run(init_params);
+    return current_factory.Run();
 
   return std::make_unique<GpuCommandBufferMemoryTracker>(
       command_buffer_id_, channel_->client_tracing_id(),
-      init_params.attribs.context_type, channel_->task_runner(),
+      channel_->task_runner(),
       channel_->gpu_channel_manager()->peak_memory_monitor());
 }
 
@@ -665,6 +652,10 @@ std::unique_ptr<MemoryTracker> CommandBufferStub::CreateMemoryTracker(
 void CommandBufferStub::SetMemoryTrackerFactoryForTesting(
     MemoryTrackerFactory factory) {
   SetOrGetMemoryTrackerFactory(factory);
+}
+
+MemoryTracker* CommandBufferStub::GetMemoryTracker() const {
+  return memory_tracker_.get();
 }
 
 scoped_refptr<Buffer> CommandBufferStub::GetTransferBuffer(int32_t id) {

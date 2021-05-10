@@ -16,6 +16,7 @@
 @protocol BrowserCommands;
 @protocol ContentSuggestionsCollectionSynchronizing;
 @protocol ContentSuggestionsCommands;
+@protocol ContentSuggestionsHeaderCommands;
 @protocol ContentSuggestionsHeaderViewControllerDelegate;
 @protocol FakeboxFocuser;
 @protocol NewTabPageControllerDelegate;
@@ -42,7 +43,11 @@ class ReadingListModel;
         dispatcher;
 @property(nonatomic, weak) id<ContentSuggestionsHeaderViewControllerDelegate>
     delegate;
+// TODO(crbug.com/1200303): Remove this and use instead
+// ContentSuggestionsHeaderCommands.
 @property(nonatomic, weak) id<ContentSuggestionsCommands> commandHandler;
+@property(nonatomic, weak) id<ContentSuggestionsHeaderCommands>
+    headerCommandHandler;
 @property(nonatomic, assign) ReadingListModel* readingListModel;
 @property(nonatomic, weak) id<NewTabPageControllerDelegate> toolbarDelegate;
 
@@ -58,6 +63,11 @@ class ReadingListModel;
 // Animates the NTP fakebox to the focused position and focuses the real
 // omnibox.
 - (void)focusFakebox;
+
+// Identity disc shown in this ViewController.
+// TODO(crbug.com/1170995): Remove once the Feed header properly supports
+// ContentSuggestions.
+@property(nonatomic, strong, readonly) UIButton* identityDiscButton;
 
 @end
 

@@ -13,16 +13,19 @@
 
 #include "base/auto_reset.h"
 #include "base/files/file_path.h"
+#include "base/guid.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
 #include "base/version.h"
 #include "extensions/buildflags/buildflags.h"
+#include "extensions/common/extension_guid.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/common/extension_resource.h"
 #include "extensions/common/hashed_extension_id.h"
 #include "extensions/common/install_warning.h"
 #include "extensions/common/manifest.h"
+#include "extensions/common/mojom/manifest.mojom-shared.h"
 #include "extensions/common/url_pattern_set.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -45,7 +48,7 @@ class PermissionsParser;
 // Once created, an Extension object is immutable, with the exception of its
 // RuntimeData. This makes it safe to use on any thread, since access to the
 // RuntimeData is protected by a lock.
-class Extension : public base::RefCountedThreadSafe<Extension> {
+class Extension final : public base::RefCountedThreadSafe<Extension> {
  public:
   // Do not renumber or reorder these values, as they are stored on-disk in the
   // user's preferences.
@@ -154,7 +157,7 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   static const int kInitFromValueFlagBits;
 
   static scoped_refptr<Extension> Create(const base::FilePath& path,
-                                         Manifest::Location location,
+                                         mojom::ManifestLocation location,
                                          const base::DictionaryValue& value,
                                          int flags,
                                          std::string* error);
@@ -162,7 +165,7 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   // In a few special circumstances, we want to create an Extension and give it
   // an explicit id. Most consumers should just use the other Create() method.
   static scoped_refptr<Extension> Create(const base::FilePath& path,
-                                         Manifest::Location location,
+                                         mojom::ManifestLocation location,
                                          const base::DictionaryValue& value,
                                          int flags,
                                          const ExtensionId& explicit_id,
@@ -245,23 +248,29 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   bool ShouldExposeViaManagementAPI() const;
 
   // Get the manifest data associated with the key, or NULL if there is none.
-  // Can only be called after InitValue is finished.
+  // Can only be called after InitFromValue is finished.
   ManifestData* GetManifestData(const std::string& key) const;
 
   // Sets |data| to be associated with the key.
-  // Can only be called before InitValue is finished. Not thread-safe;
+  // Can only be called before InitFromValue is finished. Not thread-safe;
   // all SetManifestData calls should be on only one thread.
   void SetManifestData(const std::string& key,
                        std::unique_ptr<ManifestData> data);
+
+  // Sets the GUID for this extension. Note: this should *only* be used when
+  // duplicating an existing extension; otherwise, the GUID will be
+  // appropriately set during creation (ensuring uniqueness).
+  void SetGUID(const ExtensionGuid& guid);
 
   // Accessors:
 
   const base::FilePath& path() const { return path_; }
   const GURL& url() const { return extension_url_; }
   url::Origin origin() const { return url::Origin::Create(extension_url_); }
-  Manifest::Location location() const;
+  mojom::ManifestLocation location() const;
   const ExtensionId& id() const;
   const HashedExtensionId& hashed_id() const;
+  const ExtensionGuid& guid() const;
   const base::Version& version() const { return version_; }
   const std::string& version_name() const { return version_name_; }
   std::string VersionString() const;
@@ -338,17 +347,9 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
  private:
   friend class base::RefCountedThreadSafe<Extension>;
 
-  // Chooses the extension ID for an extension based on a variety of criteria.
-  // The chosen ID will be set in |manifest|.
-  static bool InitExtensionID(extensions::Manifest* manifest,
-                              const base::FilePath& path,
-                              const ExtensionId& explicit_id,
-                              int creation_flags,
-                              base::string16* error);
-
   Extension(const base::FilePath& path,
             std::unique_ptr<extensions::Manifest> manifest);
-  virtual ~Extension();
+  ~Extension();
 
   // Initialize the extension from a parsed manifest.
   // TODO(aa): Rename to just Init()? There's no Value here anymore.
@@ -356,28 +357,26 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   // of the underlying DictionaryValue in its members. We should decide to
   // either wrap the DictionaryValue and go with that only, or we should parse
   // into strong types and discard the value. But doing both is bad.
-  bool InitFromValue(int flags, base::string16* error);
+  bool InitFromValue(int flags, std::u16string* error);
 
   // The following are helpers for InitFromValue to load various features of the
   // extension from the manifest.
 
-  bool LoadRequiredFeatures(base::string16* error);
-  bool LoadName(base::string16* error);
-  bool LoadVersion(base::string16* error);
+  bool LoadRequiredFeatures(std::u16string* error);
+  bool LoadName(std::u16string* error);
+  bool LoadVersion(std::u16string* error);
 
-  bool LoadAppFeatures(base::string16* error);
+  bool LoadAppFeatures(std::u16string* error);
   bool LoadExtent(const char* key,
                   URLPatternSet* extent,
                   const char* list_error,
                   const char* value_error,
-                  base::string16* error);
+                  std::u16string* error);
 
-  bool LoadSharedFeatures(base::string16* error);
-  bool LoadDescription(base::string16* error);
-  bool LoadManifestVersion(base::string16* error);
-  bool LoadShortName(base::string16* error);
-
-  bool CheckMinimumChromeVersion(base::string16* error) const;
+  bool LoadSharedFeatures(std::u16string* error);
+  bool LoadDescription(std::u16string* error);
+  bool LoadManifestVersion(std::u16string* error);
+  bool LoadShortName(std::u16string* error);
 
   // The extension's human-readable name. Name is used for display purpose. It
   // might be wrapped with unicode bidi control characters so that it is
@@ -446,7 +445,7 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   using ManifestDataMap = std::map<std::string, std::unique_ptr<ManifestData>>;
   ManifestDataMap manifest_data_;
 
-  // Set to true at the end of InitValue when initialization is finished.
+  // Set to true at the end of InitFromValue when initialization is finished.
   bool finished_parsing_manifest_;
 
   // Ensures that any call to GetManifestData() prior to finishing
@@ -468,6 +467,10 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   // The flags that were passed to InitFromValue.
   int creation_flags_;
 
+  // A dynamic ID that can be used when referencing extension resources via URL
+  // instead of an extension ID.
+  base::GUID guid_;
+
   DISALLOW_COPY_AND_ASSIGN(Extension);
 };
 
@@ -478,7 +481,7 @@ struct ExtensionInfo {
   ExtensionInfo(const base::DictionaryValue* manifest,
                 const ExtensionId& id,
                 const base::FilePath& path,
-                Manifest::Location location);
+                mojom::ManifestLocation location);
   ~ExtensionInfo();
 
   // Note: This may be null (e.g. for unpacked extensions retrieved from the
@@ -487,7 +490,7 @@ struct ExtensionInfo {
 
   ExtensionId extension_id;
   base::FilePath extension_path;
-  Manifest::Location extension_location;
+  mojom::ManifestLocation extension_location;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ExtensionInfo);

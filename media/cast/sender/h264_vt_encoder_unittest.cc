@@ -5,14 +5,14 @@
 #include <stdint.h>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/run_loop.h"
 #include "base/test/launcher/unit_test_launcher.h"
-#include "base/test/power_monitor_test_base.h"
+#include "base/test/power_monitor_test.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_suite.h"
@@ -130,9 +130,9 @@ class EndToEndFrameChecker
     bool decoder_init_result;
     decoder_.Initialize(
         config, false, nullptr,
-        base::Bind(&SaveDecoderInitResult, &decoder_init_result),
-        base::Bind(&EndToEndFrameChecker::CompareFrameWithExpected,
-                   base::Unretained(this)),
+        base::BindOnce(&SaveDecoderInitResult, &decoder_init_result),
+        base::BindRepeating(&EndToEndFrameChecker::CompareFrameWithExpected,
+                            base::Unretained(this)),
         base::NullCallback());
     base::RunLoop().RunUntilIdle();
     EXPECT_TRUE(decoder_init_result);
@@ -145,8 +145,8 @@ class EndToEndFrameChecker
   void EncodeDone(std::unique_ptr<SenderEncodedFrame> encoded_frame) {
     auto buffer = DecoderBuffer::CopyFrom(encoded_frame->bytes(),
                                           encoded_frame->data.size());
-    decoder_.Decode(buffer, base::Bind(&EndToEndFrameChecker::DecodeDone,
-                                       base::Unretained(this)));
+    decoder_.Decode(buffer, base::BindOnce(&EndToEndFrameChecker::DecodeDone,
+                                           base::Unretained(this)));
   }
 
   void CompareFrameWithExpected(scoped_refptr<VideoFrame> frame) {
@@ -199,8 +199,8 @@ class TestPowerSource : public base::PowerMonitorSource {
     base::RunLoop().RunUntilIdle();
   }
 
- private:
-  bool IsOnBatteryPowerImpl() final { return false; }
+  // base::PowerMonitorSource override:
+  bool IsOnBatteryPower() final { return false; }
 };
 
 class H264VideoToolboxEncoderTest : public ::testing::Test {
@@ -220,7 +220,7 @@ class H264VideoToolboxEncoderTest : public ::testing::Test {
         task_environment_.GetMainThreadTaskRunner());
     encoder_ = std::make_unique<H264VideoToolboxEncoder>(
         cast_environment_, video_sender_config_,
-        base::Bind(&SaveOperationalStatus, &operational_status_));
+        base::BindRepeating(&SaveOperationalStatus, &operational_status_));
     base::RunLoop().RunUntilIdle();
     EXPECT_EQ(STATUS_INITIALIZED, operational_status_);
   }

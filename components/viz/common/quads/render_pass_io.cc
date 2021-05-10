@@ -383,12 +383,10 @@ std::string PaintFilterToString(const sk_sp<cc::PaintFilter>& filter) {
   // No need to populate the SerializeOptions here since the security
   // constraints explicitly disable serializing images using the transfer cache
   // and serialization of PaintRecords.
-  cc::PaintOp::SerializeOptions options(nullptr, nullptr, nullptr, nullptr,
-                                        nullptr, nullptr, false, false, 0,
-                                        SkMatrix::I());
+  cc::PaintOp::SerializeOptions options;
   cc::PaintOpWriter writer(buffer.data(), buffer.size(), options,
                            true /* enable_security_constraints */);
-  writer.Write(filter.get());
+  writer.Write(filter.get(), SkM44());
   if (writer.size() == 0)
     return "";
   buffer.resize(writer.size());
@@ -455,7 +453,8 @@ base::Value FilterOperationToDict(const cc::FilterOperation& filter) {
       dict.SetIntKey("zoom_inset", filter.zoom_inset());
       break;
     case cc::FilterOperation::BLUR:
-      dict.SetIntKey("blur_tile_mode", filter.blur_tile_mode());
+      dict.SetIntKey("blur_tile_mode",
+                     static_cast<int>(filter.blur_tile_mode()));
       break;
     default:
       break;
@@ -536,7 +535,7 @@ bool FilterOperationFromDict(const base::Value& dict,
       if (!blur_tile_mode)
         return false;
       filter.set_blur_tile_mode(
-          static_cast<SkBlurImageFilter::TileMode>(blur_tile_mode.value()));
+          static_cast<SkTileMode>(blur_tile_mode.value()));
       break;
     default:
       break;
@@ -850,7 +849,7 @@ base::Value DrawQuadResourcesToList(const DrawQuad::Resources& resources) {
   base::Value list(base::Value::Type::LIST);
   DCHECK_LE(resources.count, DrawQuad::Resources::kMaxResourceIdCount);
   for (ResourceId id : resources)
-    list.Append(static_cast<int>(id));
+    list.Append(static_cast<int>(id.GetUnsafeValue()));
   return list;
 }
 
@@ -873,9 +872,56 @@ bool DrawQuadResourcesFromList(const base::Value& list,
 
   resources->count = static_cast<uint32_t>(size);
   for (size_t ii = 0; ii < size; ++ii) {
-    resources->ids[ii] = static_cast<ResourceId>(list.GetList()[ii].GetInt());
+    resources->ids[ii] = ResourceId(list.GetList()[ii].GetInt());
   }
   return true;
+}
+
+base::Value SurfaceIdToDict(const SurfaceId& id) {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetIntKey("client_id", id.frame_sink_id().client_id());
+  dict.SetIntKey("sink_id", id.frame_sink_id().sink_id());
+  dict.SetIntKey("parent_seq", id.local_surface_id().parent_sequence_number());
+  dict.SetIntKey("child_seq", id.local_surface_id().child_sequence_number());
+
+  // |embed_token_| doesn't need to be saved as long as a consistent token is
+  // used when deserializing.
+  return dict;
+}
+
+base::Optional<SurfaceId> SurfaceIdFromDict(const base::Value& dict) {
+  base::Optional<int> client_id = dict.FindIntKey("client_id");
+  base::Optional<int> sink_id = dict.FindIntKey("sink_id");
+  base::Optional<int> parent_seq = dict.FindIntKey("parent_seq");
+  base::Optional<int> child_seq = dict.FindIntKey("child_seq");
+  if (!client_id || !sink_id || !parent_seq || !child_seq)
+    return base::nullopt;
+
+  base::UnguessableToken token = base::UnguessableToken::Deserialize(1, 1);
+  return SurfaceId(FrameSinkId(*client_id, *sink_id),
+                   LocalSurfaceId(*parent_seq, *child_seq, token));
+}
+
+base::Value SurfaceRangeToDict(const SurfaceRange& range) {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  if (range.start().has_value())
+    dict.SetKey("start", SurfaceIdToDict(*(range.start())));
+  dict.SetKey("end", SurfaceIdToDict(range.end()));
+  return dict;
+}
+
+base::Optional<SurfaceRange> SurfaceRangeFromDict(const base::Value& dict) {
+  const base::Value* start_dict = dict.FindDictKey("start");
+  const base::Value* end_dict = dict.FindDictKey("end");
+  if (!end_dict)
+    return base::nullopt;
+  base::Optional<SurfaceId> start =
+      start_dict ? SurfaceIdFromDict(*start_dict) : base::nullopt;
+  base::Optional<SurfaceId> end = SurfaceIdFromDict(*end_dict);
+  if (!end || (start_dict && !start))
+    return base::nullopt;
+
+  return SurfaceRange(start, *end);
 }
 
 int GetSharedQuadStateIndex(const SharedQuadStateList& shared_quad_state_list,
@@ -1060,8 +1106,8 @@ void CompositorRenderPassDrawQuadToDict(
                      draw_quad->backdrop_filter_quality);
   dict->SetBoolKey("force_anti_aliasing_off",
                    draw_quad->force_anti_aliasing_off);
-  dict->SetBoolKey("can_use_backdrop_filter_cache",
-                   draw_quad->can_use_backdrop_filter_cache);
+  dict->SetBoolKey("intersects_damage_under",
+                   draw_quad->intersects_damage_under);
   DCHECK_GE(1u, draw_quad->resources.count);
 }
 
@@ -1110,6 +1156,19 @@ int StringToProtectedVideoType(const std::string& str) {
   return -1;
 }
 #undef MAP_STRING_TO_VIDEO_TYPE
+
+void SurfaceDrawQuadToDict(const SurfaceDrawQuad* draw_quad,
+                           base::Value* dict) {
+  DCHECK(draw_quad);
+  DCHECK(dict);
+  dict->SetKey("surface_range", SurfaceRangeToDict(draw_quad->surface_range));
+  dict->SetIntKey("default_background_color",
+                  bit_cast<int>(draw_quad->default_background_color));
+  dict->SetBoolKey("stretch_content",
+                   draw_quad->stretch_content_to_fill_bounds);
+  dict->SetBoolKey("is_reflection", draw_quad->is_reflection);
+  dict->SetBoolKey("allow_merge", draw_quad->allow_merge);
+}
 
 void TextureDrawQuadToDict(const TextureDrawQuad* draw_quad,
                            base::Value* dict) {
@@ -1190,12 +1249,12 @@ base::Value DrawQuadToDict(const DrawQuad* draw_quad,
                                 CompositorRenderPassDrawQuad)
     WRITE_DRAW_QUAD_TYPE_FIELDS(kSolidColor, SolidColorDrawQuad)
     WRITE_DRAW_QUAD_TYPE_FIELDS(kStreamVideoContent, StreamVideoDrawQuad)
+    WRITE_DRAW_QUAD_TYPE_FIELDS(kSurfaceContent, SurfaceDrawQuad)
     WRITE_DRAW_QUAD_TYPE_FIELDS(kTextureContent, TextureDrawQuad)
     WRITE_DRAW_QUAD_TYPE_FIELDS(kTiledContent, TileDrawQuad)
     WRITE_DRAW_QUAD_TYPE_FIELDS(kYuvVideoContent, YUVVideoDrawQuad)
     WRITE_DRAW_QUAD_TYPE_FIELDS(kVideoHole, VideoHoleDrawQuad)
     UNEXPECTED_DRAW_QUAD_TYPE(kPictureContent)
-    UNEXPECTED_DRAW_QUAD_TYPE(kSurfaceContent)
     default:
       break;
   }
@@ -1233,8 +1292,8 @@ bool CompositorRenderPassDrawQuadFromDict(
       dict.FindDoubleKey("backdrop_filter_quality");
   base::Optional<bool> force_anti_aliasing_off =
       dict.FindBoolKey("force_anti_aliasing_off");
-  base::Optional<bool> can_use_backdrop_filter_cache =
-      dict.FindBoolKey("can_use_backdrop_filter_cache");
+  base::Optional<bool> intersects_damage_under =
+      dict.FindBoolKey("intersects_damage_under");
 
   if (!render_pass_id || !mask_uv_rect || !mask_texture_size ||
       !filters_scale || !filters_origin || !tex_coord_rect ||
@@ -1256,7 +1315,7 @@ bool CompositorRenderPassDrawQuadFromDict(
   }
   CompositorRenderPassId t_render_pass_id{render_pass_id_as_int};
 
-  ResourceId mask_resource_id = 0u;
+  ResourceId mask_resource_id = kInvalidResourceId;
   if (common.resources.count == 1u) {
     const size_t kIndex = CompositorRenderPassDrawQuad::kMaskResourceIdIndex;
     mask_resource_id = common.resources.ids[kIndex];
@@ -1266,8 +1325,7 @@ bool CompositorRenderPassDrawQuadFromDict(
       common.needs_blending, t_render_pass_id, mask_resource_id, t_mask_uv_rect,
       t_mask_texture_size, t_filters_scale, t_filters_origin, t_tex_coord_rect,
       force_anti_aliasing_off.value(), backdrop_filter_quality.value(),
-      can_use_backdrop_filter_cache ? can_use_backdrop_filter_cache.value()
-                                    : false);
+      intersects_damage_under ? intersects_damage_under.value() : false);
   return true;
 }
 
@@ -1320,6 +1378,34 @@ bool StreamVideoDrawQuadFromDict(const base::Value& dict,
                     common.needs_blending, resource_id,
                     t_overlay_resource_size_in_pixels, t_uv_top_left,
                     t_uv_bottom_right);
+  return true;
+}
+
+bool SurfaceDrawQuadFromDict(const base::Value& dict,
+                             const DrawQuadCommon& common,
+                             SurfaceDrawQuad* draw_quad) {
+  DCHECK(draw_quad);
+  if (!dict.is_dict())
+    return false;
+
+  const base::Value* surface_range_dict = dict.FindDictKey("surface_range");
+  if (!surface_range_dict)
+    return false;
+  base::Optional<SurfaceRange> surface_range =
+      SurfaceRangeFromDict(*surface_range_dict);
+  base::Optional<int> default_background_color =
+      dict.FindIntKey("default_background_color");
+  base::Optional<bool> stretch_content = dict.FindBoolKey("stretch_content");
+  base::Optional<bool> is_reflection = dict.FindBoolKey("is_reflection");
+  base::Optional<bool> allow_merge = dict.FindBoolKey("allow_merge");
+  if (!surface_range || !default_background_color || !stretch_content ||
+      !is_reflection || !allow_merge)
+    return false;
+
+  draw_quad->SetAll(common.shared_quad_state, common.rect, common.visible_rect,
+                    common.needs_blending, *surface_range,
+                    bit_cast<SkColor>(*default_background_color),
+                    *stretch_content, *is_reflection, *allow_merge);
   return true;
 }
 
@@ -1468,7 +1554,7 @@ bool YUVVideoDrawQuadFromDict(const base::Value& dict,
       static_cast<float>(resource_multiplier.value()),
       static_cast<uint32_t>(bits_per_channel.value()),
       static_cast<gfx::ProtectedVideoType>(protected_video_type_index),
-      gl::HDRMetadata());
+      gfx::HDRMetadata());
   return true;
 }
 
@@ -1538,12 +1624,12 @@ bool QuadListFromList(const base::Value& list,
       GET_QUAD_FROM_DICT(kCompositorRenderPass, CompositorRenderPassDrawQuad)
       GET_QUAD_FROM_DICT(kSolidColor, SolidColorDrawQuad)
       GET_QUAD_FROM_DICT(kStreamVideoContent, StreamVideoDrawQuad)
+      GET_QUAD_FROM_DICT(kSurfaceContent, SurfaceDrawQuad)
       GET_QUAD_FROM_DICT(kTextureContent, TextureDrawQuad)
       GET_QUAD_FROM_DICT(kTiledContent, TileDrawQuad)
       GET_QUAD_FROM_DICT(kYuvVideoContent, YUVVideoDrawQuad)
       GET_QUAD_FROM_DICT(kVideoHole, VideoHoleDrawQuad)
       UNEXPECTED_DRAW_QUAD_TYPE(kPictureContent)
-      UNEXPECTED_DRAW_QUAD_TYPE(kSurfaceContent)
       default:
         break;
     }
@@ -1602,18 +1688,16 @@ base::Value SharedQuadStateToDict(const SharedQuadState& sqs) {
   dict.SetKey("quad_layer_rect", RectToDict(sqs.quad_layer_rect));
   dict.SetKey("visible_quad_layer_rect",
               RectToDict(sqs.visible_quad_layer_rect));
-  dict.SetKey("rounded_corner_bounds", RRectFToDict(sqs.rounded_corner_bounds));
-  dict.SetKey("clip_rect", RectToDict(sqs.clip_rect));
-  dict.SetBoolKey("is_clipped", sqs.is_clipped);
+  dict.SetKey("rounded_corner_bounds",
+              RRectFToDict(sqs.mask_filter_info.rounded_corner_bounds()));
+  if (sqs.clip_rect) {
+    dict.SetKey("clip_rect", RectToDict(*sqs.clip_rect));
+  }
   dict.SetBoolKey("are_contents_opaque", sqs.are_contents_opaque);
   dict.SetDoubleKey("opacity", sqs.opacity);
   dict.SetStringKey("blend_mode", BlendModeToString(sqs.blend_mode));
   dict.SetIntKey("sorting_context_id", sqs.sorting_context_id);
   dict.SetBoolKey("is_fast_rounded_corner", sqs.is_fast_rounded_corner);
-  if (sqs.occluding_damage_rect) {
-    dict.SetKey("occluding_damage_rect",
-                RectToDict(sqs.occluding_damage_rect.value()));
-  }
   dict.SetDoubleKey("de_jelly_delta_y", sqs.de_jelly_delta_y);
   return dict;
 }
@@ -1676,15 +1760,13 @@ bool SharedQuadStateFromDict(const base::Value& dict, SharedQuadState* sqs) {
       dict.FindIntKey("sorting_context_id");
   base::Optional<bool> is_fast_rounded_corner =
       dict.FindBoolKey("is_fast_rounded_corner");
-  const base::Value* occluding_damage_rect =
-      dict.FindDictKey("occluding_damage_rect");
   base::Optional<double> de_jelly_delta_y =
       dict.FindDoubleKey("de_jelly_delta_y");
 
   if (!quad_to_target_transform || !quad_layer_rect ||
-      !visible_quad_layer_rect || !rounded_corner_bounds || !clip_rect ||
-      !is_clipped || !are_contents_opaque || !opacity || !blend_mode ||
-      !sorting_context_id || !is_fast_rounded_corner || !de_jelly_delta_y) {
+      !visible_quad_layer_rect || !rounded_corner_bounds ||
+      !are_contents_opaque || !opacity || !blend_mode || !sorting_context_id ||
+      !is_fast_rounded_corner || !de_jelly_delta_y) {
     return false;
   }
   gfx::Transform t_quad_to_target_transform;
@@ -1695,28 +1777,31 @@ bool SharedQuadStateFromDict(const base::Value& dict, SharedQuadState* sqs) {
       !RectFromDict(*quad_layer_rect, &t_quad_layer_rect) ||
       !RectFromDict(*visible_quad_layer_rect, &t_visible_quad_layer_rect) ||
       !RRectFFromDict(*rounded_corner_bounds, &t_rounded_corner_bounds) ||
-      !RectFromDict(*clip_rect, &t_clip_rect)) {
+      (clip_rect && !RectFromDict(*clip_rect, &t_clip_rect))) {
     return false;
   }
+  base::Optional<gfx::Rect> clip_rect_opt;
+  // Some older files still use the is_clipped field.  If it's present, we'll
+  // respect it, and ignore clip_rect if it's false.
+  if (is_clipped.has_value()) {
+    if (is_clipped.value()) {
+      clip_rect_opt = t_clip_rect;
+    }
+  } else if (clip_rect) {
+    clip_rect_opt = t_clip_rect;
+  }
+
   int blend_mode_index = StringToBlendMode(*blend_mode);
   DCHECK_GE(static_cast<int>(SkBlendMode::kLastMode), blend_mode_index);
   if (blend_mode_index < 0)
     return false;
   SkBlendMode t_blend_mode = static_cast<SkBlendMode>(blend_mode_index);
-  gfx::Rect t_occluding_damage_rect;
-  if (occluding_damage_rect) {
-    if (!RectFromDict(*occluding_damage_rect, &t_occluding_damage_rect))
-      return false;
-  }
-
+  gfx::MaskFilterInfo mask_filter_info(t_rounded_corner_bounds);
   sqs->SetAll(t_quad_to_target_transform, t_quad_layer_rect,
-              t_visible_quad_layer_rect, t_rounded_corner_bounds, t_clip_rect,
-              is_clipped.value(), are_contents_opaque.value(),
-              static_cast<float>(opacity.value()), t_blend_mode,
-              sorting_context_id.value());
+              t_visible_quad_layer_rect, mask_filter_info, clip_rect_opt,
+              are_contents_opaque.value(), static_cast<float>(opacity.value()),
+              t_blend_mode, sorting_context_id.value());
   sqs->is_fast_rounded_corner = is_fast_rounded_corner.value();
-  if (occluding_damage_rect)
-    sqs->occluding_damage_rect = t_occluding_damage_rect;
   sqs->de_jelly_delta_y = static_cast<float>(de_jelly_delta_y.value());
   return true;
 }

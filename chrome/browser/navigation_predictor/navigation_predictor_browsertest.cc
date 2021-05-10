@@ -2,16 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/sequence_checker.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
-#include "chrome/browser/prerender/prerender_manager_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h"
 #include "chrome/browser/ui/browser.h"
@@ -20,7 +23,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/prerender/browser/prerender_manager.h"
+#include "components/no_state_prefetch/browser/no_state_prefetch_manager.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/browser_test.h"
@@ -58,14 +61,14 @@ class NavigationPredictorBrowserTest
   }
 
   void SetUp() override {
-    https_server_.reset(
-        new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTPS));
+    https_server_ = std::make_unique<net::EmbeddedTestServer>(
+        net::EmbeddedTestServer::TYPE_HTTPS);
     https_server_->ServeFilesFromSourceDirectory(
         "chrome/test/data/navigation_predictor");
     ASSERT_TRUE(https_server_->Start());
 
-    http_server_.reset(
-        new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTP));
+    http_server_ = std::make_unique<net::EmbeddedTestServer>(
+        net::EmbeddedTestServer::TYPE_HTTP);
     http_server_->ServeFilesFromSourceDirectory(
         "chrome/test/data/navigation_predictor");
     ASSERT_TRUE(http_server_->Start());
@@ -263,7 +266,7 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
 // Disabled because it fails when SingleProcessMash feature is enabled. Since
 // Navigation Predictor is not going to be enabled on Chrome OS, disabling the
 // browser test on that platform is fine.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #define DISABLE_ON_CHROMEOS(x) DISABLED_##x
 #else
 #define DISABLE_ON_CHROMEOS(x) x
@@ -364,9 +367,6 @@ class NavigationPredictorBrowserTestWithPrefetchAfterPreconnect
 IN_PROC_BROWSER_TEST_F(
     NavigationPredictorBrowserTestWithPrefetchAfterPreconnect,
     DISABLE_ON_CHROMEOS(PrefetchAfterPreconnect)) {
-  prerender::PrerenderManager::SetMode(
-      prerender::PrerenderManager::PRERENDER_MODE_NOSTATE_PREFETCH);
-
   const GURL& url = GetTestURL("/page_with_same_host_anchor_element.html");
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> ukm_recorder =
       std::make_unique<ukm::TestAutoSetUkmRecorder>();
@@ -458,7 +458,7 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
                        AnchorElementClickedOnSearchEnginePage) {
-  static const char kShortName[] = "test";
+  static const char16_t kShortName[] = u"test";
   static const char kSearchURL[] = "/anchors_same_href.html?q={searchTerms}";
 
   TemplateURLService* model =
@@ -468,7 +468,7 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
   ASSERT_TRUE(model->loaded());
 
   TemplateURLData data;
-  data.SetShortName(base::ASCIIToUTF16(kShortName));
+  data.SetShortName(kShortName);
   data.SetKeyword(data.short_name());
   data.SetURL(GetTestURL(kSearchURL).spec());
 
@@ -494,7 +494,7 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
                        AnchorElementClickedOnNonSearchEnginePage) {
-  static const char kShortName[] = "test";
+  static const char16_t kShortName[] = u"test";
   static const char kSearchURL[] = "/somne_other_url.html?q={searchTerms}";
 
   TemplateURLService* model =
@@ -504,7 +504,7 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
   ASSERT_TRUE(model->loaded());
 
   TemplateURLData data;
-  data.SetShortName(base::ASCIIToUTF16(kShortName));
+  data.SetShortName(kShortName);
   data.SetKeyword(data.short_name());
   data.SetURL(GetTestURL(kSearchURL).spec());
 
@@ -671,7 +671,7 @@ IN_PROC_BROWSER_TEST_F(
           browser()->profile());
   service->AddObserver(&observer);
 
-  static const char kShortName[] = "test";
+  static const char16_t kShortName[] = u"test";
   static const char kSearchURL[] =
       "/anchors_different_area.html?q={searchTerms}";
 
@@ -683,7 +683,7 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(model->loaded());
 
   TemplateURLData data;
-  data.SetShortName(base::ASCIIToUTF16(kShortName));
+  data.SetShortName(kShortName);
   data.SetKeyword(data.short_name());
   data.SetURL(GetTestURL(kSearchURL).spec());
 

@@ -62,8 +62,8 @@ TEST_F(FileSystemProviderOperationsCopyEntryTest, Execute) {
                        base::FilePath(kTargetPath),
                        base::BindOnce(&util::LogStatusCallback, &callback_log));
   copy_entry.SetDispatchEventImplForTesting(
-      base::Bind(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
-                 base::Unretained(&dispatcher)));
+      base::BindRepeating(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
+                          base::Unretained(&dispatcher)));
 
   EXPECT_TRUE(copy_entry.Execute(kRequestId));
 
@@ -94,8 +94,8 @@ TEST_F(FileSystemProviderOperationsCopyEntryTest, Execute_NoListener) {
                        base::FilePath(kTargetPath),
                        base::BindOnce(&util::LogStatusCallback, &callback_log));
   copy_entry.SetDispatchEventImplForTesting(
-      base::Bind(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
-                 base::Unretained(&dispatcher)));
+      base::BindRepeating(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
+                          base::Unretained(&dispatcher)));
 
   EXPECT_FALSE(copy_entry.Execute(kRequestId));
 }
@@ -113,8 +113,8 @@ TEST_F(FileSystemProviderOperationsCopyEntryTest, Execute_ReadOnly) {
                        base::FilePath(kSourcePath), base::FilePath(kTargetPath),
                        base::BindOnce(&util::LogStatusCallback, &callback_log));
   copy_entry.SetDispatchEventImplForTesting(
-      base::Bind(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
-                 base::Unretained(&dispatcher)));
+      base::BindRepeating(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
+                          base::Unretained(&dispatcher)));
 
   EXPECT_FALSE(copy_entry.Execute(kRequestId));
 }
@@ -127,13 +127,12 @@ TEST_F(FileSystemProviderOperationsCopyEntryTest, OnSuccess) {
                        base::FilePath(kTargetPath),
                        base::BindOnce(&util::LogStatusCallback, &callback_log));
   copy_entry.SetDispatchEventImplForTesting(
-      base::Bind(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
-                 base::Unretained(&dispatcher)));
+      base::BindRepeating(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
+                          base::Unretained(&dispatcher)));
 
   EXPECT_TRUE(copy_entry.Execute(kRequestId));
 
-  copy_entry.OnSuccess(kRequestId,
-                       std::unique_ptr<RequestValue>(new RequestValue()),
+  copy_entry.OnSuccess(kRequestId, std::make_unique<RequestValue>(),
                        false /* has_more */);
   ASSERT_EQ(1u, callback_log.size());
   EXPECT_EQ(base::File::FILE_OK, callback_log[0]);
@@ -147,13 +146,12 @@ TEST_F(FileSystemProviderOperationsCopyEntryTest, OnError) {
                        base::FilePath(kTargetPath),
                        base::BindOnce(&util::LogStatusCallback, &callback_log));
   copy_entry.SetDispatchEventImplForTesting(
-      base::Bind(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
-                 base::Unretained(&dispatcher)));
+      base::BindRepeating(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
+                          base::Unretained(&dispatcher)));
 
   EXPECT_TRUE(copy_entry.Execute(kRequestId));
 
-  copy_entry.OnError(kRequestId,
-                     std::unique_ptr<RequestValue>(new RequestValue()),
+  copy_entry.OnError(kRequestId, std::make_unique<RequestValue>(),
                      base::File::FILE_ERROR_TOO_MANY_OPENED);
   ASSERT_EQ(1u, callback_log.size());
   EXPECT_EQ(base::File::FILE_ERROR_TOO_MANY_OPENED, callback_log[0]);

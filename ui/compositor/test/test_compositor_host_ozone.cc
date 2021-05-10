@@ -36,7 +36,7 @@ class TestCompositorHostOzone::StubPlatformWindowDelegate
   gfx::AcceleratedWidget widget() const { return widget_; }
 
   // PlatformWindowDelegate:
-  void OnBoundsChanged(const gfx::Rect& new_bounds) override {}
+  void OnBoundsChanged(const BoundsChange& change) override {}
   void OnDamageRect(const gfx::Rect& damaged_region) override {}
   void DispatchEvent(Event* event) override {}
   void OnCloseRequest() override {}
@@ -67,7 +67,11 @@ TestCompositorHostOzone::TestCompositorHostOzone(
                   context_factory,
                   base::ThreadTaskRunnerHandle::Get(),
                   false /* enable_pixel_canvas */),
-      window_delegate_(std::make_unique<StubPlatformWindowDelegate>()) {}
+      window_delegate_(std::make_unique<StubPlatformWindowDelegate>()) {
+#if defined(OS_FUCHSIA)
+  ui::PlatformWindowInitProperties::allow_null_view_token_for_test = true;
+#endif
+}
 
 TestCompositorHostOzone::~TestCompositorHostOzone() {
   // |window_| should be destroyed earlier than |window_delegate_| as it refers

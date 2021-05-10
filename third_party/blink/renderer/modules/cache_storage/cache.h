@@ -5,8 +5,6 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_CACHE_STORAGE_CACHE_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_CACHE_STORAGE_CACHE_H_
 
-#include <memory>
-
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
@@ -55,6 +53,7 @@ class MODULES_EXPORT Cache : public ScriptWrappable {
 
  public:
   Cache(GlobalFetch::ScopedFetcher*,
+        CacheStorageBlobClientList* blob_client_list,
         mojo::PendingAssociatedRemote<mojom::blink::CacheStorageCache>,
         scoped_refptr<base::SingleThreadTaskRunner>);
 

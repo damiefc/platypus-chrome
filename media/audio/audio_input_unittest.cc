@@ -88,6 +88,10 @@ class AudioInputTest : public testing::Test {
     // FuchsiaAudioCapturerStream. It implements AudioCapturerStream interface
     // and runs in the renderer process.
     return false;
+#elif defined(OS_MAC) && defined(ARCH_CPU_ARM64)
+    // TODO(crbug.com/1128458): macOS on ARM64 says it has devices, but won't
+    // let any of them be opened or listed.
+    return false;
 #else
     return AudioDeviceInfoAccessorForTests(audio_manager_.get())
         .HasAudioInputDevices();
@@ -135,25 +139,31 @@ class AudioInputTest : public testing::Test {
         params, AudioDeviceDescription::kDefaultDeviceId,
         base::BindRepeating(&AudioInputTest::OnLogMessage,
                             base::Unretained(this)));
-    EXPECT_TRUE(audio_input_stream_);
+    ASSERT_TRUE(audio_input_stream_);
   }
 
   void OpenAndClose() {
     DCHECK(audio_manager_->GetTaskRunner()->BelongsToCurrentThread());
-    EXPECT_TRUE(audio_input_stream_->Open());
+    ASSERT_TRUE(audio_input_stream_);
+    EXPECT_EQ(audio_input_stream_->Open(),
+              AudioInputStream::OpenOutcome::kSuccess);
     audio_input_stream_->Close();
     audio_input_stream_ = nullptr;
   }
 
   void OpenAndStart(AudioInputStream::AudioInputCallback* sink) {
     DCHECK(audio_manager_->GetTaskRunner()->BelongsToCurrentThread());
-    EXPECT_TRUE(audio_input_stream_->Open());
+    ASSERT_TRUE(audio_input_stream_);
+    EXPECT_EQ(audio_input_stream_->Open(),
+              AudioInputStream::OpenOutcome::kSuccess);
     audio_input_stream_->Start(sink);
   }
 
   void OpenStopAndClose() {
     DCHECK(audio_manager_->GetTaskRunner()->BelongsToCurrentThread());
-    EXPECT_TRUE(audio_input_stream_->Open());
+    ASSERT_TRUE(audio_input_stream_);
+    EXPECT_EQ(audio_input_stream_->Open(),
+              AudioInputStream::OpenOutcome::kSuccess);
     audio_input_stream_->Stop();
     audio_input_stream_->Close();
     audio_input_stream_ = nullptr;
@@ -161,6 +171,7 @@ class AudioInputTest : public testing::Test {
 
   void StopAndClose() {
     DCHECK(audio_manager_->GetTaskRunner()->BelongsToCurrentThread());
+    ASSERT_TRUE(audio_input_stream_);
     audio_input_stream_->Stop();
     audio_input_stream_->Close();
     audio_input_stream_ = nullptr;

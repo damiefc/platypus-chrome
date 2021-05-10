@@ -41,13 +41,21 @@ class SimpleURLLoader;
 // omnibox text and suggestions.
 class ZeroSuggestProvider : public BaseSearchProvider {
  public:
-  // ZeroSuggestVariant field trial param values corresponding to each
-  // ZeroSuggestProvider::ResultType.
-  // Public for testing.
-  static const char kNoneVariant[];
-  static const char kRemoteNoUrlVariant[];
-  static const char kRemoteSendUrlVariant[];
-  static const char kMostVisitedVariant[];
+  // ZeroSuggestProvider is processing one of the following type of results
+  // at any time. Exposed as public for testing purposes.
+  enum ResultType {
+    NONE,
+
+    // A remote endpoint (usually the default search provider) is queried for
+    // suggestions. The endpoint is sent the user's authentication state, but
+    // not sent the current URL.
+    REMOTE_NO_URL,
+
+    // A remote endpoint (usually the default search provider) is queried for
+    // suggestions. The endpoint is sent the user's authentication state and
+    // the current URL.
+    REMOTE_SEND_URL,
+  };
 
   // Creates and returns an instance of this provider.
   static ZeroSuggestProvider* Create(AutocompleteProviderClient* client,
@@ -83,6 +91,10 @@ class ZeroSuggestProvider : public BaseSearchProvider {
     return results_.hidden_group_ids;
   }
 
+  ResultType GetResultTypeRunningForTesting() const {
+    return result_type_running_;
+  }
+
  private:
   FRIEND_TEST_ALL_PREFIXES(ZeroSuggestProviderTest,
                            AllowZeroSuggestSuggestions);
@@ -98,25 +110,6 @@ class ZeroSuggestProvider : public BaseSearchProvider {
 
   ZeroSuggestProvider(const ZeroSuggestProvider&) = delete;
   ZeroSuggestProvider& operator=(const ZeroSuggestProvider&) = delete;
-
-  // ZeroSuggestProvider is processing one of the following type of results
-  // at any time.
-  enum ResultType {
-    NONE,
-
-    // A remote endpoint (usually the default search provider) is queried for
-    // suggestions. The endpoint is sent the user's authentication state, but
-    // not sent the current URL.
-    REMOTE_NO_URL,
-
-    // A remote endpoint (usually the default search provider) is queried for
-    // suggestions. The endpoint is sent the user's authentication state and
-    // the current URL.
-    REMOTE_SEND_URL,
-
-    // Gets the most visited sites from local history.
-    MOST_VISITED,
-  };
 
   // BaseSearchProvider:
   const TemplateURL* GetTemplateURL(bool is_keyword) const override;
@@ -156,12 +149,6 @@ class ZeroSuggestProvider : public BaseSearchProvider {
   // page.
   AutocompleteMatch MatchForCurrentText();
 
-  // When the user is in the Most Visited field trial, we ask the TopSites
-  // service for the most visited URLs. It then calls back to this function to
-  // return those |urls|.
-  void OnMostVisitedUrlsAvailable(size_t request_num,
-                                  const history::MostVisitedURLList& urls);
-
   // When the user is in the remote omnibox suggestions field trial, we ask
   // the RemoteSuggestionsService for a loader to retrieve recommendations.
   // When the loader has started, the remote suggestion service then calls
@@ -195,14 +182,11 @@ class ZeroSuggestProvider : public BaseSearchProvider {
   // When the provider is not running, the result type is set to NONE.
   ResultType result_type_running_;
 
-  // For reconciling asynchronous requests for most visited URLs.
-  size_t most_visited_request_num_ = 0;
-
   // The URL for which a suggestion fetch is pending.
   std::string current_query_;
 
   // The title of the page for which a suggestion fetch is pending.
-  base::string16 current_title_;
+  std::u16string current_title_;
 
   // The type of page the user is viewing (a search results page doing search
   // term replacement, an arbitrary URL, etc.).
@@ -210,7 +194,7 @@ class ZeroSuggestProvider : public BaseSearchProvider {
       metrics::OmniboxEventProto::INVALID_SPEC;
 
   // Copy of OmniboxEditModel::permanent_text_.
-  base::string16 permanent_text_;
+  std::u16string permanent_text_;
 
   // Loader used to retrieve results.
   std::unique_ptr<network::SimpleURLLoader> loader_;
@@ -221,8 +205,6 @@ class ZeroSuggestProvider : public BaseSearchProvider {
   // Contains suggest and navigation results as well as relevance parsed from
   // the response for the most recent zero suggest input URL.
   SearchSuggestionParser::Results results_;
-
-  history::MostVisitedURLList most_visited_urls_;
 
   // For callbacks that may be run after destruction.
   base::WeakPtrFactory<ZeroSuggestProvider> weak_ptr_factory_{this};

@@ -12,7 +12,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/statistics_recorder.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/threading/thread_checker.h"
 #include "components/metrics/metrics_provider.h"
 #include "content/public/browser/browser_child_process_observer.h"
@@ -99,7 +99,7 @@ class SubprocessMetricsProvider
   // Gets a histogram allocator from a subprocess. This must be called on
   // the IO thread.
   static std::unique_ptr<base::PersistentHistogramAllocator>
-  GetSubprocessHistogramAllocatorOnIOThread(int id);
+  GetSubprocessHistogramAllocatorOnProcessThread(int id);
 
   THREAD_CHECKER(thread_checker_);
 
@@ -109,8 +109,9 @@ class SubprocessMetricsProvider
   AllocatorByIdMap allocators_by_id_;
 
   // Track all observed render processes to un-observe them on exit.
-  ScopedObserver<content::RenderProcessHost, content::RenderProcessHostObserver>
-      scoped_observer_{this};
+  base::ScopedMultiSourceObservation<content::RenderProcessHost,
+                                     content::RenderProcessHostObserver>
+      scoped_observations_{this};
 
   base::WeakPtrFactory<SubprocessMetricsProvider> weak_ptr_factory_{this};
 

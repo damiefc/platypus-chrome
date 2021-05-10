@@ -10,8 +10,10 @@
 #include "base/no_destructor.h"
 #include "chrome/browser/payments/chrome_payment_request_delegate.h"
 #include "components/payments/content/payment_request_web_contents_manager.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/message.h"
-#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-shared.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
 
 namespace payments {
 
@@ -41,8 +43,8 @@ void CreatePaymentRequest(
   }
 
   if (!render_frame_host->IsFeatureEnabled(
-          blink::mojom::FeaturePolicyFeature::kPayment)) {
-    mojo::ReportBadMessage("Feature policy blocks Payment");
+          blink::mojom::PermissionsPolicyFeature::kPayment)) {
+    mojo::ReportBadMessage("Permissions policy blocks Payment");
     return;
   }
 
@@ -51,14 +53,11 @@ void CreatePaymentRequest(
                                            render_frame_host);
   }
 
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(render_frame_host);
-  if (!web_contents)
-    return;
-  PaymentRequestWebContentsManager::GetOrCreateForWebContents(web_contents)
+  PaymentRequestWebContentsManager::GetOrCreateForWebContents(
+      content::WebContents::FromRenderFrameHost(render_frame_host))
       ->CreatePaymentRequest(
-          render_frame_host, web_contents,
-          std::make_unique<ChromePaymentRequestDelegate>(web_contents),
+          render_frame_host,
+          std::make_unique<ChromePaymentRequestDelegate>(render_frame_host),
           std::move(receiver),
           /*observer_for_testing=*/nullptr);
 }

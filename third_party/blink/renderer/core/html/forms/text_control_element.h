@@ -233,6 +233,8 @@ class CORE_EXPORT TextControlElement : public HTMLFormControlElementWithState {
   String value_before_set_suggested_value_;
 
   FRIEND_TEST_ALL_PREFIXES(TextControlElementTest, IndexForPosition);
+  FRIEND_TEST_ALL_PREFIXES(HTMLTextAreaElementTest, ValueWithHardLineBreaks);
+  FRIEND_TEST_ALL_PREFIXES(HTMLTextAreaElementTest, ValueWithHardLineBreaksRtl);
 };
 
 inline bool IsTextControl(const Node& node) {
@@ -279,8 +281,8 @@ struct DowncastTraits<TextControlElement> {
 
 TextControlElement* EnclosingTextControl(const Position&);
 TextControlElement* EnclosingTextControl(const PositionInFlatTree&);
-TextControlElement* EnclosingTextControl(const Node*);
+CORE_EXPORT TextControlElement* EnclosingTextControl(const Node*);
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_HTML_FORMS_TEXT_CONTROL_ELEMENT_H_

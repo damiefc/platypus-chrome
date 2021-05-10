@@ -9,11 +9,10 @@
 
 #include <map>
 #include <set>
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "base/optional.h"
@@ -24,7 +23,6 @@
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "mojo/public/cpp/bindings/interface_ptr_set.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 #include "services/media_session/public/mojom/audio_focus.mojom.h"
@@ -159,9 +157,14 @@ class MediaSessionImpl : public MediaSession,
   // Called when the metadata of a MediaSessionService has changed. Will notify
   // observers if the service is currently routed.
   void OnMediaSessionMetadataChanged(MediaSessionServiceImpl* service);
+
   // Called when the actions of a MediaSessionService has changed. Will notify
   // observers if the service is currently routed.
   void OnMediaSessionActionsChanged(MediaSessionServiceImpl* service);
+
+  // Called when the info of a MediaSessionService has changed. Will notify
+  // observers if the service is currently routed.
+  void OnMediaSessionInfoChanged(MediaSessionServiceImpl* service);
 
   // Requests audio focus to the AudioFocusDelegate.
   // Returns whether the request was granted.
@@ -264,6 +267,15 @@ class MediaSessionImpl : public MediaSession,
   // this method is called again.
   void SetAudioSinkId(const base::Optional<std::string>& id) override;
 
+  // Mute/Unmute the microphone for a WebRTC session.
+  void ToggleMicrophone() override;
+
+  // Turn on or off the camera for a WebRTC session.
+  void ToggleCamera() override;
+
+  // Hang up a WebRTC session.
+  void HangUp() override;
+
   // Downloads the bitmap version of a MediaImage at least |minimum_size_px|
   // and closest to |desired_size_px|. If the download failed, was too small or
   // the image did not come from the media session then returns a null image.
@@ -314,22 +326,19 @@ class MediaSessionImpl : public MediaSession,
   // Representation of a player for the MediaSessionImpl.
   struct PlayerIdentifier {
     PlayerIdentifier(MediaSessionPlayerObserver* observer, int player_id);
+
     PlayerIdentifier(const PlayerIdentifier&) = default;
+    PlayerIdentifier(PlayerIdentifier&&) = default;
 
-    void operator=(const PlayerIdentifier&) = delete;
-    bool operator==(const PlayerIdentifier& player_identifier) const;
-    bool operator<(const PlayerIdentifier&) const;
+    PlayerIdentifier& operator=(const PlayerIdentifier&) = default;
+    PlayerIdentifier& operator=(PlayerIdentifier&&) = default;
 
-    // Hash operator for std::unordered_map<>.
-    struct Hash {
-      size_t operator()(const PlayerIdentifier& player_identifier) const;
-    };
+    bool operator==(const PlayerIdentifier& other) const;
+    bool operator<(const PlayerIdentifier& other) const;
 
     MediaSessionPlayerObserver* observer;
     int player_id;
   };
-  using PlayersMap =
-      std::unordered_set<PlayerIdentifier, PlayerIdentifier::Hash>;
 
   CONTENT_EXPORT explicit MediaSessionImpl(WebContents* web_contents);
 
@@ -339,6 +348,7 @@ class MediaSessionImpl : public MediaSession,
   void OnImageDownloadComplete(GetMediaImageBitmapCallback callback,
                                int minimum_size_px,
                                int desired_size_px,
+                               bool source_icon,
                                int id,
                                int http_status_code,
                                const GURL& image_url,
@@ -380,6 +390,10 @@ class MediaSessionImpl : public MediaSession,
   CONTENT_EXPORT bool AddOneShotPlayer(MediaSessionPlayerObserver* observer,
                                        int player_id);
 
+  // Returns true if there is at least one player and all the players are
+  // one-shot.
+  bool HasOnlyOneShotPlayers() const;
+
   // MediaSessionService-related methods
 
   // Called when the routed service may have changed.
@@ -413,11 +427,12 @@ class MediaSessionImpl : public MediaSession,
   void DidReceiveAction(media_session::mojom::MediaSessionAction action,
                         blink::mojom::MediaSessionActionDetailsPtr details);
 
-  // Returns the media audio video state. This is whether the players associated
-  // with the media session are audio-only or have audio and video. If we have
-  // a |routed_service_| then we limit to players on that frame because this
-  // should align with the metadata.
-  media_session::mojom::MediaAudioVideoState GetMediaAudioVideoState();
+  // Returns the media audio video state for each player. This is whether the
+  // players associated with the media session are audio-only, video-only, or
+  // have both audio and video. If we have a |routed_service_| then we limit to
+  // players on that frame because this should align with the metadata.
+  std::vector<media_session::mojom::MediaAudioVideoState>
+  GetMediaAudioVideoStates();
 
   // Calls the callback with each |PlayerIdentifier| for every player associated
   // with this media session.
@@ -430,11 +445,11 @@ class MediaSessionImpl : public MediaSession,
   std::unique_ptr<AudioFocusDelegate> delegate_;
   std::map<PlayerIdentifier, media_session::mojom::AudioFocusType>
       normal_players_;
-  PlayersMap pepper_players_;
+  base::flat_set<PlayerIdentifier> pepper_players_;
 
   // Players that are playing in the web contents but we cannot control (e.g.
   // WebAudio or MediaStream).
-  PlayersMap one_shot_players_;
+  base::flat_set<PlayerIdentifier> one_shot_players_;
 
   State audio_focus_state_ = State::INACTIVE;
   MediaSession::SuspendType suspend_type_;
@@ -473,13 +488,16 @@ class MediaSessionImpl : public MediaSession,
 #endif  // defined(OS_ANDROID)
 
   // MediaSessionService-related fields
-  using ServicesMap = std::map<RenderFrameHost*, MediaSessionServiceImpl*>;
+  using ServicesMap = std::map<GlobalFrameRoutingId, MediaSessionServiceImpl*>;
 
   // The current metadata and images associated with the current media session.
   media_session::MediaMetadata metadata_;
   base::flat_map<media_session::mojom::MediaSessionImageType,
                  std::vector<media_session::MediaImage>>
       images_;
+
+  // Cache of images that have been requested by clients.
+  base::flat_map<GURL, SkBitmap> image_cache_;
 
   // The collection of all managed services (non-owned pointers). The services
   // are owned by RenderFrameHost and should be registered on creation and

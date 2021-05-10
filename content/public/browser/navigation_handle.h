@@ -7,13 +7,14 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
+#include "base/supports_user_data.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/navigation_handle_timing.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/restore_type.h"
-#include "content/public/common/impression.h"
 #include "content/public/common/referrer.h"
 #include "net/base/auth.h"
 #include "net/base/ip_endpoint.h"
@@ -23,8 +24,11 @@
 #include "net/http/http_response_info.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/resource_request_body.h"
+#include "third_party/blink/public/common/navigation/impression.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/loader/referrer.mojom.h"
 #include "third_party/blink/public/mojom/loader/transferrable_url_loader.mojom.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -38,6 +42,7 @@ class ProxyServer;
 namespace content {
 struct GlobalFrameRoutingId;
 struct GlobalRequestID;
+class NavigationEntry;
 class NavigationThrottle;
 class NavigationUIData;
 class RenderFrameHost;
@@ -50,9 +55,9 @@ class WebContents;
 // references to a NavigationHandle at the time of
 // WebContentsObserver::DidFinishNavigation, just before the handle is
 // destroyed.
-class CONTENT_EXPORT NavigationHandle {
+class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
  public:
-  virtual ~NavigationHandle() {}
+  ~NavigationHandle() override = default;
 
   // Parameters available at navigation start time -----------------------------
   //
@@ -86,13 +91,24 @@ class CONTENT_EXPORT NavigationHandle {
   // C, then this returns A.
   virtual SiteInstance* GetSourceSiteInstance() = 0;
 
-  // Whether the navigation is taking place in the main frame or in a subframe.
-  // This remains constant over the navigation lifetime.
+  // Whether the navigation is taking place in a main frame or in a subframe.
+  // This can also return true for navigations in the root of a non-primary
+  // page, so consider whether you want to call IsInPrimaryMainFrame() instead.
+  // See the documentation below for details. This remains constant over the
+  // navigation lifetime.
   virtual bool IsInMainFrame() = 0;
 
-  // Whether the navigation is taking place in a frame that is a direct child
-  // of the main frame. This remains constant over the navigation lifetime.
-  virtual bool IsParentMainFrame() = 0;
+  // Whether the navigation is taking place in the main frame of the primary
+  // frame tree. With MPArch (crbug.com/1164280), a WebContents may have
+  // additional frame trees for prerendering pages in addition to the primary
+  // frame tree (holding the page currently shown to the user). This remains
+  // constant over the navigation lifetime.
+  virtual bool IsInPrimaryMainFrame() = 0;
+
+  // Prerender2
+  // Returns true if this navigation will activate a prerendered page. It is
+  // only meaningful to call this after BeginNavigation().
+  virtual bool IsPrerenderedPageActivation() = 0;
 
   // Whether the navigation was initiated by the renderer process. Examples of
   // renderer-initiated navigations include:
@@ -108,6 +124,16 @@ class CONTENT_EXPORT NavigationHandle {
   //  * using window.history.forward() or window.history.back()
   //  * any other "explicit" URL navigations, e.g. bookmarks
   virtual bool IsRendererInitiated() = 0;
+
+  // Whether the previous document in this frame was same-origin with the new
+  // one created by this navigation.
+  //
+  // |HasCommitted()| must be true before calling this function.
+  //
+  // Note: This doesn't take the initiator of the navigation into consideration.
+  // For instance, a parent (A) can initiate a navigation in its iframe,
+  // replacing document (B) by (C). This methods compare (B) with (C).
+  virtual bool IsSameOrigin() = 0;
 
   // Returns the FrameTreeNode ID for the frame in which the navigation is
   // performed. This ID is browser-global and uniquely identifies a frame that
@@ -237,9 +263,6 @@ class CONTENT_EXPORT NavigationHandle {
   //
   // DO NOT use this before the navigation commit. It would always return false.
   // You can use it from WebContentsObserver::DidFinishNavigation().
-  //
-  // Note that if an error page reloads, this will return true even though
-  // GetNetErrorCode will be net::OK.
   virtual bool IsErrorPage() = 0;
 
   // Not all committed subframe navigations (i.e., !IsInMainFrame &&
@@ -265,7 +288,7 @@ class CONTENT_EXPORT NavigationHandle {
 
   // The previous main frame URL that the user was on. This may be empty if
   // there was no last committed entry.
-  virtual const GURL& GetPreviousURL() = 0;
+  virtual const GURL& GetPreviousMainFrameURL() = 0;
 
   // Returns the remote address of the socket which fetched this resource.
   virtual net::IPEndPoint GetSocketAddress() = 0;
@@ -365,21 +388,36 @@ class CONTENT_EXPORT NavigationHandle {
   // Returns, if available, the impression associated with the link clicked to
   // initiate this navigation. The impression is available for the entire
   // lifetime of the navigation.
-  virtual const base::Optional<Impression>& GetImpression() = 0;
+  virtual const base::Optional<blink::Impression>& GetImpression() = 0;
 
-  // Returns the routing id associated with the frame that initiated the
-  // navigation. This can contain a null routing id if the navigation was not
-  // associated with a frame, or may return a valid routing id to a frame that
-  // no longer exists because it was deleted before the navigation began.
-  virtual const GlobalFrameRoutingId& GetInitiatorRoutingId() = 0;
+  // Returns the frame token associated with the frame that initiated the
+  // navigation. This can be nullptr if the navigation was not associated with a
+  // frame, or may return a valid frame token to a frame that no longer exists
+  // because it was deleted before the navigation began. This parameter is
+  // defined if and only if GetInitiatorProcessID below is.
+  virtual const base::Optional<blink::LocalFrameToken>&
+  GetInitiatorFrameToken() = 0;
+
+  // Return the ID of the renderer process of the frame host that initiated the
+  // navigation. This is defined if and only if GetInitiatorFrameToken above is,
+  // and it is only valid in conjunction with it.
+  virtual int GetInitiatorProcessID() = 0;
 
   // Returns, if available, the origin of the document that has initiated the
   // navigation for this NavigationHandle.
   virtual const base::Optional<url::Origin>& GetInitiatorOrigin() = 0;
 
+  // Retrieves any DNS aliases for the requested URL. The alias chain order
+  // is preserved in reverse, from canonical name (i.e. address record name)
+  // through to query name.
+  virtual const std::vector<std::string>& GetDnsAliases() = 0;
+
   // Whether the new document will be hosted in the same process as the current
   // document or not. Set only when the navigation commits.
   virtual bool IsSameProcess() = 0;
+
+  // Returns the NavigationEntry associated with this, which may be null.
+  virtual NavigationEntry* GetNavigationEntry() = 0;
 
   // Returns the offset between the indices of the previous last committed and
   // the newly committed navigation entries.
@@ -407,11 +445,32 @@ class CONTENT_EXPORT NavigationHandle {
   // Store whether or not we're overriding the user agent. This may only be
   // called from DidStartNavigation().
   virtual void SetIsOverridingUserAgent(bool override_ua) = 0;
-  virtual bool GetIsOverridingUserAgent() = 0;
 
   // Suppress any errors during a navigation and behave as if the user cancelled
   // the navigation: no error page will commit.
   virtual void SetSilentlyIgnoreErrors() = 0;
+
+  // The sandbox flags of the new document created by this navigation. This
+  // function can only be called for cross-document navigations after receiving
+  // the final response.
+  // See also: content/browser/renderer_host/sandbox_flags.md
+  //
+  // TODO(arthursonzogni): After RenderDocument, this can be computed and stored
+  // directly into the RenderDocumentHost.
+  virtual network::mojom::WebSandboxFlags SandboxFlagsToCommit() = 0;
+
+  // Whether the navigation was sent to be committed in a renderer by the
+  // RenderFrameHost. This can either be for the commit of a successful
+  // navigation or an error page.
+  virtual bool IsWaitingToCommit() = 0;
+
+  // Returns true when at least one preload Link header was received via an
+  // Early Hints response during this navigation. True only for a main frame
+  // navigation.
+  virtual bool WasEarlyHintsPreloadLinkHeaderReceived() = 0;
+
+  // Write a representation of this object into a trace.
+  virtual void WriteIntoTrace(perfetto::TracedValue context) = 0;
 
   // Testing methods ----------------------------------------------------------
   //

@@ -12,6 +12,7 @@
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/effects/SkDashPathEffect.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/text_constants.h"
 
@@ -22,7 +23,7 @@ namespace {
 
 constexpr SkColor kGridColor = SkColorSetRGB(162, 162, 220);
 
-base::string16 GenerateLabelText(float value, const base::string16& dimention) {
+std::u16string GenerateLabelText(float value, const std::u16string& dimention) {
   if (value == (int)value) {
     return base::ASCIIToUTF16(base::StringPrintf("%d ", (int)value).c_str()) +
            dimention;
@@ -42,10 +43,11 @@ Grid::Grid(float left,
            float top,
            float right,
            float bottom,
-           const base::string16& x_unit,
-           const base::string16& y_unit,
+           const std::u16string& x_unit,
+           const std::u16string& y_unit,
            int horizontal_points_number,
-           int horizontal_ticks_interval)
+           int horizontal_ticks_interval,
+           float vertical_ticks_interval)
     : color_(kGridColor),
       left_(left),
       top_(top),
@@ -54,19 +56,20 @@ Grid::Grid(float left,
       x_unit_(x_unit),
       y_unit_(y_unit),
       horizontal_points_number_(horizontal_points_number),
-      horizontal_ticks_interval_(horizontal_ticks_interval) {
+      horizontal_ticks_interval_(horizontal_ticks_interval),
+      vertical_ticks_interval_(vertical_ticks_interval) {
   // not implemented.
   ALLOW_UNUSED_LOCAL(right_);
 
   // Text is set later.
   right_top_label_ = AddChildView(std::make_unique<views::Label>(
-      base::string16(), views::style::CONTEXT_LABEL));
+      std::u16string(), views::style::CONTEXT_LABEL));
   right_middle_label_ = AddChildView(std::make_unique<views::Label>(
-      base::string16(), views::style::CONTEXT_LABEL));
+      std::u16string(), views::style::CONTEXT_LABEL));
   right_bottom_label_ = AddChildView(std::make_unique<views::Label>(
-      base::string16(), views::style::CONTEXT_LABEL));
+      std::u16string(), views::style::CONTEXT_LABEL));
   left_bottom_label_ = AddChildView(std::make_unique<views::Label>(
-      base::string16(), views::style::CONTEXT_LABEL));
+      std::u16string(), views::style::CONTEXT_LABEL));
 
   // Set label text.
   SetTopLabel(top_);
@@ -146,18 +149,20 @@ void Grid::OnPaint(gfx::Canvas* canvas) {
   const SkScalar tick_length = 3;
 
   // Vertical interval ticks (drawn horizontally).
-  constexpr int v_ticks = 10;  // Draw 10 vertical intervals between 0 and 100%.
-  for (int i = 1; i < v_ticks; ++i) {
-    // Skip 50%.
-    if (i == v_ticks / 2)
-      continue;
+  if (vertical_ticks_interval_ > 0) {
+    float tick_bottom_offset = vertical_ticks_interval_;
+    while (tick_bottom_offset <= 1) {
+      // Skip 50%.
+      if (fabs(tick_bottom_offset - .5) > 0.01) {
+        const SkScalar line_y = (1 - tick_bottom_offset) * bounds().height();
+        solid_path.moveTo({0, line_y});
+        solid_path.lineTo({tick_length, line_y});
 
-    const SkScalar line_y = bounds().height() / (float)v_ticks * i;
-    solid_path.moveTo({0, line_y});
-    solid_path.lineTo({tick_length, line_y});
-
-    solid_path.moveTo({bounds().width() - tick_length, line_y});
-    solid_path.lineTo({bounds().width(), line_y});
+        solid_path.moveTo({bounds().width() - tick_length, line_y});
+        solid_path.lineTo({bounds().width(), line_y});
+      }
+      tick_bottom_offset += vertical_ticks_interval_;
+    }
   }
 
   // Horizontal interval ticks (drawn vertically).
@@ -220,6 +225,14 @@ void Grid::SetLeftLabel(float left) {
 
   // This might trigger label resize.
   InvalidateLayout();
+}
+
+void Grid::SetVerticalTicsInterval(float interval) {
+  interval == std::abs(interval) >= 1 ? 0 : std::abs(interval);
+  if (interval == vertical_ticks_interval_)
+    return;
+
+  vertical_ticks_interval_ = interval;
 }
 
 }  // namespace hud_display

@@ -54,6 +54,11 @@ TypeConverter<blink::Manifest, blink::mojom::blink::ManifestPtr>::Convert(
         uri_protocol.To<blink::Manifest::ProtocolHandler>());
   }
 
+  for (auto& url_handler : input->url_handlers) {
+    output.url_handlers.push_back(
+        url_handler.To<blink::Manifest::UrlHandler>());
+  }
+
   for (auto& related_application : input->related_applications) {
     output.related_applications.push_back(
         related_application.To<blink::Manifest::RelatedApplication>());
@@ -74,6 +79,8 @@ TypeConverter<blink::Manifest, blink::mojom::blink::ManifestPtr>::Convert(
   if (!input->scope.IsEmpty())
     output.scope = input->scope;
 
+  output.capture_links = input->capture_links;
+
   return output;
 }
 
@@ -91,15 +98,8 @@ TypeConverter<blink::Manifest::ImageResource,
   for (auto& size : input->sizes)
     output.sizes.push_back(gfx::Size(size));
 
-  for (auto purpose : input->purpose) {
-    blink::Manifest::ImageResource::Purpose out_purpose;
-    if (!EnumTraits<blink::mojom::ManifestImageResource_Purpose,
-                    ::blink::Manifest::ImageResource::Purpose>::
-            FromMojom(purpose, &out_purpose)) {
-      NOTREACHED();
-    }
-    output.purpose.push_back(out_purpose);
-  }
+  for (auto purpose : input->purpose)
+    output.purpose.push_back(purpose);
 
   return output;
 }
@@ -139,23 +139,8 @@ TypeConverter<blink::Manifest::ShareTarget,
     return output;
 
   output.action = input->action;
-
-  ::blink::Manifest::ShareTarget::Method output_method;
-  if (!EnumTraits<
-          blink::mojom::ManifestShareTarget_Method,
-          ::blink::Manifest::ShareTarget::Method>::FromMojom(input->method,
-                                                             &output_method)) {
-    NOTREACHED();
-  }
-  output.method = output_method;
-
-  ::blink::Manifest::ShareTarget::Enctype output_enctype;
-  if (!EnumTraits<blink::mojom::ManifestShareTarget_Enctype,
-                  ::blink::Manifest::ShareTarget::Enctype>::
-          FromMojom(input->enctype, &output_enctype)) {
-    NOTREACHED();
-  }
-  output.enctype = output_enctype;
+  output.method = input->method;
+  output.enctype = input->enctype;
 
   output.params = input->params.To<::blink::Manifest::ShareTargetParams>();
 
@@ -232,6 +217,22 @@ TypeConverter<blink::Manifest::ProtocolHandler,
     return output;
   output.protocol = blink::WebString(input->protocol).Utf16();
   output.url = input->url;
+  return output;
+}
+
+blink::Manifest::UrlHandler
+TypeConverter<blink::Manifest::UrlHandler,
+              blink::mojom::blink::ManifestUrlHandlerPtr>::
+    Convert(const blink::mojom::blink::ManifestUrlHandlerPtr& input) {
+  blink::Manifest::UrlHandler output;
+  if (input.is_null())
+    return output;
+
+  if (!output.origin.opaque()) {
+    output.origin = input->origin->ToUrlOrigin();
+    output.has_origin_wildcard = input->has_origin_wildcard;
+  }
+
   return output;
 }
 

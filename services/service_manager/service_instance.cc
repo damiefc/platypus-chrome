@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/logging.h"
-#include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
@@ -160,7 +160,7 @@ bool ServiceInstance::StartWithProcessHost(
   DCHECK(!service_remote_);
   DCHECK(!process_host_);
 
-  base::string16 display_name;
+  std::u16string display_name;
   switch (manifest_.display_name.type) {
     case Manifest::DisplayName::Type::kDefault:
       display_name =

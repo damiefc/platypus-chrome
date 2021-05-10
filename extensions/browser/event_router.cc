@@ -16,6 +16,7 @@
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
 #include "base/values.h"
+#include "components/crx_file/id_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -46,6 +47,7 @@ using base::DictionaryValue;
 using base::ListValue;
 using content::BrowserContext;
 using content::BrowserThread;
+using content::RenderProcessHost;
 
 namespace extensions {
 
@@ -57,6 +59,12 @@ const char kFilteredEvents[] = "filtered_events";
 
 // Similar to |kFilteredEvents|, but applies to extension service worker events.
 const char kFilteredServiceWorkerEvents[] = "filtered_service_worker_events";
+
+// A message when mojom::EventRouter::AddListenerForRenderer() is called with an
+// invalid param.
+constexpr char kAddEventListenerWithInvalidParam[] =
+    "Tried to add an event listener without a valid extension ID nor listener "
+    "URL";
 
 // Sends a notification about an event to the API activity monitor and the
 // ExtensionHost for |extension_id| on the UI thread. Can be called from any
@@ -164,12 +172,26 @@ bool EventRouter::CanDispatchEventToBrowserContext(BrowserContext* context,
                                                                     context);
 }
 
+// static
+void EventRouter::BindForRenderer(
+    int render_process_id,
+    mojo::PendingAssociatedReceiver<mojom::EventRouter> receiver) {
+  auto* host = RenderProcessHost::FromID(render_process_id);
+  if (!host)
+    return;
+
+  EventRouter* event_router = EventRouter::Get(host->GetBrowserContext());
+  event_router->receivers_.Add(event_router, std::move(receiver),
+                               render_process_id);
+}
+
 EventRouter::EventRouter(BrowserContext* browser_context,
                          ExtensionPrefs* extension_prefs)
     : browser_context_(browser_context),
       extension_prefs_(extension_prefs),
       lazy_event_dispatch_util_(browser_context_) {
-  extension_registry_observer_.Add(ExtensionRegistry::Get(browser_context_));
+  extension_registry_observation_.Observe(
+      ExtensionRegistry::Get(browser_context_));
 }
 
 EventRouter::~EventRouter() {
@@ -177,8 +199,25 @@ EventRouter::~EventRouter() {
     process->RemoveObserver(this);
 }
 
+void EventRouter::AddListenerForRenderer(mojom::EventListenerParamPtr param,
+                                         const std::string& event_name) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto* process = RenderProcessHost::FromID(receivers_.current_context());
+  if (!process)
+    return;
+
+  if (param->is_extension_id() &&
+      crx_file::id_util::IdIsValid(param->get_extension_id())) {
+    AddEventListener(event_name, process, param->get_extension_id());
+  } else if (param->is_listener_url() && param->get_listener_url().is_valid()) {
+    AddEventListenerForURL(event_name, process, param->get_listener_url());
+  } else {
+    mojo::ReportBadMessage(kAddEventListenerWithInvalidParam);
+  }
+}
+
 void EventRouter::AddEventListener(const std::string& event_name,
-                                   content::RenderProcessHost* process,
+                                   RenderProcessHost* process,
                                    const std::string& extension_id) {
   listeners_.AddListener(
       EventListener::ForExtension(event_name, extension_id, process, nullptr));
@@ -186,7 +225,7 @@ void EventRouter::AddEventListener(const std::string& event_name,
 
 void EventRouter::AddServiceWorkerEventListener(
     const std::string& event_name,
-    content::RenderProcessHost* process,
+    RenderProcessHost* process,
     const ExtensionId& extension_id,
     const GURL& service_worker_scope,
     int64_t service_worker_version_id,
@@ -197,7 +236,7 @@ void EventRouter::AddServiceWorkerEventListener(
 }
 
 void EventRouter::RemoveEventListener(const std::string& event_name,
-                                      content::RenderProcessHost* process,
+                                      RenderProcessHost* process,
                                       const std::string& extension_id) {
   std::unique_ptr<EventListener> listener =
       EventListener::ForExtension(event_name, extension_id, process, nullptr);
@@ -206,7 +245,7 @@ void EventRouter::RemoveEventListener(const std::string& event_name,
 
 void EventRouter::RemoveServiceWorkerEventListener(
     const std::string& event_name,
-    content::RenderProcessHost* process,
+    RenderProcessHost* process,
     const ExtensionId& extension_id,
     const GURL& service_worker_scope,
     int64_t service_worker_version_id,
@@ -219,14 +258,14 @@ void EventRouter::RemoveServiceWorkerEventListener(
 }
 
 void EventRouter::AddEventListenerForURL(const std::string& event_name,
-                                         content::RenderProcessHost* process,
+                                         RenderProcessHost* process,
                                          const GURL& listener_url) {
   listeners_.AddListener(
       EventListener::ForURL(event_name, listener_url, process, nullptr));
 }
 
 void EventRouter::RemoveEventListenerForURL(const std::string& event_name,
-                                            content::RenderProcessHost* process,
+                                            RenderProcessHost* process,
                                             const GURL& listener_url) {
   std::unique_ptr<EventListener> listener =
       EventListener::ForURL(event_name, listener_url, process, nullptr);
@@ -237,15 +276,17 @@ void EventRouter::RegisterObserver(Observer* observer,
                                    const std::string& event_name) {
   // Observing sub-event names like "foo.onBar/123" is not allowed.
   DCHECK(event_name.find('/') == std::string::npos);
-  observers_[event_name] = observer;
+  auto& observers = observer_map_[event_name];
+  if (!observers) {
+    observers = std::make_unique<Observers>();
+  }
+
+  observers->AddObserver(observer);
 }
 
 void EventRouter::UnregisterObserver(Observer* observer) {
-  for (auto it = observers_.begin(); it != observers_.end();) {
-    if (it->second == observer)
-      it = observers_.erase(it);
-    else
-      ++it;
+  for (auto& it : observer_map_) {
+    it.second->RemoveObserver(observer);
   }
 }
 
@@ -263,11 +304,14 @@ void EventRouter::OnListenerAdded(const EventListener* listener) {
       listener->listener_url(), listener->GetBrowserContext(),
       listener->worker_thread_id(), listener->service_worker_version_id());
   std::string base_event_name = GetBaseEventName(listener->event_name());
-  auto observer = observers_.find(base_event_name);
-  if (observer != observers_.end())
-    observer->second->OnListenerAdded(details);
+  auto it = observer_map_.find(base_event_name);
+  if (it != observer_map_.end()) {
+    for (auto& observer : *it->second) {
+      observer.OnListenerAdded(details);
+    }
+  }
 
-  content::RenderProcessHost* process = listener->process();
+  RenderProcessHost* process = listener->process();
   if (process) {
     bool inserted = observed_process_set_.insert(process).second;
     if (inserted)
@@ -281,20 +325,23 @@ void EventRouter::OnListenerRemoved(const EventListener* listener) {
       listener->listener_url(), listener->GetBrowserContext(),
       listener->worker_thread_id(), listener->service_worker_version_id());
   std::string base_event_name = GetBaseEventName(listener->event_name());
-  auto observer = observers_.find(base_event_name);
-  if (observer != observers_.end())
-    observer->second->OnListenerRemoved(details);
+  auto it = observer_map_.find(base_event_name);
+  if (it != observer_map_.end()) {
+    for (auto& observer : *it->second) {
+      observer.OnListenerRemoved(details);
+    }
+  }
 }
 
 void EventRouter::RenderProcessExited(
-    content::RenderProcessHost* host,
+    RenderProcessHost* host,
     const content::ChildProcessTerminationInfo& info) {
   listeners_.RemoveListenersForProcess(host);
   observed_process_set_.erase(host);
   host->RemoveObserver(this);
 }
 
-void EventRouter::RenderProcessHostDestroyed(content::RenderProcessHost* host) {
+void EventRouter::RenderProcessHostDestroyed(RenderProcessHost* host) {
   listeners_.RemoveListenersForProcess(host);
   observed_process_set_.erase(host);
   host->RemoveObserver(this);
@@ -342,7 +389,7 @@ void EventRouter::RemoveLazyServiceWorkerEventListener(
 
 void EventRouter::AddFilteredEventListener(
     const std::string& event_name,
-    content::RenderProcessHost* process,
+    RenderProcessHost* process,
     const std::string& extension_id,
     base::Optional<ServiceWorkerIdentifier> sw_identifier,
     const base::DictionaryValue& filter,
@@ -376,7 +423,7 @@ void EventRouter::AddFilteredEventListener(
 
 void EventRouter::RemoveFilteredEventListener(
     const std::string& event_name,
-    content::RenderProcessHost* process,
+    RenderProcessHost* process,
     const std::string& extension_id,
     base::Optional<ServiceWorkerIdentifier> sw_identifier,
     const base::DictionaryValue& filter,
@@ -481,7 +528,7 @@ void EventRouter::RemoveFilterFromEvent(const std::string& event_name,
   for (size_t i = 0; i < filter_list->GetSize(); i++) {
     DictionaryValue* filter_value = nullptr;
     CHECK(filter_list->GetDictionary(i, &filter_value));
-    if (filter_value->Equals(filter)) {
+    if (*filter_value == *filter) {
       filter_list->Remove(i, nullptr);
       break;
     }
@@ -603,7 +650,7 @@ void EventRouter::DispatchEventImpl(const std::string& restrict_to_extension_id,
 void EventRouter::DispatchEventToProcess(
     const std::string& extension_id,
     const GURL& listener_url,
-    content::RenderProcessHost* process,
+    RenderProcessHost* process,
     int64_t service_worker_version_id,
     int worker_thread_id,
     Event* event,
@@ -726,14 +773,14 @@ void EventRouter::DoDispatchEventToSenderBookkeeping(
   EventRouter* event_router = EventRouter::Get(browser_context);
   DCHECK(event_router);
   event_router->IncrementInFlightEvents(
-      browser_context, content::RenderProcessHost::FromID(render_process_id),
-      extension, event_id, event_name, service_worker_version_id);
+      browser_context, RenderProcessHost::FromID(render_process_id), extension,
+      event_id, event_name, service_worker_version_id);
   event_router->ReportEvent(histogram_value, extension,
                             false /* did_enqueue */);
 }
 
 void EventRouter::IncrementInFlightEvents(BrowserContext* context,
-                                          content::RenderProcessHost* process,
+                                          RenderProcessHost* process,
                                           const Extension* extension,
                                           int event_id,
                                           const std::string& event_name,

@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "components/autofill_assistant/browser/basic_interactions.h"
@@ -24,14 +24,15 @@
 #include "components/autofill_assistant/browser/script.h"
 #include "components/autofill_assistant/browser/script_executor_delegate.h"
 #include "components/autofill_assistant/browser/script_tracker.h"
-#include "components/autofill_assistant/browser/service.h"
 #include "components/autofill_assistant/browser/service.pb.h"
+#include "components/autofill_assistant/browser/service/service.h"
 #include "components/autofill_assistant/browser/state.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/ui_delegate.h"
 #include "components/autofill_assistant/browser/user_action.h"
 #include "components/autofill_assistant/browser/user_data.h"
 #include "components/autofill_assistant/browser/user_model.h"
+#include "components/autofill_assistant/browser/web/element_store.h"
 #include "components/autofill_assistant/browser/web/web_controller.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -63,7 +64,7 @@ class Controller : public ScriptExecutorDelegate,
   Controller(content::WebContents* web_contents,
              Client* client,
              const base::TickClock* tick_clock,
-             RuntimeManagerImpl* runtime_manager,
+             base::WeakPtr<RuntimeManagerImpl> runtime_manager,
              std::unique_ptr<Service> service);
   ~Controller() override;
 
@@ -106,6 +107,7 @@ class Controller : public ScriptExecutorDelegate,
   const GURL& GetScriptURL() override;
   Service* GetService() override;
   WebController* GetWebController() override;
+  ElementStore* GetElementStore() const override;
   const TriggerContext* GetTriggerContext() override;
   autofill::PersonalDataManager* GetPersonalDataManager() override;
   WebsiteLoginManager* GetWebsiteLoginManager() override;
@@ -118,7 +120,9 @@ class Controller : public ScriptExecutorDelegate,
   std::string GetStatusMessage() const override;
   void SetBubbleMessage(const std::string& message) override;
   std::string GetBubbleMessage() const override;
-  void SetDetails(std::unique_ptr<Details> details) override;
+  void SetDetails(std::unique_ptr<Details>, base::TimeDelta delay) override;
+  void AppendDetails(std::unique_ptr<Details> details,
+                     base::TimeDelta delay) override;
   void SetInfoBox(const InfoBox& info_box) override;
   void ClearInfoBox() override;
   void SetProgress(int progress) override;
@@ -148,8 +152,15 @@ class Controller : public ScriptExecutorDelegate,
       base::OnceCallback<void(const ClientStatus&)> end_action_callback,
       base::OnceCallback<void(const ClientStatus&)>
           view_inflation_finished_callback) override;
+  void SetPersistentGenericUi(
+      std::unique_ptr<GenericUserInterfaceProto> generic_ui,
+      base::OnceCallback<void(const ClientStatus&)>
+          view_inflation_finished_callback) override;
   void ClearGenericUi() override;
+  void ClearPersistentGenericUi() override;
   void SetBrowseModeInvisible(bool invisible) override;
+  bool ShouldShowWarning() override;
+  void SetShowFeedbackChip(bool show_feedback_chip) override;
 
   // Show the UI if it's not already shown. This is only meaningful while in
   // states where showing the UI is optional, such as RUNNING, in tracking mode.
@@ -164,7 +175,7 @@ class Controller : public ScriptExecutorDelegate,
   void RemoveListener(ScriptExecutorDelegate::Listener* listener) override;
 
   void SetExpandSheetForPromptAction(bool expand) override;
-  void SetBrowseDomainsWhitelist(std::vector<std::string> domains) override;
+  void SetBrowseDomainsAllowlist(std::vector<std::string> domains) override;
 
   bool EnterState(AutofillAssistantState state) override;
   void SetOverlayBehavior(
@@ -178,11 +189,13 @@ class Controller : public ScriptExecutorDelegate,
       base::OnceCallback<void(UserData*, UserData::FieldChange*)>) override;
   void OnScriptError(const std::string& error_message,
                      Metrics::DropOutReason reason);
+  void OnNavigationShutdownOrError(const GURL& url,
+                                   Metrics::DropOutReason reason);
 
   // Overrides autofill_assistant::UiDelegate:
   AutofillAssistantState GetState() const override;
   void OnUserInteractionInsideTouchableArea() override;
-  const Details* GetDetails() const override;
+  std::vector<Details> GetDetails() const override;
   const InfoBox* GetInfoBox() const override;
   int GetProgress() const override;
   base::Optional<int> GetProgressActiveStep() const override;
@@ -222,6 +235,7 @@ class Controller : public ScriptExecutorDelegate,
   void GetRestrictedArea(std::vector<RectF>* area) const override;
   void GetVisualViewport(RectF* visual_viewport) const override;
   void OnFatalError(const std::string& error_message,
+                    bool show_feedback_chip,
                     Metrics::DropOutReason reason) override;
   void OnStop(const std::string& message,
               const std::string& button_label) override;
@@ -248,12 +262,41 @@ class Controller : public ScriptExecutorDelegate,
   bool ShouldPromptActionExpandSheet() const override;
   BasicInteractions* GetBasicInteractions() override;
   const GenericUserInterfaceProto* GetGenericUiProto() const override;
+  const GenericUserInterfaceProto* GetPersistentGenericUiProto() const override;
   bool ShouldShowOverlay() const override;
   void ShutdownIfNecessary() override;
-  bool IsRunningLiteScript() const override;
+  void OnKeyboardVisibilityChanged(bool visible) override;
 
  private:
   friend ControllerTest;
+
+  // A holder class which contains some details and, optionally, a timer that
+  // will "enable" them later on.
+  class DetailsHolder {
+   public:
+    DetailsHolder(std::unique_ptr<Details> details,
+                  std::unique_ptr<base::OneShotTimer> timer);
+    ~DetailsHolder();
+    DetailsHolder(DetailsHolder&& other);
+    DetailsHolder& operator=(DetailsHolder&& other);
+
+    // The details held by this object.
+    const Details& GetDetails() const;
+
+    // Whether the details held by this object are visible. Will return false if
+    // a timer was set and was not reached yet.
+    bool CurrentlyVisible() const;
+
+    // Enable the details held by this object so that they are shown (i.e.
+    // CurrentlyVisible() returns true).
+    //
+    // In practice, this is called at most once when |timer_| is triggered.
+    void Enable();
+
+   private:
+    std::unique_ptr<Details> details_;
+    std::unique_ptr<base::OneShotTimer> timer_;
+  };
 
   void SetWebControllerForTest(std::unique_ptr<WebController> web_controller);
 
@@ -268,7 +311,9 @@ class Controller : public ScriptExecutorDelegate,
   // once right now and schedule regular checks. Otherwise, do nothing.
   void GetOrCheckScripts();
 
-  void OnGetScripts(const GURL& url, bool result, const std::string& response);
+  void OnGetScripts(const GURL& url,
+                    int http_status,
+                    const std::string& response);
 
   // Execute |script_path| and, if execution succeeds, enter |end_state| and
   // call |on_success|.
@@ -318,7 +363,8 @@ class Controller : public ScriptExecutorDelegate,
       content::NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
-  void DocumentAvailableInMainFrame() override;
+  void DocumentAvailableInMainFrame(
+      content::RenderFrameHost* render_frame_host) override;
   void RenderProcessGone(base::TerminationStatus status) override;
   void OnWebContentsFocused(
       content::RenderWidgetHost* render_widget_host) override;
@@ -341,7 +387,11 @@ class Controller : public ScriptExecutorDelegate,
   void ShowFirstMessageAndStart();
 
   // Clear out visible state and enter the stopped state.
-  void EnterStoppedState();
+  // If |show_feedback_chip| is true, a "Send feedback" chip will be added to
+  // the bottom sheet.
+  void EnterStoppedState(bool show_feedback_chip);
+
+  void OnFeedbackChipClicked();
 
   ElementArea* touchable_element_area();
   ScriptTracker* script_tracker();
@@ -352,13 +402,21 @@ class Controller : public ScriptExecutorDelegate,
 
   bool StateNeedsUI(AutofillAssistantState state);
 
+  void SetVisibilityAndUpdateUserActions();
+
+  void MakeDetailsVisible(size_t details_index);
+  void NotifyDetailsChanged();
+
   ClientSettings settings_;
   Client* const client_;
   const base::TickClock* const tick_clock_;
-  RuntimeManagerImpl* const runtime_manager_;
+  base::WeakPtr<RuntimeManagerImpl> runtime_manager_;
 
   // Lazily instantiate in GetWebController().
   std::unique_ptr<WebController> web_controller_;
+
+  // Lazily initiate in GetElementStore();
+  mutable std::unique_ptr<ElementStore> element_store_;
 
   // Lazily instantiate in GetService().
   std::unique_ptr<Service> service_;
@@ -404,8 +462,8 @@ class Controller : public ScriptExecutorDelegate,
   // Current bubble / tooltip message, may be empty.
   std::string bubble_message_;
 
-  // Current details, may be null.
-  std::unique_ptr<Details> details_;
+  // Current details, may be empty.
+  std::vector<DetailsHolder> details_;
 
   // Current info box, may be null.
   std::unique_ptr<InfoBox> info_box_;
@@ -517,11 +575,15 @@ class Controller : public ScriptExecutorDelegate,
   BasicInteractions basic_interactions_{this};
 
   bool expand_sheet_for_prompt_action_ = true;
-  std::vector<std::string> browse_domains_whitelist_;
+  std::vector<std::string> browse_domains_allowlist_;
   bool browse_mode_invisible_ = false;
+  bool is_keyboard_showing_ = false;
+  bool show_feedback_chip_on_graceful_shutdown_ = false;
 
   // Only set during a ShowGenericUiAction.
   std::unique_ptr<GenericUserInterfaceProto> generic_user_interface_;
+
+  std::unique_ptr<GenericUserInterfaceProto> persistent_generic_user_interface_;
 
   base::WeakPtrFactory<Controller> weak_ptr_factory_{this};
 

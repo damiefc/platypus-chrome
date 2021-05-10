@@ -99,14 +99,15 @@ void SVGMarkerElement::Trace(Visitor* visitor) const {
 }
 
 AffineTransform SVGMarkerElement::ViewBoxToViewTransform(
-    float view_width,
-    float view_height) const {
+    const FloatSize& viewport_size) const {
   return SVGFitToViewBox::ViewBoxToViewTransform(
       viewBox()->CurrentValue()->Value(), preserveAspectRatio()->CurrentValue(),
-      view_width, view_height);
+      viewport_size);
 }
 
-void SVGMarkerElement::SvgAttributeChanged(const QualifiedName& attr_name) {
+void SVGMarkerElement::SvgAttributeChanged(
+    const SvgAttributeChangedParams& params) {
+  const QualifiedName& attr_name = params.name;
   bool viewbox_attribute_changed = SVGFitToViewBox::IsKnownAttribute(attr_name);
   bool length_attribute_changed = attr_name == svg_names::kRefXAttr ||
                                   attr_name == svg_names::kRefYAttr ||
@@ -119,7 +120,8 @@ void SVGMarkerElement::SvgAttributeChanged(const QualifiedName& attr_name) {
       attr_name == svg_names::kMarkerUnitsAttr ||
       attr_name == svg_names::kOrientAttr) {
     SVGElement::InvalidationGuard invalidation_guard(this);
-    auto* resource_container = ToLayoutSVGResourceContainer(GetLayoutObject());
+    auto* resource_container =
+        To<LayoutSVGResourceContainer>(GetLayoutObject());
     if (resource_container) {
       // The marker transform depends on both viewbox attributes, and the marker
       // size attributes (width, height).
@@ -131,7 +133,7 @@ void SVGMarkerElement::SvgAttributeChanged(const QualifiedName& attr_name) {
     return;
   }
 
-  SVGElement::SvgAttributeChanged(attr_name);
+  SVGElement::SvgAttributeChanged(params);
 }
 
 void SVGMarkerElement::ChildrenChanged(const ChildrenChange& change) {
@@ -158,7 +160,7 @@ void SVGMarkerElement::setOrientToAngle(SVGAngleTearOff* angle) {
 
 LayoutObject* SVGMarkerElement::CreateLayoutObject(const ComputedStyle&,
                                                    LegacyLayout) {
-  return new LayoutSVGResourceMarker(this);
+  return MakeGarbageCollected<LayoutSVGResourceMarker>(this);
 }
 
 bool SVGMarkerElement::SelfHasRelativeLengths() const {

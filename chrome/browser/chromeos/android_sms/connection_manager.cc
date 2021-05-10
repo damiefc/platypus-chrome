@@ -26,8 +26,7 @@ ConnectionManager::ServiceWorkerProvider::~ServiceWorkerProvider() = default;
 content::ServiceWorkerContext* ConnectionManager::ServiceWorkerProvider::Get(
     const GURL& url,
     Profile* profile) {
-  return content::BrowserContext::GetStoragePartitionForSite(profile, url)
-      ->GetServiceWorkerContext();
+  return profile->GetStoragePartitionForUrl(url)->GetServiceWorkerContext();
 }
 
 ConnectionManager::ConnectionManager(
@@ -64,6 +63,18 @@ ConnectionManager::~ConnectionManager() {
 
   if (GetCurrentServiceWorkerContext())
     GetCurrentServiceWorkerContext()->RemoveObserver(this);
+}
+
+void ConnectionManager::StartConnection() {
+  if (!enabled_pwa_url_) {
+    return;
+  }
+  PA_LOG(INFO) << "ConnectionManager::StartConnection(): Establishing "
+               << "connection to PWA at " << *enabled_pwa_url_ << ".";
+  connection_establisher_->EstablishConnection(
+      *enabled_pwa_url_,
+      ConnectionEstablisher::ConnectionMode::kStartConnection,
+      GetCurrentServiceWorkerContext());
 }
 
 void ConnectionManager::OnVersionActivated(int64_t version_id,
@@ -146,13 +157,8 @@ void ConnectionManager::UpdateConnectionStatus() {
   if (!enabled_pwa_url_)
     return;
 
-  PA_LOG(INFO) << "ConnectionManager::UpdateConnectionStatus(): Establishing "
-               << "connection to PWA at " << *enabled_pwa_url_ << ".";
   GetCurrentServiceWorkerContext()->AddObserver(this);
-  connection_establisher_->EstablishConnection(
-      *enabled_pwa_url_,
-      ConnectionEstablisher::ConnectionMode::kStartConnection,
-      GetCurrentServiceWorkerContext());
+  StartConnection();
 }
 
 base::Optional<GURL> ConnectionManager::GenerateEnabledPwaUrl() {

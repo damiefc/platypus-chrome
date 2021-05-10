@@ -49,8 +49,6 @@ class StoreMetricsReporterTest : public SyncUsernameTestBase {
   StoreMetricsReporterTest() {
     prefs_.registry()->RegisterBooleanPref(prefs::kCredentialsEnableService,
                                            false);
-    prefs_.registry()->RegisterBooleanPref(prefs::kPasswordLeakDetectionEnabled,
-                                           false);
     prefs_.registry()->RegisterBooleanPref(
         password_manager::prefs::kWasAutoSignInFirstRunExperienceShown, false);
   }
@@ -74,12 +72,9 @@ class StoreMetricsReporterTestWithParams
 // Test that store-independent metrics are reported correctly.
 TEST_P(StoreMetricsReporterTestWithParams, StoreIndependentMetrics) {
   const bool password_manager_enabled = std::get<0>(GetParam());
-  const bool leak_detection_enabled = std::get<1>(GetParam());
 
   prefs_.SetBoolean(password_manager::prefs::kCredentialsEnableService,
                     password_manager_enabled);
-  prefs_.SetBoolean(password_manager::prefs::kPasswordLeakDetectionEnabled,
-                    leak_detection_enabled);
   base::HistogramTester histogram_tester;
   EXPECT_CALL(client_, GetProfilePasswordStore())
       .WillRepeatedly(Return(nullptr));
@@ -88,8 +83,6 @@ TEST_P(StoreMetricsReporterTestWithParams, StoreIndependentMetrics) {
 
   histogram_tester.ExpectUniqueSample("PasswordManager.Enabled",
                                       password_manager_enabled, 1);
-  histogram_tester.ExpectUniqueSample("PasswordManager.LeakDetection.Enabled",
-                                      leak_detection_enabled, 1);
 }
 
 // Test that sync username and syncing state are passed correctly to the
@@ -99,9 +92,10 @@ TEST_P(StoreMetricsReporterTestWithParams, StoreDependentMetrics) {
   const bool is_under_advanced_protection = std::get<1>(GetParam());
 
   auto store = base::MakeRefCounted<MockPasswordStore>();
-  const auto sync_state = syncing_with_passphrase
-                              ? password_manager::SYNCING_WITH_CUSTOM_PASSPHRASE
-                              : password_manager::SYNCING_NORMAL_ENCRYPTION;
+  const auto sync_state =
+      syncing_with_passphrase
+          ? password_manager::SyncState::kSyncingWithCustomPassphrase
+          : password_manager::SyncState::kSyncingNormalEncryption;
   EXPECT_CALL(client_, GetPasswordSyncState())
       .WillRepeatedly(Return(sync_state));
   EXPECT_CALL(client_, GetProfilePasswordStore())
@@ -129,8 +123,8 @@ TEST_F(StoreMetricsReporterTest, MultiStoreMetrics) {
   account_store->Init(&prefs_);
 
   EXPECT_CALL(client_, GetPasswordSyncState())
-      .WillRepeatedly(
-          Return(password_manager::ACCOUNT_PASSWORDS_ACTIVE_NORMAL_ENCRYPTION));
+      .WillRepeatedly(Return(password_manager::SyncState::
+                                 kAccountPasswordsActiveNormalEncryption));
   EXPECT_CALL(client_, IsUnderAdvancedProtection())
       .WillRepeatedly(Return(false));
   EXPECT_CALL(client_, GetProfilePasswordStore())
@@ -183,23 +177,52 @@ TEST_F(StoreMetricsReporterTest, MultiStoreMetrics) {
   profile_store->AddLogin(
       CreateForm(kRealm2, "identicaluser1", "identicalpass1"));
 
-  base::HistogramTester histogram_tester;
+  for (bool opted_in : {false, true}) {
+    EXPECT_CALL(*client_.GetPasswordFeatureManager(),
+                IsOptedInForAccountStorage())
+        .WillRepeatedly(Return(opted_in));
 
-  StoreMetricsReporter reporter(&client_, sync_service(), identity_manager(),
-                                &prefs_);
-  // Wait for the metrics to get reported. This is delayed by 30 seconds, and
-  // then involves queries to the stores, i.e. to background task runners.
-  FastForwardBy(base::TimeDelta::FromSeconds(30));
-  RunUntilIdle();
+    base::HistogramTester histogram_tester;
 
-  histogram_tester.ExpectUniqueSample(
-      "PasswordManager.AccountStoreVsProfileStore.Additional", 2, 1);
-  histogram_tester.ExpectUniqueSample(
-      "PasswordManager.AccountStoreVsProfileStore.Missing", 4, 1);
-  histogram_tester.ExpectUniqueSample(
-      "PasswordManager.AccountStoreVsProfileStore.Identical", 2, 1);
-  histogram_tester.ExpectUniqueSample(
-      "PasswordManager.AccountStoreVsProfileStore.Conflicting", 1, 1);
+    StoreMetricsReporter reporter(&client_, sync_service(), identity_manager(),
+                                  &prefs_);
+    // Wait for the metrics to get reported. This is delayed by 30 seconds, and
+    // then involves queries to the stores, i.e. to background task runners.
+    FastForwardBy(base::TimeDelta::FromSeconds(30));
+    RunUntilIdle();
+
+    // The original version of the metrics (without "2") is still recorded, even
+    // if the user isn't opted in to the account storage.
+    histogram_tester.ExpectUniqueSample(
+        "PasswordManager.AccountStoreVsProfileStore.Additional", 2, 1);
+    histogram_tester.ExpectUniqueSample(
+        "PasswordManager.AccountStoreVsProfileStore.Missing", 4, 1);
+    histogram_tester.ExpectUniqueSample(
+        "PasswordManager.AccountStoreVsProfileStore.Identical", 2, 1);
+    histogram_tester.ExpectUniqueSample(
+        "PasswordManager.AccountStoreVsProfileStore.Conflicting", 1, 1);
+
+    // Version "2" of the metrics is only recorded if the user is opted in.
+    if (opted_in) {
+      histogram_tester.ExpectUniqueSample(
+          "PasswordManager.AccountStoreVsProfileStore2.Additional", 2, 1);
+      histogram_tester.ExpectUniqueSample(
+          "PasswordManager.AccountStoreVsProfileStore2.Missing", 4, 1);
+      histogram_tester.ExpectUniqueSample(
+          "PasswordManager.AccountStoreVsProfileStore2.Identical", 2, 1);
+      histogram_tester.ExpectUniqueSample(
+          "PasswordManager.AccountStoreVsProfileStore2.Conflicting", 1, 1);
+    } else {
+      histogram_tester.ExpectTotalCount(
+          "PasswordManager.AccountStoreVsProfileStore2.Additional", 0);
+      histogram_tester.ExpectTotalCount(
+          "PasswordManager.AccountStoreVsProfileStore2.Missing", 0);
+      histogram_tester.ExpectTotalCount(
+          "PasswordManager.AccountStoreVsProfileStore2.Identical", 0);
+      histogram_tester.ExpectTotalCount(
+          "PasswordManager.AccountStoreVsProfileStore2.Conflicting", 0);
+    }
+  }
 
   account_store->ShutdownOnUIThread();
   profile_store->ShutdownOnUIThread();

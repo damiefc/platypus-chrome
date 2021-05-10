@@ -68,11 +68,18 @@ class ASH_EXPORT ToplevelWindowEventHandler
   void OnMouseEvent(ui::MouseEvent* event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
 
+  // wm::WindowMoveClient:
+  wm::WindowMoveResult RunMoveLoop(aura::Window* source,
+                                   const gfx::Vector2d& drag_offset,
+                                   ::wm::WindowMoveSource move_source) override;
+  void EndMoveLoop() override;
+
   // Attempts to start a drag if one is not already in progress. Returns true if
   // successful. |end_closure| is run when the drag completes, including if the
   // drag is not started. If |update_gesture_target| is true, the gesture
   // target is forcefully updated and gesture events are transferred to
-  // new target if any. In general, prefer the first version.
+  // new target if any. If |grab_capture| is true, capture is set to |window|,
+  // if it is not set yet. In general, prefer the first version.
   bool AttemptToStartDrag(aura::Window* window,
                           const gfx::PointF& point_in_parent,
                           int window_component,
@@ -82,13 +89,11 @@ class ASH_EXPORT ToplevelWindowEventHandler
                           int window_component,
                           ::wm::WindowMoveSource source,
                           EndClosure end_closure,
-                          bool update_gesture_target);
+                          bool update_gesture_target,
+                          bool grab_capture = true);
 
   // If there is a drag in progress it is reverted, otherwise does nothing.
   void RevertDrag();
-
-  // Returns true if there is a drag in progress.
-  bool is_drag_in_progress() const { return window_resizer_.get() != nullptr; }
 
   // Returns the toplevel window that should be dragged for a gesture event that
   // occurs in the HTCLIENT area of a window. Returns null if there shouldn't be
@@ -105,12 +110,8 @@ class ASH_EXPORT ToplevelWindowEventHandler
     return event_location_in_gesture_target_;
   }
 
-  // Overridden from wm::WindowMoveClient:
-  ::wm::WindowMoveResult RunMoveLoop(
-      aura::Window* source,
-      const gfx::Vector2d& drag_offset,
-      ::wm::WindowMoveSource move_source) override;
-  void EndMoveLoop() override;
+  // Returns true if there is a drag in progress.
+  bool is_drag_in_progress() const { return window_resizer_.get() != nullptr; }
 
  private:
   class ScopedWindowResizer;
@@ -121,7 +122,8 @@ class ASH_EXPORT ToplevelWindowEventHandler
   bool PrepareForDrag(aura::Window* window,
                       const gfx::PointF& point_in_parent,
                       int window_component,
-                      ::wm::WindowMoveSource source);
+                      ::wm::WindowMoveSource source,
+                      bool grab_capture);
 
   // Completes or reverts the drag if one is in progress. Returns true if a
   // drag was completed or reverted.

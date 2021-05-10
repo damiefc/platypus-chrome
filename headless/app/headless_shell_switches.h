@@ -27,6 +27,7 @@ HEADLESS_EXPORT extern const char kPrintToPDF[];
 HEADLESS_EXPORT extern const char kPrintToPDFNoHeader[];
 HEADLESS_EXPORT extern const char kProxyBypassList[];
 HEADLESS_EXPORT extern const char kProxyServer[];
+HEADLESS_EXPORT extern const char kNoSystemProxyConfigService[];
 HEADLESS_EXPORT extern const char kRemoteDebuggingAddress[];
 HEADLESS_EXPORT extern const char kRepl[];
 HEADLESS_EXPORT extern const char kScreenshot[];
@@ -38,6 +39,7 @@ HEADLESS_EXPORT extern const char kUserDataDir[];
 HEADLESS_EXPORT extern const char kVirtualTimeBudget[];
 HEADLESS_EXPORT extern const char kWindowSize[];
 HEADLESS_EXPORT extern const char kAuthServerAllowlist[];
+HEADLESS_EXPORT extern const char kAuthServerAllowlistDeprecated[];
 HEADLESS_EXPORT extern const char kFontRenderHinting[];
 HEADLESS_EXPORT extern const char kBlockNewWebContents[];
 

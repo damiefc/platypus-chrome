@@ -28,6 +28,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/features/feature.h"
 #include "extensions/common/features/feature_provider.h"
+#include "extensions/common/mojom/view_type.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom-forward.h"
 
 using guest_view::GuestViewBase;
@@ -46,7 +47,7 @@ ExtensionsGuestViewManagerDelegate::~ExtensionsGuestViewManagerDelegate() {
 void ExtensionsGuestViewManagerDelegate::OnGuestAdded(
     content::WebContents* guest_web_contents) const {
   // Set the view type so extensions sees the guest view as a foreground page.
-  SetViewType(guest_web_contents, VIEW_TYPE_EXTENSION_GUEST);
+  SetViewType(guest_web_contents, mojom::ViewType::kExtensionGuest);
 }
 
 void ExtensionsGuestViewManagerDelegate::DispatchEvent(
@@ -73,10 +74,11 @@ void ExtensionsGuestViewManagerDelegate::DispatchEvent(
     return;  // Could happen at tab shutdown.
 
   EventRouter::DispatchEventToSender(
-      owner->GetRenderViewHost(), guest->browser_context(), guest->owner_host(),
-      histogram_value, event_name, content::ChildProcessHost::kInvalidUniqueID,
-      extensions::kMainThreadId, blink::mojom::kInvalidServiceWorkerVersionId,
-      std::move(event_args), info);
+      owner->GetMainFrame()->GetProcess(), guest->browser_context(),
+      guest->owner_host(), histogram_value, event_name,
+      content::ChildProcessHost::kInvalidUniqueID, extensions::kMainThreadId,
+      blink::mojom::kInvalidServiceWorkerVersionId, std::move(event_args),
+      info);
 }
 
 bool ExtensionsGuestViewManagerDelegate::IsGuestAvailableToContext(

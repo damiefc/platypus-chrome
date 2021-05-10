@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/ntp_tiles/custom_links_manager.h"
@@ -45,16 +45,16 @@ class CustomLinksManagerImpl : public CustomLinksManager,
 
   const std::vector<Link>& GetLinks() const override;
 
-  bool AddLink(const GURL& url, const base::string16& title) override;
+  bool AddLink(const GURL& url, const std::u16string& title) override;
   bool UpdateLink(const GURL& url,
                   const GURL& new_url,
-                  const base::string16& new_title) override;
+                  const std::u16string& new_title) override;
   bool ReorderLink(const GURL& url, size_t new_pos) override;
   bool DeleteLink(const GURL& url) override;
   bool UndoAction() override;
 
-  std::unique_ptr<base::CallbackList<void()>::Subscription>
-  RegisterCallbackForOnChanged(base::RepeatingClosure callback) override;
+  base::CallbackListSubscription RegisterCallbackForOnChanged(
+      base::RepeatingClosure callback) override;
 
   // Register preferences used by this class.
   static void RegisterProfilePrefs(
@@ -80,7 +80,7 @@ class CustomLinksManagerImpl : public CustomLinksManager,
 
   // Called when the current list of links and/or initialization state in
   // PrefService is modified. Saves the new set of links in |current_links_|
-  // and notifies |callback_list_|.
+  // and notifies |closure_list_|.
   void OnPreferenceChanged();
 
   PrefService* const prefs_;
@@ -90,13 +90,14 @@ class CustomLinksManagerImpl : public CustomLinksManager,
   // performed.
   base::Optional<std::vector<Link>> previous_links_;
 
-  // List of callbacks to be invoked when custom links are updated by outside
+  // List of closures to be invoked when custom links are updated by outside
   // sources.
-  base::CallbackList<void()> callback_list_;
+  base::RepeatingClosureList closure_list_;
 
   // Observer for the HistoryService.
-  ScopedObserver<history::HistoryService, history::HistoryServiceObserver>
-      history_service_observer_;
+  base::ScopedObservation<history::HistoryService,
+                          history::HistoryServiceObserver>
+      history_service_observation_{this};
 
   // Observer for Chrome sync changes to |prefs::kCustomLinksList| and
   // |prefs::kCustomLinksInitialized|.

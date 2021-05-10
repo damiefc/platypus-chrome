@@ -91,6 +91,8 @@ enum class AlternateFontName {
   kLastResort
 };
 
+enum CreateIfNeeded { kDoNotCreate, kCreate };
+
 typedef HashMap<unsigned,
                 std::unique_ptr<FontPlatformData>,
                 WTF::IntHash<unsigned>,
@@ -107,13 +109,21 @@ typedef HashMap<FallbackListCompositeKey,
 // in UTS #51: https://unicode.org/reports/tr51/#Emoji_Script
 extern const char kColorEmojiLocale[];
 
+#if defined(OS_ANDROID)
+extern const char kNotoColorEmojiCompat[];
+#endif
+
 class PLATFORM_EXPORT FontCache {
   friend class FontCachePurgePreventer;
 
   USING_FAST_MALLOC(FontCache);
 
  public:
-  static FontCache* GetFontCache();
+  // FontCache initialisation on Windows depends on a global FontMgr being
+  // configured through a call from the browser process. CreateIfNeeded helps
+  // avoid early creation of a font cache when these globals have not yet
+  // been set.
+  static FontCache* GetFontCache(CreateIfNeeded = kCreate);
 
   void ReleaseFontData(const SimpleFontData*);
 
@@ -197,11 +207,11 @@ class PLATFORM_EXPORT FontCache {
   static void SetLCDTextEnabled(bool enabled) { lcd_text_enabled_ = enabled; }
   static void AddSideloadedFontForTesting(sk_sp<SkTypeface>);
   // Functions to cache and retrieve the system font metrics.
-  static void SetMenuFontMetrics(const wchar_t* family_name,
+  static void SetMenuFontMetrics(const AtomicString& family_name,
                                  int32_t font_height);
-  static void SetSmallCaptionFontMetrics(const wchar_t* family_name,
+  static void SetSmallCaptionFontMetrics(const AtomicString& family_name,
                                          int32_t font_height);
-  static void SetStatusFontMetrics(const wchar_t* family_name,
+  static void SetStatusFontMetrics(const AtomicString& family_name,
                                    int32_t font_height);
   static int32_t MenuFontHeight() { return menu_font_height_; }
   static const AtomicString& MenuFontFamily() {

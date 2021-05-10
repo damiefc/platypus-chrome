@@ -17,6 +17,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "build/chromeos_buildflags.h"
 #include "dbus/object_path.h"
 #include "device/bluetooth/bluetooth_remote_gatt_characteristic.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service.h"
@@ -54,8 +55,7 @@ class BluetoothRemoteGattCharacteristicBlueZ
   const std::vector<uint8_t>& GetValue() const override;
   device::BluetoothRemoteGattService* GetService() const override;
   bool IsNotifying() const override;
-  void ReadRemoteCharacteristic(ValueCallback callback,
-                                ErrorCallback error_callback) override;
+  void ReadRemoteCharacteristic(ValueCallback callback) override;
   void WriteRemoteCharacteristic(const std::vector<uint8_t>& value,
                                  WriteType write_type,
                                  base::OnceClosure callback,
@@ -64,14 +64,14 @@ class BluetoothRemoteGattCharacteristicBlueZ
       const std::vector<uint8_t>& value,
       base::OnceClosure callback,
       ErrorCallback error_callback) override;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   void PrepareWriteRemoteCharacteristic(const std::vector<uint8_t>& value,
                                         base::OnceClosure callback,
                                         ErrorCallback error_callback) override;
 #endif
 
  protected:
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   void SubscribeToNotifications(
       device::BluetoothRemoteGattDescriptor* ccc_descriptor,
       NotificationType notification_type,
@@ -123,7 +123,7 @@ class BluetoothRemoteGattCharacteristicBlueZ
 
   // Called by dbus:: on unsuccessful completion of a request to read
   // the characteristic value.
-  void OnReadError(ErrorCallback error_callback,
+  void OnReadError(ValueCallback callback,
                    const std::string& error_name,
                    const std::string& error_message);
 

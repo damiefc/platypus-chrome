@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -46,13 +45,8 @@ class ChromeLocationBarModelDelegateTest
     : public BrowserWithTestWindowTest,
       public ::testing::WithParamInterface<bool> {
  protected:
-  ChromeLocationBarModelDelegateTest() {
-    if (GetParam()) {
-      scoped_feature_list_.InitAndEnableFeature(ntp_features::kWebUI);
-    } else {
-      scoped_feature_list_.InitAndDisableFeature(ntp_features::kWebUI);
-    }
-  }
+  ChromeLocationBarModelDelegateTest() = default;
+
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
 
@@ -70,7 +64,7 @@ class ChromeLocationBarModelDelegateTest
     TemplateURLService* template_url_service =
         TemplateURLServiceFactory::GetForProfile(profile());
     TemplateURLData data;
-    data.SetShortName(base::ASCIIToUTF16("foo.com"));
+    data.SetShortName(u"foo.com");
     data.SetURL("http://foo.com/url?bar={searchTerms}");
     if (set_ntp_url) {
       data.new_tab_url = "https://foo.com/newtab";
@@ -97,9 +91,7 @@ class ChromeLocationBarModelDelegateTest
 TEST_P(ChromeLocationBarModelDelegateTest, IsNewTabPage) {
   chrome::NewTab(browser());
   // New Tab URL with Google DSP resolves to the local or the WebUI NTP URL.
-  GURL ntp_url(base::FeatureList::IsEnabled(ntp_features::kWebUI)
-                   ? chrome::kChromeUINewTabPageURL
-                   : chrome::kChromeSearchLocalNtpUrl);
+  GURL ntp_url(chrome::kChromeUINewTabPageURL);
   EXPECT_EQ(ntp_url, search::GetNewTabPageURL(profile()));
 
   EXPECT_TRUE(delegate_->IsNewTabPage());
@@ -108,8 +100,8 @@ TEST_P(ChromeLocationBarModelDelegateTest, IsNewTabPage) {
   SetSearchProvider(false);
   chrome::NewTab(browser());
   // New Tab URL with a user selected DSP without an NTP URL resolves to
-  // chrome-search://local-ntp/local-ntp.html.
-  EXPECT_EQ(GURL(chrome::kChromeSearchLocalNtpUrl),
+  // chrome://new-tab-page-third-party/.
+  EXPECT_EQ(GURL(chrome::kChromeUINewTabPageThirdPartyURL),
             search::GetNewTabPageURL(profile()));
 
   EXPECT_FALSE(delegate_->IsNewTabPage());

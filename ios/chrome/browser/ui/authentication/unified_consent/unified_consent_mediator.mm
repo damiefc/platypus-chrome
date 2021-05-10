@@ -27,6 +27,8 @@
 @property(nonatomic, strong) UIImage* selectedIdentityAvatar;
 // NO until the mediator is started.
 @property(nonatomic, assign) BOOL started;
+// Pref service to retrieve preference values.
+@property(nonatomic, assign) PrefService* prefService;
 
 @end
 
@@ -38,9 +40,11 @@
 @synthesize started = _started;
 
 - (instancetype)initWithUnifiedConsentViewController:
-    (UnifiedConsentViewController*)viewController {
+                    (UnifiedConsentViewController*)viewController
+                                         prefService:(PrefService*)prefService {
   self = [super init];
   if (self) {
+    _prefService = prefService;
     _unifiedConsentViewController = viewController;
     _identityServiceObserver =
         std::make_unique<ChromeIdentityServiceObserverBridge>(self);
@@ -49,6 +53,32 @@
   }
   return self;
 }
+
+- (void)dealloc {
+  DCHECK(!self.prefService);
+}
+
+- (void)start {
+  DCHECK(self.prefService);
+
+  NSArray* identities =
+      ios::GetChromeBrowserProvider()
+          ->GetChromeIdentityService()
+          ->GetAllIdentitiesSortedForDisplay(self.prefService);
+  if (identities.count != 0) {
+    self.selectedIdentity = identities[0];
+  }
+  // Make sure the view is loaded so the mediator can set it up.
+  [self.unifiedConsentViewController loadViewIfNeeded];
+  self.started = YES;
+  [self updateViewController];
+}
+
+- (void)disconnect {
+  self.prefService = nullptr;
+}
+
+#pragma mark - Properties
 
 - (void)setSelectedIdentity:(ChromeIdentity*)selectedIdentity {
   if ([self.selectedIdentity isEqual:selectedIdentity]) {
@@ -63,19 +93,6 @@
   [self updateViewController];
 }
 
-- (void)start {
-  NSArray* identities = ios::GetChromeBrowserProvider()
-                            ->GetChromeIdentityService()
-                            ->GetAllIdentitiesSortedForDisplay();
-  if (identities.count != 0) {
-    self.selectedIdentity = identities[0];
-  }
-  // Make sure the view is loaded so the mediator can set it up.
-  [self.unifiedConsentViewController loadViewIfNeeded];
-  self.started = YES;
-  [self updateViewController];
-}
-
 #pragma mark - Private
 
 // Updates the view if the mediator has been started.
@@ -85,12 +102,12 @@
     return;
   if (self.selectedIdentity) {
     [self.unifiedConsentViewController
-        updateIdentityPickerViewWithUserFullName:self.selectedIdentity
-                                                     .userFullName
-                                           email:self.selectedIdentity
-                                                     .userEmail];
+        updateIdentityButtonControlWithUserFullName:self.selectedIdentity
+                                                        .userFullName
+                                              email:self.selectedIdentity
+                                                        .userEmail];
     [self.unifiedConsentViewController
-        updateIdentityPickerViewWithAvatar:self.selectedIdentityAvatar];
+        updateIdentityButtonControlWithAvatar:self.selectedIdentityAvatar];
     ChromeIdentity* selectedIdentity = self.selectedIdentity;
     __weak UnifiedConsentMediator* weakSelf = self;
     ios::GetChromeBrowserProvider()
@@ -101,7 +118,7 @@
           [weakSelf identityAvatarUpdated:identityAvatar];
         });
   } else {
-    [self.unifiedConsentViewController hideIdentityPickerView];
+    [self.unifiedConsentViewController hideIdentityButtonControl];
   }
 }
 
@@ -110,7 +127,7 @@
     return;
   _selectedIdentityAvatar = identityAvatar;
   [self.unifiedConsentViewController
-      updateIdentityPickerViewWithAvatar:self.selectedIdentityAvatar];
+      updateIdentityButtonControlWithAvatar:self.selectedIdentityAvatar];
 }
 
 #pragma mark - ChromeBrowserProviderObserver
@@ -128,12 +145,17 @@
 #pragma mark - ChromeIdentityServiceObserver
 
 - (void)identityListChanged {
+  if (!self.prefService) {
+    return;
+  }
+
   if (!self.selectedIdentity || !ios::GetChromeBrowserProvider()
                                      ->GetChromeIdentityService()
                                      ->IsValidIdentity(self.selectedIdentity)) {
-    NSArray* identities = ios::GetChromeBrowserProvider()
-                              ->GetChromeIdentityService()
-                              ->GetAllIdentitiesSortedForDisplay();
+    NSArray* identities =
+        ios::GetChromeBrowserProvider()
+            ->GetChromeIdentityService()
+            ->GetAllIdentitiesSortedForDisplay(self.prefService);
     ChromeIdentity* newIdentity = nil;
     if (identities.count != 0) {
       newIdentity = identities[0];

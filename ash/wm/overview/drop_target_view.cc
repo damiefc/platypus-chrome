@@ -8,8 +8,8 @@
 
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/wm/overview/overview_constants.h"
-#include "ash/wm/overview/rounded_rect_view.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/layout/layout_provider.h"
@@ -46,10 +46,11 @@ class DropTargetView::PlusIconView : public views::ImageView {
 };
 
 DropTargetView::DropTargetView(bool has_plus_icon) {
-  const int corner_radius =
-      views::LayoutProvider::Get()->GetCornerRadiusMetric(views::EMPHASIS_LOW);
-  background_view_ = AddChildView(std::make_unique<RoundedRectView>(
-      corner_radius, kDropTargetBackgroundColor));
+  const int corner_radius = views::LayoutProvider::Get()->GetCornerRadiusMetric(
+      views::Emphasis::kLow);
+  background_view_ = AddChildView(std::make_unique<views::View>());
+  background_view_->SetBackground(views::CreateRoundedRectBackground(
+      kDropTargetBackgroundColor, corner_radius));
 
   if (has_plus_icon)
     plus_icon_ = AddChildView(std::make_unique<PlusIconView>());

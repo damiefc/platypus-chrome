@@ -42,8 +42,8 @@ void ScreenOrientationProvider::LockOrientation(
   }
 
   if (delegate_->FullScreenRequired(web_contents())) {
-    RenderViewHostImpl* rvhi =
-        static_cast<RenderViewHostImpl*>(web_contents()->GetRenderViewHost());
+    RenderViewHostImpl* rvhi = static_cast<RenderViewHostImpl*>(
+        web_contents()->GetMainFrame()->GetRenderViewHost());
     if (!rvhi) {
       NotifyLockResult(ScreenOrientationLockResult::
                            SCREEN_ORIENTATION_LOCK_RESULT_ERROR_CANCELED);
@@ -139,7 +139,7 @@ void ScreenOrientationProvider::DidToggleFullscreenModeForTab(
 
 void ScreenOrientationProvider::DidFinishNavigation(
     NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInMainFrame() ||
+  if (!navigation_handle->IsInPrimaryMainFrame() ||
       !navigation_handle->HasCommitted() ||
       navigation_handle->IsSameDocument()) {
     return;
@@ -149,7 +149,8 @@ void ScreenOrientationProvider::DidFinishNavigation(
 
 device::mojom::ScreenOrientationLockType
 ScreenOrientationProvider::GetNaturalLockType() const {
-  RenderWidgetHost* rwh = web_contents()->GetRenderViewHost()->GetWidget();
+  RenderWidgetHost* rwh =
+      web_contents()->GetMainFrame()->GetRenderViewHost()->GetWidget();
   if (!rwh)
     return device::mojom::ScreenOrientationLockType::DEFAULT;
 
@@ -181,7 +182,8 @@ ScreenOrientationProvider::GetNaturalLockType() const {
 
 bool ScreenOrientationProvider::LockMatchesCurrentOrientation(
     device::mojom::ScreenOrientationLockType lock) {
-  RenderWidgetHost* rwh = web_contents()->GetRenderViewHost()->GetWidget();
+  RenderWidgetHost* rwh =
+      web_contents()->GetMainFrame()->GetRenderViewHost()->GetWidget();
   if (!rwh)
     return false;
 

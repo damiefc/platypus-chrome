@@ -10,6 +10,7 @@
 #include "base/auto_reset.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_layer_impl.h"
@@ -94,7 +95,7 @@ void PictureLayer::SetLayerTreeHost(LayerTreeHost* host) {
     return;
 
   if (!recording_source_)
-    recording_source_.reset(new RecordingSource);
+    recording_source_ = std::make_unique<RecordingSource>();
   recording_source_->SetSlowdownRasterScaleFactor(
       host->GetDebugState().slow_down_raster_scale_factor);
 
@@ -141,8 +142,7 @@ bool PictureLayer::Update() {
     {
       auto old_display_list = std::move(picture_layer_inputs_.display_list);
       picture_layer_inputs_.display_list =
-          picture_layer_inputs_.client->PaintContentsToDisplayList(
-              ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+          picture_layer_inputs_.client->PaintContentsToDisplayList();
       if (old_display_list &&
           picture_layer_inputs_.display_list
               ->NeedsAdditionalInvalidationForLCDText(*old_display_list)) {
@@ -167,11 +167,8 @@ bool PictureLayer::Update() {
       picture_layer_inputs_.nearest_neighbor = result->nearest_neighbor;
     }
 
-    picture_layer_inputs_.painter_reported_memory_usage =
-        picture_layer_inputs_.client->GetApproximateUnsharedMemoryUsage();
     recording_source_->UpdateDisplayItemList(
         picture_layer_inputs_.display_list,
-        picture_layer_inputs_.painter_reported_memory_usage,
         layer_tree_host()->recording_scale_factor());
 
     SetNeedsPushProperties();
@@ -190,8 +187,7 @@ sk_sp<SkPicture> PictureLayer::GetPicture() const {
     return nullptr;
 
   scoped_refptr<DisplayItemList> display_list =
-      picture_layer_inputs_.client->PaintContentsToDisplayList(
-          ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+      picture_layer_inputs_.client->PaintContentsToDisplayList();
   SkPictureRecorder recorder;
   SkCanvas* canvas =
       recorder.beginRecording(bounds().width(), bounds().height());
@@ -291,7 +287,6 @@ void PictureLayer::DropRecordingSourceContentIfInvalid() {
     // longer valid. In this case just destroy the recording source.
     recording_source_->SetEmptyBounds();
     picture_layer_inputs_.display_list = nullptr;
-    picture_layer_inputs_.painter_reported_memory_usage = 0;
   }
 }
 

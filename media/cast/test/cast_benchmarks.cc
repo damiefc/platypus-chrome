@@ -32,7 +32,7 @@
 
 #include "base/at_exit.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/debug/profiler.h"
 #include "base/logging.h"
@@ -51,7 +51,6 @@
 #include "media/base/video_frame.h"
 #include "media/cast/cast_config.h"
 #include "media/cast/cast_environment.h"
-#include "media/cast/cast_receiver.h"
 #include "media/cast/cast_sender.h"
 #include "media/cast/logging/simple_event_subscriber.h"
 #include "media/cast/net/cast_transport.h"
@@ -59,6 +58,7 @@
 #include "media/cast/net/cast_transport_defines.h"
 #include "media/cast/net/cast_transport_impl.h"
 #include "media/cast/test/loopback_transport.h"
+#include "media/cast/test/receiver/cast_receiver.h"
 #include "media/cast/test/skewed_single_thread_task_runner.h"
 #include "media/cast/test/skewed_tick_clock.h"
 #include "media/cast/test/utility/audio_utility.h"
@@ -305,7 +305,7 @@ class RunOneBenchmark {
                                 bool continuous) {
     video_ticks_.push_back(
         std::make_pair(testing_clock_receiver_.NowTicks(), render_time));
-    cast_receiver_->RequestDecodedVideoFrame(base::Bind(
+    cast_receiver_->RequestDecodedVideoFrame(base::BindRepeating(
         &RunOneBenchmark::BasicPlayerGotVideoFrame, base::Unretained(this)));
   }
 
@@ -314,14 +314,14 @@ class RunOneBenchmark {
                                 bool is_continuous) {
     audio_ticks_.push_back(
         std::make_pair(testing_clock_receiver_.NowTicks(), playout_time));
-    cast_receiver_->RequestDecodedAudioFrame(base::Bind(
+    cast_receiver_->RequestDecodedAudioFrame(base::BindRepeating(
         &RunOneBenchmark::BasicPlayerGotAudioFrame, base::Unretained(this)));
   }
 
   void StartBasicPlayer() {
-    cast_receiver_->RequestDecodedVideoFrame(base::Bind(
+    cast_receiver_->RequestDecodedVideoFrame(base::BindRepeating(
         &RunOneBenchmark::BasicPlayerGotVideoFrame, base::Unretained(this)));
-    cast_receiver_->RequestDecodedAudioFrame(base::Bind(
+    cast_receiver_->RequestDecodedAudioFrame(base::BindRepeating(
         &RunOneBenchmark::BasicPlayerGotAudioFrame, base::Unretained(this)));
   }
 
@@ -480,10 +480,10 @@ void RunOneBenchmark::Create(const MeasuringPoint& p) {
       &video_bytes_encoded_, &audio_bytes_encoded_);
 
   receiver_to_sender_ = new LoopBackTransport(cast_environment_receiver_);
-  transport_receiver_.reset(new CastTransportImpl(
+  transport_receiver_ = std::make_unique<CastTransportImpl>(
       &testing_clock_receiver_, base::TimeDelta::FromSeconds(1),
       std::make_unique<TransportClient>(this),
-      base::WrapUnique(receiver_to_sender_), task_runner_receiver_));
+      base::WrapUnique(receiver_to_sender_), task_runner_receiver_);
 
   cast_receiver_ =
       CastReceiver::Create(cast_environment_receiver_, audio_receiver_config_,
@@ -495,9 +495,8 @@ void RunOneBenchmark::Create(const MeasuringPoint& p) {
   cast_sender_->InitializeAudio(audio_sender_config_,
                                 base::BindOnce(&ExpectAudioSuccess));
   cast_sender_->InitializeVideo(video_sender_config_,
-                                base::Bind(&ExpectVideoSuccess),
-                                CreateDefaultVideoEncodeAcceleratorCallback(),
-                                CreateDefaultVideoEncodeMemoryCallback());
+                                base::BindRepeating(&ExpectVideoSuccess),
+                                base::DoNothing());
 
   receiver_to_sender_->Initialize(CreateSimplePipe(p),
                                   transport_sender_.PacketReceiverForTesting(),

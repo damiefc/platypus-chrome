@@ -4,14 +4,18 @@
 
 #include "third_party/blink/renderer/platform/mojo/drag_mojom_traits.h"
 
+#include <string>
+
+#include "base/check.h"
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
 #include "base/optional.h"
-#include "base/strings/string16.h"
-#include "mojo/public/cpp/bindings/interface_ptr.h"
+#include "mojo/public/cpp/base/big_buffer.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
-#include "third_party/blink/public/mojom/file_system_access/native_file_system_drag_drop_token.mojom-blink.h"
+#include "third_party/blink/public/mojom/file_system_access/file_system_access_data_transfer_token.mojom-blink.h"
 #include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
@@ -73,22 +77,22 @@ bool StructTraits<
 
 // static
 base::FilePath StructTraits<
-    blink::mojom::DragItemFileDataView,
+    blink::mojom::DataTransferFileDataView,
     blink::WebDragData::Item>::path(const blink::WebDragData::Item& item) {
   return WebStringToFilePath(item.filename_data);
 }
 
 // static
 base::FilePath
-StructTraits<blink::mojom::DragItemFileDataView, blink::WebDragData::Item>::
+StructTraits<blink::mojom::DataTransferFileDataView, blink::WebDragData::Item>::
     display_name(const blink::WebDragData::Item& item) {
   return WebStringToFilePath(item.display_name_data);
 }
 
 // static
 bool StructTraits<
-    blink::mojom::DragItemFileDataView,
-    blink::WebDragData::Item>::Read(blink::mojom::DragItemFileDataView data,
+    blink::mojom::DataTransferFileDataView,
+    blink::WebDragData::Item>::Read(blink::mojom::DataTransferFileDataView data,
                                     blink::WebDragData::Item* out) {
   blink::WebDragData::Item item;
   base::FilePath filename_data, display_name_data;
@@ -99,23 +103,30 @@ bool StructTraits<
   item.storage_type = blink::WebDragData::Item::kStorageTypeFilename;
   item.filename_data = blink::FilePathToWebString(filename_data);
   item.display_name_data = blink::FilePathToWebString(display_name_data);
-  mojo::PendingRemote<::blink::mojom::blink::NativeFileSystemDragDropToken>
-      native_file_system_token(
-          data.TakeNativeFileSystemToken<mojo::PendingRemote<
-              ::blink::mojom::blink::NativeFileSystemDragDropToken>>());
-  item.native_file_system_entry =
-      base::MakeRefCounted<::blink::NativeFileSystemDropData>(
-          std::move(native_file_system_token));
+  mojo::PendingRemote<::blink::mojom::blink::FileSystemAccessDataTransferToken>
+      file_system_access_token(
+          data.TakeFileSystemAccessToken<mojo::PendingRemote<
+              ::blink::mojom::blink::FileSystemAccessDataTransferToken>>());
+  item.file_system_access_entry =
+      base::MakeRefCounted<::blink::FileSystemAccessDropData>(
+          std::move(file_system_access_token));
 
   *out = std::move(item);
   return true;
 }
 
 // static
-blink::WebVector<uint8_t> StructTraits<
+mojo_base::BigBuffer StructTraits<
     blink::mojom::DragItemBinaryDataView,
     blink::WebDragData::Item>::data(const blink::WebDragData::Item& item) {
-  return item.binary_data.Copy();
+  mojo_base::BigBuffer buffer(item.binary_data.size());
+  item.binary_data.ForEachSegment([&buffer](const char* segment,
+                                            size_t segment_size,
+                                            size_t segment_offset) {
+    std::copy(segment, segment + segment_size, buffer.data() + segment_offset);
+    return true;
+  });
+  return buffer;
 }
 
 // static
@@ -167,16 +178,17 @@ int64_t StructTraits<
 WTF::String StructTraits<blink::mojom::DragItemFileSystemFileDataView,
                          blink::WebDragData::Item>::
     file_system_id(const blink::WebDragData::Item& item) {
+  DCHECK(item.file_system_id.IsNull());
   return item.file_system_id;
 }
 
 //  static
-mojo::PendingRemote<blink::mojom::blink::NativeFileSystemDragDropToken>
-StructTraits<blink::mojom::DragItemFileDataView, blink::WebDragData::Item>::
-    native_file_system_token(const blink::WebDragData::Item& item) {
+mojo::PendingRemote<blink::mojom::blink::FileSystemAccessDataTransferToken>
+StructTraits<blink::mojom::DataTransferFileDataView, blink::WebDragData::Item>::
+    file_system_access_token(const blink::WebDragData::Item& item) {
   // Should never have to send a transfer token information from the renderer
   // to the browser.
-  NOTREACHED();
+  DCHECK(!item.file_system_access_entry);
   return mojo::NullRemote();
 }
 

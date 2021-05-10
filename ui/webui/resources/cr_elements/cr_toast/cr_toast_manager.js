@@ -93,10 +93,6 @@ cr.define('cr.toastManager', () => {
      */
     showInternal_(hideSlotted) {
       this.$.slotted.hidden = hideSlotted;
-      Polymer.IronA11yAnnouncer.requestAvailability();
-      this.fire('iron-announce', {
-        text: this.$.content.textContent,
-      });
       this.$.toast.show();
     },
 
@@ -106,6 +102,7 @@ cr.define('cr.toastManager', () => {
   });
 
   // #cr_define_end
+  console.warn('crbug/1173575, non-JS module files deprecated.');
   return {
     getToastManager: getToastManager,
   };

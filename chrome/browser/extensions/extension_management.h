@@ -75,6 +75,18 @@ class ExtensionManagement : public KeyedService {
     INSTALLATION_REMOVED,
   };
 
+  // Behavior for "Pin extension to toolbar" from the extensions menu, default
+  // is kDefaultUnpinned
+  // * kDefaultUnpinned: Extension starts unpinned, but the user can still pin
+  //                     it afterwards.
+  // * kForcePinned: Extension starts pinned to the toolbar, and the user
+  //                 cannot unpin it.
+  // TODO(crbug.com/1071314): Add kDefaultPinned state.
+  enum class ToolbarPinMode {
+    kDefaultUnpinned = 0,
+    kForcePinned,
+  };
+
   explicit ExtensionManagement(Profile* profile);
   ~ExtensionManagement() override;
 
@@ -113,6 +125,17 @@ class ExtensionManagement : public KeyedService {
   // |INSTALLATION_ALLOWED| as installation mode. This excludes force installed
   // extensions.
   bool HasAllowlistedExtension() const;
+
+  // Returns if an extension with |id| is force installed and the update URL is
+  // overridden by policy.
+  bool IsUpdateUrlOverridden(const ExtensionId& id) const;
+
+  // Get the effective update URL for the extension. Normally this URL comes
+  // from the extension manifest, but may be overridden by policies.
+  GURL GetEffectiveUpdateURL(const Extension& extension) const;
+
+  // Returns true if this extension's update URL is from webstore.
+  bool UpdatesFromWebstore(const Extension& extension) const;
 
   // Returns if an extension with id |id| is explicitly allowed by enterprise
   // policy or not.
@@ -193,6 +216,10 @@ class ExtensionManagement : public KeyedService {
   // required version is returned.
   bool CheckMinimumVersion(const Extension* extension,
                            std::string* required_version) const;
+
+  // Returns the list of extensions with "force_pinned" mode for the
+  // "toolbar_pin" setting.
+  ExtensionIdSet GetForcePinnedList() const;
 
   // Returns whether the profile associated with this instance is supervised.
   bool is_child() const { return is_child_; }

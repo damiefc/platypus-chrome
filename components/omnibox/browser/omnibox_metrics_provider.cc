@@ -4,10 +4,10 @@
 
 #include "components/omnibox/browser/omnibox_metrics_provider.h"
 
+#include <string>
 #include <vector>
 
 #include "base/bind.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -37,7 +37,7 @@ void OmniboxMetricsProvider::OnRecordingEnabled() {
 }
 
 void OmniboxMetricsProvider::OnRecordingDisabled() {
-  subscription_.reset();
+  subscription_ = {};
 }
 
 void OmniboxMetricsProvider::ProvideCurrentSessionData(
@@ -67,7 +67,7 @@ void OmniboxMetricsProvider::RecordOmniboxOpenedURL(const OmniboxLog& log) {
   omnibox_event->set_selected_index(log.selected_index);
   omnibox_event->set_selected_tab_match(log.disposition ==
                                         WindowOpenDisposition::SWITCH_TO_TAB);
-  if (log.completed_length != base::string16::npos)
+  if (log.completed_length != std::u16string::npos)
     omnibox_event->set_completed_length(log.completed_length);
   const base::TimeDelta default_time_delta =
       base::TimeDelta::FromMilliseconds(-1);
@@ -119,4 +119,8 @@ void OmniboxMetricsProvider::RecordOmniboxOpenedURL(const OmniboxLog& log) {
     omnibox_event->set_keyword_mode_entry_method(log.keyword_mode_entry_method);
   if (log.is_query_started_from_tile)
     omnibox_event->set_is_query_started_from_tile(true);
+  for (auto feature : log.feature_triggered_in_session) {
+    omnibox_event->add_feature_triggered_in_session(
+        static_cast<size_t>(feature));
+  }
 }

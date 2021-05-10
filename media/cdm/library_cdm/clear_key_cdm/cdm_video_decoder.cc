@@ -4,10 +4,11 @@
 
 #include "media/cdm/library_cdm/clear_key_cdm/cdm_video_decoder.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/queue.h"
 #include "base/feature_list.h"
@@ -27,15 +28,10 @@
 #include "media/cdm/cdm_type_conversion.h"
 #include "media/cdm/library_cdm/cdm_host_proxy.h"
 #include "media/media_buildflags.h"
-#include "third_party/libaom/libaom_buildflags.h"
 #include "third_party/libyuv/include/libyuv/planar_functions.h"
 
 #if BUILDFLAG(ENABLE_LIBVPX)
 #include "media/filters/vpx_video_decoder.h"
-#endif
-
-#if BUILDFLAG(ENABLE_LIBAOM)
-#include "media/filters/aom_video_decoder.h"
 #endif
 
 #if BUILDFLAG(ENABLE_DAV1D_DECODER)
@@ -165,7 +161,7 @@ void SetupGlobalEnvironmentIfNeeded() {
 // |kNestableTasksAllowed| because we could be running the RunLoop in a task,
 // e.g. in component builds when we share the same task runner as the host. In
 // a static build, this is not necessary.
-class VideoDecoderAdapter : public CdmVideoDecoder {
+class VideoDecoderAdapter final : public CdmVideoDecoder {
  public:
   VideoDecoderAdapter(CdmHostProxy* cdm_host_proxy,
                       std::unique_ptr<VideoDecoder> video_decoder)
@@ -261,7 +257,7 @@ class VideoDecoderAdapter : public CdmVideoDecoder {
 
   void OnVideoFrameReady(scoped_refptr<VideoFrame> video_frame) {
     // Do not queue EOS frames, which is not needed.
-    if (video_frame->metadata()->end_of_stream)
+    if (video_frame->metadata().end_of_stream)
       return;
 
     decoded_video_frames_.push(std::move(video_frame));
@@ -308,7 +304,7 @@ std::unique_ptr<CdmVideoDecoder> CreateVideoDecoder(
 
 #if BUILDFLAG(ENABLE_LIBVPX)
   if (config.codec == cdm::kCodecVp8 || config.codec == cdm::kCodecVp9)
-    video_decoder.reset(new VpxVideoDecoder());
+    video_decoder = std::make_unique<VpxVideoDecoder>();
 #endif
 
 #if BUILDFLAG(ENABLE_LIBGAV1_DECODER)
@@ -320,16 +316,13 @@ std::unique_ptr<CdmVideoDecoder> CreateVideoDecoder(
   {
 #if BUILDFLAG(ENABLE_DAV1D_DECODER)
     if (config.codec == cdm::kCodecAv1)
-      video_decoder.reset(new Dav1dVideoDecoder(null_media_log.get()));
-#elif BUILDFLAG(ENABLE_LIBAOM)
-    if (config.codec == cdm::kCodecAv1)
-      video_decoder.reset(new AomVideoDecoder(null_media_log.get()));
+      video_decoder = std::make_unique<Dav1dVideoDecoder>(null_media_log.get());
 #endif
   }
 
 #if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
   if (!video_decoder)
-    video_decoder.reset(new FFmpegVideoDecoder(null_media_log.get()));
+    video_decoder = std::make_unique<FFmpegVideoDecoder>(null_media_log.get());
 #endif
 
   if (!video_decoder)

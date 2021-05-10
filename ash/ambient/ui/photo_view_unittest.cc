@@ -20,7 +20,7 @@ using AmbientPhotoViewTest = AmbientAshTestBase;
 // screen is portrait. The top and bottom of the image will be cut off, as
 // the height of the image is taller than the height of the screen.
 TEST_F(AmbientPhotoViewTest, ShouldResizePortraitImageForPortraitScreen) {
-  SetPhotoViewImageSize(/*width=*/10, /*height=*/20);
+  SetDecodedPhotoSize(/*width=*/10, /*height=*/20);
 
   UpdateDisplay("600x800");
 
@@ -41,7 +41,7 @@ TEST_F(AmbientPhotoViewTest, ShouldResizePortraitImageForPortraitScreen) {
 // and the screen is portrait. There will be black bars to the top and bottom of
 // the image, as the height of the image is less than the height of the screen.
 TEST_F(AmbientPhotoViewTest, ShouldResizeLandscapeImageForPortraitScreen) {
-  SetPhotoViewImageSize(/*width=*/30, /*height=*/20);
+  SetDecodedPhotoSize(/*width=*/30, /*height=*/20);
 
   UpdateDisplay("600x800");
 
@@ -61,7 +61,7 @@ TEST_F(AmbientPhotoViewTest, ShouldResizeLandscapeImageForPortraitScreen) {
 // Test that two portrait images are scaled and tiled to fill screen when the
 // screen is landscape.
 TEST_F(AmbientPhotoViewTest, ShouldTileTwoPortraitImagesForLandscapeScreen) {
-  SetPhotoViewImageSize(/*width=*/10, /*height=*/20);
+  SetDecodedPhotoSize(/*width=*/10, /*height=*/20);
 
   UpdateDisplay("808x600");
 
@@ -86,7 +86,7 @@ TEST_F(AmbientPhotoViewTest, ShouldTileTwoPortraitImagesForLandscapeScreen) {
 // pixel.
 TEST_F(AmbientPhotoViewTest,
        ShouldTileTwoPortraitImagesForLandscapeScreenWithOddWidth) {
-  SetPhotoViewImageSize(/*width=*/10, /*height=*/20);
+  SetDecodedPhotoSize(/*width=*/10, /*height=*/20);
 
   constexpr int kScreenWidth = 809;
   constexpr int kScreenHeight = 600;
@@ -114,10 +114,11 @@ TEST_F(AmbientPhotoViewTest,
             gfx::Rect(/*x=*/0, /*y=*/-100, /*width=*/400, /*height=*/800));
 }
 
-// Test that landscape images will not be tiled when screen is landscape.
+// Test that landscape images can be tiled when screen is landscape as long as
+// they are related.
 TEST_F(AmbientPhotoViewTest,
        ShouldNotTileTwoLandscapeImagesForLandscapeScreen) {
-  SetPhotoViewImageSize(/*width=*/20, /*height=*/10);
+  SetDecodedPhotoSize(/*width=*/20, /*height=*/10);
 
   UpdateDisplay("808x600");
 
@@ -127,19 +128,20 @@ TEST_F(AmbientPhotoViewTest,
 
   auto* image_view = GetAmbientBackgroundImageView();
 
-  // Only show one landscape image.
+  // Show two landscape image.
   // Image should be full height. Image width should extend equally to the left
   // and right of the visible part of the screen.
   ASSERT_EQ(image_view->GetImageBoundsForTesting(),
-            gfx::Rect(/*x=*/-196, /*y=*/0, /*width=*/1200, /*height=*/600));
-  ASSERT_EQ(image_view->GetRelatedImageBoundsForTesting(), gfx::Rect());
+            gfx::Rect(/*x=*/0, /*y=*/200, /*width=*/400, /*height=*/200));
+  ASSERT_EQ(image_view->GetRelatedImageBoundsForTesting(),
+            gfx::Rect(/*x=*/0, /*y=*/200, /*width=*/400, /*height=*/200));
 }
 
 // Test that only have one available image will not be tiled when screen is
 // landscape.
 TEST_F(AmbientPhotoViewTest,
        ShouldNotTileIfRelatedImageIsNullForLandscapeScreen) {
-  SetPhotoViewImageSize(/*width=*/10, /*height=*/20);
+  SetDecodedPhotoSize(/*width=*/10, /*height=*/20);
 
   UpdateDisplay("800x600");
 
@@ -164,11 +166,11 @@ TEST_F(AmbientPhotoViewTest,
 }
 
 // Test that image is scaled to fill screen height when the image is landscape
-// and the screen is landscape. The image will be zoomed in and the left and
-// right will be cut off, as the width of the image is greater than the width of
-// the screen.
+// and no related image when the screen is landscape.
+// The image will be zoomed in and the left and right will be cut off, as the
+// width of the image is greater than the width of the screen.
 TEST_F(AmbientPhotoViewTest, ShouldResizeLandscapeImageForLandscapeScreen) {
-  SetPhotoViewImageSize(/*width=*/30, /*height=*/20);
+  SetDecodedPhotoSize(/*width=*/30, /*height=*/20);
 
   UpdateDisplay("800x600");
 
@@ -178,17 +180,23 @@ TEST_F(AmbientPhotoViewTest, ShouldResizeLandscapeImageForLandscapeScreen) {
 
   auto* image_view = GetAmbientBackgroundImageView();
 
+  // Remove the related image.
+  image_view->ResetRelatedImageForTesting();
+
+  // Trigger layout.
+  UpdateDisplay("808x600");
+
   // Image should be full height. Image width should extend equally to the left
   // and right of the visible part of the screen.
   ASSERT_EQ(image_view->GetImageBoundsForTesting(),
-            gfx::Rect(/*x=*/-50, /*y=*/0, /*width=*/900, /*height=*/600));
+            gfx::Rect(/*x=*/-46, /*y=*/0, /*width=*/900, /*height=*/600));
   ASSERT_EQ(image_view->GetRelatedImageBoundsForTesting(), gfx::Rect());
 }
 
 // Test that when rotates to portrait screen, will dynamically only show one
 // portrait image.
 TEST_F(AmbientPhotoViewTest, ShouldNotTileWhenRotateToPortraitScreen) {
-  SetPhotoViewImageSize(/*width=*/10, /*height=*/20);
+  SetDecodedPhotoSize(/*width=*/10, /*height=*/20);
 
   UpdateDisplay("808x600");
 
@@ -220,7 +228,7 @@ TEST_F(AmbientPhotoViewTest, ShouldNotTileWhenRotateToPortraitScreen) {
 // Test that when rotates to landscape screen, will dynamically tile two
 // portrait images.
 TEST_F(AmbientPhotoViewTest, ShouldTileWhenRotateToLandscapeScreen) {
-  SetPhotoViewImageSize(/*width=*/10, /*height=*/20);
+  SetDecodedPhotoSize(/*width=*/10, /*height=*/20);
 
   UpdateDisplay("600x808");
 
@@ -252,7 +260,7 @@ TEST_F(AmbientPhotoViewTest, ShouldTileWhenRotateToLandscapeScreen) {
 
 // Test that two protrat images will resize when bounds changes in landscape.
 TEST_F(AmbientPhotoViewTest, ShouldResizeTiledPortraitImagesWhenBoundsChanged) {
-  SetPhotoViewImageSize(/*width=*/10, /*height=*/20);
+  SetDecodedPhotoSize(/*width=*/10, /*height=*/20);
 
   UpdateDisplay("808x600");
 

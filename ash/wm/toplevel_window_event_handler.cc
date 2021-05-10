@@ -45,6 +45,7 @@ bool CanStartTwoFingerMove(aura::Window* window,
   // the window type and the state type so that we do not steal touches from the
   // web contents.
   if (window->type() != aura::client::WINDOW_TYPE_NORMAL ||
+      !WindowState::Get(window) ||
       !WindowState::Get(window)->IsNormalOrSnapped()) {
     return false;
   }
@@ -64,8 +65,14 @@ bool CanStartOneFingerDrag(int window_component) {
 }
 
 void ShowResizeShadow(aura::Window* window, int component) {
-  // Window resize in tablet mode is disabled (except in splitscreen).
-  if (Shell::Get()->tablet_mode_controller()->InTabletMode()) {
+  // Don't show resize shadow if
+  // 1) the window is not toplevel.
+  // 2) the device is in tablet mode.
+  // 3) the window is not resizable.
+  if (Shell::Get()->tablet_mode_controller()->InTabletMode() ||
+      window != window->GetToplevelWindow() ||
+      ((window->GetProperty(aura::client::kResizeBehaviorKey) &
+        aura::client::kResizeBehaviorCanResize) == 0)) {
     return;
   }
 
@@ -104,7 +111,8 @@ class ToplevelWindowEventHandler::ScopedWindowResizer
       public WindowStateObserver {
  public:
   ScopedWindowResizer(ToplevelWindowEventHandler* handler,
-                      std::unique_ptr<WindowResizer> resizer);
+                      std::unique_ptr<WindowResizer> resizer,
+                      bool grab_capture);
   ~ScopedWindowResizer() override;
 
   // Returns true if the drag moves the window and does not resize.
@@ -120,7 +128,7 @@ class ToplevelWindowEventHandler::ScopedWindowResizer
 
   // WindowStateObserver overrides:
   void OnPreWindowStateTypeChange(WindowState* window_state,
-                                  WindowStateType type) override;
+                                  chromeos::WindowStateType type) override;
 
  private:
   ToplevelWindowEventHandler* handler_;
@@ -137,7 +145,8 @@ class ToplevelWindowEventHandler::ScopedWindowResizer
 
 ToplevelWindowEventHandler::ScopedWindowResizer::ScopedWindowResizer(
     ToplevelWindowEventHandler* handler,
-    std::unique_ptr<WindowResizer> resizer)
+    std::unique_ptr<WindowResizer> resizer,
+    bool grab_capture)
     : handler_(handler), resizer_(std::move(resizer)), grabbed_capture_(false) {
   aura::Window* target = resizer_->GetTarget();
   target->AddObserver(this);
@@ -146,7 +155,7 @@ ToplevelWindowEventHandler::ScopedWindowResizer::ScopedWindowResizer(
   if (IsResize())
     target->NotifyResizeLoopStarted();
 
-  if (!target->HasCapture()) {
+  if (grab_capture && !target->HasCapture()) {
     grabbed_capture_ = true;
     target->SetCapture();
   }
@@ -173,7 +182,8 @@ bool ToplevelWindowEventHandler::ScopedWindowResizer::IsResize() const {
 }
 
 void ToplevelWindowEventHandler::ScopedWindowResizer::
-    OnPreWindowStateTypeChange(WindowState* window_state, WindowStateType old) {
+    OnPreWindowStateTypeChange(WindowState* window_state,
+                               chromeos::WindowStateType old) {
   handler_->CompleteDrag(DragResult::SUCCESS);
 }
 
@@ -449,6 +459,74 @@ void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
   }
 }
 
+wm::WindowMoveResult ToplevelWindowEventHandler::RunMoveLoop(
+    aura::Window* source,
+    const gfx::Vector2d& drag_offset,
+    ::wm::WindowMoveSource move_source) {
+  DCHECK(!in_move_loop_);  // Can only handle one nested loop at a time.
+  aura::Window* root_window = source->GetRootWindow();
+  DCHECK(root_window);
+  gfx::PointF drag_location;
+  if (move_source == ::wm::WINDOW_MOVE_SOURCE_TOUCH &&
+      aura::Env::GetInstance()->is_touch_down()) {
+    gfx::PointF drag_location_f;
+    bool has_point = aura::Env::GetInstance()
+                         ->gesture_recognizer()
+                         ->GetLastTouchPointForTarget(source, &drag_location_f);
+    drag_location = drag_location_f;
+    DCHECK(has_point);
+  } else {
+    drag_location = gfx::PointF(
+        root_window->GetHost()->dispatcher()->GetLastMouseLocationInRoot());
+    aura::Window::ConvertPointToTarget(root_window, source->parent(),
+                                       &drag_location);
+  }
+  // Set the cursor before calling AttemptToStartDrag(), as that will
+  // eventually call LockCursor() and prevent the cursor from changing.
+  aura::client::CursorClient* cursor_client =
+      aura::client::GetCursorClient(root_window);
+  if (cursor_client)
+    cursor_client->SetCursor(ui::mojom::CursorType::kPointer);
+
+  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+
+  DragResult result = DragResult::SUCCESS;
+  if (!AttemptToStartDrag(source, drag_location, HTCAPTION, move_source,
+                          base::BindOnce(OnDragCompleted, &result, &run_loop),
+                          /*update_gesture_target=*/false)) {
+    return ::wm::MOVE_CANCELED;
+  }
+
+  in_move_loop_ = true;
+  base::WeakPtr<ToplevelWindowEventHandler> weak_ptr(
+      weak_factory_.GetWeakPtr());
+
+  // Disable window position auto management while dragging and restore it
+  // aftrewards.
+  WindowState* window_state = WindowState::Get(source);
+  const bool window_position_managed = window_state->GetWindowPositionManaged();
+  window_state->SetWindowPositionManaged(false);
+  aura::WindowTracker tracker({source});
+
+  run_loop.Run();
+
+  if (!weak_ptr)
+    return ::wm::MOVE_CANCELED;
+
+  // Make sure the window hasn't been deleted.
+  if (tracker.Contains(source))
+    window_state->SetWindowPositionManaged(window_position_managed);
+
+  in_move_loop_ = false;
+  return result == DragResult::SUCCESS ? ::wm::MOVE_SUCCESSFUL
+                                       : ::wm::MOVE_CANCELED;
+}
+
+void ToplevelWindowEventHandler::EndMoveLoop() {
+  if (in_move_loop_)
+    RevertDrag();
+}
+
 bool ToplevelWindowEventHandler::AttemptToStartDrag(
     aura::Window* window,
     const gfx::PointF& point_in_parent,
@@ -468,7 +546,8 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
     int window_component,
     ::wm::WindowMoveSource source,
     EndClosure end_closure,
-    bool update_gesture_target) {
+    bool update_gesture_target,
+    bool grab_capture) {
   if (gesture_target_ != nullptr && update_gesture_target) {
     DCHECK_EQ(source, ::wm::WINDOW_MOVE_SOURCE_TOUCH);
     // Transfer events for gesture if switching to new target.
@@ -476,7 +555,8 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
         gesture_target_, window, ui::TransferTouchesBehavior::kDontCancel);
   }
 
-  if (!PrepareForDrag(window, point_in_parent, window_component, source)) {
+  if (!PrepareForDrag(window, point_in_parent, window_component, source,
+                      grab_capture)) {
     // Treat failure to start as a revert.
     if (end_closure)
       std::move(end_closure).Run(DragResult::REVERT);
@@ -551,79 +631,12 @@ aura::Window* ToplevelWindowEventHandler::GetTargetForClientAreaGesture(
   return nullptr;
 }
 
-::wm::WindowMoveResult ToplevelWindowEventHandler::RunMoveLoop(
-    aura::Window* source,
-    const gfx::Vector2d& drag_offset,
-    ::wm::WindowMoveSource move_source) {
-  DCHECK(!in_move_loop_);  // Can only handle one nested loop at a time.
-  aura::Window* root_window = source->GetRootWindow();
-  DCHECK(root_window);
-  gfx::PointF drag_location;
-  if (move_source == ::wm::WINDOW_MOVE_SOURCE_TOUCH &&
-      aura::Env::GetInstance()->is_touch_down()) {
-    gfx::PointF drag_location_f;
-    bool has_point = aura::Env::GetInstance()
-                         ->gesture_recognizer()
-                         ->GetLastTouchPointForTarget(source, &drag_location_f);
-    drag_location = drag_location_f;
-    DCHECK(has_point);
-  } else {
-    drag_location = gfx::PointF(
-        root_window->GetHost()->dispatcher()->GetLastMouseLocationInRoot());
-    aura::Window::ConvertPointToTarget(root_window, source->parent(),
-                                       &drag_location);
-  }
-  // Set the cursor before calling AttemptToStartDrag(), as that will
-  // eventually call LockCursor() and prevent the cursor from changing.
-  aura::client::CursorClient* cursor_client =
-      aura::client::GetCursorClient(root_window);
-  if (cursor_client)
-    cursor_client->SetCursor(ui::mojom::CursorType::kPointer);
-
-  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-
-  DragResult result = DragResult::SUCCESS;
-  if (!AttemptToStartDrag(source, drag_location, HTCAPTION, move_source,
-                          base::BindOnce(OnDragCompleted, &result, &run_loop),
-                          /*update_gesture_target=*/false)) {
-    return ::wm::MOVE_CANCELED;
-  }
-
-  in_move_loop_ = true;
-  base::WeakPtr<ToplevelWindowEventHandler> weak_ptr(
-      weak_factory_.GetWeakPtr());
-
-  // Disable window position auto management while dragging and restore it
-  // aftrewards.
-  WindowState* window_state = WindowState::Get(source);
-  const bool window_position_managed = window_state->GetWindowPositionManaged();
-  window_state->SetWindowPositionManaged(false);
-  aura::WindowTracker tracker({source});
-
-  run_loop.Run();
-
-  if (!weak_ptr)
-    return ::wm::MOVE_CANCELED;
-
-  // Make sure the window hasn't been deleted.
-  if (tracker.Contains(source))
-    window_state->SetWindowPositionManaged(window_position_managed);
-
-  in_move_loop_ = false;
-  return result == DragResult::SUCCESS ? ::wm::MOVE_SUCCESSFUL
-                                       : ::wm::MOVE_CANCELED;
-}
-
-void ToplevelWindowEventHandler::EndMoveLoop() {
-  if (in_move_loop_)
-    RevertDrag();
-}
-
 bool ToplevelWindowEventHandler::PrepareForDrag(
     aura::Window* window,
     const gfx::PointF& point_in_parent,
     int window_component,
-    ::wm::WindowMoveSource source) {
+    ::wm::WindowMoveSource source,
+    bool grab_capture) {
   if (window_resizer_)
     return false;
 
@@ -631,8 +644,8 @@ bool ToplevelWindowEventHandler::PrepareForDrag(
       CreateWindowResizer(window, point_in_parent, window_component, source));
   if (!resizer)
     return false;
-  window_resizer_ =
-      std::make_unique<ScopedWindowResizer>(this, std::move(resizer));
+  window_resizer_ = std::make_unique<ScopedWindowResizer>(
+      this, std::move(resizer), grab_capture);
   return true;
 }
 

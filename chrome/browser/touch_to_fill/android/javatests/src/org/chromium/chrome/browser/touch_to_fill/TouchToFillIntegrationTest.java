@@ -13,7 +13,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
-import static org.chromium.content_public.browser.test.util.CriteriaHelper.pollUiThread;
+import static org.chromium.base.test.util.CriteriaHelper.pollUiThread;
 import static org.chromium.content_public.browser.test.util.TestThreadUtils.runOnUiThreadBlocking;
 
 import android.annotation.SuppressLint;
@@ -32,8 +32,9 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.touch_to_fill.data.Credential;
@@ -43,7 +44,6 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 
 import java.util.Arrays;
@@ -54,14 +54,15 @@ import java.util.Collections;
  * end up rendering a View.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
+@Batch(Batch.PER_CLASS)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class TouchToFillIntegrationTest {
     private static final String EXAMPLE_URL = "https://www.example.xyz";
     private static final String MOBILE_URL = "https://m.example.xyz";
     private static final Credential ANA =
-            new Credential("Ana", "S3cr3t", "Ana", EXAMPLE_URL, false, false);
+            new Credential("Ana", "S3cr3t", "Ana", EXAMPLE_URL, false, false, 0);
     private static final Credential BOB =
-            new Credential("Bob", "*****", "Bob", MOBILE_URL, true, false);
+            new Credential("Bob", "*****", "Bob", MOBILE_URL, true, false, 0);
 
     private final TouchToFillComponent mTouchToFill = new TouchToFillCoordinator();
 
@@ -90,7 +91,6 @@ public class TouchToFillIntegrationTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "crbug.com/1012221")
     public void testClickingSuggestionsTriggersCallback() {
         runOnUiThreadBlocking(() -> {
             mTouchToFill.showCredentials(EXAMPLE_URL, true, Collections.singletonList(ANA));

@@ -9,8 +9,10 @@
 
 #include <algorithm>
 #include <map>
+#include <string>
 #include <vector>
 
+#include "ash/public/cpp/app_types.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -20,7 +22,6 @@
 #include "base/process/memory.h"
 #include "base/process/process_handle.h"  // kNullProcessHandle.
 #include "base/process/process_metrics.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -36,7 +37,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/memory/pressure/pressure.h"
 #include "chromeos/memory/pressure/system_memory_pressure_evaluator.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/arc_util.h"
@@ -216,38 +216,26 @@ class TabManagerDelegate::FocusedProcess {
 
 // TabManagerDelegate::MemoryStat implementation.
 
-// static
-int TabManagerDelegate::MemoryStat::LowMemoryMarginKB() {
-  constexpr int kDefaultLowMemoryMarginMb = 50;
-
-  // A margin file can contain multiple values but the first one
-  // represents the critical memory threshold.
-  std::vector<int> margin_parts =
-      chromeos::memory::SystemMemoryPressureEvaluator::GetMarginFileParts();
-  if (!margin_parts.empty()) {
-    return margin_parts[0] * 1024;
-  }
-
-  return kDefaultLowMemoryMarginMb * 1024;
-}
-
 // Target memory to free is the amount which brings available
 // memory back to the margin.
 int TabManagerDelegate::MemoryStat::TargetMemoryToFreeKB() {
-  uint64_t available_mem_mb;
-  if (chromeos::memory::SystemMemoryPressureEvaluator::Get()) {
-    available_mem_mb = chromeos::memory::pressure::GetAvailableMemoryKB();
+  auto* monitor = chromeos::memory::SystemMemoryPressureEvaluator::Get();
+  if (monitor) {
+    // Low memory condition is reported if available memory is under the
+    // critical margin.
+    return monitor->GetMemoryMarginsKB().critical -
+           monitor->GetCachedAvailableMemoryKB();
   } else {
     // When TabManager::DiscardTab(LifecycleUnitDiscardReason::EXTERNAL) is
-    // called by a test or an extension, TabManagerDelegate might be used
-    // without chromeos SystemMemoryPressureEvaluator, e.g. the browser test
-    // DiscardTabsWithMinimizedWindow. Set available to 0 to force discarding a
-    // tab to pass the test.
+    // called by an integration test, TabManagerDelegate might be used without
+    // chromeos SystemMemoryPressureEvaluator, e.g. the browser test
+    // DiscardTabsWithMinimizedWindow. Return 50 MB to force discarding a tab to
+    // pass the test.
+    // TODO(vovoy): Remove this code path and modify the related browser tests.
     LOG(WARNING) << "SystemMemoryPressureEvaluator is not available";
-    available_mem_mb = 0;
+    constexpr int kDefaultLowMemoryMarginKb = 50 * 1024;
+    return kDefaultLowMemoryMarginKb;
   }
-
-  return LowMemoryMarginKB() - available_mem_mb;
 }
 
 int TabManagerDelegate::MemoryStat::EstimatedMemoryFreedKB(
@@ -305,7 +293,7 @@ void TabManagerDelegate::OnWindowActivated(
     wm::ActivationChangeObserver::ActivationReason reason,
     aura::Window* gained_active,
     aura::Window* lost_active) {
-  if (arc::IsArcAppWindow(gained_active)) {
+  if (ash::IsArcWindow(gained_active)) {
     // Currently there is no way to know which app is displayed in the ARC
     // window, so schedule an early adjustment for all processes to reflect
     // the change.
@@ -320,7 +308,7 @@ void TabManagerDelegate::OnWindowActivated(
         TimeDelta::FromMilliseconds(kFocusedProcessScoreAdjustIntervalMs), this,
         &TabManagerDelegate::ScheduleEarlyOomPrioritiesAdjustment);
   }
-  if (arc::IsArcAppWindow(lost_active)) {
+  if (ash::IsArcWindow(lost_active)) {
     // Do not bother adjusting OOM score if the ARC window is deactivated
     // shortly.
     if (focused_process_->ResetIfIsArcApp() &&
@@ -577,13 +565,7 @@ void TabManagerDelegate::LowMemoryKillImpl(
   std::vector<Candidate> candidates =
       GetSortedCandidates(GetLifecycleUnits(), arc_processes);
 
-  // TODO(semenzato): decide if TargetMemoryToFreeKB is doing real
-  // I/O and if it is, move to I/O thread (crbug.com/778703).
-  int target_memory_to_free_kb = 0;
-  {
-    base::ScopedAllowBlocking allow_blocking;
-    target_memory_to_free_kb = mem_stat_->TargetMemoryToFreeKB();
-  }
+  int target_memory_to_free_kb = mem_stat_->TargetMemoryToFreeKB();
 
   MEMORY_LOG(ERROR) << "List of low memory kill candidates "
                        "(sorted from low priority to high priority):";
@@ -667,7 +649,8 @@ void TabManagerDelegate::LowMemoryKillImpl(
   if (!first_kill_time.is_null()) {
     TimeDelta delta = first_kill_time - start_time;
     MEMORY_LOG(ERROR) << "Time to first kill " << delta;
-    UMA_HISTOGRAM_MEDIUM_TIMES("Arc.LowMemoryKiller.FirstKillLatency", delta);
+    UMA_HISTOGRAM_MEDIUM_TIMES("Memory.LowMemoryKiller.FirstKillLatency",
+                               delta);
   }
 
   // tab_discard_done runs when it goes out of the scope.

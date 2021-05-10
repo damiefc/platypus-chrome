@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef UI_EVENTS_OZONE_EVDEV_DEVICE_EVENT_DISPATCHER_H_
-#define UI_EVENTS_OZONE_EVDEV_DEVICE_EVENT_DISPATCHER_H_
+#ifndef UI_EVENTS_OZONE_EVDEV_DEVICE_EVENT_DISPATCHER_EVDEV_H_
+#define UI_EVENTS_OZONE_EVDEV_DEVICE_EVENT_DISPATCHER_EVDEV_H_
 
 #include <vector>
 
@@ -64,13 +64,20 @@ struct COMPONENT_EXPORT(EVDEV) MouseMoveEventParams {
   base::TimeTicks timestamp;
 };
 
+enum class COMPONENT_EXPORT(EVDEV) MouseButtonMapType : int {
+  kNone,
+  kMouse,
+  kPointingStick,
+  kMaxValue = kPointingStick,
+};
+
 struct COMPONENT_EXPORT(EVDEV) MouseButtonEventParams {
   MouseButtonEventParams(int device_id,
                          int flags,
                          const gfx::PointF& location,
                          unsigned int button,
                          bool down,
-                         bool allow_remap,
+                         MouseButtonMapType map_type,
                          const PointerDetails& details,
                          base::TimeTicks timestamp);
   MouseButtonEventParams(const MouseButtonEventParams& other);
@@ -82,7 +89,7 @@ struct COMPONENT_EXPORT(EVDEV) MouseButtonEventParams {
   gfx::PointF location;
   unsigned int button;
   bool down;
-  bool allow_remap;
+  MouseButtonMapType map_type;
   PointerDetails pointer_details;
   base::TimeTicks timestamp;
 };
@@ -207,4 +214,4 @@ class COMPONENT_EXPORT(EVDEV) DeviceEventDispatcherEvdev {
 
 }  // namespace ui
 
-#endif  // UI_EVENTS_OZONE_EVDEV_DEVICE_EVENT_DISPATCHER_H_
+#endif  // UI_EVENTS_OZONE_EVDEV_DEVICE_EVENT_DISPATCHER_EVDEV_H_

@@ -4,17 +4,13 @@
 
 package org.chromium.chrome.browser.sync;
 
-import android.accounts.Account;
-
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 
 /**
  * Utility class for sign-in functionalities in native Sync browser tests.
  */
-public final class SyncTestSigninUtils {
-    private static final String TAG = "SyncTestSigninUtils";
-    // TODO(https://crbug.com/1101944): Remove the sAccountManagerTestRule from this class
+final class SyncTestSigninUtils {
     private static final AccountManagerTestRule sAccountManagerTestRule =
             new AccountManagerTestRule();
 
@@ -22,9 +18,9 @@ public final class SyncTestSigninUtils {
      * Sets up the test account and signs in.
      */
     @CalledByNative
-    private static Account setUpAccountAndSignInForTesting() {
+    private static void setUpAccountAndSignInForTesting() {
         sAccountManagerTestRule.waitForSeeding();
-        return sAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
+        sAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
     }
 
     /**
@@ -40,10 +36,7 @@ public final class SyncTestSigninUtils {
      */
     @CalledByNative
     private static void tearDownAuthForTesting() {
-        Account account = sAccountManagerTestRule.getCurrentSignedInAccount();
-        if (account != null) {
-            sAccountManagerTestRule.removeAccountAndWaitForSeeding(account.name);
-        }
+        // The seeded account is removed automatically when user signs out
         sAccountManagerTestRule.tearDownRule();
     }
 }

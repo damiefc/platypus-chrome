@@ -5,10 +5,11 @@
 #include "chrome/browser/policy/browser_dm_token_storage_mac.h"
 
 #include <iostream>
+#include <memory>
 
 #include "base/base64url.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/hash/sha1.h"
 #include "base/mac/foundation_util.h"
@@ -78,8 +79,8 @@ TEST_F(BrowserDMTokenStorageMacTest, SaveDMToken) {
   base::ScopedTempDir fake_app_data_dir;
 
   ASSERT_TRUE(fake_app_data_dir.CreateUniqueTempDir());
-  path_override.reset(new base::ScopedPathOverride(
-      base::DIR_APP_DATA, fake_app_data_dir.GetPath()));
+  path_override = std::make_unique<base::ScopedPathOverride>(
+      base::DIR_APP_DATA, fake_app_data_dir.GetPath());
 
   TestStoreDMTokenDelegate callback_delegate;
   BrowserDMTokenStorageMac storage_delegate;
@@ -114,8 +115,8 @@ TEST_F(BrowserDMTokenStorageMacTest, InitDMTokenWithoutDirectory) {
   base::ScopedTempDir fake_app_data_dir;
 
   ASSERT_TRUE(fake_app_data_dir.CreateUniqueTempDir());
-  path_override.reset(new base::ScopedPathOverride(
-      base::DIR_APP_DATA, fake_app_data_dir.GetPath()));
+  path_override = std::make_unique<base::ScopedPathOverride>(
+      base::DIR_APP_DATA, fake_app_data_dir.GetPath());
 
   TestStoreDMTokenDelegate delegate;
   BrowserDMTokenStorageMac storage;

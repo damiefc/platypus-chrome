@@ -5,8 +5,6 @@
 #ifndef BASE_TASK_SEQUENCE_MANAGER_TIME_DOMAIN_H_
 #define BASE_TASK_SEQUENCE_MANAGER_TIME_DOMAIN_H_
 
-#include <map>
-
 #include "base/callback.h"
 #include "base/check.h"
 #include "base/task/common/intrusive_heap.h"
@@ -112,7 +110,6 @@ class BASE_EXPORT TimeDomain {
   // NOTE: |lazy_now| is provided in TimeDomain's time.
   void SetNextWakeUpForQueue(internal::TaskQueueImpl* queue,
                              Optional<internal::DelayedWakeUp> wake_up,
-                             internal::WakeUpResolution resolution,
                              LazyNow* lazy_now);
 
   // Remove the TaskQueue from any internal data sctructures.
@@ -124,14 +121,9 @@ class BASE_EXPORT TimeDomain {
 
   struct ScheduledDelayedWakeUp {
     internal::DelayedWakeUp wake_up;
-    internal::WakeUpResolution resolution;
     internal::TaskQueueImpl* queue;
 
     bool operator<=(const ScheduledDelayedWakeUp& other) const {
-      if (wake_up == other.wake_up) {
-        return static_cast<int>(resolution) <=
-               static_cast<int>(other.resolution);
-      }
       return wake_up <= other.wake_up;
     }
 

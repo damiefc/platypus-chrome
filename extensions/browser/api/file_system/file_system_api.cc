@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <set>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -18,7 +19,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -26,6 +26,7 @@
 #include "base/util/values/values_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -62,7 +63,7 @@
 #include "base/mac/foundation_util.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "extensions/browser/api/file_handlers/non_native_file_system_delegate.h"
 #endif
 
@@ -86,7 +87,7 @@ const char kRetainEntryError[] = "Could not retain file entry.";
 const char kRetainEntryIncognitoError[] =
     "Could not retain file entry in incognito mode";
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kNotSupportedOnNonKioskSessionError[] =
     "Operation only supported for kiosk apps running in a kiosk session.";
 #endif
@@ -111,7 +112,7 @@ bool g_allow_directory_access_for_test = false;
 bool GetFileTypesFromAcceptOption(
     const file_system::AcceptOption& accept_option,
     std::vector<base::FilePath::StringType>* extensions,
-    base::string16* description) {
+    std::u16string* description) {
   std::set<base::FilePath::StringType> extension_set;
   int description_id = 0;
 
@@ -246,8 +247,7 @@ ExtensionFunction::ResponseAction FileSystemGetDisplayPathFunction::Run() {
   }
 
   file_path = path_util::PrettifyPath(file_path);
-  return RespondNow(
-      OneArgument(std::make_unique<base::Value>(file_path.value())));
+  return RespondNow(OneArgument(base::Value(file_path.AsUTF8Unsafe())));
 }
 
 FileSystemEntryFunction::FileSystemEntryFunction()
@@ -280,7 +280,7 @@ void FileSystemEntryFunction::RegisterFileSystemsAndSendResponse(
   std::unique_ptr<base::DictionaryValue> result = CreateResult();
   for (const auto& path : paths)
     AddEntryToResult(path, std::string(), result.get());
-  Respond(OneArgument(std::move(result)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 std::unique_ptr<base::DictionaryValue> FileSystemEntryFunction::CreateResult() {
@@ -347,7 +347,7 @@ ExtensionFunction::ResponseAction FileSystemGetWritableEntryFunction::Run() {
 void FileSystemGetWritableEntryFunction::CheckPermissionAndSendResponse() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (is_directory_ && !extension_->permissions_data()->HasAPIPermission(
-                           APIPermission::kFileSystemDirectory)) {
+                           mojom::APIPermissionID::kFileSystemDirectory)) {
     Respond(Error(kRequiresFileSystemDirectoryError));
     return;
   }
@@ -377,7 +377,7 @@ ExtensionFunction::ResponseAction FileSystemIsWritableEntryFunction::Run() {
   bool is_writable =
       policy->CanReadWriteFileSystem(source_process_id(), filesystem_id);
 
-  return RespondNow(OneArgument(std::make_unique<base::Value>(is_writable)));
+  return RespondNow(OneArgument(base::Value(is_writable)));
 }
 
 void FileSystemChooseEntryFunction::ShowPicker(
@@ -484,8 +484,8 @@ void FileSystemChooseEntryFunction::RegisterTempExternalFileSystemForTest(
   // smoothly, all accessed paths need to be registered in the list of
   // external mount points.
   storage::ExternalMountPoints::GetSystemInstance()->RegisterFileSystem(
-      name, storage::kFileSystemTypeNativeLocal,
-      storage::FileSystemMountOption(), path);
+      name, storage::kFileSystemTypeLocal, storage::FileSystemMountOption(),
+      path);
 }
 
 void FileSystemChooseEntryFunction::FilesSelected(
@@ -519,7 +519,7 @@ void FileSystemChooseEntryFunction::FilesSelected(
 
     DCHECK_EQ(paths.size(), 1u);
     bool non_native_path = false;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     NonNativeFileSystemDelegate* delegate =
         ExtensionsAPIClient::Get()->GetNonNativeFileSystemDelegate();
     non_native_path = delegate && delegate->IsUnderNonNativeLocalPath(
@@ -635,7 +635,7 @@ void FileSystemChooseEntryFunction::BuildFileTypeInfo(
 
   if (accepts) {
     for (const file_system::AcceptOption& option : *accepts) {
-      base::string16 description;
+      std::u16string description;
       std::vector<base::FilePath::StringType> extensions;
 
       if (!GetFileTypesFromAcceptOption(option, &extensions, &description))
@@ -732,7 +732,7 @@ ExtensionFunction::ResponseAction FileSystemChooseEntryFunction::Run() {
     } else if (options->type == file_system::CHOOSE_ENTRY_TYPE_OPENDIRECTORY) {
       is_directory_ = true;
       if (!extension_->permissions_data()->HasAPIPermission(
-              APIPermission::kFileSystemDirectory)) {
+              mojom::APIPermissionID::kFileSystemDirectory)) {
         return RespondNow(Error(kRequiresFileSystemDirectoryError));
       }
       if (multiple_) {
@@ -771,7 +771,7 @@ ExtensionFunction::ResponseAction FileSystemChooseEntryFunction::Run() {
       previous_path, suggested_name, file_type_info, picker_type);
 
 // Check whether the |previous_path| is a non-native directory.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   NonNativeFileSystemDelegate* delegate =
       ExtensionsAPIClient::Get()->GetNonNativeFileSystemDelegate();
   if (delegate &&
@@ -890,7 +890,7 @@ ExtensionFunction::ResponseAction FileSystemIsRestorableFunction::Run() {
       delegate->GetSavedFilesService(browser_context());
   DCHECK(saved_files_service);
 
-  return RespondNow(OneArgument(std::make_unique<base::Value>(
+  return RespondNow(OneArgument(base::Value(
       saved_files_service->IsRegistered(extension_->id(), entry_id))));
 }
 
@@ -920,12 +920,13 @@ ExtensionFunction::ResponseAction FileSystemRestoreEntryFunction::Run() {
     is_directory_ = file->is_directory;
     std::unique_ptr<base::DictionaryValue> result = CreateResult();
     AddEntryToResult(file->path, file->id, result.get());
-    return RespondNow(OneArgument(std::move(result)));
+    return RespondNow(
+        OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
   }
   return RespondNow(NoArguments());
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
   using file_system::RequestFileSystem::Params;
   const std::unique_ptr<Params> params(Params::Create(*args_));
@@ -977,7 +978,7 @@ void FileSystemRequestFileSystemFunction::OnGotFileSystem(
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("file_system_id", id);
   dict->SetString("file_system_path", path);
-  Respond(OneArgument(std::move(dict)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(dict))));
 }
 
 void FileSystemRequestFileSystemFunction::OnError(const std::string& error) {

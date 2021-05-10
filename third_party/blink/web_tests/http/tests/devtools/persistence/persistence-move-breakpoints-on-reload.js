@@ -4,8 +4,8 @@
 
 (async function() {
   TestRunner.addResult(`Verify that breakpoints are moved appropriately in case of page reload.\n`);
-  await TestRunner.loadModule('sources_test_runner');
-  await TestRunner.loadModule('bindings_test_runner');
+  await TestRunner.loadModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
+  await TestRunner.loadTestModule('bindings_test_runner');
   await TestRunner.showPanel('sources');
   await TestRunner.evaluateInPagePromise(`
       function addFooJS() {
@@ -51,12 +51,12 @@
   ]);
 
   function dumpBreakpointSidebarPane() {
-    var pane = self.runtime.sharedInstance(Sources.JavaScriptBreakpointsSidebarPane);
+    var pane = Sources.JavaScriptBreakpointsSidebarPane.instance();
     if (!pane._emptyElement.classList.contains('hidden'))
       return TestRunner.textContentWithLineBreaks(pane._emptyElement);
     var entries = Array.from(pane.contentElement.querySelectorAll('.breakpoint-entry'));
     for (var entry of entries) {
-      var uiLocation = entry[Sources.JavaScriptBreakpointsSidebarPane._locationSymbol];
+      var uiLocation = Sources.JavaScriptBreakpointsSidebarPane.retrieveLocationForElement(entry)
       TestRunner.addResult('    ' + uiLocation.uiSourceCode.url() + ':' + uiLocation.lineNumber);
     }
   }

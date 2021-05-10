@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_WEB_APP_PROVIDER_BASE_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_WEB_APP_PROVIDER_BASE_H_
 
-#include "base/macros.h"
 #include "components/keyed_service/core/keyed_service.h"
 
 class Profile;
@@ -19,7 +18,7 @@ class AppRegistryController;
 class InstallFinalizer;
 class InstallManager;
 class ManifestUpdateManager;
-class PendingAppManager;
+class ExternallyManagedAppManager;
 class SystemWebAppManager;
 class WebAppAudioFocusIdMap;
 class WebAppPolicyManager;
@@ -32,6 +31,8 @@ class WebAppProviderBase : public KeyedService {
   static WebAppProviderBase* GetProviderBase(Profile* profile);
 
   WebAppProviderBase();
+  WebAppProviderBase(const WebAppProviderBase&) = delete;
+  WebAppProviderBase& operator=(const WebAppProviderBase&) = delete;
   ~WebAppProviderBase() override;
 
   // The app registry model.
@@ -44,9 +45,9 @@ class WebAppProviderBase : public KeyedService {
   virtual InstallFinalizer& install_finalizer() = 0;
   // Keeps app metadata up to date with site manifests.
   virtual ManifestUpdateManager& manifest_update_manager() = 0;
-  // Clients can use PendingAppManager to install, uninstall, and update
-  // Web Apps.
-  virtual PendingAppManager& pending_app_manager() = 0;
+  // Clients can use ExternallyManagedAppManager to install, uninstall, and
+  // update Web Apps.
+  virtual ExternallyManagedAppManager& externally_managed_app_manager() = 0;
   // Clients can use WebAppPolicyManager to request updates of policy installed
   // Web Apps.
   virtual WebAppPolicyManager& policy_manager() = 0;
@@ -63,7 +64,6 @@ class WebAppProviderBase : public KeyedService {
   // Manage all OS hooks that need to be deployed during Web Apps install
   virtual OsIntegrationManager& os_integration_manager() = 0;
 
-  DISALLOW_COPY_AND_ASSIGN(WebAppProviderBase);
 };
 
 }  // namespace web_app

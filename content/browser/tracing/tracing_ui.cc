@@ -14,7 +14,6 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/format_macros.h"
@@ -24,7 +23,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "content/browser/tracing/grit/tracing_resources.h"
@@ -77,7 +75,9 @@ bool BeginRecording(const std::string& data64,
   if (stream_format == kStreamFormatProtobuf) {
     if (g_tracing_session)
       delete g_tracing_session;
-    g_tracing_session = perfetto::Tracing::NewTrace().release();
+    g_tracing_session =
+        perfetto::Tracing::NewTrace(perfetto::BackendType::kCustomBackend)
+            .release();
     g_tracing_session->Setup(tracing::GetDefaultPerfettoConfig(trace_config));
 
     auto shared_callback = base::MakeRefCounted<
@@ -242,8 +242,9 @@ TracingUI::TracingUI(WebUI* web_ui)
   WebUIDataSource* source = WebUIDataSource::Create(kChromeUITracingHost);
   source->DisableTrustedTypesCSP();
   source->UseStringsJs();
-  source->SetDefaultResource(IDR_TRACING_HTML);
-  source->AddResourcePath("tracing.js", IDR_TRACING_JS);
+  source->SetDefaultResource(IDR_TRACING_ABOUT_TRACING_HTML);
+  source->AddResourcePath("tracing.js", IDR_TRACING_ABOUT_TRACING_JS);
+
   source->SetRequestFilter(base::BindRepeating(OnShouldHandleRequest),
                            base::BindRepeating(OnTracingRequest));
   WebUIDataSource::Add(browser_context, source);

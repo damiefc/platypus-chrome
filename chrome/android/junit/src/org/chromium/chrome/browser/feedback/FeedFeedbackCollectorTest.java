@@ -33,7 +33,6 @@ import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.util.browser.Features;
 
@@ -61,7 +60,6 @@ public class FeedFeedbackCollectorTest {
     // Test constants.
     private static final String CATEGORY_TAG = "category_tag";
     private static final String DESCRIPTION = "description";
-    private static final String FEEDBACK_CONTEXT = "feedback_context";
 
     public static final String CARD_URL = "CardUrl";
     public static final String CARD_PUBLISHER = "CardPublisher";
@@ -87,9 +85,9 @@ public class FeedFeedbackCollectorTest {
     private static class EmptyFeedFeedbackCollector extends FeedFeedbackCollector {
         EmptyFeedFeedbackCollector(Activity activity, Profile profile, @Nullable String url,
                 @Nullable String categoryTag, @Nullable String description,
-                @Nullable String feedbackContext, boolean takeScreenshot,
+                @Nullable ScreenshotSource screenshotSource,
                 @Nullable Map<String, String> feedContext, Callback<FeedbackCollector> callback) {
-            super(activity, categoryTag, description, feedbackContext, takeScreenshot,
+            super(activity, categoryTag, description, screenshotSource,
                     new FeedFeedbackCollector.InitParams(profile, url, feedContext), callback);
         }
 
@@ -114,8 +112,6 @@ public class FeedFeedbackCollectorTest {
 
     @Test
     @Feature({"Feed"})
-    @Features.EnableFeatures({ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS,
-            ChromeFeatureList.INTEREST_FEED_FEEDBACK})
     public void
     testFeedSynchronousData() {
         @SuppressWarnings("unchecked")
@@ -128,7 +124,7 @@ public class FeedFeedbackCollectorTest {
 
         FeedFeedbackCollector collector =
                 new EmptyFeedFeedbackCollector(mActivity, mProfile, null, CATEGORY_TAG, DESCRIPTION,
-                        null, false, feedContext, (result) -> callback.onResult(result));
+                        null, feedContext, (result) -> callback.onResult(result));
 
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         verify(callback, times(1)).onResult(collector);

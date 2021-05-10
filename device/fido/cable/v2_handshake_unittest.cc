@@ -18,50 +18,79 @@ namespace {
 
 TEST(CableV2Encoding, TunnelServerURLs) {
   // Test that a domain name survives an encode-decode round trip.
-  constexpr uint32_t encoded =
-      tunnelserver::EncodeDomain("abcd", tunnelserver::TLD::NET);
   uint8_t tunnel_id[16] = {0};
-  const GURL url = tunnelserver::GetNewTunnelURL(encoded, tunnel_id);
-  EXPECT_TRUE(url.spec().find("//abcd.net/") != std::string::npos) << url;
+  const GURL url = tunnelserver::GetNewTunnelURL(/*domain=*/0, tunnel_id);
+  EXPECT_TRUE(url.spec().find("//cable.ua5v.com/") != std::string::npos) << url;
 }
 
-TEST(CableV2Encoding, EIDs) {
+TEST(CableV2Encoding, EIDToFromComponents) {
   eid::Components components;
-  components.tunnel_server_domain = 0x010203;
+  components.tunnel_server_domain = 0x0102;
   components.routing_id = {9, 10, 11};
   crypto::RandBytes(components.nonce);
 
-  CableEidArray eid = eid::FromComponents(components);
-  EXPECT_TRUE(eid::IsValid(eid));
-  eid::Components components2 = eid::ToComponents(eid);
+  const CableEidArray eid = eid::FromComponents(components);
+  const eid::Components components2 = eid::ToComponents(eid);
 
   EXPECT_EQ(components.routing_id, components2.routing_id);
   EXPECT_EQ(components.tunnel_server_domain, components2.tunnel_server_domain);
   EXPECT_EQ(components.nonce, components2.nonce);
+}
 
-  for (size_t i = 0; i < eid.size(); i++) {
-    eid[i] ^= 0xff;
-  }
+TEST(CableV2Encoding, EIDEncrypt) {
+  eid::Components components;
+  components.tunnel_server_domain = 0x0102;
+  components.routing_id = {9, 10, 11};
+  crypto::RandBytes(components.nonce);
+  const CableEidArray eid = eid::FromComponents(components);
 
-  EXPECT_FALSE(eid::IsValid(eid));
+  uint8_t key[kEIDKeySize];
+  crypto::RandBytes(key);
+  std::array<uint8_t, kAdvertSize> advert = eid::Encrypt(eid, key);
+
+  const base::Optional<CableEidArray> eid2 = eid::Decrypt(advert, key);
+  ASSERT_TRUE(eid2.has_value());
+  EXPECT_TRUE(memcmp(eid.data(), eid2->data(), eid.size()) == 0);
+
+  advert[0] ^= 1;
+  EXPECT_FALSE(eid::Decrypt(advert, key).has_value());
+}
+
+TEST(CableV2Encoding, QRs) {
+  std::array<uint8_t, kQRKeySize> qr_key;
+  crypto::RandBytes(qr_key);
+  std::string url = qr::Encode(qr_key);
+  EXPECT_LE(url.size(), 81u) << "QR code doesn't fit into version five";
+  const base::Optional<qr::Components> decoded = qr::Parse(url);
+  ASSERT_TRUE(decoded.has_value());
+  static_assert(EXTENT(qr_key) >= EXTENT(decoded->secret), "");
+  EXPECT_EQ(memcmp(decoded->secret.data(),
+                   &qr_key[qr_key.size() - decoded->secret.size()],
+                   decoded->secret.size()),
+            0);
+
+  url[0] ^= 4;
+  EXPECT_FALSE(qr::Parse(url));
+  EXPECT_FALSE(qr::Parse("nonsense"));
 }
 
 TEST(CableV2Encoding, PaddedCBOR) {
-  cbor::Value::MapValue map;
+  cbor::Value::MapValue map1;
   base::Optional<std::vector<uint8_t>> encoded =
-      EncodePaddedCBORMap(std::move(map));
+      EncodePaddedCBORMap(std::move(map1));
   ASSERT_TRUE(encoded);
-  EXPECT_EQ(256u, encoded->size());
+  EXPECT_EQ(kPostHandshakeMsgPaddingGranularity, encoded->size());
 
   base::Optional<cbor::Value> decoded = DecodePaddedCBORMap(*encoded);
   ASSERT_TRUE(decoded);
   EXPECT_EQ(0u, decoded->GetMap().size());
 
-  uint8_t blob[256] = {0};
-  map.emplace(1, base::span<const uint8_t>(blob, sizeof(blob)));
-  encoded = EncodePaddedCBORMap(std::move(map));
+  cbor::Value::MapValue map2;
+  uint8_t blob[kPostHandshakeMsgPaddingGranularity] = {0};
+  map2.emplace(1, base::span<const uint8_t>(blob, sizeof(blob)));
+  encoded = EncodePaddedCBORMap(std::move(map2));
   ASSERT_TRUE(encoded);
-  EXPECT_EQ(512u, encoded->size());
+  EXPECT_EQ(kPostHandshakeMsgPaddingGranularity * 2, encoded->size());
 
   decoded = DecodePaddedCBORMap(*encoded);
   ASSERT_TRUE(decoded);
@@ -116,7 +145,6 @@ class CableV2HandshakeTest : public ::testing::Test {
  public:
   CableV2HandshakeTest() {
     std::fill(psk_.begin(), psk_.end(), 0);
-    std::fill(eid_.begin(), eid_.end(), 1);
     std::fill(identity_seed_.begin(), identity_seed_.end(), 2);
 
     bssl::UniquePtr<EC_GROUP> group(
@@ -132,7 +160,6 @@ class CableV2HandshakeTest : public ::testing::Test {
 
  protected:
   std::array<uint8_t, 32> psk_;
-  CableEidArray eid_;
   bssl::UniquePtr<EC_KEY> identity_key_;
   std::array<uint8_t, kP256X962Length> identity_public_;
   std::array<uint8_t, kQRSeedSize> identity_seed_;
@@ -165,20 +192,19 @@ TEST_F(CableV2HandshakeTest, MessageEncrytion) {
   }
 }
 
-TEST_F(CableV2HandshakeTest, QRHandshake) {
+TEST_F(CableV2HandshakeTest, NKHandshake) {
   std::array<uint8_t, 32> wrong_psk = psk_;
   wrong_psk[0] ^= 1;
-  uint8_t kGetInfoBytes[] = {1, 2, 3, 4, 5};
 
   for (const bool use_correct_key : {false, true}) {
     HandshakeInitiator initiator(use_correct_key ? psk_ : wrong_psk,
                                  identity_public_,
-                                 /*local_identity=*/nullptr);
-    std::vector<uint8_t> message =
-        initiator.BuildInitialMessage(eid_, kGetInfoBytes);
+                                 /*identity_seed=*/base::nullopt);
+    std::vector<uint8_t> message = initiator.BuildInitialMessage();
     std::vector<uint8_t> response;
-    base::Optional<ResponderResult> responder_result(RespondToHandshake(
-        psk_, eid_, identity_seed_,
+    EC_KEY_up_ref(identity_key_.get());
+    HandshakeResult responder_result(RespondToHandshake(
+        psk_, bssl::UniquePtr<EC_KEY>(identity_key_.get()),
         /*peer_identity=*/base::nullopt, message, &response));
     ASSERT_EQ(responder_result.has_value(), use_correct_key);
     if (!use_correct_key) {
@@ -188,35 +214,29 @@ TEST_F(CableV2HandshakeTest, QRHandshake) {
     base::Optional<std::pair<std::unique_ptr<Crypter>, HandshakeHash>>
         initiator_result(initiator.ProcessResponse(response));
     ASSERT_TRUE(initiator_result.has_value());
-    EXPECT_EQ(initiator_result->second, responder_result->handshake_hash);
-    EXPECT_TRUE(responder_result->crypter->IsCounterpartyOfForTesting(
+    EXPECT_EQ(initiator_result->second, responder_result->second);
+    EXPECT_TRUE(responder_result->first->IsCounterpartyOfForTesting(
         *initiator_result->first));
-    ASSERT_EQ(responder_result->getinfo_bytes.size(), sizeof(kGetInfoBytes));
-    EXPECT_EQ(0, memcmp(responder_result->getinfo_bytes.data(), kGetInfoBytes,
-                        sizeof(kGetInfoBytes)));
+    EXPECT_EQ(initiator_result->second, responder_result->second);
   }
 }
 
-TEST_F(CableV2HandshakeTest, PairedHandshake) {
-  bssl::UniquePtr<EC_KEY> wrong_key(
-      EC_KEY_new_by_curve_name(NID_X9_62_prime256v1));
-  CHECK(EC_KEY_generate_key(wrong_key.get()));
-  uint8_t kGetInfoBytes[] = {1, 2, 3, 4, 5};
+TEST_F(CableV2HandshakeTest, KNHandshake) {
+  std::array<uint8_t, kQRSeedSize> wrong_seed;
+  crypto::RandBytes(wrong_seed);
 
   for (const bool use_correct_key : {false, true}) {
     SCOPED_TRACE(use_correct_key);
 
-    EC_KEY* const key = use_correct_key ? identity_key_.get() : wrong_key.get();
-    EC_KEY_up_ref(key);
+    base::span<const uint8_t, kQRSeedSize> seed =
+        use_correct_key ? identity_seed_ : wrong_seed;
     HandshakeInitiator initiator(psk_,
-                                 /*peer_identity=*/base::nullopt,
-                                 bssl::UniquePtr<EC_KEY>(key));
-    std::vector<uint8_t> message =
-        initiator.BuildInitialMessage(eid_, kGetInfoBytes);
+                                 /*peer_identity=*/base::nullopt, seed);
+    std::vector<uint8_t> message = initiator.BuildInitialMessage();
     std::vector<uint8_t> response;
-    base::Optional<ResponderResult> responder_result(RespondToHandshake(
-        psk_, eid_,
-        /*identity_seed=*/base::nullopt, identity_public_, message, &response));
+    HandshakeResult responder_result(RespondToHandshake(
+        psk_,
+        /*identity=*/nullptr, identity_public_, message, &response));
     ASSERT_EQ(responder_result.has_value(), use_correct_key);
 
     if (!use_correct_key) {
@@ -226,11 +246,9 @@ TEST_F(CableV2HandshakeTest, PairedHandshake) {
     base::Optional<std::pair<std::unique_ptr<Crypter>, HandshakeHash>>
         initiator_result(initiator.ProcessResponse(response));
     ASSERT_TRUE(initiator_result.has_value());
-    EXPECT_TRUE(responder_result->crypter->IsCounterpartyOfForTesting(
+    EXPECT_TRUE(responder_result->first->IsCounterpartyOfForTesting(
         *initiator_result->first));
-    ASSERT_EQ(responder_result->getinfo_bytes.size(), sizeof(kGetInfoBytes));
-    EXPECT_EQ(0, memcmp(responder_result->getinfo_bytes.data(), kGetInfoBytes,
-                        sizeof(kGetInfoBytes)));
+    EXPECT_EQ(initiator_result->second, responder_result->second);
   }
 }
 

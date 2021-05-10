@@ -4,11 +4,15 @@
 
 #import "ios/chrome/browser/ui/authentication/signin/advanced_settings_signin/advanced_settings_signin_coordinator.h"
 
+#include "base/mac/foundation_util.h"
 #import "base/metrics/user_metrics.h"
+#import "components/signin/public/identity_manager/identity_manager.h"
+#import "components/signin/public/identity_manager/primary_account_mutator.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service.h"
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
@@ -18,6 +22,8 @@
 #import "ios/chrome/browser/ui/authentication/signin/signin_coordinator+protected.h"
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_coordinator.h"
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_mode.h"
+#import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_coordinator.h"
+#import "ios/chrome/browser/ui/settings/google_services/sync_settings_view_state.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
@@ -31,6 +37,7 @@ using l10n_util::GetNSString;
 
 @interface AdvancedSettingsSigninCoordinator () <
     AdvancedSettingsSigninNavigationControllerNavigationDelegate,
+    ManageSyncSettingsCoordinatorDelegate,
     UIAdaptivePresentationControllerDelegate>
 
 // Advanced settings sign-in mediator.
@@ -39,12 +46,14 @@ using l10n_util::GetNSString;
 // View controller presented by this coordinator.
 @property(nonatomic, strong) AdvancedSettingsSigninNavigationController*
     advancedSettingsSigninNavigationController;
-// Google services settings coordinator.
+// Coordinator to present Sync settings.
 @property(nonatomic, strong)
-    GoogleServicesSettingsCoordinator* googleServicesSettingsCoordinator;
+    ChromeCoordinator<SyncSettingsViewState>* syncSettingsCoordinator;
 // Confirm cancel sign-in/sync dialog.
 @property(nonatomic, strong)
     ActionSheetCoordinator* cancelConfirmationAlertCoordinator;
+// Manager for user's Google identities.
+@property(nonatomic, assign) signin::IdentityManager* identityManager;
 
 @end
 
@@ -54,29 +63,23 @@ using l10n_util::GetNSString;
 
 - (void)start {
   [super start];
+  AuthenticationService* authenticationService =
+      AuthenticationServiceFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+  DCHECK(authenticationService->IsAuthenticated());
+  self.identityManager = IdentityManagerFactory::GetForBrowserState(
+      self.browser->GetBrowserState());
   self.advancedSettingsSigninNavigationController =
       [[AdvancedSettingsSigninNavigationController alloc] init];
   self.advancedSettingsSigninNavigationController.modalPresentationStyle =
       UIModalPresentationFormSheet;
   self.advancedSettingsSigninNavigationController.navigationDelegate = self;
 
-  // Init and start Google settings coordinator.
-  GoogleServicesSettingsMode mode =
-      GoogleServicesSettingsModeAdvancedSigninSettings;
-  self.googleServicesSettingsCoordinator =
-      [[GoogleServicesSettingsCoordinator alloc]
-          initWithBaseNavigationController:
-              self.advancedSettingsSigninNavigationController
-                                   browser:self.browser
-                                      mode:mode];
-  [self.googleServicesSettingsCoordinator start];
+  [self startSyncSettingsCoordinator];
 
   // Create the mediator.
   SyncSetupService* syncSetupService =
       SyncSetupServiceFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
-  AuthenticationService* authenticationService =
-      AuthenticationServiceFactory::GetForBrowserState(
           self.browser->GetBrowserState());
   syncer::SyncService* syncService =
       ProfileSyncServiceFactory::GetForBrowserState(
@@ -100,8 +103,16 @@ using l10n_util::GetNSString;
 - (void)interruptWithAction:(SigninCoordinatorInterruptAction)action
                  completion:(ProceduralBlock)completion {
   DCHECK(self.advancedSettingsSigninNavigationController);
-  [self.googleServicesSettingsCoordinator stop];
-  self.googleServicesSettingsCoordinator = nil;
+  [self.syncSettingsCoordinator stop];
+  self.syncSettingsCoordinator = nil;
+
+  if (base::FeatureList::IsEnabled(signin::kMobileIdentityConsistency)) {
+    // Revokes all refresh tokens and alerts services of the signed-out state.
+    self.identityManager->GetPrimaryAccountMutator()->ClearPrimaryAccount(
+        signin_metrics::ABORT_SIGNIN,
+        signin_metrics::SignoutDelete::kIgnoreMetric);
+  }
+
   switch (action) {
     case SigninCoordinatorInterruptActionNoDismiss:
       [self finishedWithSigninResult:SigninCoordinatorResultInterrupted];
@@ -130,6 +141,31 @@ using l10n_util::GetNSString;
 }
 
 #pragma mark - Private
+
+// Displays the Sync or Google services settings page.
+- (void)startSyncSettingsCoordinator {
+  DCHECK(!self.syncSettingsCoordinator);
+
+  if (base::FeatureList::IsEnabled(signin::kMobileIdentityConsistency)) {
+    ManageSyncSettingsCoordinator* manageSyncSettingsCoordinator =
+        [[ManageSyncSettingsCoordinator alloc]
+            initWithBaseNavigationController:
+                self.advancedSettingsSigninNavigationController
+                                     browser:self.browser];
+    manageSyncSettingsCoordinator.delegate = self;
+    self.syncSettingsCoordinator = manageSyncSettingsCoordinator;
+  } else {
+    // Init and start Google settings coordinator.
+    GoogleServicesSettingsMode mode =
+        GoogleServicesSettingsModeAdvancedSigninSettings;
+    self.syncSettingsCoordinator = [[GoogleServicesSettingsCoordinator alloc]
+        initWithBaseNavigationController:
+            self.advancedSettingsSigninNavigationController
+                                 browser:self.browser
+                                    mode:mode];
+  }
+  [self.syncSettingsCoordinator start];
+}
 
 // Called when a button of |self.cancelConfirmationAlertCoordinator| is pressed.
 - (void)cancelConfirmationWithShouldCancelSignin:(BOOL)shouldCancelSignin {
@@ -170,7 +206,7 @@ using l10n_util::GetNSString;
 }
 
 // Does the cleanup once the view has been dismissed, calls the metrics and
-// calls |runCompletionCallbackWithSigninResult:identity:| to finish the
+// calls |runCompletionCallbackWithSigninResult:completionInfo:| to finish the
 // sign-in.
 - (void)finishedWithSigninResult:(SigninCoordinatorResult)signinResult {
   DCHECK(self.advancedSettingsSigninNavigationController);
@@ -179,8 +215,8 @@ using l10n_util::GetNSString;
       saveUserPreferenceForSigninResult:signinResult];
   self.advancedSettingsSigninNavigationController = nil;
   self.advancedSettingsSigninMediator = nil;
-  [self.googleServicesSettingsCoordinator stop];
-  self.googleServicesSettingsCoordinator = nil;
+  [self.syncSettingsCoordinator stop];
+  self.syncSettingsCoordinator = nil;
   SyncSetupService* syncSetupService =
       SyncSetupServiceFactory::GetForBrowserState(
           self.browser->GetBrowserState());
@@ -191,9 +227,10 @@ using l10n_util::GetNSString;
       AuthenticationServiceFactory::GetForBrowserState(
           self.browser->GetBrowserState());
   ChromeIdentity* identity = authService->GetAuthenticatedIdentity();
+  SigninCompletionInfo* completionInfo =
+      [SigninCompletionInfo signinCompletionInfoWithIdentity:identity];
   [self runCompletionCallbackWithSigninResult:signinResult
-                                     identity:identity
-                   showAdvancedSettingsSignin:NO];
+                               completionInfo:completionInfo];
 }
 
 - (void)showCancelConfirmationAlert {
@@ -206,8 +243,7 @@ using l10n_util::GetNSString;
                          message:
                              GetNSString(
                                  IDS_IOS_ADVANCED_SIGNIN_SETTINGS_CANCEL_SYNC_ALERT_MESSAGE)
-                   barButtonItem:self.googleServicesSettingsCoordinator
-                                     .viewController.navigationItem
+                   barButtonItem:self.syncSettingsCoordinator.navigationItem
                                      .leftBarButtonItem];
   __weak __typeof(self) weakSelf = self;
   [self.cancelConfirmationAlertCoordinator
@@ -252,10 +288,18 @@ using l10n_util::GetNSString;
 - (void)presentationControllerDidAttemptToDismiss:
     (UIPresentationController*)presentationController {
   // Only show cancel confirmation when "Sync and Google Services" is displayed.
-  if (self.googleServicesSettingsCoordinator
-          .googleServicesSettingsViewIsShown) {
+  if (self.syncSettingsCoordinator.isSettingsViewShown) {
     [self showCancelConfirmationAlert];
   }
+}
+
+#pragma mark - ManageSyncSettingsCoordinatorDelegate
+
+- (void)manageSyncSettingsCoordinatorWasRemoved:
+    (ManageSyncSettingsCoordinator*)coordinator {
+  DCHECK_EQ(self.syncSettingsCoordinator, coordinator);
+  [self.syncSettingsCoordinator stop];
+  self.syncSettingsCoordinator = nil;
 }
 
 @end

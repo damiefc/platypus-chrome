@@ -198,15 +198,26 @@ suite('route', function() {
 
   test('isNavigableDialog', function() {
     assertTrue(routes.CLEAR_BROWSER_DATA.isNavigableDialog);
+    assertTrue(routes.CLEAR_BROWSER_DATA.parent === routes.PRIVACY);
+    assertFalse(routes.CLEAR_BROWSER_DATA.isSubpage());
+
     assertTrue(routes.RESET_DIALOG.isNavigableDialog);
-    assertTrue(routes.SIGN_OUT.isNavigableDialog);
+    assertTrue(routes.RESET_DIALOG.parent === routes.RESET);
     assertTrue(routes.TRIGGERED_RESET_DIALOG.isNavigableDialog);
+    assertTrue(routes.TRIGGERED_RESET_DIALOG.parent === routes.RESET);
+
+    assertTrue(routes.SIGN_OUT.isNavigableDialog);
+    assertTrue(routes.SIGN_OUT.parent === routes.PEOPLE);
+
     if (!isChromeOS) {
       assertTrue(routes.IMPORT_DATA.isNavigableDialog);
+      assertTrue(routes.IMPORT_DATA.parent === routes.PEOPLE);
     }
 
     assertFalse(routes.PRIVACY.isNavigableDialog);
+    // <if expr="not chromeos and not lacros">
     assertFalse(routes.DEFAULT_BROWSER.isNavigableDialog);
+    // </if>
   });
 
   test('pageVisibility affects route availability', function() {
@@ -238,8 +249,7 @@ suite('route', function() {
         // correct path.
         window.location.href = 'https://example.com/path/to/page.html';
         assertEquals(
-            'chrome://settings/cloudPrinters',
-            routes.CLOUD_PRINTERS.getAbsolutePath());
+            'chrome://settings/cookies', routes.COOKIES.getAbsolutePath());
 
         // Check getting the absolute path while inside settings returns the
         // correct path for the current route and a different route.

@@ -19,4 +19,10 @@ interface PageHandler {
 
   // Opens the parental controls part of OS settings.
   ShowParentalControls();
+
+  // Returns true if Local Search Service integration is enabled.
+  IsLssEnabled() => (bool enabled);
+
+  // Returns true if the Help App Launcher Search feature is enabled.
+  IsLauncherSearchEnabled() => (bool enabled);
 };

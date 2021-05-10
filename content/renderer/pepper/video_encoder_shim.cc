@@ -6,8 +6,10 @@
 
 #include <inttypes.h>
 
+#include <memory>
+
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
@@ -351,7 +353,7 @@ VideoEncoderShim::VideoEncoderShim(PepperVideoEncoderHost* host)
     : host_(host),
       media_task_runner_(
           RenderThreadImpl::current()->GetMediaThreadTaskRunner()) {
-  encoder_impl_.reset(new EncoderImpl(weak_ptr_factory_.GetWeakPtr()));
+  encoder_impl_ = std::make_unique<EncoderImpl>(weak_ptr_factory_.GetWeakPtr());
 }
 
 VideoEncoderShim::~VideoEncoderShim() {

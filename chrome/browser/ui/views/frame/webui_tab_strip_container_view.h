@@ -9,8 +9,9 @@
 #include <set>
 
 #include "base/optional.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_embedder.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_metrics.h"
@@ -96,7 +97,7 @@ class WebUITabStripContainerView : public TabStripUIEmbedder,
   void EndDragToOpen(base::Optional<WebUITabStripDragDirection>
                          fling_direction = base::nullopt);
 
-  void TabCounterPressed();
+  void TabCounterPressed(const ui::Event& event);
 
   void SetContainerTargetVisibility(bool target_visible,
                                     WebUITabStripOpenCloseReason reason);
@@ -104,17 +105,20 @@ class WebUITabStripContainerView : public TabStripUIEmbedder,
   // Passed to the AutoCloser to handle closing.
   void CloseForEventOutsideTabStrip(TabStripUICloseAction reason);
 
-  // TabStripUI::Embedder:
+  // TabStripUIEmbedder:
   const ui::AcceleratorProvider* GetAcceleratorProvider() const override;
   void CloseContainer() override;
   void ShowContextMenuAtPoint(
       gfx::Point point,
-      std::unique_ptr<ui::MenuModel> menu_model) override;
+      std::unique_ptr<ui::MenuModel> menu_model,
+      base::RepeatingClosure on_menu_closed_callback) override;
+  void CloseContextMenu() override;
   void ShowEditDialogForGroupAtPoint(gfx::Point point,
                                      gfx::Rect rect,
                                      tab_groups::TabGroupId group) override;
   TabStripUILayout GetLayout() override;
   SkColor GetColor(int id) const override;
+  SkColor GetSystemColor(ui::NativeTheme::ColorId id) const override;
 
   // views::View:
   int GetHeightForWidth(int w) const override;
@@ -139,10 +143,16 @@ class WebUITabStripContainerView : public TabStripUIEmbedder,
   views::View* tab_contents_container_;
   views::View* tab_counter_ = nullptr;
 
+#if defined(OS_WIN)
   // If the user interacts with Windows in a way that changes the width of the
   // window, close the top container. This is similar to the auto-close when the
   // user touches outside the tabstrip.
+  //
+  // TODO(dfried, davidbienvenu): we can remove this as soon as we move to the
+  // more modern Windows drag-drop system, avoiding some of the weirdness around
+  // starting drag-drop.
   int old_top_container_width_ = 0;
+#endif  // defined(OS_WIN)
 
   base::Optional<float> current_drag_height_;
 
@@ -161,7 +171,8 @@ class WebUITabStripContainerView : public TabStripUIEmbedder,
   std::unique_ptr<views::MenuRunner> context_menu_runner_;
   std::unique_ptr<ui::MenuModel> context_menu_model_;
 
-  ScopedObserver<views::View, views::ViewObserver> view_observer_{this};
+  base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
+      view_observations_{this};
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_WEBUI_TAB_STRIP_CONTAINER_VIEW_H_

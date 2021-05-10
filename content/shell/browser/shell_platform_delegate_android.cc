@@ -107,9 +107,9 @@ void ShellPlatformDelegate::SetIsLoading(Shell* shell, bool loading) {
 }
 
 void ShellPlatformDelegate::SetTitle(Shell* shell,
-                                     const base::string16& title) {}
+                                     const std::u16string& title) {}
 
-void ShellPlatformDelegate::RenderViewReady(Shell* shell) {}
+void ShellPlatformDelegate::MainFrameCreated(Shell* shell) {}
 
 bool ShellPlatformDelegate::DestroyShell(Shell* shell) {
   return false;  // Shell destroys itself.

@@ -8,11 +8,10 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "components/media_router/browser/media_router.h"
@@ -37,7 +36,8 @@ using media::mojom::RemotingStartFailReason;
 using media::mojom::RemotingStopReason;
 using media::mojom::RemotingSinkMetadata;
 
-class CastRemotingConnector::RemotingBridge : public media::mojom::Remoter {
+class CastRemotingConnector::RemotingBridge final
+    : public media::mojom::Remoter {
  public:
   // Constructs a "bridge" to delegate calls between the given |source| and
   // |connector|. |connector| must be valid at the time of construction, but is
@@ -522,8 +522,7 @@ void CastRemotingConnector::OnPrefChanged() {
 #if !defined(OS_ANDROID)
   const PrefService::Preference* pref = pref_service_->FindPreference(
       media_router::prefs::kMediaRouterMediaRemotingEnabled);
-  bool enabled = false;
-  pref->GetValue()->GetAsBoolean(&enabled);
+  bool enabled = pref->GetValue()->GetIfBool().value_or(false);
   remoting_allowed_ = enabled;
   if (!enabled)
     OnStopped(media::mojom::RemotingStopReason::USER_DISABLED);

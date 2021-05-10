@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/optional.h"
-#include "base/strings/string16.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate.h"
 #include "components/password_manager/core/browser/bulk_leak_check_service.h"
 #include "extensions/browser/extension_function.h"
@@ -120,7 +119,7 @@ class PasswordsPrivateRequestPlaintextPasswordFunction
   ResponseAction Run() override;
 
  private:
-  void GotPassword(base::Optional<base::string16> password);
+  void GotPassword(base::Optional<std::u16string> password);
 };
 
 class PasswordsPrivateGetSavedPasswordListFunction : public ExtensionFunction {
@@ -156,13 +155,14 @@ class PasswordsPrivateGetPasswordExceptionListFunction
   void GotList(const PasswordsPrivateDelegate::ExceptionEntries& entries);
 };
 
-class PasswordsPrivateMovePasswordToAccountFunction : public ExtensionFunction {
+class PasswordsPrivateMovePasswordsToAccountFunction
+    : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("passwordsPrivate.movePasswordToAccount",
-                             PASSWORDSPRIVATE_MOVEPASSWORDTOACCOUNT)
+  DECLARE_EXTENSION_FUNCTION("passwordsPrivate.movePasswordsToAccount",
+                             PASSWORDSPRIVATE_MOVEPASSWORDSTOACCOUNT)
 
  protected:
-  ~PasswordsPrivateMovePasswordToAccountFunction() override = default;
+  ~PasswordsPrivateMovePasswordsToAccountFunction() override = default;
 
   // ExtensionFunction overrides.
   ResponseAction Run() override;

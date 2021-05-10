@@ -13,7 +13,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/callback_forward.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -589,7 +588,8 @@ void BluetoothLowEnergyGetCharacteristicFunction::DoWork() {
   // Manually construct the result instead of using
   // apibtle::GetCharacteristic::Result::Create as it doesn't convert lists of
   // enums correctly.
-  Respond(OneArgument(apibtle::CharacteristicToValue(&characteristic)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(
+      apibtle::CharacteristicToValue(&characteristic))));
 }
 
 BluetoothLowEnergyGetCharacteristicsFunction::
@@ -630,7 +630,7 @@ void BluetoothLowEnergyGetCharacteristicsFunction::DoWork() {
   for (apibtle::Characteristic& characteristic : characteristic_list)
     result->Append(apibtle::CharacteristicToValue(&characteristic));
 
-  Respond(OneArgument(std::move(result)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 BluetoothLowEnergyGetIncludedServicesFunction::
@@ -700,7 +700,8 @@ void BluetoothLowEnergyGetDescriptorFunction::DoWork() {
   // Manually construct the result instead of using
   // apibtle::GetDescriptor::Result::Create as it doesn't convert lists of enums
   // correctly.
-  Respond(OneArgument(apibtle::DescriptorToValue(&descriptor)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(
+      apibtle::DescriptorToValue(&descriptor))));
 }
 
 BluetoothLowEnergyGetDescriptorsFunction::
@@ -740,7 +741,7 @@ void BluetoothLowEnergyGetDescriptorsFunction::DoWork() {
   for (apibtle::Descriptor& descriptor : descriptor_list)
     result->Append(apibtle::DescriptorToValue(&descriptor));
 
-  Respond(OneArgument(std::move(result)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 BluetoothLowEnergyReadCharacteristicValueFunction::
@@ -791,7 +792,8 @@ void BluetoothLowEnergyReadCharacteristicValueFunction::SuccessCallback() {
   // Manually construct the result instead of using
   // apibtle::GetCharacteristic::Result::Create as it doesn't convert lists of
   // enums correctly.
-  Respond(OneArgument(apibtle::CharacteristicToValue(&characteristic)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(
+      apibtle::CharacteristicToValue(&characteristic))));
 }
 
 void BluetoothLowEnergyReadCharacteristicValueFunction::ErrorCallback(
@@ -981,7 +983,8 @@ void BluetoothLowEnergyReadDescriptorValueFunction::SuccessCallback() {
   // Manually construct the result instead of using
   // apibtle::GetDescriptor::Results::Create as it doesn't convert lists of
   // enums correctly.
-  Respond(OneArgument(apibtle::DescriptorToValue(&descriptor)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(
+      apibtle::DescriptorToValue(&descriptor))));
 }
 
 void BluetoothLowEnergyReadDescriptorValueFunction::ErrorCallback(
@@ -1122,10 +1125,10 @@ void BluetoothLowEnergyRegisterAdvertisementFunction::DoWork() {
 
   event_router->adapter()->RegisterAdvertisement(
       std::move(advertisement_data),
-      base::Bind(
+      base::BindOnce(
           &BluetoothLowEnergyRegisterAdvertisementFunction::SuccessCallback,
           this),
-      base::Bind(
+      base::BindOnce(
           &BluetoothLowEnergyRegisterAdvertisementFunction::ErrorCallback,
           this));
 }
@@ -1184,10 +1187,10 @@ void BluetoothLowEnergyUnregisterAdvertisementFunction::DoWork() {
   }
 
   advertisement->advertisement()->Unregister(
-      base::Bind(
+      base::BindOnce(
           &BluetoothLowEnergyUnregisterAdvertisementFunction::SuccessCallback,
           this, params_->advertisement_id),
-      base::Bind(
+      base::BindOnce(
           &BluetoothLowEnergyUnregisterAdvertisementFunction::ErrorCallback,
           this, params_->advertisement_id));
 }
@@ -1249,10 +1252,10 @@ void BluetoothLowEnergyResetAdvertisingFunction::DoWork() {
   }
 
   event_router->adapter()->ResetAdvertising(
-      base::Bind(&BluetoothLowEnergyResetAdvertisingFunction::SuccessCallback,
-                 this),
-      base::Bind(&BluetoothLowEnergyResetAdvertisingFunction::ErrorCallback,
-                 this));
+      base::BindOnce(
+          &BluetoothLowEnergyResetAdvertisingFunction::SuccessCallback, this),
+      base::BindOnce(&BluetoothLowEnergyResetAdvertisingFunction::ErrorCallback,
+                     this));
 #endif
 }
 
@@ -1285,10 +1288,10 @@ void BluetoothLowEnergySetAdvertisingIntervalFunction::DoWork() {
   event_router->adapter()->SetAdvertisingInterval(
       base::TimeDelta::FromMilliseconds(params_->min_interval),
       base::TimeDelta::FromMilliseconds(params_->max_interval),
-      base::Bind(
+      base::BindOnce(
           &BluetoothLowEnergySetAdvertisingIntervalFunction::SuccessCallback,
           this),
-      base::Bind(
+      base::BindOnce(
           &BluetoothLowEnergySetAdvertisingIntervalFunction::ErrorCallback,
           this));
 #endif

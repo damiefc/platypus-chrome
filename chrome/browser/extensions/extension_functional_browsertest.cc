@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 
+#include "base/files/file_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/crx_installer.h"
@@ -45,7 +46,7 @@ class ExtensionFunctionalTest : public ExtensionBrowserTest {
     scoped_refptr<CrxInstaller> installer(CrxInstaller::CreateSilent(service));
     installer->set_is_gallery_install(false);
     installer->set_allow_silent_install(true);
-    installer->set_install_source(Manifest::INTERNAL);
+    installer->set_install_source(mojom::ManifestLocation::kInternal);
     installer->set_off_store_install_allow_reason(
         CrxInstaller::OffStoreInstallAllowedInTest);
 

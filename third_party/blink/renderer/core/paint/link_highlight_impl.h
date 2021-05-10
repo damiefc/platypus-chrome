@@ -86,7 +86,7 @@ class CORE_EXPORT LinkHighlightImpl final : public CompositorAnimationDelegate,
  private:
   void ReleaseResources();
 
-  void SetPaintArtifactCompositorNeedsUpdate();
+  void SetNeedsRepaintAndCompositingUpdate();
   void UpdateOpacity(float opacity);
 
   class LinkHighlightFragment : private cc::ContentLayerClient {
@@ -101,11 +101,9 @@ class CORE_EXPORT LinkHighlightImpl final : public CompositorAnimationDelegate,
 
    private:
     // cc::ContentLayerClient implementation.
-    gfx::Rect PaintableRegion() override;
-    scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList(
-        PaintingControlSetting painting_control) override;
+    gfx::Rect PaintableRegion() const override;
+    scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList() override;
     bool FillsBoundsCompletely() const override { return false; }
-    size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
 
     scoped_refptr<cc::PictureLayer> layer_;
     Path path_;

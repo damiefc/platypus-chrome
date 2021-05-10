@@ -5,8 +5,8 @@
 (async function() {
   TestRunner.addResult(
       `Tests resources initiator for images initiated by IMG tag, static CSS, CSS class added from JavaScript and XHR.\n`);
-  await TestRunner.loadModule('network_test_runner');
-  await TestRunner.loadModule('console_test_runner');
+  await TestRunner.loadTestModule('network_test_runner');
+  await TestRunner.loadModule('console'); await TestRunner.loadTestModule('console_test_runner');
   await TestRunner.showPanel('network');
   await TestRunner.evaluateInPagePromise(`
       function loadData()
@@ -45,13 +45,13 @@
       var initiator = request.initiator();
       TestRunner.addResult(request.url() + ': ' + initiator.type);
       if (initiator.url)
-        TestRunner.addResult('    ' + initiator.url + ' ' + initiator.lineNumber);
+        TestRunner.addResult('    ' + initiator.url + ' ' + initiator.lineNumber + ' ' + initiator.columnNumber);
       if (initiator.stack) {
         var stackTrace = initiator.stack;
         for (var i = 0; i < stackTrace.callFrames.length; ++i) {
           var frame = stackTrace.callFrames[i];
           if (frame.lineNumber) {
-            TestRunner.addResult('    ' + frame.functionName + ' ' + frame.url + ' ' + frame.lineNumber);
+            TestRunner.addResult('    ' + frame.functionName + ' ' + frame.url + ' ' + frame.lineNumber + ' ' + frame.columnNumber);
             break;
           }
         }

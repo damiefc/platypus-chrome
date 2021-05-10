@@ -16,6 +16,8 @@
 #include "components/keyed_service/ios/refcounted_browser_state_keyed_service_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/net/net_types.h"
+#include "ios/chrome/browser/policy/browser_state_policy_connector.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace sync_preferences {
 class PrefServiceSyncable;
@@ -49,12 +51,13 @@ class TestChromeBrowserState : public ChromeBrowserState {
   PrefProxyConfigTracker* GetProxyConfigTracker() override;
   BrowserStatePolicyConnector* GetPolicyConnector() override;
   PrefService* GetPrefs() override;
-  PrefService* GetOffTheRecordPrefs() override;
   ChromeBrowserStateIOData* GetIOData() override;
   void ClearNetworkingHistorySince(base::Time time,
-                                   const base::Closure& completion) override;
+                                   base::OnceClosure completion) override;
   net::URLRequestContextGetter* CreateRequestContext(
       ProtocolHandlerMap* protocol_handlers) override;
+  scoped_refptr<network::SharedURLLoaderFactory> GetSharedURLLoaderFactory()
+      override;
 
   // This method is defined as empty following the paradigm of
   // TestingProfile::DestroyOffTheRecordProfile().
@@ -81,6 +84,10 @@ class TestChromeBrowserState : public ChromeBrowserState {
   // for TestChromeBrowserState initialized with a custom pref service.
   sync_preferences::TestingPrefServiceSyncable* GetTestingPrefService();
 
+  // Sets a SharedURLLoaderFactory for test.
+  void SetSharedURLLoaderFactory(
+      scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory);
+
   // Helper class that allows for parameterizing the building
   // of TestChromeBrowserStates.
   class Builder {
@@ -106,6 +113,9 @@ class TestChromeBrowserState : public ChromeBrowserState {
     void SetPrefService(
         std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs);
 
+    void SetPolicyConnector(
+        std::unique_ptr<BrowserStatePolicyConnector> policy_connector);
+
     // Creates the TestChromeBrowserState using previously-set settings.
     std::unique_ptr<TestChromeBrowserState> Build();
 
@@ -116,6 +126,8 @@ class TestChromeBrowserState : public ChromeBrowserState {
     // Various staging variables where values are held until Build() is invoked.
     base::FilePath state_path_;
     std::unique_ptr<sync_preferences::PrefServiceSyncable> pref_service_;
+
+    std::unique_ptr<BrowserStatePolicyConnector> policy_connector_;
 
     TestingFactories testing_factories_;
     RefcountedTestingFactories refcounted_testing_factories_;
@@ -129,7 +141,8 @@ class TestChromeBrowserState : public ChromeBrowserState {
       const base::FilePath& path,
       std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs,
       TestingFactories testing_factories,
-      RefcountedTestingFactories refcounted_testing_factories);
+      RefcountedTestingFactories refcounted_testing_factories,
+      std::unique_ptr<BrowserStatePolicyConnector> policy_connector);
 
  private:
   friend class Builder;
@@ -150,6 +163,12 @@ class TestChromeBrowserState : public ChromeBrowserState {
   // casting as |prefs_| may not be a TestingPrefServiceSyncable.
   std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs_;
   sync_preferences::TestingPrefServiceSyncable* testing_prefs_;
+
+  std::unique_ptr<BrowserStatePolicyConnector> policy_connector_;
+
+  // A SharedURLLoaderFactory for test.
+  scoped_refptr<network::SharedURLLoaderFactory>
+      test_shared_url_loader_factory_;
 
   // The incognito ChromeBrowserState instance that is associated with this
   // non-incognito ChromeBrowserState instance.

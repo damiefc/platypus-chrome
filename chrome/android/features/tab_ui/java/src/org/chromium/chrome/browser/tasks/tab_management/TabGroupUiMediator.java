@@ -14,9 +14,11 @@ import android.view.View;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
@@ -27,7 +29,6 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
@@ -39,7 +40,7 @@ import org.chromium.chrome.browser.tasks.ConditionalTabStripUtils.FeatureStatus;
 import org.chromium.chrome.browser.tasks.ConditionalTabStripUtils.ReasonToShow;
 import org.chromium.chrome.browser.tasks.tab_groups.EmptyTabGroupModelFilterObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
-import org.chromium.chrome.browser.toolbar.ThemeColorProvider;
+import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsCoordinator;
 import org.chromium.chrome.browser.ui.messages.infobar.SimpleConfirmInfoBarBuilder;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
@@ -49,6 +50,7 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -112,6 +114,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
     private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     private final SnackbarManager.SnackbarManageable mSnackbarManageable;
     private final Snackbar mUndoClosureSnackBar;
+    private final ObservableSupplier<Boolean> mOmniboxFocusStateSupplier;
 
     private CallbackController mCallbackController = new CallbackController();
     private final OverviewModeBehavior.OverviewModeObserver mOverviewModeObserver;
@@ -120,6 +123,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
     private TabGroupModelFilter.Observer mTabGroupModelFilterObserver;
     private PauseResumeWithNativeObserver mPauseResumeWithNativeObserver;
     private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
+    private Callback<Boolean> mOmniboxFocusObserver;
     private boolean mIsTabGroupUiVisible;
     private boolean mIsShowingOverViewMode;
     private boolean mActivatedButNotShown;
@@ -132,7 +136,8 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
             ThemeColorProvider themeColorProvider,
             @Nullable TabGridDialogMediator.DialogController dialogController,
             ActivityLifecycleDispatcher activityLifecycleDispatcher,
-            SnackbarManager.SnackbarManageable snackbarManageable) {
+            SnackbarManager.SnackbarManageable snackbarManageable,
+            ObservableSupplier<Boolean> omniboxFocusStateSupplier) {
         mContext = context;
         mResetHandler = resetHandler;
         mModel = model;
@@ -143,6 +148,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
         mTabGridDialogController = dialogController;
         mActivityLifecycleDispatcher = activityLifecycleDispatcher;
         mSnackbarManageable = snackbarManageable;
+        mOmniboxFocusStateSupplier = omniboxFocusStateSupplier;
         mUndoClosureSnackBar =
                 Snackbar.make(context.getString(R.string.undo_tab_strip_closure_message), this,
                                 Snackbar.TYPE_ACTION,
@@ -210,14 +216,24 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
                                     ? ReasonToShow.LONG_PRESS
                                     : ReasonToShow.NEW_TAB);
                 }
-                if (type == TabLaunchType.FROM_CHROME_UI && mIsTabGroupUiVisible) {
-                    mModel.set(TabGroupUiProperties.INITIAL_SCROLL_INDEX,
-                            getTabsToShowForId(tab.getId()).size() - 1);
-                }
+
                 if (type == TabLaunchType.FROM_CHROME_UI || type == TabLaunchType.FROM_RESTORE
                         || type == TabLaunchType.FROM_STARTUP) {
                     return;
                 }
+
+                if (type == TabLaunchType.FROM_LONGPRESS_BACKGROUND
+                        && !TabUiFeatureUtilities.ENABLE_TAB_GROUP_AUTO_CREATION.getValue()) {
+                    return;
+                }
+
+                if (type == TabLaunchType.FROM_TAB_GROUP_UI && mIsTabGroupUiVisible) {
+                    mModel.set(TabGroupUiProperties.INITIAL_SCROLL_INDEX,
+                            getTabsToShowForId(tab.getId()).size() - 1);
+                }
+
+                if (mIsTabGroupUiVisible) return;
+
                 resetTabStripWithRelatedTabsForId(tab.getId());
             }
 
@@ -262,7 +278,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
 
         mTabModelSelectorTabObserver = new TabModelSelectorTabObserver(mTabModelSelector) {
             @Override
-            public void onPageLoadStarted(Tab tab, String url) {
+            public void onPageLoadStarted(Tab tab, GURL url) {
                 // TODO(crbug.com/1087826) This is a band-aid fix for M84. The root cause is
                 // probably a leaked observer. Remove this when the TabObservers are removed during
                 // tab reparenting.
@@ -285,7 +301,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
             }
         };
 
-        mTabModelSelectorObserver = new EmptyTabModelSelectorObserver() {
+        mTabModelSelectorObserver = new TabModelSelectorObserver() {
             @Override
             public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
                 mSnackbarManageable.getSnackbarManager().dismissSnackbars(TabGroupUiMediator.this);
@@ -333,6 +349,17 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
             mActivityLifecycleDispatcher.register(mPauseResumeWithNativeObserver);
         }
 
+        if (TabUiFeatureUtilities.isLaunchBugFixEnabled()) {
+            mOmniboxFocusObserver = isFocus -> {
+                // Hide tab strip when omnibox gains focus and try to re-show it when omnibox loses
+                // focus.
+                int tabId = (isFocus == null || !isFocus) ? mTabModelSelector.getCurrentTabId()
+                                                          : Tab.INVALID_TAB_ID;
+                resetTabStripWithRelatedTabsForId(tabId);
+            };
+            mOmniboxFocusStateSupplier.addObserver(mOmniboxFocusObserver);
+        }
+
         mThemeColorObserver =
                 (color, shouldAnimate) -> mModel.set(TabGroupUiProperties.PRIMARY_COLOR, color);
         mTintObserver = (tint, useLight) -> mModel.set(TabGroupUiProperties.TINT, tint);
@@ -348,6 +375,8 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
 
         mThemeColorProvider.addThemeColorObserver(mThemeColorObserver);
         mThemeColorProvider.addTintObserver(mTintObserver);
+        mModel.set(TabGroupUiProperties.PRIMARY_COLOR, mThemeColorProvider.getThemeColor());
+        mModel.set(TabGroupUiProperties.TINT, mThemeColorProvider.getTint());
 
         setupToolbarButtons();
         mModel.set(TabGroupUiProperties.IS_MAIN_CONTENT_VISIBLE, true);
@@ -403,7 +432,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
             }
             mTabCreatorManager.getTabCreator(currentTab.isIncognito())
                     .createNewTab(new LoadUrlParams(UrlConstants.NTP_URL),
-                            TabLaunchType.FROM_CHROME_UI, parentTabToAttach);
+                            TabLaunchType.FROM_TAB_GROUP_UI, parentTabToAttach);
             RecordUserAction.record("MobileNewTabOpened." + TabGroupUiCoordinator.COMPONENT_NAME);
         };
         mModel.set(TabGroupUiProperties.RIGHT_BUTTON_ON_CLICK_LISTENER, rightButtonOnClickListener);
@@ -523,6 +552,9 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
         if (mCallbackController != null) {
             mCallbackController.destroy();
             mCallbackController = null;
+        }
+        if (mOmniboxFocusObserver != null) {
+            mOmniboxFocusStateSupplier.removeObserver(mOmniboxFocusObserver);
         }
         mThemeColorProvider.removeThemeColorObserver(mThemeColorObserver);
         mThemeColorProvider.removeTintObserver(mTintObserver);

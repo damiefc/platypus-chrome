@@ -37,9 +37,7 @@ namespace examples {
 
 namespace {
 
-class VectorIconGallery : public View,
-                          public TextfieldController,
-                          public ButtonListener {
+class VectorIconGallery : public View, public TextfieldController {
  public:
   VectorIconGallery() {
     size_input_ = AddChildView(std::make_unique<Textfield>());
@@ -72,7 +70,9 @@ class VectorIconGallery : public View,
     file_chooser_ = file_container->AddChildView(std::move(file_chooser));
     file_go_button_ =
         file_container->AddChildView(std::make_unique<MdTextButton>(
-            this, GetStringUTF16(IDS_VECTOR_RENDER_LABEL)));
+            base::BindRepeating(&VectorIconGallery::FileGoButtonPressed,
+                                base::Unretained(this)),
+            GetStringUTF16(IDS_VECTOR_RENDER_LABEL)));
     file_box->SetFlexForView(file_chooser_, 1);
     AddChildView(std::move(file_container));
 
@@ -88,12 +88,12 @@ class VectorIconGallery : public View,
 
   // TextfieldController implementation.
   void ContentsChanged(Textfield* sender,
-                       const base::string16& new_contents) override {
+                       const std::u16string& new_contents) override {
     if (sender == size_input_) {
       if (base::StringToInt(new_contents, &size_) && (size_ > 0))
         Update();
       else
-        size_input_->SetText(base::string16());
+        size_input_->SetText(std::u16string());
 
       return;
     }
@@ -109,12 +109,11 @@ class VectorIconGallery : public View,
     }
   }
 
-  // ButtonListener
-  void ButtonPressed(Button* sender, const ui::Event& event) override {
-    DCHECK_EQ(file_go_button_, sender);
+ private:
+  void FileGoButtonPressed() {
     base::ScopedAllowBlockingForTesting allow_blocking;
 #if defined(OS_WIN)
-    base::FilePath path(file_chooser_->GetText());
+    base::FilePath path(base::UTF16ToWide(file_chooser_->GetText()));
 #else
     base::FilePath path(base::UTF16ToUTF8(file_chooser_->GetText()));
 #endif
@@ -128,7 +127,6 @@ class VectorIconGallery : public View,
     Update();
   }
 
- private:
   void Update() {
     if (!contents_.empty()) {
       image_view_->SetImage(

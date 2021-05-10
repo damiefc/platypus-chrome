@@ -46,7 +46,6 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_timing.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 
 namespace blink {
 
@@ -362,16 +361,20 @@ void WebURLResponse::SetServiceWorkerResponseSource(
   resource_response_->SetServiceWorkerResponseSource(value);
 }
 
-void WebURLResponse::SetWasFallbackRequiredByServiceWorker(bool value) {
-  resource_response_->SetWasFallbackRequiredByServiceWorker(value);
-}
-
 void WebURLResponse::SetType(network::mojom::FetchResponseType value) {
   resource_response_->SetType(value);
 }
 
 network::mojom::FetchResponseType WebURLResponse::GetType() const {
   return resource_response_->GetType();
+}
+
+void WebURLResponse::SetPadding(int64_t padding) {
+  resource_response_->SetPadding(padding);
+}
+
+int64_t WebURLResponse::GetPadding() const {
+  return resource_response_->GetPadding();
 }
 
 void WebURLResponse::SetUrlListViaServiceWorker(
@@ -479,6 +482,14 @@ void WebURLResponse::SetAlpnNegotiatedProtocol(
   resource_response_->SetAlpnNegotiatedProtocol(alpn_negotiated_protocol);
 }
 
+bool WebURLResponse::HasAuthorizationCoveredByWildcardOnPreflight() const {
+  return resource_response_->HasAuthorizationCoveredByWildcardOnPreflight();
+}
+
+void WebURLResponse::SetHasAuthorizationCoveredByWildcardOnPreflight(bool b) {
+  resource_response_->SetHasAuthorizationCoveredByWildcardOnPreflight(b);
+}
+
 bool WebURLResponse::WasAlternateProtocolAvailable() const {
   return resource_response_->WasAlternateProtocolAvailable();
 }
@@ -508,6 +519,31 @@ void WebURLResponse::SetNetworkAccessed(bool network_accessed) {
 
 bool WebURLResponse::FromArchive() const {
   return resource_response_->FromArchive();
+}
+
+void WebURLResponse::SetDnsAliases(const WebVector<WebString>& aliases) {
+  Vector<String> dns_aliases(aliases.size());
+  std::transform(aliases.begin(), aliases.end(), dns_aliases.begin(),
+                 [](const WebString& h) { return WTF::String(h); });
+  resource_response_->SetDnsAliases(std::move(dns_aliases));
+}
+
+WebURL WebURLResponse::WebBundleURL() const {
+  return resource_response_->WebBundleURL();
+}
+
+void WebURLResponse::SetWebBundleURL(const WebURL& url) {
+  resource_response_->SetWebBundleURL(url);
+}
+
+void WebURLResponse::SetAuthChallengeInfo(
+    const base::Optional<net::AuthChallengeInfo>& auth_challenge_info) {
+  resource_response_->SetAuthChallengeInfo(auth_challenge_info);
+}
+
+const base::Optional<net::AuthChallengeInfo>&
+WebURLResponse::AuthChallengeInfo() const {
+  return resource_response_->AuthChallengeInfo();
 }
 
 WebURLResponse::WebURLResponse(ResourceResponse& r) : resource_response_(&r) {}

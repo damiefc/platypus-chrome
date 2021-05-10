@@ -4,11 +4,11 @@
 
 #include "chrome/browser/ui/ash/holding_space/holding_space_downloads_delegate.h"
 
-#include "ash/public/cpp/holding_space/holding_space_constants.h"
-#include "ash/public/cpp/holding_space/holding_space_prefs.h"
-#include "base/barrier_closure.h"
+#include <vector>
+
+#include "ash/public/cpp/ash_features.h"
+#include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/ash/holding_space/holding_space_util.h"
 #include "content/public/browser/browser_context.h"
 
 namespace ash {
@@ -17,34 +17,14 @@ namespace {
 
 content::DownloadManager* download_manager_for_testing = nullptr;
 
-// Helpers ---------------------------------------------------------------------
-
-// Returns true if `download` is sufficiently recent, false otherwise.
-bool IsRecentEnough(Profile* profile, const download::DownloadItem* download) {
-  const base::Time end_time = download->GetEndTime();
-
-  // A `download` must be more recent than the time of the holding space feature
-  // first becoming available.
-  PrefService* prefs = profile->GetPrefs();
-  if (end_time < holding_space_prefs::GetTimeOfFirstAvailability(prefs).value())
-    return false;
-
-  // A `download` must be more recent that `kMaxFileAge`.
-  return end_time >= base::Time::Now() - kMaxFileAge;
-}
-
 }  // namespace
 
 // HoldingSpaceDownloadsDelegate -----------------------------------------------
 
 HoldingSpaceDownloadsDelegate::HoldingSpaceDownloadsDelegate(
-    Profile* profile,
-    HoldingSpaceModel* model,
-    ItemDownloadedCallback item_downloaded_callback,
-    DownloadsRestoredCallback downloads_restored_callback)
-    : HoldingSpaceKeyedServiceDelegate(profile, model),
-      item_downloaded_callback_(item_downloaded_callback),
-      downloads_restored_callback_(std::move(downloads_restored_callback)) {}
+    HoldingSpaceKeyedService* service,
+    HoldingSpaceModel* model)
+    : HoldingSpaceKeyedServiceDelegate(service, model) {}
 
 HoldingSpaceDownloadsDelegate::~HoldingSpaceDownloadsDelegate() = default;
 
@@ -55,14 +35,21 @@ void HoldingSpaceDownloadsDelegate::SetDownloadManagerForTesting(
 }
 
 void HoldingSpaceDownloadsDelegate::Init() {
-  download_manager_observer_.Add(
+  // ARC downloads.
+  if (features::IsHoldingSpaceArcIntegrationEnabled()) {
+    // NOTE: The `arc_intent_helper_bridge` may be `nullptr` if the `profile()`
+    // is not allowed to use ARC, e.g. if the `profile()` is OTR.
+    auto* const arc_intent_helper_bridge =
+        arc::ArcIntentHelperBridge::GetForBrowserContext(profile());
+    if (arc_intent_helper_bridge)
+      arc_intent_helper_observation_.Observe(arc_intent_helper_bridge);
+  }
+
+  // Chrome downloads.
+  download_manager_observation_.Observe(
       download_manager_for_testing
           ? download_manager_for_testing
           : content::BrowserContext::GetDownloadManager(profile()));
-}
-
-void HoldingSpaceDownloadsDelegate::Shutdown() {
-  RemoveObservers();
 }
 
 void HoldingSpaceDownloadsDelegate::OnPersistenceRestored() {
@@ -73,6 +60,33 @@ void HoldingSpaceDownloadsDelegate::OnPersistenceRestored() {
 
   if (download_manager->IsManagerInitialized())
     OnManagerInitialized();
+}
+
+void HoldingSpaceDownloadsDelegate::OnArcDownloadAdded(
+    const base::FilePath& relative_path,
+    const std::string& owner_package_name) {
+  DCHECK(features::IsHoldingSpaceArcIntegrationEnabled());
+  if (is_restoring_persistence())
+    return;
+
+  // It is expected that `owner_package_name` be non-empty. Media files from
+  // Chrome are synced to ARC via media scan and have `NULL` owning packages but
+  // are expected *not* to have generated `OnArcDownloadAdded()` events.
+  if (owner_package_name.empty()) {
+    NOTREACHED();
+    return;
+  }
+
+  // It is expected that `relative_path` always be contained within `Download/`
+  // which refers to the public downloads folder for the current `profile()`.
+  base::FilePath path(
+      file_manager::util::GetDownloadsFolderForProfile(profile()));
+  if (!base::FilePath("Download/").AppendRelativePath(relative_path, &path)) {
+    NOTREACHED();
+    return;
+  }
+
+  OnDownloadCompleted(HoldingSpaceItem::Type::kArcDownload, path);
 }
 
 void HoldingSpaceDownloadsDelegate::OnManagerInitialized() {
@@ -89,38 +103,15 @@ void HoldingSpaceDownloadsDelegate::OnManagerInitialized() {
   download::SimpleDownloadManager::DownloadVector downloads;
   download_manager->GetAllDownloads(&downloads);
 
-  base::RepeatingClosure barrier_closure = base::BarrierClosure(
-      downloads.size(), std::move(downloads_restored_callback_));
-
   for (auto* download : downloads) {
     switch (download->GetState()) {
-      case download::DownloadItem::COMPLETE: {
-        if (IsRecentEnough(profile(), download)) {
-          holding_space_util::FilePathValid(
-              profile(), {download->GetFullPath(), /*requirements=*/{}},
-              base::BindOnce(
-                  [](const base::FilePath& path,
-                     base::RepeatingClosure barrier_closure,
-                     ItemDownloadedCallback callback, bool valid) {
-                    if (valid)
-                      callback.Run(path);
-                    barrier_closure.Run();
-                  },
-                  download->GetFullPath(), barrier_closure,
-                  base::BindRepeating(
-                      &HoldingSpaceDownloadsDelegate::OnDownloadCompleted,
-                      weak_factory_.GetWeakPtr())));
-        } else {
-          barrier_closure.Run();
-        }
-      } break;
       case download::DownloadItem::IN_PROGRESS:
-        download_item_observer_.Add(download);
-        FALLTHROUGH;
+        download_item_observations_.AddObservation(download);
+        break;
+      case download::DownloadItem::COMPLETE:
       case download::DownloadItem::CANCELLED:
       case download::DownloadItem::INTERRUPTED:
       case download::DownloadItem::MAX_DOWNLOAD_STATE:
-        barrier_closure.Run();
         break;
     }
   }
@@ -128,24 +119,29 @@ void HoldingSpaceDownloadsDelegate::OnManagerInitialized() {
 
 void HoldingSpaceDownloadsDelegate::ManagerGoingDown(
     content::DownloadManager* manager) {
-  RemoveObservers();
+  download_manager_observation_.Reset();
+  download_item_observations_.RemoveAllObservations();
 }
 
 void HoldingSpaceDownloadsDelegate::OnDownloadCreated(
     content::DownloadManager* manager,
     download::DownloadItem* item) {
-  download_item_observer_.Add(item);
+  // Ignore `OnDownloadCreated()` events prior to `manager` initialization. For
+  // those events we bind any observers necessary in `OnManagerInitialized()`.
+  if (!is_restoring_persistence() && manager->IsManagerInitialized())
+    download_item_observations_.AddObservation(item);
 }
 
 void HoldingSpaceDownloadsDelegate::OnDownloadUpdated(
     download::DownloadItem* item) {
   switch (item->GetState()) {
     case download::DownloadItem::COMPLETE:
-      OnDownloadCompleted(item->GetFullPath());
+      OnDownloadCompleted(HoldingSpaceItem::Type::kDownload,
+                          item->GetFullPath());
       FALLTHROUGH;
     case download::DownloadItem::CANCELLED:
     case download::DownloadItem::INTERRUPTED:
-      download_item_observer_.Remove(item);
+      download_item_observations_.RemoveObservation(item);
       break;
     case download::DownloadItem::IN_PROGRESS:
     case download::DownloadItem::MAX_DOWNLOAD_STATE:
@@ -153,15 +149,13 @@ void HoldingSpaceDownloadsDelegate::OnDownloadUpdated(
   }
 }
 
+// TODO(crbug.com/1184438): Support in-progress downloads.
 void HoldingSpaceDownloadsDelegate::OnDownloadCompleted(
+    HoldingSpaceItem::Type type,
     const base::FilePath& file_path) {
+  DCHECK(HoldingSpaceItem::IsDownload(type));
   if (!is_restoring_persistence())
-    item_downloaded_callback_.Run(file_path);
-}
-
-void HoldingSpaceDownloadsDelegate::RemoveObservers() {
-  download_manager_observer_.RemoveAll();
-  download_item_observer_.RemoveAll();
+    service()->AddDownload(type, file_path, /*progress=*/1.f);
 }
 
 }  // namespace ash

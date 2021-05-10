@@ -25,8 +25,8 @@
 #include "chrome/android/chrome_jni_headers/CompositorView_jni.h"
 #include "chrome/browser/android/compositor/layer/toolbar_layer.h"
 #include "chrome/browser/android/compositor/layer_title_cache.h"
-#include "chrome/browser/android/compositor/scene_layer/scene_layer.h"
 #include "chrome/browser/android/compositor/tab_content_manager.h"
+#include "chrome/browser/ui/android/layouts/scene_layer.h"
 #include "content/public/browser/android/compositor.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/peak_gpu_memory_tracker.h"
@@ -37,6 +37,7 @@
 #include "ui/android/resources/ui_resource_provider.h"
 #include "ui/android/window_android.h"
 #include "ui/gfx/android/java_bitmap.h"
+#include "ui/gfx/geometry/rect.h"
 
 using base::android::JavaParamRef;
 
@@ -47,13 +48,10 @@ jlong JNI_CompositorView_Init(
     const JavaParamRef<jobject>& obj,
     jboolean low_mem_device,
     const JavaParamRef<jobject>& jwindow_android,
-    const JavaParamRef<jobject>& jlayer_title_cache,
     const JavaParamRef<jobject>& jtab_content_manager) {
   CompositorView* view;
   ui::WindowAndroid* window_android =
       ui::WindowAndroid::FromJavaWindowAndroid(jwindow_android);
-  LayerTitleCache* layer_title_cache =
-      LayerTitleCache::FromJavaObject(jlayer_title_cache);
   TabContentManager* tab_content_manager =
       TabContentManager::FromJavaObject(jtab_content_manager);
 
@@ -64,10 +62,6 @@ jlong JNI_CompositorView_Init(
                             tab_content_manager);
 
   ui::UIResourceProvider* ui_resource_provider = view->GetUIResourceProvider();
-  // TODO(dtrainor): Pass the ResourceManager on the Java side to the tree
-  // builders instead.
-  if (layer_title_cache)
-    layer_title_cache->SetResourceManager(view->GetResourceManager());
   if (tab_content_manager)
     tab_content_manager->SetUIResourceProvider(ui_resource_provider);
 
@@ -218,6 +212,21 @@ void CompositorView::OnControlsResizeViewChanged(
       controls_resize_view);
 }
 
+void CompositorView::NotifyVirtualKeyboardOverlayRect(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& jweb_contents,
+    jint x,
+    jint y,
+    jint width,
+    jint height) {
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(jweb_contents);
+  gfx::Rect keyboard_rect(x, y, width, height);
+  web_contents->GetNativeView()->NotifyVirtualKeyboardOverlayRect(
+      keyboard_rect);
+}
+
 void CompositorView::SetLayoutBounds(JNIEnv* env,
                                      const JavaParamRef<jobject>& object) {
   root_layer_->SetBounds(gfx::Size(content_width_, content_height_));
@@ -331,8 +340,11 @@ void CompositorView::BrowserChildProcessKilled(
     const content::ChildProcessTerminationInfo& info) {
   LOG(WARNING) << "Child process died (type=" << data.process_type
                << ") pid=" << data.GetProcess().Pid() << ")";
-  if (base::android::BuildInfo::GetInstance()->sdk_int() <=
-          base::android::SDK_VERSION_JELLY_BEAN_MR2 &&
+
+  // On Android R surface control layers leak if GPU process crashes, so we need
+  // to re-create surface to get rid of them.
+  if (base::android::BuildInfo::GetInstance()->sdk_int() ==
+          base::android::SDK_VERSION_R &&
       data.process_type == content::PROCESS_TYPE_GPU) {
     JNIEnv* env = base::android::AttachCurrentThread();
     compositor_->SetSurface(nullptr, false);
@@ -377,6 +389,12 @@ void CompositorView::OnTabChanged(
         // and record a histogram.
       },
       std::move(tracker)));
+}
+
+void CompositorView::PreserveChildSurfaceControls(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& object) {
+  compositor_->PreserveChildSurfaceControls();
 }
 
 }  // namespace android

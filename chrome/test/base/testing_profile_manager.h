@@ -11,9 +11,9 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
-#include "base/strings/string16.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/test/scoped_path_override.h"
+#include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/policy/core/common/policy_service.h"
@@ -34,12 +34,14 @@ class PrefServiceSyncable;
 // When a Profile is needed for testing, create it through the factory method
 // below instead of creating it via |new TestingProfile|. It is not possible
 // to register profiles created in that fashion with the ProfileManager.
-class TestingProfileManager {
+class TestingProfileManager : public ProfileObserver {
  public:
   explicit TestingProfileManager(TestingBrowserProcess* browser_process);
   TestingProfileManager(TestingBrowserProcess* browser_process,
                         ScopedTestingLocalState* local_state);
-  ~TestingProfileManager();
+  TestingProfileManager(const TestingProfileManager&) = delete;
+  TestingProfileManager& operator=(const TestingProfileManager&) = delete;
+  ~TestingProfileManager() override;
 
   // This needs to be called in testing::Test::SetUp() to put the object in a
   // valid state. Some work cannot be done in a constructor because it may
@@ -63,11 +65,11 @@ class TestingProfileManager {
   TestingProfile* CreateTestingProfile(
       const std::string& profile_name,
       std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs,
-      const base::string16& user_name,
+      const std::u16string& user_name,
       int avatar_id,
       const std::string& supervised_user_id,
       TestingProfile::TestingFactories testing_factories,
-      base::Optional<bool> override_new_profile = base::nullopt,
+      base::Optional<bool> is_new_profile = base::nullopt,
       base::Optional<std::unique_ptr<policy::PolicyService>> policy_service =
           base::nullopt);
 
@@ -117,6 +119,9 @@ class TestingProfileManager {
   ProfileAttributesStorage* profile_attributes_storage();
   ScopedTestingLocalState* local_state() { return local_state_; }
 
+  // ProfileObserver:
+  void OnProfileWillBeDestroyed(Profile* profile) override;
+
  private:
   friend class ProfileAttributesStorageTest;
   friend class ProfileInfoCacheTest;
@@ -160,7 +165,9 @@ class TestingProfileManager {
   // Map of profile_name to TestingProfile* from CreateTestingProfile().
   TestingProfilesMap testing_profiles_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestingProfileManager);
+  // Listens for Profile* destruction to perform some cleanup.
+  base::ScopedMultiSourceObservation<Profile, ProfileObserver>
+      profile_observations_{this};
 };
 
 #endif  // CHROME_TEST_BASE_TESTING_PROFILE_MANAGER_H_

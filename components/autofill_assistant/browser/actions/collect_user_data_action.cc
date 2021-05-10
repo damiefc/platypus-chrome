@@ -441,6 +441,10 @@ CollectUserDataAction::~CollectUserDataAction() {
   }
 }
 
+bool CollectUserDataAction::ShouldInterruptOnPause() const {
+  return true;
+}
+
 void CollectUserDataAction::InternalProcessAction(
     ProcessActionCallback callback) {
   callback_ = std::move(callback);
@@ -481,6 +485,7 @@ void CollectUserDataAction::InternalProcessAction(
   } else {
     ShowToUser();
   }
+  action_stopwatch_.StartWaitTime();
 }
 
 void CollectUserDataAction::EndAction(const ClientStatus& status) {
@@ -506,6 +511,10 @@ void CollectUserDataAction::OnGetLogins(
         login_option.preselection_priority(),
         login_option.has_info_popup()
             ? base::make_optional(login_option.info_popup())
+            : base::nullopt,
+        login_option.has_edit_button_content_description()
+            ? base::make_optional(
+                  login_option.edit_button_content_description())
             : base::nullopt);
     login_details_map_.emplace(
         identifier, std::make_unique<LoginDetails>(
@@ -628,6 +637,7 @@ void CollectUserDataAction::OnGetUserData(
     const UserModel* user_model) {
   if (!callback_)
     return;
+  action_stopwatch_.StartActiveTime();
   delegate_->GetPersonalDataManager()->RemoveObserver(this);
 
   WriteProcessedAction(user_data, user_model);
@@ -642,6 +652,7 @@ void CollectUserDataAction::OnAdditionalActionTriggered(
     const UserModel* user_model) {
   if (!callback_)
     return;
+  action_stopwatch_.StartActiveTime();
   delegate_->GetPersonalDataManager()->RemoveObserver(this);
 
   processed_action_proto_->mutable_collect_user_data_result()
@@ -656,6 +667,7 @@ void CollectUserDataAction::OnTermsAndConditionsLinkClicked(
     const UserModel* user_model) {
   if (!callback_)
     return;
+  action_stopwatch_.StartActiveTime();
   delegate_->GetPersonalDataManager()->RemoveObserver(this);
 
   processed_action_proto_->mutable_collect_user_data_result()->set_terms_link(
@@ -789,9 +801,10 @@ bool CollectUserDataAction::CreateOptionsFromProto() {
        collect_user_data.login_details().login_options()) {
     switch (login_option.type_case()) {
       case LoginDetailsProto::LoginOptionProto::kCustom: {
+        const std::string identifier = base::NumberToString(
+            collect_user_data_options_->login_choices.size());
         LoginChoice choice = {
-            base::NumberToString(
-                collect_user_data_options_->login_choices.size()),
+            identifier,
             login_option.custom().label(),
             login_option.sublabel(),
             login_option.has_sublabel_accessibility_hint()
@@ -803,11 +816,15 @@ bool CollectUserDataAction::CreateOptionsFromProto() {
                 : -1,
             login_option.has_info_popup()
                 ? base::make_optional(login_option.info_popup())
+                : base::nullopt,
+            login_option.has_edit_button_content_description()
+                ? base::make_optional(
+                      login_option.edit_button_content_description())
                 : base::nullopt};
         collect_user_data_options_->login_choices.emplace_back(
             std::move(choice));
         login_details_map_.emplace(
-            choice.identifier,
+            identifier,
             std::make_unique<LoginDetails>(
                 login_option.choose_automatically_if_no_stored_login(),
                 login_option.payload()));
@@ -1247,7 +1264,7 @@ void CollectUserDataAction::UpdatePersonalDataManagerProfiles(
   for (const auto* profile :
        delegate_->GetPersonalDataManager()->GetProfilesToSuggest()) {
     user_data->available_profiles_.emplace_back(
-        std::make_unique<autofill::AutofillProfile>(*profile));
+        MakeUniqueFromProfile(*profile));
 
     if (selected_profile != nullptr &&
         CompareContactDetails(*collect_user_data_options_, profile,
@@ -1279,7 +1296,7 @@ void CollectUserDataAction::UpdatePersonalDataManagerProfiles(
     if (default_selection != -1) {
       user_data->selected_addresses_.emplace(
           collect_user_data_options_->contact_details_name,
-          std::make_unique<autofill::AutofillProfile>(
+          MakeUniqueFromProfile(
               *(user_data->available_profiles_[default_selection])));
     }
   }
@@ -1299,7 +1316,7 @@ void CollectUserDataAction::UpdatePersonalDataManagerProfiles(
     if (default_selection != -1) {
       user_data->selected_addresses_.emplace(
           collect_user_data_options_->shipping_address_name,
-          std::make_unique<autofill::AutofillProfile>(
+          MakeUniqueFromProfile(
               *(user_data->available_profiles_[default_selection])));
     }
   }
@@ -1334,7 +1351,7 @@ void CollectUserDataAction::UpdatePersonalDataManagerCards(
                 card->billing_address_id());
         if (billing_address != nullptr) {
           payment_instrument->billing_address =
-              std::make_unique<autofill::AutofillProfile>(*billing_address);
+              MakeUniqueFromProfile(*billing_address);
         }
       }
 

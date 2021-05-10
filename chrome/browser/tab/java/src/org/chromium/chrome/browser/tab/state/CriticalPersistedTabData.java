@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.tab.state;
 
 import android.graphics.Color;
+import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -16,11 +17,14 @@ import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.WebContentsState;
 import org.chromium.chrome.browser.tab.WebContentsStateBridge;
 import org.chromium.chrome.browser.tab.proto.CriticalPersistedTabData.CriticalPersistedTabDataProto;
+import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.url.GURL;
@@ -70,15 +74,15 @@ public class CriticalPersistedTabData extends PersistedTabData {
 
     private ObserverList<CriticalPersistedTabDataObserver> mObservers =
             new ObserverList<CriticalPersistedTabDataObserver>();
+    private boolean mShouldSaveForTesting;
 
-    private boolean mIsStorageRetrievalEnabled;
-
-    private CriticalPersistedTabData(Tab tab) {
+    @VisibleForTesting
+    protected CriticalPersistedTabData(Tab tab) {
         super(tab,
                 PersistedTabDataConfiguration.get(CriticalPersistedTabData.class, tab.isIncognito())
-                        .storage,
+                        .getStorage(),
                 PersistedTabDataConfiguration.get(CriticalPersistedTabData.class, tab.isIncognito())
-                        .id);
+                        .getId());
     }
 
     /**
@@ -121,9 +125,11 @@ public class CriticalPersistedTabData extends PersistedTabData {
      * This constructor is public because that is needed for the reflection
      * used in PersistedTabData.java
      */
-    private CriticalPersistedTabData(
+    @VisibleForTesting
+    protected CriticalPersistedTabData(
             Tab tab, byte[] data, PersistedTabDataStorage storage, String persistedTabDataId) {
-        super(tab, data, storage, persistedTabDataId);
+        super(tab, storage, persistedTabDataId);
+        deserializeAndLog(data);
     }
 
     /**
@@ -138,19 +144,15 @@ public class CriticalPersistedTabData extends PersistedTabData {
         PersistedTabData.from(tab,
                 (data, storage, id)
                         -> { return new CriticalPersistedTabData(tab, data, storage, id); },
-                ()
-                        -> {
-                    if (tab.isInitialized()) {
-                        return CriticalPersistedTabData.build(tab);
-                    }
-                    return null;
-                },
+                (supplierCallback)
+                        -> supplierCallback.onResult(
+                                tab.isInitialized() ? CriticalPersistedTabData.build(tab) : null),
                 CriticalPersistedTabData.class, callback);
     }
 
     /**
      * Acquire {@link CriticalPersistedTabData} from a {@link Tab} or create if it doesn't exist
-     * @param  corresponding {@link Tab} for which {@link CriticalPersistedTabData} is sought
+     * @param  tab corresponding {@link Tab} for which {@link CriticalPersistedTabData} is sought
      * @return acquired or created {@link CriticalPersistedTabData}
      */
     public static CriticalPersistedTabData from(Tab tab) {
@@ -168,7 +170,7 @@ public class CriticalPersistedTabData extends PersistedTabData {
     public static byte[] restore(int tabId, boolean isIncognito) {
         PersistedTabDataConfiguration config =
                 PersistedTabDataConfiguration.get(CriticalPersistedTabData.class, isIncognito);
-        return config.storage.restore(tabId, config.id);
+        return config.getStorage().restore(tabId, config.getId());
     }
 
     /**
@@ -180,7 +182,7 @@ public class CriticalPersistedTabData extends PersistedTabData {
     public static void restore(int tabId, boolean isIncognito, Callback<byte[]> callback) {
         PersistedTabDataConfiguration config =
                 PersistedTabDataConfiguration.get(CriticalPersistedTabData.class, isIncognito);
-        config.storage.restore(tabId, config.id, callback);
+        config.getStorage().restore(tabId, config.getId(), callback);
     }
 
     /**
@@ -193,7 +195,6 @@ public class CriticalPersistedTabData extends PersistedTabData {
         CriticalPersistedTabData res = PersistedTabData.build(tab, (data, storage, id) -> {
             return new CriticalPersistedTabData(tab, data, storage, id);
         }, serialized, CriticalPersistedTabData.class);
-        res.mIsStorageRetrievalEnabled = isStorageRetrievalEnabled;
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
@@ -225,7 +226,9 @@ public class CriticalPersistedTabData extends PersistedTabData {
                     : new GURL(mWebContentsState.getVirtualUrlFromState());
             mTitle = mWebContentsState.getDisplayTitleFromState();
             mContentStateVersion = criticalPersistedTabDataProto.getContentStateVersion();
-            mOpenerAppId = criticalPersistedTabDataProto.getOpenerAppId();
+            mOpenerAppId = TextUtils.isEmpty(criticalPersistedTabDataProto.getOpenerAppId())
+                    ? null
+                    : criticalPersistedTabDataProto.getOpenerAppId();
             mThemeColor = criticalPersistedTabDataProto.getThemeColor();
             mTabLaunchTypeAtCreation =
                     getLaunchType(criticalPersistedTabDataProto.getLaunchTypeAtCreation());
@@ -244,7 +247,8 @@ public class CriticalPersistedTabData extends PersistedTabData {
         return "Critical";
     }
 
-    private static @Nullable @TabLaunchType Integer getLaunchType(
+    @VisibleForTesting
+    static @Nullable @TabLaunchType Integer getLaunchType(
             CriticalPersistedTabDataProto.LaunchTypeAtCreation protoLaunchType) {
         switch (protoLaunchType) {
             case FROM_LINK:
@@ -273,6 +277,10 @@ public class CriticalPersistedTabData extends PersistedTabData {
                 return TabLaunchType.FROM_STARTUP;
             case FROM_START_SURFACE:
                 return TabLaunchType.FROM_START_SURFACE;
+            case FROM_TAB_GROUP_UI:
+                return TabLaunchType.FROM_TAB_GROUP_UI;
+            case FROM_LONGPRESS_BACKGROUND_IN_GROUP:
+                return TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP;
             case SIZE:
                 return TabLaunchType.SIZE;
             default:
@@ -283,7 +291,8 @@ public class CriticalPersistedTabData extends PersistedTabData {
         }
     }
 
-    private static CriticalPersistedTabDataProto.LaunchTypeAtCreation getLaunchType(
+    @VisibleForTesting
+    static CriticalPersistedTabDataProto.LaunchTypeAtCreation getLaunchType(
             @Nullable @TabLaunchType Integer protoLaunchType) {
         if (protoLaunchType == null) {
             return CriticalPersistedTabDataProto.LaunchTypeAtCreation.UNKNOWN;
@@ -317,6 +326,11 @@ public class CriticalPersistedTabData extends PersistedTabData {
                 return CriticalPersistedTabDataProto.LaunchTypeAtCreation.FROM_STARTUP;
             case TabLaunchType.FROM_START_SURFACE:
                 return CriticalPersistedTabDataProto.LaunchTypeAtCreation.FROM_START_SURFACE;
+            case TabLaunchType.FROM_TAB_GROUP_UI:
+                return CriticalPersistedTabDataProto.LaunchTypeAtCreation.FROM_TAB_GROUP_UI;
+            case TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP:
+                return CriticalPersistedTabDataProto.LaunchTypeAtCreation
+                        .FROM_LONGPRESS_BACKGROUND_IN_GROUP;
             case TabLaunchType.SIZE:
                 return CriticalPersistedTabDataProto.LaunchTypeAtCreation.SIZE;
             default:
@@ -354,27 +368,36 @@ public class CriticalPersistedTabData extends PersistedTabData {
 
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     @Override
-    public byte[] serialize() {
-        try (TraceEvent e = TraceEvent.scoped("CriticalPersistedTabData.Serialize")) {
-            WebContentsState webContentsState = mWebContentsState;
-            if (webContentsState == null) {
-                webContentsState = getWebContentsStateFromTab(mTab);
-            }
-            return CriticalPersistedTabDataProto.newBuilder()
-                    .setParentId(mParentId)
-                    .setRootId(mRootId)
-                    .setTimestampMillis(mTimestampMillis)
-                    .setWebContentsStateBytes(webContentsState == null
-                                    ? ByteString.EMPTY
-                                    : ByteString.copyFrom(
-                                            getContentStateByteArray(webContentsState.buffer())))
-                    .setContentStateVersion(mContentStateVersion)
-                    .setOpenerAppId(mOpenerAppId)
-                    .setThemeColor(mThemeColor)
-                    .setLaunchTypeAtCreation(getLaunchType(mTabLaunchTypeAtCreation))
-                    .build()
-                    .toByteArray();
+    public Supplier<byte[]> getSerializeSupplier() {
+        CriticalPersistedTabDataProto.Builder builder;
+        final WebContentsState webContentsState;
+        final ByteBuffer byteBuffer;
+        try (TraceEvent e = TraceEvent.scoped("CriticalPersistedTabData.PreSerialize")) {
+            webContentsState = mWebContentsState == null ? getWebContentsStateFromTab(mTab)
+                                                         : mWebContentsState;
+            byteBuffer = webContentsState == null ? null : webContentsState.buffer();
+            builder = CriticalPersistedTabDataProto.newBuilder()
+                              .setParentId(mParentId)
+                              .setRootId(mRootId)
+                              .setTimestampMillis(mTimestampMillis)
+                              .setContentStateVersion(mContentStateVersion)
+                              .setOpenerAppId(mOpenerAppId == null ? "" : mOpenerAppId)
+                              .setThemeColor(mThemeColor)
+                              .setLaunchTypeAtCreation(getLaunchType(mTabLaunchTypeAtCreation));
         }
+        return () -> {
+            try (TraceEvent e = TraceEvent.scoped("CriticalPersistedTabData.Serialize")) {
+                // TODO(crbug.com/1203298) migrate to ByteString.copyFrom(ByteBuffer ...)
+                // in a thread safe way to avoid intermediate ByteBuffer -> byte[]. Be careful as
+                // this has caused crashes in the past crbug.com/1195550.
+                return builder
+                        .setWebContentsStateBytes(byteBuffer == null
+                                        ? ByteString.EMPTY
+                                        : ByteString.copyFrom(getContentStateByteArray(byteBuffer)))
+                        .build()
+                        .toByteArray();
+            }
+        };
     }
 
     protected static byte[] getContentStateByteArray(ByteBuffer buffer) {
@@ -384,37 +407,49 @@ public class CriticalPersistedTabData extends PersistedTabData {
         return contentsStateBytes;
     }
 
-    // TODO(crbug.com/1113814) remove save() override
     @Override
     public void save() {
-        if (mIsStorageRetrievalEnabled) {
+        if (shouldSave()) {
             super.save();
         }
     }
 
-    /**
-     * Used in tests when we need to save a CriticalPersistedTabData object.
-     * Ultimately will be deprecated by this.save() - for now this.save()
-     * is not saving while fields are being migrated to CriticalPersistedTabData
-     * TODO(crbug.com/1113813) Remove saveForTesting()
-     */
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    protected void saveForTesting() {
-        super.save();
-    }
-
-    /**
-     * Delete {@link CriticalPersistedTabData} in storage
-     */
     @Override
     public void delete() {
-        if (mIsStorageRetrievalEnabled) {
-            super.delete();
+        super.delete();
+    }
+
+    /**
+     * Encapsulates use cases where saving is disabled - as taken from TabPersistentStore.java to
+     * ensure feature parity.
+     * @return
+     */
+    @VisibleForTesting
+    protected boolean shouldSave() {
+        if (mShouldSaveForTesting) {
+            return true;
         }
+        if (getUrl() == null || TextUtils.isEmpty(getUrl().getSpec())) {
+            return false;
+        }
+        if (UrlUtilities.isNTPUrl(getUrl().getSpec()) && !mTab.canGoBack()
+                && !mTab.canGoForward()) {
+            return false;
+        }
+        if (isTabUrlContentScheme(getUrl().getSpec())) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isTabUrlContentScheme(String url) {
+        return url != null && url.startsWith(UrlConstants.CONTENT_SCHEME);
     }
 
     @Override
-    public void destroy() {}
+    public void destroy() {
+        mObservers.clear();
+    }
 
     /**
      * @return title of the {@link Tab}
@@ -427,6 +462,9 @@ public class CriticalPersistedTabData extends PersistedTabData {
      * @param title of the {@link Tab} to set
      */
     public void setTitle(String title) {
+        if (TextUtils.equals(title, mTitle)) {
+            return;
+        }
         mTitle = title;
         save();
     }
@@ -443,6 +481,9 @@ public class CriticalPersistedTabData extends PersistedTabData {
      * @param url to set
      */
     public void setUrl(GURL url) {
+        if ((url == null && mUrl == null) || (url != null && url.equals(mUrl))) {
+            return;
+        }
         mUrl = url;
         save();
     }
@@ -486,6 +527,9 @@ public class CriticalPersistedTabData extends PersistedTabData {
      * Set parent identifier for the {@link Tab}
      */
     public void setParentId(int parentId) {
+        if (mParentId == parentId) {
+            return;
+        }
         mParentId = parentId;
         save();
     }
@@ -498,11 +542,17 @@ public class CriticalPersistedTabData extends PersistedTabData {
     }
 
     /**
-     * set the timetsamp
+     * Set the timestamp.
      * @param timestamp the timestamp
      */
     public void setTimestampMillis(long timestamp) {
+        if (mTimestampMillis == timestamp) {
+            return;
+        }
         mTimestampMillis = timestamp;
+        for (CriticalPersistedTabDataObserver observer : mObservers) {
+            observer.onTimestampChanged(mTab, timestamp);
+        }
         save();
     }
 
@@ -514,6 +564,10 @@ public class CriticalPersistedTabData extends PersistedTabData {
     }
 
     public void setWebContentsState(WebContentsState webContentsState) {
+        if ((webContentsState == null && mWebContentsState == null)
+                || (webContentsState != null && webContentsState.equals(mWebContentsState))) {
+            return;
+        }
         mWebContentsState = webContentsState;
         save();
     }
@@ -547,6 +601,11 @@ public class CriticalPersistedTabData extends PersistedTabData {
     }
 
     public void setLaunchTypeAtCreation(@Nullable @TabLaunchType Integer launchTypeAtCreation) {
+        if ((launchTypeAtCreation == null && mTabLaunchTypeAtCreation == null)
+                || (launchTypeAtCreation != null
+                        && launchTypeAtCreation.equals(mTabLaunchTypeAtCreation))) {
+            return;
+        }
         mTabLaunchTypeAtCreation = launchTypeAtCreation;
         save();
     }
@@ -567,8 +626,8 @@ public class CriticalPersistedTabData extends PersistedTabData {
         mObservers.removeObserver(criticalPersistedTabDataObserver);
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    protected void setIsStorageRetrievalEnabled(boolean isStorageRetrievalEnabled) {
-        mIsStorageRetrievalEnabled = isStorageRetrievalEnabled;
+    @VisibleForTesting
+    public void setShouldSaveForTesting(boolean shouldSaveForTesting) {
+        mShouldSaveForTesting = shouldSaveForTesting;
     }
 }

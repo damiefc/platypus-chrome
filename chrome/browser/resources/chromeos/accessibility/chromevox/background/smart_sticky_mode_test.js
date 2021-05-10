@@ -11,7 +11,7 @@ GEN_INCLUDE(['../testing/chromevox_next_e2e_test_base.js']);
 ChromeVoxSmartStickyModeTest = class extends ChromeVoxNextE2ETest {
   /** @override */
   setUp() {
-    window.doCmd = this.doCmd;
+    super.setUp();
     this.ssm_ = new SmartStickyMode();
     // Deregister from actual range changes.
     ChromeVoxState.removeObserver(this.ssm_);
@@ -173,4 +173,28 @@ TEST_F('ChromeVoxSmartStickyModeTest', 'SmartStickyModeEarcons', function() {
             .call(() => assertTrue(ChromeVox.isStickyModeOn()))
             .replay();
       });
+});
+
+TEST_F('ChromeVoxSmartStickyModeTest', 'ContinuousRead', function() {
+  const mockFeedback = this.createMockFeedback();
+  const site = `
+    <p>start</p>
+    <input type="text"></input>
+    <button>end</button>
+  `;
+  this.runWithLoadedTree(site, function(root) {
+    // Fake the read from here/continuous read state.
+    ChromeVoxState.isReadingContinuously = true;
+    mockFeedback.call(doCmd('toggleStickyMode'))
+        .expectSpeech('Sticky mode enabled')
+        .call(doCmd('nextObject'))
+        .expectNextSpeechUtteranceIsNot('Sticky mode disabled')
+        .expectSpeech('Edit text')
+        .call(() => assertTrue(ChromeVox.isStickyModeOn()))
+        .call(doCmd('nextObject'))
+        .expectNextSpeechUtteranceIsNot('Sticky mode enabled')
+        .expectSpeech('Button')
+        .call(() => assertTrue(ChromeVox.isStickyModeOn()))
+        .replay();
+  });
 });

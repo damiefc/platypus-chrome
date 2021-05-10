@@ -4,16 +4,15 @@
 
 #include "content/child/child_process_sandbox_support_impl_mac.h"
 
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/strings/string16.h"
 #include "base/strings/sys_string_conversions.h"
 #include "content/common/mac/font_loader.h"
 #include "content/public/child/child_thread.h"
-#include "content/public/common/service_names.mojom.h"
 #include "mojo/public/cpp/system/buffer.h"
 
 namespace content {
@@ -35,7 +34,7 @@ bool WebSandboxSupportMac::LoadFont(
   if (!sandbox_support_)
     return false;
   base::ScopedCFTypeRef<CFStringRef> name_ref(CTFontCopyPostScriptName(font));
-  base::string16 font_name = SysCFStringRefToUTF16(name_ref);
+  std::u16string font_name = SysCFStringRefToUTF16(name_ref);
   float font_point_size = CTFontGetSize(font);
   mojo::ScopedSharedBufferHandle font_data;
   bool success = sandbox_support_->LoadFont(font_name, font_point_size,
@@ -60,8 +59,9 @@ bool WebSandboxSupportMac::LoadFont(
       out_descriptor);
 }
 
-SkColor WebSandboxSupportMac::GetSystemColor(blink::MacSystemColorID color_id,
-                                             blink::ColorScheme color_scheme) {
+SkColor WebSandboxSupportMac::GetSystemColor(
+    blink::MacSystemColorID color_id,
+    blink::mojom::ColorScheme color_scheme) {
   if (!color_map_.IsValid()) {
     DLOG(ERROR) << "GetSystemColor does not have a valid color_map_";
     return SK_ColorMAGENTA;
@@ -70,10 +70,11 @@ SkColor WebSandboxSupportMac::GetSystemColor(blink::MacSystemColorID color_id,
                 "Light and dark color scheme system colors loaded.");
   base::span<const SkColor> color_map = color_map_.GetMemoryAsSpan<SkColor>(
       blink::kMacSystemColorIDCount * blink::kMacSystemColorSchemeCount);
-  base::span<const SkColor> color_map_for_scheme = color_map.subspan(
-      color_scheme == blink::ColorScheme::kDark ? blink::kMacSystemColorIDCount
-                                                : 0,
-      blink::kMacSystemColorIDCount);
+  base::span<const SkColor> color_map_for_scheme =
+      color_map.subspan(color_scheme == blink::mojom::ColorScheme::kDark
+                            ? blink::kMacSystemColorIDCount
+                            : 0,
+                        blink::kMacSystemColorIDCount);
   return color_map_for_scheme[static_cast<size_t>(color_id)];
 }
 

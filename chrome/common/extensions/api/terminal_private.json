@@ -40,7 +40,6 @@
           {
             "type": "function",
             "name": "callback",
-            "optional": false,
             "description": "Returns id of the launched process. If no process was launched returns -1.",
             "parameters": [
               {
@@ -69,7 +68,6 @@
           {
             "type": "function",
             "name": "callback",
-            "optional": false,
             "description": "Returns id of the launched vmshell process. If no process was launched returns -1.",
             "parameters": [
               {
@@ -173,11 +171,6 @@
         "type": "function",
         "description": "Called from |onProcessOutput| when the event is dispatched to terminal extension. Observing the terminal process output will be paused after |onProcessOutput| is dispatched until this method is called.",
         "parameters": [
-          {
-            "name": "tabId",
-            "type": "integer",
-            "description": "Tab ID from |onProcessOutput| event."
-          },
           {
             "name": "id",
             "type": "string",

@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
@@ -29,10 +28,6 @@ namespace net {
 class HttpRequestHeaders;
 struct NetworkTrafficAnnotationTag;
 }  // namespace net
-
-namespace url {
-class Origin;
-}  // namespace url
 
 namespace content {
 struct BackgroundFetchResponse;
@@ -58,8 +53,6 @@ enum class BackgroundFetchPermission {
 class CONTENT_EXPORT BackgroundFetchDelegate {
  public:
   using GetIconDisplaySizeCallback = base::OnceCallback<void(const gfx::Size&)>;
-  using GetPermissionForOriginCallback =
-      base::OnceCallback<void(BackgroundFetchPermission)>;
   using GetUploadDataCallback =
       base::OnceCallback<void(blink::mojom::SerializedBlobPtr)>;
 
@@ -115,13 +108,6 @@ class CONTENT_EXPORT BackgroundFetchDelegate {
 
   // Gets size of the icon to display with the Background Fetch UI.
   virtual void GetIconDisplaySize(GetIconDisplaySizeCallback callback) = 0;
-
-  // Checks whether |origin| has permission to start a Background Fetch.
-  // |wc_getter| can be null, which means this is running from a worker context.
-  virtual void GetPermissionForOrigin(
-      const url::Origin& origin,
-      const WebContents::Getter& wc_getter,
-      GetPermissionForOriginCallback callback) = 0;
 
   // Creates a new download grouping identified by |job_unique_id|. Further
   // downloads started by DownloadUrl will also use this |job_unique_id| so that

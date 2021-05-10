@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef UI_GL_GPU_FENCE_H_
-#define UI_GL_GPU_FENCE_H_
+#ifndef UI_GFX_GPU_FENCE_H_
+#define UI_GFX_GPU_FENCE_H_
 
 #include "base/macros.h"
 #include "build/build_config.h"
@@ -25,6 +25,8 @@ class GFX_EXPORT GpuFence {
   // Constructor takes ownership of the source handle's resources.
   explicit GpuFence(GpuFenceHandle handle);
   GpuFence() = delete;
+  GpuFence(GpuFence&& other);
+  GpuFence& operator=(GpuFence&& other);
   ~GpuFence();
 
   // Returns a const reference to the underlying GpuFenceHandle
@@ -52,4 +54,4 @@ class GFX_EXPORT GpuFence {
 
 }  // namespace gfx
 
-#endif  // UI_GL_GPU_FENCE_H_
+#endif  // UI_GFX_GPU_FENCE_H_

@@ -1,0 +1,1198 @@
+// Copyright 2021 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "content/services/auction_worklet/bidder_worklet.h"
+
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "base/bind.h"
+#include "base/optional.h"
+#include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
+#include "base/test/bind.h"
+#include "base/test/task_environment.h"
+#include "content/services/auction_worklet/auction_v8_helper.h"
+#include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom.h"
+#include "content/services/auction_worklet/trusted_bidding_signals.h"
+#include "content/services/auction_worklet/worklet_test_util.h"
+#include "mojo/public/cpp/bindings/struct_ptr.h"
+#include "net/http/http_status_code.h"
+#include "services/network/test/test_url_loader_factory.h"
+#include "testing/gmock/include/gmock/gmock-matchers.h"
+#include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom.h"
+#include "url/gurl.h"
+#include "url/origin.h"
+
+using testing::HasSubstr;
+using testing::StartsWith;
+
+namespace auction_worklet {
+namespace {
+
+// Creates generateBid() scripts with the specified result value, in raw
+// Javascript. Allows returning generateBid() arguments, arbitrary values,
+// incorrect types, etc.
+std::string CreateGenerateBidScript(const std::string& raw_return_value) {
+  constexpr char kGenerateBidScript[] = R"(
+    function generateBid(interestGroup, auctionSignals, perBuyerSignals,
+                         trustedBiddingSignals, browserSignals) {
+      return %s;
+    }
+  )";
+  return base::StringPrintf(kGenerateBidScript, raw_return_value.c_str());
+}
+
+// Returns a working script, primarily for testing failure cases where it
+// should not be run.
+static std::string CreateBasicGenerateBidScript() {
+  return CreateGenerateBidScript(
+      R"({ad: ["ad"], bid:1, render:"https://response.test/"})");
+}
+
+// Creates bidder worklet script with a reportWin() function with the specified
+// body, and the default generateBid() function.
+std::string CreateReportWinScript(const std::string& function_body) {
+  constexpr char kReportWinScript[] = R"(
+    function reportWin(auctionSignals, perBuyerSignals, sellerSignals,
+                       browserSignals) {
+      %s;
+    }
+  )";
+  return CreateBasicGenerateBidScript() +
+         base::StringPrintf(kReportWinScript, function_body.c_str());
+}
+
+class BidderWorkletTest : public testing::Test {
+ public:
+  BidderWorkletTest() { SetDefaultParameters(); }
+
+  ~BidderWorkletTest() override = default;
+
+  // Default values. No test actually depends on these being anything but valid,
+  // but test that set these can use this to reset values to default after each
+  // test.
+  void SetDefaultParameters() {
+    interest_group_owner_ = url::Origin::Create(GURL("https://foo.test"));
+    interest_group_name_ = "Fred";
+    interest_group_user_bidding_signals_ = std::string();
+
+    interest_group_ads_.clear();
+    interest_group_ads_.push_back(blink::mojom::InterestGroupAd::New(
+        GURL("https://response.test/"), base::nullopt /* metadata */));
+
+    interest_group_trusted_bidding_signals_url_.reset();
+    interest_group_trusted_bidding_signals_keys_.reset();
+
+    browser_signal_join_count_ = 2;
+    browser_signal_bid_count_ = 3;
+    browser_signal_prev_wins_.clear();
+
+    auction_signals_ = "[\"auction_signals\"]";
+    null_auction_signals_ = false;
+    per_buyer_signals_ = "[\"per_buyer_signals\"]";
+    null_per_buyer_signals_ = false;
+    browser_signal_top_window_origin_ =
+        url::Origin::Create(GURL("https://top.window.test/"));
+    browser_signal_seller_ = "browser_signal_seller";
+    seller_signals_ = "[\"seller_signals\"]";
+    browser_signal_render_url_ = GURL("https://render_url.test/");
+    browser_signal_ad_render_fingerprint_ =
+        "browser_signal_ad_render_fingerprint";
+    browser_signal_bid_ = 1;
+  }
+
+  // Configures `url_loader_factory_` to return a generateBid() script with the
+  // specified return line Then runs the script, expecting the provided result.
+  void RunGenerateBidWithReturnValueExpectingResult(
+      const std::string& raw_return_value,
+      const base::Optional<BidderWorklet::Bid> expected_bid,
+      std::vector<std::string> expected_error_msgs =
+          std::vector<std::string>()) {
+    RunGenerateBidWithJavascriptExpectingResult(
+        CreateGenerateBidScript(raw_return_value), expected_bid,
+        expected_error_msgs);
+  }
+
+  // Configures `url_loader_factory_` to return a script with the specified
+  // Javascript Then runs the script, expecting the provided result.
+  void RunGenerateBidWithJavascriptExpectingResult(
+      const std::string& javascript,
+      const base::Optional<BidderWorklet::Bid> expected_bid,
+      std::vector<std::string> expected_error_msgs =
+          std::vector<std::string>()) {
+    SCOPED_TRACE(javascript);
+    AddJavascriptResponse(&url_loader_factory_, interest_group_bidding_url_,
+                          javascript);
+    RunGenerateBidExpectingResult(expected_bid, expected_error_msgs);
+  }
+
+  // Loads and runs a generateBid() script, expecting the provided result.
+  void RunGenerateBidExpectingResult(
+      const base::Optional<BidderWorklet::Bid> expected_bid,
+      std::vector<std::string> expected_error_msgs =
+          std::vector<std::string>()) {
+    auto bidder_worklet = CreateWorkletAndGenerateBid();
+
+    EXPECT_EQ(expected_bid.has_value(), bid_.has_value());
+    if (expected_bid.has_value() && bid_.has_value()) {
+      EXPECT_EQ(expected_bid->ad, bid_->ad);
+      EXPECT_EQ(expected_bid->bid, bid_->bid);
+      EXPECT_EQ(expected_bid->render_url, bid_->render_url);
+    }
+    EXPECT_EQ(expected_error_msgs, bid_error_msgs_);
+  }
+
+  // Configures `url_loader_factory_` to return a reportWin() script with the
+  // specified body. Then runs the script, expecting the provided result.
+  void RunReportWinWithFunctionBodyExpectingResult(
+      const std::string& function_body,
+      const base::Optional<GURL>& expected_report_url,
+      const std::vector<std::string>& expected_error_msgs =
+          std::vector<std::string>()) {
+    RunReportWinWithJavascriptExpectingResult(
+        CreateReportWinScript(function_body), expected_report_url,
+        expected_error_msgs);
+  }
+
+  // Configures `url_loader_factory_` to return a reportWin() script with the
+  // specified Javascript. Then runs the script, expecting the provided result.
+  void RunReportWinWithJavascriptExpectingResult(
+      const std::string& javascript,
+      const base::Optional<GURL>& expected_report_url,
+      const std::vector<std::string>& expected_error_msgs =
+          std::vector<std::string>()) {
+    SCOPED_TRACE(javascript);
+    AddJavascriptResponse(&url_loader_factory_, interest_group_bidding_url_,
+                          javascript);
+    RunReportWinExpectingResult(expected_report_url, expected_error_msgs);
+  }
+
+  // Loads and runs a reportWin() with the provided return line, expecting the
+  // supplied result.
+  void RunReportWinExpectingResult(
+      const base::Optional<GURL>& expected_report_url,
+      const std::vector<std::string>& expected_error_msgs =
+          std::vector<std::string>()) {
+    auto bidder_worket = CreateWorkletAndGenerateBid();
+    ASSERT_TRUE(bidder_worket);
+
+    base::RunLoop run_loop;
+    bidder_worket->ReportWin(
+        seller_signals_, browser_signal_render_url_,
+        browser_signal_ad_render_fingerprint_, browser_signal_bid_,
+        base::BindLambdaForTesting(
+            [&run_loop, &expected_report_url, &expected_error_msgs](
+                const base::Optional<GURL>& report_url,
+                const std::vector<std::string>& error_msgs) {
+              EXPECT_EQ(expected_report_url, report_url);
+              EXPECT_EQ(expected_error_msgs, error_msgs);
+              run_loop.Quit();
+            }));
+    run_loop.Run();
+  }
+
+  // Create a BidderWorklet, waiting for the URLLoader to complete. Returns
+  // nullptr on failure.
+  std::unique_ptr<BidderWorklet> CreateWorkletAndGenerateBid() {
+    CHECK(!load_script_run_loop_);
+
+    blink::mojom::InterestGroupPtr interest_group =
+        blink::mojom::InterestGroup::New();
+    interest_group->owner = interest_group_owner_;
+    interest_group->name = interest_group_name_;
+    interest_group->bidding_url = interest_group_bidding_url_;
+    // Convert a string to an optional. Empty string means empty optional value.
+    if (!interest_group_user_bidding_signals_.empty()) {
+      interest_group->user_bidding_signals =
+          interest_group_user_bidding_signals_;
+    }
+    interest_group->trusted_bidding_signals_url =
+        interest_group_trusted_bidding_signals_url_;
+    interest_group->trusted_bidding_signals_keys =
+        interest_group_trusted_bidding_signals_keys_;
+    interest_group->ads = std::vector<blink::mojom::InterestGroupAdPtr>();
+    for (const auto& ad : interest_group_ads_) {
+      interest_group->ads->emplace_back(ad.Clone());
+    }
+
+    mojom::BiddingBrowserSignalsPtr bidding_browser_signals =
+        mojom::BiddingBrowserSignals::New(
+            browser_signal_join_count_, browser_signal_bid_count_,
+            CloneWinList(browser_signal_prev_wins_));
+    mojom::BiddingInterestGroupPtr bidding_interest_group =
+        mojom::BiddingInterestGroup::New(std::move(interest_group),
+                                         std::move(bidding_browser_signals));
+
+    auto bidder_worket = std::make_unique<BidderWorklet>(
+        &url_loader_factory_, std::move(bidding_interest_group),
+        null_auction_signals_
+            ? base::nullopt
+            : base::make_optional<std::string>(auction_signals_),
+        null_per_buyer_signals_
+            ? base::nullopt
+            : base::make_optional<std::string>(per_buyer_signals_),
+        browser_signal_top_window_origin_, browser_signal_seller_,
+        auction_start_time_, &v8_helper_,
+        base::BindOnce(&BidderWorkletTest::CreateWorkletCallback,
+                       base::Unretained(this)));
+    load_script_run_loop_ = std::make_unique<base::RunLoop>();
+    load_script_run_loop_->Run();
+    load_script_run_loop_.reset();
+    if (!bid_)
+      return nullptr;
+    return bidder_worket;
+  }
+
+  const base::Optional<BidderWorklet::Bid>& bid() const { return bid_; }
+  const std::vector<std::string> bid_error_msgs() const {
+    return bid_error_msgs_;
+  }
+
+ protected:
+  std::vector<mojo::StructPtr<mojom::PreviousWin>> CloneWinList(
+      const std::vector<mojo::StructPtr<mojom::PreviousWin>>& prev_win_list) {
+    std::vector<mojo::StructPtr<mojom::PreviousWin>> out;
+    for (const auto& prev_win : prev_win_list) {
+      out.push_back(prev_win->Clone());
+    }
+    return out;
+  }
+
+  void CreateWorkletCallback(base::Optional<BidderWorklet::Bid> bid,
+                             std::vector<std::string> error_msgs) {
+    bid_ = std::move(bid);
+    bid_error_msgs_ = std::move(error_msgs);
+    load_script_run_loop_->Quit();
+  }
+
+  base::test::TaskEnvironment task_environment_;
+
+  // Values used to construct the BiddingInterestGroup passed to the
+  // BidderWorklet.
+  url::Origin interest_group_owner_;
+  std::string interest_group_name_;
+  const GURL interest_group_bidding_url_ = GURL("https://url.test/");
+  // This is actually an optional value, but to make testing easier, use a
+  // string. An empty string means nullptr.
+  std::string interest_group_user_bidding_signals_;
+  std::vector<blink::mojom::InterestGroupAdPtr> interest_group_ads_;
+  base::Optional<GURL> interest_group_trusted_bidding_signals_url_;
+  base::Optional<std::vector<std::string>>
+      interest_group_trusted_bidding_signals_keys_;
+  int browser_signal_join_count_;
+  int browser_signal_bid_count_;
+  std::vector<mojo::StructPtr<mojom::PreviousWin>> browser_signal_prev_wins_;
+
+  std::string auction_signals_;
+  // true to pass nullopt rather than `auction_signals_`.
+  bool null_auction_signals_ = false;
+
+  std::string per_buyer_signals_;
+  // true to pass nullopt rather than `per_buyer_signals_`.
+  bool null_per_buyer_signals_ = false;
+
+  url::Origin browser_signal_top_window_origin_;
+  std::string browser_signal_seller_;
+  std::string seller_signals_;
+  GURL browser_signal_render_url_;
+  std::string browser_signal_ad_render_fingerprint_;
+  double browser_signal_bid_;
+
+  // Use a single constant start time. Only delta times are provided to scripts,
+  // relative to the time of the auction, so no need to vary the auction time.
+  const base::Time auction_start_time_ = base::Time::Now();
+
+  // Reuseable run loop for loading the script. It's always populated after
+  // creating the worklet, to cause a crash if the callback is invoked
+  // synchronously.
+  std::unique_ptr<base::RunLoop> load_script_run_loop_;
+
+  // Values passed to the GenerateBidCallback().
+  base::Optional<BidderWorklet::Bid> bid_;
+  std::vector<std::string> bid_error_msgs_;
+
+  network::TestURLLoaderFactory url_loader_factory_;
+  AuctionV8Helper v8_helper_;
+};
+
+TEST_F(BidderWorkletTest, NetworkError) {
+  url_loader_factory_.AddResponse(interest_group_bidding_url_.spec(),
+                                  CreateBasicGenerateBidScript(),
+                                  net::HTTP_NOT_FOUND);
+  RunGenerateBidExpectingResult(
+      base::nullopt /* expected_bid */,
+      {"Failed to load https://url.test/ HTTP status = 404 Not Found."});
+}
+
+TEST_F(BidderWorkletTest, CompileError) {
+  AddJavascriptResponse(&url_loader_factory_, interest_group_bidding_url_,
+                        "Invalid Javascript");
+  EXPECT_FALSE(CreateWorkletAndGenerateBid());
+
+  EXPECT_FALSE(bid());
+  ASSERT_EQ(1u, bid_error_msgs().size());
+  EXPECT_THAT(bid_error_msgs()[0], StartsWith("https://url.test/:1 "));
+  EXPECT_THAT(bid_error_msgs()[0], HasSubstr("SyntaxError"));
+}
+
+// Test parsing of return values.
+TEST_F(BidderWorkletTest, GenerateBidResult) {
+  // Base case. Also serves to make sure the script returned by
+  // CreateBasicGenerateBidScript() does indeed work.
+  RunGenerateBidWithJavascriptExpectingResult(
+      CreateBasicGenerateBidScript(),
+      BidderWorklet::Bid("[\"ad\"]", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+
+  // --------
+  // Vary ad
+  // --------
+
+  // Make sure "ad" can be of a variety of JS object types.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: "ad", bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("\"ad\"", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: {a:1,b:null}, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid(R"({"a":1,"b":null})", 1,
+                         GURL("https://response.test/"), base::TimeDelta()));
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: [2.5,[]], bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("[2.5,[]]", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: -5, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("-5", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+  // Some values that can't be represented in JSON become null.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: 0/0, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("null", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: [globalThis.not_defined], bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("[null]", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: [function() {return 1;}], bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("[null]", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+
+  // Other values JSON can't represent result in failing instead of null.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: globalThis.not_defined, bid:1, render:"https://response.test/"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() return value "
+       "has incorrect structure."});
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: function() {return 1;}, bid:1, render:"https://response.test/"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() return value "
+       "has incorrect structure."});
+
+  // Make sure recursive structures aren't allowed in ad field.
+  RunGenerateBidWithJavascriptExpectingResult(
+      R"(
+        function generateBid() {
+          var a = [];
+          a[0] = a;
+          return {ad: a, bid:1, render:"https://response.test/"};
+        }
+      )",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() return value "
+       "has incorrect structure."});
+
+  // --------
+  // Vary bid
+  // --------
+
+  // Valid positive bid values.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: "ad", bid:1.5, render:"https://response.test/"})",
+      BidderWorklet::Bid("\"ad\"", 1.5, GURL("https://response.test/"),
+                         base::TimeDelta()));
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: "ad", bid:2, render:"https://response.test/"})",
+      BidderWorklet::Bid("\"ad\"", 2, GURL("https://response.test/"),
+                         base::TimeDelta()));
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: "ad", bid:0.001, render:"https://response.test/"})",
+      BidderWorklet::Bid("\"ad\"", 0.001, GURL("https://response.test/"),
+                         base::TimeDelta()));
+
+  // Bids <= 0.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:0, render:"https://response.test/"})",
+      base::nullopt /* expected_bid */);
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:-10, render:"https://response.test/"})",
+      base::nullopt /* expected_bid */);
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:-1.5, render:"https://response.test/"})",
+      base::nullopt /* expected_bid */);
+
+  // Infinite and NaN bid.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:1/0, render:"https://response.test/"})",
+      base::nullopt /* expected_bid */);
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:-1/0, render:"https://response.test/"})",
+      base::nullopt /* expected_bid */);
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:0/0, render:"https://response.test/"})",
+      base::nullopt /* expected_bid */);
+
+  // Non-numeric bid.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:"1", render:"https://response.test/"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() return value "
+       "has incorrect structure."});
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:[1], render:"https://response.test/"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() return value "
+       "has incorrect structure."});
+
+  // ---------
+  // Vary URL.
+  // ---------
+
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("[\"ad\"]", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+
+  // Disallowed schemes.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:1, render:"http://response.test/"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() returned "
+       "render_url isn't a valid https:// URL."});
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:1, render:"chrome-extension://response.test/"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() returned "
+       "render_url isn't a valid https:// URL."});
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:1, render:"about:blank"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() returned "
+       "render_url isn't a valid https:// URL."});
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:1, render:"data:,foo"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() returned "
+       "render_url isn't a valid https:// URL."});
+
+  // Invalid URLs.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:1, render:"test"})", base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() returned "
+       "render_url isn't a valid https:// URL."});
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:1, render:"http://"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() returned "
+       "render_url isn't a valid https:// URL."});
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:1, render:["http://response.test/"]})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() return value "
+       "has incorrect structure."});
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:1, render:9})", base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() return value "
+       "has incorrect structure."});
+
+  // ------------
+  // Other cases.
+  // ------------
+
+  // No return value.
+  RunGenerateBidWithReturnValueExpectingResult(
+      "", base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() return value not an object."});
+
+  // Missing value.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({bid:"a", render:"https://response.test/"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() return value "
+       "has incorrect structure."});
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], render:"https://response.test/"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() return value "
+       "has incorrect structure."});
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: ["ad"], bid:"a"})", base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() return value "
+       "has incorrect structure."});
+
+  // Valid JS, but missing function.
+  RunGenerateBidWithJavascriptExpectingResult(
+      R"(
+        function someOtherFunction() {
+          return {ad: ["ad"], bid:1, render:"https://response.test/"};
+        }
+      )",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ `generateBid` is not a function."});
+  RunGenerateBidWithJavascriptExpectingResult(
+      "", base::nullopt /* expected_bid */,
+      {"https://url.test/ `generateBid` is not a function."});
+  RunGenerateBidWithJavascriptExpectingResult(
+      "5", base::nullopt /* expected_bid */,
+      {"https://url.test/ `generateBid` is not a function."});
+
+  // Throw exception.
+  RunGenerateBidWithJavascriptExpectingResult(
+      "shrimp", base::nullopt /* expected_bid */,
+      {"https://url.test/:1 Uncaught ReferenceError: "
+       "shrimp is not defined."});
+}
+
+// Make sure Date() is not available when running generateBid().
+TEST_F(BidderWorkletTest, GenerateBidDateNotAvailable) {
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: Date().toString(), bid:1, render:"https://response.test/"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/:4 Uncaught ReferenceError: Date is not defined."});
+}
+
+// Checks that most input parameters are correctly passed in, and each is parsed
+// as JSON or not, depending on the parameter. Does not test `previousWins` or
+// `trustedBiddingSignals`.
+TEST_F(BidderWorkletTest, GenerateBidBasicInputParameters) {
+  // Parameters that are C++ strings, including JSON strings.
+  const struct StringTestCase {
+    // String used in JS to access the parameter.
+    const char* name;
+    bool is_json;
+    // Pointer to location at which the string can be modified.
+    std::string* value_ptr;
+  } kStringTestCases[] = {
+      {
+          "interestGroup.name",
+          false /* is_json */,
+          &interest_group_name_,
+      },
+      {
+          "interestGroup.userBiddingSignals",
+          true /* is_json */,
+          &interest_group_user_bidding_signals_,
+      },
+      {
+          "auctionSignals",
+          true /* is_json */,
+          &auction_signals_,
+      },
+      {
+          "perBuyerSignals",
+          true /* is_json */,
+          &per_buyer_signals_,
+      },
+      {
+          "browserSignals.seller",
+          false /* is_json */,
+          &browser_signal_seller_,
+      },
+  };
+
+  for (const auto& test_case : kStringTestCases) {
+    SCOPED_TRACE(test_case.name);
+
+    *test_case.value_ptr = "foo";
+    RunGenerateBidWithReturnValueExpectingResult(
+        base::StringPrintf(
+            R"({ad: %s, bid:1, render:"https://response.test/"})",
+            test_case.name),
+        test_case.is_json
+            ? base::Optional<BidderWorklet::Bid>()
+            : BidderWorklet::Bid(R"("foo")", 1, GURL("https://response.test/"),
+                                 base::TimeDelta()));
+
+    *test_case.value_ptr = R"("foo")";
+    RunGenerateBidWithReturnValueExpectingResult(
+        base::StringPrintf(
+            R"({ad: %s, bid:1, render:"https://response.test/"})",
+            test_case.name),
+        test_case.is_json
+            ? BidderWorklet::Bid(R"("foo")", 1, GURL("https://response.test/"),
+                                 base::TimeDelta())
+            : BidderWorklet::Bid(R"("\"foo\"")", 1,
+                                 GURL("https://response.test/"),
+                                 base::TimeDelta()));
+
+    *test_case.value_ptr = "[1]";
+    RunGenerateBidWithReturnValueExpectingResult(
+        base::StringPrintf(
+            R"({ad: %s[0], bid:1, render:"https://response.test/"})",
+            test_case.name),
+        test_case.is_json
+            ? BidderWorklet::Bid("1", 1, GURL("https://response.test/"),
+                                 base::TimeDelta())
+            : BidderWorklet::Bid(R"("[")", 1, GURL("https://response.test/"),
+                                 base::TimeDelta()));
+    SetDefaultParameters();
+  }
+
+  interest_group_owner_ = url::Origin::Create(GURL("https://foo.test/"));
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: interestGroup.owner, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid(R"("https://foo.test")", 1,
+                         GURL("https://response.test/"), base::TimeDelta()));
+
+  interest_group_owner_ = url::Origin::Create(GURL("https://[::1]:40000/"));
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: interestGroup.owner, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid(R"("https://[::1]:40000")", 1,
+                         GURL("https://response.test/"), base::TimeDelta()));
+  SetDefaultParameters();
+
+  // Test the empty `userBiddingSignals` case, too. It's actually an optional
+  // unlike the other values. Setting it to the empty string makes the optional
+  // nullptr. This results in interestGroup.userBiddingSignals not being
+  // populated (so undefined, rather than null).
+  interest_group_user_bidding_signals_ = "";
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad:typeof interestGroup.userBiddingSignals, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid(R"("undefined")", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+  SetDefaultParameters();
+
+  browser_signal_top_window_origin_ =
+      url::Origin::Create(GURL("https://top.window.test/"));
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: browserSignals.topWindowHostname, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid(R"("top.window.test")", 1,
+                         GURL("https://response.test/"), base::TimeDelta()));
+  SetDefaultParameters();
+
+  const struct IntegerTestCase {
+    // String used in JS to access the parameter.
+    const char* name;
+    // Pointer to location at which the integer can be modified.
+    int* value_ptr;
+  } kIntegerTestCases[] = {
+      {"browserSignals.joinCount", &browser_signal_join_count_},
+      {"browserSignals.bidCount", &browser_signal_bid_count_}};
+
+  for (const auto& test_case : kIntegerTestCases) {
+    SCOPED_TRACE(test_case.name);
+
+    *test_case.value_ptr = 0;
+    RunGenerateBidWithReturnValueExpectingResult(
+        base::StringPrintf(
+            R"({ad: %s, bid:1, render:"https://response.test/"})",
+            test_case.name),
+        BidderWorklet::Bid("0", 1, GURL("https://response.test/"),
+                           base::TimeDelta()));
+
+    *test_case.value_ptr = 10;
+    RunGenerateBidWithReturnValueExpectingResult(
+        base::StringPrintf(
+            R"({ad: %s, bid:1, render:"https://response.test/"})",
+            test_case.name),
+        BidderWorklet::Bid("10", 1, GURL("https://response.test/"),
+                           base::TimeDelta()));
+    SetDefaultParameters();
+  }
+
+  // Test InterestGroup.ads field.
+
+  // A bid URL that's not in the InterestGroup's ads list should fail.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: 0, bid:1, render:"https://response2.test/"})",
+      base::nullopt /* expected_bid */,
+      {"https://url.test/ generateBid() returned render_url isn't one of "
+       "the registered creative URLs."});
+
+  // Adding an ad with a corresponding `renderUrl` should result in success.
+  // Also check the `interestGroup.ads` field passed to Javascript.
+  interest_group_ads_.push_back(blink::mojom::InterestGroupAd::New(
+      GURL("https://response2.test/"), R"(["metadata"])" /* metadata */));
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: interestGroup.ads, bid:1, render:"https://response2.test/"})",
+      BidderWorklet::Bid("[{\"renderUrl\":\"https://response.test/\"},"
+                         "{\"renderUrl\":\"https://response2.test/"
+                         "\",\"metadata\":[\"metadata\"]}]",
+                         1, GURL("https://response2.test/"),
+                         base::TimeDelta()));
+
+  // Make sure `metadata` is treated as an object, instead of a raw string.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: interestGroup.ads[1].metadata[0], bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("\"metadata\"", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+}
+
+// Test handling of null auctionSignals and perBuyerSignals to generateBid.
+TEST_F(BidderWorkletTest, GenerateBidParametersOptionalString) {
+  constexpr char kRetVal[] = R"({
+    ad: [auctionSignals === null, perBuyerSignals === null],
+    bid: 1,
+    render: "https://response.test/"
+  })";
+
+  SetDefaultParameters();
+  null_auction_signals_ = false;
+  null_per_buyer_signals_ = false;
+  RunGenerateBidWithReturnValueExpectingResult(
+      kRetVal,
+      BidderWorklet::Bid("[false,false]", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+
+  SetDefaultParameters();
+  null_auction_signals_ = false;
+  null_per_buyer_signals_ = true;
+  RunGenerateBidWithReturnValueExpectingResult(
+      kRetVal,
+      BidderWorklet::Bid("[false,true]", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+
+  SetDefaultParameters();
+  null_auction_signals_ = true;
+  null_per_buyer_signals_ = false;
+  RunGenerateBidWithReturnValueExpectingResult(
+      kRetVal,
+      BidderWorklet::Bid("[true,false]", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+
+  SetDefaultParameters();
+  null_auction_signals_ = true;
+  null_per_buyer_signals_ = true;
+  RunGenerateBidWithReturnValueExpectingResult(
+      kRetVal,
+      BidderWorklet::Bid("[true,true]", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+}
+
+// Utility methods to create vectors of PreviousWin. Needed because StructPtr's
+// don't allow copying.
+
+std::vector<mojo::StructPtr<mojom::PreviousWin>> CreateWinList(
+    const mojo::StructPtr<mojom::PreviousWin>& win1) {
+  std::vector<mojo::StructPtr<mojom::PreviousWin>> out;
+  out.emplace_back(win1.Clone());
+  return out;
+}
+
+std::vector<mojo::StructPtr<mojom::PreviousWin>> CreateWinList(
+    const mojo::StructPtr<mojom::PreviousWin>& win1,
+    const mojo::StructPtr<mojom::PreviousWin>& win2) {
+  std::vector<mojo::StructPtr<mojom::PreviousWin>> out;
+  out.emplace_back(win1.Clone());
+  out.emplace_back(win2.Clone());
+  return out;
+}
+
+TEST_F(BidderWorkletTest, GenerateBidPrevWins) {
+  base::TimeDelta delta = base::TimeDelta::FromSeconds(100);
+  base::TimeDelta tiny_delta = base::TimeDelta::FromMilliseconds(500);
+
+  base::Time time1 = auction_start_time_ - delta - delta;
+  base::Time time2 = auction_start_time_ - delta - tiny_delta;
+  base::Time future_time = auction_start_time_ + delta;
+
+  auto win1 = mojom::PreviousWin::New(time1, R"("ad1")");
+  auto win2 = mojom::PreviousWin::New(time2, R"(["ad2"])");
+  auto future_win = mojom::PreviousWin::New(future_time, R"("future_ad")");
+  struct TestCase {
+    std::vector<mojo::StructPtr<mojom::PreviousWin>> prev_wins;
+    // Value to output as the ad data.
+    const char* ad;
+    // Expected output in the `ad` field of the result.
+    const char* expected_ad;
+  } test_cases[] = {
+      {
+          {},
+          "browserSignals.prevWins",
+          "[]",
+      },
+      {
+          CreateWinList(win1),
+          "browserSignals.prevWins",
+          R"([[200,"ad1"]])",
+      },
+      // Make sure it's passed on as an object and not a string.
+      {
+          CreateWinList(win1),
+          "browserSignals.prevWins[0]",
+          R"([200,"ad1"])",
+      },
+      // Test rounding.
+      {
+          CreateWinList(win2),
+          "browserSignals.prevWins",
+          R"([[100,["ad2"]]])",
+      },
+      // Multiple previous wins.
+      {
+          CreateWinList(win1, win2),
+          "browserSignals.prevWins",
+          R"([[200,"ad1"],[100,["ad2"]]])",
+      },
+      // Times are trimmed at 0.
+      {
+          CreateWinList(future_win),
+          "browserSignals.prevWins",
+          R"([[0,"future_ad"]])",
+      },
+      // Out of order times.
+      {
+          CreateWinList(future_win, win1),
+          "browserSignals.prevWins",
+          R"([[0,"future_ad"],[200,"ad1"]])",
+      },
+  };
+
+  for (auto& test_case : test_cases) {
+    SCOPED_TRACE(test_case.ad);
+    // StructPtrs aren't copiable, so this effectively destroys each test case.
+    browser_signal_prev_wins_ = std::move(test_case.prev_wins);
+    RunGenerateBidWithReturnValueExpectingResult(
+        base::StringPrintf(
+            R"({ad: %s, bid:1, render:"https://response.test/"})",
+            test_case.ad),
+        BidderWorklet::Bid(test_case.expected_ad, 1,
+                           GURL("https://response.test/"), base::TimeDelta()));
+  }
+}
+
+TEST_F(BidderWorkletTest, GenerateBidTrustedBiddingSignals) {
+  const GURL kBaseSignalsUrl("https://signals.test/");
+  const GURL kFullSignalsUrl(
+      "https://signals.test/?hostname=top.window.test&keys=key1,key2");
+
+  const char kJson[] = R"(
+    {
+      "key1": 1,
+      "key2": [2]
+    }
+  )";
+
+  // Request with null TrustedBiddingSignals keys and URL. No request should be
+  // made.
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: trustedBiddingSignals, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("null", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+
+  // Request with TrustedBiddingSignals keys and null URL. No request should be
+  // made.
+  interest_group_trusted_bidding_signals_keys_ =
+      std::vector<std::string>({"key1", "key2"});
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: trustedBiddingSignals, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("null", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+
+  // Request with TrustedBiddingSignals URL and null keys. No request should be
+  // made.
+  interest_group_trusted_bidding_signals_url_ = kBaseSignalsUrl;
+  interest_group_trusted_bidding_signals_keys_.reset();
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: trustedBiddingSignals, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("null", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+
+  // Request with TrustedBiddingSignals URL and empty keys. No request should be
+  // made.
+  interest_group_trusted_bidding_signals_keys_ = std::vector<std::string>();
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: trustedBiddingSignals, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("null", 1, GURL("https://response.test/"),
+                         base::TimeDelta()));
+
+  // Request with valid TrustedBiddingSignals URL and non-empty keys. Request
+  // should be made. The request fails.
+  interest_group_trusted_bidding_signals_keys_ =
+      std::vector<std::string>({"key1", "key2"});
+  url_loader_factory_.AddResponse(kFullSignalsUrl.spec(), kJson,
+                                  net::HTTP_NOT_FOUND);
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: trustedBiddingSignals, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid("null", 1, GURL("https://response.test/"),
+                         base::TimeDelta()),
+      {"Failed to load "
+       "https://signals.test/?hostname=top.window.test&keys=key1,key2 HTTP "
+       "status = 404 Not Found."});
+
+  // Request with valid TrustedBiddingSignals URL and non-empty keys. Request
+  // should be made. The request succeeds.
+  AddJsonResponse(&url_loader_factory_, kFullSignalsUrl, kJson);
+  RunGenerateBidWithReturnValueExpectingResult(
+      R"({ad: trustedBiddingSignals, bid:1, render:"https://response.test/"})",
+      BidderWorklet::Bid(R"({"key1":1,"key2":[2]})", 1,
+                         GURL("https://response.test/"), base::TimeDelta()));
+}
+
+TEST_F(BidderWorkletTest, ReportWin) {
+  RunReportWinWithFunctionBodyExpectingResult(
+      "", base::nullopt /* expected_report_url */);
+  RunReportWinWithFunctionBodyExpectingResult(
+      R"(return "https://ignored.test/")",
+      base::nullopt /* expected_report_url */);
+
+  RunReportWinWithFunctionBodyExpectingResult(
+      R"(sendReportTo("https://foo.test"))", GURL("https://foo.test/"));
+  RunReportWinWithFunctionBodyExpectingResult(
+      R"(sendReportTo("https://foo.test/bar"))", GURL("https://foo.test/bar"));
+
+  RunReportWinWithFunctionBodyExpectingResult(
+      R"(sendReportTo("http://http.not.allowed.test"))",
+      base::nullopt /* expected_report_url */,
+      {"https://url.test/:9 Uncaught TypeError: sendReportTo must be passed a "
+       "valid HTTPS url."});
+  RunReportWinWithFunctionBodyExpectingResult(
+      R"(sendReportTo("file:///file.not.allowed.test"))",
+      base::nullopt /* expected_report_url */,
+      {"https://url.test/:9 Uncaught TypeError: sendReportTo must be passed a "
+       "valid HTTPS url."});
+
+  RunReportWinWithFunctionBodyExpectingResult(
+      R"(sendReportTo(""))", base::nullopt /* expected_report_url */,
+      {"https://url.test/:9 Uncaught TypeError: sendReportTo must be passed a "
+       "valid HTTPS url."});
+
+  RunReportWinWithFunctionBodyExpectingResult(
+      R"(sendReportTo("https://foo.test");sendReportTo("https://foo.test"))",
+      base::nullopt /* expected_report_url */,
+      {"https://url.test/:9 Uncaught TypeError: sendReportTo may be called at "
+       "most once."});
+}
+
+// Make sure Date() is not available when running reportWin().
+TEST_F(BidderWorkletTest, ReportWinDateNotAvailable) {
+  RunReportWinWithFunctionBodyExpectingResult(
+      R"(sendReportTo("https://foo.test/" + Date().toString()))",
+      base::nullopt /* expected_report_url */,
+      {"https://url.test/:9 Uncaught ReferenceError: Date is not defined."});
+}
+
+TEST_F(BidderWorkletTest, ReportWinParameters) {
+  // Parameters that are C++ strings, including JSON strings.
+  const struct StringTestCase {
+    // String used in JS to access the parameter.
+    const char* name;
+    bool is_json;
+
+    // Whether a value is also passed to generateBid(). Important because in the
+    // tests for passing non-JSON data as JSON, creating the worklet fails if
+    // generateBid() also takes the value as an argument.
+    bool passed_to_generate_bid;
+
+    // Pointer to location at which the string can be modified.
+    std::string* value_ptr;
+
+    // What error(s) to expect, if any. This can be empty when call fails in
+    // case it's due to something like passing non-JSON to JSON parameter which
+    // user code should be unable to trigger, and for which we thus do not
+    // produce an error message.
+    std::vector<std::string> expect_error_msgs;
+    std::vector<std::string> expect_error_msgs_array;
+  } kStringTestCases[] = {
+      {
+          "auctionSignals",
+          true /* is_json */,
+          true /* passed_to_generate_bid */,
+          &auction_signals_,
+          {},
+          {},
+      },
+      {
+          "perBuyerSignals",
+          true /* is_json */,
+          true /* passed_to_generate_bid */,
+          &per_buyer_signals_,
+          {},
+          {},
+      },
+      {
+          "sellerSignals",
+          true /* is_json */,
+          false /* passed_to_generate_bid */,
+          &seller_signals_,
+          {},
+          {},
+      },
+      {
+          "browserSignals.interestGroupName",
+          false /* is_json */,
+          true /* passed_to_generate_bid */,
+          &interest_group_name_,
+          {},
+          {"https://url.test/:9 Uncaught TypeError: sendReportTo must be "
+           "passed "
+           "a valid HTTPS url."},
+      },
+      {
+          "browserSignals.adRenderFingerprint",
+          false /* is_json */,
+          false /* passed_to_generate_bid */,
+          &browser_signal_ad_render_fingerprint_,
+          {},
+          {"https://url.test/:9 Uncaught TypeError: sendReportTo must be "
+           "passed "
+           "a valid HTTPS url."},
+      },
+  };
+
+  for (const auto& test_case : kStringTestCases) {
+    SCOPED_TRACE(test_case.name);
+
+    *test_case.value_ptr = "https://foo.test/";
+    if (!test_case.is_json || !test_case.passed_to_generate_bid) {
+      RunReportWinWithFunctionBodyExpectingResult(
+          base::StringPrintf("sendReportTo(%s)", test_case.name),
+          test_case.is_json ? base::Optional<GURL>()
+                            : GURL("https://foo.test/"),
+          {test_case.expect_error_msgs});
+    } else {
+      // JSON values passed the generateBid() result in failures there, before
+      // reportWin is called.
+      RunGenerateBidWithJavascriptExpectingResult(
+          CreateBasicGenerateBidScript(), base::nullopt /* expected_bid */);
+    }
+
+    *test_case.value_ptr = R"(["https://foo.test/"])";
+    RunReportWinWithFunctionBodyExpectingResult(
+        base::StringPrintf("sendReportTo(%s[0])", test_case.name),
+        test_case.is_json ? GURL("https://foo.test/") : base::Optional<GURL>(),
+        {test_case.expect_error_msgs_array});
+
+    SetDefaultParameters();
+  }
+
+  interest_group_owner_ = url::Origin::Create(GURL("https://foo.test/"));
+  // Add an extra ".test" because origin's shouldn't have a terminal slash,
+  // unlike URLs. If an extra slash were added to the origin, this would end up
+  // as https://foo.test/.test, instead.
+  RunReportWinWithFunctionBodyExpectingResult(
+      R"(sendReportTo(browserSignals.interestGroupOwner + ".test"))",
+      GURL("https://foo.test.test/"));
+
+  interest_group_owner_ = url::Origin::Create(GURL("https://[::1]:40000/"));
+  RunReportWinWithFunctionBodyExpectingResult(
+      R"(sendReportTo(browserSignals.interestGroupOwner))",
+      GURL("https://[::1]:40000/"));
+  SetDefaultParameters();
+
+  browser_signal_top_window_origin_ =
+      url::Origin::Create(GURL("https://top.window.test/"));
+  RunReportWinWithFunctionBodyExpectingResult(
+      R"(sendReportTo("https://" + browserSignals.topWindowHostname))",
+      GURL("https://top.window.test/"));
+  SetDefaultParameters();
+
+  browser_signal_render_url_ = GURL("https://shrimp.test/");
+  RunReportWinWithFunctionBodyExpectingResult(
+      "sendReportTo(browserSignals.renderUrl)", browser_signal_render_url_);
+  SetDefaultParameters();
+
+  browser_signal_bid_ = 4;
+  RunReportWinWithFunctionBodyExpectingResult(
+      R"(if (browserSignals.bid == 4)
+        sendReportTo("https://jumboshrimp.test"))",
+      GURL("https://jumboshrimp.test"));
+}
+
+// Test handling of null auctionSignals and perBuyerSignals to reportWin.
+TEST_F(BidderWorkletTest, ReportWinParametersOptionalString) {
+  constexpr char kBody[] = R"(
+    let url = "https://reporter.com/?" +
+                (auctionSignals === null  ? "aN" : "aP") +
+                (perBuyerSignals === null ? "pN" : "pP");
+    sendReportTo(url);
+  )";
+
+  SetDefaultParameters();
+  null_auction_signals_ = false;
+  null_per_buyer_signals_ = false;
+  RunReportWinWithFunctionBodyExpectingResult(
+      kBody, GURL("https://reporter.com/?aPpP"));
+
+  SetDefaultParameters();
+  null_auction_signals_ = false;
+  null_per_buyer_signals_ = true;
+  RunReportWinWithFunctionBodyExpectingResult(
+      kBody, GURL("https://reporter.com/?aPpN"));
+
+  SetDefaultParameters();
+  null_auction_signals_ = true;
+  null_per_buyer_signals_ = false;
+  RunReportWinWithFunctionBodyExpectingResult(
+      kBody, GURL("https://reporter.com/?aNpP"));
+
+  SetDefaultParameters();
+  null_auction_signals_ = true;
+  null_per_buyer_signals_ = true;
+  RunReportWinWithFunctionBodyExpectingResult(
+      kBody, GURL("https://reporter.com/?aNpN"));
+}
+
+// Subsequent runs of the same script should not affect each other. Same is true
+// for different scripts, but it follows from the single script case.
+//
+// TODO(mmenke): The current API only allows each generateBid() method to be
+// called once, but each ReportWin() to be called multiple times. When the API
+// is updated to allow multiple calls to generateBid(), update this method to
+// invoke it multiple times.
+TEST_F(BidderWorkletTest, ScriptIsolation) {
+  // Use arrays so that all values are references, to catch both the case where
+  // variables are persisted, and the case where what they refer to is
+  // persisted, but variables are overwritten between runs.
+  AddJavascriptResponse(&url_loader_factory_, interest_group_bidding_url_,
+                        R"(
+        // Globally scoped variable.
+        if (!globalThis.var1)
+          globalThis.var1 = [1];
+        generateBid = function() {
+          // Value only visible within this closure.
+          var var2 = [2];
+          return function() {
+            return {
+                // Expose values in "ad" object.
+                ad: [++globalThis.var1[0], ++var2[0]],
+                bid: 1,
+                render:"https://response.test/"
+            }
+          };
+        }();
+
+        function reportWin() {
+          // Reuse generateBid() to check same potential cases for leaks between
+          // successive calls.
+          var ad = generateBid().ad;
+          sendReportTo("https://" + ad[0] + ad[1] + ".test/");
+        }
+      )");
+  auto bidder_worket = CreateWorkletAndGenerateBid();
+  ASSERT_TRUE(bidder_worket);
+
+  for (int i = 0; i < 3; ++i) {
+    base::RunLoop run_loop;
+    bidder_worket->ReportWin(
+        seller_signals_, browser_signal_render_url_,
+        browser_signal_ad_render_fingerprint_, browser_signal_bid_,
+        base::BindLambdaForTesting(
+            [&run_loop](const base::Optional<GURL>& report_url,
+                        const std::vector<std::string>& error_msgs) {
+              EXPECT_EQ(GURL("https://23.test/"), report_url);
+              EXPECT_TRUE(error_msgs.empty());
+              run_loop.Quit();
+            }));
+    run_loop.Run();
+  }
+}
+
+}  // namespace
+}  // namespace auction_worklet

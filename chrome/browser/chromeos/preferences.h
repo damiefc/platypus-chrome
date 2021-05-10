@@ -17,8 +17,8 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 
+class ContentTracingManager;
 class PrefRegistrySimple;
-class TracingManager;
 
 namespace sync_preferences {
 class PrefServiceSyncable;
@@ -76,6 +76,19 @@ class Preferences : public sync_preferences::PrefServiceSyncableObserver,
   // Callback method for preference changes.
   void OnPreferenceChanged(const std::string& pref_name);
 
+  // Add a sample to the appropriate UMA histogram for a boolean preference.
+  void ReportBooleanPrefApplication(ApplyReason reason,
+                                    const std::string& changed_histogram_name,
+                                    const std::string& started_histogram_name,
+                                    bool sample);
+
+  // Add a sample to the appropriate UMA histogram for a sensitivity preference.
+  void ReportSensitivityPrefApplication(
+      ApplyReason reason,
+      const std::string& changed_histogram_name,
+      const std::string& started_histogram_name,
+      int sensitivity_int);
+
   // This will set the OS settings when the preference changed or the user
   // owning these preferences became active. Also this method is called on
   // initialization. The reason of the call is stored as the |reason| parameter.
@@ -111,7 +124,7 @@ class Preferences : public sync_preferences::PrefServiceSyncableObserver,
   sync_preferences::PrefServiceSyncable* prefs_;
 
   input_method::InputMethodManager* input_method_manager_;
-  std::unique_ptr<TracingManager> tracing_manager_;
+  std::unique_ptr<ContentTracingManager> tracing_manager_;
 
   BooleanPrefMember performance_tracing_enabled_;
   BooleanPrefMember tap_to_click_enabled_;
@@ -122,12 +135,15 @@ class Preferences : public sync_preferences::PrefServiceSyncableObserver,
   IntegerPrefMember speed_factor_;
   IntegerPrefMember mouse_sensitivity_;
   IntegerPrefMember mouse_scroll_sensitivity_;
+  IntegerPrefMember pointing_stick_sensitivity_;
   IntegerPrefMember touchpad_sensitivity_;
   IntegerPrefMember touchpad_scroll_sensitivity_;
   BooleanPrefMember primary_mouse_button_right_;
+  BooleanPrefMember primary_pointing_stick_button_right_;
   BooleanPrefMember mouse_reverse_scroll_;
   BooleanPrefMember mouse_acceleration_;
   BooleanPrefMember mouse_scroll_acceleration_;
+  BooleanPrefMember pointing_stick_acceleration_;
   BooleanPrefMember touchpad_acceleration_;
   BooleanPrefMember touchpad_scroll_acceleration_;
   FilePathPrefMember download_default_directory_;

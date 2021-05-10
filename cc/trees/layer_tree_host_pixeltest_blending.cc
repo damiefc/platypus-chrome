@@ -123,7 +123,7 @@ class LayerTreeHostBlendingPixelTest
     gfx::Size bounds(width, height);
     backdrop_client_.set_bounds(bounds);
     backdrop_client_.add_draw_image(backing_store->makeImageSnapshot(),
-                                    gfx::Point(), PaintFlags());
+                                    gfx::Point());
     scoped_refptr<FakePictureLayer> layer =
         FakePictureLayer::Create(&backdrop_client_);
     layer->SetIsDrawable(true);
@@ -146,8 +146,7 @@ class LayerTreeHostBlendingPixelTest
         SkRect::MakeXYWH(1, 0, bounds.width() - 1, bounds.height()), paint);
 
     mask_client_.set_bounds(bounds);
-    mask_client_.add_draw_image(surface->makeImageSnapshot(), gfx::Point(),
-                                PaintFlags());
+    mask_client_.add_draw_image(surface->makeImageSnapshot(), gfx::Point());
 
     scoped_refptr<FakePictureLayer> mask =
         FakePictureLayer::Create(&mask_client_);
@@ -202,7 +201,7 @@ class LayerTreeHostBlendingPixelTest
 
     SkBitmap expected;
     expected.allocN32Pixels(width, height);
-    SkCanvas canvas(expected);
+    SkCanvas canvas(expected, SkSurfaceProps{});
     canvas.clear(SK_ColorWHITE);
     canvas.drawImage(surface->makeImageSnapshot(), 0, 0);
 
@@ -306,7 +305,7 @@ TEST_P(LayerTreeHostBlendingPixelTest, BlendingWithRoot) {
 
   SkBitmap expected;
   expected.allocN32Pixels(kRootWidth, kRootHeight);
-  SkCanvas canvas(expected);
+  SkCanvas canvas(expected, SkSurfaceProps{});
   canvas.drawColor(kCSSOrange);
   SkPaint paint;
   paint.setBlendMode(current_blend_mode());
@@ -337,7 +336,7 @@ TEST_P(LayerTreeHostBlendingPixelTest, BlendingWithBackdropFilter) {
 
   SkBitmap expected;
   expected.allocN32Pixels(kRootWidth, kRootHeight);
-  SkCanvas canvas(expected);
+  SkCanvas canvas(expected, SkSurfaceProps{});
   SkiaPaintCanvas paint_canvas(&canvas);
   PaintFlags grayscale;
   grayscale.setColor(kCSSOrange);
@@ -379,7 +378,7 @@ TEST_P(LayerTreeHostBlendingPixelTest, BlendingWithTransparent) {
 
   SkBitmap expected;
   expected.allocN32Pixels(kRootWidth, kRootHeight);
-  SkCanvas canvas(expected);
+  SkCanvas canvas(expected, SkSurfaceProps{});
   canvas.drawColor(kCSSOrange);
   SkPaint paint;
   paint.setBlendMode(current_blend_mode());

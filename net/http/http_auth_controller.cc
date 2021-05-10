@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -510,8 +510,8 @@ bool HttpAuthController::SelectNextAuthIdentityToTry() {
     identity_.source = HttpAuth::IDENT_SRC_URL;
     identity_.invalid = false;
     // Extract the username:password from the URL.
-    base::string16 username;
-    base::string16 password;
+    std::u16string username;
+    std::u16string password;
     GetIdentityFromURL(auth_url_, &username, &password);
     identity_.credentials.Set(username, password);
     embedded_identity_used_ = true;

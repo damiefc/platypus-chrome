@@ -36,29 +36,22 @@ const AcceleratorData kDeprecatedAccelerators[] = {
 
     // Deprecated in M59.
     {true, ui::VKEY_K, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN,
-     SHOW_IME_MENU_BUBBLE},
-
-    // Deprecated in M61.
-    {true, ui::VKEY_H, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN,
-     TOGGLE_HIGH_CONTRAST}};
+     SHOW_IME_MENU_BUBBLE}};
 
 const size_t kDeprecatedAcceleratorsLength =
     base::size(kDeprecatedAccelerators);
 
 const DeprecatedAcceleratorData kDeprecatedAcceleratorsData[] = {
+    // The action for the old shortcut was stopped in M92. Delete
+    // completely in M94.
     {SHOW_TASK_MANAGER, "Ash.Accelerators.Deprecated.ShowTaskManager",
      IDS_DEPRECATED_SHOW_TASK_MANAGER_MSG, IDS_SHORTCUT_TASK_MANAGER_OLD,
-     IDS_SHORTCUT_TASK_MANAGER_NEW, true},
+     IDS_SHORTCUT_TASK_MANAGER_NEW, false},
+    // The action for the old shortcut was stopped in M92. Delete
+    // completely in M94.
     {SHOW_IME_MENU_BUBBLE, "Ash.Accelerators.Deprecated.ShowImeMenuBubble",
      IDS_DEPRECATED_SHOW_IME_BUBBLE_MSG, IDS_SHORTCUT_IME_BUBBLE_OLD,
-     IDS_SHORTCUT_IME_BUBBLE_NEW, true},
-    {
-        TOGGLE_HIGH_CONTRAST, "Ash.Accelerators.Deprecated.ToggleHighContrast",
-        IDS_DEPRECATED_TOGGLE_HIGH_CONTRAST_MSG,
-        IDS_SHORTCUT_TOGGLE_HIGH_CONTRAST_OLD,
-        IDS_SHORTCUT_TOGGLE_HIGH_CONTRAST_NEW,
-        false  // Old accelerator was disabled immediately upon deprecation.
-    }};
+     IDS_SHORTCUT_IME_BUBBLE_NEW, false}};
 
 const size_t kDeprecatedAcceleratorsDataLength =
     base::size(kDeprecatedAcceleratorsData);
@@ -120,6 +113,8 @@ const AcceleratorData kDeveloperAcceleratorData[] = {
     // TODO(wutao): Get a shortcut for the Ambient mode.
     {true, ui::VKEY_A, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN,
      START_AMBIENT_MODE},
+    // For testing on Linux desktop where it's hard to rebind the caps lock key.
+    {true, ui::VKEY_A, ui::EF_ALT_DOWN, DEV_TOGGLE_APP_LIST},
 };
 
 const size_t kDeveloperAcceleratorDataLength =
@@ -173,9 +168,7 @@ const AcceleratorAction kActionsAllowedAtLoginOrLockScreen[] = {
     START_AMBIENT_MODE,
     SWITCH_TO_LAST_USED_IME,
     SWITCH_TO_NEXT_IME,
-    TAKE_PARTIAL_SCREENSHOT,
     TAKE_SCREENSHOT,
-    TAKE_WINDOW_SCREENSHOT,
     TOGGLE_CAPS_LOCK,
     TOGGLE_DICTATION,
     TOGGLE_DOCKED_MAGNIFIER,
@@ -199,7 +192,8 @@ const size_t kActionsAllowedAtLoginOrLockScreenLength =
     base::size(kActionsAllowedAtLoginOrLockScreen);
 
 const AcceleratorAction kActionsAllowedAtLockScreen[] = {
-    EXIT, SUSPEND,
+    EXIT,
+    SUSPEND,
 };
 
 const size_t kActionsAllowedAtLockScreenLength =
@@ -322,6 +316,7 @@ const AcceleratorAction kActionsAllowedInAppModeOrPinnedMode[] = {
     SWITCH_TO_LAST_USED_IME,
     SWITCH_TO_NEXT_IME,
     TOGGLE_CAPS_LOCK,
+    TOGGLE_CLIPBOARD_HISTORY,
     TOGGLE_DICTATION,
     TOGGLE_DOCKED_MAGNIFIER,
     TOGGLE_FULLSCREEN_MAGNIFIER,
@@ -359,7 +354,8 @@ const size_t kActionsAllowedInAppModeLength =
 
 const AcceleratorAction kActionsNeedingWindow[] = {
     // clang-format off
-    DESKS_MOVE_ACTIVE_ITEM,
+    DESKS_MOVE_ACTIVE_ITEM_LEFT,
+    DESKS_MOVE_ACTIVE_ITEM_RIGHT,
     MOVE_ACTIVE_WINDOW_BETWEEN_DISPLAYS,
     ROTATE_WINDOW,
     TOGGLE_FULLSCREEN,
@@ -377,6 +373,13 @@ const AcceleratorAction kActionsKeepingMenuOpen[] = {
     BRIGHTNESS_UP,
     DEBUG_TOGGLE_TOUCH_PAD,
     DEBUG_TOGGLE_TOUCH_SCREEN,
+    // Keep the menu open when switching desks. The desk activation code will
+    // close the menu without animation manually. Otherwise, the menu will fade
+    // out and a trace will be visible while switching desks.
+    DESKS_ACTIVATE_DESK_LEFT,
+    DESKS_ACTIVATE_DESK_RIGHT,
+    DESKS_NEW_DESK,
+    DESKS_REMOVE_CURRENT_DESK,
     DISABLE_CAPS_LOCK,
     KEYBOARD_BRIGHTNESS_DOWN,
     KEYBOARD_BRIGHTNESS_UP,
@@ -398,6 +401,7 @@ const AcceleratorAction kActionsKeepingMenuOpen[] = {
     TOGGLE_APP_LIST,
     TOGGLE_APP_LIST_FULLSCREEN,
     TOGGLE_CAPS_LOCK,
+    TOGGLE_CLIPBOARD_HISTORY,
     TOGGLE_DICTATION,
     TOGGLE_DOCKED_MAGNIFIER,
     TOGGLE_FULLSCREEN_MAGNIFIER,

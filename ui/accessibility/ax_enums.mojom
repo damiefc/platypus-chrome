@@ -47,7 +47,6 @@ enum Event {
   kHitTestResult,
   kHover,
   kImageFrameUpdated,     // Web
-  kInvalidStatusChanged,  // Implicit
   kLayoutComplete,        // Web
   kLiveRegionCreated,     // Implicit
   kLiveRegionChanged,     // Web
@@ -57,7 +56,6 @@ enum Event {
   kMediaStartedPlaying,   // Native / Automation
   kMediaStoppedPlaying,   // Native / Automation
   kMenuEnd,               // Native / web: menu interaction has ended.
-  kMenuListItemSelected,  // Web
   kMenuListValueChanged,  // Web
   kMenuPopupEnd,          // Native / web: a menu/submenu is hidden/closed.
   kMenuPopupStart,        // Native / web: a menu/submenu is shown/opened.
@@ -79,16 +77,16 @@ enum Event {
   kShow,                     // Native / Automation
   kStateChanged,             // Native / Automation
   kTextChanged,
-  kWindowActivated,             // Native
-  kWindowDeactivated,           // Native
-  kWindowVisibilityChanged,     // Native
+  // TODO(nektar): Remove kTextSelectionChanged.
   kTextSelectionChanged,
   kTooltipClosed,
   kTooltipOpened,
-  kTreeChanged,  // Accessibility tree changed. Don't
-                 // explicitly fire an accessibility event,
-                 // only implicitly due to the change.
+  kTreeChanged,  // Don't explicitly fire this event.
+  // TODO(nektar): Remove kValueChanged.
   kValueChanged,
+  kWindowActivated,             // Native
+  kWindowDeactivated,           // Native
+  kWindowVisibilityChanged,     // Native
 };
 
 // Accessibility object roles.
@@ -104,7 +102,7 @@ enum Event {
 //
 // Native: this attribute is only used in native UI.
 enum Role {
-  kNone,
+  kNone,  // Used for role="none"/"presentation" -- ignored in platform tree.
   kAbbr,
   kAlert,
   kAlertDialog,
@@ -176,6 +174,8 @@ enum Role {
   kDocNoteRef,
   kDocNotice,
   kDocPageBreak,
+  kDocPageFooter,
+  kDocPageHeader,
   kDocPageList,
   kDocPart,
   kDocPreface,
@@ -212,9 +212,7 @@ enum Role {
   kHeading,
   kIframe,
   kIframePresentational,
-  kIgnored,
   kImage,
-  kImageMap,
   kImeCandidate,
   kInlineTextBox,
   kInputTime,
@@ -252,12 +250,12 @@ enum Role {
   kNote,
   kPane,
   kParagraph,
-  kPdfActionableHighlight, // PDF specific highlight role.
+  kPdfActionableHighlight,
+  kPdfRoot,
   kPluginObject,
   kPopUpButton,
   kPortal,
   kPre,
-  kPresentational,
   kProgressIndicator,
   kRadioButton,
   kRadioGroup,
@@ -274,7 +272,6 @@ enum Role {
   kSearchBox,
   kSection,
   kSlider,
-  kSliderThumb,
   kSpinButton,
   kSplitter,
   kStaticText,
@@ -302,7 +299,6 @@ enum Role {
   kTreeItem,
   kUnknown,
   kVideo,
-  kWebArea,
   kWebView,
   kWindow,
 };
@@ -501,11 +497,13 @@ enum StringAttribute {
   // Only used when invalid_state == invalid_state_other.
   kAriaInvalidValue,
   kAutoComplete,
+  kCheckedStateDescription,
   kChildTreeId,
+  kChildTreeNodeAppId,
   kClassName,
   kContainerLiveRelevant,
   kContainerLiveStatus,
-  kDescription,
+  kDescription,  // Any description, from any description source.
   kDisplay,
   // Only present when different from parent.
   kFontFamily,
@@ -522,6 +520,7 @@ enum StringAttribute {
   kName,
   kLiveRelevant,
   kLiveStatus,
+  kParentTreeNodeAppId,
   // Only if not already exposed in kName (NameFrom::kPlaceholder)
   kPlaceholder,
   kRole,
@@ -530,6 +529,9 @@ enum StringAttribute {
   kTooltip,
   kUrl,
   kValue,
+  // TODO(bebeaudr): kAriaVirtualContent is currently a string attribute to
+  // facilitate prototyping. Make it an enum when we're done prototyping.
+  kVirtualContent,
 };
 
 enum IntAttribute {
@@ -704,9 +706,9 @@ enum BoolAttribute {
   // Generic busy state, does not have to be on a live region.
   kBusy,
 
-  // The object is at the root of an editable field, such as a content
-  // editable.
-  kEditableRoot,
+  // The object is at the root of a content editable region, or at a <body>
+  // element that has "design-mode" set to "on".
+  kContentEditableRoot,
 
   // Live region attributes.
   kContainerLiveAtomic,
@@ -763,6 +765,11 @@ enum BoolAttribute {
 
   // True if the node has any ARIA attributes set.
   kHasAriaAttribute,
+
+  // This element allows touches to be passed through when a screen reader
+  // is in touch exploration mode, e.g. a virtual keyboard normally
+  // behaves this way.
+  kTouchPassthrough,
 };
 
 enum IntListAttribute {
@@ -1008,7 +1015,6 @@ enum AriaCurrentState {
   kPage,
   kStep,
   kLocation,
-  kUnclippedLocation,
   kDate,
   kTime,
 };
@@ -1071,11 +1077,13 @@ enum NameFrom {
 
 enum DescriptionFrom {
   kNone,
-  kUninitialized,
-  kAttribute,
-  kContents,
+  kAriaDescription,
+  kButtonLabel,  // HTML-AAM 5.2.2
   kRelatedElement,
-  kTitle,
+  kRubyAnnotation,
+  kSummary,  // HTML-AAM 5.8.2
+  kTableCaption,  // HTML-AAM 5.9.2
+  kTitle
 };
 
 enum EventFrom {

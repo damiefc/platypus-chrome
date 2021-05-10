@@ -36,9 +36,9 @@ namespace {
 // if |emphasize| is true, which is only the case for the last row containing
 // the total of the order. |amount_label_id| is specified to recall the view
 // later, e.g. in tests.
-std::unique_ptr<views::View> CreateLineItemView(const base::string16& label,
-                                                const base::string16& currency,
-                                                const base::string16& amount,
+std::unique_ptr<views::View> CreateLineItemView(const std::u16string& label,
+                                                const std::u16string& currency,
+                                                const std::u16string& amount,
                                                 bool emphasize,
                                                 DialogViewID currency_label_id,
                                                 DialogViewID amount_label_id) {
@@ -122,7 +122,7 @@ OrderSummaryViewController::OrderSummaryViewController(
     base::WeakPtr<PaymentRequestSpec> spec,
     base::WeakPtr<PaymentRequestState> state,
     base::WeakPtr<PaymentRequestDialogView> dialog)
-    : PaymentRequestSheetController(spec, state, dialog), pay_button_(nullptr) {
+    : PaymentRequestSheetController(spec, state, dialog) {
   DCHECK(spec);
   DCHECK(state);
   spec->AddObserver(this);
@@ -141,29 +141,14 @@ void OrderSummaryViewController::OnSpecUpdated() {
 }
 
 void OrderSummaryViewController::OnSelectedInformationChanged() {
-  UpdatePayButtonState(state()->is_ready_to_pay());
-}
-
-std::unique_ptr<views::Button>
-OrderSummaryViewController::CreatePrimaryButton() {
-  auto button = std::make_unique<views::MdTextButton>(
-      this, state()->selected_app() && state()->selected_app()->type() !=
-                                           PaymentApp::Type::AUTOFILL
-                ? l10n_util::GetStringUTF16(IDS_PAYMENTS_CONTINUE_BUTTON)
-                : l10n_util::GetStringUTF16(IDS_PAYMENTS_PAY_BUTTON));
-  button->SetProminent(true);
-  button->set_tag(static_cast<int>(PaymentRequestCommonTags::PAY_BUTTON_TAG));
-  button->SetID(static_cast<int>(DialogViewID::PAY_BUTTON));
-  pay_button_ = button.get();
-  UpdatePayButtonState(state()->is_ready_to_pay());
-  return button;
+  primary_button()->SetEnabled(GetPrimaryButtonEnabled());
 }
 
 bool OrderSummaryViewController::ShouldShowSecondaryButton() {
   return false;
 }
 
-base::string16 OrderSummaryViewController::GetSheetTitle() {
+std::u16string OrderSummaryViewController::GetSheetTitle() {
   return l10n_util::GetStringUTF16(IDS_PAYMENTS_ORDER_SUMMARY_LABEL);
 }
 
@@ -188,7 +173,7 @@ void OrderSummaryViewController::FillContentView(views::View* content_view) {
   for (size_t i = 0; i < display_items.size(); i++) {
     DialogViewID view_id =
         i < line_items.size() ? line_items[i] : DialogViewID::VIEW_ID_NONE;
-    base::string16 currency = base::UTF8ToUTF16("");
+    std::u16string currency = u"";
     if (is_mixed_currency) {
       currency = base::UTF8ToUTF16((*display_items[i])->amount->currency);
     }
@@ -201,7 +186,7 @@ void OrderSummaryViewController::FillContentView(views::View* content_view) {
             .release());
   }
 
-  base::string16 total_label_value = l10n_util::GetStringFUTF16(
+  std::u16string total_label_value = l10n_util::GetStringFUTF16(
       IDS_PAYMENT_REQUEST_ORDER_SUMMARY_SHEET_TOTAL_FORMAT,
       base::UTF8ToUTF16(
           spec()->GetTotal(state()->selected_app())->amount->currency),
@@ -218,10 +203,6 @@ void OrderSummaryViewController::FillContentView(views::View* content_view) {
           true, DialogViewID::ORDER_SUMMARY_TOTAL_CURRENCY_LABEL,
           DialogViewID::ORDER_SUMMARY_TOTAL_AMOUNT_LABEL)
           .release());
-}
-
-void OrderSummaryViewController::UpdatePayButtonState(bool enabled) {
-  pay_button_->SetEnabled(enabled);
 }
 
 }  // namespace payments

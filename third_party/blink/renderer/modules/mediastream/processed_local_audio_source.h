@@ -47,6 +47,7 @@ class MODULES_EXPORT ProcessedLocalAudioSource final
       const MediaStreamDevice& device,
       bool disable_local_echo,
       const AudioProcessingProperties& audio_processing_properties,
+      int num_requested_channels,
       ConstraintsOnceCallback started_callback,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
@@ -75,6 +76,11 @@ class MODULES_EXPORT ProcessedLocalAudioSource final
   scoped_refptr<webrtc::AudioProcessorInterface> GetAudioProcessor() const;
 
   bool HasAudioProcessing() const;
+
+  // Instructs the Audio Processing Module (APM) to reduce its complexity when
+  // |muted| is true. This mode is triggered when all audio tracks are disabled.
+  // The default APM complexity mode is restored when |muted| is set to false.
+  void SetOutputWillBeMuted(bool muted);
 
   const scoped_refptr<blink::MediaStreamAudioLevelCalculator::Level>&
   audio_level() const {
@@ -130,6 +136,7 @@ class MODULES_EXPORT ProcessedLocalAudioSource final
   WeakPersistent<LocalFrame> consumer_frame_;
 
   blink::AudioProcessingProperties audio_processing_properties_;
+  int num_requested_channels_;
 
   // Callback that's called when the audio source has been initialized.
   ConstraintsOnceCallback started_callback_;

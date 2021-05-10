@@ -10,6 +10,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/files/file_util.h"
 #include "base/json/json_string_value_serializer.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
@@ -54,11 +55,15 @@ void Connect(apps::mojom::Publisher* publisher,
 }
 
 void LogPreferredAppFileIOAction(PreferredAppsFileIOAction action) {
-  UMA_HISTOGRAM_ENUMERATION("PreferredApps.FileIOAction", action);
+  UMA_HISTOGRAM_ENUMERATION("Apps.PreferredApps.FileIOAction", action);
 }
 
 void LogPreferredAppUpdateAction(PreferredAppsUpdateAction action) {
-  UMA_HISTOGRAM_ENUMERATION("PreferredApps.UpdateAction", action);
+  UMA_HISTOGRAM_ENUMERATION("Apps.PreferredApps.UpdateAction", action);
+}
+
+void LogPreferredAppEntryCount(int entry_count) {
+  base::UmaHistogramCounts10000("Apps.PreferredApps.EntryCount", entry_count);
 }
 
 // Performs blocking I/O. Called on another thread.
@@ -105,8 +110,7 @@ AppServiceImpl::AppServiceImpl(const base::FilePath& profile_dir,
       should_write_preferred_apps_to_file_(false),
       writing_preferred_apps_(false),
       task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock(),
-           base::TaskPriority::BEST_EFFORT,
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       read_completed_for_testing_(std::move(read_completed_for_testing)),
       write_completed_for_testing_(std::move(write_completed_for_testing)) {
@@ -187,12 +191,13 @@ void AppServiceImpl::Launch(apps::mojom::AppType app_type,
                             const std::string& app_id,
                             int32_t event_flags,
                             apps::mojom::LaunchSource launch_source,
-                            int64_t display_id) {
+                            apps::mojom::WindowInfoPtr window_info) {
   auto iter = publishers_.find(app_type);
   if (iter == publishers_.end()) {
     return;
   }
-  iter->second->Launch(app_id, event_flags, launch_source, display_id);
+  iter->second->Launch(app_id, event_flags, launch_source,
+                       std::move(window_info));
 }
 void AppServiceImpl::LaunchAppWithFiles(apps::mojom::AppType app_type,
                                         const std::string& app_id,
@@ -214,13 +219,13 @@ void AppServiceImpl::LaunchAppWithIntent(
     int32_t event_flags,
     apps::mojom::IntentPtr intent,
     apps::mojom::LaunchSource launch_source,
-    int64_t display_id) {
+    apps::mojom::WindowInfoPtr window_info) {
   auto iter = publishers_.find(app_type);
   if (iter == publishers_.end()) {
     return;
   }
   iter->second->LaunchAppWithIntent(app_id, event_flags, std::move(intent),
-                                    launch_source, display_id);
+                                    launch_source, std::move(window_info));
 }
 
 void AppServiceImpl::SetPermission(apps::mojom::AppType app_type,
@@ -286,6 +291,20 @@ void AppServiceImpl::GetMenuModel(apps::mojom::AppType app_type,
 
   iter->second->GetMenuModel(app_id, menu_type, display_id,
                              std::move(callback));
+}
+
+void AppServiceImpl::ExecuteContextMenuCommand(apps::mojom::AppType app_type,
+                                               const std::string& app_id,
+                                               int command_id,
+                                               const std::string& shortcut_id,
+                                               int64_t display_id) {
+  auto iter = publishers_.find(app_type);
+  if (iter == publishers_.end()) {
+    return;
+  }
+
+  iter->second->ExecuteContextMenuCommand(app_id, command_id, shortcut_id,
+                                          display_id);
 }
 
 void AppServiceImpl::OpenNativeSettings(apps::mojom::AppType app_type,
@@ -357,11 +376,11 @@ void AppServiceImpl::RemovePreferredApp(apps::mojom::AppType app_type,
     return;
   }
 
-  preferred_apps_.DeleteAppId(app_id);
+  if (preferred_apps_.DeleteAppId(app_id)) {
+    WriteToJSON(profile_dir_, preferred_apps_);
+  }
 
   LogPreferredAppUpdateAction(PreferredAppsUpdateAction::kDeleteForAppId);
-
-  WriteToJSON(profile_dir_, preferred_apps_);
 }
 
 void AppServiceImpl::RemovePreferredAppForFilter(
@@ -377,15 +396,25 @@ void AppServiceImpl::RemovePreferredAppForFilter(
     return;
   }
 
-  preferred_apps_.DeletePreferredApp(app_id, intent_filter);
+  if (preferred_apps_.DeletePreferredApp(app_id, intent_filter)) {
+    WriteToJSON(profile_dir_, preferred_apps_);
 
-  WriteToJSON(profile_dir_, preferred_apps_);
-
-  for (auto& subscriber : subscribers_) {
-    subscriber->OnPreferredAppRemoved(app_id, intent_filter->Clone());
+    for (auto& subscriber : subscribers_) {
+      subscriber->OnPreferredAppRemoved(app_id, intent_filter->Clone());
+    }
   }
 
   LogPreferredAppUpdateAction(PreferredAppsUpdateAction::kDeleteForFilter);
+}
+
+void AppServiceImpl::SetResizeLocked(apps::mojom::AppType app_type,
+                                     const std::string& app_id,
+                                     mojom::OptionalBool locked) {
+  auto iter = publishers_.find(app_type);
+  if (iter == publishers_.end()) {
+    return;
+  }
+  iter->second->SetResizeLocked(app_id, locked);
 }
 
 PreferredAppsList& AppServiceImpl::GetPreferredAppsForTesting() {
@@ -492,6 +521,8 @@ void AppServiceImpl::ReadCompleted(std::string preferred_apps_string) {
   if (read_completed_for_testing_) {
     std::move(read_completed_for_testing_).Run();
   }
+
+  LogPreferredAppEntryCount(preferred_apps_.GetEntrySize());
 }
 
 }  // namespace apps

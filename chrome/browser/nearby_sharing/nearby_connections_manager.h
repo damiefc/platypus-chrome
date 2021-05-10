@@ -11,10 +11,11 @@
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_enums.h"
 #include "chrome/browser/nearby_sharing/nearby_connection.h"
-#include "chrome/services/sharing/public/mojom/nearby_connections_types.mojom.h"
+#include "chromeos/services/nearby/public/mojom/nearby_connections_types.mojom.h"
 
 // A wrapper around the Nearby Connections mojo API.
 class NearbyConnectionsManager {
@@ -56,12 +57,22 @@ class NearbyConnectionsManager {
   // outgoing).
   class PayloadStatusListener {
    public:
+    using Medium = location::nearby::connections::mojom::Medium;
     using PayloadTransferUpdatePtr =
         location::nearby::connections::mojom::PayloadTransferUpdatePtr;
 
-    virtual ~PayloadStatusListener() = default;
+    PayloadStatusListener();
+    virtual ~PayloadStatusListener();
 
-    virtual void OnStatusUpdate(PayloadTransferUpdatePtr update) = 0;
+    base::WeakPtr<PayloadStatusListener> GetWeakPtr() const;
+
+    // Note: |upgraded_medium| is passed in for use in metrics, and it is
+    // base::nullopt if the bandwidth has not upgraded yet or if the upgrade
+    // status is not known.
+    virtual void OnStatusUpdate(PayloadTransferUpdatePtr update,
+                                base::Optional<Medium> upgraded_medium) = 0;
+
+    base::WeakPtrFactory<PayloadStatusListener> weak_ptr_factory_{this};
   };
 
   // Converts the status to a logging-friendly string.
@@ -83,11 +94,12 @@ class NearbyConnectionsManager {
                                 ConnectionsCallback callback) = 0;
 
   // Stops advertising through Nearby Connections.
-  virtual void StopAdvertising() = 0;
+  virtual void StopAdvertising(ConnectionsCallback callback) = 0;
 
   // Starts discovery through Nearby Connections. Caller is expected to ensure
   // |listener| remains valid until StopDiscovery is called.
   virtual void StartDiscovery(DiscoveryListener* listener,
+                              DataUsage data_usage,
                               ConnectionsCallback callback) = 0;
 
   // Stops discovery through Nearby Connections.
@@ -104,19 +116,15 @@ class NearbyConnectionsManager {
   // Disconnects from remote |endpoint_id| through Nearby Connections.
   virtual void Disconnect(const std::string& endpoint_id) = 0;
 
-  // Sends |payload| through Nearby Connections. Caller is expected to ensure
-  // |listener| remains valid until kSuccess/kFailure/kCancelled is invoked with
-  // OnStatusUpdate.
+  // Sends |payload| through Nearby Connections.
   virtual void Send(const std::string& endpoint_id,
                     PayloadPtr payload,
-                    PayloadStatusListener* listener) = 0;
+                    base::WeakPtr<PayloadStatusListener> listener) = 0;
 
-  // Register a |listener| with |payload_id|. Caller is expected to ensure
-  // |listener| remains valid until kSuccess/kFailure/kCancelled is invoked with
-  // OnStatusUpdate.
+  // Register a |listener| with |payload_id|.
   virtual void RegisterPayloadStatusListener(
       int64_t payload_id,
-      PayloadStatusListener* listener) = 0;
+      base::WeakPtr<PayloadStatusListener> listener) = 0;
 
   // Register a |file_path| for receiving incoming payload with |payload_id|.
   virtual void RegisterPayloadPath(int64_t payload_id,

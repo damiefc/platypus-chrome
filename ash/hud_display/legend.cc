@@ -11,6 +11,7 @@
 #include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/border.h"
@@ -38,6 +39,9 @@ class LegendEntry : public views::View {
 
   void SetValueIndex(size_t index);
   void RefreshValue();
+
+  // This is used by parent to match sizes.
+  views::View* value() { return value_; }
 
  private:
   const SkColor color_;
@@ -74,7 +78,7 @@ LegendEntry::LegendEntry(const Legend::Entry& data)
 
   constexpr int kLabelToValueSpece = 5;
   value_ = AddChildView(std::make_unique<views::Label>(
-      base::string16(), views::style::CONTEXT_LABEL));
+      std::u16string(), views::style::CONTEXT_LABEL));
   layout_manager->SetFlexForView(value_, /*flex=*/1);
   value_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_RIGHT);
   value_->SetBorder(views::CreateEmptyBorder(0, kLabelToValueSpece, 0, 0));
@@ -132,15 +136,15 @@ void LegendEntry::RefreshValue() {
   if (graph_.IsFilledIndex(value_index_)) {
     value_->SetText(formatter_.Run(graph_.GetUnscaledValueAt(value_index_)));
   } else {
-    value_->SetText(base::string16());
+    value_->SetText(std::u16string());
   }
 }
 
 }  // namespace
 
 Legend::Entry::Entry(const Graph& graph,
-                     base::string16 label,
-                     base::string16 tooltip,
+                     std::u16string label,
+                     std::u16string tooltip,
                      Formatter formatter)
     : graph(graph), label(label), tooltip(tooltip), formatter(formatter) {}
 
@@ -168,6 +172,30 @@ Legend::Legend(const std::vector<Legend::Entry>& contents) {
 }
 
 Legend::~Legend() = default;
+
+void Legend::Layout() {
+  views::View::Layout();
+
+  gfx::Size max_size;
+  bool updated = false;
+  for (auto* view : children()) {
+    if (view->GetClassName() != LegendEntry::kViewClassName)
+      continue;
+
+    views::View* value = static_cast<LegendEntry*>(view)->value();
+    max_size.SetToMax(value->GetPreferredSize());
+    updated |= max_size != value->GetPreferredSize();
+  }
+  if (updated) {
+    for (auto* view : children()) {
+      if (view->GetClassName() != LegendEntry::kViewClassName)
+        continue;
+
+      static_cast<LegendEntry*>(view)->value()->SetPreferredSize(max_size);
+    }
+    views::View::Layout();
+  }
+}
 
 void Legend::SetValuesIndex(size_t index) {
   for (auto* view : children()) {

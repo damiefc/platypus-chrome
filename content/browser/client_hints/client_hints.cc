@@ -14,7 +14,6 @@
 #include "base/optional.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
@@ -37,8 +36,8 @@
 #include "services/network/public/cpp/network_quality_tracker.h"
 #include "third_party/blink/public/common/client_hints/client_hints.h"
 #include "third_party/blink/public/common/device_memory/approximated_device_memory.h"
-#include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/platform/web_client_hints_type.h"
 #include "ui/display/display.h"
@@ -382,7 +381,7 @@ std::string SerializeHeaderString(std::string str) {
       .value_or(std::string());
 }
 
-bool IsFeaturePolicyForClientHintsEnabled() {
+bool IsPermissionsPolicyForClientHintsEnabled() {
   return base::FeatureList::IsEnabled(features::kFeaturePolicyForClientHints);
 }
 
@@ -396,16 +395,17 @@ struct ClientHintsExtendedData {
     // in order to get the main frame URL, we should use the provided URL
     // instead. Otherwise, the current frame is an iframe and the main frame URL
     // was committed, so we can safely get it from it. Similarly, an
-    // in-navigation main frame doesn't yet have a feature policy.
-    RenderFrameHostImpl* main_frame =
-        frame_tree_node->frame_tree()->GetMainFrame();
-    is_main_frame = frame_tree_node->IsMainFrame();
+    // in-navigation main frame doesn't yet have a permissions policy.
+    is_main_frame = !frame_tree_node || frame_tree_node->IsMainFrame();
     if (is_main_frame) {
       main_frame_url = url;
       is_1p_origin = true;
     } else {
+      RenderFrameHostImpl* main_frame =
+          frame_tree_node->frame_tree()->GetMainFrame();
       main_frame_url = main_frame->GetLastCommittedURL();
-      feature_policy = main_frame->feature_policy();
+      permissions_policy = blink::PermissionsPolicy::CopyStateFrom(
+          main_frame->permissions_policy());
       is_1p_origin = resource_origin.IsSameOriginWith(
           main_frame->GetLastCommittedOrigin());
     }
@@ -417,38 +417,32 @@ struct ClientHintsExtendedData {
   url::Origin resource_origin;
   bool is_main_frame = false;
   GURL main_frame_url;
-  const blink::FeaturePolicy* feature_policy = nullptr;
+  std::unique_ptr<blink::PermissionsPolicy> permissions_policy;
   bool is_1p_origin = false;
 };
+
+bool IsClientHintAllowed(const ClientHintsExtendedData& data,
+                         network::mojom::WebClientHintsType type) {
+  if (!IsPermissionsPolicyForClientHintsEnabled() || data.is_main_frame)
+    return data.is_1p_origin;
+  return data.permissions_policy &&
+         data.permissions_policy->IsFeatureEnabledForOrigin(
+             blink::kClientHintsPermissionsPolicyMapping[static_cast<int>(
+                 type)],
+             data.resource_origin);
+}
 
 bool ShouldAddClientHint(const ClientHintsExtendedData& data,
                          network::mojom::WebClientHintsType type) {
   if (!blink::IsClientHintSentByDefault(type) && !data.hints.IsEnabled(type))
     return false;
-  if (!IsFeaturePolicyForClientHintsEnabled() || data.is_main_frame)
-    return data.is_1p_origin;
-  return data.feature_policy &&
-         data.feature_policy->IsFeatureEnabledForOrigin(
-             blink::kClientHintsFeaturePolicyMapping[static_cast<int>(type)],
-             data.resource_origin);
+  return IsClientHintAllowed(data, type);
 }
 
 bool IsJavascriptEnabled(FrameTreeNode* frame_tree_node) {
   return WebContents::FromRenderFrameHost(frame_tree_node->current_frame_host())
       ->GetOrCreateWebPreferences()
       .javascript_enabled;
-}
-
-bool ShouldAddClientHints(const GURL& url,
-                          bool javascript_enabled,
-                          ClientHintsControllerDelegate* delegate) {
-  // Client hints should only be enabled when JavaScript is enabled. Platforms
-  // which enable/disable JavaScript on a per-origin basis should implement
-  // IsJavaScriptAllowed to check a given origin. Other platforms (Android
-  // WebView) enable/disable JavaScript on a per-View basis, using the
-  // WebPreferences setting.
-  return IsValidURLForClientHints(url) && delegate->IsJavaScriptAllowed(url) &&
-         javascript_enabled;
 }
 
 // Captures when UpdateNavigationRequestClientUaHeadersImpl() is being called.
@@ -472,7 +466,7 @@ void UpdateNavigationRequestClientUaHeadersImpl(
   bool disable_due_to_custom_ua = false;
   if (override_ua) {
     NavigatorDelegate* nav_delegate =
-        frame_tree_node->navigator().GetDelegate();
+        frame_tree_node ? frame_tree_node->navigator().GetDelegate() : nullptr;
     ua_metadata =
         nav_delegate ? nav_delegate->GetUserAgentOverride().ua_metadata_override
                      : base::nullopt;
@@ -481,7 +475,8 @@ void UpdateNavigationRequestClientUaHeadersImpl(
     disable_due_to_custom_ua = !ua_metadata.has_value();
   }
 
-  if (devtools_instrumentation::ApplyUserAgentMetadataOverrides(frame_tree_node,
+  if (frame_tree_node &&
+      devtools_instrumentation::ApplyUserAgentMetadataOverrides(frame_tree_node,
                                                                 &ua_metadata)) {
     // Likewise, if devtools says to override client hints but provides no
     // value, disable them. This overwrites previous decision from UI.
@@ -497,7 +492,7 @@ void UpdateNavigationRequestClientUaHeadersImpl(
     // The `Sec-CH-UA` client hint is attached to all outgoing requests. This is
     // (intentionally) different than other client hints.
     // It's barred behind ShouldAddClientHints to make sure it's controlled by
-    // FeaturePolicy.
+    // Permissions Policy.
     //
     // https://wicg.github.io/client-hints-infrastructure/#abstract-opdef-append-client-hints-to-request
     if (ShouldAddClientHint(data, network::mojom::WebClientHintsType::kUA)) {
@@ -506,7 +501,7 @@ void UpdateNavigationRequestClientUaHeadersImpl(
     }
     // The `Sec-CH-UA-Mobile client hint was also deemed "low entropy" and can
     // safely be sent with every request. Similarly to UA, ShouldAddClientHints
-    // makes sure it's controlled by FeaturePolicy.
+    // makes sure it's controlled by Permissions Policy.
     if (ShouldAddClientHint(data,
                             network::mojom::WebClientHintsType::kUAMobile)) {
       AddUAHeader(headers, network::mojom::WebClientHintsType::kUAMobile,
@@ -562,6 +557,18 @@ void UpdateNavigationRequestClientUaHeadersImpl(
 
 }  // namespace
 
+bool ShouldAddClientHints(const GURL& url,
+                          FrameTreeNode* frame_tree_node,
+                          ClientHintsControllerDelegate* delegate) {
+  // Client hints should only be enabled when JavaScript is enabled. Platforms
+  // which enable/disable JavaScript on a per-origin basis should implement
+  // IsJavaScriptAllowed to check a given origin. Other platforms (Android
+  // WebView) enable/disable JavaScript on a per-View basis, using the
+  // WebPreferences setting.
+  return IsValidURLForClientHints(url) && delegate->IsJavaScriptAllowed(url) &&
+         (!frame_tree_node || IsJavascriptEnabled(frame_tree_node));
+}
+
 unsigned long RoundRttForTesting(const std::string& host,
                                  const base::Optional<base::TimeDelta>& rtt) {
   return RoundRtt(host, rtt);
@@ -578,9 +585,9 @@ void UpdateNavigationRequestClientUaHeaders(
     bool override_ua,
     FrameTreeNode* frame_tree_node,
     net::HttpRequestHeaders* headers) {
+  DCHECK(frame_tree_node);
   if (!delegate->UserAgentClientHintEnabled() ||
-      !ShouldAddClientHints(url, IsJavascriptEnabled(frame_tree_node),
-                            delegate)) {
+      !ShouldAddClientHints(url, frame_tree_node, delegate)) {
     return;
   }
 
@@ -589,26 +596,25 @@ void UpdateNavigationRequestClientUaHeaders(
       ClientUaHeaderCallType::kAfterCreated, headers);
 }
 
-void AddNavigationRequestClientHintsHeaders(
+namespace {
+
+void AddRequestClientHintsHeaders(
     const GURL& url,
     net::HttpRequestHeaders* headers,
     BrowserContext* context,
     ClientHintsControllerDelegate* delegate,
     bool is_ua_override_on,
-    FrameTreeNode* frame_tree_node) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK_EQ(blink::kWebEffectiveConnectionTypeMappingCount,
-            net::EFFECTIVE_CONNECTION_TYPE_4G + 1u);
-  DCHECK_EQ(blink::kWebEffectiveConnectionTypeMappingCount,
-            static_cast<size_t>(net::EFFECTIVE_CONNECTION_TYPE_LAST));
-  DCHECK(context);
+    FrameTreeNode* frame_tree_node,
+    const blink::ParsedPermissionsPolicy& container_policy) {
+  ClientHintsExtendedData data(url, frame_tree_node, delegate);
 
-  if (!ShouldAddClientHints(url, IsJavascriptEnabled(frame_tree_node),
-                            delegate)) {
-    return;
+  // If there is a container policy, use the same logic as when a new frame is
+  // committed to combine with the parent policy.
+  if (!container_policy.empty()) {
+    data.permissions_policy = blink::PermissionsPolicy::CreateFromParentPolicy(
+        data.permissions_policy.get(), container_policy,
+        url::Origin::Create(url));
   }
-
-  const ClientHintsExtendedData data(url, frame_tree_node, delegate);
 
   // Add Headers
   if (ShouldAddClientHint(data,
@@ -659,6 +665,58 @@ void AddNavigationRequestClientHintsHeaders(
   // scheme or a change in the origin.
 }
 
+}  // namespace
+
+void AddPrefetchNavigationRequestClientHintsHeaders(
+    const GURL& url,
+    net::HttpRequestHeaders* headers,
+    BrowserContext* context,
+    ClientHintsControllerDelegate* delegate,
+    bool is_ua_override_on,
+    bool is_javascript_enabled) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK_EQ(blink::kWebEffectiveConnectionTypeMappingCount,
+            net::EFFECTIVE_CONNECTION_TYPE_4G + 1u);
+  DCHECK_EQ(blink::kWebEffectiveConnectionTypeMappingCount,
+            static_cast<size_t>(net::EFFECTIVE_CONNECTION_TYPE_LAST));
+  DCHECK(context);
+
+  // Since prefetch navigation doesn't have a related frame tree node,
+  // |is_javascript_enabled| is passed in to get whether a typical frame tree
+  // node would support javascript.
+  if (!is_javascript_enabled || !ShouldAddClientHints(url, nullptr, delegate)) {
+    return;
+  }
+
+  AddRequestClientHintsHeaders(url, headers, context, delegate,
+                               is_ua_override_on, nullptr, {});
+}
+
+void AddNavigationRequestClientHintsHeaders(
+    const GURL& url,
+    net::HttpRequestHeaders* headers,
+    BrowserContext* context,
+    ClientHintsControllerDelegate* delegate,
+    bool is_ua_override_on,
+    FrameTreeNode* frame_tree_node,
+    const blink::ParsedPermissionsPolicy& container_policy) {
+  DCHECK(frame_tree_node);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK_EQ(blink::kWebEffectiveConnectionTypeMappingCount,
+            net::EFFECTIVE_CONNECTION_TYPE_4G + 1u);
+  DCHECK_EQ(blink::kWebEffectiveConnectionTypeMappingCount,
+            static_cast<size_t>(net::EFFECTIVE_CONNECTION_TYPE_LAST));
+  DCHECK(context);
+
+  if (!ShouldAddClientHints(url, frame_tree_node, delegate)) {
+    return;
+  }
+
+  AddRequestClientHintsHeaders(url, headers, context, delegate,
+                               is_ua_override_on, frame_tree_node,
+                               container_policy);
+}
+
 base::Optional<std::vector<network::mojom::WebClientHintsType>>
 ParseAndPersistAcceptCHForNagivation(
     const GURL& url,
@@ -697,7 +755,7 @@ ParseAndPersistAcceptCHForNagivation(
     return base::nullopt;
 
   base::TimeDelta persist_duration;
-  if (IsFeaturePolicyForClientHintsEnabled()) {
+  if (IsPermissionsPolicyForClientHintsEnabled()) {
     // JSON cannot store "non-finite" values (i.e. NaN or infinite) so
     // base::TimeDelta::Max cannot be used. As this will be removed once
     // the FeaturePolicyForClientHints feature is shipped, a reasonably
@@ -711,6 +769,7 @@ ParseAndPersistAcceptCHForNagivation(
 
   delegate->PersistClientHints(url::Origin::Create(url), parsed.value(),
                                persist_duration);
+
   return parsed;
 }
 
@@ -719,8 +778,7 @@ LookupAcceptCHForCommit(const GURL& url,
                         ClientHintsControllerDelegate* delegate,
                         FrameTreeNode* frame_tree_node) {
   std::vector<::network::mojom::WebClientHintsType> result;
-  if (!ShouldAddClientHints(url, IsJavascriptEnabled(frame_tree_node),
-                            delegate)) {
+  if (!ShouldAddClientHints(url, frame_tree_node, delegate)) {
     return result;
   }
 
@@ -733,6 +791,24 @@ LookupAcceptCHForCommit(const GURL& url,
       result.push_back(hint);
   }
   return result;
+}
+
+bool AreCriticalHintsMissing(
+    const GURL& url,
+    FrameTreeNode* frame_tree_node,
+    ClientHintsControllerDelegate* delegate,
+    const std::vector<network::mojom::WebClientHintsType>& critical_hints) {
+  ClientHintsExtendedData data(url, frame_tree_node, delegate);
+
+  // Note: these only check for per-hint origin/permissions policy settings, not
+  // origin-level or "browser-level" policies like disabiling JS or other
+  // features.
+  for (auto hint : critical_hints) {
+    if (IsClientHintAllowed(data, hint) && !ShouldAddClientHint(data, hint))
+      return true;
+  }
+
+  return false;
 }
 
 }  // namespace content

@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
@@ -18,6 +17,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
+#include "components/arc/session/arc_client_adapter.h"
 #include "components/arc/session/arc_instance_mode.h"
 #include "components/arc/session/arc_session.h"
 #include "components/arc/session/arc_stop_reason.h"
@@ -105,6 +105,17 @@ class ArcSessionRunner : public ArcSession::Observer {
                    const std::string& hash,
                    const std::string& serial_number);
 
+  // Provides the DemoModeDelegate which will be used to load the demo session
+  // apps path.
+  void SetDemoModeDelegate(
+      std::unique_ptr<ArcClientAdapter::DemoModeDelegate> delegate);
+
+  // Trims VM's memory by moving it to zram. |callback| is called when the
+  // operation is done.
+  using TrimVmMemoryCallback =
+      base::OnceCallback<void(bool success, const std::string& failure_reason)>;
+  void TrimVmMemory(TrimVmMemoryCallback callback);
+
   // Returns the current ArcSession instance for testing purpose.
   ArcSession* GetArcSessionForTesting() { return arc_session_.get(); }
 
@@ -161,6 +172,9 @@ class ArcSessionRunner : public ArcSession::Observer {
   std::string serial_number_;
 
   bool resumed_ = false;
+
+  // DemoModeDelegate to be used by ArcSession.
+  std::unique_ptr<ArcClientAdapter::DemoModeDelegate> demo_mode_delegate_;
 
   // WeakPtrFactory to use callbacks.
   base::WeakPtrFactory<ArcSessionRunner> weak_ptr_factory_{this};

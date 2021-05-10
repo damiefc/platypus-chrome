@@ -7,8 +7,6 @@
 
 #include <stdint.h>
 
-#include <memory>
-
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/feedback_signal_accumulator.h"
@@ -24,7 +22,7 @@ class VideoFrame;
 namespace media {
 namespace cast {
 
-class Vp8Encoder : public SoftwareVideoEncoder {
+class Vp8Encoder final : public SoftwareVideoEncoder {
  public:
   explicit Vp8Encoder(const FrameSenderConfig& video_config);
 

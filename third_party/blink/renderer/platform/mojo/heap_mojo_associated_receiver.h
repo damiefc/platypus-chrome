@@ -10,8 +10,8 @@
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "third_party/blink/renderer/platform/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/mojo/features.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
+#include "third_party/blink/renderer/platform/mojo/mojo_binding_context.h"
 
 namespace blink {
 
@@ -66,6 +66,10 @@ class HeapMojoAssociatedReceiver {
     return wrapper_->associated_receiver().WaitForIncomingCall();
   }
 
+  void SetFilter(std::unique_ptr<mojo::MessageFilter> filter) {
+    wrapper_->associated_receiver().SetFilter(std::move(filter));
+  }
+
   void Trace(Visitor* visitor) const { visitor->Trace(wrapper_); }
 
  private:
@@ -96,9 +100,7 @@ class HeapMojoAssociatedReceiver {
 
     // ContextLifecycleObserver methods
     void ContextDestroyed() override {
-      if (Mode == HeapMojoWrapperMode::kWithContextObserver ||
-          (Mode == HeapMojoWrapperMode::kWithoutContextObserver &&
-           base::FeatureList::IsEnabled(kHeapMojoUseContextObserver)))
+      if (Mode == HeapMojoWrapperMode::kWithContextObserver)
         associated_receiver_.reset();
     }
 

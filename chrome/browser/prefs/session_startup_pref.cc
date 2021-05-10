@@ -58,7 +58,7 @@ void SessionStartupPref::RegisterProfilePrefs(
 
 // static
 SessionStartupPref::Type SessionStartupPref::GetDefaultStartupType() {
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   return SessionStartupPref::LAST;
 #else
   return SessionStartupPref::DEFAULT;
@@ -102,7 +102,7 @@ SessionStartupPref SessionStartupPref::GetStartupPref(const Profile* profile) {
 
   // Guest sessions should not store any state, therefore they should never
   // trigger a restore during startup.
-  return profile->IsGuestSession()
+  return (profile->IsGuestSession() || profile->IsEphemeralGuestProfile())
              ? SessionStartupPref(SessionStartupPref::DEFAULT)
              : GetStartupPref(profile->GetPrefs());
 }

@@ -104,13 +104,10 @@ class ImageDocumentTest : public testing::Test {
 
 void ImageDocumentTest::CreateDocumentWithoutLoadingImage(int view_width,
                                                           int view_height) {
-  Page::PageClients page_clients;
-  FillWithEmptyClients(page_clients);
   chrome_client_ = MakeGarbageCollected<WindowToViewportScalingChromeClient>();
-  page_clients.chrome_client = chrome_client_;
   dummy_page_holder_ = nullptr;
   dummy_page_holder_ = std::make_unique<DummyPageHolder>(
-      IntSize(view_width, view_height), &page_clients);
+      IntSize(view_width, view_height), chrome_client_);
 
   if (page_zoom_factor_)
     dummy_page_holder_->GetFrame().SetPageZoomFactor(page_zoom_factor_);
@@ -123,6 +120,7 @@ void ImageDocumentTest::CreateDocumentWithoutLoadingImage(int view_width,
 
   auto params = std::make_unique<WebNavigationParams>();
   params->url = KURL("http://www.example.com/image.jpg");
+  params->sandbox_flags = network::mojom::WebSandboxFlags::kNone;
 
   const Vector<unsigned char>& data = JpegImage();
   WebNavigationParams::FillStaticResponse(
@@ -310,7 +308,7 @@ TEST_F(ImageDocumentViewportTest, HidingURLBarDoesntChangeImageLocation) {
   // Initialize with the URL bar showing. Make the viewport very thin so that
   // we load an image much wider than the viewport but fits vertically. The
   // page will load zoomed out so the image will be vertically centered.
-  WebView().ResizeWithBrowserControls(IntSize(5, 40), 10, 10, true);
+  WebView().ResizeWithBrowserControls(gfx::Size(5, 40), 10, 10, true);
   SimRequest request("https://example.com/test.jpg", "image/jpeg");
   LoadURL("https://example.com/test.jpg");
 
@@ -337,7 +335,7 @@ TEST_F(ImageDocumentViewportTest, HidingURLBarDoesntChangeImageLocation) {
 
   // Hide the URL bar. This will make the viewport taller but won't change the
   // layout size so the image location shouldn't change.
-  WebView().ResizeWithBrowserControls(IntSize(5, 50), 10, 10, false);
+  WebView().ResizeWithBrowserControls(gfx::Size(5, 50), 10, 10, false);
   Compositor().BeginFrame();
   rect = img->getBoundingClientRect();
   EXPECT_EQ(50, rect->width());
@@ -359,7 +357,7 @@ TEST_F(ImageDocumentViewportTest, ZoomForDSFScaleImage) {
   HTMLImageElement* img = GetDocument().ImageElement();
 
   // no zoom
-  WebView().MainFrameWidget()->Resize(IntSize(100, 100));
+  WebView().MainFrameWidget()->Resize(gfx::Size(100, 100));
   WebView().SetZoomFactorForDeviceScaleFactor(1.f);
   Compositor().BeginFrame();
   EXPECT_EQ(50u, img->width());
@@ -373,7 +371,7 @@ TEST_F(ImageDocumentViewportTest, ZoomForDSFScaleImage) {
   // visual viewport should be same in CSS pixel, as no dsf applied.
   // This simulates running on two phones with different screen densities but
   // same (physical) screen size, image document should displayed the same.
-  WebView().MainFrameWidget()->Resize(IntSize(400, 400));
+  WebView().MainFrameWidget()->Resize(gfx::Size(400, 400));
   WebView().SetZoomFactorForDeviceScaleFactor(4.f);
   Compositor().BeginFrame();
   EXPECT_EQ(50u, img->width());
@@ -402,7 +400,7 @@ TEST_F(ImageDocumentViewportTest, DivWidthWithZoomForDSF) {
 
   // Image smaller then webview size, visual viewport is not zoomed, and image
   // will be centered in the viewport.
-  WebView().MainFrameWidget()->Resize(IntSize(200, 200));
+  WebView().MainFrameWidget()->Resize(gfx::Size(200, 200));
   Compositor().BeginFrame();
   EXPECT_EQ(50u, img->width());
   EXPECT_EQ(50u, img->height());
@@ -416,7 +414,7 @@ TEST_F(ImageDocumentViewportTest, DivWidthWithZoomForDSF) {
 
   // Image wider than webview size, image should fill the visual viewport, and
   // visual viewport zoom out to 0.5.
-  WebView().MainFrameWidget()->Resize(IntSize(50, 50));
+  WebView().MainFrameWidget()->Resize(gfx::Size(50, 50));
   Compositor().BeginFrame();
   EXPECT_EQ(50u, img->width());
   EXPECT_EQ(50u, img->height());
@@ -427,7 +425,7 @@ TEST_F(ImageDocumentViewportTest, DivWidthWithZoomForDSF) {
 
   // When image is more than 10X wider than webview, shrink the image to fit the
   // width of the screen.
-  WebView().MainFrameWidget()->Resize(IntSize(4, 20));
+  WebView().MainFrameWidget()->Resize(gfx::Size(4, 20));
   Compositor().BeginFrame();
   EXPECT_EQ(20u, img->width());
   EXPECT_EQ(20u, img->height());

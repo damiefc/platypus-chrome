@@ -4,17 +4,10 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/dcheck_always_on.gni")
+import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
-import("//ui/ozone/ozone.gni")
 import("features.gni")
-
-# This file depends on the legacy global sources assignment filter. It should
-# be converted to check target platform before assigning source files to the
-# sources variable. Remove this import and set_sources_assignment_filter call
-# when the file has been converted. See https://crbug.com/1018739 for details.
-import("//build/config/deprecated_default_sources_assignment_filter.gni")
-set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
 
 # Generate a buildflag header for compile-time checking of Vulkan support.
 buildflag_header("buildflags") {
@@ -23,11 +16,11 @@ buildflag_header("buildflags") {
 }
 
 if (enable_vulkan) {
-  use_vulkan_xlib = use_x11 || ozone_platform_x11
+  use_vulkan_xcb = use_x11 || ozone_platform_x11
   config("vulkan_config") {
     defines = [ "VK_NO_PROTOTYPES" ]
-    if (use_vulkan_xlib) {
-      defines += [ "USE_VULKAN_XLIB" ]
+    if (use_vulkan_xcb) {
+      defines += [ "USE_VULKAN_XCB" ]
     }
   }
 
@@ -51,7 +44,8 @@ if (enable_vulkan) {
       "//ui/gfx",
     ]
 
-    public_deps = [ "//third_party/vulkan_headers" ]
+    public_deps =
+        [ "//third_party/vulkan-deps/vulkan-headers/src:vulkan_headers" ]
 
     if (is_fuchsia) {
       sources += [ "fuchsia/vulkan_fuchsia_ext.h" ]
@@ -66,12 +60,7 @@ if (enable_vulkan) {
       "vma_wrapper.h",
     ]
 
-    defines = [
-      "IS_VULKAN_IMPL",
-      "VMA_DYNAMIC_VULKAN_FUNCTIONS=0",
-      "VMA_STATS_STRING_ENABLED=0",
-      "VMA_IMPLEMENTATION",
-    ]
+    defines = [ "IS_VULKAN_IMPL" ]
 
     deps = [
       ":vulkan_function_pointers",
@@ -117,6 +106,7 @@ if (enable_vulkan) {
       ":buildflags",
       "//base",
       "//base/util/type_safety",
+      "//build:chromeos_buildflags",
       "//components/crash/core/common:crash_key",
       "//gpu/ipc/common:vulkan_ycbcr_info",
       "//ui/gfx",
@@ -131,10 +121,11 @@ if (enable_vulkan) {
     data_deps = []
 
     if (is_posix) {
-      sources += [
-        "vulkan_image_linux.cc",
-        "vulkan_util_posix.cc",
-      ]
+      sources += [ "vulkan_util_posix.cc" ]
+
+      if (is_linux || is_chromeos) {
+        sources += [ "vulkan_image_linux.cc" ]
+      }
     }
 
     if (is_android) {
@@ -155,16 +146,12 @@ if (enable_vulkan) {
 
       data_deps += [ "//third_party/fuchsia-sdk:vulkan_base" ]
 
-      # VulkanInstance enables validation layer in Debug builds and when DCHECKs
-      # are enabled in Release builds. In these cases the validation layer
-      # libraries and configs need to be included in the generated Fuchsia
-      # package.
-      if (is_debug || dcheck_always_on) {
-        data_deps += [ "//third_party/fuchsia-sdk:vulkan_validation" ]
-      }
-    }
-    if (use_x11) {
-      deps += [ "//ui/base:features" ]
+      # TODO(fxbug.dev/73208): Vulkan validation is disabled temporarily.
+      # Re-enable once Vulkan is updated.
+      #
+      # if (is_debug || dcheck_always_on) {
+      #   data_deps += [ "//third_party/fuchsia-sdk:vulkan_validation" ]
+      # }
     }
   }
 

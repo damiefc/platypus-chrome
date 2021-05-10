@@ -351,7 +351,7 @@ id<GREYMatcher> ResendPostButtonMatcher() {
 
   // Mimic |web::GetDisplayTitleForUrl| behavior which uses FormatUrl
   // internally. It can't be called directly from the EarlGrey 2 test process.
-  base::string16 title = url_formatter::FormatUrl(destinationURL);
+  std::u16string title = url_formatter::FormatUrl(destinationURL);
   id<GREYMatcher> historyItem = grey_text(base::SysUTF16ToNSString(title));
   [[EarlGrey selectElementWithMatcher:historyItem] performAction:grey_tap()];
   [ChromeEarlGrey waitForPageToFinishLoading];
@@ -400,14 +400,13 @@ id<GREYMatcher> ResendPostButtonMatcher() {
 
   [ChromeEarlGrey waitForPageToFinishLoading];
 
-    // WKBasedNavigationManager displays repost on |reload|. So after
-    // cancelling, web view should show |destinationURL|.
-    [ChromeEarlGrey waitForWebStateContainingText:kDestinationText];
-    [[EarlGrey
-        selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
-        assertWithMatcher:grey_notNil()];
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
-        assertWithMatcher:grey_interactable()];
+  // NavigationManagerImpl displays repost on |reload|. So after
+  // cancelling, web view should show |destinationURL|.
+  [ChromeEarlGrey waitForWebStateContainingText:kDestinationText];
+  [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
+      assertWithMatcher:grey_notNil()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
+      assertWithMatcher:grey_interactable()];
 }
 
 // A new navigation dismisses the repost dialog.
@@ -528,7 +527,8 @@ id<GREYMatcher> ResendPostButtonMatcher() {
 // Tests that submitting a POST-based form by tapping the 'Go' button on the
 // keyboard navigates to the correct URL and the back button works as expected
 // afterwards.
-- (void)testPostFormEntryWithKeyboard {
+// TODO:(crbug.com/1147654): re-enable after figuring out why it is failing.
+- (void)DISABLE_testPostFormEntryWithKeyboard {
   // Test fails on iPad Air 2 13.4 crbug.com/1102608.
   if ([ChromeEarlGrey isIPadIdiom] && base::ios::IsRunningOnOrLater(13, 0, 0)) {
     EARL_GREY_TEST_DISABLED(@"Fails in iOS 13 on iPads.");

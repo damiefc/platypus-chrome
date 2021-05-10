@@ -13,7 +13,9 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/wm/overview/rounded_rect_view.h"
+#include "ash/style/ash_color_provider.h"
+#include "ash/style/default_color_constants.h"
+#include "ash/style/default_colors.h"
 #include "ash/wm/splitview/split_view_constants.h"
 #include "ash/wm/splitview/split_view_highlight_view.h"
 #include "ash/wm/splitview/split_view_utils.h"
@@ -24,8 +26,10 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display_observer.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view.h"
@@ -127,24 +131,32 @@ class SplitViewDragIndicators::RotatedImageLabelView : public views::View {
     // Use |label_parent_| to add padding and rounded edges to the text. Create
     // this extra view so that we can rotate the label, while having a slide
     // animation at times on the whole thing.
-    label_parent_ = AddChildView(std::make_unique<RoundedRectView>(
-        kSplitviewLabelRoundRectRadiusDp, kSplitviewLabelBackgroundColor));
+    label_parent_ = AddChildView(std::make_unique<views::View>());
     label_parent_->SetPaintToLayer();
     label_parent_->layer()->SetFillsBoundsOpaquely(false);
+    label_parent_->SetBackground(views::CreateRoundedRectBackground(
+        DeprecatedGetBaseLayerColor(
+            AshColorProvider::BaseLayerType::kTransparent80,
+            kSplitviewLabelBackgroundColor),
+        kSplitviewLabelRoundRectRadiusDp));
     label_parent_->SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kVertical,
         gfx::Insets(kSplitviewLabelVerticalInsetDp,
                     kSplitviewLabelHorizontalInsetDp)));
 
     label_ = label_parent_->AddChildView(std::make_unique<views::Label>(
-        base::string16(), views::style::CONTEXT_LABEL));
-    label_->SetEnabledColor(kSplitviewLabelEnabledColor);
-    label_->SetBackgroundColor(kSplitviewLabelBackgroundColor);
+        std::u16string(), views::style::CONTEXT_LABEL));
+    label_->SetEnabledColor(DeprecatedGetContentLayerColor(
+        AshColorProvider::ContentLayerType::kTextColorPrimary,
+        kSplitviewLabelEnabledColor));
+    label_->SetBackgroundColor(DeprecatedGetBaseLayerColor(
+        AshColorProvider::BaseLayerType::kTransparent80,
+        kSplitviewLabelBackgroundColor));
   }
 
   ~RotatedImageLabelView() override = default;
 
-  void SetLabelText(const base::string16& text) { label_->SetText(text); }
+  void SetLabelText(const std::u16string& text) { label_->SetText(text); }
 
   // Called when the view's bounds are altered. Rotates the view by |angle|
   // degrees.
@@ -213,7 +225,7 @@ class SplitViewDragIndicators::RotatedImageLabelView : public views::View {
   // left/top one.
   const bool is_right_or_bottom_;
 
-  RoundedRectView* label_parent_ = nullptr;
+  views::View* label_parent_ = nullptr;
   views::Label* label_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(RotatedImageLabelView);

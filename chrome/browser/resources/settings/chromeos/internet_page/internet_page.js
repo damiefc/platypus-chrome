@@ -6,6 +6,9 @@
 
 const mojom = chromeos.networkConfig.mojom;
 
+/** @type {number} */
+const ESIM_PROFILE_LIMIT = 5;
+
 /**
  * @fileoverview
  * 'settings-internet-page' is the settings page containing internet
@@ -81,10 +84,10 @@ Polymer({
     },
 
     /**
-     * False if VPN is disabled by policy.
+     * True if VPN is prohibited by policy.
      * @private {boolean}
      */
-    vpnIsEnabled_: {
+    vpnIsProhibited_: {
       type: Boolean,
       value: false,
     },
@@ -119,10 +122,65 @@ Polymer({
       value: false,
     },
 
+    /**
+     * Page name, if defined, indicating that the next deviceStates update
+     * should call attemptShowCellularSetupDialog_().
+     * @private {cellularSetup.CellularSetupPageName|null}
+     */
+    pendingShowCellularSetupDialogAttemptPageName_: {
+      type: String,
+      value: null,
+    },
+
     /** @private {boolean} */
     showCellularSetupDialog_: {
       type: Boolean,
       value: false,
+    },
+
+    /**
+     * Name of cellular setup dialog page.
+     * @private {!cellularSetup.CellularSetupPageName|null}
+     */
+    cellularSetupDialogPageName_: String,
+
+    /** @private {boolean} */
+    hasActiveCellularNetwork_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @private {boolean} */
+    isConnectedToNonCellularNetwork_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @private {boolean} */
+    showESimProfileRenameDialog_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @private {boolean} */
+    showESimRemoveProfileDialog_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @private */
+    showSimLockDialog_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /**
+     * eSIM network used in internet detail menu.
+     * @private {chromeos.networkConfig.mojom.NetworkStateProperties}
+     */
+    eSimNetworkState_: {
+      type: Object,
+      value: '',
     },
 
     /** @private {!Map<string, Element>} */
@@ -144,6 +202,12 @@ Polymer({
         chromeos.settings.mojom.Setting.kMobileOnOff,
       ]),
     },
+
+    /** @private */
+    errorToastMessage_: {
+      type: String,
+      value: '',
+    },
   },
 
   /**
@@ -161,6 +225,9 @@ Polymer({
     'show-detail': 'onShowDetail_',
     'show-known-networks': 'onShowKnownNetworks_',
     'show-networks': 'onShowNetworks_',
+    'show-esim-profile-rename-dialog': 'onShowESimProfileRenameDialog_',
+    'show-esim-remove-profile-dialog': 'onShowESimRemoveProfileDialog_',
+    'show-error-toast': 'onShowErrorToast_',
   },
 
   /** @private  {?settings.InternetPageBrowserProxy} */
@@ -182,6 +249,7 @@ Polymer({
       this.globalPolicy_ = response.result;
     });
     this.onVpnProvidersChanged();
+    this.onNetworkStateListChanged();
   },
 
   /**
@@ -217,7 +285,7 @@ Polymer({
    * @protected
    */
   currentRouteChanged(route, oldRoute) {
-    if (route == settings.routes.INTERNET_NETWORKS) {
+    if (route === settings.routes.INTERNET_NETWORKS) {
       // Handle direct navigation to the networks page,
       // e.g. chrome://settings/internet/networks?type=WiFi
       const queryParams = settings.Router.getInstance().getQueryParameters();
@@ -225,7 +293,23 @@ Polymer({
       if (type) {
         this.subpageType_ = OncMojo.getNetworkTypeFromString(type);
       }
-    } else if (route == settings.routes.KNOWN_NETWORKS) {
+
+      if (!oldRoute && queryParams.get('showCellularSetup') === 'true') {
+        const pageName = queryParams.get('showPsimFlow') === 'true' ?
+            cellularSetup.CellularSetupPageName.PSIM_FLOW_UI :
+            cellularSetup.CellularSetupPageName.ESIM_FLOW_UI;
+        // If the page just loaded, deviceStates will not be fully initialized
+        // yet. Set pendingShowCellularSetupDialogAttemptPageName_ to indicate
+        // showCellularSetupDialogAttempt_() should be called next deviceStates
+        // update.
+        this.pendingShowCellularSetupDialogAttemptPageName_ = pageName;
+      }
+
+      this.showSimLockDialog_ = !oldRoute &&
+          !!queryParams.get('showSimLockDialog') &&
+          this.subpageType_ === mojom.NetworkType.kCellular &&
+          loadTimeData.getBoolean('updatedCellularActivationUi');
+    } else if (route === settings.routes.KNOWN_NETWORKS) {
       // Handle direct navigation to the known networks page,
       // e.g. chrome://settings/internet/knownNetworks?type=WiFi
       const queryParams = settings.Router.getInstance().getQueryParameters();
@@ -233,10 +317,10 @@ Polymer({
       if (type) {
         this.knownNetworksType_ = OncMojo.getNetworkTypeFromString(type);
       }
-    } else if (route == settings.routes.INTERNET) {
+    } else if (route === settings.routes.INTERNET) {
       // Show deep links for the internet page.
       this.attemptDeepLink();
-    } else if (route != settings.routes.BASIC) {
+    } else if (route !== settings.routes.BASIC) {
       // If we are navigating to a non internet section, do not set focus.
       return;
     }
@@ -248,7 +332,7 @@ Polymer({
 
     // Focus the subpage arrow where appropriate.
     let element;
-    if (route == settings.routes.INTERNET_NETWORKS) {
+    if (route === settings.routes.INTERNET_NETWORKS) {
       // iron-list makes the correct timing to focus an item in the list
       // very complicated, and the item may not exist, so just focus the
       // entire list for now.
@@ -275,11 +359,29 @@ Polymer({
   },
 
   /** NetworkListenerBehavior override */
+  onNetworkStateListChanged() {
+    hasActiveCellularNetwork().then((hasActive) => {
+      this.hasActiveCellularNetwork_ = hasActive;
+    });
+    this.updateIsConnectedToNonCellularNetwork_();
+  },
+
   onVpnProvidersChanged() {
     this.networkConfig_.getVpnProviders().then(response => {
       const providers = response.providers;
       providers.sort(this.compareVpnProviders_);
       this.vpnProviders_ = providers;
+    });
+  },
+
+  /**
+   * @return {!Promise<boolean>}
+   * @private
+   */
+  updateIsConnectedToNonCellularNetwork_() {
+    return isConnectedToNonCellularNetwork().then((isConnected) => {
+      this.isConnectedToNonCellularNetwork_ = isConnected;
+      return isConnected;
     });
   },
 
@@ -313,9 +415,76 @@ Polymer({
     }
   },
 
+  /**
+   * @param {Event} event
+   * @private
+   */
+  onShowCellularSetupDialog_(event) {
+    this.attemptShowCellularSetupDialog_(event.detail.pageName);
+  },
+
+  /**
+   * Opens the cellular setup dialog if pageName is PSIM_FLOW_UI, or if pageName
+   * is ESIM_FLOW_UI and isConnectedToNonCellularNetwork_ is true. If
+   * isConnectedToNonCellularNetwork_ is false, shows an error toast.
+   * @param {cellularSetup.CellularSetupPageName} pageName
+   * @private
+   */
+  attemptShowCellularSetupDialog_(pageName) {
+    const cellularDeviceState =
+        this.getDeviceState_(mojom.NetworkType.kCellular, this.deviceStates);
+    if (!cellularDeviceState ||
+        cellularDeviceState.deviceState !== mojom.DeviceStateType.kEnabled) {
+      this.showErrorToast_(this.i18n('eSimMobileDataNotEnabledErrorToast'));
+      return;
+    }
+
+    if (pageName === cellularSetup.CellularSetupPageName.PSIM_FLOW_UI) {
+      this.showCellularSetupDialog_ = true;
+      this.cellularSetupDialogPageName_ = pageName;
+    } else {
+      this.attemptShowESimSetupDialog_();
+    }
+  },
+
   /** @private */
-  onShowCellularSetupDialog_() {
-    this.showCellularSetupDialog_ = true;
+  async attemptShowESimSetupDialog_() {
+    const numProfiles = await cellular_setup.getNumESimProfiles();
+    if (numProfiles >= ESIM_PROFILE_LIMIT) {
+      this.showErrorToast_(
+          this.i18n('eSimProfileLimitReachedErrorToast', ESIM_PROFILE_LIMIT));
+      return;
+    }
+    // isConnectedToNonCellularNetwork_ may
+    // not be fetched yet if the page just opened, fetch it
+    // explicitly.
+    this.updateIsConnectedToNonCellularNetwork_().then(
+        ((isConnected) => {
+          this.showCellularSetupDialog_ = isConnected;
+          if (!isConnected) {
+            this.showErrorToast_(this.i18n('eSimNoConnectionErrorToast'));
+            return;
+          }
+          this.cellularSetupDialogPageName_ =
+              cellularSetup.CellularSetupPageName.ESIM_FLOW_UI;
+        }).bind(this));
+  },
+
+  /**
+   * @param {!CustomEvent<string>} event
+   * @private
+   */
+  onShowErrorToast_(event) {
+    this.showErrorToast_(event.detail);
+  },
+
+  /**
+   * @param {string} message
+   * @private
+   */
+  showErrorToast_(message) {
+    this.errorToastMessage_ = message;
+    this.$.errorToast.show();
   },
 
   /** @private */
@@ -332,8 +501,8 @@ Polymer({
    */
   showConfig_(configAndConnect, type, opt_guid, opt_name) {
     assert(
-        type != chromeos.networkConfig.mojom.NetworkType.kCellular &&
-        type != chromeos.networkConfig.mojom.NetworkType.kTether);
+        type !== chromeos.networkConfig.mojom.NetworkType.kCellular &&
+        type !== chromeos.networkConfig.mojom.NetworkType.kTether);
     if (this.showInternetConfig_) {
       return;
     }
@@ -372,6 +541,36 @@ Polymer({
   },
 
   /**
+   * @param {!CustomEvent<!{networkState:
+   *     chromeos.networkConfig.mojom.NetworkStateProperties}>} event
+   * @private
+   */
+  onShowESimProfileRenameDialog_(event) {
+    this.eSimNetworkState_ = event.detail.networkState;
+    this.showESimProfileRenameDialog_ = true;
+  },
+
+  /** @private */
+  onCloseESimProfileRenameDialog_() {
+    this.showESimProfileRenameDialog_ = false;
+  },
+
+  /**
+   * @param {!CustomEvent<!{networkState:
+   *     chromeos.networkConfig.mojom.NetworkStateProperties}>} event
+   * @private
+   */
+  onShowESimRemoveProfileDialog_(event) {
+    this.eSimNetworkState_ = event.detail.networkState;
+    this.showESimRemoveProfileDialog_ = true;
+  },
+
+  /** @private */
+  onCloseESimRemoveProfileDialog_() {
+    this.showESimRemoveProfileDialog_ = false;
+  },
+
+  /**
    * @param {!CustomEvent<chromeos.networkConfig.mojom.NetworkType>} event
    * @private
    */
@@ -387,8 +586,8 @@ Polymer({
     // The shared Cellular/Tether subpage is referred to as "Mobile".
     // TODO(khorimoto): Remove once Cellular/Tether are split into their own
     // sections.
-    if (this.subpageType_ == mojom.NetworkType.kCellular ||
-        this.subpageType_ == mojom.NetworkType.kTether) {
+    if (this.subpageType_ === mojom.NetworkType.kCellular ||
+        this.subpageType_ === mojom.NetworkType.kTether) {
       return this.i18n('OncTypeMobile');
     }
     return this.i18n(
@@ -407,7 +606,7 @@ Polymer({
     }
     // If both Tether and Cellular are enabled, use the Cellular device state
     // when directly navigating to the Tether page.
-    if (subpageType == mojom.NetworkType.kTether &&
+    if (subpageType === mojom.NetworkType.kTether &&
         this.deviceStates[mojom.NetworkType.kCellular]) {
       subpageType = mojom.NetworkType.kCellular;
     }
@@ -436,14 +635,14 @@ Polymer({
       managedNetworkAvailable = !!wifiDeviceState.managedNetworkAvailable;
     }
 
-    if (this.managedNetworkAvailable != managedNetworkAvailable) {
+    if (this.managedNetworkAvailable !== managedNetworkAvailable) {
       this.managedNetworkAvailable = managedNetworkAvailable;
     }
 
     const vpn = this.deviceStates[mojom.NetworkType.kVPN];
-    this.vpnIsEnabled_ = !!vpn &&
+    this.vpnIsProhibited_ = !!vpn &&
         vpn.deviceState ===
-            chromeos.networkConfig.mojom.DeviceStateType.kEnabled;
+            chromeos.networkConfig.mojom.DeviceStateType.kProhibited;
 
     if (this.detailType_ && !this.deviceStates[this.detailType_]) {
       // If the device type associated with the current network has been
@@ -454,6 +653,12 @@ Polymer({
       if (detailPage) {
         detailPage.close();
       }
+    }
+
+    if (this.pendingShowCellularSetupDialogAttemptPageName_) {
+      this.attemptShowCellularSetupDialog_(
+          this.pendingShowCellularSetupDialogAttemptPageName_);
+      this.pendingShowCellularSetupDialogAttemptPageName_ = null;
     }
   },
 
@@ -480,7 +685,7 @@ Polymer({
 
   /** @private */
   onAddVPNTap_() {
-    if (this.vpnIsEnabled_) {
+    if (!this.vpnIsProhibited_) {
       this.showConfig_(
           true /* configAndConnect */,
           chromeos.networkConfig.mojom.NetworkType.kVPN);
@@ -543,7 +748,7 @@ Polymer({
   wifiIsEnabled_(deviceStates) {
     const wifi = deviceStates[mojom.NetworkType.kWiFi];
     return !!wifi &&
-        wifi.deviceState ==
+        wifi.deviceState ===
         chromeos.networkConfig.mojom.DeviceStateType.kEnabled;
   },
 
@@ -585,7 +790,7 @@ Polymer({
     const displayName = OncMojo.getNetworkStateDisplayName(networkState);
 
     if (!event.detail.bypassConnectionDialog &&
-        type == mojom.NetworkType.kTether &&
+        type === mojom.NetworkType.kTether &&
         !networkState.typeState.tether.hasConnectedToHost) {
       const params = new URLSearchParams;
       params.append('guid', networkState.guid);
@@ -598,8 +803,9 @@ Polymer({
       return;
     }
 
-    const isMobile = OncMojo.networkTypeIsMobile(type);
-    if (!isMobile && (!networkState.connectable || !!networkState.errorState)) {
+    if (OncMojo.networkTypeHasConfigurationFlow(type) &&
+        (!OncMojo.isNetworkConnectable(networkState) ||
+         !!networkState.errorState)) {
       this.showConfig_(
           true /* configAndConnect */, type, networkState.guid, displayName);
       return;
@@ -615,7 +821,7 @@ Polymer({
           // TODO(stevenjb/khorimoto): Consider handling these cases.
           return;
         case mojom.StartConnectResult.kNotConfigured:
-          if (!isMobile) {
+          if (OncMojo.networkTypeHasConfigurationFlow(type)) {
             this.showConfig_(
                 true /* configAndConnect */, type, networkState.guid,
                 displayName);

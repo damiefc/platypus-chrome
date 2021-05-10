@@ -11,10 +11,9 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_base.h"
@@ -27,7 +26,7 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool/task.h"
 #include "base/task/thread_pool/test_utils.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_simple_task_runner.h"
@@ -54,6 +53,8 @@ class CallbackThread : public SimpleThread {
  public:
   explicit CallbackThread(OnceClosure closure)
       : SimpleThread("CallbackThread"), closure_(std::move(closure)) {}
+  CallbackThread(const CallbackThread&) = delete;
+  CallbackThread& operator=(const CallbackThread&) = delete;
 
   // Returns true once the callback returns.
   bool has_returned() { return has_returned_.IsSet(); }
@@ -66,8 +67,6 @@ class CallbackThread : public SimpleThread {
 
   OnceClosure closure_;
   AtomicFlag has_returned_;
-
-  DISALLOW_COPY_AND_ASSIGN(CallbackThread);
 };
 
 class ThreadPostingAndRunningTask : public SimpleThread {
@@ -107,6 +106,9 @@ class ThreadPostingAndRunningTask : public SimpleThread {
         expect_post_succeeds_(false) {
     EXPECT_TRUE(task_source_);
   }
+  ThreadPostingAndRunningTask(const ThreadPostingAndRunningTask&) = delete;
+  ThreadPostingAndRunningTask& operator=(const ThreadPostingAndRunningTask&) =
+      delete;
 
   RegisteredTaskSource TakeTaskSource() { return std::move(task_source_); }
 
@@ -142,13 +144,11 @@ class ThreadPostingAndRunningTask : public SimpleThread {
   RegisteredTaskSource task_source_;
   const Action action_;
   const bool expect_post_succeeds_;
-
-  DISALLOW_COPY_AND_ASSIGN(ThreadPostingAndRunningTask);
 };
 
 class ScopedSetSingletonAllowed {
  public:
-  ScopedSetSingletonAllowed(bool singleton_allowed)
+  explicit ScopedSetSingletonAllowed(bool singleton_allowed)
       : previous_value_(
             ThreadRestrictions::SetSingletonAllowed(singleton_allowed)) {}
   ~ScopedSetSingletonAllowed() {
@@ -161,6 +161,11 @@ class ScopedSetSingletonAllowed {
 
 class ThreadPoolTaskTrackerTest
     : public testing::TestWithParam<TaskShutdownBehavior> {
+ public:
+  ThreadPoolTaskTrackerTest(const ThreadPoolTaskTrackerTest&) = delete;
+  ThreadPoolTaskTrackerTest& operator=(const ThreadPoolTaskTrackerTest&) =
+      delete;
+
  protected:
   ThreadPoolTaskTrackerTest() = default;
 
@@ -169,7 +174,7 @@ class ThreadPoolTaskTrackerTest
     return Task(
         FROM_HERE,
         BindOnce(&ThreadPoolTaskTrackerTest::RunTaskCallback, Unretained(this)),
-        TimeDelta());
+        TimeTicks::Now(), TimeDelta());
   }
 
   RegisteredTaskSource WillPostTaskAndQueueTaskSource(
@@ -213,8 +218,8 @@ class ThreadPoolTaskTrackerTest
   // Calls tracker_->FlushForTesting() on a new thread.
   void CallFlushFromAnotherThread() {
     ASSERT_FALSE(thread_calling_flush_);
-    thread_calling_flush_.reset(new CallbackThread(
-        BindOnce(&TaskTracker::FlushForTesting, Unretained(&tracker_))));
+    thread_calling_flush_ = std::make_unique<CallbackThread>(
+        BindOnce(&TaskTracker::FlushForTesting, Unretained(&tracker_)));
     thread_calling_flush_->Start();
   }
 
@@ -234,7 +239,7 @@ class ThreadPoolTaskTrackerTest
     return num_tasks_executed_;
   }
 
-  TaskTracker tracker_{"Test"};
+  TaskTracker tracker_;
 
  private:
   void RunTaskCallback() {
@@ -249,8 +254,6 @@ class ThreadPoolTaskTrackerTest
   CheckedLock lock_;
 
   size_t num_tasks_executed_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(ThreadPoolTaskTrackerTest);
 };
 
 #define WAIT_FOR_ASYNC_SHUTDOWN_COMPLETED() \
@@ -305,7 +308,7 @@ TEST_P(ThreadPoolTaskTrackerTest, WillPostAndRunLongTaskBeforeShutdown) {
                       task_running.Signal();
                       task_barrier.Wait();
                     }),
-                    TimeDelta());
+                    TimeTicks::Now(), TimeDelta());
 
   // Inform |task_tracker_| that |blocked_task| will be posted.
   auto sequence =
@@ -488,7 +491,7 @@ TEST_P(ThreadPoolTaskTrackerTest, SingletonAllowed) {
       (GetParam() != TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN);
 
   Task task(FROM_HERE, BindOnce(&ThreadRestrictions::AssertSingletonAllowed),
-            TimeDelta());
+            TimeTicks::Now(), TimeDelta());
   auto sequence = WillPostTaskAndQueueTaskSource(std::move(task), {GetParam()});
   EXPECT_TRUE(sequence);
 
@@ -515,7 +518,7 @@ TEST_P(ThreadPoolTaskTrackerTest, IOAllowed) {
                              ScopedBlockingCall scope_blocking_call(
                                  FROM_HERE, BlockingType::WILL_BLOCK);
                            }),
-                           TimeDelta());
+                           TimeTicks::Now(), TimeDelta());
   TaskTraits traits_with_may_block{MayBlock(), GetParam()};
   auto sequence_with_may_block = WillPostTaskAndQueueTaskSource(
       std::move(task_with_may_block), traits_with_may_block);
@@ -531,7 +534,7 @@ TEST_P(ThreadPoolTaskTrackerTest, IOAllowed) {
                                       FROM_HERE, BlockingType::WILL_BLOCK);
                                 });
                               }),
-                              TimeDelta());
+                              TimeTicks::Now(), TimeDelta());
   TaskTraits traits_without_may_block = TaskTraits(GetParam());
   auto sequence_without_may_block = WillPostTaskAndQueueTaskSource(
       std::move(task_without_may_block), traits_without_may_block);
@@ -571,7 +574,8 @@ static void VerifyNoTaskRunnerHandle() {
 TEST_P(ThreadPoolTaskTrackerTest, TaskRunnerHandleIsNotSetOnParallel) {
   // Create a task that will verify that TaskRunnerHandles are not set in its
   // scope per no TaskRunner ref being set to it.
-  Task verify_task(FROM_HERE, BindOnce(&VerifyNoTaskRunnerHandle), TimeDelta());
+  Task verify_task(FROM_HERE, BindOnce(&VerifyNoTaskRunnerHandle),
+                   TimeTicks::Now(), TimeDelta());
 
   RunTaskRunnerHandleVerificationTask(&tracker_, std::move(verify_task),
                                       TaskTraits(GetParam()), nullptr,
@@ -594,7 +598,7 @@ TEST_P(ThreadPoolTaskTrackerTest, SequencedTaskRunnerHandleIsSetOnSequenced) {
   Task verify_task(FROM_HERE,
                    BindOnce(&VerifySequencedTaskRunnerHandle,
                             Unretained(test_task_runner.get())),
-                   TimeDelta());
+                   TimeTicks::Now(), TimeDelta());
 
   RunTaskRunnerHandleVerificationTask(
       &tracker_, std::move(verify_task), TaskTraits(GetParam()),
@@ -619,7 +623,7 @@ TEST_P(ThreadPoolTaskTrackerTest, ThreadTaskRunnerHandleIsSetOnSingleThreaded) {
   Task verify_task(FROM_HERE,
                    BindOnce(&VerifyThreadTaskRunnerHandle,
                             Unretained(test_task_runner.get())),
-                   TimeDelta());
+                   TimeTicks::Now(), TimeDelta());
 
   RunTaskRunnerHandleVerificationTask(
       &tracker_, std::move(verify_task), TaskTraits(GetParam()),
@@ -627,14 +631,16 @@ TEST_P(ThreadPoolTaskTrackerTest, ThreadTaskRunnerHandleIsSetOnSingleThreaded) {
 }
 
 TEST_P(ThreadPoolTaskTrackerTest, FlushPendingDelayedTask) {
-  Task delayed_task(FROM_HERE, DoNothing(), TimeDelta::FromDays(1));
+  Task delayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(),
+                    TimeDelta::FromDays(1));
   tracker_.WillPostTask(&delayed_task, GetParam());
   // FlushForTesting() should return even if the delayed task didn't run.
   tracker_.FlushForTesting();
 }
 
 TEST_P(ThreadPoolTaskTrackerTest, FlushAsyncForTestingPendingDelayedTask) {
-  Task delayed_task(FROM_HERE, DoNothing(), TimeDelta::FromDays(1));
+  Task delayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(),
+                    TimeDelta::FromDays(1));
   tracker_.WillPostTask(&delayed_task, GetParam());
   // FlushAsyncForTesting() should callback even if the delayed task didn't run.
   bool called_back = false;
@@ -645,7 +651,7 @@ TEST_P(ThreadPoolTaskTrackerTest, FlushAsyncForTestingPendingDelayedTask) {
 }
 
 TEST_P(ThreadPoolTaskTrackerTest, FlushPendingUndelayedTask) {
-  Task undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   auto undelayed_sequence =
       WillPostTaskAndQueueTaskSource(std::move(undelayed_task), {GetParam()});
 
@@ -660,7 +666,7 @@ TEST_P(ThreadPoolTaskTrackerTest, FlushPendingUndelayedTask) {
 }
 
 TEST_P(ThreadPoolTaskTrackerTest, FlushAsyncForTestingPendingUndelayedTask) {
-  Task undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   auto undelayed_sequence =
       WillPostTaskAndQueueTaskSource(std::move(undelayed_task), {GetParam()});
 
@@ -677,7 +683,7 @@ TEST_P(ThreadPoolTaskTrackerTest, FlushAsyncForTestingPendingUndelayedTask) {
 }
 
 TEST_P(ThreadPoolTaskTrackerTest, PostTaskDuringFlush) {
-  Task undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   auto undelayed_sequence =
       WillPostTaskAndQueueTaskSource(std::move(undelayed_task), {GetParam()});
 
@@ -687,7 +693,8 @@ TEST_P(ThreadPoolTaskTrackerTest, PostTaskDuringFlush) {
   VERIFY_ASYNC_FLUSH_IN_PROGRESS();
 
   // Simulate posting another undelayed task.
-  Task other_undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task other_undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(),
+                            TimeDelta());
   auto other_undelayed_sequence = WillPostTaskAndQueueTaskSource(
       std::move(other_undelayed_task), {GetParam()});
 
@@ -704,7 +711,7 @@ TEST_P(ThreadPoolTaskTrackerTest, PostTaskDuringFlush) {
 }
 
 TEST_P(ThreadPoolTaskTrackerTest, PostTaskDuringFlushAsyncForTesting) {
-  Task undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   auto undelayed_sequence =
       WillPostTaskAndQueueTaskSource(std::move(undelayed_task), {GetParam()});
 
@@ -716,7 +723,8 @@ TEST_P(ThreadPoolTaskTrackerTest, PostTaskDuringFlushAsyncForTesting) {
   EXPECT_FALSE(event.IsSignaled());
 
   // Simulate posting another undelayed task.
-  Task other_undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task other_undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(),
+                            TimeDelta());
   auto other_undelayed_sequence = WillPostTaskAndQueueTaskSource(
       std::move(other_undelayed_task), {GetParam()});
 
@@ -736,10 +744,11 @@ TEST_P(ThreadPoolTaskTrackerTest, PostTaskDuringFlushAsyncForTesting) {
 
 TEST_P(ThreadPoolTaskTrackerTest, RunDelayedTaskDuringFlush) {
   // Simulate posting a delayed and an undelayed task.
-  Task delayed_task(FROM_HERE, DoNothing(), TimeDelta::FromDays(1));
+  Task delayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(),
+                    TimeDelta::FromDays(1));
   auto delayed_sequence =
       WillPostTaskAndQueueTaskSource(std::move(delayed_task), {GetParam()});
-  Task undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   auto undelayed_sequence =
       WillPostTaskAndQueueTaskSource(std::move(undelayed_task), {GetParam()});
 
@@ -765,10 +774,11 @@ TEST_P(ThreadPoolTaskTrackerTest, RunDelayedTaskDuringFlush) {
 
 TEST_P(ThreadPoolTaskTrackerTest, RunDelayedTaskDuringFlushAsyncForTesting) {
   // Simulate posting a delayed and an undelayed task.
-  Task delayed_task(FROM_HERE, DoNothing(), TimeDelta::FromDays(1));
+  Task delayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(),
+                    TimeDelta::FromDays(1));
   auto delayed_sequence =
       WillPostTaskAndQueueTaskSource(std::move(delayed_task), {GetParam()});
-  Task undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   auto undelayed_sequence =
       WillPostTaskAndQueueTaskSource(std::move(undelayed_task), {GetParam()});
 
@@ -799,7 +809,7 @@ TEST_P(ThreadPoolTaskTrackerTest, FlushAfterShutdown) {
     return;
 
   // Simulate posting a task.
-  Task undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   tracker_.WillPostTask(&undelayed_task, GetParam());
 
   // Shutdown() should return immediately since there are no pending
@@ -816,7 +826,7 @@ TEST_P(ThreadPoolTaskTrackerTest, FlushAfterShutdownAsync) {
     return;
 
   // Simulate posting a task.
-  Task undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   tracker_.WillPostTask(&undelayed_task, GetParam());
 
   // Shutdown() should return immediately since there are no pending
@@ -837,7 +847,7 @@ TEST_P(ThreadPoolTaskTrackerTest, ShutdownDuringFlush) {
     return;
 
   // Simulate posting a task.
-  Task undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   auto undelayed_sequence =
       WillPostTaskAndQueueTaskSource(std::move(undelayed_task), {GetParam()});
 
@@ -860,7 +870,7 @@ TEST_P(ThreadPoolTaskTrackerTest, ShutdownDuringFlushAsyncForTesting) {
     return;
 
   // Simulate posting a task.
-  Task undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   auto undelayed_sequence =
       WillPostTaskAndQueueTaskSource(std::move(undelayed_task), {GetParam()});
 
@@ -882,7 +892,7 @@ TEST_P(ThreadPoolTaskTrackerTest, ShutdownDuringFlushAsyncForTesting) {
 }
 
 TEST_P(ThreadPoolTaskTrackerTest, DoublePendingFlushAsyncForTestingFails) {
-  Task undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   auto undelayed_sequence =
       WillPostTaskAndQueueTaskSource(std::move(undelayed_task), {GetParam()});
 
@@ -898,7 +908,7 @@ TEST_P(ThreadPoolTaskTrackerTest, DoublePendingFlushAsyncForTestingFails) {
 
 TEST_P(ThreadPoolTaskTrackerTest, PostTasksDoNotBlockShutdown) {
   // Simulate posting an undelayed task.
-  Task undelayed_task(FROM_HERE, DoNothing(), TimeDelta());
+  Task undelayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   EXPECT_TRUE(tracker_.WillPostTask(&undelayed_task, GetParam()));
 
   // Since no sequence was queued, a call to Shutdown() should not hang.
@@ -909,7 +919,8 @@ TEST_P(ThreadPoolTaskTrackerTest, PostTasksDoNotBlockShutdown) {
 // of its shutdown behavior.
 TEST_P(ThreadPoolTaskTrackerTest, DelayedRunTasks) {
   // Simulate posting a delayed task.
-  Task delayed_task(FROM_HERE, DoNothing(), TimeDelta::FromDays(1));
+  Task delayed_task(FROM_HERE, DoNothing(), TimeTicks::Now(),
+                    TimeDelta::FromDays(1));
   auto sequence =
       WillPostTaskAndQueueTaskSource(std::move(delayed_task), {GetParam()});
   EXPECT_TRUE(sequence);
@@ -950,7 +961,7 @@ TEST_F(ThreadPoolTaskTrackerTest, CurrentSequenceToken) {
 
   const SequenceToken sequence_token = sequence->token();
   Task task(FROM_HERE, BindOnce(&ExpectSequenceToken, sequence_token),
-            TimeDelta());
+            TimeTicks::Now(), TimeDelta());
   tracker_.WillPostTask(&task, sequence->shutdown_behavior());
 
   {
@@ -1146,10 +1157,10 @@ TEST_F(ThreadPoolTaskTrackerTest, LoadWillPostAndRunDuringShutdown) {
 TEST_F(ThreadPoolTaskTrackerTest,
        RunAndPopNextTaskReturnsSequenceToReschedule) {
   TaskTraits default_traits;
-  Task task_1(FROM_HERE, DoNothing(), TimeDelta());
+  Task task_1(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   EXPECT_TRUE(
       tracker_.WillPostTask(&task_1, default_traits.shutdown_behavior()));
-  Task task_2(FROM_HERE, DoNothing(), TimeDelta());
+  Task task_2(FROM_HERE, DoNothing(), TimeTicks::Now(), TimeDelta());
   EXPECT_TRUE(
       tracker_.WillPostTask(&task_2, default_traits.shutdown_behavior()));
 
@@ -1165,10 +1176,12 @@ namespace {
 class WaitAllowedTestThread : public SimpleThread {
  public:
   WaitAllowedTestThread() : SimpleThread("WaitAllowedTestThread") {}
+  WaitAllowedTestThread(const WaitAllowedTestThread&) = delete;
+  WaitAllowedTestThread& operator=(const WaitAllowedTestThread&) = delete;
 
  private:
   void Run() override {
-    auto task_tracker = std::make_unique<TaskTracker>("Test");
+    auto task_tracker = std::make_unique<TaskTracker>();
 
     // Waiting is allowed by default. Expect TaskTracker to disallow it before
     // running a task without the WithBaseSyncPrimitives() trait.
@@ -1177,7 +1190,7 @@ class WaitAllowedTestThread : public SimpleThread {
         FROM_HERE, BindOnce([]() {
           EXPECT_DCHECK_DEATH({ internal::AssertBaseSyncPrimitivesAllowed(); });
         }),
-        TimeDelta());
+        TimeTicks::Now(), TimeDelta());
     TaskTraits default_traits;
     EXPECT_TRUE(task_tracker->WillPostTask(&task_without_sync_primitives,
                                            default_traits.shutdown_behavior()));
@@ -1194,7 +1207,7 @@ class WaitAllowedTestThread : public SimpleThread {
           // Shouldn't fail.
           internal::AssertBaseSyncPrimitivesAllowed();
         }),
-        TimeDelta());
+        TimeTicks::Now(), TimeDelta());
     TaskTraits traits_with_sync_primitives =
         TaskTraits(WithBaseSyncPrimitives());
     EXPECT_TRUE(task_tracker->WillPostTask(
@@ -1209,8 +1222,6 @@ class WaitAllowedTestThread : public SimpleThread {
         allow_wait_in_task_tracker_destructor;
     task_tracker.reset();
   }
-
-  DISALLOW_COPY_AND_ASSIGN(WaitAllowedTestThread);
 };
 
 }  // namespace
@@ -1225,55 +1236,6 @@ TEST(ThreadPoolTaskTrackerWaitAllowedTest, WaitAllowed) {
   WaitAllowedTestThread wait_allowed_test_thread;
   wait_allowed_test_thread.Start();
   wait_allowed_test_thread.Join();
-}
-
-// Verify that ThreadPool.TaskLatency.* histograms are correctly recorded
-// when a task runs.
-TEST(ThreadPoolTaskTrackerHistogramTest, TaskLatency) {
-  TaskTracker tracker("Test");
-
-  struct {
-    const TaskTraits traits;
-    const char* const expected_histogram;
-  } static constexpr kTests[] = {
-      {{TaskPriority::BEST_EFFORT},
-       "ThreadPool.TaskLatencyMicroseconds.Test."
-       "BackgroundTaskPriority"},
-      {{MayBlock(), TaskPriority::BEST_EFFORT},
-       "ThreadPool.TaskLatencyMicroseconds.Test."
-       "BackgroundTaskPriority"},
-      {{WithBaseSyncPrimitives(), TaskPriority::BEST_EFFORT},
-       "ThreadPool.TaskLatencyMicroseconds.Test."
-       "BackgroundTaskPriority"},
-      {{TaskPriority::USER_VISIBLE},
-       "ThreadPool.TaskLatencyMicroseconds.Test."
-       "UserVisibleTaskPriority"},
-      {{MayBlock(), TaskPriority::USER_VISIBLE},
-       "ThreadPool.TaskLatencyMicroseconds.Test."
-       "UserVisibleTaskPriority"},
-      {{WithBaseSyncPrimitives(), TaskPriority::USER_VISIBLE},
-       "ThreadPool.TaskLatencyMicroseconds.Test."
-       "UserVisibleTaskPriority"},
-      {{TaskPriority::USER_BLOCKING},
-       "ThreadPool.TaskLatencyMicroseconds.Test."
-       "UserBlockingTaskPriority"},
-      {{MayBlock(), TaskPriority::USER_BLOCKING},
-       "ThreadPool.TaskLatencyMicroseconds.Test."
-       "UserBlockingTaskPriority"},
-      {{WithBaseSyncPrimitives(), TaskPriority::USER_BLOCKING},
-       "ThreadPool.TaskLatencyMicroseconds.Test."
-       "UserBlockingTaskPriority"}};
-
-  for (const auto& test : kTests) {
-    Task task(FROM_HERE, DoNothing(), TimeDelta());
-    ASSERT_TRUE(tracker.WillPostTask(&task, test.traits.shutdown_behavior()));
-
-    HistogramTester tester;
-
-    test::QueueAndRunTaskSource(
-        &tracker, test::CreateSequenceWithTask(std::move(task), test.traits));
-    tester.ExpectTotalCount(test.expected_histogram, 1);
-  }
 }
 
 }  // namespace internal

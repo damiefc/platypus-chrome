@@ -12,8 +12,6 @@
 #include "third_party/blink/renderer/platform/fonts/font_unique_name_lookup.h"
 #include "third_party/blink/renderer/platform/wtf/deque.h"
 
-#include <memory>
-
 namespace blink {
 
 // Unique font lookup implementation for Android, uses two backends: Fonts from
@@ -59,4 +57,4 @@ class FontUniqueNameLookupAndroid : public FontUniqueNameLookup {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_ANDROID_FONT_UNIQUE_NAME_LOOKUP_ANDROID_H_

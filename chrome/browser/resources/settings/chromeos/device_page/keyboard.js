@@ -35,11 +35,21 @@ cr.define('settings', function() {
         notify: true,
       },
 
+      /** @private {!Map<string, (string|Function)>} */
+      focusConfig: {
+        type: Object,
+        observer: 'onFocusConfigChange_',
+      },
+
       /** @private Whether to show Caps Lock options. */
       showCapsLock_: Boolean,
 
-      /** @private Whether this device has an internal keyboard. */
-      hasInternalKeyboard_: Boolean,
+      /**
+       * @private
+       * Whether this device has a ChromeOS launcher key. Applies only to
+       * ChromeOS keyboards, internal or external.
+       */
+      hasLauncherKey_: Boolean,
 
       /** @private Whether this device has an Assistant key on keyboard. */
       hasAssistantKey_: Boolean,
@@ -97,17 +107,6 @@ cr.define('settings', function() {
           chromeos.settings.mojom.Setting.kKeyboardAutoRepeat,
           chromeos.settings.mojom.Setting.kKeyboardShortcuts,
         ]),
-      },
-
-      /**
-       * This is enabled when language settings update feature flag is enabled.
-       * @private
-       */
-      languageSettingsV2Enabled_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean('enableLanguageSettingsV2');
-        },
       },
     },
 
@@ -174,13 +173,22 @@ cr.define('settings', function() {
       ];
     },
 
+    /** @private */
+    onFocusConfigChange_() {
+      this.focusConfig.set(settings.routes.OS_LANGUAGES_INPUT.path, () => {
+        Polymer.RenderStatus.afterNextRender(this, () => {
+          cr.ui.focusWithoutInk(assert(this.$$('#showLanguagesInput')));
+        });
+      });
+    },
+
     /**
      * Handler for updating which keys to show.
      * @param {Object} keyboardParams
      * @private
      */
     onShowKeysChange_(keyboardParams) {
-      this.hasInternalKeyboard_ = keyboardParams['hasInternalKeyboard'];
+      this.hasLauncherKey_ = keyboardParams['hasLauncherKey'];
       this.hasAssistantKey_ = keyboardParams['hasAssistantKey'];
       this.showCapsLock_ = keyboardParams['showCapsLock'];
       this.showExternalMetaKey_ = keyboardParams['showExternalMetaKey'];
@@ -194,13 +202,6 @@ cr.define('settings', function() {
     },
 
     /** @private */
-    onShowLanguageInputTap_() {
-      settings.Router.getInstance().navigateTo(
-          settings.routes.OS_LANGUAGES_DETAILS,
-          /*dynamicParams=*/ null, /*removeSearch=*/ true);
-    },
-
-    /** @private */
     onShowInputSettingsTap_() {
       settings.Router.getInstance().navigateTo(
           settings.routes.OS_LANGUAGES_INPUT,
@@ -208,16 +209,15 @@ cr.define('settings', function() {
     },
 
     /** @private */
-    getExternalMetaKeyLabel_(hasInternalKeyboard) {
+    getExternalMetaKeyLabel_(hasLauncherKey) {
       return loadTimeData.getString(
-          hasInternalKeyboard ? 'keyboardKeyExternalMeta' : 'keyboardKeyMeta');
+          hasLauncherKey ? 'keyboardKeyExternalMeta' : 'keyboardKeyMeta');
     },
 
     /** @private */
-    getExternalCommandKeyLabel_(hasInternalKeyboard) {
+    getExternalCommandKeyLabel_(hasLauncherKey) {
       return loadTimeData.getString(
-          hasInternalKeyboard ? 'keyboardKeyExternalCommand' :
-                                'keyboardKeyCommand');
+          hasLauncherKey ? 'keyboardKeyExternalCommand' : 'keyboardKeyCommand');
     },
   });
 

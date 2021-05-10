@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
@@ -21,11 +21,11 @@
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/common/fetch/fetch_request_type_converters.h"
-#include "content/common/service_worker/service_worker_loader_helpers.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
+#include "third_party/blink/public/common/service_worker/service_worker_loader_helpers.h"
 
 namespace content {
 
@@ -164,8 +164,8 @@ void ServiceWorkerMainResourceLoader::StartRequest(
   // Dispatch the fetch event.
   fetch_dispatcher_ = std::make_unique<ServiceWorkerFetchDispatcher>(
       blink::mojom::FetchAPIRequest::From(resource_request_),
-      static_cast<blink::mojom::ResourceType>(resource_request_.resource_type),
-      container_host_->client_uuid(), active_worker,
+      resource_request_.destination, container_host_->client_uuid(),
+      active_worker,
       base::BindOnce(&ServiceWorkerMainResourceLoader::DidPrepareFetchEvent,
                      weak_factory_.GetWeakPtr(), active_worker,
                      active_worker->running_status()),
@@ -206,7 +206,7 @@ void ServiceWorkerMainResourceLoader::CommitResponseBody(
 void ServiceWorkerMainResourceLoader::CommitEmptyResponseAndComplete() {
   mojo::ScopedDataPipeProducerHandle producer_handle;
   mojo::ScopedDataPipeConsumerHandle consumer_handle;
-  if (CreateDataPipe(nullptr, &producer_handle, &consumer_handle) !=
+  if (CreateDataPipe(nullptr, producer_handle, consumer_handle) !=
       MOJO_RESULT_OK) {
     CommitCompleted(net::ERR_INSUFFICIENT_RESOURCES,
                     "Can't create empty data pipe");
@@ -339,10 +339,8 @@ void ServiceWorkerMainResourceLoader::StartResponse(
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   DCHECK_EQ(status_, Status::kStarted);
 
-  ServiceWorkerLoaderHelpers::SaveResponseInfo(*response, response_head_.get());
-  ServiceWorkerLoaderHelpers::SaveResponseHeaders(
-      response->status_code, response->status_text, response->headers,
-      response_head_.get());
+  blink::ServiceWorkerLoaderHelpers::SaveResponseInfo(*response,
+                                                      response_head_.get());
 
   response_head_->did_service_worker_navigation_preload =
       did_navigation_preload_;
@@ -366,8 +364,8 @@ void ServiceWorkerMainResourceLoader::StartResponse(
   // Handle a redirect response. ComputeRedirectInfo returns non-null redirect
   // info if the given response is a redirect.
   base::Optional<net::RedirectInfo> redirect_info =
-      ServiceWorkerLoaderHelpers::ComputeRedirectInfo(resource_request_,
-                                                      *response_head_);
+      blink::ServiceWorkerLoaderHelpers::ComputeRedirectInfo(resource_request_,
+                                                             *response_head_);
   if (redirect_info) {
     TRACE_EVENT_WITH_FLOW2(
         "ServiceWorker", "ServiceWorkerMainResourceLoader::StartResponse", this,
@@ -404,7 +402,7 @@ void ServiceWorkerMainResourceLoader::StartResponse(
     DCHECK(response->blob->blob.is_valid());
     body_as_blob_.Bind(std::move(response->blob->blob));
     mojo::ScopedDataPipeConsumerHandle data_pipe;
-    int error = ServiceWorkerLoaderHelpers::ReadBlobResponseBody(
+    int error = blink::ServiceWorkerLoaderHelpers::ReadBlobResponseBody(
         &body_as_blob_, response->blob->size,
         base::BindOnce(&ServiceWorkerMainResourceLoader::OnBlobReadingComplete,
                        weak_factory_.GetWeakPtr()),
@@ -488,8 +486,8 @@ void ServiceWorkerMainResourceLoader::RecordTimingMetrics(bool handled) {
   DCHECK(!completion_time_.is_null());
 
   // We only record these metrics for top-level navigation.
-  if (resource_request_.resource_type !=
-      static_cast<int>(blink::mojom::ResourceType::kMainFrame))
+  if (resource_request_.destination !=
+      network::mojom::RequestDestination::kDocument)
     return;
 
   // |fetch_event_timing_| is recorded in renderer so we can get reasonable

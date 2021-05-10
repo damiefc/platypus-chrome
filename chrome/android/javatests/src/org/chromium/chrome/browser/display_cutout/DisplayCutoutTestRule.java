@@ -17,16 +17,18 @@ import org.junit.Assert;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.browser_ui.display_cutout.DisplayCutoutController;
 import org.chromium.content_public.browser.WebContentsObserver;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
-import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -56,11 +58,23 @@ public class DisplayCutoutTestRule<T extends ChromeActivity> extends ChromeActiv
     public static final String VIEWPORT_FIT_COVER = "cover";
 
     /** This class has polyfills for Android P+ system apis. */
-    private static final class TestDisplayCutoutController extends DisplayCutoutController {
+    public static final class TestDisplayCutoutController extends DisplayCutoutController {
         private boolean mDeviceHasCutout = true;
         private float mDipScale = 1;
 
-        TestDisplayCutoutController(DisplayCutoutController.Delegate delegate) {
+        public static TestDisplayCutoutController create(
+                Tab tab, final ObservableSupplier<Integer> browserCutoutModeSupplier) {
+            DisplayCutoutTabHelper.ChromeDisplayCutoutDelegate delegate =
+                    new DisplayCutoutTabHelper.ChromeDisplayCutoutDelegate(tab) {
+                        @Override
+                        public ObservableSupplier<Integer> getBrowserDisplayCutoutModeSupplier() {
+                            return browserCutoutModeSupplier;
+                        }
+                    };
+            return new TestDisplayCutoutController(delegate);
+        }
+
+        private TestDisplayCutoutController(DisplayCutoutController.Delegate delegate) {
             super(delegate);
         }
 
@@ -139,7 +153,11 @@ public class DisplayCutoutTestRule<T extends ChromeActivity> extends ChromeActiv
         return super.apply(new Statement() {
             @Override
             public void evaluate() throws Throwable {
-                startMainActivityOnBlankPage();
+                // TODO(mthiesse): This class should be refactored to have an ActivityTestRule
+                // rather than extending one.
+                ChromeTabbedActivityTestRule rule = new ChromeTabbedActivityTestRule();
+                rule.startMainActivityOnBlankPage();
+                setActivity((T) rule.getActivity());
 
                 setUp();
                 loadUrl(getTestURL());
@@ -160,18 +178,24 @@ public class DisplayCutoutTestRule<T extends ChromeActivity> extends ChromeActiv
 
     protected void setUp() {
         mTab = getActivity().getActivityTab();
-        mTestController = new TestDisplayCutoutController(
-                new DisplayCutoutTabHelper.ChromeDisplayCutoutDelegate(mTab));
 
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> DisplayCutoutTabHelper.initForTesting(mTab, mTestController));
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            setDisplayCutoutController(TestDisplayCutoutController.create(mTab, null));
+        });
 
         mListener = new FullscreenToggleObserver();
         getActivity().getFullscreenManager().addObserver(mListener);
     }
 
+    protected void setDisplayCutoutController(TestDisplayCutoutController controller) {
+        mTestController = controller;
+        DisplayCutoutTabHelper.initForTesting(mTab, mTestController);
+    }
+
     protected void tearDown() {
-        getActivity().getFullscreenManager().removeObserver(mListener);
+        if (!getActivity().isActivityFinishingOrDestroyed()) {
+            getActivity().getFullscreenManager().removeObserver(mListener);
+        }
         mTestServer.stopAndDestroyServer();
     }
 

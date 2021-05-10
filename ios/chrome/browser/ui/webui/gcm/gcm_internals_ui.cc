@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
@@ -71,8 +71,9 @@ void GcmInternalsUIMessageHandler::ReturnResults(
   base::DictionaryValue results;
   gcm_driver::SetGCMInternalsInfo(stats, profile_service, prefs, &results);
 
-  std::vector<const base::Value*> args{&results};
-  web_ui()->CallJavascriptFunction(gcm_driver::kSetGcmInternalsInfo, args);
+  base::Value event_name(gcm_driver::kSetGcmInternalsInfo);
+  std::vector<const base::Value*> args{&event_name, &results};
+  web_ui()->CallJavascriptFunction("cr.webUIListenerCallback", args);
 }
 
 void GcmInternalsUIMessageHandler::RequestAllInfo(const base::ListValue* args) {
@@ -98,8 +99,9 @@ void GcmInternalsUIMessageHandler::RequestAllInfo(const base::ListValue* args) {
     ReturnResults(browser_state->GetPrefs(), nullptr, nullptr);
   } else {
     profile_service->driver()->GetGCMStatistics(
-        base::Bind(&GcmInternalsUIMessageHandler::RequestGCMStatisticsFinished,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(
+            &GcmInternalsUIMessageHandler::RequestGCMStatisticsFinished,
+            weak_ptr_factory_.GetWeakPtr()),
         clear_activity_logs);
   }
 }
@@ -126,8 +128,9 @@ void GcmInternalsUIMessageHandler::SetRecording(const base::ListValue* args) {
   }
   // Get fresh stats after changing recording setting.
   profile_service->driver()->SetGCMRecording(
-      base::Bind(&GcmInternalsUIMessageHandler::RequestGCMStatisticsFinished,
-                 weak_ptr_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          &GcmInternalsUIMessageHandler::RequestGCMStatisticsFinished,
+          weak_ptr_factory_.GetWeakPtr()),
       recording);
 }
 

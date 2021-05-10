@@ -18,8 +18,8 @@ namespace security_interstitials {
 
 namespace common_string_util {
 
-base::string16 GetFormattedHostName(const GURL& gurl) {
-  base::string16 host = url_formatter::IDNToUnicode(gurl.host());
+std::u16string GetFormattedHostName(const GURL& gurl) {
+  std::u16string host = url_formatter::IDNToUnicode(gurl.host());
   if (base::i18n::IsRTL())
     base::i18n::WrapStringWithLTRFormatting(&host);
   return host;
@@ -40,6 +40,9 @@ void PopulateSSLLayoutStrings(int cert_error,
   load_time_data->SetString(
       "optInLink",
       l10n_util::GetStringUTF16(IDS_SAFE_BROWSING_SCOUT_REPORTING_AGREE));
+  load_time_data->SetString(
+      "enhancedProtectionMessage",
+      l10n_util::GetStringUTF16(IDS_SAFE_BROWSING_ENHANCED_PROTECTION_MESSAGE));
 }
 
 void PopulateSSLDebuggingStrings(const net::SSLInfo ssl_info,
@@ -68,7 +71,7 @@ void PopulateSSLDebuggingStrings(const net::SSLInfo ssl_info,
 }
 
 void PopulateLegacyTLSStrings(base::DictionaryValue* load_time_data,
-                              const base::string16& hostname) {
+                              const std::u16string& hostname) {
   load_time_data->SetString("tabTitle",
                             l10n_util::GetStringUTF16(IDS_SSL_V2_TITLE));
   load_time_data->SetString("heading",

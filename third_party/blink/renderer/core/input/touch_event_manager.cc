@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/input/touch_event_manager.h"
 
 #include <memory>
+
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -13,15 +14,16 @@
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/input/event_handling_util.h"
 #include "third_party/blink/renderer/core/input/touch_action_util.h"
 #include "third_party/blink/renderer/core/layout/hit_test_canvas_result.h"
+#include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -574,6 +576,17 @@ void TouchEventManager::UpdateTouchAttributeMapsForPointerDown(
 
   TouchAction effective_touch_action =
       touch_action_util::ComputeEffectiveTouchAction(*touch_node);
+
+  if ((effective_touch_action & TouchAction::kPanX) != TouchAction::kNone) {
+    // Effective touch action is computed during style before we know whether
+    // any ancestor supports horizontal scrolling, so we need to check it here.
+    if (LayoutBox::HasHorizontallyScrollableAncestor(
+            touch_node->GetLayoutObject())) {
+      // If the node or its parent is horizontal scrollable, we need to disable
+      // swipe to move cursor.
+      effective_touch_action |= TouchAction::kInternalPanXScrolls;
+    }
+  }
 
   should_enforce_vertical_scroll_ =
       touch_sequence_document_->IsVerticalScrollEnforced();

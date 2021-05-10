@@ -133,7 +133,7 @@ void WebSettingsImpl::SetMinimumLogicalFontSize(int size) {
   settings_->SetMinimumLogicalFontSize(size);
 }
 
-void WebSettingsImpl::SetAutoplayPolicy(web_pref::AutoplayPolicy policy) {
+void WebSettingsImpl::SetAutoplayPolicy(mojom::blink::AutoplayPolicy policy) {
   settings_->SetAutoplayPolicy(
       static_cast<blink::AutoplayPolicy::Type>(policy));
 }
@@ -235,7 +235,7 @@ void WebSettingsImpl::SetLoadsImagesAutomatically(
 }
 
 void WebSettingsImpl::SetImageAnimationPolicy(
-    web_pref::ImageAnimationPolicy policy) {
+    mojom::blink::ImageAnimationPolicy policy) {
   settings_->SetImageAnimationPolicy(policy);
 }
 
@@ -259,7 +259,7 @@ void WebSettingsImpl::SetAvailablePointerTypes(int pointers) {
   dev_tools_emulator_->SetAvailablePointerTypes(pointers);
 }
 
-void WebSettingsImpl::SetPrimaryPointerType(ui::PointerType pointer) {
+void WebSettingsImpl::SetPrimaryPointerType(mojom::blink::PointerType pointer) {
   dev_tools_emulator_->SetPrimaryPointerType(pointer);
 }
 
@@ -267,7 +267,7 @@ void WebSettingsImpl::SetAvailableHoverTypes(int types) {
   dev_tools_emulator_->SetAvailableHoverTypes(types);
 }
 
-void WebSettingsImpl::SetPrimaryHoverType(ui::HoverType type) {
+void WebSettingsImpl::SetPrimaryHoverType(mojom::blink::HoverType type) {
   dev_tools_emulator_->SetPrimaryHoverType(type);
 }
 
@@ -285,7 +285,7 @@ void WebSettingsImpl::SetDOMPasteAllowed(bool enabled) {
 
 void WebSettingsImpl::SetShrinksViewportContentToFit(
     bool shrink_viewport_content) {
-  settings_->SetShrinksViewportContentToFit(shrink_viewport_content);
+  dev_tools_emulator_->SetShrinksViewportContentToFit(shrink_viewport_content);
 }
 
 void WebSettingsImpl::SetSpatialNavigationEnabled(bool enabled) {
@@ -465,7 +465,7 @@ void WebSettingsImpl::SetShowContextMenuOnMouseUp(bool enabled) {
 }
 
 void WebSettingsImpl::SetEditingBehavior(
-    web_pref::EditingBehaviorType behavior) {
+    mojom::blink::EditingBehavior behavior) {
   settings_->SetEditingBehaviorType(behavior);
 }
 
@@ -613,15 +613,24 @@ void WebSettingsImpl::SetImmersiveModeEnabled(bool enabled) {
 }
 
 void WebSettingsImpl::SetViewportEnabled(bool enabled) {
-  settings_->SetViewportEnabled(enabled);
+  dev_tools_emulator_->SetViewportEnabled(enabled);
 }
 
 void WebSettingsImpl::SetViewportMetaEnabled(bool enabled) {
-  settings_->SetViewportMetaEnabled(enabled);
+  dev_tools_emulator_->SetViewportMetaEnabled(enabled);
 }
 
 void WebSettingsImpl::SetSyncXHRInDocumentsEnabled(bool enabled) {
   settings_->SetSyncXHRInDocumentsEnabled(enabled);
+}
+
+void WebSettingsImpl::SetTargetBlankImpliesNoOpenerEnabledWillBeRemoved(
+    bool enabled) {
+  settings_->SetTargetBlankImpliesNoOpenerEnabledWillBeRemoved(enabled);
+}
+
+void WebSettingsImpl::SetAllowNonEmptyNavigatorPlugins(bool enabled) {
+  settings_->SetAllowNonEmptyNavigatorPlugins(enabled);
 }
 
 void WebSettingsImpl::SetCaretBrowsingEnabled(bool enabled) {
@@ -664,7 +673,7 @@ void WebSettingsImpl::SetV8CacheOptions(mojom::blink::V8CacheOptions options) {
   settings_->SetV8CacheOptions(options);
 }
 
-void WebSettingsImpl::SetViewportStyle(web_pref::ViewportStyle style) {
+void WebSettingsImpl::SetViewportStyle(mojom::blink::ViewportStyle style) {
   dev_tools_emulator_->SetViewportStyle(style);
 }
 
@@ -771,8 +780,13 @@ void WebSettingsImpl::SetForceDarkModeEnabled(bool enabled) {
 }
 
 void WebSettingsImpl::SetPreferredColorScheme(
-    PreferredColorScheme color_scheme) {
+    mojom::blink::PreferredColorScheme color_scheme) {
   settings_->SetPreferredColorScheme(color_scheme);
+}
+
+void WebSettingsImpl::SetPreferredContrast(
+    mojom::blink::PreferredContrast contrast) {
+  settings_->SetPreferredContrast(contrast);
 }
 
 void WebSettingsImpl::SetNavigationControls(
@@ -794,6 +808,11 @@ void WebSettingsImpl::SetSelectionClipboardBufferAvailable(bool available) {
 
 void WebSettingsImpl::SetAccessibilityIncludeSvgGElement(bool include) {
   settings_->SetAccessibilityIncludeSvgGElement(include);
+}
+
+void WebSettingsImpl::SetWebXRImmersiveArAllowed(
+    bool webxr_immersive_ar_allowed) {
+  settings_->SetWebXRImmersiveArAllowed(webxr_immersive_ar_allowed);
 }
 
 }  // namespace blink

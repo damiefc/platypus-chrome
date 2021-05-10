@@ -83,7 +83,7 @@ message LoginOptionList {
   repeated LoginOptionProto values = 1;
 }
 
-// Next: 25
+// Next: 29
 enum ProcessedActionStatusProto {
   UNKNOWN_ACTION_STATUS = 0;
 
@@ -194,11 +194,30 @@ enum ProcessedActionStatusProto {
   // ProcessedActionStatusProto.AutofillErrorInfoProto contains more details.
   AUTOFILL_INCOMPLETE = 24;
 
-  // Evaluating a selector required considering too many candidates. Please
-  // generate more specific selectors. See SelectorProto::ProximityFilter.
-  TOO_MANY_CANDIDATES = 25;
+  // Evaluating the element did report an unexpected mismatch in either value
+  // or text.
+  ELEMENT_MISMATCH = 26;
 
-  reserved 15, 23;
+  // Another element covered the targeted element, when trying to click.
+  ELEMENT_NOT_ON_TOP = 27;
+
+  // The client_id could not be found in the client's ElementStore. This means
+  // the element was either not successfully found or a wrong client_id was
+  // used.
+  CLIENT_ID_RESOLUTION_FAILED = 28;
+
+  // The target element's frame was not in the same domain or subdomain as the
+  // password's origin.
+  PASSWORD_ORIGIN_MISMATCH = 29;
+
+  // Selecting an option failed because more than one option matched.
+  TOO_MANY_OPTION_VALUES_FOUND = 30;
+
+  // The action's target did not fit the action. E.g. a |SelectOption| being
+  // called on any element other than <select>.
+  INVALID_TARGET = 31;
+
+  reserved 15, 23, 25;
 }
 
 // A message to describe a chip.
@@ -217,6 +236,14 @@ message ChipProto {
   // sheet is minimized, the first sticky action will be displayed instead of
   // the profile icon.
   optional bool sticky = 4;
+
+  // The content description for this chip. There are three possible states:
+  // - unset: the content description will be inferred from the chip text and/or
+  // the chip icon.
+  // - set to empty string: this chip is not important for a11y.
+  // - set to non-empty string: the chip will have the specified content
+  // description.
+  optional string content_description = 5;
 }
 
 enum ChipType {
@@ -251,20 +278,29 @@ enum ChipType {
   // HIGHLIGHTED_ACTION.
   DONE_ACTION = 6;
 
+  // A "Send feedback" chip, which will show the feedback form when clicked.
+  //
+  // Note that when this is used inside a script, we will continue the script
+  // normally once the user has clicked the chip.
+  FEEDBACK_ACTION = 7;
+
   reserved 2;
 }
 
 enum ChipIcon {
   NO_ICON = 0;
 
-  // https://icons.googleplex.com/#icon=ic_clear
+  // https://icons.googleplex.com/#icon=clear
   ICON_CLEAR = 1;
 
-  // https://icons.googleplex.com/#icon=ic_done
+  // https://icons.googleplex.com/#icon=done
   ICON_DONE = 2;
 
-  // https://icons.googleplex.com/#icon=ic_refresh
+  // https://icons.googleplex.com/#icon=refresh
   ICON_REFRESH = 3;
+
+  // https://icons.googleplex.com/#icon=more_vert
+  ICON_OVERFLOW = 4;
 }
 
 // Defines a mapping to an Android Q direct action.

@@ -34,7 +34,10 @@ enum InitiationStatusType {
   INITIATION_STATUS_DISABLED_BY_KEY,
   INITIATION_STATUS_LANGUAGE_IN_ULP,
   INITIATION_STATUS_ABORTED_BY_RANKER,
-  INITIATION_STATUS_ABORTED_BY_TOO_OFTEN_DENIED,
+
+  // Deprecated, never used in practice
+  DEPRECATED_INITIATION_STATUS_ABORTED_BY_TOO_OFTEN_DENIED,
+
   INITIATION_STATUS_ABORTED_BY_MATCHES_PREVIOUS_LANGUAGE,
   INITIATION_STATUS_CREATE_INFOBAR,
   INITIATION_STATUS_SHOW_ICON,
@@ -43,6 +46,7 @@ enum InitiationStatusType {
   INITIATION_STATUS_NO_NETWORK,
   INITIATION_STATUS_DOESNT_NEED_TRANSLATION,
   INITIATION_STATUS_IDENTICAL_LANGUAGE_USE_SOURCE_LANGUAGE_UNKNOWN,
+  INITIATION_STATUS_DISABLED_BY_AUTOFILL_ASSISTANT,
   // Insert new items here.
   INITIATION_STATUS_MAX,
 };
@@ -50,10 +54,27 @@ enum InitiationStatusType {
 enum class HrefTranslateStatus {
   kAutoTranslated,
   kAutoTranslatedDifferentTargetLanguage,
-  kNotAutoTranslated,
+
+  // Deprecated, use the below values instead.
+  kDeprecatedNotAutoTranslated,
+
+  kUiShownNotAutoTranslated,
+  kNoUiShownNotAutoTranslated,
+
   // Insert new items here. Keep in sync with HrefTranslateStatus in enums.xml
   // when adding values.
-  kMaxValue = kNotAutoTranslated
+  kMaxValue = kNoUiShownNotAutoTranslated
+};
+
+enum class HrefTranslatePrefsFilterStatus {
+  kNotInBlocklists,
+  kLanguageInBlocklist,
+  kSiteInBlocklist,
+  kBothLanguageAndSiteInBlocklist,
+
+  // Insert new items here. Keep in sync with HrefTranslatePrefsFilterStatus in
+  // enums.xml when adding values.
+  kMaxValue = kBothLanguageAndSiteInBlocklist
 };
 
 enum class TargetLanguageOrigin {
@@ -62,9 +83,25 @@ enum class TargetLanguageOrigin {
   kApplicationUI,
   kAcceptLanguages,
   kDefaultEnglish,
+  kChangedByUser,
+  kUninitialized,
   // Insert new items here. Keep in sync with TranslateTargetLanguageOrigin in
   // enums.xml when adding values.
-  kMaxValue = kDefaultEnglish
+  kMaxValue = kUninitialized
+};
+
+enum class MenuTranslationUnavailableReason {
+  kTranslateDisabled,
+  kNetworkOffline,
+  kApiKeysMissing,
+  kMHTMLPage,
+  kURLNotTranslatable,
+  kTargetLangUnknown,
+  kNotAllowedByPolicy,
+  kSourceLangUnknown,
+  // Insert new items here. Keep in sync with MenuTranslationUnavailableReason
+  // in enums.xml when adding values.
+  kMaxValue = kSourceLangUnknown
 };
 
 // Called when Chrome Translate is initiated to report a reason of the next
@@ -74,14 +111,15 @@ void ReportInitiationStatus(InitiationStatusType type);
 // Called when Chrome opens the URL so that the user sends an error feedback.
 void ReportLanguageDetectionError();
 
+// Called when the context (Desktop) menu or app (Mobile) menu is shown and
+// manual translation is unavailable to report a reason it is unavailable.
+void ReportMenuTranslationUnavailableReason(
+    MenuTranslationUnavailableReason reason);
+
 // Called when language detection details are complete.
 void ReportLanguageDetectionContentLength(size_t length);
 
 void ReportLocalesOnDisabledByPrefs(base::StringPiece locale);
-
-// Called when Chrome Translate server sends the language list which includes
-// a undisplayable language in the user's locale.
-void ReportUndisplayableLanguage(base::StringPiece language);
 
 void ReportUnsupportedLanguageAtInitiation(base::StringPiece language);
 
@@ -98,6 +136,12 @@ void ReportTranslateTargetLanguage(base::StringPiece language);
 // Called when Chrome Translate is initiated, the navigation is from Google, and
 // a href translate target is present.
 void ReportTranslateHrefHintStatus(HrefTranslateStatus status);
+
+// Called when Chrome Translate is initiated, the navigation is from Google, and
+// a href translate target is present. Records the status of any user prefs
+// filtering.
+void ReportTranslateHrefHintPrefsFilterStatus(
+    HrefTranslatePrefsFilterStatus status);
 
 // Called when Chrome Translate target language is determined.
 void ReportTranslateTargetLanguageOrigin(TargetLanguageOrigin origin);

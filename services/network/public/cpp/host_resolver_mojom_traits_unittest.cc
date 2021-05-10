@@ -21,7 +21,7 @@ TEST(HostResolverMojomTraitsTest, DnsConfigOverridesRoundtrip_Empty) {
 
   net::DnsConfigOverrides deserialized;
   EXPECT_TRUE(mojo::test::SerializeAndDeserialize<mojom::DnsConfigOverrides>(
-      &original, &deserialized));
+      original, deserialized));
 
   EXPECT_EQ(original, deserialized);
 }
@@ -33,7 +33,7 @@ TEST(HostResolverMojomTraitsTest, DnsConfigOverridesRoundtrip_FullySpecified) {
   original.search.emplace({std::string("str")});
   original.append_to_multi_label_name = true;
   original.ndots = 2;
-  original.timeout = base::TimeDelta::FromHours(4);
+  original.fallback_period = base::TimeDelta::FromHours(4);
   original.attempts = 1;
   original.rotate = true;
   original.use_local_ipv6 = false;
@@ -46,7 +46,7 @@ TEST(HostResolverMojomTraitsTest, DnsConfigOverridesRoundtrip_FullySpecified) {
 
   net::DnsConfigOverrides deserialized;
   EXPECT_TRUE(mojo::test::SerializeAndDeserialize<mojom::DnsConfigOverrides>(
-      &original, &deserialized));
+      original, deserialized));
 
   EXPECT_EQ(original, deserialized);
 }
@@ -70,7 +70,7 @@ TEST(HostResolverMojomTraitsTest, DnsConfigOverrides_OnlyDnsOverHttpsServers) {
 
   net::DnsConfigOverrides deserialized;
   EXPECT_TRUE(mojo::test::SerializeAndDeserialize<mojom::DnsConfigOverrides>(
-      &original, &deserialized));
+      original, deserialized));
 
   EXPECT_EQ(original, deserialized);
 }
@@ -81,7 +81,7 @@ TEST(HostResolverMojomTraitsTest, ResolveErrorInfo) {
 
   net::ResolveErrorInfo deserialized;
   EXPECT_TRUE(mojo::test::SerializeAndDeserialize<mojom::ResolveErrorInfo>(
-      &original, &deserialized));
+      original, deserialized));
 
   EXPECT_EQ(original, deserialized);
 }

@@ -6,11 +6,13 @@
 #define CC_TREES_PROXY_IMPL_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/memory/weak_ptr.h"
 #include "cc/base/completion_event.h"
 #include "cc/base/delayed_unique_notifier.h"
 #include "cc/input/browser_controls_state.h"
+#include "cc/metrics/jank_injector.h"
 #include "cc/scheduler/scheduler.h"
 #include "cc/trees/layer_tree_host_impl.h"
 
@@ -23,6 +25,7 @@ class LayerTreeHost;
 class ProxyMain;
 class RenderFrameMetadataObserver;
 
+class JankInjector;
 class ScopedCompletionEvent;
 
 // This class aggregates all the interactions that the main side of the
@@ -65,7 +68,7 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
                                  bool hold_commit_for_activation);
   void SetSourceURL(ukm::SourceId source_id, const GURL& url);
   void SetUkmSmoothnessDestination(
-      UkmSmoothnessDataShared* ukm_smoothness_data);
+      base::WritableSharedMemoryMapping ukm_smoothness_data);
   void ClearHistory();
   void SetRenderFrameObserver(
       std::unique_ptr<RenderFrameMetadataObserver> observer);
@@ -114,7 +117,7 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
   void NotifyImageDecodeRequestFinished() override;
   void DidPresentCompositorFrameOnImplThread(
       uint32_t frame_token,
-      std::vector<LayerTreeHost::PresentationTimeCallback> callbacks,
+      PresentationTimeCallbackBuffer::PendingCallbacks activated,
       const viz::FrameTimingDetails& details) override;
   void NotifyAnimationWorkletStateChange(
       AnimationWorkletMutationState state,
@@ -125,6 +128,9 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
   void DidObserveFirstScrollDelay(
       base::TimeDelta first_scroll_delay,
       base::TimeTicks first_scroll_timestamp) override;
+  bool IsInSynchronousComposite() const override;
+  void FrameSinksToThrottleUpdated(
+      const base::flat_set<viz::FrameSinkId>& id) override;
 
   // SchedulerClient implementation
   bool WillBeginImplFrame(const viz::BeginFrameArgs& args) override;
@@ -176,6 +182,10 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
 
   bool send_compositor_frame_ack_;
 
+  JankInjector jank_injector_;
+
+  TreePriority last_raster_priority_;
+
   TaskRunnerProvider* task_runner_provider_;
 
   DelayedUniqueNotifier smoothness_priority_expiration_notifier_;
@@ -185,6 +195,8 @@ class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
   // Use accessors instead of this variable directly.
   BlockedMainCommitOnly main_thread_blocked_commit_vars_unsafe_;
   BlockedMainCommitOnly& blocked_main_commit();
+
+  bool is_jank_injection_enabled_ = false;
 
   // Used to post tasks to ProxyMain on the main thread.
   base::WeakPtr<ProxyMain> proxy_main_weak_ptr_;

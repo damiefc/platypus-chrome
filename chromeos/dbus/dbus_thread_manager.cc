@@ -4,6 +4,7 @@
 
 #include "chromeos/dbus/dbus_thread_manager.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/command_line.h"
@@ -19,7 +20,7 @@
 #include "chromeos/dbus/arc/arc_obb_mounter_client.h"
 #include "chromeos/dbus/cec_service_client.h"
 #include "chromeos/dbus/chunneld_client.h"
-#include "chromeos/dbus/cicerone_client.h"
+#include "chromeos/dbus/cicerone/cicerone_client.h"
 #include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
 #include "chromeos/dbus/cros_disks_client.h"
@@ -30,9 +31,8 @@
 #include "chromeos/dbus/gnubby_client.h"
 #include "chromeos/dbus/image_burner_client.h"
 #include "chromeos/dbus/image_loader_client.h"
-#include "chromeos/dbus/lorgnette_manager_client.h"
+#include "chromeos/dbus/lorgnette_manager/lorgnette_manager_client.h"
 #include "chromeos/dbus/runtime_probe_client.h"
-#include "chromeos/dbus/seneschal_client.h"
 #include "chromeos/dbus/shill/modem_messaging_client.h"
 #include "chromeos/dbus/shill/shill_clients.h"
 #include "chromeos/dbus/shill/shill_device_client.h"
@@ -56,7 +56,7 @@ DBusThreadManager::DBusThreadManager(ClientSet client_set,
                                      bool use_real_clients)
     : use_real_clients_(use_real_clients) {
   if (client_set == DBusThreadManager::kAll)
-    clients_browser_.reset(new DBusClientsBrowser(use_real_clients));
+    clients_browser_ = std::make_unique<DBusClientsBrowser>(use_real_clients);
   // NOTE: When there are clients only used by ash, create them here.
 
   dbus::statistics::Initialize();
@@ -65,7 +65,7 @@ DBusThreadManager::DBusThreadManager(ClientSet client_set,
     // Create the D-Bus thread.
     base::Thread::Options thread_options;
     thread_options.message_pump_type = base::MessagePumpType::IO;
-    dbus_thread_.reset(new base::Thread("D-Bus thread"));
+    dbus_thread_ = std::make_unique<base::Thread>("D-Bus thread");
     dbus_thread_->StartWithOptions(thread_options);
 
     // Create the connection to the system bus.
@@ -228,10 +228,6 @@ RuntimeProbeClient* DBusThreadManager::GetRuntimeProbeClient() {
                           : nullptr;
 }
 
-SeneschalClient* DBusThreadManager::GetSeneschalClient() {
-  return clients_browser_ ? clients_browser_->seneschal_client_.get() : nullptr;
-}
-
 SmbProviderClient* DBusThreadManager::GetSmbProviderClient() {
   return clients_browser_ ? clients_browser_->smb_provider_client_.get()
                           : nullptr;
@@ -390,12 +386,6 @@ void DBusThreadManagerSetter::SetGnubbyClient(
 void DBusThreadManagerSetter::SetRuntimeProbeClient(
     std::unique_ptr<RuntimeProbeClient> client) {
   DBusThreadManager::Get()->clients_browser_->runtime_probe_client_ =
-      std::move(client);
-}
-
-void DBusThreadManagerSetter::SetSeneschalClient(
-    std::unique_ptr<SeneschalClient> client) {
-  DBusThreadManager::Get()->clients_browser_->seneschal_client_ =
       std::move(client);
 }
 

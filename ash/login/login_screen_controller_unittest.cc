@@ -18,7 +18,7 @@
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "base/bind.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/session_manager_types.h"
 
@@ -139,6 +139,21 @@ TEST_F(LoginScreenControllerNoSessionTest, ShowSystemTrayOnPrimaryLoginScreen) {
   EXPECT_FALSE(IsSystemTrayForWindowVisible(WindowType::kSecondary));
 
   ash::LockScreen::Get()->Destroy();
+}
+
+TEST_F(LoginScreenControllerNoSessionTest,
+       SystemTrayVisibilityOnSecondaryScreenRestored) {
+  // Create setup with 2 displays primary and secondary.
+  UpdateDisplay("800x600,800x600");
+  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
+
+  // Show login screen, then hide it.
+  GetSessionControllerClient()->SetSessionState(SessionState::LOGIN_PRIMARY);
+  Shell::Get()->login_screen_controller()->ShowLoginScreen();
+  ash::LockScreen::Get()->Destroy();
+
+  // The system tray should be visible on the secondary screen.
+  EXPECT_TRUE(IsSystemTrayForWindowVisible(WindowType::kSecondary));
 }
 
 TEST_F(LoginScreenControllerTest, ShowSystemTrayOnPrimaryLockScreen) {

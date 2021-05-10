@@ -14,9 +14,10 @@
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/pref_names.h"
 #include "components/sync/driver/data_type_controller.h"
+#include "components/sync/driver/profile_sync_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
-#include "components/sync/driver/sync_service.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#include "ios/chrome/browser/favicon/favicon_service_factory.h"
 #include "ios/web/public/test/web_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -27,7 +28,12 @@ class ProfileSyncServiceFactoryTest : public PlatformTest {
  public:
   ProfileSyncServiceFactoryTest() {
     TestChromeBrowserState::Builder browser_state_builder;
+    // BOOKMARKS requires the FaviconService, which requires the HistoryService.
+    browser_state_builder.AddTestingFactory(
+        ios::FaviconServiceFactory::GetInstance(),
+        ios::FaviconServiceFactory::GetDefaultFactory());
     chrome_browser_state_ = browser_state_builder.Build();
+    CHECK(chrome_browser_state_->CreateHistoryService());
   }
 
   void SetUp() override {
@@ -42,7 +48,7 @@ class ProfileSyncServiceFactoryTest : public PlatformTest {
  protected:
   // Returns the collection of default datatypes.
   std::vector<syncer::ModelType> DefaultDatatypes() {
-    static_assert(41 == syncer::ModelType::NUM_ENTRIES,
+    static_assert(37 == syncer::GetNumModelTypes(),
                   "When adding a new type, you probably want to add it here as "
                   "well (assuming it is already enabled).");
 
@@ -54,6 +60,7 @@ class ProfileSyncServiceFactoryTest : public PlatformTest {
     datatypes.push_back(syncer::AUTOFILL_PROFILE);
     datatypes.push_back(syncer::AUTOFILL_WALLET_DATA);
     datatypes.push_back(syncer::AUTOFILL_WALLET_METADATA);
+    datatypes.push_back(syncer::AUTOFILL_WALLET_OFFER);
     datatypes.push_back(syncer::BOOKMARKS);
     datatypes.push_back(syncer::DEVICE_INFO);
     datatypes.push_back(syncer::HISTORY_DELETE_DIRECTIVES);
@@ -114,9 +121,10 @@ TEST_F(ProfileSyncServiceFactoryTest, DisableSyncFlag) {
 // Verify that a normal (no command line flags) PSS can be created and
 // properly initialized.
 TEST_F(ProfileSyncServiceFactoryTest, CreatePSSDefault) {
-  syncer::SyncService* sync_service =
-      ProfileSyncServiceFactory::GetForBrowserState(chrome_browser_state());
-  syncer::ModelTypeSet types = sync_service->GetRegisteredDataTypes();
+  syncer::ProfileSyncService* sync_service =
+      ProfileSyncServiceFactory::GetAsProfileSyncServiceForBrowserState(
+          chrome_browser_state());
+  syncer::ModelTypeSet types = sync_service->GetRegisteredDataTypesForTest();
   EXPECT_EQ(DefaultDatatypesCount(), types.Size());
   CheckDefaultDatatypesInSetExcept(types, syncer::ModelTypeSet());
 }
@@ -126,9 +134,10 @@ TEST_F(ProfileSyncServiceFactoryTest, CreatePSSDefault) {
 TEST_F(ProfileSyncServiceFactoryTest, CreatePSSDisableOne) {
   syncer::ModelTypeSet disabled_types(syncer::AUTOFILL);
   SetDisabledTypes(disabled_types);
-  syncer::SyncService* sync_service =
-      ProfileSyncServiceFactory::GetForBrowserState(chrome_browser_state());
-  syncer::ModelTypeSet types = sync_service->GetRegisteredDataTypes();
+  syncer::ProfileSyncService* sync_service =
+      ProfileSyncServiceFactory::GetAsProfileSyncServiceForBrowserState(
+          chrome_browser_state());
+  syncer::ModelTypeSet types = sync_service->GetRegisteredDataTypesForTest();
   EXPECT_EQ(DefaultDatatypesCount() - disabled_types.Size(), types.Size());
   CheckDefaultDatatypesInSetExcept(types, disabled_types);
 }
@@ -139,9 +148,10 @@ TEST_F(ProfileSyncServiceFactoryTest, CreatePSSDisableMultiple) {
   syncer::ModelTypeSet disabled_types(syncer::AUTOFILL_PROFILE,
                                       syncer::BOOKMARKS);
   SetDisabledTypes(disabled_types);
-  syncer::SyncService* sync_service =
-      ProfileSyncServiceFactory::GetForBrowserState(chrome_browser_state());
-  syncer::ModelTypeSet types = sync_service->GetRegisteredDataTypes();
+  syncer::ProfileSyncService* sync_service =
+      ProfileSyncServiceFactory::GetAsProfileSyncServiceForBrowserState(
+          chrome_browser_state());
+  syncer::ModelTypeSet types = sync_service->GetRegisteredDataTypesForTest();
   EXPECT_EQ(DefaultDatatypesCount() - disabled_types.Size(), types.Size());
   CheckDefaultDatatypesInSetExcept(types, disabled_types);
 }

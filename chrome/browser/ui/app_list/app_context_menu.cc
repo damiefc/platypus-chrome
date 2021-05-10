@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/app_list/app_context_menu.h"
 
+#include <utility>
+
 #include "ash/public/cpp/app_menu_constants.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -27,8 +29,6 @@ AppContextMenu::AppContextMenu(AppContextMenuDelegate* delegate,
       app_id_(app_id),
       controller_(controller) {}
 
-AppContextMenu::~AppContextMenu() = default;
-
 void AppContextMenu::GetMenuModel(GetMenuModelCallback callback) {
   auto menu_model = std::make_unique<ui::SimpleMenuModel>(this);
   BuildMenu(menu_model.get());
@@ -39,7 +39,7 @@ bool AppContextMenu::IsItemForCommandIdDynamic(int command_id) const {
   return command_id == ash::TOGGLE_PIN;
 }
 
-base::string16 AppContextMenu::GetLabelForCommandId(int command_id) const {
+std::u16string AppContextMenu::GetLabelForCommandId(int command_id) const {
   DCHECK_EQ(command_id, ash::TOGGLE_PIN);
   // Return "{Pin to, Unpin from} shelf" or "Pinned by administrator".
   // Note this only exists on Ash desktops.
@@ -157,7 +157,9 @@ void AppContextMenu::AddContextMenuOption(ui::SimpleMenuModel* menu_model,
   const gfx::VectorIcon& icon = GetMenuItemVectorIcon(command_id, string_id);
   if (!icon.is_empty()) {
     menu_model->AddItemWithStringIdAndIcon(
-        command_id, string_id, ui::ImageModel::FromVectorIcon(icon));
+        command_id, string_id,
+        ui::ImageModel::FromVectorIcon(icon, /*color_id=*/-1,
+                                       ash::kAppContextMenuIconSize));
     return;
   }
   // Check items use default icons.

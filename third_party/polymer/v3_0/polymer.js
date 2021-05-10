@@ -11,6 +11,7 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
 import * as gestures from './lib/utils/gestures.js';
 
 export {DomIf} from './lib/elements/dom-if.js';
+export {DomRepeat} from './lib/elements/dom-repeat.js';
 export {mixinBehaviors} from './lib/legacy/class.js';
 export {OptionalMutableDataBehavior} from './lib/legacy/mutable-data-behavior.js';
 export {Polymer} from './lib/legacy/polymer-fn.js';
@@ -21,6 +22,7 @@ export {animationFrame, idlePeriod, microTask} from './lib/utils/async.js';
 export {dashToCamelCase} from './lib/utils/case-map.js';
 export {Debouncer, enqueueDebouncer} from './lib/utils/debounce.js';
 export {html} from './lib/utils/html-tag.js';
+export {dedupingMixin} from './lib/utils/mixin.js';
 export {matches, translate} from './lib/utils/path.js';
 export {afterNextRender, beforeNextRender} from './lib/utils/render-status.js';
 export {useShadow} from './lib/utils/settings.js';

@@ -8,7 +8,7 @@
 #include "base/test/test_mock_time_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
+#include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/testing/scoped_scheduler_overrider.h"
 
@@ -36,11 +36,12 @@ class MockIdleDeadlineScheduler final : public ThreadScheduler {
                            Thread::IdleTask) override {}
   void PostNonNestableIdleTask(const base::Location&,
                                Thread::IdleTask) override {}
-  std::unique_ptr<PageScheduler> CreatePageScheduler(
-      PageScheduler::Delegate*) override {
+  std::unique_ptr<scheduler::WebAgentGroupScheduler> CreateAgentGroupScheduler()
+      override {
+    NOTREACHED();
     return nullptr;
   }
-  AgentGroupScheduler* GetCurrentAgentGroupScheduler() override {
+  scheduler::WebAgentGroupScheduler* GetCurrentAgentGroupScheduler() override {
     return nullptr;
   }
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override {
@@ -91,6 +92,7 @@ class IdleDeadlineTest : public testing::Test {
 TEST_F(IdleDeadlineTest, DeadlineInFuture) {
   auto* deadline = MakeGarbageCollected<IdleDeadline>(
       base::TimeTicks() + base::TimeDelta::FromSecondsD(1.25),
+      /*cross_origin_isolated_capability=*/false,
       IdleDeadline::CallbackType::kCalledWhenIdle);
   deadline->SetTickClockForTesting(test_task_runner_->GetMockTickClock());
   test_task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(1));
@@ -101,6 +103,7 @@ TEST_F(IdleDeadlineTest, DeadlineInFuture) {
 TEST_F(IdleDeadlineTest, DeadlineInPast) {
   auto* deadline = MakeGarbageCollected<IdleDeadline>(
       base::TimeTicks() + base::TimeDelta::FromSecondsD(0.75),
+      /*cross_origin_isolated_capability=*/false,
       IdleDeadline::CallbackType::kCalledWhenIdle);
   deadline->SetTickClockForTesting(test_task_runner_->GetMockTickClock());
   test_task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(1));
@@ -113,6 +116,7 @@ TEST_F(IdleDeadlineTest, YieldForHighPriorityWork) {
 
   auto* deadline = MakeGarbageCollected<IdleDeadline>(
       base::TimeTicks() + base::TimeDelta::FromSecondsD(1.25),
+      /*cross_origin_isolated_capability=*/false,
       IdleDeadline::CallbackType::kCalledWhenIdle);
   deadline->SetTickClockForTesting(test_task_runner_->GetMockTickClock());
   test_task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(1));

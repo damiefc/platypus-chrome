@@ -5,7 +5,6 @@
 #include "chrome/renderer/worker_content_settings_client.h"
 
 #include "base/memory/ptr_util.h"
-#include "chrome/common/render_messages.h"
 #include "components/content_settings/renderer/content_settings_agent_impl.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
@@ -57,6 +56,23 @@ WorkerContentSettingsClient::~WorkerContentSettingsClient() {}
 std::unique_ptr<blink::WebContentSettingsClient>
 WorkerContentSettingsClient::Clone() {
   return base::WrapUnique(new WorkerContentSettingsClient(*this));
+}
+
+void WorkerContentSettingsClient::AllowStorageAccess(
+    StorageType storage_type,
+    base::OnceCallback<void(bool)> callback) {
+  if (is_unique_origin_) {
+    std::move(callback).Run(false);
+    return;
+  }
+  EnsureContentSettingsManager();
+
+  content_settings_manager_->AllowStorageAccess(
+      render_frame_id_,
+      content_settings::ContentSettingsAgentImpl::ConvertToMojoStorageType(
+          storage_type),
+      document_origin_, site_for_cookies_, top_frame_origin_,
+      std::move(callback));
 }
 
 bool WorkerContentSettingsClient::AllowStorageAccessSync(

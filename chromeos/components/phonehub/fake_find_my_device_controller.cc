@@ -11,21 +11,33 @@ FakeFindMyDeviceController::FakeFindMyDeviceController() = default;
 
 FakeFindMyDeviceController::~FakeFindMyDeviceController() = default;
 
-bool FakeFindMyDeviceController::IsPhoneRinging() const {
-  return is_phone_ringing_;
-}
-
-void FakeFindMyDeviceController::SetIsPhoneRingingInternal(
-    bool is_phone_ringing) {
-  if (is_phone_ringing_ == is_phone_ringing)
+void FakeFindMyDeviceController::SetPhoneRingingState(
+    Status phone_ringing_status) {
+  if (phone_ringing_status_ == phone_ringing_status)
     return;
-
-  is_phone_ringing_ = is_phone_ringing;
+  phone_ringing_status_ = phone_ringing_status;
   NotifyPhoneRingingStateChanged();
 }
 
+void FakeFindMyDeviceController::SetPhoneRingingStatusInternal(Status status) {
+  SetPhoneRingingState(status);
+}
+
 void FakeFindMyDeviceController::RequestNewPhoneRingingState(bool ringing) {
-  SetIsPhoneRingingInternal(ringing);
+  if (!should_request_fail_) {
+    SetPhoneRingingStatusInternal(ringing ? Status::kRingingOn
+                                          : Status::kRingingOff);
+  }
+}
+
+FindMyDeviceController::Status
+FakeFindMyDeviceController::GetPhoneRingingStatus() {
+  return phone_ringing_status_;
+}
+
+void FakeFindMyDeviceController::SetShouldRequestFail(
+    bool should_request_fail) {
+  should_request_fail_ = should_request_fail;
 }
 
 }  // namespace phonehub

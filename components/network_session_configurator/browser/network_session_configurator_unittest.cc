@@ -68,7 +68,7 @@ TEST_F(NetworkSessionConfiguratorTest, Defaults) {
   EXPECT_TRUE(params_.http2_settings.empty());
   EXPECT_FALSE(params_.greased_http2_frame);
   EXPECT_FALSE(params_.http2_end_stream_with_data_frame);
-  EXPECT_FALSE(params_.enable_websocket_over_http2);
+  EXPECT_TRUE(params_.enable_websocket_over_http2);
 
   EXPECT_TRUE(params_.enable_quic);
   EXPECT_TRUE(quic_params_.retry_without_alt_svc_on_quic_errors);
@@ -144,6 +144,45 @@ TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromParams) {
   ParseFieldTrials();
 
   EXPECT_TRUE(params_.enable_quic);
+}
+
+TEST_F(NetworkSessionConfiguratorTest, ValidQuicParams) {
+  quic::ParsedQuicVersion version = quic::ParsedQuicVersion::Draft29();
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["enable_quic"] = "true";
+  field_trial_params["channel"] = "T";
+  field_trial_params["epoch"] = "20201019";
+  field_trial_params["quic_version"] = quic::AlpnForVersion(version);
+  variations::AssociateVariationParams("QUIC", "ValidQuicParams",
+                                       field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "ValidQuicParams");
+
+  ParseFieldTrials();
+
+  EXPECT_TRUE(params_.enable_quic);
+  EXPECT_EQ(quic_params_.supported_versions,
+            quic::ParsedQuicVersionVector{version});
+  EXPECT_NE(quic_params_.supported_versions,
+            net::DefaultSupportedQuicVersions());
+}
+
+TEST_F(NetworkSessionConfiguratorTest, InvalidQuicParams) {
+  quic::ParsedQuicVersion version = quic::ParsedQuicVersion::Draft29();
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["enable_quic"] = "true";
+  // These params are missing channel and epoch.
+  field_trial_params["quic_version"] = quic::AlpnForVersion(version);
+  variations::AssociateVariationParams("QUIC", "InvalidQuicParams",
+                                       field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "InvalidQuicParams");
+
+  ParseFieldTrials();
+
+  EXPECT_TRUE(params_.enable_quic);
+  EXPECT_EQ(quic_params_.supported_versions,
+            net::DefaultSupportedQuicVersions());
+  EXPECT_NE(quic_params_.supported_versions,
+            quic::ParsedQuicVersionVector{version});
 }
 
 TEST_F(NetworkSessionConfiguratorTest, EnableQuicForDataReductionProxy) {
@@ -851,28 +890,6 @@ TEST_F(NetworkSessionConfiguratorTest,
   ParseFieldTrials();
 
   ASSERT_TRUE(params_.http2_end_stream_with_data_frame);
-}
-
-TEST_F(NetworkSessionConfiguratorTest,
-       WebsocketOverHttp2EnabledFromCommandLine) {
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  command_line.AppendSwitch(switches::kEnableWebsocketOverHttp2);
-
-  ParseCommandLineAndFieldTrials(command_line);
-
-  EXPECT_TRUE(params_.enable_websocket_over_http2);
-}
-
-TEST_F(NetworkSessionConfiguratorTest,
-       WebsocketOverHttp2EnabledFromFieldTrial) {
-  std::map<std::string, std::string> field_trial_params;
-  field_trial_params["websocket_over_http2"] = "true";
-  variations::AssociateVariationParams("HTTP2", "Enabled", field_trial_params);
-  base::FieldTrialList::CreateFieldTrial("HTTP2", "Enabled");
-
-  ParseFieldTrials();
-
-  EXPECT_TRUE(params_.enable_websocket_over_http2);
 }
 
 TEST_F(NetworkSessionConfiguratorTest,

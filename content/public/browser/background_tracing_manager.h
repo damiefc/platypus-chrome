@@ -10,7 +10,6 @@
 
 #include "base/strings/string_piece.h"
 #include "base/trace_event/trace_event_impl.h"
-#include "base/values.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -23,6 +22,8 @@ class BackgroundTracingConfig;
 class BackgroundTracingManager {
  public:
   CONTENT_EXPORT static BackgroundTracingManager* GetInstance();
+
+  CONTENT_EXPORT static const char kContentTriggerConfig[];
 
   // ReceiveCallback will be called on the UI thread every time the
   // BackgroundTracingManager finalizes a trace. The first parameter of this
@@ -87,7 +88,11 @@ class BackgroundTracingManager {
 
   // Registers a manual trigger handle, and returns a TriggerHandle which can
   // be passed to DidTriggerHappen().
-  virtual TriggerHandle RegisterTriggerType(const char* trigger_name) = 0;
+  virtual TriggerHandle RegisterTriggerType(base::StringPiece trigger_name) = 0;
+
+  // Returns the name associated with the given trigger handle.
+  virtual const std::string& GetTriggerNameFromHandle(
+      TriggerHandle trigger_handle) = 0;
 
   virtual bool HasActiveScenario() = 0;
 
@@ -100,10 +105,26 @@ class BackgroundTracingManager {
   // the serialized trace proto.
   virtual std::string GetLatestTraceToUpload() = 0;
 
+  // Returns the URL for uploading the trace files corresponding to the
+  // experiment |trial_name|.
+  virtual std::string GetBackgroundTracingUploadUrl(
+      const std::string& trial_name) = 0;
+
+  // Returns background tracing configuration for the experiment |trial_name|.
+  virtual std::unique_ptr<BackgroundTracingConfig> GetBackgroundTracingConfig(
+      const std::string& trial_name) = 0;
+
   // For tests
   virtual void AbortScenarioForTesting() = 0;
   virtual void SetTraceToUploadForTesting(
       std::unique_ptr<std::string> trace_data) = 0;
+
+  using ConfigTextFilterForTesting =
+      base::RepeatingCallback<std::string(const std::string&)>;
+
+  // Sets a callback to override the background tracing config for testing.
+  virtual void SetConfigTextFilterForTesting(
+      ConfigTextFilterForTesting predicate) = 0;
 
  protected:
   virtual ~BackgroundTracingManager() {}

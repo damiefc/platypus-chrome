@@ -21,6 +21,7 @@
 #include "base/task/thread_pool.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
@@ -29,7 +30,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/channel_info.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync/driver/about_sync_util.h"
+#include "components/sync/driver/sync_internals_util.h"
 #include "components/sync/driver/sync_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/api/power/power_api.h"
@@ -38,19 +39,20 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/public/ash_interfaces.h"
 #include "base/strings/stringprintf.h"
-#include "chrome/browser/chromeos/arc/arc_util.h"
-#include "chrome/browser/chromeos/arc/policy/arc_policy_bridge.h"
-#include "chrome/browser/chromeos/crosapi/browser_manager.h"
-#include "chrome/browser/chromeos/crosapi/browser_util.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
-#include "chrome/browser/chromeos/login/login_pref_names.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/arc/arc_util.h"
+#include "chrome/browser/ash/arc/policy/arc_policy_bridge.h"
+#include "chrome/browser/ash/crosapi/browser_manager.h"
+#include "chrome/browser/ash/crosapi/browser_util.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
+#include "chrome/browser/ash/login/login_pref_names.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
-#include "chromeos/constants/chromeos_features.h"
+#include "chrome/browser/metrics/enrollment_status.h"
 #include "chromeos/dbus/util/version_loader.h"
+#include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/system/statistics_provider.h"
 #endif
 
@@ -76,11 +78,11 @@ constexpr char kPowerApiListKey[] = "chrome.power extensions";
 constexpr char kDataReductionProxyKey[] = "data_reduction_proxy";
 constexpr char kChromeVersionTag[] = "CHROME VERSION";
 
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 constexpr char kLacrosChromeVersionPrefix[] = "Lacros ";
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 constexpr char kAshChromeVersionPrefix[] = "Ash ";
 constexpr char kArcPolicyComplianceReportKey[] =
     "CHROMEOS_ARC_POLICY_COMPLIANCE_REPORT";
@@ -90,6 +92,7 @@ constexpr char kChromeEnrollmentTag[] = "ENTERPRISE_ENROLLED";
 constexpr char kHWIDKey[] = "HWID";
 constexpr char kSettingsKey[] = "settings";
 constexpr char kLocalStateSettingsResponseKey[] = "Local State: settings";
+constexpr char kLTSChromeVersionPrefix[] = "LTS ";
 constexpr char kArcStatusKey[] = "CHROMEOS_ARC_STATUS";
 constexpr char kMonitorInfoKey[] = "monitor_info";
 constexpr char kAccountTypeKey[] = "account_type";
@@ -97,7 +100,7 @@ constexpr char kDemoModeConfigKey[] = "demo_mode_config";
 constexpr char kOnboardingTime[] = "ONBOARDING_TIME";
 #else
 constexpr char kOsVersionTag[] = "OS VERSION";
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_WIN)
 constexpr char kUsbKeyboardDetected[] = "usb_keyboard_detected";
@@ -115,7 +118,7 @@ constexpr char kInstallLocation[] = "install_location";
 constexpr char kCpuArch[] = "cpu_arch";
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 std::string GetPrimaryAccountTypeString() {
   DCHECK(user_manager::UserManager::Get());
@@ -133,7 +136,7 @@ std::string GetPrimaryAccountTypeString() {
       return "guest";
     case user_manager::USER_TYPE_PUBLIC_ACCOUNT:
       return "public_account";
-    case user_manager::USER_TYPE_SUPERVISED:
+    case user_manager::USER_TYPE_SUPERVISED_DEPRECATED:
       return "supervised";
     case user_manager::USER_TYPE_KIOSK_APP:
       return "kiosk_app";
@@ -154,18 +157,14 @@ std::string GetPrimaryAccountTypeString() {
 
 std::string GetEnrollmentStatusString() {
   switch (ChromeOSMetricsProvider::GetEnrollmentStatus()) {
-    case ChromeOSMetricsProvider::NON_MANAGED:
+    case EnrollmentStatus::kNonManaged:
       return "Not managed";
-    case ChromeOSMetricsProvider::MANAGED:
+    case EnrollmentStatus::kManaged:
       return "Managed";
-    case ChromeOSMetricsProvider::UNUSED:
-    case ChromeOSMetricsProvider::ERROR_GETTING_ENROLLMENT_STATUS:
-    case ChromeOSMetricsProvider::ENROLLMENT_STATUS_MAX:
+    case EnrollmentStatus::kUnused:
+    case EnrollmentStatus::kErrorGettingStatus:
       return "Error retrieving status";
   }
-  // For compilers that don't recognize all cases handled above.
-  NOTREACHED();
-  return std::string();
 }
 
 std::string GetDisplayInfoString(
@@ -231,33 +230,34 @@ void PopulateEntriesAsync(SystemLogsResponse* response) {
   response->emplace(kChromeOsFirmwareVersion,
                     chromeos::version_loader::GetFirmware());
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 std::string GetChromeVersionString() {
   // Version of the current running browser.
-  std::string browser_version = chrome::GetVersionString();
+  std::string browser_version =
+      chrome::GetVersionString(chrome::WithExtendedStable(true));
 
-// This is used by simple lacros feedback for backward compatibility.
-// TODO(http://crbug.com/1132106): Remove after M87 beta when Feedback
-// crosapi is available in all ash versions.
-#if BUILDFLAG(IS_LACROS)
-  browser_version = kLacrosChromeVersionPrefix + browser_version;
-#endif
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // If the device is receiving LTS updates, add a prefix to the version string.
+  // The value of the policy is ignored here.
+  std::string value;
+  const bool is_lts =
+      ash::CrosSettings::Get()->GetString(chromeos::kReleaseLtsTag, &value);
+  if (is_lts)
+    browser_version = kLTSChromeVersionPrefix + browser_version;
 
-#if defined(OS_CHROMEOS)
   // If lacros-chrome is allowed & supported, and launched before, which
-  // is indicated by |lacros_version| in BrowserManager being set to non-empty
+  // is indicated by |browser_version| in BrowserManager being set to non-empty
   // string during lacros startup, attach its version in the chrome
   // version string.
-  if (chromeos::features::IsLacrosSupportEnabled() &&
-      crosapi::browser_util::IsLacrosAllowed() &&
-      !crosapi::BrowserManager::Get()->lacros_version().empty()) {
+  if (crosapi::browser_util::IsLacrosEnabled() &&
+      !crosapi::BrowserManager::Get()->browser_version().empty()) {
     std::string lacros_version =
-        crosapi::BrowserManager::Get()->lacros_version();
+        crosapi::BrowserManager::Get()->browser_version();
     return kLacrosChromeVersionPrefix + lacros_version + ", " +
            kAshChromeVersionPrefix + browser_version;
   }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   return browser_version;
 }
 
@@ -310,10 +310,10 @@ std::string MacCpuArchAsString() {
 
 ChromeInternalLogSource::ChromeInternalLogSource()
     : SystemLogsSource("ChromeInternal") {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::BindCrosDisplayConfigController(
       cros_display_config_.BindNewPipeAndPassReceiver());
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 ChromeInternalLogSource::~ChromeInternalLogSource() {
@@ -326,7 +326,7 @@ void ChromeInternalLogSource::Fetch(SysLogsSourceCallback callback) {
   auto response = std::make_unique<SystemLogsResponse>();
   response->emplace(kChromeVersionTag, GetChromeVersionString());
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   response->emplace(kChromeEnrollmentTag, GetEnrollmentStatusString());
 #else
   // On ChromeOS, this will be pulled in from the LSB_RELEASE.
@@ -353,7 +353,7 @@ void ChromeInternalLogSource::Fetch(SysLogsSourceCallback callback) {
   if (ProfileManager::GetLastUsedProfile()->IsChild())
     response->emplace("account_type", "child");
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Store ARC enabled status.
   bool is_arc_enabled = arc::IsArcPlayStoreEnabledForProfile(
       ProfileManager::GetLastUsedProfile());
@@ -384,7 +384,7 @@ void ChromeInternalLogSource::Fetch(SysLogsSourceCallback callback) {
 #else
   // On other platforms, we're done. Invoke the callback.
   std::move(callback).Run(std::move(response));
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 void ChromeInternalLogSource::PopulateSyncLogs(SystemLogsResponse* response) {
@@ -393,35 +393,15 @@ void ChromeInternalLogSource::PopulateSyncLogs(SystemLogsResponse* response) {
   if (!profile || !ProfileSyncServiceFactory::HasSyncService(profile))
     return;
 
-  syncer::SyncService* service =
-      ProfileSyncServiceFactory::GetForProfile(profile);
-  std::unique_ptr<base::DictionaryValue> sync_logs(
-      syncer::sync_ui_util::ConstructAboutInformation(service,
-                                                      chrome::GetChannel()));
-
-  // Remove identity section.
-  base::ListValue* details = NULL;
-  sync_logs->GetList(syncer::sync_ui_util::kDetailsKey, &details);
-  if (!details)
-    return;
-  for (auto it = details->begin(); it != details->end(); ++it) {
-    base::DictionaryValue* dict = NULL;
-    if (it->GetAsDictionary(&dict)) {
-      std::string title;
-      dict->GetString("title", &title);
-      if (title == syncer::sync_ui_util::kIdentityTitle) {
-        details->Erase(it, NULL);
-        break;
-      }
-    }
-  }
-
-  // Add sync logs to logs.
-  std::string sync_logs_string;
-  JSONStringValueSerializer serializer(&sync_logs_string);
-  serializer.Serialize(*sync_logs.get());
-
-  response->emplace(kSyncDataKey, sync_logs_string);
+  // Add sync logs to |response|.
+  std::unique_ptr<base::DictionaryValue> sync_logs =
+      syncer::sync_ui_util::ConstructAboutInformation(
+          syncer::sync_ui_util::IncludeSensitiveData(false),
+          ProfileSyncServiceFactory::GetForProfile(profile),
+          chrome::GetChannelName(chrome::WithExtendedStable(true)));
+  std::string serialized_sync_logs;
+  JSONStringValueSerializer(&serialized_sync_logs).Serialize(*sync_logs);
+  response->emplace(kSyncDataKey, serialized_sync_logs);
 }
 
 void ChromeInternalLogSource::PopulateExtensionInfoLogs(
@@ -482,16 +462,17 @@ void ChromeInternalLogSource::PopulateDataReductionProxyLogs(
                     data_saver_enabled ? "enabled" : "disabled");
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void ChromeInternalLogSource::PopulateLocalStateSettings(
     SystemLogsResponse* response) {
   // Extract the "settings" entry in the local state and serialize back to
   // a string.
-  std::unique_ptr<base::DictionaryValue> local_state =
+  base::Value local_state =
       g_browser_process->local_state()->GetPreferenceValues(
           PrefService::EXCLUDE_DEFAULTS);
-  const base::DictionaryValue* local_state_settings = nullptr;
-  if (!local_state->GetDictionary(kSettingsKey, &local_state_settings)) {
+  const base::Value* local_state_settings =
+      local_state.FindDictKey(kSettingsKey);
+  if (!local_state_settings) {
     VLOG(1) << "Failed to extract the settings entry from Local State.";
     return;
   }
@@ -531,7 +512,7 @@ void ChromeInternalLogSource::PopulateOnboardingTime(
                                        exploded.month, exploded.day_of_month));
 }
 
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_WIN)
 void ChromeInternalLogSource::PopulateUsbKeyboardDetected(

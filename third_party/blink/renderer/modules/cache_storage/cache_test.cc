@@ -39,6 +39,7 @@
 #include "third_party/blink/renderer/core/fetch/response.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
+#include "third_party/blink/renderer/modules/cache_storage/cache_storage_blob_client_list.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
@@ -56,7 +57,7 @@ class ScopedFetcherForTests final
     : public GarbageCollected<ScopedFetcherForTests>,
       public GlobalFetch::ScopedFetcher {
  public:
-  ScopedFetcherForTests() : fetch_count_(0), expected_url_(nullptr) {}
+  ScopedFetcherForTests() = default;
 
   ScriptPromise Fetch(ScriptState* script_state,
                       const RequestInfo& request_info,
@@ -91,7 +92,7 @@ class ScopedFetcherForTests final
   }
   void SetResponse(Response* response) { response_ = response; }
 
-  int FetchCount() const { return fetch_count_; }
+  uint32_t FetchCount() const override { return fetch_count_; }
 
   void Trace(Visitor* visitor) const override {
     visitor->Trace(response_);
@@ -99,8 +100,8 @@ class ScopedFetcherForTests final
   }
 
  private:
-  int fetch_count_;
-  const String* expected_url_;
+  uint32_t fetch_count_ = 0;
+  const String* expected_url_ = nullptr;
   Member<Response> response_;
 };
 
@@ -162,6 +163,12 @@ class ErrorCacheForTests : public mojom::blink::CacheStorageCache {
     result->set_status(error_);
     std::move(callback).Run(std::move(result));
   }
+  void GetAllMatchedEntries(mojom::blink::FetchAPIRequestPtr request,
+                            mojom::blink::CacheQueryOptionsPtr query_options,
+                            int64_t trace_id,
+                            GetAllMatchedEntriesCallback callback) override {
+    NOTREACHED();
+  }
   void Keys(mojom::blink::FetchAPIRequestPtr fetch_api_request,
             mojom::blink::CacheQueryOptionsPtr query_options,
             int64_t trace_id,
@@ -182,6 +189,13 @@ class ErrorCacheForTests : public mojom::blink::CacheStorageCache {
     last_error_web_cache_method_called_ = "dispatchBatch";
     CheckBatchOperationsIfProvided(batch_operations);
     std::move(callback).Run(CacheStorageVerboseError::New(error_, String()));
+  }
+  void WriteSideData(const blink::KURL& url,
+                     base::Time expected_response_time,
+                     mojo_base::BigBuffer data,
+                     int64_t trace_id,
+                     WriteSideDataCallback callback) override {
+    NOTREACHED();
   }
 
  protected:
@@ -264,7 +278,10 @@ class TestCache : public Cache {
       GlobalFetch::ScopedFetcher* fetcher,
       mojo::PendingAssociatedRemote<mojom::blink::CacheStorageCache> remote,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-      : Cache(fetcher, std::move(remote), std::move(task_runner)) {}
+      : Cache(fetcher,
+              MakeGarbageCollected<CacheStorageBlobClientList>(),
+              std::move(remote),
+              std::move(task_runner)) {}
 
   bool IsAborted() const {
     return abort_controller_ && abort_controller_->signal()->aborted();
@@ -753,12 +770,13 @@ TEST_F(CacheStorageTest, Add) {
   fetcher->SetExpectedFetchUrl(&url);
 
   Request* request = NewRequestFromUrl(url);
-  Response* response = Response::Create(
-      GetScriptState(),
-      BodyStreamBuffer::Create(
-          GetScriptState(),
-          MakeGarbageCollected<FormDataBytesConsumer>(content), nullptr),
-      content_type, ResponseInit::Create(), exception_state);
+  Response* response =
+      Response::Create(GetScriptState(),
+                       BodyStreamBuffer::Create(
+                           GetScriptState(),
+                           MakeGarbageCollected<FormDataBytesConsumer>(content),
+                           nullptr, /*cached_metadata_handler=*/nullptr),
+                       content_type, ResponseInit::Create(), exception_state);
   fetcher->SetResponse(response);
 
   Vector<mojom::blink::BatchOperationPtr> expected_put_operations(size_t(1));
@@ -778,14 +796,14 @@ TEST_F(CacheStorageTest, Add) {
       GetScriptState(), RequestToRequestInfo(request), exception_state);
 
   EXPECT_EQ(kNotImplementedString, GetRejectString(add_result));
-  EXPECT_EQ(1, fetcher->FetchCount());
+  EXPECT_EQ(1u, fetcher->FetchCount());
   EXPECT_EQ("dispatchBatch",
             test_cache()->GetAndClearLastErrorWebCacheMethodCalled());
 }
 
-// Verify an error response causes Cache::addAll() to trigger its associated
-// AbortController to cancel outstanding requests.
-TEST_F(CacheStorageTest, AddAllAbort) {
+// Verify we don't create and trigger the AbortController when a single request
+// to add() addAll() fails.
+TEST_F(CacheStorageTest, AddAllAbortOne) {
   ScriptState::Scope scope(GetScriptState());
   DummyExceptionStateForTesting exception_state;
   auto* fetcher = MakeGarbageCollected<ScopedFetcherForTests>();
@@ -803,6 +821,36 @@ TEST_F(CacheStorageTest, AddAllAbort) {
   fetcher->SetResponse(response);
 
   HeapVector<RequestInfo> info_list;
+  info_list.push_back(RequestToRequestInfo(request));
+
+  ScriptPromise promise =
+      cache->addAll(GetScriptState(), info_list, exception_state);
+
+  EXPECT_EQ("TypeError: Request failed", GetRejectString(promise));
+  EXPECT_FALSE(cache->IsAborted());
+}
+
+// Verify an error response causes Cache::addAll() to trigger its associated
+// AbortController to cancel outstanding requests.
+TEST_F(CacheStorageTest, AddAllAbortMany) {
+  ScriptState::Scope scope(GetScriptState());
+  DummyExceptionStateForTesting exception_state;
+  auto* fetcher = MakeGarbageCollected<ScopedFetcherForTests>();
+  const String url = "http://www.cacheadd.test/";
+  const String content_type = "text/plain";
+  const String content = "hello cache";
+
+  TestCache* cache =
+      CreateCache(fetcher, std::make_unique<NotImplementedErrorCache>());
+
+  Request* request = NewRequestFromUrl(url);
+  fetcher->SetExpectedFetchUrl(&url);
+
+  Response* response = Response::error(GetScriptState());
+  fetcher->SetResponse(response);
+
+  HeapVector<RequestInfo> info_list;
+  info_list.push_back(RequestToRequestInfo(request));
   info_list.push_back(RequestToRequestInfo(request));
 
   ScriptPromise promise =

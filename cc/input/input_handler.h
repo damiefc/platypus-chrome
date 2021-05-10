@@ -35,7 +35,6 @@ class LatencyInfo;
 
 namespace cc {
 
-class EventMetrics;
 class CompositorDelegateForInput;
 class ScrollElasticityHelper;
 
@@ -177,6 +176,8 @@ class CC_EXPORT InputHandler {
     SCROLL_ON_MAIN_THREAD = 0,
     SCROLL_ON_IMPL_THREAD,
     SCROLL_IGNORED,
+    // SCROLL_UNKOWN is not used anymore. However we'll keep this entry as per
+    // the comment above.
     SCROLL_UNKNOWN,
     LAST_SCROLL_STATUS = SCROLL_UNKNOWN
   };
@@ -196,9 +197,17 @@ class CC_EXPORT InputHandler {
           main_thread_scrolling_reasons(main_thread_scrolling_reasons),
           needs_main_thread_hit_test(needs_main_thread_hit_test) {}
     ScrollThread thread = ScrollThread::SCROLL_ON_IMPL_THREAD;
+    // TODO(crbug.com/1155663): Make sure to set main_thread_scrolling_reasons
+    // only when ScrollStatus.thread is set to
+    // InputHander::ScrollThread::SCROLL_ON_MAIN_THREAD
     uint32_t main_thread_scrolling_reasons =
         MainThreadScrollingReason::kNotScrollingOnMain;
-    bool bubble = false;
+    // TODO(crbug.com/1155758): This is a temporary workaround for GuestViews
+    // as they create viewport nodes and want to bubble scroll if the
+    // viewport cannot scroll in the given delta directions. There should be
+    // a parameter to ThreadInputHandler to specify whether unused delta is
+    // consumed by the viewport or bubbles to the parent.
+    bool viewport_cannot_scroll = false;
 
     // Used only in scroll unification. Tells the caller that the input handler
     // detected a case where it cannot reliably target a scroll node and needs
@@ -263,6 +272,7 @@ class CC_EXPORT InputHandler {
                                  ScrollBeginThreadState scroll_start_state) = 0;
   virtual void RecordScrollEnd(ui::ScrollInputType input_type) = 0;
 
+  virtual PointerResultType HitTest(const gfx::PointF& mouse_position) = 0;
   virtual InputHandlerPointerResult MouseMoveAt(
       const gfx::Point& mouse_position) = 0;
   // TODO(arakeri): Pass in the modifier instead of a bool once the refactor
@@ -328,13 +338,18 @@ class CC_EXPORT InputHandler {
   virtual std::unique_ptr<SwapPromiseMonitor>
   CreateLatencyInfoSwapPromiseMonitor(ui::LatencyInfo* latency) = 0;
 
-  // During the lifetime of the returned EventsMetricsManager::ScopedMonitor, if
-  // SetNeedsOneBeginImplFrame() or SetNeedsRedraw() are called on
-  // LayerTreeHostImpl or a scroll animation is updated, |event_metrics| will be
-  // saved for reporting event latency metrics. It is allowed to pass nullptr as
-  // |event_metrics| in which case the return value would also be nullptr.
+  // Returns a new instance of `EventsMetricsManager::ScopedMonitor` to monitor
+  // the scope of handling an event. If `done_callback` is not a null callback,
+  // it will be called when the scope ends. If During the lifetime of the scoped
+  // monitor, `SetNeedsOneBeginImplFrame()` or `SetNeedsRedraw()` are called on
+  // `LayerTreeHostImpl` or a scroll animation is updated, the callback will be
+  // called in the end with `handled` argument set to true, denoting that the
+  // event was handled and the client should return `EventMetrics` associated
+  // with the event if it is interested in reporting event latency metrics for
+  // it.
   virtual std::unique_ptr<EventsMetricsManager::ScopedMonitor>
-  GetScopedEventMetricsMonitor(std::unique_ptr<EventMetrics> event_metrics) = 0;
+  GetScopedEventMetricsMonitor(
+      EventsMetricsManager::ScopedMonitor::DoneCallback done_callback) = 0;
 
   virtual ScrollElasticityHelper* CreateScrollElasticityHelper() = 0;
 

@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include "base/android/scoped_hardware_buffer_fence_sync.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/optional.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/texture_manager.h"
@@ -37,19 +37,6 @@ std::unique_ptr<ui::ScopedMakeCurrent> MakeCurrentIfNeeded(
   }
   return scoped_current;
 }
-
-class ScopedRestoreTextureBinding {
- public:
-  ScopedRestoreTextureBinding() {
-    glGetIntegerv(GL_TEXTURE_BINDING_EXTERNAL_OES, &bound_service_id_);
-  }
-  ~ScopedRestoreTextureBinding() {
-    glBindTexture(GL_TEXTURE_EXTERNAL_OES, bound_service_id_);
-  }
-
- private:
-  GLint bound_service_id_;
-};
 
 }  // namespace
 
@@ -109,17 +96,27 @@ bool CodecOutputBufferRenderer::RenderToTextureOwnerFrontBuffer(
   if (phase_ == Phase::kInvalidated)
     return false;
 
-  std::unique_ptr<ui::ScopedMakeCurrent> scoped_make_current =
-      MakeCurrentIfNeeded(
-          codec_buffer_wait_coordinator_->texture_owner().get());
-  // If updating the image will implicitly update the texture bindings then
-  // restore if requested or the update needed a context switch.
-  base::Optional<ScopedRestoreTextureBinding> scoped_restore_texture;
+  std::unique_ptr<ui::ScopedMakeCurrent> scoped_make_current;
+  base::Optional<gpu::ScopedRestoreTextureBinding> scoped_restore_texture;
+
   if (codec_buffer_wait_coordinator_->texture_owner()
-          ->binds_texture_on_update() &&
-      (bindings_mode == BindingsMode::kRestoreIfBound ||
-       !!scoped_make_current)) {
-    scoped_restore_texture.emplace();
+          ->binds_texture_on_update() ||
+      (bindings_mode == BindingsMode::kEnsureTexImageBound)) {
+    // If the texture_owner() binds the texture while doing the texture update
+    // (UpdateTexImage), like in SurfaceTexture case, OR if it was explicitly
+    // specified to bind the texture via bindings_mode, then only make the
+    // context current. For AImageReader, since we only acquire the latest image
+    // from it during the texture update process, there is no need to make it's
+    // context current if its not specified via bindings_mode.
+    scoped_make_current = MakeCurrentIfNeeded(
+        codec_buffer_wait_coordinator_->texture_owner().get());
+
+    // If updating the image will implicitly update the texture bindings then
+    // restore if requested or the update needed a context switch.
+    if (bindings_mode == BindingsMode::kRestoreIfBound ||
+        !!scoped_make_current) {
+      scoped_restore_texture.emplace();
+    }
   }
 
   // Render it to the back buffer if it's not already there.

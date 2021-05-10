@@ -107,9 +107,14 @@ class ExtensionDownloaderDelegate {
 
   // Passes as an argument to OnExtensionDownloadCacheStatusRetrieved to inform
   // delegate about cache status.
-  // Note: enum used for UMA. Do NOT reorder or remove entries. Don't forget to
-  // update enums.xml (name: ExtensionInstallationCacheStatus) when adding new
+  // Note: enum used for UMA. Do NOT reorder or remove entries.
+  // 1) Don't forget to update enums.xml (name:
+  // ExtensionInstallationDownloadingCacheStatus) when adding new entries.
+  // 2) Don't forget to update device_management_backend.proto (name:
+  // ExtensionInstallReportLogEvent::DownloadCacheStatus) when adding new
   // entries.
+  // 3) Don't forget to update ConvertDownloadCacheStatusToProto method in
+  // ExtensionInstallEventLogCollector.
   enum class CacheStatus {
     // No information about cache status. This is never reported by
     // ExtensionDownloader, but may be used later in statistics.
@@ -156,6 +161,9 @@ class ExtensionDownloaderDelegate {
   struct FailureData {
     FailureData();
     FailureData(const FailureData& other);
+    static FailureData CreateFromNetworkResponse(int net_error,
+                                                 int response_code,
+                                                 int failure_count);
     FailureData(const int net_error_code, const int fetch_attempts);
     FailureData(const int net_error_code,
                 const base::Optional<int> response,
@@ -223,6 +231,11 @@ class ExtensionDownloaderDelegate {
                                          const std::set<int>& request_ids,
                                          const FailureData& data);
 
+  // Invoked when an manifest or CRX of extension fails to download, but a retry
+  // is triggered.
+  virtual void OnExtensionDownloadRetry(const ExtensionId& id,
+                                        const FailureData& data);
+
   // Invoked if the extension had an update available and its crx was
   // successfully downloaded to |path|. |ownership_passed| is true if delegate
   // should get ownership of the file. The downloader may be able to get the
@@ -257,10 +270,6 @@ class ExtensionDownloaderDelegate {
   // (this is the default).
   virtual bool GetPingDataForExtension(const ExtensionId& id,
                                        ManifestFetchData::PingData* ping);
-
-  // Invoked to get the update url data for this extension's update url, if
-  // there is any. The default implementation returns an empty string.
-  virtual std::string GetUpdateUrlData(const ExtensionId& id);
 
   // Invoked to determine whether extension |id| is currently
   // pending installation.

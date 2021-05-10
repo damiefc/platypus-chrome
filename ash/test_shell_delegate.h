@@ -41,18 +41,19 @@ class TestShellDelegate : public ShellDelegate {
   bool CanGoBack(gfx::NativeWindow window) const override;
   void SetTabScrubberEnabled(bool enabled) override;
   bool ShouldWaitForTouchPressAck(gfx::NativeWindow window) override;
-  void BindNavigableContentsFactory(
-      mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver)
-      override;
   void BindMultiDeviceSetup(
       mojo::PendingReceiver<
           chromeos::multidevice_setup::mojom::MultiDeviceSetup> receiver)
       override;
   std::unique_ptr<NearbyShareDelegate> CreateNearbyShareDelegate(
       NearbyShareController* controller) const override;
+  bool IsSessionRestoreInProgress() const override;
 
   void SetCanGoBack(bool can_go_back);
   void SetShouldWaitForTouchAck(bool should_wait_for_touch_ack);
+  void SetSessionRestoreInProgress(bool in_progress);
+  bool IsLoggingRedirectDisabled() const override;
+  base::FilePath GetPrimaryUserDownloadsFolder() const override;
 
  private:
   // True if the current top window can go back.
@@ -66,6 +67,9 @@ class TestShellDelegate : public ShellDelegate {
   // |BackGestureEventHandler::should_wait_for_touch_ack_| for detailed
   // description.
   bool should_wait_for_touch_ack_ = false;
+
+  // True if window browser sessions are restoring.
+  bool session_restore_in_progress_ = false;
 
   MultiDeviceSetupBinder multidevice_setup_binder_;
 

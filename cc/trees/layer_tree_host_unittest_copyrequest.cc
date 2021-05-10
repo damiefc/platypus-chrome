@@ -158,7 +158,8 @@ class LayerTreeHostCopyRequestTestMultipleRequests
                           std::unique_ptr<viz::CopyOutputResult> result) {
     EXPECT_TRUE(layer_tree_host()->GetTaskRunnerProvider()->IsMainThread());
     EXPECT_FALSE(result->IsEmpty());
-    const SkBitmap& bitmap = result->AsSkBitmap();
+    auto scoped_sk_bitmap = result->ScopedAccessSkBitmap();
+    const SkBitmap& bitmap = scoped_sk_bitmap.bitmap();
     EXPECT_TRUE(bitmap.readyToDraw());
     EXPECT_EQ(result->size(), gfx::Size(bitmap.width(), bitmap.height()));
     callbacks_[id] = result->size();
@@ -179,6 +180,10 @@ INSTANTIATE_TEST_SUITE_P(
     CombineWithCompositorModes(viz::GetRendererTypesNoDawn()),
     PrintTupleToStringParamName());
 
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostCopyRequestTestMultipleRequests);
+
 TEST_P(LayerTreeHostCopyRequestTestMultipleRequests, Test) {
   RunTest(compositor_mode());
 }
@@ -187,8 +192,16 @@ TEST_P(LayerTreeHostCopyRequestTestMultipleRequests, Test) {
 // which causes callbacks for sync queries to be sent in reverse order.
 class LayerTreeHostCopyRequestTestMultipleRequestsOutOfOrder
     : public LayerTreeHostCopyRequestTestMultipleRequests {
+  std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+  CreateDisplayControllerOnThread() override {
+    // In this implementation, none of the output surface has a real gpu thread,
+    // and there is no overlay support.
+    return nullptr;
+  }
+
   std::unique_ptr<viz::SkiaOutputSurface>
-  CreateDisplaySkiaOutputSurfaceOnThread() override {
+  CreateDisplaySkiaOutputSurfaceOnThread(
+      viz::DisplayCompositorMemoryAndTaskController*) override {
     auto skia_output_surface = viz::FakeSkiaOutputSurface::Create3d();
     skia_output_surface->SetOutOfOrderCallbacks(true);
     return skia_output_surface;
@@ -213,6 +226,10 @@ INSTANTIATE_TEST_SUITE_P(
     LayerTreeHostCopyRequestTestMultipleRequestsOutOfOrder,
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
+
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostCopyRequestTestMultipleRequestsOutOfOrder);
 
 TEST_P(LayerTreeHostCopyRequestTestMultipleRequestsOutOfOrder, Test) {
   RunTest(compositor_mode());
@@ -272,6 +289,10 @@ INSTANTIATE_TEST_SUITE_P(
     LayerTreeHostCopyRequestCompletionCausesCommit,
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
+
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostCopyRequestCompletionCausesCommit);
 
 TEST_P(LayerTreeHostCopyRequestCompletionCausesCommit, Test) {
   RunTest(compositor_mode());
@@ -380,6 +401,10 @@ INSTANTIATE_TEST_SUITE_P(
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
 
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostCopyRequestTestLayerDestroyed);
+
 TEST_P(LayerTreeHostCopyRequestTestLayerDestroyed, Test) {
   RunTest(compositor_mode());
 }
@@ -485,6 +510,10 @@ INSTANTIATE_TEST_SUITE_P(
     LayerTreeHostCopyRequestTestInHiddenSubtree,
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
+
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostCopyRequestTestInHiddenSubtree);
 
 TEST_P(LayerTreeHostCopyRequestTestInHiddenSubtree, Test) {
   RunTest(compositor_mode());
@@ -607,6 +636,10 @@ INSTANTIATE_TEST_SUITE_P(
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
 
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest);
+
 TEST_P(LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest, Test) {
   RunTest(compositor_mode());
 }
@@ -662,6 +695,10 @@ INSTANTIATE_TEST_SUITE_P(
     LayerTreeHostCopyRequestTestClippedOut,
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
+
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostCopyRequestTestClippedOut);
 
 TEST_P(LayerTreeHostCopyRequestTestClippedOut, Test) {
   RunTest(compositor_mode());
@@ -722,6 +759,10 @@ INSTANTIATE_TEST_SUITE_P(
     LayerTreeHostCopyRequestTestScaledLayer,
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
+
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostCopyRequestTestScaledLayer);
 
 TEST_P(LayerTreeHostCopyRequestTestScaledLayer, Test) {
   RunTest(compositor_mode());
@@ -817,6 +858,10 @@ INSTANTIATE_TEST_SUITE_P(
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
 
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostTestAsyncTwoReadbacksWithoutDraw);
+
 TEST_P(LayerTreeHostTestAsyncTwoReadbacksWithoutDraw, Test) {
   RunTest(compositor_mode());
 }
@@ -824,8 +869,15 @@ TEST_P(LayerTreeHostTestAsyncTwoReadbacksWithoutDraw, Test) {
 class LayerTreeHostCopyRequestTestDeleteSharedImage
     : public LayerTreeHostCopyRequestTest {
  protected:
+  std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+  CreateDisplayControllerOnThread() override {
+    // In this implementation, none of the output surface has a real gpu thread,
+    // and there is no overlay support.
+    return nullptr;
+  }
   std::unique_ptr<viz::SkiaOutputSurface>
-  CreateDisplaySkiaOutputSurfaceOnThread() override {
+  CreateDisplaySkiaOutputSurfaceOnThread(
+      viz::DisplayCompositorMemoryAndTaskController*) override {
     display_context_provider_ = viz::TestContextProvider::Create();
     display_context_provider_->BindToCurrentThread();
     return viz::FakeSkiaOutputSurface::Create3d(display_context_provider_);
@@ -960,6 +1012,10 @@ INSTANTIATE_TEST_SUITE_P(
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
 
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostCopyRequestTestDeleteSharedImage);
+
 TEST_P(LayerTreeHostCopyRequestTestDeleteSharedImage, Test) {
   RunTest(compositor_mode());
 }
@@ -967,8 +1023,15 @@ TEST_P(LayerTreeHostCopyRequestTestDeleteSharedImage, Test) {
 class LayerTreeHostCopyRequestTestCountSharedImages
     : public LayerTreeHostCopyRequestTest {
  protected:
+  std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+  CreateDisplayControllerOnThread() override {
+    // In this implementation, none of the output surface has a real gpu thread,
+    // and there is no overlay support.
+    return nullptr;
+  }
   std::unique_ptr<viz::SkiaOutputSurface>
-  CreateDisplaySkiaOutputSurfaceOnThread() override {
+  CreateDisplaySkiaOutputSurfaceOnThread(
+      viz::DisplayCompositorMemoryAndTaskController*) override {
     display_context_provider_ = viz::TestContextProvider::Create();
     display_context_provider_->BindToCurrentThread();
     return viz::FakeSkiaOutputSurface::Create3d(display_context_provider_);
@@ -1087,14 +1150,14 @@ class LayerTreeHostCopyRequestTestCreatesSharedImage
   }
 
   void AfterTest() override {
-    release_->Run(gpu::SyncToken(), false);
+    std::move(release_).Run(gpu::SyncToken(), false);
 
     // Except the copy to have made a new shared image.
     EXPECT_EQ(num_shared_images_without_readback_ + 1,
               num_shared_images_with_readback_);
   }
 
-  std::unique_ptr<viz::SingleReleaseCallback> release_;
+  viz::ReleaseCallback release_;
 };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1102,6 +1165,10 @@ INSTANTIATE_TEST_SUITE_P(
     LayerTreeHostCopyRequestTestCreatesSharedImage,
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
+
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostCopyRequestTestCreatesSharedImage);
 
 TEST_P(LayerTreeHostCopyRequestTestCreatesSharedImage, Test) {
   RunTest(compositor_mode());
@@ -1191,6 +1258,10 @@ INSTANTIATE_TEST_SUITE_P(
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
 
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostCopyRequestTestDestroyBeforeCopy);
+
 TEST_P(LayerTreeHostCopyRequestTestDestroyBeforeCopy, Test) {
   RunTest(compositor_mode());
 }
@@ -1273,6 +1344,10 @@ INSTANTIATE_TEST_SUITE_P(
     LayerTreeHostCopyRequestTestShutdownBeforeCopy,
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
+
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostCopyRequestTestShutdownBeforeCopy);
 
 TEST_P(LayerTreeHostCopyRequestTestShutdownBeforeCopy, Test) {
   RunTest(compositor_mode());
@@ -1405,6 +1480,10 @@ INSTANTIATE_TEST_SUITE_P(
     LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest,
     CombineWithCompositorModes(viz::GetGpuRendererTypesNoDawn()),
     PrintTupleToStringParamName());
+
+// viz::GetGpuRendererTypesNoDawn() is empty on some platforms.
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(
+    LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest);
 
 TEST_P(LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest, Test) {
   RunTest(compositor_mode());

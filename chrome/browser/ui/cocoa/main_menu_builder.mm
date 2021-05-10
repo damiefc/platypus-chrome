@@ -4,10 +4,12 @@
 
 #import "chrome/browser/ui/cocoa/main_menu_builder.h"
 
+#include "base/feature_list.h"
 #include "build/branding_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/cocoa/accelerators_cocoa.h"
 #include "chrome/browser/ui/cocoa/history_menu_bridge.h"
+#include "chrome/browser/ui/commander/commander.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/chromium_strings.h"
@@ -27,7 +29,7 @@ using Item = internal::MenuItemBuilder;
 base::scoped_nsobject<NSMenuItem> BuildAppMenu(
     NSApplication* nsapp,
     id app_delegate,
-    const base::string16& product_name,
+    const std::u16string& product_name,
     bool is_pwa) {
   base::scoped_nsobject<NSMenuItem> item =
       // NB: The IDS_APP_MENU_PRODUCT_NAME string is not actually used to
@@ -56,6 +58,7 @@ base::scoped_nsobject<NSMenuItem> BuildAppMenu(
                     .remove_if(is_pwa),
                 Item().is_separator(),
                 Item(IDS_SERVICES_MAC).tag(-1).submenu({}),
+                Item().is_separator(),
                 Item(IDS_HIDE_APP_MAC)
                     .string_format_1(product_name)
                     .tag(IDC_HIDE_APP)
@@ -93,7 +96,7 @@ base::scoped_nsobject<NSMenuItem> BuildAppMenu(
 base::scoped_nsobject<NSMenuItem> BuildFileMenu(
     NSApplication* nsapp,
     id app_delegate,
-    const base::string16& product_name,
+    const std::u16string& product_name,
     bool is_pwa) {
   base::scoped_nsobject<NSMenuItem> item =
       Item(IDS_FILE_MENU_MAC)
@@ -139,7 +142,7 @@ base::scoped_nsobject<NSMenuItem> BuildFileMenu(
 base::scoped_nsobject<NSMenuItem> BuildEditMenu(
     NSApplication* nsapp,
     id app_delegate,
-    const base::string16& product_name,
+    const std::u16string& product_name,
     bool is_pwa) {
   base::scoped_nsobject<NSMenuItem> item =
       Item(IDS_EDIT_MENU_MAC)
@@ -232,7 +235,7 @@ base::scoped_nsobject<NSMenuItem> BuildEditMenu(
 base::scoped_nsobject<NSMenuItem> BuildViewMenu(
     NSApplication* nsapp,
     id app_delegate,
-    const base::string16& product_name,
+    const std::u16string& product_name,
     bool is_pwa) {
   base::scoped_nsobject<NSMenuItem> item =
       Item(IDS_VIEW_MENU_MAC)
@@ -268,6 +271,10 @@ base::scoped_nsobject<NSMenuItem> BuildViewMenu(
                 Item(IDS_DISTILL_PAGE)
                     .command_id(IDC_DISTILL_PAGE)
                     .remove_if(!dom_distiller::IsDomDistillerEnabled()),
+                Item(IDS_TOGGLE_COMMANDER)
+                    .command_id(IDC_TOGGLE_COMMANDER)
+                    .remove_if(!commander::IsEnabled()),
+
                 Item().is_separator(),
                 Item(IDS_DEVELOPER_MENU_MAC)
                     .tag(IDC_DEVELOPER_MENU)
@@ -289,7 +296,7 @@ base::scoped_nsobject<NSMenuItem> BuildViewMenu(
 base::scoped_nsobject<NSMenuItem> BuildHistoryMenu(
     NSApplication* nsapp,
     id app_delegate,
-    const base::string16& product_name,
+    const std::u16string& product_name,
     bool is_pwa) {
   base::scoped_nsobject<NSMenuItem> item =
       Item(IDS_HISTORY_MENU_MAC)
@@ -327,7 +334,7 @@ base::scoped_nsobject<NSMenuItem> BuildHistoryMenu(
 base::scoped_nsobject<NSMenuItem> BuildBookmarksMenu(
     NSApplication* nsapp,
     id app_delegate,
-    const base::string16& product_name,
+    const std::u16string& product_name,
     bool is_pwa) {
   if (is_pwa)
     return base::scoped_nsobject<NSMenuItem>();
@@ -349,19 +356,23 @@ base::scoped_nsobject<NSMenuItem> BuildBookmarksMenu(
 base::scoped_nsobject<NSMenuItem> BuildPeopleMenu(
     NSApplication* nsapp,
     id app_delegate,
-    const base::string16& product_name,
+    const std::u16string& product_name,
     bool is_pwa) {
-  base::scoped_nsobject<NSMenuItem> item = Item(IDS_PROFILES_OPTIONS_GROUP_NAME)
-                                               .tag(IDC_PROFILE_MAIN_MENU)
-                                               .submenu({})
-                                               .Build();
+  const bool new_picker =
+      base::FeatureList::IsEnabled(features::kNewProfilePicker);
+  base::scoped_nsobject<NSMenuItem> item =
+      Item(new_picker ? IDS_PROFILES_MENU_NAME
+                      : IDS_PROFILES_OPTIONS_GROUP_NAME)
+          .tag(IDC_PROFILE_MAIN_MENU)
+          .submenu({})
+          .Build();
   return item;
 }
 
 base::scoped_nsobject<NSMenuItem> BuildWindowMenu(
     NSApplication* nsapp,
     id app_delegate,
-    const base::string16& product_name,
+    const std::u16string& product_name,
     bool is_pwa) {
   const bool window_naming =
       base::FeatureList::IsEnabled(features::kWindowNaming);
@@ -406,7 +417,7 @@ base::scoped_nsobject<NSMenuItem> BuildWindowMenu(
 base::scoped_nsobject<NSMenuItem> BuildTabMenu(
     NSApplication* nsapp,
     id app_delegate,
-    const base::string16& product_name,
+    const std::u16string& product_name,
     bool is_pwa) {
   if (is_pwa)
     return base::scoped_nsobject<NSMenuItem>();
@@ -415,6 +426,8 @@ base::scoped_nsobject<NSMenuItem> BuildTabMenu(
       Item(IDS_TAB_MENU_MAC)
           .tag(IDC_TAB_MENU)
           .submenu({
+              Item(IDS_TAB_CXMENU_NEWTABTORIGHT)
+                  .command_id(IDC_NEW_TAB_TO_RIGHT),
               Item(IDS_NEXT_TAB_MAC).command_id(IDC_SELECT_NEXT_TAB),
               Item(IDS_PREV_TAB_MAC).command_id(IDC_SELECT_PREVIOUS_TAB),
               Item(IDS_DUPLICATE_TAB_MAC).command_id(IDC_DUPLICATE_TAB),
@@ -432,16 +445,11 @@ base::scoped_nsobject<NSMenuItem> BuildTabMenu(
                   .command_id(IDC_PIN_TARGET_TAB)
                   .is_alternate()
                   .key_equivalent(@"", NSAlternateKeyMask),
-              Item(IDS_GROUP_TAB_MAC)
-                  .command_id(IDC_WINDOW_GROUP_TAB)
-                  .remove_if(
-                      !base::FeatureList::IsEnabled(features::kTabGroups)),
+              Item(IDS_GROUP_TAB_MAC).command_id(IDC_WINDOW_GROUP_TAB),
               Item(IDS_GROUP_TARGET_TAB_MAC)
                   .command_id(IDC_GROUP_TARGET_TAB)
                   .is_alternate()
-                  .key_equivalent(@"", NSAlternateKeyMask)
-                  .remove_if(
-                      !base::FeatureList::IsEnabled(features::kTabGroups)),
+                  .key_equivalent(@"", NSAlternateKeyMask),
               Item(IDS_TAB_CXMENU_CLOSEOTHERTABS)
                   .command_id(IDC_WINDOW_CLOSE_OTHER_TABS),
               Item(IDS_TAB_CXMENU_CLOSETABSTORIGHT)
@@ -457,7 +465,7 @@ base::scoped_nsobject<NSMenuItem> BuildTabMenu(
 base::scoped_nsobject<NSMenuItem> BuildHelpMenu(
     NSApplication* nsapp,
     id app_delegate,
-    const base::string16& product_name,
+    const std::u16string& product_name,
     bool is_pwa) {
   if (is_pwa)
     return base::scoped_nsobject<NSMenuItem>();
@@ -481,12 +489,12 @@ base::scoped_nsobject<NSMenuItem> BuildHelpMenu(
 
 void BuildMainMenu(NSApplication* nsapp,
                    id<NSApplicationDelegate> app_delegate,
-                   const base::string16& product_name,
+                   const std::u16string& product_name,
                    bool is_pwa) {
   base::scoped_nsobject<NSMenu> main_menu([[NSMenu alloc] initWithTitle:@""]);
 
   using Builder = base::scoped_nsobject<NSMenuItem> (*)(
-      NSApplication*, id, const base::string16&, bool);
+      NSApplication*, id, const std::u16string&, bool);
   static const Builder kBuilderFuncs[] = {
       &BuildAppMenu,     &BuildFileMenu,      &BuildEditMenu,   &BuildViewMenu,
       &BuildHistoryMenu, &BuildBookmarksMenu, &BuildPeopleMenu, &BuildTabMenu,

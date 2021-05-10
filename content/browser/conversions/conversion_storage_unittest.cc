@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/string_number_conversions.h"
@@ -35,8 +36,6 @@ const int kMaxConversions = 3;
 
 // Default delay in milliseconds for when a report should be sent for testing.
 const int kReportTime = 5;
-
-using AttributionCredits = std::list<int>;
 
 base::RepeatingCallback<bool(const url::Origin&)> GetMatcher(
     const url::Origin& to_delete) {
@@ -62,13 +61,12 @@ class ConversionStorageTest : public testing::Test {
   // Given a |conversion|, returns the expected conversion report properties at
   // the current timestamp.
   ConversionReport GetExpectedReport(const StorableImpression& impression,
-                                     const StorableConversion& conversion,
-                                     int attribution_credit = 0) {
-    ConversionReport report(
-        impression, conversion.conversion_data(),
-        clock_.Now() + base::TimeDelta::FromMilliseconds(kReportTime),
-        base::nullopt /* conversion_id */);
-    report.attribution_credit = attribution_credit;
+                                     const StorableConversion& conversion) {
+    ConversionReport report(impression, conversion.conversion_data(),
+                            /*conversion_time=*/clock_.Now(),
+                            /*report_time=*/clock_.Now() +
+                                base::TimeDelta::FromMilliseconds(kReportTime),
+                            base::nullopt /* conversion_id */);
     return report;
   }
 
@@ -76,10 +74,6 @@ class ConversionStorageTest : public testing::Test {
     for (auto report : reports) {
       EXPECT_TRUE(storage_->DeleteConversion(*report.conversion_id));
     }
-  }
-
-  void AddAttributionCredits(AttributionCredits credits) {
-    delegate_->AddCredits(credits);
   }
 
   base::SimpleTestClock* clock() { return &clock_; }
@@ -157,11 +151,23 @@ TEST_F(ConversionStorageTest, GetWithMatchingImpression_ImpressionReturned) {
       1, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
 }
 
-TEST_F(ConversionStorageTest, MultipleImpressionsForConversion_AllConvert) {
+TEST_F(ConversionStorageTest, MultipleImpressionsForConversion_OneConverts) {
   storage()->StoreImpression(ImpressionBuilder(clock()->Now()).Build());
   storage()->StoreImpression(ImpressionBuilder(clock()->Now()).Build());
   EXPECT_EQ(
-      2, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+      1, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+}
+
+TEST_F(ConversionStorageTest,
+       CrossOriginSameDomainConversion_ImpressionConverted) {
+  auto impression =
+      ImpressionBuilder(clock()->Now())
+          .SetConversionOrigin(url::Origin::Create(GURL("https://sub.a.test")))
+          .Build();
+  storage()->StoreImpression(impression);
+  StorableConversion conversion("1", net::SchemefulSite(GURL("https://a.test")),
+                                impression.reporting_origin());
+  EXPECT_EQ(1, storage()->MaybeCreateAndStoreConversionReports(conversion));
 }
 
 TEST_F(ConversionStorageTest, ImpressionExpired_NoConversionsStored) {
@@ -269,25 +275,6 @@ TEST_F(ConversionStorageTest,
   EXPECT_EQ(0u, storage()->GetConversionsToReport(clock()->Now()).size());
 }
 
-TEST_F(ConversionStorageTest, OneConversion_AttributionCreditSet) {
-  auto impression = ImpressionBuilder(clock()->Now()).Build();
-  auto conversion = DefaultConversion();
-
-  const int kAttributionCredit = 100;
-  AddAttributionCredits({kAttributionCredit});
-
-  storage()->StoreImpression(impression);
-  EXPECT_EQ(1, storage()->MaybeCreateAndStoreConversionReports(conversion));
-
-  ConversionReport expected_report =
-      GetExpectedReport(impression, conversion, kAttributionCredit);
-  clock()->Advance(base::TimeDelta::FromMilliseconds(kReportTime));
-
-  std::vector<ConversionReport> actual_reports =
-      storage()->GetConversionsToReport(clock()->Now());
-  EXPECT_TRUE(ReportsEqual({expected_report}, actual_reports));
-}
-
 TEST_F(ConversionStorageTest,
        ExpiredImpressionWithPendingConversion_NotDeleted) {
   storage()->StoreImpression(
@@ -356,7 +343,7 @@ TEST_F(ConversionStorageTest, ConversionReportDeleted_RemovedFromStorage) {
 }
 
 TEST_F(ConversionStorageTest,
-       ManyImpressionsWithManyConversions_ConversionReportsCreated) {
+       ManyImpressionsWithManyConversions_OneImpressionAttributed) {
   const int kNumMultiTouchImpressions = 20;
 
   // Store a large, arbitrary number of impressions.
@@ -365,9 +352,8 @@ TEST_F(ConversionStorageTest,
   }
 
   for (int i = 0; i < kMaxConversions; i++) {
-    EXPECT_EQ(
-        kNumMultiTouchImpressions,
-        storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+    EXPECT_EQ(1, storage()->MaybeCreateAndStoreConversionReports(
+                     DefaultConversion()));
   }
 
   // No additional conversion reports should be created for any of the
@@ -377,7 +363,7 @@ TEST_F(ConversionStorageTest,
 }
 
 TEST_F(ConversionStorageTest,
-       NewImpressionForUnconvertedImpression_ImpressionRemainsActive) {
+       MultipleImpressionsForConversion_UnattributedImpressionsInactive) {
   storage()->StoreImpression(ImpressionBuilder(clock()->Now()).Build());
 
   auto new_impression =
@@ -388,8 +374,10 @@ TEST_F(ConversionStorageTest,
 
   // The first impression should be active because even though
   // <reporting_origin, conversion_origin> matches, it has not converted yet.
+  EXPECT_EQ(2u, storage()->GetActiveImpressions().size());
   EXPECT_EQ(
-      2, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+      1, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+  EXPECT_EQ(1u, storage()->GetActiveImpressions().size());
 }
 
 // This test makes sure that when a new click is received for a given
@@ -463,7 +451,7 @@ TEST_F(ConversionStorageTest,
 
 TEST_F(
     ConversionStorageTest,
-    MultipleImpressionsForConversionAtDifferentTimes_AllImpressionsConverted) {
+    MultipleImpressionsForConversionAtDifferentTimes_OneImpressionAttributed) {
   auto first_impression = ImpressionBuilder(clock()->Now()).Build();
   storage()->StoreImpression(first_impression);
 
@@ -471,10 +459,6 @@ TEST_F(
   storage()->StoreImpression(second_impression);
 
   auto conversion = DefaultConversion();
-  ConversionReport first_expected_conversion =
-      GetExpectedReport(first_impression, conversion);
-  ConversionReport second_expected_conversion =
-      GetExpectedReport(second_impression, conversion);
 
   // Advance clock so third impression is stored at a different timestamp.
   clock()->Advance(base::TimeDelta::FromMilliseconds(3));
@@ -486,13 +470,11 @@ TEST_F(
 
   ConversionReport third_expected_conversion =
       GetExpectedReport(third_impression, conversion);
-  EXPECT_EQ(3, storage()->MaybeCreateAndStoreConversionReports(conversion));
+  EXPECT_EQ(1, storage()->MaybeCreateAndStoreConversionReports(conversion));
 
   clock()->Advance(base::TimeDelta::FromMilliseconds(kReportTime));
 
-  std::vector<ConversionReport> expected_reports = {first_expected_conversion,
-                                                    second_expected_conversion,
-                                                    third_expected_conversion};
+  std::vector<ConversionReport> expected_reports = {third_expected_conversion};
   std::vector<ConversionReport> actual_reports =
       storage()->GetConversionsToReport(clock()->Now());
 
@@ -500,7 +482,7 @@ TEST_F(
 }
 
 TEST_F(ConversionStorageTest,
-       ImpressionsAtDifferentTimes_ReportedAtDifferentTimes) {
+       ImpressionsAtDifferentTimes_AttributedImpressionHasCorrectReportTime) {
   auto first_impression = ImpressionBuilder(clock()->Now()).Build();
   storage()->StoreImpression(first_impression);
 
@@ -512,18 +494,18 @@ TEST_F(ConversionStorageTest,
   storage()->StoreImpression(ImpressionBuilder(clock()->Now()).Build());
 
   EXPECT_EQ(
-      3, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+      1, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
 
   // Advance to the first impression's report time and verify only its report is
   // available.
   clock()->Advance(base::TimeDelta::FromMilliseconds(kReportTime - 6));
+  EXPECT_EQ(0u, storage()->GetConversionsToReport(clock()->Now()).size());
+
+  clock()->Advance(base::TimeDelta::FromMilliseconds(3));
+  EXPECT_EQ(0u, storage()->GetConversionsToReport(clock()->Now()).size());
+
+  clock()->Advance(base::TimeDelta::FromMilliseconds(3));
   EXPECT_EQ(1u, storage()->GetConversionsToReport(clock()->Now()).size());
-
-  clock()->Advance(base::TimeDelta::FromMilliseconds(3));
-  EXPECT_EQ(2u, storage()->GetConversionsToReport(clock()->Now()).size());
-
-  clock()->Advance(base::TimeDelta::FromMilliseconds(3));
-  EXPECT_EQ(3u, storage()->GetConversionsToReport(clock()->Now()).size());
 }
 
 TEST_F(ConversionStorageTest, GetConversionsToReportMultipleTimes_SameResult) {
@@ -543,52 +525,22 @@ TEST_F(ConversionStorageTest, GetConversionsToReportMultipleTimes_SameResult) {
   EXPECT_TRUE(ReportsEqual(first_call_reports, second_call_reports));
 }
 
-TEST_F(ConversionStorageTest,
-       ManyImpressionsWithAttributionCredits_CreditsAssignedCorrectly) {
-  const int kNumImpressions = 10;
-  std::vector<ConversionReport> expected_reports;
-  AttributionCredits credits;
-  auto conversion = DefaultConversion();
-
-  // Store a large, arbitrary number of impressions.
-  for (int i = 0; i < kNumImpressions; i++) {
-    auto impression = ImpressionBuilder(clock()->Now())
-                          .SetData(base::NumberToString(i))
-                          .Build();
-    storage()->StoreImpression(impression);
-    expected_reports.push_back(GetExpectedReport(impression, conversion, i));
-    credits.push_back(i);
-  }
-
-  // Add the expected credits to the delegate.
-  AddAttributionCredits(credits);
-  EXPECT_EQ(kNumImpressions,
-            storage()->MaybeCreateAndStoreConversionReports(conversion));
-
-  // Verify that the attribution credits were associated with scheduled
-  // conversions as expected.
-  clock()->Advance(base::TimeDelta::FromMilliseconds(kReportTime));
-  std::vector<ConversionReport> actual_reports =
-      storage()->GetConversionsToReport(clock()->Now());
-  EXPECT_TRUE(ReportsEqual(expected_reports, actual_reports));
-}
-
 TEST_F(ConversionStorageTest, MaxImpressionsPerOrigin) {
   delegate()->set_max_impressions_per_origin(2);
   storage()->StoreImpression(ImpressionBuilder(clock()->Now()).Build());
   storage()->StoreImpression(ImpressionBuilder(clock()->Now()).Build());
   storage()->StoreImpression(ImpressionBuilder(clock()->Now()).Build());
   EXPECT_EQ(
-      2, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+      1, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
 }
 
 TEST_F(ConversionStorageTest, MaxConversionsPerOrigin) {
-  delegate()->set_max_conversions_per_origin(2);
+  delegate()->set_max_conversions_per_origin(1);
+  storage()->StoreImpression(ImpressionBuilder(clock()->Now()).Build());
   storage()->StoreImpression(ImpressionBuilder(clock()->Now()).Build());
   EXPECT_EQ(
       1, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
-  EXPECT_EQ(
-      1, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+  // Verify that MaxConversionsPerOrigin is enforced.
   EXPECT_EQ(
       0, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
 }
@@ -617,22 +569,7 @@ TEST_F(ConversionStorageTest, ClearDataOutsideRange_NoDelete) {
 
 TEST_F(ConversionStorageTest, ClearDataImpression) {
   base::Time now = clock()->Now();
-  {
-    auto impression = ImpressionBuilder(now).Build();
-    storage()->StoreImpression(impression);
-    storage()->ClearData(now, now + base::TimeDelta::FromMinutes(20),
-                         GetMatcher(impression.impression_origin()));
-    EXPECT_EQ(0, storage()->MaybeCreateAndStoreConversionReports(
-                     DefaultConversion()));
-  }
-  {
-    auto impression = ImpressionBuilder(now).Build();
-    storage()->StoreImpression(impression);
-    storage()->ClearData(now, now + base::TimeDelta::FromMinutes(20),
-                         GetMatcher(impression.reporting_origin()));
-    EXPECT_EQ(0, storage()->MaybeCreateAndStoreConversionReports(
-                     DefaultConversion()));
-  }
+
   {
     auto impression = ImpressionBuilder(now).Build();
     storage()->StoreImpression(impression);
@@ -678,14 +615,14 @@ TEST_F(ConversionStorageTest, ClearDataNullFilter) {
   for (int i = 0; i < 5; i++) {
     auto origin =
         url::Origin::Create(GURL(base::StringPrintf("https://%d.com/", i)));
-    StorableConversion conversion("1", origin, origin);
+    StorableConversion conversion("1", net::SchemefulSite(origin), origin);
     EXPECT_EQ(1, storage()->MaybeCreateAndStoreConversionReports(conversion));
   }
   clock()->Advance(base::TimeDelta::FromDays(1));
   for (int i = 5; i < 10; i++) {
     auto origin =
         url::Origin::Create(GURL(base::StringPrintf("https://%d.com/", i)));
-    StorableConversion conversion("1", origin, origin);
+    StorableConversion conversion("1", net::SchemefulSite(origin), origin);
     EXPECT_EQ(1, storage()->MaybeCreateAndStoreConversionReports(conversion));
   }
 
@@ -717,7 +654,7 @@ TEST_F(ConversionStorageTest, ClearDataRangeBetweenEvents) {
   auto conversion = DefaultConversion();
 
   std::vector<ConversionReport> expected_reports = {
-      GetExpectedReport(impression, conversion, 0)};
+      GetExpectedReport(impression, conversion)};
 
   storage()->StoreImpression(impression);
 
@@ -753,50 +690,13 @@ TEST_F(ConversionStorageTest, ClearDataWithMultiTouch) {
   storage()->StoreImpression(impression3);
 
   EXPECT_EQ(
-      3, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+      1, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
 
   // Only the first impression should overlap with this time range, but all the
   // impressions should share the origin.
   storage()->ClearData(start, start,
                        GetMatcher(impression1.impression_origin()));
-  EXPECT_EQ(2u, storage()->GetConversionsToReport(base::Time::Max()).size());
-}
-
-// Attribution occurs at conversion time, not report time, so deleted
-// impressions should not adjust credit allocation.
-TEST_F(ConversionStorageTest, ClearData_AttributionUnaffected) {
-  auto impression1 = ImpressionBuilder(clock()->Now())
-                         .SetData("xyz")
-                         .SetExpiry(base::TimeDelta::FromDays(30))
-                         .Build();
-  auto impression2 = ImpressionBuilder(clock()->Now())
-                         .SetData("abc")
-                         .SetExpiry(base::TimeDelta::FromDays(30))
-                         .Build();
-  auto conversion = DefaultConversion();
-  storage()->StoreImpression(impression1);
-  storage()->StoreImpression(impression2);
-  std::vector<ConversionReport> expected_reports = {
-      GetExpectedReport(impression1, conversion, 0),
-      GetExpectedReport(impression2, conversion, 0)};
-
-  clock()->Advance(base::TimeDelta::FromDays(1));
-  auto impression3 = ImpressionBuilder(clock()->Now())
-                         .SetExpiry(base::TimeDelta::FromDays(30))
-                         .Build();
-  storage()->StoreImpression(impression3);
-  base::Time delete_time = clock()->Now();
-  clock()->Advance(base::TimeDelta::FromDays(1));
-
-  AddAttributionCredits({100, 0, 0});
-  EXPECT_EQ(3, storage()->MaybeCreateAndStoreConversionReports(conversion));
-
-  // The last impression should be deleted, but the conversion shouldn't be.
-  storage()->ClearData(delete_time, delete_time,
-                       GetMatcher(impression1.impression_origin()));
-  std::vector<ConversionReport> actual_reports =
-      storage()->GetConversionsToReport(base::Time::Max());
-  EXPECT_TRUE(ReportsEqual(expected_reports, actual_reports));
+  EXPECT_EQ(1u, storage()->GetConversionsToReport(base::Time::Max()).size());
 }
 
 // The max time range with a null filter should delete everything.
@@ -811,10 +711,10 @@ TEST_F(ConversionStorageTest, DeleteAll) {
   }
 
   EXPECT_EQ(
-      10, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+      1, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
   clock()->Advance(base::TimeDelta::FromDays(1));
   EXPECT_EQ(
-      10, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+      1, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
 
   auto null_filter = base::RepeatingCallback<bool(const url::Origin&)>();
   storage()->ClearData(base::Time::Min(), base::Time::Max(), null_filter);
@@ -836,16 +736,37 @@ TEST_F(ConversionStorageTest, DeleteAllNullDeleteBegin) {
   }
 
   EXPECT_EQ(
-      10, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+      1, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
   clock()->Advance(base::TimeDelta::FromDays(1));
   EXPECT_EQ(
-      10, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
+      1, storage()->MaybeCreateAndStoreConversionReports(DefaultConversion()));
 
   auto null_filter = base::RepeatingCallback<bool(const url::Origin&)>();
   storage()->ClearData(base::Time(), base::Time::Max(), null_filter);
 
   // Verify that everything is deleted.
   EXPECT_TRUE(storage()->GetConversionsToReport(base::Time::Max()).empty());
+}
+
+TEST_F(ConversionStorageTest, MaxAttributionReportsBetweenSites) {
+  delegate()->set_rate_limits({
+      .time_window = base::TimeDelta::Max(),
+      .max_attributions_per_window = 2,
+  });
+
+  auto impression = ImpressionBuilder(clock()->Now()).Build();
+  auto conversion = DefaultConversion();
+
+  storage()->StoreImpression(ImpressionBuilder(clock()->Now()).Build());
+  EXPECT_EQ(1, storage()->MaybeCreateAndStoreConversionReports(conversion));
+  EXPECT_EQ(1, storage()->MaybeCreateAndStoreConversionReports(conversion));
+  EXPECT_EQ(0, storage()->MaybeCreateAndStoreConversionReports(conversion));
+
+  ConversionReport expected_report = GetExpectedReport(impression, conversion);
+
+  std::vector<ConversionReport> actual_reports =
+      storage()->GetConversionsToReport(base::Time::Max());
+  EXPECT_TRUE(ReportsEqual({expected_report, expected_report}, actual_reports));
 }
 
 }  // namespace content

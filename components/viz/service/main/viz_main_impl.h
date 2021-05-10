@@ -13,12 +13,11 @@
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "components/discardable_memory/client/client_discardable_shared_memory_manager.h"
+#include "components/viz/common/buildflags.h"
 #include "components/viz/service/gl/gpu_service_impl.h"
 #include "components/viz/service/main/viz_compositor_thread_runner_impl.h"
 #include "gpu/ipc/gpu_in_process_thread_service.h"
 #include "gpu/ipc/in_process_command_buffer.h"
-#include "mojo/public/cpp/bindings/associated_receiver_set.h"
-#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -43,6 +42,10 @@ class SharedImageManager;
 
 namespace ukm {
 class MojoUkmRecorder;
+}
+
+namespace gfx {
+class RenderingPipeline;
 }
 
 namespace viz {
@@ -106,8 +109,7 @@ class VizMainImpl : public mojom::VizMain,
   // Destruction must happen on the GPU thread.
   ~VizMainImpl() override;
 
-  void BindAssociated(
-      mojo::PendingAssociatedReceiver<mojom::VizMain> pending_receiver);
+  void Bind(mojo::PendingReceiver<mojom::VizMain> receiver);
 
   // mojom::VizMain implementation:
   void CreateGpuService(
@@ -125,6 +127,12 @@ class VizMainImpl : public mojom::VizMain,
 #endif
   void CreateFrameSinkManager(mojom::FrameSinkManagerParamsPtr params) override;
   void CreateVizDevTools(mojom::VizDevToolsParamsPtr params) override;
+#if BUILDFLAG(USE_VIZ_DEBUGGER)
+  void FilterDebugStream(base::Value filter_data) override;
+  void StartDebugStream(
+      mojo::PendingRemote<mojom::VizDebugOutput> debug_output) override;
+  void StopDebugStream() override;
+#endif
 
   // gpu::GpuInProcessThreadServiceDelegate implementation:
   scoped_refptr<gpu::SharedContextState> GetSharedContextState() override;
@@ -140,10 +148,9 @@ class VizMainImpl : public mojom::VizMain,
     return discardable_shared_memory_manager_.get();
   }
 
-  // Cleanly exits the process. If |immediate_exit_code| is base::nullopt, the
-  // process exits by shutting down the GPU main thread. Otherwise, the process
-  // is terminated immediately with the specified exit code.
-  void ExitProcess(base::Optional<ExitCode> immediate_exit_code);
+  // If it's in browser process, shut down the GPU main thread. Otherwise, the
+  // GPU process is terminated immediately with the specified exit code.
+  void ExitProcess(ExitCode immediate_exit_code);
 
  private:
   void CreateFrameSinkManagerInternal(mojom::FrameSinkManagerParamsPtr params);
@@ -188,10 +195,12 @@ class VizMainImpl : public mojom::VizMain,
 
   const scoped_refptr<base::SingleThreadTaskRunner> gpu_thread_task_runner_;
 
-  mojo::AssociatedReceiver<mojom::VizMain> receiver_{this};
+  mojo::Receiver<mojom::VizMain> receiver_{this};
 
-  std::unique_ptr<discardable_memory::ClientDiscardableSharedMemoryManager>
+  scoped_refptr<discardable_memory::ClientDiscardableSharedMemoryManager>
       discardable_shared_memory_manager_;
+
+  std::unique_ptr<gfx::RenderingPipeline> gpu_pipeline_;
 
   DISALLOW_COPY_AND_ASSIGN(VizMainImpl);
 };

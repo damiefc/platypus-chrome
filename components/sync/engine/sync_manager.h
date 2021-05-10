@@ -24,7 +24,6 @@
 #include "components/sync/engine/connection_status.h"
 #include "components/sync/engine/engine_components_factory.h"
 #include "components/sync/engine/events/protocol_event.h"
-#include "components/sync/engine/model_safe_worker.h"
 #include "components/sync/engine/model_type_connector.h"
 #include "components/sync/engine/net/http_post_provider_factory.h"
 #include "components/sync/engine/sync_credentials.h"
@@ -44,7 +43,6 @@ class JsEventHandler;
 class ProtocolEvent;
 class SyncCycleSnapshot;
 class SyncStatusObserver;
-class TypeDebugInfoObserver;
 
 // Unless stated otherwise, all methods of SyncManager should be called on the
 // same thread.
@@ -63,19 +61,6 @@ class SyncManager {
     // Called when the status of the connection to the sync server has
     // changed.
     virtual void OnConnectionStatusChange(ConnectionStatus status) = 0;
-
-    // Called when initialization is complete to the point that SyncManager can
-    // process changes. This does not necessarily mean authentication succeeded
-    // or that the SyncManager is online.
-    // IMPORTANT: Creating any type of transaction before receiving this
-    // notification is illegal!
-    // WARNING: Calling methods on the SyncManager before receiving this
-    // message, unless otherwise specified, produces undefined behavior.
-
-    virtual void OnInitializationComplete(
-        const WeakHandle<JsBackend>& js_backend,
-        const WeakHandle<DataTypeDebugInfoListener>& debug_info_listener,
-        bool success) = 0;
 
     virtual void OnActionableError(
         const SyncProtocolError& sync_protocol_error) = 0;
@@ -107,14 +92,10 @@ class SyncManager {
     // Used to communicate with the sync server.
     std::unique_ptr<HttpPostProviderFactory> post_factory;
 
-    std::vector<scoped_refptr<ModelSafeWorker>> workers;
-
     std::unique_ptr<SyncEncryptionHandler::Observer> encryption_observer_proxy;
 
     // Must outlive SyncManager.
     ExtensionsActivity* extensions_activity;
-
-    CoreAccountId authenticated_account_id;
 
     // Unqiuely identifies this client to the invalidation notification server.
     std::string invalidator_client_id;
@@ -157,6 +138,8 @@ class SyncManager {
   virtual void Init(InitArgs* args) = 0;
 
   virtual ModelTypeSet InitialSyncEndedTypes() = 0;
+
+  virtual ModelTypeSet GetEnabledTypes() = 0;
 
   // Update tokens that we're using in Sync. Email must stay the same.
   virtual void UpdateCredentials(const SyncCredentials& credentials) = 0;
@@ -210,6 +193,9 @@ class SyncManager {
   // sync engine.
   virtual std::unique_ptr<ModelTypeConnector> GetModelTypeConnectorProxy() = 0;
 
+  virtual WeakHandle<JsBackend> GetJsBackend() = 0;
+  virtual WeakHandle<DataTypeDebugInfoListener> GetDebugInfoListener() = 0;
+
   // Returns the cache_guid of the currently open database.
   // Requires that the SyncManager be initialized.
   virtual std::string cache_guid() = 0;
@@ -235,26 +221,20 @@ class SyncManager {
   virtual std::vector<std::unique_ptr<ProtocolEvent>>
   GetBufferedProtocolEvents() = 0;
 
-  // Functions to manage registrations of DebugInfoObservers.
-  // TODO(crbug.com/923287): Delete because they no longer make any difference.
-  virtual void RegisterDirectoryTypeDebugInfoObserver(
-      TypeDebugInfoObserver* observer) = 0;
-  virtual void UnregisterDirectoryTypeDebugInfoObserver(
-      TypeDebugInfoObserver* observer) = 0;
-  virtual bool HasDirectoryTypeDebugInfoObserver(
-      TypeDebugInfoObserver* observer) = 0;
-
-  // Request that all current counter values be emitted as though they had just
-  // been updated.  Useful for initializing new observers' state.
-  virtual void RequestEmitDebugInfo() = 0;
-
   // Updates Sync's tracking of whether the cookie jar has a mismatch with the
   // chrome account. See ClientConfigParams proto message for more info.
   // Note: this does not trigger a sync cycle. It just updates the sync context.
-  virtual void OnCookieJarChanged(bool account_mismatch, bool empty_jar) = 0;
+  virtual void OnCookieJarChanged(bool account_mismatch) = 0;
 
   // Updates invalidation client id.
   virtual void UpdateInvalidationClientId(const std::string& client_id) = 0;
+
+  // Notifies SyncManager that there are no other known active devices.
+  virtual void UpdateSingleClientStatus(bool single_client) = 0;
+
+  // Updates the list of known active device FCM registration tokens.
+  virtual void UpdateActiveDeviceFCMRegistrationTokens(
+      std::vector<std::string> fcm_registration_tokens) = 0;
 };
 
 }  // namespace syncer

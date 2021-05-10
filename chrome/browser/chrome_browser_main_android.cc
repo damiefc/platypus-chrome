@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chrome_browser_main_android.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/path_service.h"
 #include "base/task/current_thread.h"
@@ -15,12 +17,14 @@
 #include "chrome/browser/android/seccomp_support_detector.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/webauthn/android/cable_module_android.h"
 #include "components/crash/content/browser/child_exit_observer_android.h"
 #include "components/crash/content/browser/child_process_crash_observer_android.h"
 #include "components/metrics/stability_metrics_helper.h"
 #include "content/public/browser/android/compositor.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/main_function_params.h"
+#include "device/fido/features.h"
 #include "net/base/network_change_notifier.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/resource/resource_bundle_android.h"
@@ -35,7 +39,7 @@ ChromeBrowserMainPartsAndroid::~ChromeBrowserMainPartsAndroid() {
 }
 
 int ChromeBrowserMainPartsAndroid::PreCreateThreads() {
-  TRACE_EVENT0("startup", "ChromeBrowserMainPartsAndroid::PreCreateThreads")
+  TRACE_EVENT0("startup", "ChromeBrowserMainPartsAndroid::PreCreateThreads");
 
   int result_code = ChromeBrowserMainParts::PreCreateThreads();
 
@@ -59,12 +63,18 @@ void ChromeBrowserMainPartsAndroid::PostProfileInit() {
 
   // Start watching the preferences that need to be backed up backup using
   // Android backup, so that we create a new backup if they change.
-  backup_watcher_.reset(new android::ChromeBackupWatcher(profile()));
+  backup_watcher_ = std::make_unique<android::ChromeBackupWatcher>(profile());
+
+  // The GCM driver can be used at this point because the primary profile has
+  // been created. Register non-profile-specific things that use GCM so that no
+  // messages can be processed (and dropped) because the handler wasn't
+  // installed in time.
+  webauthn::authenticator::RegisterForCloudMessages();
 }
 
 int ChromeBrowserMainPartsAndroid::PreEarlyInitialization() {
   TRACE_EVENT0("startup",
-    "ChromeBrowserMainPartsAndroid::PreEarlyInitialization")
+               "ChromeBrowserMainPartsAndroid::PreEarlyInitialization");
   content::Compositor::Initialize();
 
   CHECK(base::CurrentThread::IsSet());
@@ -73,7 +83,7 @@ int ChromeBrowserMainPartsAndroid::PreEarlyInitialization() {
 }
 
 void ChromeBrowserMainPartsAndroid::PostEarlyInitialization() {
-  profile_manager_android_.reset(new ProfileManagerAndroid());
+  profile_manager_android_ = std::make_unique<ProfileManagerAndroid>();
   g_browser_process->profile_manager()->AddObserver(
       profile_manager_android_.get());
   ChromeBrowserMainParts::PostEarlyInitialization();

@@ -5,12 +5,10 @@
 #ifndef CHROME_BROWSER_ANDROID_OOM_INTERVENTION_OOM_INTERVENTION_TAB_HELPER_H_
 #define CHROME_BROWSER_ANDROID_OOM_INTERVENTION_OOM_INTERVENTION_TAB_HELPER_H_
 
-#include <memory>
-
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/android/oom_intervention/near_oom_monitor.h"
@@ -61,7 +59,8 @@ class OomInterventionTabHelper
   void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override;
   void OnVisibilityChanged(content::Visibility visibility) override;
-  void DocumentOnLoadCompletedInMainFrame() override;
+  void DocumentOnLoadCompletedInMainFrame(
+      content::RenderFrameHost* render_frame_host) override;
 
   // CrashDumpManager::Observer:
   void OnCrashDumpProcessed(
@@ -90,7 +89,7 @@ class OomInterventionTabHelper
   bool navigation_started_ = false;
   bool load_finished_ = false;
   base::Optional<base::TimeTicks> near_oom_detected_time_;
-  std::unique_ptr<NearOomMonitor::Subscription> subscription_;
+  base::CallbackListSubscription subscription_;
   base::OneShotTimer renderer_detection_timer_;
 
   // Not owned. This will be nullptr in incognito mode.
@@ -122,9 +121,9 @@ class OomInterventionTabHelper
   base::TimeTicks last_navigation_timestamp_;
   base::TimeTicks start_monitor_timestamp_;
 
-  ScopedObserver<crash_reporter::CrashMetricsReporter,
-                 crash_reporter::CrashMetricsReporter::Observer>
-      scoped_observer_;
+  base::ScopedObservation<crash_reporter::CrashMetricsReporter,
+                          crash_reporter::CrashMetricsReporter::Observer>
+      scoped_observation_{this};
 
   base::WeakPtrFactory<OomInterventionTabHelper> weak_ptr_factory_{this};
   WEB_CONTENTS_USER_DATA_KEY_DECL();

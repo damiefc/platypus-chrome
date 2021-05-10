@@ -7,7 +7,6 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "content/browser/media/media_browsertest.h"
 #include "content/public/test/browser_test.h"
@@ -34,11 +33,7 @@ class MediaCanPlayTypeTest : public MediaBrowserTest {
   }
 
   void ExecuteTest(const std::string& command) {
-    bool result;
-    EXPECT_TRUE(ExecuteScriptAndExtractBool(
-        shell(), "window.domAutomationController.send(" + command + ");",
-        &result));
-    EXPECT_TRUE(result);
+    EXPECT_EQ(true, EvalJs(shell(), command));
   }
 
  private:

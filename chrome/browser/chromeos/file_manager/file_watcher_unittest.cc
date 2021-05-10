@@ -11,13 +11,14 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/cicerone/cicerone_service.pb.h"
+#include "chromeos/dbus/cicerone/fake_cicerone_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/fake_cicerone_client.h"
+#include "chromeos/dbus/seneschal/seneschal_client.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -31,9 +32,11 @@ class FileManagerFileWatcherTest : public testing::Test {
   FileManagerFileWatcherTest()
       : task_environment_(content::BrowserTaskEnvironment::IO_MAINLOOP) {
     chromeos::DBusThreadManager::Initialize();
+    chromeos::SeneschalClient::InitializeFake();
   }
 
   ~FileManagerFileWatcherTest() override {
+    chromeos::SeneschalClient::Shutdown();
     chromeos::DBusThreadManager::Shutdown();
   }
 

@@ -16,6 +16,7 @@
 #include "media/base/media_util.h"
 #include "media/base/mime_util.h"
 #include "media/base/supported_types.h"
+#include "media/base/supported_video_decoder_config.h"
 #include "media/base/video_decoder_config.h"
 #include "media/filters/stream_parser_factory.h"
 #include "media/learning/common/media_learning_tasks.h"
@@ -24,9 +25,8 @@
 #include "media/mojo/mojom/media_metrics_provider.mojom-blink.h"
 #include "media/mojo/mojom/media_types.mojom-blink.h"
 #include "media/video/gpu_video_accelerator_factories.h"
-#include "media/video/supported_video_decoder_config.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
-#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -46,13 +46,17 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_key_system_media_capability.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/execution_context/navigator_base.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/modules/encryptedmedia/encrypted_media_utils.h"
 #include "third_party/blink/renderer/modules/encryptedmedia/media_key_system_access.h"
 #include "third_party/blink/renderer/modules/encryptedmedia/media_key_system_access_initializer_base.h"
 #include "third_party/blink/renderer/modules/encryptedmedia/media_keys_controller.h"
+#include "third_party/blink/renderer/modules/media_capabilities/media_capabilities_identifiability_metrics.h"
+#include "third_party/blink/renderer/modules/media_capabilities_names.h"
 #include "third_party/blink/renderer/modules/mediarecorder/media_recorder_handler.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
@@ -139,6 +143,16 @@ MediaCapabilitiesDecodingInfo* CreateDecodingInfoWith(bool value) {
   info->setSmooth(value);
   info->setPowerEfficient(value);
   return info;
+}
+
+ScriptPromise CreateResolvedPromiseToDecodingInfoWith(
+    bool value,
+    ScriptState* script_state,
+    const MediaDecodingConfiguration* config) {
+  MediaCapabilitiesDecodingInfo* info = CreateDecodingInfoWith(value);
+  media_capabilities_identifiability_metrics::ReportDecodingInfoResult(
+      ExecutionContext::From(script_state), config, info);
+  return ScriptPromise::Cast(script_state, ToV8(info, script_state));
 }
 
 MediaCapabilitiesDecodingInfo* CreateEncryptedDecodingInfoWith(
@@ -298,9 +312,9 @@ WebAudioConfiguration ToWebAudioConfiguration(
   DCHECK(parsed_content_type.IsValid());
   DCHECK(!parsed_content_type.GetParameters().HasDuplicatedNames());
 
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(const String, codecs, ("codecs"));
   web_configuration.mime_type = parsed_content_type.MimeType().LowerASCII();
-  web_configuration.codec = parsed_content_type.ParameterValueForName(codecs);
+  web_configuration.codec = parsed_content_type.ParameterValueForName(
+      media_capabilities_names::kCodecs);
 
   // |channels| is optional and will be set to a null WebString if not present.
   web_configuration.channels = configuration->hasChannels()
@@ -326,9 +340,9 @@ WebVideoConfiguration ToWebVideoConfiguration(
   DCHECK(parsed_content_type.IsValid());
   DCHECK(!parsed_content_type.GetParameters().HasDuplicatedNames());
 
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(const String, codecs, ("codecs"));
   web_configuration.mime_type = parsed_content_type.MimeType().LowerASCII();
-  web_configuration.codec = parsed_content_type.ParameterValueForName(codecs);
+  web_configuration.codec = parsed_content_type.ParameterValueForName(
+      media_capabilities_names::kCodecs);
 
   DCHECK(configuration->hasWidth());
   web_configuration.width = configuration->width();
@@ -398,7 +412,7 @@ bool CheckMseSupport(const String& mime_type, const String& codec) {
 void ParseDynamicRangeConfigurations(
     const blink::VideoConfiguration* video_config,
     media::VideoColorSpace* color_space,
-    gl::HdrMetadataType* hdr_metadata) {
+    gfx::HdrMetadataType* hdr_metadata) {
   DCHECK(color_space);
   DCHECK(hdr_metadata);
 
@@ -410,16 +424,16 @@ void ParseDynamicRangeConfigurations(
     const auto& hdr_metadata_type = video_config->hdrMetadataType();
     // TODO(crbug.com/1092328): Switch by V8HdrMetadataType::Enum.
     if (hdr_metadata_type == kSmpteSt2086HdrMetadataType) {
-      *hdr_metadata = gl::HdrMetadataType::kSmpteSt2086;
+      *hdr_metadata = gfx::HdrMetadataType::kSmpteSt2086;
     } else if (hdr_metadata_type == kSmpteSt209410HdrMetadataType) {
-      *hdr_metadata = gl::HdrMetadataType::kSmpteSt2094_10;
+      *hdr_metadata = gfx::HdrMetadataType::kSmpteSt2094_10;
     } else if (hdr_metadata_type == kSmpteSt209440HdrMetadataType) {
-      *hdr_metadata = gl::HdrMetadataType::kSmpteSt2094_40;
+      *hdr_metadata = gfx::HdrMetadataType::kSmpteSt2094_40;
     } else {
       NOTREACHED();
     }
   } else {
-    *hdr_metadata = gl::HdrMetadataType::kNone;
+    *hdr_metadata = gfx::HdrMetadataType::kNone;
   }
 
   if (video_config->hasColorGamut()) {
@@ -544,7 +558,7 @@ bool IsAudioConfigurationSupported(
 bool IsVideoConfigurationSupported(const String& mime_type,
                                    const String& codec,
                                    media::VideoColorSpace video_color_space,
-                                   gl::HdrMetadataType hdr_metadata_type) {
+                                   gfx::HdrMetadataType hdr_metadata_type) {
   media::VideoCodec video_codec = media::kUnknownVideoCodec;
   media::VideoCodecProfile video_profile;
   uint8_t video_level = 0;
@@ -588,9 +602,9 @@ bool ParseContentType(const String& content_type,
     return false;
   }
 
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(const String, codecs, ("codecs"));
   *mime_type = parsed_content_type.MimeType().LowerASCII();
-  *codec = parsed_content_type.ParameterValueForName(codecs);
+  *codec = parsed_content_type.ParameterValueForName(
+      media_capabilities_names::kCodecs);
   return true;
 }
 
@@ -602,10 +616,25 @@ const char MediaCapabilities::kLearningBadWindowThresholdParamName[] =
 const char MediaCapabilities::kLearningNnrThresholdParamName[] =
     "nnr_threshold";
 
-MediaCapabilities::MediaCapabilities(ExecutionContext* context)
-    : decode_history_service_(context),
-      bad_window_predictor_(context),
-      nnr_predictor_(context) {}
+// static
+const char MediaCapabilities::kSupplementName[] = "MediaCapabilities";
+
+MediaCapabilities* MediaCapabilities::mediaCapabilities(
+    NavigatorBase& navigator) {
+  MediaCapabilities* supplement =
+      Supplement<NavigatorBase>::From<MediaCapabilities>(navigator);
+  if (!supplement) {
+    supplement = MakeGarbageCollected<MediaCapabilities>(navigator);
+    ProvideTo(navigator, supplement);
+  }
+  return supplement;
+}
+
+MediaCapabilities::MediaCapabilities(NavigatorBase& navigator)
+    : Supplement<NavigatorBase>(navigator),
+      decode_history_service_(navigator.GetExecutionContext()),
+      bad_window_predictor_(navigator.GetExecutionContext()),
+      nnr_predictor_(navigator.GetExecutionContext()) {}
 
 void MediaCapabilities::Trace(blink::Visitor* visitor) const {
   visitor->Trace(decode_history_service_);
@@ -613,15 +642,18 @@ void MediaCapabilities::Trace(blink::Visitor* visitor) const {
   visitor->Trace(nnr_predictor_);
   visitor->Trace(pending_cb_map_);
   ScriptWrappable::Trace(visitor);
+  Supplement<NavigatorBase>::Trace(visitor);
 }
 
 MediaCapabilities::PendingCallbackState::PendingCallbackState(
     ScriptPromiseResolver* resolver,
     MediaKeySystemAccess* access,
-    const base::TimeTicks& request_time)
+    const base::TimeTicks& request_time,
+    base::Optional<IdentifiableToken> input_token)
     : resolver(resolver),
       key_system_access(access),
-      request_time(request_time) {}
+      request_time(request_time),
+      input_token(input_token) {}
 
 void MediaCapabilities::PendingCallbackState::Trace(
     blink::Visitor* visitor) const {
@@ -690,9 +722,11 @@ ScriptPromise MediaCapabilities::decodingInfo(
          !CheckMseSupport(video_mime_str, video_codec_str))) {
       // Unsupported EME queries should resolve with a null
       // MediaKeySystemAccess.
-      return ScriptPromise::Cast(
-          script_state,
-          ToV8(CreateEncryptedDecodingInfoWith(false, nullptr), script_state));
+      MediaCapabilitiesDecodingInfo* info =
+          CreateEncryptedDecodingInfoWith(false, nullptr);
+      media_capabilities_identifiability_metrics::ReportDecodingInfoResult(
+          ExecutionContext::From(script_state), config, info);
+      return ScriptPromise::Cast(script_state, ToV8(info, script_state));
     }
   }
 
@@ -712,15 +746,14 @@ ScriptPromise MediaCapabilities::decodingInfo(
                                            message);
     }
 
-    return ScriptPromise::Cast(
-        script_state, ToV8(CreateDecodingInfoWith(false), script_state));
+    return CreateResolvedPromiseToDecodingInfoWith(false, script_state, config);
   }
 
   // Validation errors should return above.
   DCHECK(message.IsEmpty());
 
   media::VideoColorSpace video_color_space;
-  gl::HdrMetadataType hdr_metadata_type = gl::HdrMetadataType::kNone;
+  gfx::HdrMetadataType hdr_metadata_type = gfx::HdrMetadataType::kNone;
   if (config->hasVideo()) {
     ParseDynamicRangeConfigurations(config->video(), &video_color_space,
                                     &hdr_metadata_type);
@@ -744,9 +777,8 @@ ScriptPromise MediaCapabilities::decodingInfo(
   // No need to check video capabilities if video not included in configuration
   // or when audio is already known to be unsupported.
   if (!audio_supported || !config->hasVideo()) {
-    return ScriptPromise::Cast(
-        script_state,
-        ToV8(CreateDecodingInfoWith(audio_supported), script_state));
+    return CreateResolvedPromiseToDecodingInfoWith(audio_supported,
+                                                   script_state, config);
   }
 
   DCHECK(message.IsEmpty());
@@ -755,8 +787,7 @@ ScriptPromise MediaCapabilities::decodingInfo(
   // Return early for unsupported configurations.
   if (!IsVideoConfigurationSupported(video_mime_str, video_codec_str,
                                      video_color_space, hdr_metadata_type)) {
-    return ScriptPromise::Cast(
-        script_state, ToV8(CreateDecodingInfoWith(false), script_state));
+    return CreateResolvedPromiseToDecodingInfoWith(false, script_state, config);
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -924,14 +955,14 @@ ScriptPromise MediaCapabilities::GetEmeSupport(
   // See context here:
   // https://sites.google.com/a/chromium.org/dev/Home/chromium-security/deprecating-permissions-in-cross-origin-iframes
   if (!execution_context->IsFeatureEnabled(
-          mojom::blink::FeaturePolicyFeature::kEncryptedMedia,
+          mojom::blink::PermissionsPolicyFeature::kEncryptedMedia,
           ReportOptions::kReportOnFailure)) {
     UseCounter::Count(execution_context,
                       WebFeature::kEncryptedMediaDisabledByFeaturePolicy);
     execution_context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kJavaScript,
         mojom::ConsoleMessageLevel::kWarning,
-        kEncryptedMediaFeaturePolicyConsoleWarning));
+        kEncryptedMediaPermissionsPolicyConsoleWarning));
     exception_state.ThrowSecurityError(
         "decodingInfo(): Creating MediaKeySystemAccess is disabled by feature "
         "policy.");
@@ -1059,6 +1090,8 @@ void MediaCapabilities::GetPerfInfo(
     // Audio-only is always smooth and power efficient.
     MediaCapabilitiesDecodingInfo* info = CreateDecodingInfoWith(true);
     info->setKeySystemAccess(access);
+    media_capabilities_identifiability_metrics::ReportDecodingInfoResult(
+        execution_context, decoding_config, info);
     resolver->Resolve(info);
     return;
   }
@@ -1073,7 +1106,10 @@ void MediaCapabilities::GetPerfInfo(
   }
 
   if (!EnsurePerfHistoryService(execution_context)) {
-    resolver->Resolve(WrapPersistent(CreateDecodingInfoWith(true)));
+    MediaCapabilitiesDecodingInfo* info = CreateDecodingInfoWith(true);
+    media_capabilities_identifiability_metrics::ReportDecodingInfoResult(
+        execution_context, decoding_config, info);
+    resolver->Resolve(WrapPersistent(info));
     return;
   }
 
@@ -1081,7 +1117,9 @@ void MediaCapabilities::GetPerfInfo(
   pending_cb_map_.insert(
       callback_id,
       MakeGarbageCollected<MediaCapabilities::PendingCallbackState>(
-          resolver, access, request_time));
+          resolver, access, request_time,
+          media_capabilities_identifiability_metrics::
+              ComputeDecodingInfoInputToken(decoding_config)));
 
   if (base::FeatureList::IsEnabled(media::kMediaLearningSmoothnessExperiment)) {
     GetPerfInfo_ML(execution_context, callback_id, video_codec, video_profile,
@@ -1203,25 +1241,9 @@ void MediaCapabilities::GetGpuFactoriesSupport(
       gfx::Rect(natural_size) /* visible_rect */, natural_size,
       media::EmptyExtraData(), encryption_scheme);
 
-  static_assert(media::VideoDecoderImplementation::kAlternate ==
-                    media::VideoDecoderImplementation::kMaxValue,
-                "Keep the array below in sync.");
-  media::VideoDecoderImplementation decoder_impls[] = {
-      media::VideoDecoderImplementation::kDefault,
-      media::VideoDecoderImplementation::kAlternate};
-  media::GpuVideoAcceleratorFactories::Supported supported =
-      media::GpuVideoAcceleratorFactories::Supported::kUnknown;
-  for (const auto& impl : decoder_impls) {
-    supported = gpu_factories->IsDecoderConfigSupported(impl, config);
-    DCHECK_NE(supported,
-              media::GpuVideoAcceleratorFactories::Supported::kUnknown);
-    if (supported == media::GpuVideoAcceleratorFactories::Supported::kTrue)
-      break;
-  }
-
   OnGpuFactoriesSupport(
-      callback_id,
-      supported == media::GpuVideoAcceleratorFactories::Supported::kTrue);
+      callback_id, gpu_factories->IsDecoderConfigSupported(config) ==
+                       media::GpuVideoAcceleratorFactories::Supported::kTrue);
 }
 
 void MediaCapabilities::ResolveCallbackIfReady(int callback_id) {
@@ -1296,6 +1318,8 @@ void MediaCapabilities::ResolveCallbackIfReady(int callback_id) {
                         process_time);
   }
 
+  media_capabilities_identifiability_metrics::ReportDecodingInfoResult(
+      execution_context, pending_cb->input_token, info);
   pending_cb->resolver->Resolve(std::move(info));
   pending_cb_map_.erase(callback_id);
 }

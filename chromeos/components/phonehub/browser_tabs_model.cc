@@ -9,11 +9,11 @@
 namespace chromeos {
 namespace phonehub {
 
-const size_t BrowserTabsModel::kMaxMostRecentTabs = 4;
+const size_t BrowserTabsModel::kMaxMostRecentTabs = 2;
 
 BrowserTabsModel::BrowserTabMetadata::BrowserTabMetadata(
     GURL url,
-    const base::string16& title,
+    const std::u16string& title,
     base::Time last_accessed_timestamp,
     const gfx::Image& favicon)
     : url(url),

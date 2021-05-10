@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.settings;
 
+import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,25 +24,25 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
-import org.chromium.chrome.browser.offlinepages.prefetch.PrefetchConfiguration;
 import org.chromium.chrome.browser.password_check.PasswordCheck;
 import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
 import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
 import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.safety_check.SafetyCheckSettingsFragment;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
-import org.chromium.chrome.browser.signin.IdentityServicesProvider;
-import org.chromium.chrome.browser.signin.SigninActivityLauncherImpl;
-import org.chromium.chrome.browser.signin.SigninManager;
+import org.chromium.chrome.browser.signin.SyncConsentActivityLauncherImpl;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
 import org.chromium.chrome.browser.sync.settings.SignInPreference;
 import org.chromium.chrome.browser.sync.settings.SyncPromoPreference;
+import org.chromium.chrome.browser.sync.settings.SyncPromoPreference.State;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
 import org.chromium.chrome.browser.tracing.settings.DeveloperSettings;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
+import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
@@ -101,7 +102,7 @@ public class MainSettings extends PreferenceFragmentCompat
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mPasswordCheck = PasswordCheckFactory.getOrCreate();
+        mPasswordCheck = PasswordCheckFactory.getOrCreate(new SettingsLauncherImpl());
     }
 
     @Override
@@ -116,7 +117,6 @@ public class MainSettings extends PreferenceFragmentCompat
     public void onDestroy() {
         super.onDestroy();
         mSyncPromoPreference.onPreferenceFragmentDestroyed();
-        mSignInPreference.onPreferenceFragmentDestroyed();
         // The component should only be destroyed when the activity has been closed by the user
         // (e.g. by pressing on the back button) and not when the activity is temporarily destroyed
         // by the system.
@@ -130,7 +130,6 @@ public class MainSettings extends PreferenceFragmentCompat
                 Profile.getLastUsedRegularProfile());
         if (signinManager.isSigninSupported()) {
             signinManager.addSignInStateObserver(this);
-            mSignInPreference.registerForUpdates();
         }
         ProfileSyncService syncService = ProfileSyncService.get();
         if (syncService != null) {
@@ -145,7 +144,6 @@ public class MainSettings extends PreferenceFragmentCompat
                 Profile.getLastUsedRegularProfile());
         if (signinManager.isSigninSupported()) {
             signinManager.removeSignInStateObserver(this);
-            mSignInPreference.unregisterForUpdates();
         }
         ProfileSyncService syncService = ProfileSyncService.get();
         if (syncService != null) {
@@ -161,31 +159,10 @@ public class MainSettings extends PreferenceFragmentCompat
 
     private void createPreferences() {
         SettingsUtils.addPreferencesFromResource(this, R.xml.main_preferences);
-        // If the flag for elevating the privacy is enabled, put the "Privacy"
-        // into the reserved space in the Basics section and move the "Homepage"
-        // down to Advanced to where "Privacy" was. See (crbug.com/1099233) for
-        // more context.
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_ELEVATED_ANDROID)) {
-            Preference privacyPreference = findPreference(PREF_PRIVACY);
-            Preference homepagePreference = findPreference(PREF_HOMEPAGE);
-            getPreferenceScreen().removePreference(privacyPreference);
-            getPreferenceScreen().removePreference(homepagePreference);
-            privacyPreference.setOrder(PRIVACY_ORDER_ELEVATED);
-            homepagePreference.setOrder(PRIVACY_ORDER_DEFAULT);
-            getPreferenceScreen().addPreference(privacyPreference);
-            getPreferenceScreen().addPreference(homepagePreference);
-        }
-
-        // If the flag for adding a "Security" section is enabled, the "Privacy" section will be
-        // renamed to a "Privacy and security" section and the "Security" section will be added
-        // under the renamed section. See (go/esb-clank-dd) for more context.
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SAFE_BROWSING_SECURITY_SECTION_UI)) {
-            findPreference(PREF_PRIVACY).setTitle(R.string.prefs_privacy_security);
-        }
 
         cachePreferences();
 
-        mSignInPreference.setOnStateChangedCallback(this::onSignInPreferenceStateChanged);
+        mSyncPromoPreference.setOnStateChangedCallback(this::onSyncPromoPreferenceStateChanged);
 
         updatePasswordsPreference();
 
@@ -194,7 +171,7 @@ public class MainSettings extends PreferenceFragmentCompat
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // If we are on Android O+ the Notifications preference should lead to the Android
-            // Settings notifications page, not to Chrome's notifications settings page.
+            // Settings notifications page.
             Preference notifications = findPreference(PREF_NOTIFICATIONS);
             notifications.setOnPreferenceClickListener(preference -> {
                 Intent intent = new Intent();
@@ -202,37 +179,18 @@ public class MainSettings extends PreferenceFragmentCompat
                 intent.putExtra(Settings.EXTRA_APP_PACKAGE,
                         ContextUtils.getApplicationContext().getPackageName());
                 startActivity(intent);
-                // We handle the click so the default action (opening NotificationsPreference)
-                // isn't triggered.
+                // We handle the click so the default action isn't triggered.
                 return true;
             });
-        } else if (!PrefetchConfiguration.isPrefetchingFlagEnabled()) {
-            // The Notifications Preferences page currently contains the Content Suggestions
-            // Notifications setting (used only by the Offline Prefetch feature) and an entry to the
-            // per-website notification settings page. The latter can be accessed from Site
-            // Settings, so we only show the entry to the Notifications Preferences page if the
-            // Prefetching feature flag is enabled.
+        } else {
+            // The per-website notification settings page can be accessed from Site
+            // Settings, so we don't need to show this here.
             getPreferenceScreen().removePreference(findPreference(PREF_NOTIFICATIONS));
         }
 
         if (!TemplateUrlServiceFactory.get().isLoaded()) {
             TemplateUrlServiceFactory.get().registerLoadListener(this);
             TemplateUrlServiceFactory.get().load();
-        }
-
-        // This checks whether the flag for Downloads Preferences is enabled.
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOADS_LOCATION_CHANGE)) {
-            getPreferenceScreen().removePreference(findPreference(PREF_DOWNLOADS));
-        }
-
-        // Only show the Safety check section if both Safety check and Password check flags are on.
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.SAFETY_CHECK_ANDROID)
-                || !ChromeFeatureList.isEnabled(ChromeFeatureList.PASSWORD_CHECK)) {
-            getPreferenceScreen().removePreference(findPreference(PREF_SAFETY_CHECK));
-        } else {
-            findPreference(PREF_SAFETY_CHECK)
-                    .setTitle(SafetyCheckSettingsFragment.getSafetyCheckSettingsElementTitle(
-                            getContext()));
         }
 
         // Replace the account section header, replace SyncAndServicesSettings with
@@ -328,7 +286,7 @@ public class MainSettings extends PreferenceFragmentCompat
         String primaryAccountName = CoreAccountInfo.getEmailFrom(
                 IdentityServicesProvider.get()
                         .getIdentityManager(Profile.getLastUsedRegularProfile())
-                        .getPrimaryAccountInfo(ConsentLevel.NOT_REQUIRED));
+                        .getPrimaryAccountInfo(ConsentLevel.SIGNIN));
         boolean showManageSync =
                 ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
                 && primaryAccountName != null;
@@ -345,12 +303,15 @@ public class MainSettings extends PreferenceFragmentCompat
         mManageSync.setIcon(SyncSettingsUtils.getSyncStatusIcon(getActivity()));
         mManageSync.setSummary(SyncSettingsUtils.getSyncStatusSummary(getActivity()));
         mManageSync.setOnPreferenceClickListener(pref -> {
-            if (isSyncConsentAvailable) {
+            Context context = getContext();
+            if (ProfileSyncService.get().isSyncDisabledByEnterprisePolicy()) {
+                SyncSettingsUtils.showSyncDisabledByAdministratorToast(context);
+            } else if (isSyncConsentAvailable) {
                 SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
-                settingsLauncher.launchSettingsActivity(getContext(), ManageSyncSettings.class);
+                settingsLauncher.launchSettingsActivity(context, ManageSyncSettings.class);
             } else {
-                SigninActivityLauncherImpl.get().launchActivityForPromoDefaultFlow(
-                        getContext(), SigninAccessPoint.SETTINGS, primaryAccountName);
+                SyncConsentActivityLauncherImpl.get().launchActivityForPromoDefaultFlow(
+                        context, SigninAccessPoint.SETTINGS, primaryAccountName);
             }
             return true;
         });
@@ -400,19 +361,15 @@ public class MainSettings extends PreferenceFragmentCompat
         updatePreferences();
     }
 
-    private void onSignInPreferenceStateChanged() {
-        // Remove "Account" section header if the personalized sign-in promo is shown. Remove
-        // "You and Google" section header if the personalized sync promo is shown.
-        boolean isShowingPersonalizedPromo =
-                mSignInPreference.getState() == SignInPreference.State.PERSONALIZED_PROMO;
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
-            findPreference(PREF_ACCOUNT_AND_GOOGLE_SERVICES_SECTION)
-                    .setVisible(!isShowingPersonalizedPromo);
-        } else if (isShowingPersonalizedPromo) {
-            removePreferenceIfPresent(PREF_ACCOUNT_SECTION);
-        } else {
-            addPreferenceIfAbsent(PREF_ACCOUNT_SECTION);
-        }
+    private void onSyncPromoPreferenceStateChanged() {
+        // Remove "Account" section header if the personalized sign-in promo is shown.
+        boolean isShowingPersonalizedSigninPromo =
+                mSyncPromoPreference.getState() == State.PERSONALIZED_SIGNIN_PROMO;
+        String prefName = ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
+                ? PREF_ACCOUNT_AND_GOOGLE_SERVICES_SECTION
+                : PREF_ACCOUNT_SECTION;
+        findPreference(prefName).setVisible(!isShowingPersonalizedSigninPromo);
+        mSignInPreference.setVisible(!isShowingPersonalizedSigninPromo);
     }
 
     // TemplateUrlService.LoadListener implementation.

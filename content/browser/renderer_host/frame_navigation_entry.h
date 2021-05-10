@@ -10,17 +10,19 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
+#include "content/browser/renderer_host/policy_container_host.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/public/common/page_state.h"
 #include "content/public/common/referrer.h"
 #include "services/network/public/cpp/resource_request_body.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "third_party/blink/public/common/page_state/page_state.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
 namespace content {
 
 class WebBundleNavigationInfo;
+class SubresourceWebBundleNavigationInfo;
 
 // Represents a session history item for a particular frame.  It is matched with
 // corresponding FrameTreeNodes using unique name (or by the root position).
@@ -47,15 +49,18 @@ class CONTENT_EXPORT FrameNavigationEntry
       scoped_refptr<SiteInstanceImpl> site_instance,
       scoped_refptr<SiteInstanceImpl> source_site_instance,
       const GURL& url,
-      const url::Origin* origin,
+      const base::Optional<url::Origin>& origin,
       const Referrer& referrer,
       const base::Optional<url::Origin>& initiator_origin,
       const std::vector<GURL>& redirect_chain,
-      const PageState& page_state,
+      const blink::PageState& page_state,
       const std::string& method,
       int64_t post_id,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
-      std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info);
+      std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info,
+      std::unique_ptr<SubresourceWebBundleNavigationInfo>
+          subresource_web_bundle_navigation_info,
+      std::unique_ptr<PolicyContainerPolicies> policy_container_policies);
 
   // Creates a copy of this FrameNavigationEntry that can be modified
   // independently from the original.
@@ -73,11 +78,14 @@ class CONTENT_EXPORT FrameNavigationEntry
       const Referrer& referrer,
       const base::Optional<url::Origin>& initiator_origin,
       const std::vector<GURL>& redirect_chain,
-      const PageState& page_state,
+      const blink::PageState& page_state,
       const std::string& method,
       int64_t post_id,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
-      std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info);
+      std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info,
+      std::unique_ptr<SubresourceWebBundleNavigationInfo>
+          subresource_web_bundle_navigation_info,
+      std::unique_ptr<PolicyContainerPolicies> policy_container_policies);
 
   // The unique name of the frame this entry is for.  This is a stable name for
   // the frame based on its position in the tree and relation to other named
@@ -160,8 +168,8 @@ class CONTENT_EXPORT FrameNavigationEntry
   }
   const std::vector<GURL>& redirect_chain() const { return redirect_chain_; }
 
-  void SetPageState(const PageState& page_state);
-  const PageState& page_state() const { return page_state_; }
+  void SetPageState(const blink::PageState& page_state);
+  const blink::PageState& page_state() const { return page_state_; }
 
   // Remember the set of bindings granted to this FrameNavigationEntry at the
   // time of commit, to ensure that we do not grant it additional bindings if we
@@ -186,6 +194,18 @@ class CONTENT_EXPORT FrameNavigationEntry
   scoped_refptr<network::ResourceRequestBody> GetPostData(
       std::string* content_type) const;
 
+  // The policy container policies for this entry. This is needed for local
+  // schemes, since for them the policy container was inherited by the creator,
+  // while for network schemes we can reconstruct the policy container by
+  // parsing the network response.
+  void set_policy_container_policies(
+      std::unique_ptr<PolicyContainerPolicies> policies) {
+    policy_container_policies_ = std::move(policies);
+  }
+  const PolicyContainerPolicies* policy_container_policies() const {
+    return policy_container_policies_.get();
+  }
+
   // Optional URLLoaderFactory to facilitate blob URL loading.
   scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory()
       const {
@@ -199,6 +219,9 @@ class CONTENT_EXPORT FrameNavigationEntry
   void set_web_bundle_navigation_info(
       std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info);
   WebBundleNavigationInfo* web_bundle_navigation_info() const;
+
+  SubresourceWebBundleNavigationInfo* subresource_web_bundle_navigation_info()
+      const;
 
  private:
   friend class base::RefCounted<FrameNavigationEntry>;
@@ -230,7 +253,7 @@ class CONTENT_EXPORT FrameNavigationEntry
   // It is preserved after commit but should not be persisted.
   std::vector<GURL> redirect_chain_;
   // TODO(creis): Change this to FrameState.
-  PageState page_state_;
+  blink::PageState page_state_;
   // TODO(creis): Persist bindings_. https://crbug.com/173672.
   int bindings_ = kInvalidBindings;
   std::string method_;
@@ -243,6 +266,13 @@ class CONTENT_EXPORT FrameNavigationEntry
   // switch is set.
   // TODO(995177): Support Session/Tab restore.
   std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info_;
+  // Used when |this| is for a subframe navigation to a resource from the parent
+  // frame's subresource web bundle.
+  std::unique_ptr<SubresourceWebBundleNavigationInfo>
+      subresource_web_bundle_navigation_info_;
+
+  // TODO(https://crbug.com/1140393): Persist these policies.
+  std::unique_ptr<PolicyContainerPolicies> policy_container_policies_;
 
   DISALLOW_COPY_AND_ASSIGN(FrameNavigationEntry);
 };

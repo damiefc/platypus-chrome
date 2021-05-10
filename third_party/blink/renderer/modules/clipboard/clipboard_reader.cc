@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 #include "third_party/blink/renderer/modules/clipboard/clipboard_promise.h"
+#include "third_party/blink/renderer/modules/clipboard/clipboard_writer.h"
 #include "third_party/blink/renderer/platform/image-encoders/image_encoder.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
@@ -24,7 +25,7 @@ namespace blink {
 
 namespace {  // anonymous namespace for ClipboardReader's derived classes.
 
-// Reads an image from the System Clipboard as a blob with image/png content.
+// Reads an image from the System Clipboard as a Blob with image/png content.
 class ClipboardImageReader final : public ClipboardReader {
  public:
   explicit ClipboardImageReader(SystemClipboard* system_clipboard,
@@ -78,18 +79,19 @@ class ClipboardImageReader final : public ClipboardReader {
                                             std::move(png_data)));
   }
 
-  // An empty vector indicates that the encoding step failed.
-  void NextRead(Vector<uint8_t> png_data) {
+  void NextRead(Vector<uint8_t> utf8_bytes) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     Blob* blob = nullptr;
-    if (png_data.size())
-      blob = Blob::Create(png_data.data(), png_data.size(), kMimeTypeImagePng);
+    if (utf8_bytes.size()) {
+      blob =
+          Blob::Create(utf8_bytes.data(), utf8_bytes.size(), kMimeTypeImagePng);
+    }
 
     promise_->OnRead(blob);
   }
 };
 
-// Reads an image from the System Clipboard as a blob with text/plain content.
+// Reads an image from the System Clipboard as a Blob with text/plain content.
 class ClipboardTextReader final : public ClipboardReader {
  public:
   explicit ClipboardTextReader(SystemClipboard* system_clipboard,
@@ -123,7 +125,7 @@ class ClipboardTextReader final : public ClipboardReader {
       scoped_refptr<base::SingleThreadTaskRunner> clipboard_task_runner) {
     DCHECK(!IsMainThread());
 
-    // Encode WTF String to UTF-8, the standard text format for blobs.
+    // Encode WTF String to UTF-8, the standard text format for Blobs.
     StringUTF8Adaptor utf8_text(plain_text);
     Vector<uint8_t> utf8_bytes;
     utf8_bytes.ReserveInitialCapacity(utf8_text.size());
@@ -135,7 +137,7 @@ class ClipboardTextReader final : public ClipboardReader {
                                             std::move(utf8_bytes)));
   }
 
-  void NextRead(Vector<uint8_t> utf8_bytes) {
+  void NextRead(Vector<uint8_t> utf8_bytes) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     Blob* blob = nullptr;
     if (utf8_bytes.size()) {
@@ -146,7 +148,7 @@ class ClipboardTextReader final : public ClipboardReader {
   }
 };
 
-// Reads HTML from the System Clipboard as a blob with text/html content.
+// Reads HTML from the System Clipboard as a Blob with text/html content.
 class ClipboardHtmlReader final : public ClipboardReader {
  public:
   explicit ClipboardHtmlReader(SystemClipboard* system_clipboard,
@@ -174,6 +176,7 @@ class ClipboardHtmlReader final : public ClipboardReader {
     DocumentFragment* fragment = CreateSanitizedFragmentFromMarkupWithContext(
         *frame->GetDocument(), html_string, fragment_start,
         html_string.length(), url);
+    system_clipboard()->RecordClipboardImageUrls(fragment);
     String sanitized_html =
         CreateMarkup(fragment, kIncludeNode, kResolveAllURLs);
 
@@ -208,7 +211,7 @@ class ClipboardHtmlReader final : public ClipboardReader {
                                             std::move(utf8_bytes)));
   }
 
-  void NextRead(Vector<uint8_t> utf8_bytes) {
+  void NextRead(Vector<uint8_t> utf8_bytes) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     Blob* blob = nullptr;
     if (utf8_bytes.size()) {
@@ -219,7 +222,7 @@ class ClipboardHtmlReader final : public ClipboardReader {
   }
 };
 
-// Reads SVG from the System Clipboard as a blob with image/svg content.
+// Reads SVG from the System Clipboard as a Blob with image/svg+xml content.
 class ClipboardSvgReader final : public ClipboardReader {
  public:
   ClipboardSvgReader(SystemClipboard* system_clipboard,
@@ -272,7 +275,7 @@ class ClipboardSvgReader final : public ClipboardReader {
       scoped_refptr<base::SingleThreadTaskRunner> clipboard_task_runner) {
     DCHECK(!IsMainThread());
 
-    // Encode WTF String to UTF-8, the standard text format for blobs.
+    // Encode WTF String to UTF-8, the standard text format for Blobs.
     StringUTF8Adaptor utf8_text(plain_text);
     Vector<uint8_t> utf8_bytes;
     utf8_bytes.ReserveInitialCapacity(utf8_text.size());
@@ -284,7 +287,7 @@ class ClipboardSvgReader final : public ClipboardReader {
                                             std::move(utf8_bytes)));
   }
 
-  void NextRead(Vector<uint8_t> utf8_bytes) {
+  void NextRead(Vector<uint8_t> utf8_bytes) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     Blob* blob = nullptr;
     if (utf8_bytes.size()) {
@@ -295,11 +298,14 @@ class ClipboardSvgReader final : public ClipboardReader {
   }
 };
 }  // anonymous namespace
+
 // ClipboardReader functions.
 
+// static
 ClipboardReader* ClipboardReader::Create(SystemClipboard* system_clipboard,
                                          const String& mime_type,
                                          ClipboardPromise* promise) {
+  DCHECK(ClipboardWriter::IsValidType(mime_type, /*is_raw=*/false));
   if (mime_type == kMimeTypeImagePng)
     return MakeGarbageCollected<ClipboardImageReader>(system_clipboard,
                                                       promise);
@@ -312,7 +318,9 @@ ClipboardReader* ClipboardReader::Create(SystemClipboard* system_clipboard,
   if (mime_type == kMimeTypeImageSvg &&
       RuntimeEnabledFeatures::ClipboardSvgEnabled())
     return MakeGarbageCollected<ClipboardSvgReader>(system_clipboard, promise);
-  // The MIME type is not supported.
+
+  NOTREACHED()
+      << "IsValidType() and Create() have inconsistent implementations.";
   return nullptr;
 }
 

@@ -8,7 +8,6 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "components/link_header_util/link_header_util.h"
 #include "content/browser/loader/cross_origin_read_blocking_checker.h"
 #include "content/browser/loader/navigation_loader_interceptor.h"
@@ -33,12 +32,12 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
+#include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/blob/blob_impl.h"
 #include "storage/browser/blob/mojo_blob_reader.h"
-#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 
 namespace content {
 
@@ -150,8 +149,7 @@ class InnerResponseURLLoader : public network::mojom::URLLoader {
     // or report_raw_headers is set. Users can inspect the certificate for the
     // main frame using the info bubble in Omnibox, and for the subresources in
     // DevTools' Security panel.
-    if ((request.resource_type !=
-         static_cast<int>(blink::mojom::ResourceType::kMainFrame)) &&
+    if (request.destination != network::mojom::RequestDestination::kDocument &&
         !request.report_raw_headers) {
       response_->ssl_info = base::nullopt;
     }
@@ -223,8 +221,8 @@ class InnerResponseURLLoader : public network::mojom::URLLoader {
     // Send an empty response's body.
     mojo::ScopedDataPipeProducerHandle pipe_producer_handle;
     mojo::ScopedDataPipeConsumerHandle pipe_consumer_handle;
-    MojoResult rv = mojo::CreateDataPipe(nullptr, &pipe_producer_handle,
-                                         &pipe_consumer_handle);
+    MojoResult rv = mojo::CreateDataPipe(nullptr, pipe_producer_handle,
+                                         pipe_consumer_handle);
     if (rv != MOJO_RESULT_OK) {
       client_->OnComplete(
           network::URLLoaderCompletionStatus(net::ERR_INSUFFICIENT_RESOURCES));
@@ -270,8 +268,8 @@ class InnerResponseURLLoader : public network::mojom::URLLoader {
     options.flags = MOJO_CREATE_DATA_PIPE_FLAG_NONE;
     options.element_num_bytes = 1;
     options.capacity_num_bytes = network::kDataPipeDefaultAllocationSize;
-    MojoResult rv = mojo::CreateDataPipe(&options, &pipe_producer_handle,
-                                         &pipe_consumer_handle);
+    MojoResult rv = mojo::CreateDataPipe(&options, pipe_producer_handle,
+                                         pipe_consumer_handle);
     if (rv != MOJO_RESULT_OK) {
       client_->OnComplete(
           network::URLLoaderCompletionStatus(net::ERR_INSUFFICIENT_RESOURCES));
@@ -353,7 +351,6 @@ class SubresourceSignedExchangeURLLoaderFactory
   // network::mojom::URLLoaderFactory implementation.
   void CreateLoaderAndStart(
       mojo::PendingReceiver<network::mojom::URLLoader> loader,
-      int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& request,
@@ -611,8 +608,10 @@ void PrefetchedSignedExchangeCache::Clear() {
 }
 
 std::unique_ptr<NavigationLoaderInterceptor>
-PrefetchedSignedExchangeCache::MaybeCreateInterceptor(const GURL& outer_url,
-                                                      int frame_tree_node_id) {
+PrefetchedSignedExchangeCache::MaybeCreateInterceptor(
+    const GURL& outer_url,
+    int frame_tree_node_id,
+    const net::NetworkIsolationKey& network_isolation_key) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const auto it = exchanges_.find(outer_url);
   if (it == exchanges_.end())
@@ -625,8 +624,8 @@ PrefetchedSignedExchangeCache::MaybeCreateInterceptor(const GURL& outer_url,
     exchanges_.erase(it);
     return nullptr;
   }
-  auto info_list = GetInfoListForNavigation(*exchange, verification_time,
-                                            frame_tree_node_id);
+  auto info_list = GetInfoListForNavigation(
+      *exchange, verification_time, frame_tree_node_id, network_isolation_key);
 
   return std::make_unique<PrefetchedNavigationLoaderInterceptor>(
       exchange->Clone(), std::move(info_list));
@@ -669,7 +668,8 @@ std::vector<mojom::PrefetchedSignedExchangeInfoPtr>
 PrefetchedSignedExchangeCache::GetInfoListForNavigation(
     const PrefetchedSignedExchangeCacheEntry& main_exchange,
     const base::Time& verification_time,
-    int frame_tree_node_id) {
+    int frame_tree_node_id,
+    const net::NetworkIsolationKey& network_isolation_key) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   const url::Origin outer_url_origin =
@@ -705,7 +705,8 @@ PrefetchedSignedExchangeCache::GetInfoListForNavigation(
       ++exchanges_it;
       auto reporter = SignedExchangeReporter::MaybeCreate(
           exchange->outer_url(), main_exchange.outer_url().spec(),
-          *exchange->outer_response(), frame_tree_node_id);
+          *exchange->outer_response(), network_isolation_key,
+          frame_tree_node_id);
       if (reporter) {
         reporter->set_cert_server_ip_address(
             exchange->cert_server_ip_address());

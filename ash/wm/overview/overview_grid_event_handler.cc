@@ -4,7 +4,7 @@
 
 #include "ash/wm/overview/overview_grid_event_handler.h"
 
-#include "ash/home_screen/home_screen_controller.h"
+#include "ash/app_list/app_list_controller_impl.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
@@ -15,6 +15,7 @@
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ui/compositor/compositor.h"
+#include "ui/compositor/layer.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/gestures/fling_curve.h"
@@ -23,6 +24,9 @@
 namespace ash {
 
 namespace {
+
+// The amount the grid's fling curve's offsets are scaled down.
+constexpr float kFlingScaleDown = 3.f;
 
 // Do not bother moving the grid until a series of scrolls has reached this
 // threshold.
@@ -144,6 +148,7 @@ void OverviewGridEventHandler::OnAnimationStep(base::TimeTicks timestamp) {
   gfx::Vector2dF offset;
   bool continue_fling =
       fling_curve_->ComputeScrollOffset(timestamp, &offset, &fling_velocity_);
+  offset.Scale(1 / kFlingScaleDown);
   continue_fling = grid_->UpdateScrollOffset(
                        fling_last_offset_ ? offset.x() - fling_last_offset_->x()
                                           : offset.x()) &&
@@ -163,26 +168,21 @@ void OverviewGridEventHandler::OnCompositingShuttingDown(
 void OverviewGridEventHandler::HandleClickOrTap(ui::Event* event) {
   CHECK_EQ(ui::EP_PRETARGET, event->phase());
 
-  // Events that happen while app list is sliding out during overview should
-  // be ignored to prevent overview from disappearing out from under the user.
-  if (!IsSlidingOutOverviewFromShelf()) {
-    if (Shell::Get()->tablet_mode_controller()->InTabletMode() &&
-        features::IsDragFromShelfToHomeOrOverviewEnabled()) {
-      aura::Window* window = static_cast<views::View*>(event->target())
-                                 ->GetWidget()
-                                 ->GetNativeWindow();
+  if (Shell::Get()->tablet_mode_controller()->InTabletMode()) {
+    aura::Window* window = static_cast<views::View*>(event->target())
+                               ->GetWidget()
+                               ->GetNativeWindow();
 
-      // In tablet mode, clicking on tapping on the wallpaper background will
-      // head back to home launcher screen if not in split view (in which case
-      // the event should be ignored).
-      if (!SplitViewController::Get(window)->InSplitViewMode()) {
-        int64_t display_id =
-            display::Screen::GetScreen()->GetDisplayNearestWindow(window).id();
-        Shell::Get()->home_screen_controller()->GoHome(display_id);
-      }
-    } else {
-      Shell::Get()->overview_controller()->EndOverview();
+    // In tablet mode, clicking on tapping on the wallpaper background will
+    // head back to home launcher screen if not in split view (in which case
+    // the event should be ignored).
+    if (!SplitViewController::Get(window)->InSplitViewMode()) {
+      int64_t display_id =
+          display::Screen::GetScreen()->GetDisplayNearestWindow(window).id();
+      Shell::Get()->app_list_controller()->GoHome(display_id);
     }
+  } else {
+    Shell::Get()->overview_controller()->EndOverview();
   }
   event->StopPropagation();
 }

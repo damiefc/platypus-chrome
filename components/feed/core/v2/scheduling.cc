@@ -8,6 +8,7 @@
 #include "base/util/values/values_util.h"
 #include "base/values.h"
 #include "components/feed/core/v2/config.h"
+#include "components/feed/core/v2/feedstore_util.h"
 
 namespace feed {
 namespace {
@@ -38,6 +39,8 @@ RequestSchedule::RequestSchedule() = default;
 RequestSchedule::~RequestSchedule() = default;
 RequestSchedule::RequestSchedule(const RequestSchedule&) = default;
 RequestSchedule& RequestSchedule::operator=(const RequestSchedule&) = default;
+RequestSchedule::RequestSchedule(RequestSchedule&&) = default;
+RequestSchedule& RequestSchedule::operator=(RequestSchedule&&) = default;
 
 base::Value RequestScheduleToValue(const RequestSchedule& schedule) {
   base::Value result(base::Value::Type::DICTIONARY);
@@ -72,11 +75,11 @@ base::Time NextScheduledRequestTime(base::Time now, RequestSchedule* schedule) {
   while (!schedule->refresh_offsets.empty()) {
     base::Time request_time =
         schedule->anchor_time + schedule->refresh_offsets[0];
-    schedule->refresh_offsets.erase(schedule->refresh_offsets.begin());
-    if (request_time < now) {
-      // The schedule time is in the past. This is most likely to happen if we
-      // fail to run one of our scheduled fetches. Just ignore this fetch so
-      // that we don't risk multiple fetches at a time.
+    if (request_time <= now) {
+      // The schedule time is in the past. This can happen if the scheduled
+      // request already ran, or if the scheduled task was missed. Just ignore
+      // this fetch so that we don't risk multiple fetches at a time.
+      schedule->refresh_offsets.erase(schedule->refresh_offsets.begin());
       continue;
     }
     return request_time;
@@ -84,8 +87,17 @@ base::Time NextScheduledRequestTime(base::Time now, RequestSchedule* schedule) {
   return now + GetFeedConfig().default_background_refresh_interval;
 }
 
-bool ShouldWaitForNewContent(bool has_content, base::TimeDelta content_age) {
-  return !has_content || content_age > GetFeedConfig().stale_content_threshold;
+bool ShouldWaitForNewContent(const feedstore::Metadata& metadata,
+                             const StreamType& stream_type,
+                             bool has_content,
+                             base::TimeDelta content_age) {
+  if (!has_content)
+    return true;
+  const feedstore::Metadata::StreamMetadata* stream_metadata =
+      feedstore::FindMetadataForStream(metadata, stream_type);
+  if (stream_metadata && stream_metadata->is_known_stale())
+    return true;
+  return content_age > GetFeedConfig().GetStalenessThreshold(stream_type);
 }
 
 }  // namespace feed

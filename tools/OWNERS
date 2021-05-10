@@ -5,17 +5,11 @@
 # If you're changing existing tools, have your change reviewed by the
 # OWNERS of the existing tool.
 
+set noparent
 brucedawson@chromium.org
 dpranke@google.com
 scottmg@chromium.org
 thakis@chromium.org
-
-# These aren't actually great contact points for this directory, but
-# changes in this directory are rare and most changes happen in better-owned
-# subdirectories.
-#
-# TEAM: build@chromium.org
-# COMPONENT: Build
 
 per-file autotest.py=mthiesse@chromium.org
 

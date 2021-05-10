@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CONTENT_BROWSER_BROWSER_ASSOCIATED_INTERFACE_H_
-#define CONTENT_BROWSER_BROWSER_ASSOCIATED_INTERFACE_H_
+#ifndef CONTENT_PUBLIC_BROWSER_BROWSER_ASSOCIATED_INTERFACE_H_
+#define CONTENT_PUBLIC_BROWSER_BROWSER_ASSOCIATED_INTERFACE_H_
 
 #include <string>
 
@@ -21,15 +21,14 @@
 
 namespace content {
 
-// A helper interface which owns an associated interface receiver on the IO
-// thread. Subclassess of BrowserMessageFilter may use this to simplify
-// the transition to Mojo interfaces.
+// A helper class which owns an associated interface receiver on the IO thread.
+// Subclassess of BrowserMessageFilter may use this to simplify the transition
+// to Mojo interfaces.
 //
 // In general the correct pattern for using this is as follows:
 //
 //   class FooMessageFilter : public BrowserMessageFilter,
-//                            public BrowserAssociatedInterface<mojom::Foo>,
-//                            public mojom::Foo {
+//                            public BrowserAssociatedInterface<mojom::Foo> {
 //    public:
 //     FooMessageFilter()
 //         : BrowserMessageFilter(FooMsgStart),
@@ -52,11 +51,11 @@ namespace content {
 //
 // See BrowserAssociatedInterfaceTest.Basic for a simple working example usage.
 template <typename Interface>
-class BrowserAssociatedInterface {
+class BrowserAssociatedInterface : public Interface {
  public:
   // |filter| and |impl| must live at least as long as this object.
-  BrowserAssociatedInterface(BrowserMessageFilter* filter, Interface* impl)
-      : internal_state_(new InternalState(impl)) {
+  explicit BrowserAssociatedInterface(BrowserMessageFilter* filter)
+      : internal_state_(new InternalState(this)) {
     filter->AddAssociatedInterface(
         Interface::Name_,
         base::BindRepeating(&InternalState::BindReceiver, internal_state_),
@@ -110,4 +109,4 @@ class BrowserAssociatedInterface {
 
 }  // namespace content
 
-#endif  // CONTENT_BROWSER_BROWSER_ASSOCIATED_INTERFACE_H_
+#endif  // CONTENT_PUBLIC_BROWSER_BROWSER_ASSOCIATED_INTERFACE_H_

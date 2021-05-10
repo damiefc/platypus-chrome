@@ -20,6 +20,10 @@ constexpr base::TimeDelta kAshContextualNudgesMaxInterval =
 namespace ash {
 namespace switches {
 
+// Clear the fast ink buffer upon creation. This is needed on some devices that
+// do not zero out new buffers.
+const char kAshClearFastInkBuffer[] = "ash-clear-fast-ink-buffer";
+
 // Force the pointer (cursor) position to be kept inside root windows.
 const char kAshConstrainPointerToRoot[] = "ash-constrain-pointer-to-root";
 
@@ -139,6 +143,11 @@ const char kTouchscreenUsableWhileScreenOff[] =
 // Hides all Message Center notification popups (toasts). Used for testing.
 const char kSuppressMessageCenterPopups[] = "suppress-message-center-popups";
 
+// If set, the device will be forced to stay in clamshell UI mode but screen
+// auto rotation will be supported. E.g, chromebase device Dooly.
+const char kSupportsClamshellAutoRotation[] =
+    "supports-clamshell-auto-rotation";
+
 base::Optional<base::TimeDelta> ContextualNudgesInterval() {
   int numeric_cooldown_time;
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -164,6 +173,11 @@ bool ContextualNudgesResetShownCount() {
 
 bool IsUsingShelfAutoDim() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(kEnableDimShelf);
+}
+
+bool ShouldClearFastInkBuffer() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kAshClearFastInkBuffer);
 }
 
 }  // namespace switches

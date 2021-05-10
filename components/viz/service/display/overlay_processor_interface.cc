@@ -5,11 +5,14 @@
 #include "components/viz/service/display/overlay_processor_interface.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "build/chromecast_buildflags.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/features.h"
+#include "components/viz/service/display/display_compositor_memory_and_task_controller.h"
 #include "components/viz/service/display/overlay_processor_stub.h"
 
 #if defined(OS_APPLE)
@@ -33,7 +36,7 @@ namespace {
 enum class UnderlayDamage {
   kZeroDamageRect,
   kNonOccludingDamageOnly,
-  kOccludingDamageOnly,
+  kOccludingDamageOnly,  // deprecated
   kOccludingAndNonOccludingDamages,
   kMaxValue = kOccludingAndNonOccludingDamages,
 };
@@ -51,8 +54,7 @@ enum class UnderlayDamage {
 void OverlayProcessorInterface::RecordOverlayDamageRectHistograms(
     bool is_overlay,
     bool has_occluding_surface_damage,
-    bool zero_damage_rect,
-    bool occluding_damage_equal_to_damage_rect) {
+    bool zero_damage_rect) {
   if (is_overlay) {
     UMA_HISTOGRAM_BOOLEAN("Viz.DisplayCompositor.RootDamageRect.Overlay",
                           !zero_damage_rect);
@@ -62,11 +64,7 @@ void OverlayProcessorInterface::RecordOverlayDamageRectHistograms(
       underlay_damage = UnderlayDamage::kZeroDamageRect;
     } else {
       if (has_occluding_surface_damage) {
-        if (occluding_damage_equal_to_damage_rect) {
-          underlay_damage = UnderlayDamage::kOccludingDamageOnly;
-        } else {
-          underlay_damage = UnderlayDamage::kOccludingAndNonOccludingDamages;
-        }
+        underlay_damage = UnderlayDamage::kOccludingAndNonOccludingDamages;
       } else {
         underlay_damage = UnderlayDamage::kNonOccludingDamageOnly;
       }
@@ -79,52 +77,71 @@ void OverlayProcessorInterface::RecordOverlayDamageRectHistograms(
 std::unique_ptr<OverlayProcessorInterface>
 OverlayProcessorInterface::CreateOverlayProcessor(
     OutputSurface* output_surface,
-    gpu::SharedImageManager* shared_image_manager,
+    gpu::SurfaceHandle surface_handle,
+    const OutputSurface::Capabilities& capabilities,
+    DisplayCompositorMemoryAndTaskController* display_controller,
+    gpu::SharedImageInterface* shared_image_interface,
     const RendererSettings& renderer_settings,
     const DebugRendererSettings* debug_settings) {
-#if defined(OS_APPLE)
-  bool could_overlay =
-      output_surface->GetSurfaceHandle() != gpu::kNullSurfaceHandle;
-  could_overlay &= output_surface->capabilities().supports_surfaceless;
-  bool enable_ca_overlay = could_overlay && renderer_settings.allow_overlays;
+  // If we are offscreen, we don't have overlay support.
+  // TODO(vasilyt): WebView would have a kNullSurfaceHandle. Make sure when
+  // overlay for WebView is enabled, this check still works.
+  if (surface_handle == gpu::kNullSurfaceHandle)
+    return std::make_unique<OverlayProcessorStub>();
 
-  return std::make_unique<OverlayProcessorMac>(could_overlay,
-                                               enable_ca_overlay);
+#if defined(OS_APPLE)
+  DCHECK(capabilities.supports_surfaceless);
+
+  return std::make_unique<OverlayProcessorMac>(
+      renderer_settings.allow_overlays);
 #elif defined(OS_WIN)
+  if (!capabilities.supports_dc_layers)
+    return std::make_unique<OverlayProcessorStub>();
+
   return std::make_unique<OverlayProcessorWin>(
       output_surface,
-      std::make_unique<DCLayerOverlayProcessor>(debug_settings));
+      std::make_unique<DCLayerOverlayProcessor>(
+          debug_settings, /*allowed_yuv_overlay_count=*/capabilities
+                                  .supports_two_yuv_hardware_overlays
+                              ? 2
+                              : 1));
 #elif defined(USE_OZONE)
   if (!features::IsUsingOzonePlatform())
     return std::make_unique<OverlayProcessorStub>();
-  bool overlay_enabled =
-      output_surface->GetSurfaceHandle() != gpu::kNullSurfaceHandle;
-  overlay_enabled &= !renderer_settings.overlay_strategies.empty();
+
+#if !BUILDFLAG(IS_CHROMECAST)
+  // In tests and Ozone/X11, we do not expect surfaceless surface support.
+  // For chromecast, we always need OverlayProcessorOzone.
+  if (!capabilities.supports_surfaceless)
+    return std::make_unique<OverlayProcessorStub>();
+#endif  // #if !BUILDFLAG(IS_CHROMECAST)
+
   std::unique_ptr<ui::OverlayCandidatesOzone> overlay_candidates;
-  if (overlay_enabled) {
+  if (!renderer_settings.overlay_strategies.empty()) {
     auto* overlay_manager =
         ui::OzonePlatform::GetInstance()->GetOverlayManager();
-    overlay_candidates = overlay_manager->CreateOverlayCandidates(
-        output_surface->GetSurfaceHandle());
+    overlay_candidates =
+        overlay_manager->CreateOverlayCandidates(surface_handle);
   }
 
-  gpu::SharedImageInterface* shared_image_interface = nullptr;
-  if (overlay_enabled && features::ShouldUseRealBuffersForPageFlipTest()) {
-    CHECK(output_surface->context_provider());
-    shared_image_interface =
-        output_surface->context_provider()->SharedImageInterface();
+  gpu::SharedImageInterface* sii = nullptr;
+  if (features::ShouldUseRealBuffersForPageFlipTest() &&
+      ui::OzonePlatform::GetInstance()
+          ->GetOverlayManager()
+          ->allow_sync_and_real_buffer_page_flip_testing()) {
+    sii = shared_image_interface;
     CHECK(shared_image_interface);
   }
 
   return std::make_unique<OverlayProcessorOzone>(
-      overlay_enabled, std::move(overlay_candidates),
-      std::move(renderer_settings.overlay_strategies), shared_image_interface);
+      std::move(overlay_candidates),
+      std::move(renderer_settings.overlay_strategies), sii);
 #elif defined(OS_ANDROID)
-  bool overlay_enabled =
-      output_surface->GetSurfaceHandle() != gpu::kNullSurfaceHandle;
-  if (output_surface->capabilities().supports_surfaceless) {
+  DCHECK(display_controller);
+
+  if (capabilities.supports_surfaceless) {
     // This is for Android SurfaceControl case.
-    return std::make_unique<OverlayProcessorSurfaceControl>(overlay_enabled);
+    return std::make_unique<OverlayProcessorSurfaceControl>();
   } else {
     // When SurfaceControl is enabled, any resource backed by
     // an AHardwareBuffer can be marked as an overlay candidate but it requires
@@ -132,11 +149,10 @@ OverlayProcessorInterface::CreateOverlayProcessor(
     // native window backed GLSurface, the overlay processing code will
     // incorrectly assume these resources can be overlaid. So we disable all
     // overlay processing for this OutputSurface.
-    overlay_enabled &=
-        !output_surface->capabilities().android_surface_control_feature_enabled;
-    return std::make_unique<OverlayProcessorAndroid>(
-        shared_image_manager, output_surface->GetMemoryTracker(),
-        output_surface->GetGpuTaskSchedulerHelper(), overlay_enabled);
+    if (capabilities.android_surface_control_feature_enabled)
+      return std::make_unique<OverlayProcessorStub>();
+
+    return std::make_unique<OverlayProcessorAndroid>(display_controller);
   }
 #else  // Default
   return std::make_unique<OverlayProcessorStub>();
@@ -150,13 +166,18 @@ bool OverlayProcessorInterface::DisableSplittingQuads() const {
 OverlayProcessorInterface::OutputSurfaceOverlayPlane
 OverlayProcessorInterface::ProcessOutputSurfaceAsOverlay(
     const gfx::Size& viewport_size,
+    const gfx::Size& resource_size,
     const gfx::BufferFormat& buffer_format,
     const gfx::ColorSpace& color_space,
     bool has_alpha,
     const gpu::Mailbox& mailbox) {
   OutputSurfaceOverlayPlane overlay_plane;
   overlay_plane.transform = gfx::OverlayTransform::OVERLAY_TRANSFORM_NONE;
-  overlay_plane.resource_size = viewport_size;
+  overlay_plane.uv_rect = gfx::RectF(
+      0.f, 0.f,
+      viewport_size.width() / static_cast<float>(resource_size.width()),
+      viewport_size.height() / static_cast<float>(resource_size.height()));
+  overlay_plane.resource_size = resource_size;
   overlay_plane.format = buffer_format;
   overlay_plane.color_space = color_space;
   overlay_plane.enable_blending = has_alpha;

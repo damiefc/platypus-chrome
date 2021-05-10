@@ -97,9 +97,18 @@ class COMPONENT_EXPORT(CDM_FACTORY_DAEMON) OutputProtectionImpl
                                      uint32_t link_mask,
                                      uint32_t protection_mask);
 
+  void HandleDisplayChange();
+
   // display::DisplayObserver:
+  void OnDisplayAdded(const display::Display& display) override;
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;
+  void OnDisplayRemoved(const display::Display& display) override;
+
+  // Helper methods to report output protection UMAs.
+  void ReportOutputProtectionQuery();
+  void ReportOutputProtectionQueryResult(uint32_t link_mask,
+                                         uint32_t protection_mask);
 
   std::unique_ptr<DisplaySystemDelegate> delegate_;
   display::ContentProtectionManager::ClientId client_id_;
@@ -107,6 +116,11 @@ class COMPONENT_EXPORT(CDM_FACTORY_DAEMON) OutputProtectionImpl
   std::vector<int64_t> display_id_list_;
 
   uint32_t desired_protection_mask_{0};
+
+  // Tracks whether an output protection query and a positive query result (no
+  // unprotected external link) have been reported to UMA.
+  bool uma_for_output_protection_query_reported_ = false;
+  bool uma_for_output_protection_positive_result_reported_ = false;
 
   // WeakPtrFactory to use for callbacks.
   base::WeakPtrFactory<OutputProtectionImpl> weak_factory_{this};

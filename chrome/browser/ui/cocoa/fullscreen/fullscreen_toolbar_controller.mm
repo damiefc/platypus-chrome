@@ -12,7 +12,6 @@
 #import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_animation_controller.h"
 #import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_mouse_tracker.h"
 #import "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
@@ -40,7 +39,7 @@
   BrowserView* _browserView;  // weak
 }
 
-- (id)initWithBrowserView:(BrowserView*)browserView {
+- (instancetype)initWithBrowserView:(BrowserView*)browserView {
   if ((self = [super init])) {
     _browserView = browserView;
     _animationController =
@@ -55,7 +54,8 @@
 }
 
 - (void)enterFullscreenMode {
-  DCHECK(!_inFullscreenMode);
+  if (_inFullscreenMode)
+    return;
   _inFullscreenMode = YES;
 
   _menubarTracker.reset([[FullscreenMenubarTracker alloc]
@@ -65,7 +65,8 @@
 }
 
 - (void)exitFullscreenMode {
-  DCHECK(_inFullscreenMode);
+  if (!_inFullscreenMode)
+    return;
   _inFullscreenMode = NO;
 
   _animationController->StopAnimationAndTimer();

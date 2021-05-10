@@ -12,13 +12,6 @@ if (is_mac) {
   import("//third_party/protobuf/proto_library.gni")
 }
 
-# This file depends on the legacy global sources assignment filter. It should
-# be converted to check target platform before assigning source files to the
-# sources variable. Remove this import and set_sources_assignment_filter call
-# when the file has been converted. See https://crbug.com/1018739 for details.
-import("//build/config/deprecated_default_sources_assignment_filter.gni")
-set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
-
 component("embedder_internal") {
   output_name = "mojo_core_embedder_internal"
   public_deps = [ ":impl_for_embedder" ]
@@ -73,7 +66,6 @@ template("core_impl_source_set") {
       "platform_handle_utils.h",
       "platform_shared_memory_mapping.h",
       "request_context.h",
-      "scoped_process_handle.h",
       "shared_buffer_dispatcher.h",
       "user_message_impl.h",
     ]
@@ -81,9 +73,7 @@ template("core_impl_source_set") {
     sources = [
       "atomic_flag.h",
       "broker.h",
-      "broker_win.cc",
       "channel.cc",
-      "channel_win.cc",
       "configuration.cc",
       "connection_params.cc",
       "core.cc",
@@ -103,7 +93,6 @@ template("core_impl_source_set") {
       "platform_handle_utils.cc",
       "platform_shared_memory_mapping.cc",
       "request_context.cc",
-      "scoped_process_handle.cc",
       "shared_buffer_dispatcher.cc",
       "user_message_impl.cc",
       "watch.cc",
@@ -116,6 +105,7 @@ template("core_impl_source_set") {
 
     public_deps = [
       "//base",
+      "//mojo/core/embedder:features",
       "//mojo/core/ports",
       "//mojo/public/c/system:headers",
       "//mojo/public/cpp/platform",
@@ -132,7 +122,17 @@ template("core_impl_source_set") {
         sources += [
           "broker_posix.cc",
           "channel_posix.cc",
+          "channel_posix.h",
         ]
+      }
+
+      if ((is_linux || is_chromeos || is_android) && !is_nacl) {
+        sources += [
+          "channel_linux.cc",
+          "channel_linux.h",
+        ]
+
+        public += [ "channel_linux.h" ]
       }
     }
 
@@ -163,6 +163,10 @@ template("core_impl_source_set") {
     }
 
     if (is_win) {
+      sources += [
+        "broker_win.cc",
+        "channel_win.cc",
+      ]
       cflags = [ "/wd4324" ]  # Structure was padded due to __declspec(align()),
                               # which is uninteresting.
     }
@@ -207,7 +211,7 @@ if (is_chromeos || is_linux || is_android || is_win) {
     }
   }
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     if (target_cpu == "arm" || target_cpu == "arm64") {
       android32_toolchain = "android_clang_arm"
       android64_toolchain = "android_clang_arm64"
@@ -269,27 +273,6 @@ if (is_chromeos || is_linux || is_android || is_win) {
   }
 }
 
-source_set("test_utils") {
-  testonly = true
-
-  sources = [
-    "test_utils.cc",
-    "test_utils.h",
-  ]
-
-  public_deps = [
-    "//mojo/public/c/system",
-    "//mojo/public/cpp/system",
-  ]
-
-  deps = [
-    "//base",
-    "//base/test:test_support",
-    "//mojo/core/test:test_support",
-    "//testing/gtest:gtest",
-  ]
-}
-
 source_set("test_sources") {
   testonly = true
   sources = [
@@ -316,12 +299,12 @@ source_set("test_sources") {
       "data_pipe_unittest.cc",
       "invitation_unittest.cc",
       "multiprocess_message_pipe_unittest.cc",
+      "node_controller_unittest.cc",
       "platform_wrapper_unittest.cc",
     ]
   }
 
   deps = [
-    ":test_utils",
     "//base",
     "//base/test:test_support",
     "//mojo/core:embedder_internal",

@@ -41,6 +41,7 @@ buildflag_header("media_buildflags") {
     "ENABLE_PLATFORM_MPEG_H_AUDIO=$enable_platform_mpeg_h_audio",
     "ENABLE_MSE_MPEG2TS_STREAM_PARSER=$enable_mse_mpeg2ts_stream_parser",
     "USE_CHROMEOS_MEDIA_ACCELERATION=$use_vaapi||$use_v4l2_codec",
+    "USE_CHROMEOS_PROTECTED_MEDIA=$use_chromeos_protected_media",
     "USE_PROPRIETARY_CODECS=$proprietary_codecs",
   ]
 }
@@ -122,6 +123,13 @@ component("media") {
   if (is_apple) {
     public_deps += [ "//media/base/mac" ]
   }
+
+  if (use_x11) {
+    deps += [ "//ui/base/x" ]
+  }
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
 }
 
 # Note: This can't be a static_library since it does not have any sources.
@@ -134,6 +142,7 @@ source_set("test_support") {
     "//media/base/android:test_support",
     "//media/filters:test_support",
     "//media/formats:test_support",
+    "//media/renderers:test_support",
     "//media/video:test_support",
   ]
 }
@@ -191,7 +200,17 @@ test("media_unittests") {
       "//media/fuchsia/audio:unittests",
       "//media/fuchsia/cdm/service:unittests",
     ]
-    manifest = "//media/fuchsia/media_unittests.cmx"
+
+    additional_manifest_fragments = [
+      "//build/config/fuchsia/test/audio_capabilities.test-cmx",
+
+      # TODO(crbug.com/1185811): Figure out why
+      # PaintCanvasVideoRendererWithGLTest.CopyVideoFrameYUVDataToGLTexture
+      # crashes without "deprecated-ambient-replace-as-executable".
+      "//build/config/fuchsia/test/jit_capabilities.test-cmx",
+
+      "//build/config/fuchsia/test/vulkan_capabilities.test-cmx",
+    ]
   }
 
   if (enable_media_remoting) {
@@ -274,6 +293,8 @@ component("shared_memory_support") {
     "base/vector_math.cc",
     "base/vector_math.h",
     "base/vector_math_testing.h",
+    "base/video_types.cc",
+    "base/video_types.h",
   ]
   if (is_mac) {
     # These need to be included here because audio_latency.cc depends on them.
@@ -294,6 +315,7 @@ component("shared_memory_support") {
   }
   deps = [
     "//base",
+    "//build:chromeos_buildflags",
     "//ui/gfx/geometry",
   ]
 }

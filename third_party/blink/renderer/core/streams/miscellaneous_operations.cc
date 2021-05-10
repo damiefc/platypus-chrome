@@ -19,7 +19,6 @@
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_v8_reference.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -34,7 +33,10 @@ v8::Local<v8::Promise> PromiseRejectInternal(ScriptState* script_state,
                                              v8::Local<v8::Value> value,
                                              int recursion_depth) {
   auto context = script_state->GetContext();
-  v8::TryCatch trycatch(script_state->GetIsolate());
+  v8::Isolate* isolate = script_state->GetIsolate();
+  v8::MicrotasksScope microtasks_scope(
+      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+  v8::TryCatch trycatch(isolate);
   // TODO(ricea): Can this fail for reasons other than memory exhaustion? Can we
   // recover if it does?
   auto resolver = v8::Promise::Resolver::New(context).ToLocalChecked();
@@ -196,6 +198,48 @@ class JavaScriptStreamAlgorithmWithExtraArg final : public StreamAlgorithm {
   TraceWrapperV8Reference<v8::Value> extra_arg_;
 };
 
+class JavaScriptByteStreamStartAlgorithm : public StreamStartAlgorithm {
+ public:
+  JavaScriptByteStreamStartAlgorithm(v8::Isolate* isolate,
+                                     v8::Local<v8::Function> method,
+                                     v8::Local<v8::Object> recv,
+                                     v8::Local<v8::Value> controller)
+      : recv_(isolate, recv),
+        method_(isolate, method),
+        controller_(isolate, controller) {}
+
+  v8::MaybeLocal<v8::Promise> Run(ScriptState* script_state,
+                                  ExceptionState& exception_state) override {
+    auto* isolate = script_state->GetIsolate();
+
+    auto value_maybe =
+        Call1(script_state, method_.NewLocal(isolate), recv_.NewLocal(isolate),
+              controller_.NewLocal(isolate), exception_state);
+    if (exception_state.HadException()) {
+      return v8::MaybeLocal<v8::Promise>();
+    }
+
+    v8::Local<v8::Value> value;
+    if (!value_maybe.ToLocal(&value)) {
+      exception_state.ThrowTypeError("internal error");
+      return v8::MaybeLocal<v8::Promise>();
+    }
+    return PromiseResolve(script_state, value);
+  }
+
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(recv_);
+    visitor->Trace(method_);
+    visitor->Trace(controller_);
+    StreamStartAlgorithm::Trace(visitor);
+  }
+
+ private:
+  TraceWrapperV8Reference<v8::Object> recv_;
+  TraceWrapperV8Reference<v8::Function> method_;
+  TraceWrapperV8Reference<v8::Value> controller_;
+};
+
 class JavaScriptStreamStartAlgorithm : public StreamStartAlgorithm {
  public:
   JavaScriptStreamStartAlgorithm(v8::Isolate* isolate,
@@ -343,8 +387,22 @@ CORE_EXPORT StreamStartAlgorithm* CreateStartAlgorithm(
       controller);
 }
 
+CORE_EXPORT StreamStartAlgorithm* CreateByteStreamStartAlgorithm(
+    ScriptState* script_state,
+    v8::Local<v8::Object> underlying_object,
+    v8::Local<v8::Value> method,
+    v8::Local<v8::Value> controller) {
+  return MakeGarbageCollected<JavaScriptByteStreamStartAlgorithm>(
+      script_state->GetIsolate(), method.As<v8::Function>(), underlying_object,
+      controller);
+}
+
 CORE_EXPORT StreamStartAlgorithm* CreateTrivialStartAlgorithm() {
   return MakeGarbageCollected<TrivialStartAlgorithm>();
+}
+
+CORE_EXPORT StreamAlgorithm* CreateTrivialStreamAlgorithm() {
+  return MakeGarbageCollected<TrivialStreamAlgorithm>();
 }
 
 CORE_EXPORT v8::MaybeLocal<v8::Value> CallOrNoop1(
@@ -381,13 +439,31 @@ CORE_EXPORT v8::MaybeLocal<v8::Value> CallOrNoop1(
   return result;
 }
 
+CORE_EXPORT v8::MaybeLocal<v8::Value> Call1(ScriptState* script_state,
+                                            v8::Local<v8::Function> method,
+                                            v8::Local<v8::Object> object,
+                                            v8::Local<v8::Value> arg0,
+                                            ExceptionState& exception_state) {
+  v8::TryCatch try_catch(script_state->GetIsolate());
+  v8::MaybeLocal<v8::Value> result =
+      method->Call(script_state->GetContext(), object, 1, &arg0);
+  if (result.IsEmpty()) {
+    exception_state.RethrowV8Exception(try_catch.Exception());
+    return v8::MaybeLocal<v8::Value>();
+  }
+  return result;
+}
+
 CORE_EXPORT v8::Local<v8::Promise> PromiseCall(ScriptState* script_state,
                                                v8::Local<v8::Function> method,
                                                v8::Local<v8::Object> recv,
                                                int argc,
                                                v8::Local<v8::Value> argv[]) {
   DCHECK_GE(argc, 0);
-  v8::TryCatch trycatch(script_state->GetIsolate());
+  v8::Isolate* isolate = script_state->GetIsolate();
+  v8::TryCatch trycatch(isolate);
+  v8::MicrotasksScope microtasks_scope(
+      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
   // https://streams.spec.whatwg.org/#promise-call
   // 4. Let returnValue be Call(F, V, args).
@@ -458,7 +534,10 @@ CORE_EXPORT v8::Local<v8::Promise> PromiseResolve(ScriptState* script_state,
     return value.As<v8::Promise>();
   }
   auto context = script_state->GetContext();
-  v8::TryCatch trycatch(script_state->GetIsolate());
+  v8::Isolate* isolate = script_state->GetIsolate();
+  v8::MicrotasksScope microtasks_scope(
+      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+  v8::TryCatch trycatch(isolate);
   // TODO(ricea): Can this fail for reasons other than memory exhaustion? Can we
   // recover if it does?
   auto resolver = v8::Promise::Resolver::New(context).ToLocalChecked();
@@ -560,6 +639,10 @@ double StrategyUnpacker::GetHighWaterMark(
   // 8. Set highWaterMark to ? ValidateAndNormalizeHighWaterMark(highWaterMark)
   return ValidateAndNormalizeHighWaterMark(high_water_mark_as_number->Value(),
                                            exception_state);
+}
+
+bool StrategyUnpacker::IsSizeUndefined() const {
+  return size_->IsUndefined();
 }
 
 }  // namespace blink

@@ -57,14 +57,19 @@ class BrowserImpl : public Browser {
       const std::string& guid);
   TabImpl* CreateTab(std::unique_ptr<content::WebContents> web_contents);
 
+  // Called from BrowserPersister when restore has completed.
+  void OnRestoreCompleted();
+
 #if defined(OS_ANDROID)
   bool CompositorHasSurface();
 
-  void AddTab(JNIEnv* env,
-              long native_tab);
+  base::android::ScopedJavaGlobalRef<jobject> java_browser() {
+    return java_impl_;
+  }
+
+  void AddTab(JNIEnv* env, long native_tab);
   base::android::ScopedJavaLocalRef<jobjectArray> GetTabs(JNIEnv* env);
-  void SetActiveTab(JNIEnv* env,
-                    long native_tab);
+  void SetActiveTab(JNIEnv* env, long native_tab);
   base::android::ScopedJavaLocalRef<jobject> GetActiveTab(JNIEnv* env);
   void PrepareForShutdown(JNIEnv* env);
   base::android::ScopedJavaLocalRef<jstring> GetPersistenceId(JNIEnv* env);
@@ -83,6 +88,9 @@ class BrowserImpl : public Browser {
   void OnFragmentStart(JNIEnv* env);
   void OnFragmentResume(JNIEnv* env);
   void OnFragmentPause(JNIEnv* env);
+  bool IsRestoringPreviousState(JNIEnv* env) {
+    return IsRestoringPreviousState();
+  }
 
   bool fragment_resumed() { return fragment_resumed_; }
 #endif
@@ -118,8 +126,11 @@ class BrowserImpl : public Browser {
   void PrepareForShutdown() override;
   std::string GetPersistenceId() override;
   std::vector<uint8_t> GetMinimalPersistenceState() override;
+  bool IsRestoringPreviousState() override;
   void AddObserver(BrowserObserver* observer) override;
   void RemoveObserver(BrowserObserver* observer) override;
+  void AddBrowserRestoreObserver(BrowserRestoreObserver* observer) override;
+  void RemoveBrowserRestoreObserver(BrowserRestoreObserver* observer) override;
   void VisibleSecurityStateOfActiveTabChanged() override;
 
  private:
@@ -149,6 +160,7 @@ class BrowserImpl : public Browser {
   base::android::ScopedJavaGlobalRef<jobject> java_impl_;
 #endif
   base::ObserverList<BrowserObserver> browser_observers_;
+  base::ObserverList<BrowserRestoreObserver> browser_restore_observers_;
   ProfileImpl* const profile_;
   std::vector<std::unique_ptr<Tab>> tabs_;
   TabImpl* active_tab_ = nullptr;

@@ -29,6 +29,7 @@
 
 #include "third_party/blink/renderer/core/editing/serializers/serialization.h"
 
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/css_value.h"
@@ -62,6 +63,7 @@
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_table_cell_element.h"
 #include "third_party/blink/renderer/core/html/html_table_element.h"
+#include "third_party/blink/renderer/core/html/html_template_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
@@ -196,12 +198,7 @@ static HTMLElement* HighestAncestorToWrapMarkup(
           FirstPositionInOrBeforeNode(*first_node);
       if (Node* parent_list_node =
               EnclosingNodeOfType(first_node_position, IsListItem)) {
-        EphemeralRangeTemplate<Strategy> markup_range =
-            EphemeralRangeTemplate<Strategy>(start_position, end_position);
-        EphemeralRangeTemplate<Strategy> node_range =
-            NormalizeRange(EphemeralRangeTemplate<Strategy>::RangeOfContents(
-                *parent_list_node));
-        if (node_range == markup_range) {
+        if (AreSameRanges(parent_list_node, start_position, end_position)) {
           ContainerNode* ancestor = parent_list_node->parentNode();
           while (ancestor && !IsHTMLListElement(ancestor))
             ancestor = ancestor->parentNode();
@@ -608,10 +605,12 @@ DocumentFragment* CreateFragmentForInnerOuterHTML(
     Element* context_element,
     ParserContentPolicy parser_content_policy,
     const char* method,
+    bool include_shadow_roots,
     ExceptionState& exception_state) {
   DCHECK(context_element);
-  if (IsA<HTMLTemplateElement>(*context_element) &&
-      !context_element->GetExecutionContext()) {
+  const HTMLTemplateElement* template_element =
+      DynamicTo<HTMLTemplateElement>(*context_element);
+  if (template_element && !template_element->GetExecutionContext()) {
     return nullptr;
   }
 
@@ -620,6 +619,7 @@ DocumentFragment* CreateFragmentForInnerOuterHTML(
           ? context_element->GetDocument().EnsureTemplateDocument()
           : context_element->GetDocument();
   DocumentFragment* fragment = DocumentFragment::Create(document);
+  document.setAllowDeclarativeShadowRoots(include_shadow_roots);
 
   if (IsA<HTMLDocument>(document)) {
     fragment->ParseHTML(markup, context_element, parser_content_policy);
@@ -687,7 +687,7 @@ DocumentFragment* CreateContextualFragment(
 
   DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
       markup, element, parser_content_policy, "createContextualFragment",
-      exception_state);
+      /*include_shadow_roots=*/false, exception_state);
   if (!fragment)
     return nullptr;
 
@@ -700,10 +700,10 @@ DocumentFragment* CreateContextualFragment(
     next_node = node->nextSibling();
     if (IsA<HTMLHtmlElement>(node) || IsA<HTMLHeadElement>(node) ||
         IsA<HTMLBodyElement>(node)) {
-      auto* element = To<HTMLElement>(node);
-      if (Node* first_child = element->firstChild())
+      auto* child_element = To<HTMLElement>(node);
+      if (Node* first_child = child_element->firstChild())
         next_node = first_child;
-      RemoveElementPreservingChildren(fragment, element);
+      RemoveElementPreservingChildren(fragment, child_element);
     }
   }
   return fragment;
@@ -772,10 +772,10 @@ void MergeWithNextTextNode(Text* text_node, ExceptionState& exception_state) {
     text_next->remove(exception_state);
 }
 
-static Document* CreateStagingDocumentForMarkupSanitization() {
-  Page::PageClients page_clients;
-  FillWithEmptyClients(page_clients);
-  Page* page = Page::CreateNonOrdinary(page_clients);
+static Document* CreateStagingDocumentForMarkupSanitization(
+    scheduler::WebAgentGroupScheduler& agent_group_scheduler) {
+  Page* page = Page::CreateNonOrdinary(GetStaticEmptyChromeClientInstance(),
+                                       agent_group_scheduler);
 
   page->GetSettings().SetScriptEnabled(false);
   page->GetSettings().SetPluginsEnabled(false);
@@ -788,7 +788,7 @@ static Document* CreateStagingDocumentForMarkupSanitization() {
       nullptr,  // FrameOwner*
       nullptr,  // Frame* parent
       nullptr,  // Frame* previous_sibling
-      FrameInsertType::kInsertInConstructor, base::UnguessableToken::Create(),
+      FrameInsertType::kInsertInConstructor, blink::LocalFrameToken(),
       nullptr,  // WindowAgentFactory*
       nullptr   // InterfaceRegistry*
   );
@@ -796,7 +796,7 @@ static Document* CreateStagingDocumentForMarkupSanitization() {
   LocalFrameView* frame_view =
       MakeGarbageCollected<LocalFrameView>(*frame, IntSize(800, 600));
   frame->SetView(frame_view);
-  frame->Init(nullptr);
+  frame->Init(/*opener=*/nullptr, /*policy_container=*/nullptr);
 
   Document* document = frame->GetDocument();
   DCHECK(document);
@@ -844,7 +844,8 @@ DocumentFragment* CreateSanitizedFragmentFromMarkupWithContext(
   if (raw_markup.IsEmpty())
     return nullptr;
 
-  Document* staging_document = CreateStagingDocumentForMarkupSanitization();
+  Document* staging_document = CreateStagingDocumentForMarkupSanitization(
+      *document.GetFrame()->GetFrameScheduler()->GetAgentGroupScheduler());
   Element* body = staging_document->body();
 
   DocumentFragment* fragment = CreateFragmentFromMarkupWithContext(

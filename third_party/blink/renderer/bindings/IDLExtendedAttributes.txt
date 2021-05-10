@@ -47,12 +47,12 @@ Constructor
 ConstructorCallWith=ExecutionContext|ScriptState|Document
 ContextEnabled=*
 CrossOrigin=|Getter|Setter
+CrossOriginIsolated
 Custom=|Getter|Setter|LegacyCallAsFunction|PropertyGetter|PropertyEnumerator|PropertyQuery
 CustomConstructor
-CustomElementCallbacks
 DefaultValue=Undefined
 DeprecateAs=*
-DisableInNewIDLCompiler
+DirectSocketEnabled
 DoNotCheckConstants
 DoNotTestNewObject
 EnforceRange
@@ -65,6 +65,7 @@ HighEntropy=|Direct
 HTMLConstructor
 ImmutablePrototype
 ImplementedAs=*
+IsCodeLike
 LegacyLenientSetter
 LegacyLenientThis
 LegacyNoInterfaceObject

@@ -19,7 +19,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom.h"
 
 // Set the default number of "automatic" implicit storage access grants per
 // third party origin that can be granted. This can be overridden via
@@ -48,7 +48,7 @@ StorageAccessGrantPermissionContext::StorageAccessGrantPermissionContext(
     : PermissionContextBase(
           browser_context,
           ContentSettingsType::STORAGE_ACCESS,
-          blink::mojom::FeaturePolicyFeature::kStorageAccessAPI),
+          blink::mojom::PermissionsPolicyFeature::kStorageAccessAPI),
       content_settings_type_(ContentSettingsType::STORAGE_ACCESS) {}
 
 StorageAccessGrantPermissionContext::~StorageAccessGrantPermissionContext() =
@@ -83,7 +83,7 @@ void StorageAccessGrantPermissionContext::DecidePermission(
   // |requesting_origin|.
   ContentSettingsForOneType implicit_grants;
   settings_map->GetSettingsForOneType(
-      ContentSettingsType::STORAGE_ACCESS, std::string(), &implicit_grants,
+      ContentSettingsType::STORAGE_ACCESS, &implicit_grants,
       content_settings::SessionModel::UserSession);
 
   const int existing_implicit_grants =
@@ -125,7 +125,9 @@ void StorageAccessGrantPermissionContext::NotifyPermissionSet(
     const GURL& embedding_origin,
     permissions::BrowserPermissionCallback callback,
     bool persist,
-    ContentSetting content_setting) {
+    ContentSetting content_setting,
+    bool is_one_time) {
+  DCHECK(!is_one_time);
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   NotifyPermissionSetInternal(id, requesting_origin, embedding_origin,
                               std::move(callback), persist, content_setting,
@@ -181,12 +183,11 @@ void StorageAccessGrantPermissionContext::NotifyPermissionSetInternal(
   // grant.
   settings_map->SetContentSettingDefaultScope(
       requesting_origin, embedding_origin, ContentSettingsType::STORAGE_ACCESS,
-      std::string(), content_setting,
-      implicit_result ? implicit_grant : explicit_grant);
+      content_setting, implicit_result ? implicit_grant : explicit_grant);
 
   ContentSettingsForOneType grants;
   settings_map->GetSettingsForOneType(ContentSettingsType::STORAGE_ACCESS,
-                                      std::string(), &grants);
+                                      &grants);
 
   // TODO(https://crbug.com/989663): Ensure that this update of settings doesn't
   // cause a double update with
@@ -196,7 +197,8 @@ void StorageAccessGrantPermissionContext::NotifyPermissionSetInternal(
   // partition has updated and ack'd the update. This prevents a race where
   // the renderer could initiate a network request based on the response to this
   // request before the access grants have updated in the network service.
-  content::BrowserContext::GetDefaultStoragePartition(browser_context())
+  browser_context()
+      ->GetDefaultStoragePartition()
       ->GetCookieManagerForBrowserProcess()
       ->SetStorageAccessGrantSettings(
           grants, base::BindOnce(std::move(callback), content_setting));
@@ -205,7 +207,9 @@ void StorageAccessGrantPermissionContext::NotifyPermissionSetInternal(
 void StorageAccessGrantPermissionContext::UpdateContentSetting(
     const GURL& requesting_origin,
     const GURL& embedding_origin,
-    ContentSetting content_setting) {
+    ContentSetting content_setting,
+    bool is_one_time) {
+  DCHECK(!is_one_time);
   // We need to notify the network service of content setting updates before we
   // run our callback. As a result we do our updates when we're notified of a
   // permission being set and should not be called here.

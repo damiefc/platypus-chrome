@@ -10,7 +10,7 @@
 #include "cc/paint/paint_image.h"
 #include "third_party/skia/include/core/SkFilterQuality.h"
 #include "third_party/skia/include/core/SkImage.h"
-#include "third_party/skia/include/core/SkMatrix.h"
+#include "third_party/skia/include/core/SkM44.h"
 #include "third_party/skia/include/core/SkRect.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/color_space.h"
@@ -27,9 +27,10 @@ class CC_PAINT_EXPORT DrawImage {
   DrawImage();
   explicit DrawImage(PaintImage image);
   DrawImage(PaintImage image,
+            bool use_dark_mode,
             const SkIRect& src_rect,
             SkFilterQuality filter_quality,
-            const SkMatrix& matrix,
+            const SkM44& matrix,
             base::Optional<size_t> frame_index = base::nullopt,
             const base::Optional<gfx::ColorSpace>& color_space = base::nullopt,
             float sdr_white_level = gfx::ColorSpace::kDefaultSDRWhiteLevel);
@@ -50,6 +51,7 @@ class CC_PAINT_EXPORT DrawImage {
   bool operator==(const DrawImage& other) const;
 
   const PaintImage& paint_image() const { return paint_image_; }
+  bool use_dark_mode() const { return use_dark_mode_; }
   const SkSize& scale() const { return scale_; }
   const SkIRect& src_rect() const { return src_rect_; }
   SkFilterQuality filter_quality() const { return filter_quality_; }
@@ -69,6 +71,7 @@ class CC_PAINT_EXPORT DrawImage {
 
  private:
   PaintImage paint_image_;
+  bool use_dark_mode_;
   SkIRect src_rect_;
   SkFilterQuality filter_quality_;
   SkSize scale_;

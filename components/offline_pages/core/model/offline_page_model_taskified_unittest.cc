@@ -11,11 +11,11 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/time/clock.h"
@@ -62,7 +62,7 @@ const ClientId kTestUserRequestedClientId(kDownloadNamespace, "714");
 const ClientId kTestBrowserActionsClientId(kBrowserActionsNamespace, "999");
 const ClientId kTestLastNClientId(kLastNNamespace, "8989");
 const int64_t kTestFileSize = 876543LL;
-const base::string16 kTestTitle = base::UTF8ToUTF16("a title");
+const std::u16string kTestTitle = u"a title";
 const char kTestRequestOrigin[] = "abc.xyz";
 const char kEmptyRequestOrigin[] = "";
 const char kTestDigest[] = "test digest";

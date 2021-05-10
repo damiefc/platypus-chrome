@@ -85,7 +85,7 @@ class PerformanceChannelListener : public Listener {
     std::string test_name =
         base::StringPrintf("IPC_%s_Perf_%dx_%u", label_.c_str(), msg_count_,
                            static_cast<unsigned>(msg_size_));
-    perf_logger_.reset(new base::PerfTimeLogger(test_name.c_str()));
+    perf_logger_ = std::make_unique<base::PerfTimeLogger>(test_name.c_str());
     if (sync_) {
       for (; count_down_ > 0; --count_down_) {
         std::string response;
@@ -315,7 +315,7 @@ class MojoInterfacePerfTest : public mojo::core::test::MojoTestBase {
       std::string test_name =
           base::StringPrintf("IPC_%s_Perf_%dx_%zu", label_.c_str(),
                              message_count_, payload_.size());
-      perf_logger_.reset(new base::PerfTimeLogger(test_name.c_str()));
+      perf_logger_ = std::make_unique<base::PerfTimeLogger>(test_name.c_str());
     } else {
       DCHECK_EQ(payload_.size(), value.size());
 
@@ -374,11 +374,11 @@ class InterfacePassingTestDriverImpl : public mojom::InterfacePassingTestDriver,
                                        public mojom::PingReceiver {
  public:
   InterfacePassingTestDriverImpl(mojo::ScopedMessagePipeHandle handle,
-                                 const base::Closure& quit_closure)
+                                 base::OnceClosure quit_closure)
       : receiver_(this,
                   mojo::PendingReceiver<mojom::InterfacePassingTestDriver>(
                       std::move(handle))),
-        quit_closure_(quit_closure) {}
+        quit_closure_(std::move(quit_closure)) {}
   ~InterfacePassingTestDriverImpl() override {
     ignore_result(receiver_.Unbind().PassPipe().release());
   }
@@ -408,7 +408,7 @@ class InterfacePassingTestDriverImpl : public mojom::InterfacePassingTestDriver,
 
   void Quit() override {
     if (quit_closure_)
-      quit_closure_.Run();
+      std::move(quit_closure_).Run();
   }
 
   // mojom::PingReceiver implementation:
@@ -419,7 +419,7 @@ class InterfacePassingTestDriverImpl : public mojom::InterfacePassingTestDriver,
       ping_receiver_associated_receivers_;
   mojo::Receiver<mojom::InterfacePassingTestDriver> receiver_;
 
-  base::Closure quit_closure_;
+  base::OnceClosure quit_closure_;
 };
 
 class MojoInterfacePassingPerfTest : public mojo::core::test::MojoTestBase {
@@ -462,7 +462,7 @@ class MojoInterfacePassingPerfTest : public mojo::core::test::MojoTestBase {
     DCHECK(!perf_logger_.get());
     std::string test_name = base::StringPrintf(
         "IPC_%s_Perf_%zux_%zu", label_.c_str(), rounds_, num_interfaces_);
-    perf_logger_.reset(new base::PerfTimeLogger(test_name.c_str()));
+    perf_logger_ = std::make_unique<base::PerfTimeLogger>(test_name.c_str());
 
     DoNextRound();
   }
@@ -508,7 +508,7 @@ class MojoInterfacePassingPerfTest : public mojo::core::test::MojoTestBase {
 
     if (count_down_ == 0) {
       perf_logger_.reset();
-      quit_closure_.Run();
+      std::move(quit_closure_).Run();
       return;
     }
 
@@ -540,7 +540,7 @@ class MojoInterfacePassingPerfTest : public mojo::core::test::MojoTestBase {
 
   mojo::Remote<mojom::InterfacePassingTestDriver> driver_remote_;
 
-  base::Closure quit_closure_;
+  base::OnceClosure quit_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoInterfacePassingPerfTest);
 };
@@ -642,7 +642,7 @@ TEST_P(MojoInProcessInterfacePerfTest, SingleThreadPingPong) {
   mojo::MessagePipeHandle mp_handle(client_handle);
   mojo::ScopedMessagePipeHandle scoped_mp(mp_handle);
   LockThreadAffinity thread_locker(kSharedCore);
-  ReflectorImpl impl(std::move(scoped_mp), base::Closure());
+  ReflectorImpl impl(std::move(scoped_mp), base::OnceClosure());
 
   RunPingPongServer(server_handle, "SingleProcess");
 }
@@ -691,7 +691,8 @@ TEST_P(MojoInProcessInterfacePassingPerfTest, SingleThreadInterfacePassing) {
   mojo::MessagePipeHandle mp_handle(client_handle);
   mojo::ScopedMessagePipeHandle scoped_mp(mp_handle);
   LockThreadAffinity thread_locker(kSharedCore);
-  InterfacePassingTestDriverImpl impl(std::move(scoped_mp), base::Closure());
+  InterfacePassingTestDriverImpl impl(std::move(scoped_mp),
+                                      base::OnceClosure());
 
   RunInterfacePassingServer(server_handle, "SingleProcess",
                             false /* associated */);
@@ -706,7 +707,8 @@ TEST_P(MojoInProcessInterfacePassingPerfTest,
   mojo::MessagePipeHandle mp_handle(client_handle);
   mojo::ScopedMessagePipeHandle scoped_mp(mp_handle);
   LockThreadAffinity thread_locker(kSharedCore);
-  InterfacePassingTestDriverImpl impl(std::move(scoped_mp), base::Closure());
+  InterfacePassingTestDriverImpl impl(std::move(scoped_mp),
+                                      base::OnceClosure());
 
   RunInterfacePassingServer(server_handle, "SingleProcess",
                             true /* associated */);
@@ -752,7 +754,7 @@ class CallbackPerfTest : public testing::Test {
       std::string test_name =
           base::StringPrintf("Callback_MultiProcess_Perf_%dx_%zu",
                              message_count_, payload_.size());
-      perf_logger_.reset(new base::PerfTimeLogger(test_name.c_str()));
+      perf_logger_ = std::make_unique<base::PerfTimeLogger>(test_name.c_str());
     } else {
       DCHECK_EQ(payload_.size(), value.size());
 
@@ -784,7 +786,7 @@ class CallbackPerfTest : public testing::Test {
       std::string test_name =
           base::StringPrintf("Callback_SingleThreadNoPostTask_Perf_%dx_%zu",
                              params[i].message_count(), payload_.size());
-      perf_logger_.reset(new base::PerfTimeLogger(test_name.c_str()));
+      perf_logger_ = std::make_unique<base::PerfTimeLogger>(test_name.c_str());
       for (int j = 0; j < params[i].message_count(); ++j) {
         ping.Run(payload_, j,
                  base::BindOnce(&CallbackPerfTest::SingleThreadPongNoPostTask,
@@ -830,7 +832,7 @@ class CallbackPerfTest : public testing::Test {
       std::string test_name =
           base::StringPrintf("Callback_SingleThreadPostTask_Perf_%dx_%zu",
                              message_count_, payload_.size());
-      perf_logger_.reset(new base::PerfTimeLogger(test_name.c_str()));
+      perf_logger_ = std::make_unique<base::PerfTimeLogger>(test_name.c_str());
     } else {
       DCHECK_EQ(payload_.size(), value.size());
 

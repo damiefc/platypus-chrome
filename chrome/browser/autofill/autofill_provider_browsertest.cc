@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/base_switches.h"
+#include "base/bind.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
@@ -12,6 +13,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
+#include "components/autofill/core/browser/android_autofill_manager.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_provider.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -26,6 +28,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/switches.h"
 
 using ::testing::_;
 using ::testing::Invoke;
@@ -42,20 +45,20 @@ class MockAutofillProvider : public TestAutofillProvider {
   ~MockAutofillProvider() override {}
 
   MOCK_METHOD4(OnFormSubmitted,
-               void(AutofillHandlerProxy* handler,
+               void(AndroidAutofillManager* manager,
                     const FormData& form,
                     bool,
                     SubmissionSource));
 
   MOCK_METHOD6(OnQueryFormFieldAutofill,
-               void(AutofillHandlerProxy* handler,
+               void(AndroidAutofillManager* manager,
                     int32_t id,
                     const FormData& form,
                     const FormFieldData& field,
                     const gfx::RectF& bounding_box,
                     bool autoselect_first_suggestion));
 
-  void OnQueryFormFieldAutofillImpl(AutofillHandlerProxy* handler,
+  void OnQueryFormFieldAutofillImpl(AndroidAutofillManager* manager,
                                     int32_t id,
                                     const FormData& form,
                                     const FormFieldData& field,
@@ -64,7 +67,7 @@ class MockAutofillProvider : public TestAutofillProvider {
     queried_form_ = form;
   }
 
-  void OnFormSubmittedImpl(AutofillHandlerProxy*,
+  void OnFormSubmittedImpl(AndroidAutofillManager*,
                            const FormData& form,
                            bool success,
                            SubmissionSource source) {
@@ -99,6 +102,13 @@ class AutofillProviderBrowserTest : public InProcessBrowserTest {
     ASSERT_TRUE(embedded_test_server()->Start());
   }
 
+  // Necessary to avoid flakiness or failure due to input arriving
+  // before the first compositor commit.
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    InProcessBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(blink::switches::kAllowPreCommitInput);
+  }
+
   void CreateContentAutofillDriverFactoryForSubFrame() {
     content::WebContents* web_contents = WebContents();
     ASSERT_TRUE(web_contents != NULL);
@@ -110,18 +120,9 @@ class AutofillProviderBrowserTest : public InProcessBrowserTest {
     // Replace the ContentAutofillDriverFactory for sub frame.
     ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
         web_contents, autofill_client_.get(), "en-US",
-        AutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER,
-        autofill_provider_.get());
-  }
-
-  void ReplaceAutofillDriver() {
-    content::WebContents* web_contents = WebContents();
-    // Set AutofillProvider for current WebContents.
-    ContentAutofillDriverFactory* factory =
-        ContentAutofillDriverFactory::FromWebContents(web_contents);
-    ContentAutofillDriver* driver =
-        factory->DriverForFrame(web_contents->GetMainFrame());
-    driver->SetAutofillProviderForTesting(autofill_provider_.get());
+        BrowserAutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER,
+        base::BindRepeating(&AndroidAutofillManager::Create,
+                            autofill_provider_.get()));
   }
 
   void TearDownOnMainThread() override {
@@ -157,7 +158,6 @@ class AutofillProviderBrowserTest : public InProcessBrowserTest {
   }
 
   void SetLabelChangeExpectationAndTriggerQuery() {
-    ReplaceAutofillDriver();
     // One query for the single click, and a second query when the typing is
     // simulated.
     base::RunLoop run_loop;

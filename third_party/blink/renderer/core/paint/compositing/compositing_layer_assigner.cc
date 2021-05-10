@@ -49,7 +49,7 @@ CompositingLayerAssigner::CompositingLayerAssigner(
 
 void CompositingLayerAssigner::Assign(
     PaintLayer* update_root,
-    Vector<PaintLayer*>& layers_needing_paint_invalidation) {
+    HeapVector<Member<PaintLayer>>& layers_needing_paint_invalidation) {
   TRACE_EVENT0("blink", "CompositingLayerAssigner::assign");
 
   SquashingState squashing_state;
@@ -66,7 +66,7 @@ void CompositingLayerAssigner::Assign(
 void CompositingLayerAssigner::SquashingState::
     UpdateSquashingStateForNewMapping(
         CompositedLayerMapping* new_composited_layer_mapping,
-        Vector<PaintLayer*>& layers_needing_paint_invalidation) {
+        HeapVector<Member<PaintLayer>>& layers_needing_paint_invalidation) {
   // The most recent backing is done accumulating any more squashing layers.
   if (most_recent_mapping) {
     most_recent_mapping->FinishAccumulatingSquashingLayers(
@@ -105,7 +105,7 @@ bool CompositingLayerAssigner::SquashingWouldExceedSparsityTolerance(
 }
 
 bool CompositingLayerAssigner::NeedsOwnBacking(const PaintLayer* layer) const {
-  if (!compositor_->CanBeComposited(layer))
+  if (!layer->CanBeComposited())
     return false;
 
   return RequiresCompositing(layer->GetCompositingReasons()) ||
@@ -123,7 +123,7 @@ CompositingLayerAssigner::ComputeCompositedLayerUpdate(PaintLayer* layer) {
     if (layer->HasCompositedLayerMapping())
       update = kRemoveOwnCompositedLayerMapping;
 
-    if (!layer->SubtreeIsInvisible() && compositor_->CanBeComposited(layer) &&
+    if (!layer->SubtreeIsInvisible() && layer->CanBeComposited() &&
         RequiresSquashing(layer->GetCompositingReasons())) {
       // We can't compute at this time whether the squashing layer update is a
       // no-op, since that requires walking the paint layer tree.
@@ -133,6 +133,15 @@ CompositingLayerAssigner::ComputeCompositedLayerUpdate(PaintLayer* layer) {
     }
   }
   return update;
+}
+
+static unsigned GetRenderingContextId(const PaintLayer* layer) {
+  const auto& fragment = layer->GetLayoutObject().PrimaryStitchingFragment();
+  DCHECK(fragment.HasLocalBorderBoxProperties());
+  return fragment.LocalBorderBoxProperties()
+      .Transform()
+      .Unalias()
+      .RenderingContextId();
 }
 
 SquashingDisallowedReasons
@@ -193,6 +202,13 @@ CompositingLayerAssigner::GetReasonsPreventingSquashing(
   if (layer->TransformAncestor() != squashing_layer.TransformAncestor())
     return SquashingDisallowedReason::kTransformAncestorMismatch;
 
+  // A PaintLayer can generate multiple compositor layers that have
+  // *different* sorting contexts (because they point to different
+  // TransformTree nodes).  We are only checking one here, which will not be
+  // accurate in all cases.
+  if (GetRenderingContextId(layer) != GetRenderingContextId(&squashing_layer))
+    return SquashingDisallowedReason::kPreserve3DSortingContextMismatch;
+
   if (layer->HasFilterInducingProperty() ||
       layer->FilterAncestor() != squashing_layer.FilterAncestor())
     return SquashingDisallowedReason::kFilterMismatch;
@@ -208,7 +224,7 @@ CompositingLayerAssigner::GetReasonsPreventingSquashing(
            .SubtreeWillChangeContents() &&
        squashing_layer.GetLayoutObject()
            .StyleRef()
-           .IsRunningAnimationOnCompositor()) ||
+           .RequiresPropertyNodeForAnimation()) ||
       squashing_layer.GetLayoutObject()
           .StyleRef()
           .ShouldCompositeForCurrentAnimations())
@@ -236,7 +252,7 @@ void CompositingLayerAssigner::UpdateSquashingAssignment(
     PaintLayer* layer,
     SquashingState& squashing_state,
     const CompositingStateTransitionType composited_layer_update,
-    Vector<PaintLayer*>& layers_needing_paint_invalidation) {
+    HeapVector<Member<PaintLayer>>& layers_needing_paint_invalidation) {
   // NOTE: In the future as we generalize this, the background of this layer may
   // need to be assigned to a different backing than the squashed PaintLayer's
   // own primary contents. This would happen when we have a composited negative
@@ -261,8 +277,6 @@ void CompositingLayerAssigner::UpdateSquashingAssignment(
     // the graphics layer geometry.
     squashing_state.most_recent_mapping->SetNeedsGraphicsLayerUpdate(
         kGraphicsLayerUpdateSubtree);
-
-    layer->ClearClipRects();
 
     // Issue a paint invalidation, since |layer| may have been added to an
     // already-existing squashing layer.
@@ -292,7 +306,7 @@ void CompositingLayerAssigner::AssignLayersToBackingsInternal(
     PaintLayer* layer,
     PaintLayer* paint_invalidation_container,
     SquashingState& squashing_state,
-    Vector<PaintLayer*>& layers_needing_paint_invalidation) {
+    HeapVector<Member<PaintLayer>>& layers_needing_paint_invalidation) {
   if (layer->NeedsCompositingLayerAssignment()) {
     if (RequiresSquashing(layer->GetCompositingReasons())) {
       SquashingDisallowedReasons reasons_preventing_squashing =
@@ -356,7 +370,7 @@ void CompositingLayerAssigner::AssignLayersToBackingsInternal(
     paint_invalidation_container = layer;
 
   if (layer->StackingDescendantNeedsCompositingLayerAssignment()) {
-    PaintLayerPaintOrderIterator iterator(*layer, kNegativeZOrderChildren);
+    PaintLayerPaintOrderIterator iterator(layer, kNegativeZOrderChildren);
     while (PaintLayer* child_node = iterator.Next()) {
       AssignLayersToBackingsInternal(child_node, paint_invalidation_container,
                                      squashing_state,
@@ -374,7 +388,7 @@ void CompositingLayerAssigner::AssignLayersToBackingsInternal(
   }
 
   if (layer->StackingDescendantNeedsCompositingLayerAssignment()) {
-    PaintLayerPaintOrderIterator iterator(*layer,
+    PaintLayerPaintOrderIterator iterator(layer,
                                           kNormalFlowAndPositiveZOrderChildren);
     while (PaintLayer* curr_layer = iterator.Next()) {
       AssignLayersToBackingsInternal(curr_layer, paint_invalidation_container,
@@ -394,8 +408,8 @@ void CompositingLayerAssigner::AssignLayersToBackingsInternal(
   // If this is an iframe whose content document is composited, then we can't
   // squash layers painted after the iframe with layers painted before it.
   if (layer->GetLayoutObject().IsLayoutEmbeddedContent() &&
-      ToLayoutEmbeddedContent(layer->GetLayoutObject())
-          .ContentDocumentIsCompositing()) {
+      To<LayoutEmbeddedContent>(layer->GetLayoutObject())
+          .ContentDocumentContainsGraphicsLayer()) {
     squashing_state.have_assigned_backings_to_entire_squashing_layer_subtree =
         false;
   }

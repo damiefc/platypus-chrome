@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/chromeos/input_method/ui/suggestion_view.h"
+
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -10,6 +11,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -95,13 +97,15 @@ std::unique_ptr<views::View> CreateKeyContainer() {
 
 }  // namespace
 
-SuggestionView::SuggestionView(views::ButtonListener* listener)
-    : views::Button(listener) {
+SuggestionView::SuggestionView(PressedCallback callback)
+    : views::Button(std::move(callback)) {
   index_label_ = AddChildView(CreateIndexLabel());
   index_label_->SetVisible(false);
   suggestion_label_ = AddChildView(CreateSuggestionLabel());
   annotation_label_ = AddChildView(CreateAnnotationLabel());
   annotation_label_->SetVisible(false);
+
+  SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
 }
 
 SuggestionView::~SuggestionView() = default;
@@ -130,8 +134,8 @@ void SuggestionView::SetView(const SuggestionDetails& details) {
   annotation_label_->SetVisible(details.show_annotation);
 }
 
-void SuggestionView::SetViewWithIndex(const base::string16& index,
-                                      const base::string16& text) {
+void SuggestionView::SetViewWithIndex(const std::u16string& index,
+                                      const std::u16string& text) {
   index_label_->SetText(index);
   index_label_->SetVisible(true);
   index_width_ = index_label_->GetPreferredSize().width();
@@ -139,7 +143,7 @@ void SuggestionView::SetViewWithIndex(const base::string16& index,
   suggestion_width_ = suggestion_label_->GetPreferredSize().width();
 }
 
-void SuggestionView::SetSuggestionText(const base::string16& text,
+void SuggestionView::SetSuggestionText(const std::u16string& text,
                                        const size_t confirmed_length) {
   // SetText clears the existing style only if the text to set is different from
   // the previous one.
@@ -194,10 +198,6 @@ void SuggestionView::OnThemeChanged() {
   views::View::OnThemeChanged();
 }
 
-const char* SuggestionView::GetClassName() const {
-  return "SuggestionView";
-}
-
 void SuggestionView::Layout() {
   int left = kPadding;
   if (index_label_->GetVisible()) {
@@ -238,6 +238,9 @@ gfx::Size SuggestionView::CalculatePreferredSize() const {
 void SuggestionView::SetMinWidth(int min_width) {
   min_width_ = min_width;
 }
+
+BEGIN_METADATA(SuggestionView, views::Button)
+END_METADATA
 
 }  // namespace ime
 }  // namespace ui

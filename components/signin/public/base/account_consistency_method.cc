@@ -11,12 +11,25 @@ namespace signin {
 // Experiments for MICE will be run independently per platform (Android, iOS).
 #if defined(OS_ANDROID)
 const base::Feature kMobileIdentityConsistency{
-    "MobileIdentityConsistency", base::FEATURE_DISABLED_BY_DEFAULT};
+    "MobileIdentityConsistency", base::FEATURE_ENABLED_BY_DEFAULT};
+// This feature flag is used to run experiments of different variations
+// of MICE on Android.
+const base::Feature kMobileIdentityConsistencyVar{
+    "MobileIdentityConsistencyVar", base::FEATURE_DISABLED_BY_DEFAULT};
+// Feature flag for FRE related changes as part of MICE.
+const base::Feature kMobileIdentityConsistencyFRE{
+    "MobileIdentityConsistencyFRE", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 #if defined(OS_IOS)
 const base::Feature kMobileIdentityConsistency{
     "MobileIdentityConsistency", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
+#if defined(OS_ANDROID) || defined(OS_IOS)
+bool IsMobileIdentityConsistencyEnabled() {
+  return base::FeatureList::IsEnabled(kMobileIdentityConsistency);
+}
 #endif
 
 }  // namespace signin

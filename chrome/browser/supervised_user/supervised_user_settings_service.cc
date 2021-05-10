@@ -87,8 +87,7 @@ void SupervisedUserSettingsService::Init(
   store_->AddObserver(this);
 }
 
-std::unique_ptr<
-    SupervisedUserSettingsService::SettingsCallbackList::Subscription>
+base::CallbackListSubscription
 SupervisedUserSettingsService::SubscribeForSettingsChange(
     const SettingsCallback& callback) {
   if (IsReady()) {
@@ -99,8 +98,7 @@ SupervisedUserSettingsService::SubscribeForSettingsChange(
   return settings_callback_list_.Add(callback);
 }
 
-std::unique_ptr<
-    SupervisedUserSettingsService::ShutdownCallbackList::Subscription>
+base::CallbackListSubscription
 SupervisedUserSettingsService::SubscribeForShutdown(
     const ShutdownCallback& callback) {
   return shutdown_callback_list_.Add(callback);
@@ -353,10 +351,6 @@ SupervisedUserSettingsService::ProcessSyncChanges(
         dict->RemoveKey(key);
         break;
       }
-      case SyncChange::ACTION_INVALID: {
-        NOTREACHED();
-        break;
-      }
     }
   }
   store_->ReportValueChanged(kAtomicSettings,
@@ -443,7 +437,7 @@ std::unique_ptr<base::DictionaryValue>
 SupervisedUserSettingsService::GetSettings() {
   DCHECK(IsReady());
   if (!active_ || initialization_failed_)
-    return std::unique_ptr<base::DictionaryValue>();
+    return nullptr;
 
   std::unique_ptr<base::DictionaryValue> settings(local_settings_->DeepCopy());
 

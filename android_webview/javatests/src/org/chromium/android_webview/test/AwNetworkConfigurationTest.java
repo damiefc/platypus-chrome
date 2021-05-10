@@ -6,6 +6,7 @@ package org.chromium.android_webview.test;
 
 import static org.chromium.android_webview.test.AwActivityTestRule.WAIT_TIMEOUT_MS;
 
+import android.os.Build;
 import android.support.test.InstrumentationRegistry;
 import android.webkit.JavascriptInterface;
 
@@ -22,7 +23,7 @@ import org.junit.runner.RunWith;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContentsClient.AwWebResourceRequest;
 import org.chromium.android_webview.test.TestAwContentsClient.OnReceivedSslErrorHelper;
-import org.chromium.base.BuildInfo;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.ServerCertificate;
@@ -57,7 +58,8 @@ public class AwNetworkConfigurationTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Network"})
-    // clang-format off
+    @DisabledTest(message = "crbug.com/1148388")
+    // clang-format off+
     public void testSHA1LocalAnchorsAllowed() throws Throwable {
         // clang-format on
         mTestServer = EmbeddedTestServer.createAndStartHTTPSServer(
@@ -70,7 +72,7 @@ public class AwNetworkConfigurationTest {
             String url = mTestServer.getURL("/android_webview/test/data/hello_world.html");
             mActivityTestRule.loadUrlSync(
                     mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
-            if (BuildInfo.isAtLeastQ()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 Assert.assertEquals("We should generate an SSL error on >= Q", count + 1,
                         onReceivedSslErrorHelper.getCallCount());
             } else {
@@ -196,7 +198,7 @@ public class AwNetworkConfigurationTest {
         mTestServer = EmbeddedTestServer.createAndStartServer(
                 InstrumentationRegistry.getInstrumentation().getContext());
         try {
-            final String url = mTestServer.getURL("/any-http-url-will-suffice.html");
+            final String url = mTestServer.getURL("/android_webview/test/data/hello_world.html");
             mActivityTestRule.loadUrlSync(
                     mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
             AwWebResourceRequest request =

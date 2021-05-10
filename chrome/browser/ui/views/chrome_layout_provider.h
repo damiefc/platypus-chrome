@@ -21,6 +21,8 @@ enum ChromeInsetsMetric {
   INSETS_TOAST,
   // Padding used in an omnibox pill button.
   INSETS_OMNIBOX_PILL_BUTTON,
+  // Padding used in an page info hover button.
+  INSETS_PAGE_INFO_HOVER_BUTTON,
 };
 
 enum ChromeDistanceMetric {
@@ -60,17 +62,11 @@ enum ChromeDistanceMetric {
   DISTANCE_UNRELATED_CONTROL_HORIZONTAL_LARGE,
   // Larger vertical spacing between unrelated controls.
   DISTANCE_UNRELATED_CONTROL_VERTICAL_LARGE,
-  // Width of modal dialogs unless the content is too wide to make that
-  // feasible.
-  DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH,
   // Width of larger modal dialogs that require extra width.
   DISTANCE_LARGE_MODAL_DIALOG_PREFERRED_WIDTH,
   // Width and height of a vector icon in a bubble's header (i.e. the one
   // returned from GetWindowIcon).
   DISTANCE_BUBBLE_HEADER_VECTOR_ICON_SIZE,
-  // Width of a bubble unless the content is too wide to make that
-  // feasible.
-  DISTANCE_BUBBLE_PREFERRED_WIDTH,
   // Width of a bubble that appears mid-screen (like a standalone dialog)
   // instead of being anchored.
   DISTANCE_STANDALONE_BUBBLE_PREFERRED_WIDTH,
@@ -96,8 +92,6 @@ class ChromeLayoutProvider : public views::LayoutProvider {
   int GetDistanceMetric(int metric) const override;
   int GetSnappedDialogWidth(int min_width) const override;
   const views::TypographyProvider& GetTypographyProvider() const override;
-  gfx::ShadowValues MakeShadowValues(int elevation,
-                                     SkColor color) const override;
 
   // Returns the alignment used for control labels in a GridLayout; for example,
   // in this GridLayout:

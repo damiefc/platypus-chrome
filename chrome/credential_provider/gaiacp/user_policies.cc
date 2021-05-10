@@ -11,7 +11,6 @@
 #include "chrome/credential_provider/gaiacp/device_policies.h"
 #include "chrome/credential_provider/gaiacp/gcp_utils.h"
 #include "chrome/credential_provider/gaiacp/gcpw_strings.h"
-#include "chrome/credential_provider/gaiacp/mdm_utils.h"
 #include "chrome/credential_provider/gaiacp/reg_utils.h"
 
 namespace credential_provider {
@@ -46,7 +45,7 @@ UserPolicies::UserPolicies()
 
   // Override with existing registry entry if any.
   DWORD reg_validity_period_days;
-  HRESULT hr = GetGlobalFlag(base::UTF8ToUTF16(kKeyValidityPeriodInDays),
+  HRESULT hr = GetGlobalFlag(base::UTF8ToWide(kKeyValidityPeriodInDays),
                              &reg_validity_period_days);
   if (SUCCEEDED(hr)) {
     validity_period_days = reg_validity_period_days;

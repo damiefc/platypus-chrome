@@ -19,7 +19,7 @@
 #include "components/send_tab_to_self/send_tab_to_self_sync_service.h"
 #include "components/send_tab_to_self/test_send_tab_to_self_model.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/model/fake_model_type_controller_delegate.h"
+#include "components/sync/test/model/fake_model_type_controller_delegate.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/image/image.h"
@@ -36,11 +36,12 @@ const char kDesktopNotificationOrigin[] = "https://www.google.com";
 const char kDesktopNotificationId[] = "notification_id";
 const char kDesktopNotificationGuid[] = "guid";
 const char kDesktopNotificationTitle[] = "title";
+const char16_t kDesktopNotificationTitle16[] = u"title";
 const char kDesktopNotificationDeviceInfo[] = "device_info";
 const char kDesktopNotificationTargetDeviceSyncCacheGuid[] =
     "target_device_sync_cache_guid";
-const char kDesktopNotificationDeviceInfoWithPrefix[] =
-    "Shared from device_info";
+const char16_t kDesktopNotificationDeviceInfoWithPrefix[] =
+    u"Shared from device_info";
 
 class SendTabToSelfModelMock : public TestSendTabToSelfModel {
  public:
@@ -144,8 +145,7 @@ TEST_F(DesktopNotificationHandlerTest, DisplayNewEntries) {
   optional_fields.never_timeout = true;
   message_center::Notification notification(
       message_center::NOTIFICATION_TYPE_SIMPLE, kDesktopNotificationGuid,
-      base::ASCIIToUTF16(kDesktopNotificationTitle),
-      base::ASCIIToUTF16(kDesktopNotificationDeviceInfoWithPrefix),
+      kDesktopNotificationTitle16, kDesktopNotificationDeviceInfoWithPrefix,
       gfx::Image(), base::UTF8ToUTF16(url.host()), url,
       message_center::NotifierId(url), optional_fields, /*delegate=*/nullptr);
 

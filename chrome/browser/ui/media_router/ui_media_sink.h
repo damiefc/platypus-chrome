@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_UI_MEDIA_ROUTER_UI_MEDIA_SINK_H_
 #define CHROME_BROWSER_UI_MEDIA_ROUTER_UI_MEDIA_SINK_H_
 
-#include "base/strings/string16.h"
+#include <string>
+
 #include "chrome/browser/ui/media_router/media_cast_mode.h"
 #include "components/media_router/common/issue.h"
+#include "components/media_router/common/media_route_provider_helper.h"
 #include "components/media_router/common/media_sink.h"
 #include "url/gurl.h"
 
@@ -39,11 +41,11 @@ struct UIMediaSink {
   std::string id;
 
   // Name that can be used by the user to identify the sink.
-  base::string16 friendly_name;
+  std::u16string friendly_name;
 
   // Normally the sink status text is set from |state|. This field allows it
   // to be overridden for error states or to show route descriptions.
-  base::string16 status_text;
+  std::u16string status_text;
 
   // Presentation URL to use when initiating a new casting activity for this
   // sink. For sites that integrate with the Presentation API, this is the
@@ -56,6 +58,9 @@ struct UIMediaSink {
 
   // The icon to use for the sink.
   SinkIconType icon_type = SinkIconType::GENERIC;
+
+  // The provider of the sink.
+  MediaRouteProviderId provider = MediaRouteProviderId::UNKNOWN;
 
   // The current state of the media sink.
   UIMediaSinkState state = UIMediaSinkState::AVAILABLE;

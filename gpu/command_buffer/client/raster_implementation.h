@@ -130,19 +130,15 @@ class RASTER_EXPORT RasterImplementation : public RasterInterface,
                    const SkImageInfo& src_info,
                    const void* src_pixels) override;
 
-  void ConvertYUVMailboxesToRGB(const gpu::Mailbox& dest_mailbox,
-                                SkYUVColorSpace planes_yuv_color_space,
-                                const gpu::Mailbox& y_plane_mailbox,
-                                const gpu::Mailbox& u_plane_mailbox,
-                                const gpu::Mailbox& v_plane_mailbox) override;
-
-  void ConvertNV12MailboxesToRGB(
+  void ConvertYUVAMailboxesToRGB(
       const gpu::Mailbox& dest_mailbox,
       SkYUVColorSpace planes_yuv_color_space,
-      const gpu::Mailbox& y_plane_mailbox,
-      const gpu::Mailbox& uv_planes_mailbox) override;
+      SkYUVAInfo::PlaneConfig plane_config,
+      SkYUVAInfo::Subsampling subsampling,
+      const gpu::Mailbox yuva_plane_mailboxes[]) override;
 
   void BeginRasterCHROMIUM(GLuint sk_color,
+                           GLboolean needs_clear,
                            GLuint msaa_sample_count,
                            GLboolean can_use_lcd_text,
                            const gfx::ColorSpace& color_space,
@@ -153,7 +149,7 @@ class RASTER_EXPORT RasterImplementation : public RasterInterface,
                       const gfx::Rect& full_raster_rect,
                       const gfx::Rect& playback_rect,
                       const gfx::Vector2dF& post_translate,
-                      GLfloat post_scale,
+                      const gfx::Vector2dF& post_scale,
                       bool requires_clear,
                       size_t* max_op_size_hint) override;
   SyncToken ScheduleImageDecode(base::span<const uint8_t> encoded_data,
@@ -164,10 +160,11 @@ class RASTER_EXPORT RasterImplementation : public RasterInterface,
   void ReadbackARGBPixelsAsync(
       const gpu::Mailbox& source_mailbox,
       GLenum source_target,
-      const gfx::Size& dst_size,
+      GrSurfaceOrigin source_origin,
+      const SkImageInfo& dst_info,
+      GLuint dst_row_bytes,
       unsigned char* out,
-      GLenum format,
-      base::OnceCallback<void(bool)> readback_done) override;
+      base::OnceCallback<void(GrSurfaceOrigin, bool)> readback_done) override;
   void ReadbackYUVPixelsAsync(
       const gpu::Mailbox& source_mailbox,
       GLenum source_target,
@@ -249,6 +246,7 @@ class RASTER_EXPORT RasterImplementation : public RasterInterface,
   void GenUnverifiedSyncTokenCHROMIUM(GLbyte* sync_token) override;
   void VerifySyncTokensCHROMIUM(GLbyte** sync_tokens, GLsizei count) override;
   void WaitSyncTokenCHROMIUM(const GLbyte* sync_token) override;
+  void ShallowFlushCHROMIUM() override;
 
   bool GetQueryObjectValueHelper(const char* function_name,
                                  GLuint id,
@@ -350,6 +348,25 @@ class RASTER_EXPORT RasterImplementation : public RasterInterface,
       bool needs_mips,
       SyncToken* decode_sync_token,
       ClientDiscardableHandle handle);
+
+  void ReadbackImagePixelsINTERNAL(
+      const gpu::Mailbox& source_mailbox,
+      const SkImageInfo& dst_info,
+      GLuint dst_row_bytes,
+      int src_x,
+      int src_y,
+      base::OnceCallback<void(GrSurfaceOrigin, bool)> readback_done,
+      void* dst_pixels);
+
+  struct AsyncARGBReadbackRequest;
+  void OnAsyncARGBReadbackDone(AsyncARGBReadbackRequest* request);
+  base::queue<std::unique_ptr<AsyncARGBReadbackRequest>> argb_request_queue_;
+
+  struct AsyncYUVReadbackRequest;
+  void OnAsyncYUVReadbackDone(AsyncYUVReadbackRequest* request);
+  base::queue<std::unique_ptr<AsyncYUVReadbackRequest>> yuv_request_queue_;
+
+  void CancelRequests();
 
 // Set to 1 to have the client fail when a GL error is generated.
 // This helps find bugs in the renderer since the debugger stops on the error.

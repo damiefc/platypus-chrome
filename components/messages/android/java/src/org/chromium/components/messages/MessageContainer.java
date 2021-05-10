@@ -12,10 +12,14 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.chromium.ui.base.ViewUtils;
+
 /**
  * Container holding messages.
  */
 public class MessageContainer extends FrameLayout {
+    private View mMessageBannerView;
+
     public MessageContainer(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
     }
@@ -26,21 +30,60 @@ public class MessageContainer extends FrameLayout {
      * @param view The message view to display on the screen.
      */
     void addMessage(View view) {
-        if (getChildCount() != 0) {
+        if (mMessageBannerView != null) {
             throw new IllegalStateException(
                     "Should not contain any view when adding a new message.");
         }
+        mMessageBannerView = view;
         addView(view);
+        // TODO(crbug.com/1178965): clipChildren should be set to false only when the message is in
+        // motion.
+        ViewUtils.setAncestorsShouldClipChildren(this, false);
     }
 
     /**
-     * Hide the given message view, which is being shown inside the container.
+     * Remove the given message view, which is being shown inside the container.
      * @param view The message which should be removed.
      */
     void removeMessage(View view) {
-        if (getChildCount() == 0) {
+        if (mMessageBannerView != view) {
             throw new IllegalStateException("The given view is not being shown.");
         }
+        ViewUtils.setAncestorsShouldClipChildren(this, true);
         removeAllViews();
+        mMessageBannerView = null;
+    }
+
+    public int getMessageBannerHeight() {
+        assert mMessageBannerView != null;
+        return mMessageBannerView.getHeight();
+    }
+
+    public int getMessageShadowTopMargin() {
+        return getResources().getDimensionPixelOffset(R.dimen.message_shadow_top_margin);
+    }
+
+    /**
+     * Runs a {@link Runnable} after the message's initial layout. If the view is already laid out,
+     * the {@link Runnable} will be called immediately.
+     * @param runnable The {@link Runnable}.
+     */
+    void runAfterInitialMessageLayout(Runnable runnable) {
+        assert mMessageBannerView != null;
+        if (mMessageBannerView.getHeight() > 0) {
+            runnable.run();
+            return;
+        }
+
+        mMessageBannerView.addOnLayoutChangeListener(new OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(View v, int left, int top, int right, int bottom,
+                    int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                if (v.getHeight() == 0) return;
+
+                runnable.run();
+                v.removeOnLayoutChangeListener(this);
+            }
+        });
     }
 }

@@ -69,9 +69,9 @@ class DiscardableImageGenerator {
     ~ImageGatheringProvider() override = default;
 
     ScopedResult GetRasterContent(const DrawImage& draw_image) override {
-      generator_->AddImage(draw_image.paint_image(),
+      generator_->AddImage(draw_image.paint_image(), false,
                            SkRect::Make(draw_image.src_rect()), op_rect_,
-                           SkMatrix::I(), draw_image.filter_quality());
+                           SkM44(), draw_image.filter_quality());
       return ScopedResult();
     }
 
@@ -96,7 +96,7 @@ class DiscardableImageGenerator {
     // Prevent PaintOpBuffers from having side effects back into the canvas.
     SkAutoCanvasRestore save_restore(canvas, true);
 
-    PlaybackParams params(nullptr, canvas->getTotalMatrix());
+    PlaybackParams params(nullptr, canvas->getLocalToDevice());
     // TODO(khushalsagar): Optimize out save/restore blocks if there are no
     // images in the draw ops between them.
     for (auto* op : PaintOpBuffer::Iterator(buffer)) {
@@ -124,7 +124,7 @@ class DiscardableImageGenerator {
         op_rect = local_op_rect.value();
       }
 
-      const SkMatrix& ctm = canvas->getTotalMatrix();
+      const SkM44& ctm = canvas->getLocalToDevice();
       if (op->IsPaintOpWithFlags()) {
         AddImageFromFlags(op_rect,
                           static_cast<const PaintOpWithFlags*>(op)->flags, ctm);
@@ -134,17 +134,18 @@ class DiscardableImageGenerator {
       if (op_type == PaintOpType::DrawImage) {
         auto* image_op = static_cast<DrawImageOp*>(op);
         AddImage(
-            image_op->image,
+            image_op->image, image_op->flags.useDarkModeForImage(),
             SkRect::MakeIWH(image_op->image.width(), image_op->image.height()),
             op_rect, ctm, image_op->flags.getFilterQuality());
       } else if (op_type == PaintOpType::DrawImageRect) {
         auto* image_rect_op = static_cast<DrawImageRectOp*>(op);
-        SkMatrix matrix = ctm;
-        matrix.postConcat(SkMatrix::MakeRectToRect(image_rect_op->src,
-                                                   image_rect_op->dst,
-                                                   SkMatrix::kFill_ScaleToFit));
-        AddImage(image_rect_op->image, image_rect_op->src, op_rect, matrix,
-                 image_rect_op->flags.getFilterQuality());
+        // TODO(crbug.com/1155544): Make a RectToRect method that uses SkM44s
+        // in MathUtil.
+        SkM44 matrix = ctm * SkM44(SkMatrix::RectToRect(image_rect_op->src,
+                                                        image_rect_op->dst));
+        AddImage(image_rect_op->image,
+                 image_rect_op->flags.useDarkModeForImage(), image_rect_op->src,
+                 op_rect, matrix, image_rect_op->flags.getFilterQuality());
       } else if (op_type == PaintOpType::DrawRecord) {
         GatherDiscardableImages(
             static_cast<const DrawRecordOp*>(op)->record.get(),
@@ -155,7 +156,8 @@ class DiscardableImageGenerator {
 
   void AddImageFromFlags(const gfx::Rect& op_rect,
                          const PaintFlags& flags,
-                         const SkMatrix& ctm) {
+                         const SkM44& ctm) {
+    // TODO(prashant.n): Add dark mode support for images from shaders/filters.
     AddImageFromShader(op_rect, flags.getShader(), ctm,
                        flags.getFilterQuality());
     AddImageFromFilter(op_rect, flags.getImageFilter().get());
@@ -163,16 +165,16 @@ class DiscardableImageGenerator {
 
   void AddImageFromShader(const gfx::Rect& op_rect,
                           const PaintShader* shader,
-                          const SkMatrix& ctm,
+                          const SkM44& ctm,
                           SkFilterQuality filter_quality) {
     if (!shader || !shader->has_discardable_images())
       return;
 
     if (shader->shader_type() == PaintShader::Type::kImage) {
       const PaintImage& paint_image = shader->paint_image();
-      SkMatrix matrix = ctm;
-      matrix.postConcat(shader->GetLocalMatrix());
-      AddImage(paint_image,
+      SkM44 matrix = ctm * SkM44(shader->GetLocalMatrix());
+      // TODO(prashant.n): Add dark mode support for images from shader.
+      AddImage(paint_image, false,
                SkRect::MakeWH(paint_image.width(), paint_image.height()),
                op_rect, matrix, filter_quality);
       return;
@@ -187,14 +189,13 @@ class DiscardableImageGenerator {
       }
 
       SkRect scaled_tile_rect;
-      if (!shader->GetRasterizationTileRect(ctm, &scaled_tile_rect)) {
+      if (!shader->GetRasterizationTileRect(ctm.asM33(), &scaled_tile_rect)) {
         return;
       }
 
       SkNoDrawCanvas canvas(scaled_tile_rect.width(),
                             scaled_tile_rect.height());
-      canvas.setMatrix(SkMatrix::MakeRectToRect(
-          shader->tile(), scaled_tile_rect, SkMatrix::kFill_ScaleToFit));
+      canvas.setMatrix(SkMatrix::RectToRect(shader->tile(), scaled_tile_rect));
       base::AutoReset<bool> auto_reset(&only_gather_animated_images_, true);
       size_t prev_image_set_size = image_set_.size();
       GatherDiscardableImages(shader->paint_record().get(), &op_rect, &canvas);
@@ -231,9 +232,10 @@ class DiscardableImageGenerator {
   }
 
   void AddImage(PaintImage paint_image,
+                bool use_dark_mode,
                 const SkRect& src_rect,
                 const gfx::Rect& image_rect,
-                const SkMatrix& matrix,
+                const SkM44& matrix,
                 SkFilterQuality filter_quality) {
     if (paint_image.IsTextureBacked())
       return;
@@ -293,9 +295,9 @@ class DiscardableImageGenerator {
     }
 
     if (add_image) {
-      image_set_.emplace_back(
-          DrawImage(std::move(paint_image), src_irect, filter_quality, matrix),
-          image_rect);
+      image_set_.emplace_back(DrawImage(std::move(paint_image), use_dark_mode,
+                                        src_irect, filter_quality, matrix),
+                              image_rect);
     }
   }
 

@@ -4,15 +4,17 @@
 
 #include "components/content_settings/browser/page_specific_content_settings.h"
 
+#include <string>
+
 #include "base/macros.h"
 #include "base/optional.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/content_settings/browser/test_page_specific_content_settings_delegate.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/security_state/core/security_state.h"
+#include "components/services/storage/public/cpp/storage_key.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/mock_navigation_handle.h"
@@ -82,8 +84,6 @@ TEST_F(PageSpecificContentSettingsTest, BlockedContent) {
   // Check that after initializing, nothing is blocked.
 #if !defined(OS_ANDROID)
   EXPECT_FALSE(content_settings->IsContentBlocked(ContentSettingsType::IMAGES));
-  EXPECT_FALSE(
-      content_settings->IsContentBlocked(ContentSettingsType::PLUGINS));
 #endif
   EXPECT_FALSE(
       content_settings->IsContentBlocked(ContentSettingsType::JAVASCRIPT));
@@ -127,8 +127,6 @@ TEST_F(PageSpecificContentSettingsTest, BlockedContent) {
   // Check that only the respective content types are affected.
 #if !defined(OS_ANDROID)
   EXPECT_TRUE(content_settings->IsContentBlocked(ContentSettingsType::IMAGES));
-  EXPECT_FALSE(
-      content_settings->IsContentBlocked(ContentSettingsType::PLUGINS));
 #endif
   EXPECT_FALSE(
       content_settings->IsContentBlocked(ContentSettingsType::JAVASCRIPT));
@@ -190,8 +188,6 @@ TEST_F(PageSpecificContentSettingsTest, BlockedContent) {
       PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
 #if !defined(OS_ANDROID)
   EXPECT_FALSE(content_settings->IsContentBlocked(ContentSettingsType::IMAGES));
-  EXPECT_FALSE(
-      content_settings->IsContentBlocked(ContentSettingsType::PLUGINS));
 #endif
   EXPECT_FALSE(
       content_settings->IsContentBlocked(ContentSettingsType::JAVASCRIPT));
@@ -348,7 +344,8 @@ TEST_F(PageSpecificContentSettingsTest, LocalSharedObjectsContainer) {
                                           blocked_by_policy);
   content_settings->OnSharedWorkerAccessed(
       GURL("http://youtube.com/worker.js"), "worker",
-      url::Origin::Create(GURL("https://youtube.com")), blocked_by_policy);
+      storage::StorageKey(url::Origin::Create(GURL("https://youtube.com"))),
+      blocked_by_policy);
 
   const auto& objects = content_settings->allowed_local_shared_objects();
   EXPECT_EQ(6u, objects.GetObjectCount());
@@ -423,7 +420,7 @@ TEST_F(PageSpecificContentSettingsTest,
 
   map->SetWebsiteSettingCustomScope(
       pattern, ContentSettingsPattern::Wildcard(),
-      ContentSettingsType::CLIPBOARD_READ_WRITE, std::string(),
+      ContentSettingsType::CLIPBOARD_READ_WRITE,
       std::make_unique<base::Value>(CONTENT_SETTING_ALLOW));
 
   // Now the indicator is set to allowed.
@@ -435,7 +432,7 @@ TEST_F(PageSpecificContentSettingsTest,
   // Simulate the user modifying the setting back to blocked.
   map->SetWebsiteSettingCustomScope(
       pattern, ContentSettingsPattern::Wildcard(),
-      ContentSettingsType::CLIPBOARD_READ_WRITE, std::string(),
+      ContentSettingsType::CLIPBOARD_READ_WRITE,
       std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
 
   // Now the indicator is set to allowed.

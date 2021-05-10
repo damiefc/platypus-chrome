@@ -24,7 +24,9 @@ import org.chromium.base.test.params.ParameterProvider;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.chrome.browser.customtabs.IncognitoCustomTabActivityTestRule;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.incognito.IncognitoDataTestUtils.ActivityType;
@@ -33,8 +35,6 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -53,17 +53,17 @@ import java.util.concurrent.TimeoutException;
 @EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class IncognitoCookieLeakageTest {
+    private static final String COOKIES_SETTING_PATH = "/chrome/test/data/android/cookie.html";
     private String mCookiesTestPage;
     private EmbeddedTestServer mTestServer;
-
-    private static final String COOKIES_SETTING_PATH = "/chrome/test/data/android/cookie.html";
 
     @Rule
     public ChromeTabbedActivityTestRule mChromeActivityTestRule =
             new ChromeTabbedActivityTestRule();
 
     @Rule
-    public CustomTabActivityTestRule mCustomTabActivityTestRule = new CustomTabActivityTestRule();
+    public IncognitoCustomTabActivityTestRule mCustomTabActivityTestRule =
+            new IncognitoCustomTabActivityTestRule();
 
     @Before
     public void setUp() throws TimeoutException {

@@ -12,15 +12,9 @@
 
 @protocol ApplicationCommands;
 @protocol BrowsingDataCommands;
+class Browser;
 class ChromeBrowserState;
 @class SceneState;
-
-namespace {
-
-// Preference key used to store which profile is current.
-NSString* kIncognitoCurrentKey = @"IncognitoActive";
-
-}  // namespace
 
 // Wrangler (a class in need of further refactoring) for handling the creation
 // and ownership of Browser instances and their associated
@@ -45,11 +39,18 @@ NSString* kIncognitoCurrentKey = @"IncognitoActive";
 - (instancetype)init NS_UNAVAILABLE;
 
 // Creates the main Browser used by the receiver, using the browser state
-// it was configured with. The main interface is then created; until this
+// it was configured with.
+// Returns the created browser. The browser's internals, e.g.
+// the dispatcher, can now be accessed. But createMainCoordinatorAndInterface
+// should be called shortly after.
+- (Browser*)createMainBrowser;
+
+// Creates the main interface; until this
 // method is called, the main and incognito interfaces will be nil. This should
 // be done before the main interface is accessed, usually immediately after
 // initialization.
-- (void)createMainBrowser;
+// -createMainBrowser MUST be called before calling this method.
+- (void)createMainCoordinatorAndInterface;
 
 // Tells the receiver to clean up all the state that is tied to the incognito
 // BrowserState. This method should be called before the incognito BrowserState
@@ -64,9 +65,6 @@ NSString* kIncognitoCurrentKey = @"IncognitoActive";
 // Tells the receiver to clean up prior to deallocation. It is an error for an
 // instance of this class to deallocate without a call to this method first.
 - (void)shutdown;
-
-// Switch all global states for the given mode (normal or incognito).
-- (void)switchGlobalStateToMode:(ApplicationMode)mode;
 
 @end
 

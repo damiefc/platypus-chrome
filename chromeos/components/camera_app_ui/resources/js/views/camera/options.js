@@ -2,16 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {browserProxy} from '../../browser_proxy/browser_proxy.js';
+import * as animate from '../../animation.js';
 // eslint-disable-next-line no-unused-vars
 import {Camera3DeviceInfo} from '../../device/camera3_device_info.js';
 // eslint-disable-next-line no-unused-vars
 import {DeviceInfoUpdater} from '../../device/device_info_updater.js';
 import * as dom from '../../dom.js';
+import {sendBarcodeEnabledEvent} from '../../metrics.js';
+import * as localStorage from '../../models/local_storage.js';
+import {DeviceOperator} from '../../mojo/device_operator.js';
 import * as nav from '../../nav.js';
-import {PerfEvent} from '../../perf.js';
 import * as state from '../../state.js';
-import {Facing, ViewName} from '../../type.js';
+import {Facing, Mode, PerfEvent, ViewName} from '../../type.js';
 import * as util from '../../util.js';
 
 /**
@@ -20,7 +22,8 @@ import * as util from '../../util.js';
 export class Options {
   /**
    * @param {!DeviceInfoUpdater} infoUpdater
-   * @param {function()} doSwitchDevice Callback to trigger device switching.
+   * @param {function(): !Promise} doSwitchDevice Callback to trigger device
+   *     switching.
    */
   constructor(infoUpdater, doSwitchDevice) {
     /**
@@ -31,7 +34,7 @@ export class Options {
     this.infoUpdater_ = infoUpdater;
 
     /**
-     * @type {function()}
+     * @type {function(): !Promise}
      * @private
      * @const
      */
@@ -52,6 +55,13 @@ export class Options {
     this.toggleMirror_ = dom.get('#toggle-mirror', HTMLInputElement);
 
     /**
+     * @type {!HTMLInputElement}
+     * @private
+     * @const
+     */
+    this.toggleBarcode_ = dom.get('#toggle-barcode', HTMLInputElement);
+
+    /**
      * Device id of the camera device currently used or selected.
      * @type {?string}
      * @private
@@ -64,14 +74,6 @@ export class Options {
      * @private
      */
     this.refreshingVideoDeviceIds_ = false;
-
-    /**
-     * Whether the current device is HALv1 and lacks facing configuration.
-     * get facing information.
-     * @type {?boolean}
-     * private
-     */
-    this.isV1NoFacingConfig_ = null;
 
     /**
      * Mirroring set per device.
@@ -88,22 +90,34 @@ export class Options {
     this.audioTrack_ = null;
 
     [['#switch-device', () => this.switchDevice_()],
-     ['#toggle-grid', () => this.animatePreviewGrid_()],
      ['#open-settings', () => nav.open(ViewName.SETTINGS)],
     ]
         .forEach(
-            ([selector, fn]) =>
-                document.querySelector(selector).addEventListener('click', fn));
+            ([selector, fn]) => dom.get(selector, HTMLButtonElement)
+                                    .addEventListener('click', fn));
 
     this.toggleMic_.addEventListener('click', () => this.updateAudioByMic_());
     this.toggleMirror_.addEventListener('click', () => this.saveMirroring_());
+    this.toggleBarcode_.addEventListener('click', () => this.updateBarcode_());
+
+    state.addObserver(Mode.PHOTO, (inPhotoMode) => {
+      if (!inPhotoMode) {
+        this.toggleBarcode_.checked = false;
+        this.updateBarcode_();
+      }
+    });
+
+    util.bindElementAriaLabelWithState({
+      element: dom.get('#toggle-timer', Element),
+      state: state.State.TIMER_3SEC,
+      onLabel: 'toggle_timer_3s_button',
+      offLabel: 'toggle_timer_10s_button',
+    });
 
     // Restore saved mirroring states per video device.
-    browserProxy.localStorageGet({mirroringToggles: {}})
-        .then((values) => this.mirroringToggles_ = values['mirroringToggles']);
+    this.mirroringToggles_ = localStorage.getObject('mirroringToggles');
     // Remove the deprecated values.
-    browserProxy.localStorageRemove(
-        ['effectIndex', 'toggleMulti', 'toggleMirror']);
+    localStorage.remove('effectIndex', 'toggleMulti', 'toggleMirror');
 
     this.infoUpdater_.addDeviceChangeListener(async (updater) => {
       state.set(
@@ -130,7 +144,7 @@ export class Options {
     }
     state.set(PerfEvent.CAMERA_SWITCHING, true);
     const devices = await this.infoUpdater_.getDevicesInfo();
-    util.animateOnce(dom.get('#switch-device', HTMLElement));
+    animate.play(dom.get('#switch-device', HTMLElement));
     let index =
         devices.findIndex((entry) => entry.deviceId === this.videoDeviceId_);
     if (index === -1) {
@@ -142,15 +156,6 @@ export class Options {
     }
     const isSuccess = await this.doSwitchDevice_();
     state.set(PerfEvent.CAMERA_SWITCHING, false, {hasError: !isSuccess});
-  }
-
-  /**
-   * Animates the preview grid.
-   * @private
-   */
-  animatePreviewGrid_() {
-    Array.from(document.querySelector('#preview-grid').children)
-        .forEach((grid) => util.animateOnce(grid));
   }
 
   /**
@@ -181,17 +186,9 @@ export class Options {
     const track = stream.getVideoTracks()[0];
     const trackSettings = track.getSettings && track.getSettings();
     const facingMode = trackSettings && trackSettings.facingMode;
-    if (this.isV1NoFacingConfig_ === null) {
-      // Because the facing mode of external camera will be set to undefined on
-      // all devices, to distinguish HALv1 device without facing configuration,
-      // assume the first opened camera is built-in camera. Device without
-      // facing configuration won't set facing of built-in cameras. Also if
-      // HALv1 device with facing configuration opened external camera first
-      // after CCA launched the logic here may misjudge it as this category.
-      this.isV1NoFacingConfig_ = facingMode === undefined;
-    }
-    const facing =
-        this.isV1NoFacingConfig_ ? Facing.NOT_SET : this.mapFacing_(facingMode);
+    const facing = (await DeviceOperator.isSupported()) ?
+        this.mapFacing_(facingMode) :
+        Facing.NOT_SET;
     this.videoDeviceId_ = trackSettings && trackSettings.deviceId || null;
     this.updateMirroring_(facing);
     this.audioTrack_ = stream.getAudioTracks()[0];
@@ -223,11 +220,12 @@ export class Options {
    */
   saveMirroring_() {
     this.mirroringToggles_[this.videoDeviceId_] = this.toggleMirror_.checked;
-    browserProxy.localStorageSet({mirroringToggles: this.mirroringToggles_});
+    localStorage.set('mirroringToggles', this.mirroringToggles_);
   }
 
   /**
-   * Enables/disables the current audio track by the microphone option.
+   * Enables/disables the current audio track according to the microphone
+   * option.
    * @private
    */
   updateAudioByMic_() {
@@ -237,15 +235,25 @@ export class Options {
   }
 
   /**
+   * Enables/disables barcode scanning according to the barcode option.
+   * @private
+   */
+  updateBarcode_() {
+    state.set(state.State.SCAN_BARCODE, this.toggleBarcode_.checked);
+    if (this.toggleBarcode_.checked) {
+      sendBarcodeEnabledEvent();
+    }
+  }
+
+  /**
    * Gets the video device ids sorted by preference.
-   * @return {!Promise<!Array<?string>>} May contain null for user facing camera
-   *     on HALv1 devices.
+   * @return {!Promise<!Array<?string>>} May contain null for fake cameras.
    */
   async videoDeviceIds() {
     /** @type {!Array<(!Camera3DeviceInfo|!MediaDeviceInfo)>} */
     let devices;
     /**
-     * Object mapping from device id to facing. Set to null on HALv1 device.
+     * Object mapping from device id to facing. Set to null for fake cameras.
      * @type {?Object<string, !Facing>}
      */
     let facings = null;
@@ -257,7 +265,6 @@ export class Options {
       for (const {deviceId, facing} of camera3Info) {
         facings[deviceId] = facing;
       }
-      this.isV1NoFacingConfig_ = false;
     } else {
       devices = await this.infoUpdater_.getDevicesInfo();
     }
@@ -274,8 +281,9 @@ export class Options {
       }
       return 1;
     });
-    // Prepended 'null' deviceId means the system default camera on HALv1
-    // device. Add it only when the app is launched (no video-device-id set).
+    // Prepended 'null' deviceId means there is no facing information to sort
+    // device IDs and prefer the default one. Add it only when the app is
+    // launched (no video-device-id set).
     if (!facings && this.videoDeviceId_ === null) {
       sorted.unshift(null);
     }

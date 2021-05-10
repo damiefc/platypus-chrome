@@ -8,8 +8,8 @@
 
 #include "base/callback.h"
 #include "base/check.h"
+#include "base/containers/contains.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "url/gurl.h"
 
 namespace web_app {
@@ -42,6 +42,11 @@ bool TestAppRegistrar::IsLocallyInstalled(const AppId& app_id) const {
 }
 
 bool TestAppRegistrar::WasInstalledByUser(const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return false;
+}
+
+bool TestAppRegistrar::WasInstalledByOem(const AppId& app_id) const {
   NOTIMPLEMENTED();
   return false;
 }
@@ -122,6 +127,21 @@ const apps::ShareTarget* TestAppRegistrar::GetAppShareTarget(
   return nullptr;
 }
 
+blink::mojom::CaptureLinks TestAppRegistrar::GetAppCaptureLinks(
+    const AppId& app_id) const {
+  return blink::mojom::CaptureLinks::kUndefined;
+}
+
+const apps::FileHandlers* TestAppRegistrar::GetAppFileHandlers(
+    const AppId& app_id) const {
+  return nullptr;
+}
+
+bool TestAppRegistrar::IsAppFileHandlerPermissionBlocked(
+    const web_app::AppId& app_id) const {
+  return false;
+}
+
 base::Optional<GURL> TestAppRegistrar::GetAppScopeInternal(
     const AppId& app_id) const {
   const auto& result = installed_apps_.find(app_id);
@@ -145,6 +165,22 @@ std::vector<DisplayMode> TestAppRegistrar::GetAppDisplayModeOverride(
     const AppId& app_id) const {
   NOTIMPLEMENTED();
   return std::vector<DisplayMode>();
+}
+
+apps::UrlHandlers TestAppRegistrar::GetAppUrlHandlers(
+    const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return std::vector<apps::UrlHandlerInfo>();
+}
+
+GURL TestAppRegistrar::GetAppManifestUrl(const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return GURL::EmptyGURL();
+}
+
+base::Time TestAppRegistrar::GetAppLastBadgingTime(const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return base::Time();
 }
 
 base::Time TestAppRegistrar::GetAppLastLaunchTime(const AppId& app_id) const {
@@ -175,7 +211,7 @@ TestAppRegistrar::GetAppShortcutsMenuItemInfos(const AppId& app_id) const {
   return {};
 }
 
-std::vector<std::vector<SquareSizePx>>
+std::vector<IconSizes>
 TestAppRegistrar::GetAppDownloadedShortcutsMenuIconsSizes(
     const AppId& app_id) const {
   NOTIMPLEMENTED();
@@ -185,7 +221,7 @@ TestAppRegistrar::GetAppDownloadedShortcutsMenuIconsSizes(
 RunOnOsLoginMode TestAppRegistrar::GetAppRunOnOsLoginMode(
     const AppId& app_id) const {
   NOTIMPLEMENTED();
-  return RunOnOsLoginMode::kUndefined;
+  return RunOnOsLoginMode::kNotRun;
 }
 
 std::vector<AppId> TestAppRegistrar::GetAppIds() const {
@@ -197,6 +233,10 @@ std::vector<AppId> TestAppRegistrar::GetAppIds() const {
 }
 
 WebAppRegistrar* TestAppRegistrar::AsWebAppRegistrar() {
+  return nullptr;
+}
+
+const WebAppRegistrar* TestAppRegistrar::AsWebAppRegistrar() const {
   return nullptr;
 }
 

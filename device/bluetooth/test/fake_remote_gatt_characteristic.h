@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
+#include "build/chromeos_buildflags.h"
 #include "device/bluetooth/bluetooth_remote_gatt_characteristic.h"
 #include "device/bluetooth/public/cpp/bluetooth_uuid.h"
 #include "device/bluetooth/public/mojom/test/fake_bluetooth.mojom.h"
@@ -87,8 +88,7 @@ class FakeRemoteGattCharacteristic
   // device::BluetoothRemoteGattCharacteristic overrides:
   const std::vector<uint8_t>& GetValue() const override;
   device::BluetoothRemoteGattService* GetService() const override;
-  void ReadRemoteCharacteristic(ValueCallback callback,
-                                ErrorCallback error_callback) override;
+  void ReadRemoteCharacteristic(ValueCallback callback) override;
   void WriteRemoteCharacteristic(const std::vector<uint8_t>& value,
                                  WriteType write_type,
                                  base::OnceClosure callback,
@@ -97,14 +97,14 @@ class FakeRemoteGattCharacteristic
       const std::vector<uint8_t>& value,
       base::OnceClosure callback,
       ErrorCallback error_callback) override;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   void PrepareWriteRemoteCharacteristic(const std::vector<uint8_t>& value,
                                         base::OnceClosure callback,
                                         ErrorCallback error_callback) override;
 #endif
 
  protected:
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // device::BluetoothRemoteGattCharacteristic overrides:
   void SubscribeToNotifications(
       device::BluetoothRemoteGattDescriptor* ccc_descriptor,
@@ -124,8 +124,7 @@ class FakeRemoteGattCharacteristic
       ErrorCallback error_callback) override;
 
  private:
-  void DispatchReadResponse(ValueCallback callback,
-                            ErrorCallback error_callback);
+  void DispatchReadResponse(ValueCallback callback);
   void DispatchWriteResponse(base::OnceClosure callback,
                              ErrorCallback error_callback,
                              const std::vector<uint8_t>& value,

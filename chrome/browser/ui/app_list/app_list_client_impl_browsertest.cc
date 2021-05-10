@@ -6,18 +6,17 @@
 
 #include <memory>
 
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/app_list_switches.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
@@ -25,8 +24,8 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -42,8 +41,9 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
+#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
-#include "chrome/browser/web_applications/system_web_app_manager.h"
+#include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -51,7 +51,6 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_names.h"
@@ -83,15 +82,15 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, IsExtensionAppOpen) {
     content::WindowedNotificationObserver app_loaded_observer(
         content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
         content::NotificationService::AllSources());
-    apps::AppServiceProxy* proxy =
-        apps::AppServiceProxyFactory::GetForProfile(profile());
-    proxy->Launch(extension_app->id(),
-                  apps::GetEventFlags(
-                      apps::mojom::LaunchContainer::kLaunchContainerWindow,
-                      WindowOpenDisposition::NEW_WINDOW,
-                      false /* preferred_containner */),
-                  apps::mojom::LaunchSource::kFromTest,
-                  display::Screen::GetScreen()->GetPrimaryDisplay().id());
+    apps::AppServiceProxyFactory::GetForProfile(profile())->Launch(
+        extension_app->id(),
+        apps::GetEventFlags(
+            apps::mojom::LaunchContainer::kLaunchContainerWindow,
+            WindowOpenDisposition::NEW_WINDOW,
+            false /* preferred_containner */),
+        apps::mojom::LaunchSource::kFromTest,
+        apps::MakeWindowInfo(
+            display::Screen::GetScreen()->GetPrimaryDisplay().id()));
     app_loaded_observer.Wait();
   }
   EXPECT_TRUE(delegate->IsAppOpen(extension_app->id()));
@@ -130,9 +129,8 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, UninstallApp) {
   base::RunLoop run_loop;
   client->UninstallApp(profile(), app->id());
 
-  apps::AppServiceProxy* app_service_proxy_ =
-      apps::AppServiceProxyFactory::GetForProfile(profile());
-  app_service_proxy_->FlushMojoCallsForTesting();
+  apps::AppServiceProxyFactory::GetForProfile(profile())
+      ->FlushMojoCallsForTesting();
 
   run_loop.RunUntilIdle();
   EXPECT_FALSE(wm::GetTransientChildren(client->GetAppListWindow()).empty());
@@ -158,6 +156,11 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, ShowAppInfo) {
 
   // Open the app info dialog.
   client->DoShowAppInfoFlow(profile(), app->id());
+
+  // The above DoShowAppInfoFlow() should trigger an asynchronous call to launch
+  // OS Settings SWA. Flush Mojo calls so the browser window is created.
+  web_app::FlushSystemWebAppLaunchesForTesting(profile());
+
   Browser* settings_app =
       chrome::SettingsWindowManager::GetInstance()->FindBrowserForProfile(
           profile());
@@ -181,15 +184,17 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, CreateNewWindow) {
   ASSERT_TRUE(controller);
 
   EXPECT_EQ(1U, chrome::GetBrowserCount(browser()->profile()));
-  EXPECT_EQ(0U, chrome::GetBrowserCount(
-                    browser()->profile()->GetPrimaryOTRProfile()));
+  EXPECT_EQ(0U,
+            chrome::GetBrowserCount(browser()->profile()->GetPrimaryOTRProfile(
+                /*create_if_needed=*/true)));
 
   controller->CreateNewWindow(/*incognito=*/false);
   EXPECT_EQ(2U, chrome::GetBrowserCount(browser()->profile()));
 
   controller->CreateNewWindow(/*incognito=*/true);
-  EXPECT_EQ(1U, chrome::GetBrowserCount(
-                    browser()->profile()->GetPrimaryOTRProfile()));
+  EXPECT_EQ(1U,
+            chrome::GetBrowserCount(browser()->profile()->GetPrimaryOTRProfile(
+                /*create_if_needed=*/true)));
 }
 
 // When getting activated, SelfDestroyAppItem has itself removed from the
@@ -261,7 +266,7 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, ShowContextMenu) {
     if (menu_model->GetTypeAt(i) == ui::MenuModel::TYPE_SEPARATOR)
       continue;
 
-    base::string16 label = menu_model->GetLabelAt(i);
+    std::u16string label = menu_model->GetLabelAt(i);
     EXPECT_FALSE(label.empty());
   }
 }
@@ -324,7 +329,8 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest,
   ASSERT_TRUE(controller);
 
   Profile* profile = browser()->profile();
-  Profile* profile_otr = profile->GetPrimaryOTRProfile();
+  Profile* profile_otr =
+      profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
 
   extensions::ExtensionPrefs* prefs = extensions::ExtensionPrefs::Get(profile);
 
@@ -371,26 +377,11 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest,
 }
 
 // Browser Test for AppListClient that observes search result changes.
-class AppListClientSearchResultsBrowserTest
-    : public extensions::ExtensionBrowserTest {
- public:
-  AppListClientSearchResultsBrowserTest() {
-    // Zero state changes UI behavior. This test case tests the expected UI
-    // behavior with zero state being disabled.
-    // TODO(jennyz): write new test case for zero state, crbug.com/925195.
-    feature_list_.InitAndDisableFeature(
-        app_list_features::kEnableZeroStateSuggestions);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
+using AppListClientSearchResultsBrowserTest = extensions::ExtensionBrowserTest;
 
 // Test showing search results, and uninstalling one of them while displayed.
 IN_PROC_BROWSER_TEST_F(AppListClientSearchResultsBrowserTest,
                        UninstallSearchResult) {
-  ASSERT_FALSE(app_list_features::IsZeroStateSuggestionsEnabled());
-
   base::FilePath test_extension_path;
   ASSERT_TRUE(
       base::PathService::Get(chrome::DIR_TEST_DATA, &test_extension_path));
@@ -441,13 +432,14 @@ IN_PROC_BROWSER_TEST_F(AppListClientSearchResultsBrowserTest,
 
 class AppListClientGuestModeBrowserTest : public InProcessBrowserTest {
  public:
-  AppListClientGuestModeBrowserTest() {}
+  AppListClientGuestModeBrowserTest() = default;
+  AppListClientGuestModeBrowserTest(const AppListClientGuestModeBrowserTest&) =
+      delete;
+  AppListClientGuestModeBrowserTest& operator=(
+      const AppListClientGuestModeBrowserTest&) = delete;
 
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AppListClientGuestModeBrowserTest);
 };
 
 void AppListClientGuestModeBrowserTest::SetUpCommandLine(
@@ -474,6 +466,8 @@ class AppListAppLaunchTest : public extensions::ExtensionBrowserTest {
   AppListAppLaunchTest() : extensions::ExtensionBrowserTest() {
     histogram_tester_ = std::make_unique<base::HistogramTester>();
   }
+  AppListAppLaunchTest(const AppListAppLaunchTest&) = delete;
+  AppListAppLaunchTest& operator=(const AppListAppLaunchTest&) = delete;
   ~AppListAppLaunchTest() override = default;
 
   // InProcessBrowserTest:
@@ -498,8 +492,6 @@ class AppListAppLaunchTest : public extensions::ExtensionBrowserTest {
 
  private:
   AppListModelUpdater* model_updater_;
-
-  DISALLOW_COPY_AND_ASSIGN(AppListAppLaunchTest);
 };
 
 IN_PROC_BROWSER_TEST_F(AppListAppLaunchTest,

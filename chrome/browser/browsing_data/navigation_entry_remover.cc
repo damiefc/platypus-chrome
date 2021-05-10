@@ -113,8 +113,7 @@ void DeleteTabNavigationEntries(
           : base::BindRepeating(&UrlMatcherForSerializedNavigationEntry,
                                 std::cref(url_set));
 
-  for (auto it = TabModelList::begin(); it != TabModelList::end(); ++it) {
-    TabModel* tab_model = *it;
+  for (const TabModel* tab_model : TabModelList::models()) {
     if (tab_model->GetProfile() == profile) {
       for (int i = 0; i < tab_model->GetTabCount(); i++) {
         TabAndroid* tab = tab_model->GetTabAt(i);
@@ -216,7 +215,7 @@ namespace browsing_data {
 
 void RemoveNavigationEntries(Profile* profile,
                              const history::DeletionInfo& deletion_info) {
-  DCHECK(profile->IsRegularProfile());
+  DCHECK(!profile->IsOffTheRecord());
   DCHECK(!deletion_info.is_from_expiration());
 
   base::flat_set<GURL> url_set;

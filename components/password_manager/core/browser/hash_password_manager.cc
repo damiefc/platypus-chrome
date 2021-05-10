@@ -128,7 +128,7 @@ HashPasswordManager::HashPasswordManager() = default;
 HashPasswordManager::~HashPasswordManager() = default;
 
 bool HashPasswordManager::SavePasswordHash(const std::string username,
-                                           const base::string16& password,
+                                           const std::u16string& password,
                                            bool is_gaia_password) {
   if (!prefs_)
     return false;
@@ -272,7 +272,7 @@ bool HashPasswordManager::HasPasswordHash(const std::string& username,
   return false;
 }
 
-std::unique_ptr<StateSubscription> HashPasswordManager::RegisterStateCallback(
+base::CallbackListSubscription HashPasswordManager::RegisterStateCallback(
     const base::RepeatingCallback<void(const std::string& username)>&
         callback) {
   return state_callback_list_.Add(callback);

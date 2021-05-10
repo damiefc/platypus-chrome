@@ -32,7 +32,8 @@ class TestPersonalDataManager : public PersonalDataManager {
   // or to make things easier in general to toggle.
   void OnSyncServiceInitialized(syncer::SyncService* sync_service) override;
   AutofillSyncSigninState GetSyncSigninState() const override;
-  void RecordUseOf(const AutofillDataModel& data_model) override;
+  void RecordUseOf(absl::variant<const AutofillProfile*, const CreditCard*>
+                       profile_or_credit_card) override;
   std::string SaveImportedProfile(
       const AutofillProfile& imported_profile) override;
   std::string SaveImportedCreditCard(
@@ -92,7 +93,7 @@ class TestPersonalDataManager : public PersonalDataManager {
   void AddCloudTokenData(const CreditCardCloudTokenData& cloud_token_data);
 
   // Adds offer data to |autofill_offer_data_|.
-  void AddCreditCardOfferData(const AutofillOfferData& offer_data);
+  void AddAutofillOfferData(const AutofillOfferData& offer_data);
 
   // Sets a local/server card's nickname based on the provided |guid|.
   void SetNicknameForCardWithGUID(const char* guid,

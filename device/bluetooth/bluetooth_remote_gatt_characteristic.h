@@ -19,6 +19,8 @@
 #include "base/containers/span.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
+#include "build/chromeos_buildflags.h"
 #include "device/bluetooth/bluetooth_export.h"
 #include "device/bluetooth/bluetooth_gatt_characteristic.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service.h"
@@ -49,8 +51,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
   };
 
   // The ValueCallback is used to return the value of a remote characteristic
-  // upon a read request.
-  using ValueCallback = base::OnceCallback<void(const std::vector<uint8_t>&)>;
+  // upon a read request. Upon successful completion |error_code| will not
+  // have a value and |value| may be used. When unsuccessful |error_code| will
+  // have a value and |value| must be ignored.
+  using ValueCallback = base::OnceCallback<void(
+      base::Optional<BluetoothGattService::GattErrorCode> error_code,
+      const std::vector<uint8_t>& value)>;
 
   // The NotifySessionCallback is used to return sessions after they have
   // been successfully started.
@@ -124,7 +130,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
   // BluetoothGattNotifySession object that you received in |callback|.
   virtual void StartNotifySession(NotifySessionCallback callback,
                                   ErrorCallback error_callback);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // TODO(https://crbug.com/849359): This method should also be implemented on
   // Android and Windows.
   // macOS does not support specifying a notification type. According to macOS
@@ -137,10 +143,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
 #endif
 
   // Sends a read request to a remote characteristic to read its value.
-  // |callback| is called to return the read value on success and
-  // |error_callback| is called for failures.
-  virtual void ReadRemoteCharacteristic(ValueCallback callback,
-                                        ErrorCallback error_callback) = 0;
+  // |callback| is called to return the read value or error.
+  virtual void ReadRemoteCharacteristic(ValueCallback callback) = 0;
 
   // Sends a write request to a remote characteristic with the value |value|
   // using the specified |write_type|. |callback| is called to signal success
@@ -162,7 +166,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
       base::OnceClosure callback,
       ErrorCallback error_callback) = 0;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Sends a prepare write request to a remote characteristic with the value
   // |value|. |callback| is called to signal success and |error_callback| for
   // failures. This method only applies to remote characteristics and will fail
@@ -186,7 +190,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
   // notifications/indications. This method is meant to be called from
   // StartNotifySession and should contain only the code necessary to start
   // listening to characteristic notifications on a particular platform.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // |notification_type| specifies the type of notifications that will be
   // enabled: notifications or indications.
   // TODO(https://crbug.com/849359): This method should also be implemented on
@@ -241,10 +245,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
   class NotifySessionCommand {
    public:
     enum Type { COMMAND_NONE, COMMAND_START, COMMAND_STOP };
-    enum Result { RESULT_SUCCESS, RESULT_ERROR };
 
     using ExecuteCallback = base::OnceCallback<
-        void(Type, Result, BluetoothRemoteGattService::GattErrorCode)>;
+        void(Type, base::Optional<BluetoothRemoteGattService::GattErrorCode>)>;
 
     ExecuteCallback execute_callback_;
     base::OnceClosure cancel_callback_;
@@ -254,10 +257,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
     ~NotifySessionCommand();
 
     void Execute();
-    void Execute(
-        Type previous_command_type,
-        Result previous_command_result,
-        BluetoothRemoteGattService::GattErrorCode previous_command_error_code);
+    void Execute(Type previous_command_type,
+                 base::Optional<BluetoothRemoteGattService::GattErrorCode>
+                     previous_command_error_code);
     void Cancel();
   };
 
@@ -270,8 +272,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
       NotifySessionCallback callback,
       ErrorCallback error_callback,
       NotifySessionCommand::Type previous_command_type,
-      NotifySessionCommand::Result previous_command_result,
-      BluetoothRemoteGattService::GattErrorCode previous_command_error_code);
+      base::Optional<BluetoothRemoteGattService::GattErrorCode>
+          previous_command_error_code);
   void CancelStartNotifySession(base::OnceClosure callback);
   void OnStartNotifySessionSuccess(NotifySessionCallback callback);
   void OnStartNotifySessionError(
@@ -282,8 +284,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristic
       BluetoothGattNotifySession* session,
       base::OnceClosure callback,
       NotifySessionCommand::Type previous_command_type,
-      NotifySessionCommand::Result previous_command_result,
-      BluetoothRemoteGattService::GattErrorCode previous_command_error_code);
+      base::Optional<BluetoothRemoteGattService::GattErrorCode>
+          previous_command_error_code);
   void CancelStopNotifySession(base::OnceClosure callback);
   void OnStopNotifySessionSuccess(BluetoothGattNotifySession* session,
                                   base::OnceClosure callback);

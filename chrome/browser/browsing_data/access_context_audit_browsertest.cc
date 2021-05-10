@@ -5,21 +5,22 @@
 #include <memory>
 
 #include "base/path_service.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/test/simple_test_clock.h"
 #include "base/test/test_timeouts.h"
+#include "build/build_config.h"
 #include "chrome/browser/browsing_data/access_context_audit_service.h"
 #include "chrome/browser/browsing_data/access_context_audit_service_factory.h"
-#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/browsing_data/cookies_tree_model.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/base/ui_test_utils.h"
+#include "chrome/test/base/chrome_test_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/history/core/browser/history_service.h"
@@ -33,6 +34,15 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
+
+#if defined(OS_ANDROID)
+#include "chrome/browser/ui/android/tab_model/tab_model.h"
+#include "chrome/browser/ui/android/tab_model/tab_model_list.h"
+#include "chrome/test/base/android/android_browser_test.h"
+#else
+#include "chrome/browser/ui/browser.h"
+#include "chrome/test/base/in_process_browser_test.h"
+#endif  // defined (OS_ANDROID)
 
 namespace {
 
@@ -128,9 +138,8 @@ void CheckContainsOriginStorageRecords(
 
 // Calls the accessStorage javascript function and awaits its completion for
 // each frame in the active web contents for |browser|.
-void EnsurePageAccessedStorage(Browser* browser) {
-  auto frames =
-      browser->tab_strip_model()->GetActiveWebContents()->GetAllFrames();
+void EnsurePageAccessedStorage(content::WebContents* web_contents) {
+  auto frames = web_contents->GetAllFrames();
   for (auto* frame : frames) {
     ASSERT_TRUE(content::EvalJs(
                     frame, "(async () => { return await accessStorage();})()")
@@ -164,7 +173,7 @@ class CookiesTreeObserver : public CookiesTreeModel::Observer {
   std::unique_ptr<base::RunLoop> run_loop;
 };
 
-class AccessContextAuditBrowserTest : public InProcessBrowserTest {
+class AccessContextAuditBrowserTest : public PlatformBrowserTest {
  public:
   AccessContextAuditBrowserTest() {
     feature_list_.InitAndEnableFeature(
@@ -173,8 +182,10 @@ class AccessContextAuditBrowserTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
-    top_level_.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
-    embedded_.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
+    top_level_.ServeFilesFromSourceDirectory(
+        base::FilePath(FILE_PATH_LITERAL("content/test/data")));
+    embedded_.ServeFilesFromSourceDirectory(
+        base::FilePath(FILE_PATH_LITERAL("content/test/data")));
     top_level_.SetSSLConfig(net::EmbeddedTestServer::CERT_TEST_NAMES);
     embedded_.SetSSLConfig(net::EmbeddedTestServer::CERT_TEST_NAMES);
     ASSERT_TRUE(embedded_.Start());
@@ -184,7 +195,8 @@ class AccessContextAuditBrowserTest : public InProcessBrowserTest {
   std::vector<AccessContextAuditDatabase::AccessRecord> GetAllAccessRecords() {
     base::RunLoop run_loop;
     std::vector<AccessContextAuditDatabase::AccessRecord> records_out;
-    AccessContextAuditServiceFactory::GetForProfile(browser()->profile())
+    AccessContextAuditServiceFactory::GetForProfile(
+        chrome_test_utils::GetProfile(this))
         ->GetAllAccessRecords(base::BindLambdaForTesting(
             [&](std::vector<AccessContextAuditDatabase::AccessRecord> records) {
               records_out = records;
@@ -197,7 +209,8 @@ class AccessContextAuditBrowserTest : public InProcessBrowserTest {
   std::vector<net::CanonicalCookie> GetAllCookies() {
     base::RunLoop run_loop;
     std::vector<net::CanonicalCookie> cookies_out;
-    content::BrowserContext::GetDefaultStoragePartition(browser()->profile())
+    chrome_test_utils::GetProfile(this)
+        ->GetDefaultStoragePartition()
         ->GetCookieManagerForBrowserProcess()
         ->GetAllCookies(base::BindLambdaForTesting(
             [&](const std::vector<net::CanonicalCookie>& cookies) {
@@ -211,16 +224,18 @@ class AccessContextAuditBrowserTest : public InProcessBrowserTest {
   // Navigate to a page that accesses cookies and storage APIs and also embeds
   // a site which also accesses cookies and storage APIs.
   void NavigateToTopLevelPage() {
-    ui_test_utils::NavigateToURL(browser(), top_level_url());
+    ASSERT_TRUE(content::NavigateToURL(
+        chrome_test_utils::GetActiveWebContents(this), top_level_url()));
     base::RunLoop().RunUntilIdle();
-    EnsurePageAccessedStorage(browser());
+    EnsurePageAccessedStorage(chrome_test_utils::GetActiveWebContents(this));
   }
 
   // Navigate directly to the embedded page.
   void NavigateToEmbeddedPage() {
-    ui_test_utils::NavigateToURL(browser(), embedded_url());
+    ASSERT_TRUE(content::NavigateToURL(
+        chrome_test_utils::GetActiveWebContents(this), embedded_url()));
     base::RunLoop().RunUntilIdle();
-    EnsurePageAccessedStorage(browser());
+    EnsurePageAccessedStorage(chrome_test_utils::GetActiveWebContents(this));
   }
 
   url::Origin top_level_origin() {
@@ -331,11 +346,12 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, PRE_RemoveRecords) {
 IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, RemoveRecords) {
   // Immediately remove all records and ensure no record remains.
   content::BrowsingDataRemover* remover =
-      content::BrowserContext::GetBrowsingDataRemover(browser()->profile());
+      content::BrowserContext::GetBrowsingDataRemover(
+          chrome_test_utils::GetProfile(this));
   content::BrowsingDataRemoverCompletionObserver completion_observer(remover);
   remover->RemoveAndReply(base::Time(), base::Time::Max(),
-                          ChromeBrowsingDataRemoverDelegate::ALL_DATA_TYPES,
-                          ChromeBrowsingDataRemoverDelegate::ALL_ORIGIN_TYPES,
+                          chrome_browsing_data_remover::ALL_DATA_TYPES,
+                          chrome_browsing_data_remover::ALL_ORIGIN_TYPES,
                           &completion_observer);
   completion_observer.BlockUntilCompletion();
 
@@ -348,8 +364,8 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, RemoveRecords) {
 IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, PRE_CheckSessionOnly) {
   // Check that a content setting of SESSION_ONLY results in records being
   // cleared across browser restart.
-  HostContentSettingsMap* map =
-      HostContentSettingsMapFactory::GetForProfile(browser()->profile());
+  HostContentSettingsMap* map = HostContentSettingsMapFactory::GetForProfile(
+      chrome_test_utils::GetProfile(this));
   map->SetDefaultContentSetting(ContentSettingsType::COOKIES,
                                 ContentSetting::CONTENT_SETTING_SESSION_ONLY);
 
@@ -395,7 +411,7 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, RemoveHistory) {
   // Remove the history entry for the navigation to the page which embeds
   // storage_accessor.html.
   auto* history_service = HistoryServiceFactory::GetForProfile(
-      browser()->profile(), ServiceAccessType::EXPLICIT_ACCESS);
+      chrome_test_utils::GetProfile(this), ServiceAccessType::EXPLICIT_ACCESS);
   history_service->DeleteURLs({top_level_url()});
   base::RunLoop run_loop;
   history_service->FlushForTest(run_loop.QuitClosure());
@@ -446,7 +462,8 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, TreeModelDeletion) {
   EXPECT_EQ(cookies.size(),
             kEmbeddedPageCookieCount + kTopLevelPageCookieCount);
 
-  auto tree_model = CookiesTreeModel::CreateForProfile(browser()->profile());
+  auto tree_model =
+      CookiesTreeModel::CreateForProfile(chrome_test_utils::GetProfile(this));
   CookiesTreeObserver observer;
   tree_model->AddCookiesTreeObserver(&observer);
   observer.AwaitTreeModelEndBatch();
@@ -469,12 +486,98 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, TreeModelDeletion) {
   EXPECT_EQ(cookies.size(), 0u);
 }
 
+IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, MultipleAccesses) {
+  // Ensure that renavigating to a page in the same tab correctly re-records
+  // accesses.
+  base::SimpleTestClock clock;
+  clock.SetNow(base::Time::Now());
+  AccessContextAuditServiceFactory::GetForProfile(
+      chrome_test_utils::GetProfile(this))
+      ->SetClockForTesting(&clock);
+
+  NavigateToTopLevelPage();
+  NavigateToEmbeddedPage();
+
+  // Check all records have the initial access time.
+  auto records = GetAllAccessRecords();
+  for (const auto& record : records)
+    EXPECT_EQ(record.last_access_time, clock.Now());
+
+  // Renavigate to the same pages, this should update the access times on all
+  // records.
+  clock.Advance(base::TimeDelta::FromHours(1));
+  NavigateToTopLevelPage();
+  NavigateToEmbeddedPage();
+
+  // All records should now have the updated time.
+  records = GetAllAccessRecords();
+  for (const auto& record : records)
+    EXPECT_EQ(record.last_access_time, clock.Now());
+}
+
+IN_PROC_BROWSER_TEST_F(AccessContextAuditBrowserTest, TabClosed) {
+  // Ensure closing a tab correctly flushes access records.
+  NavigateToTopLevelPage();
+  NavigateToEmbeddedPage();
+
+  // Close the previous tab, keeping the browser active if required to ensure
+  // the profile does not begin destruction.
+#if defined(OS_ANDROID)
+  TabModel* tab_model = TabModelList::GetTabModelForWebContents(
+      chrome_test_utils::GetActiveWebContents(this));
+  tab_model->CloseTabAt(tab_model->GetActiveIndex());
+#else
+  AddTabAtIndex(1, GURL("about:blank"), ui::PAGE_TRANSITION_TYPED);
+  browser()->tab_strip_model()->CloseWebContentsAt(0,
+                                                   TabStripModel::CLOSE_NONE);
+#endif  // defined (OS_ANDROID)
+
+  auto records = GetAllAccessRecords();
+  auto cookies = GetAllCookies();
+  unsigned expected_cookie_records =
+      2 * kEmbeddedPageCookieCount + kTopLevelPageCookieCount;
+  unsigned expected_origin_storage_records = 3 * kOriginStorageTypes.size();
+  EXPECT_EQ(records.size(),
+            expected_cookie_records + expected_origin_storage_records);
+
+  CheckContainsCookieAndRecord(cookies, records, top_level_origin(), "embedder",
+                               kTopLevelHost, "/",
+                               /*compare_host_only*/ true);
+  CheckContainsCookieAndRecord(cookies, records, top_level_origin(),
+                               "session_only", kEmbeddedHost, "/",
+                               /*compare_host_only*/ true);
+  CheckContainsCookieAndRecord(cookies, records, top_level_origin(),
+                               "persistent", kEmbeddedHost, "/",
+                               /*compare_host_only*/ true);
+  CheckContainsCookieAndRecord(cookies, records, embedded_origin(),
+                               "persistent", kEmbeddedHost, "/",
+                               /*compare_host_only*/ true);
+  CheckContainsCookieAndRecord(cookies, records, embedded_origin(),
+                               "session_only", kEmbeddedHost, "/",
+                               /*compare_host_only*/ true);
+  CheckContainsOriginStorageRecords(records, kOriginStorageTypes,
+                                    top_level_origin(), top_level_origin(),
+                                    /* compare__host_only */ true);
+  CheckContainsOriginStorageRecords(records, kOriginStorageTypes,
+                                    embedded_origin(), top_level_origin(),
+                                    /* compare__host_only */ true);
+  CheckContainsOriginStorageRecords(records, kOriginStorageTypes,
+                                    embedded_origin(), embedded_origin(),
+                                    /* compare_host_only */ true);
+}
+
+// Enabling session restore behavior on desktop preserves non-persistent cookies
+// when the browser restarts. Android has a superficially similar behavior where
+// tabs are re-opened after close, but non-persistent cookies are not preserved,
+// making this test only applicable to desktop.
+#if !defined(OS_ANDROID)
 class AccessContextAuditSessionRestoreBrowserTest
     : public AccessContextAuditBrowserTest {
  public:
   void SetUpOnMainThread() override {
     SessionStartupPref::SetStartupPref(
-        browser()->profile(), SessionStartupPref(SessionStartupPref::LAST));
+        chrome_test_utils::GetProfile(this),
+        SessionStartupPref(SessionStartupPref::LAST));
     AccessContextAuditBrowserTest::SetUpOnMainThread();
   }
 };
@@ -538,3 +641,4 @@ IN_PROC_BROWSER_TEST_F(AccessContextAuditSessionRestoreBrowserTest,
                                     embedded_origin(), embedded_origin(),
                                     /* compare_host_only */ true);
 }
+#endif  // !defined(OS_ANDROID)

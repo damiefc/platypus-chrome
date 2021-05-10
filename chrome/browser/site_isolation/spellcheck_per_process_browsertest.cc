@@ -7,9 +7,10 @@
 
 // spellcheck_per_process_browsertest.cc
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
@@ -50,7 +51,7 @@ class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
 
   content::RenderProcessHost* process_host() const { return process_host_; }
 
-  const base::string16& text() const { return text_; }
+  const std::u16string& text() const { return text_; }
 
   bool HasReceivedText() const { return text_received_; }
 
@@ -85,7 +86,7 @@ class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
   }
 
  private:
-  void TextReceived(const base::string16& text) {
+  void TextReceived(const std::u16string& text) {
     text_received_ = true;
     text_ = text;
     receiver_.reset();
@@ -100,10 +101,10 @@ class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
 
   // spellcheck::mojom::SpellCheckHost:
   void RequestDictionary() override {}
-  void NotifyChecked(const base::string16& word, bool misspelled) override {}
+  void NotifyChecked(const std::u16string& word, bool misspelled) override {}
 
 #if BUILDFLAG(USE_RENDERER_SPELLCHECKER)
-  void CallSpellingService(const base::string16& text,
+  void CallSpellingService(const std::u16string& text,
                            CallSpellingServiceCallback callback) override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     std::move(callback).Run(true, std::vector<SpellCheckResult>());
@@ -112,7 +113,7 @@ class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
 #endif
 
 #if BUILDFLAG(USE_BROWSER_SPELLCHECKER)
-  void RequestTextCheck(const base::string16& text,
+  void RequestTextCheck(const std::u16string& text,
                         int route_id,
                         RequestTextCheckCallback callback) override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -120,20 +121,13 @@ class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
     TextReceived(text);
   }
 
-  void CheckSpelling(const base::string16& word,
+  void CheckSpelling(const std::u16string& word,
                      int,
                      CheckSpellingCallback) override {}
-  void FillSuggestionList(const base::string16& word,
+  void FillSuggestionList(const std::u16string& word,
                           FillSuggestionListCallback) override {}
 
 #if defined(OS_WIN)
-  void GetPerLanguageSuggestions(
-      const base::string16& word,
-      GetPerLanguageSuggestionsCallback callback) override {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-    std::move(callback).Run(std::vector<std::vector<base::string16>>());
-  }
-
   void InitializeDictionaries(
       InitializeDictionariesCallback callback) override {
     if (base::FeatureList::IsEnabled(
@@ -184,7 +178,7 @@ class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
 
   content::RenderProcessHost* process_host_;
   bool text_received_ = false;
-  base::string16 text_;
+  std::u16string text_;
   mojo::Receiver<spellcheck::mojom::SpellCheckHost> receiver_{this};
   base::OnceClosure quit_;
 
@@ -303,7 +297,7 @@ class ChromeSitePerProcessSpellCheckTest : public ChromeSitePerProcessTest {
             cross_site_subframe->GetProcess());
     spell_check_host->Wait();
 
-    EXPECT_EQ(base::ASCIIToUTF16("zz."), spell_check_host->text());
+    EXPECT_EQ(u"zz.", spell_check_host->text());
   }
 
   // Tests that after disabling spellchecking, spelling in new out-of-process

@@ -73,7 +73,7 @@ class WebContentsViewAndroid : public WebContentsView,
       RenderWidgetHost* render_widget_host) override;
   RenderWidgetHostViewBase* CreateViewForChildWidget(
       RenderWidgetHost* render_widget_host) override;
-  void SetPageTitle(const base::string16& title) override;
+  void SetPageTitle(const std::u16string& title) override;
   void RenderViewReady() override;
   void RenderViewHostChanged(RenderViewHost* old_host,
                              RenderViewHost* new_host) override;
@@ -99,7 +99,7 @@ class WebContentsViewAndroid : public WebContentsView,
                      const gfx::Vector2d& image_offset,
                      const blink::mojom::DragEventSourceInfo& event_info,
                      RenderWidgetHostImpl* source_rwh) override;
-  void UpdateDragCursor(blink::DragOperation operation) override;
+  void UpdateDragCursor(ui::mojom::DragOperation operation) override;
   void GotFocus(RenderWidgetHostImpl* render_widget_host) override;
   void LostFocus(RenderWidgetHostImpl* render_widget_host) override;
   void TakeFocus(bool reverse) override;
@@ -125,6 +125,8 @@ class WebContentsViewAndroid : public WebContentsView,
       base::Optional<base::TimeDelta> deadline_override) override;
   void OnBrowserControlsHeightChanged() override;
   void OnControlsResizeViewChanged() override;
+  void NotifyVirtualKeyboardOverlayRect(
+      const gfx::Rect& keyboard_rect) override;
 
   void SetFocus(bool focused);
   void set_device_orientation(int orientation) {

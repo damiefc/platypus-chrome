@@ -16,17 +16,14 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
-#include "base/strings/string16.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "build/build_config.h"
 #include "content/public/common/content_client.h"
-#include "content/public/renderer/url_loader_throttle_provider.h"
-#include "content/public/renderer/websocket_handshake_throttle_provider.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/supported_types.h"
-#include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "third_party/blink/public/platform/url_loader_throttle_provider.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
+#include "third_party/blink/public/platform/websocket_handshake_throttle_provider.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
 #include "ui/base/page_transition_types.h"
@@ -56,6 +53,7 @@ class WebURL;
 class WebURLRequest;
 struct WebPluginParams;
 struct WebURLError;
+enum class ProtocolHandlerSecurityLevel;
 }  // namespace blink
 
 namespace media {
@@ -127,14 +125,6 @@ class CONTENT_EXPORT ContentRendererClient {
       RenderFrame* render_frame,
       const base::FilePath& plugin_path);
 
-  // Returns true if the embedder has an error page to show for the given http
-  // status code.
-  virtual bool HasErrorPage(int http_status_code);
-
-  // Returns false for new tab page activities, which should be filtered out in
-  // UseCounter; returns true otherwise.
-  virtual bool ShouldTrackUseCounter(const GURL& url);
-
   // Returns the information to display when a navigation error occurs.
   // |error_html| should be set to null if this is a custom error page that will
   // set its own html content, otherwise if |error_html| is not null then it may
@@ -149,10 +139,10 @@ class CONTENT_EXPORT ContentRendererClient {
 
   virtual void PrepareErrorPageForHttpStatusError(
       content::RenderFrame* render_frame,
-      const GURL& unreachable_url,
+      const blink::WebURLError& error,
       const std::string& http_method,
       int http_status,
-      std::string* error_html) {}
+      std::string* error_html);
 
   // Allows the embedder to control when media resources are loaded. Embedders
   // can run |closure| immediately if they don't wish to defer media resource
@@ -177,7 +167,7 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Allows the embedder to provide a WebSocketHandshakeThrottleProvider. If it
   // returns NULL then none will be used.
-  virtual std::unique_ptr<WebSocketHandshakeThrottleProvider>
+  virtual std::unique_ptr<blink::WebSocketHandshakeThrottleProvider>
   CreateWebSocketHandshakeThrottleProvider();
 
   // Called on the main-thread immediately after the io thread is
@@ -197,6 +187,9 @@ class CONTENT_EXPORT ContentRendererClient {
   // Returns true if a popup window should be allowed.
   virtual bool AllowPopup();
 
+  // Returns the security level to use for Navigator.RegisterProtocolHandler().
+  virtual blink::ProtocolHandlerSecurityLevel GetProtocolHandlerSecurityLevel();
+
 #if defined(OS_ANDROID)
   // TODO(sgurun) This callback is deprecated and will be removed as soon
   // as android webview completes implementation of a resource throttle based
@@ -205,7 +198,6 @@ class CONTENT_EXPORT ContentRendererClient {
   // Returns true if the navigation was handled by the embedder and should be
   // ignored by WebKit. This method is used by CEF and android_webview.
   virtual bool HandleNavigation(RenderFrame* render_frame,
-                                bool is_content_initiated,
                                 bool render_view_was_created_by_renderer,
                                 blink::WebFrame* frame,
                                 const blink::WebURLRequest& request,
@@ -216,28 +208,21 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Notifies the embedder that the given frame is requesting the resource at
   // |url|. If the function returns a valid |new_url|, the request must be
-  // updated to use it. The |force_ignore_site_for_cookies| output parameter
-  // indicates whether SameSite cookies should be unconditionally attached to
-  // the request, bypassing the usual |site_for_cookies| checks. The
-  // |site_for_cookies| is the site_for_cookies of the request. (This is
+  // updated to use it.
+  //
+  // The |site_for_cookies| is the site_for_cookies of the request. (This is
   // approximately the URL of the main frame. It is empty in the case of
   // cross-site iframes.)
-  //
-  // TODO(nasko): When moved over to Network Service, find a way to perform
-  // this check on the browser side, so untrusted renderer processes cannot
-  // influence whether SameSite cookies are attached.
   virtual void WillSendRequest(blink::WebLocalFrame* frame,
                                ui::PageTransition transition_type,
                                const blink::WebURL& url,
                                const net::SiteForCookies& site_for_cookies,
                                const url::Origin* initiator_origin,
-                               GURL* new_url,
-                               bool* force_ignore_site_for_cookies);
+                               GURL* new_url);
 
-  // Returns true if the request is associated with a document that is in
-  // ""prefetch only" mode, and will not be rendered.
-  virtual bool IsPrefetchOnly(RenderFrame* render_frame,
-                              const blink::WebURLRequest& request);
+  // Returns true if the render frame is used for NoStatePrefetch and will not
+  // be rendered.
+  virtual bool IsPrefetchOnly(RenderFrame* render_frame);
 
   // See blink::Platform.
   virtual uint64_t VisitedLinkHash(const char* canonical_url, size_t length);
@@ -282,7 +267,7 @@ class CONTENT_EXPORT ContentRendererClient {
   // reported source for the error; this can point to a page or a script,
   // and can be external or internal.
   virtual bool ShouldReportDetailedMessageForSource(
-      const base::string16& source);
+      const std::u16string& source);
 
   // Creates a permission client for in-renderer worker.
   virtual std::unique_ptr<blink::WebContentSettingsClient>
@@ -393,12 +378,13 @@ class CONTENT_EXPORT ContentRendererClient {
   // suspended after a period of inactivity.
   virtual bool IsIdleMediaSuspendEnabled();
 
-  // Allows the embedder to return a (possibly null) URLLoaderThrottleProvider
-  // for a frame or worker. For frames this is called on the main thread, and
-  // for workers it's called on the main or worker threads depending on
-  // http://crbug.com/692909.
-  virtual std::unique_ptr<URLLoaderThrottleProvider>
-  CreateURLLoaderThrottleProvider(URLLoaderThrottleProviderType provider_type);
+  // Allows the embedder to return a (possibly null)
+  // blink::URLLoaderThrottleProvider for a frame or worker. For frames this is
+  // called on the main thread, and for workers it's called on the main or
+  // worker threads depending on http://crbug.com/692909.
+  virtual std::unique_ptr<blink::URLLoaderThrottleProvider>
+  CreateURLLoaderThrottleProvider(
+      blink::URLLoaderThrottleProviderType provider_type);
 
   // Called when Blink cannot find a frame with the given name in the frame's
   // browsing instance.  This gives the embedder a chance to return a frame
@@ -413,22 +399,10 @@ class CONTENT_EXPORT ContentRendererClient {
   // most once.
   virtual void DidSetUserAgent(const std::string& user_agent);
 
-  // Returns true if |url| still requires native Web Components v0 features.
-  // Used for Web UI pages.
-  // TODO(937747): Remove this function when all WebUIs can function without
-  // Web Components v0.
-  virtual bool RequiresWebComponentsV0(const GURL& url);
-
   // Optionally returns audio renderer algorithm parameters.
   virtual base::Optional<::media::AudioRendererAlgorithmParameters>
   GetAudioRendererAlgorithmParameters(
       ::media::AudioParameters audio_parameters);
-
-  // Proxies the URLLoaderFactory if the platform supports Chrome extensions.
-  virtual void MaybeProxyURLLoaderFactory(
-      RenderFrame* render_frame,
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory>*
-          factory_receiver);
 };
 
 }  // namespace content

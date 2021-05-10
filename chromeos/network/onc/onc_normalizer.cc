@@ -24,7 +24,7 @@ Normalizer::~Normalizer() = default;
 
 std::unique_ptr<base::DictionaryValue> Normalizer::NormalizeObject(
     const OncValueSignature* object_signature,
-    const base::DictionaryValue& onc_object) {
+    const base::Value& onc_object) {
   CHECK(object_signature != nullptr);
   bool error = false;
   std::unique_ptr<base::DictionaryValue> result =
@@ -35,13 +35,13 @@ std::unique_ptr<base::DictionaryValue> Normalizer::NormalizeObject(
 
 std::unique_ptr<base::DictionaryValue> Normalizer::MapObject(
     const OncValueSignature& signature,
-    const base::DictionaryValue& onc_object,
+    const base::Value& onc_object,
     bool* error) {
   std::unique_ptr<base::DictionaryValue> normalized =
       Mapper::MapObject(signature, onc_object, error);
 
   if (normalized.get() == nullptr)
-    return std::unique_ptr<base::DictionaryValue>();
+    return nullptr;
 
   if (remove_recommended_fields_)
     normalized->RemoveKey(::onc::kRecommended);

@@ -1,8 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env vpython
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+from __future__ import absolute_import
 import unittest
 
 from pylib.base import base_test_result
@@ -134,7 +135,18 @@ class GtestTestInstanceTests(unittest.TestCase):
     actual = gtest_test_instance.ParseGTestOutput(raw_output, None, None)
     self.assertEquals(1, len(actual))
     self.assertEquals('FooTest.Bar', actual[0].GetName())
-    self.assertEquals(0, actual[0].GetDuration())
+    self.assertIsNone(actual[0].GetDuration())
+    self.assertEquals(base_test_result.ResultType.CRASH, actual[0].GetType())
+
+  def testParseGTestOutput_fatalDcheck(self):
+    raw_output = [
+        '[ RUN      ] FooTest.Bar',
+        '[0324/183029.116334:FATAL:test_timeouts.cc(103)] Check failed: !init',
+    ]
+    actual = gtest_test_instance.ParseGTestOutput(raw_output, None, None)
+    self.assertEquals(1, len(actual))
+    self.assertEquals('FooTest.Bar', actual[0].GetName())
+    self.assertIsNone(actual[0].GetDuration())
     self.assertEquals(base_test_result.ResultType.CRASH, actual[0].GetType())
 
   def testParseGTestOutput_unknown(self):
@@ -145,7 +157,7 @@ class GtestTestInstanceTests(unittest.TestCase):
     self.assertEquals(1, len(actual))
     self.assertEquals('FooTest.Bar', actual[0].GetName())
     self.assertEquals(0, actual[0].GetDuration())
-    self.assertEquals(base_test_result.ResultType.UNKNOWN, actual[0].GetType())
+    self.assertEquals(base_test_result.ResultType.CRASH, actual[0].GetType())
 
   def testParseGTestOutput_nonterminalUnknown(self):
     raw_output = [
@@ -158,7 +170,7 @@ class GtestTestInstanceTests(unittest.TestCase):
 
     self.assertEquals('FooTest.Bar', actual[0].GetName())
     self.assertEquals(0, actual[0].GetDuration())
-    self.assertEquals(base_test_result.ResultType.UNKNOWN, actual[0].GetType())
+    self.assertEquals(base_test_result.ResultType.CRASH, actual[0].GetType())
 
     self.assertEquals('FooTest.Baz', actual[1].GetName())
     self.assertEquals(1, actual[1].GetDuration())
@@ -211,6 +223,17 @@ class GtestTestInstanceTests(unittest.TestCase):
     self.assertEquals('Baz/FooTest.Bar/0', actual[0].GetName())
     self.assertEquals(1, actual[0].GetDuration())
     self.assertEquals(base_test_result.ResultType.FAIL, actual[0].GetType())
+
+  def testParseGTestOutput_skippedTest(self):
+    raw_output = [
+        '[ RUN      ] FooTest.Bar',
+        '[  SKIPPED ] FooTest.Bar (1 ms)',
+    ]
+    actual = gtest_test_instance.ParseGTestOutput(raw_output, None, None)
+    self.assertEquals(1, len(actual))
+    self.assertEquals('FooTest.Bar', actual[0].GetName())
+    self.assertEquals(1, actual[0].GetDuration())
+    self.assertEquals(base_test_result.ResultType.SKIP, actual[0].GetType())
 
   def testParseGTestXML_none(self):
     actual = gtest_test_instance.ParseGTestXML(None)

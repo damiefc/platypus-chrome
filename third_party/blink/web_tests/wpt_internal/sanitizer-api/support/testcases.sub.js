@@ -1,24 +1,46 @@
 const testcases = [
-  {config_input: {}, config_value: {dropElements: null}, value: "test", result: "test", message: "string"},
-  {config_input: {}, config_value: {dropElements: null}, value: "<b>bla</b>", result: "<b>bla</b>", message: "html fragment"},
-  {config_input: {}, config_value: {dropElements: null}, value: "<a<embla", result: "", message: "broken html"},
-  {config_input: {}, config_value: {dropElements: null}, value: {}, result: "[object Object]", message: "empty object"},
-  {config_input: {}, config_value: {dropElements: null}, value: 1, result: "1", message: "number"},
-  {config_input: {}, config_value: {dropElements: null}, value: 000, result: "0", message: "zeros"},
-  {config_input: {}, config_value: {dropElements: null}, value: 1+2, result: "3", message: "arithmetic"},
-  {config_input: {}, config_value: {dropElements: null}, value: "", result: "", message: "empty string"},
-  {config_input: {}, config_value: {dropElements: null}, value: undefined, result: "undefined", message: "undefined"},
-  {config_input: {}, config_value: {dropElements: null}, value: null, result: "null", message: "null"},
-  {config_input: {}, config_value: {dropElements: null}, value: "<html><head></head><body>test</body></html>", result: "test", message: "document"},
-  {config_input: {}, config_value: {dropElements: null}, value: "<div>test", result: "<div>test</div>", message: "html without close tag"},
-  {config_input: {}, config_value: {dropElements: null}, value: "<script>alert('i am a test')<\/script>", result: "", message: "scripts"},
-  {config_input: {}, config_value: {dropElements: null}, value: "<p onclick='a= 123'>Click.</p>", result: "<p>Click.</p>", message: "onclick scripts"},
-  {config_input: {test: 123}, config_value: {dropElements: null}, value: "test", result: "test", message: "invalid config_input"},
-  {config_input: {dropElements: []}, config_value: {dropElements:[]}, value: "test", result: "test", message: "empty dropElements list"},
-  {config_input: {dropElements: ["div"]}, config_value: {dropElements:["DIV"]}, value: "<div>test</div><c>bla", result: "<c>bla</c>", message: "test html without close tag with dropElements list ['div']"},
-  {config_input: {dropElements: ["script"]}, config_value: {dropElements:["SCRIPT"]}, value: "<script>alert('i am a test')<\/script>", result: "", message: "test script with [\"script\"] as dropElements list"},
-  {config_input: {dropElements: ["test", "i"]}, config_value: {dropElements:["TEST","I"]}, value: "<div>balabala<i>test</i></div><test>t</test>", result: "<div>balabala</div>", message: "dropElements list [\"test\", \"i\"]}"},
-  {config_input: {dropElements: ["I", "AM"]}, config_value: {dropElements:["I", "AM"]}, value: "<div>balabala<am>test</am></div>", result: "<div>balabala</div>", message: "dropElements list [\"I\", \"AM\"]}"},
-  {config_input: {dropElements: ["am", "p"]}, config_value: {dropElements:["AM","P"]}, value: "<div>balabala<i>i</i><p>t</p><test>a</test></div>", result: "<div>balabala<i>i</i><test>a</test></div>", message: "dropElements list [\"am\", \"p\"]}"},
-  {config_input: {dropElements: [123, [], "test", "i"]}, config_value: {dropElements:["123","","TEST","I"]}, value: "<div>balabala<i>test</i></div><test>t</test>", result: "<div>balabala</div>", message: "dropElements list with invalid values}"}
+  {config_input: {}, value: "<plaintext><p>text</p>", result: "", message: "plaintext"},
+  {config_input: {}, value: "<xmp>TEXT</xmp>", result: "", message: "xmp"},
+  {config_input: {allowElements: ["template", "div"]}, value: "<template><script>test</script><div>hello</div></template>", result: "<template><div>hello</div></template>", message: "Template element"},
+  {config_input: {}, value: "<a href='javascript:evil.com'>Click.</a>", result: "<a>Click.</a>", message: "HTMLAnchorElement with javascript protocal"},
+  {config_input: {}, value: "<a href='  javascript:evil.com'>Click.</a>", result: "<a>Click.</a>", message: "HTMLAnchorElement with javascript protocal start with space"},
+  {config_input: {}, value: "<a href='http:evil.com'>Click.</a>", result: "<a href=\"http:evil.com\">Click.</a>", message: "HTMLAnchorElement"},
+  {config_input: {}, value: "<area href='javascript:evil.com'>Click.</area>", result: "<area>Click.", message: "HTMLAreaElement with javascript protocal"},
+  {config_input: {}, value: "<area href=' javascript:evil.com'>Click.</area>", result: "<area>Click.", message: "HTMLAreaElement with javascript protocal start with space"},
+  {config_input: {}, value: "<area href='http:evil.com'>Click.</area>", result: "<area href=\"http:evil.com\">Click.", message: "HTMLAreaElement"},
+  {config_input: {}, value: "<form action='javascript:evil.com'>Click.</form>", result: "<form>Click.</form>", message: "HTMLFormElement with javascript action"},
+  {config_input: {}, value: "<form action=' javascript:evil.com'>Click.</form>", result: "<form>Click.</form>", message: "HTMLFormElement with javascript action start with space"},
+  {config_input: {}, value: "<form action='http:evil.com'>Click.</form>", result: "<form action=\"http:evil.com\">Click.</form>", message: "HTMLFormElement"},
+  {config_input: {}, value: "<input formaction='javascript:evil.com'>Click.</input>", result: "<input>Click.", message: "HTMLInputElement with javascript formaction"},
+  {config_input: {}, value: "<input formaction=' javascript:evil.com'>Click.</input>", result: "<input>Click.", message: "HTMLInputElement with javascript formaction start with space"},
+  {config_input: {}, value: "<input formaction='http:evil.com'>Click.</input>", result: "<input formaction=\"http:evil.com\">Click.", message: "HTMLInputElement"},
+  {config_input: {}, value: "<button formaction='javascript:evil.com'>Click.</button>", result: "<button>Click.</button>", message: "HTMLButtonElement with javascript formaction"},
+  {config_input: {}, value: "<button formaction=' javascript:evil.com'>Click.</button>", result: "<button>Click.</button>", message: "HTMLButtonElement with javascript formaction start with space"},
+  {config_input: {}, value: "<button formaction='http:evil.com'>Click.</button>", result: "<button formaction=\"http:evil.com\">Click.</button>", message: "HTMLButtonElement"},
+  {config_input: {}, value: "<p>Some text</p></body><!-- 1 --></html><!-- 2 --><p>Some more text</p>", result: "<p>Some text</p><!-- 1 --><!-- 2 --><p>Some more text</p>", message: "malformed HTML"},
+
+  // Test cases from issue WICG/sanitizer-api#84
+  {
+    config_input: {"allowElements":["svg","use"], "allowAttributes":{"xlink:href":["use"]}},
+    value: `<svg><use xlink:href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="x" viewBox="0 0 100 50" width="100%" height="100%"><a href="javascript:alert(1)"><circle r="100" /></a></svg>#x'/></svg>`,
+    result: "",
+    message: "Regression test for WICG/sanitizer-api#84."
+  },
+  // Test cases from issue WICG/sanitizer-api#85
+  {
+    config_input: {
+      "allowElements": ["svg","set"],
+      "allowAttributes": { "onend": ["set"], "dur":["set"] }
+    },
+    value: `<svg><set onend="alert(1)" dur="1"/></svg>`,
+    result: "",
+    message: "Regression test for WICG/sanitizer-api#85."
+  },
+  // Test cases from issue WICG/sanitizer-api#86
+  {
+    config_input: {},
+    value: `<noscript><img title="</noscript><iframe onload=alert(1)>"></noscript>`,
+    result: "",
+    message: "Regression test for WICG/sanitizer-api#86."
+  },
 ];

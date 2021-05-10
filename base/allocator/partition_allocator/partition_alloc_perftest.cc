@@ -10,6 +10,7 @@
 
 #include "base/allocator/partition_allocator/partition_alloc.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
+#include "base/allocator/partition_allocator/thread_cache.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
@@ -35,6 +36,7 @@ namespace {
 constexpr base::TimeDelta kTimeLimit = base::TimeDelta::FromSeconds(2);
 constexpr int kWarmupRuns = 10000;
 constexpr int kTimeCheckInterval = 100000;
+constexpr size_t kAllocSize = 40;
 
 // Size constants are mostly arbitrary, but try to simulate something like CSS
 // parsing which consists of lots of relatively small objects.
@@ -43,7 +45,7 @@ constexpr int kMultiBucketIncrement = 13;
 // Final size is 24 + (13 * 22) = 310 bytes.
 constexpr int kMultiBucketRounds = 22;
 
-constexpr char kMetricPrefixMemoryAllocation[] = "MemoryAllocation";
+constexpr char kMetricPrefixMemoryAllocation[] = "MemoryAllocation.";
 constexpr char kMetricThroughput[] = "throughput";
 constexpr char kMetricTimePerAllocation[] = "time_per_allocation";
 
@@ -55,7 +57,11 @@ perf_test::PerfResultReporter SetUpReporter(const std::string& story_name) {
   return reporter;
 }
 
-enum class AllocatorType { kSystem, kPartitionAlloc };
+enum class AllocatorType {
+  kSystem,
+  kPartitionAlloc,
+  kPartitionAllocWithThreadCache
+};
 
 class Allocator {
  public:
@@ -84,8 +90,34 @@ class PartitionAllocator : public Allocator {
   void Free(void* data) override { ThreadSafePartitionRoot::FreeNoHooks(data); }
 
  private:
-  ThreadSafePartitionRoot alloc_{{PartitionOptions::Alignment::kRegular,
-                                  PartitionOptions::ThreadCache::kDisabled}};
+  ThreadSafePartitionRoot alloc_{{PartitionOptions::AlignedAlloc::kDisallowed,
+                                  PartitionOptions::ThreadCache::kDisabled,
+                                  PartitionOptions::Quarantine::kDisallowed,
+                                  PartitionOptions::Cookies::kAllowed,
+                                  PartitionOptions::RefCount::kDisallowed}};
+};
+
+// Only one partition with a thread cache.
+ThreadSafePartitionRoot* g_partition_root = nullptr;
+class PartitionAllocatorWithThreadCache : public Allocator {
+ public:
+  PartitionAllocatorWithThreadCache() {
+    if (!g_partition_root) {
+      g_partition_root = new ThreadSafePartitionRoot(
+          {PartitionOptions::AlignedAlloc::kDisallowed,
+           PartitionOptions::ThreadCache::kEnabled,
+           PartitionOptions::Quarantine::kDisallowed,
+           PartitionOptions::Cookies::kAllowed,
+           PartitionOptions::RefCount::kDisallowed});
+    }
+    internal::ThreadCacheRegistry::Instance().PurgeAll();
+  }
+  ~PartitionAllocatorWithThreadCache() override = default;
+
+  void* Alloc(size_t size) override {
+    return g_partition_root->AllocFlagsNoHooks(0, size);
+  }
+  void Free(void* data) override { ThreadSafePartitionRoot::FreeNoHooks(data); }
 };
 
 class TestLoopThread : public PlatformThread::Delegate {
@@ -135,35 +167,45 @@ class MemoryAllocationPerfNode {
 #if !defined(MEMORY_CONSTRAINED)
 float SingleBucket(Allocator* allocator) {
   auto* first =
-      reinterpret_cast<MemoryAllocationPerfNode*>(allocator->Alloc(40));
+      reinterpret_cast<MemoryAllocationPerfNode*>(allocator->Alloc(kAllocSize));
+  size_t allocated_memory = kAllocSize;
 
   LapTimer timer(kWarmupRuns, kTimeLimit, kTimeCheckInterval);
   MemoryAllocationPerfNode* cur = first;
   do {
-    auto* next =
-        reinterpret_cast<MemoryAllocationPerfNode*>(allocator->Alloc(40));
+    auto* next = reinterpret_cast<MemoryAllocationPerfNode*>(
+        allocator->Alloc(kAllocSize));
     CHECK_NE(next, nullptr);
     cur->SetNext(next);
     cur = next;
     timer.NextLap();
+    allocated_memory += kAllocSize;
+    // With multiple threads, can get OOM otherwise.
+    if (allocated_memory > 200e6) {
+      cur->SetNext(nullptr);
+      MemoryAllocationPerfNode::FreeAll(first->GetNext(), allocator);
+      cur = first;
+      allocated_memory = kAllocSize;
+    }
   } while (!timer.HasTimeLimitExpired());
+
   // next_ = nullptr only works if the class constructor is called (it's not
   // called in this case because then we can allocate arbitrary-length
   // payloads.)
   cur->SetNext(nullptr);
-
   MemoryAllocationPerfNode::FreeAll(first, allocator);
+
   return timer.LapsPerSecond();
 }
 #endif  // defined(MEMORY_CONSTRAINED)
 
 float SingleBucketWithFree(Allocator* allocator) {
   // Allocate an initial element to make sure the bucket stays set up.
-  void* elem = allocator->Alloc(40);
+  void* elem = allocator->Alloc(kAllocSize);
 
   LapTimer timer(kWarmupRuns, kTimeLimit, kTimeCheckInterval);
   do {
-    void* cur = allocator->Alloc(40);
+    void* cur = allocator->Alloc(kAllocSize);
     CHECK_NE(cur, nullptr);
     allocator->Free(cur);
     timer.NextLap();
@@ -176,22 +218,34 @@ float SingleBucketWithFree(Allocator* allocator) {
 #if !defined(MEMORY_CONSTRAINED)
 float MultiBucket(Allocator* allocator) {
   auto* first =
-      reinterpret_cast<MemoryAllocationPerfNode*>(allocator->Alloc(40));
+      reinterpret_cast<MemoryAllocationPerfNode*>(allocator->Alloc(kAllocSize));
   MemoryAllocationPerfNode* cur = first;
+  size_t allocated_memory = kAllocSize;
 
   LapTimer timer(kWarmupRuns, kTimeLimit, kTimeCheckInterval);
   do {
     for (int i = 0; i < kMultiBucketRounds; i++) {
-      auto* next = reinterpret_cast<MemoryAllocationPerfNode*>(allocator->Alloc(
-          kMultiBucketMinimumSize + (i * kMultiBucketIncrement)));
+      size_t size = kMultiBucketMinimumSize + (i * kMultiBucketIncrement);
+      auto* next =
+          reinterpret_cast<MemoryAllocationPerfNode*>(allocator->Alloc(size));
       CHECK_NE(next, nullptr);
       cur->SetNext(next);
       cur = next;
+      allocated_memory += size;
     }
+
+    // Can OOM with multiple threads.
+    if (allocated_memory > 100e6) {
+      cur->SetNext(nullptr);
+      MemoryAllocationPerfNode::FreeAll(first->GetNext(), allocator);
+      cur = first;
+      allocated_memory = kAllocSize;
+    }
+
     timer.NextLap();
   } while (!timer.HasTimeLimitExpired());
-  cur->SetNext(nullptr);
 
+  cur->SetNext(nullptr);
   MemoryAllocationPerfNode::FreeAll(first, allocator);
 
   return timer.LapsPerSecond() * kMultiBucketRounds;
@@ -228,10 +282,29 @@ float MultiBucketWithFree(Allocator* allocator) {
   return timer.LapsPerSecond() * kMultiBucketRounds;
 }
 
+float DirectMapped(Allocator* allocator) {
+  constexpr size_t kSize = 2 * 1000 * 1000;
+
+  LapTimer timer(kWarmupRuns, kTimeLimit, kTimeCheckInterval);
+  do {
+    void* cur = allocator->Alloc(kSize);
+    CHECK_NE(cur, nullptr);
+    allocator->Free(cur);
+    timer.NextLap();
+  } while (!timer.HasTimeLimitExpired());
+
+  return timer.LapsPerSecond();
+}
+
 std::unique_ptr<Allocator> CreateAllocator(AllocatorType type) {
-  if (type == AllocatorType::kSystem)
-    return std::make_unique<SystemAllocator>();
-  return std::make_unique<PartitionAllocator>();
+  switch (type) {
+    case AllocatorType::kSystem:
+      return std::make_unique<SystemAllocator>();
+    case AllocatorType::kPartitionAlloc:
+      return std::make_unique<PartitionAllocator>();
+    case AllocatorType::kPartitionAllocWithThreadCache:
+      return std::make_unique<PartitionAllocatorWithThreadCache>();
+  }
 }
 
 void LogResults(int thread_count,
@@ -246,8 +319,15 @@ void LogResults(int thread_count,
 void RunTest(int thread_count,
              AllocatorType alloc_type,
              float (*test_fn)(Allocator*),
+             float (*noisy_neighbor_fn)(Allocator*),
              const char* story_base_name) {
   auto alloc = CreateAllocator(alloc_type);
+
+  std::unique_ptr<TestLoopThread> noisy_neighbor_thread = nullptr;
+  if (noisy_neighbor_fn) {
+    noisy_neighbor_thread = std::make_unique<TestLoopThread>(
+        BindOnce(noisy_neighbor_fn, Unretained(alloc.get())));
+  }
 
   std::vector<std::unique_ptr<TestLoopThread>> threads;
   for (int i = 0; i < thread_count; ++i) {
@@ -263,10 +343,25 @@ void RunTest(int thread_count,
     total_laps_per_second += laps_per_second;
   }
 
-  std::string name = base::StringPrintf(
-      "%s.%s_%s_%d", kMetricPrefixMemoryAllocation, story_base_name,
-      alloc_type == AllocatorType::kSystem ? "System" : "PartitionAlloc",
-      thread_count);
+  if (noisy_neighbor_thread)
+    noisy_neighbor_thread->Run();
+
+  char const* alloc_type_str;
+  switch (alloc_type) {
+    case AllocatorType::kSystem:
+      alloc_type_str = "System";
+      break;
+    case AllocatorType::kPartitionAlloc:
+      alloc_type_str = "PartitionAlloc";
+      break;
+    case AllocatorType::kPartitionAllocWithThreadCache:
+      alloc_type_str = "PartitionAllocWithThreadCache";
+      break;
+  }
+
+  std::string name =
+      base::StringPrintf("%s%s_%s_%d", kMetricPrefixMemoryAllocation,
+                         story_base_name, alloc_type_str, thread_count);
 
   DisplayResults(name + "_total", total_laps_per_second);
   DisplayResults(name + "_worst", min_laps_per_second);
@@ -277,19 +372,27 @@ void RunTest(int thread_count,
 class MemoryAllocationPerfTest
     : public testing::TestWithParam<std::tuple<int, AllocatorType>> {};
 
+// Only one partition with a thread cache: cannot use the thread cache when
+// PartitionAlloc is malloc().
 INSTANTIATE_TEST_SUITE_P(
     ,
     MemoryAllocationPerfTest,
-    ::testing::Combine(::testing::Values(1, 2, 3, 4),
-                       ::testing::Values(AllocatorType::kSystem,
-                                         AllocatorType::kPartitionAlloc)));
+    ::testing::Combine(
+        ::testing::Values(1, 2, 3, 4),
+        ::testing::Values(AllocatorType::kSystem,
+                          AllocatorType::kPartitionAlloc
+#if !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+                          ,
+                          AllocatorType::kPartitionAllocWithThreadCache
+#endif
+                          )));
 
 // This test (and the other one below) allocates a large amount of memory, which
 // can cause issues on Android.
 #if !defined(MEMORY_CONSTRAINED)
 TEST_P(MemoryAllocationPerfTest, SingleBucket) {
   auto params = GetParam();
-  RunTest(std::get<0>(params), std::get<1>(params), SingleBucket,
+  RunTest(std::get<0>(params), std::get<1>(params), SingleBucket, nullptr,
           "SingleBucket");
 }
 #endif  // defined(MEMORY_CONSTRAINED)
@@ -297,21 +400,36 @@ TEST_P(MemoryAllocationPerfTest, SingleBucket) {
 TEST_P(MemoryAllocationPerfTest, SingleBucketWithFree) {
   auto params = GetParam();
   RunTest(std::get<0>(params), std::get<1>(params), SingleBucketWithFree,
-          "SingleBucketWithFree");
+          nullptr, "SingleBucketWithFree");
 }
 
 #if !defined(MEMORY_CONSTRAINED)
 TEST_P(MemoryAllocationPerfTest, MultiBucket) {
   auto params = GetParam();
-  RunTest(std::get<0>(params), std::get<1>(params), MultiBucket, "MultiBucket");
+  RunTest(std::get<0>(params), std::get<1>(params), MultiBucket, nullptr,
+          "MultiBucket");
 }
 #endif  // defined(MEMORY_CONSTRAINED)
 
 TEST_P(MemoryAllocationPerfTest, MultiBucketWithFree) {
   auto params = GetParam();
   RunTest(std::get<0>(params), std::get<1>(params), MultiBucketWithFree,
-          "MultiBucketWithFree");
+          nullptr, "MultiBucketWithFree");
 }
+
+TEST_P(MemoryAllocationPerfTest, DirectMapped) {
+  auto params = GetParam();
+  RunTest(std::get<0>(params), std::get<1>(params), DirectMapped, nullptr,
+          "DirectMapped");
+}
+
+#if !defined(MEMORY_CONSTRAINED)
+TEST_P(MemoryAllocationPerfTest, MultiBucketWithNoisyNeighbor) {
+  auto params = GetParam();
+  RunTest(std::get<0>(params), std::get<1>(params), MultiBucket, DirectMapped,
+          "MultiBucketWithNoisyNeighbor");
+}
+#endif  // !defined(MEMORY_CONSTRAINED)
 
 }  // namespace
 

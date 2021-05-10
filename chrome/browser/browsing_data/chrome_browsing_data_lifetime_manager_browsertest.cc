@@ -12,16 +12,19 @@
 #include "base/optional.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/autofill/autofill_uitest_util.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
+#include "chrome/browser/browsing_data/browsing_data_remover_browsertest_base.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_factory.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/browsing_data/counters/site_data_counting_helper.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -33,7 +36,12 @@
 #include "components/browsing_data/core/features.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/history/core/browser/history_service.h"
+#include "components/history/core/browser/history_types.h"
+#include "components/keyed_service/core/service_access_type.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/sync/base/pref_names.h"
+#include "components/sync/driver/sync_driver_switches.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
@@ -50,95 +58,29 @@
 #include "storage/browser/quota/special_storage_policy.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace {
 
-static const char* kExampleHost = "example.com";
 enum class BrowserType { Default, Incognito };
 
 }  // namespace
 
-// TODO(ydago) : Extract this into a base class shared with BrowsingDataRemover
-// browser tests.
 class ChromeBrowsingDataLifetimeManagerTest
-    : public InProcessBrowserTest,
-      public testing::WithParamInterface<BrowserType> {
- public:
+    : public BrowsingDataRemoverBrowserTestBase {
+ protected:
   ChromeBrowsingDataLifetimeManagerTest() {
-    feature_list_.InitAndEnableFeature(
-        browsing_data::features::kEnableBrowsingDataLifetimeManager);
+    InitFeatureList(
+        {browsing_data::features::kEnableBrowsingDataLifetimeManager});
   }
+
   ~ChromeBrowsingDataLifetimeManagerTest() override = default;
 
   void SetUpOnMainThread() override {
-    base::FilePath path;
-    base::PathService::Get(content::DIR_TEST_DATA, &path);
-    host_resolver()->AddRule(kExampleHost, "127.0.0.1");
-    embedded_test_server()->ServeFilesFromDirectory(path);
-    ASSERT_TRUE(embedded_test_server()->Start());
-    if (GetParam() == BrowserType::Incognito)
-      UseIncognitoBrowser();
+    BrowsingDataRemoverBrowserTestBase::SetUpOnMainThread();
+    GetBrowser()->profile()->GetPrefs()->Set(syncer::prefs::kSyncManaged,
+                                             base::Value(true));
   }
-
-  bool RunScriptAndGetBool(const std::string& script) {
-    bool data;
-    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-        GetBrowser()->tab_strip_model()->GetActiveWebContents(), script,
-        &data));
-    return data;
-  }
-
-  void SetDataForType(const std::string& type) {
-    ASSERT_TRUE(RunScriptAndGetBool("set" + type + "()"))
-        << "Couldn't create data for: " << type;
-  }
-
-  bool HasDataForType(const std::string& type) {
-    return RunScriptAndGetBool("has" + type + "()");
-  }
-
-  void VerifyDownloadCount(size_t expected) {
-    content::DownloadManager* download_manager =
-        content::BrowserContext::GetDownloadManager(GetBrowser()->profile());
-    std::vector<download::DownloadItem*> downloads;
-    download_manager->GetAllDownloads(&downloads);
-    EXPECT_EQ(expected, downloads.size());
-  }
-
-  void DownloadAnItem() {
-    // Start a download.
-    content::DownloadManager* download_manager =
-        content::BrowserContext::GetDownloadManager(GetBrowser()->profile());
-    std::unique_ptr<content::DownloadTestObserver> observer(
-        new content::DownloadTestObserverTerminal(
-            download_manager, 1,
-            content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_ACCEPT));
-
-    GURL download_url = ui_test_utils::GetTestUrl(
-        base::FilePath().AppendASCII("downloads"),
-        base::FilePath().AppendASCII("a_zip_file.zip"));
-    ui_test_utils::NavigateToURL(GetBrowser(), download_url);
-    observer->WaitForFinished();
-  }
-
-  network::mojom::NetworkContext* network_context() const {
-    return content::BrowserContext::GetDefaultStoragePartition(
-               GetBrowser()->profile())
-        ->GetNetworkContext();
-  }
-
-  // Call to use an Incognito browser rather than the default.
-  void UseIncognitoBrowser() {
-    ASSERT_EQ(nullptr, incognito_browser_);
-    incognito_browser_ = CreateIncognitoBrowser();
-  }
-
-  bool IsIncognito() { return incognito_browser_ != nullptr; }
-
-  Browser* GetBrowser() const {
-    return incognito_browser_ ? incognito_browser_ : browser();
-  }
-
   void ApplyBrowsingDataLifetimeDeletion(base::StringPiece pref) {
     auto* browsing_data_lifetime_manager =
         ChromeBrowsingDataLifetimeManagerFactory::GetForProfile(
@@ -156,14 +98,54 @@ class ChromeBrowsingDataLifetimeManagerTest
 
     completion_observer.BlockUntilCompletion();
   }
-
- private:
-  Browser* incognito_browser_ = nullptr;
-  base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
-                       ScheduledRemovalDownload) {
+class ChromeBrowsingDataLifetimeManagerScheduledRemovalTest
+    : public ChromeBrowsingDataLifetimeManagerTest,
+      public testing::WithParamInterface<BrowserType> {
+ protected:
+  ChromeBrowsingDataLifetimeManagerScheduledRemovalTest() = default;
+  ~ChromeBrowsingDataLifetimeManagerScheduledRemovalTest() override = default;
+
+  void SetUpOnMainThread() override {
+    ChromeBrowsingDataLifetimeManagerTest::SetUpOnMainThread();
+    if (GetParam() == BrowserType::Incognito)
+      UseIncognitoBrowser();
+    GetBrowser()->profile()->GetPrefs()->Set(syncer::prefs::kSyncManaged,
+                                             base::Value(true));
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerScheduledRemovalTest,
+                       PrefChange) {
+  static constexpr char kCookiesPref[] =
+      R"([{"time_to_live_in_hours": 1, "data_types":
+      ["cookies_and_other_site_data"]}])";
+  static constexpr char kDownloadHistoryPref[] =
+      R"([{"time_to_live_in_hours": 1, "data_types":["download_history"]}])";
+
+  GURL url = embedded_test_server()->GetURL("/browsing_data/site_data.html");
+  ui_test_utils::NavigateToURL(GetBrowser(), url);
+
+  // Add cookie.
+  SetDataForType("Cookie");
+  EXPECT_TRUE(HasDataForType("Cookie"));
+
+  // Expect that cookies are deleted.
+  ApplyBrowsingDataLifetimeDeletion(kCookiesPref);
+  EXPECT_FALSE(HasDataForType("Cookie"));
+
+  // Download an item.
+  DownloadAnItem();
+  VerifyDownloadCount(1u);
+
+  // Change the pref and verify that download history is deleted.
+  ApplyBrowsingDataLifetimeDeletion(kDownloadHistoryPref);
+  VerifyDownloadCount(0u);
+}
+
+IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerScheduledRemovalTest,
+                       Download) {
   static constexpr char kPref[] =
       R"([{"time_to_live_in_hours": 1, "data_types":["download_history"]}])";
   DownloadAnItem();
@@ -172,8 +154,8 @@ IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
   VerifyDownloadCount(0u);
 }
 
-IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
-                       ScheduledRemovalHistory) {
+IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerScheduledRemovalTest,
+                       History) {
   // No history saved in incognito mode.
   if (IsIncognito())
     return;
@@ -190,8 +172,8 @@ IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
   EXPECT_FALSE(HasDataForType("History"));
 }
 
-IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
-                       ScheduledRemovalContentSettings) {
+IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerScheduledRemovalTest,
+                       ContentSettings) {
   static constexpr char kPref[] =
       R"([{"time_to_live_in_hours": 1, "data_types":["site_settings"]}])";
 
@@ -199,13 +181,12 @@ IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
       HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile());
   map->SetContentSettingDefaultScope(GURL("http://host1.com:1"), GURL(),
                                      ContentSettingsType::COOKIES,
-                                     std::string(), CONTENT_SETTING_BLOCK);
+                                     CONTENT_SETTING_BLOCK);
 
   ApplyBrowsingDataLifetimeDeletion(kPref);
 
   ContentSettingsForOneType host_settings;
-  map->GetSettingsForOneType(ContentSettingsType::COOKIES, std::string(),
-                             &host_settings);
+  map->GetSettingsForOneType(ContentSettingsType::COOKIES, &host_settings);
   for (const auto& host_setting : host_settings) {
     if (host_setting.source == "webui_allowlist")
       continue;
@@ -214,8 +195,8 @@ IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
-                       ScheduledRemovalSiteData) {
+IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerScheduledRemovalTest,
+                       SiteData) {
   static constexpr char kPref[] =
       R"([{"time_to_live_in_hours": 1, "data_types":
       ["cookies_and_other_site_data"]}])";
@@ -239,8 +220,8 @@ IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
-                       ScheduledRemovalCache) {
+IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerScheduledRemovalTest,
+                       Cache) {
   static constexpr char kPref[] =
       R"([{"time_to_live_in_hours": 1, "data_types":
       ["cached_images_and_files"]}])";
@@ -258,8 +239,9 @@ IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
   EXPECT_NE(net::OK, content::LoadBasicRequest(network_context(), url));
 }
 
-IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
-                       ScheduledRemovalAutofill) {
+// Disabled because "autofill::AddTestProfile" times out when sync is disabled.
+IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerScheduledRemovalTest,
+                       DISABLED_Autofill) {
   // No autofill data saved in incognito mode.
   if (IsIncognito())
     return;
@@ -271,7 +253,7 @@ IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
   autofill::test::SetProfileInfo(
       &profile, "Marion", "Mitchell", "Morrison", "johnwayne@me.xyz", "Fox",
       "123 Zoo St.", "unit 5", "Hollywood", "CA", "91601", "US", "12345678910");
-  autofill::AddTestProfile(GetBrowser(), profile);
+  autofill::AddTestProfile(GetBrowser()->profile(), profile);
   auto* personal_data_manager =
       autofill::PersonalDataManagerFactory::GetForProfile(
           GetBrowser()->profile());
@@ -285,6 +267,134 @@ IN_PROC_BROWSER_TEST_P(ChromeBrowsingDataLifetimeManagerTest,
 }
 
 INSTANTIATE_TEST_SUITE_P(All,
-                         ChromeBrowsingDataLifetimeManagerTest,
+                         ChromeBrowsingDataLifetimeManagerScheduledRemovalTest,
                          ::testing::Values(BrowserType::Default,
                                            BrowserType::Incognito));
+
+class ChromeBrowsingDataLifetimeManagerShutdownTest
+    : public ChromeBrowsingDataLifetimeManagerTest {
+ protected:
+  ChromeBrowsingDataLifetimeManagerShutdownTest() = default;
+  ~ChromeBrowsingDataLifetimeManagerShutdownTest() override = default;
+
+  history::HistoryService* history_service() {
+    return HistoryServiceFactory::GetForProfile(
+        browser()->profile(), ServiceAccessType::EXPLICIT_ACCESS);
+  }
+
+  void VerifyHistorySize(size_t expected_size) {
+    history::QueryResults history_query_results;
+    base::RunLoop run_loop;
+    base::CancelableTaskTracker tracker;
+    history_service()->QueryHistory(
+        std::u16string(), history::QueryOptions(),
+        base::BindLambdaForTesting([&](history::QueryResults results) {
+          history_query_results = std::move(results);
+          run_loop.QuitClosure().Run();
+        }),
+        &tracker);
+    run_loop.Run();
+    EXPECT_EQ(history_query_results.size(), expected_size);
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(ChromeBrowsingDataLifetimeManagerShutdownTest,
+                       PRE_PRE_BrowserShutdown) {
+  // browsing_history
+  history_service()->AddPage(GURL("https://www.website.com"),
+                             base::Time::FromDoubleT(1000),
+                             history::VisitSource::SOURCE_BROWSED);
+  VerifyHistorySize(1u);
+
+  // download_history
+  DownloadAnItem();
+  VerifyDownloadCount(1u);
+
+  // site_settings
+  auto* map =
+      HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile());
+  map->SetContentSettingDefaultScope(GURL("http://host1.com:1"), GURL(),
+                                     ContentSettingsType::COOKIES,
+                                     CONTENT_SETTING_BLOCK);
+
+  ContentSettingsForOneType host_settings;
+  bool has_pref_setting = false;
+  map->GetSettingsForOneType(ContentSettingsType::COOKIES, &host_settings);
+  for (const auto& host_setting : host_settings) {
+    if (host_setting.source == "webui_allowlist")
+      continue;
+    if (host_setting.source == "preference") {
+      has_pref_setting = true;
+      EXPECT_EQ(ContentSettingsPattern::FromURL(GURL("http://host1.com:1")),
+                host_setting.primary_pattern);
+      EXPECT_EQ(CONTENT_SETTING_BLOCK, host_setting.GetContentSetting());
+    }
+  }
+  EXPECT_TRUE(has_pref_setting);
+
+  // Ensure nothing gets deleted when the browser closes.
+  static constexpr char kPref[] = R"([])";
+  GetBrowser()->profile()->GetPrefs()->Set(
+      browsing_data::prefs::kClearBrowsingDataOnExitList,
+      *base::JSONReader::Read(kPref));
+  base::RunLoop().RunUntilIdle();
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeBrowsingDataLifetimeManagerShutdownTest,
+                       PRE_BrowserShutdown) {
+  // browsing_history
+  VerifyHistorySize(1u);
+
+  // download_history
+  VerifyDownloadCount(1u);
+
+  // site_settings
+  auto* map =
+      HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile());
+  ContentSettingsForOneType host_settings;
+  bool has_pref_setting = false;
+  map->GetSettingsForOneType(ContentSettingsType::COOKIES, &host_settings);
+  for (const auto& host_setting : host_settings) {
+    if (host_setting.source == "webui_allowlist")
+      continue;
+    if (host_setting.source == "preference") {
+      has_pref_setting = true;
+      EXPECT_EQ(ContentSettingsPattern::FromURL(GURL("http://host1.com:1")),
+                host_setting.primary_pattern);
+      EXPECT_EQ(CONTENT_SETTING_BLOCK, host_setting.GetContentSetting());
+    }
+  }
+  EXPECT_TRUE(has_pref_setting);
+
+  // Ensure data gets deleted when the browser closes.
+  static constexpr char kPref[] =
+      R"(["browsing_history", "download_history", "cookies_and_other_site_data",
+      "cached_images_and_files", "password_signin", "autofill", "site_settings",
+      "hosted_app_data"])";
+  GetBrowser()->profile()->GetPrefs()->Set(
+      browsing_data::prefs::kClearBrowsingDataOnExitList,
+      *base::JSONReader::Read(kPref));
+  base::RunLoop().RunUntilIdle();
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeBrowsingDataLifetimeManagerShutdownTest,
+                       BrowserShutdown) {
+  // browsing_history
+  VerifyHistorySize(0u);
+
+  // download_history
+  VerifyDownloadCount(0u);
+
+  // site_settings
+  auto* map =
+      HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile());
+
+  ContentSettingsForOneType host_settings;
+  map->GetSettingsForOneType(ContentSettingsType::COOKIES, &host_settings);
+  for (const auto& host_setting : host_settings) {
+    if (host_setting.source == "webui_allowlist")
+      continue;
+    EXPECT_EQ(ContentSettingsPattern::Wildcard(), host_setting.primary_pattern);
+    EXPECT_EQ(CONTENT_SETTING_ALLOW, host_setting.GetContentSetting());
+  }
+}

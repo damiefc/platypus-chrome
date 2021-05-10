@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/browser_navigator_browsertest.h"
-#include "content/public/test/browser_test.h"
 
 #include <memory>
 
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
@@ -25,29 +25,30 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/search/local_ntp_test_utils.h"
+#include "chrome/browser/ui/search/ntp_test_utils.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/captive_portal/core/buildflags.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/navigation_handle.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/bindings_policy.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "content/public/test/test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/network/public/cpp/resource_request_body.h"
 
@@ -60,6 +61,7 @@ using content::WebContents;
 namespace {
 
 const char kExpectedTitle[] = "PASSED!";
+const char16_t kExpectedTitle16[] = u"PASSED!";
 const char kEchoTitleCommand[] = "/echotitle";
 
 GURL GetGoogleURL() {
@@ -106,7 +108,7 @@ bool BrowserNavigatorTest::OpenPOSTURLInNewForegroundTabAndGetTitle(
     const GURL& url,
     const std::string& post_data,
     bool is_browser_initiated,
-    base::string16* title) {
+    std::u16string* title) {
   NavigateParams param(MakeNavigateParams());
   param.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   param.url = url;
@@ -134,13 +136,14 @@ bool BrowserNavigatorTest::OpenPOSTURLInNewForegroundTabAndGetTitle(
 
 Browser* BrowserNavigatorTest::CreateEmptyBrowserForType(Browser::Type type,
                                                          Profile* profile) {
-  Browser* browser = new Browser(Browser::CreateParams(type, profile, true));
+  Browser* browser =
+      Browser::Create(Browser::CreateParams(type, profile, true));
   chrome::AddTabAt(browser, GURL(), -1, true);
   return browser;
 }
 
 Browser* BrowserNavigatorTest::CreateEmptyBrowserForApp(Profile* profile) {
-  Browser* browser = new Browser(Browser::CreateParams::CreateForApp(
+  Browser* browser = Browser::Create(Browser::CreateParams::CreateForApp(
       "Test", false /* trusted_source */, gfx::Rect(), profile, true));
   chrome::AddTabAt(browser, GURL(), -1, true);
   return browser;
@@ -220,14 +223,6 @@ void BrowserNavigatorTest::RunDoNothingIfIncognitoIsForcedTest(
             browser->tab_strip_model()->GetActiveWebContents()->GetURL());
 }
 
-void BrowserNavigatorTest::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  DCHECK_EQ(content::NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED, type);
-  ++created_tab_contents_count_;
-}
-
 // Subclass of TestNavigationObserver that saves ChromeNavigationUIData.
 class TestNavigationUIDataObserver : public content::TestNavigationObserver {
  public:
@@ -251,7 +246,7 @@ class TestNavigationUIDataObserver : public content::TestNavigationObserver {
     content::TestNavigationObserver::OnDidFinishNavigation(navigation_handle);
   }
 
-  std::unique_ptr<content::NavigationUIData> last_navigation_ui_data_ = nullptr;
+  std::unique_ptr<content::NavigationUIData> last_navigation_ui_data_;
 };
 
 Browser* BrowserNavigatorTest::NavigateHelper(const GURL& url,
@@ -294,16 +289,6 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, Disposition_CurrentTab) {
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, Disposition_SingletonTabExisting) {
   const GURL singleton_url1("http://maps.google.com/");
 
-  // Register for a notification if an additional WebContents was instantiated.
-  // Opening a Singleton tab that is already opened should not be opening a new
-  // tab nor be creating a new WebContents object.
-  content::NotificationRegistrar registrar;
-
-  // As the registrar object goes out of scope, this will get unregistered
-  registrar.Add(this,
-                content::NOTIFICATION_WEB_CONTENTS_RENDER_VIEW_HOST_CREATED,
-                content::NotificationService::AllSources());
-
   chrome::AddSelectedTabWithURL(browser(), singleton_url1,
                                 ui::PAGE_TRANSITION_LINK);
   chrome::AddSelectedTabWithURL(browser(), GetGoogleURL(),
@@ -311,9 +296,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, Disposition_SingletonTabExisting) {
 
   // We should have one browser with 3 tabs, the 3rd selected.
   EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
+  EXPECT_EQ(3, browser()->tab_strip_model()->count());
   EXPECT_EQ(2, browser()->tab_strip_model()->active_index());
-
-  unsigned int previous_tab_contents_count = created_tab_contents_count_ = 0;
 
   // Navigate to singleton_url1.
   NavigateParams params(MakeNavigateParams());
@@ -326,7 +310,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, Disposition_SingletonTabExisting) {
   EXPECT_EQ(1, browser()->tab_strip_model()->active_index());
 
   // No tab contents should have been created
-  EXPECT_EQ(previous_tab_contents_count, created_tab_contents_count_);
+  EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
+  EXPECT_EQ(3, browser()->tab_strip_model()->count());
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
@@ -420,7 +405,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   // need a different profile, and creating a popup window with an incognito
   // profile is a quick and dirty way of achieving this.
   Browser* popup = CreateEmptyBrowserForType(
-      Browser::TYPE_POPUP, browser()->profile()->GetPrimaryOTRProfile());
+      Browser::TYPE_POPUP,
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true));
   NavigateParams params(MakeNavigateParams(popup));
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   Navigate(&params);
@@ -956,8 +942,9 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, MAYBE_Disposition_Incognito) {
 
   // Navigate() should have opened a new toplevel incognito window.
   EXPECT_NE(browser(), params.browser);
-  EXPECT_EQ(browser()->profile()->GetPrimaryOTRProfile(),
-            params.browser->profile());
+  EXPECT_EQ(
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true),
+      params.browser->profile());
 
   // |source_contents| should be set to NULL because the profile for the new
   // page is different from the originating page.
@@ -974,7 +961,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, MAYBE_Disposition_Incognito) {
 // reuses an existing incognito window when possible.
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, Disposition_IncognitoRefocus) {
   Browser* incognito_browser = CreateEmptyBrowserForType(
-      Browser::TYPE_NORMAL, browser()->profile()->GetPrimaryOTRProfile());
+      Browser::TYPE_NORMAL,
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true));
   NavigateParams params(MakeNavigateParams());
   params.disposition = WindowOpenDisposition::OFF_THE_RECORD;
   Navigate(&params);
@@ -1366,9 +1354,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
 }
 
 // This test makes sure a crashed singleton tab reloads from a new navigation.
-// TODO(https://crbug.com/396371): Disabled due to flakiness.
-IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
-                       DISABLED_NavigateToCrashedSingletonTab) {
+IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, NavigateToCrashedSingletonTab) {
   const GURL singleton_url(GetContentSettingsURL());
   WebContents* web_contents = chrome::AddSelectedTabWithURL(
       browser(), singleton_url, ui::PAGE_TRANSITION_LINK);
@@ -1379,7 +1365,14 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   EXPECT_EQ(1, browser()->tab_strip_model()->active_index());
 
   // Kill the singleton tab.
-  web_contents->SetIsCrashed(base::TERMINATION_STATUS_PROCESS_CRASHED, -1);
+  {
+    content::ScopedAllowRendererCrashes scoped_allow_renderer_crashes;
+
+    content::RenderFrameDeletedObserver crash_observer(
+        web_contents->GetMainFrame());
+    web_contents->GetMainFrame()->GetProcess()->Shutdown(1);
+    crash_observer.WaitUntilDeleted();
+  }
   EXPECT_TRUE(web_contents->IsCrashed());
 
   NavigateParams params(MakeNavigateParams());
@@ -1408,7 +1401,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
 }
 
 // TODO(1024166): Timing out on linux-chromeos-dbg.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #define MAYBE_NavigateFromBlankToOptionsInSameTab \
   DISABLED_NavigateFromBlankToOptionsInSameTab
 #else
@@ -1434,7 +1427,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
 }
 
 // TODO(1024166): Timing out on linux-chromeos-dbg.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #define MAYBE_NavigateFromNTPToOptionsInSameTab \
   DISABLED_NavigateFromNTPToOptionsInSameTab
 #else
@@ -1447,7 +1440,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   params.url = GURL(chrome::kChromeUINewTabURL);
   ui_test_utils::NavigateToURL(&params);
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
-  EXPECT_EQ(local_ntp_test_utils::GetFinalNtpUrl(browser()->profile()),
+  EXPECT_EQ(ntp_test_utils::GetFinalNtpUrl(browser()->profile()),
             browser()
                 ->tab_strip_model()
                 ->GetActiveWebContents()
@@ -1512,8 +1505,9 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
             browser()->tab_strip_model()->GetActiveWebContents()->GetURL());
 }
 
+// TODO(crbug.com/1171245): This is disabled for Mac OS due to flakiness.
 // TODO(1024166): Timing out on linux-chromeos-dbg.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_MAC)
 #define MAYBE_NavigateFromNTPToOptionsPageInSameTab \
   DISABLED_NavigateFromNTPToOptionsPageInSameTab
 #else
@@ -1604,7 +1598,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
 }
 
 // TODO(1024166): Timing out on linux-chromeos-dbg.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #define MAYBE_CloseSingletonTab DISABLED_CloseSingletonTab
 #else
 #define MAYBE_CloseSingletonTab CloseSingletonTab
@@ -1650,7 +1644,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
 }
 
 // TODO(linux_aura) http://crbug.com/163931
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA)
+#if (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && defined(USE_AURA)
 #define MAYBE_NavigateFromDefaultToBookmarksInSameTab \
   DISABLED_NavigateFromDefaultToBookmarksInSameTab
 #else
@@ -1696,8 +1690,9 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, NavigateWithoutBrowser) {
 
   // Now navigate using the incognito profile and check that a new window
   // is created.
-  NavigateParams params_incognito(browser()->profile()->GetPrimaryOTRProfile(),
-                                  GetGoogleURL(), ui::PAGE_TRANSITION_LINK);
+  NavigateParams params_incognito(
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true),
+      GetGoogleURL(), ui::PAGE_TRANSITION_LINK);
   ui_test_utils::NavigateToURL(&params_incognito);
   EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
 }
@@ -1725,9 +1720,9 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Open a browser initiated POST request in new foreground tab.
-  base::string16 expected_title(base::ASCIIToUTF16(kExpectedTitle));
+  std::u16string expected_title(kExpectedTitle16);
   std::string post_data = kExpectedTitle;
-  base::string16 title;
+  std::u16string title;
   ASSERT_TRUE(OpenPOSTURLInNewForegroundTabAndGetTitle(
       embedded_test_server()->GetURL(kEchoTitleCommand), post_data, true,
       &title));
@@ -1742,9 +1737,9 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Open a renderer initiated POST request in new foreground tab.
-  base::string16 expected_title(base::ASCIIToUTF16(kExpectedTitle));
+  std::u16string expected_title(kExpectedTitle16);
   std::string post_data = kExpectedTitle;
-  base::string16 title;
+  std::u16string title;
   ASSERT_TRUE(OpenPOSTURLInNewForegroundTabAndGetTitle(
       embedded_test_server()->GetURL(kEchoTitleCommand), post_data, false,
       &title));
@@ -1775,7 +1770,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   params.window_action = NavigateParams::SHOW_WINDOW;
   ui_test_utils::NavigateToURL(&params);
 
-  base::string16 expected_title(base::UTF8ToUTF16(unescaped_title));
+  std::u16string expected_title(base::UTF8ToUTF16(unescaped_title));
   EXPECT_TRUE(params.navigated_or_inserted_contents);
   EXPECT_EQ(expected_title, params.navigated_or_inserted_contents->GetTitle());
   // GURL always keeps non-ASCII characters escaped, but check them anyways.
@@ -1821,7 +1816,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, MAYBE_ReuseRVHWithWebUI) {
   WebContents* popup = controller->GetWebContents();
   ASSERT_TRUE(popup);
   EXPECT_EQ(2, browser()->tab_strip_model()->count());
-  content::RenderViewHost* webui_rvh = popup->GetRenderViewHost();
+  content::RenderViewHost* webui_rvh =
+      popup->GetMainFrame()->GetRenderViewHost();
   content::RenderFrameHost* webui_rfh = popup->GetMainFrame();
   EXPECT_TRUE(content::BINDINGS_POLICY_MOJO_WEB_UI &
               webui_rfh->GetEnabledBindings());
@@ -1829,14 +1825,14 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, MAYBE_ReuseRVHWithWebUI) {
   // Navigate to another page in the popup.
   GURL nonwebui_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   ui_test_utils::NavigateToURL(browser(), nonwebui_url);
-  EXPECT_NE(webui_rvh, popup->GetRenderViewHost());
+  EXPECT_NE(webui_rvh, popup->GetMainFrame()->GetRenderViewHost());
 
   // Go back in the popup.  This should finish without crashing and should
   // reuse the old RenderViewHost.
   content::TestNavigationObserver back_load_observer(popup);
   controller->GoBack();
   back_load_observer.Wait();
-  EXPECT_EQ(webui_rvh, popup->GetRenderViewHost());
+  EXPECT_EQ(webui_rvh, popup->GetMainFrame()->GetRenderViewHost());
   EXPECT_TRUE(webui_rvh->IsRenderViewLive());
   EXPECT_TRUE(content::BINDINGS_POLICY_MOJO_WEB_UI &
               webui_rvh->GetMainFrame()->GetEnabledBindings());

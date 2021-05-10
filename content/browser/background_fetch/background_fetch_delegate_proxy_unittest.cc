@@ -8,10 +8,9 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
-#include "base/task/post_task.h"
 #include "content/browser/background_fetch/background_fetch_test_base.h"
 #include "content/public/browser/background_fetch_delegate.h"
 #include "content/public/browser/background_fetch_description.h"
@@ -38,12 +37,6 @@ class FakeBackgroundFetchDelegate : public BackgroundFetchDelegate {
   void GetIconDisplaySize(
       BackgroundFetchDelegate::GetIconDisplaySizeCallback callback) override {
     std::move(callback).Run(gfx::Size(kIconDisplaySize, kIconDisplaySize));
-  }
-  void GetPermissionForOrigin(
-      const url::Origin& origin,
-      const WebContents::Getter& wc_getter,
-      GetPermissionForOriginCallback callback) override {
-    std::move(callback).Run(BackgroundFetchPermission::ALLOWED);
   }
   void CreateDownloadJob(
       base::WeakPtr<Client> client,
@@ -72,10 +65,12 @@ class FakeBackgroundFetchDelegate : public BackgroundFetchDelegate {
                                                         std::move(response));
     if (complete_downloads_) {
       // Post a task so that Abort() can cancel this download before completing.
-      base::PostTask(
-          FROM_HERE, {ServiceWorkerContext::GetCoreThreadId()},
-          base::BindOnce(&FakeBackgroundFetchDelegate::CompleteDownload,
-                         base::Unretained(this), job_unique_id, guid));
+      BrowserThread::GetTaskRunnerForThread(
+          ServiceWorkerContext::GetCoreThreadId())
+          ->PostTask(
+              FROM_HERE,
+              base::BindOnce(&FakeBackgroundFetchDelegate::CompleteDownload,
+                             base::Unretained(this), job_unique_id, guid));
     }
   }
 

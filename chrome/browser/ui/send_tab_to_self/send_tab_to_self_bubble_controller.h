@@ -6,10 +6,10 @@
 #define CHROME_BROWSER_UI_SEND_TAB_TO_SELF_SEND_TAB_TO_SELF_BUBBLE_CONTROLLER_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "content/public/browser/web_contents_user_data.h"
 
 class Profile;
@@ -42,9 +42,9 @@ class SendTabToSelfBubbleController
   // Returns nullptr if no bubble is currently shown.
   SendTabToSelfBubbleView* send_tab_to_self_bubble_view() const;
   // Returns the title of send tab to self bubble.
-  base::string16 GetWindowTitle() const;
+  std::u16string GetWindowTitle() const;
   // Returns the valid devices info map.
-  const std::vector<TargetDeviceInfo>& GetValidDevices() const;
+  virtual std::vector<TargetDeviceInfo> GetValidDevices() const;
   // Returns current profile.
   Profile* GetProfile() const;
 
@@ -80,15 +80,10 @@ class SendTabToSelfBubbleController
   FRIEND_TEST_ALL_PREFIXES(SendTabToSelfBubbleViewImplTest, PopulateScrollView);
   FRIEND_TEST_ALL_PREFIXES(SendTabToSelfBubbleViewImplTest, DevicePressed);
 
-  // Get information of valid devices.
-  void FetchDeviceInfo();
-
   // The web_contents associated with this controller.
   content::WebContents* web_contents_;
   // Weak reference. Will be nullptr if no bubble is currently shown.
   SendTabToSelfBubbleView* send_tab_to_self_bubble_view_ = nullptr;
-  // Valid devices data.
-  std::vector<TargetDeviceInfo> valid_devices_;
   // True if a confirmation message should be shown in the omnibox.
   bool show_message_ = false;
 

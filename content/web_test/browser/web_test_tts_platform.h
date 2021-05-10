@@ -16,8 +16,9 @@ class WebTestTtsPlatform : public content::TtsPlatform {
   static WebTestTtsPlatform* GetInstance();
 
   // content::TtsControllerDelegate overrides.
-  bool PlatformImplAvailable() override;
-  bool LoadBuiltInTtsEngine(content::BrowserContext* browser_context) override;
+  bool PlatformImplSupported() override;
+  bool PlatformImplInitialized() override;
+  void LoadBuiltInTtsEngine(content::BrowserContext* browser_context) override;
   void Speak(int utterance_id,
              const std::string& utterance,
              const std::string& lang,
@@ -35,6 +36,7 @@ class WebTestTtsPlatform : public content::TtsPlatform {
   std::string GetError() override;
   void ClearError() override;
   void SetError(const std::string& error) override;
+  void Shutdown() override;
 
  private:
   WebTestTtsPlatform();

@@ -11,15 +11,16 @@
 #include "components/permissions/permission_request_id.h"
 #include "components/permissions/permissions_client.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-shared.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
 
 CameraPanTiltZoomPermissionContext::CameraPanTiltZoomPermissionContext(
     content::BrowserContext* browser_context)
     : PermissionContextBase(browser_context,
                             ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
-                            blink::mojom::FeaturePolicyFeature::kNotFound) {
+                            blink::mojom::PermissionsPolicyFeature::kNotFound) {
   host_content_settings_map_ =
       permissions::PermissionsClient::Get()->GetSettingsMap(browser_context);
+  content_setting_observer_registered_by_subclass_ = true;
   host_content_settings_map_->AddObserver(this);
 }
 
@@ -72,8 +73,10 @@ bool CameraPanTiltZoomPermissionContext::IsRestrictedToSecureOrigins() const {
 void CameraPanTiltZoomPermissionContext::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type,
-    const std::string& resource_identifier) {
+    ContentSettingsType content_type) {
+  PermissionContextBase::OnContentSettingChanged(
+      primary_pattern, secondary_pattern, content_type);
+
   if (content_type != ContentSettingsType::MEDIASTREAM_CAMERA &&
       content_type != ContentSettingsType::CAMERA_PAN_TILT_ZOOM) {
     return;
@@ -103,8 +106,8 @@ void CameraPanTiltZoomPermissionContext::OnContentSettingChanged(
     return;
 
   ContentSetting camera_ptz_setting =
-      host_content_settings_map_->GetContentSetting(
-          url, url, content_settings_type(), resource_identifier);
+      host_content_settings_map_->GetContentSetting(url, url,
+                                                    content_settings_type());
 
   if (content_type == ContentSettingsType::CAMERA_PAN_TILT_ZOOM) {
     // Automatically update camera permission to camera PTZ permission as any
@@ -112,8 +115,7 @@ void CameraPanTiltZoomPermissionContext::OnContentSettingChanged(
     updating_mediastream_camera_permission_ = true;
     host_content_settings_map_->SetContentSettingCustomScope(
         primary_pattern, secondary_pattern,
-        ContentSettingsType::MEDIASTREAM_CAMERA, resource_identifier,
-        camera_ptz_setting);
+        ContentSettingsType::MEDIASTREAM_CAMERA, camera_ptz_setting);
     return;
   }
 
@@ -125,8 +127,7 @@ void CameraPanTiltZoomPermissionContext::OnContentSettingChanged(
   }
 
   ContentSetting mediastream_camera_setting =
-      host_content_settings_map_->GetContentSetting(url, url, content_type,
-                                                    resource_identifier);
+      host_content_settings_map_->GetContentSetting(url, url, content_type);
   if (mediastream_camera_setting == CONTENT_SETTING_BLOCK ||
       mediastream_camera_setting == CONTENT_SETTING_ASK) {
     // Automatically reset camera PTZ permission if camera permission
@@ -134,8 +135,7 @@ void CameraPanTiltZoomPermissionContext::OnContentSettingChanged(
     updating_camera_ptz_permission_ = true;
     host_content_settings_map_->SetContentSettingCustomScope(
         primary_pattern, secondary_pattern,
-        ContentSettingsType::CAMERA_PAN_TILT_ZOOM, resource_identifier,
-        CONTENT_SETTING_DEFAULT);
+        ContentSettingsType::CAMERA_PAN_TILT_ZOOM, CONTENT_SETTING_DEFAULT);
   }
 }
 

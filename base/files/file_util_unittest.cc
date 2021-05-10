@@ -18,7 +18,6 @@
 
 #include "base/base_paths.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/environment.h"
@@ -477,7 +476,7 @@ TEST_F(FileUtilTest, NormalizeFilePathReparsePoints) {
   // TEMP can have a lower case drive letter.
   std::wstring temp_base_a = base_a.value();
   ASSERT_FALSE(temp_base_a.empty());
-  temp_base_a[0] = ToUpperASCII(char16{temp_base_a[0]});
+  temp_base_a[0] = ToUpperASCII(char16_t{temp_base_a[0]});
   base_a = FilePath(temp_base_a);
 #endif
   ASSERT_TRUE(CreateDirectory(base_a));
@@ -1122,7 +1121,7 @@ TEST_F(FileUtilTest, CopyDirectoryPermissions) {
   ASSERT_TRUE(GetPosixFilePermissions(file_name_to, &mode));
 #if defined(OS_APPLE)
   expected_mode = 0755;
-#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   expected_mode = 0644;
 #else
   expected_mode = 0600;
@@ -1132,7 +1131,7 @@ TEST_F(FileUtilTest, CopyDirectoryPermissions) {
   ASSERT_TRUE(GetPosixFilePermissions(file2_name_to, &mode));
 #if defined(OS_APPLE)
   expected_mode = 0755;
-#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   expected_mode = 0644;
 #else
   expected_mode = 0600;
@@ -1142,7 +1141,7 @@ TEST_F(FileUtilTest, CopyDirectoryPermissions) {
   ASSERT_TRUE(GetPosixFilePermissions(file3_name_to, &mode));
 #if defined(OS_APPLE)
   expected_mode = 0600;
-#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   expected_mode = 0644;
 #else
   expected_mode = 0600;
@@ -1292,7 +1291,7 @@ TEST_F(FileUtilTest, CopyFileExecutablePermission) {
   int expected_mode;
 #if defined(OS_APPLE)
   expected_mode = 0755;
-#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   expected_mode = 0644;
 #else
   expected_mode = 0600;
@@ -1310,7 +1309,7 @@ TEST_F(FileUtilTest, CopyFileExecutablePermission) {
   ASSERT_TRUE(GetPosixFilePermissions(dst, &mode));
 #if defined(OS_APPLE)
   expected_mode = 0755;
-#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   expected_mode = 0644;
 #else
   expected_mode = 0600;
@@ -1328,7 +1327,7 @@ TEST_F(FileUtilTest, CopyFileExecutablePermission) {
   ASSERT_TRUE(GetPosixFilePermissions(dst, &mode));
 #if defined(OS_APPLE)
   expected_mode = 0600;
-#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   expected_mode = 0644;
 #else
   expected_mode = 0600;
@@ -4256,6 +4255,46 @@ TEST(ScopedFD, ScopedFDCrashesOnCloseFailure) {
 }
 
 #endif  // defined(OS_POSIX) || defined(OS_FUCHSIA)
+
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
+TEST_F(FileUtilTest, CopyFileContentsWithSendfile) {
+  // This test validates that sendfile(2) can be used to copy a file contents
+  // and that it will honor the file offsets as CopyFileContents does.
+  FilePath file_name_from = temp_dir_.GetPath().Append(
+      FILE_PATH_LITERAL("copy_contents_file_in.txt"));
+  FilePath file_name_to = temp_dir_.GetPath().Append(
+      FILE_PATH_LITERAL("copy_contents_file_out.txt"));
+
+  const std::wstring from_contents(L"0123456789ABCDEF");
+  CreateTextFile(file_name_from, from_contents);
+  ASSERT_TRUE(PathExists(file_name_from));
+
+  const std::wstring to_contents(L"GHIJKL");
+  CreateTextFile(file_name_to, to_contents);
+  ASSERT_TRUE(PathExists(file_name_to));
+
+  File from(file_name_from, File::FLAG_OPEN | File::FLAG_READ);
+  ASSERT_TRUE(from.IsValid());
+
+  File to(file_name_to, File::FLAG_OPEN | File::FLAG_WRITE);
+  ASSERT_TRUE(to.IsValid());
+
+  // See to the 1st byte in each file.
+  ASSERT_EQ(from.Seek(File::Whence::FROM_BEGIN, 1), 1);
+  ASSERT_EQ(to.Seek(File::Whence::FROM_BEGIN, 1), 1);
+
+  bool retry_slow = false;
+
+  // Given the test setup there should never be a sendfile(2) failure.
+  ASSERT_TRUE(internal::CopyFileContentsWithSendfile(from, to, retry_slow));
+  from.Close();
+  to.Close();
+
+  // Expect the output file contents to be: G123456789ABCDEF because both
+  // file positions when we copied the file contents were at 1.
+  EXPECT_EQ(L"G123456789ABCDEF", ReadTextFile(file_name_to));
+}
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 
 }  // namespace
 

@@ -17,7 +17,6 @@
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_ioplugininterface.h"
 #include "base/optional.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/device_event_log/device_event_log.h"
@@ -35,7 +34,7 @@ constexpr uint8_t kDeviceClassHub = 0x09;
 // These methods are similar to the ones used by HidServiceMac.
 // TODO(https://crbug.com/1104271): Move these methods into a shared utility
 // file.
-base::Optional<base::string16> GetStringProperty(io_service_t service,
+base::Optional<std::u16string> GetStringProperty(io_service_t service,
                                                  CFStringRef key) {
   base::ScopedCFTypeRef<CFStringRef> ref(base::mac::CFCast<CFStringRef>(
       IORegistryEntryCreateCFProperty(service, key, kCFAllocatorDefault, 0)));
@@ -235,19 +234,19 @@ void UsbServiceMac::AddDevice(io_service_t device) {
     return;
   usb_version = property_uint16.value();
 
-  base::Optional<base::string16> property_string16 =
+  base::Optional<std::u16string> property_string16 =
       GetStringProperty(device, CFSTR(kUSBVendorString));
-  base::string16 manufacturer_string;
+  std::u16string manufacturer_string;
   if (property_string16.has_value())
     manufacturer_string = property_string16.value();
 
   property_string16 = GetStringProperty(device, CFSTR(kUSBSerialNumberString));
-  base::string16 serial_number_string;
+  std::u16string serial_number_string;
   if (property_string16.has_value())
     serial_number_string = property_string16.value();
 
   property_string16 = GetStringProperty(device, CFSTR(kUSBProductString));
-  base::string16 product_string;
+  std::u16string product_string;
   if (property_string16.has_value())
     product_string = property_string16.value();
 

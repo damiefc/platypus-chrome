@@ -5,13 +5,11 @@
 #include "chrome/browser/ui/views/extensions/print_job_confirmation_dialog_view.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
-#include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_action_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -20,6 +18,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -31,10 +30,10 @@
 void PrintJobConfirmationDialogView::Show(
     gfx::NativeWindow parent,
     const std::string& extension_id,
-    const base::string16& extension_name,
+    const std::u16string& extension_name,
     const gfx::ImageSkia& extension_icon,
-    const base::string16& print_job_title,
-    const base::string16& printer_name,
+    const std::u16string& print_job_title,
+    const std::u16string& printer_name,
     base::OnceCallback<void(bool)> callback) {
   // TODO (crbug.com/996785): Extract common code with
   // ExtensionUninstallDialogViews::Show() to separate methods: first method to
@@ -45,36 +44,21 @@ void PrintJobConfirmationDialogView::Show(
   // constrained_window::CreateBrowserModalDialogViews() (see below).
   BrowserView* const browser_view =
       parent ? BrowserView::GetBrowserViewForNativeWindow(parent) : nullptr;
-  ToolbarActionView* anchor_view = nullptr;
   ExtensionsToolbarContainer* const container =
       browser_view ? browser_view->toolbar_button_provider()
                          ->GetExtensionsToolbarContainer()
                    : nullptr;
-  if (container) {
-    anchor_view = container->GetViewForId(extension_id);
-  } else if (browser_view &&
-             !base::FeatureList::IsEnabled(features::kExtensionsToolbarMenu)) {
-    BrowserActionsContainer* const browser_actions_container =
-        browser_view->toolbar_button_provider()->GetBrowserActionsContainer();
-    ToolbarActionView* const reference_view =
-        browser_actions_container
-            ? browser_actions_container->GetViewForId(extension_id)
-            : nullptr;
-    if (reference_view && reference_view->GetVisible())
-      anchor_view = reference_view;
-  }
+  ToolbarActionView* anchor_view =
+      container ? container->GetViewForId(extension_id) : nullptr;
+
   auto* print_job_confirmation_dialog_view = new PrintJobConfirmationDialogView(
       anchor_view, extension_name, extension_icon, print_job_title,
       printer_name, std::move(callback));
   if (anchor_view) {
+    DCHECK(container);
     views::Widget* const widget = views::BubbleDialogDelegateView::CreateBubble(
         print_job_confirmation_dialog_view);
-    if (container) {
-      container->ShowWidgetForExtension(widget, extension_id);
-    } else {
-      DCHECK(!base::FeatureList::IsEnabled(features::kExtensionsToolbarMenu));
-      widget->Show();
-    }
+    container->ShowWidgetForExtension(widget, extension_id);
   } else {
     constrained_window::CreateBrowserModalDialogViews(
         print_job_confirmation_dialog_view, parent)
@@ -84,17 +68,15 @@ void PrintJobConfirmationDialogView::Show(
 
 PrintJobConfirmationDialogView::PrintJobConfirmationDialogView(
     ToolbarActionView* anchor_view,
-    const base::string16& extension_name,
+    const std::u16string& extension_name,
     const gfx::ImageSkia& extension_icon,
-    const base::string16& print_job_title,
-    const base::string16& printer_name,
+    const std::u16string& print_job_title,
+    const std::u16string& printer_name,
     base::OnceCallback<void(bool)> callback)
     : BubbleDialogDelegateView(anchor_view,
                                anchor_view ? views::BubbleBorder::TOP_RIGHT
                                            : views::BubbleBorder::NONE),
-      callback_(std::move(callback)),
-      dialog_is_bubble_(anchor_view != nullptr) {
-  SetModalType(dialog_is_bubble_ ? ui::MODAL_TYPE_NONE : ui::MODAL_TYPE_WINDOW);
+      callback_(std::move(callback)) {
   SetButtonLabel(ui::DIALOG_BUTTON_OK,
                  l10n_util::GetStringUTF16(
                      IDS_EXTENSIONS_PRINTING_API_PRINT_REQUEST_ALLOW));
@@ -117,10 +99,15 @@ PrintJobConfirmationDialogView::PrintJobConfirmationDialogView(
   SetCancelCallback(
       base::BindOnce(run_callback, base::Unretained(this), false));
 
-  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+  ChromeLayoutProvider* const provider = ChromeLayoutProvider::Get();
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(),
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL)));
+  const bool dialog_is_bubble = anchor_view != nullptr;
+  SetModalType(dialog_is_bubble ? ui::MODAL_TYPE_NONE : ui::MODAL_TYPE_WINDOW);
+  set_fixed_width(provider->GetDistanceMetric(
+      dialog_is_bubble ? views::DISTANCE_BUBBLE_PREFERRED_WIDTH
+                       : views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
 
   // Add margins for the icon plus the icon-title padding so that the dialog
   // contents align with the title text.
@@ -145,23 +132,17 @@ PrintJobConfirmationDialogView::PrintJobConfirmationDialogView(
 
 PrintJobConfirmationDialogView::~PrintJobConfirmationDialogView() = default;
 
-gfx::Size PrintJobConfirmationDialogView::CalculatePreferredSize() const {
-  const int width =
-      ChromeLayoutProvider::Get()->GetDistanceMetric(
-          dialog_is_bubble_ ? DISTANCE_BUBBLE_PREFERRED_WIDTH
-                            : DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
-      margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
-}
+BEGIN_METADATA(PrintJobConfirmationDialogView, views::BubbleDialogDelegateView)
+END_METADATA
 
 namespace chrome {
 
 void ShowPrintJobConfirmationDialog(gfx::NativeWindow parent,
                                     const std::string& extension_id,
-                                    const base::string16& extension_name,
+                                    const std::u16string& extension_name,
                                     const gfx::ImageSkia& extension_icon,
-                                    const base::string16& print_job_title,
-                                    const base::string16& printer_name,
+                                    const std::u16string& print_job_title,
+                                    const std::u16string& printer_name,
                                     base::OnceCallback<void(bool)> callback) {
   PrintJobConfirmationDialogView::Show(parent, extension_id, extension_name,
                                        extension_icon, print_job_title,

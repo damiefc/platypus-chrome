@@ -55,7 +55,7 @@ class NGCaretPositionTest : public NGLayoutTest {
   }
 
   Persistent<Element> container_;
-  const LayoutBlockFlow* context_;
+  Persistent<const LayoutBlockFlow> context_;
 };
 
 #define TEST_CARET(caret, fragment_, type_, offset_)                         \
@@ -287,6 +287,202 @@ TEST_F(NGCaretPositionTest, CaretPositionAtSoftLineWrapBetweenDeepTextNodes) {
              fragment_c, kAtTextOffset, base::Optional<unsigned>(wrap_offset));
   TEST_CARET(ComputeNGCaretPosition(wrap_offset, TextAffinity::kDownstream),
              fragment_d, kAtTextOffset, base::Optional<unsigned>(wrap_offset));
+}
+
+TEST_F(NGCaretPositionTest, GeneratedZeroWidthSpace) {
+  LoadAhem();
+  InsertStyleElement(
+      "p { font: 10px/1 Ahem; }"
+      "p { width: 4ch; white-space: pre-wrap;");
+  // We have ZWS before "abc" due by "pre-wrap".
+  // text content is
+  //    [0..3] "   "
+  //    [4] ZWS
+  //    [5..8] "abcd"
+  SetBodyInnerHTML("<p id=t>    abcd</p>");
+  const Text& text = To<Text>(*GetElementById("t")->firstChild());
+  const Position after_zws(text, 4);  // before "a".
+
+  NGInlineCursor cursor;
+  cursor.MoveTo(*text.GetLayoutObject());
+
+  ASSERT_EQ(NGTextOffset(0, 4), cursor.Current().TextOffset());
+  TEST_CARET(blink::ComputeNGCaretPosition(
+                 PositionWithAffinity(after_zws, TextAffinity::kUpstream)),
+             cursor, kAtTextOffset, base::Optional<unsigned>(4));
+
+  cursor.MoveToNextForSameLayoutObject();
+  ASSERT_EQ(NGTextOffset(5, 9), cursor.Current().TextOffset());
+  TEST_CARET(blink::ComputeNGCaretPosition(
+                 PositionWithAffinity(after_zws, TextAffinity::kDownstream)),
+             cursor, kAtTextOffset, base::Optional<unsigned>(5));
+}
+
+// See also ParameterizedLocalCaretRectTest.MultiColumnSingleText
+TEST_F(NGCaretPositionTest, MultiColumnSingleText) {
+  RuntimeEnabledFeaturesTestHelpers::ScopedLayoutNGBlockFragmentation
+      block_fragmentation(true);
+  LoadAhem();
+  InsertStyleElement(
+      "div { font: 10px/15px Ahem; column-count: 3; width: 20ch; }");
+  SetBodyInnerHTML("<div id=target>abc def ghi jkl mno pqr</div>");
+  // This HTML is rendered as:
+  //    abc ghi mno
+  //    def jkl
+  const auto& target = *GetElementById("target");
+  const Text& text = *To<Text>(target.firstChild());
+
+  NGInlineCursor cursor;
+  cursor.MoveTo(*text.GetLayoutObject());
+
+  // "abc " in column 1
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 0))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(0));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 1))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(1));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 2))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(2));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 3))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(3));
+  cursor.MoveToNextForSameLayoutObject();
+
+  // "def " in column 1
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 4))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(4));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 5))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(5));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 6))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(6));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 7))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(7));
+  cursor.MoveToNextForSameLayoutObject();
+
+  // "ghi " in column 2
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 8))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(8));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 9))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(9));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 10))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(10));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 11))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(11));
+  cursor.MoveToNextForSameLayoutObject();
+
+  // "jkl " in column 2
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 12))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(12));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 13))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(13));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 14))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(14));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 15))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(15));
+  cursor.MoveToNextForSameLayoutObject();
+
+  // "mno " in column 3
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 16))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(16));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 17))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(17));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 18))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(18));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 19))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(19));
+  cursor.MoveToNextForSameLayoutObject();
+
+  // "pqr" in column 3
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 20))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(20));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 21))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(21));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 22))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(22));
+  TEST_CARET(
+      blink::ComputeNGCaretPosition(PositionWithAffinity(Position(text, 23))),
+      cursor, kAtTextOffset, base::Optional<unsigned>(23));
+  cursor.MoveToNextForSameLayoutObject();
+}
+
+// http://crbug.com/1183269
+// See also NGCaretPositionTest.CaretPositionAtSoftLineWrap
+TEST_F(NGCaretPositionTest, SoftLineWrap) {
+  LoadAhem();
+  InsertStyleElement(
+      "p { font: 10px/1 Ahem; }"
+      "p { width: 4ch;");
+  // Note: "contenteditable" adds
+  //    line-break: after-white-space;
+  //    overflow-wrap: break-word;
+  SetBodyInnerHTML("<p id=t contenteditable>abc xyz</p>");
+  const Text& text = To<Text>(*GetElementById("t")->firstChild());
+  const Position before_xyz(text, 4);  // before "w".
+
+  NGInlineCursor cursor;
+  cursor.MoveTo(*text.GetLayoutObject());
+
+  // Note: upstream/downstream before "xyz" are in different line.
+
+  ASSERT_EQ(NGTextOffset(0, 3), cursor.Current().TextOffset());
+  TEST_CARET(blink::ComputeNGCaretPosition(
+                 PositionWithAffinity(before_xyz, TextAffinity::kUpstream)),
+             cursor, kAtTextOffset, base::Optional<unsigned>(3));
+
+  cursor.MoveToNextForSameLayoutObject();
+  ASSERT_EQ(NGTextOffset(4, 7), cursor.Current().TextOffset());
+  TEST_CARET(blink::ComputeNGCaretPosition(
+                 PositionWithAffinity(before_xyz, TextAffinity::kDownstream)),
+             cursor, kAtTextOffset, base::Optional<unsigned>(4));
+}
+
+TEST_F(NGCaretPositionTest, ZeroWidthSpace) {
+  LoadAhem();
+  InsertStyleElement(
+      "p { font: 10px/1 Ahem; }"
+      "p { width: 4ch;");
+  // dom and text content is
+  //    [0..3] "abcd"
+  //    [4] ZWS
+  //    [5..8] "wxyz"
+  SetBodyInnerHTML("<p id=t>abcd&#x200B;wxyz</p>");
+  const Text& text = To<Text>(*GetElementById("t")->firstChild());
+  const Position after_zws(text, 5);  // before "w".
+
+  NGInlineCursor cursor;
+  cursor.MoveTo(*text.GetLayoutObject());
+
+  ASSERT_EQ(NGTextOffset(0, 5), cursor.Current().TextOffset());
+  TEST_CARET(blink::ComputeNGCaretPosition(
+                 PositionWithAffinity(after_zws, TextAffinity::kUpstream)),
+             cursor, kAtTextOffset, base::Optional<unsigned>(4));
+
+  cursor.MoveToNextForSameLayoutObject();
+  ASSERT_EQ(NGTextOffset(5, 9), cursor.Current().TextOffset());
+  TEST_CARET(blink::ComputeNGCaretPosition(
+                 PositionWithAffinity(after_zws, TextAffinity::kDownstream)),
+             cursor, kAtTextOffset, base::Optional<unsigned>(5));
 }
 
 TEST_F(NGCaretPositionTest, InlineBlockBeforeContent) {

@@ -15,11 +15,8 @@
 #include "components/feed/core/v2/feed_store.h"
 #include "components/offline_pages/task/task.h"
 
-namespace base {
-class Clock;
-}  // namespace base
-
 namespace feed {
+class FeedStream;
 struct StreamModelUpdateRequest;
 
 // Attempts to load stream data from persistent storage.
@@ -33,22 +30,32 @@ class LoadStreamFromStoreTask : public offline_pages::Task {
     LoadStreamStatus status = LoadStreamStatus::kNoStatus;
     // Only provided if using |LoadType::kFullLoad| AND successful.
     std::unique_ptr<StreamModelUpdateRequest> update_request;
-    // This data is provided when |LoadType::kPendingActionsOnly|, or
-    // when loading fails.
-    std::string consistency_token;
+
+    // The fields below are provided for all `LoadType`s.
+
     // Pending actions to be uploaded if the stream is to be loaded from the
     // network.
     std::vector<feedstore::StoredAction> pending_actions;
+    // How long since the loaded content was fetched from the server.
+    // May be zero if content is not loaded.
+    base::TimeDelta content_age;
+    // Last time the stream was fetched from the network.
+    base::Time last_added_time;
   };
 
+  // Determines what kind of data is loaded. See `Result` for what is loaded.
   enum class LoadType {
+    // Load the full stream content.
     kFullLoad = 0,
-    kPendingActionsOnly = 1,
+    // Skips loading stream content.
+    kLoadNoContent = 1,
   };
 
   LoadStreamFromStoreTask(LoadType load_type,
+                          FeedStream* feed_stream,
+                          const StreamType& stream_type,
                           FeedStore* store,
-                          const base::Clock* clock,
+                          bool missed_last_refresh,
                           base::OnceCallback<void(Result)> callback);
   ~LoadStreamFromStoreTask() override;
   LoadStreamFromStoreTask(const LoadStreamFromStoreTask&) = delete;
@@ -68,16 +75,20 @@ class LoadStreamFromStoreTask : public offline_pages::Task {
     return weak_ptr_factory_.GetWeakPtr();
   }
 
+  LoadStreamStatus stale_reason_ = LoadStreamStatus::kNoStatus;
   LoadType load_type_;
+  FeedStream* feed_stream_;
+  StreamType stream_type_;
   FeedStore* store_;  // Unowned.
-  const base::Clock* clock_;
   bool ignore_staleness_ = false;
+  bool missed_last_refresh_ = false;
   base::OnceCallback<void(Result)> result_callback_;
 
   // Data to be stuffed into the Result when the task is complete.
   std::unique_ptr<StreamModelUpdateRequest> update_request_;
-  std::string consistency_token_;
   std::vector<feedstore::StoredAction> pending_actions_;
+  base::TimeDelta content_age_;
+  base::Time last_added_time_;
 
   base::WeakPtrFactory<LoadStreamFromStoreTask> weak_ptr_factory_{this};
 };

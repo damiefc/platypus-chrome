@@ -141,8 +141,6 @@ NGMathUnderOverLayoutAlgorithm::NGMathUnderOverLayoutAlgorithm(
     const NGLayoutAlgorithmParams& params)
     : NGLayoutAlgorithm(params) {
   DCHECK(params.space.IsNewFormattingContext());
-  container_builder_.SetIsNewFormattingContext(
-      params.space.IsNewFormattingContext());
 }
 
 void NGMathUnderOverLayoutAlgorithm::GatherChildren(NGBlockNode* base,
@@ -184,7 +182,7 @@ void NGMathUnderOverLayoutAlgorithm::GatherChildren(NGBlockNode* base,
   }
 }
 
-scoped_refptr<const NGLayoutResult> NGMathUnderOverLayoutAlgorithm::Layout() {
+const NGLayoutResult* NGMathUnderOverLayoutAlgorithm::Layout() {
   DCHECK(!BreakToken());
   DCHECK(IsValidMathMLScript(Node()));
 
@@ -218,12 +216,12 @@ scoped_refptr<const NGLayoutResult> NGMathUnderOverLayoutAlgorithm::Layout() {
 
   auto base_space = CreateConstraintSpaceForMathChild(
       Node(), ChildAvailableSize(), ConstraintSpace(), base);
-  auto base_layout_result = base.Layout(base_space);
+  auto* base_layout_result = base.Layout(base_space);
   auto base_margins =
       ComputeMarginsFor(base_space, base.Style(), ConstraintSpace());
 
   NGBoxFragment base_fragment(
-      ConstraintSpace().GetWritingMode(), ConstraintSpace().Direction(),
+      ConstraintSpace().GetWritingDirection(),
       To<NGPhysicalBoxFragment>(base_layout_result->PhysicalFragment()));
   LayoutUnit base_ascent = base_fragment.BaselineOrSynthesize();
 
@@ -232,12 +230,11 @@ scoped_refptr<const NGLayoutResult> NGMathUnderOverLayoutAlgorithm::Layout() {
   if (over) {
     auto over_space = CreateConstraintSpaceForMathChild(
         Node(), ChildAvailableSize(), ConstraintSpace(), over);
-    scoped_refptr<const NGLayoutResult> over_layout_result =
-        over.Layout(over_space);
+    const NGLayoutResult* over_layout_result = over.Layout(over_space);
     NGBoxStrut over_margins =
         ComputeMarginsFor(over_space, over.Style(), ConstraintSpace());
     NGBoxFragment over_fragment(
-        ConstraintSpace().GetWritingMode(), ConstraintSpace().Direction(),
+        ConstraintSpace().GetWritingDirection(),
         To<NGPhysicalBoxFragment>(over_layout_result->PhysicalFragment()));
     block_offset += parameters.over_extra_ascender + over_margins.block_start;
     LogicalOffset over_offset = {
@@ -281,12 +278,11 @@ scoped_refptr<const NGLayoutResult> NGMathUnderOverLayoutAlgorithm::Layout() {
   if (under) {
     auto under_space = CreateConstraintSpaceForMathChild(
         Node(), ChildAvailableSize(), ConstraintSpace(), under);
-    scoped_refptr<const NGLayoutResult> under_layout_result =
-        under.Layout(under_space);
+    const NGLayoutResult* under_layout_result = under.Layout(under_space);
     NGBoxStrut under_margins =
         ComputeMarginsFor(under_space, under.Style(), ConstraintSpace());
     NGBoxFragment under_fragment(
-        ConstraintSpace().GetWritingMode(), ConstraintSpace().Direction(),
+        ConstraintSpace().GetWritingDirection(),
         To<NGPhysicalBoxFragment>(under_layout_result->PhysicalFragment()));
     block_offset += under_margins.block_start;
     if (parameters.use_under_over_bar_fallback) {
@@ -328,7 +324,7 @@ scoped_refptr<const NGLayoutResult> NGMathUnderOverLayoutAlgorithm::Layout() {
 }
 
 MinMaxSizesResult NGMathUnderOverLayoutAlgorithm::ComputeMinMaxSizes(
-    const MinMaxSizesInput& child_input) const {
+    const MinMaxSizesFloatInput&) const {
   DCHECK(IsValidMathMLScript(Node()));
 
   if (auto result = CalculateMinMaxSizesIgnoringChildren(
@@ -336,25 +332,23 @@ MinMaxSizesResult NGMathUnderOverLayoutAlgorithm::ComputeMinMaxSizes(
     return *result;
 
   MinMaxSizes sizes;
-  bool depends_on_percentage_block_size = false;
+  bool depends_on_block_constraints = false;
 
   for (NGLayoutInputNode child = Node().FirstChild(); child;
        child = child.NextSibling()) {
     if (child.IsOutOfFlowPositioned())
       continue;
     // TODO(crbug.com/1125136): take into account italic correction.
-    auto child_result = ComputeMinAndMaxContentContribution(
-        Style(), To<NGBlockNode>(child), child_input);
-    NGBoxStrut margins = ComputeMinMaxMargins(Style(), child);
-    child_result.sizes += margins.InlineSum();
+    const auto child_result = ComputeMinAndMaxContentContributionForMathChild(
+        Style(), ConstraintSpace(), To<NGBlockNode>(child),
+        ChildAvailableSize().block_size);
 
     sizes.Encompass(child_result.sizes);
-    depends_on_percentage_block_size |=
-        child_result.depends_on_percentage_block_size;
+    depends_on_block_constraints |= child_result.depends_on_block_constraints;
   }
 
   sizes += BorderScrollbarPadding().InlineSum();
-  return {sizes, depends_on_percentage_block_size};
+  return MinMaxSizesResult(sizes, depends_on_block_constraints);
 }
 
 }  // namespace blink

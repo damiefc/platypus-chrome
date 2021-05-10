@@ -5,6 +5,7 @@
 #include "chrome/test/chromedriver/session_commands.h"
 
 #include <list>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -64,7 +65,8 @@ Status EvaluateScriptAndIgnoreResult(Session* session,
   Status status = session->GetTargetWindow(&web_view);
   if (status.IsError())
     return status;
-  if (web_view->GetJavaScriptDialogManager()->IsDialogOpen()) {
+  if (!web_view->IsServiceWorker() &&
+      web_view->GetJavaScriptDialogManager()->IsDialogOpen()) {
     std::string alert_text;
     status =
         web_view->GetJavaScriptDialogManager()->GetDialogMessage(&alert_text);
@@ -190,7 +192,10 @@ std::unique_ptr<base::DictionaryValue> CreateCapabilities(
 
   // Extensions defined by the W3C.
   // See https://w3c.github.io/webauthn/#sctn-automation-webdriver-capability
-  caps->SetBoolean("webauthn:virtualAuthenticators", !capabilities.IsAndroid());
+  caps->SetBoolPath("webauthn:virtualAuthenticators",
+                    !capabilities.IsAndroid());
+  caps->SetBoolPath("webauthn:extension:largeBlob", !capabilities.IsAndroid());
+  caps->SetBoolPath("webauthn:extension:credBlob", !capabilities.IsAndroid());
 
   // Chrome-specific extensions.
   const std::string chromedriverVersionKey = base::StringPrintf(
@@ -207,8 +212,9 @@ std::unique_ptr<base::DictionaryValue> CreateCapabilities(
   if (status.IsOk()) {
     const std::string userDataDirKey = base::StringPrintf(
         "%s.userDataDir", base::ToLowerASCII(kBrowserShortName).c_str());
-    caps->SetString(userDataDirKey,
-                    desktop->command().GetSwitchValueNative("user-data-dir"));
+    caps->SetString(
+        userDataDirKey,
+        desktop->command().GetSwitchValuePath("user-data-dir").AsUTF8Unsafe());
     caps->SetBoolean("networkConnectionEnabled",
                      desktop->IsNetworkConnectionEnabled());
   }
@@ -258,8 +264,7 @@ Status CheckSessionCreated(Session* session) {
   if (status.IsError())
     return Status(kSessionNotCreated, status);
 
-  int response;
-  if (!result->GetAsInteger(&response) || response != 1) {
+  if (!result->is_int() || result->GetInt() != 1) {
     return Status(kSessionNotCreated,
                   "unexpected response from browser");
   }
@@ -345,8 +350,8 @@ Status ConfigureSession(Session* session,
                         const base::DictionaryValue** desired_caps,
                         base::DictionaryValue* merged_caps,
                         Capabilities* capabilities) {
-  session->driver_log.reset(
-      new WebDriverLog(WebDriverLog::kDriverType, Log::kAll));
+  session->driver_log =
+      std::make_unique<WebDriverLog>(WebDriverLog::kDriverType, Log::kAll);
 
   session->w3c_compliant = GetW3CSetting(params);
   if (session->w3c_compliant) {
@@ -437,8 +442,8 @@ bool MergeCapabilities(const base::DictionaryValue* always_match,
 // Implementation of "matching capabilities", as defined in W3C spec at
 // https://www.w3.org/TR/webdriver/#dfn-matching-capabilities.
 // It checks some requested capabilities and make sure they are supported.
-// Currently, we only check "browserName", "platformName", and
-// "webauthn:virtualAuthenticators" but more can be added as necessary.
+// Currently, we only check "browserName", "platformName", and webauthn
+// capabilities but more can be added as necessary.
 bool MatchCapabilities(const base::DictionaryValue* capabilities) {
   const base::Value* name;
   if (capabilities->Get("browserName", &name) && !name->is_none()) {
@@ -489,12 +494,20 @@ bool MatchCapabilities(const base::DictionaryValue* capabilities) {
     }
   }
 
-  const base::Value* virtual_authenticators_value;
-  if (capabilities->Get("webauthn:virtualAuthenticators",
-                        &virtual_authenticators_value) &&
-      !virtual_authenticators_value->is_none()) {
+  const base::Value* virtual_authenticators_value =
+      capabilities->FindPath("webauthn:virtualAuthenticators");
+  if (virtual_authenticators_value) {
     if (!virtual_authenticators_value->is_bool() ||
         (virtual_authenticators_value->GetBool() && is_android)) {
+      return false;
+    }
+  }
+
+  const base::Value* large_blob_value =
+      capabilities->FindPath("webauthn:extension:largeBlob");
+  if (large_blob_value) {
+    if (!large_blob_value->is_bool() ||
+        (large_blob_value->GetBool() && is_android)) {
       return false;
     }
   }
@@ -647,7 +660,8 @@ Status ExecuteGetCurrentWindowHandle(Session* session,
   status = web_view->ConnectIfNecessary();
   if (status.IsError())
     return status;
-  value->reset(new base::Value(WebViewIdToWindowHandle(web_view->GetId())));
+  *value =
+      std::make_unique<base::Value>(WebViewIdToWindowHandle(web_view->GetId()));
   return Status(kOk);
 }
 
@@ -702,20 +716,20 @@ Status ExecuteClose(Session* session,
       return Status(kUnexpectedAlertOpen, "{Alert text : " + alert_text + "}");
   }
 
-  if (!is_last_web_view) {
-    status = session->chrome->CloseWebView(web_view->GetId());
-    if (status.IsError())
-      return status;
+  status = session->chrome->CloseWebView(web_view->GetId());
+  if (status.IsError())
+    return status;
 
+  if (!is_last_web_view) {
     status = ExecuteGetWindowHandles(session, base::DictionaryValue(), value);
     if (status.IsError())
       return status;
   } else {
-    // If there is only one open window, close is the same as calling "quit".
+    // If there is only one window left, call quit as well.
     session->quit = true;
     status = session->chrome->Quit();
     if (status.IsOk())
-      value->reset(new base::ListValue());
+      *value = std::make_unique<base::ListValue>();
   }
 
   return status;
@@ -969,7 +983,7 @@ Status ExecuteIsLoading(Session* session,
   status = web_view->IsPendingNavigation(nullptr, &is_pending);
   if (status.IsError())
     return status;
-  value->reset(new base::Value(is_pending));
+  *value = std::make_unique<base::Value>(is_pending);
   return Status(kOk);
 }
 
@@ -1004,7 +1018,7 @@ Status ExecuteGetNetworkConnection(Session* session,
   int connection_type = 0;
   connection_type = desktop->GetNetworkConnection();
 
-  value->reset(new base::Value(connection_type));
+  *value = std::make_unique<base::Value>(connection_type);
   return Status(kOk);
 }
 
@@ -1097,7 +1111,7 @@ Status ExecuteSetNetworkConnection(Session* session,
       *session->overridden_network_conditions);
   }
 
-  value->reset(new base::Value(connection_type));
+  *value = std::make_unique<base::Value>(connection_type);
   return Status(kOk);
 }
 
@@ -1233,7 +1247,7 @@ Status ExecuteUploadFile(Session* session,
   if (status.IsError())
     return Status(kUnknownError, "unable to unzip 'file'", status);
 
-  value->reset(new base::Value(upload.value()));
+  *value = std::make_unique<base::Value>(upload.AsUTF8Unsafe());
   return Status(kOk);
 }
 
@@ -1262,5 +1276,25 @@ Status ExecuteGenerateTestReport(Session* session,
   body.SetString("group", group);
 
   web_view->SendCommandAndGetResult("Page.generateTestReport", body, value);
+  return Status(kOk);
+}
+
+Status ExecuteSetTimeZone(Session* session,
+                          const base::DictionaryValue& params,
+                          std::unique_ptr<base::Value>* value) {
+  WebView* web_view = nullptr;
+  Status status = session->GetTargetWindow(&web_view);
+  if (status.IsError())
+    return status;
+
+  std::string time_zone;
+  if (!params.GetString("time_zone", &time_zone))
+    return Status(kInvalidArgument, "missing parameter 'time_zone'");
+
+  base::DictionaryValue body;
+  body.SetString("timezoneId", time_zone);
+
+  web_view->SendCommandAndGetResult("Emulation.setTimezoneOverride", body,
+                                    value);
   return Status(kOk);
 }

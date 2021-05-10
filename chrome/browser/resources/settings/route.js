@@ -5,7 +5,7 @@
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
 import {pageVisibility} from './page_visibility.js';
-import {Route, Router} from './router.m.js';
+import {Route, Router} from './router.js';
 import {SettingsRoutes} from './settings_routes.js';
 
 /**
@@ -14,11 +14,16 @@ import {SettingsRoutes} from './settings_routes.js';
  * @param {!SettingsRoutes} r
  */
 function addPrivacyChildRoutes(r) {
+  r.CLEAR_BROWSER_DATA = r.PRIVACY.createChild('/clearBrowserData');
+  r.CLEAR_BROWSER_DATA.isNavigableDialog = true;
+
   r.SITE_SETTINGS = r.PRIVACY.createChild('/content');
   r.COOKIES = r.PRIVACY.createChild('/cookies');
   r.SECURITY = r.PRIVACY.createChild('/security');
 
-  // <if expr="use_nss_certs">
+  // TODO(crbug.com/1147032): The certificates settings page is temporarily
+  // disabled for Lacros-Chrome until a better solution is found.
+  // <if expr="use_nss_certs and not lacros">
   r.CERTIFICATES = r.SECURITY.createChild('/certificates');
   // </if>
 
@@ -54,10 +59,7 @@ function addPrivacyChildRoutes(r) {
   r.SITE_SETTINGS_LOCATION = r.SITE_SETTINGS.createChild('location');
   r.SITE_SETTINGS_MICROPHONE = r.SITE_SETTINGS.createChild('microphone');
   r.SITE_SETTINGS_NOTIFICATIONS = r.SITE_SETTINGS.createChild('notifications');
-  r.SITE_SETTINGS_FLASH = r.SITE_SETTINGS.createChild('flash');
   r.SITE_SETTINGS_POPUPS = r.SITE_SETTINGS.createChild('popups');
-  r.SITE_SETTINGS_UNSANDBOXED_PLUGINS =
-      r.SITE_SETTINGS.createChild('unsandboxedPlugins');
   r.SITE_SETTINGS_MIDI_DEVICES = r.SITE_SETTINGS.createChild('midiDevices');
   r.SITE_SETTINGS_USB_DEVICES = r.SITE_SETTINGS.createChild('usbDevices');
   r.SITE_SETTINGS_HID_DEVICES = r.SITE_SETTINGS.createChild('hidDevices');
@@ -85,6 +87,9 @@ function addPrivacyChildRoutes(r) {
   if (loadTimeData.getBoolean('enableFontAccessContentSetting')) {
     r.SITE_SETTINGS_FONT_ACCESS = r.SITE_SETTINGS.createChild('fontAccess');
   }
+  if (loadTimeData.getBoolean('enableFileHandlingContentSetting')) {
+    r.SITE_SETTINGS_FILE_HANDLING = r.SITE_SETTINGS.createChild('fileHandlers');
+  }
 }
 
 /**
@@ -98,12 +103,16 @@ function createBrowserSettingsRoutes() {
   r.BASIC = new Route('/');
   r.ABOUT = new Route('/help');
 
-  r.SIGN_OUT = r.BASIC.createChild('/signOut');
-  r.SIGN_OUT.isNavigableDialog = true;
-
   r.SEARCH = r.BASIC.createSection('/search', 'search');
   if (!loadTimeData.getBoolean('isGuest')) {
     r.PEOPLE = r.BASIC.createSection('/people', 'people');
+    r.SIGN_OUT = r.PEOPLE.createChild('/signOut');
+    r.SIGN_OUT.isNavigableDialog = true;
+    // <if expr="not chromeos">
+    r.IMPORT_DATA = r.PEOPLE.createChild('/importData');
+    r.IMPORT_DATA.isNavigableDialog = true;
+    // </if>
+
     r.SYNC = r.PEOPLE.createChild('/syncSetup');
     r.SYNC_ADVANCED = r.SYNC.createChild('/syncSetup/advanced');
   }
@@ -111,9 +120,6 @@ function createBrowserSettingsRoutes() {
   const visibility = pageVisibility || {};
 
   // <if expr="not chromeos">
-  r.IMPORT_DATA = r.BASIC.createChild('/importData');
-  r.IMPORT_DATA.isNavigableDialog = true;
-
   if (visibility.people !== false) {
     r.MANAGE_PROFILE = r.PEOPLE.createChild('/manageProfile');
   }
@@ -137,9 +143,6 @@ function createBrowserSettingsRoutes() {
     r.ADDRESSES = r.AUTOFILL.createChild('/addresses');
   }
 
-  r.CLEAR_BROWSER_DATA = r.BASIC.createChild('/clearBrowserData');
-  r.CLEAR_BROWSER_DATA.isNavigableDialog = true;
-
   if (visibility.privacy !== false) {
     r.PRIVACY = r.BASIC.createSection('/privacy', 'privacy');
     addPrivacyChildRoutes(r);
@@ -147,10 +150,12 @@ function createBrowserSettingsRoutes() {
     r.SAFETY_CHECK = r.BASIC.createSection('/safetyCheck', 'safetyCheck');
   }
 
+  // <if expr="not chromeos and not lacros">
   if (visibility.defaultBrowser !== false) {
     r.DEFAULT_BROWSER =
         r.BASIC.createSection('/defaultBrowser', 'defaultBrowser');
   }
+  // </if>
 
   r.SEARCH_ENGINES = r.SEARCH.createChild('/searchEngines');
 
@@ -167,13 +172,15 @@ function createBrowserSettingsRoutes() {
     // <if expr="not is_macosx">
     r.EDIT_DICTIONARY = r.LANGUAGES.createChild('/editDictionary');
     // </if>
+    // <if expr="not chromeos and not lacros">
+    if (loadTimeData.getBoolean('enableDesktopRestructuredLanguageSettings')) {
+      r.LANGUAGE_SETTINGS = r.LANGUAGES.createChild('/languageSettings');
+    }
+    // </if>
 
     if (visibility.downloads !== false) {
       r.DOWNLOADS = r.ADVANCED.createSection('/downloads', 'downloads');
     }
-
-    r.PRINTING = r.ADVANCED.createSection('/printing', 'printing');
-    r.CLOUD_PRINTERS = r.PRINTING.createChild('/cloudPrinters');
 
     r.ACCESSIBILITY = r.ADVANCED.createSection('/accessibility', 'a11y');
 
@@ -187,16 +194,16 @@ function createBrowserSettingsRoutes() {
     }
     // </if>
 
-    // <if expr="not chromeos">
+    // <if expr="not chromeos and not lacros">
     r.SYSTEM = r.ADVANCED.createSection('/system', 'system');
     // </if>
 
     if (visibility.reset !== false) {
       r.RESET = r.ADVANCED.createSection('/reset', 'reset');
-      r.RESET_DIALOG = r.ADVANCED.createChild('/resetProfileSettings');
+      r.RESET_DIALOG = r.RESET.createChild('/resetProfileSettings');
       r.RESET_DIALOG.isNavigableDialog = true;
       r.TRIGGERED_RESET_DIALOG =
-          r.ADVANCED.createChild('/triggeredResetProfileSettings');
+          r.RESET.createChild('/triggeredResetProfileSettings');
       r.TRIGGERED_RESET_DIALOG.isNavigableDialog = true;
       // <if expr="_google_chrome and is_win">
       r.CHROME_CLEANUP = r.RESET.createChild('/cleanup');

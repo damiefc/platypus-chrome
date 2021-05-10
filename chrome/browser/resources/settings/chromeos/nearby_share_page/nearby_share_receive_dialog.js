@@ -54,14 +54,40 @@ Polymer({
       type: Object,
       value: {},
     },
+
+    /**
+     * Status of the current transfer.
+     * @private {?nearbyShare.mojom.TransferStatus}
+     */
+    transferStatus_: {
+      type: nearbyShare.mojom.TransferStatus,
+      value: null,
+    },
+
+    /**
+     * @private {boolean}
+     */
+    nearbyProcessStopped_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /**
+     * @private {boolean}
+     */
+    startAdvertisingFailed_: {
+      type: Boolean,
+      value: false,
+    },
   },
 
   listeners: {
-    'change-page': 'onChangePage_',
+    'accept': 'onAccept_',
     'cancel': 'onCancel_',
-    'confirm': 'onConfirm_',
+    'change-page': 'onChangePage_',
     'onboarding-complete': 'onOnboardingComplete_',
     'reject': 'onReject_',
+    'close': 'close_',
   },
 
   observers: [
@@ -89,6 +115,16 @@ Polymer({
   /** @private {?nearbyShare.mojom.ReceiveObserverReceiver} */
   observerReceiver_: null,
 
+  /**
+   * Timestamp in milliseconds since unix epoch of when high visibility will
+   * be turned off.
+   * @private {number}
+   */
+  highVisibilityShutoffTimestamp_: 0,
+
+  /** @private {?nearbyShare.mojom.RegisterReceiveSurfaceResult} */
+  registerForegroundReceiveSurfaceResult_: null,
+
   /** @override */
   attached() {
     this.closing_ = false;
@@ -107,26 +143,57 @@ Polymer({
 
   /**
    * Mojo callback when high visibility changes. If high visibility is false
-   * we force this dialog to close as well.
+   * due to a user cancel, we force this dialog to close as well.
    * @param {boolean} inHighVisibility
    */
   onHighVisibilityChanged(inHighVisibility) {
-    if (inHighVisibility == false) {
-      // TODO(vecore): Show error state to user
+    const now = performance.now();
+
+    if (inHighVisibility === false &&
+        now < this.highVisibilityShutoffTimestamp_ &&
+        this.transferStatus_ !==
+            nearbyShare.mojom.TransferStatus.kAwaitingLocalConfirmation) {
       this.close_();
+      return;
+    }
+
+    // If high visibility has been attained, then the process must be up and
+    // advertising must be on.
+    if (inHighVisibility) {
+      this.startAdvertisingFailed_ = false;
+      this.nearbyProcessStopped_ = false;
     }
   },
 
   /**
-   * Mojo callback called when a shareTarget is requesting an incoming share
-   * and the user must manually confirm.
+   * Mojo callback when transfer status changes.
    * @param {!nearbyShare.mojom.ShareTarget} shareTarget
-   * @param {?string} connectionToken
+   * @param {!nearbyShare.mojom.TransferMetadata} metadata
    */
-  onIncomingShare(shareTarget, connectionToken) {
-    this.shareTarget = shareTarget;
-    this.connectionToken = connectionToken;
-    this.showConfirmPage();
+  onTransferUpdate(shareTarget, metadata) {
+    this.transferStatus_ = metadata.status;
+
+    if (metadata.status ===
+        nearbyShare.mojom.TransferStatus.kAwaitingLocalConfirmation) {
+      this.shareTarget = shareTarget;
+      this.connectionToken =
+          (metadata && metadata.token) ? metadata.token : null;
+      this.showConfirmPage();
+    }
+  },
+
+  /**
+   * Mojo callback when the Nearby utility process stops.
+   */
+  onNearbyProcessStopped() {
+    this.nearbyProcessStopped_ = true;
+  },
+
+  /**
+   * Mojo callback when advertising fails to start.
+   */
+  onStartAdvertisingFailure() {
+    this.startAdvertisingFailed_ = true;
   },
 
   /**
@@ -134,7 +201,7 @@ Polymer({
    * @private
    */
   onSettingsChanged_(change) {
-    if (change.path != 'settings.enabled') {
+    if (change.path !== 'settings.enabled') {
       return;
     }
 
@@ -161,7 +228,7 @@ Polymer({
     }
 
     this.closing_ = true;
-    this.receiveManager_.exitHighVisibility().then(() => {
+    this.receiveManager_.unregisterForegroundReceiveSurface().then(() => {
       const dialog = /** @type {!CrDialogElement} */ (this.$.dialog);
       if (dialog.open) {
         dialog.close();
@@ -208,17 +275,26 @@ Polymer({
 
   /**
    * Call to show the high visibility page.
+   * @param {number} shutoffTimeoutInSeconds Duration of the high
+   *     visibility session, after which the session would be turned off.
    */
-  showHighVisibilityPage() {
+  showHighVisibilityPage(shutoffTimeoutInSeconds) {
     // Check if we need to wait for settings values from mojo or if we need to
     // run onboarding first before showing the page.
-    if (this.deferCallIfNecessary(this.showHighVisibilityPage.bind(this))) {
+    if (this.deferCallIfNecessary(
+            this.showHighVisibilityPage.bind(this, shutoffTimeoutInSeconds))) {
       return;
     }
 
-    // Request to enter high visibility mode and show the page.
-    this.receiveManager_.enterHighVisibility();
-    this.getViewManager_().switchView(Page.HIGH_VISIBILITY);
+    // performance.now() returns DOMHighResTimeStamp in milliseconds.
+    this.highVisibilityShutoffTimestamp_ =
+        performance.now() + (shutoffTimeoutInSeconds * 1000);
+
+    // Register a receive surface to enter high visibility and show the page.
+    this.receiveManager_.registerForegroundReceiveSurface().then((result) => {
+      this.registerForegroundReceiveSurfaceResult_ = result.result;
+      this.getViewManager_().switchView(Page.HIGH_VISIBILITY);
+    });
   },
 
   /**
@@ -248,7 +324,7 @@ Polymer({
   },
 
   /** @private */
-  onConfirm_() {
+  onAccept_() {
     assert(this.shareTarget);
     this.receiveManager_.accept(this.shareTarget.id).then((success) => {
       if (success) {

@@ -1,8 +1,8 @@
 {
   "schema": "pedal_concepts_runtime",
-  "schema_version": 1,
-  "data_version": 15497154,
-  "tokenize_characters": " -",
+  "schema_version": 3,
+  "data_version": 15831389,
+  "tokenize_each_character": false,
   "dictionary": [
     "aktivera",
     "ansvarig",
@@ -71,11 +71,11 @@
     "wipe",
     "ändra",
     "öppna",
-    "översätt"
+    "översätt",
+    "一時的踏板placeholder"
   ],
   "pedals": [
     {
-      "name": "CLEAR_BROWSING_DATA",
       "id": 1,
       "groups": [
         {
@@ -143,10 +143,11 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "MANAGE_PASSWORDS",
       "id": 2,
       "groups": [
         {
@@ -173,10 +174,10 @@
               59
             ],
             [
-              48
+              1
             ],
             [
-              1
+              48
             ],
             [
               22
@@ -204,16 +205,14 @@
             ],
             [
               43
-            ],
-            [
-              43
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "UPDATE_CREDIT_CARD",
       "id": 3,
       "groups": [
         {
@@ -279,9 +278,6 @@
               38
             ],
             [
-              38
-            ],
-            [
               3
             ],
             [
@@ -289,10 +285,11 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "LAUNCH_INCOGNITO",
       "id": 4,
       "groups": [
         {
@@ -362,10 +359,11 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "TRANSLATE",
       "id": 5,
       "groups": [
         {
@@ -416,10 +414,11 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "UPDATE_CHROME",
       "id": 6,
       "groups": [
         {
@@ -443,17 +442,19 @@
           "single": true,
           "synonyms": [
             [
-              60
+              33
             ],
             [
-              33
+              60
             ],
             [
               59
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     }
   ],
   "ignore_group": {

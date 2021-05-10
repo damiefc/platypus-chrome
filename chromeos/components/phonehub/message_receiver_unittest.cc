@@ -4,12 +4,13 @@
 
 #include "chromeos/components/phonehub/message_receiver_impl.h"
 
-#include "base/strings/strcat.h"
-#include "chromeos/components/phonehub/fake_connection_manager.h"
-#include "chromeos/components/phonehub/proto/phonehub_api.pb.h"
-#include "testing/gtest/include/gtest/gtest.h"
-
+#include <netinet/in.h>
 #include <memory>
+
+#include "base/strings/strcat.h"
+#include "chromeos/components/phonehub/proto/phonehub_api.pb.h"
+#include "chromeos/services/secure_channel/public/cpp/client/fake_connection_manager.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {
 namespace phonehub {
@@ -62,7 +63,7 @@ std::string SerializeMessage(proto::MessageType message_type,
   // Replace the first two characters with |message_type| as a 16-bit int.
   uint16_t* ptr =
       reinterpret_cast<uint16_t*>(const_cast<char*>(message.data()));
-  *ptr = static_cast<uint16_t>(message_type);
+  *ptr = htons(static_cast<uint16_t>(message_type));
   return message;
 }
 
@@ -71,7 +72,8 @@ std::string SerializeMessage(proto::MessageType message_type,
 class MessageReceiverImplTest : public testing::Test {
  protected:
   MessageReceiverImplTest()
-      : fake_connection_manager_(std::make_unique<FakeConnectionManager>()) {}
+      : fake_connection_manager_(
+            std::make_unique<secure_channel::FakeConnectionManager>()) {}
   MessageReceiverImplTest(const MessageReceiverImplTest&) = delete;
   MessageReceiverImplTest& operator=(const MessageReceiverImplTest&) = delete;
   ~MessageReceiverImplTest() override = default;
@@ -103,7 +105,8 @@ class MessageReceiverImplTest : public testing::Test {
   }
 
   FakeObserver fake_observer_;
-  std::unique_ptr<FakeConnectionManager> fake_connection_manager_;
+  std::unique_ptr<secure_channel::FakeConnectionManager>
+      fake_connection_manager_;
   std::unique_ptr<MessageReceiverImpl> message_receiver_;
 };
 

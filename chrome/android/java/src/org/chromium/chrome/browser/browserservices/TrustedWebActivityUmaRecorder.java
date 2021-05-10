@@ -12,9 +12,9 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
-import org.chromium.chrome.browser.metrics.UkmRecorder;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.content_settings.ContentSettingsType;
+import org.chromium.components.ukm.UkmRecorder;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -214,8 +214,21 @@ public class TrustedWebActivityUmaRecorder {
                 error, LocationUpdateError.MAX_VALUE + 1);
     }
 
-    public void recordQualityEnforcementViolation(@QualityEnforcer.ViolationType int type) {
+    public void recordQualityEnforcementViolation(
+            Tab tab, @QualityEnforcementViolationType int type) {
         RecordHistogram.recordEnumeratedHistogram("TrustedWebActivity.QualityEnforcementViolation",
-                type, QualityEnforcer.ViolationType.NUM_ENTRIES);
+                type, QualityEnforcementViolationType.MAX_VALUE + 1);
+
+        new UkmRecorder.Bridge().recordEventWithIntegerMetric(tab.getWebContents(),
+                /* eventName = */ "TrustedWebActivity.QualityEnforcementViolation",
+                /* metricName = */ "ViolationType",
+                /* metricValue = */ type);
+    }
+
+    public void recordQualityEnforcementViolationCrashed(
+            @QualityEnforcementViolationType int type) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "TrustedWebActivity.QualityEnforcementViolation.Crashed", type,
+                QualityEnforcementViolationType.MAX_VALUE + 1);
     }
 }

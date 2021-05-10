@@ -9,6 +9,10 @@
 #include <tuple>
 #include <utility>
 
+#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_token_builder.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_insertable_streams.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtcp_parameters.h"
@@ -18,10 +22,10 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_header_extension_parameters.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
-#include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 #include "third_party/blink/renderer/core/streams/writable_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_track.h"
+#include "third_party/blink/renderer/modules/peerconnection/identifiability_metrics.h"
 #include "third_party/blink/renderer/modules/peerconnection/peer_connection_dependency_factory.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_dtls_transport.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_dtmf_sender.h"
@@ -37,12 +41,12 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
-#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_dtmf_sender_handler.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_encoded_audio_stream_transformer.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_encoded_video_stream_transformer.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_stats.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_void_request.h"
+#include "third_party/blink/renderer/platform/privacy_budget/identifiability_digest_helpers.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
@@ -349,9 +353,7 @@ webrtc::RtpEncodingParameters ToRtpEncodingParameters(
     } else if (encoding->scalabilityMode() == "L1T3") {
       webrtc_encoding.num_temporal_layers = 3;
     }
-  }
-  if (encoding->adaptivePtime()) {
-    UseCounter::Count(context, WebFeature::kRTCAdaptivePtime);
+    webrtc_encoding.scalability_mode = encoding->scalabilityMode().Utf8();
   }
   webrtc_encoding.adaptive_ptime = encoding->adaptivePtime();
   return webrtc_encoding;
@@ -719,7 +721,8 @@ void RTCRtpSender::Trace(Visitor* visitor) const {
   ScriptWrappable::Trace(visitor);
 }
 
-RTCRtpCapabilities* RTCRtpSender::getCapabilities(const String& kind) {
+RTCRtpCapabilities* RTCRtpSender::getCapabilities(ScriptState* state,
+                                                  const String& kind) {
   if (kind != "audio" && kind != "video")
     return nullptr;
 
@@ -740,6 +743,7 @@ RTCRtpCapabilities* RTCRtpSender::getCapabilities(const String& kind) {
     codec->setMimeType(WTF::String::FromUTF8(rtc_codec.mime_type()));
     if (rtc_codec.clock_rate)
       codec->setClockRate(rtc_codec.clock_rate.value());
+
     if (rtc_codec.num_channels)
       codec->setChannels(rtc_codec.num_channels.value());
     if (!rtc_codec.parameters.empty()) {
@@ -751,11 +755,35 @@ RTCRtpCapabilities* RTCRtpSender::getCapabilities(const String& kind) {
       }
       codec->setSdpFmtpLine(sdp_fmtp_line.c_str());
     }
-    if (rtc_codec.mime_type() == "video/VP8" ||
-        rtc_codec.mime_type() == "video/VP9") {
+    if (rtc_codec.mime_type() == "video/VP8") {
       Vector<String> modes;
       modes.push_back("L1T2");
       modes.push_back("L1T3");
+      codec->setScalabilityModes(modes);
+    } else if (rtc_codec.mime_type() == "video/VP9") {
+      auto profile_id = rtc_codec.parameters.find("profile-id");
+      if (profile_id == rtc_codec.parameters.end() ||
+          profile_id->second != "2") {
+        Vector<String> modes;
+        modes.push_back("L1T2");
+        modes.push_back("L1T3");
+        codec->setScalabilityModes(modes);
+      }
+    } else if (rtc_codec.mime_type() == "video/AV1" ||
+               rtc_codec.mime_type() == "video/AV1X") {
+      Vector<String> modes;
+      modes.push_back("L1T2");
+      modes.push_back("L1T3");
+      modes.push_back("L2T1");
+      modes.push_back("L2T1h");
+      modes.push_back("L2T1_KEY");
+      modes.push_back("L2T2");
+      modes.push_back("L2T2_KEY");
+      modes.push_back("L2T2_KEY_SHIFT");
+      modes.push_back("L3T1");
+      modes.push_back("L3T3");
+      modes.push_back("L3T3_KEY");
+      modes.push_back("S2T1");
       codec->setScalabilityModes(modes);
     }
     codecs.push_back(codec);
@@ -772,6 +800,17 @@ RTCRtpCapabilities* RTCRtpSender::getCapabilities(const String& kind) {
   }
   capabilities->setHeaderExtensions(header_extensions);
 
+  if (IdentifiabilityStudySettings::Get()->IsTypeAllowed(
+          IdentifiableSurface::Type::kRtcRtpSenderGetCapabilities)) {
+    IdentifiableTokenBuilder builder;
+    IdentifiabilityAddRTCRtpCapabilitiesToBuilder(builder, *capabilities);
+    IdentifiabilityMetricBuilder(ExecutionContext::From(state)->UkmSourceID())
+        .Set(IdentifiableSurface::FromTypeAndToken(
+                 IdentifiableSurface::Type::kRtcRtpSenderGetCapabilities,
+                 IdentifiabilityBenignStringToken(kind)),
+             builder.GetToken())
+        .Record(ExecutionContext::From(state)->UkmRecorder());
+  }
   return capabilities;
 }
 

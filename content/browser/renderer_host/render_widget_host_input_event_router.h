@@ -69,7 +69,7 @@ viz::HitTestQuery* GetHitTestQuery(
 // own. When an input event requires routing based on window coordinates,
 // this class requests a Surface hit test from the provided |root_view| and
 // forwards the event to the owning RWHV of the returned Surface ID.
-class CONTENT_EXPORT RenderWidgetHostInputEventRouter
+class CONTENT_EXPORT RenderWidgetHostInputEventRouter final
     : public RenderWidgetHostViewBaseObserver,
       public RenderWidgetTargeter::Delegate,
       public TouchEmulatorClient,
@@ -152,7 +152,6 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   // Allows a target to claim or release capture of mouse events.
   void SetMouseCaptureTarget(RenderWidgetHostViewBase* target,
                              bool captures_dragging);
-  RenderWidgetHostImpl* GetMouseCaptureWidgetForTests() const;
 
   std::vector<RenderWidgetHostView*> GetRenderWidgetHostViewsForTests() const;
   RenderWidgetTargeter* GetRenderWidgetTargeterForTests();
@@ -195,10 +194,11 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   FRIEND_TEST_ALL_PREFIXES(BrowserSideFlingBrowserTest,
                            InertialGSUBubblingStopsWhenParentCannotScroll);
 
-  using FrameSinkIdOwnerMap = std::unordered_map<viz::FrameSinkId,
-                                                 RenderWidgetHostViewBase*,
-                                                 viz::FrameSinkIdHash>;
-  using TargetMap = std::map<uint32_t, RenderWidgetHostViewBase*>;
+  using FrameSinkIdOwnerMap =
+      std::unordered_map<viz::FrameSinkId,
+                         base::WeakPtr<RenderWidgetHostViewBase>,
+                         viz::FrameSinkIdHash>;
+  using TargetMap = std::map<uint32_t, base::WeakPtr<RenderWidgetHostViewBase>>;
 
   void ClearAllObserverRegistrations();
   RenderWidgetTargetResult FindViewAtLocation(
@@ -424,6 +424,10 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   mutable gfx::PointF mouse_down_pre_transformed_coordinate_;
   mutable gfx::PointF mouse_down_post_transformed_coordinate_;
   RenderWidgetHostViewBase* last_mouse_down_target_ = nullptr;
+
+  // Set to true when we first DwoC on an invalid RWHVB* in DispatchTouchEvent.
+  // Used to prevent multiple dumps.
+  bool has_dumped_ = false;
 
   base::WeakPtrFactory<RenderWidgetHostInputEventRouter> weak_ptr_factory_{
       this};

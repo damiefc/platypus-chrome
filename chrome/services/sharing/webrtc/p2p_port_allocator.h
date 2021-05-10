@@ -5,8 +5,6 @@
 #ifndef CHROME_SERVICES_SHARING_WEBRTC_P2P_PORT_ALLOCATOR_H_
 #define CHROME_SERVICES_SHARING_WEBRTC_P2P_PORT_ALLOCATOR_H_
 
-#include <memory>
-
 #include "third_party/webrtc/p2p/client/basic_port_allocator.h"
 
 namespace sharing {
@@ -33,18 +31,15 @@ class P2PPortAllocator : public cricket::BasicPortAllocator {
     bool enable_default_local_candidate = true;
   };
 
-  P2PPortAllocator(std::unique_ptr<rtc::NetworkManager> network_manager,
+  // NOTE: The network_manager passed must have had Initialize() called.
+  P2PPortAllocator(rtc::NetworkManager* network_manager,
                    rtc::PacketSocketFactory* socket_factory,
                    const Config& config);
   P2PPortAllocator(const P2PPortAllocator&) = delete;
   P2PPortAllocator& operator=(const P2PPortAllocator&) = delete;
   ~P2PPortAllocator() override;
 
-  // Will also initialize the network manager passed into the constructor.
-  void Initialize() override;
-
  private:
-  std::unique_ptr<rtc::NetworkManager> network_manager_;
   Config config_;
 };
 

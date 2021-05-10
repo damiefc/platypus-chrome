@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/files/file_path.h"
 #include "chrome/browser/nearby_sharing/nearby_share_settings.h"
 #include "chrome/browser/nearby_sharing/share_target_discovered_callback.h"
 #include "chrome/browser/nearby_sharing/transfer_update_callback.h"
@@ -27,21 +26,27 @@ class NearbyShareLocalDeviceDataManager;
 // after the user has enabled Nearby Sharing in prefs.
 class NearbySharingService : public KeyedService {
  public:
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused. If entries are added, kMaxValue
+  // should be updated.
   enum class StatusCodes {
-    // The operation failed, without any more information.
-    kError,
     // The operation was successful.
-    kOk,
+    kOk = 0,
+    // The operation failed, without any more information.
+    kError = 1,
     // The operation failed since it was called in an invalid order.
-    kOutOfOrderApiCall,
+    kOutOfOrderApiCall = 2,
     // Tried to stop something that was already stopped.
-    kStatusAlreadyStopped,
+    kStatusAlreadyStopped = 3,
     // Tried to register an opposite foreground surface in the midst of a
     // transfer or connection.
     // (Tried to register Send Surface when receiving a file or tried to
     // register Receive Surface when
     // sending a file.)
-    kTransferAlreadyInProgress,
+    kTransferAlreadyInProgress = 4,
+    // There is no available connection medium to use.
+    kNoAvailableConnectionMedium = 5,
+    kMaxValue = kNoAvailableConnectionMedium
   };
 
   enum class ReceiveSurfaceState {
@@ -64,7 +69,12 @@ class NearbySharingService : public KeyedService {
 
   class Observer : public base::CheckedObserver {
    public:
+    virtual void OnHighVisibilityChangeRequested() {}
     virtual void OnHighVisibilityChanged(bool in_high_visibility) = 0;
+
+    virtual void OnNearbyProcessStopped() {}
+    virtual void OnStartAdvertisingFailure() {}
+    virtual void OnStartDiscoveryResult(bool success) {}
 
     // Called during the |KeyedService| shutdown, but before everything has been
     // cleaned up. It is safe to remove any observers on this event.
@@ -101,8 +111,27 @@ class NearbySharingService : public KeyedService {
   virtual StatusCodes UnregisterReceiveSurface(
       TransferUpdateCallback* transfer_callback) = 0;
 
+  // Unregisters all foreground receive surfaces.
+  virtual StatusCodes ClearForegroundReceiveSurfaces() = 0;
+
   // Returns true if a foreground receive surface is registered.
-  virtual bool IsInHighVisibility() = 0;
+  virtual bool IsInHighVisibility() const = 0;
+
+  // Returns true if there is an ongoing file transfer.
+  virtual bool IsTransferring() const = 0;
+
+  // Returns true if we're currently receiving a file.
+  virtual bool IsReceivingFile() const = 0;
+
+  // Returns true if we're currently sending a file.
+  virtual bool IsSendingFile() const = 0;
+
+  // Returns true if we're currently attempting to connect to a
+  // remote device.
+  virtual bool IsConnecting() const = 0;
+
+  // Returns true if we are currently scanning for remote devices.
+  virtual bool IsScanning() const = 0;
 
   // Sends |attachments| to the remote |share_target|.
   virtual StatusCodes SendAttachments(
@@ -117,13 +146,20 @@ class NearbySharingService : public KeyedService {
   virtual void Reject(const ShareTarget& share_target,
                       StatusCodesCallback status_codes_callback) = 0;
 
-  // Cancels outoing shares to the remote |share_target|.
+  // Cancels outgoing shares to the remote |share_target|.
   virtual void Cancel(const ShareTarget& share_target,
                       StatusCodesCallback status_codes_callback) = 0;
+
+  // Returns true if the local user cancelled the transfer to remote
+  // |share_target|.
+  virtual bool DidLocalUserCancelTransfer(const ShareTarget& share_target) = 0;
 
   // Opens attachments from the remote |share_target|.
   virtual void Open(const ShareTarget& share_target,
                     StatusCodesCallback status_codes_callback) = 0;
+
+  // Opens an url target on a browser instance.
+  virtual void OpenURL(GURL url) = 0;
 
   // Gets a delegate to handle events for |notification_id| or nullptr.
   virtual NearbyNotificationDelegate* GetNotificationDelegate(

@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_number_conversions.h"
+#include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/file_system_provider/fake_extension_provider.h"
 #include "chrome/browser/chromeos/file_system_provider/fake_provided_file_system.h"
 #include "chrome/browser/chromeos/file_system_provider/fake_registry.h"
@@ -24,7 +25,6 @@
 #include "chrome/browser/chromeos/file_system_provider/observer.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_info.h"
 #include "chrome/browser/chromeos/file_system_provider/registry_interface.h"
-#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/common/extensions/api/file_system_provider_capabilities/file_system_provider_capabilities_handler.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -80,8 +80,8 @@ scoped_refptr<extensions::Extension> CreateFakeExtension(
 
   scoped_refptr<extensions::Extension> extension =
       extensions::Extension::Create(
-          base::FilePath(), extensions::Manifest::UNPACKED, manifest,
-          extensions::Extension::NO_FLAGS, extension_id, &error);
+          base::FilePath(), extensions::mojom::ManifestLocation::kUnpacked,
+          manifest, extensions::Extension::NO_FLAGS, extension_id, &error);
   EXPECT_TRUE(extension) << error;
   return extension;
 }
@@ -95,8 +95,8 @@ class FileSystemProviderServiceTest : public testing::Test {
   ~FileSystemProviderServiceTest() override {}
 
   void SetUp() override {
-    profile_manager_.reset(
-        new TestingProfileManager(TestingBrowserProcess::GetGlobal()));
+    profile_manager_ = std::make_unique<TestingProfileManager>(
+        TestingBrowserProcess::GetGlobal());
     ASSERT_TRUE(profile_manager_->SetUp());
     profile_ = profile_manager_->CreateTestingProfile("test-user@example.com");
     user_manager_ = new FakeChromeUserManager();
@@ -104,8 +104,9 @@ class FileSystemProviderServiceTest : public testing::Test {
         AccountId::FromUserEmail(profile_->GetProfileUserName()));
     user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
         base::WrapUnique(user_manager_));
-    extension_registry_.reset(new extensions::ExtensionRegistry(profile_));
-    service_.reset(new Service(profile_, extension_registry_.get()));
+    extension_registry_ =
+        std::make_unique<extensions::ExtensionRegistry>(profile_);
+    service_ = std::make_unique<Service>(profile_, extension_registry_.get());
 
     registry_ = new FakeRegistry;
     // Passes ownership to the service instance.

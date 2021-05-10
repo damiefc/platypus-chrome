@@ -8,18 +8,17 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/values.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
+#include "chrome/browser/ash/settings/device_settings_service.h"
+#include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/chromeos/policy/device_network_configuration_updater.h"
 #include "chrome/browser/chromeos/policy/user_network_configuration_updater.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/settings/device_settings_service.h"
-#include "chrome/browser/chromeos/settings/scoped_testing_cros_settings.h"
-#include "chrome/browser/chromeos/settings/stub_cros_settings_provider.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/network/fake_network_device_handler.h"
 #include "chromeos/network/mock_managed_network_configuration_handler.h"
@@ -175,6 +174,7 @@ const char kFakeONC[] = R"(
           "Name": "My WiFi Network",
           "WiFi": {
             "HexSSID": "737369642D6E6F6E65",
+            "HiddenSSID": false,
             "Security": "None" }
         },
         { "GUID": "{guid-for-wifi-with-device-exp}",
@@ -186,6 +186,7 @@ const char kFakeONC[] = R"(
               "Identity": "${DEVICE_SERIAL_NUMBER}-${DEVICE_ASSET_ID}"
             },
             "HexSSID": "7465737431323334",
+            "HiddenSSID": false,
             "Security": "WPA-EAP",
             "SSID": "test1234",
           }
@@ -344,22 +345,24 @@ class NetworkConfigurationUpdaterTest : public testing::Test {
 
     EXPECT_CALL(provider_, IsInitializationComplete(_))
         .WillRepeatedly(Return(false));
+    EXPECT_CALL(provider_, IsFirstPolicyLoadComplete(_))
+        .WillRepeatedly(Return(false));
     provider_.Init();
     PolicyServiceImpl::Providers providers;
     providers.push_back(&provider_);
     policy_service_ = std::make_unique<PolicyServiceImpl>(std::move(providers));
 
-    std::unique_ptr<base::Value> fake_toplevel_onc =
+    base::Value fake_toplevel_onc =
         chromeos::onc::ReadDictionaryFromJson(kFakeONC);
 
     base::DictionaryValue* global_config = nullptr;
     fake_toplevel_onc
-        ->FindKey(onc::toplevel_config::kGlobalNetworkConfiguration)
+        .FindKey(onc::toplevel_config::kGlobalNetworkConfiguration)
         ->GetAsDictionary(&global_config);
     fake_global_network_config_.MergeDictionary(global_config);
 
     base::ListValue* certs = nullptr;
-    fake_toplevel_onc->FindKey(onc::toplevel_config::kCertificates)
+    fake_toplevel_onc.FindKey(onc::toplevel_config::kCertificates)
         ->GetAsList(&certs);
     fake_certificates_ =
         std::make_unique<chromeos::onc::OncParsedCertificates>(*certs);
@@ -369,10 +372,10 @@ class NetworkConfigurationUpdaterTest : public testing::Test {
   }
 
   base::Value* GetExpectedFakeNetworkConfigs(::onc::ONCSource source) {
-    std::unique_ptr<base::Value> fake_toplevel_onc =
+    base::Value fake_toplevel_onc =
         chromeos::onc::ReadDictionaryFromJson(kFakeONC);
     fake_network_configs_ =
-        fake_toplevel_onc->FindKey(onc::toplevel_config::kNetworkConfigurations)
+        fake_toplevel_onc.FindKey(onc::toplevel_config::kNetworkConfigurations)
             ->Clone();
     if (source == ::onc::ONC_SOURCE_DEVICE_POLICY) {
       std::string expected_identity =
@@ -397,6 +400,8 @@ class NetworkConfigurationUpdaterTest : public testing::Test {
   void MarkPolicyProviderInitialized() {
     Mock::VerifyAndClearExpectations(&provider_);
     EXPECT_CALL(provider_, IsInitializationComplete(_))
+        .WillRepeatedly(Return(true));
+    EXPECT_CALL(provider_, IsFirstPolicyLoadComplete(_))
         .WillRepeatedly(Return(true));
     provider_.SetAutoRefresh();
     provider_.RefreshPolicies();
@@ -433,7 +438,7 @@ class NetworkConfigurationUpdaterTest : public testing::Test {
     network_configuration_updater_ =
         DeviceNetworkConfigurationUpdater::CreateForDevicePolicy(
             policy_service_.get(), &network_config_handler_,
-            &network_device_handler_, chromeos::CrosSettings::Get(),
+            &network_device_handler_, ash::CrosSettings::Get(),
             testing_device_asset_id_getter);
     return network_configuration_updater_.get();
   }
@@ -445,8 +450,8 @@ class NetworkConfigurationUpdaterTest : public testing::Test {
       network_config_handler_;
   FakeNetworkDeviceHandler network_device_handler_;
   chromeos::ScopedStubInstallAttributes scoped_stub_install_attributes_;
-  chromeos::ScopedTestDeviceSettingsService scoped_device_settings_service_;
-  chromeos::ScopedTestingCrosSettings scoped_testing_cros_settings_;
+  ash::ScopedTestDeviceSettingsService scoped_device_settings_service_;
+  ash::ScopedTestingCrosSettings scoped_testing_cros_settings_;
   chromeos::system::ScopedFakeStatisticsProvider fake_statistics_provider_;
 
   // Ownership of client_certificate_importer_owned_ is passed to the

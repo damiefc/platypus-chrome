@@ -6,6 +6,7 @@
 
 #include <limits>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "android_webview/browser/aw_autofill_client.h"
@@ -23,7 +24,7 @@
 #include "android_webview/browser/gfx/aw_picture.h"
 #include "android_webview/browser/gfx/browser_view_renderer.h"
 #include "android_webview/browser/gfx/child_frame.h"
-#include "android_webview/browser/gfx/gpu_service_web_view.h"
+#include "android_webview/browser/gfx/gpu_service_webview.h"
 #include "android_webview/browser/gfx/java_browser_view_renderer_helper.h"
 #include "android_webview/browser/gfx/render_thread_manager.h"
 #include "android_webview/browser/gfx/scoped_app_gl_state_restore.h"
@@ -35,9 +36,9 @@
 #include "android_webview/browser/permission/simple_permission_request.h"
 #include "android_webview/browser/state_serializer.h"
 #include "android_webview/browser_jni_headers/AwContents_jni.h"
-#include "android_webview/common/aw_hit_test_data.h"
 #include "android_webview/common/aw_switches.h"
 #include "android_webview/common/devtools_instrumentation.h"
+#include "android_webview/common/mojom/frame.mojom.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -45,8 +46,8 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/atomicops.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
@@ -57,14 +58,14 @@
 #include "base/no_destructor.h"
 #include "base/pickle.h"
 #include "base/single_thread_task_runner.h"
-#include "base/strings/string16.h"
 #include "base/supports_user_data.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/autofill/android/provider/autofill_provider_android.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
-#include "components/autofill/core/browser/autofill_manager.h"
+#include "components/autofill/core/browser/android_autofill_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "components/safe_browsing/core/features.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
@@ -97,7 +98,6 @@
 #include "ui/gfx/image/image.h"
 struct AwDrawSWFunctionTable;
 
-using autofill::AutofillManager;
 using autofill::ContentAutofillDriverFactory;
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF16;
@@ -221,7 +221,7 @@ AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
       browser_view_renderer_(this, content::GetUIThreadTaskRunner({})),
       web_contents_(std::move(web_contents)) {
   base::subtle::NoBarrier_AtomicIncrement(&g_instance_count, 1);
-  icon_helper_.reset(new IconHelper(web_contents_.get()));
+  icon_helper_ = std::make_unique<IconHelper>(web_contents_.get());
   icon_helper_->SetListener(this);
   web_contents_->SetUserData(android_webview::kAwContentsUserDataKey,
                              std::make_unique<AwContentsUserData>(this));
@@ -234,18 +234,20 @@ AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
   }
 
   browser_view_renderer_.SetActiveFrameSinkId(frame_sink_id);
-  render_view_host_ext_.reset(
-      new AwRenderViewHostExt(this, web_contents_.get()));
+  render_view_host_ext_ =
+      std::make_unique<AwRenderViewHostExt>(this, web_contents_.get());
 
   InitializePageLoadMetricsForWebContents(web_contents_.get());
 
-  permission_request_handler_.reset(
-      new PermissionRequestHandler(this, web_contents_.get()));
+  permission_request_handler_ =
+      std::make_unique<PermissionRequestHandler>(this, web_contents_.get());
 
-  AwAutofillClient* autofill_manager_delegate =
+  AwAutofillClient* browser_autofill_manager_delegate =
       AwAutofillClient::FromWebContents(web_contents_.get());
-  if (autofill_manager_delegate)
-    InitAutofillIfNecessary(autofill_manager_delegate->GetSaveFormData());
+  if (browser_autofill_manager_delegate) {
+    InitAutofillIfNecessary(
+        browser_autofill_manager_delegate->GetSaveFormData());
+  }
   content::SynchronousCompositor::SetClientForWebContents(
       web_contents_.get(), &browser_view_renderer_);
   AwContentsLifecycleNotifier::GetInstance().OnWebViewCreated(this);
@@ -266,12 +268,12 @@ void AwContents::SetJavaPeers(
   // is passed over anyway to make the binding more explicit.
   java_ref_ = JavaObjectWeakGlobalRef(env, aw_contents);
 
-  web_contents_delegate_.reset(
-      new AwWebContentsDelegate(env, web_contents_delegate));
+  web_contents_delegate_ =
+      std::make_unique<AwWebContentsDelegate>(env, web_contents_delegate);
   web_contents_->SetDelegate(web_contents_delegate_.get());
 
-  contents_client_bridge_.reset(
-      new AwContentsClientBridge(env, contents_client_bridge));
+  contents_client_bridge_ =
+      std::make_unique<AwContentsClientBridge>(env, contents_client_bridge);
   AwContentsClientBridge::Associate(web_contents_.get(),
                                     contents_client_bridge_.get());
 
@@ -290,7 +292,7 @@ void AwContents::SetJavaPeers(
 void AwContents::SetSaveFormData(bool enabled) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   InitAutofillIfNecessary(enabled);
-  // We need to check for the existence, since autofill_manager_delegate
+  // We need to check for the existence, since browser_autofill_manager_delegate
   // may not be created when the setting is false.
   if (AwAutofillClient::FromWebContents(web_contents_.get())) {
     AwAutofillClient::FromWebContents(web_contents_.get())
@@ -319,8 +321,16 @@ void AwContents::InitAutofillIfNecessary(bool autocomplete_enabled) {
   ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
       web_contents, AwAutofillClient::FromWebContents(web_contents),
       base::android::GetDefaultLocaleString(),
-      AutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER,
-      autofill_provider_.get());
+      base::FeatureList::IsEnabled(
+          autofill::features::kAndroidAutofillQueryServerFieldTypes) &&
+              (!autofill::AutofillProvider::
+                   is_download_manager_disabled_for_testing())
+          ? autofill::AutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER
+          : autofill::AutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER,
+      autofill_provider_
+          ? base::BindRepeating(&autofill::AndroidAutofillManager::Create,
+                                autofill_provider_.get())
+          : autofill::AutofillManager::AutofillManagerFactoryCallback());
 }
 
 void AwContents::SetAwAutofillClient(const JavaRef<jobject>& client) {
@@ -434,6 +444,14 @@ static void JNI_AwContents_SetAwDrawSWFunctionTable(JNIEnv* env,
 static void JNI_AwContents_SetAwDrawGLFunctionTable(JNIEnv* env,
                                                     jlong function_table) {}
 
+static void JNI_AwContents_UpdateOpenWebScreenArea(JNIEnv* env,
+                                                   jint pixels,
+                                                   jint percentage) {
+  AwBrowserProcess::GetInstance()
+      ->visibility_metrics_logger()
+      ->UpdateOpenWebScreenArea(pixels, percentage);
+}
+
 // static
 jint JNI_AwContents_GetNativeInstanceCount(JNIEnv* env) {
   return base::subtle::NoBarrier_Load(&g_instance_count);
@@ -491,7 +509,8 @@ void AwContents::GenerateMHTML(JNIEnv* env,
 void AwContents::CreatePdfExporter(JNIEnv* env,
                                    const JavaParamRef<jobject>& obj,
                                    const JavaParamRef<jobject>& pdfExporter) {
-  pdf_exporter_.reset(new AwPdfExporter(env, pdfExporter, web_contents_.get()));
+  pdf_exporter_ =
+      std::make_unique<AwPdfExporter>(env, pdfExporter, web_contents_.get());
 }
 
 bool AwContents::OnReceivedHttpAuthRequest(const JavaRef<jobject>& handler,
@@ -521,12 +540,12 @@ void AwContents::AddVisitedLinks(
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobjectArray>& jvisited_links) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::vector<base::string16> visited_link_strings;
+  std::vector<std::u16string> visited_link_strings;
   base::android::AppendJavaStringArrayToStringVector(env, jvisited_links,
                                                      &visited_link_strings);
 
   std::vector<GURL> visited_link_gurls;
-  std::vector<base::string16>::const_iterator itr;
+  std::vector<std::u16string>::const_iterator itr;
   for (itr = visited_link_strings.begin(); itr != visited_link_strings.end();
        ++itr) {
     visited_link_gurls.push_back(GURL(*itr));
@@ -563,9 +582,8 @@ void ShowGeolocationPromptHelper(const JavaObjectWeakGlobalRef& java_ref,
 
 }  // anonymous namespace
 
-void AwContents::ShowGeolocationPrompt(
-    const GURL& requesting_frame,
-    base::OnceCallback<void(bool)> callback) {
+void AwContents::ShowGeolocationPrompt(const GURL& requesting_frame,
+                                       PermissionCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   GURL origin = requesting_frame.GetOrigin();
@@ -665,7 +683,7 @@ void AwContents::PreauthorizePermission(JNIEnv* env,
 
 void AwContents::RequestProtectedMediaIdentifierPermission(
     const GURL& origin,
-    base::OnceCallback<void(bool)> callback) {
+    PermissionCallback callback) {
   permission_request_handler_->SendRequest(
       std::make_unique<SimplePermissionRequest>(
           origin, AwPermissionRequest::ProtectedMediaId, std::move(callback)));
@@ -677,9 +695,8 @@ void AwContents::CancelProtectedMediaIdentifierPermissionRequests(
       origin, AwPermissionRequest::ProtectedMediaId);
 }
 
-void AwContents::RequestGeolocationPermission(
-    const GURL& origin,
-    base::OnceCallback<void(bool)> callback) {
+void AwContents::RequestGeolocationPermission(const GURL& origin,
+                                              PermissionCallback callback) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (!obj)
@@ -708,9 +725,8 @@ void AwContents::CancelGeolocationPermissionRequests(const GURL& origin) {
                                              AwPermissionRequest::Geolocation);
 }
 
-void AwContents::RequestMIDISysexPermission(
-    const GURL& origin,
-    base::OnceCallback<void(bool)> callback) {
+void AwContents::RequestMIDISysexPermission(const GURL& origin,
+                                            PermissionCallback callback) {
   permission_request_handler_->SendRequest(
       std::make_unique<SimplePermissionRequest>(
           origin, AwPermissionRequest::MIDISysex, std::move(callback)));
@@ -744,7 +760,11 @@ void AwContents::ClearCache(JNIEnv* env,
                             const JavaParamRef<jobject>& obj,
                             jboolean include_disk_files) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  render_view_host_ext_->ClearCache();
+  AwRenderProcess* aw_render_process =
+      AwRenderProcess::GetInstanceForRenderProcessHost(
+          web_contents_->GetMainFrame()->GetProcess());
+
+  aw_render_process->ClearCache();
 
   if (include_disk_files) {
     content::BrowsingDataRemover* remover =
@@ -758,16 +778,10 @@ void AwContents::ClearCache(JNIEnv* env,
   }
 }
 
-void AwContents::KillRenderProcess(JNIEnv* env,
-                                   const JavaParamRef<jobject>& obj) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  render_view_host_ext_->KillRenderProcess();
-}
-
 FindHelper* AwContents::GetFindHelper() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!find_helper_.get()) {
-    find_helper_.reset(new FindHelper(web_contents_.get()));
+    find_helper_ = std::make_unique<FindHelper>(web_contents_.get());
     find_helper_->SetListener(this);
   }
   return find_helper_.get();
@@ -813,7 +827,7 @@ void AwContents::OnReceivedIcon(const GURL& icon_url, const SkBitmap& bitmap) {
   }
 
   ScopedJavaLocalRef<jobject> java_bitmap =
-      gfx::ConvertToJavaBitmap(&bitmap, gfx::OomBehavior::kReturnNullOnOom);
+      gfx::ConvertToJavaBitmap(bitmap, gfx::OomBehavior::kReturnNullOnOom);
   if (!java_bitmap) {
     LOG(WARNING) << "Skipping onReceivedIcon; Not enough memory to convert "
                     "icon to Bitmap.";
@@ -893,7 +907,8 @@ void AwContents::UpdateLastHitTestData(JNIEnv* env,
   if (!render_view_host_ext_->HasNewHitTestData())
     return;
 
-  const AwHitTestData& data = render_view_host_ext_->GetLastHitTestData();
+  const android_webview::mojom::HitTestData& data =
+      render_view_host_ext_->GetLastHitTestData();
   render_view_host_ext_->MarkHitTestDataRead();
 
   // Make sure to null the Java object if data is empty/invalid.
@@ -914,8 +929,9 @@ void AwContents::UpdateLastHitTestData(JNIEnv* env,
   if (data.img_src.is_valid())
     img_src = ConvertUTF8ToJavaString(env, data.img_src.spec());
 
-  Java_AwContents_updateHitTestData(env, obj, data.type, extra_data_for_type,
-                                    href, anchor_text, img_src);
+  Java_AwContents_updateHitTestData(env, obj, static_cast<jint>(data.type),
+                                    extra_data_for_type, href, anchor_text,
+                                    img_src);
 }
 
 void AwContents::OnSizeChanged(JNIEnv* env,
@@ -1094,7 +1110,7 @@ void AwContents::SetPendingWebContentsForPopup(
                                                     pending.release());
     return;
   }
-  pending_contents_.reset(new AwContents(std::move(pending)));
+  pending_contents_ = std::make_unique<AwContents>(std::move(pending));
   // Set dip_scale for pending contents, which is necessary for the later
   // SynchronousCompositor and InputHandler setup.
   pending_contents_->SetDipScaleInternal(browser_view_renderer_.dip_scale());
@@ -1197,6 +1213,12 @@ void AwContents::SetDipScale(JNIEnv* env,
                              jfloat dip_scale) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   SetDipScaleInternal(dip_scale);
+}
+
+jboolean AwContents::IsDisplayingOpenWebContent(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  return GetVisibilityInfo().IsDisplayingOpenWebContent();
 }
 
 void AwContents::OnInputEvent(JNIEnv* env, const JavaParamRef<jobject>& obj) {
@@ -1364,12 +1386,12 @@ base::android::ScopedJavaLocalRef<jstring> AwContents::AddWebMessageListener(
     const base::android::JavaParamRef<jobject>& listener,
     const base::android::JavaParamRef<jstring>& js_object_name,
     const base::android::JavaParamRef<jobjectArray>& allowed_origin_rules) {
-  base::string16 native_js_object_name =
+  std::u16string native_js_object_name =
       base::android::ConvertJavaStringToUTF16(env, js_object_name);
   std::vector<std::string> native_allowed_origin_rule_strings;
   AppendJavaStringArrayToStringVector(env, allowed_origin_rules,
                                       &native_allowed_origin_rule_strings);
-  const base::string16 error_message =
+  const std::u16string error_message =
       GetJsCommunicationHost()->AddWebMessageHostFactory(
           std::make_unique<AwWebMessageHostFactory>(listener),
           native_js_object_name, native_allowed_origin_rule_strings);
@@ -1421,7 +1443,11 @@ void AwContents::SetJsOnlineProperty(JNIEnv* env,
                                      const JavaParamRef<jobject>& obj,
                                      jboolean network_up) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  render_view_host_ext_->SetJsOnlineProperty(network_up);
+  AwRenderProcess* aw_render_process =
+      AwRenderProcess::GetInstanceForRenderProcessHost(
+          web_contents_->GetMainFrame()->GetProcess());
+
+  aw_render_process->SetJsOnlineProperty(network_up);
 }
 
 void AwContents::TrimMemory(JNIEnv* env,

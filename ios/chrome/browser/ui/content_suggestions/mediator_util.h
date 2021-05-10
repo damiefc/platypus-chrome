@@ -5,6 +5,8 @@
 #ifndef IOS_CHROME_BROWSER_UI_CONTENT_SUGGESTIONS_MEDIATOR_UTIL_H_
 #define IOS_CHROME_BROWSER_UI_CONTENT_SUGGESTIONS_MEDIATOR_UTIL_H_
 
+#include <string>
+
 #include "base/bind.h"
 #include "base/optional.h"
 #include "components/ntp_snippets/category_info.h"
@@ -46,6 +48,10 @@ ContentSuggestionsSectionInformation* SectionInformationFromCategoryInfo(
 ntp_snippets::ContentSuggestion::ID SuggestionIDForSectionID(
     ContentSuggestionsCategoryWrapper* category,
     const std::string& id_in_category);
+
+// Creates and returns a SectionInfo for the section containing the "Return to
+// Recent Tab" tile for the Start Surface.
+ContentSuggestionsSectionInformation* ReturnToRecentTabSectionInformation();
 
 // Creates and returns a SectionInfo for the section containing the logo and
 // omnibox.

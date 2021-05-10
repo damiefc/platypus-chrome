@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
 #include "third_party/webrtc/modules/desktop_capture/shared_desktop_frame.h"
@@ -70,10 +70,10 @@ class DualBufferFrameConsumerTest : public testing::Test {
 };
 
 void DualBufferFrameConsumerTest::SetUp() {
-  consumer_.reset(new DualBufferFrameConsumer(
+  consumer_ = std::make_unique<DualBufferFrameConsumer>(
       base::BindRepeating(&DualBufferFrameConsumerTest::OnFrameReceived,
                           base::Unretained(this)),
-      nullptr, protocol::FrameConsumer::FORMAT_RGBA));
+      nullptr, protocol::FrameConsumer::FORMAT_RGBA);
 }
 
 void DualBufferFrameConsumerTest::OnFrameReceived(

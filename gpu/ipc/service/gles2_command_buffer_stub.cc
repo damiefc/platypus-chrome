@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/hash/hash.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
@@ -43,6 +43,7 @@
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 #include "gpu/ipc/service/image_transport_surface.h"
+#include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gl/gl_bindings.h"
@@ -74,7 +75,7 @@ GLES2CommandBufferStub::GLES2CommandBufferStub(
                         route_id),
       gles2_decoder_(nullptr) {}
 
-GLES2CommandBufferStub::~GLES2CommandBufferStub() {}
+GLES2CommandBufferStub::~GLES2CommandBufferStub() = default;
 
 gpu::ContextResult GLES2CommandBufferStub::Initialize(
     CommandBufferStub* share_command_buffer_stub,
@@ -85,6 +86,7 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
 
   GpuChannelManager* manager = channel_->gpu_channel_manager();
   DCHECK(manager);
+  memory_tracker_ = CreateMemoryTracker();
 
   if (share_command_buffer_stub) {
     context_group_ =
@@ -107,7 +109,7 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
         manager->gpu_memory_buffer_factory();
     context_group_ = new gles2::ContextGroup(
         manager->gpu_preferences(), gles2::PassthroughCommandDecoderSupported(),
-        manager->mailbox_manager(), CreateMemoryTracker(init_params),
+        manager->mailbox_manager(), CreateMemoryTracker(),
         manager->shader_translator_cache(),
         manager->framebuffer_completeness_cache(), feature_info,
         init_params.attribs.bind_generates_resource, channel_->image_manager(),
@@ -128,10 +130,6 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
 
   use_virtualized_gl_context_ |=
       context_group_->feature_info()->workarounds().use_virtualized_gl_contexts;
-
-  // MailboxManagerSync synchronization correctness currently depends on having
-  // only a single context. See crbug.com/510243 for details.
-  use_virtualized_gl_context_ |= manager->mailbox_manager()->UsesSync();
 
   bool offscreen = (surface_handle_ == kNullSurfaceHandle);
   gl::GLSurface* default_surface = manager->default_offscreen_surface();
@@ -432,7 +430,7 @@ base::TimeDelta GLES2CommandBufferStub::GetGpuBlockedTimeSinceLastSwap() {
   return channel_->scheduler()->TakeTotalBlockingTime();
 }
 
-MemoryTracker* GLES2CommandBufferStub::GetMemoryTracker() const {
+MemoryTracker* GLES2CommandBufferStub::GetContextGroupMemoryTracker() const {
   return context_group_->memory_tracker();
 }
 
@@ -467,7 +465,6 @@ void GLES2CommandBufferStub::OnTakeFrontBuffer(const Mailbox& mailbox) {
 void GLES2CommandBufferStub::OnReturnFrontBuffer(const Mailbox& mailbox,
                                                  bool is_lost) {
   // No need to pull texture updates.
-  DCHECK(!context_group_->mailbox_manager()->UsesSync());
   gles2_decoder_->ReturnFrontBuffer(mailbox, is_lost);
 }
 
@@ -544,8 +541,15 @@ void GLES2CommandBufferStub::OnCreateImage(
     return;
   }
 
+  if (!gpu::IsPlaneValidForGpuMemoryBufferFormat(params.plane, format)) {
+    LOG(ERROR) << "Invalid plane " << gfx::BufferPlaneToString(params.plane)
+               << " for " << gfx::BufferFormatToString(format);
+    return;
+  }
+
   scoped_refptr<gl::GLImage> image = channel()->CreateImageForGpuMemoryBuffer(
-      std::move(params.gpu_memory_buffer), size, format, surface_handle_);
+      std::move(params.gpu_memory_buffer), size, format, params.plane,
+      surface_handle_);
   if (!image.get())
     return;
 

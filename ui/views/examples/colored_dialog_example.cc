@@ -27,11 +27,12 @@
 namespace views {
 namespace examples {
 
-class ThemeTrackingCheckbox : public views::Checkbox,
-                              public views::ButtonListener {
+class ThemeTrackingCheckbox : public views::Checkbox {
  public:
-  explicit ThemeTrackingCheckbox(const base::string16& label)
-      : Checkbox(label, this) {}
+  explicit ThemeTrackingCheckbox(const std::u16string& label)
+      : Checkbox(label,
+                 base::BindRepeating(&ThemeTrackingCheckbox::ButtonPressed,
+                                     base::Unretained(this))) {}
   ThemeTrackingCheckbox(const ThemeTrackingCheckbox&) = delete;
   ThemeTrackingCheckbox& operator=(const ThemeTrackingCheckbox&) = delete;
   ~ThemeTrackingCheckbox() override = default;
@@ -39,12 +40,10 @@ class ThemeTrackingCheckbox : public views::Checkbox,
   // views::Checkbox
   void OnThemeChanged() override {
     views::Checkbox::OnThemeChanged();
-
     SetChecked(GetNativeTheme()->ShouldUseDarkColors());
   }
 
-  // ButtonListener
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override {
+  void ButtonPressed() {
     GetNativeTheme()->set_use_dark_colors(GetChecked());
     GetWidget()->ThemeChanged();
   }
@@ -52,10 +51,10 @@ class ThemeTrackingCheckbox : public views::Checkbox,
 
 class TextVectorImageButton : public views::MdTextButton {
  public:
-  TextVectorImageButton(ButtonListener* listener,
-                        const base::string16& text,
+  TextVectorImageButton(PressedCallback callback,
+                        const std::u16string& text,
                         const gfx::VectorIcon& icon)
-      : MdTextButton(listener, text), icon_(icon) {}
+      : MdTextButton(callback, text), icon_(icon) {}
   TextVectorImageButton(const TextVectorImageButton&) = delete;
   TextVectorImageButton& operator=(const TextVectorImageButton&) = delete;
   ~TextVectorImageButton() override = default;
@@ -85,7 +84,7 @@ ColoredDialog::ColoredDialog(AcceptCallback accept_callback) {
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
   set_margins(views::LayoutProvider::Get()->GetDialogInsetsForContentType(
-      views::CONTROL, views::CONTROL));
+      views::DialogContentType::kControl, views::DialogContentType::kControl));
 
   textfield_ = AddChildView(std::make_unique<views::Textfield>());
   textfield_->SetPlaceholderText(
@@ -106,7 +105,7 @@ bool ColoredDialog::ShouldShowCloseButton() const {
 }
 
 void ColoredDialog::ContentsChanged(Textfield* sender,
-                                    const base::string16& new_contents) {
+                                    const std::u16string& new_contents) {
   SetButtonEnabled(ui::DIALOG_BUTTON_OK, !textfield_->GetText().empty());
   DialogModelChanged();
 }
@@ -125,18 +124,19 @@ ColoredDialogChooser::ColoredDialogChooser() {
       l10n_util::GetStringUTF16(IDS_COLORED_DIALOG_CHOOSER_CHECKBOX)));
 
   AddChildView(std::make_unique<TextVectorImageButton>(
-      this, l10n_util::GetStringUTF16(IDS_COLORED_DIALOG_CHOOSER_BUTTON),
+      base::BindRepeating(&ColoredDialogChooser::ButtonPressed,
+                          base::Unretained(this)),
+      l10n_util::GetStringUTF16(IDS_COLORED_DIALOG_CHOOSER_BUTTON),
       views::kInfoIcon));
 
   confirmation_label_ = AddChildView(
-      std::make_unique<views::Label>(base::string16(), style::CONTEXT_LABEL));
+      std::make_unique<views::Label>(std::u16string(), style::CONTEXT_LABEL));
   confirmation_label_->SetVisible(false);
 }
 
 ColoredDialogChooser::~ColoredDialogChooser() = default;
 
-void ColoredDialogChooser::ButtonPressed(Button* sender,
-                                         const ui::Event& event) {
+void ColoredDialogChooser::ButtonPressed() {
   // Create the colored dialog.
   views::Widget* widget = DialogDelegate::CreateDialogWidget(
       new ColoredDialog(base::BindOnce(&ColoredDialogChooser::OnFeedbackSubmit,
@@ -145,7 +145,7 @@ void ColoredDialogChooser::ButtonPressed(Button* sender,
   widget->Show();
 }
 
-void ColoredDialogChooser::OnFeedbackSubmit(base::string16 text) {
+void ColoredDialogChooser::OnFeedbackSubmit(std::u16string text) {
   constexpr base::TimeDelta kConfirmationDuration =
       base::TimeDelta::FromSeconds(3);
 

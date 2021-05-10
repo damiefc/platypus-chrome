@@ -18,6 +18,10 @@ namespace favicon_base {
 struct FaviconImageResult;
 }
 
+namespace password_manager {
+struct PasswordForm;
+}  // namespace password_manager
+
 // This controller provides data and actions for the PasswordItemsView.
 class ItemsBubbleController : public PasswordBubbleControllerBase {
  public:
@@ -30,7 +34,7 @@ class ItemsBubbleController : public PasswordBubbleControllerBase {
 
   // Called by the view code to delete or add a password form to the
   // PasswordStore.
-  void OnPasswordAction(const autofill::PasswordForm& password_form,
+  void OnPasswordAction(const password_manager::PasswordForm& password_form,
                         PasswordAction action);
 
   // Makes a request to the favicon service for the icon of current visible URL.
@@ -40,7 +44,7 @@ class ItemsBubbleController : public PasswordBubbleControllerBase {
       base::OnceCallback<void(const gfx::Image&)> favicon_ready_callback);
 
   // Returns the available credentials which match the current site.
-  const std::vector<autofill::PasswordForm>& local_credentials() const {
+  const std::vector<password_manager::PasswordForm>& local_credentials() const {
     return local_credentials_;
   }
 
@@ -52,15 +56,15 @@ class ItemsBubbleController : public PasswordBubbleControllerBase {
       const favicon_base::FaviconImageResult& result);
 
   // PasswordBubbleControllerBase methods:
-  base::string16 GetTitle() const override;
+  std::u16string GetTitle() const override;
   void ReportInteractions() override;
 
-  const std::vector<autofill::PasswordForm> local_credentials_;
+  const std::vector<password_manager::PasswordForm> local_credentials_;
 
   // Used to track a requested favicon.
   base::CancelableTaskTracker favicon_tracker_;
 
-  const base::string16 title_;
+  const std::u16string title_;
   // Dismissal reason for a password bubble.
   password_manager::metrics_util::UIDismissalReason dismissal_reason_ =
       password_manager::metrics_util::NO_DIRECT_INTERACTION;

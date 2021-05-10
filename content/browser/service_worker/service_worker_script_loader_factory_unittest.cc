@@ -4,9 +4,8 @@
 
 #include "content/browser/service_worker/service_worker_script_loader_factory.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_feature_list.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_registration.h"
@@ -62,9 +61,9 @@ class ServiceWorkerScriptLoaderFactoryTest : public testing::Test {
     resource_request.destination =
         network::mojom::RequestDestination::kServiceWorker;
     factory_->CreateLoaderAndStart(
-        loader.InitWithNewPipeAndPassReceiver(), 0 /* routing_id */,
-        0 /* request_id */, network::mojom::kURLLoadOptionNone,
-        resource_request, client->CreateRemote(),
+        loader.InitWithNewPipeAndPassReceiver(), 0 /* request_id */,
+        network::mojom::kURLLoadOptionNone, resource_request,
+        client->CreateRemote(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
     return loader;
   }

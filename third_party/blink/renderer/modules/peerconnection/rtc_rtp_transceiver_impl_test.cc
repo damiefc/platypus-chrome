@@ -25,15 +25,14 @@
 #include "third_party/blink/renderer/platform/mediastream/media_stream_source.h"
 #include "third_party/blink/renderer/platform/peerconnection/webrtc_util.h"
 #include "third_party/blink/renderer/platform/testing/io_task_runner_testing_platform_support.h"
-#include "third_party/webrtc/api/test/mock_rtpreceiver.h"
-#include "third_party/webrtc/api/test/mock_rtpsender.h"
 
 namespace blink {
 
 class RTCRtpTransceiverImplTest : public ::testing::Test {
  public:
   void SetUp() override {
-    dependency_factory_.reset(new blink::MockPeerConnectionDependencyFactory());
+    dependency_factory_ =
+        std::make_unique<blink::MockPeerConnectionDependencyFactory>();
     main_task_runner_ = blink::scheduler::GetSingleThreadTaskRunnerForTesting();
     track_map_ = base::MakeRefCounted<blink::WebRtcMediaStreamTrackAdapterMap>(
         dependency_factory_.get(), main_task_runner_);
@@ -146,7 +145,7 @@ class RTCRtpTransceiverImplTest : public ::testing::Test {
         blink::ToBaseOptional(webrtc_transceiver->mid()),
         webrtc_transceiver->stopped(), webrtc_transceiver->direction(),
         blink::ToBaseOptional(webrtc_transceiver->current_direction()),
-        blink::ToBaseOptional(webrtc_transceiver->fired_direction()));
+        blink::ToBaseOptional(webrtc_transceiver->fired_direction()), {});
   }
 
  protected:
@@ -344,10 +343,10 @@ TEST_F(RTCRtpTransceiverImplTest, ShallowCopy) {
                                remote_track_adapter->Copy());
     EXPECT_FALSE(transceiver_state.is_initialized());
     transceiver_state.Initialize();
-    transceiver.reset(new RTCRtpTransceiverImpl(
+    transceiver = std::make_unique<RTCRtpTransceiverImpl>(
         peer_connection_.get(), track_map_, std::move(transceiver_state),
         /*force_encoded_audio_insertable_streams=*/false,
-        /*force_encoded_video_insertable_streams=*/false));
+        /*force_encoded_video_insertable_streams=*/false);
   }
   DCHECK(transceiver);
   EXPECT_FALSE(transceiver->Stopped());

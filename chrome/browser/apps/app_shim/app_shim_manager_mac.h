@@ -18,13 +18,13 @@
 #include "chrome/browser/apps/app_shim/app_shim_host_bootstrap_mac.h"
 #include "chrome/browser/apps/app_shim/app_shim_host_mac.h"
 #include "chrome/browser/profiles/avatar_menu_observer.h"
+#include "chrome/browser/profiles/profile_manager_observer.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
 
 class Profile;
+class ProfileManager;
 
 namespace base {
 class FilePath;
@@ -40,10 +40,10 @@ namespace apps {
 // extension.
 class AppShimManager : public AppShimHostBootstrap::Client,
                        public AppShimHost::Client,
-                       public content::NotificationObserver,
                        public AppLifetimeMonitor::Observer,
                        public BrowserListObserver,
-                       public AvatarMenuObserver {
+                       public AvatarMenuObserver,
+                       public ProfileManagerObserver {
  public:
   class Delegate {
    public:
@@ -91,7 +91,10 @@ class AppShimManager : public AppShimHostBootstrap::Client,
     // is called.
     virtual void LaunchApp(Profile* profile,
                            const web_app::AppId& app_id,
-                           const std::vector<base::FilePath>& files) = 0;
+                           const std::vector<base::FilePath>& files,
+                           const std::vector<GURL>& urls,
+                           chrome::mojom::AppShimLoginItemRestoreState
+                               login_item_restore_state) = 0;
 
     // Launch the shim process for an app. It is guaranteed that |app_id| is
     // installed for |profile| when this method is called.
@@ -111,7 +114,13 @@ class AppShimManager : public AppShimHostBootstrap::Client,
   static AppShimManager* Get();
 
   explicit AppShimManager(std::unique_ptr<Delegate> delegate);
+  AppShimManager(const AppShimManager&) = delete;
+  AppShimManager& operator=(const AppShimManager&) = delete;
   ~AppShimManager() override;
+
+  // Called at the beginning of browser shut down. Is used to remove |this| as
+  // a ProfileManager and AvatarMenuObserver observer.
+  void OnBeginTearDown();
 
   // Get the host corresponding to a profile and app id, or null if there is
   // none.
@@ -144,6 +153,8 @@ class AppShimManager : public AppShimHostBootstrap::Client,
                          const std::vector<base::FilePath>& files) override;
   void OnShimSelectedProfile(AppShimHost* host,
                              const base::FilePath& profile_path) override;
+  void OnShimOpenedUrls(AppShimHost* host,
+                        const std::vector<GURL>& urls) override;
 
   // AppLifetimeMonitor::Observer overrides:
   void OnAppStart(content::BrowserContext* context,
@@ -155,10 +166,9 @@ class AppShimManager : public AppShimHostBootstrap::Client,
   void OnAppStop(content::BrowserContext* context,
                  const std::string& app_id) override;
 
-  // content::NotificationObserver overrides:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
+  // ProfileManagerObserver overrides:
+  void OnProfileAdded(Profile* profile) override;
+  void OnProfileMarkedForPermanentDeletion(Profile* profile) override;
 
   // BrowserListObserver overrides;
   void OnBrowserAdded(Browser* browser) override;
@@ -207,14 +217,11 @@ class AppShimManager : public AppShimHostBootstrap::Client,
 
   // Launch the user manager (in response to attempting to access a locked
   // profile).
-  virtual void LaunchUserManager();
+  virtual void LaunchProfilePicker();
 
   // Terminate Chrome if Chrome attempted to quit, but was prevented from
   // quitting due to apps being open.
   virtual void MaybeTerminate();
-
-  // Exposed for testing.
-  content::NotificationRegistrar& registrar() { return registrar_; }
 
   // Called when profile menu items may have changed. Rebuilds the profile
   // menu item list and sends updated lists to all apps.
@@ -255,25 +262,34 @@ class AppShimManager : public AppShimHostBootstrap::Client,
   using LoadAndLaunchAppCallback =
       base::OnceCallback<void(ProfileState* profile_state,
                               chrome::mojom::AppShimLaunchResult result)>;
-  void LoadAndLaunchApp(const web_app::AppId& app_id,
-                        const base::FilePath& profile_path,
-                        const std::vector<base::FilePath>& launch_files,
-                        LoadAndLaunchAppCallback launch_callback);
+  void LoadAndLaunchApp(
+      const web_app::AppId& app_id,
+      const base::FilePath& profile_path,
+      const std::vector<base::FilePath>& launch_files,
+      const std::vector<GURL>& launch_urls,
+      chrome::mojom::AppShimLoginItemRestoreState login_item_restore_state,
+      LoadAndLaunchAppCallback launch_callback);
   bool LoadAndLaunchApp_TryExistingProfileStates(
       const web_app::AppId& app_id,
       const base::FilePath& profile_path,
       const std::vector<base::FilePath>& launch_files,
+      const std::vector<GURL>& launch_urls,
+      chrome::mojom::AppShimLoginItemRestoreState login_item_restore_state,
       LoadAndLaunchAppCallback* launch_callback);
   void LoadAndLaunchApp_OnProfilesAndAppReady(
       const web_app::AppId& app_id,
       const std::vector<base::FilePath>& launch_files,
+      const std::vector<GURL>& launch_urls,
+      chrome::mojom::AppShimLoginItemRestoreState login_item_restore_state,
       const std::vector<base::FilePath>& profile_paths_to_launch,
       LoadAndLaunchAppCallback launch_callback);
   void LoadAndLaunchApp_LaunchIfAppropriate(
       Profile* profile,
       ProfileState* profile_state,
       const web_app::AppId& app_id,
-      const std::vector<base::FilePath>& launch_files);
+      const std::vector<base::FilePath>& launch_files,
+      const std::vector<GURL>& launch_urls,
+      chrome::mojom::AppShimLoginItemRestoreState login_item_restore_state);
 
   // The final step of both paths for OnShimProcessConnected. This will connect
   // |bootstrap| to |profile_state|'s AppShimHost, if possible. The value of
@@ -311,17 +327,16 @@ class AppShimManager : public AppShimHostBootstrap::Client,
   ProfileState* GetOrCreateProfileState(Profile* profile,
                                         const web_app::AppId& app_id);
 
+  // Weak, reset during OnBeginTearDown.
+  ProfileManager* profile_manager_ = nullptr;
+
   // Map from extension id to the state for that app.
   std::map<std::string, std::unique_ptr<AppState>> apps_;
-
-  content::NotificationRegistrar registrar_;
 
   // The avatar menu instance used by all app shims.
   std::unique_ptr<AvatarMenu> avatar_menu_;
 
   base::WeakPtrFactory<AppShimManager> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(AppShimManager);
 };
 
 }  // namespace apps

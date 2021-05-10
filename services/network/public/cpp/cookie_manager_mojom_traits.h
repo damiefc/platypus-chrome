@@ -5,7 +5,6 @@
 #ifndef SERVICES_NETWORK_PUBLIC_CPP_COOKIE_MANAGER_MOJOM_TRAITS_H_
 #define SERVICES_NETWORK_PUBLIC_CPP_COOKIE_MANAGER_MOJOM_TRAITS_H_
 
-#include "ipc/ipc_message_utils.h"
 #include "mojo/public/cpp/bindings/enum_traits.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_result.h"
@@ -95,6 +94,16 @@ struct StructTraits<network::mojom::CookieSameSiteContextDataView,
 };
 
 template <>
+struct EnumTraits<network::mojom::SamePartyCookieContextType,
+                  net::CookieOptions::SamePartyCookieContextType> {
+  static network::mojom::SamePartyCookieContextType ToMojom(
+      net::CookieOptions::SamePartyCookieContextType context_type);
+
+  static bool FromMojom(network::mojom::SamePartyCookieContextType context_type,
+                        net::CookieOptions::SamePartyCookieContextType* out);
+};
+
+template <>
 struct StructTraits<network::mojom::CookieOptionsDataView, net::CookieOptions> {
   static bool exclude_httponly(const net::CookieOptions& o) {
     return o.exclude_httponly();
@@ -108,6 +117,19 @@ struct StructTraits<network::mojom::CookieOptionsDataView, net::CookieOptions> {
   }
   static bool return_excluded_cookies(const net::CookieOptions& o) {
     return o.return_excluded_cookies();
+  }
+
+  static net::CookieOptions::SamePartyCookieContextType
+  same_party_cookie_context_type(const net::CookieOptions& o) {
+    return o.same_party_cookie_context_type();
+  }
+
+  static uint32_t full_party_context_size(const net::CookieOptions& o) {
+    return o.full_party_context_size();
+  }
+
+  static bool is_in_nontrivial_first_party_set(const net::CookieOptions& o) {
+    return o.is_in_nontrivial_first_party_set();
   }
 
   static bool Read(network::mojom::CookieOptionsDataView mojo_options,
@@ -148,6 +170,12 @@ struct StructTraits<network::mojom::CanonicalCookieDataView,
   }
   static net::CookieSourceScheme source_scheme(const net::CanonicalCookie& c) {
     return c.SourceScheme();
+  }
+  static bool same_party(const net::CanonicalCookie& c) {
+    return c.IsSameParty();
+  }
+  static int source_port(const net::CanonicalCookie& c) {
+    return c.SourcePort();
   }
 
   static bool Read(network::mojom::CanonicalCookieDataView cookie,
@@ -200,6 +228,10 @@ struct StructTraits<network::mojom::CookieAccessResultDataView,
   static const net::CookieAccessSemantics& access_semantics(
       const net::CookieAccessResult& c) {
     return c.access_semantics;
+  }
+  static bool is_allowed_to_access_secure_cookies(
+      const net::CookieAccessResult& c) {
+    return c.is_allowed_to_access_secure_cookies;
   }
   static bool Read(network::mojom::CookieAccessResultDataView access_result,
                    net::CookieAccessResult* out);

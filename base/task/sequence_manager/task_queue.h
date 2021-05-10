@@ -16,6 +16,7 @@
 #include "base/task/task_observer.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
+#include "base/trace_event/base_tracing_forward.h"
 
 namespace base {
 
@@ -67,6 +68,10 @@ class BASE_EXPORT TaskQueue : public RefCountedThreadSafe<TaskQueue> {
   // Shuts down the queue when there are no more tasks queued.
   void ShutdownTaskQueueGracefully();
 
+  // Queues with higher priority are selected to run before queues of lower
+  // priority. Note that there is no starvation protection, i.e., a constant
+  // stream of high priority work can mean that tasks in lower priority queues
+  // won't get to run.
   // TODO(scheduler-dev): Could we define a more clear list of priorities?
   // See https://crbug.com/847858.
   enum QueuePriority : uint8_t {
@@ -75,24 +80,16 @@ class BASE_EXPORT TaskQueue : public RefCountedThreadSafe<TaskQueue> {
     // private queues which perform control operations.
     kControlPriority = 0,
 
-    // The selector will prioritize highest over high, normal and low; and
-    // high over normal and low; and normal over low. However it will ensure
-    // neither of the lower priority queues can be completely starved by higher
-    // priority tasks. All three of these queues will always take priority over
-    // and can starve the best effort queue.
     kHighestPriority = 1,
-
     kVeryHighPriority = 2,
-
     kHighPriority = 3,
-
-    // Queues with normal priority are the default.
-    kNormalPriority = 4,
+    kNormalPriority = 4,  // Queues with normal priority are the default.
     kLowPriority = 5,
 
     // Queues with best effort priority will only be run if all other queues are
-    // empty. They can be starved by the other queues.
+    // empty.
     kBestEffortPriority = 6,
+
     // Must be the last entry.
     kQueuePriorityCount = 7,
     kFirstQueuePriority = kControlPriority,
@@ -256,6 +253,9 @@ class BASE_EXPORT TaskQueue : public RefCountedThreadSafe<TaskQueue> {
   // Can be called on any thread.
   virtual const char* GetName() const;
 
+  // Serialise this object into a trace.
+  void WriteIntoTrace(perfetto::TracedValue context) const;
+
   // Set the priority of the queue to |priority|. NOTE this must be called on
   // the thread this TaskQueue was created by.
   void SetQueuePriority(QueuePriority priority);
@@ -338,8 +338,41 @@ class BASE_EXPORT TaskQueue : public RefCountedThreadSafe<TaskQueue> {
   scoped_refptr<SingleThreadTaskRunner> CreateTaskRunner(TaskType task_type);
 
   // Default task runner which doesn't annotate tasks with a task type.
-  scoped_refptr<SingleThreadTaskRunner> task_runner() const {
+  const scoped_refptr<SingleThreadTaskRunner>& task_runner() const {
     return default_task_runner_;
+  }
+
+  // Checks whether or not this TaskQueue has a TaskQueueImpl.
+  // TODO(kdillon): Remove this method when TaskQueueImpl inherits from
+  // TaskQueue and TaskQueue no longer owns an Impl.
+  bool HasImpl() { return !!impl_; }
+
+  using OnTaskStartedHandler =
+      RepeatingCallback<void(const Task&, const TaskQueue::TaskTiming&)>;
+  using OnTaskCompletedHandler =
+      RepeatingCallback<void(const Task&, TaskQueue::TaskTiming*, LazyNow*)>;
+  using OnTaskPostedHandler = RepeatingCallback<void(const Task&)>;
+
+  // Sets a handler to subscribe for notifications about started and completed
+  // tasks.
+  void SetOnTaskStartedHandler(OnTaskStartedHandler handler);
+
+  // |task_timing| may be passed in Running state and may not have the end time,
+  // so that the handler can run an additional task that is counted as a part of
+  // the main task.
+  // The handler can call TaskTiming::RecordTaskEnd, which is optional, to
+  // finalize the task, and use the resulting timing.
+  void SetOnTaskCompletedHandler(OnTaskCompletedHandler handler);
+
+  // Set a callback for adding custom functionality for processing posted task.
+  // Callback will be dispatched while holding a scheduler lock. As a result,
+  // callback should not call scheduler APIs directly, as this can lead to
+  // deadlocks. For example, PostTask should not be called directly and
+  // ScopedDeferTaskPosting::PostOrDefer should be used instead.
+  void SetOnTaskPostedHandler(OnTaskPostedHandler handler);
+
+  base::WeakPtr<TaskQueue> AsWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
   }
 
  protected:
@@ -382,6 +415,8 @@ class BASE_EXPORT TaskQueue : public RefCountedThreadSafe<TaskQueue> {
   int enabled_voter_count_ = 0;
   int voter_count_ = 0;
   const char* name_;
+
+  base::WeakPtrFactory<TaskQueue> weak_ptr_factory_{this};
 };
 
 }  // namespace sequence_manager

@@ -5,12 +5,12 @@
 import './strings.m.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
+import {CustomElement} from 'chrome://resources/js/custom_element.js';
 import {getFavicon} from 'chrome://resources/js/icon.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {isRTL} from 'chrome://resources/js/util.m.js';
 
 import {AlertIndicatorsElement} from './alert_indicators.js';
-import {CustomElement} from './custom_element.js';
 import {TabStripEmbedderProxy, TabStripEmbedderProxyImpl} from './tab_strip_embedder_proxy.js';
 import {TabSwiper} from './tab_swiper.js';
 import {CloseTabAction, TabData, TabNetworkState, TabsApiProxy, TabsApiProxyImpl} from './tabs_api_proxy.js';
@@ -103,6 +103,9 @@ export class TabElement extends CustomElement {
     this.tabEl_.addEventListener('contextmenu', e => this.onContextMenu_(e));
     this.tabEl_.addEventListener(
         'keydown', e => this.onKeyDown_(/** @type {!KeyboardEvent} */ (e)));
+    this.tabEl_.addEventListener(
+        'pointerup', e => this.onPointerUp_(/** @type {!PointerEvent} */ (e)));
+
     this.closeButtonEl_.addEventListener('click', e => this.onClose_(e));
     this.addEventListener('swipe', () => this.onSwipe_());
 
@@ -262,6 +265,18 @@ export class TabElement extends CustomElement {
     }
   }
 
+  /**
+   * @param {!PointerEvent} event
+   * @private
+   */
+  onPointerUp_(event) {
+    event.stopPropagation();
+    if (event.pointerType !== 'touch' && event.button === 2) {
+      this.embedderApi_.showTabContextMenu(
+          this.tab.id, event.clientX, event.clientY);
+    }
+  }
+
   resetSwipe() {
     this.tabSwiper_.reset();
   }
@@ -276,6 +291,16 @@ export class TabElement extends CustomElement {
   /** @param {boolean} isDraggedOut */
   setDraggedOut(isDraggedOut) {
     this.toggleAttribute('dragged-out_', isDraggedOut);
+  }
+
+  /** @return {boolean} */
+  isDraggedOut() {
+    return this.hasAttribute('dragged-out_');
+  }
+
+  /** @param {boolean} isTouchPressed */
+  setTouchPressed(isTouchPressed) {
+    this.toggleAttribute('touch_pressed_', isTouchPressed);
   }
 
   /**

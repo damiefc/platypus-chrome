@@ -16,6 +16,7 @@
 #include "base/optional.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "media/base/media_export.h"
 
 namespace media {
 
@@ -23,9 +24,9 @@ namespace media {
 // 1. Data validation check.
 // 2. Stream/Buffer life time management.
 // 3. Configure StreamProcessor and input/output buffer settings.
-class StreamProcessorHelper {
+class MEDIA_EXPORT StreamProcessorHelper {
  public:
-  class IoPacket {
+  class MEDIA_EXPORT IoPacket {
    public:
     static IoPacket CreateInput(size_t index,
                                 size_t size,
@@ -122,10 +123,11 @@ class StreamProcessorHelper {
   void CompleteInputBuffersAllocation(
       fuchsia::sysmem::BufferCollectionTokenPtr token);
   void CompleteOutputBuffersAllocation(
-      size_t num_buffers_for_client,
-      size_t num_buffers_for_server,
       fuchsia::sysmem::BufferCollectionTokenPtr token);
 
+  // Closes the current stream and starts a new one. After that all packets
+  // passed to Process() will be sent with a new |stream_lifetime_ordinal|
+  // value.
   void Reset();
 
  private:

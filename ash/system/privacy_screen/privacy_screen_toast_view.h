@@ -20,7 +20,8 @@ class PrivacyScreenToastController;
 class ASH_EXPORT PrivacyScreenToastView : public views::View,
                                           public views::ViewObserver {
  public:
-  explicit PrivacyScreenToastView(PrivacyScreenToastController* controller);
+  PrivacyScreenToastView(PrivacyScreenToastController* controller,
+                         views::Button::PressedCallback callback);
   ~PrivacyScreenToastView() override;
   PrivacyScreenToastView(PrivacyScreenToastView&) = delete;
   PrivacyScreenToastView operator=(PrivacyScreenToastView&) = delete;
@@ -29,7 +30,7 @@ class ASH_EXPORT PrivacyScreenToastView : public views::View,
   void SetPrivacyScreenEnabled(bool enabled, bool managed);
 
   // Returns the accessible name for the view.
-  base::string16 GetAccessibleName();
+  std::u16string GetAccessibleName();
 
   // Returns true if the toggle button is focused.
   bool IsButtonFocused() const;

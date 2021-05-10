@@ -7,7 +7,6 @@
 
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
@@ -23,7 +22,6 @@ namespace examples {
 // controls. Lays out a sequence of ChildPanels in a view using the layout
 // manager of choice.
 class VIEWS_EXAMPLES_EXPORT LayoutExampleBase : public ExampleBase,
-                                                public ButtonListener,
                                                 public TextfieldController {
  public:
   // Grouping of multiple textfields that provide insets.
@@ -61,7 +59,7 @@ class VIEWS_EXAMPLES_EXPORT LayoutExampleBase : public ExampleBase,
    private:
     // TextfieldController
     void ContentsChanged(Textfield* sender,
-                         const base::string16& new_contents) override;
+                         const std::u16string& new_contents) override;
 
     Textfield* CreateTextfield();
 
@@ -89,27 +87,24 @@ class VIEWS_EXAMPLES_EXPORT LayoutExampleBase : public ExampleBase,
 
   // Creates and adds a Combobox with a label with |label_text| to the left.
   // Sets |combobox_callback| as the callback for the created combobox.
-  Combobox* CreateAndAddCombobox(const base::string16& label_text,
+  Combobox* CreateAndAddCombobox(const std::u16string& label_text,
                                  const char* const* items,
                                  int count,
                                  base::RepeatingClosure combobox_callback);
 
   // Creates and adds a Textfield with a label with |label_text| to the left.
-  Textfield* CreateAndAddTextfield(const base::string16& label_text);
+  Textfield* CreateAndAddTextfield(const std::u16string& label_text);
 
   // Creates a set of labeled Textfields with |label_text|, and four text fields
   // arranged at compass points representing a set of insets. |textfields| is
   // populated with the fields that are created.
-  void CreateMarginsTextFields(const base::string16& label_text,
+  void CreateMarginsTextFields(const std::u16string& label_text,
                                InsetTextfields* textfields);
 
-  // Creates and adds a Checkbox with label |label_text|.
-  Checkbox* CreateAndAddCheckbox(const base::string16& label_text);
-
-  // ButtonListener:
-  // Be sure to call LayoutExampleBase::ButtonPressed() to ensure the "add"
-  // button works correctly.
-  void ButtonPressed(Button* sender, const ui::Event& event) final;
+  // Creates and adds a Checkbox with label |label_text|. Sets
+  // |checkbox_callback| as the callback for the created checkbox.
+  Checkbox* CreateAndAddCheckbox(const std::u16string& label_text,
+                                 base::RepeatingClosure checkbox_callback);
 
   // ExampleBase:
   // Be sure to call LayoutExampleBase::CreateExampleView() to ensure default
@@ -122,14 +117,12 @@ class VIEWS_EXAMPLES_EXPORT LayoutExampleBase : public ExampleBase,
   // the specific layout.
   virtual void CreateAdditionalControls() = 0;
 
-  // Handles buttons added by derived classes after button handling for
-  // common controls is done.
-  virtual void ButtonPressedImpl(Button* sender) = 0;
-
   // Performs layout-specific update of the layout manager.
   virtual void UpdateLayoutManager() = 0;
 
  private:
+  void AddButtonPressed();
+
   View* layout_panel_ = nullptr;
   View* control_panel_ = nullptr;
   LabelButton* add_button_ = nullptr;

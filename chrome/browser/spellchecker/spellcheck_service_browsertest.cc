@@ -5,11 +5,13 @@
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -75,7 +77,7 @@ class SpellcheckServiceBrowserTest : public InProcessBrowserTest,
 #endif  // defined(OS_WIN)
 
   void SetUpOnMainThread() override {
-    renderer_.reset(new content::MockRenderProcessHost(GetContext()));
+    renderer_ = std::make_unique<content::MockRenderProcessHost>(GetContext());
     renderer_->Init();
     prefs_ = user_prefs::UserPrefs::Get(GetContext());
   }
@@ -313,7 +315,7 @@ class SpellcheckServiceHostBrowserTest : public SpellcheckServiceBrowserTest {
   }
 
   bool spelling_service_done_called_ = false;
-  base::string16 word_;
+  std::u16string word_;
 
   DISALLOW_COPY_AND_ASSIGN(SpellcheckServiceHostBrowserTest);
 };
@@ -476,17 +478,6 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceHostBrowserTest, RequestDictionary) {
 
   RequestDictionary();
   EXPECT_TRUE(GetEnableSpellcheckState());
-}
-
-// When the renderer notifies that it corrected a word, the render process
-// host should record UMA stats about the correction.
-IN_PROC_BROWSER_TEST_F(SpellcheckServiceHostBrowserTest, NotifyChecked) {
-  const char kMisspellRatio[] = "SpellCheck.MisspellRatio";
-
-  base::HistogramTester tester;
-  tester.ExpectTotalCount(kMisspellRatio, 0);
-  NotifyChecked();
-  tester.ExpectTotalCount(kMisspellRatio, 1);
 }
 
 #if BUILDFLAG(USE_RENDERER_SPELLCHECKER)
@@ -778,7 +769,7 @@ const std::vector<std::string> kSpellcheckDictionariesAfter = {
 // spellcheck language preferences for the test profile.
 IN_PROC_BROWSER_TEST_F(SpellcheckServiceWindowsHybridBrowserTestDelayInit,
                        PRE_WindowsHybridSpellcheckDelayInit) {
-  GetPrefs()->SetString(language::prefs::kAcceptLanguages, kAcceptLanguages);
+  GetPrefs()->SetString(language::prefs::kSelectedLanguages, kAcceptLanguages);
   base::Value spellcheck_dictionaries_list(base::Value::Type::LIST);
   for (const auto& dictionary : kSpellcheckDictionariesBefore) {
     spellcheck_dictionaries_list.Append(std::move(dictionary));

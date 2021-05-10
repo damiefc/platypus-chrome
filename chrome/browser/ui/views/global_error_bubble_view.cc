@@ -25,6 +25,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "ui/base/buildflags.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -58,7 +59,6 @@ GlobalErrorBubbleView::GlobalErrorBubbleView(
     Browser* browser,
     const base::WeakPtr<GlobalErrorWithStandardBubble>& error)
     : BubbleDialogDelegateView(anchor_view, arrow),
-      browser_(browser),
       error_(error) {
   // error_ is a WeakPtr, but it's always non-null during construction.
   DCHECK(error_);
@@ -81,14 +81,17 @@ GlobalErrorBubbleView::GlobalErrorBubbleView(
   // nothing if they are invoked after its destruction.
   SetAcceptCallback(base::BindOnce(
       &GlobalErrorWithStandardBubble::BubbleViewAcceptButtonPressed, error,
-      base::Unretained(browser_)));
+      base::Unretained(browser)));
   SetCancelCallback(base::BindOnce(
       &GlobalErrorWithStandardBubble::BubbleViewCancelButtonPressed, error,
-      base::Unretained(browser_)));
+      base::Unretained(browser)));
 
   if (!error_->GetBubbleViewDetailsButtonLabel().empty()) {
     SetExtraView(std::make_unique<views::MdTextButton>(
-        this, error_->GetBubbleViewDetailsButtonLabel()));
+        base::BindRepeating(
+            &GlobalErrorWithStandardBubble::BubbleViewDetailsButtonPressed,
+            error_, browser),
+        error_->GetBubbleViewDetailsButtonLabel()));
   }
 
   chrome::RecordDialogCreation(chrome::DialogIdentifier::GLOBAL_ERROR);
@@ -101,7 +104,7 @@ void GlobalErrorBubbleView::Init() {
   // |error_| is assumed to be valid, and stay valid, at least until Init()
   // returns.
 
-  std::vector<base::string16> message_strings(error_->GetBubbleViewMessages());
+  std::vector<std::u16string> message_strings(error_->GetBubbleViewMessages());
   std::vector<std::unique_ptr<views::Label>> message_labels;
   for (const auto& message_string : message_strings) {
     auto message_label = std::make_unique<views::Label>(message_string);
@@ -146,8 +149,5 @@ void GlobalErrorBubbleView::CloseBubbleView() {
   GetWidget()->Close();
 }
 
-void GlobalErrorBubbleView::ButtonPressed(views::Button* sender,
-                                          const ui::Event& event) {
-  if (error_)
-    error_->BubbleViewDetailsButtonPressed(browser_);
-}
+BEGIN_METADATA(GlobalErrorBubbleView, views::BubbleDialogDelegateView)
+END_METADATA

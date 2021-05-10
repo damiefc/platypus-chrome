@@ -17,6 +17,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/child_process_host.h"
+#include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -83,6 +84,8 @@ blink::ServiceWorkerStatusCode
 ServiceWorkerProcessManager::AllocateWorkerProcess(
     int embedded_worker_id,
     const GURL& script_url,
+    const base::Optional<network::CrossOriginEmbedderPolicy>&
+        cross_origin_embedder_policy,
     bool can_use_existing_process,
     AllocatedProcessInfo* out_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -115,14 +118,24 @@ ServiceWorkerProcessManager::AllocateWorkerProcess(
   // (e.g., <webview>).
   const bool is_guest =
       storage_partition_ &&
-      !storage_partition_->site_for_guest_service_worker().is_empty();
+      !storage_partition_->site_for_guest_service_worker_or_shared_worker()
+           .is_empty();
   const GURL service_worker_url =
-      is_guest ? storage_partition_->site_for_guest_service_worker()
-               : script_url;
+      is_guest
+          ? storage_partition_->site_for_guest_service_worker_or_shared_worker()
+          : script_url;
+  const bool is_coop_coep_cross_origin_isolated =
+      !is_guest && cross_origin_embedder_policy.has_value() &&
+      network::CompatibleWithCrossOriginIsolated(
+          cross_origin_embedder_policy->value);
   scoped_refptr<SiteInstanceImpl> site_instance =
       SiteInstanceImpl::CreateForServiceWorker(
-          browser_context_, service_worker_url, can_use_existing_process,
-          is_guest);
+          browser_context_, service_worker_url,
+          is_coop_coep_cross_origin_isolated
+              ? WebExposedIsolationInfo::CreateIsolated(
+                    url::Origin::Create(service_worker_url))
+              : WebExposedIsolationInfo::CreateNonIsolated(),
+          can_use_existing_process, is_guest);
 
   // Get the process from the SiteInstance.
   RenderProcessHost* rph = site_instance->GetProcess();

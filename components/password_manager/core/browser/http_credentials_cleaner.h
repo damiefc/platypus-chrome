@@ -14,6 +14,7 @@
 
 #include "base/containers/flat_set.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "components/password_manager/core/browser/credentials_cleaner.h"
 #include "components/password_manager/core/browser/hsts_query.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -77,7 +78,7 @@ class HttpCredentialCleaner : public PasswordStoreConsumer,
   // signon-realm excluding the protocol, the second argument is
   // the PasswordForm::scheme (i.e. HTML, BASIC, etc.) and the third argument is
   // the username of the form.
-  using FormKey = std::tuple<std::string, PasswordForm::Scheme, base::string16>;
+  using FormKey = std::tuple<std::string, PasswordForm::Scheme, std::u16string>;
 
   // PasswordStoreConsumer:
   void OnGetPasswordStoreResults(
@@ -109,7 +110,7 @@ class HttpCredentialCleaner : public PasswordStoreConsumer,
 
   // Map from (signon-realm excluding the protocol, Password::Scheme, username)
   // tuples of HTTPS forms to a list of passwords for that pair.
-  std::map<FormKey, base::flat_set<base::string16>> https_credentials_map_;
+  std::map<FormKey, base::flat_set<std::u16string>> https_credentials_map_;
 
   // Used to signal completion of the clean-up. It is null until
   // StartCleaning is called.
@@ -122,6 +123,8 @@ class HttpCredentialCleaner : public PasswordStoreConsumer,
   // Number of HTTP credentials from the password store. Used to know when all
   // credentials were processed.
   size_t total_http_credentials_ = 0;
+
+  base::WeakPtrFactory<HttpCredentialCleaner> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(HttpCredentialCleaner);
 };

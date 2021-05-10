@@ -49,7 +49,7 @@ void FakeRenderWidgetHost::IntrinsicSizingInfoChanged(
 void FakeRenderWidgetHost::SetCursor(const ui::Cursor& cursor) {}
 
 void FakeRenderWidgetHost::SetToolTipText(
-    const base::string16& tooltip_text,
+    const std::u16string& tooltip_text,
     base::i18n::TextDirection text_direction_hint) {}
 
 void FakeRenderWidgetHost::TextInputStateChanged(
@@ -60,7 +60,28 @@ void FakeRenderWidgetHost::SelectionBoundsChanged(
     base::i18n::TextDirection anchor_dir,
     const gfx::Rect& focus_rect,
     base::i18n::TextDirection focus_dir,
+    const gfx::Rect& bounding_box,
     bool is_anchor_first) {}
+
+void FakeRenderWidgetHost::CreateFrameSink(
+    mojo::PendingReceiver<viz::mojom::CompositorFrameSink>
+        compositor_frame_sink_receiver,
+    mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient>
+        compositor_frame_sink_client) {}
+
+void FakeRenderWidgetHost::RegisterRenderFrameMetadataObserver(
+    mojo::PendingReceiver<cc::mojom::RenderFrameMetadataObserverClient>
+        render_frame_metadata_observer_client_receiver,
+    mojo::PendingRemote<cc::mojom::RenderFrameMetadataObserver>
+        render_frame_metadata_observer) {}
+
+void FakeRenderWidgetHost::RequestClosePopup() {}
+
+void FakeRenderWidgetHost::SetPopupBounds(const gfx::Rect& bounds,
+                                          SetPopupBoundsCallback callback) {}
+
+void FakeRenderWidgetHost::ShowPopup(const gfx::Rect& initial_rect,
+                                     ShowPopupCallback callback) {}
 
 void FakeRenderWidgetHost::SetTouchActionFromMain(
     cc::TouchAction touch_action) {}
@@ -82,7 +103,6 @@ void FakeRenderWidgetHost::ImeCompositionRangeChanged(
 void FakeRenderWidgetHost::SetMouseCapture(bool capture) {}
 
 void FakeRenderWidgetHost::RequestMouseLock(bool from_user_gesture,
-                                            bool privileged,
                                             bool unadjusted_movement,
                                             RequestMouseLockCallback callback) {
 }

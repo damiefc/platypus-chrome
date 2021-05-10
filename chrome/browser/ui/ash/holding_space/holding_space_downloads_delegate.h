@@ -5,11 +5,12 @@
 #ifndef CHROME_BROWSER_UI_ASH_HOLDING_SPACE_HOLDING_SPACE_DOWNLOADS_DELEGATE_H_
 #define CHROME_BROWSER_UI_ASH_HOLDING_SPACE_HOLDING_SPACE_DOWNLOADS_DELEGATE_H_
 
-#include <memory>
-
 #include "base/callback.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_multi_source_observation.h"
+#include "base/scoped_observation.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service_delegate.h"
+#include "components/arc/intent_helper/arc_intent_helper_bridge.h"
+#include "components/arc/intent_helper/arc_intent_helper_observer.h"
 #include "components/download/public/common/download_item.h"
 #include "content/public/browser/download_manager.h"
 
@@ -20,24 +21,14 @@ class FilePath;
 namespace ash {
 
 // A delegate of `HoldingSpaceKeyedService` tasked with monitoring the status of
-// of downloads and notifying a callback on download completion.
+// of downloads on its behalf.
 class HoldingSpaceDownloadsDelegate : public HoldingSpaceKeyedServiceDelegate,
+                                      public arc::ArcIntentHelperObserver,
                                       public content::DownloadManager::Observer,
                                       public download::DownloadItem::Observer {
  public:
-  // Callback to be invoked when a download is completed. Note that this
-  // callback will only be invoked after holding space persistence is restored.
-  using ItemDownloadedCallback =
-      base::RepeatingCallback<void(const base::FilePath&)>;
-
-  // Callback to invoke when all downloads have been restored to holding space.
-  using DownloadsRestoredCallback = base::OnceClosure;
-
-  HoldingSpaceDownloadsDelegate(
-      Profile* profile,
-      HoldingSpaceModel* model,
-      ItemDownloadedCallback item_downloaded_callback,
-      DownloadsRestoredCallback downloads_restored_callback);
+  HoldingSpaceDownloadsDelegate(HoldingSpaceKeyedService* service,
+                                HoldingSpaceModel* model);
   HoldingSpaceDownloadsDelegate(const HoldingSpaceDownloadsDelegate&) = delete;
   HoldingSpaceDownloadsDelegate& operator=(
       const HoldingSpaceDownloadsDelegate&) = delete;
@@ -51,8 +42,11 @@ class HoldingSpaceDownloadsDelegate : public HoldingSpaceKeyedServiceDelegate,
  private:
   // HoldingSpaceKeyedServiceDelegate:
   void Init() override;
-  void Shutdown() override;
   void OnPersistenceRestored() override;
+
+  // arc::ArcIntentHelperObserver:
+  void OnArcDownloadAdded(const base::FilePath& relative_path,
+                          const std::string& owner_package_name) override;
 
   // content::DownloadManager::Observer:
   void OnManagerInitialized() override;
@@ -63,23 +57,23 @@ class HoldingSpaceDownloadsDelegate : public HoldingSpaceKeyedServiceDelegate,
   // download::DownloadItem::Observer:
   void OnDownloadUpdated(download::DownloadItem* item) override;
 
-  // Invoked when the specified `file_path` has completed downloading.
-  void OnDownloadCompleted(const base::FilePath& file_path);
+  // Invoked when a download of the specified `type` at the specified
+  // `file_path` has completed downloading. Note that the specified `type` must
+  // be a download type.
+  void OnDownloadCompleted(HoldingSpaceItem::Type type,
+                           const base::FilePath& file_path);
 
-  // Removes all observers.
-  void RemoveObservers();
+  base::ScopedObservation<arc::ArcIntentHelperBridge,
+                          arc::ArcIntentHelperObserver>
+      arc_intent_helper_observation_{this};
 
-  // Callback to invoke when a download is completed.
-  ItemDownloadedCallback item_downloaded_callback_;
+  base::ScopedObservation<content::DownloadManager,
+                          content::DownloadManager::Observer>
+      download_manager_observation_{this};
 
-  // Callback to invoke when all downloads have been restored to holding space.
-  DownloadsRestoredCallback downloads_restored_callback_;
-
-  ScopedObserver<content::DownloadManager, content::DownloadManager::Observer>
-      download_manager_observer_{this};
-
-  ScopedObserver<download::DownloadItem, download::DownloadItem::Observer>
-      download_item_observer_{this};
+  base::ScopedMultiSourceObservation<download::DownloadItem,
+                                     download::DownloadItem::Observer>
+      download_item_observations_{this};
 
   base::WeakPtrFactory<HoldingSpaceDownloadsDelegate> weak_factory_{this};
 };

@@ -30,11 +30,8 @@ bool AppendArgumentFromJSONValue(const std::string& key,
       command_line->AppendArg(argument_name);
       break;
     case base::Value::Type::INTEGER: {
-      int value;
-      bool result = value_node.GetAsInteger(&value);
-      DCHECK(result);
       command_line->AppendArg(argument_name + "=" +
-                              base::NumberToString(value));
+                              base::NumberToString(value_node.GetInt()));
       break;
     }
     case base::Value::Type::STRING: {
@@ -210,8 +207,8 @@ bool LocalTestServer::AddCommandLineArguments(
       const base::ListValue* list = nullptr;
       if (!value.GetAsList(&list) || !list || list->empty())
         return false;
-      for (auto list_it = list->begin(); list_it != list->end(); ++list_it) {
-        if (!AppendArgumentFromJSONValue(key, *list_it, command_line))
+      for (const auto& entry : list->GetList()) {
+        if (!AppendArgumentFromJSONValue(key, entry, command_line))
           return false;
       }
     } else if (!AppendArgumentFromJSONValue(key, value, command_line)) {
@@ -232,12 +229,6 @@ bool LocalTestServer::AddCommandLineArguments(
       break;
     case TYPE_FTP:
       command_line->AppendArg("--ftp");
-      break;
-    case TYPE_TCP_ECHO:
-      command_line->AppendArg("--tcp-echo");
-      break;
-    case TYPE_UDP_ECHO:
-      command_line->AppendArg("--udp-echo");
       break;
     case TYPE_BASIC_AUTH_PROXY:
       command_line->AppendArg("--basic-auth-proxy");

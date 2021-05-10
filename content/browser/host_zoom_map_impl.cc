@@ -17,7 +17,6 @@
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
@@ -65,16 +64,15 @@ GURL HostZoomMap::GetURLFromEntry(NavigationEntry* entry) {
 
 HostZoomMap* HostZoomMap::GetDefaultForBrowserContext(BrowserContext* context) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  StoragePartition* partition =
-      BrowserContext::GetDefaultStoragePartition(context);
+  StoragePartition* partition = context->GetDefaultStoragePartition();
   DCHECK(partition);
   return partition->GetHostZoomMap();
 }
 
 HostZoomMap* HostZoomMap::Get(SiteInstance* instance) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  StoragePartition* partition = BrowserContext::GetStoragePartition(
-      instance->GetBrowserContext(), instance);
+  StoragePartition* partition =
+      instance->GetBrowserContext()->GetStoragePartition(instance);
   DCHECK(partition);
   return partition->GetHostZoomMap();
 }
@@ -84,8 +82,8 @@ HostZoomMap* HostZoomMap::GetForWebContents(WebContents* contents) {
   // TODO(wjmaclean): Update this behaviour to work with OOPIF.
   // See crbug.com/528407.
   StoragePartition* partition =
-      BrowserContext::GetStoragePartition(contents->GetBrowserContext(),
-                                          contents->GetSiteInstance());
+      contents->GetBrowserContext()->GetStoragePartition(
+          contents->GetSiteInstance());
   DCHECK(partition);
   return partition->GetHostZoomMap();
 }
@@ -332,8 +330,7 @@ void HostZoomMapImpl::SetDefaultZoomLevel(double level) {
   }
 }
 
-std::unique_ptr<HostZoomMap::Subscription>
-HostZoomMapImpl::AddZoomLevelChangedCallback(
+base::CallbackListSubscription HostZoomMapImpl::AddZoomLevelChangedCallback(
     ZoomLevelChangedCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return zoom_level_changed_callbacks_.Add(std::move(callback));

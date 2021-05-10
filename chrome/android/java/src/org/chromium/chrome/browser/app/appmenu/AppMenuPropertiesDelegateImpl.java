@@ -10,12 +10,12 @@ import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.SystemClock;
-import android.text.TextUtils;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.SubMenu;
 import android.view.View;
 
+import androidx.annotation.IdRes;
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -32,25 +32,25 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.ShortcutHelper;
-import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.banners.AppMenuVerbiage;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.device.DeviceConditions;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.flags.StringCachedFieldTrialParameter;
 import org.chromium.chrome.browser.image_descriptions.ImageDescriptionsController;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.share.ShareUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tasks.tab_management.PriceTrackingUtilities;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.translate.TranslateUtils;
@@ -61,8 +61,14 @@ import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.webapk.lib.client.WebApkValidator;
+import org.chromium.components.webapps.AppBannerManager;
+import org.chromium.components.webapps.WebappsUtils;
+import org.chromium.net.ConnectionType;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.url.GURL;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -71,14 +77,6 @@ import java.util.List;
  * items based on activity state.
  */
 public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate {
-    public static final StringCachedFieldTrialParameter ACTION_BAR_VARIATION =
-            new StringCachedFieldTrialParameter(
-                    ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP, "action_bar", "");
-    public static final StringCachedFieldTrialParameter THREE_BUTTON_ACTION_BAR_VARIATION =
-            new StringCachedFieldTrialParameter(
-                    ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR,
-                    "three_button_action_bar", "");
-
     private static Boolean sItemBookmarkedForTesting;
 
     protected MenuItem mReloadMenuItem;
@@ -109,19 +107,23 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         int TABLET_EMPTY_MODE_MENU = 3;
     }
 
-    @IntDef({ActionBarType.STANDARD, ActionBarType.BACKWARD_BUTTON, ActionBarType.SHARE_BUTTON})
-    @interface ActionBarType {
-        int STANDARD = 0;
-        int BACKWARD_BUTTON = 1;
-        int SHARE_BUTTON = 2;
-    }
-
-    @IntDef({ThreeButtonActionBarType.DISABLED, ThreeButtonActionBarType.ACTION_CHIP_VIEW,
-            ThreeButtonActionBarType.DESTINATION_CHIP_VIEW})
-    @interface ThreeButtonActionBarType {
-        int DISABLED = 0;
-        int ACTION_CHIP_VIEW = 1;
-        int DESTINATION_CHIP_VIEW = 2;
+    // Please treat this list as append only and keep it in sync with
+    // AppMenuHighlightItem in enums.xml.
+    @IntDef({AppMenuHighlightItem.UNKNOWN, AppMenuHighlightItem.DOWNLOADS,
+            AppMenuHighlightItem.BOOKMARKS, AppMenuHighlightItem.TRANSLATE,
+            AppMenuHighlightItem.ADD_TO_HOMESCREEN, AppMenuHighlightItem.DOWNLOAD_THIS_PAGE,
+            AppMenuHighlightItem.BOOKMARK_THIS_PAGE, AppMenuHighlightItem.DATA_REDUCTION_FOOTER})
+    @Retention(RetentionPolicy.SOURCE)
+    @interface AppMenuHighlightItem {
+        int UNKNOWN = 0;
+        int DOWNLOADS = 1;
+        int BOOKMARKS = 2;
+        int TRANSLATE = 3;
+        int ADD_TO_HOMESCREEN = 4;
+        int DOWNLOAD_THIS_PAGE = 5;
+        int BOOKMARK_THIS_PAGE = 6;
+        int DATA_REDUCTION_FOOTER = 7;
+        int NUM_ENTRIES = 8;
     }
 
     protected @Nullable OverviewModeBehavior mOverviewModeBehavior;
@@ -178,9 +180,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
     @Override
     public int getAppMenuLayoutId() {
-        if (shouldShowRegroupedMenu() || shouldShowThreeButtonActionBar()) {
-            return R.menu.main_menu_regroup;
-        }
         return R.menu.main_menu;
     }
 
@@ -191,7 +190,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         customViewBinders.add(new ManagedByMenuItemViewBinder());
         customViewBinders.add(new IncognitoMenuItemViewBinder());
         customViewBinders.add(new DividerLineMenuItemViewBinder());
-        customViewBinders.add(new ChipViewMenuItemViewBinder(getThreeButtonActionBarType()));
         return customViewBinders;
     }
 
@@ -261,28 +259,17 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
     private void preparePageMenu(
             Menu menu, Tab currentTab, AppMenuHandler handler, boolean isIncognito) {
-        String url = currentTab.getUrlString();
-        boolean isChromeScheme = url.startsWith(UrlConstants.CHROME_URL_PREFIX)
-                || url.startsWith(UrlConstants.CHROME_NATIVE_URL_PREFIX);
-        boolean isFileScheme = url.startsWith(UrlConstants.FILE_URL_PREFIX);
-        boolean isContentScheme = url.startsWith(UrlConstants.CONTENT_URL_PREFIX);
+        GURL url = currentTab.getUrl();
+        boolean isChromeScheme = url.getScheme().equals(UrlConstants.CHROME_SCHEME)
+                || url.getScheme().equals(UrlConstants.CHROME_NATIVE_SCHEME);
+        boolean isFileScheme = url.getScheme().equals(UrlConstants.FILE_SCHEME);
+        boolean isContentScheme = url.getScheme().equals(UrlConstants.CONTENT_SCHEME);
 
         // Update the icon row items (shown in narrow form factors).
         boolean shouldShowIconRow = shouldShowIconRow();
         menu.findItem(R.id.icon_row_menu_id).setVisible(shouldShowIconRow);
         if (shouldShowIconRow) {
             SubMenu actionBar = menu.findItem(R.id.icon_row_menu_id).getSubMenu();
-
-            @ActionBarType
-            int actionBarType = getActionBarType();
-            MenuItem backwardMenuItem = actionBar.findItem(R.id.backward_menu_id);
-            if (backwardMenuItem != null) {
-                if (actionBarType == ActionBarType.BACKWARD_BUTTON) {
-                    backwardMenuItem.setEnabled(currentTab.canGoBack());
-                } else {
-                    actionBar.removeItem(R.id.backward_menu_id);
-                }
-            }
 
             // Disable the "Forward" menu item if there is no page to go to.
             MenuItem forwardMenuItem = actionBar.findItem(R.id.forward_menu_id);
@@ -297,39 +284,12 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             loadingStateChanged(currentTab.isLoading());
 
             MenuItem bookmarkMenuItem = actionBar.findItem(R.id.bookmark_this_page_id);
-            if (shouldShowThreeButtonActionBar()) {
-                actionBar.removeItem(R.id.bookmark_this_page_id);
-            } else {
-                updateBookmarkMenuItem(bookmarkMenuItem, currentTab);
-            }
+            updateBookmarkMenuItem(bookmarkMenuItem, currentTab);
 
             MenuItem offlineMenuItem = actionBar.findItem(R.id.offline_page_id);
-            if (offlineMenuItem != null) {
-                if (shouldShowThreeButtonActionBar()) {
-                    actionBar.removeItem(R.id.offline_page_id);
-                } else {
-                    offlineMenuItem.setEnabled(shouldEnableDownloadPage(currentTab));
-                }
-            }
+            offlineMenuItem.setEnabled(shouldEnableDownloadPage(currentTab));
 
-            MenuItem shareMenuItem = actionBar.findItem(R.id.share_menu_button_id);
-            if (shareMenuItem != null) {
-                if (shouldShowShareInMenu()) {
-                    actionBar.removeItem(R.id.share_menu_button_id);
-                } else {
-                    shareMenuItem.setEnabled(mShareUtils.shouldEnableShare(currentTab));
-                }
-            }
-
-            if (shouldShowInfoInMenu()) {
-                actionBar.removeItem(R.id.info_menu_id);
-            }
-
-            if (shouldShowThreeButtonActionBar()) {
-                assert actionBar.size() == 3;
-            } else {
-                assert actionBar.size() == 5;
-            }
+            assert actionBar.size() == 5;
         }
 
         mUpdateMenuItemVisible = shouldShowUpdateMenuItem();
@@ -341,44 +301,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
         menu.findItem(R.id.move_to_other_window_menu_id).setVisible(shouldShowMoveToOtherWindow());
 
-        if (shouldShowThreeButtonActionBar()) {
-            @ThreeButtonActionBarType
-            int threeButtonActionBarType = getThreeButtonActionBarType();
-
-            MenuItem downloadMenuItem =
-                    menu.findItem(R.id.downloads_row_menu_id).getSubMenu().getItem(1);
-            assert downloadMenuItem.getItemId() == R.id.offline_page_chip_id;
-            downloadMenuItem.setEnabled(shouldEnableDownloadPage(currentTab));
-
-            MenuItem bookmarkMenuItem =
-                    menu.findItem(R.id.all_bookmarks_row_menu_id).getSubMenu().getItem(1);
-            assert bookmarkMenuItem.getItemId() == R.id.bookmark_this_page_chip_id;
-            updateBookmarkMenuItem(bookmarkMenuItem, currentTab);
-
-            // Update titles for ChipView menu items.
-            if (threeButtonActionBarType == ThreeButtonActionBarType.ACTION_CHIP_VIEW) {
-                downloadMenuItem.setTitle(R.string.add);
-                if (bookmarkMenuItem.isChecked()) {
-                    bookmarkMenuItem.setTitle(R.string.bookmark_item_edit);
-                } else {
-                    bookmarkMenuItem.setTitle(R.string.add);
-                }
-            } else if (threeButtonActionBarType == ThreeButtonActionBarType.DESTINATION_CHIP_VIEW) {
-                MenuItem allDownloadMenuItem =
-                        menu.findItem(R.id.downloads_row_menu_id).getSubMenu().getItem(0);
-                assert allDownloadMenuItem.getItemId() == R.id.downloads_menu_id;
-                allDownloadMenuItem.setTitle(R.string.all);
-
-                MenuItem allBookmarkMenuItem =
-                        menu.findItem(R.id.all_bookmarks_row_menu_id).getSubMenu().getItem(0);
-                assert allBookmarkMenuItem.getItemId() == R.id.all_bookmarks_menu_id;
-                allBookmarkMenuItem.setTitle(R.string.all);
-            }
-        }
-
         // Don't allow either "chrome://" pages or interstitial pages to be shared.
-        menu.findItem(R.id.share_row_menu_id)
-                .setVisible(mShareUtils.shouldEnableShare(currentTab) && shouldShowShareInMenu());
+        menu.findItem(R.id.share_row_menu_id).setVisible(mShareUtils.shouldEnableShare(currentTab));
 
         ShareHelper.configureDirectShareMenuItem(
                 mContext, menu.findItem(R.id.direct_share_menu_id));
@@ -390,10 +314,21 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         // is currently running.
         if (ImageDescriptionsController.getInstance().shouldShowImageDescriptionsMenuItem()) {
             menu.findItem(R.id.get_image_descriptions_id).setVisible(true);
-            menu.findItem(R.id.get_image_descriptions_id)
-                    .setTitle(ImageDescriptionsController.getInstance().imageDescriptionsEnabled()
-                                    ? R.string.menu_stop_image_descriptions
-                                    : R.string.menu_get_image_descriptions);
+
+            int titleId = R.string.menu_stop_image_descriptions;
+            Profile profile = Profile.getLastUsedRegularProfile();
+            // If image descriptions are not enabled, then we want the menu item to be "Get".
+            if (!ImageDescriptionsController.getInstance().imageDescriptionsEnabled(profile)) {
+                titleId = R.string.menu_get_image_descriptions;
+            } else if (ImageDescriptionsController.getInstance().onlyOnWifiEnabled(profile)
+                    && DeviceConditions.getCurrentNetConnectionType(mContext)
+                            != ConnectionType.CONNECTION_WIFI) {
+                // If image descriptions are enabled, then we want "Stop", except in the special
+                // case that the user specified only on Wifi, and we are not currently on Wifi.
+                titleId = R.string.menu_get_image_descriptions;
+            }
+
+            menu.findItem(R.id.get_image_descriptions_id).setTitle(titleId);
         } else {
             menu.findItem(R.id.get_image_descriptions_id).setVisible(false);
         }
@@ -412,11 +347,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
         // Only display reader mode settings menu option if the current page is in reader mode.
         menu.findItem(R.id.reader_mode_prefs_id).setVisible(shouldShowReaderModePrefs(currentTab));
-
-        MenuItem infoMenuItem = menu.findItem(R.id.info_id);
-        if (infoMenuItem != null) {
-            infoMenuItem.setVisible(shouldShowInfoInMenu());
-        }
 
         // Only display the Enter VR button if VR Shell Dev environment is enabled.
         menu.findItem(R.id.enter_vr_id).setVisible(shouldShowEnterVr());
@@ -439,6 +369,9 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                                 .getTabsWithNoOtherRelatedTabs()
                                 .size()
                         > 1;
+        boolean isPriceTrackingVisible = PriceTrackingUtilities.isPriceTrackingEligible()
+                && !DeviceClassManager.enableAccessibilityLayout() && !isIncognito;
+        boolean isPriceTrackingEnabled = isPriceTrackingVisible;
 
         for (int i = 0; i < menu.size(); ++i) {
             MenuItem item = menu.getItem(i);
@@ -479,6 +412,10 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 item.setVisible(isMenuGroupTabsVisible);
                 item.setEnabled(isMenuGroupTabsEnabled);
             }
+            if (item.getItemId() == R.id.track_prices_row_menu_id) {
+                item.setVisible(isPriceTrackingVisible);
+                item.setEnabled(isPriceTrackingEnabled);
+            }
             if (item.getItemId() == R.id.close_all_tabs_menu_id) {
                 boolean hasTabs = mTabModelSelector.getTotalTabCount() > 0;
                 item.setVisible(!isIncognito);
@@ -498,7 +435,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     public boolean shouldShowReaderModePrefs(@NonNull Tab currentTab) {
-        return DomDistillerUrlUtils.isDistilledPage(currentTab.getUrlString());
+        return DomDistillerUrlUtils.isDistilledPage(currentTab.getUrl());
     }
 
     /**
@@ -567,12 +504,14 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     }
 
     /**
+     * This method should only be called once per context menu shown.
      * @param currentTab The currentTab for which the app menu is showing.
+     * @param logging Whether logging should be performed in this check.
      * @return Whether the translate menu item should be displayed.
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     public boolean shouldShowTranslateMenuItem(@NonNull Tab currentTab) {
-        return TranslateUtils.canTranslateCurrentTab(currentTab);
+        return TranslateUtils.canTranslateCurrentTab(currentTab, true);
     }
 
     /**
@@ -584,7 +523,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      * @return Whether the homescreen menu item should be displayed.
      */
     protected boolean shouldShowHomeScreenMenuItem(boolean isChromeScheme, boolean isFileScheme,
-            boolean isContentScheme, boolean isIncognito, String url) {
+            boolean isContentScheme, boolean isIncognito, @NonNull GURL url) {
         // Hide 'Add to homescreen' for the following:
         // * chrome:// pages - Android doesn't know how to direct those URLs.
         // * incognito pages - To avoid problems where users create shortcuts in incognito
@@ -595,8 +534,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         //                access to the resource via FLAG_GRANT_READ_URI_PERMISSION, and that
         //                is not persisted when adding to the homescreen.
         // * If creating shortcuts it not supported by the current home screen.
-        return ShortcutHelper.isAddToHomeIntentSupported() && !isChromeScheme && !isFileScheme
-                && !isContentScheme && !isIncognito && !TextUtils.isEmpty(url);
+        return WebappsUtils.isAddToHomeIntentSupported() && !isChromeScheme && !isFileScheme
+                && !isContentScheme && !isIncognito && !url.isEmpty();
     }
 
     /**
@@ -618,8 +557,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         if (shouldShowHomeScreenMenuItem) {
             Context context = ContextUtils.getApplicationContext();
             long addToHomeScreenStart = SystemClock.elapsedRealtime();
-            ResolveInfo resolveInfo =
-                    WebApkValidator.queryFirstWebApkResolveInfo(context, currentTab.getUrlString());
+            ResolveInfo resolveInfo = WebApkValidator.queryFirstWebApkResolveInfo(
+                    context, currentTab.getUrl().getSpec());
             RecordHistogram.recordTimesHistogram("Android.PrepareMenu.OpenWebApkVisibilityCheck",
                     SystemClock.elapsedRealtime() - addToHomeScreenStart);
 
@@ -652,18 +591,17 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
-    public AppBannerManager.InstallStringPair getAddToHomeScreenTitle(Tab currentTab) {
-        return AppBannerManager.getHomescreenLanguageOption(currentTab);
+    public AppBannerManager.InstallStringPair getAddToHomeScreenTitle(@NonNull Tab currentTab) {
+        return AppBannerManager.getHomescreenLanguageOption(currentTab.getWebContents());
     }
 
     @Override
     public Bundle getBundleForMenuItem(MenuItem item) {
+        Bundle bundle = new Bundle();
         if (item.getItemId() == R.id.add_to_homescreen_id) {
-            Bundle payload = new Bundle();
-            payload.putInt(AppBannerManager.MENU_TITLE_KEY, mAddAppTitleShown);
-            return payload;
+            bundle.putInt(AppBannerManager.MENU_TITLE_KEY, mAddAppTitleShown);
         }
-        return null;
+        return bundle;
     }
 
     /**
@@ -671,8 +609,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      */
     protected void prepareTranslateMenuItem(Menu menu, Tab currentTab) {
         boolean isTranslateVisible = shouldShowTranslateMenuItem(currentTab);
-        RecordHistogram.recordBooleanHistogram(
-                "Translate.MobileMenuTranslate.Shown", isTranslateVisible);
         menu.findItem(R.id.translate_id).setVisible(isTranslateVisible);
     }
 
@@ -748,6 +684,39 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         return false;
     }
 
+    @Override
+    public void recordHighlightedMenuItemShown(@Nullable @IdRes Integer menuItemId) {
+        RecordHistogram.recordEnumeratedHistogram("Mobile.AppMenu.HighlightMenuItem.Shown",
+                getUmaEnumForMenuItem(menuItemId), AppMenuHighlightItem.NUM_ENTRIES);
+    }
+
+    @Override
+    public void recordHighlightedMenuItemClicked(@Nullable @IdRes Integer menuItemId) {
+        RecordHistogram.recordEnumeratedHistogram("Mobile.AppMenu.HighlightMenuItem.Clicked",
+                getUmaEnumForMenuItem(menuItemId), AppMenuHighlightItem.NUM_ENTRIES);
+    }
+
+    private int getUmaEnumForMenuItem(@Nullable @IdRes Integer menuItemId) {
+        if (menuItemId == null) return AppMenuHighlightItem.UNKNOWN;
+
+        if (menuItemId == R.id.downloads_menu_id) {
+            return AppMenuHighlightItem.DOWNLOADS;
+        } else if (menuItemId == R.id.all_bookmarks_menu_id) {
+            return AppMenuHighlightItem.BOOKMARKS;
+        } else if (menuItemId == R.id.translate_id) {
+            return AppMenuHighlightItem.TRANSLATE;
+        } else if (menuItemId == R.id.add_to_homescreen_id) {
+            return AppMenuHighlightItem.ADD_TO_HOMESCREEN;
+        } else if (menuItemId == R.id.offline_page_id) {
+            return AppMenuHighlightItem.DOWNLOAD_THIS_PAGE;
+        } else if (menuItemId == R.id.bookmark_this_page_id) {
+            return AppMenuHighlightItem.BOOKMARK_THIS_PAGE;
+        } else if (menuItemId == R.id.app_menu_footer) {
+            return AppMenuHighlightItem.DATA_REDUCTION_FOOTER;
+        }
+        return AppMenuHighlightItem.UNKNOWN;
+    }
+
     /**
      * Updates the bookmark item's visibility.
      *
@@ -793,9 +762,9 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         MenuItem requestMenuCheck = menu.findItem(R.id.request_desktop_site_check_id);
 
         // Hide request desktop site on all chrome:// pages except for the NTP.
-        String url = currentTab.getUrlString();
-        boolean isChromeScheme = url.startsWith(UrlConstants.CHROME_URL_PREFIX)
-                || url.startsWith(UrlConstants.CHROME_NATIVE_URL_PREFIX);
+        GURL url = currentTab.getUrl();
+        boolean isChromeScheme = url.getScheme().equals(UrlConstants.CHROME_SCHEME)
+                || url.getScheme().equals(UrlConstants.CHROME_NATIVE_SCHEME);
 
         boolean itemVisible = canShowRequestDesktopSite
                 && (!isChromeScheme || currentTab.isNativePage())
@@ -805,14 +774,25 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
         boolean isRequestDesktopSite =
                 currentTab.getWebContents().getNavigationController().getUseDesktopUserAgent();
-        // Mark the checkbox if RDS is activated on this page.
-        requestMenuCheck.setChecked(isRequestDesktopSite);
+        if (CachedFeatureFlags.isEnabled(ChromeFeatureList.APP_MENU_MOBILE_SITE_OPTION)) {
+            requestMenuLabel.setTitle(isRequestDesktopSite
+                            ? R.string.menu_item_request_mobile_site
+                            : R.string.menu_item_request_desktop_site);
+            requestMenuLabel.setIcon(isRequestDesktopSite ? R.drawable.smartphone_black_24dp
+                                                          : R.drawable.ic_desktop_windows);
+            requestMenuCheck.setVisible(false);
+        } else {
+            requestMenuLabel.setTitle(R.string.menu_request_desktop_site);
+            requestMenuCheck.setVisible(true);
+            // Mark the checkbox if RDS is activated on this page.
+            requestMenuCheck.setChecked(isRequestDesktopSite);
 
-        // This title doesn't seem to be displayed by Android, but it is used to set up
-        // accessibility text in {@link AppMenuAdapter#setupMenuButton}.
-        requestMenuLabel.setTitleCondensed(isRequestDesktopSite
-                        ? mContext.getString(R.string.menu_request_desktop_site_on)
-                        : mContext.getString(R.string.menu_request_desktop_site_off));
+            // This title doesn't seem to be displayed by Android, but it is used to set up
+            // accessibility text in {@link AppMenuAdapter#setupMenuButton}.
+            requestMenuLabel.setTitleCondensed(isRequestDesktopSite
+                            ? mContext.getString(R.string.menu_request_desktop_site_on)
+                            : mContext.getString(R.string.menu_request_desktop_site_off));
+        }
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
@@ -823,51 +803,5 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     @VisibleForTesting
     static void setPageBookmarkedForTesting(Boolean bookmarked) {
         sItemBookmarkedForTesting = bookmarked;
-    }
-
-    private boolean shouldShowRegroupedMenu() {
-        return CachedFeatureFlags.isEnabled(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP);
-    }
-
-    private boolean shouldShowThreeButtonActionBar() {
-        return CachedFeatureFlags.isEnabled(
-                ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR);
-    }
-
-    private boolean shouldShowShareInMenu() {
-        return getActionBarType() != ActionBarType.SHARE_BUTTON;
-    }
-
-    private boolean shouldShowInfoInMenu() {
-        return getActionBarType() != ActionBarType.STANDARD;
-    }
-
-    /**
-     * @return The type of action bar should be shown.
-     */
-    private @ActionBarType int getActionBarType() {
-        if (shouldShowRegroupedMenu()) {
-            if (ACTION_BAR_VARIATION.getValue().equals("backward_button")) {
-                return ActionBarType.BACKWARD_BUTTON;
-            } else if (ACTION_BAR_VARIATION.getValue().equals("share_button")) {
-                return ActionBarType.SHARE_BUTTON;
-            }
-        }
-        return ActionBarType.STANDARD;
-    }
-
-    /**
-     * @return The type of three button action bar should be shown.
-     */
-    private @ThreeButtonActionBarType int getThreeButtonActionBarType() {
-        if (shouldShowThreeButtonActionBar()) {
-            if (THREE_BUTTON_ACTION_BAR_VARIATION.getValue().equals("action_chip_view")) {
-                return ThreeButtonActionBarType.ACTION_CHIP_VIEW;
-            } else if (THREE_BUTTON_ACTION_BAR_VARIATION.getValue().equals(
-                               "destination_chip_view")) {
-                return ThreeButtonActionBarType.DESTINATION_CHIP_VIEW;
-            }
-        }
-        return ThreeButtonActionBarType.DISABLED;
     }
 }

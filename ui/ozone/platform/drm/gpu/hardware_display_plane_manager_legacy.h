@@ -6,10 +6,13 @@
 #define UI_OZONE_PLATFORM_DRM_GPU_HARDWARE_DISPLAY_PLANE_MANAGER_LEGACY_H_
 
 #include <stdint.h>
-#include <memory>
 
 #include "base/macros.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_manager.h"
+
+namespace gfx {
+struct GpuFenceHandle;
+}  // namespace gfx
 
 namespace ui {
 
@@ -19,16 +22,11 @@ class HardwareDisplayPlaneManagerLegacy : public HardwareDisplayPlaneManager {
   ~HardwareDisplayPlaneManagerLegacy() override;
 
   // HardwareDisplayPlaneManager:
-  bool Modeset(uint32_t crtc_id,
-               uint32_t framebuffer_id,
-               uint32_t connector_id,
-               const drmModeModeInfo& mode,
-               const HardwareDisplayPlaneList& plane_list) override;
-  bool DisableModeset(uint32_t crtc_id, uint32_t connector) override;
+  bool Commit(CommitRequest commit_request, uint32_t flags) override;
+
   bool Commit(HardwareDisplayPlaneList* plane_list,
-              bool should_modeset,
               scoped_refptr<PageFlipRequest> page_flip_request,
-              std::unique_ptr<gfx::GpuFence>* out_fence) override;
+              gfx::GpuFenceHandle* release_fence) override;
   bool DisableOverlayPlanes(HardwareDisplayPlaneList* plane_list) override;
 
   bool SetColorCorrectionOnAllCrtcPlanes(

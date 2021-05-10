@@ -13,7 +13,7 @@
 
 #include "base/containers/queue.h"
 #include "base/optional.h"
-#include "base/strings/string16.h"
+#include "build/chromeos_buildflags.h"
 #include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/public/cpp/bluetooth_uuid.h"
@@ -46,13 +46,14 @@ class MockBluetoothDevice : public BluetoothDevice {
   MOCK_CONST_METHOD0(GetDeviceID, uint16_t());
   MOCK_CONST_METHOD0(GetAppearance, uint16_t());
   MOCK_CONST_METHOD0(GetName, base::Optional<std::string>());
-  MOCK_CONST_METHOD0(GetNameForDisplay, base::string16());
+  MOCK_CONST_METHOD0(GetNameForDisplay, std::u16string());
   MOCK_CONST_METHOD0(GetDeviceType, BluetoothDeviceType());
   MOCK_CONST_METHOD0(IsPaired, bool());
   MOCK_CONST_METHOD0(IsConnected, bool());
   MOCK_CONST_METHOD0(IsGattConnected, bool());
   MOCK_CONST_METHOD0(IsConnectable, bool());
   MOCK_CONST_METHOD0(IsConnecting, bool());
+  MOCK_CONST_METHOD0(IsBlockedByPolicy, bool());
   MOCK_CONST_METHOD0(GetUUIDs, UUIDSet());
   MOCK_CONST_METHOD0(GetInquiryRSSI, base::Optional<int8_t>());
   MOCK_CONST_METHOD0(GetInquiryTxPower, base::Optional<int8_t>());
@@ -126,7 +127,7 @@ class MockBluetoothDevice : public BluetoothDevice {
   MOCK_METHOD1(CreateGattConnectionImpl,
                void(base::Optional<BluetoothUUID> service_uuid));
   MOCK_METHOD0(DisconnectGatt, void());
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   MOCK_METHOD2(ExecuteWrite,
                void(base::OnceClosure callback,
                     ExecuteWriteErrorCallback error_callback));
@@ -149,6 +150,12 @@ class MockBluetoothDevice : public BluetoothDevice {
       const std::string& identifier) const;
 
   void AddUUID(const BluetoothUUID& uuid) { uuids_.insert(uuid); }
+
+  // Updates the device's Manufacturer Data that are returned by
+  // BluetoothDevice::GetManufacturerData().
+  void SetManufacturerData(ManufacturerDataMap manufacturer_data) {
+    manufacturer_data_ = std::move(manufacturer_data);
+  }
 
   // Functions to save and run callbacks from this device. Useful when
   // trying to run callbacks in response to other actions e.g. run a read

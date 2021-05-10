@@ -37,6 +37,7 @@ class MockMediaSessionPlayerObserver : public MediaSessionPlayerObserver {
   void OnResume(int player_id) override {}
   void OnSeekForward(int player_id, base::TimeDelta seek_time) override {}
   void OnSeekBackward(int player_id, base::TimeDelta seek_time) override {}
+  void OnSeekTo(int player_id, base::TimeDelta seek_time) override {}
   void OnSetVolumeMultiplier(int player_id, double volume_multiplier) override {
   }
   void OnEnterPictureInPicture(int player_id) override {}
@@ -53,6 +54,7 @@ class MockMediaSessionPlayerObserver : public MediaSessionPlayerObserver {
     return false;
   }
 
+  bool HasAudio(int player_id) const override { return true; }
   bool HasVideo(int player_id) const override { return false; }
 
   std::string GetAudioOutputSinkId(int player_id) const override { return ""; }
@@ -97,9 +99,9 @@ class MediaSessionImplUmaTest : public RenderViewHostImplTestHarness {
     contents()->GetMainFrame()->InitializeRenderFrameIfNeeded();
     StartPlayer();
 
-    mock_media_session_service_.reset(
-        new testing::NiceMock<MockMediaSessionServiceImpl>(
-            contents()->GetMainFrame()));
+    mock_media_session_service_ =
+        std::make_unique<testing::NiceMock<MockMediaSessionServiceImpl>>(
+            contents()->GetMainFrame());
   }
 
   void TearDown() override {
@@ -111,8 +113,8 @@ class MediaSessionImplUmaTest : public RenderViewHostImplTestHarness {
   MediaSessionImpl* GetSession() { return MediaSessionImpl::Get(contents()); }
 
   void StartPlayer() {
-    player_.reset(
-        new MockMediaSessionPlayerObserver(contents()->GetMainFrame()));
+    player_ = std::make_unique<MockMediaSessionPlayerObserver>(
+        contents()->GetMainFrame());
     GetSession()->AddPlayer(player_.get(), kPlayerId,
                             media::MediaContentType::Persistent);
   }

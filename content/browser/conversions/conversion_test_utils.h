@@ -19,6 +19,7 @@
 #include "content/browser/conversions/storable_conversion.h"
 #include "content/browser/conversions/storable_impression.h"
 #include "content/test/test_content_browser_client.h"
+#include "net/base/schemeful_site.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "url/origin.h"
 
@@ -31,21 +32,60 @@ class ConversionDisallowingContentBrowserClient
   ~ConversionDisallowingContentBrowserClient() override = default;
 
   // ContentBrowserClient:
-  bool AllowConversionMeasurement(BrowserContext* context) override;
+  bool IsConversionMeasurementAllowed(
+      content::BrowserContext* browser_context) override;
+  bool IsConversionMeasurementOperationAllowed(
+      content::BrowserContext* browser_context,
+      ConversionMeasurementOperation operation,
+      const url::Origin* impression_origin,
+      const url::Origin* conversion_origin,
+      const url::Origin* reporting_origin) override;
+};
+
+// Configurable browser client capable of blocking conversion operations in a
+// single embedded context.
+class ConfigurableConversionTestBrowserClient
+    : public TestContentBrowserClient {
+ public:
+  ConfigurableConversionTestBrowserClient();
+  ~ConfigurableConversionTestBrowserClient() override;
+
+  // ContentBrowserClient:
+  bool IsConversionMeasurementOperationAllowed(
+      content::BrowserContext* browser_context,
+      ConversionMeasurementOperation operation,
+      const url::Origin* impression_origin,
+      const url::Origin* conversion_origin,
+      const url::Origin* reporting_origin) override;
+
+  // Sets the origins where conversion measurement is blocked. This only blocks
+  // an operation if all origins match in
+  // `AllowConversionMeasurementOperation()`.
+  void BlockConversionMeasurementInContext(
+      base::Optional<url::Origin> impression_origin,
+      base::Optional<url::Origin> conversion_origin,
+      base::Optional<url::Origin> reporting_origin);
+
+ private:
+  base::Optional<url::Origin> blocked_impression_origin_;
+  base::Optional<url::Origin> blocked_conversion_origin_;
+  base::Optional<url::Origin> blocked_reporting_origin_;
 };
 
 class ConfigurableStorageDelegate : public ConversionStorage::Delegate {
  public:
-  using AttributionCredits = std::list<int>;
   ConfigurableStorageDelegate();
   ~ConfigurableStorageDelegate() override;
 
   // ConversionStorage::Delegate
-  void ProcessNewConversionReports(
-      std::vector<ConversionReport>* reports) override;
-  int GetMaxConversionsPerImpression() const override;
+  const StorableImpression& GetImpressionToAttribute(
+      const std::vector<StorableImpression>& impressions) override;
+  void ProcessNewConversionReport(ConversionReport& report) override;
+  int GetMaxConversionsPerImpression(
+      StorableImpression::SourceType source_type) const override;
   int GetMaxImpressionsPerOrigin() const override;
   int GetMaxConversionsPerOrigin() const override;
+  RateLimitConfig GetRateLimits() const override;
 
   void set_max_conversions_per_impression(int max) {
     max_conversions_per_impression_ = max;
@@ -59,13 +99,10 @@ class ConfigurableStorageDelegate : public ConversionStorage::Delegate {
     max_conversions_per_origin_ = max;
   }
 
+  void set_rate_limits(RateLimitConfig c) { rate_limits_ = c; }
+
   void set_report_time_ms(int report_time_ms) {
     report_time_ms_ = report_time_ms;
-  }
-
-  void AddCredits(AttributionCredits credits) {
-    // Add all credits to our list in order.
-    attribution_credits_.splice(attribution_credits_.end(), credits);
   }
 
  private:
@@ -73,11 +110,12 @@ class ConfigurableStorageDelegate : public ConversionStorage::Delegate {
   int max_impressions_per_origin_ = INT_MAX;
   int max_conversions_per_origin_ = INT_MAX;
 
-  int report_time_ms_ = 0;
+  RateLimitConfig rate_limits_ = {
+      .time_window = base::TimeDelta::Max(),
+      .max_attributions_per_window = INT_MAX,
+  };
 
-  // List of attribution credits the test delegate should associate with
-  // reports.
-  AttributionCredits attribution_credits_;
+  int report_time_ms_ = 0;
 };
 
 // Test manager provider which can be used to inject a fake ConversionManager.
@@ -126,8 +164,24 @@ class TestConversionManager : public ConversionManager {
   size_t num_impressions() const { return num_impressions_; }
   size_t num_conversions() const { return num_conversions_; }
 
+  const net::SchemefulSite& last_conversion_destination() {
+    return last_conversion_destination_;
+  }
+
+  const base::Optional<StorableImpression::SourceType>&
+  last_impression_source_type() {
+    return last_impression_source_type_;
+  }
+
+  const base::Optional<url::Origin>& last_impression_origin() {
+    return last_impression_origin_;
+  }
+
  private:
   ConversionPolicy policy_;
+  net::SchemefulSite last_conversion_destination_;
+  base::Optional<StorableImpression::SourceType> last_impression_source_type_;
+  base::Optional<url::Origin> last_impression_origin_;
   size_t num_impressions_ = 0;
   size_t num_conversions_ = 0;
 
@@ -149,9 +203,13 @@ class ImpressionBuilder {
 
   ImpressionBuilder& SetImpressionOrigin(const url::Origin& origin);
 
-  ImpressionBuilder& SetConversionOrigin(const url::Origin& origin);
+  ImpressionBuilder& SetConversionOrigin(const url::Origin& domain);
 
   ImpressionBuilder& SetReportingOrigin(const url::Origin& origin);
+
+  ImpressionBuilder& SetSourceType(StorableImpression::SourceType source_type);
+
+  ImpressionBuilder& SetImpressionId(base::Optional<int64_t> impression_id);
 
   StorableImpression Build() const;
 
@@ -162,6 +220,8 @@ class ImpressionBuilder {
   url::Origin impression_origin_;
   url::Origin conversion_origin_;
   url::Origin reporting_origin_;
+  StorableImpression::SourceType source_type_;
+  base::Optional<int64_t> impression_id_;
 };
 
 // Returns a StorableConversion with default data which matches the default

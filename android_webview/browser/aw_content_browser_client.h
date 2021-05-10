@@ -18,6 +18,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "storage/browser/quota/quota_settings.h"
 
 namespace content {
@@ -26,6 +27,10 @@ class RenderFrameHost;
 
 namespace safe_browsing {
 class UrlCheckerDelegate;
+}
+
+namespace net {
+class IsolationInfo;
 }
 
 namespace android_webview {
@@ -64,8 +69,8 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       bool in_memory,
       const base::FilePath& relative_partition_path,
       network::mojom::NetworkContextParams* network_context_params,
-      network::mojom::CertVerifierCreationParams* cert_verifier_creation_params)
-      override;
+      cert_verifier::mojom::CertVerifierCreationParams*
+          cert_verifier_creation_params) override;
   std::unique_ptr<content::BrowserMainParts> CreateBrowserMainParts(
       const content::MainFunctionParams& parameters) override;
   content::WebContentsViewDelegate* GetWebContentsViewDelegate(
@@ -129,12 +134,13 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const base::CommandLine& command_line,
       int child_process_id,
       content::PosixFileDescriptorInfo* mappings) override;
-  void OverrideWebkitPrefs(content::RenderViewHost* rvh,
+  void OverrideWebkitPrefs(content::WebContents* web_contents,
                            blink::web_pref::WebPreferences* web_prefs) override;
   std::vector<std::unique_ptr<content::NavigationThrottle>>
   CreateThrottlesForNavigation(
       content::NavigationHandle* navigation_handle) override;
-  content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
+  std::unique_ptr<content::DevToolsManagerDelegate>
+  CreateDevToolsManagerDelegate() override;
   bool BindAssociatedReceiverFromFrame(
       content::RenderFrameHost* render_frame_host,
       const std::string& interface_name,
@@ -161,7 +167,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                                 bool is_main_frame,
                                 ui::PageTransition transition,
                                 bool* ignore_navigation) override;
-  bool ShouldCreateThreadPool() override;
+  bool CreateThreadPool(base::StringPiece name) override;
   std::unique_ptr<content::LoginDelegate> CreateLoginDelegate(
       const net::AuthChallengeInfo& auth_info,
       content::WebContents* web_contents,
@@ -175,6 +181,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const GURL& url,
       content::WebContents::OnceGetter web_contents_getter,
       int child_id,
+      int frame_tree_node_id,
       content::NavigationUIData* navigation_data,
       bool is_main_frame,
       ui::PageTransition page_transition,
@@ -185,12 +192,12 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
   void RegisterNonNetworkSubresourceURLLoaderFactories(
       int render_process_id,
       int render_frame_id,
-      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
       NonNetworkURLLoaderFactoryMap* factories) override;
   bool ShouldIsolateErrorPage(bool in_main_frame) override;
   bool ShouldEnableStrictSiteIsolation() override;
-  bool ShouldLockProcess(content::BrowserContext* browser_context,
-                         const GURL& effective_url) override;
+  bool ShouldDisableSiteIsolation() override;
+  bool ShouldLockProcessToSite(content::BrowserContext* browser_context,
+                               const GURL& effective_url) override;
   bool WillCreateURLLoaderFactory(
       content::BrowserContext* browser_context,
       content::RenderFrameHost* frame,
@@ -198,7 +205,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       URLLoaderFactoryType type,
       const url::Origin& request_initiator,
       base::Optional<int64_t> navigation_id,
-      base::UkmSourceId ukm_source_id,
+      ukm::SourceIdObj ukm_source_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
@@ -210,8 +217,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       network::mojom::RestrictedCookieManagerRole role,
       content::BrowserContext* browser_context,
       const url::Origin& origin,
-      const net::SiteForCookies& site_for_cookies,
-      const url::Origin& top_frame_origin,
+      const net::IsolationInfo& isolation_info,
       bool is_service_worker,
       int process_id,
       int routing_id,
@@ -225,13 +231,15 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                                    blink::mojom::WebFeature feature) override;
   bool IsOriginTrialRequiredForAppCache(
       content::BrowserContext* browser_text) override;
+  content::SpeechRecognitionManagerDelegate*
+  CreateSpeechRecognitionManagerDelegate() override;
+  bool HasErrorPage(int http_status_code) override;
+  bool SuppressDifferentOriginSubframeJSDialogs(
+      content::BrowserContext* browser_context) override;
 
   AwFeatureListCreator* aw_feature_list_creator() {
     return aw_feature_list_creator_;
   }
-
-  content::SpeechRecognitionManagerDelegate*
-  CreateSpeechRecognitionManagerDelegate() override;
 
   static void DisableCreatingThreadPool();
 

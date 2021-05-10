@@ -5,7 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_SVG_INLINE_TEXT_BOX_PAINTER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_SVG_INLINE_TEXT_BOX_PAINTER_H_
 
-#include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_paint_server.h"
+#include "third_party/blink/renderer/core/paint/svg_object_painter.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
@@ -16,6 +16,7 @@ class ComputedStyle;
 class DocumentMarker;
 class Font;
 class LayoutSVGInlineText;
+class SelectionBoundsRecorder;
 class SVGInlineTextBox;
 class TextMarkerBase;
 class TextRun;
@@ -86,6 +87,14 @@ class SVGInlineTextBoxPainter {
   LayoutObject& InlineLayoutObject() const;
   LayoutObject& ParentInlineLayoutObject() const;
   LayoutSVGInlineText& InlineText() const;
+
+  void RecordSelectionBoundsForRange(
+      int start_position,
+      int end_position,
+      SelectionState selection_state,
+      const ComputedStyle& style,
+      PaintController& paint_controller,
+      base::Optional<SelectionBoundsRecorder>& bounds_recorder);
 
   const SVGInlineTextBox& svg_inline_text_box_;
 };

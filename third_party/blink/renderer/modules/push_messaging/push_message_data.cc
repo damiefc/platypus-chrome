@@ -14,7 +14,6 @@
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_encoding.h"
 #include "v8/include/v8.h"
 
@@ -33,14 +32,13 @@ PushMessageData* PushMessageData::Create(const String& message_string) {
 PushMessageData* PushMessageData::Create(
     const ArrayBufferOrArrayBufferViewOrUSVString& message_data) {
   if (message_data.IsArrayBuffer() || message_data.IsArrayBufferView()) {
-    DOMArrayBuffer* buffer =
-        message_data.IsArrayBufferView()
-            ? message_data.GetAsArrayBufferView().View()->buffer()
-            : message_data.GetAsArrayBuffer();
+    DOMArrayBuffer* buffer = message_data.IsArrayBufferView()
+                                 ? message_data.GetAsArrayBufferView()->buffer()
+                                 : message_data.GetAsArrayBuffer();
 
     return MakeGarbageCollected<PushMessageData>(
         static_cast<const char*>(buffer->Data()),
-        base::checked_cast<wtf_size_t>(buffer->ByteLengthAsSizeT()));
+        base::checked_cast<wtf_size_t>(buffer->ByteLength()));
   }
 
   if (message_data.IsUSVString()) {

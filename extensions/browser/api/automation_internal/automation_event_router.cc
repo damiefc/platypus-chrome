@@ -12,6 +12,7 @@
 #include "base/stl_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
@@ -22,7 +23,6 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_messages.h"
 #include "ui/accessibility/ax_action_data.h"
-#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 
 namespace extensions {
@@ -42,11 +42,13 @@ AutomationEventRouter::AutomationEventRouter()
   // Not reset because |this| is leaked.
   ExtensionsAPIClient::Get()
       ->GetAutomationInternalApiDelegate()
-      ->SetEventBundleSink(this);
+      ->SetAutomationEventRouterInterface(this);
 #endif
 }
 
-AutomationEventRouter::~AutomationEventRouter() {}
+AutomationEventRouter::~AutomationEventRouter() {
+  CHECK(!remote_router_);
+}
 
 void AutomationEventRouter::RegisterListenerForOneTree(
     const ExtensionId& extension_id,
@@ -61,7 +63,7 @@ void AutomationEventRouter::RegisterListenerWithDesktopPermission(
   Register(extension_id, listener_process_id, ui::AXTreeIDUnknown(), true);
 }
 
-void AutomationEventRouter::DispatchAccessibilityEvents(
+void AutomationEventRouter::DispatchAccessibilityEventsInternal(
     const ExtensionMsg_AccessibilityEventBundleParams& event_bundle) {
   content::BrowserContext* active_context =
       ExtensionsAPIClient::Get()
@@ -104,6 +106,11 @@ void AutomationEventRouter::DispatchAccessibilityLocationChange(
 void AutomationEventRouter::DispatchTreeDestroyedEvent(
     ui::AXTreeID tree_id,
     content::BrowserContext* browser_context) {
+  if (remote_router_) {
+    remote_router_->DispatchTreeDestroyedEvent(tree_id, browser_context);
+    return;
+  }
+
   if (listeners_.empty())
     return;
 
@@ -169,12 +176,30 @@ void AutomationEventRouter::DispatchGetTextLocationDataResult(
       ->DispatchEventToExtension(data.source_extension_id, std::move(event));
 }
 
-AutomationEventRouter::AutomationListener::AutomationListener() {}
+void AutomationEventRouter::AddObserver(
+    AutomationEventRouterObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void AutomationEventRouter::RemoveObserver(
+    AutomationEventRouterObserver* observer) {
+  observers_.RemoveObserver(observer);
+}
+
+void AutomationEventRouter::RegisterRemoteRouter(
+    AutomationEventRouterInterface* router) {
+  // There can be at most 1 remote router. So either this method is setting the
+  // remote router, or it's unsetting the remote router.
+  CHECK(!router || !remote_router_);
+  remote_router_ = router;
+}
+
+AutomationEventRouter::AutomationListener::AutomationListener() = default;
 
 AutomationEventRouter::AutomationListener::AutomationListener(
     const AutomationListener& other) = default;
 
-AutomationEventRouter::AutomationListener::~AutomationListener() {}
+AutomationEventRouter::AutomationListener::~AutomationListener() = default;
 
 void AutomationEventRouter::Register(const ExtensionId& extension_id,
                                      int listener_process_id,
@@ -196,7 +221,8 @@ void AutomationEventRouter::Register(const ExtensionId& extension_id,
     if (!desktop)
       listener.tree_ids.insert(ax_tree_id);
     listeners_.push_back(listener);
-    rph_observers_.Add(content::RenderProcessHost::FromID(listener_process_id));
+    rph_observers_.AddObservation(
+        content::RenderProcessHost::FromID(listener_process_id));
     UpdateActiveProfile();
     return;
   }
@@ -214,13 +240,19 @@ void AutomationEventRouter::DispatchAccessibilityEvents(
     std::vector<ui::AXTreeUpdate> updates,
     const gfx::Point& mouse_location,
     std::vector<ui::AXEvent> events) {
+  if (remote_router_) {
+    remote_router_->DispatchAccessibilityEvents(
+        tree_id, std::move(updates), mouse_location, std::move(events));
+    return;
+  }
+
   ExtensionMsg_AccessibilityEventBundleParams event_bundle;
   event_bundle.tree_id = tree_id;
   event_bundle.updates = std::move(updates);
   event_bundle.mouse_location = mouse_location;
   event_bundle.events = std::move(events);
 
-  DispatchAccessibilityEvents(event_bundle);
+  DispatchAccessibilityEventsInternal(event_bundle);
 }
 
 void AutomationEventRouter::RenderProcessExited(
@@ -235,13 +267,18 @@ void AutomationEventRouter::RenderProcessHostDestroyed(
   base::EraseIf(listeners_, [process_id](const AutomationListener& item) {
     return item.process_id == process_id;
   });
-  rph_observers_.Remove(host);
+  rph_observers_.RemoveObservation(host);
   UpdateActiveProfile();
+
+  if (rph_observers_.GetSourcesCount() == 0) {
+    for (AutomationEventRouterObserver& observer : observers_)
+      observer.AllAutomationExtensionsGone();
+  }
 }
 
 void AutomationEventRouter::UpdateActiveProfile() {
   for (auto& listener : listeners_) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     int extension_id_count = 0;
     for (const auto& listener2 : listeners_) {
       if (listener2.extension_id == listener.extension_id)

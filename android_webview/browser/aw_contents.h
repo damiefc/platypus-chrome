@@ -17,6 +17,7 @@
 #include "android_webview/browser/gfx/browser_view_renderer_client.h"
 #include "android_webview/browser/icon_helper.h"
 #include "android_webview/browser/metrics/visibility_metrics_logger.h"
+#include "android_webview/browser/permission/permission_callback.h"
 #include "android_webview/browser/permission/permission_request_handler_client.h"
 #include "android_webview/browser/renderer_host/aw_render_view_host_ext.h"
 #include "android_webview/browser/safe_browsing/aw_safe_browsing_ui_manager.h"
@@ -271,16 +272,14 @@ class AwContents : public FindHelper::Listener,
   // AwBrowserPermissionRequestDelegate implementation.
   void RequestProtectedMediaIdentifierPermission(
       const GURL& origin,
-      base::OnceCallback<void(bool)> callback) override;
+      PermissionCallback callback) override;
   void CancelProtectedMediaIdentifierPermissionRequests(
       const GURL& origin) override;
-  void RequestGeolocationPermission(
-      const GURL& origin,
-      base::OnceCallback<void(bool)> callback) override;
+  void RequestGeolocationPermission(const GURL& origin,
+                                    PermissionCallback callback) override;
   void CancelGeolocationPermissionRequests(const GURL& origin) override;
-  void RequestMIDISysexPermission(
-      const GURL& origin,
-      base::OnceCallback<void(bool)> callback) override;
+  void RequestMIDISysexPermission(const GURL& origin,
+                                  PermissionCallback callback) override;
   void CancelMIDISysexPermissionRequests(const GURL& origin) override;
 
   // Find-in-page API and related methods.
@@ -333,8 +332,6 @@ class AwContents : public FindHelper::Listener,
   void ClearCache(JNIEnv* env,
                   const base::android::JavaParamRef<jobject>& obj,
                   jboolean include_disk_files);
-  void KillRenderProcess(JNIEnv* env,
-                         const base::android::JavaParamRef<jobject>& obj);
   // See //android_webview/docs/how-does-on-create-window-work.md for more
   // details.
   void SetPendingWebContentsForPopup(
@@ -359,6 +356,9 @@ class AwContents : public FindHelper::Listener,
   void SetDipScale(JNIEnv* env,
                    const base::android::JavaParamRef<jobject>& obj,
                    jfloat dip_scale);
+  jboolean IsDisplayingOpenWebContent(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
   void OnInputEvent(JNIEnv* env,
                     const base::android::JavaParamRef<jobject>& obj);
   void SetSaveFormData(bool enabled);
@@ -409,8 +409,7 @@ class AwContents : public FindHelper::Listener,
   void InitAutofillIfNecessary(bool autocomplete_enabled);
 
   // Geolocation API support
-  void ShowGeolocationPrompt(const GURL& origin,
-                             base::OnceCallback<void(bool)>);
+  void ShowGeolocationPrompt(const GURL& origin, PermissionCallback);
   void HideGeolocationPrompt(const GURL& origin);
 
   void SetDipScaleInternal(float dip_scale);
@@ -437,7 +436,7 @@ class AwContents : public FindHelper::Listener,
   // GURL is supplied by the content layer as requesting frame.
   // Callback is supplied by the content layer, and is invoked with the result
   // from the permission prompt.
-  typedef std::pair<const GURL, base::OnceCallback<void(bool)>> OriginCallback;
+  typedef std::pair<const GURL, PermissionCallback> OriginCallback;
   // The first element in the list is always the currently pending request.
   std::list<OriginCallback> pending_geolocation_prompts_;
 

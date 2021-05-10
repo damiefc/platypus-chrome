@@ -20,7 +20,8 @@ enum class ClipboardFormatMetric {
   kCustomData = 6,
   kWebSmartPaste = 7,  // Only used on write.
   kSvg = 8,
-  kMaxValue = kSvg,
+  kFilenames = 9,
+  kMaxValue = kFilenames,
 };
 
 void RecordRead(ClipboardFormatMetric metric);
@@ -28,4 +29,4 @@ void RecordWrite(ClipboardFormatMetric metric);
 
 }  // namespace ui
 
-#endif  // UI_BASE_CLIPBOARD_CLIPBOARD_MONITOR_H_
+#endif  // UI_BASE_CLIPBOARD_CLIPBOARD_METRICS_H_

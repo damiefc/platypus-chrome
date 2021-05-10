@@ -15,6 +15,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/posix/eintr_wrapper.h"
+#include "base/process/process_metrics.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -25,7 +26,6 @@
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "chromeos/memory/pressure/pressure.h"
 
 namespace chromeos {
 namespace memory {
@@ -40,20 +40,14 @@ SystemMemoryPressureEvaluator* g_system_evaluator = nullptr;
 constexpr base::TimeDelta kModerateMemoryPressureCooldownTime =
     base::TimeDelta::FromSeconds(10);
 
-// The margin mem file contains the two memory levels, the first is the
-// critical level and the second is the moderate level. Note, this
-// file may contain more values but only the first two are used for
-// memory pressure notifications in chromeos.
-constexpr char kMarginMemFile[] = "/sys/kernel/mm/chromeos-low_mem/margin";
-
 // Converts an available memory value in MB to a memory pressure level.
 base::MemoryPressureListener::MemoryPressureLevel
-GetMemoryPressureLevelFromAvailable(int available_mb,
-                                    int moderate_avail_mb,
-                                    int critical_avail_mb) {
-  if (available_mb < critical_avail_mb)
+GetMemoryPressureLevelFromAvailable(uint64_t available_kb,
+                                    uint64_t moderate_margin_kb,
+                                    uint64_t critical_margin_kb) {
+  if (available_kb < critical_margin_kb)
     return base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL;
-  if (available_mb < moderate_avail_mb)
+  if (available_kb < moderate_margin_kb)
     return base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE;
 
   return base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE;
@@ -64,32 +58,29 @@ GetMemoryPressureLevelFromAvailable(int available_mb,
 SystemMemoryPressureEvaluator::SystemMemoryPressureEvaluator(
     std::unique_ptr<util::MemoryPressureVoter> voter)
     : SystemMemoryPressureEvaluator(
-          kMarginMemFile,
-          /*disable_timer_for_testing*/ false,
+          /*for_testing*/ false,
           std::move(voter)) {}
 
 SystemMemoryPressureEvaluator::SystemMemoryPressureEvaluator(
-    const std::string& margin_file,
-    bool disable_timer_for_testing,
+    bool for_testing,
     std::unique_ptr<util::MemoryPressureVoter> voter)
     : util::SystemMemoryPressureEvaluator(std::move(voter)),
+      cached_available_kb_(0),
       weak_ptr_factory_(this) {
   DCHECK(g_system_evaluator == nullptr);
   g_system_evaluator = this;
 
-  std::vector<int> margin_parts =
-      SystemMemoryPressureEvaluator::GetMarginFileParts(margin_file);
+  // Setting up default margins in case the D-Bus method call failed.
+  SetupDefaultMemoryMargins();
 
-  // This class SHOULD have verified kernel support by calling
-  // SupportsKernelNotifications() before creating a new instance of this.
-  // Therefore we will check fail if we don't have multiple margin values.
-  CHECK_LE(2u, margin_parts.size());
-  critical_pressure_threshold_mb_ = margin_parts[0];
-  moderate_pressure_threshold_mb_ = margin_parts[1];
+  if (!for_testing) {
+    chromeos::ResourcedClient* client = chromeos::ResourcedClient::Get();
+    if (client) {
+      client->GetMemoryMarginsKB(
+          base::BindOnce(&SystemMemoryPressureEvaluator::OnMemoryMargins,
+                         weak_ptr_factory_.GetWeakPtr()));
+    }
 
-  chromeos::memory::pressure::UpdateMemoryParameters();
-
-  if (!disable_timer_for_testing) {
     // We will check the memory pressure and report the metric
     // (ChromeOS.MemoryPressureLevel) every 1 second.
     checking_timer_.Start(
@@ -109,63 +100,27 @@ SystemMemoryPressureEvaluator* SystemMemoryPressureEvaluator::Get() {
   return g_system_evaluator;
 }
 
-std::vector<int> SystemMemoryPressureEvaluator::GetMarginFileParts() {
-  static const base::NoDestructor<std::vector<int>> margin_file_parts(
-      GetMarginFileParts(kMarginMemFile));
-  return *margin_file_parts;
-}
-
-std::vector<int> SystemMemoryPressureEvaluator::GetMarginFileParts(
-    const std::string& file) {
-  std::vector<int> margin_values;
-  std::string margin_contents;
-  if (base::ReadFileToStringNonBlocking(base::FilePath(file),
-                                        &margin_contents)) {
-    std::vector<std::string> margins =
-        base::SplitString(margin_contents, base::kWhitespaceASCII,
-                          base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-    for (const auto& v : margins) {
-      int value = -1;
-      if (!base::StringToInt(v, &value)) {
-        // If any of the values weren't parseable as an int we return
-        // nothing as the file format is unexpected.
-        LOG(ERROR) << "Unable to parse margin file contents as integer: " << v;
-        return std::vector<int>();
-      }
-      margin_values.push_back(value);
-    }
-  } else {
-    PLOG_IF(ERROR, base::SysInfo::IsRunningOnChromeOS())
-        << "Unable to read margin file: " << kMarginMemFile;
-  }
-  return margin_values;
-}
-
-bool SystemMemoryPressureEvaluator::SupportsKernelNotifications() {
-  // Unfortunately at the moment the only way to determine if the chromeos
-  // kernel supports polling on the available file is to observe two values
-  // in the margin file, if the critical and moderate levels are specified
-  // there then we know the kernel must support polling on available.
-  return SystemMemoryPressureEvaluator::GetMarginFileParts().size() >= 2;
-}
-
 // CheckMemoryPressure will get the current memory pressure level by checking
 // the available memory.
 void SystemMemoryPressureEvaluator::CheckMemoryPressure() {
-  uint64_t mem_avail_mb =
-      chromeos::memory::pressure::GetAvailableMemoryKB() / 1024;
-  CheckMemoryPressureImpl(mem_avail_mb);
+  chromeos::ResourcedClient* client = chromeos::ResourcedClient::Get();
+  if (client) {
+    client->GetAvailableMemoryKB(
+        base::BindOnce(&SystemMemoryPressureEvaluator::OnAvailableMemory,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void SystemMemoryPressureEvaluator::CheckMemoryPressureImpl(
-    uint64_t mem_avail_mb) {
+    uint64_t moderate_margin_kb,
+    uint64_t critical_margin_kb,
+    uint64_t mem_avail_kb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   auto old_vote = current_vote();
 
   SetCurrentVote(GetMemoryPressureLevelFromAvailable(
-      mem_avail_mb, moderate_pressure_threshold_mb_,
-      critical_pressure_threshold_mb_));
+      mem_avail_kb, moderate_margin_kb, critical_margin_kb));
   bool notify = true;
 
   if (current_vote() ==
@@ -220,6 +175,71 @@ void SystemMemoryPressureEvaluator::ScheduleEarlyCheck() {
       FROM_HERE,
       base::BindOnce(&SystemMemoryPressureEvaluator::CheckMemoryPressure,
                      weak_ptr_factory_.GetWeakPtr()));
+}
+
+void SystemMemoryPressureEvaluator::SetupDefaultMemoryMargins() {
+  base::SystemMemoryInfoKB info;
+  uint64_t total_memory_kb = 2 * 1024 * 1024;
+  if (base::GetSystemMemoryInfo(&info)) {
+    total_memory_kb = static_cast<uint64_t>(info.total);
+  } else {
+    PLOG(ERROR)
+        << "Assume 2 GiB total memory if opening/parsing meminfo failed";
+    LOG_IF(FATAL, base::SysInfo::IsRunningOnChromeOS())
+        << "procfs isn't mounted or unable to open /proc/meminfo";
+  }
+
+  // Critical margin is 5.2% of total memory, moderate margin is 40% of total
+  // memory. See also /usr/share/cros/init/swap.sh on DUT.
+  critical_margin_kb_ = total_memory_kb * 13 / 250;
+  moderate_margin_kb_ = total_memory_kb * 2 / 5;
+}
+
+SystemMemoryPressureEvaluator::MemoryMarginsKB
+SystemMemoryPressureEvaluator::GetMemoryMarginsKB() {
+  return MemoryMarginsKB{.critical = critical_margin_kb_,
+                         .moderate = moderate_margin_kb_};
+}
+
+uint64_t SystemMemoryPressureEvaluator::GetCachedAvailableMemoryKB() {
+  return cached_available_kb_.load();
+}
+
+void SystemMemoryPressureEvaluator::OnMemoryMargins(
+    base::Optional<chromeos::ResourcedClient::MemoryMarginsKB> result) {
+  // The bus daemon never reorders messages. That is, if you send two method
+  // call messages to the same recipient, they will be received in the order
+  // they were sent [1].
+  //
+  // OnMemoryMargins is the callback to SystemMemoryPressureEvaluator's first
+  // dbus call, and reading critical_margin_kb_ is on/after the
+  // OnAvailableMemory dbus method callback. So it's safe to write to
+  // critical_margin_kb_ and moderate_margin_kb_ without a mutex in
+  // OnMemoryMargins.
+  //
+  // [1]: https://dbus.freedesktop.org/doc/dbus-tutorial.html#callprocedure
+  if (result.has_value()) {
+    critical_margin_kb_ = result.value().critical;
+    moderate_margin_kb_ = result.value().moderate;
+  } else {
+    LOG(ERROR) << "Failed to get the memory margins with D-Bus";
+  }
+}
+
+void SystemMemoryPressureEvaluator::OnAvailableMemory(
+    base::Optional<uint64_t> result) {
+  if (result.has_value()) {
+    uint64_t mem_avail_kb = result.value();
+    cached_available_kb_.store(mem_avail_kb);
+    CheckMemoryPressureImpl(moderate_margin_kb_, critical_margin_kb_,
+                            mem_avail_kb);
+  } else {
+    static bool error_printed = false;
+    if (!error_printed) {
+      LOG(ERROR) << "Failed to get available memory with D-Bus";
+      error_printed = true;
+    }
+  }
 }
 
 }  // namespace memory

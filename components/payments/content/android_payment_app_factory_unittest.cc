@@ -6,8 +6,8 @@
 
 #include <utility>
 
+#include "base/containers/contains.h"
 #include "base/memory/weak_ptr.h"
-#include "base/stl_util.h"
 #include "components/autofill/core/browser/payments/internal_authenticator.h"
 #include "components/payments/content/android_app_communication.h"
 #include "components/payments/content/android_app_communication_test_support.h"
@@ -175,6 +175,9 @@ TEST_F(AndroidPaymentAppFactoryTest, FindAppsThatDoNotHaveReadyToPayService) {
 
   EXPECT_CALL(delegate_, GetTwaPackageName())
       .WillRepeatedly(testing::Return("com.example.app"));
+  EXPECT_CALL(delegate_, GetInitiatorRenderFrameHost())
+      .WillRepeatedly(
+          testing::Return(delegate_.GetWebContents()->GetMainFrame()));
   EXPECT_CALL(delegate_, OnDoneCreatingPaymentApps());
 
   EXPECT_CALL(delegate_, OnPaymentAppCreationError(testing::_)).Times(0);
@@ -214,6 +217,9 @@ TEST_F(AndroidPaymentAppFactoryTest,
 
   EXPECT_CALL(delegate_, GetTwaPackageName())
       .WillRepeatedly(testing::Return("com.example.app"));
+  EXPECT_CALL(delegate_, GetInitiatorRenderFrameHost())
+      .WillRepeatedly(
+          testing::Return(delegate_.GetWebContents()->GetMainFrame()));
   EXPECT_CALL(delegate_, OnDoneCreatingPaymentApps());
 
   EXPECT_CALL(delegate_, OnPaymentAppCreationError(testing::_)).Times(0);
@@ -250,6 +256,9 @@ TEST_F(AndroidPaymentAppFactoryTest,
 
   EXPECT_CALL(delegate_, GetTwaPackageName())
       .WillRepeatedly(testing::Return("com.twa.app"));
+  EXPECT_CALL(delegate_, GetInitiatorRenderFrameHost())
+      .WillRepeatedly(
+          testing::Return(delegate_.GetWebContents()->GetMainFrame()));
   EXPECT_CALL(delegate_, OnDoneCreatingPaymentApps());
 
   EXPECT_CALL(delegate_, OnPaymentAppCreationError(testing::_)).Times(0);
@@ -282,6 +291,9 @@ TEST_F(AndroidPaymentAppFactoryTest, IgnoreAppsThatAreNotReadyToPay) {
 
   EXPECT_CALL(delegate_, GetTwaPackageName())
       .WillRepeatedly(testing::Return("com.example.app"));
+  EXPECT_CALL(delegate_, GetInitiatorRenderFrameHost())
+      .WillRepeatedly(
+          testing::Return(delegate_.GetWebContents()->GetMainFrame()));
   EXPECT_CALL(delegate_, OnDoneCreatingPaymentApps());
   EXPECT_CALL(delegate_, OnPaymentAppCreationError(testing::_)).Times(0);
   EXPECT_CALL(delegate_, OnPaymentAppCreated(testing::_)).Times(0);
@@ -309,6 +321,9 @@ TEST_F(AndroidPaymentAppFactoryTest, FindTheCorrectTwaAppInTwaMode) {
 
   EXPECT_CALL(delegate_, GetTwaPackageName())
       .WillRepeatedly(testing::Return("com.correct-twa.app"));
+  EXPECT_CALL(delegate_, GetInitiatorRenderFrameHost())
+      .WillRepeatedly(
+          testing::Return(delegate_.GetWebContents()->GetMainFrame()));
   EXPECT_CALL(delegate_, OnDoneCreatingPaymentApps());
 
   EXPECT_CALL(delegate_, OnPaymentAppCreationError(testing::_)).Times(0);
@@ -448,6 +463,9 @@ TEST_F(AndroidPaymentAppFactoryTest,
 
   EXPECT_CALL(delegate_, GetTwaPackageName())
       .WillRepeatedly(testing::Return("com.twa.app"));
+  EXPECT_CALL(delegate_, GetInitiatorRenderFrameHost())
+      .WillRepeatedly(
+          testing::Return(delegate_.GetWebContents()->GetMainFrame()));
   EXPECT_CALL(delegate_, OnDoneCreatingPaymentApps());
   EXPECT_CALL(delegate_, OnPaymentAppCreationError(testing::_)).Times(0);
   EXPECT_CALL(delegate_, OnPaymentAppCreated(PaymentAppMatches(

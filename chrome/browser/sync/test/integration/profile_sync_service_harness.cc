@@ -13,8 +13,9 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
@@ -24,11 +25,10 @@
 #include "chrome/common/channel_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
-#include "components/sync/driver/about_sync_util.h"
-#include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/driver/sync_internals_util.h"
+#include "components/sync/engine/net/url_translator.h"
 #include "components/sync/engine/sync_string_conversions.h"
-#include "components/sync/engine_impl/net/url_translator.h"
-#include "components/sync/engine_impl/traffic_logger.h"
+#include "components/sync/engine/traffic_logger.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/simple_url_loader_test_helper.h"
@@ -124,6 +124,51 @@ class SyncSetupChecker : public SingleClientStatusChangeChecker {
   const State wait_for_state_;
 };
 
+// Same as reset on chrome.google.com/sync.
+// This function will wait until the reset is done. If error occurs,
+// it will log error messages.
+void ResetAccount(network::SharedURLLoaderFactory* url_loader_factory,
+                  const std::string& access_token,
+                  const GURL& url,
+                  const std::string& username,
+                  const std::string& birthday) {
+  // Generate https POST payload.
+  sync_pb::ClientToServerMessage message;
+  message.set_share(username);
+  message.set_message_contents(
+      sync_pb::ClientToServerMessage::CLEAR_SERVER_DATA);
+  message.set_store_birthday(birthday);
+  message.set_api_key(google_apis::GetAPIKey());
+  syncer::LogClientToServerMessage(message);
+  std::string payload;
+  message.SerializeToString(&payload);
+  std::string request_to_send;
+  compression::GzipCompress(payload, &request_to_send);
+
+  auto resource_request = std::make_unique<network::ResourceRequest>();
+  resource_request->url = url;
+  resource_request->method = "POST";
+  resource_request->headers.SetHeader("Authorization",
+                                      "Bearer " + access_token);
+  resource_request->headers.SetHeader("Content-Encoding", "gzip");
+  resource_request->headers.SetHeader("Accept-Language", "en-US,en");
+  resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  auto simple_loader = network::SimpleURLLoader::Create(
+      std::move(resource_request), TRAFFIC_ANNOTATION_FOR_TESTS);
+  simple_loader->AttachStringForUpload(request_to_send,
+                                       "application/octet-stream");
+  simple_loader->SetTimeoutDuration(base::TimeDelta::FromSeconds(10));
+  content::SimpleURLLoaderTestHelper url_loader_helper;
+  simple_loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
+      url_loader_factory, url_loader_helper.GetCallback());
+  url_loader_helper.WaitForCallback();
+  if (simple_loader->NetError() != 0) {
+    LOG(ERROR) << "Reset account failed with error "
+               << net::ErrorToString(simple_loader->NetError())
+               << ". The account will remain dirty and may cause test fail.";
+  }
+}
+
 }  // namespace
 
 // static
@@ -173,53 +218,8 @@ bool ProfileSyncServiceHarness::SignInPrimaryAccount() {
   return false;
 }
 
-// Same as reset on chrome.google.com/sync.
-// This function will wait until the reset is done. If error occurs,
-// it will log error messages.
-void ResetAccount(network::SharedURLLoaderFactory* url_loader_factory,
-                  const std::string& access_token,
-                  const GURL& url,
-                  const std::string& username,
-                  const std::string& birthday) {
-  // Generate https POST payload.
-  sync_pb::ClientToServerMessage message;
-  message.set_share(username);
-  message.set_message_contents(
-      sync_pb::ClientToServerMessage::CLEAR_SERVER_DATA);
-  message.set_store_birthday(birthday);
-  message.set_api_key(google_apis::GetAPIKey());
-  syncer::LogClientToServerMessage(message);
-  std::string payload;
-  message.SerializeToString(&payload);
-  std::string request_to_send;
-  compression::GzipCompress(payload, &request_to_send);
-
-  auto resource_request = std::make_unique<network::ResourceRequest>();
-  resource_request->url = url;
-  resource_request->method = "POST";
-  resource_request->headers.SetHeader("Authorization",
-                                      "Bearer " + access_token);
-  resource_request->headers.SetHeader("Content-Encoding", "gzip");
-  resource_request->headers.SetHeader("Accept-Language", "en-US,en");
-  resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
-  auto simple_loader = network::SimpleURLLoader::Create(
-      std::move(resource_request), TRAFFIC_ANNOTATION_FOR_TESTS);
-  simple_loader->AttachStringForUpload(request_to_send,
-                                       "application/octet-stream");
-  simple_loader->SetTimeoutDuration(base::TimeDelta::FromSeconds(10));
-  content::SimpleURLLoaderTestHelper url_loader_helper;
-  simple_loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
-      url_loader_factory, url_loader_helper.GetCallback());
-  url_loader_helper.WaitForCallback();
-  if (simple_loader->NetError() != 0) {
-    LOG(ERROR) << "Reset account failed with error "
-               << net::ErrorToString(simple_loader->NetError())
-               << ". The account will remain dirty and may cause test fail.";
-  }
-}
-
 void ProfileSyncServiceHarness::ResetSyncForPrimaryAccount() {
-  syncer::SyncPrefs sync_prefs(profile_->GetPrefs());
+  syncer::SyncTransportDataPrefs transport_data_prefs(profile_->GetPrefs());
   // Generate the https url.
   // CLEAR_SERVER_DATA isn't enabled on the prod Sync server,
   // so --sync-url-clear-server-data can be used to specify an
@@ -229,23 +229,22 @@ void ProfileSyncServiceHarness::ResetSyncForPrimaryAccount() {
   auto* cmd_line = base::CommandLine::ForCurrentProcess();
   DCHECK(cmd_line->HasSwitch(kSyncUrlClearServerDataKey))
       << "Missing switch " << kSyncUrlClearServerDataKey;
-  std::string url =
-      cmd_line->GetSwitchValueASCII(kSyncUrlClearServerDataKey) + "/command/?";
-  url += syncer::MakeSyncQueryString(sync_prefs.GetCacheGuid());
+  GURL base_url(cmd_line->GetSwitchValueASCII(kSyncUrlClearServerDataKey) +
+                "/command/?");
+  GURL url = syncer::AppendSyncQueryString(base_url,
+                                           transport_data_prefs.GetCacheGuid());
 
   // Call sync server to clear sync data.
   std::string access_token = service()->GetAccessTokenForTest();
   DCHECK(access_token.size()) << "Access token is not available.";
-  ResetAccount(profile_->GetURLLoaderFactory().get(), access_token, GURL(url),
-               username_, sync_prefs.GetBirthday());
+  ResetAccount(profile_->GetURLLoaderFactory().get(), access_token, url,
+               username_, transport_data_prefs.GetBirthday());
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 void ProfileSyncServiceHarness::SignOutPrimaryAccount() {
   DCHECK(!username_.empty());
-  signin::ClearPrimaryAccount(
-      IdentityManagerFactory::GetForProfile(profile_),
-      signin::ClearPrimaryAccountPolicy::REMOVE_ALL_ACCOUNTS);
+  signin::ClearPrimaryAccount(IdentityManagerFactory::GetForProfile(profile_));
 }
 #endif  // !OS_CHROMEOS
 
@@ -258,10 +257,8 @@ void ProfileSyncServiceHarness::EnterSyncPausedStateForPrimaryAccount() {
 void ProfileSyncServiceHarness::ExitSyncPausedStateForPrimaryAccount() {
   signin::SetRefreshTokenForPrimaryAccount(
       IdentityManagerFactory::GetForProfile(profile_));
-  if (base::FeatureList::IsEnabled(switches::kStopSyncInPausedState)) {
-    // The engine was off in the sync-paused state, so wait for it to start.
-    AwaitSyncSetupCompletion();
-  }
+  // The engine was off in the sync-paused state, so wait for it to start.
+  AwaitSyncSetupCompletion();
 }
 
 bool ProfileSyncServiceHarness::SetupSync() {
@@ -306,8 +303,6 @@ bool ProfileSyncServiceHarness::SetupSyncImpl(
     const base::Optional<std::string>& passphrase) {
   DCHECK(encryption_mode == EncryptionSetupMode::kNoEncryption ||
          passphrase.has_value());
-  DCHECK(!profile_->IsLegacySupervised())
-      << "SetupSync should not be used for legacy supervised users.";
 
   if (service() == nullptr) {
     LOG(ERROR) << "SetupSync(): service() is null.";
@@ -381,7 +376,7 @@ bool ProfileSyncServiceHarness::StartSyncService() {
   }
   DVLOG(1) << "Engine Initialized successfully.";
 
-  if (service()->GetUserSettings()->IsUsingSecondaryPassphrase()) {
+  if (service()->GetUserSettings()->IsUsingExplicitPassphrase()) {
     LOG(ERROR) << "A passphrase is required for decryption. Sync cannot proceed"
                   " until SetDecryptionPassphrase is called.";
     return false;
@@ -606,9 +601,12 @@ SyncCycleSnapshot ProfileSyncServiceHarness::GetLastCycleSnapshot() const {
 }
 
 std::string ProfileSyncServiceHarness::GetServiceStatus() {
+  // This method is only used in test code for debugging purposes, so it's fine
+  // to include sensitive data in ConstructAboutInformation().
   std::unique_ptr<base::DictionaryValue> value(
-      syncer::sync_ui_util::ConstructAboutInformation(service(),
-                                                      chrome::GetChannel()));
+      syncer::sync_ui_util::ConstructAboutInformation(
+          syncer::sync_ui_util::IncludeSensitiveData(true), service(),
+          chrome::GetChannelName(chrome::WithExtendedStable(true))));
   std::string service_status;
   base::JSONWriter::WriteWithOptions(
       *value, base::JSONWriter::OPTIONS_PRETTY_PRINT, &service_status);

@@ -23,54 +23,78 @@ SimpleCommandSource::SimpleCommandSource() {
 SimpleCommandSource::~SimpleCommandSource() = default;
 
 CommandSource::CommandResults SimpleCommandSource::GetCommands(
-    const base::string16& input,
+    const std::u16string& input,
     Browser* browser) const {
-  static constexpr struct {
-    int command_id;
-    int string_constant;
+  // TODO(lgrey): Temporarily using hardcoded English titles instead of
+  // translated strings so we can experiment without adding translation load.
+  // As implied, none of these strings are final, or necessarily expected to
+  // ship.
+  const struct {
+    int id;
+    std::u16string title;
   } command_map[] = {
-      {IDC_SHOW_HISTORY, IDS_HISTORY_SHOWFULLHISTORY_LINK},
-      {IDC_FIND, IDS_FIND},
-      {IDC_RELOAD, IDS_TOOLTIP_RELOAD},
-      {IDC_SAVE_PAGE, IDS_SAVE_PAGE},
-      {IDC_PRINT, IDS_PRINT},
+      {IDC_FIND, l10n_util::GetStringUTF16(IDS_FIND)},
+      {IDC_SAVE_PAGE, l10n_util::GetStringUTF16(IDS_SAVE_PAGE)},
+      {IDC_PRINT, l10n_util::GetStringUTF16(IDS_PRINT)},
+      {IDC_SHOW_HISTORY, u"Show history"},
+      {IDC_RELOAD, u"Reload"},
+      {IDC_NEW_TAB, u"Create new tab"},
+      {IDC_RESTORE_TAB, u"Open recently closed tab"},
+      {IDC_NEW_WINDOW, u"Create new window"},
+      {IDC_NEW_INCOGNITO_WINDOW, u"Create new incognito window"},
+      {IDC_BOOKMARK_THIS_TAB, u"Bookmark this tab"},
+      {IDC_BOOKMARK_ALL_TABS, u"Bookmark all tabs"},
+      {IDC_BACK, u"Back"},
+      {IDC_FORWARD, u"Forward"},
+      {IDC_ZOOM_PLUS, u"Zoom in"},
+      {IDC_ZOOM_MINUS, u"Zoom out"},
+      {IDC_ZOOM_NORMAL, u"Reset zoom"},
+      {IDC_VIEW_SOURCE, u"View page source"},
+      {IDC_EXIT, u"Quit"},
+      {IDC_EMAIL_PAGE_LOCATION, u"Email page location"},
+      {IDC_FOCUS_LOCATION, u"Focus location bar"},
+      {IDC_FOCUS_TOOLBAR, u"Focus toolbar"},
+      {IDC_OPEN_FILE, u"Open file"},
+      {IDC_TASK_MANAGER, u"Show task manager"},
+      {IDC_SHOW_BOOKMARK_MANAGER, u"Show bookmark manager"},
+      {IDC_SHOW_DOWNLOADS, u"Show downloads"},
+      {IDC_CLEAR_BROWSING_DATA, u"Clear browsing data"},
+      {IDC_OPTIONS, u"Show settings"},
+      {IDC_SHOW_AVATAR_MENU, u"Switch profile"},
+      {IDC_DEV_TOOLS_TOGGLE, u"Toggle developer tools"},
+      {IDC_MANAGE_EXTENSIONS, l10n_util::GetStringUTF16(IDS_MANAGE_EXTENSION)},
+      {IDC_TAB_SEARCH, u"Search tabs..."},
+      {IDC_SELECT_NEXT_TAB, u"Next tab"},
+      {IDC_SELECT_PREVIOUS_TAB, u"Previous tab"},
+      {IDC_MOVE_TAB_NEXT, u"Move tab forward"},
+      {IDC_MOVE_TAB_PREVIOUS, u"Move tab backward"},
+      {IDC_QRCODE_GENERATOR, u"Create QR code"},
   };
-
   CommandSource::CommandResults results;
-  const base::string16& folded_input = base::i18n::FoldCase(input);
+  FuzzyFinder finder(input);
   std::vector<gfx::Range> ranges;
   for (const auto& command_spec : command_map) {
-    if (!chrome::IsCommandEnabled(browser, command_spec.command_id))
+    if (!chrome::IsCommandEnabled(browser, command_spec.id))
       continue;
-    base::string16 title =
-        l10n_util::GetStringUTF16(command_spec.string_constant);
+    std::u16string title = command_spec.title;
     base::Erase(title, '&');
-    double score = FuzzyFind(folded_input, title, &ranges);
+    double score = finder.Find(title, &ranges);
     if (score == 0)
       continue;
 
-    auto item = std::make_unique<CommandItem>();
-    item->title = title;
-    item->score = score;
-    item->matched_ranges = ranges;
-
+    auto item = std::make_unique<CommandItem>(title, score, ranges);
     ui::Accelerator accelerator;
     ui::AcceleratorProvider* provider =
         chrome::AcceleratorProviderForBrowser(browser);
-    if (provider->GetAcceleratorForCommandId(command_spec.command_id,
-                                             &accelerator)) {
+    if (provider->GetAcceleratorForCommandId(command_spec.id, &accelerator)) {
       item->annotation = accelerator.GetShortcutText();
     }
 
-    // TODO(lgrey): For base::Unretained to be safe here, we need to ensure
-    // that if |browser| is destroyed, the palette is reset. It's likely
-    // that this will be the case anyway, but leaving this comment so:
-    // - it doesn't get dropped/forgotten
-    // - as a reminder to replace the comment with the actual explanation
-    //   when we have it
+    // base::Unretained is safe because the controller is reset when the
+    // browser it's attached to closes.
     item->command =
         base::BindOnce(&SimpleCommandSource::ExecuteCommand, weak_this_,
-                       base::Unretained(browser), command_spec.command_id);
+                       base::Unretained(browser), command_spec.id);
     results.push_back(std::move(item));
   }
 

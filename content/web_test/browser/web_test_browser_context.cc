@@ -4,6 +4,7 @@
 
 #include "content/web_test/browser/web_test_browser_context.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -38,9 +39,9 @@ namespace content {
 
 WebTestBrowserContext::WebTestBrowserContext(bool off_the_record)
     : ShellBrowserContext(off_the_record) {
-  // Overrides geolocation coordinates for testing.
-  geolocation_overrider_ =
-      std::make_unique<device::ScopedGeolocationOverrider>(0, 0);
+  // Configure the Geolocation API to provide no location by default.
+  geolocation_overrider_ = std::make_unique<device::ScopedGeolocationOverrider>(
+      /*position=*/nullptr);
 }
 
 WebTestBrowserContext::~WebTestBrowserContext() {
@@ -49,7 +50,8 @@ WebTestBrowserContext::~WebTestBrowserContext() {
 
 DownloadManagerDelegate* WebTestBrowserContext::GetDownloadManagerDelegate() {
   if (!download_manager_delegate_) {
-    download_manager_delegate_.reset(new WebTestDownloadManagerDelegate());
+    download_manager_delegate_ =
+        std::make_unique<WebTestDownloadManagerDelegate>();
     download_manager_delegate_->SetDownloadManager(
         BrowserContext::GetDownloadManager(this));
     download_manager_delegate_->SetDownloadBehaviorForTesting(

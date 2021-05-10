@@ -8,7 +8,9 @@
 
 #include "ash/shell.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -129,6 +131,19 @@ class DisplaySystemDelegateImpl
   display::DisplayConfigurator* display_configurator_;             // Not owned.
 };
 
+// These are reported to UMA server. Do not renumber or reuse values.
+enum class OutputProtectionStatus {
+  kQueried = 0,
+  kNoExternalLink = 1,
+  kAllExternalLinksProtected = 2,
+  // Note: Only add new values immediately before this line.
+  kMaxValue = kAllExternalLinksProtected,
+};
+
+void ReportOutputProtectionUMA(OutputProtectionStatus status) {
+  UMA_HISTOGRAM_ENUMERATION("Media.EME.OutputProtection.PlatformCdm", status);
+}
+
 }  // namespace
 
 // static
@@ -175,6 +190,8 @@ void OutputProtectionImpl::QueryStatus(QueryStatusCallback callback) {
     return;
   }
 
+  ReportOutputProtectionQuery();
+
   // We want to copy this since we will manipulate it.
   std::vector<int64_t> remaining_displays = display_id_list_;
   int64_t curr_display_id = remaining_displays.back();
@@ -200,12 +217,17 @@ void OutputProtectionImpl::EnableProtection(ProtectionType desired_protection,
     return;
   }
 
-  // We never lower the HDCP level with a new request.
-  if (desired_protection == ProtectionType::HDCP_TYPE_0) {
-    if (!desired_protection_mask_)
+  // We just pass through what the client requests.
+  switch (desired_protection) {
+    case ProtectionType::HDCP_TYPE_0:
       desired_protection_mask_ = display::CONTENT_PROTECTION_METHOD_HDCP_TYPE_0;
-  } else if (desired_protection == ProtectionType::HDCP_TYPE_1) {
-    desired_protection_mask_ = display::CONTENT_PROTECTION_METHOD_HDCP_TYPE_1;
+      break;
+    case ProtectionType::HDCP_TYPE_1:
+      desired_protection_mask_ = display::CONTENT_PROTECTION_METHOD_HDCP_TYPE_1;
+      break;
+    case ProtectionType::NONE:
+      desired_protection_mask_ = display::CONTENT_PROTECTION_METHOD_NONE;
+      break;
   }
 
   // We want to copy this since we will manipulate it.
@@ -281,14 +303,17 @@ void OutputProtectionImpl::QueryStatusCallbackAggregator(
     return;
   }
 
+  if (aggregate_success) {
+    ReportOutputProtectionQueryResult(aggregate_link_mask,
+                                      aggregate_protection_mask);
+  }
+
   aggregate_protection_mask &= ~aggregate_no_protection_mask;
   std::move(callback).Run(aggregate_success, aggregate_link_mask,
                           ConvertProtection(aggregate_protection_mask));
 }
 
-void OutputProtectionImpl::OnDisplayMetricsChanged(
-    const display::Display& display,
-    uint32_t changed_metrics) {
+void OutputProtectionImpl::HandleDisplayChange() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   display_id_list_ = GetDisplayIdsFromSnapshots(delegate_->cached_displays());
   if (desired_protection_mask_) {
@@ -297,6 +322,64 @@ void OutputProtectionImpl::OnDisplayMetricsChanged(
     EnableProtection(ConvertProtection(desired_protection_mask_),
                      base::DoNothing());
   }
+}
+
+void OutputProtectionImpl::OnDisplayAdded(const display::Display& display) {
+  HandleDisplayChange();
+}
+
+void OutputProtectionImpl::OnDisplayMetricsChanged(
+    const display::Display& display,
+    uint32_t changed_metrics) {
+  HandleDisplayChange();
+}
+
+void OutputProtectionImpl::OnDisplayRemoved(const display::Display& display) {
+  HandleDisplayChange();
+}
+
+void OutputProtectionImpl::ReportOutputProtectionQuery() {
+  if (uma_for_output_protection_query_reported_)
+    return;
+
+  ReportOutputProtectionUMA(OutputProtectionStatus::kQueried);
+  uma_for_output_protection_query_reported_ = true;
+}
+
+void OutputProtectionImpl::ReportOutputProtectionQueryResult(
+    uint32_t link_mask,
+    uint32_t protection_mask) {
+  DCHECK(uma_for_output_protection_query_reported_);
+
+  if (uma_for_output_protection_positive_result_reported_)
+    return;
+
+  // Report UMAs for output protection query result.
+  uint32_t external_links =
+      (link_mask & ~display::DISPLAY_CONNECTION_TYPE_INTERNAL);
+
+  if (!external_links) {
+    ReportOutputProtectionUMA(OutputProtectionStatus::kNoExternalLink);
+    uma_for_output_protection_positive_result_reported_ = true;
+    return;
+  }
+
+  bool is_unprotectable_link_connected =
+      (external_links & ~kProtectableConnectionTypes) != 0;
+  bool is_hdcp_enabled_on_all_protectable_links =
+      (protection_mask & desired_protection_mask_) != 0;
+
+  if (!is_unprotectable_link_connected &&
+      is_hdcp_enabled_on_all_protectable_links) {
+    ReportOutputProtectionUMA(
+        OutputProtectionStatus::kAllExternalLinksProtected);
+    uma_for_output_protection_positive_result_reported_ = true;
+    return;
+  }
+
+  // Do not report a negative result because it could be a false negative.
+  // Instead, we will calculate number of negatives using the total number of
+  // queries and positive results.
 }
 
 }  // namespace chromeos

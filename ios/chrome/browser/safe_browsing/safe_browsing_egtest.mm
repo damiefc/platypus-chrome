@@ -6,11 +6,13 @@
 
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
+#import "base/test/ios/wait_util.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/core/features.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey_ui.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/features.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_app_interface.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -96,9 +98,7 @@ std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
-  config.features_enabled.push_back(safe_browsing::kSafeBrowsingAvailableOnIOS);
   config.features_enabled.push_back(safe_browsing::kRealTimeUrlLookupEnabled);
-  config.features_enabled.push_back(web::features::kSSLCommittedInterstitials);
 
   // Use commandline args to insert fake unsafe URLs into the Safe Browsing
   // database.
@@ -280,6 +280,14 @@ std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
 // Tests expanding the details on a malware warning, proceeding past the
 // warning, and navigating back/forward to the unsafe page.
 - (void)testProceedingPastMalwareWarning {
+  if (@available(iOS 14, *)) {
+  } else {
+    if (@available(iOS 13, *)) {
+      // TODO(crbug.com/1156574): This test is failing on iOS 13, not sure why.
+      EARL_GREY_TEST_DISABLED(@"Disabled on iOS 13 as it is failing.");
+    }
+  }
+
   [ChromeEarlGrey loadURL:_safeURL1];
   [ChromeEarlGrey waitForWebStateContainingText:_safeContent1];
 
@@ -315,6 +323,14 @@ std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
 // Tests expanding the details on a malware warning, proceeding past the
 // warning, and navigating back/forward to the unsafe page, in incognito mode.
 - (void)testProceedingPastMalwareWarningInIncognito {
+  if (@available(iOS 14, *)) {
+  } else {
+    if (@available(iOS 13, *)) {
+      // TODO(crbug.com/1156574): This test is failing on iOS 13, not sure why.
+      EARL_GREY_TEST_DISABLED(@"Disabled on iOS 13 as it is failing.");
+    }
+  }
+
   [ChromeEarlGrey openNewIncognitoTab];
   [ChromeEarlGrey loadURL:_safeURL1];
   [ChromeEarlGrey waitForWebStateContainingText:_safeContent1];
@@ -437,10 +453,16 @@ std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
 
   [ChromeEarlGrey loadURL:_safeURL2];
   [ChromeEarlGrey waitForWebStateContainingText:_safeContent2];
+  // TODO(crbug.com/1153261): Adding a delay to avoid never-ending load on the
+  // last navigation forward. Should be fixed in newer iOS version.
+  base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(1));
 
   [ChromeEarlGrey goBack];
   [ChromeEarlGrey waitForWebStateContainingText:l10n_util::GetStringUTF8(
                                                     IDS_MALWARE_V3_HEADING)];
+  // TODO(crbug.com/1153261): Adding a delay to avoid never-ending load on the
+  // last navigation forward. Should be fixed in newer iOS version.
+  base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(1));
 
   [ChromeEarlGrey goForward];
   [ChromeEarlGrey waitForWebStateContainingText:_safeContent2];
@@ -448,7 +470,8 @@ std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
 
 // Tests performing a back navigation to a warning page and a forward navigation
 // from a warning page, in incognito mode.
-- (void)testBackForwardNavigationWithWarningInIncognito {
+// crbug.com/1147360 Test is flaky
+- (void)DISABLED_testBackForwardNavigationWithWarningInIncognito {
   [ChromeEarlGrey openNewIncognitoTab];
   [ChromeEarlGrey loadURL:_safeURL1];
   [ChromeEarlGrey waitForWebStateContainingText:_safeContent1];

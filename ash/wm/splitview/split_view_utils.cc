@@ -33,6 +33,8 @@ namespace ash {
 
 namespace {
 
+using ::chromeos::WindowStateType;
+
 // The animation speed at which the highlights fade in or out.
 constexpr base::TimeDelta kHighlightsFadeInOut =
     base::TimeDelta::FromMilliseconds(250);
@@ -67,6 +69,7 @@ void GetAnimationValuesForType(
   *out_preemption_strategy = ui::LayerAnimator::IMMEDIATELY_SET_NEW_TARGET;
   switch (type) {
     case SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_IN:
+    case SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_IN_CANNOT_SNAP:
     case SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_OUT:
     case SPLITVIEW_ANIMATION_PREVIEW_AREA_FADE_IN:
     case SPLITVIEW_ANIMATION_OVERVIEW_ITEM_FADE_IN:
@@ -81,6 +84,7 @@ void GetAnimationValuesForType(
       *out_tween_type = gfx::Tween::FAST_OUT_SLOW_IN;
       return;
     case SPLITVIEW_ANIMATION_OTHER_HIGHLIGHT_FADE_IN:
+    case SPLITVIEW_ANIMATION_OTHER_HIGHLIGHT_FADE_IN_CANNOT_SNAP:
     case SPLITVIEW_ANIMATION_OTHER_HIGHLIGHT_SLIDE_IN:
     case SPLITVIEW_ANIMATION_OTHER_HIGHLIGHT_TEXT_SLIDE_IN:
       *out_delay = kOtherFadeInDelay;
@@ -200,11 +204,21 @@ void DoSplitviewOpacityAnimation(ui::Layer* layer,
       target_opacity = 0.f;
       break;
     case SPLITVIEW_ANIMATION_PREVIEW_AREA_FADE_IN:
-      target_opacity = kPreviewAreaHighlightOpacity;
+      target_opacity = features::IsDarkLightModeEnabled()
+                           ? kDarkLightPreviewAreaHighlightOpacity
+                           : kPreviewAreaHighlightOpacity;
       break;
     case SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_IN:
     case SPLITVIEW_ANIMATION_OTHER_HIGHLIGHT_FADE_IN:
-      target_opacity = kHighlightOpacity;
+      target_opacity = features::IsDarkLightModeEnabled()
+                           ? kDarkLightHighlightOpacity
+                           : kHighlightOpacity;
+      break;
+    case SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_IN_CANNOT_SNAP:
+    case SPLITVIEW_ANIMATION_OTHER_HIGHLIGHT_FADE_IN_CANNOT_SNAP:
+      target_opacity = features::IsDarkLightModeEnabled()
+                           ? kDarkLightHighlightCannotSnapOpacity
+                           : kHighlightOpacity;
       break;
     case SPLITVIEW_ANIMATION_OVERVIEW_ITEM_FADE_IN:
     case SPLITVIEW_ANIMATION_TEXT_FADE_IN:
@@ -378,21 +392,7 @@ void MaybeRestoreSplitView(bool refresh_snapped_windows) {
   }
 }
 
-bool IsClamshellSplitViewModeEnabled() {
-  return base::FeatureList::IsEnabled(features::kDragToSnapInClamshellMode);
-}
-
-bool AreMultiDisplayOverviewAndSplitViewEnabled() {
-  return base::FeatureList::IsEnabled(
-      features::kMultiDisplayOverviewAndSplitView);
-}
-
 bool ShouldAllowSplitView() {
-  if (!Shell::Get()->tablet_mode_controller()->InTabletMode() &&
-      !IsClamshellSplitViewModeEnabled()) {
-    return false;
-  }
-
   // Don't allow split view if we're in pinned mode.
   if (Shell::Get()->screen_pinning_controller()->IsPinned())
     return false;
@@ -409,7 +409,7 @@ void ShowAppCannotSnapToast() {
   Shell::Get()->toast_manager()->Show(ToastData(
       kAppCannotSnapToastId,
       l10n_util::GetStringUTF16(IDS_ASH_SPLIT_VIEW_CANNOT_SNAP),
-      kAppCannotSnapToastDurationMs, base::Optional<base::string16>()));
+      kAppCannotSnapToastDurationMs, base::Optional<std::u16string>()));
 }
 
 SplitViewController::SnapPosition GetSnapPositionForLocation(

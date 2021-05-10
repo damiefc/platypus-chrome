@@ -43,7 +43,7 @@ int ServiceMain::RunComService(const base::CommandLine* command_line) {
     return ERROR_BAD_ARGUMENTS;
 
   int ret = service->Start();
-  DCHECK_NE(ret, static_cast<int>(STILL_ACTIVE));
+  DCHECK_NE(ret, int{STILL_ACTIVE});
   return ret;
 }
 
@@ -201,7 +201,7 @@ void ServiceMain::ServiceControlHandler(DWORD control) {
 }
 
 // static
-void WINAPI ServiceMain::ServiceMainEntry(DWORD argc, base::char16* argv[]) {
+void WINAPI ServiceMain::ServiceMainEntry(DWORD argc, wchar_t* argv[]) {
   ServiceMain::GetInstance()->ServiceMainImpl();
 }
 

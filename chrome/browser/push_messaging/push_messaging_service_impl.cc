@@ -11,7 +11,7 @@
 #include "base/barrier_closure.h"
 #include "base/base64url.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
@@ -28,6 +28,8 @@
 #include "chrome/browser/permissions/abusive_origin_permission_revocation_request.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_keep_alive_types.h"
+#include "chrome/browser/profiles/scoped_profile_keep_alive.h"
 #include "chrome/browser/push_messaging/push_messaging_app_identifier.h"
 #include "chrome/browser/push_messaging/push_messaging_constants.h"
 #include "chrome/browser/push_messaging/push_messaging_features.h"
@@ -59,6 +61,7 @@
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging_status.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -268,7 +271,7 @@ PushMessagingServiceImpl::PushMessagingServiceImpl(Profile* profile)
 
   registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
                  content::NotificationService::AllSources());
-  refresh_observer_.Add(&refresher_);
+  refresh_observation_.Observe(&refresher_);
 }
 
 PushMessagingServiceImpl::~PushMessagingServiceImpl() = default;
@@ -349,6 +352,8 @@ void PushMessagingServiceImpl::OnMessage(const std::string& app_id,
     in_flight_keep_alive_ = std::make_unique<ScopedKeepAlive>(
         KeepAliveOrigin::IN_FLIGHT_PUSH_MESSAGE,
         KeepAliveRestartOption::DISABLED);
+    in_flight_profile_keep_alive_ = std::make_unique<ScopedProfileKeepAlive>(
+        profile_, ProfileKeepAliveOrigin::kInFlightPushMessage);
   }
 #endif
 
@@ -595,8 +600,10 @@ void PushMessagingServiceImpl::DidHandleMessage(
 
 #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
   // Reset before running callbacks below, so tests can verify keep-alive reset.
-  if (in_flight_message_deliveries_.empty())
+  if (in_flight_message_deliveries_.empty()) {
     in_flight_keep_alive_.reset();
+    in_flight_profile_keep_alive_.reset();
+  }
 #endif
 
   std::move(message_handled_closure).Run();
@@ -623,7 +630,7 @@ void PushMessagingServiceImpl::DidHandleMessage(
 }
 
 void PushMessagingServiceImpl::SetMessageCallbackForTesting(
-    const base::Closure& callback) {
+    const base::RepeatingClosure& callback) {
   message_callback_for_testing_ = callback;
 }
 
@@ -844,8 +851,7 @@ void PushMessagingServiceImpl::DoSubscribe(
       ->GetInstanceID(app_identifier.app_id())
       ->GetToken(
           push_messaging::NormalizeSenderInfo(application_server_key_string),
-          kGCMScope, ttl, std::map<std::string, std::string>() /* options */,
-          {} /* flags */,
+          kGCMScope, ttl, {} /* flags */,
           base::BindOnce(&PushMessagingServiceImpl::DidSubscribe,
                          weak_factory_.GetWeakPtr(), app_identifier,
                          application_server_key_string,
@@ -1155,12 +1161,12 @@ void PushMessagingServiceImpl::DidUnsubscribe(
     DecreasePushSubscriptionCount(1, false /* was_pending */);
 
   if (!unsubscribe_callback_for_testing_.is_null())
-    unsubscribe_callback_for_testing_.Run();
+    std::move(unsubscribe_callback_for_testing_).Run();
 }
 
 void PushMessagingServiceImpl::SetUnsubscribeCallbackForTesting(
-    const base::Closure& callback) {
-  unsubscribe_callback_for_testing_ = callback;
+    base::OnceClosure callback) {
+  unsubscribe_callback_for_testing_ = std::move(callback);
 }
 
 // DidDeleteServiceWorkerRegistration methods ----------------------------------
@@ -1229,8 +1235,7 @@ void PushMessagingServiceImpl::SetServiceWorkerDatabaseWipedCallbackForTesting(
 void PushMessagingServiceImpl::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type,
-    const std::string& resource_identifier) {
+    ContentSettingsType content_type) {
   if (content_type != ContentSettingsType::NOTIFICATIONS)
     return;
 
@@ -1415,6 +1420,7 @@ void PushMessagingServiceImpl::Observe(
   shutdown_started_ = true;
 #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
   in_flight_keep_alive_.reset();
+  in_flight_profile_keep_alive_.reset();
 #endif  // BUILDFLAG(ENABLE_BACKGROUND_MODE)
 }
 
@@ -1614,8 +1620,7 @@ instance_id::InstanceIDDriver* PushMessagingServiceImpl::GetInstanceIDDriver()
 
 content::DevToolsBackgroundServicesContext*
 PushMessagingServiceImpl::GetDevToolsContext(const GURL& origin) const {
-  auto* storage_partition =
-      content::BrowserContext::GetStoragePartitionForSite(profile_, origin);
+  auto* storage_partition = profile_->GetStoragePartitionForUrl(origin);
   if (!storage_partition)
     return nullptr;
 

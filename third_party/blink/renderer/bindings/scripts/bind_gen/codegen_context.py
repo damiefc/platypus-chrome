@@ -84,6 +84,9 @@ class CodeGenContext(object):
             "named_property_deleter": None,
             "stringifier": None,
 
+            # Contents of union.
+            "union_members": (),
+
             # The names of the class being generated and its base class.
             "base_class_name": None,
             "class_name": None,
@@ -92,6 +95,12 @@ class CodeGenContext(object):
             # Used via [PerWorldBindings] to optimize the code path of the main
             # world.
             "for_world": cls.ALL_WORLDS,
+
+            # True when generating a callback of [NoAllocDirectCall].
+            "no_alloc_direct_call": False,
+            # True when generating a (fake) callback of [NoAllocDirectCall] for
+            # testing.
+            "no_alloc_direct_call_for_testing": False,
 
             # Type of V8 callback function which implements IDL attribute,
             # IDL operation, etc.

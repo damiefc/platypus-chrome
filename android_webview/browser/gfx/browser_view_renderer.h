@@ -160,7 +160,7 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
   base::WeakPtr<CompositorFrameProducer> GetWeakPtr() override;
   void RemoveCompositorFrameConsumer(
       CompositorFrameConsumer* consumer) override;
-  void ReturnUsedResources(const std::vector<viz::ReturnedResource>& resources,
+  void ReturnUsedResources(std::vector<viz::ReturnedResource> resources,
                            const viz::FrameSinkId& frame_sink_id,
                            uint32_t layer_tree_frame_sink_id) override;
   void OnParentDrawDataUpdated(
@@ -188,7 +188,7 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
   void SetActiveCompositor(content::SynchronousCompositor* compositor);
   void SetTotalRootLayerScrollOffset(const gfx::Vector2dF& new_value_dip);
   bool CanOnDraw();
-  bool CompositeSW(SkCanvas* canvas);
+  bool CompositeSW(SkCanvas* canvas, bool software_canvas);
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
   RootLayerStateAsValue(const gfx::Vector2dF& total_scroll_offset_dip,
                         const gfx::SizeF& scrollable_size_dip);

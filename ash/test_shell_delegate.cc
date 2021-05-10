@@ -56,9 +56,6 @@ bool TestShellDelegate::ShouldWaitForTouchPressAck(gfx::NativeWindow window) {
   return should_wait_for_touch_ack_;
 }
 
-void TestShellDelegate::BindNavigableContentsFactory(
-    mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver) {}
-
 void TestShellDelegate::BindMultiDeviceSetup(
     mojo::PendingReceiver<chromeos::multidevice_setup::mojom::MultiDeviceSetup>
         receiver) {
@@ -79,6 +76,22 @@ std::unique_ptr<NearbyShareDelegate>
 TestShellDelegate::CreateNearbyShareDelegate(
     NearbyShareController* controller) const {
   return std::make_unique<TestNearbyShareDelegate>();
+}
+
+bool TestShellDelegate::IsSessionRestoreInProgress() const {
+  return session_restore_in_progress_;
+}
+
+void TestShellDelegate::SetSessionRestoreInProgress(bool in_progress) {
+  session_restore_in_progress_ = in_progress;
+}
+
+bool TestShellDelegate::IsLoggingRedirectDisabled() const {
+  return false;
+}
+
+base::FilePath TestShellDelegate::GetPrimaryUserDownloadsFolder() const {
+  return base::FilePath();
 }
 
 }  // namespace ash

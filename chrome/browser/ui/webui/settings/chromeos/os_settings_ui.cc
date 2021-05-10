@@ -6,6 +6,8 @@
 
 #include <utility>
 
+#include "ash/constants/ash_features.h"
+#include "ash/public/cpp/esim_manager.h"
 #include "ash/public/cpp/network_config_service.h"
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/nearby_sharing/contacts/nearby_share_contact_manager.h"
@@ -14,7 +16,6 @@
 #include "chrome/browser/nearby_sharing/nearby_sharing_service_factory.h"
 #include "chrome/browser/nearby_sharing/nearby_sharing_service_impl.h"
 #include "chrome/browser/ui/webui/managed_ui_handler.h"
-#include "chrome/browser/ui/webui/nearby_share/shared_resources.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_storage_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_manager.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_manager_factory.h"
@@ -25,8 +26,8 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/os_settings_resources.h"
 #include "chrome/grit/os_settings_resources_map.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/cellular_setup/cellular_setup_impl.h"
+#include "chromeos/services/cellular_setup/public/mojom/esim_manager.mojom.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -35,13 +36,6 @@
 
 namespace chromeos {
 namespace settings {
-
-#if !BUILDFLAG(OPTIMIZE_WEBUI)
-namespace {
-const char kOsGeneratedPath[] =
-    "@out_folder@/gen/chrome/browser/resources/settings/";
-}
-#endif
 
 // static
 void OSSettingsUI::RegisterProfilePrefs(
@@ -70,46 +64,10 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
       std::make_unique<chromeos::settings::StorageHandler>(profile,
                                                            html_source));
 
-#if BUILDFLAG(OPTIMIZE_WEBUI)
-  if (base::FeatureList::IsEnabled(::chromeos::features::kOsSettingsPolymer3)) {
-    // Polymer3 Source files
-    webui::SetupBundledWebUIDataSource(html_source, "chromeos/os_settings.js",
-                                       IDR_OS_SETTINGS_OS_SETTINGS_ROLLUP_JS,
-                                       IDR_OS_SETTINGS_OS_SETTINGS_V3_HTML);
-    html_source->AddResourcePath("chromeos/shared.rollup.js",
-                                 IDR_OS_SETTINGS_SHARED_ROLLUP_JS);
-    html_source->AddResourcePath("chromeos/lazy_load.js",
-                                 IDR_OS_SETTINGS_LAZY_LOAD_ROLLUP_JS);
-  } else {
-    // Polymer2 Source files
-    html_source->AddResourcePath("crisper.js", IDR_OS_SETTINGS_CRISPER_JS);
-    html_source->AddResourcePath("lazy_load.crisper.js",
-                                 IDR_OS_SETTINGS_LAZY_LOAD_CRISPER_JS);
-    html_source->AddResourcePath("chromeos/lazy_load.html",
-                                 IDR_OS_SETTINGS_LAZY_LOAD_VULCANIZED_HTML);
-    html_source->SetDefaultResource(IDR_OS_SETTINGS_VULCANIZED_HTML);
-  }
-
-  // We only need to register the mojo resources here because the rest are
-  // bundled in.
-  RegisterNearbySharedMojoResources(html_source);
-#else
   webui::SetupWebUIDataSource(
       html_source,
       base::make_span(kOsSettingsResources, kOsSettingsResourcesSize),
-      kOsGeneratedPath,
-      base::FeatureList::IsEnabled(chromeos::features::kOsSettingsPolymer3)
-          ? IDR_OS_SETTINGS_OS_SETTINGS_V3_HTML
-          : IDR_OS_SETTINGS_SETTINGS_HTML);
-
-  // Register chrome://nearby resources so they are available at
-  // chrome://os-settings. This allows the sharing of resources without having
-  // to put everything in chrome://resources. This is necessary because portions
-  // of the nearby UI need to be re-used in both places.
-  // This is not nessary when OPTIMIZE_WEBUI is true because the files will be
-  // added to the optimized bundles.
-  RegisterNearbySharedResources(html_source);
-#endif
+      IDR_OS_SETTINGS_OS_SETTINGS_V3_HTML);
 
   ManagedUIHandler::Initialize(web_ui, html_source);
 
@@ -130,6 +88,11 @@ void OSSettingsUI::BindInterface(
     mojo::PendingReceiver<cellular_setup::mojom::CellularSetup> receiver) {
   cellular_setup::CellularSetupImpl::CreateAndBindToReciever(
       std::move(receiver));
+}
+
+void OSSettingsUI::BindInterface(
+    mojo::PendingReceiver<cellular_setup::mojom::ESimManager> receiver) {
+  ash::GetESimManager(std::move(receiver));
 }
 
 void OSSettingsUI::BindInterface(
@@ -163,6 +126,11 @@ void OSSettingsUI::BindInterface(
 
 void OSSettingsUI::BindInterface(
     mojo::PendingReceiver<nearby_share::mojom::NearbyShareSettings> receiver) {
+  if (!NearbySharingServiceFactory::IsNearbyShareSupportedForBrowserContext(
+          Profile::FromWebUI(web_ui()))) {
+    return;
+  }
+
   NearbySharingService* service =
       NearbySharingServiceFactory::GetForBrowserContext(
           Profile::FromWebUI(web_ui()));
@@ -171,6 +139,11 @@ void OSSettingsUI::BindInterface(
 
 void OSSettingsUI::BindInterface(
     mojo::PendingReceiver<nearby_share::mojom::ReceiveManager> receiver) {
+  if (!NearbySharingServiceFactory::IsNearbyShareSupportedForBrowserContext(
+          Profile::FromWebUI(web_ui()))) {
+    return;
+  }
+
   NearbySharingService* service =
       NearbySharingServiceFactory::GetForBrowserContext(
           Profile::FromWebUI(web_ui()));
@@ -180,6 +153,11 @@ void OSSettingsUI::BindInterface(
 
 void OSSettingsUI::BindInterface(
     mojo::PendingReceiver<nearby_share::mojom::ContactManager> receiver) {
+  if (!NearbySharingServiceFactory::IsNearbyShareSupportedForBrowserContext(
+          Profile::FromWebUI(web_ui()))) {
+    return;
+  }
+
   NearbySharingService* service =
       NearbySharingServiceFactory::GetForBrowserContext(
           Profile::FromWebUI(web_ui()));

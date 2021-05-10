@@ -8,7 +8,9 @@
 #include "base/optional.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
 #include "third_party/blink/renderer/core/paint/object_paint_properties.h"
+#include "third_party/blink/renderer/platform/graphics/paint/cull_rect.h"
 #include "third_party/blink/renderer/platform/graphics/paint/ref_counted_property_tree_state.h"
+#include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
 namespace blink {
@@ -17,15 +19,21 @@ class PaintLayer;
 
 // Represents the data for a particular fragment of a LayoutObject.
 // See README.md.
-class CORE_EXPORT FragmentData {
-  USING_FAST_MALLOC(FragmentData);
-
+class CORE_EXPORT FragmentData final : public GarbageCollected<FragmentData> {
  public:
   FragmentData* NextFragment() const {
-    return rare_data_ ? rare_data_->next_fragment_.get() : nullptr;
+    return rare_data_ ? rare_data_->next_fragment_ : nullptr;
   }
   FragmentData& EnsureNextFragment();
-  void ClearNextFragment() { DestroyTail(); }
+
+  // We could let the compiler generate code to automatically clear the
+  // next_fragment_ chain, but the code would cause stack overflow in some
+  // cases (e.g. fast/multicol/infinitely-tall-content-in-outer-crash.html).
+  // This function crear the next_fragment_ chain non-recursively.
+  void ClearNextFragment();
+
+  FragmentData& LastFragment();
+  const FragmentData& LastFragment() const;
 
   // Physical offset of this fragment's local border box's top-left position
   // from the origin of the transform node of the fragment's property tree
@@ -43,37 +51,8 @@ class CORE_EXPORT FragmentData {
 
   // The PaintLayer associated with this LayoutBoxModelObject. This can be null
   // depending on the return value of LayoutBoxModelObject::LayerTypeRequired().
-  PaintLayer* Layer() const {
-    return rare_data_ ? rare_data_->layer.get() : nullptr;
-  }
-  void SetLayer(std::unique_ptr<PaintLayer>);
-
-  // Covers the sub-rectangles of the object that need to be re-rastered, in the
-  // object's local coordinate space.  During PrePaint, the rect mapped into
-  // visual rect space will be added into PartialInvalidationVisualRect(), and
-  // cleared.
-  PhysicalRect PartialInvalidationLocalRect() const {
-    return rare_data_ ? rare_data_->partial_invalidation_local_rect
-                      : PhysicalRect();
-  }
-  // LayoutObject::InvalidatePaintRectangle() calls this method to accumulate
-  // the sub-rectangles needing re-rasterization.
-  void SetPartialInvalidationLocalRect(const PhysicalRect& r) {
-    if (rare_data_ || !r.IsEmpty())
-      EnsureRareData().partial_invalidation_local_rect = r;
-  }
-
-  // Covers the sub-rectangles of the object that need to be re-rastered, in
-  // visual rect space (see VisualRect()). It will be cleared after the raster
-  // invalidation is issued after paint.
-  IntRect PartialInvalidationVisualRect() const {
-    return rare_data_ ? rare_data_->partial_invalidation_visual_rect
-                      : IntRect();
-  }
-  void SetPartialInvalidationVisualRect(const IntRect& r) {
-    if (rare_data_ || !r.IsEmpty())
-      EnsureRareData().partial_invalidation_visual_rect = r;
-  }
+  PaintLayer* Layer() const { return rare_data_ ? rare_data_->layer : nullptr; }
+  void SetLayer(PaintLayer*);
 
   LayoutUnit LogicalTopInFlowThread() const {
     return rare_data_ ? rare_data_->logical_top_in_flow_thread : LayoutUnit();
@@ -136,6 +115,7 @@ class CORE_EXPORT FragmentData {
       rare_data_->paint_properties = nullptr;
   }
   void EnsureId() { EnsureRareData(); }
+  bool HasUniqueId() const { return rare_data_ && rare_data_->unique_id; }
 
   // This is a complete set of property nodes that should be used as a
   // starting point to paint a LayoutObject. This data is cached because some
@@ -150,6 +130,12 @@ class CORE_EXPORT FragmentData {
   //   ancestor transform space.
   PropertyTreeStateOrAlias LocalBorderBoxProperties() const {
     DCHECK(HasLocalBorderBoxProperties());
+
+    // TODO(chrishtr): this should never happen, but does in practice and
+    // we haven't been able to find all of the cases where it happens yet.
+    // See crbug.com/1137883. Once we find more of them, remove this.
+    if (!rare_data_ || !rare_data_->local_border_box_properties)
+      return PropertyTreeState::Root();
     return rare_data_->local_border_box_properties->GetPropertyTreeState();
   }
   bool HasLocalBorderBoxProperties() const {
@@ -167,6 +153,19 @@ class CORE_EXPORT FragmentData {
     } else {
       *rare_data_->local_border_box_properties = state;
     }
+  }
+
+  void SetCullRect(const CullRect& cull_rect) {
+    EnsureRareData().cull_rect_ = cull_rect;
+  }
+  CullRect GetCullRect() const {
+    return rare_data_ ? rare_data_->cull_rect_ : CullRect();
+  }
+  void SetContentsCullRect(const CullRect& contents_cull_rect) {
+    EnsureRareData().contents_cull_rect_ = contents_cull_rect;
+  }
+  CullRect GetContentsCullRect() const {
+    return rare_data_ ? rare_data_->contents_cull_rect_ : CullRect();
   }
 
   // This is the complete set of property nodes that is inherited
@@ -197,36 +196,28 @@ class CORE_EXPORT FragmentData {
   // border box space. Both fragments must have local border box properties.
   void MapRectToFragment(const FragmentData& fragment, IntRect&) const;
 
-  ~FragmentData() {
-    if (NextFragment())
-      DestroyTail();
-  }
+  ~FragmentData() = default;
+  void Trace(Visitor* visitor) const { visitor->Trace(rare_data_); }
 
  private:
   friend class FragmentDataTest;
 
-  // We could let the compiler generate code to automatically destroy the
-  // next_fragment_ chain, but the code would cause stack overflow in some
-  // cases (e.g. fast/multicol/infinitely-tall-content-in-outer-crash.html).
-  // This function destroy the next_fragment_ chain non-recursively.
-  void DestroyTail();
-
   // Contains rare data that that is not needed on all fragments.
-  struct CORE_EXPORT RareData {
-    USING_FAST_MALLOC(RareData);
-
+  struct CORE_EXPORT RareData final : public GarbageCollected<RareData> {
    public:
     RareData();
     RareData(const RareData&) = delete;
     RareData& operator=(const RareData&) = delete;
     ~RareData();
 
+    void SetLayer(PaintLayer*);
+
+    void Trace(Visitor* visitor) const;
+
     // The following data fields are not fragment specific. Placed here just to
     // avoid separate data structure for them.
-    std::unique_ptr<PaintLayer> layer;
+    Member<PaintLayer> layer;
     UniqueObjectId unique_id;
-    PhysicalRect partial_invalidation_local_rect;
-    IntRect partial_invalidation_visual_rect;
 
     // Fragment specific data.
     PhysicalOffset legacy_pagination_offset;
@@ -236,13 +227,15 @@ class CORE_EXPORT FragmentData {
     bool is_clip_path_cache_valid = false;
     base::Optional<IntRect> clip_path_bounding_box;
     scoped_refptr<const RefCountedPath> clip_path_path;
-    std::unique_ptr<FragmentData> next_fragment_;
+    CullRect cull_rect_;
+    CullRect contents_cull_rect_;
+    Member<FragmentData> next_fragment_;
   };
 
   RareData& EnsureRareData();
 
   PhysicalOffset paint_offset_;
-  std::unique_ptr<RareData> rare_data_;
+  Member<RareData> rare_data_;
 };
 
 }  // namespace blink

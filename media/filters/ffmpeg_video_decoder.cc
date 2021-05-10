@@ -8,12 +8,13 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/sequenced_task_runner.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/limits.h"
@@ -83,10 +84,34 @@ bool FFmpegVideoDecoder::IsCodecSupported(VideoCodec codec) {
   return avcodec_find_decoder(VideoCodecToCodecID(codec)) != nullptr;
 }
 
+// static
+SupportedVideoDecoderConfigs FFmpegVideoDecoder::SupportedConfigsForWebRTC() {
+  SupportedVideoDecoderConfigs supported_configs;
+
+  if (IsCodecSupported(kCodecH264)) {
+    supported_configs.emplace_back(/*profile_min=*/H264PROFILE_BASELINE,
+                                   /*profile_max=*/H264PROFILE_HIGH,
+                                   /*coded_size_min=*/kDefaultSwDecodeSizeMin,
+                                   /*coded_size_max=*/kDefaultSwDecodeSizeMax,
+                                   /*allow_encrypted=*/false,
+                                   /*require_encrypted=*/false);
+  }
+  if (IsCodecSupported(kCodecVP8)) {
+    supported_configs.emplace_back(/*profile_min=*/VP8PROFILE_ANY,
+                                   /*profile_max=*/VP8PROFILE_ANY,
+                                   /*coded_size_min=*/kDefaultSwDecodeSizeMin,
+                                   /*coded_size_max=*/kDefaultSwDecodeSizeMax,
+                                   /*allow_encrypted=*/false,
+                                   /*require_encrypted=*/false);
+  }
+
+  return supported_configs;
+}
+
 FFmpegVideoDecoder::FFmpegVideoDecoder(MediaLog* media_log)
-    : media_log_(media_log), state_(kUninitialized), decode_nalus_(false) {
+    : media_log_(media_log) {
   DVLOG(1) << __func__;
-  thread_checker_.DetachFromThread();
+  DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
 int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
@@ -134,6 +159,9 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
   gfx::Size coded_size(std::max(size.width(), codec_context->coded_width),
                        std::max(size.height(), codec_context->coded_height));
 
+  if (force_allocation_error_)
+    return AVERROR(EINVAL);
+
   // FFmpeg expects the initial allocation to be zero-initialized.  Failure to
   // do so can lead to uninitialized value usage.  See http://crbug.com/390941
   scoped_refptr<VideoFrame> video_frame = frame_pool_.CreateFrame(
@@ -161,6 +189,13 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
     if (codec_context->color_range == AVCOL_RANGE_JPEG) {
       video_frame->set_color_space(gfx::ColorSpace::CreateJpeg());
     }
+  } else if (codec_context->codec_id == AV_CODEC_ID_H264 &&
+             codec_context->colorspace == AVCOL_SPC_RGB &&
+             format == PIXEL_FORMAT_I420) {
+    // Some H.264 videos contain a VUI that specifies a color matrix of GBR,
+    // when they are actually ordinary YUV. Only 4:2:0 formats are checked,
+    // because GBR is reasonable for 4:4:4 content. See crbug.com/1067377.
+    video_frame->set_color_space(gfx::ColorSpace::CreateREC709());
   } else if (codec_context->color_primaries != AVCOL_PRI_UNSPECIFIED ||
              codec_context->color_trc != AVCOL_TRC_UNSPECIFIED ||
              codec_context->colorspace != AVCOL_SPC_UNSPECIFIED) {
@@ -196,8 +231,8 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
   return 0;
 }
 
-std::string FFmpegVideoDecoder::GetDisplayName() const {
-  return "FFmpegVideoDecoder";
+VideoDecoderType FFmpegVideoDecoder::GetDecoderType() const {
+  return VideoDecoderType::kFFmpeg;
 }
 
 void FFmpegVideoDecoder::Initialize(const VideoDecoderConfig& config,
@@ -207,7 +242,7 @@ void FFmpegVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                     const OutputCB& output_cb,
                                     const WaitingCB& /* waiting_cb */) {
   DVLOG(1) << __func__ << ": " << config.AsHumanReadableString();
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(config.IsValidConfig());
   DCHECK(output_cb);
 
@@ -233,7 +268,7 @@ void FFmpegVideoDecoder::Initialize(const VideoDecoderConfig& config,
 void FFmpegVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                                 DecodeCB decode_cb) {
   DVLOG(3) << __func__;
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(buffer.get());
   DCHECK(decode_cb);
   CHECK_NE(state_, kUninitialized);
@@ -286,16 +321,17 @@ void FFmpegVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
 
 void FFmpegVideoDecoder::Reset(base::OnceClosure closure) {
   DVLOG(2) << __func__;
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   avcodec_flush_buffers(codec_context_.get());
   state_ = kNormal;
   // PostTask() to avoid calling |closure| immediately.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(closure));
+  base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                   std::move(closure));
 }
 
 FFmpegVideoDecoder::~FFmpegVideoDecoder() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (state_ != kUninitialized)
     ReleaseFFmpegResources();
@@ -333,7 +369,7 @@ bool FFmpegVideoDecoder::FFmpegDecode(const DecoderBuffer& buffer) {
       return false;
     case FFmpegDecodingLoop::DecodeStatus::kDecodeFrameFailed:
       MEDIA_LOG(DEBUG, media_log_)
-          << GetDisplayName() << " failed to decode a video frame: "
+          << GetDecoderType() << " failed to decode a video frame: "
           << AVErrorToString(decoding_loop_->last_averror_code()) << ", at "
           << buffer.AsHumanReadableString();
       return false;
@@ -358,7 +394,7 @@ bool FFmpegVideoDecoder::OnNewFrame(AVFrame* frame) {
       reinterpret_cast<VideoFrame*>(av_buffer_get_opaque(frame->buf[0]));
   video_frame->set_timestamp(
       base::TimeDelta::FromMicroseconds(frame->reordered_opaque));
-  video_frame->metadata()->power_efficient = false;
+  video_frame->metadata().power_efficient = false;
   output_cb_.Run(video_frame);
   return true;
 }
@@ -395,7 +431,7 @@ bool FFmpegVideoDecoder::ConfigureDecoder(const VideoDecoderConfig& config,
     return false;
   }
 
-  decoding_loop_.reset(new FFmpegDecodingLoop(codec_context_.get()));
+  decoding_loop_ = std::make_unique<FFmpegDecodingLoop>(codec_context_.get());
   return true;
 }
 

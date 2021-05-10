@@ -8,10 +8,11 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -34,8 +35,8 @@
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/fake_test_cert_verifier_params_factory.h"
 #include "services/network/test/test_network_context_client.h"
-#include "services/network/test/test_network_service_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace google_apis {
@@ -68,7 +69,8 @@ const char kTestDownloadFileQuery[] = "alt=media&supportsTeamDrives=true";
 // Used as a GetContentCallback.
 void AppendContent(std::string* out,
                    DriveApiErrorCode error,
-                   std::unique_ptr<std::string> content) {
+                   std::unique_ptr<std::string> content,
+                   bool first_chunk) {
   EXPECT_EQ(HTTP_SUCCESS, error);
   out->append(*content);
 }
@@ -78,11 +80,11 @@ class TestBatchableDelegate : public BatchableDelegate {
   TestBatchableDelegate(const GURL url,
                         const std::string& content_type,
                         const std::string& content_data,
-                        const base::Closure& callback)
+                        base::OnceClosure callback)
       : url_(url),
         content_type_(content_type),
         content_data_(content_data),
-        callback_(callback) {}
+        callback_(std::move(callback)) {}
   GURL GetURL() const override { return url_; }
   std::string GetRequestType() const override { return "PUT"; }
   std::vector<std::string> GetExtraRequestHeaders() const override {
@@ -97,11 +99,13 @@ class TestBatchableDelegate : public BatchableDelegate {
     upload_content->assign(content_data_);
     return true;
   }
-  void NotifyError(DriveApiErrorCode code) override { callback_.Run(); }
+  void NotifyError(DriveApiErrorCode code) override {
+    std::move(callback_).Run();
+  }
   void NotifyResult(DriveApiErrorCode code,
                     const std::string& body,
                     base::OnceClosure closure) override {
-    callback_.Run();
+    std::move(callback_).Run();
     std::move(closure).Run();
   }
   void NotifyUploadProgress(int64_t current, int64_t total) override {
@@ -115,7 +119,7 @@ class TestBatchableDelegate : public BatchableDelegate {
   GURL url_;
   std::string content_type_;
   std::string content_data_;
-  base::Closure callback_;
+  base::OnceClosure callback_;
   std::vector<int64_t> progress_values_;
 };
 
@@ -129,18 +133,21 @@ class DriveApiRequestsTest : public testing::Test {
         network_service_remote.BindNewPipeAndPassReceiver());
     network::mojom::NetworkContextParamsPtr context_params =
         network::mojom::NetworkContextParams::New();
+    // Use a dummy CertVerifier that always passes cert verification, since
+    // these unittests don't need to test CertVerifier behavior.
+    context_params->cert_verifier_params =
+        network::FakeTestCertVerifierParamsFactory::GetCertVerifierParams();
     network_service_remote->CreateNetworkContext(
         network_context_.BindNewPipeAndPassReceiver(),
         std::move(context_params));
 
-    mojo::PendingRemote<network::mojom::NetworkServiceClient>
-        network_service_client_remote;
-    network_service_client_ =
-        std::make_unique<network::TestNetworkServiceClient>(
-            network_service_client_remote.InitWithNewPipeAndPassReceiver());
-    network_service_remote->SetClient(
-        std::move(network_service_client_remote),
-        network::mojom::NetworkServiceParams::New());
+    mojo::PendingReceiver<network::mojom::URLLoaderNetworkServiceObserver>
+        default_observer_receiver;
+    network::mojom::NetworkServiceParamsPtr network_service_params =
+        network::mojom::NetworkServiceParams::New();
+    network_service_params->default_observer =
+        default_observer_receiver.InitWithNewPipeAndPassRemote();
+    network_service_remote->SetParams(std::move(network_service_params));
 
     mojo::PendingRemote<network::mojom::NetworkContextClient>
         network_context_client_remote;
@@ -169,37 +176,33 @@ class DriveApiRequestsTest : public testing::Test {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
     test_server_.RegisterRequestHandler(
-        base::Bind(&DriveApiRequestsTest::HandleChildrenDeleteRequest,
-                   base::Unretained(this)));
+        base::BindRepeating(&DriveApiRequestsTest::HandleChildrenDeleteRequest,
+                            base::Unretained(this)));
+    test_server_.RegisterRequestHandler(base::BindRepeating(
+        &DriveApiRequestsTest::HandleDataFileRequest, base::Unretained(this)));
+    test_server_.RegisterRequestHandler(base::BindRepeating(
+        &DriveApiRequestsTest::HandleDeleteRequest, base::Unretained(this)));
+    test_server_.RegisterRequestHandler(base::BindRepeating(
+        &DriveApiRequestsTest::HandlePreconditionFailedRequest,
+        base::Unretained(this)));
     test_server_.RegisterRequestHandler(
-        base::Bind(&DriveApiRequestsTest::HandleDataFileRequest,
-                   base::Unretained(this)));
+        base::BindRepeating(&DriveApiRequestsTest::HandleResumeUploadRequest,
+                            base::Unretained(this)));
     test_server_.RegisterRequestHandler(
-        base::Bind(&DriveApiRequestsTest::HandleDeleteRequest,
-                   base::Unretained(this)));
+        base::BindRepeating(&DriveApiRequestsTest::HandleInitiateUploadRequest,
+                            base::Unretained(this)));
+    test_server_.RegisterRequestHandler(base::BindRepeating(
+        &DriveApiRequestsTest::HandleContentResponse, base::Unretained(this)));
+    test_server_.RegisterRequestHandler(base::BindRepeating(
+        &DriveApiRequestsTest::HandleDownloadRequest, base::Unretained(this)));
     test_server_.RegisterRequestHandler(
-        base::Bind(&DriveApiRequestsTest::HandlePreconditionFailedRequest,
-                   base::Unretained(this)));
-    test_server_.RegisterRequestHandler(
-        base::Bind(&DriveApiRequestsTest::HandleResumeUploadRequest,
-                   base::Unretained(this)));
-    test_server_.RegisterRequestHandler(
-        base::Bind(&DriveApiRequestsTest::HandleInitiateUploadRequest,
-                   base::Unretained(this)));
-    test_server_.RegisterRequestHandler(
-        base::Bind(&DriveApiRequestsTest::HandleContentResponse,
-                   base::Unretained(this)));
-    test_server_.RegisterRequestHandler(
-        base::Bind(&DriveApiRequestsTest::HandleDownloadRequest,
-                   base::Unretained(this)));
-    test_server_.RegisterRequestHandler(
-        base::Bind(&DriveApiRequestsTest::HandleBatchUploadRequest,
-                   base::Unretained(this)));
+        base::BindRepeating(&DriveApiRequestsTest::HandleBatchUploadRequest,
+                            base::Unretained(this)));
     ASSERT_TRUE(test_server_.Start());
 
     GURL test_base_url = test_util::GetBaseUrlForTesting(test_server_.port());
-    url_generator_.reset(
-        new DriveApiUrlGenerator(test_base_url, test_base_url));
+    url_generator_ =
+        std::make_unique<DriveApiUrlGenerator>(test_base_url, test_base_url);
 
     // Reset the server's expected behavior just in case.
     ResetExpectedResponse();
@@ -227,7 +230,6 @@ class DriveApiRequestsTest : public testing::Test {
   std::unique_ptr<RequestSender> request_sender_;
   std::unique_ptr<DriveApiUrlGenerator> url_generator_;
   std::unique_ptr<network::mojom::NetworkService> network_service_;
-  std::unique_ptr<network::mojom::NetworkServiceClient> network_service_client_;
   std::unique_ptr<network::mojom::NetworkContextClient> network_context_client_;
   mojo::Remote<network::mojom::NetworkContext> network_context_;
   mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory_;
@@ -276,7 +278,7 @@ class DriveApiRequestsTest : public testing::Test {
         request.relative_url.find("/children/") == std::string::npos) {
       // The request is not the "Children: delete" request. Delegate the
       // processing to the next handler.
-      return std::unique_ptr<net::test_server::HttpResponse>();
+      return nullptr;
     }
 
     http_request_ = request;
@@ -297,7 +299,7 @@ class DriveApiRequestsTest : public testing::Test {
     if (expected_data_file_path_.empty()) {
       // The file is not specified. Delegate the processing to the next
       // handler.
-      return std::unique_ptr<net::test_server::HttpResponse>();
+      return nullptr;
     }
 
     http_request_ = request;
@@ -314,7 +316,7 @@ class DriveApiRequestsTest : public testing::Test {
         request.relative_url.find("/files/") == std::string::npos) {
       // The file is not file deletion request. Delegate the processing to the
       // next handler.
-      return std::unique_ptr<net::test_server::HttpResponse>();
+      return nullptr;
     }
 
     http_request_ = request;
@@ -335,7 +337,7 @@ class DriveApiRequestsTest : public testing::Test {
       const net::test_server::HttpRequest& request) {
     if (expected_precondition_failed_file_path_.empty()) {
       // The file is not specified. Delegate the process to the next handler.
-      return std::unique_ptr<net::test_server::HttpResponse>();
+      return nullptr;
     }
 
     http_request_ = request;
@@ -365,7 +367,7 @@ class DriveApiRequestsTest : public testing::Test {
         expected_upload_path_.empty()) {
       // The request is for resume uploading or the expected upload url is not
       // set. Delegate the processing to the next handler.
-      return std::unique_ptr<net::test_server::HttpResponse>();
+      return nullptr;
     }
 
     http_request_ = request;
@@ -378,7 +380,7 @@ class DriveApiRequestsTest : public testing::Test {
     auto found = request.headers.find("X-Upload-Content-Length");
     if (found == request.headers.end() ||
         !base::StringToInt64(found->second, &content_length_)) {
-      return std::unique_ptr<net::test_server::HttpResponse>();
+      return nullptr;
     }
     received_bytes_ = 0;
 
@@ -394,7 +396,7 @@ class DriveApiRequestsTest : public testing::Test {
     if (request.relative_url != expected_upload_path_) {
       // The request path is different from the expected path for uploading.
       // Delegate the processing to the next handler.
-      return std::unique_ptr<net::test_server::HttpResponse>();
+      return nullptr;
     }
 
     http_request_ = request;
@@ -403,7 +405,7 @@ class DriveApiRequestsTest : public testing::Test {
       auto iter = request.headers.find("Content-Range");
       if (iter == request.headers.end()) {
         // The range must be set.
-        return std::unique_ptr<net::test_server::HttpResponse>();
+        return nullptr;
       }
 
       int64_t length = 0;
@@ -412,7 +414,7 @@ class DriveApiRequestsTest : public testing::Test {
       if (!test_util::ParseContentRangeHeader(
               iter->second, &start_position, &end_position, &length)) {
         // Invalid "Content-Range" value.
-        return std::unique_ptr<net::test_server::HttpResponse>();
+        return nullptr;
       }
 
       EXPECT_EQ(start_position, received_bytes_);
@@ -461,7 +463,7 @@ class DriveApiRequestsTest : public testing::Test {
     if (expected_content_type_.empty() || expected_content_.empty()) {
       // Expected content is not set. Delegate the processing to the next
       // handler.
-      return std::unique_ptr<net::test_server::HttpResponse>();
+      return nullptr;
     }
 
     http_request_ = request;
@@ -484,7 +486,7 @@ class DriveApiRequestsTest : public testing::Test {
     if (!test_util::RemovePrefix(
           absolute_url.path(), kTestDownloadPathPrefix, &id) ||
         absolute_url.query() != kTestDownloadFileQuery) {
-      return std::unique_ptr<net::test_server::HttpResponse>();
+      return nullptr;
     }
 
     // For testing, returns a text with |id| repeated 3 times.
@@ -503,7 +505,7 @@ class DriveApiRequestsTest : public testing::Test {
     const GURL absolute_url = test_server_.GetURL(request.relative_url);
     std::string id;
     if (absolute_url.path() != "/upload/drive")
-      return std::unique_ptr<net::test_server::HttpResponse>();
+      return nullptr;
 
     std::unique_ptr<net::test_server::BasicHttpResponse> response(
         new net::test_server::BasicHttpResponse);
@@ -1987,7 +1989,7 @@ TEST_F(DriveApiRequestsTest, DownloadFileRequest_GetContentCallback) {
             test_util::CreateQuitCallback(
                 &run_loop,
                 test_util::CreateCopyResultCallback(&result_code, &temp_file)),
-            base::Bind(&AppendContent, &contents), ProgressCallback());
+            base::BindRepeating(&AppendContent, &contents), ProgressCallback());
     request_sender_->StartRequestWithAuthRetry(std::move(request));
     run_loop.Run();
   }

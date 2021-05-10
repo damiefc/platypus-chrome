@@ -12,7 +12,7 @@
 
 #include "base/android/reached_code_profiler.h"
 #include "base/base_switches.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -43,7 +43,7 @@ class ReachedCodeDataSourceTest : public testing::Test {
     PerfettoTracedProcess::ResetTaskRunnerForTesting();
     PerfettoTracedProcess::GetTaskRunner()->GetOrCreateTaskRunner();
 
-    auto perfetto_wrapper = std::make_unique<PerfettoTaskRunner>(
+    auto perfetto_wrapper = std::make_unique<base::tracing::PerfettoTaskRunner>(
         task_environment_.GetMainThreadTaskRunner());
 
     producer_ =
@@ -56,7 +56,7 @@ class ReachedCodeDataSourceTest : public testing::Test {
   }
 
   void BeginTrace() {
-    ReachedCodeDataSource::Get()->StartTracingWithID(
+    ReachedCodeDataSource::Get()->StartTracing(
         /*data_source_id=*/1, producer_.get(), perfetto::DataSourceConfig());
   }
 

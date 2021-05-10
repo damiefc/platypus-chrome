@@ -14,6 +14,7 @@
 #include "base/sampling_heap_profiler/sampling_heap_profiler.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
+#include "base/trace_event/heap_profiler_allocation_context_tracker.h"
 #include "base/trace_event/heap_profiler_event_filter.h"
 #include "base/trace_event/malloc_dump_provider.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -153,8 +154,6 @@ mojom::AllocatorType ConvertType(
       return mojom::AllocatorType::kMalloc;
     case base::PoissonAllocationSampler::AllocatorType::kPartitionAlloc:
       return mojom::AllocatorType::kPartitionAlloc;
-    case base::PoissonAllocationSampler::AllocatorType::kBlinkGC:
-      return mojom::AllocatorType::kOilpan;
   }
 }
 

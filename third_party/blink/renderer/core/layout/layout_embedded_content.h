@@ -42,20 +42,13 @@ class WebPluginContainerImpl;
 class CORE_EXPORT LayoutEmbeddedContent : public LayoutReplaced {
  public:
   explicit LayoutEmbeddedContent(HTMLFrameOwnerElement*);
-  ~LayoutEmbeddedContent() override;
 
-  bool ContentDocumentIsCompositing() const;
+  bool ContentDocumentContainsGraphicsLayer() const;
 
   bool NodeAtPoint(HitTestResult&,
                    const HitTestLocation&,
                    const PhysicalOffset& accumulated_offset,
                    HitTestAction) override;
-
-  void AddRef() {
-    NOT_DESTROYED();
-    ++ref_count_;
-  }
-  void Release();
 
   // LayoutEmbeddedContent::ChildFrameView returns the LocalFrameView associated
   // with the current Node, if Node is HTMLFrameOwnerElement. This is different
@@ -85,7 +78,6 @@ class CORE_EXPORT LayoutEmbeddedContent : public LayoutReplaced {
   void UpdateLayout() override;
   void PaintReplaced(const PaintInfo&,
                      const PhysicalOffset& paint_offset) const override;
-  void InvalidatePaint(const PaintInvalidatorContext&) const final;
   CursorDirective GetCursor(const PhysicalOffset&, ui::Cursor&) const final;
 
   bool CanBeSelectionLeafInternal() const final {
@@ -106,19 +98,20 @@ class CORE_EXPORT LayoutEmbeddedContent : public LayoutReplaced {
   CompositingReasons AdditionalCompositingReasons() const override;
 
   void WillBeDestroyed() final;
-  void DeleteThis() final;
 
   bool NodeAtPointOverEmbeddedContentView(
       HitTestResult&,
       const HitTestLocation&,
       const PhysicalOffset& accumulated_offset,
       HitTestAction);
-
-  int ref_count_;
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutEmbeddedContent,
-                                IsLayoutEmbeddedContent());
+template <>
+struct DowncastTraits<LayoutEmbeddedContent> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsLayoutEmbeddedContent();
+  }
+};
 
 }  // namespace blink
 

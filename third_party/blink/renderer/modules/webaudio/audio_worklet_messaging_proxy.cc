@@ -10,16 +10,17 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/messaging/message_port.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_global_scope.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_node.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_object_proxy.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_processor.h"
+#include "third_party/blink/renderer/modules/webaudio/cross_thread_audio_worklet_processor_info.h"
 #include "third_party/blink/renderer/modules/webaudio/offline_audio_worklet_thread.h"
 #include "third_party/blink/renderer/modules/webaudio/realtime_audio_worklet_thread.h"
 #include "third_party/blink/renderer/modules/webaudio/semi_realtime_audio_worklet_thread.h"
-#include "third_party/blink/renderer/modules/webaudio/cross_thread_audio_worklet_processor_info.h"
 
 namespace blink {
 
@@ -115,7 +116,7 @@ AudioWorkletMessagingProxy::CreateWorkletThreadWithConstraints(
 
   // If the flag is set, it overrides the default thread priority for
   // subframes. This is only allowed for the experimental purposes, and this
-  // flag will be deprecated in M90.
+  // flag will be deprecated in M90. (See crbug.com/1156842)
   if (is_top_level_frame ||
       base::FeatureList::IsEnabled(features::kAudioWorkletRealtimeThread)) {
     return std::make_unique<RealtimeAudioWorkletThread>(worker_reporting_proxy);

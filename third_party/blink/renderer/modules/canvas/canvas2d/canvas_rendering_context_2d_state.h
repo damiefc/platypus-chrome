@@ -11,7 +11,7 @@
 #include "third_party/blink/renderer/platform/fonts/font_selector_client.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_filter.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_flags.h"
-#include "third_party/blink/renderer/platform/transforms/affine_transform.h"
+#include "third_party/blink/renderer/platform/transforms/transformation_matrix.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -20,9 +20,16 @@ namespace blink {
 
 class BaseRenderingContext2D;
 class CanvasRenderingContext2D;
+class CanvasFilter;
 class CanvasStyle;
 class CSSValue;
 class Element;
+
+enum ShadowMode {
+  kDrawShadowAndForeground,
+  kDrawShadowOnly,
+  kDrawForegroundOnly
+};
 
 class CanvasRenderingContext2DState final
     : public GarbageCollected<CanvasRenderingContext2DState>,
@@ -46,11 +53,6 @@ class CanvasRenderingContext2DState final
   // FontSelectorClient implementation
   void FontsNeedUpdate(FontSelector*, FontInvalidationReason) override;
 
-  bool HasUnrealizedSaves() const { return unrealized_save_count_; }
-  void Save() { ++unrealized_save_count_; }
-  void Restore() { --unrealized_save_count_; }
-  void ResetUnrealizedSaveCount() { unrealized_save_count_ = 0; }
-
   void SetLineDash(const Vector<double>&);
   const Vector<double>& LineDash() const { return line_dash_; }
 
@@ -60,10 +62,10 @@ class CanvasRenderingContext2DState final
   void SetLineDashOffset(double);
   double LineDashOffset() const { return line_dash_offset_; }
 
-  // setTransform returns true iff transform is invertible;
-  void SetTransform(const AffineTransform&);
+  void SetTransform(const TransformationMatrix&);
   void ResetTransform();
-  AffineTransform Transform() const { return transform_; }
+  TransformationMatrix GetTransform() const { return transform_; }
+  AffineTransform GetAffineTransform() const;
   bool IsTransformInvertible() const { return is_transform_invertible_; }
 
   void ClipPath(const SkPath&, AntiAliasingMode);
@@ -72,35 +74,40 @@ class CanvasRenderingContext2DState final
   void PlaybackClips(cc::PaintCanvas* canvas) const {
     clip_list_.Playback(canvas);
   }
-  const SkPath& GetCurrentClipPath() const {
-    return clip_list_.GetCurrentClipPath();
+  SkPath IntersectPathWithClip(const SkPath& path) const {
+    return clip_list_.IntersectPathWithClip(path);
   }
 
   void SetFont(const FontDescription&, FontSelector*);
   const Font& GetFont() const;
   const FontDescription& GetFontDescription() const;
-  bool HasRealizedFont() const { return realized_font_; }
+  inline bool HasRealizedFont() const { return realized_font_; }
   void SetUnparsedFont(const String& font) { unparsed_font_ = font; }
   const String& UnparsedFont() const { return unparsed_font_; }
 
   void SetFontForFilter(const Font& font) { font_for_filter_ = font; }
 
-  void SetFilter(const CSSValue*);
-  void SetUnparsedFilter(const String& filter_string) {
-    unparsed_filter_ = filter_string;
+  void SetCSSFilter(const CSSValue*);
+  void SetUnparsedCSSFilter(const String& filter_string) {
+    unparsed_css_filter_ = filter_string;
   }
-  const String& UnparsedFilter() const { return unparsed_filter_; }
+  const String& UnparsedCSSFilter() const { return unparsed_css_filter_; }
+  void SetCanvasFilter(CanvasFilter* filter_value);
+  CanvasFilter* GetCanvasFilter() const { return canvas_filter_; }
   sk_sp<PaintFilter> GetFilter(Element*,
                                IntSize canvas_size,
-                               CanvasRenderingContext2D*) const;
+                               CanvasRenderingContext2D*);
   sk_sp<PaintFilter> GetFilterForOffscreenCanvas(IntSize canvas_size,
-                                                 BaseRenderingContext2D*) const;
+                                                 BaseRenderingContext2D*);
   bool HasFilterForOffscreenCanvas(IntSize canvas_size,
-                                   BaseRenderingContext2D*) const;
-  bool HasFilter(Element*,
-                 IntSize canvas_size,
-                 CanvasRenderingContext2D*) const;
-  void ClearResolvedFilter() const;
+                                   BaseRenderingContext2D*);
+  bool HasFilter(Element*, IntSize canvas_size, CanvasRenderingContext2D*);
+  ALWAYS_INLINE bool IsFilterUnresolved() const {
+    return filter_state_ == FilterState::kUnresolved;
+  }
+
+  void ClearResolvedFilter();
+  void ValidateFilterState() const;
 
   void SetStrokeStyle(CanvasStyle*);
   CanvasStyle* StrokeStyle() const { return stroke_style_.Get(); }
@@ -129,6 +136,29 @@ class CanvasRenderingContext2DState final
 
   void SetTextBaseline(TextBaseline baseline) { text_baseline_ = baseline; }
   TextBaseline GetTextBaseline() const { return text_baseline_; }
+
+  void SetTextLetterSpacing(float letter_space, FontSelector* selector);
+  float GetTextLetterSpacing() const { return letter_spacing_; }
+
+  void SetTextWordSpacing(float word_space, FontSelector* selector);
+  float GetTextWordSpacing() const { return word_spacing_; }
+
+  void SetTextRendering(TextRenderingMode text_rendering,
+                        FontSelector* selector);
+  TextRenderingMode GetTextRendering() const { return text_rendering_mode_; }
+
+  void SetFontKerning(FontDescription::Kerning font_kerning,
+                      FontSelector* selector);
+  FontDescription::Kerning GetFontKerning() const { return font_kerning_; }
+
+  void SetFontStretch(FontSelectionValue font_stretch, FontSelector* selector);
+  FontSelectionValue GetFontStretch() const { return font_stretch_; }
+
+  void SetFontVariantCaps(FontDescription::FontVariantCaps font_kerning,
+                          FontSelector* selector);
+  FontDescription::FontVariantCaps GetFontVariantCaps() const {
+    return font_variant_caps_;
+  }
 
   void SetLineWidth(double line_width) {
     stroke_flags_.setStrokeWidth(clampTo<float>(line_width));
@@ -200,13 +230,11 @@ class CanvasRenderingContext2DState final
   void UpdateFilterQuality() const;
   void UpdateFilterQualityWithSkFilterQuality(const SkFilterQuality&) const;
   void ShadowParameterChanged();
-  SkDrawLooper* EmptyDrawLooper() const;
-  SkDrawLooper* ShadowOnlyDrawLooper() const;
-  SkDrawLooper* ShadowAndForegroundDrawLooper() const;
-  sk_sp<PaintFilter> ShadowOnlyImageFilter() const;
-  sk_sp<PaintFilter> ShadowAndForegroundImageFilter() const;
-
-  unsigned unrealized_save_count_;
+  sk_sp<SkDrawLooper>& EmptyDrawLooper() const;
+  sk_sp<SkDrawLooper>& ShadowOnlyDrawLooper() const;
+  sk_sp<SkDrawLooper>& ShadowAndForegroundDrawLooper() const;
+  sk_sp<PaintFilter>& ShadowOnlyImageFilter() const;
+  sk_sp<PaintFilter>& ShadowAndForegroundImageFilter() const;
 
   String unparsed_stroke_color_;
   String unparsed_fill_color_;
@@ -227,7 +255,7 @@ class CanvasRenderingContext2DState final
   mutable sk_sp<PaintFilter> shadow_and_foreground_image_filter_;
 
   double global_alpha_;
-  AffineTransform transform_;
+  TransformationMatrix transform_;
   Vector<double> line_dash_;
   double line_dash_offset_;
 
@@ -235,14 +263,29 @@ class CanvasRenderingContext2DState final
   Font font_;
   Font font_for_filter_;
 
-  String unparsed_filter_;
-  Member<const CSSValue> filter_value_;
-  mutable sk_sp<PaintFilter> resolved_filter_;
+  enum class FilterState {
+    kNone,
+    kUnresolved,
+    kResolved,
+    kInvalid,
+  };
+  FilterState filter_state_ = FilterState::kNone;
+  Member<CanvasFilter> canvas_filter_;
+  String unparsed_css_filter_;
+  Member<const CSSValue> css_filter_value_;
+  sk_sp<PaintFilter> resolved_filter_;
 
   // Text state.
   TextAlign text_align_;
-  TextBaseline text_baseline_;
-  Direction direction_;
+  TextBaseline text_baseline_{kAlphabeticTextBaseline};
+  Direction direction_{kDirectionInherit};
+  float letter_spacing_{0};
+  float word_spacing_{0};
+  TextRenderingMode text_rendering_mode_{TextRenderingMode::kAutoTextRendering};
+  FontDescription::Kerning font_kerning_{FontDescription::kAutoKerning};
+  FontSelectionValue font_stretch_{NormalWidthValue()};
+  FontDescription::FontVariantCaps font_variant_caps_{
+      FontDescription::kCapsNormal};
 
   bool realized_font_ : 1;
   bool is_transform_invertible_ : 1;
@@ -262,4 +305,4 @@ class CanvasRenderingContext2DState final
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_MODULES_CANVAS_CANVAS2D_CANVAS_RENDERING_CONTEXT_2D_STATE_H_

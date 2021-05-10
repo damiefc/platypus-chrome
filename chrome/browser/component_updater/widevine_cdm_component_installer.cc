@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <memory>
 #include <string>
 #include <utility>
@@ -18,11 +19,13 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/native_library.h"
+#include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/common/media/cdm_manifest.h"
+#include "build/chromeos_buildflags.h"
+#include "components/cdm/common/cdm_manifest.h"
 #include "components/component_updater/component_installer.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/version_info/version_info.h"
@@ -30,7 +33,9 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cdm_registry.h"
 #include "content/public/common/cdm_info.h"
+#include "content/public/common/content_paths.h"
 #include "crypto/sha2.h"
+#include "media/cdm/cdm_capability.h"
 #include "third_party/widevine/cdm/buildflags.h"
 #include "third_party/widevine/cdm/widevine_cdm_common.h"
 
@@ -63,9 +68,9 @@ const char kWidevineCdmPlatform[] =
     "mac";
 #elif defined(OS_WIN)
     "win";
-#elif defined(OS_CHROMEOS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
     "cros";
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
     "linux";
 #else
 #error This file should only be included for supported platforms.
@@ -102,29 +107,37 @@ base::FilePath GetPlatformDirectory(const base::FilePath& base_path) {
 // file so that startup can load this new version next time.
 void RegisterWidevineCdmWithChrome(
     const base::Version& cdm_version,
-    const base::FilePath& cdm_install_dir,
+    const base::FilePath& cdm_path,
     std::unique_ptr<base::DictionaryValue> manifest) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // This check must be a subset of the check in VerifyInstallation() to
   // avoid the case where the CDM is accepted by the component updater
   // but not registered.
-  content::CdmCapability capability;
+  media::CdmCapability capability;
   if (!ParseCdmManifest(*manifest, &capability)) {
     VLOG(1) << "Not registering Widevine CDM due to malformed manifest.";
     return;
   }
 
   VLOG(1) << "Register Widevine CDM with Chrome";
-  const base::FilePath cdm_path =
-      GetPlatformDirectory(cdm_install_dir)
-          .AppendASCII(base::GetNativeLibraryName(kWidevineCdmLibraryName));
-  CdmRegistry::GetInstance()->RegisterCdm(
-      content::CdmInfo(kWidevineCdmDisplayName, kWidevineCdmGuid, cdm_version,
-                       cdm_path, kWidevineCdmFileSystemId,
-                       std::move(capability), kWidevineKeySystem, false));
+  content::CdmInfo cdm_info(
+      kWidevineKeySystem, content::CdmInfo::Robustness::kSoftwareSecure,
+      std::move(capability), /*supports_sub_key_systems=*/false,
+      kWidevineCdmDisplayName, kWidevineCdmGuid, cdm_version, cdm_path,
+      kWidevineCdmFileSystemId);
+  CdmRegistry::GetInstance()->RegisterCdm(cdm_info);
 }
 #endif  // !defined(OS_LINUX) && !defined(OS_CHROMEOS)
+
+base::FilePath GetCdmPathFromInstallDir(const base::FilePath& install_dir) {
+  base::FilePath cdm_platform_dir = GetPlatformDirectory(install_dir);
+  std::string cdm_lib_name =
+      base::GetNativeLibraryName(kWidevineCdmLibraryName);
+  base::FilePath cdm_path = cdm_platform_dir.AppendASCII(cdm_lib_name);
+
+  return cdm_path;
+}
 
 }  // namespace
 
@@ -150,7 +163,6 @@ class WidevineCdmComponentInstallerPolicy : public ComponentInstallerPolicy {
   void GetHash(std::vector<uint8_t>* hash) const override;
   std::string GetName() const override;
   update_client::InstallerAttributes GetInstallerAttributes() const override;
-  std::vector<std::string> GetMimeTypes() const override;
 
   // Updates CDM path if necessary.
   void UpdateCdmPath(const base::Version& cdm_version,
@@ -197,16 +209,15 @@ void WidevineCdmComponentInstallerPolicy::ComponentReady(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&WidevineCdmComponentInstallerPolicy::UpdateCdmPath,
                      base::Unretained(this), version, path,
-                     base::Passed(&manifest)));
+                     std::move(manifest)));
 }
 
 bool WidevineCdmComponentInstallerPolicy::VerifyInstallation(
     const base::DictionaryValue& manifest,
     const base::FilePath& install_dir) const {
-  const base::FilePath cdm_path =
-      GetPlatformDirectory(install_dir)
-          .AppendASCII(base::GetNativeLibraryName(kWidevineCdmLibraryName));
-  content::CdmCapability capability;
+  base::FilePath cdm_path = GetCdmPathFromInstallDir(install_dir);
+
+  media::CdmCapability capability;
   return IsCdmManifestCompatibleWithChrome(manifest) &&
          base::PathExists(cdm_path) && ParseCdmManifest(manifest, &capability);
 }
@@ -233,11 +244,6 @@ WidevineCdmComponentInstallerPolicy::GetInstallerAttributes() const {
   return update_client::InstallerAttributes();
 }
 
-std::vector<std::string> WidevineCdmComponentInstallerPolicy::GetMimeTypes()
-    const {
-  return std::vector<std::string>();
-}
-
 void WidevineCdmComponentInstallerPolicy::UpdateCdmPath(
     const base::Version& cdm_version,
     const base::FilePath& cdm_install_dir,
@@ -262,7 +268,8 @@ void WidevineCdmComponentInstallerPolicy::UpdateCdmPath(
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&RegisterWidevineCdmWithChrome, cdm_version,
-                     absolute_cdm_install_dir, base::Passed(&manifest)));
+                     GetCdmPathFromInstallDir(absolute_cdm_install_dir),
+                     std::move(manifest)));
 #endif
 }
 

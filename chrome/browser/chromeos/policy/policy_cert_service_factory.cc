@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
 
 #include "base/memory/singleton.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -12,7 +13,6 @@
 #include "chrome/browser/chromeos/policy/policy_cert_service.h"
 #include "chrome/browser/chromeos/policy/user_network_configuration_updater.h"
 #include "chrome/browser/chromeos/policy/user_network_configuration_updater_factory.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
@@ -87,7 +87,8 @@ bool PolicyCertServiceFactory::UsedPolicyCertificates(
     NOTREACHED();
     return false;
   }
-  return list->Find(value) != list->end();
+  // TODO(crbug.com/1187106): Use base::Contains once |list| is not a ListValue.
+  return std::find(list->begin(), list->end(), value) != list->end();
 }
 
 // static

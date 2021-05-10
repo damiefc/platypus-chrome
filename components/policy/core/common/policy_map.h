@@ -13,6 +13,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/optional.h"
@@ -33,6 +34,17 @@ FORWARD_DECLARE_TEST(PolicyMapTest, MergeFrom);
 // A mapping of policy names to policy values for a given policy namespace.
 class POLICY_EXPORT PolicyMap {
  public:
+  // Types of messages that can be associated with policies. New types must be
+  // added here in order to appear in the policy table.
+  enum class MessageType { kInfo, kWarning, kError };
+
+  // Types of conflicts that can be associated with policies. New conflict types
+  // must be added here in order to appear in the policy table.
+  enum class ConflictType { None, Override, Supersede };
+
+  // Forward declare class so that it can be used in Entry.
+  class EntryConflict;
+
   // Each policy maps to an Entry which keeps the policy value as well as other
   // relevant data about the policy.
   class POLICY_EXPORT Entry {
@@ -42,7 +54,7 @@ class POLICY_EXPORT PolicyMap {
     // For debugging and displaying only. Set by provider delivering the policy.
     PolicySource source = POLICY_SOURCE_ENTERPRISE_DEFAULT;
     std::unique_ptr<ExternalDataFetcher> external_data_fetcher;
-    std::vector<Entry> conflicts;
+    std::vector<EntryConflict> conflicts;
 
     Entry();
     Entry(PolicyLevel level,
@@ -70,13 +82,17 @@ class POLICY_EXPORT PolicyMap {
     // Returns true if |this| equals |other|.
     bool Equals(const Entry& other) const;
 
-    // Add a non-localized error given its UTF-8 string contents.
-    void AddError(base::StringPiece error);
-    // Add a localized error given its l10n message ID.
-    void AddError(int message_id);
+    // Add a localized message given its l10n message ID.
+    void AddMessage(MessageType type, int message_id);
 
-    // Add a localized error given its l10n message ID.
-    void AddWarning(int message_id);
+    // Add a localized message given its l10n message ID and placeholder
+    // args.
+    void AddMessage(MessageType type,
+                    int message_id,
+                    std::vector<std::u16string>&& message_args);
+
+    // Clear a message of a specific type given its l10n message ID.
+    void ClearMessage(MessageType type, int message_id);
 
     // Adds a conflicting policy.
     void AddConflictingPolicy(Entry&& conflict);
@@ -102,25 +118,55 @@ class POLICY_EXPORT PolicyMap {
     void SetIgnoredByPolicyAtomicGroup();
     bool IsIgnoredByAtomicGroup() const;
 
+    // Sets that the policy's value is a default value set by the policy
+    // provider.
+    void SetIsDefaultValue();
+    bool IsDefaultValue() const;
+
     // Callback used to look up a localized string given its l10n message ID. It
     // should return a UTF-16 string.
-    typedef base::RepeatingCallback<base::string16(int message_id)>
+    typedef base::RepeatingCallback<std::u16string(int message_id)>
         L10nLookupFunction;
 
-    // Returns localized errors added through AddError(), as UTF-16, and
-    // separated with LF characters.
-    base::string16 GetLocalizedErrors(L10nLookupFunction lookup) const;
+    // Returns true if there is any message for |type|.
+    bool HasMessage(MessageType type) const;
 
-    // Returns localized warnings added through AddWarning(), as UTF-16, and
-    // separated with LF characters.
-    base::string16 GetLocalizedWarnings(L10nLookupFunction lookup) const;
+    // Returns localized messages as UTF-16 separated with LF characters. The
+    // messages are organized according to message types (Warning, Error, etc).
+    std::u16string GetLocalizedMessages(MessageType type,
+                                        L10nLookupFunction lookup) const;
 
    private:
     base::Optional<base::Value> value_;
     bool ignored_ = false;
-    std::string error_strings_;
-    std::set<int> error_message_ids_;
-    std::set<int> warning_message_ids_;
+    bool is_default_value_ = false;
+
+    // Stores all message IDs separated by message types.
+    std::map<MessageType,
+             std::map<int, base::Optional<std::vector<std::u16string>>>>
+        message_ids_;
+  };
+
+  // Associates an Entry with a ConflictType.
+  class POLICY_EXPORT EntryConflict {
+   public:
+    EntryConflict();
+    EntryConflict(ConflictType type, Entry&& entry);
+    ~EntryConflict();
+
+    EntryConflict(EntryConflict&&) noexcept;
+    EntryConflict& operator=(EntryConflict&&) noexcept;
+
+    // Accessor methods for conflict type.
+    void SetConflictType(ConflictType type);
+    ConflictType conflict_type() const;
+
+    // Accessor method for entry.
+    const Entry& entry() const;
+
+   private:
+    ConflictType conflict_type_;
+    Entry entry_;
   };
 
   typedef std::map<std::string, Entry> PolicyMapType;
@@ -128,7 +174,11 @@ class POLICY_EXPORT PolicyMap {
   typedef PolicyMapType::iterator iterator;
 
   PolicyMap();
-  virtual ~PolicyMap();
+  PolicyMap(const PolicyMap&) = delete;
+  PolicyMap& operator=(const PolicyMap&) = delete;
+  PolicyMap(PolicyMap&& other) noexcept;
+  PolicyMap& operator=(PolicyMap&& other) noexcept;
+  ~PolicyMap();
 
   // Returns a weak reference to the entry currently stored for key |policy|,
   // or NULL if untrusted or not found. Ownership is retained by the PolicyMap.
@@ -152,15 +202,21 @@ class POLICY_EXPORT PolicyMap {
 
   void Set(const std::string& policy, Entry entry);
 
-  // Adds non-localized |error| to the map for the key |policy| that should be
-  // shown to the user alongside the value in the policy UI. This should only be
-  // called for policies that are already stored in this map.
-  void AddError(const std::string& policy, const std::string& error);
-
-  // Adds a localized error with |message_id| to the map for the key |policy|
+  // Adds a localized message with |message_id| to the map for the key |policy|
   // that should be shown to the user alongisde the value in the policy UI. This
   // should only be called for policies that are already stored in the map.
-  void AddError(const std::string& policy, int message_id);
+  void AddMessage(const std::string& policy, MessageType type, int message_id);
+
+  // Adds a localized message with |message_id| and placeholder arguments
+  // |message_args| to the map for the key |policy| that should be shown to the
+  // user alongisde the value in the policy UI. The number of placeholders in
+  // the policy string corresponding to |message_id| must be equal to the number
+  // of arguments in |message_args|. This should only be called for policies
+  // that are already stored in the map.
+  void AddMessage(const std::string& policy,
+                  MessageType type,
+                  int message_id,
+                  std::vector<std::u16string>&& message_args);
 
   // Return True if the policy is set but its value is ignored because it does
   // not share the highest priority from its atomic group. Returns False if the
@@ -188,11 +244,8 @@ class POLICY_EXPORT PolicyMap {
   // Swaps the internal representation of |this| with |other|.
   void Swap(PolicyMap* other);
 
-  // |this| becomes a copy of |other|. Any existing policies are dropped.
-  void CopyFrom(const PolicyMap& other);
-
   // Returns a copy of |this|.
-  std::unique_ptr<PolicyMap> DeepCopy() const;
+  PolicyMap Clone() const;
 
   // Merges policies from |other| into |this|. Existing policies are only
   // overridden by those in |other| if they have a higher priority, as defined
@@ -211,12 +264,21 @@ class POLICY_EXPORT PolicyMap {
                 PolicyScope scope,
                 PolicySource source);
 
-  // Compares this value map against |other| and stores all key names that have
-  // different values or reference different external data in |differing_keys|.
-  // This includes keys that are present only in one of the maps.
-  // |differing_keys| is not cleared before the keys are added.
-  void GetDifferingKeys(const PolicyMap& other,
-                        std::set<std::string>* differing_keys) const;
+  // Returns True if at least one shared ID is found in the user and device
+  // affiliation ID sets.
+  bool IsUserAffiliated() const;
+
+  // Populates the set containing user affiliation ID strings.
+  void SetUserAffiliationIds(const base::flat_set<std::string>& user_ids);
+
+  // Returns the set containing user affiliation ID strings.
+  const base::flat_set<std::string>& GetUserAffiliationIds() const;
+
+  // Populates the set containing device affiliation ID strings.
+  void SetDeviceAffiliationIds(const base::flat_set<std::string>& device_ids);
+
+  // Returns the set containing device affiliation ID strings.
+  const base::flat_set<std::string>& GetDeviceAffiliationIds() const;
 
   bool Equals(const PolicyMap& other) const;
   bool empty() const;
@@ -249,9 +311,11 @@ class POLICY_EXPORT PolicyMap {
 
   PolicyMapType map_;
 
-  DISALLOW_COPY_AND_ASSIGN(PolicyMap);
+  // Affiliation
+  bool is_user_affiliated_ = false;
+  base::flat_set<std::string> user_affiliation_ids_;
+  base::flat_set<std::string> device_affiliation_ids_;
 };
-
 }  // namespace policy
 
 #endif  // COMPONENTS_POLICY_CORE_COMMON_POLICY_MAP_H_

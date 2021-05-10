@@ -4,11 +4,11 @@
 
 #include <memory>
 
-#include "ash/login/ui/login_user_menu_view.h"
 #include "ash/login/ui/login_button.h"
 #include "ash/login/ui/login_test_base.h"
+#include "ash/login/ui/login_user_menu_view.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/user_manager/user_type.h"
 #include "ui/events/test/event_generator.h"
@@ -114,7 +114,8 @@ TEST_F(LoginUserMenuViewTest, LoginButtonRipple) {
   container->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
 
-  LoginButton* bubble_opener = new LoginButton(nullptr /*listener*/);
+  LoginButton* bubble_opener =
+      new LoginButton(views::Button::PressedCallback());
   bubble_opener->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
   bubble_opener->SetPreferredSize(
       gfx::Size(kBubbleAnchorViewSizeDp, kBubbleAnchorViewSizeDp));
@@ -122,9 +123,8 @@ TEST_F(LoginUserMenuViewTest, LoginButtonRipple) {
   container->AddChildView(bubble_opener);
   SetWidget(CreateWidgetWithContent(container));
 
-  views::test::InkDropHostViewTestApi ink_drop_api(bubble_opener);
-  EXPECT_EQ(ink_drop_api.ink_drop_mode(),
-            views::InkDropHostView::InkDropMode::ON);
+  views::test::InkDropHostTestApi ink_drop_api(bubble_opener->ink_drop());
+  EXPECT_EQ(ink_drop_api.ink_drop_mode(), views::InkDropHost::InkDropMode::ON);
   EXPECT_TRUE(ink_drop_api.HasInkDrop());
 
   auto* bubble = new LoginUserMenuView(LoginUserInfo(), container /*anchor*/,

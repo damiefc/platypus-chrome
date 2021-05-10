@@ -12,8 +12,6 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/optional.h"
 #include "chrome/browser/notifications/notification_platform_bridge_delegate.h"
-#include "chromeos/crosapi/cpp/bitmap.h"
-#include "chromeos/crosapi/cpp/bitmap_util.h"
 #include "chromeos/crosapi/mojom/message_center.mojom.h"
 #include "chromeos/crosapi/mojom/notification.mojom.h"
 #include "ui/message_center/public/cpp/notification.h"
@@ -59,29 +57,18 @@ crosapi::mojom::NotificationPtr ToMojo(
   mojo_note->message = notification.message();
   mojo_note->display_source = notification.display_source();
   mojo_note->origin_url = notification.origin_url();
-  if (!notification.icon().IsEmpty()) {
-    // TODO(https://crbug.com/1123969): Don't send the deprecated field after
-    // ash M87 beta.
-    SkBitmap icon = notification.icon().AsBitmap();
-    mojo_note->deprecated_icon = crosapi::BitmapFromSkBitmap(icon);
+  if (!notification.icon().IsEmpty())
     mojo_note->icon = notification.icon().AsImageSkia();
-  }
   mojo_note->priority = base::ClampToRange(notification.priority(), -2, 2);
   mojo_note->require_interaction = notification.never_timeout();
   mojo_note->timestamp = notification.timestamp();
-  if (!notification.image().IsEmpty()) {
-    // TODO(https://crbug.com/1123969): Don't send the deprecated field after
-    // ash M87 beta.
-    SkBitmap image = notification.image().AsBitmap();
-    mojo_note->deprecated_image = crosapi::BitmapFromSkBitmap(image);
+  if (!notification.image().IsEmpty())
     mojo_note->image = notification.image().AsImageSkia();
-  }
   if (!notification.small_image().IsEmpty()) {
-    // TODO(https://crbug.com/1123969): Don't send the deprecated field after
-    // ash M87 beta.
-    SkBitmap badge = notification.small_image().AsBitmap();
-    mojo_note->deprecated_badge = crosapi::BitmapFromSkBitmap(badge);
     mojo_note->badge = notification.small_image().AsImageSkia();
+    mojo_note->badge_needs_additional_masking_has_value = true;
+    mojo_note->badge_needs_additional_masking =
+        notification.small_image_needs_additional_masking();
   }
   for (const auto& item : notification.items()) {
     auto mojo_item = crosapi::mojom::NotificationItem::New();

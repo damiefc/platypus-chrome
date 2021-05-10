@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_raster_invalidator.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_artifact.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller_test.h"
@@ -24,13 +24,14 @@ class DisplayItemRasterInvalidatorTest : public PaintControllerTestBase,
   Vector<RasterInvalidationInfo> GenerateRasterInvalidations() {
     GetPaintController().CommitNewDisplayItems();
     invalidator_.Generate(
-        base::DoNothing(), GetPaintController().GetPaintArtifactShared(),
+        base::DoNothing(),
+        PaintChunkSubset(GetPaintController().GetPaintArtifactShared()),
         // The layer rect is big enough not to clip display item raster
-        // invalidation rects.
+        // invalidation rects in the tests.
         IntRect(0, 0, 20000, 20000), PropertyTreeState::Root());
     GetPaintController().FinishCycle();
-    GetPaintController().ClearPropertyTreeChangedStateTo(
-        PropertyTreeState::Root());
+    for (auto& chunk : GetPaintController().PaintChunks())
+      chunk.properties.ClearChangedTo(PropertyTreeState::Root());
 
     if (invalidator_.GetTracking())
       return invalidator_.GetTracking()->Invalidations();
@@ -633,60 +634,6 @@ TEST_P(DisplayItemRasterInvalidatorTest, PartialSkipCache) {
       UnorderedElementsAre(RasterInvalidationInfo{
           &content, "content", UnionRect(rect1, UnionRect(rect2, rect3)),
           PaintInvalidationReason::kUncacheable}));
-  invalidator_.SetTracksRasterInvalidations(false);
-}
-
-TEST_P(DisplayItemRasterInvalidatorTest, Partial) {
-  FakeDisplayItemClient client("client");
-  GraphicsContext context(GetPaintController());
-
-  InitRootChunk();
-  DrawRect(context, client, kBackgroundType, IntRect(100, 100, 300, 300));
-  GenerateRasterInvalidations();
-
-  // Test partial rect invalidation without other invalidations.
-  invalidator_.SetTracksRasterInvalidations(true);
-  InitRootChunk();
-  client.SetPartialInvalidationVisualRect(IntRect(150, 160, 170, 180));
-  DrawRect(context, client, kBackgroundType, IntRect(100, 100, 300, 300));
-
-  // Partial invalidation.
-  EXPECT_THAT(GenerateRasterInvalidations(),
-              UnorderedElementsAre(RasterInvalidationInfo{
-                  &client, "client", IntRect(150, 160, 170, 180),
-                  PaintInvalidationReason::kRectangle}));
-  EXPECT_EQ(IntRect(), client.PartialInvalidationVisualRect());
-  invalidator_.SetTracksRasterInvalidations(false);
-
-  // Test partial rect invalidation with full invalidation.
-  invalidator_.SetTracksRasterInvalidations(true);
-  InitRootChunk();
-  client.SetPartialInvalidationVisualRect(IntRect(150, 160, 170, 180));
-  client.Invalidate();
-  DrawRect(context, client, kBackgroundType, IntRect(100, 100, 300, 300));
-
-  // Partial invalidation is shadowed by full invalidation.
-  EXPECT_THAT(GenerateRasterInvalidations(),
-              UnorderedElementsAre(RasterInvalidationInfo{
-                  &client, "client", IntRect(100, 100, 300, 300),
-                  PaintInvalidationReason::kFull}));
-  EXPECT_EQ(IntRect(), client.PartialInvalidationVisualRect());
-  invalidator_.SetTracksRasterInvalidations(false);
-
-  // Test partial rect invalidation with incremental invalidation.
-  invalidator_.SetTracksRasterInvalidations(true);
-  InitRootChunk();
-  client.SetPartialInvalidationVisualRect(IntRect(150, 160, 170, 180));
-  DrawRect(context, client, kBackgroundType, IntRect(100, 100, 300, 400));
-
-  // Both partial invalidation and incremental invalidation.
-  EXPECT_THAT(
-      GenerateRasterInvalidations(),
-      UnorderedElementsAre(
-          RasterInvalidationInfo{&client, "client", IntRect(150, 160, 170, 180),
-                                 PaintInvalidationReason::kRectangle},
-          RasterInvalidationInfo{&client, "client", IntRect(100, 400, 300, 100),
-                                 PaintInvalidationReason::kIncremental}));
   invalidator_.SetTracksRasterInvalidations(false);
 }
 

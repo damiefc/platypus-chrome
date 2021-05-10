@@ -16,7 +16,7 @@
 #include "components/autofill/content/common/mojom/autofill_agent.mojom.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
 #include "components/autofill/content/renderer/renderer_save_password_progress_logger.h"
-#include "components/autofill/core/common/renderer_id.h"
+#include "components/autofill/core/common/unique_ids.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -54,13 +54,13 @@ class PasswordGenerationAgent : public content::RenderFrameObserver,
           pending_receiver);
 
   // mojom::PasswordGenerationAgent:
-  void GeneratedPasswordAccepted(const base::string16& password) override;
+  void GeneratedPasswordAccepted(const std::u16string& password) override;
   void FoundFormEligibleForGeneration(
       const PasswordFormGenerationData& form) override;
   // Sets |generation_element_| to the focused password field and responds back
   // if the generation was triggered successfully.
-  void UserTriggeredGeneratePassword(
-      UserTriggeredGeneratePasswordCallback callback) override;
+  void TriggeredGeneratePassword(
+      TriggeredGeneratePasswordCallback callback) override;
 
   // Returns true if the field being changed is one where a generated password
   // is being offered. Updates the state of the popup if necessary.
@@ -110,7 +110,7 @@ class PasswordGenerationAgent : public content::RenderFrameObserver,
   // Helper function which takes care of the form processing and collecting the
   // information which is required to show the generation popup. Returns true if
   // all required information is collected.
-  bool SetUpUserTriggeredGeneration();
+  bool SetUpTriggeredGeneration();
 
   // This is called whenever automatic generation could be offered.
   // If manual generation was already requested, automatic generation will

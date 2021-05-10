@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/ui.gni")
 
 if (is_mac) {
@@ -23,7 +24,7 @@ component("idle") {
     "//ui/base",
   ]
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     deps += [ "//chromeos/dbus/session_manager" ]
   }
 
@@ -34,8 +35,13 @@ component("idle") {
     "idle_internal.h",
   ]
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     sources += [ "idle_chromeos.cc" ]
+  }
+
+  if (is_chromeos_lacros) {
+    sources += [ "idle_lacros.cc" ]
+    deps += [ "//chromeos/lacros" ]
   }
 
   if (is_mac) {
@@ -50,17 +56,18 @@ component("idle") {
     sources += [ "idle_fuchsia.cc" ]
   }
 
-  if (is_linux && !is_chromeos) {
+  if (is_linux) {
     sources += [ "idle_linux.cc" ]
   }
 
-  if (use_x11 && !is_chromeos) {
-    deps += [ "//ui/gfx/x" ]
-    sources += [
-      "idle_query_x11.cc",
-      "idle_query_x11.h",
-      "screensaver_window_finder_x11.cc",
-      "screensaver_window_finder_x11.h",
+  if (use_x11 && !is_chromeos_ash) {
+    deps += [ "//ui/base/x" ]
+  }
+
+  if (use_ozone) {
+    deps += [
+      "//ui/base:features",
+      "//ui/display",
     ]
   }
 

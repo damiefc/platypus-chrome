@@ -11,7 +11,6 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/translate/source_language_combobox_model.h"
@@ -24,7 +23,6 @@
 #include "components/translate/core/common/translate_errors.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/base/models/simple_menu_model.h"
-#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -42,7 +40,6 @@ class View;
 }  // namespace views
 
 class TranslateBubbleView : public LocationBarBubbleDelegateView,
-                            public views::ButtonListener,
                             public ui::SimpleMenuModel::Delegate,
                             public views::TabbedPaneListener {
  public:
@@ -90,9 +87,6 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   gfx::Size CalculatePreferredSize() const override;
   void OnWidgetClosing(views::Widget* widget) override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* source, const ui::Event& event) override;
-
   // ui::SimpleMenuModel::Delegate:
   bool IsCommandIdChecked(int command_id) const override;
   bool IsCommandIdEnabled(int command_id) const override;
@@ -107,7 +101,7 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
 
  private:
   enum ButtonID {
-    BUTTON_ID_DONE,
+    BUTTON_ID_DONE = 1,
     BUTTON_ID_TRY_AGAIN,
     BUTTON_ID_ALWAYS_TRANSLATE,
     BUTTON_ID_OPTIONS_MENU,
@@ -120,7 +114,7 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   friend void ::translate::test_utils::PressRevert(::Browser*);
   friend void ::translate::test_utils::SelectTargetLanguageByDisplayName(
       ::Browser*,
-      const ::base::string16&);
+      const ::std::u16string&);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest, TranslateButton);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
                            AlwaysTranslateCheckboxShortcut);
@@ -136,6 +130,8 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
                            OptionsMenuNeverTranslateLanguage);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
                            OptionsMenuRespectsBlocklistSite);
+  FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
+                           MenuOptionsHiddenOnUnknownSource);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
                            OptionsMenuNeverTranslateSite);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
@@ -164,6 +160,8 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   // Handles the event when the user changes an index of a combobox.
   void SourceLanguageChanged();
   void TargetLanguageChanged();
+
+  void AlwaysTranslatePressed();
 
   // Updates the visibilities of child views according to the current view type.
   void UpdateChildVisibilities();
@@ -243,8 +241,8 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
 
   // Retrieve the names of the from/to languages and reset the language
   // indices.
-  void UpdateLanguageNames(base::string16* original_language_name,
-                           base::string16* target_language_name);
+  void UpdateLanguageNames(std::u16string* source_language_name,
+                           std::u16string* target_language_name);
 
   void UpdateInsets(TranslateBubbleModel::ViewState state);
 

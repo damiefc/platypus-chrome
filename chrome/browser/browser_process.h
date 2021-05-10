@@ -19,6 +19,7 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
 #include "media/media_buildflags.h"
 
@@ -29,7 +30,6 @@ class DownloadRequestLimiter;
 class DownloadStatusUpdater;
 class GpuModeManager;
 class IconManager;
-class IntranetRedirectDetector;
 class MediaFileSystemRegistry;
 class NotificationPlatformBridge;
 class NotificationUIManager;
@@ -40,6 +40,10 @@ class SystemNetworkContextManager;
 class WatchDogThread;
 class WebRtcLogUploader;
 class StartupData;
+
+#if !defined(OS_ANDROID)
+class IntranetRedirectDetector;
+#endif
 
 namespace network {
 class NetworkQualityTracker;
@@ -55,7 +59,6 @@ class RulesetService;
 }
 
 namespace federated_learning {
-class FlocBlocklistService;
 class FlocSortingLshClustersService;
 }
 
@@ -65,7 +68,6 @@ class VariationsService;
 
 namespace component_updater {
 class ComponentUpdateService;
-class SupervisedUserWhitelistInstaller;
 }
 
 namespace extensions {
@@ -88,10 +90,6 @@ namespace network_time {
 class NetworkTimeTracker;
 }
 
-namespace optimization_guide {
-class OptimizationGuideService;
-}
-
 namespace policy {
 class ChromeBrowserPolicyConnector;
 class PolicyService;
@@ -101,10 +99,6 @@ namespace printing {
 class BackgroundPrintingManager;
 class PrintJobManager;
 class PrintPreviewDialogController;
-}
-
-namespace rappor {
-class RapporServiceImpl;
 }
 
 namespace resource_coordinator {
@@ -136,7 +130,6 @@ class BrowserProcess {
 
   // Services: any of these getters may return NULL
   virtual metrics::MetricsService* metrics_service() = 0;
-  virtual rappor::RapporServiceImpl* rappor_service() = 0;
   virtual ProfileManager* profile_manager() = 0;
   virtual PrefService* local_state() = 0;
   virtual scoped_refptr<network::SharedURLLoaderFactory>
@@ -190,7 +183,9 @@ class BrowserProcess {
   virtual printing::BackgroundPrintingManager*
       background_printing_manager() = 0;
 
+#if !defined(OS_ANDROID)
   virtual IntranetRedirectDetector* intranet_redirect_detector() = 0;
+#endif
 
   // Returns the locale used by the application. It is the IETF language tag,
   // defined in BCP 47. The region subtag is not included when it adds no
@@ -204,8 +199,10 @@ class BrowserProcess {
 
   // Returns the object that manages background applications.
   virtual BackgroundModeManager* background_mode_manager() = 0;
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
   virtual void set_background_mode_manager_for_test(
       std::unique_ptr<BackgroundModeManager> manager) = 0;
+#endif
 
   // Returns the StatusTray, which provides an API for displaying status icons
   // in the system status tray. Returns NULL if status icons are not supported
@@ -220,25 +217,18 @@ class BrowserProcess {
   virtual subresource_filter::RulesetService*
   subresource_filter_ruleset_service() = 0;
 
-  // Returns the service providing versioned storage for a blocklist of flocs.
-  virtual federated_learning::FlocBlocklistService*
-  floc_blocklist_service() = 0;
-
   // Returns the service providing versioned storage for a list of limit values
   // for calculating the floc based on SortingLSH.
   virtual federated_learning::FlocSortingLshClustersService*
   floc_sorting_lsh_clusters_service() = 0;
 
-  // Returns the service used to provide hints for what optimizations can be
-  // performed on slow page loads.
-  virtual optimization_guide::OptimizationGuideService*
-  optimization_guide_service() = 0;
-
   // Returns the StartupData which owns any pre-created objects in //chrome
   // before the full browser starts.
   virtual StartupData* startup_data() = 0;
 
-#if (defined(OS_WIN) || defined(OS_LINUX)) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if defined(OS_WIN) || (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
   // This will start a timer that, if Chrome is in persistent mode, will check
   // whether an update is available, and if that's the case, restart the
   // browser. Note that restart code will strip some of the command line keys
@@ -250,11 +240,6 @@ class BrowserProcess {
 #endif
 
   virtual component_updater::ComponentUpdateService* component_updater() = 0;
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  virtual component_updater::SupervisedUserWhitelistInstaller*
-  supervised_user_whitelist_installer() = 0;
-#endif
 
   virtual MediaFileSystemRegistry* media_file_system_registry() = 0;
 

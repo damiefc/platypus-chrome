@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/animation/sampled_effect.h"
 #include "third_party/blink/renderer/core/animation/timing_input.h"
+#include "third_party/blink/renderer/core/css/parser/css_selector_parser.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -125,7 +126,7 @@ KeyframeEffect* KeyframeEffect::Create(
     if (element) {
       element->GetDocument().UpdateStyleAndLayoutTreeForNode(element);
       effect->effect_target_ = element->GetPseudoElement(
-          CSSSelector::ParsePseudoId(pseudo, element));
+          CSSSelectorParser::ParsePseudoElement(pseudo, element));
     }
   }
   return effect;
@@ -213,7 +214,7 @@ void KeyframeEffect::RefreshTarget() {
     target_element_->GetDocument().UpdateStyleAndLayoutTreeForNode(
         target_element_);
     PseudoId pseudoId =
-        CSSSelector::ParsePseudoId(target_pseudo_, target_element_);
+        CSSSelectorParser::ParsePseudoElement(target_pseudo_, target_element_);
     new_target = target_element_->GetPseudoElement(pseudoId);
   }
 
@@ -432,7 +433,7 @@ void KeyframeEffect::AttachCompositedLayers() {
   // very special element id for this animation so that the compositor animation
   // system recognize it. We do not use 0 as the element id because 0 is
   // kInvalidElementId.
-  if (compositor_animation && !Model()->HasNonVariableProperty()) {
+  if (compositor_animation && !Model()->RequiresPropertyNode()) {
     compositor_animation->AttachNoElement();
     return;
   }
@@ -456,24 +457,6 @@ void KeyframeEffect::Trace(Visitor* visitor) const {
   AnimationEffect::Trace(visitor);
 }
 
-bool KeyframeEffect::AnimationsPreserveAxisAlignment(
-    const PropertyHandle& property) const {
-  const auto* keyframes = Model()->GetPropertySpecificKeyframes(property);
-  if (!keyframes)
-    return true;
-  for (const auto& keyframe : *keyframes) {
-    const auto* value = keyframe->GetCompositorKeyframeValue();
-    if (!value)
-      continue;
-    DCHECK(value->IsTransform());
-    const auto& transform_operations =
-        To<CompositorKeyframeTransform>(value)->GetTransformOperations();
-    if (!transform_operations.PreservesAxisAlignment())
-      return false;
-  }
-  return true;
-}
-
 namespace {
 
 static const size_t num_transform_properties = 4;
@@ -487,13 +470,83 @@ const CSSProperty** TransformProperties() {
 
 }  // namespace
 
-bool KeyframeEffect::AnimationsPreserveAxisAlignment() const {
+bool KeyframeEffect::UpdateBoxSizeAndCheckTransformAxisAlignment(
+    const FloatSize& box_size) {
   static const auto** properties = TransformProperties();
+  bool preserves_axis_alignment = true;
+  bool has_transform = false;
+  TransformOperation::BoxSizeDependency size_dependencies =
+      TransformOperation::kDependsNone;
   for (size_t i = 0; i < num_transform_properties; i++) {
-    if (!AnimationsPreserveAxisAlignment(PropertyHandle(*properties[i])))
-      return false;
+    const auto* keyframes =
+        Model()->GetPropertySpecificKeyframes(PropertyHandle(*properties[i]));
+    if (!keyframes)
+      continue;
+
+    has_transform = true;
+    for (const auto& keyframe : *keyframes) {
+      const auto* value = keyframe->GetCompositorKeyframeValue();
+      if (!value)
+        continue;
+      const auto& transform_operations =
+          To<CompositorKeyframeTransform>(value)->GetTransformOperations();
+      if (!transform_operations.PreservesAxisAlignment())
+        preserves_axis_alignment = false;
+      size_dependencies = TransformOperation::CombineDependencies(
+          size_dependencies, transform_operations.BoxSizeDependencies());
+    }
   }
 
+  if (!has_transform)
+    return true;
+
+  if (HasAnimation()) {
+    if (effect_target_size_) {
+      if ((size_dependencies & TransformOperation::kDependsWidth) &&
+          (effect_target_size_->Width() != box_size.Width()))
+        RestartRunningAnimationOnCompositor();
+      else if ((size_dependencies & TransformOperation::kDependsHeight) &&
+               (effect_target_size_->Height() != box_size.Height()))
+        RestartRunningAnimationOnCompositor();
+    }
+  }
+
+  effect_target_size_ = box_size;
+
+  return preserves_axis_alignment;
+}
+
+void KeyframeEffect::RestartRunningAnimationOnCompositor() {
+  Animation* animation = GetAnimation();
+  if (!animation)
+    return;
+
+  // No need to to restart an animation that is in the process of starting up,
+  // paused or idle.
+  if (!animation->StartTimeInternal())
+    return;
+
+  animation->RestartAnimationOnCompositor();
+}
+
+bool KeyframeEffect::IsIdentityOrTranslation() const {
+  static const auto** properties = TransformProperties();
+  for (size_t i = 0; i < num_transform_properties; i++) {
+    const auto* keyframes =
+        Model()->GetPropertySpecificKeyframes(PropertyHandle(*properties[i]));
+    if (!keyframes)
+      continue;
+
+    for (const auto& keyframe : *keyframes) {
+      if (const auto* value = keyframe->GetCompositorKeyframeValue()) {
+        if (!To<CompositorKeyframeTransform>(value)
+                 ->GetTransformOperations()
+                 .IsIdentityOrTranslation()) {
+          return false;
+        }
+      }
+    }
+  }
   return true;
 }
 
@@ -724,7 +777,7 @@ void KeyframeEffect::CountAnimatedProperties() const {
     Document& document = target_element_->GetDocument();
     for (const auto& property : model_->Properties()) {
       if (property.IsCSSProperty()) {
-        DCHECK(isValidCSSPropertyID(property.GetCSSProperty().PropertyID()));
+        DCHECK(IsValidCSSPropertyID(property.GetCSSProperty().PropertyID()));
         document.CountAnimatedProperty(property.GetCSSProperty().PropertyID());
       }
     }

@@ -8,8 +8,8 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/values.h"
 #include "components/policy/core/browser/policy_conversions.h"
 #include "components/policy/core/common/policy_map.h"
@@ -41,6 +41,9 @@ void PolicyUIHandler::AddCommonLocalizedStringsToSource(
     web::WebUIIOSDataSource* source) {
   static constexpr webui::LocalizedString kStrings[] = {
       {"conflict", IDS_POLICY_LABEL_CONFLICT},
+      {"superseding", IDS_POLICY_LABEL_SUPERSEDING},
+      {"conflictValue", IDS_POLICY_LABEL_CONFLICT_VALUE},
+      {"supersededValue", IDS_POLICY_LABEL_SUPERSEDED_VALUE},
       {"headerLevel", IDS_POLICY_HEADER_LEVEL},
       {"headerName", IDS_POLICY_HEADER_NAME},
       {"headerScope", IDS_POLICY_HEADER_SCOPE},
@@ -53,6 +56,7 @@ void PolicyUIHandler::AddCommonLocalizedStringsToSource(
       {"error", IDS_POLICY_LABEL_ERROR},
       {"deprecated", IDS_POLICY_LABEL_DEPRECATED},
       {"future", IDS_POLICY_LABEL_FUTURE},
+      {"info", IDS_POLICY_LABEL_INFO},
       {"ignored", IDS_POLICY_LABEL_IGNORED},
       {"notSpecified", IDS_POLICY_NOT_SPECIFIED},
       {"ok", IDS_POLICY_OK},
@@ -62,6 +66,9 @@ void PolicyUIHandler::AddCommonLocalizedStringsToSource(
       {"unknown", IDS_POLICY_UNKNOWN},
       {"unset", IDS_POLICY_UNSET},
       {"value", IDS_POLICY_LABEL_VALUE},
+      {"sourceDefault", IDS_POLICY_SOURCE_DEFAULT},
+      {"loadPoliciesDone", IDS_POLICY_LOAD_POLICIES_DONE},
+      {"loadingPolicies", IDS_POLICY_LOADING_POLICIES},
   };
   source->AddLocalizedStrings(kStrings);
   source->AddLocalizedStrings(policy::kPolicySources);
@@ -136,7 +143,7 @@ void PolicyUIHandler::HandleListenPoliciesUpdates(const base::ListValue* args) {
 }
 
 void PolicyUIHandler::HandleReloadPolicies(const base::ListValue* args) {
-  GetPolicyService()->RefreshPolicies(base::Bind(
+  GetPolicyService()->RefreshPolicies(base::BindOnce(
       &PolicyUIHandler::OnRefreshPoliciesDone, weak_factory_.GetWeakPtr()));
 }
 

@@ -15,6 +15,7 @@
 #include "components/viz/common/resources/bitmap_allocation.h"
 #include "components/viz/common/resources/resource_sizes.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/mask_filter_info.h"
 
 namespace viz {
 namespace {
@@ -340,12 +341,15 @@ void FuzzedCompositorFrameBuilder::ConfigureSharedQuadState(
     SharedQuadState* shared_quad_state,
     const proto::DrawQuad& quad_spec) {
   if (quad_spec.has_sqs()) {
+    base::Optional<gfx::Rect> clip_rect;
+    if (quad_spec.sqs().is_clipped()) {
+      clip_rect = GetRectFromProtobuf(quad_spec.sqs().clip_rect());
+    }
     shared_quad_state->SetAll(
         GetTransformFromProtobuf(quad_spec.sqs().transform()),
         GetRectFromProtobuf(quad_spec.sqs().layer_rect()),
-        GetRectFromProtobuf(quad_spec.sqs().visible_rect()), gfx::RRectF(),
-        GetRectFromProtobuf(quad_spec.sqs().clip_rect()),
-        quad_spec.sqs().is_clipped(), quad_spec.sqs().are_contents_opaque(),
+        GetRectFromProtobuf(quad_spec.sqs().visible_rect()),
+        gfx::MaskFilterInfo(), clip_rect, quad_spec.sqs().are_contents_opaque(),
         Normalize(quad_spec.sqs().opacity()), SkBlendMode::kSrcOver,
         quad_spec.sqs().sorting_context_id());
   } else {
@@ -360,12 +364,11 @@ void FuzzedCompositorFrameBuilder::ConfigureSharedQuadState(
                                                .transform_to_root_target());
     }
 
-    shared_quad_state->SetAll(transform, GetRectFromProtobuf(quad_spec.rect()),
-                              GetRectFromProtobuf(quad_spec.visible_rect()),
-                              gfx::RRectF(), gfx::Rect(), /*is_clipped=*/false,
-                              /*are_contents_opaque=*/true, /*opacity=*/1.0,
-                              SkBlendMode::kSrcOver,
-                              /*sorting_context_id=*/0);
+    shared_quad_state->SetAll(
+        transform, GetRectFromProtobuf(quad_spec.rect()),
+        GetRectFromProtobuf(quad_spec.visible_rect()), gfx::MaskFilterInfo(),
+        /*clip_rect=*/base::nullopt, /*are_contents_opaque=*/true,
+        /*opacity=*/1.0, SkBlendMode::kSrcOver, /*sorting_context_id=*/0);
   }
 }
 

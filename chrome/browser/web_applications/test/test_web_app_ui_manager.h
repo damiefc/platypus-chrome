@@ -7,7 +7,6 @@
 
 #include <map>
 
-#include "base/macros.h"
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
 
 namespace web_app {
@@ -15,9 +14,12 @@ namespace web_app {
 class TestWebAppUiManager : public WebAppUiManager {
  public:
   TestWebAppUiManager();
+  TestWebAppUiManager(const TestWebAppUiManager&) = delete;
+  TestWebAppUiManager& operator=(const TestWebAppUiManager&) = delete;
   ~TestWebAppUiManager() override;
 
-  void SetSubsystems(AppRegistryController* app_registry_controller) override;
+  void SetSubsystems(AppRegistryController* app_registry_controller,
+                     OsIntegrationManager* os_integration_manager) override;
   void Start() override;
   void Shutdown() override;
 
@@ -29,7 +31,7 @@ class TestWebAppUiManager : public WebAppUiManager {
   size_t GetNumWindowsForApp(const AppId& app_id) override;
   void NotifyOnAllAppWindowsClosed(const AppId& app_id,
                                    base::OnceClosure callback) override;
-  void UninstallAndReplaceIfExists(const std::vector<AppId>& from_apps,
+  bool UninstallAndReplaceIfExists(const std::vector<AppId>& from_apps,
                                    const AppId& to_app) override;
   bool CanAddAppToQuickLaunchBar() const override;
   void AddAppToQuickLaunchBar(const AppId& app_id) override;
@@ -43,12 +45,13 @@ class TestWebAppUiManager : public WebAppUiManager {
   void ReparentAppTabToWindow(content::WebContents* contents,
                               const AppId& app_id,
                               bool shortcut_created) override;
+  content::WebContents* NavigateExistingWindow(const AppId& app_id,
+                                               const GURL& url) override;
 
  private:
   std::map<AppId, size_t> app_id_to_num_windows_map_;
   std::map<AppId, AppId> uninstall_and_replace_map_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestWebAppUiManager);
 };
 
 }  // namespace web_app

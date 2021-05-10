@@ -18,9 +18,19 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "context_lost_validating_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "dimension_sets": [
             {
               "device_os": "MMB29Q",
@@ -49,9 +59,19 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "dimension_sets": [
             {
               "device_os": "MMB29Q",
@@ -80,9 +100,19 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "dimension_sets": [
             {
               "device_os": "MMB29Q",
@@ -111,9 +141,19 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "dimension_sets": [
             {
               "device_os": "MMB29Q",
@@ -151,9 +191,19 @@
           "--gerrit-patchset=${patch_set}",
           "--buildbucket-id=${buildbucket_build_id}"
         ],
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "dimension_sets": [
             {
               "device_os": "MMB29Q",
@@ -191,9 +241,19 @@
           "--gerrit-patchset=${patch_set}",
           "--buildbucket-id=${buildbucket_build_id}"
         ],
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "dimension_sets": [
             {
               "device_os": "MMB29Q",
@@ -223,9 +283,19 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "screenshot_sync_validating_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "dimension_sets": [
             {
               "device_os": "MMB29Q",
@@ -254,9 +324,19 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "trace_test",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "dimension_sets": [
             {
               "device_os": "MMB29Q",
@@ -286,9 +366,19 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "webgl_conformance_gles_passthrough_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "dimension_sets": [
             {
               "device_os": "MMB29Q",
@@ -319,9 +409,19 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "webgl_conformance_validating_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "dimension_sets": [
             {
               "device_os": "MMB29Q",
@@ -362,6 +462,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "context_lost_passthrough_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -392,6 +495,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -422,6 +528,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -452,6 +561,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -491,6 +603,9 @@
           "--gerrit-patchset=${patch_set}",
           "--buildbucket-id=${buildbucket_build_id}"
         ],
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -530,6 +645,9 @@
           "--gerrit-patchset=${patch_set}",
           "--buildbucket-id=${buildbucket_build_id}"
         ],
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -561,6 +679,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "screenshot_sync_passthrough_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -591,6 +712,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "trace_test",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -623,6 +747,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "webgl2_conformance_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -655,6 +782,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "webgl_conformance_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -690,6 +820,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "context_lost_passthrough_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -720,6 +853,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -750,6 +886,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -780,6 +919,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -819,6 +961,9 @@
           "--gerrit-patchset=${patch_set}",
           "--buildbucket-id=${buildbucket_build_id}"
         ],
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -858,6 +1003,9 @@
           "--gerrit-patchset=${patch_set}",
           "--buildbucket-id=${buildbucket_build_id}"
         ],
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -889,6 +1037,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "screenshot_sync_passthrough_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -919,6 +1070,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "trace_test",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -951,6 +1105,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "webgl2_conformance_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -983,6 +1140,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "webgl_conformance_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1018,11 +1178,15 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "context_lost_validating_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86-64",
               "gpu": "8086:0a2e",
               "os": "Mac-10.15.5"
             }
@@ -1047,11 +1211,15 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86-64",
               "gpu": "8086:0a2e",
               "os": "Mac-10.15.5"
             }
@@ -1076,11 +1244,15 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86-64",
               "gpu": "8086:0a2e",
               "os": "Mac-10.15.5"
             }
@@ -1105,11 +1277,15 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86-64",
               "gpu": "8086:0a2e",
               "os": "Mac-10.15.5"
             }
@@ -1143,11 +1319,15 @@
           "--gerrit-patchset=${patch_set}",
           "--buildbucket-id=${buildbucket_build_id}"
         ],
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86-64",
               "gpu": "8086:0a2e",
               "os": "Mac-10.15.5"
             }
@@ -1181,11 +1361,15 @@
           "--gerrit-patchset=${patch_set}",
           "--buildbucket-id=${buildbucket_build_id}"
         ],
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86-64",
               "gpu": "8086:0a2e",
               "os": "Mac-10.15.5"
             }
@@ -1211,11 +1395,15 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "screenshot_sync_validating_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86-64",
               "gpu": "8086:0a2e",
               "os": "Mac-10.15.5"
             }
@@ -1240,11 +1428,15 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "trace_test",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86-64",
               "gpu": "8086:0a2e",
               "os": "Mac-10.15.5"
             }
@@ -1271,11 +1463,15 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "webgl2_conformance_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86-64",
               "gpu": "8086:0a2e",
               "os": "Mac-10.15.5"
             }
@@ -1302,11 +1498,15 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "webgl_conformance_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86-64",
               "gpu": "8086:0a2e",
               "os": "Mac-10.15.5"
             }
@@ -1367,6 +1567,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1425,6 +1628,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1481,6 +1687,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1534,6 +1743,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1568,6 +1780,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86-64",
               "os": "Mac-10.13"
             }
           ],
@@ -1590,11 +1803,15 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": "x86-64",
               "os": "Mac-10.13"
             }
           ],
@@ -1622,12 +1839,15 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "os": "Windows-10-15063"
+              "os": "Windows-10-18363"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -1707,6 +1927,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "context_lost_passthrough_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1737,6 +1960,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1767,6 +1993,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1797,6 +2026,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1836,6 +2068,9 @@
           "--gerrit-patchset=${patch_set}",
           "--buildbucket-id=${buildbucket_build_id}"
         ],
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1875,6 +2110,9 @@
           "--gerrit-patchset=${patch_set}",
           "--buildbucket-id=${buildbucket_build_id}"
         ],
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1906,6 +2144,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "screenshot_sync_passthrough_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1936,6 +2177,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "trace_test",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -1968,6 +2212,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "webgl2_conformance_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -2000,6 +2247,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "webgl_conformance_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,

@@ -60,7 +60,6 @@ class FloatQuad;
 class HTMLFrameOwnerElement;
 class HTMLPortalElement;
 class HTMLSlotElement;
-class V0InsertionPoint;
 class InspectedFrames;
 class InspectorHistory;
 class Node;
@@ -258,6 +257,7 @@ class CORE_EXPORT InspectorDOMAgent final
   // Methods called from the InspectorInstrumentation.
   void DomContentLoadedEventFired(LocalFrame*);
   void DidCommitLoad(LocalFrame*, DocumentLoader*);
+  void DidRestoreFromBackForwardCache(LocalFrame*);
   void DidInsertDOMNode(Node*);
   void WillRemoveDOMNode(Node*);
   void WillModifyDOMAttr(Element*,
@@ -272,7 +272,6 @@ class CORE_EXPORT InspectorDOMAgent final
   void DidInvalidateStyleAttr(Node*);
   void DidPushShadowRoot(Element* host, ShadowRoot*);
   void WillPopShadowRoot(Element* host, ShadowRoot*);
-  void DidPerformElementShadowDistribution(Element*);
   void DidPerformSlotDistribution(HTMLSlotElement*);
   void FrameDocumentUpdated(LocalFrame*);
   void FrameOwnerContentUpdated(LocalFrame*, HTMLFrameOwnerElement*);
@@ -363,8 +362,6 @@ class CORE_EXPORT InspectorDOMAgent final
       protocol::Array<protocol::DOM::Node>* flatten_result);
   std::unique_ptr<protocol::Array<protocol::DOM::Node>>
   BuildArrayForPseudoElements(Element*, NodeToIdMap* nodes_map);
-  std::unique_ptr<protocol::Array<protocol::DOM::BackendNode>>
-  BuildArrayForDistributedNodes(V0InsertionPoint*);
   std::unique_ptr<protocol::Array<protocol::DOM::BackendNode>>
   BuildDistributedNodesForSlot(HTMLSlotElement*);
 

@@ -4,6 +4,8 @@
 
 #include "content/renderer/pepper/renderer_ppapi_host_impl.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/check.h"
 #include "base/files/file_path.h"
@@ -11,7 +13,6 @@
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "content/renderer/pepper/fullscreen_container.h"
 #include "content/renderer/pepper/host_globals.h"
 #include "content/renderer/pepper/pepper_browser_connection.h"
 #include "content/renderer/pepper/pepper_graphics_2d_host.h"
@@ -20,13 +21,11 @@
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/pepper/plugin_module.h"
 #include "content/renderer/render_view_impl.h"
-#include "content/renderer/render_widget_fullscreen_pepper.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_platform_file.h"
 #include "ppapi/host/ppapi_host.h"
 #include "ppapi/proxy/host_dispatcher.h"
-#include "third_party/blink/public/common/loader/network_utils.h"
-#include "third_party/blink/public/platform/web_rect.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_element.h"
 #include "third_party/blink/public/web/web_plugin_container.h"
@@ -48,7 +47,8 @@ RendererPpapiHostImpl::RendererPpapiHostImpl(
       dispatcher_(dispatcher),
       is_external_plugin_host_(false) {
   // Hook the PpapiHost up to the dispatcher for out-of-process communication.
-  ppapi_host_.reset(new ppapi::host::PpapiHost(dispatcher, permissions));
+  ppapi_host_ =
+      std::make_unique<ppapi::host::PpapiHost>(dispatcher, permissions);
   ppapi_host_->AddHostFactoryFilter(std::unique_ptr<ppapi::host::HostFactory>(
       new ContentRendererPepperHostFactory(this)));
   dispatcher->AddFilter(ppapi_host_.get());
@@ -61,9 +61,9 @@ RendererPpapiHostImpl::RendererPpapiHostImpl(
     const ppapi::PpapiPermissions& permissions)
     : module_(module), dispatcher_(nullptr), is_external_plugin_host_(false) {
   // Hook the host up to the in-process router.
-  in_process_router_.reset(new PepperInProcessRouter(this));
-  ppapi_host_.reset(new ppapi::host::PpapiHost(
-      in_process_router_->GetRendererToPluginSender(), permissions));
+  in_process_router_ = std::make_unique<PepperInProcessRouter>(this);
+  ppapi_host_ = std::make_unique<ppapi::host::PpapiHost>(
+      in_process_router_->GetRendererToPluginSender(), permissions);
   ppapi_host_->AddHostFactoryFilter(std::unique_ptr<ppapi::host::HostFactory>(
       new ContentRendererPepperHostFactory(this)));
   is_running_in_process_ = true;
@@ -192,10 +192,6 @@ int RendererPpapiHostImpl::GetRoutingIDForWidget(PP_Instance instance) {
   PepperPluginInstanceImpl* plugin_instance = GetAndValidateInstance(instance);
   if (!plugin_instance)
     return 0;
-  if (plugin_instance->flash_fullscreen()) {
-    FullscreenContainer* container = plugin_instance->fullscreen_container();
-    return static_cast<RenderWidgetFullscreenPepper*>(container)->routing_id();
-  }
   return GetRenderViewForInstance(instance)->GetRoutingID();
 }
 
@@ -203,11 +199,8 @@ gfx::Point RendererPpapiHostImpl::PluginPointToRenderFrame(
     PP_Instance instance,
     const gfx::Point& pt) {
   PepperPluginInstanceImpl* plugin_instance = GetAndValidateInstance(instance);
-  if (!plugin_instance || plugin_instance->flash_fullscreen()) {
-    // Flash fullscreen is special in that it renders into its own separate,
-    // dedicated window.  So, do not offset the point.
+  if (!plugin_instance)
     return pt;
-  }
   return gfx::Point((pt.x() + plugin_instance->view_data().rect.point.x) /
                         viewport_to_dip_scale_,
                     (pt.y() + plugin_instance->view_data().rect.point.y) /
@@ -288,7 +281,7 @@ bool RendererPpapiHostImpl::IsSecureContext(PP_Instance pp_instance) const {
   if (!instance)
     return false;
   return instance->GetContainer()->GetDocument().IsSecureContext() &&
-         blink::network_utils::IsOriginSecure(instance->GetPluginURL());
+         network::IsUrlPotentiallyTrustworthy(instance->GetPluginURL());
 }
 
 int RendererPpapiHostImpl::GetPluginChildId() const {

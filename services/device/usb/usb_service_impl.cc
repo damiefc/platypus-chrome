@@ -13,13 +13,13 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
@@ -145,7 +145,7 @@ void SaveStringsAndRunContinuation(
     uint8_t product,
     uint8_t serial_number,
     base::OnceClosure continuation,
-    std::unique_ptr<std::map<uint8_t, base::string16>> string_map) {
+    std::unique_ptr<std::map<uint8_t, std::u16string>> string_map) {
   if (manufacturer != 0)
     device->set_manufacturer_string((*string_map)[manufacturer]);
   if (product != 0)
@@ -183,14 +183,14 @@ void OnDeviceOpenedReadDescriptors(
     base::OnceClosure completion_closure,
     scoped_refptr<UsbDeviceHandle> device_handle) {
   if (device_handle) {
-    std::unique_ptr<std::map<uint8_t, base::string16>> string_map(
-        new std::map<uint8_t, base::string16>());
+    std::unique_ptr<std::map<uint8_t, std::u16string>> string_map(
+        new std::map<uint8_t, std::u16string>());
     if (manufacturer != 0)
-      (*string_map)[manufacturer] = base::string16();
+      (*string_map)[manufacturer] = std::u16string();
     if (product != 0)
-      (*string_map)[product] = base::string16();
+      (*string_map)[product] = std::u16string();
     if (serial_number != 0)
-      (*string_map)[serial_number] = base::string16();
+      (*string_map)[serial_number] = std::u16string();
 
     int count = 0;
     if (!string_map->empty())

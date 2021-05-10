@@ -8,6 +8,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
+#include "ash/system/audio/mic_gain_slider_controller.h"
 #include "ash/system/brightness/unified_brightness_slider_controller.h"
 #include "ash/system/keyboard_brightness/unified_keyboard_brightness_slider_controller.h"
 #include "ash/system/status_area_widget.h"
@@ -17,8 +18,6 @@
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "ui/accessibility/ax_enums.mojom.h"
-
-using chromeos::CrasAudioHandler;
 
 namespace ash {
 
@@ -44,11 +43,13 @@ UnifiedSliderBubbleController::UnifiedSliderBubbleController(
     : tray_(tray) {
   CrasAudioHandler::Get()->AddAudioObserver(this);
   tray_->model()->AddObserver(this);
+  tray_->shelf()->AddObserver(this);
 }
 
 UnifiedSliderBubbleController::~UnifiedSliderBubbleController() {
   CrasAudioHandler::Get()->RemoveAudioObserver(this);
   tray_->model()->RemoveObserver(this);
+  tray_->shelf()->RemoveObserver(this);
   autoclose_.Stop();
   slider_controller_.reset();
   if (bubble_widget_)
@@ -97,6 +98,10 @@ void UnifiedSliderBubbleController::OnOutputMuteChanged(bool mute_on) {
   ShowBubble(SLIDER_TYPE_VOLUME);
 }
 
+void UnifiedSliderBubbleController::OnInputMuteChanged(bool mute_on) {
+  ShowBubble(SLIDER_TYPE_MIC);
+}
+
 void UnifiedSliderBubbleController::OnDisplayBrightnessChanged(bool by_user) {
   if (by_user)
     ShowBubble(SLIDER_TYPE_DISPLAY_BRIGHTNESS);
@@ -111,13 +116,23 @@ void UnifiedSliderBubbleController::OnAudioSettingsButtonClicked() {
   tray_->ShowAudioDetailedViewBubble();
 }
 
+void UnifiedSliderBubbleController::OnShelfWorkAreaInsetsChanged() {
+  if (bubble_view_)
+    bubble_view_->ChangeAnchorRect(tray_->shelf()->GetSystemTrayAnchorRect());
+}
+
 void UnifiedSliderBubbleController::ShowBubble(SliderType slider_type) {
   // Never show slider bubble in kiosk app mode.
   if (Shell::Get()->session_controller()->IsRunningInAppMode())
     return;
 
   if (IsAnyMainBubbleShown()) {
-    tray_->EnsureBubbleExpanded();
+    // Unlike VOLUME and BRIGHTNESS, which are shown in the main bubble view,
+    // MIC slider is shown in the audio details view.
+    if (slider_type == SLIDER_TYPE_MIC)
+      tray_->ShowAudioDetailedViewBubble();
+    else
+      tray_->EnsureBubbleExpanded();
     return;
   }
 
@@ -173,6 +188,7 @@ void UnifiedSliderBubbleController::ShowBubble(SliderType slider_type) {
   init_params.translucent = true;
 
   bubble_view_ = new TrayBubbleView(init_params);
+  bubble_view_->SetCanActivate(false);
   UnifiedSliderView* slider_view =
       static_cast<UnifiedSliderView*>(slider_controller_->CreateView());
   ConfigureSliderViewStyle(slider_view);
@@ -197,8 +213,8 @@ void UnifiedSliderBubbleController::ShowBubble(SliderType slider_type) {
 void UnifiedSliderBubbleController::CreateSliderController() {
   switch (slider_type_) {
     case SLIDER_TYPE_VOLUME:
-      slider_controller_ =
-          std::make_unique<UnifiedVolumeSliderController>(this);
+      slider_controller_ = std::make_unique<UnifiedVolumeSliderController>(
+          this, true /* in_bubble */);
       return;
     case SLIDER_TYPE_DISPLAY_BRIGHTNESS:
       slider_controller_ =
@@ -209,6 +225,8 @@ void UnifiedSliderBubbleController::CreateSliderController() {
           std::make_unique<UnifiedKeyboardBrightnessSliderController>(
               tray_->model());
       return;
+    case SLIDER_TYPE_MIC:
+      slider_controller_ = std::make_unique<MicGainSliderController>();
   }
 }
 

@@ -7,7 +7,6 @@
 #include "base/callback.h"
 #include "base/check_op.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/nullable_string16.h"
 #include "base/strings/string_piece.h"
 #include "chrome/browser/extensions/api/notifications/extension_notification_display_helper.h"
 #include "chrome/browser/extensions/api/notifications/extension_notification_display_helper_factory.h"
@@ -53,7 +52,7 @@ ExtensionNotificationHandler::~ExtensionNotificationHandler() = default;
 std::string ExtensionNotificationHandler::GetExtensionId(const GURL& url) {
   if (!url.is_valid() || !url.SchemeIs(extensions::kExtensionScheme))
     return "";
-  return url.GetOrigin().host_piece().as_string();
+  return std::string(url.GetOrigin().host_piece());
 }
 
 void ExtensionNotificationHandler::OnClose(
@@ -87,7 +86,7 @@ void ExtensionNotificationHandler::OnClick(
     const GURL& origin,
     const std::string& notification_id,
     const base::Optional<int>& action_index,
-    const base::Optional<base::string16>& reply,
+    const base::Optional<std::u16string>& reply,
     base::OnceClosure completed_closure) {
   DCHECK(!reply.has_value());
 

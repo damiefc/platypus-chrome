@@ -18,7 +18,6 @@
 #include "base/mac/foundation_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "build/branding_buildflags.h"
 #include "components/crash/core/app/crash_reporter_client.h"
@@ -56,10 +55,25 @@ std::map<std::string, std::string> GetProcessSimpleAnnotations() {
 #endif
       NSString* channel = base::mac::ObjCCast<NSString>(
           [outer_bundle objectForInfoDictionaryKey:@"KSChannelID"]);
-      if (channel) {
-        process_annotations["channel"] = base::SysNSStringToUTF8(channel);
-      } else if (allow_empty_channel) {
-        process_annotations["channel"] = "";
+      if (!channel || [channel isEqual:@"arm64"] ||
+          [channel isEqual:@"universal"]) {
+        if (allow_empty_channel)
+          process_annotations["channel"] = "";
+      } else {
+        if ([channel hasPrefix:@"arm64-"])
+          channel = [channel substringFromIndex:[@"arm64-" length]];
+        else if ([channel hasPrefix:@"universal-"])
+          channel = [channel substringFromIndex:[@"universal-" length]];
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+        if ([channel isEqual:@"extended"]) {
+          // Extended stable reports as stable with an extra bool.
+          channel = @"";
+          process_annotations["extended_stable_channel"] = "true";
+        }
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+        if (allow_empty_channel || [channel length]) {
+          process_annotations["channel"] = base::SysNSStringToUTF8(channel);
+        }
       }
 
       NSString* version =

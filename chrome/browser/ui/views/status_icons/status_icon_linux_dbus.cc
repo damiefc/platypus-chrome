@@ -203,7 +203,7 @@ void StatusIconLinuxDbus::SetIcon(const gfx::ImageSkia& image) {
   SetIconImpl(image, true);
 }
 
-void StatusIconLinuxDbus::SetToolTip(const base::string16& tool_tip) {
+void StatusIconLinuxDbus::SetToolTip(const std::u16string& tool_tip) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!properties_)
     return;
@@ -344,7 +344,7 @@ void StatusIconLinuxDbus::OnOwnership(const std::string& service_name,
   properties_->RegisterInterface(kInterfaceStatusNotifierItem);
   auto set_property = [&](const std::string& property_name, auto&& value) {
     properties_->SetProperty(kInterfaceStatusNotifierItem, property_name,
-                             std::move(value), false);
+                             std::forward<decltype(value)>(value), false);
   };
   set_property(kPropertyItemIsMenu, DbusBoolean(false));
   set_property(kPropertyWindowId, DbusInt32(0));

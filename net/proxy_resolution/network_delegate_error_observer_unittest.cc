@@ -5,7 +5,7 @@
 #include "net/proxy_resolution/network_delegate_error_observer.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
@@ -55,7 +55,7 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   void OnCompleted(URLRequest* request, bool started, int net_error) override {}
   void OnURLRequestDestroyed(URLRequest* request) override {}
 
-  void OnPACScriptError(int line_number, const base::string16& error) override {
+  void OnPACScriptError(int line_number, const std::u16string& error) override {
     got_pac_error_ = true;
   }
   bool OnCanGetCookies(const URLRequest& request,
@@ -84,7 +84,7 @@ TEST(NetworkDelegateErrorObserverTest, CallOnThread) {
   thread.task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&NetworkDelegateErrorObserver::OnPACScriptError,
-                     base::Unretained(&observer), 42, base::string16()));
+                     base::Unretained(&observer), 42, std::u16string()));
   thread.Stop();
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(network_delegate.got_pac_error());
@@ -100,7 +100,7 @@ TEST(NetworkDelegateErrorObserverTest, NoDelegate) {
   thread.task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&NetworkDelegateErrorObserver::OnPACScriptError,
-                     base::Unretained(&observer), 42, base::string16()));
+                     base::Unretained(&observer), 42, std::u16string()));
   thread.Stop();
   base::RunLoop().RunUntilIdle();
   // Shouldn't have crashed until here...

@@ -12,6 +12,7 @@
 #include "base/strings/pattern.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -34,6 +35,7 @@ const char* const kValidSchemes[] = {
     content::kChromeUIScheme, extensions::kExtensionScheme,
     url::kFileSystemScheme,   url::kWsScheme,
     url::kWssScheme,          url::kDataScheme,
+    url::kUrnScheme,
 };
 
 const int kValidSchemeMasks[] = {
@@ -42,6 +44,7 @@ const int kValidSchemeMasks[] = {
     URLPattern::SCHEME_CHROMEUI,   URLPattern::SCHEME_EXTENSION,
     URLPattern::SCHEME_FILESYSTEM, URLPattern::SCHEME_WS,
     URLPattern::SCHEME_WSS,        URLPattern::SCHEME_DATA,
+    URLPattern::SCHEME_URN,
 };
 
 static_assert(base::size(kValidSchemes) == base::size(kValidSchemeMasks),
@@ -160,15 +163,9 @@ URLPattern::URLPattern(int valid_schemes, base::StringPiece pattern)
       match_subdomains_(false),
       port_("*") {
   ParseResult result = Parse(pattern);
-  if (result != ParseResult::kSuccess) {
-    const char* error_string = GetParseResultString(result);
-    // Temporarily add more logging to investigate why this code path is
-    // reached. For http://crbug.com/856948
-    LOG(ERROR) << "Invalid pattern was given " << pattern << " result "
-               << error_string;
-    NOTREACHED() << "URLPattern invalid: '" << pattern
-                 << "'; error: " << error_string;
-  }
+  DCHECK_EQ(ParseResult::kSuccess, result)
+      << "Parsing unexpectedly failed for pattern: " << pattern << ": "
+      << GetParseResultString(result);
 }
 
 URLPattern::URLPattern(const URLPattern& other) = default;
@@ -312,7 +309,7 @@ URLPattern::ParseResult URLPattern::Parse(base::StringPiece pattern) {
       host_piece = host_piece.substr(2);
     }
 
-    host_ = host_piece.as_string();
+    host_ = std::string(host_piece);
 
     path_start_pos = host_end_pos;
   }

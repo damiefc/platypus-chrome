@@ -6,6 +6,8 @@ package org.chromium.chrome.test.util;
 
 import org.hamcrest.Matchers;
 
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.ntp.IncognitoNewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.suggestions.SiteSuggestion;
@@ -13,8 +15,6 @@ import org.chromium.chrome.browser.suggestions.tile.TileSectionType;
 import org.chromium.chrome.browser.suggestions.tile.TileSource;
 import org.chromium.chrome.browser.suggestions.tile.TileTitleSource;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.url.GURL;
 
@@ -53,9 +53,9 @@ public class NewTabPageTestUtils {
         siteSuggestions.add(new SiteSuggestion("0 TOP_SITES",
                 new GURL(testServer.getURL(TEST_PAGE) + "#0"), "", TileTitleSource.TITLE_TAG,
                 TileSource.TOP_SITES, TileSectionType.PERSONALIZED, new Date()));
-        siteSuggestions.add(new SiteSuggestion("1 WHITELIST",
+        siteSuggestions.add(new SiteSuggestion("1 ALLOWLIST",
                 new GURL(testServer.getURL(TEST_PAGE) + "#1"), "/test.png", TileTitleSource.UNKNOWN,
-                TileSource.WHITELIST, TileSectionType.PERSONALIZED, new Date()));
+                TileSource.ALLOWLIST, TileSectionType.PERSONALIZED, new Date()));
         siteSuggestions.add(new SiteSuggestion("2 TOP_SITES",
                 new GURL(testServer.getURL(TEST_PAGE) + "#2"), "", TileTitleSource.TITLE_TAG,
                 TileSource.TOP_SITES, TileSectionType.PERSONALIZED, new Date()));

@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
@@ -18,6 +19,12 @@
 #if defined(OS_IOS)
 #import <CoreTelephony/CTTelephonyNetworkInfo.h>
 #endif
+
+namespace {
+// The maximum number of seconds to wait for the connection type to be
+// determined.
+const double kMaxWaitForConnectionTypeInSeconds = 2.0;
+}  // namespace
 
 namespace net {
 
@@ -71,11 +78,32 @@ NetworkChangeNotifierMac::GetCurrentConnectionType() const {
   // https://crbug.com/125097
   base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope allow_wait;
   base::AutoLock lock(connection_type_lock_);
-  // Make sure the initial connection type is set before returning.
-  while (!connection_type_initialized_) {
-    initial_connection_type_cv_.Wait();
+
+  if (connection_type_initialized_)
+    return connection_type_;
+
+  SCOPED_UMA_HISTOGRAM_TIMER(
+      "Net.NetworkChangeNotifierMac.GetCurrentConnectionTypeWaitTime");
+
+  // Wait up to a limited amount of time for the connection type to be
+  // determined, to avoid blocking the main thread indefinitely. Since
+  // ConditionVariables are susceptible to spurious wake-ups, each call to
+  // TimedWait can spuriously return even though the connection type hasn't been
+  // initialized and the timeout hasn't been reached; so TimedWait must be
+  // called repeatedly until either the timeout is reached or the connection
+  // type has been determined.
+  base::TimeDelta remaining_time =
+      base::TimeDelta::FromSecondsD(kMaxWaitForConnectionTypeInSeconds);
+  base::TimeTicks end_time = base::TimeTicks::Now() + remaining_time;
+  while (remaining_time > base::TimeDelta()) {
+    initial_connection_type_cv_.TimedWait(remaining_time);
+    if (connection_type_initialized_)
+      return connection_type_;
+
+    remaining_time = end_time - base::TimeTicks::Now();
   }
-  return connection_type_;
+
+  return CONNECTION_UNKNOWN;
 }
 
 void NetworkChangeNotifierMac::Forwarder::Init() {
@@ -101,7 +129,7 @@ NetworkChangeNotifierMac::CalculateConnectionType(
         service_current_radio_access_technology =
             [info serviceCurrentRadioAccessTechnology];
     NSSet<NSString*>* technologies_2g = [NSSet
-        setWithObjects:CTRadioAccessTechnologyGPRS, CTRadioAccessTechnologyGPRS,
+        setWithObjects:CTRadioAccessTechnologyGPRS, CTRadioAccessTechnologyEdge,
                        CTRadioAccessTechnologyCDMA1x, nil];
     NSSet<NSString*>* technologies_3g =
         [NSSet setWithObjects:CTRadioAccessTechnologyWCDMA,
@@ -113,6 +141,10 @@ NetworkChangeNotifierMac::CalculateConnectionType(
                               CTRadioAccessTechnologyeHRPD, nil];
     NSSet<NSString*>* technologies_4g =
         [NSSet setWithObjects:CTRadioAccessTechnologyLTE, nil];
+    // TODO: Use constants from CoreTelephony once Cronet builds with XCode 12.1
+    NSSet<NSString*>* technologies_5g =
+        [NSSet setWithObjects:@"CTRadioAccessTechnologyNRNSA",
+                              @"CTRadioAccessTechnologyNR", nil];
     int best_network = 0;
     for (NSString* service in service_current_radio_access_technology) {
       if (!service_current_radio_access_technology[service]) {
@@ -128,9 +160,11 @@ NetworkChangeNotifierMac::CalculateConnectionType(
         current_network = 3;
       } else if ([technologies_4g containsObject:network_type]) {
         current_network = 4;
+      } else if ([technologies_5g containsObject:network_type]) {
+        current_network = 5;
       } else {
         // New technology?
-        NOTREACHED();
+        NOTREACHED() << "Unknown network technology: " << network_type;
         return CONNECTION_UNKNOWN;
       }
       if (current_network > best_network) {
@@ -145,6 +179,8 @@ NetworkChangeNotifierMac::CalculateConnectionType(
         return CONNECTION_3G;
       case 4:
         return CONNECTION_4G;
+      case 5:
+        return CONNECTION_5G;
       default:
         // Default to CONNECTION_3G to not change existing behavior.
         return CONNECTION_3G;

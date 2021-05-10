@@ -4,15 +4,16 @@
 
 #include "services/network/expect_ct_reporter.h"
 
+#include <memory>
 #include <string>
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -52,6 +53,7 @@ class TestCertificateReportSender : public net::ReportSender {
       const GURL& report_uri,
       base::StringPiece content_type,
       base::StringPiece serialized_report,
+      const net::NetworkIsolationKey& network_isolation_key,
       base::OnceCallback<void()> success_callback,
       base::OnceCallback<void(const GURL&, int, int)> error_callback) override {
     sent_report_count_++;
@@ -59,6 +61,7 @@ class TestCertificateReportSender : public net::ReportSender {
     latest_serialized_report_.assign(serialized_report.data(),
                                      serialized_report.size());
     latest_content_type_.assign(content_type.data(), content_type.size());
+    latest_network_isolation_key_ = network_isolation_key;
     if (!report_callback_.is_null()) {
       EXPECT_EQ(expected_report_uri_, latest_report_uri_);
       std::move(report_callback_).Run();
@@ -75,6 +78,10 @@ class TestCertificateReportSender : public net::ReportSender {
 
   const std::string& latest_serialized_report() const {
     return latest_serialized_report_;
+  }
+
+  const net::NetworkIsolationKey latest_network_isolation_key() const {
+    return latest_network_isolation_key_;
   }
 
   // Can be called to wait for a single report, which is expected to be sent to
@@ -96,6 +103,7 @@ class TestCertificateReportSender : public net::ReportSender {
   GURL latest_report_uri_;
   std::string latest_content_type_;
   std::string latest_serialized_report_;
+  net::NetworkIsolationKey latest_network_isolation_key_;
   base::OnceClosure report_callback_;
   GURL expected_report_uri_;
 };
@@ -316,8 +324,8 @@ class ExpectCTReporterWaitTest : public ::testing::Test {
 
   void SetUp() override {
     // Initializes URLRequestContext after the thread is set up.
-    context_.reset(
-        new net::TestURLRequestContext(true /* delay_initialization */));
+    context_ = std::make_unique<net::TestURLRequestContext>(
+        true /* delay_initialization */);
     context_->set_network_delegate(&network_delegate_);
     context_->Init();
     net::URLRequestFailedJob::AddUrlHandler();
@@ -440,11 +448,13 @@ class ExpectCTReporterTest : public ::testing::Test {
 
     const GURL fail_report_uri = test_server().GetURL(fail_path);
     const GURL successful_report_uri = test_server().GetURL(successful_path);
+    const net::NetworkIsolationKey network_isolation_key =
+        net::NetworkIsolationKey::CreateTransient();
 
     reporter->OnExpectCTFailed(
         host_port, fail_report_uri, base::Time(), ssl_info.cert.get(),
         ssl_info.unverified_cert.get(), ssl_info.signed_certificate_timestamps,
-        net::NetworkIsolationKey());
+        network_isolation_key);
     bad_cors_run_loop.Run();
     // The CORS preflight response may not even have been received yet, so
     // these expectations are mostly aspirational.
@@ -459,9 +469,10 @@ class ExpectCTReporterTest : public ::testing::Test {
     reporter->OnExpectCTFailed(
         host_port, successful_report_uri, base::Time(), ssl_info.cert.get(),
         ssl_info.unverified_cert.get(), ssl_info.signed_certificate_timestamps,
-        net::NetworkIsolationKey());
+        network_isolation_key);
     sender->WaitForReport(successful_report_uri);
     EXPECT_EQ(successful_report_uri, sender->latest_report_uri());
+    EXPECT_EQ(network_isolation_key, sender->latest_network_isolation_key());
     EXPECT_EQ(1, sender->sent_report_count());
   }
 

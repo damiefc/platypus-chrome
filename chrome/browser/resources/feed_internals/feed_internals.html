@@ -18,6 +18,7 @@ found in the LICENSE file.
   <script src="chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js"></script>
   <script src="chrome://resources/mojo/url/mojom/url.mojom-lite.js"></script>
   <script src="chrome://resources/mojo/mojo/public/mojom/base/time.mojom-lite.js"></script>
+  <script src="chrome://resources/js/assert.js"></script>
   <script src="chrome://resources/js/util.js"></script>
   <script src="feed_internals.mojom-lite.js"></script>
 
@@ -171,9 +172,29 @@ found in the LICENSE file.
   <input id="feed-host-override">
   <button id="feed-host-override-apply">Apply</button>
 
-  <h2>Actions Endpoint Override (v2 only)</h2>
-  <input id="actions-endpoint-override">
-  <button id="actions-endpoint-override-apply">Apply</button>
+  <h2>Discover API Endpoint Override</h2>
+  <input id="discover-api-override">
+  <button id="discover-api-override-apply">Apply</button>
 
+  <h2>Feed Stream Data</h2>
+  <input id="feed-stream-data-file" type="file">
+  <button id="feed-stream-data-override">Override</button>
+
+  <h2>WebFeed UI</h2>
+  <p>WebFeed enabled: </p>
+  <p id="webfeed-ui-enabled-status"></p>
+  <label>
+    <input type="checkbox" id="enable-webfeed-ui" name="enable-webfeed-ui">
+    Enable WebFeed UI
+  </label>
+  <button id="enable-webfeed-ui-apply">Apply</button>
+  <p>WebFeed Follow Intro Debug enabled: </p>
+  <p id="webfeed-follow-intro-debug-enabled-status"></p>
+  <label>
+    <input type="checkbox" id="enable-webfeed-follow-intro-debug"
+           name="enable-webfeed-follow-intro-debug">
+    Enable WebFeed Follow Intro Debug
+  </label>
+  <button id="enable-webfeed-follow-intro-debug-apply">Apply</button>
 </body>
 </html>

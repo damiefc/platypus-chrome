@@ -57,7 +57,9 @@ void PrivacyScreenToastController::ShowToast() {
   init_params.translucent = true;
 
   bubble_view_ = new TrayBubbleView(init_params);
-  toast_view_ = new PrivacyScreenToastView(this);
+  toast_view_ = new PrivacyScreenToastView(
+      this, base::BindRepeating(&PrivacyScreenToastController::ButtonPressed,
+                                base::Unretained(this)));
   bubble_view_->AddChildView(toast_view_);
 
   bubble_widget_ = views::BubbleDialogDelegateView::CreateBubble(bubble_view_);
@@ -102,9 +104,9 @@ void PrivacyScreenToastController::OnMouseExitedView() {
   mouse_hovered_ = false;
 }
 
-base::string16 PrivacyScreenToastController::GetAccessibleNameForBubble() {
+std::u16string PrivacyScreenToastController::GetAccessibleNameForBubble() {
   if (!toast_view_)
-    return base::string16();
+    return std::u16string();
   return toast_view_->GetAccessibleName();
 }
 
@@ -143,8 +145,7 @@ void PrivacyScreenToastController::UpdateToastView() {
   }
 }
 
-void PrivacyScreenToastController::ButtonPressed(views::Button* sender,
-                                                 const ui::Event& event) {
+void PrivacyScreenToastController::ButtonPressed() {
   auto* privacy_screen_controller = Shell::Get()->privacy_screen_controller();
   privacy_screen_controller->SetEnabled(
       !privacy_screen_controller->GetEnabled(),

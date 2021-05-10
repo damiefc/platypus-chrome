@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/platform/scheduler/main_thread/find_in_page_budget_pool_controller.h"
 
+#include <memory>
+
 #include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
@@ -38,8 +40,8 @@ FindInPageBudgetPoolController::FindInPageBudgetPoolController(
   }
 
   base::TimeTicks now = scheduler_->GetTickClock()->NowTicks();
-  find_in_page_budget_pool_.reset(new CPUTimeBudgetPool(
-      "FindInPageBudgetPool", this, &scheduler_->tracing_controller_, now));
+  find_in_page_budget_pool_ = std::make_unique<CPUTimeBudgetPool>(
+      "FindInPageBudgetPool", this, &scheduler_->tracing_controller_, now);
   // Set no minimum budget for find-in-page, so that we won't delay running
   // find-in-page tasks when budget is available.
   find_in_page_budget_pool_->SetMinBudgetLevelToRun(now, base::TimeDelta());
@@ -59,7 +61,7 @@ void FindInPageBudgetPoolController::OnTaskCompleted(
   if (queue->GetPrioritisationType() ==
       MainThreadTaskQueue::QueueTraits::PrioritisationType::kFindInPage) {
     find_in_page_budget_pool_->RecordTaskRunTime(
-        queue, task_timing->start_time(), task_timing->end_time());
+        nullptr, task_timing->start_time(), task_timing->end_time());
   }
 
   bool is_exhausted = !find_in_page_budget_pool_->CanRunTasksAt(

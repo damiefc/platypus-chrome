@@ -85,15 +85,20 @@ class LnkParserTest : public testing::Test {
 
   void CheckParsedShortcut(ParsedLnkFile* parsed_shortcut,
                            base::FilePath target_path,
+                           base::FilePath working_dir,
                            std::wstring arguments,
-                           base::FilePath icon_location) {
-    base::FilePath parsed_file_path(parsed_shortcut->target_path);
-    ASSERT_TRUE(PathEqual(parsed_file_path, target_path));
+                           base::FilePath icon_location,
+                           const int32_t& icon_index) {
+    base::FilePath parsed_target_path(parsed_shortcut->target_path);
+    ASSERT_TRUE(PathEqual(parsed_target_path, target_path));
 
+    base::FilePath parsed_working_dir_file_path(parsed_shortcut->working_dir);
+    ASSERT_TRUE(PathEqual(parsed_working_dir_file_path, working_dir));
     ASSERT_EQ(parsed_shortcut->command_line_arguments, arguments);
 
     base::FilePath parsed_icon_location(parsed_shortcut->icon_location);
     ASSERT_TRUE(PathEqual(parsed_icon_location, icon_location));
+    ASSERT_EQ(parsed_shortcut->icon_index, icon_index);
   }
 
   bool CreateFileWithUTF16Name(base::FilePath* file_path) {
@@ -313,13 +318,14 @@ TEST_F(LnkParserTest, ParseLnkWithoutArgumentsTest) {
 
   ASSERT_EQ(ParseLnk(std::move(lnk_handle), &parsed_shortcut),
             mojom::LnkParsingResult::SUCCESS);
-  CheckParsedShortcut(&parsed_shortcut, target_file_path_, L"",
-                      base::FilePath(L""));
+  CheckParsedShortcut(&parsed_shortcut, target_file_path_, base::FilePath(L""),
+                      L"", base::FilePath(L""), properties.icon_index);
 }
 
 TEST_F(LnkParserTest, ParseLnkWithArgumentsTest) {
   base::win::ShortcutProperties properties;
   properties.set_target(target_file_path_);
+  properties.set_working_dir(target_file_path_);
   const std::wstring kArguments = L"Seven";
   properties.set_arguments(kArguments.c_str());
 
@@ -329,8 +335,8 @@ TEST_F(LnkParserTest, ParseLnkWithArgumentsTest) {
   ParsedLnkFile parsed_shortcut;
   ASSERT_EQ(ParseLnk(std::move(lnk_handle), &parsed_shortcut),
             mojom::LnkParsingResult::SUCCESS);
-  CheckParsedShortcut(&parsed_shortcut, target_file_path_, kArguments,
-                      base::FilePath(L""));
+  CheckParsedShortcut(&parsed_shortcut, target_file_path_, target_file_path_,
+                      kArguments, base::FilePath(L""), properties.icon_index);
 }
 
 TEST_F(LnkParserTest, ParseLnkWithExtraStringStructures) {
@@ -349,8 +355,8 @@ TEST_F(LnkParserTest, ParseLnkWithExtraStringStructures) {
   ParsedLnkFile parsed_shortcut;
   ASSERT_EQ(ParseLnk(std::move(lnk_handle), &parsed_shortcut),
             mojom::LnkParsingResult::SUCCESS);
-  CheckParsedShortcut(&parsed_shortcut, target_file_path_, kArguments,
-                      base::FilePath(L""));
+  CheckParsedShortcut(&parsed_shortcut, target_file_path_, temp_dir_.GetPath(),
+                      kArguments, base::FilePath(L""), properties.icon_index);
 }
 
 TEST_F(LnkParserTest, UTF16FileNameParseTest) {
@@ -364,7 +370,8 @@ TEST_F(LnkParserTest, UTF16FileNameParseTest) {
   ParsedLnkFile parsed_shortcut;
   ASSERT_EQ(ParseLnk(std::move(lnk_handle), &parsed_shortcut),
             mojom::LnkParsingResult::SUCCESS);
-  CheckParsedShortcut(&parsed_shortcut, utf16_path, L"", base::FilePath(L""));
+  CheckParsedShortcut(&parsed_shortcut, utf16_path, base::FilePath(L""), L"",
+                      base::FilePath(L""), properties.icon_index);
 }
 
 TEST_F(LnkParserTest, InvalidHandleTest) {
@@ -412,8 +419,8 @@ TEST_F(LnkParserTest, ReasonablyLargeFileSizeShortcutTest) {
   ParsedLnkFile parsed_shortcut;
   ASSERT_EQ(ParseLnk(std::move(lnk_handle), &parsed_shortcut),
             mojom::LnkParsingResult::SUCCESS);
-  CheckParsedShortcut(&parsed_shortcut, target_file_path_, L"",
-                      base::FilePath(L""));
+  CheckParsedShortcut(&parsed_shortcut, target_file_path_, temp_dir_.GetPath(),
+                      L"", base::FilePath(L""), properties.icon_index);
 }
 
 TEST_F(LnkParserTest, TooLargeFileSizeShortcutTest) {
@@ -504,8 +511,8 @@ TEST_F(LnkParserTest, ArgumentsSizeCorruptedShortcutTest_Smaller) {
   ParsedLnkFile parsed_shortcut;
   ASSERT_EQ(ParseLnk(std::move(lnk_handle), &parsed_shortcut),
             mojom::LnkParsingResult::SUCCESS);
-  CheckParsedShortcut(&parsed_shortcut, target_file_path_, L"foo",
-                      base::FilePath(L""));
+  CheckParsedShortcut(&parsed_shortcut, target_file_path_, temp_dir_.GetPath(),
+                      L"foo", base::FilePath(L""), properties.icon_index);
 }
 
 TEST_F(LnkParserTest, LocalAndNetworkShortcutTest) {
@@ -520,8 +527,8 @@ TEST_F(LnkParserTest, LocalAndNetworkShortcutTest) {
   ParsedLnkFile parsed_shortcut;
   ASSERT_EQ(ParseLnk(std::move(local_and_network_lnk_handle), &parsed_shortcut),
             mojom::LnkParsingResult::SUCCESS);
-  CheckParsedShortcut(&parsed_shortcut, target_file_path_, L"",
-                      base::FilePath(L""));
+  CheckParsedShortcut(&parsed_shortcut, target_file_path_, temp_dir_.GetPath(),
+                      L"", base::FilePath(L""), properties.icon_index);
 }
 
 TEST_F(LnkParserTest, ParseIconLocationTest) {
@@ -530,9 +537,10 @@ TEST_F(LnkParserTest, ParseIconLocationTest) {
                                          base::File::Flags::FLAG_READ);
   ASSERT_TRUE(txt_file.IsValid());
 
+  int32_t icon_index = 0;
   base::win::ShortcutProperties properties;
   properties.set_target(txt_file_path);
-  properties.set_icon(txt_file_path, /*icon_index=*/0);
+  properties.set_icon(txt_file_path, icon_index);
 
   base::win::ScopedHandle txt_lnk_handle = CreateAndOpenShortcut(properties);
   ASSERT_TRUE(txt_lnk_handle.IsValid());
@@ -540,7 +548,8 @@ TEST_F(LnkParserTest, ParseIconLocationTest) {
   ParsedLnkFile parsed_shortcut;
   EXPECT_EQ(ParseLnk(std::move(txt_lnk_handle), &parsed_shortcut),
             mojom::LnkParsingResult::SUCCESS);
-  CheckParsedShortcut(&parsed_shortcut, txt_file_path, L"", txt_file_path);
+  CheckParsedShortcut(&parsed_shortcut, txt_file_path, base::FilePath(L""), L"",
+                      txt_file_path, icon_index);
 }
 
 }  // namespace internal

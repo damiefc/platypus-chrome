@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/compiler_specific.h"
@@ -17,18 +19,20 @@
 #include "base/no_destructor.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
+#include "base/strings/strcat.h"
 #include "base/synchronization/lock.h"
 #include "base/task/current_thread.h"
 #include "base/threading/sequence_local_storage_slot.h"
 #include "base/trace_event/trace_event.h"
+#include "base/trace_event/typed_macros.h"
 #include "mojo/public/c/system/quota.h"
 #include "mojo/public/cpp/bindings/features.h"
 #include "mojo/public/cpp/bindings/lib/may_auto_lock.h"
 #include "mojo/public/cpp/bindings/lib/message_quota_checker.h"
-#include "mojo/public/cpp/bindings/lib/tracing_helper.h"
 #include "mojo/public/cpp/bindings/mojo_buildflags.h"
 #include "mojo/public/cpp/bindings/sync_handle_watcher.h"
 #include "mojo/public/cpp/system/wait.h"
+#include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_mojo_event_info.pbzero.h"
 
 #if defined(ENABLE_IPC_FUZZER)
 #include "mojo/public/cpp/bindings/message_dumper.h"
@@ -145,15 +149,14 @@ void Connector::ActiveDispatchTracker::NotifyBeginNesting() {
 Connector::Connector(ScopedMessagePipeHandle message_pipe,
                      ConnectorConfig config,
                      scoped_refptr<base::SequencedTaskRunner> runner,
-                     const char* heap_profiler_tag)
+                     const char* interface_name)
     : message_pipe_(std::move(message_pipe)),
       task_runner_(std::move(runner)),
       error_(false),
       force_immediate_dispatch_(!EnableTaskPerMessage()),
       outgoing_serialization_mode_(g_default_outgoing_serialization_mode),
       incoming_serialization_mode_(g_default_incoming_serialization_mode),
-      heap_profiler_tag_(heap_profiler_tag),
-      nesting_observer_(RunLoopNestingObserver::GetForThread()) {
+      interface_name_(interface_name) {
   if (config == MULTI_THREADED_SEND)
     lock_.emplace();
 
@@ -163,9 +166,17 @@ Connector::Connector(ScopedMessagePipeHandle message_pipe,
 #endif
 
   weak_self_ = weak_factory_.GetWeakPtr();
+
+  DETACH_FROM_SEQUENCE(sequence_checker_);
+
   // Even though we don't have an incoming receiver, we still want to monitor
   // the message pipe to know if is closed or encounters an error.
-  WaitToReadMore();
+  if (task_runner_->RunsTasksInCurrentSequence()) {
+    WaitToReadMore();
+  } else {
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&Connector::WaitToReadMore, weak_self_));
+  }
 }
 
 Connector::~Connector() {
@@ -280,11 +291,22 @@ void Connector::ResumeIncomingMethodCallProcessing() {
 }
 
 bool Connector::PrefersSerializedMessages() {
-  if (outgoing_serialization_mode_ == OutgoingSerializationMode::kEager)
+  if (outgoing_serialization_mode_ != OutgoingSerializationMode::kLazy)
     return true;
-  DCHECK_EQ(OutgoingSerializationMode::kLazy, outgoing_serialization_mode_);
-  return peer_remoteness_tracker_ &&
-         peer_remoteness_tracker_->last_known_state().peer_remote();
+
+  // In lazy serialization mode (the default) we prefer to send unserialized
+  // messages. Note that most interfaces don't support lazy serialization
+  // though, so they'll still only send serialized messages. As such, in most
+  // cases this return value is ignored.
+  if (!peer_remoteness_tracker_)
+    return false;
+
+  // If we have set up a remoteness tracker however, that means we've actually
+  // seen at least one unserialized message (see Accept()). In that case we
+  // consult the tracker. The point of this is to avoid the redundant work of
+  // deferred serialization if we're reasonably certain the message is going to
+  // end up serialized anyway.
+  return peer_remoteness_tracker_->last_known_state().peer_remote();
 }
 
 bool Connector::Accept(Message* message) {
@@ -305,6 +327,17 @@ bool Connector::Accept(Message* message) {
     DCHECK(dump_result);
   }
 #endif
+
+  if (!message->is_serialized()) {
+    // The caller is sending an unserialized message. If we haven't set up a
+    // remoteness tracker yet, do so now. See PrefersSerializedMessages() above
+    // for more details.
+    DCHECK_EQ(outgoing_serialization_mode_, OutgoingSerializationMode::kLazy);
+    if (!peer_remoteness_tracker_) {
+      peer_remoteness_tracker_.emplace(
+          message_pipe_.get(), MOJO_HANDLE_SIGNAL_PEER_REMOTE, task_runner_);
+    }
+  }
 
   if (quota_checker_)
     quota_checker_->BeforeWrite();
@@ -407,19 +440,17 @@ void Connector::WaitToReadMore() {
   CHECK(!paused_);
   DCHECK(!handle_watcher_);
 
+  if (!nesting_observer_)
+    nesting_observer_ = RunLoopNestingObserver::GetForThread();
+
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   handle_watcher_ = std::make_unique<SimpleWatcher>(
       FROM_HERE, SimpleWatcher::ArmingPolicy::MANUAL, task_runner_,
-      heap_profiler_tag_);
+      interface_name_);
   MojoResult rv = handle_watcher_->Watch(
       message_pipe_.get(), MOJO_HANDLE_SIGNAL_READABLE,
       base::BindRepeating(&Connector::OnWatcherHandleReady,
                           base::Unretained(this)));
-
-  if (message_pipe_.is_valid()) {
-    peer_remoteness_tracker_.emplace(
-        message_pipe_.get(), MOJO_HANDLE_SIGNAL_PEER_REMOTE, task_runner_);
-  }
 
   if (rv != MOJO_RESULT_OK) {
     // If the watch failed because the handle is invalid or its conditions can
@@ -459,12 +490,13 @@ MojoResult Connector::ReadMessage(Message* message) {
     // was a problem extracting handles from it. We treat this essentially as
     // a bad IPC because we don't really have a better option.
     //
-    // We include |heap_profiler_tag_| in the error message since it usually
+    // We include |interface_name_| in the error message since it usually
     // (via this Connector's owner) provides useful information about which
     // binding interface is using this Connector.
-    NotifyBadMessage(handle.get(),
-                     std::string(heap_profiler_tag_) +
-                         "One or more handle attachments were invalid.");
+    NotifyBadMessage(
+        handle.get(),
+        base::StrCat({interface_name_,
+                      " One or more handle attachments were invalid."}));
     return MOJO_RESULT_ABORTED;
   }
 
@@ -490,11 +522,15 @@ bool Connector::DispatchMessage(Message message) {
   }
 
   TRACE_EVENT_WITH_FLOW0("toplevel.flow", "mojo::Message Receive",
-                         MANGLE_MESSAGE_ID(message.header()->trace_id),
-                         TRACE_EVENT_FLAG_FLOW_IN);
+                         message.header()->trace_id, TRACE_EVENT_FLAG_FLOW_IN);
 #if !BUILDFLAG(MOJO_TRACE_ENABLED)
   // This emits just full class name, and is inferior to mojo tracing.
-  TRACE_EVENT0("mojom", heap_profiler_tag_);
+  TRACE_EVENT("toplevel", "Connector::DispatchMessage",
+              [this](perfetto::EventContext ctx) {
+                ctx.event()
+                    ->set_chrome_mojo_event_info()
+                    ->set_watcher_notify_interface_tag(interface_name_);
+              });
 #endif
 
   if (connection_group_)
@@ -633,10 +669,10 @@ void Connector::HandleError(bool force_pipe_reset, bool force_async_handler) {
 void Connector::EnsureSyncWatcherExists() {
   if (sync_watcher_)
     return;
-  sync_watcher_.reset(new SyncHandleWatcher(
+  sync_watcher_ = std::make_unique<SyncHandleWatcher>(
       message_pipe_.get(), MOJO_HANDLE_SIGNAL_READABLE,
       base::BindRepeating(&Connector::OnSyncHandleWatcherHandleReady,
-                          base::Unretained(this))));
+                          base::Unretained(this)));
 }
 
 }  // namespace mojo

@@ -22,9 +22,9 @@
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/content_export.h"
 #include "content/common/render_widget_host_ns_view.mojom.h"
-#include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "third_party/blink/public/mojom/webshare/webshare.mojom.h"
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/base/cocoa/accessibility_focus_overrider.h"
 #include "ui/base/cocoa/remote_layer_api.h"
@@ -83,8 +83,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       public RenderFrameMetadataProvider::Observer,
       public ui::GestureProviderClient,
       public ui::AcceleratedWidgetMacNSView,
-      public ui::AccessibilityFocusOverrider::Client,
-      public IPC::Sender {
+      public ui::AccessibilityFocusOverrider::Client {
  public:
   // The view will associate itself with the given widget. The native view must
   // be hooked up immediately to the view hierarchy, or else when it is
@@ -123,7 +122,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // Implementation of RenderWidgetHostViewBase.
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
                    const gfx::Rect& pos) override;
-  void InitAsFullscreen(RenderWidgetHostView* reference_host_view) override;
   void Focus() override;
   void UpdateCursor(const WebCursor& cursor) override;
   void DisplayCursor(const WebCursor& cursor) override;
@@ -132,8 +130,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void SetIsLoading(bool is_loading) override;
   void RenderProcessGone() override;
   void Destroy() override;
-  void SetTooltipText(const base::string16& tooltip_text) override;
-  void DisplayTooltipText(const base::string16& tooltip_text) override;
+  void SetTooltipText(const std::u16string& tooltip_text) override;
+  void DisplayTooltipText(const std::u16string& tooltip_text) override;
   gfx::Size GetRequestedRendererSize() override;
   uint32_t GetCaptureSequenceNumber() const override;
   bool IsSurfaceAvailableForCopy() override;
@@ -146,13 +144,11 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
                           const gfx::Rect& node_bounds_in_screen) override;
   void ResetFallbackToFirstNavigationSurface() override;
   bool RequestRepaintForTesting() override;
-  BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
-      BrowserAccessibilityDelegate* delegate,
-      bool for_root_frame) override;
   gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible() override;
   gfx::NativeViewAccessible AccessibilityGetNativeViewAccessibleForWindow()
       override;
   base::Optional<SkColor> GetBackgroundColor() override;
+  void OnSynchronizedDisplayPropertiesChanged(bool rotation) override;
 
   void TransformPointToRootSurface(gfx::PointF* point) override;
   gfx::Rect GetBoundsInRootWindow() override;
@@ -228,13 +224,11 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // RenderFrameMetadataProvider::Observer
   void OnRenderFrameMetadataChangedBeforeActivation(
       const cc::RenderFrameMetadata& metadata) override {}
-  void OnRenderFrameMetadataChangedAfterActivation() override;
+  void OnRenderFrameMetadataChangedAfterActivation(
+      base::TimeTicks activation_time) override;
   void OnRenderFrameSubmission() override {}
   void OnLocalSurfaceIdChanged(
       const cc::RenderFrameMetadata& metadata) override {}
-
-  // IPC::Sender implementation.
-  bool Send(IPC::Message* message) override;
 
   void SetTextInputActive(bool active);
 
@@ -366,12 +360,12 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       std::unique_ptr<blink::WebCoalescedInputEvent> event) override;
   void SmartMagnify(
       std::unique_ptr<blink::WebCoalescedInputEvent> event) override;
-  void ImeSetComposition(const base::string16& text,
+  void ImeSetComposition(const std::u16string& text,
                          const std::vector<ui::ImeTextSpan>& ime_text_spans,
                          const gfx::Range& replacement_range,
                          int selection_start,
                          int selection_end) override;
-  void ImeCommitText(const base::string16& text,
+  void ImeCommitText(const std::u16string& text,
                      const gfx::Range& replacement_range) override;
   void ImeFinishComposingText() override;
   void ImeCancelCompositionFromCocoa() override;
@@ -411,7 +405,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   // BrowserCompositorMacClient implementation.
   SkColor BrowserCompositorMacGetGutterColor() const override;
-  void OnFrameTokenChanged(uint32_t frame_token) override;
+  void OnFrameTokenChanged(uint32_t frame_token,
+                           base::TimeTicks activation_time) override;
   void DestroyCompositorForShutdown() override;
   bool OnBrowserCompositorSurfaceIdChanged() override;
   std::vector<viz::SurfaceId> CollectSurfaceIdsForEviction() override;
@@ -485,6 +480,13 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   MouseWheelPhaseHandler* GetMouseWheelPhaseHandler() override;
 
+  void ShowSharePicker(
+      const std::string& title,
+      const std::string& text,
+      const std::string& url,
+      const std::vector<std::string>& file_paths,
+      blink::mojom::ShareService::ShareCallback callback) override;
+
  protected:
   // This class is to be deleted through the Destroy method.
   ~RenderWidgetHostViewMac() override;
@@ -517,10 +519,13 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // RenderWidgetHostViewBase:
   void UpdateBackgroundColor() override;
   bool HasFallbackSurface() const override;
+  base::Optional<DisplayFeature> GetDisplayFeature() override;
+  void SetDisplayFeatureForTesting(
+      const DisplayFeature* display_feature) override;
 
   // Gets a textual view of the page's contents, and passes it to the callback
   // provided.
-  using SpeechCallback = base::OnceCallback<void(const base::string16&)>;
+  using SpeechCallback = base::OnceCallback<void(const std::u16string&)>;
   void GetPageTextForSpeech(SpeechCallback callback);
 
   // Interface through which the NSView is to be manipulated. This points either
@@ -565,6 +570,9 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   // Whether or not the NSView is first responder.
   bool is_first_responder_ = false;
+
+  // Whether Focus() is being called.
+  bool is_getting_focus_ = false;
 
   // Indicates if the page is loading.
   bool is_loading_;
@@ -655,6 +663,11 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // content::BrowserAccessibilityCocoa accessibility tree when the NSView for
   // this is focused.
   ui::AccessibilityFocusOverrider accessibility_focus_overrider_;
+
+  // Represents a feature of the physical display whose offset and mask_length
+  // are expressed in DIPs relative to the view. See display_feature.h for more
+  // details.
+  base::Optional<DisplayFeature> display_feature_;
 
   // Factory used to safely scope delayed calls to ShutdownHost().
   base::WeakPtrFactory<RenderWidgetHostViewMac> weak_factory_;

@@ -8,7 +8,6 @@
 #import <UIKit/UIKit.h>
 
 @protocol ApplicationCommands;
-class AuthenticationService;
 class Browser;
 @class DiscoverFeedConfiguration;
 
@@ -38,13 +37,20 @@ class DiscoverFeedProvider {
   // Starts the Feed using |discover_config| which contains various configs for
   // the Feed.
   virtual void StartFeed(DiscoverFeedConfiguration* discover_config);
-  // DEPRECATED. Delete once this method has been deleted downstream.
-  virtual void StartFeed(AuthenticationService* auth_service);
+  // Stops the Feed, which will disconnect all of its services.
+  virtual void StopFeed();
   // Returns true if the Discover Feed is enabled.
   virtual bool IsDiscoverFeedEnabled();
   // Returns the Discover Feed ViewController.
-  virtual UIViewController* NewFeedViewController(Browser* browser)
-      NS_RETURNS_RETAINED;
+  virtual UIViewController* NewFeedViewController(Browser* browser);
+  // Returns the Discover Feed ViewController with a custom
+  // UIScrollViewDelegate.
+  virtual UIViewController* NewFeedViewControllerWithScrollDelegate(
+      Browser* browser,
+      id<UIScrollViewDelegate> scrollDelegate);
+  // Removes the Discover |feedViewController|. It should be called whenever
+  // |feedViewController| will no longer be used.
+  virtual void RemoveFeedViewController(UIViewController* feedViewController);
   // Updates the feed's theme to match the user's theme (light/dark).
   virtual void UpdateTheme();
   // Refreshes the Discover Feed. Once the Feed model is refreshed it will
@@ -57,6 +63,10 @@ class DiscoverFeedProvider {
   virtual void RemoveObserver(Observer* observer);
   // Loads and appends the next set of articles in the feed.
   virtual void LoadMoreFeedArticles();
+  // Called by the embedder whenever the Feed has been shown.
+  // TODO(crbug.com/1126940): The Feed should have a callback for this, remove
+  // when its available.
+  virtual void FeedWasShown();
 };
 
 #endif  // IOS_PUBLIC_PROVIDER_CHROME_BROWSER_DISCOVER_FEED_DISCOVER_FEED_PROVIDER_H_

@@ -14,7 +14,8 @@
 
 #include "base/command_line.h"
 #include "ui/gfx/x/connection.h"
-#include "ui/gfx/x/x11.h"
+#include "ui/gfx/x/event.h"
+#include "ui/gfx/x/future.h"
 #include "ui/gfx/x/xproto.h"
 
 void CalculateTimeout(const timespec& now,

@@ -5,7 +5,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -65,9 +65,9 @@ class MojoAudioDecoderTest : public ::testing::Test {
         base::BindOnce(&MojoAudioDecoderTest::ConnectToService,
                        base::Unretained(this),
                        remote_audio_decoder.InitWithNewPipeAndPassReceiver()));
-    mojo_audio_decoder_.reset(
-        new MojoAudioDecoder(task_environment_.GetMainThreadTaskRunner(),
-                             std::move(remote_audio_decoder)));
+    mojo_audio_decoder_ = std::make_unique<MojoAudioDecoder>(
+        task_environment_.GetMainThreadTaskRunner(),
+        std::move(remote_audio_decoder));
   }
 
   ~MojoAudioDecoderTest() override {
@@ -91,13 +91,13 @@ class MojoAudioDecoderTest : public ::testing::Test {
 
   void RunLoop() {
     DVLOG(1) << __func__;
-    run_loop_.reset(new base::RunLoop());
+    run_loop_ = std::make_unique<base::RunLoop>();
     run_loop_->Run();
   }
 
   void RunLoopUntilIdle() {
     DVLOG(1) << __func__;
-    run_loop_.reset(new base::RunLoop());
+    run_loop_ = std::make_unique<base::RunLoop>();
     run_loop_->RunUntilIdle();
   }
 

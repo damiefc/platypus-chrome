@@ -5,7 +5,8 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser_fast_paths.h"
 
 #include "build/build_config.h"
-#include "third_party/blink/renderer/core/css/css_color_value.h"
+#include "third_party/blink/public/public_buildflags.h"
+#include "third_party/blink/renderer/core/css/css_color.h"
 #include "third_party/blink/renderer/core/css/css_function_value.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_inherited_value.h"
@@ -548,7 +549,7 @@ static CSSValue* ParseColor(CSSPropertyID property_id,
       });
   if (!parse_result)
     return nullptr;
-  return cssvalue::CSSColorValue::Create(color);
+  return cssvalue::CSSColor::Create(color);
 }
 
 CSSValue* CSSParserFastPaths::ParseColor(const String& string,
@@ -650,10 +651,6 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
     case CSSPropertyID::kListStylePosition:
       return value_id == CSSValueID::kInside ||
              value_id == CSSValueID::kOutside;
-    case CSSPropertyID::kListStyleType:
-      return (value_id >= CSSValueID::kDisc &&
-              value_id <= CSSValueID::kKatakanaIroha) ||
-             value_id == CSSValueID::kNone;
     case CSSPropertyID::kMaskType:
       return value_id == CSSValueID::kLuminance ||
              value_id == CSSValueID::kAlpha;
@@ -899,7 +896,7 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return value_id == CSSValueID::kNowrap || value_id == CSSValueID::kWrap ||
              value_id == CSSValueID::kWrapReverse;
     case CSSPropertyID::kHyphens:
-#if defined(OS_ANDROID) || defined(OS_MAC)
+#if BUILDFLAG(USE_MINIKIN_HYPHENATION) || defined(OS_MAC)
       return value_id == CSSValueID::kAuto || value_id == CSSValueID::kNone ||
              value_id == CSSValueID::kManual;
 #else
@@ -985,6 +982,9 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
              value_id == CSSValueID::kBreakAll ||
              value_id == CSSValueID::kKeepAll ||
              value_id == CSSValueID::kBreakWord;
+    case CSSPropertyID::kScrollbarWidth:
+      return value_id == CSSValueID::kAuto || value_id == CSSValueID::kThin ||
+             value_id == CSSValueID::kNone;
     case CSSPropertyID::kScrollSnapStop:
       return value_id == CSSValueID::kNormal || value_id == CSSValueID::kAlways;
     case CSSPropertyID::kOverscrollBehaviorInline:
@@ -1031,7 +1031,6 @@ bool CSSParserFastPaths::IsKeywordPropertyID(CSSPropertyID property_id) {
     case CSSPropertyID::kHyphens:
     case CSSPropertyID::kImageRendering:
     case CSSPropertyID::kListStylePosition:
-    case CSSPropertyID::kListStyleType:
     case CSSPropertyID::kMaskType:
     case CSSPropertyID::kMathShift:
     case CSSPropertyID::kMathStyle:
@@ -1110,17 +1109,9 @@ bool CSSParserFastPaths::IsKeywordPropertyID(CSSPropertyID property_id) {
     case CSSPropertyID::kWhiteSpace:
     case CSSPropertyID::kWordBreak:
     case CSSPropertyID::kWritingMode:
+    case CSSPropertyID::kScrollbarWidth:
     case CSSPropertyID::kScrollSnapStop:
     case CSSPropertyID::kOriginTrialTestProperty:
-      return true;
-    default:
-      return false;
-  }
-}
-
-bool CSSParserFastPaths::IsPartialKeywordPropertyID(CSSPropertyID property_id) {
-  switch (property_id) {
-    case CSSPropertyID::kListStyleType:
       return true;
     default:
       return false;
@@ -1137,8 +1128,7 @@ static CSSValue* ParseKeywordValue(CSSPropertyID property_id,
     if (!EqualIgnoringASCIICase(string, "initial") &&
         !EqualIgnoringASCIICase(string, "inherit") &&
         !EqualIgnoringASCIICase(string, "unset") &&
-        (!RuntimeEnabledFeatures::CSSRevertEnabled() ||
-         !EqualIgnoringASCIICase(string, "revert")))
+        !EqualIgnoringASCIICase(string, "revert"))
       return nullptr;
 
     // Parse CSS-wide keyword shorthands using the CSSPropertyParser.
@@ -1161,10 +1151,8 @@ static CSSValue* ParseKeywordValue(CSSPropertyID property_id,
     return CSSInitialValue::Create();
   if (value_id == CSSValueID::kUnset)
     return cssvalue::CSSUnsetValue::Create();
-  if (RuntimeEnabledFeatures::CSSRevertEnabled() &&
-      value_id == CSSValueID::kRevert) {
+  if (value_id == CSSValueID::kRevert)
     return cssvalue::CSSRevertValue::Create();
-  }
   if (CSSParserFastPaths::IsValidKeywordPropertyAndValue(property_id, value_id,
                                                          parser_mode))
     return CSSIdentifierValue::Create(value_id);

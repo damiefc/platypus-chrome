@@ -28,15 +28,6 @@ CONTENT_EXPORT extern const base::FilePath::CharType kPepperDataDirname[];
 CONTENT_EXPORT extern const char kBrowserPluginMimeType[];
 
 CONTENT_EXPORT extern const char kFlashPluginName[];
-CONTENT_EXPORT extern const char kFlashPluginSwfMimeType[];
-CONTENT_EXPORT extern const char kFlashPluginSwfExtension[];
-CONTENT_EXPORT extern const char kFlashPluginSwfDescription[];
-CONTENT_EXPORT extern const char kFlashPluginSplMimeType[];
-CONTENT_EXPORT extern const char kFlashPluginSplExtension[];
-CONTENT_EXPORT extern const char kFlashPluginSplDescription[];
-
-// The maximum number of session history entries per tab.
-constexpr int kMaxSessionHistoryEntries = 50;
 
 // The maximum number of characters in the URL that we're willing to accept
 // in the browser process. It is set low enough to avoid damage to the browser

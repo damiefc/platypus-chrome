@@ -338,8 +338,6 @@ suite('CupsAddPrinterDialogTests', function() {
       printerAddress: '192.168.1.13',
       printerDescription: '',
       printerId: '',
-      printerManufacturer: '',
-      printerModel: '',
       printerMakeAndModel: '',
       printerName: 'Test Printer',
       printerPPDPath: '',
@@ -604,6 +602,27 @@ suite('CupsAddPrinterDialogTests', function() {
           modelDropdown.$$('#search').fire('input');
           assertFalse(addButton.disabled);
         });
+  });
+
+  test('Queue input is hidden when protocol is App Socket', () => {
+    const addDialog = dialog.$$('add-printer-manually-dialog');
+    let printerQueueInput = addDialog.$$('#printerQueueInput');
+    const select = addDialog.shadowRoot.querySelector('select');
+    assertTrue(!!printerQueueInput);
+
+    select.value = 'socket';
+    select.dispatchEvent(new CustomEvent('change'), {'bubbles': true});
+    Polymer.dom.flush();
+
+    printerQueueInput = addDialog.$$('#printerQueueInput');
+    assertFalse(!!printerQueueInput);
+
+    select.value = 'http';
+    select.dispatchEvent(new CustomEvent('change'), {'bubbles': true});
+    Polymer.dom.flush();
+
+    printerQueueInput = addDialog.$$('#printerQueueInput');
+    assertTrue(!!printerQueueInput);
   });
 });
 

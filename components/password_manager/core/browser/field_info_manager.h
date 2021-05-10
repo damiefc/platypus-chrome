@@ -10,12 +10,12 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/password_manager/core/browser/password_form_forward.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 
 namespace password_manager {
 
 class PasswordStore;
+struct PasswordForm;
 
 class FieldInfoManager {
  public:
@@ -37,7 +37,8 @@ class FieldInfoManagerImpl : public FieldInfoManager,
                              public KeyedService,
                              public PasswordStoreConsumer {
  public:
-  FieldInfoManagerImpl(scoped_refptr<password_manager::PasswordStore> store);
+  explicit FieldInfoManagerImpl(
+      scoped_refptr<password_manager::PasswordStore> store);
   ~FieldInfoManagerImpl() override;
 
   // FieldInfoManager:

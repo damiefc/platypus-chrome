@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "device/vr/public/mojom/isolated_xr_service.mojom.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "ui/display/display.h"
 #include "ui/gfx/transform.h"
@@ -25,19 +26,72 @@ class COMPONENT_EXPORT(VR_ARCORE) ArCore {
  public:
   virtual ~ArCore() = default;
 
+  // Represents an inclusive range from min to max. (This is different from
+  // base::Interval which excludes the top end of the range, resulting in an
+  // empty interval if min==max.)
+  struct MinMaxRange {
+    float min;
+    float max;
+  };
+
+  struct InitializeResult {
+    std::unordered_set<device::mojom::XRSessionFeature> enabled_features;
+
+    // If the depth sensing API was requested, the depth_configuration will
+    // contain the device-selected depth API usage and data format.
+
+    base::Optional<device::mojom::XRDepthConfig> depth_configuration;
+
+    InitializeResult(
+        const std::unordered_set<device::mojom::XRSessionFeature>&
+            enabled_features,
+        base::Optional<device::mojom::XRDepthConfig> depth_configuration);
+    InitializeResult(const InitializeResult& other);
+    ~InitializeResult();
+  };
+
+  struct DepthSensingConfiguration {
+    std::vector<device::mojom::XRDepthUsage> depth_usage_preference;
+    std::vector<device::mojom::XRDepthDataFormat> depth_data_format_preference;
+
+    DepthSensingConfiguration(
+        std::vector<device::mojom::XRDepthUsage> depth_usage_preference,
+        std::vector<device::mojom::XRDepthDataFormat>
+            depth_data_format_preference);
+    ~DepthSensingConfiguration();
+
+    DepthSensingConfiguration(const DepthSensingConfiguration& other);
+    DepthSensingConfiguration(DepthSensingConfiguration&& other);
+
+    DepthSensingConfiguration& operator=(
+        const DepthSensingConfiguration& other);
+    DepthSensingConfiguration& operator=(DepthSensingConfiguration&& other);
+  };
+
   // Initializes the runtime and returns whether it was successful.
   // If successful, the runtime must be paused when this method returns.
-  virtual bool Initialize(
+  virtual base::Optional<InitializeResult> Initialize(
       base::android::ScopedJavaLocalRef<jobject> application_context,
       const std::unordered_set<device::mojom::XRSessionFeature>&
-          enabled_features) = 0;
+          required_features,
+      const std::unordered_set<device::mojom::XRSessionFeature>&
+          optional_features,
+      const std::vector<device::mojom::XRTrackedImagePtr>& tracked_images,
+      base::Optional<DepthSensingConfiguration> depth_sensing_config) = 0;
+
+  // Returns the target framerate range in Hz. Actual capture frame rate will
+  // vary within this range, i.e. lower in low light to increase exposure time.
+  virtual MinMaxRange GetTargetFramerateRange() = 0;
 
   virtual void SetDisplayGeometry(
       const gfx::Size& frame_size,
       display::Display::Rotation display_rotation) = 0;
   virtual void SetCameraTexture(uint32_t camera_texture_id) = 0;
 
+  virtual gfx::Size GetUncroppedCameraImageSize() const;
+
   gfx::Transform GetCameraUvFromScreenUvTransform() const;
+  gfx::Transform GetDepthUvFromScreenUvTransform() const;
 
   virtual gfx::Transform GetProjectionMatrix(float near, float far) = 0;
 
@@ -65,6 +119,8 @@ class COMPONENT_EXPORT(VR_ARCORE) ArCore {
   virtual mojom::XRLightEstimationDataPtr GetLightEstimationData() = 0;
 
   virtual mojom::XRDepthDataPtr GetDepthData() = 0;
+
+  virtual mojom::XRTrackedImagesDataPtr GetTrackedImages() = 0;
 
   virtual bool RequestHitTest(
       const mojom::XRRayPtr& ray,

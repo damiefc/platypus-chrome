@@ -34,7 +34,7 @@ namespace {
 void JNI_AccountChooserDialog_AddElementsToJavaCredentialArray(
     JNIEnv* env,
     base::android::ScopedJavaLocalRef<jobjectArray> java_credentials_array,
-    const std::vector<std::unique_ptr<autofill::PasswordForm>>& forms) {
+    const std::vector<std::unique_ptr<password_manager::PasswordForm>>& forms) {
   int index = 0;
   for (const auto& password_form : forms) {
     base::android::ScopedJavaLocalRef<jobject> java_credential =
@@ -76,7 +76,7 @@ void AvatarFetcherAndroid::OnFetchComplete(const GURL& url,
                                            const SkBitmap* bitmap) {
   if (bitmap) {
     base::android::ScopedJavaLocalRef<jobject> java_bitmap =
-        gfx::ConvertToJavaBitmap(bitmap);
+        gfx::ConvertToJavaBitmap(*bitmap);
     Java_AccountChooserDialog_imageFetchComplete(
         base::android::AttachCurrentThread(), java_dialog_, index_,
         java_bitmap);
@@ -85,7 +85,7 @@ void AvatarFetcherAndroid::OnFetchComplete(const GURL& url,
 }
 
 void FetchAvatar(const base::android::ScopedJavaGlobalRef<jobject>& java_dialog,
-                 const autofill::PasswordForm* password_form,
+                 const password_manager::PasswordForm* password_form,
                  int index,
                  network::mojom::URLLoaderFactory* loader_factory) {
   if (!password_form->icon_url.is_valid())
@@ -100,7 +100,8 @@ void FetchAvatar(const base::android::ScopedJavaGlobalRef<jobject>& java_dialog,
 
 AccountChooserDialogAndroid::AccountChooserDialogAndroid(
     content::WebContents* web_contents,
-    std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
+    std::vector<std::unique_ptr<password_manager::PasswordForm>>
+        local_credentials,
     const url::Origin& origin,
     ManagePasswordsState::CredentialsCallback callback)
     : content::WebContentsObserver(web_contents),
@@ -121,7 +122,7 @@ bool AccountChooserDialogAndroid::ShowDialog() {
     return false;
   }
   JNIEnv* env = base::android::AttachCurrentThread();
-  base::string16 title =
+  std::u16string title =
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_TITLE);
   gfx::NativeWindow native_window = web_contents_->GetTopLevelNativeWindow();
   base::android::ScopedJavaLocalRef<jobjectArray> java_credentials_array =
@@ -130,7 +131,7 @@ bool AccountChooserDialogAndroid::ShowDialog() {
       env, java_credentials_array, local_credentials_forms());
   base::android::ScopedJavaGlobalRef<jobject> java_dialog_global;
   const std::string origin = password_manager::GetShownOrigin(origin_);
-  base::string16 signin_button;
+  std::u16string signin_button;
   if (local_credentials_forms().size() == 1) {
     signin_button =
         l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_SIGN_IN);
@@ -142,8 +143,8 @@ bool AccountChooserDialogAndroid::ShowDialog() {
       base::android::ConvertUTF8ToJavaString(env, origin),
       base::android::ConvertUTF16ToJavaString(env, signin_button)));
   network::mojom::URLLoaderFactory* loader_factory =
-      content::BrowserContext::GetDefaultStoragePartition(
-          Profile::FromBrowserContext(web_contents_->GetBrowserContext()))
+      web_contents_->GetBrowserContext()
+          ->GetDefaultStoragePartition()
           ->GetURLLoaderFactoryForBrowserProcess()
           .get();
   int avatar_index = 0;
@@ -204,7 +205,7 @@ void AccountChooserDialogAndroid::OnDialogCancel() {
                    false /* signin_button_clicked */);
 }
 
-const std::vector<std::unique_ptr<autofill::PasswordForm>>&
+const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
 AccountChooserDialogAndroid::local_credentials_forms() const {
   return passwords_data_.GetCurrentForms();
 }

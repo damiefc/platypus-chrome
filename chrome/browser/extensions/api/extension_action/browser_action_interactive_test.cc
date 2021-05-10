@@ -7,6 +7,7 @@
 #include "base/run_loop.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/browser.h"
@@ -37,6 +38,7 @@
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
+#include "extensions/common/mojom/view_type.mojom.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
@@ -45,6 +47,7 @@
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/buildflags.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/scrollbar_size.h"
 #include "ui/views/widget/widget.h"
 
 #if defined(OS_WIN)
@@ -90,7 +93,7 @@ class PopupHostWatcher : public content::NotificationObserver {
     const ExtensionHost* host =
         content::Details<const ExtensionHost>(details).ptr();
     DCHECK(host);
-    if (host->extension_host_type() != VIEW_TYPE_EXTENSION_POPUP)
+    if (host->extension_host_type() != mojom::ViewType::kExtensionPopup)
       return;
 
     ++(type == NOTIFICATION_EXTENSION_HOST_CREATED ? created_ : destroyed_);
@@ -100,7 +103,7 @@ class PopupHostWatcher : public content::NotificationObserver {
 
  private:
   content::NotificationRegistrar registrar_;
-  base::Closure quit_closure_;
+  base::RepeatingClosure quit_closure_;
   int created_ = 0;
   int destroyed_ = 0;
 
@@ -155,20 +158,23 @@ class BrowserActionInteractiveTest : public ExtensionApiTest {
     if (!will_reply)
       listener = std::make_unique<ExtensionTestMessageListener>("ready", false);
     // Show first popup in first window and expect it to have loaded.
-    ASSERT_TRUE(RunExtensionSubtest("browser_action/open_popup",
-                                    "open_popup_succeeds.html")) << message_;
+    ASSERT_TRUE(RunExtensionTest({.name = "browser_action/open_popup",
+                                  .page_url = "open_popup_succeeds.html"}))
+        << message_;
     if (listener)
       EXPECT_TRUE(listener->WaitUntilSatisfied());
     frame_observer.Wait();
     EnsurePopupActive();
   }
 
-  // Open an extension popup by clicking the browser action button.
-  content::WebContents* OpenPopupViaToolbar() {
+  // Open an extension popup by clicking the browser action button associated
+  // with `id`.
+  content::WebContents* OpenPopupViaToolbar(const std::string& id) {
+    EXPECT_FALSE(id.empty());
     content::WindowedNotificationObserver popup_observer(
         content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
         content::NotificationService::AllSources());
-    ExtensionActionTestHelper::Create(browser())->Press(0);
+    ExtensionActionTestHelper::Create(browser())->Press(id);
     popup_observer.Wait();
     EnsurePopupActive();
     const auto& source =
@@ -240,12 +246,13 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, TestOpenPopup) {
         content::NotificationService::AllSources());
     // Open a new window.
     new_browser = chrome::FindBrowserWithWebContents(browser()->OpenURL(
-        content::OpenURLParams(GURL("about:"), content::Referrer(),
+        content::OpenURLParams(GURL("about:blank"), content::Referrer(),
                                WindowOpenDisposition::NEW_WINDOW,
                                ui::PAGE_TRANSITION_TYPED, false)));
-    // Hide all the buttons to test that it opens even when the browser action
-    // is in the overflow bucket.
-    ToolbarActionsModel::Get(profile())->SetVisibleIconCount(0);
+    // Pin the extension to test that it opens when the action is on the
+    // toolbar.
+    ToolbarActionsModel::Get(profile())->SetActionVisibility(
+        last_loaded_extension_id(), true);
     frame_observer.Wait();
   }
 
@@ -270,9 +277,10 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, TestOpenPopupIncognito) {
   content::WindowedNotificationObserver frame_observer(
       content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
       content::NotificationService::AllSources());
-  ASSERT_TRUE(RunExtensionSubtest("browser_action/open_popup",
-                                  "open_popup_succeeds.html",
-                                  kFlagEnableIncognito, kFlagUseIncognito))
+  ASSERT_TRUE(RunExtensionTest({.name = "browser_action/open_popup",
+                                .page_url = "open_popup_succeeds.html",
+                                .open_in_incognito = true},
+                               {.allow_in_incognito = true}))
       << message_;
   frame_observer.Wait();
   // Non-Aura Linux uses a singleton for the popup, so it looks like all windows
@@ -294,8 +302,9 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, TestOpenPopupIncognito) {
 IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
                        TestOpenPopupIncognitoFromBackground) {
   const Extension* extension =
-      LoadExtensionIncognito(test_data_dir_.AppendASCII("browser_action").
-          AppendASCII("open_popup_background"));
+      LoadExtension(test_data_dir_.AppendASCII("browser_action")
+                        .AppendASCII("open_popup_background"),
+                    {.allow_in_incognito = true});
   ASSERT_TRUE(extension);
   ExtensionTestMessageListener listener(false);
   listener.set_extension_id(extension->id());
@@ -314,20 +323,23 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
 IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
                        TestOpenPopupDoesNotCloseOtherPopups) {
   // Load a first extension that can open a popup.
-  ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII(
-      "browser_action/popup")));
-  const Extension* extension = GetSingleLoadedExtension();
-  ASSERT_TRUE(extension) << message_;
+  const Extension* first_extension =
+      LoadExtension(test_data_dir_.AppendASCII("browser_action/popup"));
+  ASSERT_TRUE(first_extension) << message_;
 
   ExtensionTestMessageListener listener("ready", true);
   // Load the test extension which will do nothing except notifyPass() to
   // return control here.
-  ASSERT_TRUE(RunExtensionSubtest("browser_action/open_popup",
-                                  "open_popup_fails.html")) << message_;
+  ASSERT_TRUE(RunExtensionTest({.name = "browser_action/open_popup",
+                                .page_url = "open_popup_fails.html"}))
+      << message_;
   EXPECT_TRUE(listener.WaitUntilSatisfied());
-  OpenPopupViaToolbar();
+
+  // Open a popup with the first extension.
+  OpenPopupViaToolbar(first_extension->id());
   ResultCatcher catcher;
-  // Return control to javascript to validate that opening a popup fails now.
+  // Now, try to open a popup with the second extension. It should fail since
+  // there's an active popup.
   listener.Reply("show another");
   ASSERT_TRUE(catcher.GetNextResult()) << message_;
   EXPECT_TRUE(ClosePopup());
@@ -347,7 +359,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
                        sessions::SessionTabHelper::IdForTab(
                            browser()->tab_strip_model()->GetActiveWebContents())
                            .id(),
-                       APIPermission::kTab));
+                       mojom::APIPermissionID::kTab));
   EXPECT_TRUE(ClosePopup());
 }
 
@@ -364,7 +376,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, FocusLossClosesPopup2) {
       "browser_action/popup")));
   const Extension* extension = GetSingleLoadedExtension();
   ASSERT_TRUE(extension) << message_;
-  OpenPopupViaToolbar();
+  OpenPopupViaToolbar(extension->id());
   ClosePopupViaFocusLoss();
 }
 
@@ -438,7 +450,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, PopupZoomsIndependently) {
   content::WindowedNotificationObserver popup_observer(
       NOTIFICATION_EXTENSION_HOST_CREATED,
       content::NotificationService::AllSources());
-  OpenPopupViaToolbar();
+  OpenPopupViaToolbar(extension->id());
   popup_observer.Wait();
   ExtensionHost* extension_host =
       content::Details<ExtensionHost>(popup_observer.details()).ptr();
@@ -500,7 +512,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveViewsTest,
   content::WindowedNotificationObserver frame_observer(
       content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
       content::NotificationService::AllSources());
-  ExtensionActionTestHelper::Create(browser())->InspectPopup(0);
+  ExtensionActionTestHelper::Create(browser())->InspectPopup(extension->id());
   frame_observer.Wait();
   EXPECT_TRUE(ExtensionActionTestHelper::Create(browser())->HasPopup());
 
@@ -522,9 +534,9 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, DestroyHWNDDoesNotCrash) {
   EXPECT_EQ(TRUE, ::IsWindow(browser_hwnd));
 
   // Create a new browser window to prevent the message loop from terminating.
-  browser()->OpenURL(content::OpenURLParams(GURL("about:"), content::Referrer(),
-                                            WindowOpenDisposition::NEW_WINDOW,
-                                            ui::PAGE_TRANSITION_TYPED, false));
+  browser()->OpenURL(content::OpenURLParams(
+      GURL("chrome://version"), content::Referrer(),
+      WindowOpenDisposition::NEW_WINDOW, ui::PAGE_TRANSITION_TYPED, false));
 
   // Forcibly closing the browser HWND should not cause a crash.
   EXPECT_EQ(TRUE, ::CloseWindow(browser_hwnd));
@@ -582,15 +594,45 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, BrowserActionPopup) {
   // popup.
   const gfx::Size kExpectedSizes[] = {minSize, middleSize, maxSize};
   for (size_t i = 0; i < base::size(kExpectedSizes); i++) {
-    const gfx::Size& kExpectedSize = kExpectedSizes[i];
-    SCOPED_TRACE(testing::Message()
-                 << "Test #" << i << ": size = " << kExpectedSize.ToString());
-
     content::WebContentsAddedObserver popup_observer;
-    actions_bar->Press(0);
+    actions_bar->Press(extension->id());
     content::WebContents* popup = popup_observer.GetWebContents();
-    MainFrameSizeWaiter(popup, kExpectedSize).Wait();
-    EXPECT_EQ(kExpectedSize, popup->GetContainerBounds().size());
+    actions_bar->WaitForExtensionsContainerLayout();
+
+    gfx::Size max_available_size =
+        actions_bar->GetMaxAvailableSizeToFitBubbleOnScreen(extension->id());
+
+    // Take the screen boundaries into account for calculating the size of the
+    // displayed popup
+    gfx::Size expected_size = kExpectedSizes[i];
+    expected_size.SetToMin(max_available_size);
+
+    // Take the scrollbar thickness into account in the cases where one
+    // dimension is adjusted leading to a scrollbar being added to the expected
+    // size of the other dimension where there is space available. On Mac the
+    // scrollbars are overlaid, appear on hover and don't increase the height
+    // or width of the popup.
+    const int kScrollbarAdjustment =
+#if defined(OS_MAC)
+        0;
+#else
+        gfx::scrollbar_size();
+#endif
+
+    expected_size.Enlarge(expected_size.height() < kExpectedSizes[i].height()
+                              ? kScrollbarAdjustment
+                              : 0,
+                          expected_size.width() < kExpectedSizes[i].width()
+                              ? kScrollbarAdjustment
+                              : 0);
+    expected_size.SetToMin(max_available_size);
+    expected_size.SetToMin(maxSize);
+
+    SCOPED_TRACE(testing::Message()
+                 << "Test #" << i << ": size = " << expected_size.ToString());
+
+    MainFrameSizeWaiter(popup, expected_size).Wait();
+    EXPECT_EQ(expected_size, popup->GetContainerBounds().size());
     ASSERT_TRUE(actions_bar->HidePopup());
   }
 }
@@ -611,7 +653,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
       content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
 
   // Simulate a click on the browser action to open the popup.
-  content::WebContents* popup = OpenPopupViaToolbar();
+  content::WebContents* popup = OpenPopupViaToolbar(extension->id());
   ASSERT_TRUE(popup);
   content::ExecuteScriptAsync(popup, "run_tests()");
 
@@ -697,7 +739,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
   ASSERT_TRUE(extension) << message_;
 
   // Simulate a click on the browser action to open the popup.
-  ASSERT_TRUE(OpenPopupViaToolbar());
+  ASSERT_TRUE(OpenPopupViaToolbar(extension->id()));
 
   // Find the RenderFrameHost associated with the iframe in the popup.
   content::RenderFrameHost* frame_host = nullptr;
@@ -796,12 +838,12 @@ class NavigatingExtensionPopupInteractiveTest
       std::unique_ptr<ExtensionActionTestHelper> action_bar_helper =
           ExtensionActionTestHelper::Create(browser());
       ASSERT_EQ(2, action_bar_helper->NumberOfBrowserActions());
-      ASSERT_EQ(popup_extension().id(), action_bar_helper->GetExtensionId(0));
-      ASSERT_EQ(other_extension().id(), action_bar_helper->GetExtensionId(1));
+      EXPECT_TRUE(action_bar_helper->HasAction(popup_extension().id()));
+      EXPECT_TRUE(action_bar_helper->HasAction(other_extension().id()));
     }
 
     // Simulate a click on the browser action to open the popup.
-    content::WebContents* popup = OpenPopupViaToolbar();
+    content::WebContents* popup = OpenPopupViaToolbar(popup_extension().id());
     ASSERT_TRUE(popup);
     GURL popup_url = popup_extension().GetResourceURL("popup.html");
     EXPECT_EQ(popup_url, popup->GetLastCommittedURL());
@@ -945,7 +987,7 @@ IN_PROC_BROWSER_TEST_F(NavigatingExtensionPopupInteractiveTest,
   // The test verification below is applicable only to scenarios where the
   // download shelf is supported - on ChromeOS, instead of the download shelf,
   // there is a download notification in the right-bottom corner of the screen.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   EXPECT_TRUE(browser()->window()->IsDownloadShelfVisible());
 #endif
 }
@@ -980,7 +1022,7 @@ IN_PROC_BROWSER_TEST_F(NavigatingExtensionPopupInteractiveTest,
   // The test verification below is applicable only to scenarios where the
   // download shelf is supported - on ChromeOS, instead of the download shelf,
   // there is a download notification in the right-bottom corner of the screen.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   EXPECT_TRUE(browser()->window()->IsDownloadShelfVisible());
 #endif
 }

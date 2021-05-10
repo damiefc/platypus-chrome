@@ -36,7 +36,7 @@ class BASE_EXPORT JobDelegate {
               internal::PooledTaskRunnerDelegate* pooled_task_runner_delegate);
   ~JobDelegate();
 
-  // Returns true if this thread should return from the worker task on the
+  // Returns true if this thread *must* return from the worker task on the
   // current thread ASAP. Workers should periodically invoke ShouldYield (or
   // YieldIfNeeded()) as often as is reasonable.
   bool ShouldYield();
@@ -94,8 +94,8 @@ class BASE_EXPORT JobHandle {
   // Returns true if associated with a Job.
   explicit operator bool() const { return task_source_ != nullptr; }
 
-  // Returns true if there's no work pending and no worker running.
-  bool IsCompleted() const;
+  // Returns true if there's any work pending or any worker running.
+  bool IsActive() const;
 
   // Update this Job's priority.
   void UpdatePriority(TaskPriority new_priority);

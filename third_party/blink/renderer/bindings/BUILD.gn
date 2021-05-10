@@ -65,6 +65,9 @@ if (use_blink_v8_binding_new_idl_interface) {
 
 template("collect_idl_files") {
   action_with_pydeps(target_name) {
+    # TODO(crbug.com/1194277): Investigate non-determinism in Py3 builds.
+    run_under_python2 = true
+
     script = "${bindings_scripts_dir}/collect_idl_files.py"
 
     inputs = invoker.inputs
@@ -94,10 +97,6 @@ collect_idl_files("web_idl_in_core") {
   component = "core"
 
   inputs = static_idl_files_in_core
-
-  # Supplemental IDL definitions to support the migration from the old bindings
-  # generator to the new one.
-  inputs += [ "${bindings_scripts_dir}/web_idl/migration_adapter.idl" ]
 
   output = "${bindings_output_dir}/web_idl_in_core.pickle"
 }
@@ -139,6 +138,11 @@ collect_idl_files("web_idl_in_modules_for_testing") {
 }
 
 action_with_pydeps("web_idl_database") {
+  # TODO(crbug.com/1194277): Investigate non-determinism in Py3 builds.
+  run_under_python2 = true
+
+  visibility += [ "//tools/privacy_budget/blink_apis:*" ]
+
   script = "${bindings_scripts_dir}/build_web_idl_database.py"
 
   input_data_files = get_target_outputs(":web_idl_in_core") +
@@ -147,12 +151,11 @@ action_with_pydeps("web_idl_database") {
                      get_target_outputs(":web_idl_in_modules_for_testing")
   runtime_enabled_features_file = "../platform/runtime_enabled_features.json5"
   inputs = input_data_files + [ runtime_enabled_features_file ]
-  output_data_file = "${bindings_output_dir}/web_idl_database.pickle"
-  outputs = [ output_data_file ]
+  outputs = [ web_idl_database_filepath ]
 
   args = [
            "--output",
-           rebase_path(output_data_file, root_build_dir),
+           rebase_path(web_idl_database_filepath, root_build_dir),
            "--runtime_enabled_features",
            rebase_path(runtime_enabled_features_file, root_build_dir),
            "--",
@@ -168,6 +171,9 @@ action_with_pydeps("web_idl_database") {
 
 template("generate_bindings") {
   action_with_pydeps(target_name) {
+    # TODO(crbug.com/1194277): Investigate non-determinism in Py3 builds.
+    run_under_python2 = true
+
     script = "${bindings_scripts_dir}/generate_bindings.py"
 
     if (defined(invoker.pool)) {
@@ -225,27 +231,56 @@ generate_bindings("generate_bindings_all") {
                generated_interface_sources_in_modules +
                generated_interface_sources_for_testing_in_core +
                generated_interface_sources_for_testing_in_modules
+    targets += [ "namespace" ]
+    outputs += generated_namespace_sources_in_core +
+               generated_namespace_sources_in_modules
   }
+  targets += [ "typedef" ]
+  outputs +=
+      generated_typedef_sources_in_core + generated_typedef_sources_in_modules
+  targets += [ "union" ]
+  outputs +=
+      generated_union_sources_in_core + generated_union_sources_in_modules +
+      generated_union_sources_for_testing_in_core
 }
 
-action_with_pydeps("generate_high_entropy_list") {
-  script = "${bindings_scripts_dir}/generate_high_entropy_list.py"
+action_with_pydeps("validate_web_idl") {
+  script = "${bindings_scripts_dir}/validate_web_idl.py"
 
   web_idl_database_outputs = get_target_outputs(":web_idl_database")
   web_idl_database = web_idl_database_outputs[0]
+  idl_syntax_known_issues = "idl_syntax_known_issues.txt"
+  validate_web_idl_result =
+      "${bindings_output_dir}/validate_web_idl_results.txt"
 
-  inputs = [ web_idl_database ]
-  output_data_file = "${root_build_dir}/high_entropy_list.csv"
-  outputs = [ output_data_file ]
+  inputs = [
+    web_idl_database,
+    idl_syntax_known_issues,
+  ]
+  outputs = [ validate_web_idl_result ]
 
   args = [
     "--web_idl_database",
     rebase_path(web_idl_database, root_build_dir),
+    "--idl_syntax_known_issues",
+    rebase_path(idl_syntax_known_issues, root_build_dir),
     "--output",
-    rebase_path(output_data_file, root_build_dir),
+    rebase_path(validate_web_idl_result, root_build_dir),
   ]
 
-  deps = [ ":web_idl_database" ]
+  deps = [
+    # A lot of C++ compile tasks are waiting for the completion of the
+    # bindings generator because most Blink C++ source files directly or
+    # indirectly depend on the generated bindings files.  Since we'd like
+    # `generate_bindings_all` to use the most CPU power and memory so that
+    # it unblocks Blink C++ compile tasks as soon as possible, we do not like
+    # `validate_web_idl` running in parallel to `generate_bindings_all`.
+    #
+    # This trick (unnecessary dependency to `generate_bindings_all`) makes
+    # `validate_web_idl` wait for the completion of `generate_bindings_all`.
+    ":generate_bindings_all",
+    ":web_idl_database",
+  ]
 }
 
 # Exposes the libraries that affect the resulting blob image of the V8 context

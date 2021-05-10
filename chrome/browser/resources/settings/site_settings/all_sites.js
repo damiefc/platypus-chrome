@@ -10,12 +10,12 @@
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
 import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
-import 'chrome://resources/cr_elements/cr_search_field/cr_search_field.m.js';
+import 'chrome://resources/cr_elements/cr_search_field/cr_search_field.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/cr_elements/md_select_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
-import '../settings_shared_css.m.js';
+import '../settings_shared_css.js';
 import './all_sites_icons.js';
 import './clear_storage_dialog_css.js';
 import './site_entry.js';
@@ -24,10 +24,10 @@ import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
 import {afterNextRender, html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {GlobalScrollTargetBehavior, GlobalScrollTargetBehaviorImpl} from '../global_scroll_target_behavior.m.js';
+import {GlobalScrollTargetBehavior, GlobalScrollTargetBehaviorImpl} from '../global_scroll_target_behavior.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {routes} from '../route.js';
-import {Route, RouteObserverBehavior, Router} from '../router.m.js';
+import {Route, RouteObserverBehavior, Router} from '../router.js';
 
 import {ALL_SITES_DIALOG, AllSitesAction2, ContentSetting, ContentSettingsTypes, SortMethod} from './constants.js';
 import {LocalDataBrowserProxy, LocalDataBrowserProxyImpl} from './local_data_browser_proxy.js';
@@ -154,15 +154,6 @@ Polymer({
     sortMethod_: String,
 
     /**
-     * Used to determine if clear all data UI should be displayed.
-     * @private
-     */
-    storagePressureFlagEnabled_: {
-      type: Boolean,
-      value: () => loadTimeData.getBoolean('enableStoragePressureUI'),
-    },
-
-    /**
      * The total usage of all sites for this profile.
      * @type {string}
      * @private
@@ -195,11 +186,9 @@ Polymer({
       this.selectedItem_ = event.detail;
     });
 
-    if (this.storagePressureFlagEnabled_) {
-      const sortParam = Router.getInstance().getQueryParameters().get('sort');
-      if (Object.values(this.sortMethods_).includes(sortParam)) {
-        this.$.sortMethod.value = sortParam;
-      }
+    const sortParam = Router.getInstance().getQueryParameters().get('sort');
+    if (Object.values(this.sortMethods_).includes(sortParam)) {
+      this.$.sortMethod.value = sortParam;
     }
     this.sortMethod_ = this.$.sortMethod.value;
   },
@@ -479,23 +468,19 @@ Polymer({
    */
   onConfirmClearData_(e) {
     e.preventDefault();
-    if (this.storagePressureFlagEnabled_) {
-      const {actionScope, index, origin} = this.actionMenuModel_;
-      const {origins, hasInstalledPWA} = this.filteredList_[index];
+    const {actionScope, index, origin} = this.actionMenuModel_;
+    const {origins, hasInstalledPWA} = this.filteredList_[index];
 
-      const scope = actionScope === 'origin' ? 'Origin' : 'SiteGroup';
-      const appInstalled = actionScope === 'origin' ?
-          (origins.find(o => o.origin === origin) || {}).isInstalled :
-          hasInstalledPWA;
-      const installed = appInstalled ? 'Installed' : '';
+    const scope = actionScope === 'origin' ? 'Origin' : 'SiteGroup';
+    const appInstalled = actionScope === 'origin' ?
+        (origins.find(o => o.origin === origin) || {}).isInstalled :
+        hasInstalledPWA;
+    const installed = appInstalled ? 'Installed' : '';
 
-      const scopes =
-          [ALL_SITES_DIALOG.CLEAR_DATA, scope, installed, 'DialogOpened'];
-      this.recordUserAction_(scopes);
-      this.$.confirmClearDataNew.get().showModal();
-    } else {
-      this.$.confirmClearData.get().showModal();
-    }
+    const scopes =
+        [ALL_SITES_DIALOG.CLEAR_DATA, scope, installed, 'DialogOpened'];
+    this.recordUserAction_(scopes);
+    this.$.confirmClearDataNew.get().showModal();
   },
 
   /**
@@ -534,45 +519,37 @@ Polymer({
       return '';
     }
 
-    if (this.storagePressureFlagEnabled_) {
-      const {index, origin} = this.actionMenuModel_;
+    const {index, origin} = this.actionMenuModel_;
 
-      const {origins, hasInstalledPWA} = this.filteredList_[index];
+    const {origins, hasInstalledPWA} = this.filteredList_[index];
 
-      if (origin) {
-        const {isInstalled = false} =
-            origins.find(o => o.origin === origin) || {};
-        const messageId = isInstalled ?
-            'siteSettingsOriginDeleteConfirmationInstalled' :
-            'siteSettingsOriginDeleteConfirmation';
-        return loadTimeData.substituteString(
-            this.i18n(messageId), this.originRepresentation(origin));
-      } else {
-        // Clear SiteGroup
-        let messageId;
-        if (hasInstalledPWA) {
-          const multipleAppsInstalled =
-              (this.filteredList_[index].origins || [])
-                  .filter(o => o.isInstalled)
-                  .length > 1;
-
-          messageId = multipleAppsInstalled ?
-              'siteSettingsSiteGroupDeleteConfirmationInstalledPlural' :
-              'siteSettingsSiteGroupDeleteConfirmationInstalled';
-        } else {
-          messageId = 'siteSettingsSiteGroupDeleteConfirmationNew';
-        }
-        const displayName = this.actionMenuModel_.item.etldPlus1 ||
-            this.originRepresentation(
-                this.actionMenuModel_.item.origins[0].origin);
-        return loadTimeData.substituteString(this.i18n(messageId), displayName);
-      }
-    } else {
-      // Storage Pressure UI disabled
+    if (origin) {
+      const {isInstalled = false} =
+          origins.find(o => o.origin === origin) || {};
+      const messageId = isInstalled ?
+          'siteSettingsOriginDeleteConfirmationInstalled' :
+          'siteSettingsOriginDeleteConfirmation';
       return loadTimeData.substituteString(
-          this.i18n('siteSettingsSiteGroupDeleteConfirmation'),
-          this.actionMenuModel_.item.etldPlus1);
-    }
+          this.i18n(messageId), this.originRepresentation(origin));
+    } else {
+      // Clear SiteGroup
+      let messageId;
+      if (hasInstalledPWA) {
+        const multipleAppsInstalled = (this.filteredList_[index].origins || [])
+                                          .filter(o => o.isInstalled)
+                                          .length > 1;
+
+        messageId = multipleAppsInstalled ?
+            'siteSettingsSiteGroupDeleteConfirmationInstalledPlural' :
+            'siteSettingsSiteGroupDeleteConfirmationInstalled';
+      } else {
+        messageId = 'siteSettingsSiteGroupDeleteConfirmationNew';
+      }
+      const displayName = this.actionMenuModel_.item.etldPlus1 ||
+          this.originRepresentation(
+              this.actionMenuModel_.item.origins[0].origin);
+      return loadTimeData.substituteString(this.i18n(messageId), displayName);
+      }
   },
 
   /**
@@ -644,9 +621,6 @@ Polymer({
     const contentSettingsTypes = this.getCategoryList();
     this.browserProxy.setOriginPermissions(
         origin, contentSettingsTypes, ContentSetting.DEFAULT);
-    if (contentSettingsTypes.includes(ContentSettingsTypes.PLUGINS)) {
-      this.browserProxy.clearFlashPref(origin);
-    }
   },
 
   /**

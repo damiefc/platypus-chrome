@@ -12,7 +12,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/strings/string16.h"
 #include "components/metrics/clean_exit_beacon.h"
 #include "components/metrics/client_info.h"
 #include "components/metrics/cloned_install_detector.h"
@@ -56,6 +55,9 @@ class MetricsStateManager final {
   // Returns the client ID for this client, or the empty string if the user is
   // not opted in to metrics reporting.
   const std::string& client_id() const { return client_id_; }
+
+  // Returns the low entropy source for this client.
+  int GetLowEntropySource();
 
   // The CleanExitBeacon, used to determine whether the previous Chrome browser
   // session terminated gracefully.
@@ -101,7 +103,7 @@ class MetricsStateManager final {
   static std::unique_ptr<MetricsStateManager> Create(
       PrefService* local_state,
       EnabledStateProvider* enabled_state_provider,
-      const base::string16& backup_registry_key,
+      const std::wstring& backup_registry_key,
       StoreClientInfoCallback store_client_info,
       LoadClientInfoCallback load_client_info);
 
@@ -137,7 +139,7 @@ class MetricsStateManager final {
   // that it is later retrievable by |load_client_info|.
   MetricsStateManager(PrefService* local_state,
                       EnabledStateProvider* enabled_state_provider,
-                      const base::string16& backup_registry_key,
+                      const std::wstring& backup_registry_key,
                       StoreClientInfoCallback store_client_info,
                       LoadClientInfoCallback load_client_info);
 
@@ -152,9 +154,6 @@ class MetricsStateManager final {
   // each install. UMA must be enabled (and |client_id_| must be set) or
   // |provisional_client_id_| must be set before calling this.
   std::string GetHighEntropySource();
-
-  // Returns the low entropy source for this client.
-  int GetLowEntropySource();
 
   // Returns the old low entropy source for this client.
   int GetOldLowEntropySource();

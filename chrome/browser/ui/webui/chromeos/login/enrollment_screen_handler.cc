@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
@@ -16,16 +16,16 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/ash/authpolicy/authpolicy_helper.h"
+#include "chrome/browser/ash/login/error_screens_histogram_helper.h"
+#include "chrome/browser/ash/login/help_app_launcher.h"
+#include "chrome/browser/ash/login/oobe_screen.h"
+#include "chrome/browser/ash/login/screens/network_error.h"
+#include "chrome/browser/ash/login/signin_partition_manager.h"
+#include "chrome/browser/ash/login/ui/login_display_host.h"
+#include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chromeos/authpolicy/authpolicy_helper.h"
-#include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
-#include "chrome/browser/chromeos/login/help_app_launcher.h"
-#include "chrome/browser/chromeos/login/oobe_screen.h"
-#include "chrome/browser/chromeos/login/screens/network_error.h"
-#include "chrome/browser/chromeos/login/signin_partition_manager.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host.h"
-#include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
 #include "chrome/browser/chromeos/policy/policy_oauth2_token_fetcher.h"
@@ -67,7 +67,7 @@ constexpr char kActiveDirectoryJoinHistogram[] =
 
 constexpr char kOAUTHCodeCookie[] = "oauth_code";
 
-// Converts |mode| to a mode identifier for the UI.
+// Converts `mode` to a mode identifier for the UI.
 std::string EnrollmentModeToUIMode(policy::EnrollmentConfig::Mode mode) {
   switch (mode) {
     case policy::EnrollmentConfig::MODE_NONE:
@@ -339,10 +339,10 @@ void EnrollmentScreenHandler::ShowEnrollmentSpinnerScreen() {
   ShowStep(kEnrollmentStepWorking);
 }
 
-void EnrollmentScreenHandler::SetEnterpriseDomainAndDeviceType(
-    const std::string& domain,
-    const base::string16& device_type) {
-  CallJS("login.OAuthEnrollmentScreen.setEnterpriseDomainAndDeviceType", domain,
+void EnrollmentScreenHandler::SetEnterpriseDomainInfo(
+    const std::string& manager,
+    const std::u16string& device_type) {
+  CallJS("login.OAuthEnrollmentScreen.setEnterpriseDomainInfo", manager,
          device_type);
 }
 
@@ -386,6 +386,10 @@ void EnrollmentScreenHandler::ShowOtherError(
   NOTREACHED();
 }
 
+void EnrollmentScreenHandler::Shutdown() {
+  shutdown_ = true;
+}
+
 void EnrollmentScreenHandler::ShowEnrollmentStatus(
     policy::EnrollmentStatus status) {
   switch (status.status()) {
@@ -399,10 +403,19 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
       // Some special cases for generating a nicer message that's more helpful.
       switch (status.client_status()) {
         case policy::DM_STATUS_SERVICE_MANAGEMENT_NOT_SUPPORTED:
-          ShowError(IDS_ENTERPRISE_ENROLLMENT_ACCOUNT_ERROR, true);
+          if (policy::EnrollmentRequisitionManager::IsRemoraRequisition()) {
+            ShowError(IDS_ENTERPRISE_ENROLLMENT_ACCOUNT_ERROR_MEETS, true);
+          } else {
+            ShowError(IDS_ENTERPRISE_ENROLLMENT_ACCOUNT_ERROR, true);
+          }
           break;
         case policy::DM_STATUS_SERVICE_MISSING_LICENSES:
-          ShowError(IDS_ENTERPRISE_ENROLLMENT_MISSING_LICENSES_ERROR, true);
+          if (policy::EnrollmentRequisitionManager::IsRemoraRequisition()) {
+            ShowError(IDS_ENTERPRISE_ENROLLMENT_MISSING_LICENSES_ERROR_MEETS,
+                      true);
+          } else {
+            ShowError(IDS_ENTERPRISE_ENROLLMENT_MISSING_LICENSES_ERROR, true);
+          }
           break;
         case policy::DM_STATUS_SERVICE_DEPROVISIONED:
           ShowError(IDS_ENTERPRISE_ENROLLMENT_DEPROVISIONED_ERROR, true);
@@ -422,8 +435,19 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
               true);
           break;
         case policy::DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED:
+          if (policy::EnrollmentRequisitionManager::IsRemoraRequisition()) {
+            ShowError(
+                IDS_ENTERPRISE_ENROLLMENT_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED_MEETS,
+                true);
+          } else {
+            ShowError(
+                IDS_ENTERPRISE_ENROLLMENT_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED,
+                true);
+          }
+          break;
+        case policy::DM_STATUS_SERVICE_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE:
           ShowError(
-              IDS_ENTERPRISE_ENROLLMENT_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED,
+              IDS_ENTERPRISE_ENROLLMENT_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE,
               true);
           break;
         default:
@@ -540,7 +564,12 @@ void EnrollmentScreenHandler::DeclareLocalizedValues(
                IDS_ENTERPRISE_ENROLLMENT_SCREEN_TITLE);
   builder->Add("oauthEnrollNextBtn", IDS_OFFLINE_LOGIN_NEXT_BUTTON_TEXT);
   builder->Add("oauthEnrollSkip", IDS_ENTERPRISE_ENROLLMENT_SKIP);
-  builder->Add("oauthEnrollDone", IDS_ENTERPRISE_ENROLLMENT_DONE);
+  if (policy::EnrollmentRequisitionManager::IsRemoraRequisition()) {
+    // Use Next text since the setup is not finished.
+    builder->Add("oauthEnrollDone", IDS_EULA_NEXT_BUTTON);
+  } else {
+    builder->Add("oauthEnrollDone", IDS_ENTERPRISE_ENROLLMENT_DONE);
+  }
   builder->Add("oauthEnrollRetry", IDS_ENTERPRISE_ENROLLMENT_RETRY);
   builder->Add("oauthEnrollManualEnrollment",
                IDS_ENTERPRISE_ENROLLMENT_ENROLL_MANUALLY);
@@ -599,11 +628,11 @@ void EnrollmentScreenHandler::GetAdditionalParameters(
   parameters->SetKey("encryptionTypesList", GetEncryptionTypesList());
 }
 
-bool EnrollmentScreenHandler::IsOnEnrollmentScreen() const {
+bool EnrollmentScreenHandler::IsOnEnrollmentScreen() {
   return (GetCurrentScreen() == kScreenId);
 }
 
-bool EnrollmentScreenHandler::IsEnrollmentScreenHiddenByError() const {
+bool EnrollmentScreenHandler::IsEnrollmentScreenHiddenByError() {
   return (GetCurrentScreen() == ErrorScreenView::kScreenId &&
           error_screen_->GetParentScreen() == kScreenId);
 }
@@ -735,6 +764,7 @@ void EnrollmentScreenHandler::HandleToggleFakeEnrollment() {
   VLOG(1) << "HandleToggleFakeEnrollment";
   policy::PolicyOAuth2TokenFetcher::UseFakeTokensForTesting();
   WizardController::SkipEnrollmentPromptsForTesting();
+  use_fake_login_for_testing_ = true;
 }
 
 void EnrollmentScreenHandler::HandleClose(const std::string& reason) {
@@ -825,8 +855,10 @@ void EnrollmentScreenHandler::OnGetCookiesForCompleteLogin(
     }
   }
 
-  if (auth_code.empty()) {
+  // Allow testing to continue without a oauth cookie.
+  if (auth_code.empty() && !use_fake_login_for_testing_) {
     // Will try again from oauth_code_waiter callback.
+    VLOG(1) << "OAuth cookie empty, still waiting";
     return;
   }
 
@@ -836,8 +868,13 @@ void EnrollmentScreenHandler::OnGetCookiesForCompleteLogin(
 }
 
 void EnrollmentScreenHandler::OnCookieWaitTimeout() {
+  LOG(ERROR) << "Timeout waiting for OAuth cookie";
   oauth_code_waiter_.reset();
-  ShowError(IDS_LOGIN_FATAL_ERROR_NO_AUTH_TOKEN, true);
+
+  // If enrollment ends and the browser is being restarted, the renderers are
+  // killed so we can not talk to them anymore.
+  if (!shutdown_)
+    ShowError(IDS_LOGIN_FATAL_ERROR_NO_AUTH_TOKEN, true);
 }
 
 void EnrollmentScreenHandler::HandleAdCompleteLogin(
@@ -919,6 +956,11 @@ void EnrollmentScreenHandler::DoShow() {
 
 void EnrollmentScreenHandler::DoShowWithPartition(
     const std::string& partition_name) {
+  // If enrollment ends and the browser is being restarted, the renderers are
+  // killed so we can not talk to them anymore.
+  if (shutdown_)
+    return;
+
   base::DictionaryValue screen_data;
 
   screen_data.SetString("webviewPartitionName", partition_name);

@@ -44,15 +44,6 @@ class SyncEncryptionPassphraseTableViewControllerTest
  public:
   SyncEncryptionPassphraseTableViewControllerTest() {}
 
-  static std::unique_ptr<KeyedService> CreateSyncSetupService(
-      web::BrowserState* context) {
-    ChromeBrowserState* chrome_browser_state =
-        ChromeBrowserState::FromBrowserState(context);
-    syncer::SyncService* sync_service =
-        ProfileSyncServiceFactory::GetForBrowserState(chrome_browser_state);
-    return std::make_unique<SyncSetupServiceMock>(sync_service);
-  }
-
   void TurnSyncPassphraseErrorOn() {
     ON_CALL(*mock_sync_setup_service_, GetSyncServiceState())
         .WillByDefault(Return(SyncSetupService::kSyncServiceNeedsPassphrase));
@@ -74,7 +65,7 @@ class SyncEncryptionPassphraseTableViewControllerTest
     mock_sync_setup_service_ = static_cast<NiceMock<SyncSetupServiceMock>*>(
         SyncSetupServiceFactory::GetInstance()->SetTestingFactoryAndUse(
             chrome_browser_state_.get(),
-            base::BindRepeating(&CreateSyncSetupService)));
+            base::BindRepeating(&SyncSetupServiceMock::CreateKeyedService)));
     // The other mocked functions of SyncSetupServiceMock return bools, so they
     // will by default return false.  GetSyncServiceState(), however, returns an
     // enum, and thus always needs its default value set.
@@ -198,10 +189,10 @@ TEST_F(SyncEncryptionPassphraseTableViewControllerTest,
   ON_CALL(*fake_sync_service_->GetMockUserSettings(), IsPassphraseRequired())
       .WillByDefault(Return(false));
   ON_CALL(*fake_sync_service_->GetMockUserSettings(),
-          IsUsingSecondaryPassphrase())
+          IsUsingExplicitPassphrase())
       .WillByDefault(Return(true));
   [sync_controller onSyncStateChanged];
-  // Calling -onStateChanged with an accepted secondary passphrase should
+  // Calling -onStateChanged with an accepted explicit passphrase should
   // cause the controller to be popped off the navigation stack.
   EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
       base::test::ios::kWaitForUIElementTimeout, ^bool() {

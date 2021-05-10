@@ -12,7 +12,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
@@ -897,7 +897,7 @@ void TestLevelDBSaveAndLoad(bool close_after_save) {
   EXPECT_TRUE(db->Save(save_entries, remove_keys, &status));
 
   if (close_after_save) {
-    db.reset(new LevelDB(kTestLevelDBClientName));
+    db = std::make_unique<LevelDB>(kTestLevelDBClientName);
     EXPECT_TRUE(db->Init(temp_dir.GetPath(), CreateSimpleOptions()));
   }
 

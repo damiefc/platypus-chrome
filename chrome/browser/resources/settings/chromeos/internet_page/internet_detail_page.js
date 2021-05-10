@@ -30,6 +30,18 @@ Polymer({
       notify: true,
     },
 
+    /**
+     * Whether network configuration properties sections should be shown. The
+     * advanced section is not controlled by this property.
+     * @private
+     */
+    showConfigurableSections_: {
+      type: Boolean,
+      value: true,
+      computed:
+          'computeShowConfigurableSections_(deviceState_, managedProperties_)',
+    },
+
     /** @private Indicates if wi-fi sync is enabled for the active user.  */
     isWifiSyncEnabled_: Boolean,
 
@@ -121,6 +133,22 @@ Polymer({
     },
 
     /**
+     * The network hidden state.
+     * @private {!chrome.settingsPrivate.PrefObject|undefined}
+     */
+    hiddenPref_: {
+      type: Object,
+      observer: 'hiddenPrefChanged_',
+      value() {
+        return {
+          key: 'fakeHiddenPref',
+          type: chrome.settingsPrivate.PrefType.BOOLEAN,
+          value: false,
+        };
+      },
+    },
+
+    /**
      * The always-on VPN state as a fake preference object.
      * @private {!chrome.settingsPrivate.PrefObject|undefined}
      */
@@ -190,6 +218,36 @@ Polymer({
       }
     },
 
+    /**
+     * Whether to show the Hidden toggle on configured wifi networks (flag).
+     * @private
+     */
+    showHiddenToggle_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.valueExists('showHiddenToggle') &&
+            loadTimeData.getBoolean('showHiddenToggle');
+      },
+    },
+
+    /** @private */
+    isUpdatedCellularUiEnabled_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('updatedCellularActivationUi');
+      }
+    },
+
+    /**
+     * When true, all inputs that allow state to be changed (e.g., toggles,
+     * inputs) are disabled.
+     */
+    disabled_: {
+      type: Boolean,
+      value: false,
+      computed: 'computeDisabled_(deviceState_.*)'
+    },
+
     /** @private */
     advancedExpanded_: Boolean,
 
@@ -215,6 +273,7 @@ Polymer({
         chromeos.settings.mojom.Setting.kForgetWifiNetwork,
         chromeos.settings.mojom.Setting.kWifiAutoConfigureIp,
         chromeos.settings.mojom.Setting.kWifiDns,
+        chromeos.settings.mojom.Setting.kWifiHidden,
         chromeos.settings.mojom.Setting.kWifiProxy,
         chromeos.settings.mojom.Setting.kWifiAutoConnectToNetwork,
         chromeos.settings.mojom.Setting.kCellularSimLock,
@@ -239,6 +298,7 @@ Polymer({
     'updateAutoConnectPref_(globalPolicy)',
     'autoConnectPrefChanged_(autoConnectPref_.*)',
     'alwaysOnVpnChanged_(alwaysOnVpn_.*)',
+    'hiddenPrefChanged_(hiddenPref_.*)',
   ],
 
   /** @private {boolean} */
@@ -410,19 +470,19 @@ Polymer({
    * @protected
    */
   currentRouteChanged(route, oldRoute) {
-    if (route != settings.routes.NETWORK_DETAIL) {
+    if (route !== settings.routes.NETWORK_DETAIL) {
       return;
     }
 
     const queryParams = settings.Router.getInstance().getQueryParameters();
     const guid = queryParams.get('guid') || '';
     if (!guid) {
-      console.error('No guid specified for page:' + route);
+      console.warn('No guid specified for page:' + route);
       this.close();
     }
 
     this.shouldShowConfigureWhenNetworkLoaded_ =
-        queryParams.get('showConfigure') == 'true';
+        queryParams.get('showConfigure') === 'true';
     const type = queryParams.get('type') || 'WiFi';
     const name = queryParams.get('name') || type;
     this.init(guid, type, name);
@@ -493,9 +553,9 @@ Polymer({
       return;
     }
     // If the network was or is active, request an update.
-    if (this.managedProperties_.connectionState !=
+    if (this.managedProperties_.connectionState !==
             chromeos.networkConfig.mojom.ConnectionStateType.kNotConnected ||
-        networks.find(network => network.guid == this.guid)) {
+        networks.find(network => network.guid === this.guid)) {
       this.getNetworkDetails_();
     }
   },
@@ -508,7 +568,7 @@ Polymer({
     if (!this.guid || !this.managedProperties_) {
       return;
     }
-    if (network.guid == this.guid) {
+    if (network.guid === this.guid) {
       this.getNetworkDetails_();
     }
   },
@@ -535,16 +595,17 @@ Polymer({
       return;
     }
     this.updateAutoConnectPref_();
+    this.updateHiddenPref_();
 
     const metered = this.managedProperties_.metered;
-    if (metered && metered.activeValue != this.meteredOverride_) {
+    if (metered && metered.activeValue !== this.meteredOverride_) {
       this.meteredOverride_ = metered.activeValue;
     }
 
     const priority = this.managedProperties_.priority;
     if (priority) {
       const preferNetwork = priority.activeValue > 0;
-      if (preferNetwork != this.preferNetwork_) {
+      if (preferNetwork !== this.preferNetwork_) {
         this.preferNetwork_ = preferNetwork;
       }
     }
@@ -571,7 +632,7 @@ Polymer({
     }
 
     if (this.shouldShowConfigureWhenNetworkLoaded_ &&
-        this.managedProperties_.type ==
+        this.managedProperties_.type ===
             chromeos.networkConfig.mojom.NetworkType.kTether) {
       // Set |this.shouldShowConfigureWhenNetworkLoaded_| back to false to
       // ensure that the Tether dialog is only shown once.
@@ -595,7 +656,9 @@ Polymer({
         a.managedNetworkAvailable === b.managedNetworkAvailable &&
         OncMojo.ipAddressMatch(a.ipv4Address, b.ipv4Address) &&
         OncMojo.ipAddressMatch(a.ipv6Address, b.ipv6Address) &&
-        OncMojo.simLockStatusMatch(a.simLockStatus, b.simLockStatus);
+        OncMojo.simLockStatusMatch(a.simLockStatus, b.simLockStatus) &&
+        OncMojo.simInfosMatch(a.simInfos, b.simInfos) &&
+        a.inhibitReason === b.inhibitReason;
   },
 
   /** @private */
@@ -607,7 +670,7 @@ Polymer({
     this.networkConfig_.getDeviceStateList().then(response => {
       const devices = response.result;
       const newDeviceState =
-          devices.find(device => device.type == type) || null;
+          devices.find(device => device.type === type) || null;
       let shouldGetNetworkDetails = false;
       if (!this.deviceState_ || !newDeviceState) {
         this.deviceState_ = newDeviceState;
@@ -615,9 +678,9 @@ Polymer({
       } else if (!this.deviceStatesMatch_(this.deviceState_, newDeviceState)) {
         // Only request a network state update if the deviceState changed.
         shouldGetNetworkDetails =
-            this.deviceState_.deviceState != newDeviceState.deviceState;
+            this.deviceState_.deviceState !== newDeviceState.deviceState;
         this.deviceState_ = newDeviceState;
-      } else if (this.deviceState_.scanning != newDeviceState.scanning) {
+      } else if (this.deviceState_.scanning !== newDeviceState.scanning) {
         // Update just the scanning state to avoid interrupting other parts of
         // the UI (e.g. custom IP addresses or nameservers).
         this.deviceState_.scanning = newDeviceState.scanning;
@@ -649,6 +712,61 @@ Polymer({
     this.setMojoNetworkProperties_(config);
   },
 
+  /** @private */
+  hiddenPrefChanged_() {
+    if (!this.propertiesReceived_) {
+      return;
+    }
+    settings.recordSettingChange(
+        chromeos.settings.mojom.Setting.kWifiHidden,
+        {boolValue: !!this.hiddenPref_.value});
+    const config = this.getDefaultConfigProperties_();
+    config.typeConfig.wifi.hiddenSsid = this.hiddenPref_.value ?
+        chromeos.networkConfig.mojom.HiddenSsidMode.kEnabled :
+        chromeos.networkConfig.mojom.HiddenSsidMode.kDisabled;
+    this.setMojoNetworkProperties_(config);
+  },
+
+  /**
+   * @param {!chromeos.networkConfig.mojom.PolicySource} policySource
+   * @return {!chrome.settingsPrivate.Enforcement|undefined}
+   * @private
+   */
+  getPolicyEnforcement_(policySource) {
+    switch (policySource) {
+      case chromeos.networkConfig.mojom.PolicySource.kUserPolicyEnforced:
+      case chromeos.networkConfig.mojom.PolicySource.kDevicePolicyEnforced:
+        return chrome.settingsPrivate.Enforcement.ENFORCED;
+
+      case chromeos.networkConfig.mojom.PolicySource.kUserPolicyRecommended:
+      case chromeos.networkConfig.mojom.PolicySource.kDevicePolicyRecommended:
+        return chrome.settingsPrivate.Enforcement.RECOMMENDED;
+
+      default:
+        return undefined;
+    }
+  },
+
+  /**
+   * @param {!chromeos.networkConfig.mojom.PolicySource} policySource
+   * @return {!chrome.settingsPrivate.ControlledBy|undefined}
+   * @private
+   */
+  getPolicyController_(policySource) {
+    switch (policySource) {
+      case chromeos.networkConfig.mojom.PolicySource.kDevicePolicyEnforced:
+      case chromeos.networkConfig.mojom.PolicySource.kDevicePolicyRecommended:
+        return chrome.settingsPrivate.ControlledBy.DEVICE_POLICY;
+
+      case chromeos.networkConfig.mojom.PolicySource.kUserPolicyEnforced:
+      case chromeos.networkConfig.mojom.PolicySource.kUserPolicyRecommended:
+        return chrome.settingsPrivate.ControlledBy.USER_POLICY;
+
+      default:
+        return undefined;
+    }
+  },
+
   /**
    * Updates auto-connect pref value.
    * @private
@@ -662,8 +780,6 @@ Polymer({
       return;
     }
 
-    const PolicySource = chromeos.networkConfig.mojom.PolicySource;
-
     let enforcement;
     let controlledBy;
 
@@ -672,33 +788,14 @@ Polymer({
       enforcement = chrome.settingsPrivate.Enforcement.ENFORCED;
       controlledBy = chrome.settingsPrivate.ControlledBy.DEVICE_POLICY;
     } else {
-      switch (autoConnect.policySource) {
-        case PolicySource.kUserPolicyEnforced:
-        case PolicySource.kDevicePolicyEnforced:
-          enforcement = chrome.settingsPrivate.Enforcement.ENFORCED;
-          break;
-        case PolicySource.kUserPolicyRecommended:
-        case PolicySource.kDevicePolicyRecommended:
-          enforcement = chrome.settingsPrivate.Enforcement.RECOMMENDED;
-          break;
-      }
-
-      switch (autoConnect.policySource) {
-        case PolicySource.kDevicePolicyEnforced:
-        case PolicySource.kDevicePolicyRecommended:
-          controlledBy = chrome.settingsPrivate.ControlledBy.DEVICE_POLICY;
-          break;
-        case PolicySource.kUserPolicyEnforced:
-        case PolicySource.kUserPolicyRecommended:
-          controlledBy = chrome.settingsPrivate.ControlledBy.USER_POLICY;
-          break;
-      }
+      enforcement = this.getPolicyEnforcement_(autoConnect.policySource);
+      controlledBy = this.getPolicyController_(autoConnect.policySource);
     }
 
     if (this.autoConnectPref_ &&
-        this.autoConnectPref_.value == autoConnect.activeValue &&
-        enforcement == this.autoConnectPref_.enforcement &&
-        controlledBy == this.autoConnectPref_.controlledBy) {
+        this.autoConnectPref_.value === autoConnect.activeValue &&
+        enforcement === this.autoConnectPref_.enforcement &&
+        controlledBy === this.autoConnectPref_.controlledBy) {
       return;
     }
 
@@ -713,6 +810,47 @@ Polymer({
     }
 
     this.autoConnectPref_ = newPrefValue;
+  },
+
+  /**
+   * Updates hidden pref value.
+   * @private
+   */
+  updateHiddenPref_() {
+    if (!this.managedProperties_) {
+      return;
+    }
+
+    if (this.managedProperties_.type !==
+        chromeos.networkConfig.mojom.NetworkType.kWiFi) {
+      return;
+    }
+
+
+    const hidden = this.managedProperties_.typeProperties.wifi.hiddenSsid;
+    if (!hidden) {
+      return;
+    }
+
+    const enforcement = this.getPolicyEnforcement_(hidden.policySource);
+    const controlledBy = this.getPolicyController_(hidden.policySource);
+    if (this.hiddenPref_ && this.hiddenPref_.value === hidden.activeValue &&
+        enforcement === this.hiddenPref_.enforcement &&
+        controlledBy === this.hiddenPref_.controlledBy) {
+      return;
+    }
+
+    const newPrefValue = {
+      key: 'fakeHiddenPref',
+      value: hidden.activeValue,
+      type: chrome.settingsPrivate.PrefType.BOOLEAN,
+    };
+    if (enforcement) {
+      newPrefValue.enforcement = enforcement;
+      newPrefValue.controlledBy = controlledBy;
+    }
+
+    this.hiddenPref_ = newPrefValue;
   },
 
   /**
@@ -785,7 +923,7 @@ Polymer({
     }
 
     if (!properties) {
-      console.error('Details page: GUID no longer exists: ' + this.guid);
+      // Close the page if the network was removed and no longer exists.
       this.close();
       return;
     }
@@ -846,6 +984,8 @@ Polymer({
       case chromeos.networkConfig.mojom.NetworkType.kCellular:
         managedProperties.typeProperties.cellular.signalStrength =
             networkState.typeState.cellular.signalStrength;
+        managedProperties.typeProperties.cellular.simLocked =
+            networkState.typeState.cellular.simLocked;
         break;
       case chromeos.networkConfig.mojom.NetworkType.kTether:
         managedProperties.typeProperties.tether.signalStrength =
@@ -915,22 +1055,10 @@ Polymer({
     }
 
     if (this.isOutOfRangeOrNotEnabled_(outOfRange, deviceState)) {
-      return managedProperties.type ==
+      return managedProperties.type ===
               chromeos.networkConfig.mojom.NetworkType.kTether ?
           this.i18n('tetherPhoneOutOfRange') :
           this.i18n('networkOutOfRange');
-    }
-
-    if (managedProperties.type ==
-            chromeos.networkConfig.mojom.NetworkType.kCellular &&
-        !managedProperties.connectable) {
-      if (managedProperties.typeProperties.cellular.homeProvider &&
-          managedProperties.typeProperties.cellular.homeProvider.name) {
-        return this.i18n(
-            'cellularContactSpecificCarrier',
-            managedProperties.typeProperties.cellular.homeProvider.name);
-      }
-      return this.i18n('cellularContactDefaultCarrier');
     }
 
     return this.i18n(
@@ -961,7 +1089,8 @@ Polymer({
       return this.i18n('networkAllowDataRoamingDisabled');
     }
 
-    return managedProperties.typeProperties.cellular.roamingState == 'Roaming' ?
+    return managedProperties.typeProperties.cellular.roamingState ===
+            'Roaming' ?
         this.i18n('networkAllowDataRoamingEnabledRoaming') :
         this.i18n('networkAllowDataRoamingEnabledHome');
   },
@@ -978,39 +1107,13 @@ Polymer({
   },
 
   /**
-   * @param {!chromeos.networkConfig.mojom.ManagedProperties|undefined}
-   *     managedProperties
-   * @param {boolean} outOfRange
-   * @param {?OncMojo.DeviceStateProperties} deviceState
-   * @return {boolean} True if the network shown cannot initiate a connection.
-   * @private
-   */
-  isConnectionErrorState_(managedProperties, outOfRange, deviceState) {
-    if (this.isOutOfRangeOrNotEnabled_(outOfRange, deviceState)) {
-      return true;
-    }
-
-    if (!managedProperties) {
-      return false;
-    }
-
-    // It's still possible to initiate a connection to a network if it is not
-    // connectable as long as the network has an associated configuration flow.
-    // Cellular networks do not have a configuration flow, so a Cellular network
-    // that is not connectable represents an error state.
-    return managedProperties.type ==
-        chromeos.networkConfig.mojom.NetworkType.kCellular &&
-        !managedProperties.connectable;
-  },
-
-  /**
    * @param {!chromeos.networkConfig.mojom.ManagedProperties} managedProperties
    * @return {boolean}
    * @private
    */
   isRemembered_(managedProperties) {
     return !!managedProperties &&
-        managedProperties.source !=
+        managedProperties.source !==
         chromeos.networkConfig.mojom.OncSource.kNone;
   },
 
@@ -1031,7 +1134,7 @@ Polymer({
    */
   isCellular_(managedProperties) {
     return !!managedProperties &&
-        managedProperties.type ==
+        managedProperties.type ===
         chromeos.networkConfig.mojom.NetworkType.kCellular;
   },
 
@@ -1042,7 +1145,7 @@ Polymer({
    */
   isTether_(managedProperties) {
     return !!managedProperties &&
-        managedProperties.type ==
+        managedProperties.type ===
         chromeos.networkConfig.mojom.NetworkType.kTether;
   },
 
@@ -1055,7 +1158,7 @@ Polymer({
    */
   isBlockedByPolicy_(managedProperties, globalPolicy, managedNetworkAvailable) {
     if (!managedProperties || !globalPolicy ||
-        managedProperties.type !=
+        managedProperties.type !==
             chromeos.networkConfig.mojom.NetworkType.kWiFi ||
         this.isPolicySource(managedProperties.source)) {
       return false;
@@ -1095,28 +1198,23 @@ Polymer({
       return false;
     }
 
-    if (managedProperties.connectionState !=
+    if (managedProperties.connectionState !==
         chromeos.networkConfig.mojom.ConnectionStateType.kNotConnected) {
       return false;
     }
 
     if (deviceState &&
-        deviceState.deviceState !=
+        deviceState.deviceState !==
             chromeos.networkConfig.mojom.DeviceStateType.kEnabled) {
       return false;
     }
 
-    // Cellular is not configurable, so we always show the connect button, and
-    // disable it if 'connectable' is false.
-    if (managedProperties.type ==
-        chromeos.networkConfig.mojom.NetworkType.kCellular) {
-      return true;
-    }
-
-    // If 'connectable' is false we show the configure button.
-    return managedProperties.connectable &&
-        managedProperties.type !=
+    const isEthernet = managedProperties.type ===
         chromeos.networkConfig.mojom.NetworkType.kEthernet;
+
+    // Note: Ethernet networks do not have an explicit "Connect" button in the
+    // UI.
+    return OncMojo.isNetworkConnectable(managedProperties) && !isEthernet;
   },
 
   /**
@@ -1127,11 +1225,11 @@ Polymer({
    */
   showDisconnect_(managedProperties) {
     if (!managedProperties ||
-        managedProperties.type ==
+        managedProperties.type ===
             chromeos.networkConfig.mojom.NetworkType.kEthernet) {
       return false;
     }
-    return managedProperties.connectionState !=
+    return managedProperties.connectionState !==
         chromeos.networkConfig.mojom.ConnectionStateType.kNotConnected;
   },
 
@@ -1145,8 +1243,8 @@ Polymer({
       return false;
     }
     const type = managedProperties.type;
-    if (type != chromeos.networkConfig.mojom.NetworkType.kWiFi &&
-        type != chromeos.networkConfig.mojom.NetworkType.kVPN) {
+    if (type !== chromeos.networkConfig.mojom.NetworkType.kWiFi &&
+        type !== chromeos.networkConfig.mojom.NetworkType.kVPN) {
       return false;
     }
     if (this.isArcVpn_(managedProperties)) {
@@ -1170,9 +1268,9 @@ Polymer({
     }
     const activation =
         managedProperties.typeProperties.cellular.activationState;
-    return activation ==
+    return activation ===
         chromeos.networkConfig.mojom.ActivationStateType.kNotActivated ||
-        activation ==
+        activation ===
         chromeos.networkConfig.mojom.ActivationStateType.kPartiallyActivated;
   },
 
@@ -1192,17 +1290,17 @@ Polymer({
       return false;
     }
     const type = managedProperties.type;
-    if (type == chromeos.networkConfig.mojom.NetworkType.kCellular ||
-        type == chromeos.networkConfig.mojom.NetworkType.kTether) {
+    if (type === chromeos.networkConfig.mojom.NetworkType.kCellular ||
+        type === chromeos.networkConfig.mojom.NetworkType.kTether) {
       return false;
     }
-    if (type == chromeos.networkConfig.mojom.NetworkType.kWiFi &&
-        managedProperties.typeProperties.wifi.security ==
+    if (type === chromeos.networkConfig.mojom.NetworkType.kWiFi &&
+        managedProperties.typeProperties.wifi.security ===
             chromeos.networkConfig.mojom.SecurityType.kNone) {
       return false;
     }
-    if (type == chromeos.networkConfig.mojom.NetworkType.kWiFi &&
-        (managedProperties.connectionState !=
+    if (type === chromeos.networkConfig.mojom.NetworkType.kWiFi &&
+        (managedProperties.connectionState !==
          chromeos.networkConfig.mojom.ConnectionStateType.kNotConnected)) {
       return false;
     }
@@ -1220,10 +1318,10 @@ Polymer({
    * @private
    */
   disableForget_(managedProperties, vpnConfigAllowed) {
-    if (!managedProperties) {
+    if (this.disabled_ || !managedProperties) {
       return true;
     }
-    return managedProperties.type ==
+    return managedProperties.type ===
         chromeos.networkConfig.mojom.NetworkType.kVPN &&
         vpnConfigAllowed && !vpnConfigAllowed.value;
   },
@@ -1235,10 +1333,10 @@ Polymer({
    * @private
    */
   disableConfigure_(managedProperties, vpnConfigAllowed) {
-    if (!managedProperties) {
+    if (this.disabled_ || !managedProperties) {
       return true;
     }
-    if (managedProperties.type ==
+    if (managedProperties.type ===
             chromeos.networkConfig.mojom.NetworkType.kVPN &&
         vpnConfigAllowed && !vpnConfigAllowed.value) {
       return true;
@@ -1257,7 +1355,7 @@ Polymer({
       return false;
     }
     for (const value of Object.values(managedProperties)) {
-      if (typeof value != 'object' || value === null) {
+      if (typeof value !== 'object' || value === null) {
         continue;
       }
       if ('activeValue' in value) {
@@ -1301,7 +1399,7 @@ Polymer({
     if (!this.isConnectedState_(managedProperties)) {
       const technology =
           managedProperties.typeProperties.cellular.networkTechnology;
-      if (technology != 'LTE' && technology != 'LTEAdvanced') {
+      if (technology !== 'LTE' && technology !== 'LTEAdvanced') {
         return false;
       }
       if (!managedProperties.typeProperties.cellular.mdn) {
@@ -1332,21 +1430,25 @@ Polymer({
             deviceState)) {
       return false;
     }
+
     if (!propertiesReceived || outOfRange) {
       return false;
     }
-    // Cellular networks are not configurable, so we show a disabled 'Connect'
-    // button when not connectable.
-    if (managedProperties.type ==
-            chromeos.networkConfig.mojom.NetworkType.kCellular &&
-        !managedProperties.connectable) {
-      return false;
-    }
-    if (managedProperties.type ==
+
+    if (managedProperties.type ===
             chromeos.networkConfig.mojom.NetworkType.kVPN &&
         !defaultNetwork) {
       return false;
     }
+
+    // Cannot connect to a network which is SIM locked; the user must first
+    // unlock the SIM before attempting a connection.
+    if (managedProperties.type ===
+            chromeos.networkConfig.mojom.NetworkType.kCellular &&
+        managedProperties.typeProperties.cellular.simLocked) {
+      return false;
+    }
+
     return true;
   },
 
@@ -1371,7 +1473,7 @@ Polymer({
     // policy indicator on the connect/disconnect buttons, so it shouldn't be
     // shown on non-VPN networks.
     if (this.managedProperties_ &&
-        this.managedProperties_.type ==
+        this.managedProperties_.type ===
             chromeos.networkConfig.mojom.NetworkType.kVPN &&
         this.prefs && this.prefs.vpn_config_allowed &&
         !this.prefs.vpn_config_allowed.value) {
@@ -1401,7 +1503,7 @@ Polymer({
 
   /** @private */
   handleConnectTap_() {
-    if (this.managedProperties_.type ==
+    if (this.managedProperties_.type ===
             chromeos.networkConfig.mojom.NetworkType.kTether &&
         (!this.managedProperties_.typeProperties.tether.hasConnectedToHost)) {
       this.showTetherDialog_();
@@ -1472,11 +1574,19 @@ Polymer({
    * @private
    */
   shouldConnectDisconnectButtonBeDisabled_() {
-    return !this.enableConnect_(
-               this.managedProperties_, this.defaultNetwork,
-               this.propertiesReceived_, this.outOfRange_, this.globalPolicy,
-               this.managedNetworkAvailable, this.deviceState_) &&
-        !this.showDisconnect_(this.managedProperties_);
+    if (this.disabled_) {
+      return true;
+    }
+    if (this.enableConnect_(
+            this.managedProperties_, this.defaultNetwork,
+            this.propertiesReceived_, this.outOfRange_, this.globalPolicy,
+            this.managedNetworkAvailable, this.deviceState_)) {
+      return false;
+    }
+    if (this.showDisconnect_(this.managedProperties_)) {
+      return false;
+    }
+    return true;
   },
 
   /**
@@ -1506,7 +1616,14 @@ Polymer({
       // A forgotten network no longer has a valid GUID, close the subpage.
       this.close();
     });
-    settings.recordSettingChange();
+
+    if (this.managedProperties_.type ===
+        chromeos.networkConfig.mojom.NetworkType.kWiFi) {
+      settings.recordSettingChange(
+          chromeos.settings.mojom.Setting.kForgetWifiNetwork);
+    } else {
+      settings.recordSettingChange();
+    }
   },
 
   /** @private */
@@ -1533,8 +1650,7 @@ Polymer({
 
   /** @private */
   onViewAccountTap_() {
-    // Currently 'Account Details' is the same as the activation UI.
-    this.browserProxy_.showCellularSetupUI(this.guid);
+    this.browserProxy_.showCarrierAccountDetail(this.guid);
   },
 
   /** @type {string} */
@@ -1553,7 +1669,7 @@ Polymer({
     return loadTimeData.getBoolean('showHiddenNetworkWarning') &&
         !!this.autoConnectPref_ && !!this.autoConnectPref_.value &&
         !!this.managedProperties_ &&
-        this.managedProperties_.type ==
+        this.managedProperties_.type ===
         chromeos.networkConfig.mojom.NetworkType.kWiFi &&
         !!OncMojo.getActiveValue(
             this.managedProperties_.typeProperties.wifi.hiddenSsid);
@@ -1575,8 +1691,8 @@ Polymer({
     const value = e.detail.value;
     const config = this.getDefaultConfigProperties_();
     const valueType = typeof value;
-    if (valueType != 'string' && valueType != 'number' &&
-        valueType != 'boolean' && !Array.isArray(value)) {
+    if (valueType !== 'string' && valueType !== 'number' &&
+        valueType !== 'boolean' && !Array.isArray(value)) {
       console.error(
           'Unexpected property change event, Key: ' + field +
           ' Value: ' + JSON.stringify(value));
@@ -1587,10 +1703,11 @@ Polymer({
     // configurations are set.
     const vpnConfig = config.typeConfig.vpn;
     if (vpnConfig) {
-      if (vpnConfig.openVpn && vpnConfig.openVpn.saveCredentials == undefined) {
+      if (vpnConfig.openVpn &&
+          vpnConfig.openVpn.saveCredentials === undefined) {
         vpnConfig.openVpn.saveCredentials = false;
       }
-      if (vpnConfig.l2tp && vpnConfig.l2tp.saveCredentials == undefined) {
+      if (vpnConfig.l2tp && vpnConfig.l2tp.saveCredentials === undefined) {
         vpnConfig.l2tp.saveCredentials = false;
       }
     }
@@ -1683,7 +1800,7 @@ Polymer({
     } else if (!managedProperties.typeProperties.wifi.isSyncable) {
       return this.i18nAdvanced('networkNotSynced');
     } else if (
-        managedProperties.source ==
+        managedProperties.source ===
         chromeos.networkConfig.mojom.OncSource.kUser) {
       return this.i18nAdvanced('networkSyncedUser');
     } else {
@@ -1745,9 +1862,9 @@ Polymer({
    */
   showShared_(managedProperties, globalPolicy, managedNetworkAvailable) {
     return !this.propertiesMissingOrBlockedByPolicy_() &&
-        (managedProperties.source ==
+        (managedProperties.source ===
              chromeos.networkConfig.mojom.OncSource.kDevice ||
-         managedProperties.source ==
+         managedProperties.source ===
              chromeos.networkConfig.mojom.OncSource.kDevicePolicy);
   },
 
@@ -1760,12 +1877,45 @@ Polymer({
    */
   showAutoConnect_(managedProperties, globalPolicy, managedNetworkAvailable) {
     return !!managedProperties &&
-        managedProperties.type !=
+        managedProperties.type !==
         chromeos.networkConfig.mojom.NetworkType.kEthernet &&
         this.isRemembered_(managedProperties) &&
         !this.isArcVpn_(managedProperties) &&
         !this.isBlockedByPolicy_(
             managedProperties, globalPolicy, managedNetworkAvailable);
+  },
+
+  /**
+   * @param {!chromeos.networkConfig.mojom.ManagedProperties} managedProperties
+   * @param {!chromeos.networkConfig.mojom.GlobalPolicy} globalPolicy
+   * @param {boolean} managedNetworkAvailable
+   * @return {boolean} True if the Hidden checkbox should be shown.
+   * @private
+   */
+  showHiddenNetwork_(managedProperties, globalPolicy, managedNetworkAvailable) {
+    if (!this.showHiddenToggle_) {
+      return false;
+    }
+
+    if (!managedProperties) {
+      return false;
+    }
+
+    if (managedProperties.type !==
+        chromeos.networkConfig.mojom.NetworkType.kWiFi) {
+      return false;
+    }
+
+    if (!this.isRemembered_(managedProperties)) {
+      return false;
+    }
+
+    if (this.isBlockedByPolicy_(
+            managedProperties, globalPolicy, managedNetworkAvailable)) {
+      return false;
+    }
+
+    return true;
   },
 
   /**
@@ -1776,9 +1926,9 @@ Polymer({
     const managedProperties = this.managedProperties_;
     return this.showMeteredToggle_ && !!managedProperties &&
         this.isRemembered_(managedProperties) &&
-        (managedProperties.type ==
+        (managedProperties.type ===
              chromeos.networkConfig.mojom.NetworkType.kCellular ||
-         managedProperties.type ==
+         managedProperties.type ===
              chromeos.networkConfig.mojom.NetworkType.kWiFi);
   },
 
@@ -1819,8 +1969,8 @@ Polymer({
     }
 
     const type = managedProperties.type;
-    if (type == chromeos.networkConfig.mojom.NetworkType.kEthernet ||
-        type == chromeos.networkConfig.mojom.NetworkType.kCellular ||
+    if (type === chromeos.networkConfig.mojom.NetworkType.kEthernet ||
+        type === chromeos.networkConfig.mojom.NetworkType.kCellular ||
         this.isArcVpn_(managedProperties)) {
       return false;
     }
@@ -1828,6 +1978,15 @@ Polymer({
     return this.isRemembered_(managedProperties) &&
         !this.isBlockedByPolicy_(
             managedProperties, globalPolicy, managedNetworkAvailable);
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  shouldPreferNetworkToggleBeDisabled_() {
+    return this.disabled_ ||
+        this.isNetworkPolicyEnforced(this.managedProperties_.priority);
   },
 
   /**
@@ -1885,11 +2044,10 @@ Polymer({
     /** @type {!Array<string>} */ const fields = [];
     switch (this.managedProperties_.type) {
       case chromeos.networkConfig.mojom.NetworkType.kCellular:
-        fields.push(
-            'cellular.activationState', 'cellular.servingOperator.name');
-        if (this.managedProperties_.restrictedConnectivity) {
-          fields.push('restrictedConnectivity');
+        if (!this.isUpdatedCellularUiEnabled_) {
+          fields.push('cellular.activationState');
         }
+        fields.push('cellular.servingOperator.name');
         break;
       case chromeos.networkConfig.mojom.NetworkType.kTether:
         fields.push(
@@ -1917,10 +2075,10 @@ Polymer({
         }
         break;
       case chromeos.networkConfig.mojom.NetworkType.kWiFi:
-        if (this.managedProperties_.restrictedConnectivity) {
-          fields.push('restrictedConnectivity');
-        }
         break;
+    }
+    if (OncMojo.isRestrictedConnectivity(this.managedProperties_.portalState)) {
+      fields.push('portalState');
     }
     return fields;
   },
@@ -1939,12 +2097,12 @@ Polymer({
 
     /** @dict */ const editFields = {};
     const type = this.managedProperties_.type;
-    if (type == chromeos.networkConfig.mojom.NetworkType.kVPN) {
+    if (type === chromeos.networkConfig.mojom.NetworkType.kVPN) {
       const vpnType = this.managedProperties_.typeProperties.vpn.type;
-      if (vpnType != chromeos.networkConfig.mojom.VpnType.kExtension) {
+      if (vpnType !== chromeos.networkConfig.mojom.VpnType.kExtension) {
         editFields['vpn.host'] = 'String';
       }
-      if (vpnType == chromeos.networkConfig.mojom.VpnType.kOpenVPN) {
+      if (vpnType === chromeos.networkConfig.mojom.VpnType.kOpenVPN) {
         editFields['vpn.openVpn.username'] = 'String';
         editFields['vpn.openVpn.extraHosts'] = 'StringArray';
       }
@@ -1965,9 +2123,10 @@ Polymer({
     const type = this.managedProperties_.type;
     switch (type) {
       case chromeos.networkConfig.mojom.NetworkType.kCellular:
-        fields.push(
-            'cellular.family', 'cellular.networkTechnology',
-            'cellular.servingOperator.code');
+        if (this.isUpdatedCellularUiEnabled_) {
+          fields.push('cellular.activationState');
+        }
+        fields.push('cellular.networkTechnology');
         break;
       case chromeos.networkConfig.mojom.NetworkType.kWiFi:
         fields.push(
@@ -1993,10 +2152,8 @@ Polymer({
 
     return [
       'cellular.homeProvider.name', 'cellular.homeProvider.country',
-      'cellular.homeProvider.code', 'cellular.manufacturer', 'cellular.modelId',
       'cellular.firmwareRevision', 'cellular.hardwareRevision', 'cellular.esn',
-      'cellular.iccid', 'cellular.imei', 'cellular.imsi', 'cellular.mdn',
-      'cellular.meid', 'cellular.min'
+      'cellular.iccid', 'cellular.imei', 'cellular.meid', 'cellular.min'
     ];
   },
 
@@ -2011,7 +2168,7 @@ Polymer({
     if (this.showMetered_()) {
       return true;
     }
-    if (this.managedProperties_.type ==
+    if (this.managedProperties_.type ===
         chromeos.networkConfig.mojom.NetworkType.kTether) {
       // These properties apply to the underlying WiFi network, not the Tether
       // network.
@@ -2045,7 +2202,7 @@ Polymer({
    */
   hasNetworkSection_(managedProperties, globalPolicy, managedNetworkAvailable) {
     if (!managedProperties ||
-        managedProperties.type ==
+        managedProperties.type ===
             chromeos.networkConfig.mojom.NetworkType.kTether) {
       // These settings apply to the underlying WiFi network, not the Tether
       // network.
@@ -2055,7 +2212,7 @@ Polymer({
             managedProperties, globalPolicy, managedNetworkAvailable)) {
       return false;
     }
-    if (managedProperties.type ==
+    if (managedProperties.type ===
         chromeos.networkConfig.mojom.NetworkType.kCellular) {
       return true;
     }
@@ -2071,7 +2228,7 @@ Polymer({
    */
   hasProxySection_(managedProperties, globalPolicy, managedNetworkAvailable) {
     if (!managedProperties ||
-        managedProperties.type ==
+        managedProperties.type ===
             chromeos.networkConfig.mojom.NetworkType.kTether) {
       // Proxy settings apply to the underlying WiFi network, not the Tether
       // network.
@@ -2091,7 +2248,7 @@ Polymer({
    */
   showCellularChooseNetwork_(managedProperties) {
     return !!managedProperties &&
-        managedProperties.type ==
+        managedProperties.type ===
         chromeos.networkConfig.mojom.NetworkType.kCellular &&
         managedProperties.typeProperties.cellular.supportNetworkScan;
   },
@@ -2102,7 +2259,7 @@ Polymer({
    */
   showScanningSpinner_() {
     if (!this.managedProperties_ ||
-        this.managedProperties_.type !=
+        this.managedProperties_.type !==
             chromeos.networkConfig.mojom.NetworkType.kCellular) {
       return false;
     }
@@ -2115,11 +2272,24 @@ Polymer({
    * @private
    */
   showCellularSim_(managedProperties) {
-    return !!managedProperties &&
-        managedProperties.type ==
+    return !!managedProperties && !this.isUpdatedCellularUiEnabled_ &&
+        managedProperties.type ===
         chromeos.networkConfig.mojom.NetworkType.kCellular &&
-        managedProperties.typeProperties.cellular.family != 'CDMA';
+        managedProperties.typeProperties.cellular.family !== 'CDMA';
   },
+
+  /**
+   * @param {!chromeos.networkConfig.mojom.ManagedProperties} managedProperties
+   * @return {boolean}
+   * @private
+   */
+  showCellularSimUpdatedUi_(managedProperties) {
+    return !!managedProperties && this.isUpdatedCellularUiEnabled_ &&
+        managedProperties.type ===
+        chromeos.networkConfig.mojom.NetworkType.kCellular &&
+        managedProperties.typeProperties.cellular.family !== 'CDMA';
+  },
+
 
   /**
    * @param {!chromeos.networkConfig.mojom.ManagedProperties|undefined}
@@ -2129,9 +2299,9 @@ Polymer({
    */
   isArcVpn_(managedProperties) {
     return !!managedProperties &&
-        managedProperties.type ==
+        managedProperties.type ===
         chromeos.networkConfig.mojom.NetworkType.kVPN &&
-        managedProperties.typeProperties.vpn.type ==
+        managedProperties.typeProperties.vpn.type ===
         chromeos.networkConfig.mojom.VpnType.kArc;
   },
 
@@ -2143,9 +2313,9 @@ Polymer({
    */
   isThirdPartyVpn_(managedProperties) {
     return !!managedProperties &&
-        managedProperties.type ==
+        managedProperties.type ===
         chromeos.networkConfig.mojom.NetworkType.kVPN &&
-        managedProperties.typeProperties.vpn.type ==
+        managedProperties.typeProperties.vpn.type ===
         chromeos.networkConfig.mojom.VpnType.kExtension;
   },
 
@@ -2183,7 +2353,7 @@ Polymer({
    */
   allPropertiesMatch_(curValue, newValue) {
     for (const key in newValue) {
-      if (newValue[key] != curValue[key]) {
+      if (newValue[key] !== curValue[key]) {
         return false;
       }
     }
@@ -2199,7 +2369,73 @@ Polymer({
   isOutOfRangeOrNotEnabled_(outOfRange, deviceState) {
     return outOfRange ||
         (!!deviceState &&
-         deviceState.deviceState !=
+         deviceState.deviceState !==
              chromeos.networkConfig.mojom.DeviceStateType.kEnabled);
   },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeShowConfigurableSections_() {
+    if (!this.isUpdatedCellularUiEnabled_ || !this.managedProperties_ ||
+        !this.deviceState_) {
+      return true;
+    }
+
+    const mojom = chromeos.networkConfig.mojom;
+    const networkState =
+        OncMojo.managedPropertiesToNetworkState(this.managedProperties_);
+    assert(networkState);
+    if (networkState.type !== mojom.NetworkType.kCellular) {
+      return true;
+    }
+    return isActiveSim(networkState, this.deviceState_);
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeDisabled_() {
+    if (!this.isUpdatedCellularUiEnabled_) {
+      return false;
+    }
+    if (!this.deviceState_ ||
+        this.deviceState_.type !==
+            chromeos.networkConfig.mojom.NetworkType.kCellular) {
+      return false;
+    }
+    // If this is a cellular device and inhibited, state cannot be changed, so
+    // the page's inputs should be disabled.
+    return OncMojo.deviceIsInhibited(this.deviceState_);
+  },
+
+  /**
+   * @returns {boolean}
+   * @private
+   */
+  shouldShowMacAddress_() {
+    return !!this.getMacAddress_();
+  },
+
+  /**
+   * @returns {string}
+   * @private
+   */
+  getMacAddress_() {
+    if (!this.deviceState_) {
+      return '';
+    }
+
+    // 00:00:00:00:00:00 is provided when device MAC address cannot be
+    // retrieved.
+    const MISSING_MAC_ADDRESS = '00:00:00:00:00:00';
+    if (this.deviceState_ && this.deviceState_.macAddress &&
+        this.deviceState_.macAddress !== MISSING_MAC_ADDRESS) {
+      return this.deviceState_.macAddress;
+    }
+
+    return '';
+  }
 });

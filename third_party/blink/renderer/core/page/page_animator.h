@@ -43,8 +43,8 @@ class CORE_EXPORT PageAnimator final : public GarbageCollected<PageAnimator> {
   // See documents of methods with the same names in LocalFrameView class.
   void UpdateAllLifecyclePhases(LocalFrame& root_frame,
                                 DocumentUpdateReason reason);
-  void UpdateAllLifecyclePhasesExceptPaint(LocalFrame& root_frame,
-                                           DocumentUpdateReason reason);
+  void UpdateLifecycleToPrePaintClean(LocalFrame& root_frame,
+                                      DocumentUpdateReason reason);
   void UpdateLifecycleToLayoutClean(LocalFrame& root_frame,
                                     DocumentUpdateReason reason);
   AnimationClock& Clock() { return animation_clock_; }
@@ -57,6 +57,7 @@ class CORE_EXPORT PageAnimator final : public GarbageCollected<PageAnimator> {
   bool has_inline_style_mutation_for_test() const {
     return has_inline_style_mutation_;
   }
+  void SetHasSmilAnimation();
   void ReportFrameAnimations(cc::AnimationHost* animation_host);
 
  private:
@@ -70,6 +71,8 @@ class CORE_EXPORT PageAnimator final : public GarbageCollected<PageAnimator> {
   bool has_inline_style_mutation_ = false;
   // True if the current main frame has canvas invalidation.
   bool has_canvas_invalidation_ = false;
+  // True if the current main frame has svg smil animation.
+  bool has_smil_animation_ = false;
 };
 
 }  // namespace blink

@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/api/storage/settings_sync_processor.h"
 #include "chrome/browser/extensions/api/storage/settings_sync_util.h"
@@ -14,7 +15,7 @@
 #include "components/sync/model/sync_error.h"
 #include "components/sync/protocol/extension_setting_specifics.pb.h"
 #include "extensions/browser/api/storage/backend_task_runner.h"
-#include "extensions/browser/api/storage/settings_namespace.h"
+#include "extensions/browser/api/storage/storage_area_namespace.h"
 
 namespace extensions {
 
@@ -197,7 +198,7 @@ SyncableSettingsStorage::SendLocalSettingsToSync(
   }
 
   base::Optional<syncer::ModelError> error =
-      sync_processor_->SendChanges(changes);
+      sync_processor_->SendChanges(std::move(changes));
   if (error.has_value())
     StopSyncing();
   return error;
@@ -216,7 +217,7 @@ SyncableSettingsStorage::OverwriteLocalSettingsWithSync(
        it.Advance()) {
     std::unique_ptr<base::Value> sync_value;
     if (sync_state->RemoveWithoutPathExpansion(it.key(), &sync_value)) {
-      if (sync_value->Equals(&it.value())) {
+      if (*sync_value == it.value()) {
         // Sync and local values are the same, no changes to send.
       } else {
         // Sync value is different, update local setting with new value.
@@ -288,7 +289,9 @@ base::Optional<syncer::ModelError> SyncableSettingsStorage::ProcessSyncChanges(
 
     syncer::SyncError error;
 
-    switch (sync_change->change_type()) {
+    DCHECK(sync_change->change_type().has_value());
+
+    switch (*sync_change->change_type()) {
       case syncer::SyncChange::ACTION_ADD:
         if (!current_value.get()) {
           error = OnSyncAdd(key, std::move(change_value), &changes);
@@ -323,9 +326,6 @@ base::Optional<syncer::ModelError> SyncableSettingsStorage::ProcessSyncChanges(
               extension_id_ << "/" << key;
         }
         break;
-
-      default:
-        NOTREACHED();
     }
 
     if (error.IsSet()) {
@@ -336,8 +336,8 @@ base::Optional<syncer::ModelError> SyncableSettingsStorage::ProcessSyncChanges(
   sync_processor_->NotifyChanges(changes);
 
   observers_->Notify(FROM_HERE, &SettingsObserver::OnSettingsChanged,
-                     extension_id_, settings_namespace::SYNC,
-                     ValueStoreChange::ToJson(changes));
+                     extension_id_, StorageAreaNamespace::kSync,
+                     ValueStoreChange::ToValue(std::move(changes)));
 
   // TODO(kalman): Something sensible with multiple errors.
   if (errors.empty())

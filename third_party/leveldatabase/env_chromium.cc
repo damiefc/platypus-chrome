@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/check_op.h"
-#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
@@ -33,11 +32,11 @@
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/services/storage/public/cpp/filesystem/file_error_or.h"
 #include "components/services/storage/public/cpp/filesystem/filesystem_proxy.h"
 #include "third_party/leveldatabase/chromium_logger.h"
 #include "third_party/leveldatabase/leveldb_chrome.h"
-#include "third_party/leveldatabase/leveldb_features.h"
 #include "third_party/leveldatabase/src/include/leveldb/options.h"
 #include "third_party/re2/src/re2/re2.h"
 
@@ -48,9 +47,6 @@ using base::trace_event::ProcessMemoryDump;
 using leveldb::FileLock;
 using leveldb::Slice;
 using leveldb::Status;
-
-const base::Feature kLevelDBFileHandleEviction{
-    "LevelDBFileHandleEviction", base::FEATURE_ENABLED_BY_DEFAULT};
 
 namespace leveldb_env {
 namespace {
@@ -454,7 +450,7 @@ Options::Options() {
 //
 // Currently log reuse is an experimental feature in leveldb. More info at:
 // https://github.com/google/leveldb/commit/251ebf5dc70129ad3
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Reusing logs on Chrome OS resulted in an unacceptably high leveldb
   // corruption rate (at least for Indexed DB). More info at
   // https://crbug.com/460568
@@ -706,8 +702,7 @@ ChromiumEnv::ChromiumEnv(const std::string& name,
   DCHECK(filesystem_);
 
   size_t max_open_files = base::GetMaxFds();
-  if (base::FeatureList::IsEnabled(kLevelDBFileHandleEviction) &&
-      max_open_files < kFileLimitToDisableEviction) {
+  if (max_open_files < kFileLimitToDisableEviction) {
     file_cache_.reset(
         leveldb::NewLRUCache(GetLevelDBFileLimit(max_open_files)));
   }
@@ -1038,8 +1033,12 @@ class Thread : public base::PlatformThread::Delegate {
 };
 
 void ChromiumEnv::Schedule(ScheduleFunc* function, void* arg) {
+  // The BLOCK_SHUTDOWN is required to avoid shutdown hangs. The scheduled
+  // tasks may be blocking foreground threads waiting for their completions.
+  // see: https://crbug.com/1086185.
   base::ThreadPool::PostTask(FROM_HERE,
-                             {base::MayBlock(), base::WithBaseSyncPrimitives()},
+                             {base::MayBlock(), base::WithBaseSyncPrimitives(),
+                              base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
                              base::BindOnce(function, arg));
 }
 
@@ -1416,8 +1415,6 @@ leveldb::Status RewriteDB(const leveldb_env::Options& options,
                           const std::string& name,
                           std::unique_ptr<leveldb::DB>* dbptr) {
   DCHECK(options.create_if_missing);
-  if (!base::FeatureList::IsEnabled(leveldb::kLevelDBRewriteFeature))
-    return Status::OK();
   if (leveldb_chrome::IsMemEnv(options.env))
     return Status::OK();
   TRACE_EVENT1("leveldb", "ChromiumEnv::RewriteDB", "name", name);

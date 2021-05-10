@@ -16,18 +16,21 @@
 #include "components/history/core/common/pref_names.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/language/core/browser/language_prefs.h"
+#include "components/metrics/demographics/user_demographics.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/in_memory_pref_store.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_filter.h"
 #include "components/prefs/pref_service_factory.h"
+#include "components/profile_metrics/browser_profile_type.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/sync/base/pref_names.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync_device_info/device_info_prefs.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
+#include "components/unified_consent/unified_consent_service.h"
 #include "ios/web/public/thread/web_task_traits.h"
 #include "ios/web/public/thread/web_thread.h"
 #import "ios/web/public/web_state.h"
@@ -79,6 +82,10 @@ WebViewBrowserState::WebViewBrowserState(
          (off_the_record && recording_browser_state &&
           !recording_browser_state->IsOffTheRecord()));
   recording_browser_state_ = recording_browser_state;
+
+  profile_metrics::SetBrowserProfileType(
+      this, off_the_record ? profile_metrics::BrowserProfileType::kIncognito
+                           : profile_metrics::BrowserProfileType::kRegular);
 
   // IO access is required to setup the browser state. In Chrome, this is
   // already allowed during thread startup. However, startup time of
@@ -166,12 +173,14 @@ void WebViewBrowserState::RegisterPrefs(
   pref_registry->RegisterBooleanPref(prefs::kSavingBrowserHistoryDisabled,
                                      true);
   language::LanguagePrefs::RegisterProfilePrefs(pref_registry);
+  metrics::RegisterDemographicsProfilePrefs(pref_registry);
   translate::TranslatePrefs::RegisterProfilePrefs(pref_registry);
   autofill::prefs::RegisterProfilePrefs(pref_registry);
   password_manager::PasswordManager::RegisterProfilePrefs(pref_registry);
   syncer::SyncPrefs::RegisterProfilePrefs(pref_registry);
   syncer::DeviceInfoPrefs::RegisterProfilePrefs(pref_registry);
   safe_browsing::RegisterProfilePrefs(pref_registry);
+  unified_consent::UnifiedConsentService::RegisterPrefs(pref_registry);
 
   // Instantiate all factories to setup dependency graph for pref registration.
   WebViewLanguageModelManagerFactory::GetInstance();

@@ -16,7 +16,6 @@
 #include "third_party/blink/renderer/core/timing/performance.h"
 #include "third_party/blink/renderer/core/timing/time_clamper.h"
 #include "third_party/blink/renderer/modules/video_rvfc/video_frame_request_callback_collection.h"
-#include "third_party/blink/renderer/modules/xr/navigator_xr.h"
 #include "third_party/blink/renderer/modules/xr/xr_frame_provider.h"
 #include "third_party/blink/renderer/modules/xr/xr_session.h"
 #include "third_party/blink/renderer/modules/xr/xr_system.h"
@@ -46,16 +45,14 @@ VideoFrameCallbackRequesterImpl::VideoFrameCallbackRequesterImpl(
     : VideoFrameCallbackRequester(element),
       callback_collection_(
           MakeGarbageCollected<VideoFrameRequestCallbackCollection>(
-              element.GetExecutionContext())) {}
-
-VideoFrameCallbackRequesterImpl::~VideoFrameCallbackRequesterImpl() {
-  if (!observing_immersive_session_)
-    return;
-
-  auto* frame_provider = GetXRFrameProvider();
-  if (frame_provider)
-    frame_provider->RemoveImmersiveSessionObserver(this);
+              element.GetExecutionContext())) {
+  cross_origin_isolated_capability_ =
+      element.GetExecutionContext()
+          ? element.GetExecutionContext()->CrossOriginIsolatedCapability()
+          : false;
 }
+
+VideoFrameCallbackRequesterImpl::~VideoFrameCallbackRequesterImpl() = default;
 
 // static
 VideoFrameCallbackRequesterImpl& VideoFrameCallbackRequesterImpl::From(
@@ -93,13 +90,19 @@ void VideoFrameCallbackRequesterImpl::OnWebMediaPlayerCreated() {
     GetSupplementable()->GetWebMediaPlayer()->RequestVideoFrameCallback();
 }
 
+void VideoFrameCallbackRequesterImpl::OnWebMediaPlayerCleared() {
+  // Clear existing issued weak pointers from the factory, so that
+  // pending ScheduleVideoFrameCallbacksExecution are cancelled.
+  weak_factory_.InvalidateWeakPtrs();
+}
+
 void VideoFrameCallbackRequesterImpl::ScheduleWindowRaf() {
   GetSupplementable()
       ->GetDocument()
       .GetScriptedAnimationController()
       .ScheduleVideoFrameCallbacksExecution(
           WTF::Bind(&VideoFrameCallbackRequesterImpl::OnExecution,
-                    WrapWeakPersistent(this)));
+                    weak_factory_.GetWeakPtr()));
 }
 
 void VideoFrameCallbackRequesterImpl::ScheduleExecution() {
@@ -140,20 +143,10 @@ void VideoFrameCallbackRequesterImpl::OnImmersiveFrame() {
 }
 
 XRFrameProvider* VideoFrameCallbackRequesterImpl::GetXRFrameProvider() {
-  auto& document = GetSupplementable()->GetDocument();
-
-  // Do not force the lazy creation of the NavigatorXR by accessing it through
-  // NavigatorXR::From(). If it doesn't exist already exist, the webpage isn't
-  // using XR.
-  if (!NavigatorXR::AlreadyExists(document))
-    return nullptr;
-
-  auto* system = NavigatorXR::From(document)->xr();
-
-  if (!system)
-    return nullptr;
-
-  return system->frameProvider();
+  // Do not force the lazy creation of the XRSystem.
+  // If it doesn't exist already exist, the webpage isn't using XR.
+  auto* system = XRSystem::FromIfExists(GetSupplementable()->GetDocument());
+  return system ? system->frameProvider() : nullptr;
 }
 
 bool VideoFrameCallbackRequesterImpl::TryScheduleImmersiveXRSessionRaf() {
@@ -179,8 +172,9 @@ bool VideoFrameCallbackRequesterImpl::TryScheduleImmersiveXRSessionRaf() {
   if (!in_immersive_session_)
     return false;
 
-  session->ScheduleVideoFrameCallbacksExecution(WTF::Bind(
-      &VideoFrameCallbackRequesterImpl::OnExecution, WrapWeakPersistent(this)));
+  session->ScheduleVideoFrameCallbacksExecution(
+      WTF::Bind(&VideoFrameCallbackRequesterImpl::OnExecution,
+                weak_factory_.GetWeakPtr()));
 
   return true;
 }
@@ -213,11 +207,13 @@ void VideoFrameCallbackRequesterImpl::ExecuteVideoFrameCallbacks(
 
   metadata->setPresentationTime(GetClampedTimeInMillis(
       time_converter.MonotonicTimeToZeroBasedDocumentTime(
-          frame_metadata->presentation_time)));
+          frame_metadata->presentation_time),
+      cross_origin_isolated_capability_));
 
   metadata->setExpectedDisplayTime(GetClampedTimeInMillis(
       time_converter.MonotonicTimeToZeroBasedDocumentTime(
-          frame_metadata->expected_display_time)));
+          frame_metadata->expected_display_time),
+      cross_origin_isolated_capability_));
 
   metadata->setPresentedFrames(frame_metadata->presented_frames);
 
@@ -234,13 +230,15 @@ void VideoFrameCallbackRequesterImpl::ExecuteVideoFrameCallbacks(
   if (frame_metadata->metadata.capture_begin_time) {
     metadata->setCaptureTime(GetClampedTimeInMillis(
         time_converter.MonotonicTimeToZeroBasedDocumentTime(
-            *frame_metadata->metadata.capture_begin_time)));
+            *frame_metadata->metadata.capture_begin_time),
+        cross_origin_isolated_capability_));
   }
 
   if (frame_metadata->metadata.receive_time) {
     metadata->setReceiveTime(GetClampedTimeInMillis(
         time_converter.MonotonicTimeToZeroBasedDocumentTime(
-            *frame_metadata->metadata.receive_time)));
+            *frame_metadata->metadata.receive_time),
+        cross_origin_isolated_capability_));
   }
 
   if (frame_metadata->metadata.rtp_timestamp) {
@@ -298,9 +296,10 @@ void VideoFrameCallbackRequesterImpl::OnExecution(double high_res_now_ms) {
 
 // static
 double VideoFrameCallbackRequesterImpl::GetClampedTimeInMillis(
-    base::TimeDelta time) {
-  return Performance::ClampTimeResolution(time.InSecondsF()) *
-         base::Time::kMillisecondsPerSecond;
+    base::TimeDelta time,
+    bool cross_origin_isolated_capability) {
+  return Performance::ClampTimeResolution(time,
+                                          cross_origin_isolated_capability);
 }
 
 // static
@@ -309,10 +308,11 @@ double VideoFrameCallbackRequesterImpl::GetCoarseClampedTimeInSeconds(
   constexpr auto kCoarseResolution = base::TimeDelta::FromMicroseconds(100);
   // Add this assert, in case TimeClamper's resolution were to change to be
   // stricter.
-  static_assert(kCoarseResolution >= base::TimeDelta::FromSecondsD(
-                                         TimeClamper::kResolutionSeconds),
-                "kCoarseResolution should be at least as coarse as other clock "
-                "resolutions");
+  static_assert(
+      kCoarseResolution >= base::TimeDelta::FromMicrosecondsD(
+                               TimeClamper::kCoarseResolutionMicroseconds),
+      "kCoarseResolution should be at least as coarse as other clock "
+      "resolutions");
 
   return time.FloorToMultiple(kCoarseResolution).InSecondsF();
 }

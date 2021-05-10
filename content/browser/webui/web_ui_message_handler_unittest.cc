@@ -4,7 +4,8 @@
 
 #include "content/public/browser/web_ui_message_handler.h"
 
-#include "base/strings/string16.h"
+#include <string>
+
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "content/public/test/test_web_ui.h"
@@ -94,11 +95,11 @@ TEST(WebUIMessageHandlerTest, ExtractDoubleValue) {
 
 TEST(WebUIMessageHandlerTest, ExtractStringValue) {
   base::ListValue list;
-  static const char in_string[] =
-      "The facts, though interesting, are irrelevant.";
-  list.AppendString(in_string);
-  base::string16 out_string = WebUIMessageHandler::ExtractStringValue(&list);
-  EXPECT_EQ(base::ASCIIToUTF16(in_string), out_string);
+  static constexpr char16_t kInString[] =
+      u"The facts, though interesting, are irrelevant.";
+  list.AppendString(kInString);
+  std::u16string out_string = WebUIMessageHandler::ExtractStringValue(&list);
+  EXPECT_EQ(kInString, out_string);
 }
 
 class TestWebUIMessageHandler : public WebUIMessageHandler {

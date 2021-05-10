@@ -52,6 +52,10 @@ void AppUpdate::Merge(apps::mojom::App* state, const apps::mojom::App* delta) {
     return;
   }
 
+  // You can not merge removed states.
+  DCHECK(state->readiness != mojom::Readiness::kRemoved);
+  DCHECK(delta->readiness != mojom::Readiness::kRemoved);
+
   if (delta->readiness != apps::mojom::Readiness::kUnknown) {
     state->readiness = delta->readiness;
   }
@@ -120,10 +124,15 @@ void AppUpdate::Merge(apps::mojom::App* state, const apps::mojom::App* delta) {
   if (delta->paused != apps::mojom::OptionalBool::kUnknown) {
     state->paused = delta->paused;
   }
-
   if (!delta->intent_filters.empty()) {
     state->intent_filters.clear();
     CloneIntentFilters(delta->intent_filters, &state->intent_filters);
+  }
+  if (delta->resize_locked != apps::mojom::OptionalBool::kUnknown) {
+    state->resize_locked = delta->resize_locked;
+  }
+  if (delta->preferred_app != apps::mojom::OptionalBool::kUnknown) {
+    state->preferred_app = delta->preferred_app;
   }
 
   // When adding new fields to the App Mojo type, this function should also be
@@ -518,6 +527,38 @@ std::vector<apps::mojom::IntentFilterPtr> AppUpdate::IntentFilters() const {
 bool AppUpdate::IntentFiltersChanged() const {
   return delta_ && !delta_->intent_filters.empty() &&
          (!state_ || (delta_->intent_filters != state_->intent_filters));
+}
+
+apps::mojom::OptionalBool AppUpdate::ResizeLocked() const {
+  if (delta_ &&
+      (delta_->resize_locked != apps::mojom::OptionalBool::kUnknown)) {
+    return delta_->resize_locked;
+  }
+  if (state_)
+    return state_->resize_locked;
+  return apps::mojom::OptionalBool::kUnknown;
+}
+
+bool AppUpdate::ResizeLockedChanged() const {
+  return delta_ &&
+         (delta_->resize_locked != apps::mojom::OptionalBool::kUnknown) &&
+         (!state_ || (delta_->resize_locked != state_->resize_locked));
+}
+
+apps::mojom::OptionalBool AppUpdate::PreferredApp() const {
+  if (delta_ &&
+      (delta_->preferred_app != apps::mojom::OptionalBool::kUnknown)) {
+    return delta_->preferred_app;
+  }
+  if (state_)
+    return state_->preferred_app;
+  return apps::mojom::OptionalBool::kUnknown;
+}
+
+bool AppUpdate::PreferredAppChanged() const {
+  return delta_ &&
+         (delta_->preferred_app != apps::mojom::OptionalBool::kUnknown) &&
+         (!state_ || (delta_->preferred_app != state_->preferred_app));
 }
 
 const ::AccountId& AppUpdate::AccountId() const {

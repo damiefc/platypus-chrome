@@ -52,7 +52,7 @@ BrowserContextKeyedAPIFactory<ActivityLogAPI>::DeclareFactoryDependencies() {
 }
 
 ActivityLogAPI::ActivityLogAPI(content::BrowserContext* context)
-    : browser_context_(context), initialized_(false) {
+    : browser_context_(context) {
   if (!EventRouter::Get(browser_context_)) {  // Check for testing.
     DVLOG(1) << "ExtensionSystem event_router does not exist.";
     return;
@@ -63,9 +63,6 @@ ActivityLogAPI::ActivityLogAPI(content::BrowserContext* context)
       this, activity_log_private::OnExtensionActivity::kEventName);
   activity_log_->AddObserver(this);
   initialized_ = true;
-}
-
-ActivityLogAPI::~ActivityLogAPI() {
 }
 
 void ActivityLogAPI::Shutdown() {
@@ -228,7 +225,8 @@ ExtensionFunction::ResponseAction ActivityLogPrivateDeleteUrlsFunction::Run() {
 
   // Put the arguments in the right format.
   std::vector<GURL> gurls;
-  const std::vector<std::string>& urls = *params->urls;
+  const std::vector<std::string>& urls = params->urls;
+  gurls.reserve(urls.size());
   for (const std::string& url : urls)
     gurls.push_back(GURL(url));
 

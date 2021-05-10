@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CONTENT_BROWSER_WEB_PACKAGE_SIGNED_EXCHANGE_CERT_CETCHER_H_
-#define CONTENT_BROWSER_WEB_PACKAGE_SIGNED_EXCHANGE_CERT_CETCHER_H_
+#ifndef CONTENT_BROWSER_WEB_PACKAGE_SIGNED_EXCHANGE_CERT_FETCHER_H_
+#define CONTENT_BROWSER_WEB_PACKAGE_SIGNED_EXCHANGE_CERT_FETCHER_H_
 
 #include <string>
 #include <vector>
@@ -94,6 +94,7 @@ class CONTENT_EXPORT SignedExchangeCertFetcher
       const network::URLLoaderCompletionStatus& status);
 
   // network::mojom::URLLoaderClient
+  void OnReceiveEarlyHints(network::mojom::EarlyHintsPtr early_hints) override;
   void OnReceiveResponse(network::mojom::URLResponseHeadPtr head) override;
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          network::mojom::URLResponseHeadPtr head) override;
@@ -132,4 +133,4 @@ class CONTENT_EXPORT SignedExchangeCertFetcher
 
 }  // namespace content
 
-#endif  // CONTENT_BROWSER_WEB_PACKAGE_SIGNED_EXCHANGE_CERT_CETCHER_H_
+#endif  // CONTENT_BROWSER_WEB_PACKAGE_SIGNED_EXCHANGE_CERT_FETCHER_H_

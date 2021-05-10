@@ -5,13 +5,12 @@
 #ifndef EXTENSIONS_BROWSER_API_STORAGE_STORAGE_API_H_
 #define EXTENSIONS_BROWSER_API_STORAGE_STORAGE_API_H_
 
-#include <string>
-
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
-#include "extensions/browser/api/storage/settings_namespace.h"
 #include "extensions/browser/api/storage/settings_observer.h"
+#include "extensions/browser/api/storage/storage_area_namespace.h"
 #include "extensions/browser/extension_function.h"
+#include "extensions/browser/value_store/settings_namespace.h"
 #include "extensions/browser/value_store/value_store.h"
 
 namespace extensions {
@@ -46,9 +45,14 @@ class SettingsFunction : public ExtensionFunction {
   // SendResponse with its success value.
   void AsyncRunWithStorage(ValueStore* storage);
 
-  // The settings namespace the call was for.  For example, SYNC if the API
-  // call was chrome.settings.experimental.sync..., LOCAL if .local, etc.
-  settings_namespace::Namespace settings_namespace_;
+  // The Storage Area the call was for. For example: kLocal if the API call was
+  // chrome.storage.local, kSync if the API call was chrome.storage.sync, etc.
+  StorageAreaNamespace storage_area_ = StorageAreaNamespace::kInvalid;
+
+  // The settings namespace the call was for. Only includes
+  // StorageAreaNamespace's that use ValueStore.
+  settings_namespace::Namespace settings_namespace_ =
+      settings_namespace::INVALID;
 
   // Observers, cached so that it's only grabbed from the UI thread.
   scoped_refptr<SettingsObserverList> observers_;

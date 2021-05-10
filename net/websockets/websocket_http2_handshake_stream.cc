@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/check_op.h"
+#include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
@@ -43,7 +44,8 @@ WebSocketHttp2HandshakeStream::WebSocketHttp2HandshakeStream(
     WebSocketStream::ConnectDelegate* connect_delegate,
     std::vector<std::string> requested_sub_protocols,
     std::vector<std::string> requested_extensions,
-    WebSocketStreamRequestAPI* request)
+    WebSocketStreamRequestAPI* request,
+    std::vector<std::string> dns_aliases)
     : result_(HandshakeResult::HTTP2_INCOMPLETE),
       session_(session),
       connect_delegate_(connect_delegate),
@@ -54,7 +56,8 @@ WebSocketHttp2HandshakeStream::WebSocketHttp2HandshakeStream(
       request_info_(nullptr),
       stream_closed_(false),
       stream_error_(OK),
-      response_headers_complete_(false) {
+      response_headers_complete_(false),
+      dns_aliases_(std::move(dns_aliases)) {
   DCHECK(connect_delegate);
   DCHECK(request);
 }
@@ -90,8 +93,9 @@ int WebSocketHttp2HandshakeStream::SendRequest(
   DCHECK(headers.HasHeader(websockets::kSecWebSocketVersion));
 
   if (!session_) {
-    OnFailure("Connection closed before sending request.");
-    return ERR_CONNECTION_CLOSED;
+    const int rv = ERR_CONNECTION_CLOSED;
+    OnFailure("Connection closed before sending request.", rv, base::nullopt);
+    return rv;
   }
 
   http_response_info_ = response;
@@ -99,7 +103,7 @@ int WebSocketHttp2HandshakeStream::SendRequest(
   IPEndPoint address;
   int result = session_->GetPeerAddress(&address);
   if (result != OK) {
-    OnFailure("Error getting IP address.");
+    OnFailure("Error getting IP address.", result, base::nullopt);
     return result;
   }
   http_response_info_->remote_endpoint = address;
@@ -235,6 +239,15 @@ HttpStream* WebSocketHttp2HandshakeStream::RenewStreamForAuth() {
   return nullptr;
 }
 
+const std::vector<std::string>& WebSocketHttp2HandshakeStream::GetDnsAliases()
+    const {
+  return dns_aliases_;
+}
+
+base::StringPiece WebSocketHttp2HandshakeStream::GetAcceptChViaAlps() const {
+  return {};
+}
+
 std::unique_ptr<WebSocketStream> WebSocketHttp2HandshakeStream::Upgrade() {
   DCHECK(extension_params_.get());
 
@@ -261,7 +274,7 @@ void WebSocketHttp2HandshakeStream::OnHeadersSent() {
 }
 
 void WebSocketHttp2HandshakeStream::OnHeadersReceived(
-    const spdy::SpdyHeaderBlock& response_headers) {
+    const spdy::Http2HeaderBlock& response_headers) {
   DCHECK(!response_headers_complete_);
   DCHECK(http_response_info_);
 
@@ -303,7 +316,8 @@ void WebSocketHttp2HandshakeStream::OnClose(int status) {
   if (!response_headers_complete_)
     result_ = HandshakeResult::HTTP2_FAILED;
 
-  OnFailure(std::string("Stream closed with error: ") + ErrorToString(status));
+  OnFailure(std::string("Stream closed with error: ") + ErrorToString(status),
+            status, base::nullopt);
 
   if (callback_)
     std::move(callback_).Run(status);
@@ -343,9 +357,11 @@ int WebSocketHttp2HandshakeStream::ValidateResponse() {
     // Other status codes are potentially risky (see the warnings in the
     // WHATWG WebSocket API spec) and so are dropped by default.
     default:
-      OnFailure(base::StringPrintf(
-          "Error during WebSocket handshake: Unexpected response code: %d",
-          headers->response_code()));
+      OnFailure(
+          base::StringPrintf(
+              "Error during WebSocket handshake: Unexpected response code: %d",
+              headers->response_code()),
+          ERR_FAILED, headers->response_code());
       result_ = HandshakeResult::HTTP2_INVALID_STATUS;
       return ERR_INVALID_RESPONSE;
   }
@@ -367,12 +383,18 @@ int WebSocketHttp2HandshakeStream::ValidateUpgradeResponse(
     result_ = HandshakeResult::HTTP2_CONNECTED;
     return OK;
   }
-  OnFailure("Error during WebSocket handshake: " + failure_message);
-  return ERR_INVALID_RESPONSE;
+
+  const int rv = ERR_INVALID_RESPONSE;
+  OnFailure("Error during WebSocket handshake: " + failure_message, rv,
+            base::nullopt);
+  return rv;
 }
 
-void WebSocketHttp2HandshakeStream::OnFailure(const std::string& message) {
-  stream_request_->OnFailure(message);
+void WebSocketHttp2HandshakeStream::OnFailure(
+    const std::string& message,
+    int net_error,
+    base::Optional<int> response_code) {
+  stream_request_->OnFailure(message, net_error, response_code);
 }
 
 }  // namespace net

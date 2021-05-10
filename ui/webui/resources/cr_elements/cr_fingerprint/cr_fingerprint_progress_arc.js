@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// #import {CrLottieElement} from '../cr_lottie/cr_lottie.m.js';
-
 /** @type {string} */
 /* #export */ const FINGEPRINT_TICK_DARK_URL =
     'chrome://theme/IDR_FINGERPRINT_COMPLETE_TICK_DARK';
@@ -89,6 +87,15 @@ Polymer({
     circleRadius: {
       type: Number,
       value: DEFAULT_CANVAS_CIRCLE_RADIUS,
+    },
+
+    /**
+     * Whether lottie animation should be autoplayed.
+     * @type {boolean}
+     */
+    autoplay: {
+      type: Boolean,
+      value: false,
     },
 
     /**
@@ -264,6 +271,16 @@ Polymer({
   },
 
   /**
+   * Controls the animation based on the value of |shouldPlay|.
+   * @param {boolean} shouldPlay Will play the animation if true else pauses it.
+   */
+  setPlay(shouldPlay) {
+    const scanningAnimation =
+        /** @type {CrLottieElement|HTMLElement} */ (this.$.scanningAnimation);
+    scanningAnimation.setPlay(shouldPlay);
+  },
+
+  /**
    * Updates the lottie animation taking into account the current state and
    * whether dark mode is enabled.
    * @private
@@ -405,4 +422,5 @@ Polymer({
     return this.isComplete_;
   },
 });
+/* #ignore */ console.warn('crbug/1173575, non-JS module files deprecated.');
 })();

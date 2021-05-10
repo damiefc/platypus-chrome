@@ -21,11 +21,12 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
+#include "ui/compositor/layer.h"
 #include "ui/display/scoped_display_for_new_windows.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/widget/widget.h"
@@ -34,6 +35,8 @@
 namespace ash {
 
 namespace {
+
+using ::chromeos::WindowStateType;
 
 // WindowState based on a given initial state. Records the last resize bounds.
 class FakeWindowState : public WindowState::State {

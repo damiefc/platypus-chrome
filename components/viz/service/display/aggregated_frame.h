@@ -9,13 +9,15 @@
 #include <vector>
 
 #include "base/optional.h"
-#include "components/viz/common/delegated_ink_metadata.h"
 #include "components/viz/common/quads/aggregated_render_pass.h"
 #include "components/viz/service/viz_service_export.h"
+#include "ui/gfx/delegated_ink_metadata.h"
 #include "ui/gfx/display_color_spaces.h"
 #include "ui/latency/latency_info.h"
 
 namespace viz {
+
+typedef std::vector<gfx::Rect> SurfaceDamageRectList;
 
 class VIZ_SERVICE_EXPORT AggregatedFrame {
  public:
@@ -39,14 +41,14 @@ class VIZ_SERVICE_EXPORT AggregatedFrame {
   // Indicates whether any render passes have a copy output request.
   bool has_copy_requests = false;
 
+  // Indicates whether video capture has been enabled for this frame.
+  bool video_capture_enabled = false;
+
   // Indicates whether this frame may contain video.
   bool may_contain_video = false;
 
-  // This is the final root damage rect produced in
-  // ProcessSurfaceOccludingDamage().
-  // TODO(magchen@): This will be replaced by a damage rect list in the follow
-  // up CL.
-  gfx::Rect occluding_damage_;
+  // A list of surface damage rects in the current frame, used for overlays.
+  SurfaceDamageRectList surface_damage_rect_list_;
 
   // Contains the metadata required for drawing a delegated ink trail onto the
   // end of a rendered ink stroke. This should only be present when two
@@ -59,7 +61,7 @@ class VIZ_SERVICE_EXPORT AggregatedFrame {
   // The ink trail created with this metadata will only last for a single frame
   // before it disappears, regardless of whether or not the next frame contains
   // delegated ink metadata.
-  std::unique_ptr<DelegatedInkMetadata> delegated_ink_metadata;
+  std::unique_ptr<gfx::DelegatedInkMetadata> delegated_ink_metadata;
 
   AggregatedRenderPassList render_pass_list;
 };

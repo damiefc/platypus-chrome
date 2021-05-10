@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -153,34 +153,6 @@ TEST_P(ReportBadMessageTest, ResponseAsync) {
   // handler immediately.
   std::move(bad_message_callback)
       .Run("this message is bad and should feel bad");
-  EXPECT_TRUE(error);
-}
-
-TEST_P(ReportBadMessageTest, ResponseSync) {
-  bool error = false;
-  SetErrorHandler(base::BindLambdaForTesting([&] { error = true; }));
-
-  SyncMessageResponseContext context;
-  remote()->RequestResponseSync();
-
-  EXPECT_FALSE(error);
-  context.ReportBadMessage("i don't like this response");
-  EXPECT_TRUE(error);
-}
-
-TEST_P(ReportBadMessageTest, ResponseSyncDeferred) {
-  bool error = false;
-  SetErrorHandler(base::BindLambdaForTesting([&] { error = true; }));
-
-  ReportBadMessageCallback bad_message_callback;
-  {
-    SyncMessageResponseContext context;
-    remote()->RequestResponseSync();
-    bad_message_callback = context.GetBadMessageCallback();
-  }
-
-  EXPECT_FALSE(error);
-  std::move(bad_message_callback).Run("nope nope nope");
   EXPECT_TRUE(error);
 }
 

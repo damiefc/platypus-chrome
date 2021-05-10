@@ -220,7 +220,7 @@ class SharingServiceTest : public testing::Test {
   bool device_candidates_initialized_ = false;
 
  private:
-  std::unique_ptr<SharingService> sharing_service_ = nullptr;
+  std::unique_ptr<SharingService> sharing_service_;
   base::Optional<SharingSendMessageResult> send_message_result_;
   std::unique_ptr<chrome_browser_sharing::ResponseMessage>
       send_message_response_;
@@ -283,6 +283,7 @@ TEST_F(SharingServiceTest, SendMessageToDeviceSuccess) {
     response_message->CopyFrom(expected_response_message);
     std::move(callback).Run(SharingSendMessageResult::kSuccessful,
                             std::move(response_message));
+    return base::DoNothing();
   };
 
   ON_CALL(*sharing_message_sender_,

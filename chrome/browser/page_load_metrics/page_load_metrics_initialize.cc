@@ -5,12 +5,16 @@
 #include "chrome/browser/page_load_metrics/page_load_metrics_initialize.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/heavy_ad_intervention/heavy_ad_service_factory.h"
 #include "chrome/browser/page_load_metrics/observers/aborts_page_load_metrics_observer.h"
-#include "chrome/browser/page_load_metrics/observers/ad_metrics/ads_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/ad_metrics/floc_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/core/amp_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/core/ukm_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/data_saver_site_breakdown_metrics_observer.h"
@@ -19,7 +23,6 @@
 #include "chrome/browser/page_load_metrics/observers/foreground_duration_ukm_observer.h"
 #include "chrome/browser/page_load_metrics/observers/from_gws_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/https_engagement_metrics/https_engagement_page_load_metrics_observer.h"
-#include "chrome/browser/page_load_metrics/observers/isolated_prerender_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/javascript_frameworks_ukm_observer.h"
 #include "chrome/browser/page_load_metrics/observers/live_tab_count_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/loading_predictor_page_load_metrics_observer.h"
@@ -29,10 +32,9 @@
 #include "chrome/browser/page_load_metrics/observers/omnibox_suggestion_used_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/optimization_guide_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/portal_page_load_metrics_observer.h"
-#include "chrome/browser/page_load_metrics/observers/previews_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/prefetch_proxy_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/previews_ukm_observer.h"
 #include "chrome/browser/page_load_metrics/observers/protocol_page_load_metrics_observer.h"
-#include "chrome/browser/page_load_metrics/observers/resource_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/scheme_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/security_state_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/service_worker_page_load_metrics_observer.h"
@@ -40,14 +42,16 @@
 #include "chrome/browser/page_load_metrics/observers/tab_restore_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/third_party_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/translate_page_load_metrics_observer.h"
-#include "chrome/browser/prerender/chrome_prerender_contents_delegate.h"
+#include "chrome/browser/page_load_metrics/page_load_metrics_memory_tracker_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/chrome_no_state_prefetch_contents_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
+#include "components/no_state_prefetch/browser/no_state_prefetch_contents.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
+#include "components/page_load_metrics/browser/observers/ad_metrics/ads_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_embedder_base.h"
+#include "components/page_load_metrics/browser/page_load_metrics_memory_tracker.h"
 #include "components/page_load_metrics/browser/page_load_tracker.h"
-#include "components/prerender/browser/prerender_contents.h"
-#include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
 #include "url/gurl.h"
@@ -66,6 +70,10 @@ namespace chrome {
 
 namespace {
 
+std::string GetApplicationLocale() {
+  return g_browser_process->GetApplicationLocale();
+}
+
 class PageLoadMetricsEmbedder
     : public page_load_metrics::PageLoadMetricsEmbedderBase {
  public:
@@ -76,6 +84,9 @@ class PageLoadMetricsEmbedder
   bool IsNewTabPageUrl(const GURL& url) override;
   bool IsPrerender(content::WebContents* web_contents) override;
   bool IsExtensionUrl(const GURL& url) override;
+  page_load_metrics::PageLoadMetricsMemoryTracker*
+  GetMemoryTrackerForBrowserContext(
+      content::BrowserContext* browser_context) override;
 
  protected:
   // page_load_metrics::PageLoadMetricsEmbedderBase:
@@ -105,7 +116,7 @@ void PageLoadMetricsEmbedder::RegisterEmbedderObservers(
     tracker->AddObserver(
         std::make_unique<DocumentWritePageLoadMetricsObserver>());
     tracker->AddObserver(
-        std::make_unique<IsolatedPrerenderPageLoadMetricsObserver>());
+        std::make_unique<PrefetchProxyPageLoadMetricsObserver>());
     tracker->AddObserver(
         std::make_unique<LiveTabCountPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<MediaPageLoadMetricsObserver>());
@@ -113,10 +124,7 @@ void PageLoadMetricsEmbedder::RegisterEmbedderObservers(
         std::make_unique<MultiTabLoadingPageLoadMetricsObserver>());
     tracker->AddObserver(
         std::make_unique<OptimizationGuidePageLoadMetricsObserver>());
-    tracker->AddObserver(
-        std::make_unique<previews::PreviewsPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<previews::PreviewsUKMObserver>());
-    tracker->AddObserver(std::make_unique<ResourceMetricsObserver>());
     tracker->AddObserver(
         std::make_unique<ServiceWorkerPageLoadMetricsObserver>());
     tracker->AddObserver(
@@ -128,11 +136,17 @@ void PageLoadMetricsEmbedder::RegisterEmbedderObservers(
     tracker->AddObserver(std::make_unique<TabRestorePageLoadMetricsObserver>());
     tracker->AddObserver(
         std::make_unique<DataSaverSiteBreakdownMetricsObserver>());
-    std::unique_ptr<AdsPageLoadMetricsObserver> ads_observer =
-        AdsPageLoadMetricsObserver::CreateIfNeeded(tracker->GetWebContents());
+    std::unique_ptr<page_load_metrics::AdsPageLoadMetricsObserver>
+        ads_observer =
+            page_load_metrics::AdsPageLoadMetricsObserver::CreateIfNeeded(
+                tracker->GetWebContents(),
+                HeavyAdServiceFactory::GetForBrowserContext(
+                    tracker->GetWebContents()->GetBrowserContext()),
+                base::BindRepeating(&GetApplicationLocale));
     if (ads_observer)
       tracker->AddObserver(std::move(ads_observer));
 
+    tracker->AddObserver(std::make_unique<FlocPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<ThirdPartyMetricsObserver>());
 
     std::unique_ptr<page_load_metrics::PageLoadMetricsObserver> ukm_observer =
@@ -167,13 +181,14 @@ void PageLoadMetricsEmbedder::RegisterEmbedderObservers(
           web_contents()->GetBrowserContext()));
   tracker->AddObserver(std::make_unique<DataUseMetricsObserver>());
   std::unique_ptr<TranslatePageLoadMetricsObserver> translate_observer =
-      TranslatePageLoadMetricsObserver::CreateIfNeeded();
-  if (translate_observer != nullptr)
+      TranslatePageLoadMetricsObserver::CreateIfNeeded(
+          tracker->GetWebContents());
+  if (translate_observer)
     tracker->AddObserver(std::move(translate_observer));
 }
 
 bool PageLoadMetricsEmbedder::IsPrerendering() const {
-  return prerender::ChromePrerenderContentsDelegate::FromWebContents(
+  return prerender::ChromeNoStatePrefetchContentsDelegate::FromWebContents(
              web_contents()) != nullptr;
 }
 
@@ -186,7 +201,7 @@ bool PageLoadMetricsEmbedder::IsNewTabPageUrl(const GURL& url) {
 }
 
 bool PageLoadMetricsEmbedder::IsPrerender(content::WebContents* web_contents) {
-  return prerender::ChromePrerenderContentsDelegate::FromWebContents(
+  return prerender::ChromeNoStatePrefetchContentsDelegate::FromWebContents(
       web_contents);
 }
 
@@ -196,6 +211,16 @@ bool PageLoadMetricsEmbedder::IsExtensionUrl(const GURL& url) {
 #else
   return false;
 #endif
+}
+
+page_load_metrics::PageLoadMetricsMemoryTracker*
+PageLoadMetricsEmbedder::GetMemoryTrackerForBrowserContext(
+    content::BrowserContext* browser_context) {
+  if (!base::FeatureList::IsEnabled(features::kV8PerFrameMemoryMonitoring))
+    return nullptr;
+
+  return page_load_metrics::PageLoadMetricsMemoryTrackerFactory::
+      GetForBrowserContext(browser_context);
 }
 
 }  // namespace

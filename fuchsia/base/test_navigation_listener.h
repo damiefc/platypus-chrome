@@ -25,30 +25,38 @@ class TestNavigationListener : public fuchsia::web::NavigationEventListener {
   TestNavigationListener();
   ~TestNavigationListener() final;
 
+  TestNavigationListener(const TestNavigationListener&) = delete;
+  TestNavigationListener& operator=(const TestNavigationListener&) = delete;
+
   // Spins a RunLoop until the navigation state of the page matches the fields
   // of |expected_state| that have been set.
   void RunUntilNavigationStateMatches(
       const fuchsia::web::NavigationState& expected_state);
 
   // Calls RunUntilNavigationStateMatches with a NavigationState that has
-  // loaded.
+  // the main document loaded and the normal page type.
   void RunUntilLoaded();
 
   // Calls RunUntilNavigationStateMatches with a NavigationState that has
-  // |expected_url|.
+  // |expected_url|, the normal page type, and the main document loaded.
   void RunUntilUrlEquals(const GURL& expected_url);
 
   // Calls RunUntilNavigationStateMatches with a NavigationState that has
-  // |expected_title|.
+  // |expected_title| and the normal page type.
   void RunUntilTitleEquals(const base::StringPiece expected_title);
 
   // Calls RunUntilNavigationStateMatches with a NavigationState that has
-  // |expected_url| and |expected_title|.
+  // |expected_url|, |expected_title|, and the normal page type.
   void RunUntilUrlAndTitleEquals(const GURL& expected_url,
                                  base::StringPiece expected_title);
 
   // Calls RunUntilNavigationStateMatches with a NavigationState that has
-  // all the expected fields.
+  // the error page type, |expected_title|, and the main document loaded.
+  void RunUntilErrorPageIsLoadedAndTitleEquals(
+      base::StringPiece expected_title);
+
+  // Calls RunUntilNavigationStateMatches with a NavigationState that has
+  // all the expected fields and the normal page type.
   void RunUntilUrlTitleBackForwardEquals(const GURL& expected_url,
                                          base::StringPiece expected_title,
                                          bool expected_can_go_back,
@@ -56,6 +64,9 @@ class TestNavigationListener : public fuchsia::web::NavigationEventListener {
 
   // Returns the title.
   std::string title() { return current_state_.title(); }
+
+  // Returns the current navigation state.
+  fuchsia::web::NavigationState* current_state() { return &current_state_; }
 
   // Register a callback which intercepts the execution of the event
   // acknowledgement callback. |before_ack| takes ownership of the
@@ -70,14 +81,20 @@ class TestNavigationListener : public fuchsia::web::NavigationEventListener {
       fuchsia::web::NavigationState change,
       OnNavigationStateChangedCallback callback) final;
 
-  fuchsia::web::NavigationState current_state_;
-
-  BeforeAckCallback before_ack_;
-
   // Compare the current state with all fields of |expected| that have been set.
   bool AllFieldsMatch(const fuchsia::web::NavigationState& expected);
 
-  DISALLOW_COPY_AND_ASSIGN(TestNavigationListener);
+  void QuitLoopIfAllFieldsMatch(
+      const fuchsia::web::NavigationState* expected_state,
+      base::RepeatingClosure quit_run_loop_closure,
+      BeforeAckCallback before_ack_callback,
+      const fuchsia::web::NavigationState& change,
+      fuchsia::web::NavigationEventListener::OnNavigationStateChangedCallback
+          ack_callback);
+
+  fuchsia::web::NavigationState current_state_;
+
+  BeforeAckCallback before_ack_;
 };
 
 }  // namespace cr_fuchsia

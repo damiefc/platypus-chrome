@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
@@ -30,6 +31,7 @@
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/permission_util.h"
+#include "components/permissions/request_type.h"
 #include "components/permissions/test/mock_permission_prompt_factory.h"
 #include "components/prefs/pref_service.h"
 #include "components/variations/variations_associated_data.h"
@@ -118,13 +120,13 @@ class MediaStreamDevicesControllerTest : public WebRtcTestBase {
             Profile::FromBrowserContext(GetWebContents()->GetBrowserContext()));
     content_settings->SetContentSettingDefaultScope(
         example_url_, GURL(), ContentSettingsType::MEDIASTREAM_MIC,
-        std::string(), mic_setting);
+        mic_setting);
     content_settings->SetContentSettingDefaultScope(
         example_url_, GURL(), ContentSettingsType::MEDIASTREAM_CAMERA,
-        std::string(), cam_setting);
+        cam_setting);
     content_settings->SetContentSettingDefaultScope(
         example_url_, GURL(), ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
-        std::string(), ptz_setting);
+        ptz_setting);
   }
 
   // Checks whether the devices returned in OnMediaStreamResponse contains a
@@ -214,8 +216,8 @@ class MediaStreamDevicesControllerTest : public WebRtcTestBase {
     permissions::PermissionRequestManager* manager =
         permissions::PermissionRequestManager::FromWebContents(
             browser()->tab_strip_model()->GetActiveWebContents());
-    prompt_factory_.reset(
-        new permissions::MockPermissionPromptFactory(manager));
+    prompt_factory_ =
+        std::make_unique<permissions::MockPermissionPromptFactory>(manager);
 
     // Cleanup.
     media_stream_devices_.clear();
@@ -610,7 +612,9 @@ IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
       dispatcher->GetMediaStreamCaptureIndicator()->RegisterMediaStream(
           GetWebContents(), video_devices);
   video_stream_ui->OnStarted(base::OnceClosure(),
-                             content::MediaStreamUI::SourceCallback());
+                             content::MediaStreamUI::SourceCallback(),
+                             /*label=*/std::string(), /*screen_capture_ids=*/{},
+                             content::MediaStreamUI::StateChangeCallback());
 
   // Request mic and deny.
   SetDevicePolicy(DEVICE_TYPE_AUDIO, ACCESS_DENIED);
@@ -814,18 +818,15 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerPtzTest, ContentSettings) {
         CreateRequest(example_audio_id(), example_video_id(), true));
 
     ASSERT_LE(prompt_factory()->TotalRequestCount(), 3);
-    EXPECT_EQ(
-        test.ExpectMicInfobar(control_support),
-        prompt_factory()->RequestTypeSeen(
-            permissions::PermissionRequestType::PERMISSION_MEDIASTREAM_MIC));
-    EXPECT_EQ(
-        test.ExpectCamInfobar(control_support),
-        prompt_factory()->RequestTypeSeen(
-            permissions::PermissionRequestType::PERMISSION_MEDIASTREAM_CAMERA));
-    EXPECT_EQ(
-        test.ExpectPtzInfobar(control_support),
-        prompt_factory()->RequestTypeSeen(permissions::PermissionRequestType::
-                                              PERMISSION_CAMERA_PAN_TILT_ZOOM));
+    EXPECT_EQ(test.ExpectMicInfobar(control_support),
+              prompt_factory()->RequestTypeSeen(
+                  permissions::RequestType::kMicStream));
+    EXPECT_EQ(test.ExpectCamInfobar(control_support),
+              prompt_factory()->RequestTypeSeen(
+                  permissions::RequestType::kCameraStream));
+    EXPECT_EQ(test.ExpectPtzInfobar(control_support),
+              prompt_factory()->RequestTypeSeen(
+                  permissions::RequestType::kCameraPanTiltZoom));
 
     // Check the media stream result is expected and the devices returned are
     // expected;
@@ -874,9 +875,9 @@ IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
       CreateRequest(example_audio_id(), example_video_id(), false));
   ASSERT_EQ(2, prompt_factory()->TotalRequestCount());
   ASSERT_TRUE(prompt_factory()->RequestTypeSeen(
-      permissions::PermissionRequestType::PERMISSION_MEDIASTREAM_CAMERA));
-  ASSERT_TRUE(prompt_factory()->RequestTypeSeen(
-      permissions::PermissionRequestType::PERMISSION_MEDIASTREAM_MIC));
+      permissions::RequestType::kCameraStream));
+  ASSERT_TRUE(
+      prompt_factory()->RequestTypeSeen(permissions::RequestType::kMicStream));
 
   VerifyResultState(blink::mojom::MediaStreamRequestResult::OK, true, true);
 
@@ -941,15 +942,18 @@ IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
   const int prompt_contents_index =
       browser()->tab_strip_model()->GetIndexOfWebContents(prompt_contents);
 
-  // Now request permissions, but before the callback is asynchronously called,
-  // destroy the tab.
+  // Now request permissions, but before the request is handled, destroy the
+  // tab.
   permission_bubble_media_access_handler_->HandleRequest(
       prompt_contents,
       CreateRequest(example_audio_id(), example_video_id(), false),
       base::BindOnce([](const blink::MediaStreamDevices& devices,
                         blink::mojom::MediaStreamRequestResult result,
                         std::unique_ptr<content::MediaStreamUI> ui) {
-        ADD_FAILURE() << " this callback shouldn't be reached";
+        // The permission may be dismissed before we have a chance to delete the
+        // request.
+        EXPECT_EQ(blink::mojom::MediaStreamRequestResult::PERMISSION_DISMISSED,
+                  result);
       }),
       nullptr);
   // Since the mock prompt factory holds a reference to the
@@ -994,7 +998,7 @@ IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
 }
 
 IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
-                       RequestCamAndMicBlockedByFeaturePolicy) {
+                       RequestCamAndMicBlockedByPermissionsPolicy) {
   InitWithUrl(embedded_test_server()->GetURL("/iframe_blank.html"));
 
   // Create a cross-origin request by using localhost as the iframe origin.
@@ -1024,7 +1028,7 @@ IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
 }
 
 IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
-                       RequestCamBlockedByFeaturePolicy) {
+                       RequestCamBlockedByPermissionsPolicy) {
   InitWithUrl(embedded_test_server()->GetURL("/iframe_blank.html"));
 
   // Create a cross-origin request by using localhost as the iframe origin.

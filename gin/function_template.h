@@ -10,7 +10,6 @@
 
 #include "base/callback.h"
 #include "base/check.h"
-#include "base/macros.h"
 #include "base/strings/strcat.h"
 #include "gin/arguments.h"
 #include "gin/converter.h"
@@ -47,6 +46,9 @@ struct CallbackParamTraits<const T*> {
 // among every CallbackHolder instance.
 class GIN_EXPORT CallbackHolderBase {
  public:
+  CallbackHolderBase(const CallbackHolderBase&) = delete;
+  CallbackHolderBase& operator=(const CallbackHolderBase&) = delete;
+
   v8::Local<v8::External> GetHandle(v8::Isolate* isolate);
 
  protected:
@@ -60,8 +62,6 @@ class GIN_EXPORT CallbackHolderBase {
       const v8::WeakCallbackInfo<CallbackHolderBase>& data);
 
   v8::Global<v8::External> v8_ref_;
-
-  DISALLOW_COPY_AND_ASSIGN(CallbackHolderBase);
 };
 
 template<typename Sig>
@@ -73,14 +73,14 @@ class CallbackHolder : public CallbackHolderBase {
       : CallbackHolderBase(isolate),
         callback(std::move(callback)),
         invoker_options(std::move(invoker_options)) {}
+  CallbackHolder(const CallbackHolder&) = delete;
+  CallbackHolder& operator=(const CallbackHolder&) = delete;
 
   base::RepeatingCallback<Sig> callback;
   InvokerOptions invoker_options;
 
  private:
-  ~CallbackHolder() override {}
-
-  DISALLOW_COPY_AND_ASSIGN(CallbackHolder);
+  ~CallbackHolder() override = default;
 };
 
 template <typename T>
@@ -248,9 +248,8 @@ v8::Local<v8::FunctionTemplate> CreateFunctionTemplate(
 
   v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(
       isolate, &internal::Dispatcher<Sig>::DispatchToCallback,
-      ConvertToV8<v8::Local<v8::External>>(isolate,
-                                           holder->GetHandle(isolate)));
-  tmpl->RemovePrototype();
+      ConvertToV8<v8::Local<v8::External>>(isolate, holder->GetHandle(isolate)),
+      v8::Local<v8::Signature>(), 0, v8::ConstructorBehavior::kThrow);
   return tmpl;
 }
 

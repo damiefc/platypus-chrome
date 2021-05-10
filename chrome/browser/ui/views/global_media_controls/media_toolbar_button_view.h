@@ -5,9 +5,9 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_GLOBAL_MEDIA_CONTROLS_MEDIA_TOOLBAR_BUTTON_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_GLOBAL_MEDIA_CONTROLS_MEDIA_TOOLBAR_BUTTON_VIEW_H_
 
-#include "base/macros.h"
 #include "chrome/browser/ui/global_media_controls/media_toolbar_button_controller_delegate.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 
 class Browser;
 class BrowserView;
@@ -20,10 +20,12 @@ class MediaToolbarButtonObserver;
 // of its parent ToolbarView. The icon is made visible when there is an active
 // media session.
 class MediaToolbarButtonView : public ToolbarButton,
-                               public MediaToolbarButtonControllerDelegate,
-                               public views::ButtonListener {
+                               public MediaToolbarButtonControllerDelegate {
  public:
+  METADATA_HEADER(MediaToolbarButtonView);
   explicit MediaToolbarButtonView(BrowserView* browser_view);
+  MediaToolbarButtonView(const MediaToolbarButtonView&) = delete;
+  MediaToolbarButtonView& operator=(const MediaToolbarButtonView&) = delete;
   ~MediaToolbarButtonView() override;
 
   void AddObserver(MediaToolbarButtonObserver* observer);
@@ -35,13 +37,13 @@ class MediaToolbarButtonView : public ToolbarButton,
   void Enable() override;
   void Disable() override;
 
-  // views::ButtonListener implementation.
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
-  // ToolbarButton implementation.
-  void UpdateIcon() override;
+  MediaToolbarButtonController* media_toolbar_button_controller() {
+    return controller_.get();
+  }
 
  private:
+  void ButtonPressed();
+
   const Browser* const browser_;
 
   MediaNotificationService* const service_;
@@ -52,8 +54,6 @@ class MediaToolbarButtonView : public ToolbarButton,
   std::unique_ptr<MediaToolbarButtonController> controller_;
 
   base::ObserverList<MediaToolbarButtonObserver> observers_;
-
-  DISALLOW_COPY_AND_ASSIGN(MediaToolbarButtonView);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_GLOBAL_MEDIA_CONTROLS_MEDIA_TOOLBAR_BUTTON_VIEW_H_

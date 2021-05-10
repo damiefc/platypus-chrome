@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "chrome/browser/extensions/browsertest_util.h"
@@ -15,7 +16,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
+#include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -57,7 +59,7 @@ class TestExtensionUninstallDialogDelegate
     : public extensions::ExtensionUninstallDialog::Delegate {
  public:
   explicit TestExtensionUninstallDialogDelegate(
-      const base::Closure& quit_closure)
+      base::RepeatingClosure quit_closure)
       : quit_closure_(quit_closure), canceled_(false) {}
 
   ~TestExtensionUninstallDialogDelegate() override {}
@@ -66,12 +68,12 @@ class TestExtensionUninstallDialogDelegate
 
  private:
   void OnExtensionUninstallDialogClosed(bool did_start_uninstall,
-                                        const base::string16& error) override {
+                                        const std::u16string& error) override {
     canceled_ = !did_start_uninstall;
     quit_closure_.Run();
   }
 
-  base::Closure quit_closure_;
+  base::RepeatingClosure quit_closure_;
   bool canceled_;
 
   DISALLOW_COPY_AND_ASSIGN(TestExtensionUninstallDialogDelegate);
@@ -135,7 +137,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionUninstallDialogViewBrowserTest,
   EXPECT_TRUE(delegate.canceled());
 }
 
-#if defined(OS_CHROMEOS)
 // Test that we don't crash when uninstalling an extension from a web app
 // window in Ash. Context: crbug.com/825554
 IN_PROC_BROWSER_TEST_F(ExtensionUninstallDialogViewBrowserTest,
@@ -150,17 +151,18 @@ IN_PROC_BROWSER_TEST_F(ExtensionUninstallDialogViewBrowserTest,
   web_app_info->start_url = start_url;
   web_app_info->scope = start_url;
   web_app_info->open_as_window = true;
-  web_app::AppId app_id =
-      web_app::InstallWebApp(browser()->profile(), std::move(web_app_info));
+  web_app::AppId app_id = web_app::test::InstallWebApp(browser()->profile(),
+                                                       std::move(web_app_info));
   Browser* app_browser =
       web_app::LaunchWebAppBrowser(browser()->profile(), app_id);
 
+  TestExtensionUninstallDialogDelegate delegate{base::DoNothing()};
   std::unique_ptr<extensions::ExtensionUninstallDialog> dialog;
   {
     base::RunLoop run_loop;
     dialog = extensions::ExtensionUninstallDialog::Create(
         app_browser->profile(), app_browser->window()->GetNativeWindow(),
-        nullptr);
+        &delegate);
     run_loop.RunUntilIdle();
   }
 
@@ -172,7 +174,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionUninstallDialogViewBrowserTest,
     run_loop.RunUntilIdle();
   }
 }
-#endif  // defined(OS_CHROMEOS)
 
 class ParameterizedExtensionUninstallDialogViewBrowserTest
     : public InProcessBrowserTest,
@@ -346,7 +347,7 @@ class ExtensionUninstallDialogViewInteractiveBrowserTest
   class TestDelegate : public extensions::ExtensionUninstallDialog::Delegate {
     void OnExtensionUninstallDialogClosed(
         bool did_start_uninstall,
-        const base::string16& error) override {}
+        const std::u16string& error) override {}
   };
 
   void TearDownOnMainThread() override {

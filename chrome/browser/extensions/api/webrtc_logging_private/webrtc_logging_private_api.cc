@@ -43,7 +43,8 @@ bool CanEnableAudioDebugRecordingsFromExtension(
   if (extension) {
     enabled_by_permissions =
         extension->permissions_data()->active_permissions().HasAPIPermission(
-            extensions::APIPermission::kWebrtcLoggingPrivateAudioDebug);
+            extensions::mojom::APIPermissionID::
+                kWebrtcLoggingPrivateAudioDebug);
   }
 #endif
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -198,7 +199,7 @@ WebrtcLoggingPrivateFunctionWithGenericCallback::PrepareTask(
     const std::string& security_origin,
     WebRtcLoggingController::GenericDoneCallback* callback,
     std::string* error) {
-  *callback = base::Bind(
+  *callback = base::BindOnce(
       &WebrtcLoggingPrivateFunctionWithGenericCallback::FireCallback, this);
   return LoggingControllerFromRequest(request, security_origin, error);
 }
@@ -220,7 +221,7 @@ void WebrtcLoggingPrivateFunctionWithUploadCallback::FireCallback(
   if (success) {
     api::webrtc_logging_private::UploadResult result;
     result.report_id = report_id;
-    Respond(OneArgument(result.ToValue()));
+    Respond(OneArgument(base::Value::FromUniquePtrValue(result.ToValue())));
   } else {
     Respond(Error(error_message));
   }
@@ -241,7 +242,7 @@ void WebrtcLoggingPrivateFunctionWithRecordingDoneCallback::FireCallback(
   result.prefix_path = prefix_path;
   result.did_stop = did_stop;
   result.did_manual_stop = did_manual_stop;
-  Respond(OneArgument(result.ToValue()));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(result.ToValue())));
 }
 
 ExtensionFunction::ResponseAction
@@ -345,8 +346,8 @@ WebrtcLoggingPrivateUploadStoredFunction::Run() {
   if (!logging_controller)
     return RespondNow(Error(std::move(error)));
 
-  WebRtcLoggingController::UploadDoneCallback callback =
-      base::Bind(&WebrtcLoggingPrivateUploadStoredFunction::FireCallback, this);
+  WebRtcLoggingController::UploadDoneCallback callback = base::BindOnce(
+      &WebrtcLoggingPrivateUploadStoredFunction::FireCallback, this);
 
   const std::string local_log_id(HashIdWithOrigin(params->security_origin,
                                                   params->log_id));
@@ -366,7 +367,7 @@ ExtensionFunction::ResponseAction WebrtcLoggingPrivateUploadFunction::Run() {
     return RespondNow(Error(std::move(error)));
 
   WebRtcLoggingController::UploadDoneCallback callback =
-      base::Bind(&WebrtcLoggingPrivateUploadFunction::FireCallback, this);
+      base::BindOnce(&WebrtcLoggingPrivateUploadFunction::FireCallback, this);
 
   logging_controller->UploadLog(std::move(callback));
   return RespondLater();
@@ -413,8 +414,8 @@ WebrtcLoggingPrivateStartRtpDumpFunction::Run() {
   WebRtcLoggingController* webrtc_logging_controller =
       WebRtcLoggingController::FromRenderProcessHost(host);
 
-  WebRtcLoggingController::GenericDoneCallback callback =
-      base::Bind(&WebrtcLoggingPrivateStartRtpDumpFunction::FireCallback, this);
+  WebRtcLoggingController::GenericDoneCallback callback = base::BindOnce(
+      &WebrtcLoggingPrivateStartRtpDumpFunction::FireCallback, this);
 
   webrtc_logging_controller->StartRtpDump(type, std::move(callback));
   return RespondLater();
@@ -446,8 +447,8 @@ WebrtcLoggingPrivateStopRtpDumpFunction::Run() {
   WebRtcLoggingController* webrtc_logging_controller =
       WebRtcLoggingController::FromRenderProcessHost(host);
 
-  WebRtcLoggingController::GenericDoneCallback callback =
-      base::Bind(&WebrtcLoggingPrivateStopRtpDumpFunction::FireCallback, this);
+  WebRtcLoggingController::GenericDoneCallback callback = base::BindOnce(
+      &WebrtcLoggingPrivateStopRtpDumpFunction::FireCallback, this);
 
   webrtc_logging_controller->StopRtpDump(type, std::move(callback));
   return RespondLater();
@@ -481,12 +482,12 @@ WebrtcLoggingPrivateStartAudioDebugRecordingsFunction::Run() {
 
   audio_debug_recordings_handler->StartAudioDebugRecordings(
       host, base::TimeDelta::FromSeconds(params->seconds),
-      base::Bind(
+      base::BindOnce(
           &WebrtcLoggingPrivateStartAudioDebugRecordingsFunction::FireCallback,
           this),
-      base::Bind(&WebrtcLoggingPrivateStartAudioDebugRecordingsFunction::
-                     FireErrorCallback,
-                 this));
+      base::BindOnce(&WebrtcLoggingPrivateStartAudioDebugRecordingsFunction::
+                         FireErrorCallback,
+                     this));
   return RespondLater();
 }
 
@@ -513,12 +514,12 @@ WebrtcLoggingPrivateStopAudioDebugRecordingsFunction::Run() {
 
   audio_debug_recordings_handler->StopAudioDebugRecordings(
       host,
-      base::Bind(
+      base::BindOnce(
           &WebrtcLoggingPrivateStopAudioDebugRecordingsFunction::FireCallback,
           this),
-      base::Bind(&WebrtcLoggingPrivateStopAudioDebugRecordingsFunction::
-                     FireErrorCallback,
-                 this));
+      base::BindOnce(&WebrtcLoggingPrivateStopAudioDebugRecordingsFunction::
+                         FireErrorCallback,
+                     this));
   return RespondLater();
 }
 
@@ -561,7 +562,7 @@ void WebrtcLoggingPrivateStartEventLoggingFunction::FireCallback(
     DCHECK(error_message.empty());
     api::webrtc_logging_private::StartEventLoggingResult result;
     result.log_id = log_id;
-    Respond(OneArgument(result.ToValue()));
+    Respond(OneArgument(base::Value::FromUniquePtrValue(result.ToValue())));
   } else {
     DCHECK(log_id.empty());
     DCHECK(!error_message.empty());
@@ -588,9 +589,9 @@ WebrtcLoggingPrivateGetLogsDirectoryFunction::Run() {
   }
 
   webrtc_logging_controller->GetLogsDirectory(
-      base::Bind(&WebrtcLoggingPrivateGetLogsDirectoryFunction::FireCallback,
-                 this),
-      base::Bind(
+      base::BindOnce(
+          &WebrtcLoggingPrivateGetLogsDirectoryFunction::FireCallback, this),
+      base::BindOnce(
           &WebrtcLoggingPrivateGetLogsDirectoryFunction::FireErrorCallback,
           this));
   return RespondLater();
@@ -606,7 +607,7 @@ void WebrtcLoggingPrivateGetLogsDirectoryFunction::FireCallback(
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("fileSystemId", filesystem_id);
   dict->SetString("baseName", base_name);
-  Respond(OneArgument(std::move(dict)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(dict))));
 }
 
 void WebrtcLoggingPrivateGetLogsDirectoryFunction::FireErrorCallback(

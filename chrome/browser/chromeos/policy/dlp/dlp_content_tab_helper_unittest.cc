@@ -22,7 +22,8 @@ using testing::Return;
 namespace {
 const DlpContentRestrictionSet kEmptyRestrictionSet;
 const DlpContentRestrictionSet kNonEmptyRestrictionSet(
-    DlpContentRestriction::kScreenshot);
+    DlpContentRestriction::kScreenshot,
+    DlpRulesManager::Level::kBlock);
 }  // namespace
 
 class DlpContentTabHelperTest : public ChromeRenderViewHostTestHarness {
@@ -34,16 +35,14 @@ class DlpContentTabHelperTest : public ChromeRenderViewHostTestHarness {
         &mock_dlp_content_manager_);
 
     // Initialize browser.
-    params_ = std::make_unique<Browser::CreateParams>(profile(),
-                                                      /*user_gesture=*/true);
-    browser_ = CreateBrowserWithTestWindowForParams(params_.get());
+    const Browser::CreateParams params(profile(), /*user_gesture=*/true);
+    browser_ = CreateBrowserWithTestWindowForParams(params);
     tab_strip_model_ = browser_->tab_strip_model();
   }
 
   void TearDown() override {
     tab_strip_model_->CloseAllTabs();
     browser_.reset();
-    params_.reset();
 
     DlpContentManager::ResetDlpContentManagerForTesting();
 
@@ -53,7 +52,6 @@ class DlpContentTabHelperTest : public ChromeRenderViewHostTestHarness {
   MockDlpContentManager mock_dlp_content_manager_;
   TabActivitySimulator tab_activity_simulator_;
   TabStripModel* tab_strip_model_;
-  std::unique_ptr<Browser::CreateParams> params_;
   std::unique_ptr<Browser> browser_;
 };
 

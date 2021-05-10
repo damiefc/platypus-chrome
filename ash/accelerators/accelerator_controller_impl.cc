@@ -10,25 +10,30 @@
 #include <utility>
 
 #include "ash/accelerators/accelerator_commands.h"
-#include "ash/accelerators/accelerator_confirmation_dialog.h"
 #include "ash/accelerators/debug_commands.h"
 #include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/magnifier/docked_magnifier_controller_impl.h"
+#include "ash/accessibility/magnifier/magnification_controller.h"
+#include "ash/accessibility/ui/accessibility_confirmation_dialog.h"
 #include "ash/ambient/ambient_controller.h"
 #include "ash/app_list/app_list_controller_impl.h"
+#include "ash/app_list/app_list_metrics.h"
 #include "ash/assistant/model/assistant_ui_model.h"
 #include "ash/capture_mode/capture_mode_controller.h"
+#include "ash/capture_mode/capture_mode_metrics.h"
+#include "ash/clipboard/clipboard_history_controller_impl.h"
+#include "ash/components/audio/cras_audio_handler.h"
+#include "ash/constants/ash_features.h"
+#include "ash/constants/devicetype.h"
 #include "ash/debug.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/display_move_window_util.h"
 #include "ash/display/privacy_screen_controller.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/focus_cycler.h"
-#include "ash/home_screen/home_screen_controller.h"
 #include "ash/ime/ime_controller_impl.h"
 #include "ash/ime/ime_switch_type.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
-#include "ash/magnifier/docked_magnifier_controller_impl.h"
-#include "ash/magnifier/magnification_controller.h"
 #include "ash/media/media_controller_impl.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/multi_profile_uma.h"
@@ -73,30 +78,32 @@
 #include "ash/wm/overview/overview_session.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "ash/wm/window_cycle_controller.h"
+#include "ash/wm/window_cycle/window_cycle_controller.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "chromeos/audio/cras_audio_handler.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/power/power_manager_client.h"
+#include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/user_manager/user_type.h"
+#include "ui/aura/client/aura_constants.h"
+#include "ui/aura/env.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
+#include "ui/base/emoji/emoji_panel_helper.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/chromeos/events/keyboard_layout_util.h"
@@ -140,6 +147,7 @@ const char kAccelWindowSnap[] = "Ash.Accelerators.WindowSnap";
 namespace {
 
 using base::UserMetricsAction;
+using chromeos::input_method::InputMethodManager;
 using message_center::Notification;
 using message_center::SystemNotificationWarningLevel;
 
@@ -181,17 +189,16 @@ void RecordTabletVolumeAdjustTypeHistogram(TabletModeVolumeAdjustType type) {
 
 // Ensures that there are no word breaks at the "+"s in the shortcut texts such
 // as "Ctrl+Shift+Space".
-void EnsureNoWordBreaks(base::string16* shortcut_text) {
-  std::vector<base::string16> keys =
-      base::SplitString(*shortcut_text, base::ASCIIToUTF16("+"),
-                        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+void EnsureNoWordBreaks(std::u16string* shortcut_text) {
+  std::vector<std::u16string> keys = base::SplitString(
+      *shortcut_text, u"+", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   if (keys.size() < 2U)
     return;
 
   // The plus sign surrounded by the word joiner to guarantee an non-breaking
   // shortcut.
-  const base::string16 non_breaking_plus =
+  const std::u16string non_breaking_plus =
       base::UTF8ToUTF16("\xe2\x81\xa0+\xe2\x81\xa0");
   shortcut_text->clear();
   for (size_t i = 0; i < keys.size() - 1; ++i) {
@@ -204,11 +211,11 @@ void EnsureNoWordBreaks(base::string16* shortcut_text) {
 
 // Gets the notification message after it formats it in such a way that there
 // are no line breaks in the middle of the shortcut texts.
-base::string16 GetNotificationText(int message_id,
+std::u16string GetNotificationText(int message_id,
                                    int old_shortcut_id,
                                    int new_shortcut_id) {
-  base::string16 old_shortcut = l10n_util::GetStringUTF16(old_shortcut_id);
-  base::string16 new_shortcut = l10n_util::GetStringUTF16(new_shortcut_id);
+  std::u16string old_shortcut = l10n_util::GetStringUTF16(old_shortcut_id);
+  std::u16string new_shortcut = l10n_util::GetStringUTF16(new_shortcut_id);
   EnsureNoWordBreaks(&old_shortcut);
   EnsureNoWordBreaks(&new_shortcut);
 
@@ -220,7 +227,7 @@ void ShowDeprecatedAcceleratorNotification(const char* const notification_id,
                                            int message_id,
                                            int old_shortcut_id,
                                            int new_shortcut_id) {
-  const base::string16 message =
+  const std::u16string message =
       GetNotificationText(message_id, old_shortcut_id, new_shortcut_id);
   auto delegate =
       base::MakeRefCounted<message_center::HandleNotificationClickDelegate>(
@@ -232,7 +239,7 @@ void ShowDeprecatedAcceleratorNotification(const char* const notification_id,
   std::unique_ptr<Notification> notification = ash::CreateSystemNotification(
       message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
       l10n_util::GetStringUTF16(IDS_DEPRECATED_SHORTCUT_TITLE), message,
-      base::string16(), GURL(),
+      std::u16string(), GURL(),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
                                  kNotifierAccelerator),
       message_center::RichNotificationData(), std::move(delegate),
@@ -241,7 +248,7 @@ void ShowDeprecatedAcceleratorNotification(const char* const notification_id,
       std::move(notification));
 }
 
-void ShowToast(std::string id, const base::string16& text) {
+void ShowToast(std::string id, const std::u16string& text) {
   ToastData toast(id, text, kToastDurationMs, base::nullopt,
                   /*visible_on_lock_screen=*/true);
   Shell::Get()->toast_manager()->Show(toast);
@@ -280,7 +287,7 @@ void HandleCycleBackwardMRU(const ui::Accelerator& accelerator) {
     base::RecordAction(base::UserMetricsAction("Accel_PrevWindow_Tab"));
 
   Shell::Get()->window_cycle_controller()->HandleCycleWindow(
-      WindowCycleController::BACKWARD);
+      WindowCycleController::WindowCyclingDirection::kBackward);
 }
 
 void HandleCycleForwardMRU(const ui::Accelerator& accelerator) {
@@ -288,35 +295,25 @@ void HandleCycleForwardMRU(const ui::Accelerator& accelerator) {
     base::RecordAction(base::UserMetricsAction("Accel_NextWindow_Tab"));
 
   Shell::Get()->window_cycle_controller()->HandleCycleWindow(
-      WindowCycleController::FORWARD);
+      WindowCycleController::WindowCyclingDirection::kForward);
 }
 
-void HandleActivateDesk(const ui::Accelerator& accelerator) {
+void HandleActivateDesk(const ui::Accelerator& accelerator,
+                        bool activate_left) {
   auto* desks_controller = DesksController::Get();
   const bool success = desks_controller->ActivateAdjacentDesk(
-      /*going_left=*/
-      (accelerator.key_code() == ui::VKEY_OEM_4 ||
-       accelerator.key_code() == ui::VKEY_LEFT),
-      DesksSwitchSource::kDeskSwitchShortcut);
+      activate_left, DesksSwitchSource::kDeskSwitchShortcut);
   if (!success)
     return;
 
-  switch (accelerator.key_code()) {
-    case ui::VKEY_OEM_4:
-    case ui::VKEY_LEFT:
-      base::RecordAction(base::UserMetricsAction("Accel_Desks_ActivateLeft"));
-      break;
-    case ui::VKEY_OEM_6:
-    case ui::VKEY_RIGHT:
-      base::RecordAction(base::UserMetricsAction("Accel_Desks_ActivateRight"));
-      break;
-
-    default:
-      NOTREACHED();
+  if (activate_left) {
+    base::RecordAction(base::UserMetricsAction("Accel_Desks_ActivateLeft"));
+  } else {
+    base::RecordAction(base::UserMetricsAction("Accel_Desks_ActivateRight"));
   }
 }
 
-void HandleMoveActiveItem(const ui::Accelerator& accelerator) {
+void HandleMoveActiveItem(const ui::Accelerator& accelerator, bool going_left) {
   auto* desks_controller = DesksController::Get();
   if (desks_controller->AreDesksBeingModified())
     return;
@@ -335,14 +332,10 @@ void HandleMoveActiveItem(const ui::Accelerator& accelerator) {
     return;
 
   Desk* target_desk = nullptr;
-  bool going_left = accelerator.key_code() == ui::VKEY_OEM_4 ||
-                    accelerator.key_code() == ui::VKEY_LEFT;
   if (going_left) {
     target_desk = desks_controller->GetPreviousDesk();
     base::RecordAction(base::UserMetricsAction("Accel_Desks_MoveWindowLeft"));
   } else {
-    DCHECK(accelerator.key_code() == ui::VKEY_OEM_6 ||
-           accelerator.key_code() == ui::VKEY_RIGHT);
     target_desk = desks_controller->GetNextDesk();
     base::RecordAction(base::UserMetricsAction("Accel_Desks_MoveWindowRight"));
   }
@@ -351,9 +344,8 @@ void HandleMoveActiveItem(const ui::Accelerator& accelerator) {
     return;
 
   if (!in_overview) {
-    desks_animations::PerformWindowMoveToDeskAnimation(
-        window_to_move,
-        /*going_left=*/going_left);
+    desks_animations::PerformWindowMoveToDeskAnimation(window_to_move,
+                                                       going_left);
   }
 
   if (!desks_controller->MoveWindowFromActiveDeskTo(
@@ -525,18 +517,18 @@ bool CanHandleNewIncognitoWindow() {
 
 void HandleNewIncognitoWindow() {
   base::RecordAction(UserMetricsAction("Accel_New_Incognito_Window"));
-  NewWindowDelegate::GetInstance()->NewWindow(true /* is_incognito */);
+  NewWindowDelegate::GetPrimary()->NewWindow(/*is_incognito=*/true);
 }
 
 void HandleNewTab(const ui::Accelerator& accelerator) {
   if (accelerator.key_code() == ui::VKEY_T)
     base::RecordAction(UserMetricsAction("Accel_NewTab_T"));
-  NewWindowDelegate::GetInstance()->NewTab();
+  NewWindowDelegate::GetPrimary()->NewTab();
 }
 
 void HandleNewWindow() {
   base::RecordAction(UserMetricsAction("Accel_New_Window"));
-  NewWindowDelegate::GetInstance()->NewWindow(false /* is_incognito */);
+  NewWindowDelegate::GetPrimary()->NewWindow(/*is_incognito=*/false);
 }
 
 bool CanCycleInputMethod() {
@@ -560,6 +552,16 @@ void HandleSwitchToNextIme(const ui::Accelerator& accelerator) {
   else
     RecordImeSwitchByAccelerator();
   Shell::Get()->ime_controller()->SwitchToNextIme();
+}
+
+void HandleCalculator() {
+  base::RecordAction(UserMetricsAction("Accel_Open_Calculator"));
+  NewWindowDelegate::GetInstance()->OpenCalculator();
+}
+
+void HandleDiagnostics() {
+  base::RecordAction(UserMetricsAction("Accel_Open_Diagnostics"));
+  NewWindowDelegate::GetInstance()->OpenDiagnostics();
 }
 
 void HandleOpenFeedbackPage() {
@@ -720,7 +722,7 @@ void HandleRotateScreen() {
 
 void HandleRestoreTab() {
   base::RecordAction(UserMetricsAction("Accel_Restore_Tab"));
-  NewWindowDelegate::GetInstance()->RestoreTab();
+  NewWindowDelegate::GetPrimary()->RestoreTab();
 }
 
 // Rotate the active window.
@@ -744,47 +746,71 @@ void HandleShowKeyboardShortcutViewer() {
   NewWindowDelegate::GetInstance()->ShowKeyboardShortcutViewer();
 }
 
-bool CanHandleScreenshot() {
+bool CanHandleScreenshot(AcceleratorAction action) {
   // The old screenshot code will handle the different sessions in its own code.
-  if (!features::IsCaptureModeEnabled())
+  // |TAKE_SCREENSHOT| is allowed when user session is blocked.
+  if (!features::IsCaptureModeEnabled() || action == TAKE_SCREENSHOT)
     return true;
-
   return !Shell::Get()->session_controller()->IsUserSessionBlocked();
 }
 
 // Tries to enter capture mode image type with |source|. Returns false if
 // unsuccessful (capture mode disabled).
-bool MaybeEnterImageCaptureMode(CaptureModeSource source) {
+bool MaybeEnterImageCaptureMode(CaptureModeSource source,
+                                CaptureModeEntryType entry_type) {
   if (!features::IsCaptureModeEnabled())
     return false;
 
   auto* capture_mode_controller = CaptureModeController::Get();
   capture_mode_controller->SetSource(source);
   capture_mode_controller->SetType(CaptureModeType::kImage);
-  capture_mode_controller->Start();
+  capture_mode_controller->Start(entry_type);
   return true;
 }
 
 void HandleTakeWindowScreenshot() {
   base::RecordAction(UserMetricsAction("Accel_Take_Window_Screenshot"));
-  if (MaybeEnterImageCaptureMode(CaptureModeSource::kWindow))
+  if (MaybeEnterImageCaptureMode(
+          CaptureModeSource::kWindow,
+          CaptureModeEntryType::kAccelTakeWindowScreenshot)) {
     return;
+  }
 
   Shell::Get()->screenshot_controller()->StartWindowScreenshotSession();
 }
 
 void HandleTakePartialScreenshot() {
   base::RecordAction(UserMetricsAction("Accel_Take_Partial_Screenshot"));
-  if (MaybeEnterImageCaptureMode(CaptureModeSource::kRegion))
+  if (MaybeEnterImageCaptureMode(
+          CaptureModeSource::kRegion,
+          CaptureModeEntryType::kAccelTakePartialScreenshot)) {
     return;
+  }
 
   Shell::Get()->screenshot_controller()->StartPartialScreenshotSession(
       /*draw_overlay_immediately=*/true);
 }
 
-void HandleTakeScreenshot() {
+void HandleTakeScreenshot(ui::KeyboardCode key_code) {
   base::RecordAction(UserMetricsAction("Accel_Take_Screenshot"));
-  Shell::Get()->screenshot_controller()->TakeScreenshotForAllRootWindows();
+  if (!features::IsCaptureModeEnabled()) {
+    Shell::Get()->screenshot_controller()->TakeScreenshotForAllRootWindows();
+    return;
+  }
+
+  // If it is the snip key, toggle capture mode unless the session is blocked,
+  // in which case, it behaves like a fullscreen screenshot.
+  auto* capture_mode_controller = CaptureModeController::Get();
+  if (key_code == ui::VKEY_SNAPSHOT &&
+      !Shell::Get()->session_controller()->IsUserSessionBlocked()) {
+    if (capture_mode_controller->IsActive())
+      capture_mode_controller->Stop();
+    else
+      capture_mode_controller->Start(CaptureModeEntryType::kSnipKey);
+    return;
+  }
+
+  capture_mode_controller->CaptureScreenshotsOfAllDisplays();
 }
 
 void HandleToggleSystemTrayBubbleInternal(bool focus_message_center) {
@@ -795,7 +821,7 @@ void HandleToggleSystemTrayBubbleInternal(bool focus_message_center) {
   if (tray->IsBubbleShown()) {
     tray->CloseBubble();
   } else {
-    tray->ShowBubble(false /* show_by_click */);
+    tray->ShowBubble();
     tray->ActivateBubble();
 
     if (focus_message_center)
@@ -834,8 +860,22 @@ void HandleSwitchIme(const ui::Accelerator& accelerator) {
   Shell::Get()->ime_controller()->SwitchImeWithAccelerator(accelerator);
 }
 
-bool CanHandleToggleAppList(const ui::Accelerator& accelerator,
-                            const ui::Accelerator& previous_accelerator) {
+bool CanHandleToggleAppList(
+    const ui::Accelerator& accelerator,
+    const ui::Accelerator& previous_accelerator,
+    const std::set<ui::KeyboardCode>& currently_pressed_keys) {
+  for (auto key : currently_pressed_keys) {
+    // The AppList accelerator is triggered on search(VKEY_LWIN) key release.
+    // Sometimes users will press and release the search key while holding other
+    // keys in an attempt to trigger a different accelerator. We should not
+    // toggle the AppList in that case. Check for VKEY_SHIFT because this is
+    // used to show fullscreen app list.
+    if (key != ui::VKEY_LWIN && key != ui::VKEY_SHIFT &&
+        key != ui::VKEY_BROWSER_SEARCH) {
+      return false;
+    }
+  }
+
   if (accelerator.key_code() == ui::VKEY_LWIN) {
     // If something else was pressed between the Search key (LWIN)
     // being pressed and released, then ignore the release of the
@@ -868,7 +908,7 @@ void HandleToggleAppList(const ui::Accelerator& accelerator,
 }
 
 void HandleToggleFullscreen(const ui::Accelerator& accelerator) {
-  if (accelerator.key_code() == ui::VKEY_MEDIA_LAUNCH_APP2)
+  if (accelerator.key_code() == ui::VKEY_ZOOM)
     base::RecordAction(UserMetricsAction("Accel_Fullscreen_F4"));
   OverviewController* overview_controller = Shell::Get()->overview_controller();
   // Disable fullscreen while overview animation is running due to
@@ -951,6 +991,11 @@ void HandleTopWindowMinimizeOnBack() {
   WindowState::Get(window_util::GetTopWindow())->Minimize();
 }
 
+void HandleShowEmojiPicker() {
+  base::RecordAction(UserMetricsAction("Accel_Show_Emoji_Picker"));
+  ui::ShowEmojiPanel();
+}
+
 void HandleShowImeMenuBubble() {
   base::RecordAction(UserMetricsAction("Accel_Show_Ime_Menu_Bubble"));
 
@@ -960,7 +1005,7 @@ void HandleShowImeMenuBubble() {
     ImeMenuTray* ime_menu_tray = status_area_widget->ime_menu_tray();
     if (ime_menu_tray && ime_menu_tray->GetVisible() &&
         !ime_menu_tray->GetBubbleView()) {
-      ime_menu_tray->ShowBubble(false /* show_by_click */);
+      ime_menu_tray->ShowBubble();
     }
   }
 }
@@ -1016,7 +1061,7 @@ PaletteTray* GetPaletteTray() {
 
 void HandleShowStylusTools() {
   base::RecordAction(UserMetricsAction("Accel_Show_Stylus_Tools"));
-  GetPaletteTray()->ShowBubble(false /* show_by_click */);
+  GetPaletteTray()->ShowBubble();
 }
 
 bool CanHandleShowStylusTools() {
@@ -1037,8 +1082,14 @@ void HandleToggleAssistant(const ui::Accelerator& accelerator) {
         base::UserMetricsAction("VoiceInteraction.Started.Search_Space"));
   } else if (accelerator.IsCmdDown() && accelerator.key_code() == ui::VKEY_A) {
     // Search+A shortcut is disabled on device with an assistant key.
-    if (ui::DeviceKeyboardHasAssistantKey())
+    // Currently only Google branded device has the key. Some external keyboard
+    // may report it has the key but actually not.  This would cause keyboard
+    // shortcut stops working.  So we only check the key on these branded
+    // devices.
+    if (chromeos::IsGoogleBrandedDevice() &&
+        ui::DeviceKeyboardHasAssistantKey()) {
       return;
+    }
 
     base::RecordAction(
         base::UserMetricsAction("VoiceInteraction.Started.Search_A"));
@@ -1082,10 +1133,6 @@ void HandleToggleAssistant(const ui::Accelerator& accelerator) {
       ShowToast(kAssistantErrorToastId,
                 l10n_util::GetStringUTF16(
                     IDS_ASH_ASSISTANT_DISABLED_IN_PUBLIC_SESSION_MESSAGE));
-      return;
-    case AssistantAllowedState::DISALLOWED_BY_SUPERVISED_USER:
-      // supervised user is deprecated, wait for the code clean up.
-      NOTREACHED();
       return;
     case AssistantAllowedState::DISALLOWED_BY_INCOGNITO:
       ShowToast(kAssistantErrorToastId,
@@ -1145,7 +1192,7 @@ bool CanHandleToggleCapsLock(
       return false;
   }
 
-  // This shortcust is set to be trigger on release. Either the current
+  // This shortcut is set to be trigger on release. Either the current
   // accelerator is a Search release or Alt release.
   if (accelerator.key_code() == ui::VKEY_LWIN &&
       accelerator.key_state() == ui::Accelerator::KeyState::RELEASED) {
@@ -1183,6 +1230,15 @@ void HandleToggleCapsLock() {
   ime_controller->SetCapsLockEnabled(!ime_controller->IsCapsLockEnabled());
 }
 
+bool CanHandleToggleClipboardHistory() {
+  return chromeos::features::IsClipboardHistoryEnabled();
+}
+
+void HandleToggleClipboardHistory() {
+  DCHECK(Shell::Get()->clipboard_history_controller());
+  Shell::Get()->clipboard_history_controller()->ShowMenuByAccelerator();
+}
+
 bool CanHandleToggleDictation() {
   return Shell::Get()->accessibility_controller()->dictation().enabled();
 }
@@ -1204,13 +1260,13 @@ bool CanHandleToggleOverview() {
   return true;
 }
 
-void CreateAndShowStickyNotification(const base::string16& title,
-                                     const base::string16& message,
+void CreateAndShowStickyNotification(const std::u16string& title,
+                                     const std::u16string& message,
                                      const std::string& notification_id,
                                      const gfx::VectorIcon& icon) {
   std::unique_ptr<Notification> notification = ash::CreateSystemNotification(
       message_center::NOTIFICATION_TYPE_SIMPLE, notification_id, title, message,
-      base::string16() /* display source */, GURL(),
+      std::u16string() /* display source */, GURL(),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
                                  kNotifierAccelerator),
       message_center::RichNotificationData(), nullptr, icon,
@@ -1234,22 +1290,22 @@ void NotifyAccessibilityFeatureDisabledByAdmin(
     int feature_name_id,
     bool feature_state,
     const std::string& notification_id) {
-  const base::string16 organization_name =
+  const std::u16string organization_manager =
       base::UTF8ToUTF16(Shell::Get()
                             ->system_tray_model()
                             ->enterprise_domain()
-                            ->enterprise_display_domain());
+                            ->enterprise_domain_manager());
   CreateAndShowStickyNotification(
       l10n_util::GetStringUTF16(
           IDS_ASH_ACCESSIBILITY_FEATURE_SHORTCUT_DISABLED_TITLE),
       l10n_util::GetStringFUTF16(
           IDS_ASH_ACCESSIBILITY_FEATURE_SHORTCUT_DISABLED_MSG,
-          organization_name,
+          organization_manager,
           l10n_util::GetStringUTF16(
               feature_state ? IDS_ASH_ACCESSIBILITY_FEATURE_ACTIVATED
                             : IDS_ASH_ACCESSIBILITY_FEATURE_DEACTIVATED),
           l10n_util::GetStringUTF16(feature_name_id)),
-      notification_id, kLoginScreenEnterpriseIcon);
+      notification_id, chromeos::kEnterpriseIcon);
 }
 
 void RemoveStickyNotitification(const std::string& notification_id) {
@@ -1502,7 +1558,7 @@ const double kStepPercentage = 4.0;
 void HandleVolumeDown() {
   base::RecordAction(UserMetricsAction("Accel_VolumeDown_F9"));
 
-  chromeos::CrasAudioHandler* audio_handler = chromeos::CrasAudioHandler::Get();
+  auto* audio_handler = CrasAudioHandler::Get();
   if (audio_handler->IsOutputMuted()) {
     audio_handler->SetOutputVolumePercent(0);
   } else {
@@ -1518,13 +1574,13 @@ void HandleVolumeMute(const ui::Accelerator& accelerator) {
   if (accelerator.key_code() == ui::VKEY_VOLUME_MUTE)
     base::RecordAction(UserMetricsAction("Accel_VolumeMute_F8"));
 
-  chromeos::CrasAudioHandler::Get()->SetOutputMute(true);
+  CrasAudioHandler::Get()->SetOutputMute(true);
 }
 
 void HandleVolumeUp() {
   base::RecordAction(UserMetricsAction("Accel_VolumeUp_F10"));
 
-  chromeos::CrasAudioHandler* audio_handler = chromeos::CrasAudioHandler::Get();
+  auto* audio_handler = CrasAudioHandler::Get();
   bool play_sound = false;
   if (audio_handler->IsOutputMuted()) {
     audio_handler->SetOutputMute(false);
@@ -1615,7 +1671,7 @@ AcceleratorControllerImpl::TestApi::GetDeprecatedAcceleratorData(
   return it->second;
 }
 
-AcceleratorConfirmationDialog*
+AccessibilityConfirmationDialog*
 AcceleratorControllerImpl::TestApi::GetConfirmationDialog() {
   return controller_->confirmation_dialog_.get();
 }
@@ -1634,15 +1690,50 @@ void AcceleratorControllerImpl::TestApi::SetSideVolumeButtonLocation(
 
 AcceleratorControllerImpl::AcceleratorControllerImpl()
     : accelerator_manager_(std::make_unique<ui::AcceleratorManager>()),
-      accelerator_history_(std::make_unique<ui::AcceleratorHistory>()),
+      accelerator_history_(std::make_unique<AcceleratorHistoryImpl>()),
       side_volume_button_location_file_path_(
           base::FilePath(kSideVolumeButtonLocationFilePath)) {
+  if (::features::IsImprovedKeyboardShortcutsEnabled()) {
+    // Observe input method changes to determine when to use positional
+    // shortcuts. Calling AddObserver will cause InputMethodChanged to be
+    // called once even when the method does not change.
+    InputMethodManager::Get()->AddObserver(this);
+  }
+
   Init();
 
   ParseSideVolumeButtonLocationInfo();
+
+  // Let AcceleratorHistory be a PreTargetHandler on aura::Env to ensure that it
+  // receives KeyEvents and MouseEvents. In some cases Shell PreTargetHandlers
+  // will handle Events before AcceleratorHistory gets to see them. This
+  // interferes with Accelerator processing. See https://crbug.com/1174603.
+  aura::Env::GetInstance()->AddPreTargetHandler(
+      accelerator_history_.get(), ui::EventTarget::Priority::kAccessibility);
 }
 
-AcceleratorControllerImpl::~AcceleratorControllerImpl() = default;
+AcceleratorControllerImpl::~AcceleratorControllerImpl() {
+  aura::Env::GetInstance()->RemovePreTargetHandler(accelerator_history_.get());
+
+  if (::features::IsImprovedKeyboardShortcutsEnabled()) {
+    InputMethodManager::Get()->RemoveObserver(this);
+  }
+}
+
+void AcceleratorControllerImpl::InputMethodChanged(InputMethodManager* manager,
+                                                   Profile* profile,
+                                                   bool show_message) {
+  DCHECK(::features::IsImprovedKeyboardShortcutsEnabled());
+  DCHECK(manager);
+
+  // InputMethodChanged will be called as soon as the observer is registered
+  // from Init(), so these settings get propagated before any keys are
+  // seen.
+  const bool use_positional_lookup =
+      manager->ArePositionalShortcutsUsedByCurrentInputMethod();
+  accelerators_.set_use_positional_lookup(use_positional_lookup);
+  accelerator_manager_->SetUsePositionalLookup(use_positional_lookup);
+}
 
 void AcceleratorControllerImpl::Register(
     const std::vector<ui::Accelerator>& accelerators,
@@ -1662,9 +1753,8 @@ void AcceleratorControllerImpl::UnregisterAll(ui::AcceleratorTarget* target) {
 
 bool AcceleratorControllerImpl::IsActionForAcceleratorEnabled(
     const ui::Accelerator& accelerator) const {
-  std::map<ui::Accelerator, AcceleratorAction>::const_iterator it =
-      accelerators_.find(accelerator);
-  return it != accelerators_.end() && CanPerformAction(it->second, accelerator);
+  const AcceleratorAction* action_ptr = accelerators_.Find(accelerator);
+  return action_ptr && CanPerformAction(*action_ptr, accelerator);
 }
 
 bool AcceleratorControllerImpl::Process(const ui::Accelerator& accelerator) {
@@ -1673,7 +1763,7 @@ bool AcceleratorControllerImpl::Process(const ui::Accelerator& accelerator) {
 
 bool AcceleratorControllerImpl::IsDeprecated(
     const ui::Accelerator& accelerator) const {
-  return deprecated_accelerators_.count(accelerator) != 0;
+  return base::Contains(deprecated_accelerators_, accelerator);
 }
 
 bool AcceleratorControllerImpl::PerformActionIfEnabled(
@@ -1690,12 +1780,9 @@ bool AcceleratorControllerImpl::OnMenuAccelerator(
     const ui::Accelerator& accelerator) {
   accelerator_history()->StoreCurrentAccelerator(accelerator);
 
-  auto itr = accelerators_.find(accelerator);
-  if (itr == accelerators_.end())
-    return false;  // Menu shouldn't be closed for an invalid accelerator.
-
-  AcceleratorAction action = itr->second;
-  return actions_keeping_menu_open_.count(action) == 0;
+  // Menu shouldn't be closed for an invalid accelerator.
+  AcceleratorAction* action_ptr = accelerators_.Find(accelerator);
+  return action_ptr && !base::Contains(actions_keeping_menu_open_, *action_ptr);
 }
 
 bool AcceleratorControllerImpl::IsRegistered(
@@ -1703,28 +1790,20 @@ bool AcceleratorControllerImpl::IsRegistered(
   return accelerator_manager_->IsRegistered(accelerator);
 }
 
-ui::AcceleratorHistory* AcceleratorControllerImpl::GetAcceleratorHistory() {
+AcceleratorHistoryImpl* AcceleratorControllerImpl::GetAcceleratorHistory() {
   return accelerator_history_.get();
 }
 
 bool AcceleratorControllerImpl::IsPreferred(
     const ui::Accelerator& accelerator) const {
-  std::map<ui::Accelerator, AcceleratorAction>::const_iterator iter =
-      accelerators_.find(accelerator);
-  if (iter == accelerators_.end())
-    return false;  // not an accelerator.
-
-  return preferred_actions_.find(iter->second) != preferred_actions_.end();
+  const AcceleratorAction* action_ptr = accelerators_.Find(accelerator);
+  return action_ptr && base::Contains(preferred_actions_, *action_ptr);
 }
 
 bool AcceleratorControllerImpl::IsReserved(
     const ui::Accelerator& accelerator) const {
-  std::map<ui::Accelerator, AcceleratorAction>::const_iterator iter =
-      accelerators_.find(accelerator);
-  if (iter == accelerators_.end())
-    return false;  // not an accelerator.
-
-  return reserved_actions_.find(iter->second) != reserved_actions_.end();
+  const AcceleratorAction* action_ptr = accelerators_.Find(accelerator);
+  return action_ptr && base::Contains(reserved_actions_, *action_ptr);
 }
 
 AcceleratorControllerImpl::AcceleratorProcessingRestriction
@@ -1737,10 +1816,7 @@ AcceleratorControllerImpl::GetCurrentAcceleratorRestriction() {
 
 bool AcceleratorControllerImpl::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
-  std::map<ui::Accelerator, AcceleratorAction>::const_iterator it =
-      accelerators_.find(accelerator);
-  DCHECK(it != accelerators_.end());
-  AcceleratorAction action = it->second;
+  AcceleratorAction action = accelerators_.Get(accelerator);
   if (!CanPerformAction(action, accelerator))
     return false;
 
@@ -1787,6 +1863,7 @@ void AcceleratorControllerImpl::Init() {
     actions_allowed_in_pinned_mode_.insert(
         kActionsAllowedInAppModeOrPinnedMode[i]);
   }
+
   for (size_t i = 0; i < kActionsAllowedInPinnedModeLength; ++i)
     actions_allowed_in_pinned_mode_.insert(kActionsAllowedInPinnedMode[i]);
   for (size_t i = 0; i < kActionsAllowedInAppModeLength; ++i)
@@ -1798,7 +1875,10 @@ void AcceleratorControllerImpl::Init() {
 
   RegisterAccelerators(kAcceleratorData, kAcceleratorDataLength);
 
-  if (::features::IsNewShortcutMappingEnabled()) {
+  if (::features::IsImprovedKeyboardShortcutsEnabled()) {
+    RegisterAccelerators(kEnableWithPositionalAcceleratorsData,
+                         kEnableWithPositionalAcceleratorsDataLength);
+  } else if (::features::IsNewShortcutMappingEnabled()) {
     RegisterAccelerators(kEnableWithNewMappingAcceleratorData,
                          kEnableWithNewMappingAcceleratorDataLength);
   } else {
@@ -1833,7 +1913,8 @@ void AcceleratorControllerImpl::RegisterAccelerators(
         CreateAccelerator(accelerators[i].keycode, accelerators[i].modifiers,
                           accelerators[i].trigger_on_press);
     ui_accelerators.push_back(accelerator);
-    accelerators_.insert(std::make_pair(accelerator, accelerators[i].action));
+    accelerators_.InsertNew(
+        std::make_pair(accelerator, accelerators[i].action));
   }
   Register(ui_accelerators, this);
 }
@@ -1852,7 +1933,8 @@ void AcceleratorControllerImpl::RegisterDeprecatedAccelerators() {
                           accelerator_data.trigger_on_press);
 
     ui_accelerators.push_back(deprecated_accelerator);
-    accelerators_[deprecated_accelerator] = accelerator_data.action;
+    accelerators_.InsertNew(
+        std::make_pair(deprecated_accelerator, accelerator_data.action));
     deprecated_accelerators_.insert(deprecated_accelerator);
   }
   Register(ui_accelerators, this);
@@ -1861,7 +1943,7 @@ void AcceleratorControllerImpl::RegisterDeprecatedAccelerators() {
 bool AcceleratorControllerImpl::CanPerformAction(
     AcceleratorAction action,
     const ui::Accelerator& accelerator) const {
-  if (accelerator.IsRepeat() && !repeatable_actions_.count(action))
+  if (accelerator.IsRepeat() && !base::Contains(repeatable_actions_, action))
     return false;
 
   AcceleratorProcessingRestriction restriction =
@@ -1879,8 +1961,10 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case CYCLE_BACKWARD_MRU:
     case CYCLE_FORWARD_MRU:
       return CanHandleCycleMru(accelerator);
-    case DESKS_ACTIVATE_DESK:
-    case DESKS_MOVE_ACTIVE_ITEM:
+    case DESKS_ACTIVATE_DESK_LEFT:
+    case DESKS_ACTIVATE_DESK_RIGHT:
+    case DESKS_MOVE_ACTIVE_ITEM_LEFT:
+    case DESKS_MOVE_ACTIVE_ITEM_RIGHT:
     case DESKS_NEW_DESK:
     case DESKS_REMOVE_CURRENT_DESK:
       return true;
@@ -1900,6 +1984,7 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case DEBUG_TOGGLE_HUD_DISPLAY:
       return debug::DebugAcceleratorsEnabled();
     case DEV_ADD_REMOVE_DISPLAY:
+    case DEV_TOGGLE_APP_LIST:
     case DEV_TOGGLE_UNIFIED_DESKTOP:
       return debug::DeveloperAcceleratorsEnabled();
     case DISABLE_CAPS_LOCK:
@@ -1941,11 +2026,15 @@ bool AcceleratorControllerImpl::CanPerformAction(
       return CanHandleCycleUser();
     case TOGGLE_APP_LIST:
     case TOGGLE_APP_LIST_FULLSCREEN:
-      return CanHandleToggleAppList(accelerator, previous_accelerator);
+      return CanHandleToggleAppList(
+          accelerator, previous_accelerator,
+          accelerator_history_->currently_pressed_keys());
     case TOGGLE_CAPS_LOCK:
       return CanHandleToggleCapsLock(
           accelerator, previous_accelerator,
           accelerator_history_->currently_pressed_keys());
+    case TOGGLE_CLIPBOARD_HISTORY:
+      return CanHandleToggleClipboardHistory();
     case TOGGLE_DICTATION:
       return CanHandleToggleDictation();
     case TOGGLE_DOCKED_MAGNIFIER:
@@ -1973,7 +2062,7 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case TAKE_PARTIAL_SCREENSHOT:
     case TAKE_SCREENSHOT:
     case TAKE_WINDOW_SCREENSHOT:
-      return CanHandleScreenshot();
+      return CanHandleScreenshot(action);
 
     // The following are always enabled.
     case BRIGHTNESS_DOWN:
@@ -2005,7 +2094,9 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case MEDIA_STOP:
     case NEW_TAB:
     case NEW_WINDOW:
+    case OPEN_CALCULATOR:
     case OPEN_CROSH:
+    case OPEN_DIAGNOSTICS:
     case OPEN_FEEDBACK_PAGE:
     case OPEN_FILE_MANAGER:
     case OPEN_GET_HELP:
@@ -2014,6 +2105,7 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case PRINT_UI_HIERARCHIES:
     case RESTORE_TAB:
     case ROTATE_WINDOW:
+    case SHOW_EMOJI_PICKER:
     case SHOW_IME_MENU_BUBBLE:
     case SHOW_SHORTCUT_VIEWER:
     case SHOW_TASK_MANAGER:
@@ -2072,11 +2164,17 @@ void AcceleratorControllerImpl::PerformAction(
     case CYCLE_FORWARD_MRU:
       HandleCycleForwardMRU(accelerator);
       break;
-    case DESKS_ACTIVATE_DESK:
-      HandleActivateDesk(accelerator);
+    case DESKS_ACTIVATE_DESK_LEFT:
+      HandleActivateDesk(accelerator, /*activate_left=*/true);
       break;
-    case DESKS_MOVE_ACTIVE_ITEM:
-      HandleMoveActiveItem(accelerator);
+    case DESKS_ACTIVATE_DESK_RIGHT:
+      HandleActivateDesk(accelerator, /*activate_left=*/false);
+      break;
+    case DESKS_MOVE_ACTIVE_ITEM_LEFT:
+      HandleMoveActiveItem(accelerator, /*going_left=*/true);
+      break;
+    case DESKS_MOVE_ACTIVE_ITEM_RIGHT:
+      HandleMoveActiveItem(accelerator, /*going_left=*/false);
       break;
     case DESKS_NEW_DESK:
       HandleNewDesk();
@@ -2110,6 +2208,9 @@ void AcceleratorControllerImpl::PerformAction(
       break;
     case DEV_ADD_REMOVE_DISPLAY:
       Shell::Get()->display_manager()->AddRemoveDisplay();
+      break;
+    case DEV_TOGGLE_APP_LIST:
+      HandleToggleAppList(accelerator, kSearchKey);
       break;
     case DEV_TOGGLE_UNIFIED_DESKTOP:
       HandleToggleUnifiedDesktop();
@@ -2224,8 +2325,14 @@ void AcceleratorControllerImpl::PerformAction(
     case NEW_WINDOW:
       HandleNewWindow();
       break;
+    case OPEN_CALCULATOR:
+      HandleCalculator();
+      break;
     case OPEN_CROSH:
       HandleCrosh();
+      break;
+    case OPEN_DIAGNOSTICS:
+      HandleDiagnostics();
       break;
     case OPEN_FEEDBACK_PAGE:
       HandleOpenFeedbackPage();
@@ -2273,6 +2380,9 @@ void AcceleratorControllerImpl::PerformAction(
     case SCALE_UI_UP:
       accelerators::ZoomDisplay(true /* up */);
       break;
+    case SHOW_EMOJI_PICKER:
+      HandleShowEmojiPicker();
+      break;
     case SHOW_IME_MENU_BUBBLE:
       HandleShowImeMenuBubble();
       break;
@@ -2316,7 +2426,7 @@ void AcceleratorControllerImpl::PerformAction(
       HandleTakePartialScreenshot();
       break;
     case TAKE_SCREENSHOT:
-      HandleTakeScreenshot();
+      HandleTakeScreenshot(accelerator.key_code());
       break;
     case TAKE_WINDOW_SCREENSHOT:
       HandleTakeWindowScreenshot();
@@ -2329,6 +2439,9 @@ void AcceleratorControllerImpl::PerformAction(
       break;
     case TOGGLE_CAPS_LOCK:
       HandleToggleCapsLock();
+      break;
+    case TOGGLE_CLIPBOARD_HISTORY:
+      HandleToggleClipboardHistory();
       break;
     case TOGGLE_DICTATION:
       HandleToggleDictation();
@@ -2407,18 +2520,15 @@ AcceleratorControllerImpl::AcceleratorProcessingRestriction
 AcceleratorControllerImpl::GetAcceleratorProcessingRestriction(
     int action) const {
   if (Shell::Get()->screen_pinning_controller()->IsPinned() &&
-      actions_allowed_in_pinned_mode_.find(action) ==
-          actions_allowed_in_pinned_mode_.end()) {
+      !base::Contains(actions_allowed_in_pinned_mode_, action)) {
     return RESTRICTION_PREVENT_PROCESSING_AND_PROPAGATION;
   }
   if (!Shell::Get()->session_controller()->IsActiveUserSessionStarted() &&
-      actions_allowed_at_login_screen_.find(action) ==
-          actions_allowed_at_login_screen_.end()) {
+      !base::Contains(actions_allowed_at_login_screen_, action)) {
     return RESTRICTION_PREVENT_PROCESSING;
   }
   if (Shell::Get()->session_controller()->IsScreenLocked() &&
-      actions_allowed_at_lock_screen_.find(action) ==
-          actions_allowed_at_lock_screen_.end()) {
+      !base::Contains(actions_allowed_at_lock_screen_, action)) {
     return RESTRICTION_PREVENT_PROCESSING;
   }
   if (Shell::Get()->power_button_controller()->IsMenuOpened() &&
@@ -2426,13 +2536,11 @@ AcceleratorControllerImpl::GetAcceleratorProcessingRestriction(
     return RESTRICTION_PREVENT_PROCESSING;
   }
   if (Shell::Get()->session_controller()->IsRunningInAppMode() &&
-      actions_allowed_in_app_mode_.find(action) ==
-          actions_allowed_in_app_mode_.end()) {
+      !base::Contains(actions_allowed_in_app_mode_, action)) {
     return RESTRICTION_PREVENT_PROCESSING;
   }
   if (Shell::IsSystemModalWindowOpen() &&
-      actions_allowed_at_modal_window_.find(action) ==
-          actions_allowed_at_modal_window_.end()) {
+      !base::Contains(actions_allowed_at_modal_window_, action)) {
     // Note we prevent the shortcut from propagating so it will not
     // be passed to the modal window. This is important for things like
     // Alt+Tab that would cause an undesired effect in the modal window by
@@ -2465,7 +2573,7 @@ AcceleratorControllerImpl::MaybeDeprecatedAcceleratorPressed(
   // This action is associated with new and deprecated accelerators, find which
   // one is |accelerator|.
   const DeprecatedAcceleratorData* data = itr->second;
-  if (!deprecated_accelerators_.count(accelerator)) {
+  if (!base::Contains(deprecated_accelerators_, accelerator)) {
     // This is a new accelerator replacing the old deprecated one.
     // Record UMA stats and proceed normally to perform it.
     RecordUmaHistogram(data->uma_histogram_name, NEW_USED);
@@ -2498,9 +2606,10 @@ void AcceleratorControllerImpl::MaybeShowConfirmationDialog(
   if (confirmation_dialog_)
     return;
 
-  auto* dialog = new AcceleratorConfirmationDialog(
-      window_title_text_id, dialog_text_id, std::move(on_accept_callback),
-      std::move(on_cancel_callback));
+  auto* dialog = new AccessibilityConfirmationDialog(
+      l10n_util::GetStringUTF16(window_title_text_id),
+      l10n_util::GetStringUTF16(dialog_text_id), std::move(on_accept_callback),
+      std::move(on_cancel_callback), /* on close */ base::DoNothing());
   confirmation_dialog_ = dialog->GetWeakPtr();
 }
 
@@ -2599,8 +2708,7 @@ bool AcceleratorControllerImpl::ShouldSwapSideVolumeButtons(
 }
 
 void AcceleratorControllerImpl::UpdateTabletModeVolumeAdjustHistogram() {
-  const int volume_percent =
-      chromeos::CrasAudioHandler::Get()->GetOutputVolumePercent();
+  const int volume_percent = CrasAudioHandler::Get()->GetOutputVolumePercent();
   const bool swapped = features::IsSwapSideVolumeButtonsForOrientationEnabled();
   if ((volume_adjust_starts_with_up_ &&
        volume_percent >= initial_volume_percent_) ||
@@ -2621,8 +2729,7 @@ void AcceleratorControllerImpl::StartTabletModeVolumeAdjustTimer(
     AcceleratorAction action) {
   if (!tablet_mode_volume_adjust_timer_.IsRunning()) {
     volume_adjust_starts_with_up_ = action == VOLUME_UP;
-    initial_volume_percent_ =
-        chromeos::CrasAudioHandler::Get()->GetOutputVolumePercent();
+    initial_volume_percent_ = CrasAudioHandler::Get()->GetOutputVolumePercent();
   }
   tablet_mode_volume_adjust_timer_.Start(
       FROM_HERE, kVolumeAdjustTimeout, this,

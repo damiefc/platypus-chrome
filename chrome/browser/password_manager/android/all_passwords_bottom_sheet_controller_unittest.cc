@@ -6,14 +6,15 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/mock_callback.h"
-#include "base/util/type_safety/pass_key.h"
+#include "base/types/pass_key.h"
 #include "chrome/browser/password_manager/password_manager_test_util.h"
 #include "chrome/browser/ui/android/passwords/all_passwords_bottom_sheet_view.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-forward.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/origin_credential_store.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
+#include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/browser/stub_password_manager_driver.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "content/public/test/browser_task_environment.h"
@@ -25,7 +26,7 @@ using ::testing::Eq;
 using ::testing::Pointee;
 using ::testing::UnorderedElementsAre;
 
-using autofill::PasswordForm;
+using password_manager::PasswordForm;
 using password_manager::TestPasswordStore;
 using password_manager::UiCredential;
 using CallbackFunctionMock = testing::MockFunction<void()>;
@@ -38,18 +39,19 @@ using IsAffiliationBasedMatch = UiCredential::IsAffiliationBasedMatch;
 
 constexpr char kExampleCom[] = "https://example.com";
 constexpr char kExampleOrg[] = "http://www.example.org";
+constexpr char kExampleDe[] = "https://www.example.de";
 
-constexpr char kUsername1[] = "alice";
-constexpr char kUsername2[] = "bob";
+constexpr char16_t kUsername1[] = u"alice";
+constexpr char16_t kUsername2[] = u"bob";
 
-constexpr char kPassword[] = "password123";
+constexpr char16_t kPassword[] = u"password123";
 
 class MockPasswordManagerDriver
     : public password_manager::StubPasswordManagerDriver {
  public:
   MOCK_METHOD(void,
               FillIntoFocusedField,
-              (bool, const base::string16&),
+              (bool, const std::u16string&),
               (override));
 };
 
@@ -62,22 +64,35 @@ class MockAllPasswordsBottomSheetView : public AllPasswordsBottomSheetView {
               (override));
 };
 
-UiCredential MakeUiCredential(const std::string& username,
-                              const std::string& password) {
-  return UiCredential(base::UTF8ToUTF16(username), base::UTF8ToUTF16(password),
-                      url::Origin::Create(GURL(kExampleCom)),
-                      IsPublicSuffixMatch(false),
-                      IsAffiliationBasedMatch(false));
+class MockPasswordManagerClient
+    : public password_manager::StubPasswordManagerClient {
+ public:
+  MOCK_METHOD(void, OnPasswordSelected, (const std::u16string&), (override));
+};
+
+UiCredential MakeUiCredential(const std::u16string& username,
+                              const std::u16string& password) {
+  return UiCredential(
+      username, password, url::Origin::Create(GURL(kExampleCom)),
+      IsPublicSuffixMatch(false), IsAffiliationBasedMatch(false), base::Time());
 }
 
 PasswordForm MakeSavedPassword(const std::string& signon_realm,
-                               const std::string& username) {
+                               const std::u16string& username) {
   PasswordForm form;
-  form.signon_realm = std::string(signon_realm);
+  form.signon_realm = signon_realm;
   form.url = GURL(signon_realm);
-  form.username_value = base::ASCIIToUTF16(username);
-  form.password_value = base::ASCIIToUTF16(kPassword);
-  form.username_element = base::ASCIIToUTF16("");
+  form.username_value = username;
+  form.password_value = kPassword;
+  form.in_store = PasswordForm::Store::kProfileStore;
+  return form;
+}
+
+PasswordForm MakePasswordException(const std::string& signon_realm) {
+  PasswordForm form;
+  form.blocked_by_user = true;
+  form.signon_realm = signon_realm;
+  form.url = GURL(signon_realm);
   form.in_store = PasswordForm::Store::kProfileStore;
   return form;
 }
@@ -85,15 +100,20 @@ PasswordForm MakeSavedPassword(const std::string& signon_realm,
 class AllPasswordsBottomSheetControllerTest : public testing::Test {
  protected:
   AllPasswordsBottomSheetControllerTest() {
+    createAllPasswordsController(FocusedFieldType::kFillablePasswordField);
+  }
+
+  void createAllPasswordsController(
+      autofill::mojom::FocusedFieldType focused_field_type) {
     std::unique_ptr<MockAllPasswordsBottomSheetView> mock_view_unique_ptr =
         std::make_unique<MockAllPasswordsBottomSheetView>();
     mock_view_ = mock_view_unique_ptr.get();
     all_passwords_controller_ =
         std::make_unique<AllPasswordsBottomSheetController>(
-            util::PassKey<AllPasswordsBottomSheetControllerTest>(),
+            base::PassKey<AllPasswordsBottomSheetControllerTest>(),
             std::move(mock_view_unique_ptr), driver_.AsWeakPtr(), store_.get(),
-            dissmissal_callback_.Get(),
-            FocusedFieldType::kFillablePasswordField);
+            dissmissal_callback_.Get(), focused_field_type,
+            mock_pwd_manager_client_.get());
   }
 
   MockPasswordManagerDriver& driver() { return driver_; }
@@ -110,6 +130,10 @@ class AllPasswordsBottomSheetControllerTest : public testing::Test {
 
   void RunUntilIdle() { task_env_.RunUntilIdle(); }
 
+  MockPasswordManagerClient& client() {
+    return *mock_pwd_manager_client_.get();
+  }
+
  private:
   content::BrowserTaskEnvironment task_env_;
   MockPasswordManagerDriver driver_;
@@ -119,6 +143,8 @@ class AllPasswordsBottomSheetControllerTest : public testing::Test {
   MockAllPasswordsBottomSheetView* mock_view_;
   DismissCallback dissmissal_callback_;
   std::unique_ptr<AllPasswordsBottomSheetController> all_passwords_controller_;
+  std::unique_ptr<MockPasswordManagerClient> mock_pwd_manager_client_ =
+      std::make_unique<MockPasswordManagerClient>();
 };
 
 TEST_F(AllPasswordsBottomSheetControllerTest, Show) {
@@ -131,6 +157,9 @@ TEST_F(AllPasswordsBottomSheetControllerTest, Show) {
   store().AddLogin(form2);
   store().AddLogin(form3);
   store().AddLogin(form4);
+  // Exceptions are not shown. Sites where saving is disabled still show pwds.
+  store().AddLogin(MakePasswordException(kExampleDe));
+  store().AddLogin(MakePasswordException(kExampleCom));
 
   EXPECT_CALL(view(),
               Show(UnorderedElementsAre(Pointee(Eq(form1)), Pointee(Eq(form2)),
@@ -145,14 +174,27 @@ TEST_F(AllPasswordsBottomSheetControllerTest, Show) {
 TEST_F(AllPasswordsBottomSheetControllerTest, OnCredentialSelected) {
   UiCredential credential = MakeUiCredential(kUsername1, kPassword);
 
-  EXPECT_CALL(driver(),
-              FillIntoFocusedField(true, base::ASCIIToUTF16(kPassword)));
+  EXPECT_CALL(driver(), FillIntoFocusedField(true, std::u16string(kPassword)));
 
-  all_passwords_controller()->OnCredentialSelected(
-      base::UTF8ToUTF16(kUsername1), base::UTF8ToUTF16(kPassword));
+  all_passwords_controller()->OnCredentialSelected(kUsername1, kPassword);
 }
 
 TEST_F(AllPasswordsBottomSheetControllerTest, OnDismiss) {
   EXPECT_CALL(dismissal_callback(), Run());
   all_passwords_controller()->OnDismiss();
+}
+
+TEST_F(AllPasswordsBottomSheetControllerTest,
+       OnCredentialSelectedTriggersPhishGuard) {
+  EXPECT_CALL(client(), OnPasswordSelected(std::u16string(kPassword)));
+
+  all_passwords_controller()->OnCredentialSelected(kUsername1, kPassword);
+}
+
+TEST_F(AllPasswordsBottomSheetControllerTest,
+       PhishGuardIsNotCalledForUsername) {
+  createAllPasswordsController(FocusedFieldType::kFillableUsernameField);
+  EXPECT_CALL(client(), OnPasswordSelected).Times(0);
+
+  all_passwords_controller()->OnCredentialSelected(kUsername1, kPassword);
 }

@@ -27,8 +27,8 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   // list of entries has each of the ids, vector of ids isn't empty and if the
   // new password isn't empty.
   bool ChangeSavedPassword(const std::vector<int>& ids,
-                           const base::string16& new_username,
-                           const base::string16& new_password) override;
+                           const std::u16string& new_username,
+                           const std::u16string& new_password) override;
   void RemoveSavedPasswords(const std::vector<int>& id) override;
   void RemovePasswordExceptions(const std::vector<int>& ids) override;
   // Simplified version of undo logic, only use for testing.
@@ -37,8 +37,8 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
                                 api::passwords_private::PlaintextReason reason,
                                 PlaintextPasswordCallback callback,
                                 content::WebContents* web_contents) override;
-  void MovePasswordToAccount(int id,
-                             content::WebContents* web_contents) override;
+  void MovePasswordsToAccount(const std::vector<int>& ids,
+                              content::WebContents* web_contents) override;
   void ImportPasswords(content::WebContents* web_contents) override;
   void ExportPasswords(base::OnceCallback<void(const std::string&)> callback,
                        content::WebContents* web_contents) override;
@@ -69,6 +69,8 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   void StartPasswordCheck(StartPasswordCheckCallback callback) override;
   void StopPasswordCheck() override;
   api::passwords_private::PasswordCheckStatus GetPasswordCheckStatus() override;
+  password_manager::InsecureCredentialsManager* GetInsecureCredentialsManager()
+      override;
 
   void SetProfile(Profile* profile);
   void SetOptedInForAccountStorage(bool opted_in);
@@ -92,8 +94,8 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
     start_password_check_state_ = state;
   }
 
-  base::Optional<int> last_moved_password() const {
-    return last_moved_password_;
+  const std::vector<int>& last_moved_passwords() const {
+    return last_moved_passwords_;
   }
 
  private:
@@ -114,8 +116,7 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   std::vector<api::passwords_private::ExceptionEntry>
       last_deleted_exceptions_batch_;
 
-  base::Optional<base::string16> plaintext_password_ =
-      base::ASCIIToUTF16("plaintext");
+  base::Optional<std::u16string> plaintext_password_ = u"plaintext";
 
   // List of insecure credentials.
   std::vector<api::passwords_private::InsecureCredential> insecure_credentials_;
@@ -134,8 +135,8 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   password_manager::BulkLeakCheckService::State start_password_check_state_ =
       password_manager::BulkLeakCheckService::State::kRunning;
 
-  // Records the id of the last password that was moved.
-  base::Optional<int> last_moved_password_ = base::nullopt;
+  // Records the ids of the passwords that were last moved.
+  std::vector<int> last_moved_passwords_;
 };
 }  // namespace extensions
 

@@ -58,6 +58,13 @@ void WorkletModuleTreeClient::NotifyModuleTreeLoadFinished(
   // run these steps:
   ScriptState::Scope scope(script_state_);
   if (module_script->HasErrorToRethrow()) {
+    // TODO(crbug.com/1204965): SerializedScriptValue always assumes that the
+    // default microtask queue is used, so we have to put an explicit scope on
+    // the stack here. Ideally, all V8 bindings would understand non-default
+    // microtask queues.
+    v8::MicrotasksScope microtasks_scope(
+        script_state_->GetIsolate(), ToMicrotaskQueue(script_state_),
+        v8::MicrotasksScope::kDoNotRunMicrotasks);
     PostCrossThreadTask(
         *outside_settings_task_runner_, FROM_HERE,
         CrossThreadBindOnce(
@@ -70,10 +77,7 @@ void WorkletModuleTreeClient::NotifyModuleTreeLoadFinished(
   }
 
   // Step 5: "Run a module script given script."
-  ScriptEvaluationResult result =
-      Modulator::From(script_state_)
-          ->ExecuteModule(module_script,
-                          Modulator::CaptureEvalErrorFlag::kReport);
+  ScriptEvaluationResult result = module_script->RunScriptAndReturnValue();
 
   auto* global_scope =
       To<WorkletGlobalScope>(ExecutionContext::From(script_state_));

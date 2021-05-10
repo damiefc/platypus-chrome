@@ -15,6 +15,7 @@
 #include <stdio.h>
 
 #include <cmath>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -79,13 +80,15 @@ class GLHelperBenchmark : public testing::Test {
         attributes, SharedMemoryLimits(),
         nullptr, /* gpu_memory_buffer_manager */
         nullptr, /* image_factory */
+        nullptr, /* gpu_task_helper */
+        nullptr, /* display_compositor_memory_and_task_controller */
         base::ThreadTaskRunnerHandle::Get());
     DCHECK_EQ(result, ContextResult::kSuccess);
     gl_ = context_->GetImplementation();
     ContextSupport* support = context_->GetImplementation();
 
-    helper_.reset(new GLHelper(gl_, support));
-    helper_scaling_.reset(new GLHelperScaling(gl_, helper_.get()));
+    helper_ = std::make_unique<GLHelper>(gl_, support);
+    helper_scaling_ = std::make_unique<GLHelperScaling>(gl_, helper_.get());
   }
 
   void TearDown() override {

@@ -45,6 +45,7 @@ FakeCentral::FakeCentral(mojom::CentralState state,
 void FakeCentral::SimulatePreconnectedPeripheral(
     const std::string& address,
     const std::string& name,
+    const base::flat_map<uint16_t, std::vector<uint8_t>>& manufacturer_data,
     const std::vector<device::BluetoothUUID>& known_service_uuids,
     SimulatePreconnectedPeripheralCallback callback) {
   FakePeripheral* fake_peripheral = GetFakePeripheral(address);
@@ -57,6 +58,9 @@ void FakeCentral::SimulatePreconnectedPeripheral(
 
   fake_peripheral->SetName(name);
   fake_peripheral->SetSystemConnected(true);
+  fake_peripheral->SetManufacturerData(
+      device::BluetoothDevice::ManufacturerDataMap(manufacturer_data.begin(),
+                                                   manufacturer_data.end()));
   fake_peripheral->SetServiceUUIDs(device::BluetoothDevice::UUIDSet(
       known_service_uuids.begin(), known_service_uuids.end()));
 
@@ -591,6 +595,13 @@ void FakeCentral::ResetAdvertising(base::OnceClosure callback,
                                    AdvertisementErrorCallback error_callback) {
   NOTREACHED();
 }
+void FakeCentral::ConnectDevice(
+    const std::string& address,
+    const base::Optional<device::BluetoothDevice::AddressType>& address_type,
+    ConnectDeviceCallback callback,
+    ErrorCallback error_callback) {
+  NOTREACHED();
+}
 #endif
 
 device::BluetoothLocalGattService* FakeCentral::GetGattService(
@@ -598,6 +609,14 @@ device::BluetoothLocalGattService* FakeCentral::GetGattService(
   NOTREACHED();
   return nullptr;
 }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+void FakeCentral::SetServiceAllowList(const UUIDList& uuids,
+                                      base::OnceClosure callback,
+                                      ErrorCallback error_callback) {
+  NOTREACHED();
+}
+#endif
 
 base::WeakPtr<device::BluetoothAdapter> FakeCentral::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();

@@ -65,6 +65,8 @@ FrameSequenceTracker* FrameSequenceTrackerCollection::StartSequenceInternal(
   if (IsScrollType(type)) {
     DCHECK_NE(scrolling_thread, ThreadType::kUnknown);
     metrics->SetScrollingThread(scrolling_thread);
+    compositor_frame_reporting_controller_->SetScrollingThread(
+        scrolling_thread);
   }
 
   if (metrics->GetEffectiveThread() == ThreadType::kCompositor) {
@@ -117,6 +119,8 @@ void FrameSequenceTrackerCollection::StopSequence(
 
   auto key = std::make_pair(type, ThreadType::kUnknown);
   if (IsScrollType(type)) {
+    compositor_frame_reporting_controller_->SetScrollingThread(
+        ThreadType::kUnknown);
     key = std::make_pair(type, ThreadType::kCompositor);
     if (!frame_trackers_.contains(key))
       key = std::make_pair(type, ThreadType::kMain);
@@ -363,7 +367,7 @@ void FrameSequenceTrackerCollection::RecreateTrackers(
 }
 
 ActiveFrameSequenceTrackers
-FrameSequenceTrackerCollection::FrameSequenceTrackerActiveTypes() {
+FrameSequenceTrackerCollection::FrameSequenceTrackerActiveTypes() const {
   ActiveFrameSequenceTrackers encoded_types = 0;
   for (const auto& key : frame_trackers_) {
     auto thread_type = key.first.first;
@@ -392,12 +396,12 @@ void FrameSequenceTrackerCollection::SetUkmManager(UkmManager* manager) {
 
 void FrameSequenceTrackerCollection::AddCustomTrackerResult(
     int custom_sequence_id,
-    FrameSequenceMetrics::ThroughputData throughput_data) {
+    const FrameSequenceMetrics::CustomReportData& data) {
   DCHECK(custom_tracker_results_added_callback_);
 
   CustomTrackerResults results;
-  results[custom_sequence_id] = std::move(throughput_data);
-  custom_tracker_results_added_callback_.Run(std::move(results));
+  results[custom_sequence_id] = data;
+  custom_tracker_results_added_callback_.Run(results);
 }
 
 }  // namespace cc

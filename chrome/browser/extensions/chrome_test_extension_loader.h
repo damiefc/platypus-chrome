@@ -13,6 +13,7 @@
 #include "base/optional.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest.h"
+#include "extensions/common/mojom/manifest.mojom-shared.h"
 
 namespace base {
 class FilePath;
@@ -51,7 +52,7 @@ class ChromeTestExtensionLoader {
     creation_flags_ |= flag;
   }
   void set_creation_flags(int flags) { creation_flags_ = flags; }
-  void set_location(Manifest::Location location) { location_ = location; }
+  void set_location(mojom::ManifestLocation location) { location_ = location; }
   void set_should_fail(bool should_fail) { should_fail_ = should_fail; }
   void set_pack_extension(bool pack_extension) {
     pack_extension_ = pack_extension;
@@ -94,8 +95,13 @@ class ChromeTestExtensionLoader {
   scoped_refptr<const Extension> LoadUnpacked(
       const base::FilePath& unpacked_path);
 
-  // Checks that the permissions of the loaded extension are correct.
+  // Checks that the permissions of the loaded extension are correct
+  // and updates them if necessary.
   void CheckPermissions(const Extension* extension);
+
+  // Verifies that the permissions of the loaded extension are correct.
+  // Returns false if they are not.
+  bool VerifyPermissions(const Extension* extension);
 
   // Checks for any install warnings associated with the extension.
   bool CheckInstallWarnings(const Extension& extension);
@@ -123,7 +129,7 @@ class ChromeTestExtensionLoader {
   std::string expected_id_;
 
   // An install param to use with the loaded extension.
-  std::string install_param_;
+  base::Optional<std::string> install_param_;
 
   // Any creation flags (see Extension::InitFromValueFlags) to use for the
   // extension. Only used for crx installs.
@@ -131,7 +137,7 @@ class ChromeTestExtensionLoader {
 
   // The install location of the added extension. Not valid for unpacked
   // extensions.
-  Manifest::Location location_ = Manifest::INTERNAL;
+  mojom::ManifestLocation location_ = mojom::ManifestLocation::kInternal;
 
   // Whether or not the extension load should fail.
   bool should_fail_ = false;
@@ -152,7 +158,7 @@ class ChromeTestExtensionLoader {
   base::Optional<bool> allow_file_access_;
 
   // Whether or not to allow incognito access by default to the extension.
-  bool allow_incognito_access_ = false;
+  base::Optional<bool> allow_incognito_access_;
 
   // Whether or not to ignore manifest warnings during installation.
   bool ignore_manifest_warnings_ = false;

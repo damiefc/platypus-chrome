@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_VIZ_SERVICE_DISPLAY_EMBEDDER_SKIA_OUTPUT_SURFACE_DEPENDENCY_IMPL_H_
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_EMBEDDER_SKIA_OUTPUT_SURFACE_DEPENDENCY_IMPL_H_
 
+#include <memory>
+
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "components/viz/service/display_embedder/skia_output_surface_dependency.h"

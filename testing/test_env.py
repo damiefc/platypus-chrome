@@ -13,12 +13,6 @@ import subprocess
 import sys
 import time
 
-SIX_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'third_party',
-    'six')
-sys.path.insert(0, SIX_DIR)
-
-import six
 
 # This is hardcoded to be src/ relative to this script.
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -351,8 +345,8 @@ def run_executable(cmd, env, stdoutfile=None):
 
   print('Additional test environment:\n%s\n'
         'Command: %s\n' % (
-        '\n'.join('    %s=%s' %
-            (k, v) for k, v in sorted(six.iteritems(env_to_print))),
+        '\n'.join('    %s=%s' % (k, v)
+                  for k, v in sorted(env_to_print.items())),
         ' '.join(cmd)))
   sys.stdout.flush()
   env.update(extra_env or {})
@@ -395,4 +389,9 @@ def main():
 
 
 if __name__ == '__main__':
+  if sys.platform == 'win32':
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+        'scripts'))
+    import common
+    common.set_lpac_acls(ROOT_DIR)
   sys.exit(main())

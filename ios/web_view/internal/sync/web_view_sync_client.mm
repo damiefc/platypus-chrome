@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/notreached.h"
@@ -16,10 +17,10 @@
 #include "components/history/core/common/pref_names.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/keyed_service/core/service_access_type.h"
+#include "components/metrics/demographics/user_demographics.h"
 #include "components/sync/base/sync_util.h"
 #include "components/sync/driver/data_type_controller.h"
 #include "components/sync/driver/sync_api_component_factory.h"
-#include "components/sync/engine/passive_model_worker.h"
 #include "components/version_info/version_info.h"
 #include "components/version_info/version_string.h"
 #include "ios/web/public/thread/web_task_traits.h"
@@ -147,6 +148,11 @@ history::HistoryService* WebViewSyncClient::GetHistoryService() {
   return nullptr;
 }
 
+sync_preferences::PrefServiceSyncable*
+WebViewSyncClient::GetPrefServiceSyncable() {
+  return nullptr;
+}
+
 sync_sessions::SessionSyncService* WebViewSyncClient::GetSessionSyncService() {
   return nullptr;
 }
@@ -189,27 +195,10 @@ WebViewSyncClient::GetExtensionsActivity() {
   return nullptr;
 }
 
-base::WeakPtr<syncer::SyncableService>
-WebViewSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
-  NOTREACHED();
-  return base::WeakPtr<syncer::SyncableService>();
-}
-
 base::WeakPtr<syncer::ModelTypeControllerDelegate>
 WebViewSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
   NOTREACHED();
   return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
-}
-
-scoped_refptr<syncer::ModelSafeWorker>
-WebViewSyncClient::CreateModelWorkerForGroup(syncer::ModelSafeGroup group) {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  switch (group) {
-    case syncer::GROUP_PASSIVE:
-      return new syncer::PassiveModelWorker();
-    default:
-      return nullptr;
-  }
 }
 
 syncer::SyncApiComponentFactory*
@@ -219,6 +208,11 @@ WebViewSyncClient::GetSyncApiComponentFactory() {
 
 syncer::SyncTypePreferenceProvider* WebViewSyncClient::GetPreferenceProvider() {
   return nullptr;
+}
+
+void WebViewSyncClient::OnLocalSyncTransportDataCleared() {
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
+  metrics::ClearDemographicsPrefs(pref_service_);
 }
 
 }  // namespace ios_web_view

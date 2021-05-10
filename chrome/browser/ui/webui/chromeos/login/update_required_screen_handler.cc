@@ -7,8 +7,8 @@
 #include <memory>
 
 #include "base/values.h"
-#include "chrome/browser/chromeos/login/oobe_screen.h"
-#include "chrome/browser/chromeos/login/screens/update_required_screen.h"
+#include "chrome/browser/ash/login/oobe_screen.h"
+#include "chrome/browser/ash/login/screens/update_required_screen.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/login/localized_values_builder.h"
@@ -68,6 +68,18 @@ void UpdateRequiredScreenHandler::DeclareLocalizedValues(
   builder->Add("noNetworkMessage",
                IDS_UPDATE_REQUIRED_SCREEN_NO_NETWORK_MESSAGE);
   builder->Add("eolAdminMessageTitle", IDS_UPDATE_REQUIRED_EOL_ADMIN_MESSAGE);
+  builder->Add("eolDeleteUsersDataMessage",
+               IDS_UPDATE_REQUIRED_EOL_DELETE_USERS_DATA_MESSAGE);
+  builder->Add("eolNoUsersDataMessage",
+               IDS_UPDATE_REQUIRED_EOL_NO_USERS_DATA_MESSAGE);
+  builder->Add("eolDeleteUsersDataPopupMessage",
+               IDS_UPDATE_REQUIRED_EOL_DELETE_USERS_DATA_POPUP_MESSAGE);
+  builder->Add("eolDeleteUsersDataPopupTitle",
+               IDS_UPDATE_REQUIRED_EOL_DELETE_USERS_DATA_POPUP_TITLE);
+  builder->Add("eolDeleteUsersDataConfirm",
+               IDS_UPDATE_REQUIRED_EOL_DELETE_USERS_DATA_CONFIRM);
+  builder->Add("eolDeleteUsersDataCancel",
+               IDS_UPDATE_REQUIRED_EOL_DELETE_USERS_DATA_CANCEL);
 }
 
 void UpdateRequiredScreenHandler::Initialize() {
@@ -79,7 +91,7 @@ void UpdateRequiredScreenHandler::Initialize() {
 
 void UpdateRequiredScreenHandler::SetEnterpriseAndDeviceName(
     const std::string& enterpriseDomain,
-    const base::string16& deviceName) {
+    const std::u16string& deviceName) {
   CallJS("login.UpdateRequiredScreen.setEnterpriseAndDeviceName",
          enterpriseDomain, deviceName);
 }
@@ -123,7 +135,7 @@ void UpdateRequiredScreenHandler::SetUpdateProgressValue(int progress) {
 }
 
 void UpdateRequiredScreenHandler::SetUpdateProgressMessage(
-    const base::string16& message) {
+    const std::u16string& message) {
   CallJS("login.UpdateRequiredScreen.setUpdateProgressMessage", message);
 }
 
@@ -138,6 +150,10 @@ void UpdateRequiredScreenHandler::SetEstimatedTimeLeft(int seconds_left) {
 void UpdateRequiredScreenHandler::SetUIState(
     UpdateRequiredView::UIState ui_state) {
   CallJS("login.UpdateRequiredScreen.setUIState", static_cast<int>(ui_state));
+}
+
+void UpdateRequiredScreenHandler::SetIsUserDataPresent(bool data_present) {
+  CallJS("login.UpdateRequiredScreen.setIsUserDataPresent", data_present);
 }
 
 }  // namespace chromeos

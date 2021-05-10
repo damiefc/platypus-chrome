@@ -161,14 +161,16 @@ AudioCaptureSettings::AudioCaptureSettings(
     bool disable_local_echo,
     bool enable_automatic_output_device_selection,
     ProcessingType processing_type,
-    const AudioProcessingProperties& audio_processing_properties)
+    const AudioProcessingProperties& audio_processing_properties,
+    int num_channels)
     : failed_constraint_name_(nullptr),
       device_id_(std::move(device_id)),
       requested_buffer_size_(requested_buffer_size),
       disable_local_echo_(disable_local_echo),
       render_to_associated_sink_(enable_automatic_output_device_selection),
       processing_type_(processing_type),
-      audio_processing_properties_(audio_processing_properties) {}
+      audio_processing_properties_(audio_processing_properties),
+      num_channels_(num_channels) {}
 
 AudioCaptureSettings::AudioCaptureSettings(const AudioCaptureSettings& other) =
     default;
@@ -281,7 +283,7 @@ double StringConstraintFitnessDistance(const WebString& value,
 MediaStreamSource::Capabilities ComputeCapabilitiesForVideoSource(
     const String& device_id,
     const media::VideoCaptureFormats& formats,
-    media::VideoFacingMode facing_mode,
+    mojom::blink::FacingMode facing_mode,
     bool is_device_capture,
     const base::Optional<std::string>& group_id) {
   MediaStreamSource::Capabilities capabilities;

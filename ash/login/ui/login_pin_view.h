@@ -11,8 +11,8 @@
 #include "ash/ash_export.h"
 #include "ash/login/ui/login_palette.h"
 #include "ash/login/ui/non_accessible_view.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "ui/views/view.h"
 
@@ -80,6 +80,8 @@ class ASH_EXPORT LoginPinView : public NonAccessibleView {
     void SetBackspaceTimers(std::unique_ptr<base::OneShotTimer> delay_timer,
                             std::unique_ptr<base::RepeatingTimer> repeat_timer);
 
+    void ClickOnDigit(int number) const;
+
    private:
     LoginPinView* const view_;
   };
@@ -109,8 +111,11 @@ class ASH_EXPORT LoginPinView : public NonAccessibleView {
   // Called when the password field text changed.
   void OnPasswordTextChanged(bool is_empty);
 
+  void UpdatePalette(const LoginPalette& palette);
+
  private:
   class BackspacePinButton;
+  class DigitPinButton;
   class SubmitPinButton;
 
   // Builds and returns a new view which contains a row of the PIN keyboard.
@@ -122,7 +127,8 @@ class ASH_EXPORT LoginPinView : public NonAccessibleView {
   // The submit button does not exist when no |on_submit| callback is passed.
   SubmitPinButton* submit_button_ = nullptr;
 
-  std::vector<NonAccessibleView*> rows;
+  std::vector<NonAccessibleView*> rows_;
+  std::vector<DigitPinButton*> digit_buttons_;
 
   DISALLOW_COPY_AND_ASSIGN(LoginPinView);
 };

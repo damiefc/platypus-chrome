@@ -18,8 +18,8 @@
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
+#include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/chromeos/extensions/external_cache_delegate.h"
-#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/extensions/external_provider_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_task_environment.h"
@@ -161,7 +161,7 @@ TEST_F(ExternalCacheImplTest, Basic) {
   content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(provided_prefs());
-  EXPECT_EQ(provided_prefs()->size(), 2ul);
+  EXPECT_EQ(provided_prefs()->DictSize(), 2ul);
 
   // File in cache from Webstore.
   const base::DictionaryValue* entry1 = NULL;
@@ -201,7 +201,7 @@ TEST_F(ExternalCacheImplTest, Basic) {
       extensions::ExtensionDownloaderDelegate::InstallCallback());
 
   content::RunAllTasksUntilIdle();
-  EXPECT_EQ(provided_prefs()->size(), 3ul);
+  EXPECT_EQ(provided_prefs()->DictSize(), 3ul);
 
   const base::DictionaryValue* entry2 = NULL;
   ASSERT_TRUE(provided_prefs()->GetDictionary(kTestExtensionId2, &entry2));
@@ -232,7 +232,7 @@ TEST_F(ExternalCacheImplTest, Basic) {
   }
 
   content::RunAllTasksUntilIdle();
-  EXPECT_EQ(provided_prefs()->size(), 4ul);
+  EXPECT_EQ(provided_prefs()->DictSize(), 4ul);
 
   const base::DictionaryValue* entry4 = NULL;
   ASSERT_TRUE(provided_prefs()->GetDictionary(kTestExtensionId4, &entry4));
@@ -251,7 +251,7 @@ TEST_F(ExternalCacheImplTest, Basic) {
   external_cache.OnDamagedFileDetected(
       GetExtensionFile(cache_dir, kTestExtensionId2, "2"));
   content::RunAllTasksUntilIdle();
-  EXPECT_EQ(3ul, provided_prefs()->size());
+  EXPECT_EQ(3ul, provided_prefs()->DictSize());
   EXPECT_FALSE(
       base::PathExists(GetExtensionFile(cache_dir, kTestExtensionId2, "2")));
   EXPECT_EQ(1ul, deleted_extension_files().size());
@@ -263,7 +263,7 @@ TEST_F(ExternalCacheImplTest, Basic) {
       base::BindOnce(&ExternalCacheImplTest::OnExtensionListsUpdated,
                      base::Unretained(this), base::Unretained(empty.get())));
   content::RunAllTasksUntilIdle();
-  EXPECT_EQ(provided_prefs()->size(), 0ul);
+  EXPECT_EQ(provided_prefs()->DictSize(), 0ul);
 
   // After Shutdown directory shouldn't be touched.
   external_cache.OnDamagedFileDetected(
@@ -288,7 +288,7 @@ TEST_F(ExternalCacheImplTest, PreserveExternalCrx) {
   content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(provided_prefs());
-  EXPECT_EQ(provided_prefs()->size(), 1ul);
+  EXPECT_EQ(provided_prefs()->DictSize(), 1ul);
 
   // Extensions downloaded from update url will only be visible in the provided
   // prefs once the download of the .crx has finished. Extensions that are

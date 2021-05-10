@@ -10,7 +10,7 @@
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
-import '../settings_shared_css.m.js';
+import '../settings_shared_css.js';
 import './chooser_exception_list_entry.js';
 
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
@@ -165,12 +165,12 @@ Polymer({
       this.$.tooltip.hide();
       target.removeEventListener('mouseleave', hide);
       target.removeEventListener('blur', hide);
-      target.removeEventListener('tap', hide);
+      target.removeEventListener('click', hide);
       this.$.tooltip.removeEventListener('mouseenter', hide);
     };
     target.addEventListener('mouseleave', hide);
     target.addEventListener('blur', hide);
-    target.addEventListener('tap', hide);
+    target.addEventListener('click', hide);
     this.$.tooltip.addEventListener('mouseenter', hide);
     this.$.tooltip.show();
   },
@@ -197,7 +197,7 @@ Polymer({
 
     if (!this.updateList(
             'chooserExceptions', x => x.displayName, exceptions,
-            true /* uidBasedUpdate */)) {
+            true /* identityBasedUpdate= */)) {
       // The chooser objects have not been changed, so check if their site
       // permissions have changed. The |exceptions| and |this.chooserExceptions|
       // arrays should be the same length.

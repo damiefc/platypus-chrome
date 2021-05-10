@@ -4,11 +4,12 @@
 
 #include "net/cert/trial_comparison_cert_verifier.h"
 
+#include <memory>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
@@ -76,7 +77,7 @@ class RepeatedTestClosure {
   void WaitForResult() {
     DCHECK(!run_loop_);
     if (!have_result_) {
-      run_loop_.reset(new base::RunLoop());
+      run_loop_ = std::make_unique<base::RunLoop>();
       run_loop_->Run();
       run_loop_.reset();
       DCHECK(have_result_);

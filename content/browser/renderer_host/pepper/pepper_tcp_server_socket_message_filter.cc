@@ -8,9 +8,10 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/browser/renderer_host/pepper/browser_ppapi_host_impl.h"
 #include "content/browser/renderer_host/pepper/content_browser_pepper_host_factory.h"
 #include "content/browser/renderer_host/pepper/pepper_socket_utils.h"
@@ -18,6 +19,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/socket_permission_request.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -36,9 +38,9 @@
 #include "ppapi/shared_impl/private/net_address_private_impl.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/network/firewall_hole.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 using ppapi::NetAddressPrivateImpl;
 using ppapi::host::NetErrorToPepperError;
@@ -59,7 +61,8 @@ PepperTCPServerSocketMessageFilter::PepperTCPServerSocketMessageFilter(
     BrowserPpapiHostImpl* host,
     PP_Instance instance,
     bool private_api)
-    : ppapi_host_(host->GetPpapiHost()),
+    : host_(host),
+      ppapi_host_(host->GetPpapiHost()),
       factory_(factory),
       instance_(instance),
       state_(STATE_BEFORE_LISTENING),
@@ -251,7 +254,7 @@ void PepperTCPServerSocketMessageFilter::OnListenCompleted(
     return;
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   OpenFirewallHole(context, *local_addr);
 #else
   SendListenReply(context, PP_OK, bound_addr_);
@@ -259,7 +262,7 @@ void PepperTCPServerSocketMessageFilter::OnListenCompleted(
 #endif
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void PepperTCPServerSocketMessageFilter::OpenFirewallHole(
     const ppapi::host::ReplyMessageContext& context,
     const net::IPEndPoint& local_addr) {
@@ -282,7 +285,7 @@ void PepperTCPServerSocketMessageFilter::OnFirewallHoleOpened(
   SendListenReply(context, PP_OK, bound_addr_);
   state_ = STATE_LISTENING;
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 void PepperTCPServerSocketMessageFilter::OnAcceptCompleted(
     const ppapi::host::ReplyMessageContext& context,
@@ -327,16 +330,19 @@ void PepperTCPServerSocketMessageFilter::OnAcceptCompleted(
     return;
   }
 
-  GetIOThreadTaskRunner({})->PostTask(
+  auto task_runner = base::FeatureList::IsEnabled(features::kProcessHostOnUI)
+                         ? content::GetUIThreadTaskRunner({})
+                         : content::GetIOThreadTaskRunner({});
+  task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(
-          &PepperTCPServerSocketMessageFilter::OnAcceptCompletedOnIOThread,
+          &PepperTCPServerSocketMessageFilter::OnAcceptCompletedOnProcessThread,
           this, context, std::move(connected_socket),
           std::move(socket_observer_receiver), std::move(receive_stream),
           std::move(send_stream), bound_addr_, pp_remote_addr));
 }
 
-void PepperTCPServerSocketMessageFilter::OnAcceptCompletedOnIOThread(
+void PepperTCPServerSocketMessageFilter::OnAcceptCompletedOnProcessThread(
     const ppapi::host::ReplyMessageContext& context,
     mojo::PendingRemote<network::mojom::TCPConnectedSocket> connected_socket,
     mojo::PendingReceiver<network::mojom::SocketObserver>
@@ -345,7 +351,17 @@ void PepperTCPServerSocketMessageFilter::OnAcceptCompletedOnIOThread(
     mojo::ScopedDataPipeProducerHandle send_stream,
     PP_NetAddress_Private pp_local_addr,
     PP_NetAddress_Private pp_remote_addr) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
+                          ? content::BrowserThread::UI
+                          : content::BrowserThread::IO);
+
+  if (!host_->IsValidInstance(instance_)) {
+    // The instance has been removed while Accept was in progress. This object
+    // should be destroyed and cleaned up after we release the reference we're
+    // holding as a part of this function running so we just return without
+    // doing anything.
+    return;
+  }
 
   // |factory_| is guaranteed to be non-NULL here. Only those instances created
   // in CONNECTED state have a NULL |factory_|, while getting here requires
@@ -378,9 +394,9 @@ void PepperTCPServerSocketMessageFilter::Close() {
   state_ = STATE_CLOSED;
 
   socket_.reset();
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   firewall_hole_.reset();
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 void PepperTCPServerSocketMessageFilter::SendListenReply(

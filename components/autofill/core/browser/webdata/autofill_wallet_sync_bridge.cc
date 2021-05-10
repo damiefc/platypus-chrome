@@ -7,10 +7,12 @@
 #include <utility>
 
 #include "base/base64.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_profile_sync_util.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
@@ -24,10 +26,10 @@
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/driver/sync_driver_switches.h"
-#include "components/sync/model/entity_data.h"
+#include "components/sync/engine/entity_data.h"
+#include "components/sync/model/client_tag_based_model_type_processor.h"
 #include "components/sync/model/mutable_data_batch.h"
-#include "components/sync/model_impl/client_tag_based_model_type_processor.h"
-#include "components/sync/model_impl/sync_metadata_store_change_list.h"
+#include "components/sync/model/sync_metadata_store_change_list.h"
 
 using sync_pb::AutofillWalletSpecifics;
 using syncer::EntityData;
@@ -134,6 +136,35 @@ std::unique_ptr<EntityData> CreateEntityDataFromCreditCardCloudTokenData(
   return entity_data;
 }
 
+// Checks whether the virtual card metadata for cards is updated, if so, logs
+// accordingly.
+void LogVirtualCardMetadataChanges(
+    const std::vector<std::unique_ptr<CreditCard>>& old_data,
+    const std::vector<CreditCard>& new_data) {
+  for (CreditCard new_card : new_data) {
+    if (new_card.virtual_card_enrollment_state() ==
+        CreditCard::VirtualCardEnrollmentState::ENROLLED) {
+      // Find the old card with same server id.
+      auto old_data_iterator = std::find_if(
+          old_data.begin(), old_data.end(),
+          [&new_card](const std::unique_ptr<CreditCard>& old_card) {
+            return new_card.server_id() == old_card->server_id();
+          });
+      if (old_data_iterator != old_data.end()) {
+        // If the virtual card metadata has changed, log the updated sync.
+        if ((*old_data_iterator)->virtual_card_enrollment_state() !=
+                new_card.virtual_card_enrollment_state() ||
+            (*old_data_iterator)->card_art_url() != new_card.card_art_url()) {
+          AutofillMetrics::LogVirtualCardMetadataSynced(/*existing_card*/ true);
+        }
+      } else {
+        // No existing card with the same ID found; log the newly-synced card.
+        AutofillMetrics::LogVirtualCardMetadataSynced(/*existing_card*/ false);
+      }
+    }
+  }
+}
+
 }  // namespace
 
 // static
@@ -146,7 +177,7 @@ void AutofillWalletSyncBridge::CreateForWebDataServiceAndBackend(
       std::make_unique<AutofillWalletSyncBridge>(
           std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
               syncer::AUTOFILL_WALLET_DATA,
-              /*dump_stack=*/base::RepeatingClosure()),
+              /*dump_stack=*/base::DoNothing()),
           web_data_backend));
 }
 
@@ -355,6 +386,10 @@ bool AutofillWalletSyncBridge::SetWalletCards(
       ComputeAutofillWalletDiff(existing_cards, wallet_cards);
 
   if (!diff.IsEmpty()) {
+    // Check if there is any update on cards' virtual card metadata. If so log
+    // it.
+    LogVirtualCardMetadataChanges(existing_cards, wallet_cards);
+
     table->SetServerCardsData(wallet_cards);
     if (notify_metadata_bridge) {
       for (const CreditCardChange& change : diff.changes) {

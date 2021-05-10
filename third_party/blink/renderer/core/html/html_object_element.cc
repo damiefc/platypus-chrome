@@ -24,7 +24,6 @@
 
 #include "third_party/blink/renderer/core/html/html_object_element.h"
 
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -48,15 +47,10 @@ namespace blink {
 
 HTMLObjectElement::HTMLObjectElement(Document& document,
                                      const CreateElementFlags flags)
-    : HTMLPlugInElement(html_names::kObjectTag,
-                        document,
-                        flags,
-                        kShouldNotPreferPlugInsForImages),
+    : HTMLPlugInElement(html_names::kObjectTag, document, flags),
       use_fallback_content_(false) {
   EnsureUserAgentShadowRoot();
 }
-
-inline HTMLObjectElement::~HTMLObjectElement() = default;
 
 void HTMLObjectElement::Trace(Visitor* visitor) const {
   ListedElement::Trace(visitor);
@@ -274,7 +268,7 @@ void HTMLObjectElement::UpdatePluginInternal() {
     if (!url_.IsEmpty())
       DispatchErrorEvent();
     if (HasFallbackContent())
-      RenderFallbackContent(ContentFrame());
+      RenderFallbackContent(ErrorEventPolicy::kDoNotDispatch);
   } else {
     if (IsErrorplaceholder())
       DispatchErrorEvent();
@@ -294,18 +288,16 @@ void HTMLObjectElement::RemovedFrom(ContainerNode& insertion_point) {
 }
 
 void HTMLObjectElement::ChildrenChanged(const ChildrenChange& change) {
+  HTMLPlugInElement::ChildrenChanged(change);
   if (isConnected() && !UseFallbackContent()) {
     SetNeedsPluginUpdate(true);
     ReattachOnPluginChangeIfNeeded();
   }
-  HTMLPlugInElement::ChildrenChanged(change);
 }
 
 bool HTMLObjectElement::IsURLAttribute(const Attribute& attribute) const {
   return attribute.GetName() == html_names::kCodebaseAttr ||
          attribute.GetName() == html_names::kDataAttr ||
-         (attribute.GetName() == html_names::kUsemapAttr &&
-          attribute.Value()[0] != '#') ||
          HTMLPlugInElement::IsURLAttribute(attribute);
 }
 
@@ -335,8 +327,18 @@ void HTMLObjectElement::ReattachFallbackContent() {
   }
 }
 
-void HTMLObjectElement::RenderFallbackContent(Frame* frame) {
-  DCHECK(!frame || frame == ContentFrame());
+void HTMLObjectElement::RenderFallbackContent(
+    ErrorEventPolicy should_dispatch_error_event) {
+  // This method approximately corresponds to step 7 from
+  // https://whatwg.org/C/iframe-embed-object.html#the-object-element:
+  //
+  // If the load failed (e.g. there was an HTTP 404 error, there was a DNS
+  // error), fire an event named error at the element, then jump to the step
+  // below labeled fallback.
+  if (should_dispatch_error_event == ErrorEventPolicy::kDispatch) {
+    DispatchErrorEvent();
+  }
+
   if (UseFallbackContent())
     return;
 
@@ -358,8 +360,17 @@ void HTMLObjectElement::RenderFallbackContent(Frame* frame) {
     }
   }
 
+  // TODO(dcheng): Detach the content frame here.
   use_fallback_content_ = true;
   ReattachFallbackContent();
+}
+
+// static
+bool HTMLObjectElement::IsClassOf(const FrameOwner& owner) {
+  auto* owner_element = DynamicTo<HTMLFrameOwnerElement>(owner);
+  if (!owner_element)
+    return false;
+  return IsA<HTMLObjectElement>(owner_element);
 }
 
 bool HTMLObjectElement::IsExposed() const {
@@ -405,10 +416,6 @@ void HTMLObjectElement::DidMoveToNewDocument(Document& old_document) {
 
 HTMLFormElement* HTMLObjectElement::formOwner() const {
   return ListedElement::Form();
-}
-
-bool HTMLObjectElement::IsInteractiveContent() const {
-  return FastHasAttribute(html_names::kUsemapAttr);
 }
 
 bool HTMLObjectElement::UseFallbackContent() const {

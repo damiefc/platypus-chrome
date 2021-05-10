@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
@@ -18,6 +18,7 @@
 #include "net/base/test_completion_callback.h"
 #include "net/base/winsock_init.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/dns/public/secure_dns_policy.h"
 #include "net/http/http_proxy_connect_job.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
@@ -93,8 +94,8 @@ base::WeakPtr<SpdySession> CreateSpdyProxySession(
       NetLogWithSource()));
 
   auto transport_params = base::MakeRefCounted<TransportSocketParams>(
-      key.host_port_pair(), NetworkIsolationKey(),
-      false /* disable_secure_dns */, OnHostResolutionCallback());
+      key.host_port_pair(), NetworkIsolationKey(), SecureDnsPolicy::kAllow,
+      OnHostResolutionCallback());
 
   SSLConfig ssl_config;
   auto ssl_params = base::MakeRefCounted<SSLSocketParams>(
@@ -132,8 +133,9 @@ class SpdyProxyClientSocketTest : public PlatformTest,
  protected:
   void Initialize(base::span<const MockRead> reads,
                   base::span<const MockWrite> writes);
-  void PopulateConnectRequestIR(spdy::SpdyHeaderBlock* syn_ir);
-  void PopulateConnectReplyIR(spdy::SpdyHeaderBlock* block, const char* status);
+  void PopulateConnectRequestIR(spdy::Http2HeaderBlock* syn_ir);
+  void PopulateConnectReplyIR(spdy::Http2HeaderBlock* block,
+                              const char* status);
   spdy::SpdySerializedFrame ConstructConnectRequestFrame(
       RequestPriority priority = LOWEST);
   spdy::SpdySerializedFrame ConstructConnectAuthRequestFrame();
@@ -156,8 +158,8 @@ class SpdyProxyClientSocketTest : public PlatformTest,
   void AssertWriteLength(int len);
 
   void AddAuthToCache() {
-    const base::string16 kFoo(base::ASCIIToUTF16("foo"));
-    const base::string16 kBar(base::ASCIIToUTF16("bar"));
+    const std::u16string kFoo(u"foo");
+    const std::u16string kBar(u"bar");
     session_->http_auth_cache()->Add(
         GURL(kProxyUrl), HttpAuth::AUTH_PROXY, "MyRealm1",
         HttpAuth::AUTH_SCHEME_BASIC, NetworkIsolationKey(),
@@ -217,7 +219,7 @@ SpdyProxyClientSocketTest::SpdyProxyClientSocketTest()
                                  SpdySessionKey::IsProxySession::kFalse,
                                  SocketTag(),
                                  NetworkIsolationKey(),
-                                 false /* disable_secure_dns */),
+                                 SecureDnsPolicy::kAllow),
       ssl_(SYNCHRONOUS, OK) {
   session_deps_.net_log = net_log_.bound().net_log();
 }
@@ -395,14 +397,14 @@ void SpdyProxyClientSocketTest::AssertWriteLength(int len) {
 }
 
 void SpdyProxyClientSocketTest::PopulateConnectRequestIR(
-    spdy::SpdyHeaderBlock* block) {
+    spdy::Http2HeaderBlock* block) {
   (*block)[spdy::kHttp2MethodHeader] = "CONNECT";
   (*block)[spdy::kHttp2AuthorityHeader] = kOriginHostPort;
   (*block)["user-agent"] = kUserAgent;
 }
 
 void SpdyProxyClientSocketTest::PopulateConnectReplyIR(
-    spdy::SpdyHeaderBlock* block,
+    spdy::Http2HeaderBlock* block,
     const char* status) {
   (*block)[spdy::kHttp2StatusHeader] = status;
 }
@@ -411,7 +413,7 @@ void SpdyProxyClientSocketTest::PopulateConnectReplyIR(
 spdy::SpdySerializedFrame
 SpdyProxyClientSocketTest::ConstructConnectRequestFrame(
     RequestPriority priority) {
-  spdy::SpdyHeaderBlock block;
+  spdy::Http2HeaderBlock block;
   PopulateConnectRequestIR(&block);
   return spdy_util_.ConstructSpdyHeaders(kStreamId, std::move(block), priority,
                                          false);
@@ -421,7 +423,7 @@ SpdyProxyClientSocketTest::ConstructConnectRequestFrame(
 // Proxy-Authorization headers.
 spdy::SpdySerializedFrame
 SpdyProxyClientSocketTest::ConstructConnectAuthRequestFrame() {
-  spdy::SpdyHeaderBlock block;
+  spdy::Http2HeaderBlock block;
   PopulateConnectRequestIR(&block);
   block["proxy-authorization"] = "Basic Zm9vOmJhcg==";
   return spdy_util_.ConstructSpdyHeaders(kStreamId, std::move(block), LOWEST,
@@ -431,7 +433,7 @@ SpdyProxyClientSocketTest::ConstructConnectAuthRequestFrame() {
 // Constructs a standard SPDY HEADERS frame to match the SPDY CONNECT.
 spdy::SpdySerializedFrame
 SpdyProxyClientSocketTest::ConstructConnectReplyFrame() {
-  spdy::SpdyHeaderBlock block;
+  spdy::Http2HeaderBlock block;
   PopulateConnectReplyIR(&block, "200");
   return spdy_util_.ConstructSpdyReply(kStreamId, std::move(block));
 }
@@ -440,7 +442,7 @@ SpdyProxyClientSocketTest::ConstructConnectReplyFrame() {
 // including Proxy-Authenticate headers.
 spdy::SpdySerializedFrame
 SpdyProxyClientSocketTest::ConstructConnectAuthReplyFrame() {
-  spdy::SpdyHeaderBlock block;
+  spdy::Http2HeaderBlock block;
   PopulateConnectReplyIR(&block, "407");
   block["proxy-authenticate"] = "Basic realm=\"MyRealm1\"";
   return spdy_util_.ConstructSpdyReply(kStreamId, std::move(block));
@@ -449,7 +451,7 @@ SpdyProxyClientSocketTest::ConstructConnectAuthReplyFrame() {
 // Constructs a SPDY HEADERS frame with an HTTP 302 redirect.
 spdy::SpdySerializedFrame
 SpdyProxyClientSocketTest::ConstructConnectRedirectReplyFrame() {
-  spdy::SpdyHeaderBlock block;
+  spdy::Http2HeaderBlock block;
   PopulateConnectReplyIR(&block, "302");
   block["location"] = kRedirectUrl;
   block["set-cookie"] = "foo=bar";
@@ -459,7 +461,7 @@ SpdyProxyClientSocketTest::ConstructConnectRedirectReplyFrame() {
 // Constructs a SPDY HEADERS frame with an HTTP 500 error.
 spdy::SpdySerializedFrame
 SpdyProxyClientSocketTest::ConstructConnectErrorReplyFrame() {
-  spdy::SpdyHeaderBlock block;
+  spdy::Http2HeaderBlock block;
   PopulateConnectReplyIR(&block, "500");
   return spdy_util_.ConstructSpdyReply(kStreamId, std::move(block));
 }

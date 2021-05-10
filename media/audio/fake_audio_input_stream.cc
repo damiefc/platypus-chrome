@@ -9,7 +9,7 @@
 
 #include "base/atomicops.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
@@ -61,11 +61,11 @@ FakeAudioInputStream::~FakeAudioInputStream() {
   DCHECK(!fake_audio_worker_);
 }
 
-bool FakeAudioInputStream::Open() {
+AudioInputStream::OpenOutcome FakeAudioInputStream::Open() {
   DCHECK(audio_manager_->GetTaskRunner()->BelongsToCurrentThread());
   audio_bus_->Zero();
 
-  return true;
+  return OpenOutcome::kSuccess;
 }
 
 void FakeAudioInputStream::Start(AudioInputCallback* callback) {

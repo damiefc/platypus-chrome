@@ -7,19 +7,19 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
-#include "base/timer/timer.h"
 #include "chrome/browser/android/autofill_assistant/assistant_bottom_bar_delegate.h"
 #include "chrome/browser/android/autofill_assistant/assistant_collect_user_data_delegate.h"
 #include "chrome/browser/android/autofill_assistant/assistant_form_delegate.h"
 #include "chrome/browser/android/autofill_assistant/assistant_generic_ui_delegate.h"
 #include "chrome/browser/android/autofill_assistant/assistant_header_delegate.h"
+#include "chrome/browser/android/autofill_assistant/assistant_header_model.h"
 #include "chrome/browser/android/autofill_assistant/assistant_overlay_delegate.h"
 #include "components/autofill_assistant/browser/chip.h"
-#include "components/autofill_assistant/browser/client.h"
 #include "components/autofill_assistant/browser/controller_observer.h"
 #include "components/autofill_assistant/browser/details.h"
 #include "components/autofill_assistant/browser/info_box.h"
@@ -31,6 +31,7 @@
 namespace autofill_assistant {
 struct ClientSettings;
 class GenericUiRootControllerAndroid;
+class ClientAndroid;
 
 // Starts and owns the UI elements required to display AA.
 //
@@ -45,7 +46,7 @@ class UiControllerAndroid : public ControllerObserver {
  public:
   static std::unique_ptr<UiControllerAndroid> CreateFromWebContents(
       content::WebContents* web_contents,
-      const base::android::JavaParamRef<jobject>& jonboarding_coordinator);
+      const base::android::JavaRef<jobject>& joverlay_coordinator);
 
   // pointers to |web_contents|, |client| must remain valid for the lifetime of
   // this instance.
@@ -55,7 +56,7 @@ class UiControllerAndroid : public ControllerObserver {
   UiControllerAndroid(
       JNIEnv* env,
       const base::android::JavaRef<jobject>& jactivity,
-      const base::android::JavaParamRef<jobject>& jonboarding_coordinator);
+      const base::android::JavaRef<jobject>& joverlay_coordinator);
   ~UiControllerAndroid() override;
 
   // Attaches the UI to the given client, its web contents and delegate.
@@ -64,7 +65,7 @@ class UiControllerAndroid : public ControllerObserver {
   // lifetime of this instance or until Attach() is called again, with different
   // pointers.
   void Attach(content::WebContents* web_contents,
-              Client* client,
+              ClientAndroid* client,
               UiDelegate* ui_delegate);
 
   // Detaches the UI from |ui_delegate_|. It will stop receiving notifications
@@ -86,6 +87,10 @@ class UiControllerAndroid : public ControllerObserver {
   void CloseOrCancel(int action_index,
                      std::unique_ptr<TriggerContext> trigger_context,
                      Metrics::DropOutReason dropout_reason);
+  // Returns the size of the window.
+  base::Optional<std::pair<int, int>> GetWindowSize() const;
+  // Returns the screen's orientation.
+  ClientContextProto::ScreenOrientation GetScreenOrientation() const;
 
   // Overrides ControllerObserver:
   void OnStateChanged(AutofillAssistantState new_state) override;
@@ -97,7 +102,7 @@ class UiControllerAndroid : public ControllerObserver {
       const CollectUserDataOptions* collect_user_data_options) override;
   void OnUserDataChanged(const UserData* state,
                          UserData::FieldChange field_change) override;
-  void OnDetailsChanged(const Details* details) override;
+  void OnDetailsChanged(const std::vector<Details>& details) override;
   void OnInfoBoxChanged(const InfoBox* info_box) override;
   void OnProgressChanged(int progress) override;
   void OnProgressActiveStepChanged(int active_step) override;
@@ -121,6 +126,8 @@ class UiControllerAndroid : public ControllerObserver {
   void OnClientSettingsChanged(const ClientSettings& settings) override;
   void OnGenericUserInterfaceChanged(
       const GenericUserInterfaceProto* generic_ui) override;
+  void OnPersistentGenericUserInterfaceChanged(
+      const GenericUserInterfaceProto* generic_ui) override;
   void OnShouldShowOverlayChanged(bool should_show) override;
 
   // Called by AssistantOverlayDelegate:
@@ -128,7 +135,7 @@ class UiControllerAndroid : public ControllerObserver {
   void OnUserInteractionInsideTouchableArea();
 
   // Called by AssistantHeaderDelegate:
-  void OnFeedbackButtonClicked();
+  void OnHeaderFeedbackButtonClicked();
 
   // Called by AssistantGenericUiDelegate:
   void OnViewEvent(const EventHandler::EventKey& key);
@@ -194,6 +201,10 @@ class UiControllerAndroid : public ControllerObserver {
   void OnCloseButtonClicked(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jcaller);
+  void OnFeedbackButtonClicked(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jcaller,
+      jint actionIndex);
   void OnKeyboardVisibilityChanged(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jcaller,
@@ -210,7 +221,7 @@ class UiControllerAndroid : public ControllerObserver {
 
  private:
   // A pointer to the client. nullptr until Attach() is called.
-  Client* client_ = nullptr;
+  ClientAndroid* client_ = nullptr;
 
   // A pointer to the ui_delegate. nullptr until Attach() is called.
   UiDelegate* ui_delegate_ = nullptr;
@@ -232,6 +243,7 @@ class UiControllerAndroid : public ControllerObserver {
   base::android::ScopedJavaLocalRef<jobject> GetCollectUserDataModel();
   base::android::ScopedJavaLocalRef<jobject> GetFormModel();
   base::android::ScopedJavaLocalRef<jobject> GetGenericUiModel();
+  base::android::ScopedJavaLocalRef<jobject> GetPersistentGenericUiModel();
 
   // The UiDelegate has the last say on whether we should show the overlay.
   // This saves the AutofillAssistantState-determined OverlayState and then
@@ -272,10 +284,6 @@ class UiControllerAndroid : public ControllerObserver {
   // Restore the UI for the current UIDelegate.
   void RestoreUi();
 
-  // Timer started when reaching the STOPPED state. It allows keeping the UI up
-  // for a few seconds before it destroys itself.
-  std::unique_ptr<base::OneShotTimer> destroy_timer_;
-
   // Java-side AutofillAssistantUiController object.
   base::android::ScopedJavaGlobalRef<jobject> java_object_;
 
@@ -285,9 +293,13 @@ class UiControllerAndroid : public ControllerObserver {
   std::unique_ptr<GenericUiRootControllerAndroid>
       collect_user_data_appended_generic_ui_controller_;
   std::unique_ptr<GenericUiRootControllerAndroid> generic_ui_controller_;
+  std::unique_ptr<GenericUiRootControllerAndroid>
+      persistent_generic_ui_controller_;
 
   OverlayState desired_overlay_state_ = OverlayState::FULL;
   OverlayState overlay_state_ = OverlayState::FULL;
+
+  std::unique_ptr<AssistantHeaderModel> header_model_;
 
   base::WeakPtrFactory<UiControllerAndroid> weak_ptr_factory_{this};
 

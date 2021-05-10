@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <functional>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -48,23 +49,25 @@ static void ReleaseAudioBufferImpl(void* opaque, uint8_t* data) {
 }
 
 FFmpegAudioDecoder::FFmpegAudioDecoder(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     MediaLog* media_log)
     : task_runner_(task_runner),
       state_(kUninitialized),
       av_sample_format_(0),
       media_log_(media_log),
-      pool_(new AudioBufferMemoryPool()) {}
+      pool_(new AudioBufferMemoryPool()) {
+  DETACH_FROM_SEQUENCE(sequence_checker_);
+}
 
 FFmpegAudioDecoder::~FFmpegAudioDecoder() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (state_ != kUninitialized)
     ReleaseFFmpegResources();
 }
 
-std::string FFmpegAudioDecoder::GetDisplayName() const {
-  return "FFmpegAudioDecoder";
+AudioDecoderType FFmpegAudioDecoder::GetDecoderType() const {
+  return AudioDecoderType::kFFmpeg;
 }
 
 void FFmpegAudioDecoder::Initialize(const AudioDecoderConfig& config,
@@ -72,7 +75,7 @@ void FFmpegAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                     InitCB init_cb,
                                     const OutputCB& output_cb,
                                     const WaitingCB& /* waiting_cb */) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(config.IsValidConfig());
 
   InitCB bound_init_cb = BindToCurrentLoop(std::move(init_cb));
@@ -108,7 +111,7 @@ void FFmpegAudioDecoder::Initialize(const AudioDecoderConfig& config,
 
 void FFmpegAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                                 DecodeCB decode_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(decode_cb);
   CHECK_NE(state_, kUninitialized);
   DecodeCB decode_cb_bound = BindToCurrentLoop(std::move(decode_cb));
@@ -128,7 +131,7 @@ void FFmpegAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
 }
 
 void FFmpegAudioDecoder::Reset(base::OnceClosure closure) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   avcodec_flush_buffers(codec_context_.get());
   state_ = kNormal;
@@ -138,7 +141,7 @@ void FFmpegAudioDecoder::Reset(base::OnceClosure closure) {
 
 void FFmpegAudioDecoder::DecodeBuffer(const DecoderBuffer& buffer,
                                       DecodeCB decode_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_NE(state_, kUninitialized);
   DCHECK_NE(state_, kDecodeFinished);
   DCHECK_NE(state_, kError);
@@ -199,7 +202,7 @@ bool FFmpegAudioDecoder::FFmpegDecode(const DecoderBuffer& buffer) {
           << "end of stream AVPackets correctly.";
 
       MEDIA_LOG(DEBUG, media_log_)
-          << GetDisplayName() << " failed to decode an audio buffer: "
+          << GetDecoderType() << " failed to decode an audio buffer: "
           << AVErrorToString(decoding_loop_->last_averror_code()) << ", at "
           << buffer.AsHumanReadableString();
       break;
@@ -352,7 +355,8 @@ bool FFmpegAudioDecoder::ConfigureDecoder(const AudioDecoderConfig& config) {
     return false;
   }
 
-  decoding_loop_.reset(new FFmpegDecodingLoop(codec_context_.get(), true));
+  decoding_loop_ =
+      std::make_unique<FFmpegDecodingLoop>(codec_context_.get(), true);
   ResetTimestampState(config);
   return true;
 }
@@ -361,9 +365,8 @@ void FFmpegAudioDecoder::ResetTimestampState(const AudioDecoderConfig& config) {
   // Opus codec delay is handled by ffmpeg.
   const int codec_delay =
       config.codec() == kCodecOpus ? 0 : config.codec_delay();
-  discard_helper_.reset(new AudioDiscardHelper(config.samples_per_second(),
-                                               codec_delay,
-                                               config.codec() == kCodecVorbis));
+  discard_helper_ = std::make_unique<AudioDiscardHelper>(
+      config.samples_per_second(), codec_delay, config.codec() == kCodecVorbis);
   discard_helper_->Reset(codec_delay);
 }
 

@@ -15,7 +15,6 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -62,6 +61,15 @@ void BluetoothDevice::DeviceUUIDs::ReplaceServiceUUIDs(
   UpdateDeviceUUIDs();
 }
 
+void BluetoothDevice::DeviceUUIDs::ReplaceServiceUUIDs(
+    UUIDList new_service_uuids) {
+  service_uuids_.clear();
+  for (auto& it : new_service_uuids) {
+    service_uuids_.insert(std::move(it));
+  }
+  UpdateDeviceUUIDs();
+}
+
 void BluetoothDevice::DeviceUUIDs::ClearServiceUUIDs() {
   service_uuids_.clear();
   UpdateDeviceUUIDs();
@@ -101,7 +109,7 @@ BluetoothDevice::ConnectionInfo::ConnectionInfo(int rssi,
 
 BluetoothDevice::ConnectionInfo::~ConnectionInfo() = default;
 
-base::string16 BluetoothDevice::GetNameForDisplay() const {
+std::u16string BluetoothDevice::GetNameForDisplay() const {
   base::Optional<std::string> name = GetName();
   if (name && HasGraphicCharacter(name.value())) {
     return base::UTF8ToUTF16(name.value());
@@ -110,8 +118,8 @@ base::string16 BluetoothDevice::GetNameForDisplay() const {
   }
 }
 
-base::string16 BluetoothDevice::GetAddressWithLocalizedDeviceTypeName() const {
-  base::string16 address_utf16 = base::UTF8ToUTF16(GetAddress());
+std::u16string BluetoothDevice::GetAddressWithLocalizedDeviceTypeName() const {
+  std::u16string address_utf16 = base::UTF8ToUTF16(GetAddress());
   BluetoothDeviceType device_type = GetDeviceType();
   switch (device_type) {
     case BluetoothDeviceType::COMPUTER:

@@ -14,7 +14,6 @@
 #include "base/run_loop.h"
 #include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
-#include "base/strings/stringprintf.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/task/post_task.h"
 #include "base/task/sequence_manager/task_queue_impl.h"
@@ -126,7 +125,7 @@ class BaseSequenceManagerPerfTestDelegate : public PerfTestDelegate {
   }
 
   void WaitUntilDone() override {
-    run_loop_.reset(new RunLoop());
+    run_loop_ = std::make_unique<RunLoop>();
     run_loop_->Run();
   }
 

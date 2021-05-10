@@ -32,7 +32,7 @@ ash::AppListSearchResultType ArcAppShortcutsSearchProvider::ResultType() {
   return ash::AppListSearchResultType::kArcAppShortcut;
 }
 
-void ArcAppShortcutsSearchProvider::Start(const base::string16& query) {
+void ArcAppShortcutsSearchProvider::Start(const std::u16string& query) {
   arc::mojom::AppInstance* app_instance =
       arc::ArcServiceManager::Get()
           ? ARC_GET_INSTANCE_FOR_METHOD(
@@ -47,6 +47,7 @@ void ArcAppShortcutsSearchProvider::Start(const base::string16& query) {
     ClearResults();
     return;
   }
+  last_query_ = query;
 
   if (query.empty()) {
     app_instance->GetAppShortcutGlobalQueryItems(
@@ -69,6 +70,9 @@ void ArcAppShortcutsSearchProvider::UpdateRecommendedResults(
   const ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(profile_);
   DCHECK(arc_prefs);
 
+  // All ArcAppShortcutSearchResults have display type kList, so they are shown
+  // in the zero-state results list, but not in the suggestion chips.
+
   // Maps app IDs to their score according to |ranker_|
   SearchProvider::Results search_results;
   for (auto& item : shortcut_items) {
@@ -80,8 +84,8 @@ void ArcAppShortcutsSearchProvider::UpdateRecommendedResults(
     if (!app_info || !app_info->show_in_launcher)
       continue;
     auto result = std::make_unique<ArcAppShortcutSearchResult>(
-        std::move(item), profile_, list_controller_,
-        true /*is_recommendation*/);
+        std::move(item), profile_, list_controller_, true /*is_recommendation*/,
+        std::u16string() /*query*/);
 
     if (!app_info->install_time.is_null() ||
         !app_info->last_launch_time.is_null()) {
@@ -113,7 +117,7 @@ void ArcAppShortcutsSearchProvider::OnGetAppShortcutGlobalQueryItems(
       continue;
     search_results.emplace_back(std::make_unique<ArcAppShortcutSearchResult>(
         std::move(item), profile_, list_controller_,
-        false /*is_recommendation*/));
+        false /*is_recommendation*/, last_query_));
   }
   SwapResults(&search_results);
 }

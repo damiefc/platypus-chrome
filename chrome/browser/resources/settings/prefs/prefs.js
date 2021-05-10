@@ -12,7 +12,10 @@
  * is eventually consistent with the Chrome pref store.
  */
 
-(function() {
+import {assert} from '//resources/js/assert.m.js';
+import {html, Polymer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {CrSettingsPrefs} from './prefs_types.js';
 
 /**
  * Checks whether two values are recursively equal. Only compares serializable
@@ -127,6 +130,8 @@ function deepCopyObject(obj) {
 Polymer({
   is: 'settings-prefs',
 
+  _template: null,
+
   properties: {
     /**
      * Object containing all preferences, for use by Polymer controls.
@@ -213,7 +218,9 @@ Polymer({
     // settingsPrivate.setPref and potentially trigger an IPC loop.)
     if (!deepEqual(prefStoreValue, prefObj.value)) {
       // <if expr="chromeos">
-      this.fire('user-action-setting-change');
+      this.fire(
+          'user-action-setting-change',
+          {prefKey: key, prefValue: prefObj.value});
       // </if>
 
       this.settingsApi_.setPref(
@@ -360,4 +367,3 @@ Polymer({
         /** @type {SettingsPrivate} */ (chrome.settingsPrivate);
   },
 });
-})();

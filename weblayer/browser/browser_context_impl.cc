@@ -5,13 +5,16 @@
 #include "weblayer/browser/browser_context_impl.h"
 
 #include "base/threading/thread_restrictions.h"
+#include "components/background_sync/background_sync_controller_impl.h"
 #include "components/blocked_content/safe_browsing_triggered_popup_blocker.h"
 #include "components/client_hints/browser/client_hints.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/download/public/common/in_progress_download_manager.h"
 #include "components/embedder_support/pref_names.h"
+#include "components/heavy_ad_intervention/heavy_ad_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/language/core/browser/language_prefs.h"
+#include "components/payments/core/payment_prefs.h"
 #include "components/permissions/permission_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/in_memory_pref_store.h"
@@ -33,10 +36,14 @@
 #include "content/public/browser/download_request_utils.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "weblayer/browser/background_fetch/background_fetch_delegate_factory.h"
+#include "weblayer/browser/background_fetch/background_fetch_delegate_impl.h"
+#include "weblayer/browser/background_sync/background_sync_controller_factory.h"
 #include "weblayer/browser/browsing_data_remover_delegate.h"
 #include "weblayer/browser/browsing_data_remover_delegate_factory.h"
 #include "weblayer/browser/client_hints_factory.h"
 #include "weblayer/browser/default_search_engine.h"
+#include "weblayer/browser/heavy_ad_service_factory.h"
 #include "weblayer/browser/permissions/permission_manager_factory.h"
 #include "weblayer/browser/stateful_ssl_host_state_delegate_factory.h"
 #include "weblayer/public/common/switches.h"
@@ -92,12 +99,20 @@ BrowserContextImpl::BrowserContextImpl(ProfileImpl* profile_impl,
                                        const base::FilePath& path)
     : profile_impl_(profile_impl),
       path_(path),
+      simple_factory_key_(path, path.empty()),
       resource_context_(new ResourceContextImpl()),
       download_delegate_(BrowserContext::GetDownloadManager(this)) {
   CreateUserPrefService();
 
   BrowserContextDependencyManager::GetInstance()->CreateBrowserContextServices(
       this);
+
+  auto* heavy_ad_service = HeavyAdServiceFactory::GetForBrowserContext(this);
+  if (IsOffTheRecord()) {
+    heavy_ad_service->InitializeOffTheRecord();
+  } else {
+    heavy_ad_service->Initialize(GetPath());
+  }
 
   site_isolation::SiteIsolationPolicy::ApplyPersistedIsolatedOrigins(this);
 
@@ -192,12 +207,12 @@ BrowserContextImpl::GetClientHintsControllerDelegate() {
 
 content::BackgroundFetchDelegate*
 BrowserContextImpl::GetBackgroundFetchDelegate() {
-  return nullptr;
+  return BackgroundFetchDelegateFactory::GetForBrowserContext(this);
 }
 
 content::BackgroundSyncController*
 BrowserContextImpl::GetBackgroundSyncController() {
-  return nullptr;
+  return BackgroundSyncControllerFactory::GetForBrowserContext(this);
 }
 
 content::BrowsingDataRemoverDelegate*
@@ -210,9 +225,8 @@ BrowserContextImpl::RetriveInProgressDownloadManager() {
   // Override this to provide a connection to the wake lock service.
   auto* download_manager = new download::InProgressDownloadManager(
       nullptr, path_,
-      path_.empty()
-          ? nullptr
-          : GetDefaultStoragePartition(this)->GetProtoDatabaseProvider(),
+      path_.empty() ? nullptr
+                    : GetDefaultStoragePartition()->GetProtoDatabaseProvider(),
       base::BindRepeating(&IgnoreOriginSecurityCheck),
       base::BindRepeating(&content::DownloadRequestUtils::IsURLSafe),
       base::BindRepeating(&BindWakeLockProvider));
@@ -270,6 +284,7 @@ void BrowserContextImpl::RegisterPrefs(
   translate::TranslatePrefs::RegisterProfilePrefs(pref_registry);
   blocked_content::SafeBrowsingTriggeredPopupBlocker::RegisterProfilePrefs(
       pref_registry);
+  payments::RegisterProfilePrefs(pref_registry);
   pref_registry->RegisterBooleanPref(
       ::prefs::kOfferTranslateEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
@@ -304,10 +319,13 @@ class BrowserContextImpl::WebLayerVariationsClient
   }
 
  private:
-  bool IsSignedIn() const {
-    // TODO(weblayer-dev): Update when signin is supported.
-    return false;
-  }
+  // Signed-in state shouldn't control the set of variations for WebLayer,
+  // so this always returns true. This is particularly experiment for
+  // registering external experiment ids, which are registered assuming
+  // signed-in.
+  // TODO(sky): this is rather misleading, and needs to be resolved. Figure
+  // out right long term solution.
+  bool IsSignedIn() const { return true; }
 
   content::BrowserContext* browser_context_;
 };

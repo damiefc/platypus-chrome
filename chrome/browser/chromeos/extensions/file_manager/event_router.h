@@ -12,18 +12,18 @@
 #include <string>
 #include <vector>
 
+#include "ash/public/cpp/tablet_mode_observer.h"
 #include "base/compiler_specific.h"
-#include "base/files/file_path_watcher.h"
 #include "base/macros.h"
 #include "base/optional.h"
-#include "chrome/browser/chromeos/drive/drive_integration_service.h"
+#include "chrome/browser/ash/drive/drive_integration_service.h"
+#include "chrome/browser/ash/guest_os/guest_os_share_path.h"
 #include "chrome/browser/chromeos/extensions/file_manager/device_event_router.h"
 #include "chrome/browser/chromeos/extensions/file_manager/drivefs_event_router.h"
 #include "chrome/browser/chromeos/file_manager/file_watcher.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager_observer.h"
-#include "chrome/browser/chromeos/guest_os/guest_os_share_path.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
 #include "chromeos/disks/disk_mount_manager.h"
 #include "chromeos/settings/timezone_settings.h"
@@ -51,12 +51,13 @@ class EventRouter
       public VolumeManagerObserver,
       public arc::ArcIntentHelperObserver,
       public drive::DriveIntegrationServiceObserver,
-      public guest_os::GuestOsSharePath::Observer {
+      public guest_os::GuestOsSharePath::Observer,
+      public ash::TabletModeObserver {
  public:
-  typedef base::Callback<void(const base::FilePath& virtual_path,
-                              bool got_error,
-                              const std::vector<std::string>& extension_ids)>
-      DispatchDirectoryChangeEventImplCallback;
+  using DispatchDirectoryChangeEventImplCallback = base::RepeatingCallback<void(
+      const base::FilePath& virtual_path,
+      bool got_error,
+      const std::vector<std::string>& extension_ids)>;
 
   explicit EventRouter(Profile* profile);
   ~EventRouter() override;
@@ -155,9 +156,20 @@ class EventRouter
   // DriveIntegrationServiceObserver override.
   void OnFileSystemMountFailed() override;
 
-  // guest_os::GuestOsSharePath::Observer overrides
+  // guest_os::GuestOsSharePath::Observer overrides.
   void OnUnshare(const std::string& vm_name,
                  const base::FilePath& path) override;
+
+  // ash:TabletModeObserver overrides.
+  void OnTabletModeStarted() override;
+  void OnTabletModeEnded() override;
+
+  // Notifies FilesApp that file drop to Plugin VM was not in a shared directory
+  // and failed FilesApp will show the "Move to Windows files" dialog.
+  void DropFailedPluginVmDirectoryNotShared();
+
+  // Called by the UI to notify the result of a displayed dialog.
+  void OnDriveDialogResult(drivefs::mojom::DialogResult result);
 
   // Returns a weak pointer for the event router.
   base::WeakPtr<EventRouter> GetWeakPtr();
@@ -216,6 +228,10 @@ class EventRouter
       extensions::api::file_manager_private::CrostiniEventType pref_false);
 
   void NotifyDriveConnectionStatusChanged();
+
+  void DisplayDriveConfirmDialog(
+      const drivefs::mojom::DialogReason& reason,
+      base::OnceCallback<void(drivefs::mojom::DialogResult)> callback);
 
   base::Time last_copy_progress_event_;
 

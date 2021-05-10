@@ -7,11 +7,12 @@
 #include <array>
 #include <memory>
 
+#include "base/callback_helpers.h"
 #include "base/message_loop/message_pump.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/run_loop.h"
 #include "base/task/sequence_manager/sequence_manager.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "content/public/browser/browser_thread.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -261,9 +262,8 @@ TEST_F(BrowserTaskQueuesTest, HandleStillWorksWhenQueuesDestroyed) {
   queues_.reset();
 
   for (size_t i = 0; i < BrowserTaskQueues::kNumQueueTypes; ++i) {
-    EXPECT_FALSE(
-        handle_->GetBrowserTaskRunner(static_cast<QueueType>(i))
-            ->PostTask(FROM_HERE, base::BindLambdaForTesting([]() {})));
+    EXPECT_FALSE(handle_->GetBrowserTaskRunner(static_cast<QueueType>(i))
+                     ->PostTask(FROM_HERE, base::DoNothing()));
   }
 
   RunLoop run_loop;

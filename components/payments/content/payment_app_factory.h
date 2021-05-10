@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/payments/content/payment_app.h"
@@ -45,11 +44,20 @@ class PaymentAppFactory {
    public:
     virtual ~Delegate() = default;
 
+    // Returns the WebContents that initiated the PaymentRequest API, or null if
+    // the RenderFrameHost or WebContents has been deleted, which can happen
+    // when the page is being closed, for example.
     virtual content::WebContents* GetWebContents() = 0;
+
     virtual const GURL& GetTopOrigin() = 0;
     virtual const GURL& GetFrameOrigin() = 0;
     virtual const url::Origin& GetFrameSecurityOrigin() = 0;
+
+    // Returns the RenderFrameHost that initiated the PaymentRequest API, or
+    // null if the RenderFrameHost has been deleted, which can happen when the
+    // RenderFrameHost is being unloaded, for example.
     virtual content::RenderFrameHost* GetInitiatorRenderFrameHost() const = 0;
+
     virtual const std::vector<mojom::PaymentMethodDataPtr>& GetMethodData()
         const = 0;
     virtual std::unique_ptr<autofill::InternalAuthenticator>

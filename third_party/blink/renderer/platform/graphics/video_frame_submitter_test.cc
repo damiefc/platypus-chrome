@@ -8,11 +8,11 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/read_only_shared_memory_region.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -143,9 +143,8 @@ class MockVideoFrameResourceProvider
   MOCK_METHOD2(PrepareSendToParent,
                void(const WebVector<viz::ResourceId>&,
                     WebVector<viz::TransferableResource>*));
-  MOCK_METHOD1(
-      ReceiveReturnsFromParent,
-      void(const Vector<viz::ReturnedResource>& transferable_resources));
+  MOCK_METHOD1(ReceiveReturnsFromParent,
+               void(Vector<viz::ReturnedResource> transferable_resources));
   MOCK_METHOD0(ObtainContextProvider, void());
 
  private:
@@ -223,7 +222,7 @@ class VideoFrameSubmitterTest : public testing::Test {
   void AckSubmittedFrame() {
     WTF::Vector<viz::ReturnedResource> resources;
     EXPECT_CALL(*resource_provider_, ReceiveReturnsFromParent(_));
-    submitter_->DidReceiveCompositorFrameAck(resources);
+    submitter_->DidReceiveCompositorFrameAck(std::move(resources));
   }
 
  protected:
@@ -992,7 +991,7 @@ TEST_F(VideoFrameSubmitterTest, ProcessTimingDetails) {
     auto frame = media::VideoFrame::CreateFrame(
         media::PIXEL_FORMAT_YV12, gfx::Size(8, 8), gfx::Rect(gfx::Size(8, 8)),
         gfx::Size(8, 8), i * frame_duration);
-    frame->metadata()->wallclock_frame_duration = frame_duration;
+    frame->metadata().wallclock_frame_duration = frame_duration;
     EXPECT_CALL(*video_frame_provider_, GetCurrentFrame())
         .WillRepeatedly(Return(frame));
 

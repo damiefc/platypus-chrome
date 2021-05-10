@@ -4,6 +4,7 @@
 
 #include "ui/views/controls/scrollbar/base_scroll_bar_thumb.h"
 
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/controls/scrollbar/scroll_bar.h"

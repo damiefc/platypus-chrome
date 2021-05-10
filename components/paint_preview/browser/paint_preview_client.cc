@@ -15,13 +15,16 @@
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
+#include "base/trace_event/trace_event.h"
 #include "base/unguessable_token.h"
 #include "components/paint_preview/common/capture_result.h"
 #include "components/paint_preview/common/mojom/paint_preview_recorder.mojom-forward.h"
+#include "components/paint_preview/common/proto_validator.h"
 #include "components/paint_preview/common/version.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -115,8 +118,12 @@ mojom::PaintPreviewCaptureParamsPtr CreateRecordingRequestParams(
   // when clip_rects are used intentionally to limit capture time.
   mojo_params->clip_rect_is_hint = true;
   mojo_params->is_main_frame = capture_params.is_main_frame;
+  mojo_params->skip_accelerated_content =
+      capture_params.skip_accelerated_content;
   mojo_params->file = std::move(file);
   mojo_params->max_capture_size = capture_params.max_capture_size;
+  mojo_params->max_decoded_image_size_bytes =
+      capture_params.max_decoded_image_size_bytes;
   return mojo_params;
 }
 
@@ -275,12 +282,13 @@ void PaintPreviewClient::CapturePaintPreview(
     const PaintPreviewParams& params,
     content::RenderFrameHost* render_frame_host,
     PaintPreviewCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (base::Contains(all_document_data_, params.inner.document_guid)) {
     std::move(callback).Run(params.inner.document_guid,
                             mojom::PaintPreviewStatus::kGuidCollision, {});
     return;
   }
-  if (!render_frame_host) {
+  if (!render_frame_host || params.inner.document_guid.is_empty()) {
     std::move(callback).Run(params.inner.document_guid,
                             mojom::PaintPreviewStatus::kFailed, {});
     return;
@@ -299,12 +307,21 @@ void PaintPreviewClient::CapturePaintPreview(
   auto* metadata = document_data.proto.mutable_metadata();
   metadata->set_url(url.spec());
   metadata->set_version(kPaintPreviewVersion);
+  auto* chromeVersion = metadata->mutable_chrome_version();
+  chromeVersion->set_major(CHROME_VERSION_MAJOR);
+  chromeVersion->set_minor(CHROME_VERSION_MINOR);
+  chromeVersion->set_build(CHROME_VERSION_BUILD);
+  chromeVersion->set_patch(CHROME_VERSION_PATCH);
   document_data.callback = std::move(callback);
   document_data.source_id =
       ukm::GetSourceIdForWebContentsDocument(web_contents());
   document_data.accepted_tokens = CreateAcceptedTokenList(render_frame_host);
   document_data.capture_links = params.inner.capture_links;
   document_data.max_per_capture_size = params.inner.max_capture_size;
+  document_data.max_decoded_image_size_bytes =
+      params.inner.max_decoded_image_size_bytes;
+  document_data.skip_accelerated_content =
+      params.inner.skip_accelerated_content;
   all_document_data_.insert(
       {params.inner.document_guid, std::move(document_data)});
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
@@ -317,6 +334,9 @@ void PaintPreviewClient::CaptureSubframePaintPreview(
     const base::UnguessableToken& guid,
     const gfx::Rect& rect,
     content::RenderFrameHost* render_subframe_host) {
+  if (guid.is_empty())
+    return;
+
   auto it = all_document_data_.find(guid);
   if (it == all_document_data_.end())
     return;
@@ -326,6 +346,8 @@ void PaintPreviewClient::CaptureSubframePaintPreview(
   params.is_main_frame = false;
   params.capture_links = it->second.capture_links;
   params.max_capture_size = it->second.max_per_capture_size;
+  params.max_decoded_image_size_bytes = it->second.max_decoded_image_size_bytes;
+  params.skip_accelerated_content = it->second.skip_accelerated_content;
   CapturePaintPreviewInternal(params, render_subframe_host);
 }
 
@@ -419,6 +441,7 @@ void PaintPreviewClient::RequestCaptureOnUIThread(
     mojom::PaintPreviewStatus status,
     mojom::PaintPreviewCaptureParamsPtr capture_params) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
   auto it = all_document_data_.find(params.document_guid);
   if (it == all_document_data_.end())
     return;
@@ -434,8 +457,10 @@ void PaintPreviewClient::RequestCaptureOnUIThread(
   // If the render frame host navigated or is no longer around treat this as a
   // failure as a navigation occurring during capture is bad.
   auto* render_frame_host = content::RenderFrameHost::FromID(render_frame_id);
-  if (!render_frame_host || render_frame_host->GetEmbeddingToken().value_or(
-                                base::UnguessableToken::Null()) != frame_guid) {
+  if (!render_frame_host ||
+      render_frame_host->GetEmbeddingToken().value_or(
+          base::UnguessableToken::Null()) != frame_guid ||
+      !capture_params) {
     std::move(document_data->callback)
         .Run(params.document_guid, mojom::PaintPreviewStatus::kCaptureFailed,
              {});
@@ -458,6 +483,11 @@ void PaintPreviewClient::RequestCaptureOnUIThread(
     render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
         &interface_ptrs_[frame_guid]);
   }
+
+  // For the main frame, apply a clip rect if one is provided.
+  if (params.is_main_frame)
+    capture_params->clip_rect_is_hint = false;
+
   interface_ptrs_[frame_guid]->CapturePaintPreview(
       std::move(capture_params),
       base::BindOnce(&PaintPreviewClient::OnPaintPreviewCapturedCallback,
@@ -525,6 +555,10 @@ void PaintPreviewClient::OnFinished(
   if (!document_data || !document_data->callback)
     return;
 
+  if (!PaintPreviewProtoValid(document_data->proto)) {
+    document_data->had_success = false;
+  }
+
   TRACE_EVENT_NESTABLE_ASYNC_END2(
       "paint_preview", "PaintPreviewClient::CapturePaintPreview",
       TRACE_ID_LOCAL(document_data), "success", document_data->had_success,
@@ -543,16 +577,18 @@ void PaintPreviewClient::OnFinished(
     // At a minimum one frame was captured successfully, it is up to the
     // caller to decide if a partial success is acceptable based on what is
     // contained in the proto.
-    std::move(document_data->callback)
-        .Run(guid,
-             document_data->had_error
-                 ? mojom::PaintPreviewStatus::kPartialSuccess
-                 : mojom::PaintPreviewStatus::kOk,
-             std::move(*document_data).IntoCaptureResult());
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(document_data->callback), guid,
+                       document_data->had_error
+                           ? mojom::PaintPreviewStatus::kPartialSuccess
+                           : mojom::PaintPreviewStatus::kOk,
+                       std::move(*document_data).IntoCaptureResult()));
   } else {
     // A proto could not be created indicating all frames failed to capture.
-    std::move(document_data->callback)
-        .Run(guid, mojom::PaintPreviewStatus::kFailed, {});
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(document_data->callback), guid,
+                                  mojom::PaintPreviewStatus::kFailed, nullptr));
   }
   all_document_data_.erase(guid);
 }

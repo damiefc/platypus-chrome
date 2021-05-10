@@ -4,6 +4,8 @@
 
 #include "printing/backend/printing_restrictions.h"
 
+#include "build/chromeos_buildflags.h"
+
 namespace printing {
 
 #if defined(OS_CHROMEOS)

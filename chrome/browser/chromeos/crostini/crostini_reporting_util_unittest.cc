@@ -11,7 +11,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
-#include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
+#include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/mock_component_updater_service.h"
@@ -49,8 +49,7 @@ TEST_F(CrostiniReportingUtilTest, WriteMetricsForReportingToPrefsIfEnabled) {
   test_clock_.SetNow(time);
 
   const auto component_info = component_updater::ComponentInfo(
-      "id2", "fingerprint2", base::ASCIIToUTF16("cros-termina"),
-      base::Version("1.33.7"));
+      "id2", "fingerprint2", u"cros-termina", base::Version("1.33.7"));
   EXPECT_CALL(update_service_, GetComponents())
       .Times(1)
       .WillOnce(Return(
@@ -157,12 +156,11 @@ TEST_F(CrostiniReportingUtilTest, GetTerminaVersion) {
   Mock::VerifyAndClearExpectations(update_service);
 
   const auto component_info_1 = component_updater::ComponentInfo(
-      "id1", "fingerprint1", base::ASCIIToUTF16("name1"), base::Version("1.0"));
+      "id1", "fingerprint1", u"name1", base::Version("1.0"));
   const auto component_info_2 = component_updater::ComponentInfo(
-      "id2", "fingerprint2", base::ASCIIToUTF16("cros-termina"),
-      base::Version("1.33.7"));
+      "id2", "fingerprint2", u"cros-termina", base::Version("1.33.7"));
   const auto component_info_3 = component_updater::ComponentInfo(
-      "id3", "fingerprint3", base::ASCIIToUTF16("name1"), base::Version("1.0"));
+      "id3", "fingerprint3", u"name1", base::Version("1.0"));
   EXPECT_CALL(*update_service, GetComponents())
       .Times(1)
       .WillOnce(Return(std::vector<component_updater::ComponentInfo>(

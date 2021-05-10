@@ -5,7 +5,7 @@
 #include "media/gpu/chromeos/mailbox_video_frame_converter.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
@@ -237,8 +237,8 @@ void MailboxVideoFrameConverter::WrapMailboxAndVideoFrameAndOutput(
       GetRectSizeFromOrigin(frame->visible_rect()), frame->visible_rect(),
       frame->natural_size(), frame->timestamp());
   mailbox_frame->set_color_space(frame->ColorSpace());
-  mailbox_frame->set_metadata(*(frame->metadata()));
-  mailbox_frame->metadata()->read_lock_fences_enabled = true;
+  mailbox_frame->set_metadata(frame->metadata());
+  mailbox_frame->metadata().read_lock_fences_enabled = true;
 
   output_cb_.Run(mailbox_frame);
 }
@@ -355,8 +355,9 @@ bool MailboxVideoFrameConverter::GenerateSharedImageOnGPUThread(
   const bool success = shared_image_stub->CreateSharedImage(
       mailbox, gpu::kPlatformVideoFramePoolClientId,
       std::move(gpu_memory_buffer_handle), *buffer_format,
-      gpu::kNullSurfaceHandle, shared_image_size, video_frame->ColorSpace(),
-      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, shared_image_usage);
+      gfx::BufferPlane::DEFAULT, gpu::kNullSurfaceHandle, shared_image_size,
+      video_frame->ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
+      shared_image_usage);
   if (!success) {
     OnError(FROM_HERE, "Failed to create shared image.");
     return false;

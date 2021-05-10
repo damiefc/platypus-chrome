@@ -21,7 +21,7 @@ class VideoSender;
 
 // This class combines all required sending objects such as the audio and video
 // senders, pacer, packet receiver and frame input.
-class CastSenderImpl : public CastSender {
+class CastSenderImpl final : public CastSender {
  public:
   CastSenderImpl(scoped_refptr<CastEnvironment> cast_environment,
                  CastTransport* const transport_sender);
@@ -31,8 +31,7 @@ class CastSenderImpl : public CastSender {
   void InitializeVideo(
       const FrameSenderConfig& video_config,
       const StatusChangeCallback& status_change_cb,
-      const CreateVideoEncodeAcceleratorCallback& create_vea_cb,
-      const CreateVideoEncodeMemoryCallback& create_video_encode_mem_cb) final;
+      const CreateVideoEncodeAcceleratorCallback& create_vea_cb) final;
 
   void SetTargetPlayoutDelay(base::TimeDelta new_target_playout_delay) final;
 

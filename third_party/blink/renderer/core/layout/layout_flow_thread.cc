@@ -40,6 +40,11 @@ LayoutFlowThread::LayoutFlowThread(bool needs_paint_layer)
       page_logical_size_changed_(false),
       needs_paint_layer_(needs_paint_layer) {}
 
+void LayoutFlowThread::Trace(Visitor* visitor) const {
+  visitor->Trace(multi_column_set_list_);
+  LayoutBlockFlow::Trace(visitor);
+}
+
 LayoutFlowThread* LayoutFlowThread::LocateFlowThreadContainingBlockOf(
     const LayoutObject& descendant,
     AncestorSearchConstraint constraint) {
@@ -59,9 +64,9 @@ LayoutFlowThread* LayoutFlowThread::LocateFlowThreadContainingBlockOf(
     // a fieldset isn't allowed to be a multicol container anyway.
     if (curr->IsHTMLLegendElement() && !curr->IsOutOfFlowPositioned() &&
         !curr->IsColumnSpanAll() && curr->Parent()->IsLayoutFlowThread())
-      return ToLayoutFlowThread(curr->Parent());
+      return To<LayoutFlowThread>(curr->Parent());
     if (curr->IsLayoutFlowThread())
-      return ToLayoutFlowThread(curr);
+      return To<LayoutFlowThread>(curr);
     LayoutObject* container = curr->Container();
     // If we're inside something strictly unbreakable (due to having scrollbars
     // or being writing mode roots, for instance), it's also strictly
@@ -69,7 +74,7 @@ LayoutFlowThread* LayoutFlowThread::LocateFlowThreadContainingBlockOf(
     // inside any fragmentation context on the inside of this is completely
     // opaque to ancestor fragmentation contexts.
     if (constraint == kIsolateUnbreakableContainers && container) {
-      if (const LayoutBox* box = ToLayoutBoxOrNull(container)) {
+      if (const auto* box = DynamicTo<LayoutBox>(container)) {
         // We're walking up the tree without knowing which fragmentation engine
         // is being used, so we have to detect any engine mismatch ourselves.
         if (box->IsLayoutNGObject() != inner_is_ng_object)
@@ -258,7 +263,7 @@ void LayoutFlowThread::GenerateColumnSetIntervalTree() {
   // manually managing the tree nodes lifecycle.
   multi_column_set_interval_tree_.Clear();
   multi_column_set_interval_tree_.InitIfNeeded();
-  for (auto* column_set : multi_column_set_list_)
+  for (const auto& column_set : multi_column_set_list_)
     multi_column_set_interval_tree_.Add(
         MultiColumnSetIntervalTree::CreateInterval(
             column_set->LogicalTopInFlowThread(),
@@ -283,7 +288,7 @@ LayoutRect LayoutFlowThread::FragmentsBoundingBox(
   DCHECK(!column_sets_invalidated_);
 
   LayoutRect result;
-  for (auto* column_set : multi_column_set_list_)
+  for (const auto& column_set : multi_column_set_list_)
     result.Unite(column_set->FragmentsBoundingBox(layer_bounding_box));
 
   return result;

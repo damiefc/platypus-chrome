@@ -24,7 +24,8 @@ class NavigationHandle;
 class TranslatePageLoadMetricsObserver
     : public page_load_metrics::PageLoadMetricsObserver {
  public:
-  static std::unique_ptr<TranslatePageLoadMetricsObserver> CreateIfNeeded();
+  static std::unique_ptr<TranslatePageLoadMetricsObserver> CreateIfNeeded(
+      content::WebContents* web_contents);
 
   explicit TranslatePageLoadMetricsObserver(
       std::unique_ptr<translate::TranslateMetricsLogger>
@@ -40,6 +41,8 @@ class TranslatePageLoadMetricsObserver
   ObservePolicy OnStart(content::NavigationHandle* navigation_handle,
                         const GURL& currently_committed_url,
                         bool started_in_foreground) override;
+  ObservePolicy OnCommit(content::NavigationHandle* navigation_handle,
+                         ukm::SourceId source_id) override;
   ObservePolicy OnHidden(
       const page_load_metrics::mojom::PageLoadTiming& timing) override;
   ObservePolicy OnShown() override;

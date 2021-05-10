@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/hash/md5.h"
 #include "base/location.h"
 #include "base/rand_util.h"
@@ -204,7 +204,7 @@ CloudPrintURLFetcher::ResponseAction CloudPrintConnector::OnRequestAuthError() {
   return CloudPrintURLFetcher::STOP_PROCESSING;
 }
 
-std::string CloudPrintConnector::GetAuthHeader() {
+std::string CloudPrintConnector::GetAuthHeaderValue() {
   return GetCloudPrintAuthHeaderFromStore();
 }
 
@@ -347,8 +347,8 @@ void CloudPrintConnector::StartGetRequest(const GURL& url,
                                           ResponseHandler handler) {
   next_response_handler_ = handler;
   request_ = CloudPrintURLFetcher::Create(partial_traffic_annotation_);
-  request_->StartGetRequest(CloudPrintURLFetcher::REQUEST_UPDATE_JOB,
-                            url, this, max_retries, std::string());
+  request_->StartGetRequest(CloudPrintURLFetcher::REQUEST_UPDATE_JOB, url, this,
+                            max_retries);
 }
 
 void CloudPrintConnector::StartPostRequest(
@@ -360,8 +360,8 @@ void CloudPrintConnector::StartPostRequest(
     ResponseHandler handler) {
   next_response_handler_ = handler;
   request_ = CloudPrintURLFetcher::Create(partial_traffic_annotation_);
-  request_->StartPostRequest(
-      type, url, this, max_retries, mime_type, post_data, std::string());
+  request_->StartPostRequest(type, url, this, max_retries, mime_type,
+                             post_data);
 }
 
 void CloudPrintConnector::ReportUserMessage(const std::string& message_id,
@@ -380,7 +380,7 @@ void CloudPrintConnector::ReportUserMessage(const std::string& message_id,
       CloudPrintURLFetcher::Create(partial_traffic_annotation_);
   user_message_request_->StartPostRequest(
       CloudPrintURLFetcher::REQUEST_USER_MESSAGE, url, this, 1, mime_type,
-      post_data, std::string());
+      post_data);
 }
 
 bool CloudPrintConnector::RemovePrinterFromList(
@@ -609,7 +609,7 @@ void CloudPrintConnector::OnReceivePrinterCaps(
     LOG(ERROR) << "CP_CONNECTOR: Failed to get printer info"
                << ", printer name: " << printer_name;
     // This printer failed to register, notify the server of this failure.
-    base::string16 printer_name_utf16 = base::UTF8ToUTF16(printer_name);
+    std::u16string printer_name_utf16 = base::UTF8ToUTF16(printer_name);
     std::string status_message = l10n_util::GetStringFUTF8(
         IDS_CLOUD_PRINT_REGISTER_PRINTER_FAILED,
         printer_name_utf16,

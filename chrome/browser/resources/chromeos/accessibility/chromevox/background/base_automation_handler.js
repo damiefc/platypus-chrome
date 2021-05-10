@@ -10,6 +10,7 @@
 goog.provide('BaseAutomationHandler');
 
 goog.scope(function() {
+const ActionType = chrome.automation.ActionType;
 const AutomationEvent = chrome.automation.AutomationEvent;
 const AutomationNode = chrome.automation.AutomationNode;
 const EventType = chrome.automation.EventType;
@@ -99,23 +100,21 @@ BaseAutomationHandler = class {
     }
 
     // Decide whether to announce and sync this event.
-    const isFocusOnRoot = evt.type == 'focus' && evt.target == evt.target.root;
+    const prevRange = ChromeVoxState.instance.getCurrentRangeWithoutRecovery();
     if (!DesktopAutomationHandler.announceActions &&
-        evt.eventFrom == 'action' &&
-        (EventSourceState.get() != EventSourceType.TOUCH_GESTURE ||
-         isFocusOnRoot)) {
+        (prevRange && !prevRange.requiresRecovery()) &&
+        evt.eventFrom === 'action' &&
+        evt.eventFromAction !== ActionType.DO_DEFAULT) {
       return;
     }
-
-    const prevRange = ChromeVoxState.instance.getCurrentRangeWithoutRecovery();
 
     ChromeVoxState.instance.setCurrentRange(cursors.Range.fromNode(node));
 
     // Don't output if focused node hasn't changed. Allow focus announcements
     // when interacting via touch. Touch never sets focus without a double tap.
-    if (prevRange && evt.type == 'focus' &&
+    if (prevRange && evt.type === 'focus' &&
         ChromeVoxState.instance.currentRange.equalsWithoutRecovery(prevRange) &&
-        EventSourceState.get() != EventSourceType.TOUCH_GESTURE) {
+        EventSourceState.get() !== EventSourceType.TOUCH_GESTURE) {
       return;
     }
 

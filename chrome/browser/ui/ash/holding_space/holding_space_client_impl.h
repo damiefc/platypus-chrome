@@ -9,6 +9,7 @@
 
 #include "ash/public/cpp/holding_space/holding_space_client.h"
 #include "base/callback.h"
+#include "base/memory/weak_ptr.h"
 
 class Profile;
 
@@ -24,17 +25,23 @@ class HoldingSpaceClientImpl : public HoldingSpaceClient {
   ~HoldingSpaceClientImpl() override;
 
   // HoldingSpaceClient:
+  void AddScreenRecording(const base::FilePath& file_path) override;
   void AddScreenshot(const base::FilePath& file_path) override;
   void CopyImageToClipboard(const HoldingSpaceItem&, SuccessCallback) override;
+  base::FilePath CrackFileSystemUrl(const GURL& file_system_url) const override;
   void OpenDownloads(SuccessCallback callback) override;
   void OpenItems(const std::vector<const HoldingSpaceItem*>& items,
                  SuccessCallback callback) override;
+  void OpenMyFiles(SuccessCallback callback) override;
   void ShowItemInFolder(const HoldingSpaceItem&, SuccessCallback) override;
+  void PinFiles(const std::vector<base::FilePath>& file_paths) override;
   void PinItems(const std::vector<const HoldingSpaceItem*>& items) override;
   void UnpinItems(const std::vector<const HoldingSpaceItem*>& items) override;
 
  private:
   Profile* const profile_;
+
+  base::WeakPtrFactory<HoldingSpaceClientImpl> weak_factory_{this};
 };
 
 }  // namespace ash

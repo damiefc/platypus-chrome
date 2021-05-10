@@ -5,7 +5,7 @@
 #include "extensions/browser/service_worker_manager.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
@@ -16,7 +16,7 @@ namespace extensions {
 ServiceWorkerManager::ServiceWorkerManager(
     content::BrowserContext* browser_context)
     : browser_context_(browser_context) {
-  registry_observer_.Add(ExtensionRegistry::Get(browser_context_));
+  registry_observation_.Observe(ExtensionRegistry::Get(browser_context_));
 }
 
 ServiceWorkerManager::~ServiceWorkerManager() {}

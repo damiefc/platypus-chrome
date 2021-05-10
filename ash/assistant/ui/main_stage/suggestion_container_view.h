@@ -15,8 +15,8 @@
 #include "base/component_export.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/scoped_observer.h"
-#include "chromeos/services/assistant/public/cpp/assistant_service.h"
+#include "chromeos/services/libassistant/public/cpp/assistant_suggestion.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/controls/scroll_view.h"
 
 namespace views {
@@ -33,16 +33,18 @@ class AssistantViewDelegate;
 class COMPONENT_EXPORT(ASSISTANT_UI) SuggestionContainerView
     : public AnimatedContainerView,
       public AssistantSuggestionsModelObserver,
-      public AssistantUiModelObserver,
-      public views::ButtonListener {
+      public AssistantUiModelObserver {
  public:
   using AssistantSuggestion = chromeos::assistant::AssistantSuggestion;
 
+  METADATA_HEADER(SuggestionContainerView);
+
   explicit SuggestionContainerView(AssistantViewDelegate* delegate);
+  SuggestionContainerView(const SuggestionContainerView&) = delete;
+  SuggestionContainerView& operator=(const SuggestionContainerView&) = delete;
   ~SuggestionContainerView() override;
 
   // AnimatedContainerView:
-  const char* GetClassName() const override;
   gfx::Size CalculatePreferredSize() const override;
   int GetHeightForWidth(int width) const override;
   void OnContentsPreferredSizeChanged(views::View* content_view) override;
@@ -60,9 +62,6 @@ class COMPONENT_EXPORT(ASSISTANT_UI) SuggestionContainerView
       base::Optional<AssistantEntryPoint> entry_point,
       base::Optional<AssistantExitPoint> exit_point) override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // The suggestion chip that was pressed by the user. May be |nullptr|.
   const SuggestionChipView* selected_chip() const { return selected_chip_; }
 
@@ -77,6 +76,8 @@ class COMPONENT_EXPORT(ASSISTANT_UI) SuggestionContainerView
   std::unique_ptr<ElementAnimator> AddSuggestionChip(
       const AssistantSuggestion& suggestion);
 
+  void OnButtonPressed(SuggestionChipView* chip_view);
+
   views::BoxLayout* layout_manager_;  // Owned by view hierarchy.
 
   // Whether or not we have committed a query during this Assistant session.
@@ -84,8 +85,6 @@ class COMPONENT_EXPORT(ASSISTANT_UI) SuggestionContainerView
 
   // The suggestion chip that was pressed by the user. May be |nullptr|.
   const SuggestionChipView* selected_chip_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(SuggestionContainerView);
 };
 
 }  // namespace ash

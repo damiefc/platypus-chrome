@@ -1,8 +1,8 @@
 {
   "schema": "pedal_concepts_runtime",
-  "schema_version": 1,
-  "data_version": 15497154,
-  "tokenize_characters": " -",
+  "schema_version": 3,
+  "data_version": 15831389,
+  "tokenize_each_character": false,
   "dictionary": [
     "chrome",
     "google",
@@ -62,11 +62,11 @@
     "ವಿಂಡೋ",
     "ವಿಧಾನಗಳು",
     "ವೀಕ್ಷಿಸಿ",
-    "ಹೇಗೆ"
+    "ಹೇಗೆ",
+    "一時的踏板placeholder"
   ],
   "pedals": [
     {
-      "name": "CLEAR_BROWSING_DATA",
       "id": 1,
       "groups": [
         {
@@ -100,12 +100,6 @@
             ],
             [
               7
-            ],
-            [
-              7
-            ],
-            [
-              7
             ]
           ]
         },
@@ -126,17 +120,15 @@
               49
             ],
             [
-              49
-            ],
-            [
               27
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "MANAGE_PASSWORDS",
       "id": 2,
       "groups": [
         {
@@ -200,10 +192,11 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "UPDATE_CREDIT_CARD",
       "id": 3,
       "groups": [
         {
@@ -254,11 +247,6 @@
             ],
             [
               24,
-              18,
-              49
-            ],
-            [
-              24,
               20
             ],
             [
@@ -268,10 +256,6 @@
             [
               38,
               56
-            ],
-            [
-              18,
-              49
             ],
             [
               18,
@@ -288,10 +272,11 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "LAUNCH_INCOGNITO",
       "id": 4,
       "groups": [
         {
@@ -364,10 +349,11 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "TRANSLATE",
       "id": 5,
       "groups": [
         {
@@ -408,17 +394,18 @@
               42
             ],
             [
-              42
+              11
             ],
             [
-              11
+              42
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "UPDATE_CHROME",
       "id": 6,
       "groups": [
         {
@@ -452,7 +439,9 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     }
   ],
   "ignore_group": {
@@ -468,9 +457,6 @@
       ],
       [
         10
-      ],
-      [
-        34
       ],
       [
         34
@@ -492,9 +478,6 @@
       ],
       [
         22
-      ],
-      [
-        16
       ],
       [
         35

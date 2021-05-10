@@ -7,11 +7,10 @@
 #include <tuple>
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item_result.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_line_info.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_logical_line_item.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_physical_container_fragment.h"
 #include "third_party/blink/renderer/platform/fonts/font_height.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -100,13 +99,11 @@ PhysicalRect AdjustTextRectForEmHeight(const PhysicalRect& rect,
 
 // See LayoutRubyRun::GetOverhang().
 NGAnnotationOverhang GetOverhang(const NGInlineItemResult& item) {
-  DCHECK(RuntimeEnabledFeatures::LayoutNGRubyEnabled());
   NGAnnotationOverhang overhang;
   if (!item.layout_result)
     return overhang;
 
-  const auto& run_fragment =
-      To<NGPhysicalContainerFragment>(item.layout_result->PhysicalFragment());
+  const auto& run_fragment = item.layout_result->PhysicalFragment();
   LayoutUnit start_overhang = LayoutUnit::Max();
   LayoutUnit end_overhang = LayoutUnit::Max();
   bool found_line = false;
@@ -122,24 +119,21 @@ NGAnnotationOverhang GetOverhang(const NGInlineItemResult& item) {
     }
     if (layout_object->IsRubyBase()) {
       const ComputedStyle& base_style = child_fragment.Style();
-      const WritingMode writing_mode = base_style.GetWritingMode();
+      const auto writing_direction = base_style.GetWritingDirection();
       const LayoutUnit base_inline_size =
-          NGFragment(writing_mode, child_fragment).InlineSize();
+          NGFragment(writing_direction, child_fragment).InlineSize();
       // RubyBase's inline_size is always same as RubyRun's inline_size.
       // Overhang values are offsets from RubyBase's inline edges to
       // the outmost text.
-      for (const auto& base_child_link :
-           To<NGPhysicalContainerFragment>(child_fragment)
-               .PostLayoutChildren()) {
+      for (const auto& base_child_link : child_fragment.PostLayoutChildren()) {
         const LayoutUnit line_inline_size =
-            NGFragment(writing_mode, *base_child_link).InlineSize();
+            NGFragment(writing_direction, *base_child_link).InlineSize();
         if (line_inline_size == LayoutUnit())
           continue;
         found_line = true;
         const LayoutUnit start =
             base_child_link.offset
-                .ConvertToLogical(writing_mode, base_style.Direction(),
-                                  child_fragment.Size(),
+                .ConvertToLogical(writing_direction, child_fragment.Size(),
                                   base_child_link.get()->Size())
                 .inline_offset;
         const LayoutUnit end = base_inline_size - start - line_inline_size;
@@ -166,7 +160,6 @@ bool CanApplyStartOverhang(const NGLineInfo& line_info,
                            LayoutUnit& start_overhang) {
   if (start_overhang <= LayoutUnit())
     return false;
-  DCHECK(RuntimeEnabledFeatures::LayoutNGRubyEnabled());
   const NGInlineItemResults& items = line_info.Results();
   // Requires at least the current item and the previous item.
   if (items.size() < 2)
@@ -193,13 +186,14 @@ bool CanApplyStartOverhang(const NGLineInfo& line_info,
 
 // See LayoutRubyRun::GetOverhang().
 LayoutUnit CommitPendingEndOverhang(NGLineInfo* line_info) {
-  DCHECK(RuntimeEnabledFeatures::LayoutNGRubyEnabled());
   DCHECK(line_info);
   NGInlineItemResults* items = line_info->MutableResults();
   if (items->size() < 2U)
     return LayoutUnit();
   const NGInlineItemResult& text_item = items->back();
-  DCHECK_EQ(text_item.item->Type(), NGInlineItem::kText);
+  if (text_item.item->Type() == NGInlineItem::kControl)
+    return LayoutUnit();
+  DCHECK(text_item.item->Type() == NGInlineItem::kText);
   wtf_size_t i = items->size() - 2;
   while ((*items)[i].item->Type() != NGInlineItem::kAtomicInline) {
     const auto type = (*items)[i].item->Type();
@@ -235,7 +229,6 @@ NGAnnotationMetrics ComputeAnnotationOverflow(
     const FontHeight& line_box_metrics,
     LayoutUnit line_over,
     const ComputedStyle& line_style) {
-  DCHECK(RuntimeEnabledFeatures::LayoutNGRubyEnabled());
   // Min/max position of content and annotations, ignoring line-height.
   LayoutUnit content_over = line_over + line_box_metrics.ascent;
   LayoutUnit content_under = content_over;
@@ -253,12 +246,10 @@ NGAnnotationMetrics ComputeAnnotationOverflow(
       continue;
     LayoutUnit item_over = item.BlockOffset();
     LayoutUnit item_under = item.BlockEndOffset();
-    if (item.fragment || item.shape_result) {
+    if (item.shape_result) {
       if (const auto* style = item.Style()) {
         std::tie(item_over, item_under) = AdjustTextOverUnderOffsetsForEmHeight(
-            item_over, item_under, *style,
-            item.fragment ? *item.fragment->TextShapeResult()
-                          : *item.shape_result);
+            item_over, item_under, *style, *item.shape_result);
       }
     } else {
       const auto* fragment = item.PhysicalFragment();
@@ -283,7 +274,7 @@ NGAnnotationMetrics ComputeAnnotationOverflow(
         }
 
         // Check if we really have an annotation.
-        if (const auto* layout_result = item.layout_result.get()) {
+        if (const auto& layout_result = item.layout_result) {
           LayoutUnit overflow = layout_result->AnnotationOverflow();
           if (IsFlippedLinesWritingMode(line_style.GetWritingMode()))
             overflow = -overflow;

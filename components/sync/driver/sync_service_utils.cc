@@ -30,7 +30,7 @@ UploadState GetUploadToGoogleState(const SyncService* sync_service,
   // some data types are never encrypted (e.g. DEVICE_INFO), even if the
   // "encrypt everything" setting is enabled.
   if (sync_service->GetUserSettings()->GetEncryptedDataTypes().Has(type) &&
-      sync_service->GetUserSettings()->IsUsingSecondaryPassphrase()) {
+      sync_service->GetUserSettings()->IsUsingExplicitPassphrase()) {
     return UploadState::NOT_ACTIVE;
   }
 
@@ -69,10 +69,6 @@ UploadState GetUploadToGoogleState(const SyncService* sync_service,
   }
   NOTREACHED();
   return UploadState::NOT_ACTIVE;
-}
-
-void RecordSyncEvent(SyncEventCodes code) {
-  UMA_HISTOGRAM_ENUMERATION("Sync.EventCodes", code, MAX_SYNC_EVENT_CODE);
 }
 
 void RecordKeyRetrievalTrigger(KeyRetrievalTriggerForUMA trigger) {

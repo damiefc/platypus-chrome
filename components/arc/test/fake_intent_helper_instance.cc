@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/threading/thread_task_runner_handle.h"
 
 namespace arc {
@@ -67,6 +67,13 @@ void FakeIntentHelperInstance::GetFileSizeDeprecated(
 
 void FakeIntentHelperInstance::HandleIntent(mojom::IntentInfoPtr intent,
                                             mojom::ActivityNamePtr activity) {
+  handled_intents_.emplace_back(std::move(intent), std::move(activity));
+}
+
+void FakeIntentHelperInstance::HandleIntentWithWindowInfo(
+    mojom::IntentInfoPtr intent,
+    mojom::ActivityNamePtr activity,
+    mojom::WindowInfoPtr window_info) {
   handled_intents_.emplace_back(std::move(intent), std::move(activity));
 }
 

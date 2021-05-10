@@ -17,6 +17,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "printing/mojom/print.mojom.h"
 #include "printing/print_job_constants.h"
 #include "printing/print_settings.h"
@@ -26,7 +27,7 @@ namespace printing {
 
 namespace {
 
-// Note: If this code crashes, then the caller has passed in invalid |settings|.
+// Note: If this code crashes, then the caller has passed in invalid `settings`.
 // Fix the caller, instead of trying to avoid the crash here.
 PageMargins GetCustomMarginsFromJobSettings(const base::Value& settings) {
   PageMargins margins_in_points;
@@ -182,7 +183,6 @@ std::unique_ptr<PrintSettings> PrintSettingsFromJobSettings(
     return nullptr;
   }
 
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
   base::Optional<int> dpi_horizontal =
       job_settings.FindIntKey(kSettingDpiHorizontal);
   base::Optional<int> dpi_vertical =
@@ -190,7 +190,6 @@ std::unique_ptr<PrintSettings> PrintSettingsFromJobSettings(
   if (!dpi_horizontal.has_value() || !dpi_vertical.has_value())
     return nullptr;
   settings->set_dpi_xy(dpi_horizontal.value(), dpi_vertical.value());
-#endif
 
   settings->set_collate(collate.value());
   settings->set_copies(copies.value());
@@ -212,16 +211,21 @@ std::unique_ptr<PrintSettings> PrintSettingsFromJobSettings(
 #endif
   }
 
-#if defined(OS_CHROMEOS) || (defined(OS_LINUX) && defined(USE_CUPS))
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if defined(OS_CHROMEOS) ||                                  \
+    ((defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && \
+     defined(USE_CUPS))
   const base::Value* advanced_settings =
       job_settings.FindDictKey(kSettingAdvancedSettings);
   if (advanced_settings) {
     for (const auto& item : advanced_settings->DictItems())
       settings->advanced_settings().emplace(item.first, item.second.Clone());
   }
-#endif  // defined(OS_CHROMEOS) || (defined(OS_LINUX) && defined(USE_CUPS))
+#endif  // defined(OS_CHROMEOS) || ((defined(OS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS_LACROS)) && defined(USE_CUPS))
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   bool send_user_info =
       job_settings.FindBoolKey(kSettingSendUserInfo).value_or(false);
   settings->set_send_user_info(send_user_info);
@@ -234,7 +238,7 @@ std::unique_ptr<PrintSettings> PrintSettingsFromJobSettings(
   const std::string* pin_value = job_settings.FindStringKey(kSettingPinValue);
   if (pin_value)
     settings->set_pin_value(*pin_value);
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   return settings;
 }

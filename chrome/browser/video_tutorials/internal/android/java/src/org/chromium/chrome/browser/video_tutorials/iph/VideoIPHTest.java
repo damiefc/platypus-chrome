@@ -13,11 +13,9 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.support.test.rule.ActivityTestRule;
 import android.view.ViewStub;
 import android.widget.FrameLayout;
 
-import androidx.annotation.Nullable;
 import androidx.test.espresso.action.ViewActions;
 import androidx.test.filters.SmallTest;
 
@@ -30,16 +28,17 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.Callback;
-import org.chromium.chrome.browser.image_fetcher.ImageFetcher;
-import org.chromium.chrome.browser.image_fetcher.ImageFetcherConfig;
+import org.chromium.base.test.BaseActivityTestRule;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.video_tutorials.FeatureType;
 import org.chromium.chrome.browser.video_tutorials.R;
 import org.chromium.chrome.browser.video_tutorials.Tutorial;
+import org.chromium.chrome.browser.video_tutorials.test.TestImageFetcher;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.DummyUiActivity;
 
-import jp.tomorrowkey.android.gifplayer.BaseGifImage;
+import java.util.HashMap;
 
 /**
  * Tests for {@link LanguagePickerCoordinator}.
@@ -47,8 +46,8 @@ import jp.tomorrowkey.android.gifplayer.BaseGifImage;
 @RunWith(ChromeJUnit4ClassRunner.class)
 public class VideoIPHTest {
     @Rule
-    public ActivityTestRule<DummyUiActivity> mActivityTestRule =
-            new ActivityTestRule<>(DummyUiActivity.class);
+    public BaseActivityTestRule<DummyUiActivity> mActivityTestRule =
+            new BaseActivityTestRule<>(DummyUiActivity.class);
 
     private Activity mActivity;
     private VideoIPHCoordinator mCoordinator;
@@ -61,6 +60,7 @@ public class VideoIPHTest {
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
+        mActivityTestRule.launchActivity(null);
         mActivity = mActivityTestRule.getActivity();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             FrameLayout parentView = new FrameLayout(mActivity);
@@ -74,6 +74,7 @@ public class VideoIPHTest {
             TestImageFetcher imageFetcher = new TestImageFetcher(testImage);
             mCoordinator = new VideoIPHCoordinatorImpl(
                     viewStub, imageFetcher, mOnClickListener, mOnDismissListener);
+            ChromeFeatureList.setTestFeatures(new HashMap<>());
         });
     }
 
@@ -82,9 +83,9 @@ public class VideoIPHTest {
     public void testShowIPH() {
         final Tutorial tutorial = createDummyTutorial();
         TestThreadUtils.runOnUiThreadBlocking(() -> { mCoordinator.showVideoIPH(tutorial); });
-        onView(withText(tutorial.displayTitle)).check(matches(isDisplayed()));
+        onView(withText(tutorial.title)).check(matches(isDisplayed()));
         onView(withText("5:35")).check(matches(isDisplayed()));
-        onView(withText(tutorial.displayTitle)).perform(ViewActions.click());
+        onView(withText(tutorial.title)).perform(ViewActions.click());
         Mockito.verify(mOnClickListener).onResult(Mockito.any());
         onView(withId(R.id.close_button)).perform(ViewActions.click());
         Mockito.verify(mOnDismissListener).onResult(Mockito.any());
@@ -94,33 +95,8 @@ public class VideoIPHTest {
         return new Tutorial(FeatureType.DOWNLOAD,
                 "How to use Google Chrome's download functionality",
                 "https://xyz.example.com/xyz.mp4", "https://xyz.example.com/xyz.png",
+                "https://xyz.example.com/xyz.gif", "https://xyz.example.com/xyz.png",
                 "https://xyz.example.com/xyz.vtt", "https://xyz.example.com/xyz.mp4", 335);
     }
 
-    private static class TestImageFetcher extends ImageFetcher.ImageFetcherForTesting {
-        private final Bitmap mBitmapToFetch;
-
-        TestImageFetcher(@Nullable Bitmap bitmapToFetch) {
-            mBitmapToFetch = bitmapToFetch;
-        }
-
-        @Override
-        public void fetchGif(final ImageFetcher.Params params, Callback<BaseGifImage> callback) {}
-
-        @Override
-        public void fetchImage(ImageFetcher.Params params, Callback<Bitmap> callback) {
-            callback.onResult(mBitmapToFetch);
-        }
-
-        @Override
-        public void clear() {}
-
-        @Override
-        public @ImageFetcherConfig int getConfig() {
-            return ImageFetcherConfig.IN_MEMORY_ONLY;
-        }
-
-        @Override
-        public void destroy() {}
-    }
 }

@@ -11,8 +11,8 @@
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
-#include "base/macros.h"
 #include "base/observer_list.h"
+#include "components/exo/key_state.h"
 #include "components/exo/keyboard_observer.h"
 #include "components/exo/seat_observer.h"
 #include "components/exo/surface_observer.h"
@@ -39,6 +39,8 @@ class Keyboard : public ui::EventHandler,
                  public ash::ImeControllerImpl::Observer {
  public:
   Keyboard(std::unique_ptr<KeyboardDelegate> delegate, Seat* seat);
+  Keyboard(const Keyboard&) = delete;
+  Keyboard& operator=(const Keyboard&) = delete;
   ~Keyboard() override;
 
   KeyboardDelegate* delegate() const { return delegate_.get(); }
@@ -75,6 +77,8 @@ class Keyboard : public ui::EventHandler,
   // Overridden from ash::ImeControllerImpl::Observer
   void OnCapsLockChanged(bool enabled) override;
   void OnKeyboardLayoutNameChanged(const std::string& layout_name) override;
+
+  Surface* focused_surface_for_testing() const { return focus_; }
 
  private:
   // Change keyboard focus to |surface|.
@@ -115,7 +119,7 @@ class Keyboard : public ui::EventHandler,
   // Set of currently pressed keys. First value is a platform code and second
   // value is the code that was delivered to client. See Seat.h for more
   // details.
-  base::flat_map<ui::DomCode, ui::DomCode> pressed_keys_;
+  base::flat_map<ui::DomCode, KeyState> pressed_keys_;
 
   // Key state changes that are expected to be acknowledged.
   using KeyStateChange = std::pair<ui::KeyEvent, base::TimeTicks>;
@@ -130,13 +134,11 @@ class Keyboard : public ui::EventHandler,
   // True when the ARC app window is focused.
   // TODO(yhanada, https://crbug.com/847500): Remove this when we find a way to
   // fix https://crbug.com/847500 without breaking ARC++ apps.
-  bool focus_belongs_to_arc_app_ = false;
+  bool focused_on_ime_supported_surface_ = false;
 
   base::ObserverList<KeyboardObserver>::Unchecked observer_list_;
 
   base::WeakPtrFactory<Keyboard> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(Keyboard);
 };
 
 }  // namespace exo

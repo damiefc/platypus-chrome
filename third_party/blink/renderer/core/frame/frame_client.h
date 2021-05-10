@@ -15,6 +15,7 @@ namespace blink {
 
 class LocalFrame;
 enum class FrameDetachType;
+class IntRect;
 
 class CORE_EXPORT FrameClient : public GarbageCollected<FrameClient> {
  public:
@@ -26,8 +27,6 @@ class CORE_EXPORT FrameClient : public GarbageCollected<FrameClient> {
 
   virtual void OnMainFrameIntersectionChanged(
       const IntRect& intersection_rect) {}
-
-  virtual base::UnguessableToken GetDevToolsFrameToken() const = 0;
 
   virtual ~FrameClient() = default;
 

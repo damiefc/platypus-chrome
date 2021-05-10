@@ -8,7 +8,6 @@
 
 #include "base/callback.h"
 #include "base/notreached.h"
-#include "device/fido/fido_constants.h"
 
 namespace device {
 
@@ -26,7 +25,7 @@ void FidoAuthenticator::GetPinRetries(
 
 void FidoAuthenticator::GetPINToken(
     std::string pin,
-    const std::vector<pin::Permissions>& permissions,
+    std::vector<pin::Permissions> permissions,
     base::Optional<std::string> rp_id,
     FidoAuthenticator::GetTokenCallback callback) {
   NOTREACHED();
@@ -42,9 +41,25 @@ bool FidoAuthenticator::CanGetUvToken() {
 }
 
 void FidoAuthenticator::GetUvToken(
+    std::vector<pin::Permissions> permissions,
     base::Optional<std::string> rp_id,
     FidoAuthenticator::GetTokenCallback callback) {
   NOTREACHED();
+}
+
+uint32_t FidoAuthenticator::CurrentMinPINLength() {
+  NOTREACHED();
+  return kMinPinLength;
+}
+
+uint32_t FidoAuthenticator::NewMinPINLength() {
+  NOTREACHED();
+  return kMinPinLength;
+}
+
+bool FidoAuthenticator::ForcePINChange() {
+  NOTREACHED();
+  return false;
 }
 
 void FidoAuthenticator::SetPIN(const std::string& pin,
@@ -58,18 +73,18 @@ void FidoAuthenticator::ChangePIN(const std::string& old_pin,
   NOTREACHED();
 }
 
-FidoAuthenticator::MakeCredentialPINDisposition
-FidoAuthenticator::WillNeedPINToMakeCredential(
+FidoAuthenticator::PINUVDisposition
+FidoAuthenticator::PINUVDispositionForMakeCredential(
     const CtapMakeCredentialRequest& request,
     const FidoRequestHandlerBase::Observer* observer) {
-  return MakeCredentialPINDisposition::kNoPIN;
+  return PINUVDisposition::kNoUV;
 }
 
-FidoAuthenticator::GetAssertionPINDisposition
-FidoAuthenticator::WillNeedPINToGetAssertion(
+FidoAuthenticator::PINUVDisposition
+FidoAuthenticator::PINUVDispositionForGetAssertion(
     const CtapGetAssertionRequest& request,
     const FidoRequestHandlerBase::Observer* observer) {
-  return GetAssertionPINDisposition::kNoPIN;
+  return PINUVDisposition::kNoUV;
 }
 
 void FidoAuthenticator::GetCredentialsMetadata(
@@ -147,9 +162,17 @@ base::Optional<base::span<const int32_t>> FidoAuthenticator::GetAlgorithms() {
   return base::nullopt;
 }
 
+bool FidoAuthenticator::DiscoverableCredentialStorageFull() const {
+  return false;
+}
+
 void FidoAuthenticator::Reset(ResetCallback callback) {
   std::move(callback).Run(CtapDeviceResponseCode::kCtap1ErrInvalidCommand,
                           base::nullopt);
+}
+
+std::string FidoAuthenticator::GetDisplayName() const {
+  return GetId();
 }
 
 ProtocolVersion FidoAuthenticator::SupportedProtocol() const {
@@ -165,6 +188,10 @@ bool FidoAuthenticator::SupportsHMACSecretExtension() const {
 }
 
 bool FidoAuthenticator::SupportsEnterpriseAttestation() const {
+  return false;
+}
+
+bool FidoAuthenticator::SupportsCredBlobOfSize(size_t num_bytes) const {
   return false;
 }
 

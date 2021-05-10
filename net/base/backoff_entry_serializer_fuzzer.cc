@@ -38,6 +38,10 @@ class ProtoTranslator {
     return base::Time() +
            base::TimeDelta::FromMicroseconds(input_.parse_time());
   }
+  base::TimeTicks parse_time_ticks() const {
+    return base::TimeTicks() +
+           base::TimeDelta::FromMicroseconds(input_.parse_time());
+  }
   base::Time serialize_time() const {
     return base::Time() +
            base::TimeDelta::FromMicroseconds(input_.serialize_time());
@@ -95,7 +99,7 @@ void TestDeserialize(const ProtoTranslator& translator) {
   BackoffEntry::Policy policy = translator.policy();
 
   MockClock clock;
-  clock.SetNow(translator.now_ticks());
+  clock.SetNow(translator.parse_time_ticks());
 
   // Attempt to deserialize a BackoffEntry.
   std::unique_ptr<BackoffEntry> entry =
@@ -166,6 +170,11 @@ DEFINE_PROTO_FUZZER(const fuzz_proto::FuzzerInput& input) {
   }
 
   ProtoTranslator translator(input);
+  // Skip this input if any of the time values are infinite.
+  if (translator.now_ticks().is_inf() || translator.parse_time().is_inf() ||
+      translator.serialize_time().is_inf()) {
+    return;
+  }
   TestDeserialize(translator);
   TestSerialize(translator);
 }

@@ -10,7 +10,7 @@
 #include "third_party/blink/public/common/input/web_pointer_event.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/public/resources/grit/inspector_overlay_resources_map.h"
-#include "third_party/blink/renderer/core/css/css_color_value.h"
+#include "third_party/blink/renderer/core/css/css_color.h"
 #include "third_party/blink/renderer/core/css/css_computed_style_declaration.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -23,6 +23,7 @@
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/inspector/inspector_css_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_dom_agent.h"
+#include "third_party/blink/renderer/core/inspector/node_content_visibility_state.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -44,12 +45,14 @@ InspectorHighlightContrastInfo FetchContrast(Node* node) {
   Vector<Color> bgcolors;
   String font_size;
   String font_weight;
+  float text_opacity = 1.0f;
   InspectorCSSAgent::GetBackgroundColors(element, &bgcolors, &font_size,
-                                         &font_weight);
+                                         &font_weight, &text_opacity);
   if (bgcolors.size() == 1) {
     result.font_size = font_size;
     result.font_weight = font_weight;
     result.background_color = bgcolors[0];
+    result.text_opacity = text_opacity;
   }
   return result;
 }
@@ -98,6 +101,38 @@ Node* HoveredNodeForEvent(LocalFrame* frame,
       ignore_pointer_events_none);
 }
 
+bool IsSelfLocked(Node* node) {
+  auto* element = DynamicTo<Element>(node);
+  if (!element)
+    return false;
+
+  auto* context = element->GetDisplayLockContext();
+  if (!context)
+    return false;
+
+  return context->IsLocked();
+}
+
+NodeContentVisibilityState DetermineSelfContentVisibilityState(Node* node) {
+  return IsSelfLocked(node) ? NodeContentVisibilityState::kIsLocked
+                            : NodeContentVisibilityState::kNone;
+}
+
+std::pair<Node*, NodeContentVisibilityState> DetermineContentVisibilityState(
+    Node* node) {
+  DCHECK(node);
+  std::pair<Node*, NodeContentVisibilityState> result;
+  if (auto* locked_ancestor =
+          DisplayLockUtilities::HighestLockedExclusiveAncestor(*node)) {
+    result.first = locked_ancestor;
+    result.second = NodeContentVisibilityState::kIsLockedAncestor;
+  } else {
+    result.first = node;
+    result.second = DetermineSelfContentVisibilityState(node);
+  }
+  return result;
+}
+
 }  // namespace
 
 // SearchingForNodeTool --------------------------------------------------------
@@ -116,6 +151,10 @@ SearchingForNodeTool::SearchingForNodeTool(InspectorOverlayAgent* overlay,
     highlight_config_ =
         InspectorOverlayAgent::ToHighlightConfig(parsed_config.get());
   }
+}
+
+String SearchingForNodeTool::GetOverlayName() {
+  return OverlayNames::OVERLAY_HIGHLIGHT;
 }
 
 void SearchingForNodeTool::Trace(Visitor* visitor) const {
@@ -137,7 +176,8 @@ void SearchingForNodeTool::Draw(float scale) {
                              node->GetDocument().GetFrame();
   overlay_->EnsureAXContext(node);
   InspectorHighlight highlight(node, *highlight_config_, contrast_info_,
-                               append_element_info, false, is_locked_ancestor_);
+                               append_element_info, false,
+                               content_visibility_state_);
   if (event_target_node_) {
     highlight.AppendEventTargetQuads(event_target_node_.Get(),
                                      *highlight_config_);
@@ -153,7 +193,8 @@ bool SearchingForNodeTool::HandleInputEvent(LocalFrameView* frame_view,
                                             const WebInputEvent& input_event,
                                             bool* swallow_next_mouse_up) {
   if (input_event.GetType() == WebInputEvent::Type::kGestureScrollBegin ||
-      input_event.GetType() == WebInputEvent::Type::kGestureScrollUpdate) {
+      input_event.GetType() == WebInputEvent::Type::kGestureScrollUpdate ||
+      input_event.GetType() == WebInputEvent::Type::kMouseLeave) {
     hovered_node_.Clear();
     event_target_node_.Clear();
     overlay_->ScheduleUpdate();
@@ -184,15 +225,8 @@ bool SearchingForNodeTool::HandleMouseMove(const WebMouseEvent& event) {
   if (!node)
     return true;
 
-  // If |node| is in a display locked subtree, highlight the highest locked
-  // element instead.
-  if (Node* locked_ancestor =
-          DisplayLockUtilities::HighestLockedExclusiveAncestor(*node)) {
-    node = locked_ancestor;
-    is_locked_ancestor_ = true;
-  } else {
-    is_locked_ancestor_ = false;
-  }
+  std::tie(node, content_visibility_state_) =
+      DetermineContentVisibilityState(node);
 
   if (auto* frame_owner = DynamicTo<HTMLFrameOwnerElement>(node)) {
     if (!IsA<LocalFrame>(frame_owner->ContentFrame())) {
@@ -204,6 +238,7 @@ bool SearchingForNodeTool::HandleMouseMove(const WebMouseEvent& event) {
   }
 
   // Store values for the highlight.
+  bool hovered_node_changed = node != hovered_node_;
   hovered_node_ = node;
   event_target_node_ = (event.GetModifiers() & WebInputEvent::kShiftKey)
                            ? HoveredNodeForEvent(frame, event, false)
@@ -214,7 +249,8 @@ bool SearchingForNodeTool::HandleMouseMove(const WebMouseEvent& event) {
                   (WebInputEvent::kControlKey | WebInputEvent::kMetaKey);
 
   contrast_info_ = FetchContrast(node);
-  NodeHighlightRequested(node);
+  if (hovered_node_changed)
+    NodeHighlightRequested(node);
   return true;
 }
 
@@ -275,6 +311,10 @@ QuadHighlightTool::QuadHighlightTool(InspectorOverlayAgent* overlay,
       color_(color),
       outline_color_(outline_color) {}
 
+String QuadHighlightTool::GetOverlayName() {
+  return OverlayNames::OVERLAY_HIGHLIGHT;
+}
+
 bool QuadHighlightTool::ForwardEventsToOverlay() {
   return false;
 }
@@ -300,14 +340,13 @@ NodeHighlightTool::NodeHighlightTool(
     : InspectTool(overlay, frontend),
       selector_list_(selector_list),
       highlight_config_(std::move(highlight_config)) {
-  if (Node* locked_ancestor =
-          DisplayLockUtilities::HighestLockedExclusiveAncestor(*node)) {
-    is_locked_ancestor_ = true;
-    node_ = locked_ancestor;
-  } else {
-    node_ = node;
-  }
+  std::tie(node_, content_visibility_state_) =
+      DetermineContentVisibilityState(node);
   contrast_info_ = FetchContrast(node_);
+}
+
+String NodeHighlightTool::GetOverlayName() {
+  return OverlayNames::OVERLAY_HIGHLIGHT;
 }
 
 bool NodeHighlightTool::ForwardEventsToOverlay() {
@@ -362,10 +401,12 @@ void NodeHighlightTool::DrawMatchingSelector() {
     // Skip elements in locked subtrees.
     if (DisplayLockUtilities::NearestLockedExclusiveAncestor(*element))
       continue;
+    NodeContentVisibilityState content_visibility_state =
+        DetermineSelfContentVisibilityState(element);
     InspectorHighlight highlight(element, *highlight_config_, contrast_info_,
                                  false /* append_element_info */,
                                  false /* append_distance_info */,
-                                 false /* is_locked_ancestor */);
+                                 content_visibility_state);
     overlay_->EvaluateInOverlay("drawHighlight", highlight.AsProtocolValue());
   }
 }
@@ -382,36 +423,45 @@ NodeHighlightTool::GetNodeInspectorHighlightAsJson(
   overlay_->EnsureAXContext(node_.Get());
   InspectorHighlight highlight(node_.Get(), *highlight_config_, contrast_info_,
                                append_element_info, append_distance_info,
-                               is_locked_ancestor_);
+                               content_visibility_state_);
   return highlight.AsProtocolValue();
 }
 
 // GridHighlightTool -----------------------------------------------------------
-
-int GridHighlightTool::GetDataResourceId() {
-  return IDR_INSPECT_TOOL_HIGHLIGHT_GRID_JS;
+String PersistentTool::GetOverlayName() {
+  return OverlayNames::OVERLAY_PERSISTENT;
 }
 
-void GridHighlightTool::AddGridConfig(
-    Node* node,
-    std::unique_ptr<InspectorGridHighlightConfig> grid_highlight_config) {
-  grid_node_highlights_.emplace_back(
-      std::make_pair(node, std::move(grid_highlight_config)));
+bool PersistentTool::IsEmpty() {
+  return !grid_node_highlights_.size() && !flex_container_configs_.size() &&
+         !scroll_snap_configs_.size();
 }
 
-bool GridHighlightTool::ForwardEventsToOverlay() {
+void PersistentTool::SetGridConfigs(GridConfigs configs) {
+  grid_node_highlights_ = std::move(configs);
+}
+
+void PersistentTool::SetFlexContainerConfigs(FlexContainerConfigs configs) {
+  flex_container_configs_ = std::move(configs);
+}
+
+void PersistentTool::SetScrollSnapConfigs(ScrollSnapConfigs configs) {
+  scroll_snap_configs_ = std::move(configs);
+}
+
+bool PersistentTool::ForwardEventsToOverlay() {
   return false;
 }
 
-bool GridHighlightTool::HideOnHideHighlight() {
+bool PersistentTool::HideOnHideHighlight() {
   return false;
 }
 
-bool GridHighlightTool::HideOnMouseMove() {
+bool PersistentTool::HideOnMouseMove() {
   return false;
 }
 
-void GridHighlightTool::Draw(float scale) {
+void PersistentTool::Draw(float scale) {
   for (auto& entry : grid_node_highlights_) {
     std::unique_ptr<protocol::Value> highlight =
         InspectorGridHighlight(entry.first.Get(), *(entry.second));
@@ -419,10 +469,26 @@ void GridHighlightTool::Draw(float scale) {
       continue;
     overlay_->EvaluateInOverlay("drawGridHighlight", std::move(highlight));
   }
+  for (auto& entry : flex_container_configs_) {
+    std::unique_ptr<protocol::Value> highlight =
+        InspectorFlexContainerHighlight(entry.first.Get(), *(entry.second));
+    if (!highlight)
+      continue;
+    overlay_->EvaluateInOverlay("drawFlexContainerHighlight",
+                                std::move(highlight));
+  }
+  for (auto& entry : scroll_snap_configs_) {
+    std::unique_ptr<protocol::Value> highlight =
+        InspectorScrollSnapHighlight(entry.first.Get(), *(entry.second));
+    if (!highlight)
+      continue;
+    overlay_->EvaluateInOverlay("drawScrollSnapHighlight",
+                                std::move(highlight));
+  }
 }
 
 std::unique_ptr<protocol::DictionaryValue>
-GridHighlightTool::GetGridInspectorHighlightsAsJson() const {
+PersistentTool::GetGridInspectorHighlightsAsJson() const {
   std::unique_ptr<protocol::ListValue> highlights =
       protocol::ListValue::create();
   for (auto& entry : grid_node_highlights_) {
@@ -449,12 +515,11 @@ SourceOrderTool::SourceOrderTool(
     std::unique_ptr<InspectorSourceOrderConfig> source_order_config)
     : InspectTool(overlay, frontend),
       source_order_config_(std::move(source_order_config)) {
-  if (Node* locked_ancestor =
-          DisplayLockUtilities::HighestLockedExclusiveAncestor(*node)) {
-    node_ = locked_ancestor;
-  } else {
-    node_ = node;
-  }
+  node_ = DetermineContentVisibilityState(node).first;
+}
+
+String SourceOrderTool::GetOverlayName() {
+  return OverlayNames::OVERLAY_SOURCE_ORDER;
 }
 
 void SourceOrderTool::Draw(float scale) {
@@ -501,10 +566,6 @@ bool SourceOrderTool::HideOnMouseMove() {
   return false;
 }
 
-int SourceOrderTool::GetDataResourceId() {
-  return IDR_INSPECT_TOOL_SOURCE_ORDER_JS;
-}
-
 std::unique_ptr<protocol::DictionaryValue>
 SourceOrderTool::GetNodeInspectorSourceOrderHighlightAsJson() const {
   InspectorSourceOrderHighlight highlight(
@@ -519,8 +580,8 @@ void SourceOrderTool::Trace(Visitor* visitor) const {
 
 // NearbyDistanceTool ----------------------------------------------------------
 
-int NearbyDistanceTool::GetDataResourceId() {
-  return IDR_INSPECT_TOOL_DISTANCES_JS;
+String NearbyDistanceTool::GetOverlayName() {
+  return OverlayNames::OVERLAY_DISTANCES;
 }
 
 bool NearbyDistanceTool::HandleMouseDown(const WebMouseEvent& event,
@@ -551,12 +612,7 @@ bool NearbyDistanceTool::HandleMouseMove(const WebMouseEvent& event) {
       return false;
     }
   }
-
-  // If |node| is in a display locked subtree, highlight the highest locked
-  // element instead.
-  if (Node* locked_ancestor =
-          DisplayLockUtilities::HighestLockedExclusiveAncestor(*node))
-    node = locked_ancestor;
+  node = DetermineContentVisibilityState(node).first;
 
   // Store values for the highlight.
   hovered_node_ = node;
@@ -572,10 +628,11 @@ void NearbyDistanceTool::Draw(float scale) {
   if (!node)
     return;
   overlay_->EnsureAXContext(node);
+  auto content_visibility_state = DetermineSelfContentVisibilityState(node);
   InspectorHighlight highlight(
       node, InspectorHighlight::DefaultConfig(),
       InspectorHighlightContrastInfo(), false /* append_element_info */,
-      true /* append_distance_info */, false /* is_locked_ancestor */);
+      true /* append_distance_info */, content_visibility_state);
   overlay_->EvaluateInOverlay("drawDistances", highlight.AsProtocolValue());
 }
 
@@ -590,8 +647,8 @@ void ShowViewSizeTool::Draw(float scale) {
   overlay_->EvaluateInOverlay("drawViewSize", "");
 }
 
-int ShowViewSizeTool::GetDataResourceId() {
-  return IDR_INSPECT_TOOL_VIEWPORT_SIZE_JS;
+String ShowViewSizeTool::GetOverlayName() {
+  return OverlayNames::OVERLAY_VIEWPORT_SIZE;
 }
 
 bool ShowViewSizeTool::ForwardEventsToOverlay() {
@@ -609,8 +666,8 @@ ScreenshotTool::ScreenshotTool(InspectorOverlayAgent* overlay,
   client.SetCursorOverridden(true);
 }
 
-int ScreenshotTool::GetDataResourceId() {
-  return IDR_INSPECT_TOOL_SCREENSHOT_JS;
+String ScreenshotTool::GetOverlayName() {
+  return OverlayNames::OVERLAY_SCREENSHOT;
 }
 
 void ScreenshotTool::Dispatch(const String& message) {
@@ -686,8 +743,8 @@ void ScreenshotTool::Dispatch(const String& message) {
 
 // PausedInDebuggerTool --------------------------------------------------------
 
-int PausedInDebuggerTool::GetDataResourceId() {
-  return IDR_INSPECT_TOOL_PAUSED_JS;
+String PausedInDebuggerTool::GetOverlayName() {
+  return OverlayNames::OVERLAY_PAUSED;
 }
 
 void PausedInDebuggerTool::Draw(float scale) {

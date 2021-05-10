@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/browser_accessibility.h"
@@ -66,7 +65,7 @@ class MAYBE_SitePerProcessAccessibilityBrowserTest
         frame_tree_node->render_manager()->current_frame_host();
     RenderFrameDeletedObserver deleted_observer(child_rfh);
     GURL cross_site_url(embedded_test_server()->GetURL(host, relative_url));
-    NavigateFrameToURL(frame_tree_node, cross_site_url);
+    EXPECT_TRUE(NavigateToURLFromRenderer(frame_tree_node, cross_site_url));
 
     // Ensure that we have created a new process for the subframe.
     SiteInstance* site_instance =
@@ -94,7 +93,7 @@ IN_PROC_BROWSER_TEST_P(MAYBE_SitePerProcessAccessibilityBrowserTest,
   // Load same-site page into iframe.
   FrameTreeNode* child = root->child_at(0);
   GURL http_url(embedded_test_server()->GetURL("/title1.html"));
-  NavigateFrameToURL(child, http_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(child, http_url));
 
   // Load cross-site page into iframe and wait for text from that
   // page to appear in the accessibility tree.
@@ -200,7 +199,8 @@ IN_PROC_BROWSER_TEST_P(MAYBE_SitePerProcessAccessibilityBrowserTest,
                                                 "Title Of Awesomeness");
 }
 
-INSTANTIATE_TEST_SUITE_P(MAYBE_All,
-                         MAYBE_SitePerProcessAccessibilityBrowserTest,
-                         testing::ValuesIn(RenderDocumentFeatureLevelValues()));
+INSTANTIATE_TEST_SUITE_P(
+    MAYBE_All,
+    MAYBE_SitePerProcessAccessibilityBrowserTest,
+    ::testing::ValuesIn(RenderDocumentFeatureLevelValues()));
 }  // namespace content

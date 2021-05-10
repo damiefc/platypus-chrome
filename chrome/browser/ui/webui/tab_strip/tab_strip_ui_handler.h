@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_WEBUI_TAB_STRIP_TAB_STRIP_UI_HANDLER_H_
 
 #include "base/macros.h"
+#include "base/timer/timer.h"
 #include "base/values.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
@@ -13,19 +14,22 @@
 #include "chrome/browser/ui/webui/tab_strip/tab_before_unload_tracker.h"
 #include "chrome/browser/ui/webui/tab_strip/thumbnail_tracker.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
 class Browser;
 class TabStripUIEmbedder;
 
 class TabStripUIHandler : public content::WebUIMessageHandler,
-                          public TabStripModelObserver {
+                          public TabStripModelObserver,
+                          public content::WebContentsDelegate {
  public:
   explicit TabStripUIHandler(Browser* browser, TabStripUIEmbedder* embedder);
   ~TabStripUIHandler() override;
 
   void NotifyLayoutChanged();
   void NotifyReceivedKeyboardFocus();
+  void NotifyContextMenuClosed();
 
   // TabStripModelObserver:
   void OnTabGroupChanged(const TabGroupChange& change) override;
@@ -45,6 +49,10 @@ class TabStripUIHandler : public content::WebUIMessageHandler,
   void TabBlockedStateChanged(content::WebContents* contents,
                               int index) override;
 
+  // content::WebContentsDelegate:
+  bool PreHandleGestureEvent(content::WebContents* source,
+                             const blink::WebGestureEvent& event) override;
+
  protected:
   // content::WebUIMessageHandler:
   void OnJavascriptAllowed() override;
@@ -60,8 +68,11 @@ class TabStripUIHandler : public content::WebUIMessageHandler,
   FRIEND_TEST_ALL_PREFIXES(TabStripUIHandlerTest, MoveTab);
   FRIEND_TEST_ALL_PREFIXES(TabStripUIHandlerTest, MoveTabAcrossProfiles);
   FRIEND_TEST_ALL_PREFIXES(TabStripUIHandlerTest, MoveTabAcrossWindows);
+  FRIEND_TEST_ALL_PREFIXES(TabStripUIHandlerTest,
+                           RemoveTabIfInvalidContextMenu);
   FRIEND_TEST_ALL_PREFIXES(TabStripUIHandlerTest, UngroupTab);
 
+  void OnLongPressTimer();
   void HandleCreateNewTab(const base::ListValue* args);
   base::DictionaryValue GetTabData(content::WebContents* contents, int index);
   base::DictionaryValue GetTabGroupData(TabGroup* group);
@@ -93,6 +104,20 @@ class TabStripUIHandler : public content::WebUIMessageHandler,
   TabStripUIEmbedder* const embedder_;
   ThumbnailTracker thumbnail_tracker_;
   tab_strip_ui::TabBeforeUnloadTracker tab_before_unload_tracker_;
+
+  // Tracks whether we are currently handling a gesture scroll event sequence.
+  bool handling_gesture_scroll_ = false;
+
+  // The point at which the initial gesture tap event occurred and at which the
+  // drag will start.
+  gfx::Point touch_drag_start_point_;
+
+  // Timer that starts when a press gesture is encountered and runs for the
+  // duration of a long press. The timer is stopped if the tap gesture is
+  // interrupted (eg by a scroll start gesture).
+  std::unique_ptr<base::RetainingOneShotTimer> long_press_timer_;
+
+  base::WeakPtrFactory<TabStripUIHandler> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(TabStripUIHandler);
 };

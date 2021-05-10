@@ -5,12 +5,8 @@
 #ifndef BASE_TASK_THREAD_POOL_DELAYED_TASK_MANAGER_H_
 #define BASE_TASK_THREAD_POOL_DELAYED_TASK_MANAGER_H_
 
-#include <memory>
-#include <utility>
-
 #include "base/base_export.h"
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
@@ -39,6 +35,8 @@ class BASE_EXPORT DelayedTaskManager {
   // |tick_clock| can be specified for testing.
   DelayedTaskManager(
       const TickClock* tick_clock = DefaultTickClock::GetInstance());
+  DelayedTaskManager(const DelayedTaskManager&) = delete;
+  DelayedTaskManager& operator=(const DelayedTaskManager&) = delete;
   ~DelayedTaskManager();
 
   // Starts the delayed task manager, allowing past and future tasks to be
@@ -67,6 +65,8 @@ class BASE_EXPORT DelayedTaskManager {
                 PostTaskNowCallback callback,
                 scoped_refptr<TaskRunner> task_runner);
     DelayedTask(DelayedTask&& other);
+    DelayedTask(const DelayedTask&) = delete;
+    DelayedTask& operator=(const DelayedTask&) = delete;
     ~DelayedTask();
 
     // Required by IntrusiveHeap::insert().
@@ -97,7 +97,6 @@ class BASE_EXPORT DelayedTaskManager {
 
    private:
     bool scheduled_ = false;
-    DISALLOW_COPY_AND_ASSIGN(DelayedTask);
   };
 
   // Get the time at which to schedule the next |ProcessRipeTasks()| execution,
@@ -126,8 +125,6 @@ class BASE_EXPORT DelayedTaskManager {
   scoped_refptr<SequencedTaskRunner> service_thread_task_runner_;
 
   IntrusiveHeap<DelayedTask> delayed_task_queue_ GUARDED_BY(queue_lock_);
-
-  DISALLOW_COPY_AND_ASSIGN(DelayedTaskManager);
 };
 
 }  // namespace internal

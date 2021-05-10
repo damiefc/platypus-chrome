@@ -23,11 +23,11 @@
 #include "content/public/test/text_input_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "ui/base/ime/init/input_method_factory.h"
-#include "ui/base/ime/input_method_keyboard_controller.h"
-#include "ui/base/ime/input_method_keyboard_controller_observer.h"
 #include "ui/base/ime/input_method_observer.h"
 #include "ui/base/ime/mock_input_method.h"
 #include "ui/base/ime/text_input_type.h"
+#include "ui/base/ime/virtual_keyboard_controller.h"
+#include "ui/base/ime/virtual_keyboard_controller_observer.h"
 
 namespace content {
 
@@ -121,43 +121,42 @@ class TextInputManagerShowImeIfNeededObserver
   bool expected_value_ = false;
 };
 
-class MockKeyboardController : public ui::InputMethodKeyboardController {
+class MockKeyboardController : public ui::VirtualKeyboardController {
  public:
   bool DisplayVirtualKeyboard() override {
     is_keyboard_visible_ = true;
     return true;
   }
   void DismissVirtualKeyboard() override {}
-  void AddObserver(
-      ui::InputMethodKeyboardControllerObserver* observer) override {
+  void AddObserver(ui::VirtualKeyboardControllerObserver* observer) override {
     observers_.AddObserver(observer);
   }
   void RemoveObserver(
-      ui::InputMethodKeyboardControllerObserver* observer) override {
+      ui::VirtualKeyboardControllerObserver* observer) override {
     observers_.RemoveObserver(observer);
   }
 
   void NotifyObserversOnKeyboardShown(gfx::Rect dip_rect) {
     is_keyboard_visible_ = true;
-    for (ui::InputMethodKeyboardControllerObserver& observer : observers_)
+    for (ui::VirtualKeyboardControllerObserver& observer : observers_)
       observer.OnKeyboardVisible(dip_rect);
   }
 
   void NotifyObserversOnKeyboardHidden() {
     is_keyboard_visible_ = false;
-    for (ui::InputMethodKeyboardControllerObserver& observer : observers_)
+    for (ui::VirtualKeyboardControllerObserver& observer : observers_)
       observer.OnKeyboardHidden();
   }
 
   bool IsKeyboardVisible() override { return is_keyboard_visible_; }
 
  private:
-  base::ObserverList<ui::InputMethodKeyboardControllerObserver,
-                     false>::Unchecked observers_;
+  base::ObserverList<ui::VirtualKeyboardControllerObserver, false>::Unchecked
+      observers_;
   bool is_keyboard_visible_ = false;
 };
 
-class InputMethodKeyboardObserver : public ui::InputMethodObserver {
+class VirtualKeyboardObserver : public ui::InputMethodObserver {
  public:
   // ui::InputMethodObserver:
   void OnFocus() override {}
@@ -177,8 +176,7 @@ class InputMethodKeyboardObserver : public ui::InputMethodObserver {
 class KeyboardControllerMockInputMethod : public ui::MockInputMethod {
  public:
   KeyboardControllerMockInputMethod() : ui::MockInputMethod(nullptr) {}
-  ui::InputMethodKeyboardController* GetInputMethodKeyboardController()
-      override {
+  ui::VirtualKeyboardController* GetVirtualKeyboardController() override {
     return &mock_keyboard_controller_;
   }
 
@@ -194,7 +192,7 @@ class RenderWidgetHostViewAuraBrowserMockIMETest : public ContentBrowserTest {
  public:
   void SetUp() override {
     input_method_ = new KeyboardControllerMockInputMethod;
-    mock_keyboard_observer_ = new InputMethodKeyboardObserver;
+    mock_keyboard_observer_ = new VirtualKeyboardObserver;
     input_method_->AddObserver(mock_keyboard_observer_);
     // transfers ownership.
     ui::SetUpInputMethodForTesting(input_method_);
@@ -208,7 +206,8 @@ class RenderWidgetHostViewAuraBrowserMockIMETest : public ContentBrowserTest {
   }
 
   RenderViewHost* GetRenderViewHost() const {
-    RenderViewHost* const rvh = shell()->web_contents()->GetRenderViewHost();
+    RenderViewHost* const rvh =
+        shell()->web_contents()->GetMainFrame()->GetRenderViewHost();
     CHECK(rvh);
     return rvh;
   }
@@ -242,7 +241,7 @@ class RenderWidgetHostViewAuraBrowserMockIMETest : public ContentBrowserTest {
 
  protected:
   KeyboardControllerMockInputMethod* input_method_ = nullptr;
-  InputMethodKeyboardObserver* mock_keyboard_observer_ = nullptr;
+  VirtualKeyboardObserver* mock_keyboard_observer_ = nullptr;
 
  private:
   BrowserAccessibility* FindNodeInSubtree(BrowserAccessibility& node,
@@ -250,7 +249,7 @@ class RenderWidgetHostViewAuraBrowserMockIMETest : public ContentBrowserTest {
                                           const std::string& name_or_value) {
     const std::string& name =
         node.GetStringAttribute(ax::mojom::StringAttribute::kName);
-    const std::string& value = base::UTF16ToUTF8(node.GetValue());
+    const std::string value = base::UTF16ToUTF8(node.GetValueForControl());
     if (node.GetRole() == role &&
         (name == name_or_value || value == name_or_value)) {
       return &node;
@@ -277,18 +276,21 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewAuraBrowserMockIMETest,
   const char kVirtualKeyboardDataURL[] =
       "data:text/html,<!DOCTYPE html>"
       "<script>"
-      "  let VKRect, x, y, width, height, numEvents = 0;"
+      "  let VKRect = navigator.virtualKeyboard.boundingRect, numEvents = 0;"
       "  navigator.virtualKeyboard.overlaysContent = true;"
       "  navigator.virtualKeyboard.addEventListener('geometrychange',"
       "   evt => {"
       "     numEvents++;"
-      "     let r = evt.boundingRect;"
-      "     x = r.x; y = r.y; width = r.width; height = r.height;"
       "     VKRect = navigator.virtualKeyboard.boundingRect"
       "   }, false);"
       "</script>";
   EXPECT_TRUE(NavigateToURL(shell(), GURL(kVirtualKeyboardDataURL)));
 
+  // Check the boundingRect property so it's not null when queried.
+  EXPECT_EQ(0, EvalJs(shell(), "VKRect.x"));
+  EXPECT_EQ(0, EvalJs(shell(), "VKRect.y"));
+  EXPECT_EQ(0, EvalJs(shell(), "VKRect.width"));
+  EXPECT_EQ(0, EvalJs(shell(), "VKRect.height"));
   // Send a touch event so that RenderWidgetHostViewAura will create the
   // keyboard observer (requires last_pointer_type_ to be TOUCH).
   ui::TouchEvent press(ui::ET_TOUCH_PRESSED, gfx::Point(30, 30),
@@ -332,10 +334,6 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewAuraBrowserMockIMETest,
   const int expected_y = kKeyboardY - root_widget_origin.y();
 
   EXPECT_EQ(1, EvalJs(shell(), "numEvents"));
-  EXPECT_EQ(0, EvalJs(shell(), "x"));
-  EXPECT_EQ(expected_y, EvalJs(shell(), "y"));
-  EXPECT_EQ(expected_width, EvalJs(shell(), "width"));
-  EXPECT_EQ(kKeyboardHeight, EvalJs(shell(), "height"));
   EXPECT_EQ(0, EvalJs(shell(), "VKRect.x"));
   EXPECT_EQ(expected_y, EvalJs(shell(), "VKRect.y"));
   EXPECT_EQ(expected_width, EvalJs(shell(), "VKRect.width"));
@@ -343,10 +341,6 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewAuraBrowserMockIMETest,
 
   input_method_->GetMockKeyboardController()->NotifyObserversOnKeyboardHidden();
   EXPECT_EQ(2, EvalJs(shell(), "numEvents"));
-  EXPECT_EQ(0, EvalJs(shell(), "width"));
-  EXPECT_EQ(0, EvalJs(shell(), "height"));
-  EXPECT_EQ(0, EvalJs(shell(), "x"));
-  EXPECT_EQ(0, EvalJs(shell(), "y"));
   EXPECT_EQ(0, EvalJs(shell(), "VKRect.x"));
   EXPECT_EQ(0, EvalJs(shell(), "VKRect.y"));
   EXPECT_EQ(0, EvalJs(shell(), "VKRect.width"));
@@ -728,9 +722,9 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewAuraBrowserMockIMETest,
       "<script>"
       " let elemRect = txt3.getBoundingClientRect();"
       " const editContext = new EditContext();"
+      " txt3.editContext = editContext;"
       " editContext.inputPanelPolicy = \"manual\";"
       " function FocusIn1() {"
-      "   editContext.focus();"
       "   navigator.virtualKeyboard.show();"
       "  }"
       " function HideVKCalled() {"

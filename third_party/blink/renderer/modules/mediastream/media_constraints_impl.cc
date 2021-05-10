@@ -35,13 +35,13 @@
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_constraints.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -367,15 +367,16 @@ static void ParseOldStyleNames(
       }
       result.enable_dtls_srtp.SetExact(ToBoolean(constraint.value_));
     } else if (constraint.name_.Equals(kEnableRtpDataChannels)) {
+      // This constraint does not turn on RTP data channels, but we do not
+      // want it to cause an error, so we parse it and ignore it.
       bool value = ToBoolean(constraint.value_);
       if (value) {
-        UseCounter::Count(context,
-                          WebFeature::kRTCConstraintEnableRtpDataChannelsTrue);
+        Deprecation::CountDeprecation(
+            context, WebFeature::kRTCConstraintEnableRtpDataChannelsTrue);
       } else {
-        UseCounter::Count(context,
-                          WebFeature::kRTCConstraintEnableRtpDataChannelsFalse);
+        Deprecation::CountDeprecation(
+            context, WebFeature::kRTCConstraintEnableRtpDataChannelsFalse);
       }
-      result.enable_rtp_data_channels.SetExact(ToBoolean(constraint.value_));
     } else if (constraint.name_.Equals(kEnableDscp)) {
       result.enable_dscp.SetExact(ToBoolean(constraint.value_));
     } else if (constraint.name_.Equals(kEnableIPv6)) {
@@ -394,21 +395,6 @@ static void ParseOldStyleNames(
           atoi(constraint.value_.Utf8().c_str()));
     } else if (constraint.name_.Equals(kCpuOveruseDetection)) {
       result.goog_cpu_overuse_detection.SetExact(ToBoolean(constraint.value_));
-    } else if (constraint.name_.Equals(kCpuUnderuseThreshold)) {
-      result.goog_cpu_underuse_threshold.SetExact(
-          atoi(constraint.value_.Utf8().c_str()));
-    } else if (constraint.name_.Equals(kCpuOveruseThreshold)) {
-      result.goog_cpu_overuse_threshold.SetExact(
-          atoi(constraint.value_.Utf8().c_str()));
-    } else if (constraint.name_.Equals(kCpuUnderuseEncodeRsdThreshold)) {
-      result.goog_cpu_underuse_encode_rsd_threshold.SetExact(
-          atoi(constraint.value_.Utf8().c_str()));
-    } else if (constraint.name_.Equals(kCpuOveruseEncodeRsdThreshold)) {
-      result.goog_cpu_overuse_encode_rsd_threshold.SetExact(
-          atoi(constraint.value_.Utf8().c_str()));
-    } else if (constraint.name_.Equals(kCpuOveruseEncodeUsage)) {
-      result.goog_cpu_overuse_encode_usage.SetExact(
-          ToBoolean(constraint.value_));
     } else if (constraint.name_.Equals(kHighStartBitrate)) {
       result.goog_high_start_bitrate.SetExact(
           atoi(constraint.value_.Utf8().c_str()));
@@ -416,7 +402,12 @@ static void ParseOldStyleNames(
       result.goog_payload_padding.SetExact(ToBoolean(constraint.value_));
     } else if (constraint.name_.Equals(kAudioLatency)) {
       result.goog_latency_ms.SetExact(atoi(constraint.value_.Utf8().c_str()));
-    } else if (constraint.name_.Equals(kGoogLeakyBucket) ||
+    } else if (constraint.name_.Equals(kCpuUnderuseThreshold) ||
+               constraint.name_.Equals(kCpuOveruseThreshold) ||
+               constraint.name_.Equals(kCpuUnderuseEncodeRsdThreshold) ||
+               constraint.name_.Equals(kCpuOveruseEncodeRsdThreshold) ||
+               constraint.name_.Equals(kCpuOveruseEncodeUsage) ||
+               constraint.name_.Equals(kGoogLeakyBucket) ||
                constraint.name_.Equals(kGoogBeamforming) ||
                constraint.name_.Equals(kGoogArrayGeometry) ||
                constraint.name_.Equals(kPowerLineFrequency) ||
@@ -481,7 +472,7 @@ static MediaConstraints CreateFromNamedConstraints(
     Vector<NameValueStringConstraint> element_as_list(1, optional_constraint);
     ParseOldStyleNames(context, element_as_list, false, advanced_element,
                        ignored_error_state);
-    if (!advanced_element.IsEmpty())
+    if (!advanced_element.IsUnconstrained())
       advanced_vector.push_back(advanced_element);
   }
   constraints.Initialize(basic, advanced_vector);
@@ -758,7 +749,7 @@ MediaConstraints Create(ExecutionContext* context,
   MediaConstraints standard_form =
       ConvertTrackConstraintsToMediaConstraints(constraints_in);
   if (constraints_in->hasOptional() || constraints_in->hasMandatory()) {
-    if (!standard_form.IsEmpty()) {
+    if (!standard_form.IsUnconstrained()) {
       UseCounter::Count(context, WebFeature::kMediaStreamConstraintsOldAndNew);
       error_state.ThrowTypeError(
           "Malformed constraint: Cannot use both optional/mandatory and "
@@ -834,7 +825,7 @@ LongOrConstrainLongRange ConvertLong(const LongConstraint& input,
   LongOrConstrainLongRange output_union;
   if (UseNakedNumeric(input, naked_treatment)) {
     output_union.SetLong(GetNakedValue<uint32_t>(input, naked_treatment));
-  } else if (!input.IsEmpty()) {
+  } else if (!input.IsUnconstrained()) {
     ConstrainLongRange* output = ConstrainLongRange::Create();
     if (input.HasExact())
       output->setExact(input.Exact());
@@ -855,7 +846,7 @@ DoubleOrConstrainDoubleRange ConvertDouble(
   DoubleOrConstrainDoubleRange output_union;
   if (UseNakedNumeric(input, naked_treatment)) {
     output_union.SetDouble(GetNakedValue<double>(input, naked_treatment));
-  } else if (!input.IsEmpty()) {
+  } else if (!input.IsUnconstrained()) {
     ConstrainDoubleRange* output = ConstrainDoubleRange::Create();
     if (input.HasExact())
       output->setExact(input.Exact());
@@ -876,7 +867,7 @@ BooleanOrDoubleOrConstrainDoubleRange ConvertBooleanOrDouble(
   BooleanOrDoubleOrConstrainDoubleRange output_union;
   if (UseNakedNumeric(input, naked_treatment)) {
     output_union.SetDouble(GetNakedValue<double>(input, naked_treatment));
-  } else if (!input.IsEmpty()) {
+  } else if (!input.IsUnconstrained()) {
     ConstrainDoubleRange* output = ConstrainDoubleRange::Create();
     if (input.HasExact())
       output->setExact(input.Exact());
@@ -920,7 +911,7 @@ StringOrStringSequenceOrConstrainDOMStringParameters ConvertString(
     } else if (!input_buffer.empty()) {
       output_union.SetString(input_buffer[0]);
     }
-  } else if (!input.IsEmpty()) {
+  } else if (!input.IsUnconstrained()) {
     ConstrainDOMStringParameters* output =
         ConstrainDOMStringParameters::Create();
     if (input.HasExact())
@@ -938,7 +929,7 @@ BooleanOrConstrainBooleanParameters ConvertBoolean(
   BooleanOrConstrainBooleanParameters output_union;
   if (UseNakedNonNumeric(input, naked_treatment)) {
     output_union.SetBoolean(GetNakedValue<bool>(input, naked_treatment));
-  } else if (!input.IsEmpty()) {
+  } else if (!input.IsUnconstrained()) {
     ConstrainBooleanParameters* output = ConstrainBooleanParameters::Create();
     if (input.HasExact())
       output->setExact(input.Exact());
@@ -952,49 +943,49 @@ BooleanOrConstrainBooleanParameters ConvertBoolean(
 void ConvertConstraintSet(const MediaTrackConstraintSetPlatform& input,
                           NakedValueDisposition naked_treatment,
                           MediaTrackConstraintSet* output) {
-  if (!input.width.IsEmpty())
+  if (!input.width.IsUnconstrained())
     output->setWidth(ConvertLong(input.width, naked_treatment));
-  if (!input.height.IsEmpty())
+  if (!input.height.IsUnconstrained())
     output->setHeight(ConvertLong(input.height, naked_treatment));
-  if (!input.aspect_ratio.IsEmpty())
+  if (!input.aspect_ratio.IsUnconstrained())
     output->setAspectRatio(ConvertDouble(input.aspect_ratio, naked_treatment));
-  if (!input.frame_rate.IsEmpty())
+  if (!input.frame_rate.IsUnconstrained())
     output->setFrameRate(ConvertDouble(input.frame_rate, naked_treatment));
-  if (!input.facing_mode.IsEmpty())
+  if (!input.facing_mode.IsUnconstrained())
     output->setFacingMode(ConvertString(input.facing_mode, naked_treatment));
-  if (!input.resize_mode.IsEmpty())
+  if (!input.resize_mode.IsUnconstrained())
     output->setResizeMode(ConvertString(input.resize_mode, naked_treatment));
-  if (!input.sample_rate.IsEmpty())
+  if (!input.sample_rate.IsUnconstrained())
     output->setSampleRate(ConvertLong(input.sample_rate, naked_treatment));
-  if (!input.sample_size.IsEmpty())
+  if (!input.sample_size.IsUnconstrained())
     output->setSampleSize(ConvertLong(input.sample_size, naked_treatment));
-  if (!input.echo_cancellation.IsEmpty()) {
+  if (!input.echo_cancellation.IsUnconstrained()) {
     output->setEchoCancellation(
         ConvertBoolean(input.echo_cancellation, naked_treatment));
   }
-  if (!input.goog_auto_gain_control.IsEmpty()) {
+  if (!input.goog_auto_gain_control.IsUnconstrained()) {
     output->setAutoGainControl(
         ConvertBoolean(input.goog_auto_gain_control, naked_treatment));
   }
-  if (!input.goog_noise_suppression.IsEmpty()) {
+  if (!input.goog_noise_suppression.IsUnconstrained()) {
     output->setNoiseSuppression(
         ConvertBoolean(input.goog_noise_suppression, naked_treatment));
   }
-  if (!input.latency.IsEmpty())
+  if (!input.latency.IsUnconstrained())
     output->setLatency(ConvertDouble(input.latency, naked_treatment));
-  if (!input.channel_count.IsEmpty())
+  if (!input.channel_count.IsUnconstrained())
     output->setChannelCount(ConvertLong(input.channel_count, naked_treatment));
-  if (!input.device_id.IsEmpty())
+  if (!input.device_id.IsUnconstrained())
     output->setDeviceId(ConvertString(input.device_id, naked_treatment));
-  if (!input.group_id.IsEmpty())
+  if (!input.group_id.IsUnconstrained())
     output->setGroupId(ConvertString(input.group_id, naked_treatment));
-  if (!input.video_kind.IsEmpty())
+  if (!input.video_kind.IsUnconstrained())
     output->setVideoKind(ConvertString(input.video_kind, naked_treatment));
-  if (!input.pan.IsEmpty())
+  if (!input.pan.IsUnconstrained())
     output->setPan(ConvertBooleanOrDouble(input.pan, naked_treatment));
-  if (!input.tilt.IsEmpty())
+  if (!input.tilt.IsUnconstrained())
     output->setTilt(ConvertBooleanOrDouble(input.tilt, naked_treatment));
-  if (!input.zoom.IsEmpty())
+  if (!input.zoom.IsUnconstrained())
     output->setZoom(ConvertBooleanOrDouble(input.zoom, naked_treatment));
   // TODO(hta): Decide the future of the nonstandard constraints.
   // If they go forward, they need to be added here.
@@ -1010,7 +1001,7 @@ MediaTrackConstraints* ConvertConstraints(const MediaConstraints& input) {
 
   HeapVector<Member<MediaTrackConstraintSet>> advanced_vector;
   for (const auto& it : input.Advanced()) {
-    if (it.IsEmpty())
+    if (it.IsUnconstrained())
       continue;
     MediaTrackConstraintSet* element = MediaTrackConstraintSet::Create();
     ConvertConstraintSet(it, NakedValueDisposition::kTreatAsExact, element);

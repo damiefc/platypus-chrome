@@ -16,13 +16,16 @@
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_sink.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_track.h"
 #include "third_party/blink/public/web/modules/mediastream/encoded_video_frame.h"
+#include "third_party/blink/public/web/modules/mediastream/media_stream_video_sink.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_track_platform.h"
+#include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
 
+class MediaStreamVideoTrackSignalObserver;
 class VideoTrackAdapterSettings;
 
 // MediaStreamVideoTrack is a video-specific representation of a
@@ -55,7 +58,7 @@ class MODULES_EXPORT MediaStreamVideoTrack : public MediaStreamTrackPlatform {
       MediaStreamVideoSource::ConstraintsOnceCallback callback,
       bool enabled);
 
-  static MediaStreamVideoTrack* GetVideoTrack(const WebMediaStreamTrack& track);
+  static MediaStreamVideoTrack* From(const MediaStreamComponent* track);
 
   // Constructors for video tracks.
   MediaStreamVideoTrack(
@@ -88,8 +91,12 @@ class MODULES_EXPORT MediaStreamVideoTrack : public MediaStreamTrackPlatform {
   // |callback| will be reset on the render thread.
   void AddSink(WebMediaStreamSink* sink,
                const VideoCaptureDeliverFrameCB& callback,
-               bool is_sink_secure);
+               MediaStreamVideoSink::IsSecure is_secure,
+               MediaStreamVideoSink::UsesAlpha uses_alpha);
   void RemoveSink(WebMediaStreamSink* sink);
+
+  // Returns the number of currently connected sinks.
+  size_t CountSinks() const;
 
   // Adds |callback| for encoded frame output on the IO thread. The function
   // will cause generation of a keyframe from the source.
@@ -139,6 +146,8 @@ class MODULES_EXPORT MediaStreamVideoTrack : public MediaStreamTrackPlatform {
     computed_frame_rate_ = frame_rate;
   }
 
+  void SetMinimumFrameRate(double min_frame_rate);
+
   // Setting information about the source format. The format is computed based
   // on incoming frames and it's used for applying constraints for remote video
   // tracks. Passed as callback on MediaStreamVideoTrack::AddTrack, and run from
@@ -155,6 +164,17 @@ class MODULES_EXPORT MediaStreamVideoTrack : public MediaStreamTrackPlatform {
 
   void OnFrameDropped(media::VideoCaptureFrameDropReason reason);
 
+  MediaStreamVideoTrackSignalObserver* SignalObserver();
+  void SetSignalObserver(MediaStreamVideoTrackSignalObserver* observer);
+
+  bool IsRefreshFrameTimerRunningForTesting() {
+    return refresh_timer_.IsRunning();
+  }
+
+  void SetIsScreencastForTesting(bool is_screencast) {
+    is_screencast_ = is_screencast;
+  }
+
  private:
   FRIEND_TEST_ALL_PREFIXES(MediaStreamRemoteVideoSourceTest, StartTrack);
   FRIEND_TEST_ALL_PREFIXES(MediaStreamRemoteVideoSourceTest, RemoteTrackStop);
@@ -164,6 +184,10 @@ class MODULES_EXPORT MediaStreamVideoTrack : public MediaStreamTrackPlatform {
 
   void UpdateSourceCapturingSecure();
   void UpdateSourceHasConsumers();
+
+  void RequestRefreshFrame();
+  void StartTimerForRequestingFrames();
+  void ResetRefreshTimer();
 
   // In debug builds, check that all methods that could cause object graph
   // or data flow changes are being called on the main thread.
@@ -194,12 +218,18 @@ class MODULES_EXPORT MediaStreamVideoTrack : public MediaStreamTrackPlatform {
   // This is used for tracking if all connected video sinks are secure.
   SecureDisplayLinkTracker<WebMediaStreamSink> secure_tracker_;
 
+  // This is used for tracking if no connected video use alpha.
+  HashSet<WebMediaStreamSink*> alpha_using_sinks_;
+
   // Remembering our desired video size and frame rate.
   int width_ = 0;
   int height_ = 0;
   double frame_rate_ = 0.0;
   base::Optional<double> computed_frame_rate_;
   media::VideoCaptureFormat computed_source_format_;
+  base::RepeatingTimer refresh_timer_;
+
+  WeakPersistent<MediaStreamVideoTrackSignalObserver> signal_observer_;
 
   base::WeakPtrFactory<MediaStreamVideoTrack> weak_factory_{this};
 

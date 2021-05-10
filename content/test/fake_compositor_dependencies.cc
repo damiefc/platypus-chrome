@@ -22,55 +22,23 @@ FakeCompositorDependencies::FakeCompositorDependencies() {
 FakeCompositorDependencies::~FakeCompositorDependencies() {
 }
 
-bool FakeCompositorDependencies::IsLcdTextEnabled() {
-  return false;
-}
-
-bool FakeCompositorDependencies::IsElasticOverscrollEnabled() {
-  return true;
-}
-
 bool FakeCompositorDependencies::IsUseZoomForDSFEnabled() {
   return use_zoom_for_dsf_;
-}
-
-bool FakeCompositorDependencies::IsSingleThreaded() {
-  // Currently never threaded compositing in unit tests.
-  return true;
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
-FakeCompositorDependencies::GetCleanupTaskRunner() {
-  return base::ThreadTaskRunnerHandle::Get();
-}
-
-blink::scheduler::WebThreadScheduler*
-FakeCompositorDependencies::GetWebMainThreadScheduler() {
-  return &main_thread_scheduler_;
 }
 
 cc::TaskGraphRunner* FakeCompositorDependencies::GetTaskGraphRunner() {
   return &task_graph_runner_;
 }
 
-bool FakeCompositorDependencies::IsScrollAnimatorEnabled() {
-  return false;
+gfx::RenderingPipeline* FakeCompositorDependencies::GetMainThreadPipeline() {
+  // TODO(crbug.com/1157620): Implement to test rendering pipelines.
+  return nullptr;
 }
 
-std::unique_ptr<cc::UkmRecorderFactory>
-FakeCompositorDependencies::CreateUkmRecorderFactory() {
-  return std::make_unique<cc::TestUkmRecorderFactory>();
-}
-
-void FakeCompositorDependencies::RequestNewLayerTreeFrameSink(
-    RenderWidget* render_widget,
-    const GURL& url,
-    LayerTreeFrameSinkCallback callback,
-    const char* client_name) {
-  std::unique_ptr<cc::FakeLayerTreeFrameSink> sink =
-      cc::FakeLayerTreeFrameSink::Create3d();
-  last_created_frame_sink_ = sink.get();
-  std::move(callback).Run(std::move(sink), nullptr);
+gfx::RenderingPipeline*
+FakeCompositorDependencies::GetCompositorThreadPipeline() {
+  // TODO(crbug.com/1157620): Implement to test rendering pipelines.
+  return nullptr;
 }
 
 }  // namespace content

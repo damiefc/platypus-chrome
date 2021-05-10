@@ -5,7 +5,7 @@
 #include "gpu/vulkan/android/vulkan_implementation_android.h"
 
 #include "base/android/android_hardware_buffer_compat.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info.h"
@@ -61,8 +61,7 @@ std::unique_ptr<VulkanSurface> VulkanImplementationAndroid::CreateViewSurface(
   }
 
   return std::make_unique<VulkanSurface>(vulkan_instance_.vk_instance(), window,
-                                         surface,
-                                         false /* use_protected_memory */);
+                                         surface);
 }
 
 bool VulkanImplementationAndroid::GetPhysicalDevicePresentationSupport(
@@ -91,7 +90,6 @@ VulkanImplementationAndroid::GetOptionalDeviceExtensions() {
       VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
       VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
       VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
-      VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME,
       VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME,
       VK_KHR_SWAPCHAIN_EXTENSION_NAME,
       VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME,

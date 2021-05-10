@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Copyright 2021 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<!--  TODO(petewil): Redo as a follow management list item -->
+<org.chromium.chrome.browser.feed.followmanagement.FollowManagementItemView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:orientation="horizontal"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content" >
+
+    <ImageView
+        android:id="@+id/follow_management_favicon"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:src="@drawable/star_gray"
+        tools:ignore="ContentDescription" />
+
+    <RelativeLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1" >
+
+        <TextView
+            android:id="@+id/follow_management_item_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.TextLarge.Primary" />
+
+        <TextView
+            android:id="@+id/follow_management_item_url"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.TextSmall.Secondary"
+            android:layout_below="@id/follow_management_item_text" />
+
+    </RelativeLayout>
+
+    <CheckBox
+        android:id="@+id/follow_management_subscribed_checkbox"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+</org.chromium.chrome.browser.feed.followmanagement.FollowManagementItemView>

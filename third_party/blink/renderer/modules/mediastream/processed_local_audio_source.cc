@@ -8,16 +8,19 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "media/audio/audio_source_parameters.h"
 #include "media/base/channel_layout.h"
 #include "media/base/sample_rates.h"
 #include "media/webrtc/audio_processor_controls.h"
 #include "media/webrtc/webrtc_switches.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -93,7 +96,8 @@ std::string GetAudioProcesingPropertiesLogString(
       bool_to_string(properties.goog_experimental_noise_suppression),
       bool_to_string(properties.goog_highpass_filter),
       bool_to_string(properties.goog_experimental_auto_gain_control),
-      bool_to_string(base::FeatureList::IsEnabled(features::kWebRtcHybridAgc)));
+      bool_to_string(
+          base::FeatureList::IsEnabled(::features::kWebRtcHybridAgc)));
   return str;
 }
 }  // namespace
@@ -103,6 +107,7 @@ ProcessedLocalAudioSource::ProcessedLocalAudioSource(
     const blink::MediaStreamDevice& device,
     bool disable_local_echo,
     const blink::AudioProcessingProperties& audio_processing_properties,
+    int num_requested_channels,
     ConstraintsOnceCallback started_callback,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : blink::MediaStreamAudioSource(std::move(task_runner),
@@ -110,6 +115,7 @@ ProcessedLocalAudioSource::ProcessedLocalAudioSource(
                                     disable_local_echo),
       consumer_frame_(frame),
       audio_processing_properties_(audio_processing_properties),
+      num_requested_channels_(num_requested_channels),
       started_callback_(std::move(started_callback)),
       volume_(0),
       allow_invalid_render_frame_id_for_testing_(false) {
@@ -274,8 +280,10 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
 
   media::AudioSourceParameters source_params(device().session_id());
   blink::WebRtcLogMessage("Using APM in renderer process.");
+  bool use_multichannel_processing = num_requested_channels_ > 1;
   audio_processor_ = new rtc::RefCountedObject<MediaStreamAudioProcessor>(
-      audio_processing_properties_, rtc_audio_device);
+      audio_processing_properties_, use_multichannel_processing,
+      rtc_audio_device);
   params.set_frames_per_buffer(GetBufferSize(device().input.sample_rate()));
   audio_processor_->OnCaptureFormatChanged(params);
   SetFormat(audio_processor_->OutputFormat());
@@ -287,7 +295,7 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
       params.AsHumanReadableString().c_str(),
       GetAudioParameters().AsHumanReadableString().c_str()));
   auto* web_frame =
-      static_cast<WebLocalFrame*>(WebFrame::FromFrame(consumer_frame_));
+      static_cast<WebLocalFrame*>(WebFrame::FromCoreFrame(consumer_frame_));
   scoped_refptr<media::AudioCapturerSource> new_source =
       Platform::Current()->NewAudioCapturerSource(web_frame, source_params);
   new_source->Initialize(params, this);
@@ -334,6 +342,14 @@ ProcessedLocalAudioSource::GetAudioProcessor() const {
 
 bool ProcessedLocalAudioSource::HasAudioProcessing() const {
   return audio_processor_ && audio_processor_->has_audio_processing();
+}
+
+void ProcessedLocalAudioSource::SetOutputWillBeMuted(bool muted) {
+  if (base::FeatureList::IsEnabled(
+          features::kMinimizeAudioProcessingForUnusedOutput) &&
+      HasAudioProcessing()) {
+    audio_processor_->SetOutputWillBeMuted(muted);
+  }
 }
 
 void ProcessedLocalAudioSource::SetVolume(int volume) {
@@ -408,7 +424,7 @@ void ProcessedLocalAudioSource::CaptureUsingProcessor(
     bool key_pressed) {
 #if defined(OS_WIN) || defined(OS_MAC)
   DCHECK_LE(volume, 1.0);
-#elif (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_OPENBSD)
+#elif defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS) || defined(OS_OPENBSD)
   // We have a special situation on Linux where the microphone volume can be
   // "higher than maximum". The input volume slider in the sound preference
   // allows the user to set a scaling that is higher than 100%. It means that
@@ -454,9 +470,13 @@ void ProcessedLocalAudioSource::CaptureUsingProcessor(
   media::AudioBus* processed_data = nullptr;
   base::TimeDelta processed_data_audio_delay;
   int new_volume = 0;
+
+  // Maximum number of channels used by the sinks.
+  const int num_preferred_channels = NumPreferredChannels();
+
   while (audio_processor_->ProcessAndConsumeData(
-      current_volume, key_pressed, &processed_data, &processed_data_audio_delay,
-      &new_volume)) {
+      current_volume, num_preferred_channels, key_pressed, &processed_data,
+      &processed_data_audio_delay, &new_volume)) {
     DCHECK(processed_data);
 
     level_calculator_.Calculate(*processed_data, force_report_nonzero_energy);

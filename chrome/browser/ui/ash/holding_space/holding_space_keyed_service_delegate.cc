@@ -19,14 +19,6 @@ ProfileManager* GetProfileManager() {
 
 HoldingSpaceKeyedServiceDelegate::~HoldingSpaceKeyedServiceDelegate() = default;
 
-void HoldingSpaceKeyedServiceDelegate::Shutdown() {}
-
-void HoldingSpaceKeyedServiceDelegate::NotifyDownloadsRestored() {
-  DCHECK(is_restoring_downloads_);
-  is_restoring_downloads_ = false;
-  OnDownloadsRestored();
-}
-
 void HoldingSpaceKeyedServiceDelegate::NotifyPersistenceRestored() {
   DCHECK(is_restoring_persistence_);
   is_restoring_persistence_ = false;
@@ -34,21 +26,22 @@ void HoldingSpaceKeyedServiceDelegate::NotifyPersistenceRestored() {
 }
 
 HoldingSpaceKeyedServiceDelegate::HoldingSpaceKeyedServiceDelegate(
-    Profile* profile,
+    HoldingSpaceKeyedService* service,
     HoldingSpaceModel* model)
-    : profile_(profile), model_(model) {
-  // It is expected that `profile` already be ready prior to delegate creation.
-  DCHECK(GetProfileManager()->IsValidProfile(profile));
-  holding_space_model_observer_.Add(model);
+    : service_(service), model_(model) {
+  // It's expected that `profile()` already be ready prior to delegate creation.
+  DCHECK(GetProfileManager()->IsValidProfile(profile()));
+  holding_space_model_observation_.Observe(model);
 }
 
-void HoldingSpaceKeyedServiceDelegate::OnHoldingSpaceItemAdded(
-    const HoldingSpaceItem* item) {}
+void HoldingSpaceKeyedServiceDelegate::OnHoldingSpaceItemsAdded(
+    const std::vector<const HoldingSpaceItem*>& items) {}
 
-void HoldingSpaceKeyedServiceDelegate::OnHoldingSpaceItemRemoved(
-    const HoldingSpaceItem* item) {}
+void HoldingSpaceKeyedServiceDelegate::OnHoldingSpaceItemsRemoved(
+    const std::vector<const HoldingSpaceItem*>& items) {}
 
-void HoldingSpaceKeyedServiceDelegate::OnDownloadsRestored() {}
+void HoldingSpaceKeyedServiceDelegate::OnHoldingSpaceItemInitialized(
+    const HoldingSpaceItem* item) {}
 
 void HoldingSpaceKeyedServiceDelegate::OnPersistenceRestored() {}
 

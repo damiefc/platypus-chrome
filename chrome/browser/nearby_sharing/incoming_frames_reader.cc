@@ -9,9 +9,7 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/nearby_sharing/logging/logging.h"
 #include "chrome/browser/nearby_sharing/nearby_connection.h"
-#include "chrome/browser/nearby_sharing/nearby_process_manager.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/services/sharing/public/mojom/nearby_decoder.mojom.h"
+#include "chromeos/services/nearby/public/mojom/nearby_decoder.mojom.h"
 
 namespace {
 
@@ -25,17 +23,11 @@ std::ostream& operator<<(std::ostream& out,
 }  // namespace
 
 IncomingFramesReader::IncomingFramesReader(
-    NearbyProcessManager* process_manager,
-    Profile* profile,
+    chromeos::nearby::NearbyProcessManager* process_manager,
     NearbyConnection* connection)
-    : process_manager_(process_manager),
-      profile_(profile),
-      connection_(connection) {
-  DCHECK(process_manager_);
-  DCHECK(profile_);
-  DCHECK(connection_);
-
-  nearby_process_observer_.Add(process_manager);
+    : process_manager_(process_manager), connection_(connection) {
+  DCHECK(process_manager);
+  DCHECK(connection);
 }
 
 IncomingFramesReader::~IncomingFramesReader() = default;
@@ -93,11 +85,8 @@ void IncomingFramesReader::ReadFrame(
   ReadNextFrame();
 }
 
-void IncomingFramesReader::OnNearbyProfileChanged(Profile* profile) {}
-
-void IncomingFramesReader::OnNearbyProcessStarted() {}
-
-void IncomingFramesReader::OnNearbyProcessStopped() {
+void IncomingFramesReader::OnNearbyProcessStopped(
+    chromeos::nearby::NearbyProcessManager::NearbyProcessShutdownReason) {
   is_process_stopped_ = true;
   Done(base::nullopt);
 }
@@ -112,11 +101,8 @@ void IncomingFramesReader::ReadNextFrame() {
 void IncomingFramesReader::OnTimeout() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!callback_)
-    return;
-
   NS_LOG(WARNING) << __func__ << ": Timed out reading from NearbyConnection.";
-  connection_->Close();
+  Done(base::nullopt);
 }
 
 void IncomingFramesReader::OnDataReadFromConnection(
@@ -133,9 +119,20 @@ void IncomingFramesReader::OnDataReadFromConnection(
     return;
   }
 
-  process_manager_->GetOrStartNearbySharingDecoder(profile_)->DecodeFrame(
-      *bytes, base::BindOnce(&IncomingFramesReader::OnFrameDecoded,
-                             weak_ptr_factory_.GetWeakPtr()));
+  sharing::mojom::NearbySharingDecoder* decoder =
+      GetOrStartNearbySharingDecoder();
+
+  if (!decoder) {
+    NS_LOG(WARNING)
+        << __func__
+        << ": Cannot decode frame. Not currently bound to nearby process";
+    Done(base::nullopt);
+    return;
+  }
+
+  decoder->DecodeFrame(*bytes,
+                       base::BindOnce(&IncomingFramesReader::OnFrameDecoded,
+                                      weak_ptr_factory_.GetWeakPtr()));
 }
 
 void IncomingFramesReader::OnFrameDecoded(sharing::mojom::FramePtr frame) {
@@ -193,4 +190,31 @@ base::Optional<sharing::mojom::V1FramePtr> IncomingFramesReader::GetCachedFrame(
   sharing::mojom::V1FramePtr frame = std::move(iter->second);
   cached_frames_.erase(iter);
   return frame;
+}
+
+sharing::mojom::NearbySharingDecoder*
+IncomingFramesReader::GetOrStartNearbySharingDecoder() {
+  if (!process_reference_) {
+    process_reference_ = process_manager_->GetNearbyProcessReference(
+        base::BindOnce(&IncomingFramesReader::OnNearbyProcessStopped,
+                       weak_ptr_factory_.GetWeakPtr()));
+
+    if (!process_reference_) {
+      NS_LOG(WARNING) << __func__
+                      << "Failed to get a reference to the nearby process.";
+      is_process_stopped_ = true;
+      return nullptr;
+    }
+  }
+
+  is_process_stopped_ = false;
+
+  sharing::mojom::NearbySharingDecoder* decoder =
+      process_reference_->GetNearbySharingDecoder().get();
+
+  if (!decoder)
+    NS_LOG(WARNING) << __func__
+                    << "Failed to get decoder from process reference.";
+
+  return decoder;
 }

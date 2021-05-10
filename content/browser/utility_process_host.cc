@@ -4,11 +4,12 @@
 
 #include "content/browser/utility_process_host.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/base_switches.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/i18n/base_i18n_switches.h"
@@ -40,8 +41,16 @@
 #include "ui/base/ui_base_switches.h"
 #include "ui/gl/gl_switches.h"
 
+#if defined(OS_ANDROID)
+#include "services/network/public/mojom/network_service.mojom.h"
+#endif
+
 #if defined(OS_MAC)
 #include "components/os_crypt/os_crypt_switches.h"
+#endif
+
+#if defined(OS_WIN)
+#include "media/capture/capture_switches.h"
 #endif
 
 namespace content {
@@ -64,14 +73,19 @@ UtilityProcessHost::UtilityProcessHost(std::unique_ptr<Client> client)
       child_flags_(ChildProcessHost::CHILD_NORMAL),
 #endif
       started_(false),
-      name_(base::ASCIIToUTF16("utility process")),
+      name_(u"utility process"),
       client_(std::move(client)) {
-  process_.reset(new BrowserChildProcessHostImpl(
-      PROCESS_TYPE_UTILITY, this, ChildProcessHost::IpcMode::kNormal));
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
+                          ? BrowserThread::UI
+                          : BrowserThread::IO);
+  process_ = std::make_unique<BrowserChildProcessHostImpl>(
+      PROCESS_TYPE_UTILITY, this, ChildProcessHost::IpcMode::kNormal);
 }
 
 UtilityProcessHost::~UtilityProcessHost() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
+                          ? BrowserThread::UI
+                          : BrowserThread::IO);
   if (client_ && launch_state_ == LaunchState::kLaunchComplete)
     client_->OnProcessTerminatedNormally();
 }
@@ -106,16 +120,17 @@ bool UtilityProcessHost::Start() {
   return StartProcess();
 }
 
-void UtilityProcessHost::RunService(
+void UtilityProcessHost::RunServiceDeprecated(
     const std::string& service_name,
-    mojo::PendingReceiver<service_manager::mojom::Service> receiver,
-    service_manager::Service::CreatePackagedServiceInstanceCallback callback) {
+    mojo::ScopedMessagePipeHandle service_pipe,
+    RunServiceDeprecatedCallback callback) {
   if (launch_state_ == LaunchState::kLaunchFailed) {
     std::move(callback).Run(base::nullopt);
     return;
   }
 
-  process_->GetHost()->RunService(service_name, std::move(receiver));
+  process_->GetHost()->RunServiceDeprecated(service_name,
+                                            std::move(service_pipe));
   if (launch_state_ == LaunchState::kLaunchComplete) {
     std::move(callback).Run(process_->GetProcess().Pid());
   } else {
@@ -128,13 +143,8 @@ void UtilityProcessHost::SetMetricsName(const std::string& metrics_name) {
   metrics_name_ = metrics_name;
 }
 
-void UtilityProcessHost::SetName(const base::string16& name) {
+void UtilityProcessHost::SetName(const std::u16string& name) {
   name_ = name;
-}
-
-void UtilityProcessHost::SetServiceIdentity(
-    const service_manager::Identity& identity) {
-  service_identity_ = identity;
 }
 
 void UtilityProcessHost::SetExtraCommandLineSwitches(
@@ -177,7 +187,7 @@ bool UtilityProcessHost::StartProcess() {
     // not needed on Android anyway. See crbug.com/500854.
     std::unique_ptr<base::CommandLine> cmd_line =
         std::make_unique<base::CommandLine>(base::CommandLine::NO_PROGRAM);
-    if (sandbox_type_ == sandbox::policy::SandboxType::kNetwork &&
+    if (metrics_name_ == network::mojom::NetworkService::Name_ &&
         base::FeatureList::IsEnabled(features::kWarmUpNetworkProcess)) {
       process_->EnableWarmUpConnection();
     }
@@ -227,9 +237,11 @@ bool UtilityProcessHost::StartProcess() {
       network::switches::kIgnoreUrlFetcherCertRequests,
       network::switches::kLogNetLog,
       network::switches::kNetLogCaptureMode,
-      network::switches::kExplicitlyAllowedPorts,
       sandbox::policy::switches::kNoSandbox,
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && !BUILDFLAG(IS_LACROS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) && !BUILDFLAG(IS_CHROMEOS_ASH) && \
+    !BUILDFLAG(IS_CHROMEOS_LACROS)
       switches::kDisableDevShmUsage,
 #endif
 #if defined(OS_MAC)
@@ -237,6 +249,7 @@ bool UtilityProcessHost::StartProcess() {
       os_crypt::switches::kUseMockKeychain,
 #endif
       switches::kDisableTestCerts,
+      switches::kEnableBackgroundThreadPool,
       switches::kEnableExperimentalCookieFeatures,
       switches::kEnableLogging,
       switches::kForceTextDirection,
@@ -252,7 +265,9 @@ bool UtilityProcessHost::StartProcess() {
       switches::kUseFileForFakeVideoCapture,
       switches::kUseMockCertVerifierForTesting,
       switches::kMockCertVerifierDefaultResultForTesting,
+      switches::kTimeZoneForTesting,
       switches::kUtilityStartupDialog,
+      switches::kUseANGLE,
       switches::kUseGL,
       switches::kV,
       switches::kVModule,
@@ -281,10 +296,16 @@ bool UtilityProcessHost::StartProcess() {
       switches::kDisableHighResTimer,
       switches::kEnableExclusiveAudio,
       switches::kForceWaveAudio,
+      switches::kRaiseTimerFrequency,
       switches::kTrySupportedChannelLayouts,
       switches::kWaveOutBuffers,
       switches::kWebXrForceRuntime,
       sandbox::policy::switches::kAddXrAppContainerCaps,
+#endif
+      network::switches::kUseFirstPartySet,
+      network::switches::kIpAddressSpaceOverrides,
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+      switches::kSchedulerBoostUrgent,
 #endif
     };
     cmd_line->CopySwitchesFrom(browser_command_line, kSwitchNames,
@@ -303,9 +324,17 @@ bool UtilityProcessHost::StartProcess() {
     for (const auto& extra_switch : extra_switches_)
       cmd_line->AppendSwitch(extra_switch);
 
+#if defined(OS_WIN)
+    if (base::FeatureList::IsEnabled(
+            media::kMediaFoundationD3D11VideoCapture)) {
+      cmd_line->AppendSwitch(switches::kVideoCaptureUseGpuMemoryBuffer);
+    }
+#endif
+
     std::unique_ptr<UtilitySandboxedProcessLauncherDelegate> delegate =
         std::make_unique<UtilitySandboxedProcessLauncherDelegate>(
             sandbox_type_, env_, *cmd_line);
+
     process_->LaunchWithPreloadedFiles(std::move(delegate), std::move(cmd_line),
                                        GetV8SnapshotFilesToPreload(), true);
   }
@@ -353,9 +382,7 @@ void UtilityProcessHost::OnProcessCrashed(int exit_code) {
 }
 
 base::Optional<std::string> UtilityProcessHost::GetServiceName() {
-  if (!service_identity_)
-    return metrics_name_;
-  return service_identity_->name();
+  return metrics_name_;
 }
 
 }  // namespace content

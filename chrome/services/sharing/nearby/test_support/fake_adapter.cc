@@ -72,6 +72,9 @@ class FakeServerSocket : public mojom::ServerSocket {
   void Accept(AcceptCallback callback) override {
     std::move(callback).Run(/*result=*/nullptr);
   }
+  void Disconnect(DisconnectCallback callback) override {
+    std::move(callback).Run();
+  }
 };
 
 }  // namespace
@@ -106,6 +109,7 @@ void FakeAdapter::AddObserver(
 void FakeAdapter::RegisterAdvertisement(
     const device::BluetoothUUID& service_uuid,
     const std::vector<uint8_t>& service_data,
+    bool use_scan_response,
     RegisterAdvertisementCallback callback) {
   if (!should_advertisement_registration_succeed_) {
     std::move(callback).Run(mojo::NullRemote());
@@ -170,16 +174,15 @@ void FakeAdapter::ConnectToServiceInsecurely(
 
   mojo::ScopedDataPipeProducerHandle receive_pipe_producer_handle;
   mojo::ScopedDataPipeConsumerHandle receive_pipe_consumer_handle;
-  ASSERT_EQ(
-      MOJO_RESULT_OK,
-      mojo::CreateDataPipe(/*options=*/nullptr, &receive_pipe_producer_handle,
-                           &receive_pipe_consumer_handle));
+  ASSERT_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(/*options=*/nullptr,
+                                                 receive_pipe_producer_handle,
+                                                 receive_pipe_consumer_handle));
 
   mojo::ScopedDataPipeProducerHandle send_pipe_producer_handle;
   mojo::ScopedDataPipeConsumerHandle send_pipe_consumer_handle;
-  ASSERT_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(/*options=*/nullptr,
-                                                 &send_pipe_producer_handle,
-                                                 &send_pipe_consumer_handle));
+  ASSERT_EQ(MOJO_RESULT_OK,
+            mojo::CreateDataPipe(/*options=*/nullptr, send_pipe_producer_handle,
+                                 send_pipe_consumer_handle));
 
   mojo::PendingRemote<mojom::Socket> pending_socket;
 
@@ -197,9 +200,10 @@ void FakeAdapter::ConnectToServiceInsecurely(
   std::move(callback).Run(std::move(connect_to_service_result));
 }
 
-void FakeAdapter::CreateRfcommService(const std::string& service_name,
-                                      const device::BluetoothUUID& service_uuid,
-                                      CreateRfcommServiceCallback callback) {
+void FakeAdapter::CreateRfcommServiceInsecurely(
+    const std::string& service_name,
+    const device::BluetoothUUID& service_uuid,
+    CreateRfcommServiceInsecurelyCallback callback) {
   if (!base::Contains(allowed_connections_for_service_name_and_uuid_pair_,
                       std::make_pair(service_name, service_uuid))) {
     std::move(callback).Run(/*server_socket=*/mojo::NullRemote());

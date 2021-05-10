@@ -4,11 +4,13 @@
 
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey_app_interface.h"
 
+#include "base/format_macros.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/titled_url_match.h"
 #include "components/prefs/pref_service.h"
+#include "components/query_parser/query_parser.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/pref_names.h"
@@ -136,11 +138,12 @@
       [BookmarkEarlGreyAppInterface bookmarkModel];
 
   // Verify the correct number of bookmarks exist.
-  base::string16 matchString = base::SysNSStringToUTF16(title);
-  std::vector<bookmarks::TitledUrlMatch> matches;
-  int const kMaxCountOfBoomarks = 50;
-  bookmarkModel->GetBookmarksMatching(matchString, kMaxCountOfBoomarks,
-                                      &matches);
+  std::u16string matchString = base::SysNSStringToUTF16(title);
+  int const kMaxCountOfBookmarks = 50;
+  std::vector<bookmarks::TitledUrlMatch> matches =
+      bookmarkModel->GetBookmarksMatching(
+          matchString, kMaxCountOfBookmarks,
+          query_parser::MatchingAlgorithm::DEFAULT);
   if (matches.size() != expectedCount)
     return testing::NSErrorWithLocalizedDescription(
         @"Unexpected number of bookmarks");
@@ -163,7 +166,7 @@
 }
 
 + (NSError*)removeBookmarkWithTitle:(NSString*)title {
-  base::string16 name16(base::SysNSStringToUTF16(title));
+  std::u16string name16(base::SysNSStringToUTF16(title));
   bookmarks::BookmarkModel* bookmarkModel =
       [BookmarkEarlGreyAppInterface bookmarkModel];
   ui::TreeNodeIterator<const bookmarks::BookmarkNode> iterator(
@@ -181,7 +184,7 @@
 
 + (NSError*)moveBookmarkWithTitle:(NSString*)bookmarkTitle
                 toFolderWithTitle:(NSString*)newFolder {
-  base::string16 name16(base::SysNSStringToUTF16(bookmarkTitle));
+  std::u16string name16(base::SysNSStringToUTF16(bookmarkTitle));
   bookmarks::BookmarkModel* bookmarkModel =
       [BookmarkEarlGreyAppInterface bookmarkModel];
   ui::TreeNodeIterator<const bookmarks::BookmarkNode> iterator(
@@ -194,7 +197,7 @@
     bookmark = iterator.Next();
   }
 
-  base::string16 folderName16(base::SysNSStringToUTF16(newFolder));
+  std::u16string folderName16(base::SysNSStringToUTF16(newFolder));
   ui::TreeNodeIterator<const bookmarks::BookmarkNode> iteratorFolder(
       bookmarkModel->root_node());
   const bookmarks::BookmarkNode* folder = iteratorFolder.Next();
@@ -216,7 +219,7 @@
 }
 
 + (NSError*)verifyChildCount:(size_t)count inFolderWithName:(NSString*)name {
-  base::string16 name16(base::SysNSStringToUTF16(name));
+  std::u16string name16(base::SysNSStringToUTF16(name));
   bookmarks::BookmarkModel* bookmarkModel =
       [BookmarkEarlGreyAppInterface bookmarkModel];
 
@@ -272,7 +275,7 @@
 }
 
 + (NSError*)verifyExistenceOfFolderWithTitle:(NSString*)title {
-  base::string16 folderTitle16(base::SysNSStringToUTF16(title));
+  std::u16string folderTitle16(base::SysNSStringToUTF16(title));
 
   ui::TreeNodeIterator<const bookmarks::BookmarkNode> iterator(
       [self bookmarkModel] -> root_node());

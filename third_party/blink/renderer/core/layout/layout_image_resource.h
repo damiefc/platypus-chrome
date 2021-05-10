@@ -42,6 +42,7 @@ class CORE_EXPORT LayoutImageResource
   LayoutImageResource(const LayoutImageResource&) = delete;
   LayoutImageResource& operator=(const LayoutImageResource&) = delete;
   virtual ~LayoutImageResource();
+  virtual void Trace(Visitor* visitor) const;
 
   virtual void Initialize(LayoutObject*);
   virtual void Shutdown();
@@ -69,9 +70,8 @@ class CORE_EXPORT LayoutImageResource
   // Default size is effective when this is LayoutImageResourceStyleImage.
   virtual FloatSize ImageSizeWithDefaultSize(float multiplier,
                                              const FloatSize&) const;
+  virtual RespectImageOrientationEnum ImageOrientation() const;
   virtual WrappedImagePtr ImagePtr() const { return cached_image_.Get(); }
-
-  virtual void Trace(Visitor* visitor) const { visitor->Trace(cached_image_); }
 
  protected:
   // Device scale factor for the associated LayoutObject.
@@ -79,10 +79,10 @@ class CORE_EXPORT LayoutImageResource
   // Returns an image based on the passed device scale factor.
   static Image* BrokenImage(float device_scale_factor);
 
-  LayoutObject* layout_object_;
+  Member<LayoutObject> layout_object_;
   Member<ImageResourceContent> cached_image_;
 };
 
 }  // namespace blink
 
-#endif  // LayoutImage_h
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_IMAGE_RESOURCE_H_

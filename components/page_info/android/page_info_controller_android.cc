@@ -8,7 +8,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/command_line.h"
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -159,7 +159,7 @@ void PageInfoControllerAndroid::SetPermissionInfo(
 
   for (const auto& permission : permissions_to_display) {
     if (base::Contains(user_specified_settings_to_display, permission)) {
-      base::string16 setting_title =
+      std::u16string setting_title =
           PageInfoUI::PermissionTypeToUIString(permission);
 
       Java_PageInfoController_addPermissionSection(
@@ -171,7 +171,7 @@ void PageInfoControllerAndroid::SetPermissionInfo(
   }
 
   for (const auto& chosen_object : chosen_object_info_list) {
-    base::string16 object_title =
+    std::u16string object_title =
         presenter_->GetChooserContextFromUIInfo(chosen_object->ui_info)
             ->GetObjectDisplayName(chosen_object->chooser_object->value);
 
@@ -199,6 +199,11 @@ base::Optional<ContentSetting> PageInfoControllerAndroid::GetSettingToDisplay(
     // setting if it is showing up in Page Info. Logic for whether the
     // setting should show up in Page Info is in ShouldShowPermission in
     // page_info.cc.
+    return permission.default_setting;
+  } else if (permission.type == ContentSettingsType::JAVASCRIPT &&
+             base::FeatureList::IsEnabled(page_info::kPageInfoV2)) {
+    // The javascript content setting should show up if it is blocked globally
+    // to give users an easy way to create exceptions.
     return permission.default_setting;
   } else if (permission.type == ContentSettingsType::SOUND) {
     // The sound content setting should always show up when the tab has played

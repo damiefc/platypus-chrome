@@ -6,15 +6,13 @@
 
 #include <vector>
 
+#include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
+#include "base/ranges/algorithm.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_client.h"
 #include "components/signin/public/base/signin_pref_names.h"
-
-const base::Feature kUseMultiloginEndpoint{"UseMultiloginEndpoint",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 namespace signin {
 
@@ -27,14 +25,6 @@ DiceAccountReconcilorDelegate::DiceAccountReconcilorDelegate(
 }
 
 bool DiceAccountReconcilorDelegate::IsReconcileEnabled() const {
-  return true;
-}
-
-bool DiceAccountReconcilorDelegate::IsMultiloginEndpointEnabled() const {
-  return base::FeatureList::IsEnabled(kUseMultiloginEndpoint);
-}
-
-bool DiceAccountReconcilorDelegate::IsAccountConsistencyEnforced() const {
   return true;
 }
 
@@ -75,9 +65,9 @@ DiceAccountReconcilorDelegate::GetInconsistencyReason(
   std::vector<CoreAccountId> sorted_chrome_accounts(chrome_accounts);
   std::sort(sorted_chrome_accounts.begin(), sorted_chrome_accounts.end());
   bool missing_token =
-      !base::STLIncludes(sorted_chrome_accounts, valid_gaia_accounts_ids);
+      !base::ranges::includes(sorted_chrome_accounts, valid_gaia_accounts_ids);
   bool missing_cookie =
-      !base::STLIncludes(valid_gaia_accounts_ids, sorted_chrome_accounts);
+      !base::ranges::includes(valid_gaia_accounts_ids, sorted_chrome_accounts);
 
   if (missing_token && missing_cookie)
     return InconsistencyReason::kCookieTokenMismatch;
@@ -305,12 +295,9 @@ bool DiceAccountReconcilorDelegate::ShouldRevokeTokensNotInCookies() const {
   return !migration_completed_;
 }
 
-void DiceAccountReconcilorDelegate::OnRevokeTokensNotInCookiesCompleted(
-    RevokeTokenAction revoke_token_action) {
+void DiceAccountReconcilorDelegate::OnRevokeTokensNotInCookiesCompleted() {
   migration_completed_ = true;
   signin_client_->SetDiceMigrationCompleted();
-  UMA_HISTOGRAM_ENUMERATION("ForceDiceMigration.RevokeTokenAction",
-                            revoke_token_action);
 }
 
 bool DiceAccountReconcilorDelegate::ShouldRevokeTokensOnCookieDeleted() {

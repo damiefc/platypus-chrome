@@ -7,8 +7,9 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "content/browser/appcache/appcache.h"
 #include "content/browser/appcache/appcache_backend_impl.h"
 #include "content/browser/appcache/appcache_host.h"
@@ -20,6 +21,7 @@
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/public/common/content_client.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/resource_type_util.h"
@@ -27,6 +29,12 @@
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 
 namespace content {
+
+// If this feature is enabled, we behave as if all manifests include a
+// NETWORK: * line, indicating that all requests should fall back to the
+// network.
+const base::Feature kAppCacheAlwaysFallbackToNetwork{
+    "AppCacheAlwaysFallbackToNetwork", base::FEATURE_ENABLED_BY_DEFAULT};
 
 namespace {
 
@@ -36,11 +44,12 @@ bool g_running_in_tests = false;
 
 AppCacheRequestHandler::AppCacheRequestHandler(
     AppCacheHost* host,
-    blink::mojom::ResourceType resource_type,
+    network::mojom::RequestDestination request_destination,
     bool should_reset_appcache,
-    std::unique_ptr<AppCacheRequest> request)
+    std::unique_ptr<AppCacheRequest> request,
+    int frame_tree_node_id)
     : host_(host),
-      resource_type_(resource_type),
+      request_destination_(request_destination),
       should_reset_appcache_(should_reset_appcache),
       is_waiting_for_cache_selection_(false),
       found_group_id_(0),
@@ -51,7 +60,8 @@ AppCacheRequestHandler::AppCacheRequestHandler(
       maybe_load_resource_executed_(false),
       cache_id_(blink::mojom::kAppCacheNoCacheId),
       service_(host_->service()),
-      request_(std::move(request)) {
+      request_(std::move(request)),
+      frame_tree_node_id_(frame_tree_node_id) {
   DCHECK(host_);
   DCHECK(service_);
   host_->AddObserver(this);
@@ -152,7 +162,8 @@ AppCacheURLLoader* AppCacheRequestHandler::MaybeLoadFallbackForRedirect(
     DeliverAppCachedResponse(found_fallback_entry_, found_cache_id_,
                              found_manifest_url_, true,
                              found_namespace_entry_url_);
-  } else if (!found_network_namespace_) {
+  } else if (!found_network_namespace_ &&
+             !base::FeatureList::IsEnabled(kAppCacheAlwaysFallbackToNetwork)) {
     // 7.9.6, step 6: Fail the resource load.
     loader = CreateLoader(network_delegate);
     DeliverErrorResponse();
@@ -222,25 +233,25 @@ void AppCacheRequestHandler::GetExtraResponseInfo(int64_t* cache_id,
 std::unique_ptr<AppCacheRequestHandler>
 AppCacheRequestHandler::InitializeForMainResourceNetworkService(
     const network::ResourceRequest& request,
-    base::WeakPtr<AppCacheHost> appcache_host) {
+    base::WeakPtr<AppCacheHost> appcache_host,
+    int frame_tree_node_id) {
   std::unique_ptr<AppCacheRequestHandler> handler =
       appcache_host->CreateRequestHandler(
-          std::make_unique<AppCacheRequest>(request),
-          static_cast<blink::mojom::ResourceType>(request.resource_type),
-          request.should_reset_appcache);
+          std::make_unique<AppCacheRequest>(request), request.destination,
+          request.should_reset_appcache, frame_tree_node_id);
   if (handler)
     handler->appcache_host_ = std::move(appcache_host);
   return handler;
 }
 
 // static
-bool AppCacheRequestHandler::IsMainResourceType(
-    blink::mojom::ResourceType type) {
+bool AppCacheRequestHandler::IsMainRequestDestination(
+    network::mojom::RequestDestination destination) {
   // This returns false for kWorker, which is typically considered a main
   // resource. In appcache, dedicated workers are treated as subresources of
   // their nearest ancestor frame's appcache host unlike shared workers.
-  return blink::IsResourceTypeFrame(type) ||
-         type == blink::mojom::ResourceType::kSharedWorker;
+  return blink::IsRequestDestinationFrame(destination) ||
+         destination == network::mojom::RequestDestination::kSharedWorker;
 }
 
 void AppCacheRequestHandler::OnDestructionImminent(AppCacheHost* host) {
@@ -277,7 +288,7 @@ void AppCacheRequestHandler::DeliverAppCachedResponse(
   cache_id_ = cache_id;
   manifest_url_ = manifest_url;
 
-  if (blink::IsResourceTypeFrame(resource_type_) &&
+  if (blink::IsRequestDestinationFrame(request_destination_) &&
       !namespace_entry_url.is_empty())
     host_->NotifyMainResourceIsNamespaceEntry(namespace_entry_url);
 
@@ -323,7 +334,8 @@ AppCacheRequestHandler::MaybeLoadMainResource(
   host_->enable_cache_selection(true);
 
   const AppCacheHost* spawning_host =
-      (resource_type_ == blink::mojom::ResourceType::kSharedWorker)
+      (request_destination_ ==
+       network::mojom::RequestDestination::kSharedWorker)
           ? host_
           : host_->GetSpawningHost();
   GURL preferred_manifest_url = spawning_host ?
@@ -364,10 +376,11 @@ void AppCacheRequestHandler::OnMainResponseFound(
                                host_->top_frame_origin());
 
   if (was_blocked_by_policy) {
-    if (blink::IsResourceTypeFrame(resource_type_)) {
+    if (blink::IsRequestDestinationFrame(request_destination_)) {
       host_->NotifyMainResourceBlocked(manifest_url);
     } else {
-      DCHECK_EQ(resource_type_, blink::mojom::ResourceType::kSharedWorker);
+      DCHECK_EQ(request_destination_,
+                network::mojom::RequestDestination::kSharedWorker);
       host_->OnContentBlocked(manifest_url);
     }
     DeliverNetworkResponse();
@@ -381,7 +394,7 @@ void AppCacheRequestHandler::OnMainResponseFound(
     return;
   }
 
-  if (IsMainResourceType(resource_type_) &&
+  if (IsMainRequestDestination(request_destination_) &&
       cache_id != blink::mojom::kAppCacheNoCacheId) {
     // AppCacheHost loads and holds a reference to the main resource cache
     // for two reasons, firstly to preload the cache into the working set
@@ -412,7 +425,6 @@ void AppCacheRequestHandler::OnMainResponseFound(
 
 // NetworkService loading:
 void AppCacheRequestHandler::RunLoaderCallbackForMainResource(
-    int frame_tree_node_id,
     BrowserContext* browser_context,
     LoaderCallback callback,
     SingleRequestURLLoaderFactory::RequestHandler handler) {
@@ -426,7 +438,7 @@ void AppCacheRequestHandler::RunLoaderCallbackForMainResource(
     single_request_factory =
         base::MakeRefCounted<SingleRequestURLLoaderFactory>(std::move(handler));
     FrameTreeNode* frame_tree_node =
-        FrameTreeNode::GloballyFindByID(frame_tree_node_id);
+        FrameTreeNode::GloballyFindByID(frame_tree_node_id_);
     if (frame_tree_node && frame_tree_node->navigation_request()) {
       mojo::PendingRemote<network::mojom::URLLoaderFactory> pending_factory;
       auto factory_receiver = pending_factory.InitWithNewPipeAndPassReceiver();
@@ -437,8 +449,8 @@ void AppCacheRequestHandler::RunLoaderCallbackForMainResource(
               ContentBrowserClient::URLLoaderFactoryType::kNavigation,
               url::Origin(),
               frame_tree_node->navigation_request()->GetNavigationId(),
-              base::UkmSourceId::FromInt64(frame_tree_node->navigation_request()
-                                               ->GetNextPageUkmSourceId()),
+              ukm::SourceIdObj::FromInt64(frame_tree_node->navigation_request()
+                                              ->GetNextPageUkmSourceId()),
               &factory_receiver, nullptr /* header_client */,
               nullptr /* bypass_redirect_checks */,
               nullptr /* disable_secure_dns */, nullptr /* factory_override */);
@@ -513,7 +525,8 @@ void AppCacheRequestHandler::ContinueMaybeLoadSubResource() {
     return;
   }
 
-  if (found_network_namespace_) {
+  if (found_network_namespace_ ||
+      base::FeatureList::IsEnabled(kAppCacheAlwaysFallbackToNetwork)) {
     // Step 3 and 5: Fetch the resource normally.
     DCHECK(!found_entry_.has_response_id() &&
            !found_fallback_entry_.has_response_id());
@@ -558,7 +571,6 @@ void AppCacheRequestHandler::MaybeCreateLoader(
       tentative_resource_request,
       base::BindOnce(&AppCacheRequestHandler::RunLoaderCallbackForMainResource,
                      weak_factory_.GetWeakPtr(),
-                     tentative_resource_request.render_frame_id,
                      browser_context, std::move(callback)));
 }
 
@@ -624,8 +636,8 @@ bool AppCacheRequestHandler::MaybeCreateLoaderForResponse(
   // In appcache, dedicated workers are treated as subresources of their nearest
   // ancestor frame's appcache host. On the other hand, dedicated workers need
   // their own subresource loader.
-  if (IsMainResourceType(resource_type_) ||
-      resource_type_ == blink::mojom::ResourceType::kWorker) {
+  if (IsMainRequestDestination(request_destination_) ||
+      request_destination_ == network::mojom::RequestDestination::kWorker) {
     should_create_subresource_loader_ = true;
   }
   return true;

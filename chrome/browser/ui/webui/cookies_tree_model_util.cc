@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/contains.h"
 #include "base/i18n/time_formatting.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -18,7 +18,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/cookies_tree_model.h"
 #include "chrome/grit/generated_resources.h"
-#include "content/public/browser/cache_storage_context.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_usage_info.h"
 #include "extensions/buildflags/buildflags.h"
@@ -255,12 +254,6 @@ bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
                           usage_info.last_modified)));
       break;
     }
-    case CookieTreeNode::DetailedInfo::TYPE_FLASH_LSO: {
-      dict->SetString(kKeyType, "flash_lso");
-
-      dict->SetString(kKeyDomain, node.GetDetailedInfo().flash_lso_domain);
-      break;
-    }
     case CookieTreeNode::DetailedInfo::TYPE_MEDIA_LICENSE: {
       dict->SetString(kKeyType, "media_license");
 
@@ -359,7 +352,7 @@ const CookieTreeNode* CookiesTreeModelUtil::GetTreeNodeFromPath(
 
 const CookieTreeNode* CookiesTreeModelUtil::GetTreeNodeFromTitle(
     const CookieTreeNode* root,
-    const base::string16& title) {
+    const std::u16string& title) {
   // TODO(dschuyler): This is an O(n) lookup for O(1) space, but it could be
   // improved to O(1) lookup if desired (by using O(n) space).
   const auto i = std::find_if(

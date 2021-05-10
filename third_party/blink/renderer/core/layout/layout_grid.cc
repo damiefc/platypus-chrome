@@ -54,8 +54,14 @@ LayoutGrid::LayoutGrid(Element* element)
 
 LayoutGrid::~LayoutGrid() = default;
 
+void LayoutGrid::Trace(Visitor* visitor) const {
+  visitor->Trace(column_of_positioned_item_);
+  visitor->Trace(row_of_positioned_item_);
+  LayoutBlock::Trace(visitor);
+}
+
 LayoutGrid* LayoutGrid::CreateAnonymous(Document* document) {
-  LayoutGrid* layout_grid = new LayoutGrid(nullptr);
+  LayoutGrid* layout_grid = MakeGarbageCollected<LayoutGrid>(nullptr);
   layout_grid->SetDocumentForAnonymous(document);
   return layout_grid;
 }
@@ -360,7 +366,7 @@ void LayoutGrid::UpdateBlockLayout(bool relayout_children) {
     // LayoutBox::ComputeContentAndScrollbarLogicalHeightUsing() is adding the
     // ScrollbarLogicalHeight() for the intrinsic height cases. But that's
     // causing more problems as described in the bug linked before.
-    if (!StyleRef().LogicalHeight().IsIntrinsic())
+    if (!StyleRef().LogicalHeight().IsContentOrIntrinsic())
       track_based_logical_height += ComputeLogicalScrollbars().BlockSum();
 
     SetLogicalHeight(track_based_logical_height);
@@ -865,8 +871,8 @@ void LayoutGrid::PlaceItemsOnGrid(
   DCHECK(!grid.HasGridItems());
   PopulateExplicitGridAndOrderIterator(grid);
 
-  Vector<LayoutBox*> auto_major_axis_auto_grid_items;
-  Vector<LayoutBox*> specified_major_axis_auto_grid_items;
+  HeapVector<Member<LayoutBox>> auto_major_axis_auto_grid_items;
+  HeapVector<Member<LayoutBox>> specified_major_axis_auto_grid_items;
 #if DCHECK_IS_ON()
   DCHECK(!grid.HasAnyGridItemPaintOrder());
 #endif
@@ -944,7 +950,7 @@ void LayoutGrid::PlaceItemsOnGrid(
 // TODO(lajava): Consider rafactoring this code with
 // LocalFrameView::PrepareOrthogonalWritingModeRootForLayout
 static bool PrepareOrthogonalWritingModeRootForLayout(LayoutObject& root) {
-  DCHECK(root.IsBox() && ToLayoutBox(root).IsOrthogonalWritingModeRoot());
+  DCHECK(To<LayoutBox>(root).IsOrthogonalWritingModeRoot());
   if (!root.NeedsLayout() || root.IsOutOfFlowPositioned() ||
       root.IsColumnSpanAll() || root.IsTablePart())
     return false;
@@ -1076,7 +1082,7 @@ LayoutGrid::CreateEmptyGridAreaAtSpecifiedPositionsOutsideGrid(
 
 void LayoutGrid::PlaceSpecifiedMajorAxisItemsOnGrid(
     Grid& grid,
-    const Vector<LayoutBox*>& auto_grid_items) const {
+    const HeapVector<Member<LayoutBox>>& auto_grid_items) const {
   NOT_DESTROYED();
   bool is_for_columns = AutoPlacementMajorAxisDirection() == kForColumns;
   bool is_grid_auto_flow_dense = StyleRef().IsGridAutoFlowAlgorithmDense();
@@ -1089,7 +1095,7 @@ void LayoutGrid::PlaceSpecifiedMajorAxisItemsOnGrid(
           WTF::UnsignedWithZeroKeyHashTraits<unsigned>>
       minor_axis_cursors;
 
-  for (auto* const auto_grid_item : auto_grid_items) {
+  for (const auto& auto_grid_item : auto_grid_items) {
     GridSpan major_axis_positions =
         grid.GridItemSpan(*auto_grid_item, AutoPlacementMajorAxisDirection());
     DCHECK(major_axis_positions.IsTranslatedDefinite());
@@ -1122,12 +1128,12 @@ void LayoutGrid::PlaceSpecifiedMajorAxisItemsOnGrid(
 
 void LayoutGrid::PlaceAutoMajorAxisItemsOnGrid(
     Grid& grid,
-    const Vector<LayoutBox*>& auto_grid_items) const {
+    const HeapVector<Member<LayoutBox>>& auto_grid_items) const {
   NOT_DESTROYED();
   std::pair<size_t, size_t> auto_placement_cursor = std::make_pair(0, 0);
   bool is_grid_auto_flow_dense = StyleRef().IsGridAutoFlowAlgorithmDense();
 
-  for (auto* const auto_grid_item : auto_grid_items) {
+  for (const auto& auto_grid_item : auto_grid_items) {
     PlaceAutoMajorAxisItemOnGrid(grid, *auto_grid_item, auto_placement_cursor);
 
     // If grid-auto-flow is dense, reset auto-placement cursor.
@@ -1379,27 +1385,14 @@ void LayoutGrid::LayoutGridItems() {
     UpdateAutoMarginsInColumnAxisIfNeeded(*child);
     UpdateAutoMarginsInRowAxisIfNeeded(*child);
 
-    const GridArea& area = grid_->GridItemArea(*child);
 #if DCHECK_IS_ON()
+    const GridArea& area = grid_->GridItemArea(*child);
     DCHECK_LT(area.columns.StartLine(),
               track_sizing_algorithm_.Tracks(kForColumns).size());
     DCHECK_LT(area.rows.StartLine(),
               track_sizing_algorithm_.Tracks(kForRows).size());
 #endif
     SetLogicalPositionForChild(*child);
-
-    // Keep track of children overflowing their grid area as we might need to
-    // paint them even if the grid-area is not visible. Using physical
-    // dimensions for simplicity, so we can forget about orthogonalty.
-    LayoutUnit child_grid_area_height =
-        child->OverrideContainingBlockContentHeight();
-    LayoutUnit child_grid_area_width =
-        child->OverrideContainingBlockContentWidth();
-    LayoutRect grid_area_rect(
-        GridAreaLogicalPosition(area),
-        LayoutSize(child_grid_area_width, child_grid_area_height));
-    LayoutRect child_overflow_rect = child->FrameRect();
-    child_overflow_rect.SetSize(child->VisualOverflowRect().Size());
   }
 }
 
@@ -1438,7 +1431,7 @@ void LayoutGrid::LayoutPositionedObjects(bool relayout_children,
   if (!positioned_descendants)
     return;
 
-  for (auto* child : *positioned_descendants) {
+  for (const auto& child : *positioned_descendants) {
     LayoutUnit column_breadth =
         GridAreaBreadthForOutOfFlowChild(*child, kForColumns);
     LayoutUnit row_breadth = GridAreaBreadthForOutOfFlowChild(*child, kForRows);
@@ -1631,13 +1624,67 @@ void LayoutGrid::ApplyStretchAlignmentToChildIfNeeded(LayoutBox& child) {
     LayoutUnit desired_logical_height = child.ConstrainLogicalHeightByMinMax(
         stretched_logical_height, LayoutUnit(-1));
     child.SetOverrideLogicalHeight(desired_logical_height);
-    if (desired_logical_height != child.LogicalHeight()) {
-      // TODO (lajava): Can avoid laying out here in some cases. See
-      // https://webkit.org/b/87905.
-      child.SetLogicalHeight(LayoutUnit());
+
+    // Checking the logical-height of a child isn't enough. Setting an override
+    // logical-height changes the definiteness, resulting in percentages to
+    // resolve differently.
+    // NG nodes have enough information to check for this case, and only layout
+    // if needed.
+    //
+    // TODO (lajava): Can avoid laying out here in some cases.
+    // See https://webkit.org/b/87905.
+    if (desired_logical_height != child.LogicalHeight() ||
+        child.MaybeHasPercentHeightDescendant()) {
+      // Never mess around with the logical-height of any NG children.
+      if (!child.IsLayoutNGMixin())
+        child.SetLogicalHeight(LayoutUnit());
       child.SetSelfNeedsLayoutForAvailableSpace(true);
     }
   }
+}
+
+bool LayoutGrid::HasAutoSizeInColumnAxis(const LayoutBox& child) const {
+  NOT_DESTROYED();
+  if (!child.StyleRef().AspectRatio().IsAuto()) {
+    if (IsHorizontalWritingMode() == child.IsHorizontalWritingMode()) {
+      // If the used inline size is non-auto, we do have a non auto block size
+      // (column axis size) because of the aspect ratio.
+      if (!child.StyleRef().LogicalWidth().IsAuto())
+        return false;
+    } else {
+      const Length& logical_height = child.StyleRef().LogicalHeight();
+      if (logical_height.IsFixed() ||
+          (logical_height.IsPercentOrCalc() &&
+           child.ComputePercentageLogicalHeight(Length::Percent(0)) !=
+               kIndefiniteSize)) {
+        return false;
+      }
+    }
+  }
+  return IsHorizontalWritingMode() ? child.StyleRef().Height().IsAuto()
+                                   : child.StyleRef().Width().IsAuto();
+}
+
+bool LayoutGrid::HasAutoSizeInRowAxis(const LayoutBox& child) const {
+  NOT_DESTROYED();
+  if (!child.StyleRef().AspectRatio().IsAuto()) {
+    if (IsHorizontalWritingMode() == child.IsHorizontalWritingMode()) {
+      // If the used block size is non-auto, we do have a non auto inline size
+      // (row axis size) because of the aspect ratio.
+      const Length& logical_height = child.StyleRef().LogicalHeight();
+      if (logical_height.IsFixed() ||
+          (logical_height.IsPercentOrCalc() &&
+           child.ComputePercentageLogicalHeight(Length::Percent(0)) !=
+               kIndefiniteSize)) {
+        return false;
+      }
+    } else {
+      if (!child.StyleRef().LogicalWidth().IsAuto())
+        return false;
+    }
+  }
+  return IsHorizontalWritingMode() ? child.StyleRef().Width().IsAuto()
+                                   : child.StyleRef().Height().IsAuto();
 }
 
 // TODO(lajava): This logic is shared by LayoutFlexibleBox, so it should be
@@ -2190,7 +2237,7 @@ LayoutUnit LayoutGrid::LogicalOffsetForOutOfFlowChild(
       is_flowaware_row_axis ? child.LogicalLeft() : child.LogicalTop();
   LayoutUnit grid_border = is_row_axis ? BorderLogicalLeft() : BorderBefore();
   LayoutUnit child_margin =
-      is_flowaware_row_axis ? child.MarginLineLeft() : child.MarginBefore();
+      is_row_axis ? child.MarginLineLeft(Style()) : child.MarginBefore(Style());
   LayoutUnit offset = child_position - grid_border - child_margin;
   if (!is_row_axis || StyleRef().IsLeftToRightDirection())
     return offset;

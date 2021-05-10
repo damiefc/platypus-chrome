@@ -8,21 +8,24 @@
 #include <string>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
+#include "ash/public/cpp/ambient/ambient_metrics.h"
+#include "ash/public/cpp/ambient/ambient_prefs.h"
 #include "ash/public/cpp/ambient/common/ambient_settings.h"
 #include "ash/public/cpp/image_downloader.h"
+#include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/constants/chromeos_features.h"
+#include "components/prefs/pref_service.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -103,7 +106,7 @@ void EncodeImage(const gfx::ImageSkia& image,
   }
 }
 
-base::string16 GetAlbumDescription(const ash::PersonalAlbum& album) {
+std::u16string GetAlbumDescription(const ash::PersonalAlbum& album) {
   if (album.album_id == ash::kAmbientModeRecentHighlightsAlbumId) {
     return l10n_util::GetStringUTF16(
         IDS_OS_SETTINGS_AMBIENT_MODE_ALBUMS_SUBPAGE_RECENT_DESC);
@@ -122,9 +125,10 @@ base::string16 GetAlbumDescription(const ash::PersonalAlbum& album) {
 
 }  // namespace
 
-AmbientModeHandler::AmbientModeHandler()
+AmbientModeHandler::AmbientModeHandler(PrefService* pref_service)
     : fetch_settings_retry_backoff_(&kRetryBackoffPolicy),
-      update_settings_retry_backoff_(&kRetryBackoffPolicy) {}
+      update_settings_retry_backoff_(&kRetryBackoffPolicy),
+      pref_service_(pref_service) {}
 
 AmbientModeHandler::~AmbientModeHandler() = default;
 
@@ -150,9 +154,30 @@ void AmbientModeHandler::RegisterMessages() {
                           base::Unretained(this)));
 }
 
+void AmbientModeHandler::OnJavascriptAllowed() {
+  pref_change_registrar_.Init(pref_service_);
+  pref_change_registrar_.Add(
+      ash::ambient::prefs::kAmbientModeEnabled,
+      base::BindRepeating(&AmbientModeHandler::OnEnabledPrefChanged,
+                          base::Unretained(this)));
+}
+
 void AmbientModeHandler::OnJavascriptDisallowed() {
   backend_weak_factory_.InvalidateWeakPtrs();
   ui_update_weak_factory_.InvalidateWeakPtrs();
+  pref_change_registrar_.RemoveAll();
+}
+
+bool AmbientModeHandler::IsAmbientModeEnabled() {
+  return pref_service_->GetBoolean(ash::ambient::prefs::kAmbientModeEnabled);
+}
+
+void AmbientModeHandler::OnEnabledPrefChanged() {
+  // Call |UpdateSettings| when Ambient mode is enabled to make sure that
+  // settings are properly synced to the server even if the user never touches
+  // the other controls.
+  if (settings_ && IsAmbientModeEnabled())
+    UpdateSettings();
 }
 
 void AmbientModeHandler::HandleRequestSettings(const base::ListValue* args) {
@@ -186,8 +211,11 @@ void AmbientModeHandler::HandleSetSelectedTemperatureUnit(
   DCHECK(settings_);
   CHECK_EQ(1U, args->GetSize());
 
-  settings_->temperature_unit = ExtractTemperatureUnit(args);
-  UpdateSettings();
+  auto temperature_unit = ExtractTemperatureUnit(args);
+  if (settings_->temperature_unit != temperature_unit) {
+    settings_->temperature_unit = temperature_unit;
+    UpdateSettings();
+  }
 }
 
 void AmbientModeHandler::HandleSetSelectedAlbums(const base::ListValue* args) {
@@ -220,6 +248,11 @@ void AmbientModeHandler::HandleSetSelectedAlbums(const base::ListValue* args) {
         settings_->topic_source = ash::AmbientModeTopicSource::kArtGallery;
       else
         settings_->topic_source = ash::AmbientModeTopicSource::kGooglePhotos;
+
+      ash::ambient::RecordAmbientModeTotalNumberOfAlbums(
+          personal_albums_.albums.size());
+      ash::ambient::RecordAmbientModeSelectedNumberOfAlbums(
+          settings_->selected_album_ids.size());
       break;
     case ash::AmbientModeTopicSource::kArtGallery:
       // For Art gallery, we set the corresponding setting to be enabled or not
@@ -241,7 +274,6 @@ void AmbientModeHandler::HandleSetSelectedAlbums(const base::ListValue* args) {
   }
 
   UpdateSettings();
-  // TODO(wutao): Undate the UI when success in OnUpdateSettings.
   SendTopicSource();
 }
 
@@ -276,7 +308,6 @@ void AmbientModeHandler::SendAlbums(ash::AmbientModeTopicSource topic_source) {
         value.SetKey("checked", base::Value(album.selected));
         value.SetKey("description", base::Value(GetAlbumDescription(album)));
         value.SetKey("title", base::Value(album.album_name));
-        value.SetKey("url", base::Value(album.png_data_url));
         albums.Append(std::move(value));
       }
       break;
@@ -289,7 +320,6 @@ void AmbientModeHandler::SendAlbums(ash::AmbientModeTopicSource topic_source) {
         value.SetKey("checked", base::Value(setting.enabled));
         value.SetKey("description", base::Value(setting.description));
         value.SetKey("title", base::Value(setting.title));
-        value.SetKey("url", base::Value(setting.png_data_url));
         albums.Append(std::move(value));
       }
       break;
@@ -313,7 +343,41 @@ void AmbientModeHandler::SendAlbumPreview(
   FireWebUIListener("album-preview-changed", std::move(album));
 }
 
+void AmbientModeHandler::SendRecentHighlightsPreviews() {
+  if (!FindPersonalAlbumById(ash::kAmbientModeRecentHighlightsAlbumId))
+    return;
+
+  base::Value png_data_urls(base::Value::Type::LIST);
+  for (const auto& image : recent_highlights_preview_images_) {
+    if (image.isNull())
+      continue;
+
+    std::vector<unsigned char> encoded_image_bytes;
+    EncodeImage(image, &encoded_image_bytes);
+    if (!encoded_image_bytes.empty()) {
+      png_data_urls.Append(base::Value(webui::GetPngDataUrl(
+          &encoded_image_bytes.front(), encoded_image_bytes.size())));
+    }
+  }
+
+  base::Value album(base::Value::Type::DICTIONARY);
+  album.SetKey("albumId",
+               base::Value(ash::kAmbientModeRecentHighlightsAlbumId));
+  album.SetKey("topicSource", base::Value(static_cast<int>(
+                                  ash::AmbientModeTopicSource::kGooglePhotos)));
+  album.SetKey("recentHighlightsUrls", std::move(png_data_urls));
+  FireWebUIListener("album-preview-changed", std::move(album));
+}
+
 void AmbientModeHandler::UpdateSettings() {
+  DCHECK(IsAmbientModeEnabled())
+      << "Ambient mode must be enabled to update settings";
+  DCHECK(settings_);
+
+  // Prevent fetch settings callback changing |settings_| and |personal_albums_|
+  // while updating.
+  ui_update_weak_factory_.InvalidateWeakPtrs();
+
   if (is_updating_backend_) {
     has_pending_updates_for_backend_ = true;
     return;
@@ -322,7 +386,11 @@ void AmbientModeHandler::UpdateSettings() {
   has_pending_updates_for_backend_ = false;
   is_updating_backend_ = true;
 
-  DCHECK(settings_);
+  // Explicitly set show_weather to true to force server to respond with
+  // weather information. See: b/158630188.
+  settings_->show_weather = true;
+
+  settings_sent_for_update_ = settings_;
   ash::AmbientBackendController::Get()->UpdateSettings(
       *settings_, base::BindOnce(&AmbientModeHandler::OnUpdateSettings,
                                  backend_weak_factory_.GetWeakPtr()));
@@ -333,25 +401,72 @@ void AmbientModeHandler::OnUpdateSettings(bool success) {
 
   if (success) {
     update_settings_retry_backoff_.Reset();
+    cached_settings_ = settings_sent_for_update_;
   } else {
     update_settings_retry_backoff_.InformOfRequest(/*succeeded=*/false);
-    if (update_settings_retry_backoff_.failure_count() > kMaxRetries)
-      return;
   }
 
-  if (has_pending_updates_for_backend_ || !success) {
-    const base::TimeDelta kDelay =
-        update_settings_retry_backoff_.GetTimeUntilRelease();
-    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&AmbientModeHandler::UpdateSettings,
-                       backend_weak_factory_.GetWeakPtr()),
-        kDelay);
-  }
+  if (MaybeScheduleNewUpdateSettings(success))
+    return;
+
+  UpdateUIWithCachedSettings(success);
+}
+
+bool AmbientModeHandler::MaybeScheduleNewUpdateSettings(bool success) {
+  // If it was unsuccessful to update settings, but have not reached
+  // |kMaxRetries|, then it will retry.
+  const bool need_retry_update_settings_at_backend =
+      !success && update_settings_retry_backoff_.failure_count() <= kMaxRetries;
+
+  // If there has pending updates or need to retry, then updates settings again.
+  const bool should_update_settings_at_backend =
+      has_pending_updates_for_backend_ || need_retry_update_settings_at_backend;
+
+  if (!should_update_settings_at_backend)
+    return false;
+
+  const base::TimeDelta kDelay =
+      update_settings_retry_backoff_.GetTimeUntilRelease();
+  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&AmbientModeHandler::UpdateSettings,
+                     backend_weak_factory_.GetWeakPtr()),
+      kDelay);
+  return true;
+}
+
+void AmbientModeHandler::UpdateUIWithCachedSettings(bool success) {
+  // If it was unsuccessful to update settings with |kMaxRetries|, need to
+  // restore to cached settings.
+  const bool should_restore_previous_settings =
+      !success && update_settings_retry_backoff_.failure_count() > kMaxRetries;
+
+  // Otherwise, if there has pending fetching request or need to restore
+  // cached settings, then updates the WebUi.
+  const bool should_update_web_ui =
+      has_pending_fetch_request_ || should_restore_previous_settings;
+
+  if (!should_update_web_ui)
+    return;
+
+  OnSettingsAndAlbumsFetched(last_fetch_request_topic_source_, cached_settings_,
+                             std::move(personal_albums_));
+  has_pending_fetch_request_ = false;
+  last_fetch_request_topic_source_ = base::nullopt;
 }
 
 void AmbientModeHandler::RequestSettingsAndAlbums(
     base::Optional<ash::AmbientModeTopicSource> topic_source) {
+  last_fetch_request_topic_source_ = topic_source;
+
+  // If there is an ongoing update, do not request. If update succeeds, it will
+  // update the UI with the new settings. If update fails, it will restore
+  // previous settings and update UI.
+  if (is_updating_backend_) {
+    has_pending_fetch_request_ = true;
+    return;
+  }
+
   // TODO(b/161044021): Add a helper function to get all the albums. Currently
   // only load 100 latest modified albums.
   ash::AmbientBackendController::Get()->FetchSettingsAndAlbums(
@@ -382,6 +497,7 @@ void AmbientModeHandler::OnSettingsAndAlbumsFetched(
 
   fetch_settings_retry_backoff_.Reset();
   settings_ = settings;
+  cached_settings_ = settings;
   personal_albums_ = std::move(personal_albums);
   SyncSettingsAndAlbums();
 
@@ -389,14 +505,9 @@ void AmbientModeHandler::OnSettingsAndAlbumsFetched(
     SendTopicSource();
     SendTemperatureUnit();
 
-    // Explicitly enable the weather settings if necessary to make sure we
-    // can always get weather info in the response. Leaving this settings as
-    // default could result in unpredictable behavior (b/158630188). Note that
-    // right now the weather info is designed to be always shown on ambient
-    // screen, so we don't expose an option in ambient Settings for users to
-    // switch it off.
-    if (!settings_->show_weather) {
-      settings_->show_weather = true;
+    // If weather info is disabled, call |UpdateSettings| immediately to force
+    // it to true.
+    if (!settings_->show_weather && IsAmbientModeEnabled()) {
       UpdateSettings();
     }
     return;
@@ -454,7 +565,6 @@ void AmbientModeHandler::MaybeUpdateTopicSource(
 
   settings_->topic_source = topic_source;
   UpdateSettings();
-  // TODO(wutao): Undate the UI when success in OnUpdateSettings.
   SendTopicSource();
 }
 
@@ -465,6 +575,11 @@ void AmbientModeHandler::DownloadAlbumPreviewImage(
       // TODO(b/163413738): Slow down the downloading when there are too many
       // albums.
       for (const auto& album : personal_albums_.albums) {
+        if (album.album_id == ash::kAmbientModeRecentHighlightsAlbumId) {
+          DownloadRecentHighlightsPreviewImages(album.preview_image_urls);
+          continue;
+        }
+
         ash::ImageDownloader::Get()->Download(
             GURL(album.banner_image_url), NO_TRAFFIC_ANNOTATION_YET,
             base::BindOnce(&AmbientModeHandler::OnAlbumPreviewImageDownloaded,
@@ -508,6 +623,40 @@ void AmbientModeHandler::OnAlbumPreviewImageDownloaded(
   SendAlbumPreview(topic_source, album_id,
                    webui::GetPngDataUrl(&encoded_image_bytes.front(),
                                         encoded_image_bytes.size()));
+}
+
+void AmbientModeHandler::DownloadRecentHighlightsPreviewImages(
+    const std::vector<std::string>& urls) {
+  recent_highlights_previews_weak_factory_.InvalidateWeakPtrs();
+
+  // Only show up to 4 previews.
+  constexpr int kMaxRecentHighlightsPreviews = 4;
+  const int total_previews =
+      std::min(kMaxRecentHighlightsPreviews, static_cast<int>(urls.size()));
+  recent_highlights_preview_images_.resize(total_previews);
+  auto on_done = base::BarrierClosure(
+      total_previews,
+      base::BindOnce(&AmbientModeHandler::SendRecentHighlightsPreviews,
+                     recent_highlights_previews_weak_factory_.GetWeakPtr()));
+
+  for (int url_index = 0; url_index < total_previews; ++url_index) {
+    const auto& url = urls[url_index];
+    ash::ImageDownloader::Get()->Download(
+        GURL(url), NO_TRAFFIC_ANNOTATION_YET,
+        base::BindOnce(
+            [](std::vector<gfx::ImageSkia>* preview_images, int url_index,
+               base::RepeatingClosure on_done,
+               base::WeakPtr<AmbientModeHandler> weak_ptr,
+               const gfx::ImageSkia& image) {
+              if (!weak_ptr)
+                return;
+
+              (*preview_images)[url_index] = image;
+              on_done.Run();
+            },
+            &recent_highlights_preview_images_, url_index, on_done,
+            recent_highlights_previews_weak_factory_.GetWeakPtr()));
+  }
 }
 
 ash::PersonalAlbum* AmbientModeHandler::FindPersonalAlbumById(

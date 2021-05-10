@@ -13,6 +13,7 @@
 
 namespace blink {
 
+class GPUAdapter;
 class GPUSwapChain;
 class GPUSwapChainDescriptor;
 
@@ -59,11 +60,23 @@ class GPUCanvasContext : public CanvasRenderingContext {
   void Stop() final;
   cc::Layer* CcLayer() const final;
 
+  // OffscreenCanvas-specific methods
+  void SetOffscreenCanvasGetContextResult(OffscreenRenderingContext&) final;
+  bool PushFrame() final;
+  ImageBitmap* TransferToImageBitmap(ScriptState*) final;
+
+  bool IsOffscreenCanvas() const {
+    if (Host())
+      return Host()->IsOffscreenCanvas();
+    return false;
+  }
+
   // gpu_canvas_context.idl
   GPUSwapChain* configureSwapChain(const GPUSwapChainDescriptor* descriptor,
                                    ExceptionState&);
   ScriptPromise getSwapChainPreferredFormat(ScriptState* script_state,
-                                            const GPUDevice* device);
+                                            GPUDevice* device);
+  String getSwapChainPreferredFormat(const GPUAdapter* adapter);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(GPUCanvasContext);

@@ -29,8 +29,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "google_apis/gaia/gaia_urls.h"
-#include "third_party/blink/public/common/css/preferred_color_scheme.h"
-#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 
 namespace {
 
@@ -116,7 +114,8 @@ void SigninReauthViewController::SetWebContents(
 }
 
 void SigninReauthViewController::OnModalSigninClosed() {
-  dialog_delegate_observer_.Remove(dialog_delegate_);
+  DCHECK(dialog_delegate_observation_.IsObservingSource(dialog_delegate_));
+  dialog_delegate_observation_.Reset();
   dialog_delegate_ = nullptr;
 
   DCHECK(ui_state_ == UIState::kConfirmationDialog ||
@@ -217,7 +216,8 @@ void SigninReauthViewController::CompleteReauth(signin::ReauthResult result) {
   }
 
   if (dialog_delegate_) {
-    dialog_delegate_observer_.Remove(dialog_delegate_);
+    DCHECK(dialog_delegate_observation_.IsObservingSource(dialog_delegate_));
+    dialog_delegate_observation_.Reset();
     dialog_delegate_->CloseModalSignin();
     dialog_delegate_ = nullptr;
   }
@@ -309,17 +309,12 @@ void SigninReauthViewController::ShowReauthConfirmationDialog() {
   dialog_delegate_ =
       SigninViewControllerDelegate::CreateReauthConfirmationDelegate(
           browser_, account_id_, access_point_);
-  dialog_delegate_observer_.Add(dialog_delegate_);
+  dialog_delegate_observation_.Observe(dialog_delegate_);
 
-  // Gaia Reauth page doesn't support dark mode. Force the confirmation dialog
-  // to use the light mode as well to match the style.
-  auto* web_contents = dialog_delegate_->GetWebContents();
-  auto prefs = web_contents->GetOrCreateWebPreferences();
-  prefs.preferred_color_scheme = blink::PreferredColorScheme::kLight;
-  web_contents->SetWebPreferences(prefs);
-
-  SigninReauthUI* web_dialog_ui =
-      web_contents->GetWebUI()->GetController()->GetAs<SigninReauthUI>();
+  SigninReauthUI* web_dialog_ui = dialog_delegate_->GetWebContents()
+                                      ->GetWebUI()
+                                      ->GetController()
+                                      ->GetAs<SigninReauthUI>();
   web_dialog_ui->InitializeMessageHandlerWithReauthController(this);
 }
 
@@ -347,7 +342,8 @@ void SigninReauthViewController::ShowGaiaReauthPageInNewTab() {
   ui_state_ = UIState::kGaiaReauthTab;
   // Remove the observer to not trigger OnModalSigninClosed() that will abort
   // the reauth flow.
-  dialog_delegate_observer_.Remove(dialog_delegate_);
+  DCHECK(dialog_delegate_observation_.IsObservingSource(dialog_delegate_));
+  dialog_delegate_observation_.Reset();
   dialog_delegate_->CloseModalSignin();
   dialog_delegate_ = nullptr;
 

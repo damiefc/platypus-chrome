@@ -31,7 +31,6 @@ class ShellSurface : public ShellSurfaceBase, public ash::WindowStateObserver {
   // specified as part of the geometry is relative to the shell surface.
   ShellSurface(Surface* surface,
                const gfx::Point& origin,
-               bool activatable,
                bool can_minimize,
                int container);
   explicit ShellSurface(Surface* surface);
@@ -43,7 +42,7 @@ class ShellSurface : public ShellSurfaceBase, public ash::WindowStateObserver {
   // in steps of NxM pixels).
   using ConfigureCallback =
       base::RepeatingCallback<uint32_t(const gfx::Size& size,
-                                       ash::WindowStateType state_type,
+                                       chromeos::WindowStateType state_type,
                                        bool resizing,
                                        bool activated,
                                        const gfx::Vector2d& origin_offset)>;
@@ -88,11 +87,6 @@ class ShellSurface : public ShellSurfaceBase, public ash::WindowStateObserver {
   // Start an interactive move of surface.
   void StartMove();
 
-  // Before widget initialization, this method will be called. Depending on the
-  // implementation, it may return true to force the surface to launch in a
-  // maximized state.
-  virtual bool ShouldAutoMaximize();
-
   // Return the initial show state for this surface.
   ui::WindowShowState initial_show_state() { return initial_show_state_; }
 
@@ -112,9 +106,9 @@ class ShellSurface : public ShellSurfaceBase, public ash::WindowStateObserver {
 
   // Overridden from ash::WindowStateObserver:
   void OnPreWindowStateTypeChange(ash::WindowState* window_state,
-                                  ash::WindowStateType old_type) override;
+                                  chromeos::WindowStateType old_type) override;
   void OnPostWindowStateTypeChange(ash::WindowState* window_state,
-                                   ash::WindowStateType old_type) override;
+                                   chromeos::WindowStateType old_type) override;
 
   // Overridden from wm::ActivationChangeObserver:
   void OnWindowActivated(ActivationReason reason,

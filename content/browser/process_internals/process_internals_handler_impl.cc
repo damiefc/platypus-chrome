@@ -11,6 +11,7 @@
 #include "base/strings/string_piece.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/process_internals/process_internals.mojom.h"
+#include "content/browser/renderer_host/agent_scheduling_group_host.h"
 #include "content/browser/renderer_host/back_forward_cache_impl.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/navigation_entry_impl.h"
@@ -32,6 +33,8 @@ using IsolatedOriginSource = ChildProcessSecurityPolicy::IsolatedOriginSource;
   auto frame_info = ::mojom::FrameInfo::New();
 
   frame_info->routing_id = frame->GetRoutingID();
+  frame_info->agent_scheduling_group_id =
+      frame->GetAgentSchedulingGroup().id_for_debugging();
   frame_info->process_id = frame->GetProcess()->GetID();
   frame_info->last_committed_url =
       frame->GetLastCommittedURL().is_valid()
@@ -90,6 +93,8 @@ std::string IsolatedOriginSourceToString(IsolatedOriginSource source) {
       return "Test";
     case IsolatedOriginSource::USER_TRIGGERED:
       return "User-triggered";
+    case IsolatedOriginSource::WEB_TRIGGERED:
+      return "Web-triggered";
     default:
       NOTREACHED();
       return "";
@@ -114,6 +119,8 @@ void ProcessInternalsHandlerImpl::GetIsolationMode(
     modes.push_back("Isolate Origins");
   if (SiteIsolationPolicy::IsStrictOriginIsolationEnabled())
     modes.push_back("Strict Origin Isolation");
+  if (SiteIsolationPolicy::IsSiteIsolationForCOOPEnabled())
+    modes.push_back("COOP");
 
   // Retrieve any additional site isolation modes controlled by the embedder.
   std::vector<std::string> additional_modes =
@@ -138,6 +145,19 @@ void ProcessInternalsHandlerImpl::GetUserTriggeredIsolatedOrigins(
   std::vector<std::string> serialized_origins;
   for (const auto& origin : policy->GetIsolatedOrigins(
            IsolatedOriginSource::USER_TRIGGERED, browser_context_)) {
+    serialized_origins.push_back(origin.Serialize());
+  }
+  std::move(callback).Run(std::move(serialized_origins));
+}
+
+void ProcessInternalsHandlerImpl::GetWebTriggeredIsolatedOrigins(
+    GetWebTriggeredIsolatedOriginsCallback callback) {
+  // Retrieve serialized user-triggered isolated origins for the current
+  // profile (i.e., profile from which chrome://process-internals is shown).
+  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  std::vector<std::string> serialized_origins;
+  for (const auto& origin : policy->GetIsolatedOrigins(
+           IsolatedOriginSource::WEB_TRIGGERED, browser_context_)) {
     serialized_origins.push_back(origin.Serialize());
   }
   std::move(callback).Run(std::move(serialized_origins));

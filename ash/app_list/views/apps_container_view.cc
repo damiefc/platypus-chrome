@@ -223,16 +223,15 @@ void AppsContainerView::AnimateYPosition(AppListViewState target_view_state,
   const int offset = current_suggestion_chip_y - target_suggestion_chip_y;
 
   suggestion_chip_container_view_->SetY(target_suggestion_chip_y);
-  animator.Run(offset, suggestion_chip_container_view_->layer(),
-               suggestion_chip_container_view_);
+  animator.Run(offset, suggestion_chip_container_view_->layer());
 
   apps_grid_view_->SetY(suggestion_chip_container_view_->y() +
                         chip_grid_y_distance_);
-  animator.Run(offset, apps_grid_view_->layer(), apps_grid_view_);
+  animator.Run(offset, apps_grid_view_->layer());
 
   page_switcher_->SetY(suggestion_chip_container_view_->y() +
                        chip_grid_y_distance_);
-  animator.Run(offset, page_switcher_->layer(), page_switcher_);
+  animator.Run(offset, page_switcher_->layer());
 }
 
 void AppsContainerView::OnTabletModeChanged(bool started) {
@@ -620,12 +619,11 @@ void AppsContainerView::UpdateContentsOpacity(float progress,
   gfx::Rect switcher_bounds = page_switcher_->GetBoundsInScreen();
   float centerline_above_work_area =
       std::max<float>(screen_bottom - switcher_bounds.CenterPoint().y(), 0.f);
-  const float start_px = AppListConfig::instance().all_apps_opacity_start_px();
+  const float start_px = GetAppListConfig().all_apps_opacity_start_px();
   float opacity = std::min(
-      std::max(
-          (centerline_above_work_area - start_px) /
-              (AppListConfig::instance().all_apps_opacity_end_px() - start_px),
-          0.f),
+      std::max((centerline_above_work_area - start_px) /
+                   (GetAppListConfig().all_apps_opacity_end_px() - start_px),
+               0.f),
       1.0f);
   page_switcher_->layer()->SetOpacity(restore_opacity ? 1.0f : opacity);
 

@@ -50,7 +50,6 @@
 #include "third_party/blink/renderer/modules/crypto/crypto_utilities.h"
 #include "third_party/blink/renderer/modules/crypto/normalize_algorithm.h"
 #include "third_party/blink/renderer/platform/json/json_values.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -407,7 +406,7 @@ ScriptPromise SubtleCrypto::importKey(
       if (raw_key_data.IsArrayBuffer()) {
         key_data = CopyBytes(raw_key_data.GetAsArrayBuffer());
       } else if (raw_key_data.IsArrayBufferView()) {
-        key_data = CopyBytes(raw_key_data.GetAsArrayBufferView().View());
+        key_data = CopyBytes(raw_key_data.GetAsArrayBufferView().Get());
       } else {
         result->CompleteWithError(
             kWebCryptoErrorTypeType,

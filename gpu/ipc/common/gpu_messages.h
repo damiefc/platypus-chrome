@@ -31,6 +31,7 @@
 #include "gpu/ipc/common/vulkan_ycbcr_info.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_message_macros.h"
+#include "ipc/ipc_message_start.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/gpu/GrTypes.h"
 #include "ui/gfx/color_space.h"
@@ -76,6 +77,7 @@ IPC_STRUCT_BEGIN(GpuCommandBufferMsg_CreateImage_Params)
   IPC_STRUCT_MEMBER(gfx::GpuMemoryBufferHandle, gpu_memory_buffer)
   IPC_STRUCT_MEMBER(gfx::Size, size)
   IPC_STRUCT_MEMBER(gfx::BufferFormat, format)
+  IPC_STRUCT_MEMBER(gfx::BufferPlane, plane)
   IPC_STRUCT_MEMBER(uint64_t, image_release_count)
 IPC_STRUCT_END()
 
@@ -111,6 +113,7 @@ IPC_STRUCT_BEGIN(GpuChannelMsg_CreateGMBSharedImage_Params)
   IPC_STRUCT_MEMBER(gfx::GpuMemoryBufferHandle, handle)
   IPC_STRUCT_MEMBER(gfx::Size, size)
   IPC_STRUCT_MEMBER(gfx::BufferFormat, format)
+  IPC_STRUCT_MEMBER(gfx::BufferPlane, plane)
   IPC_STRUCT_MEMBER(gfx::ColorSpace, color_space)
   IPC_STRUCT_MEMBER(uint32_t, usage)
   IPC_STRUCT_MEMBER(uint32_t, release_id)
@@ -131,18 +134,6 @@ IPC_STRUCT_BEGIN(GpuChannelMsg_CreateSwapChain_Params)
   IPC_STRUCT_MEMBER(SkAlphaType, alpha_type)
 IPC_STRUCT_END()
 #endif  // OS_WIN
-
-IPC_STRUCT_BEGIN(GpuChannelMsg_ScheduleImageDecode_Params)
-  IPC_STRUCT_MEMBER(std::vector<uint8_t>, encoded_data)
-  IPC_STRUCT_MEMBER(gfx::Size, output_size)
-  IPC_STRUCT_MEMBER(int32_t, raster_decoder_route_id)
-  IPC_STRUCT_MEMBER(uint32_t, transfer_cache_entry_id)
-  IPC_STRUCT_MEMBER(int32_t, discardable_handle_shm_id)
-  IPC_STRUCT_MEMBER(uint32_t, discardable_handle_shm_offset)
-  IPC_STRUCT_MEMBER(uint64_t, discardable_handle_release_count)
-  IPC_STRUCT_MEMBER(gfx::ColorSpace, target_color_space)
-  IPC_STRUCT_MEMBER(bool, needs_mips)
-IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(GpuDeferredMessage)
   IPC_STRUCT_MEMBER(IPC::Message, message)
@@ -221,27 +212,9 @@ IPC_MESSAGE_ROUTED1(GpuChannelMsg_ReleaseSysmemBufferCollection,
 IPC_MESSAGE_ROUTED1(GpuChannelMsg_RegisterSharedImageUploadBuffer,
                     base::ReadOnlySharedMemoryRegion /* shm */)
 
-// Schedules a hardware-accelerated image decode in the GPU process. Renderers
-// should use gpu::ImageDecodeAcceleratorProxy to schedule decode requests which
-// are processed by gpu::ImageDecodeAcceleratorStub on the service side.
-IPC_MESSAGE_ROUTED2(
-    GpuChannelMsg_ScheduleImageDecode,
-    GpuChannelMsg_ScheduleImageDecode_Params /* decode_params */,
-    uint64_t /* decode_release_count */)
-
-// Crash the GPU process in similar way to how chrome://gpucrash does.
-// This is only supported in testing environments, and is otherwise ignored.
-IPC_MESSAGE_CONTROL0(GpuChannelMsg_CrashForTesting)
-
-// Terminates the GPU process with an exit code of 0. This message is handled in
-// in GpuChannelMessageFilter::OnMessageReceived and is only used in tests where
-// the GPU benchmarking extension is enabled. The purpose of this API is to test
-// scenarios where the GPU process is terminated on purpose with exit code of 0.
-IPC_MESSAGE_CONTROL0(GpuChannelMsg_TerminateForTesting)
-
 // Simple NOP message which can be used as fence to ensure all previous sent
 // messages have been received.
-IPC_SYNC_MESSAGE_CONTROL0_0(GpuChannelMsg_Nop)
+IPC_SYNC_MESSAGE_ROUTED0_0(GpuChannelMsg_Nop)
 
 // Creates a StreamTexture attached to the provided |stream_id|.
 IPC_SYNC_MESSAGE_CONTROL1_1(GpuChannelMsg_CreateStreamTexture,

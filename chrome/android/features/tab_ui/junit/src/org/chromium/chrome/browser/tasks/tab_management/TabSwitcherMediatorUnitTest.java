@@ -57,12 +57,14 @@ import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
+import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyObservable;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -125,7 +127,11 @@ public class TabSwitcherMediatorUnitTest {
     @Mock
     TabSwitcherMediator.MessageItemsController mMessageItemsController;
     @Mock
+    TabSwitcherMediator.PriceWelcomeMessageController mPriceWelcomeMessageController;
+    @Mock
     MultiWindowModeStateDispatcher mMultiWindowModeStateDispatcher;
+    @Mock
+    PriceMessageService mPriceMessageService;
 
     @Captor
     ArgumentCaptor<TabModelObserver> mTabModelObserverCaptor;
@@ -198,9 +204,10 @@ public class TabSwitcherMediatorUnitTest {
 
         mModel = new PropertyModel(TabListContainerProperties.ALL_KEYS);
         mModel.addObserver(mPropertyObserver);
-        mMediator = new TabSwitcherMediator(mResetHandler, mModel, mTabModelSelector,
+        mMediator = new TabSwitcherMediator(mContext, mResetHandler, mModel, mTabModelSelector,
                 mBrowserControlsStateProvider, mCompositorViewHolder, null, mMessageItemsController,
-                mMultiWindowModeStateDispatcher, TabListCoordinator.TabListMode.GRID);
+                mPriceWelcomeMessageController, mMultiWindowModeStateDispatcher,
+                TabListCoordinator.TabListMode.GRID);
         mMediator.initWithNative(null);
         mMediator.addOverviewModeObserver(mOverviewModeObserver);
         mMediator.setOnTabSelectingListener(mLayout::onTabSelecting);
@@ -446,6 +453,29 @@ public class TabSwitcherMediatorUnitTest {
     }
 
     @Test
+    public void scrollAfterNewTabModelSelected() {
+        initAndAssertAllProperties();
+        mModel.set(TabListContainerProperties.IS_VISIBLE, true);
+        TabModel incognitoTabModel = mock(TabModel.class);
+
+        doReturn(0).when(mTabModelFilter).index();
+        mTabModelSelectorObserverCaptor.getValue().onTabModelSelected(incognitoTabModel, mTabModel);
+        assertThat(mModel.get(TabListContainerProperties.INITIAL_SCROLL_INDEX), equalTo(0));
+
+        doReturn(1).when(mTabModelFilter).index();
+        mTabModelSelectorObserverCaptor.getValue().onTabModelSelected(incognitoTabModel, mTabModel);
+        assertThat(mModel.get(TabListContainerProperties.INITIAL_SCROLL_INDEX), equalTo(0));
+
+        doReturn(2).when(mTabModelFilter).index();
+        mTabModelSelectorObserverCaptor.getValue().onTabModelSelected(incognitoTabModel, mTabModel);
+        assertThat(mModel.get(TabListContainerProperties.INITIAL_SCROLL_INDEX), equalTo(0));
+
+        doReturn(3).when(mTabModelFilter).index();
+        mTabModelSelectorObserverCaptor.getValue().onTabModelSelected(incognitoTabModel, mTabModel);
+        assertThat(mModel.get(TabListContainerProperties.INITIAL_SCROLL_INDEX), equalTo(1));
+    }
+
+    @Test
     public void updatesMarginWithBottomBarChanges() {
         initAndAssertAllProperties();
 
@@ -552,6 +582,63 @@ public class TabSwitcherMediatorUnitTest {
         doReturn(1).when(mTabModel).getCount();
         mTabModelObserverCaptor.getValue().tabClosureUndone(mTab1);
         verify(mMessageItemsController).restoreAllAppendedMessage();
+    }
+
+    @Test
+    public void removePriceWelcomeMessageWhenCloseBindingTab() {
+        mMediator.setPriceMessageService(mPriceMessageService);
+
+        doReturn(1).when(mTabModel).getCount();
+        doReturn(TAB1_ID).when(mPriceMessageService).getBindingTabId();
+        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, false);
+        verify(mPriceWelcomeMessageController, times(0)).removePriceWelcomeMessage();
+
+        doReturn(2).when(mTabModel).getCount();
+        doReturn(TAB2_ID).when(mPriceMessageService).getBindingTabId();
+        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, false);
+        verify(mPriceWelcomeMessageController, times(0)).removePriceWelcomeMessage();
+
+        doReturn(2).when(mTabModel).getCount();
+        doReturn(TAB1_ID).when(mPriceMessageService).getBindingTabId();
+        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, false);
+        verify(mPriceWelcomeMessageController, times(1)).removePriceWelcomeMessage();
+    }
+
+    @Test
+    public void restorePriceWelcomeMessageWhenUndoBindingTabClosure() {
+        mMediator.setPriceMessageService(mPriceMessageService);
+
+        doReturn(1).when(mTabModel).getCount();
+        doReturn(TAB1_ID).when(mPriceMessageService).getBindingTabId();
+        mTabModelObserverCaptor.getValue().tabClosureUndone(mTab1);
+        verify(mPriceWelcomeMessageController, times(1)).restorePriceWelcomeMessage();
+
+        doReturn(2).when(mTabModel).getCount();
+        doReturn(TAB2_ID).when(mPriceMessageService).getBindingTabId();
+        mTabModelObserverCaptor.getValue().tabClosureUndone(mTab1);
+        verify(mPriceWelcomeMessageController, times(1)).restorePriceWelcomeMessage();
+    }
+
+    @Test
+    public void invalidatePriceWelcomeMessageWhenBindingTabClosureCommitted() {
+        mMediator.setPriceMessageService(mPriceMessageService);
+
+        doReturn(TAB2_ID).when(mPriceMessageService).getBindingTabId();
+        mTabModelObserverCaptor.getValue().tabClosureCommitted(mTab1);
+        verify(mPriceMessageService, times(0)).invalidateMessage();
+
+        doReturn(TAB1_ID).when(mPriceMessageService).getBindingTabId();
+        mTabModelObserverCaptor.getValue().tabClosureCommitted(mTab1);
+        verify(mPriceMessageService, times(1)).invalidateMessage();
+    }
+
+    @Test
+    public void testScrollToTab() {
+        initAndAssertAllProperties();
+        mMediator.scrollToTab(0);
+        assertThat(mModel.get(TabListContainerProperties.INITIAL_SCROLL_INDEX), equalTo(0));
+        mMediator.scrollToTab(1);
+        assertThat(mModel.get(TabListContainerProperties.INITIAL_SCROLL_INDEX), equalTo(1));
     }
 
     @Test
@@ -785,6 +872,25 @@ public class TabSwitcherMediatorUnitTest {
     }
 
     @Test
+    public void updatesBottomPaddingOnlyInGridMode() {
+        doReturn(16f).when(mResources).getDimension(R.dimen.tab_grid_bottom_padding);
+
+        assertEquals(0, mModel.get(TabListContainerProperties.BOTTOM_PADDING));
+        new TabSwitcherMediator(mContext, mResetHandler, mModel, mTabModelSelector,
+                mBrowserControlsStateProvider, mCompositorViewHolder, null, mMessageItemsController,
+                mPriceWelcomeMessageController, mMultiWindowModeStateDispatcher,
+                TabListCoordinator.TabListMode.GRID);
+        assertEquals(16, mModel.get(TabListContainerProperties.BOTTOM_PADDING));
+
+        mModel.set(TabListContainerProperties.BOTTOM_PADDING, 0);
+        new TabSwitcherMediator(mContext, mResetHandler, mModel, mTabModelSelector,
+                mBrowserControlsStateProvider, mCompositorViewHolder, null, mMessageItemsController,
+                mPriceWelcomeMessageController, mMultiWindowModeStateDispatcher,
+                TabListCoordinator.TabListMode.STRIP);
+        assertEquals(0, mModel.get(TabListContainerProperties.BOTTOM_PADDING));
+    }
+
+    @Test
     public void enterMultiWindowMode() {
         initAndAssertAllProperties();
 
@@ -821,7 +927,7 @@ public class TabSwitcherMediatorUnitTest {
         when(tab.getView()).thenReturn(mock(View.class));
         when(tab.getUserDataHost()).thenReturn(new UserDataHost());
         doReturn(id).when(tab).getId();
-        doReturn("").when(tab).getUrlString();
+        doReturn(GURL.emptyGURL()).when(tab).getUrl();
         doReturn(title).when(tab).getTitle();
         doReturn(false).when(tab).isClosing();
         return tab;

@@ -11,9 +11,10 @@
 #include "base/memory/ptr_util.h"
 #include "chrome/android/chrome_jni_headers/PermissionUpdateInfoBarDelegate_jni.h"
 #include "chrome/browser/android/android_theme_resources.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/infobars/android/confirm_infobar.h"
+#include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/infobar.h"
 #include "components/permissions/android/android_permission_util.h"
 #include "components/permissions/permission_uma_util.h"
@@ -113,14 +114,14 @@ infobars::InfoBar* PermissionUpdateInfoBarDelegate::Create(
     const std::vector<ContentSettingsType> content_settings_types,
     int permission_msg_id,
     PermissionUpdatedCallback callback) {
-  InfoBarService* infobar_service =
-      InfoBarService::FromWebContents(web_contents);
-  if (!infobar_service) {
+  infobars::ContentInfoBarManager* infobar_manager =
+      infobars::ContentInfoBarManager::FromWebContents(web_contents);
+  if (!infobar_manager) {
     std::move(callback).Run(false);
     return nullptr;
   }
 
-  return infobar_service->AddInfoBar(infobar_service->CreateConfirmInfoBar(
+  return infobar_manager->AddInfoBar(std::make_unique<infobars::ConfirmInfoBar>(
       // Using WrapUnique as the PermissionUpdateInfoBarDelegate ctor is
       // private.
       base::WrapUnique<ConfirmInfoBarDelegate>(
@@ -160,7 +161,7 @@ int PermissionUpdateInfoBarDelegate::GetIconId() const {
   return IDR_ANDROID_INFOBAR_WARNING;
 }
 
-base::string16 PermissionUpdateInfoBarDelegate::GetMessageText() const {
+std::u16string PermissionUpdateInfoBarDelegate::GetMessageText() const {
   return l10n_util::GetStringUTF16(permission_msg_id_);
 }
 
@@ -168,7 +169,7 @@ int PermissionUpdateInfoBarDelegate::GetButtons() const {
   return BUTTON_OK;
 }
 
-base::string16 PermissionUpdateInfoBarDelegate::GetButtonLabel(
+std::u16string PermissionUpdateInfoBarDelegate::GetButtonLabel(
     InfoBarButton button) const {
   DCHECK_EQ(button, BUTTON_OK);
   return l10n_util::GetStringUTF16(IDS_INFOBAR_UPDATE_PERMISSIONS_BUTTON_TEXT);

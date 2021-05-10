@@ -5,14 +5,11 @@
 #ifndef CHROME_BROWSER_ANDROID_COMPOSITOR_SCENE_LAYER_TOP_TOOLBAR_SCENE_LAYER_H_
 #define CHROME_BROWSER_ANDROID_COMPOSITOR_SCENE_LAYER_TOP_TOOLBAR_SCENE_LAYER_H_
 
-#include <memory>
-#include <vector>
-
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
-#include "chrome/browser/android/compositor/scene_layer/scene_layer.h"
+#include "chrome/browser/ui/android/layouts/scene_layer.h"
 #include "ui/android/resources/resource_manager_impl.h"
 
 namespace cc {
@@ -38,9 +35,11 @@ class TopToolbarSceneLayer : public SceneLayer {
       jint toolbar_background_color,
       jint url_bar_resource_id,
       jint url_bar_color,
+      jfloat x_offset,
       jfloat y_offset,
       bool show_shadow,
-      bool visible);
+      bool visible,
+      bool anonymize);
 
   // Update the progress bar.
   void UpdateProgressBar(JNIEnv* env,

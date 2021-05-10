@@ -80,10 +80,7 @@ Polymer({
      */
     quickUnlockDisabledByPolicy_: {
       type: Boolean,
-      value() {
-        return loadTimeData.getBoolean('quickUnlockDisabledByPolicy');
-      },
-      readOnly: true,
+      value: loadTimeData.getBoolean('quickUnlockDisabledByPolicy'),
     },
 
     /**
@@ -102,6 +99,12 @@ Polymer({
     numFingerprints_: {
       type: Number,
       value: 0,
+      observer: 'updateNumFingerprintsDescription_',
+    },
+
+    /** @private */
+    numFingerprintsDescription_: {
+      type: String,
     },
 
     /**
@@ -158,6 +161,8 @@ Polymer({
       value: () => new Set([
         chromeos.settings.mojom.Setting.kLockScreen,
         chromeos.settings.mojom.Setting.kChangeAuthPin,
+        chromeos.settings.mojom.Setting.kLockScreenV2,
+        chromeos.settings.mojom.Setting.kChangeAuthPinV2,
       ]),
     },
   },
@@ -173,6 +178,13 @@ Polymer({
     this.fingerprintBrowserProxy_ =
         settings.FingerprintBrowserProxyImpl.getInstance();
     this.updateNumFingerprints_();
+
+    this.addWebUIListener(
+        'quick-unlock-disabled-by-policy-changed',
+        (quickUnlockDisabledByPolicy) => {
+          this.quickUnlockDisabledByPolicy_ = quickUnlockDisabledByPolicy;
+        });
+    chrome.send('RequestQuickUnlockDisabledByPolicy');
   },
 
   /**
@@ -182,7 +194,7 @@ Polymer({
    * @protected
    */
   currentRouteChanged(newRoute, oldRoute) {
-    if (newRoute == settings.routes.LOCK_SCREEN) {
+    if (newRoute === settings.routes.LOCK_SCREEN) {
       this.updateUnlockType(/*activeModesChanged=*/ false);
       this.updateNumFingerprints_();
       this.attemptDeepLink();
@@ -239,11 +251,11 @@ Polymer({
    * @private
    */
   selectedUnlockTypeChanged_(selected) {
-    if (selected == LockScreenUnlockType.VALUE_PENDING) {
+    if (selected === LockScreenUnlockType.VALUE_PENDING) {
       return;
     }
 
-    if (selected != LockScreenUnlockType.PIN_PASSWORD && this.setModes) {
+    if (selected !== LockScreenUnlockType.PIN_PASSWORD && this.setModes) {
       // If the user selects PASSWORD only (which sends an asynchronous
       // setModes.call() to clear the quick unlock capability), indicate to the
       // user immediately that the quick unlock capability is cleared by setting
@@ -251,8 +263,11 @@ Polymer({
       // |hasPin| to true. This prevents setupPinButton UI delays, except in the
       // small chance that CrOS fails to remove the quick unlock capability. See
       // https://crbug.com/1054327 for details.
+      if (!this.hasPin) {
+        return;
+      }
       this.hasPin = false;
-      this.setModes.call(null, [], [], function(result) {
+      this.setModes.call(null, [], [], (result) => {
         assert(result, 'Failed to clear quick unlock modes');
         // Revert |hasPin| to true in the event setModes fails to set lock state
         // to PASSWORD only.
@@ -336,13 +351,16 @@ Polymer({
   },
 
   /** @private */
-  getDescriptionText_() {
-    if (this.numFingerprints_ > 0) {
-      return this.i18n(
-          'lockScreenNumberFingerprints', this.numFingerprints_.toString());
+  updateNumFingerprintsDescription_() {
+    if (this.numFingerprints_ === 0) {
+      this.numFingerprintDescription_ =
+          this.i18n('lockScreenEditFingerprintsDescription');
+    } else {
+      PluralStringProxyImpl.getInstance()
+          .getPluralString(
+              'lockScreenNumberFingerprints', this.numFingerprints_)
+          .then(string => this.numFingerprintDescription_ = string);
     }
-
-    return this.i18n('lockScreenEditFingerprintsDescription');
   },
 
   /** @private */

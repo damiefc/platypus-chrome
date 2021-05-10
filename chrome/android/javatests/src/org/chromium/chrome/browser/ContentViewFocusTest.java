@@ -4,12 +4,15 @@
 
 package org.chromium.chrome.browser;
 
+import static org.chromium.chrome.test.util.ViewUtils.createMotionEvent;
+
 import android.support.test.InstrumentationRegistry;
 import android.view.View;
 
 import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -17,24 +20,24 @@ import org.junit.runner.RunWith;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
-import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
-import org.chromium.chrome.browser.compositor.layouts.eventfilter.ScrollDirection;
+import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.OverviewModeBehaviorWatcher;
+import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.ScrollDirection;
+import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.ViewEventSink;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.content_public.browser.test.util.WebContentsUtils;
@@ -57,6 +60,17 @@ public class ContentViewFocusTest {
     private final ArrayDeque<Boolean> mFocusChanges = new ArrayDeque<Boolean>();
 
     private String mTitle;
+
+    private float mDpToPx;
+
+    @Before
+    public void setUp() throws InterruptedException {
+        mDpToPx = InstrumentationRegistry.getInstrumentation()
+                          .getContext()
+                          .getResources()
+                          .getDisplayMetrics()
+                          .density;
+    }
 
     private void addFocusChangedListener(View view) {
         view.setOnFocusChangeListener((v, hasFocus) -> {
@@ -115,15 +129,16 @@ public class ContentViewFocusTest {
 
         // Start the swipe
         addFocusChangedListener(view);
-        final EdgeSwipeHandler edgeSwipeHandler =
+        final SwipeHandler swipeHandler =
                 mActivityTestRule.getActivity().getLayoutManager().getToolbarSwipeHandler();
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
-            edgeSwipeHandler.swipeStarted(ScrollDirection.RIGHT, 0, 0);
-            edgeSwipeHandler.swipeUpdated(100, 0, 100, 0, 100, 0);
+            swipeHandler.onSwipeStarted(ScrollDirection.RIGHT, createMotionEvent(0, 0));
+            swipeHandler.onSwipeUpdated(
+                    createMotionEvent(100 * mDpToPx, 0), 100 * mDpToPx, 0, 100 * mDpToPx, 0);
         });
 
         CriteriaHelper.pollUiThread(() -> {
-            LayoutManager driver = mActivityTestRule.getActivity().getLayoutManager();
+            LayoutManagerImpl driver = mActivityTestRule.getActivity().getLayoutManager();
             return !driver.getActiveLayout().shouldDisplayContentOverlay();
         }, "Layout still requesting Tab Android view be attached");
 
@@ -132,10 +147,10 @@ public class ContentViewFocusTest {
         Assert.assertFalse("Content view didn't lose focus", blockForFocusChanged());
 
         // End the drag
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> edgeSwipeHandler.swipeFinished());
+        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, swipeHandler::onSwipeFinished);
 
         CriteriaHelper.pollUiThread(() -> {
-            LayoutManager driver = mActivityTestRule.getActivity().getLayoutManager();
+            LayoutManagerImpl driver = mActivityTestRule.getActivity().getLayoutManager();
             return driver.getActiveLayout().shouldDisplayContentOverlay();
         }, "Layout not requesting Tab Android view be attached");
 

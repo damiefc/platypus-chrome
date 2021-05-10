@@ -2,107 +2,315 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {BatteryChargeStatus, BatteryHealth, CpuUsage, ExternalPowerSource, MemoryUsage, SystemInfo} from './diagnostics_types.js'
+import {BatteryChargeStatus, BatteryHealth, BatteryInfo, CpuUsage, ExternalPowerSource, MemoryUsage, Network, NetworkGuidInfo, NetworkState, NetworkType, PowerRoutineResult, RoutineType, StandardRoutineResult, SystemInfo} from './diagnostics_types.js'
+import {stringToMojoString16} from './mojo_utils.js';
 
-/* @type {!Array<!BatteryChargeStatus>} */
+/** @type {!Array<!BatteryChargeStatus>} */
 export const fakeBatteryChargeStatus = [
   {
-    charge_full_now_milliamp_hours: 5700,
-    charge_now_milliamp_hours: 4200,
-    current_now_milliamps: 1123,
-    power_adapter_status: ExternalPowerSource.kAc,
-    power_time: '3h 15m',
+    chargeNowMilliampHours: 4200,
+    currentNowMilliamps: 1123,
+    powerAdapterStatus: chromeos.diagnostics.mojom.ExternalPowerSource.kAc,
+    powerTime: stringToMojoString16('3h 15m'),
+    batteryState: chromeos.diagnostics.mojom.BatteryState.kCharging,
   },
   {
-    charge_full_now_milliamp_hours: 5700,
-    charge_now_milliamp_hours: 4500,
-    current_now_milliamps: 1123,
-    power_adapter_status: ExternalPowerSource.kAc,
-    power_time: '3h 01m',
+    chargeNowMilliampHours: 4500,
+    currentNowMilliamps: 1123,
+    powerAdapterStatus:
+        chromeos.diagnostics.mojom.ExternalPowerSource.kDisconnected,
+    powerTime: stringToMojoString16('3h 01m'),
+    batteryState: chromeos.diagnostics.mojom.BatteryState.kDischarging,
   },
   {
-    charge_full_now_milliamp_hours: 5700,
-    charge_now_milliamp_hours: 4800,
-    current_now_milliamps: 1123,
-    power_adapter_status: ExternalPowerSource.kAc,
-    power_time: '2h 45m',
+    chargeNowMilliampHours: 4800,
+    currentNowMilliamps: 1123,
+    powerAdapterStatus:
+        chromeos.diagnostics.mojom.ExternalPowerSource.kDisconnected,
+    powerTime: stringToMojoString16('2h 45m'),
+    batteryState: chromeos.diagnostics.mojom.BatteryState.kDischarging,
+  },
+  {
+    chargeNowMilliampHours: 5700,
+    currentNowMilliamps: 1123,
+    powerAdapterStatus: chromeos.diagnostics.mojom.ExternalPowerSource.kAc,
+    powerTime: stringToMojoString16('2h 45m'),
+    batteryState: chromeos.diagnostics.mojom.BatteryState.kFull,
   }
 ];
 
-/* @type {!Array<!BatteryHealth>} */
-export const fakeBatteryHealth = [{
-  battery_wear_percentage: 7,
-  charge_full_design_milliamp_hours: 6000,
-  charge_full_now_milliamp_hours: 5700,
-  cycle_count: 73,
+/** @type {!Array<!BatteryChargeStatus>} */
+export const fakeBatteryChargeStatus2 = [{
+  chargeNowMilliampHours: 4200,
+  currentNowMilliamps: 1123,
+  powerAdapterStatus:
+      chromeos.diagnostics.mojom.ExternalPowerSource.kDisconnected,
+  powerTime: stringToMojoString16('3h 15m'),
 }];
 
-/* @type {!BatteryInfo} */
+/** @type {!Array<!BatteryHealth>} */
+export const fakeBatteryHealth2 = [
+  {
+    batteryWearPercentage: 7,
+    chargeFullDesignMilliampHours: 6000,
+    chargeFullNowMilliampHours: 5700,
+    cycleCount: 73,
+  },
+];
+
+/** @type {!Array<!BatteryHealth>} */
+export const fakeBatteryHealth = [
+  {
+    batteryWearPercentage: 7,
+    chargeFullDesignMilliampHours: 6000,
+    chargeFullNowMilliampHours: 5700,
+    cycleCount: 73,
+  },
+  {
+    battery_weabatteryWearPercentager_percentage: 8,
+    chargeFullDesignMilliampHours: 6000,
+    chargeFullNowMilliampHours: 5699,
+    cycleCount: 73,
+  }
+];
+
+/** @type {!BatteryInfo} */
 export const fakeBatteryInfo = {
-  charge_full_design_milliamp_hours: 6000,
+  chargeFullDesignMilliampHours: 6000,
   manufacturer: 'BatterCorp USA',
 };
 
-/* @type {!BatteryInfo} */
+/** @type {!BatteryInfo} */
 export const fakeBatteryInfo2 = {
-  charge_full_design_milliamp_hours: 9000,
+  chargeFullDesignMilliampHours: 9000,
   manufacturer: 'PowerPod 9000',
 };
 
-/* @type {!Array<!CpuUsage>} */
+/** @type {!Array<!CpuUsage>} */
 export const fakeCpuUsage = [
   {
-    cpu_temp_degrees_celcius: 107,
-    percent_usage_system: 15,
-    percent_usage_user: 20,
+    averageCpuTempCelsius: 107,
+    percentUsageSystem: 15,
+    percentUsageUser: 20,
+    scalingCurrentFrequencyKhz: 900,
   },
   {
-    cpu_temp_degrees_celcius: 106,
-    percent_usage_system: 30,
-    percent_usage_user: 40,
+    averageCpuTempCelsius: 106,
+    percentUsageSystem: 30,
+    percentUsageUser: 40,
+    scalingCurrentFrequencyKhz: 1000,
   },
   {
-    cpu_temp_degrees_celcius: 107,
-    percent_usage_system: 31,
-    percent_usage_user: 45,
+    averageCpuTempCelsius: 107,
+    percentUsageSystem: 31,
+    percentUsageUser: 45,
+    scalingCurrentFrequencyKhz: 900,
   },
   {
-    cpu_temp_degrees_celcius: 109,
-    percent_usage_system: 55,
-    percent_usage_user: 24,
-  }
+    averageCpuTempCelsius: 109,
+    percentUsageSystem: 55,
+    percentUsageUser: 24,
+    scalingCurrentFrequencyKhz: 900,
+  },
+  {
+    averageCpuTempCelsius: 109,
+    percentUsageSystem: 49,
+    percentUsageUser: 10,
+    scalingCurrentFrequencyKhz: 900,
+  },
+  {
+    averageCpuTempCelsius: 161,
+    percentUsageSystem: 1,
+    percentUsageUser: 99,
+    scalingCurrentFrequencyKhz: 900,
+  },
+  {
+    averageCpuTempCelsius: 118,
+    percentUsageSystem: 35,
+    percentUsageUser: 37,
+    scalingCurrentFrequencyKhz: 900,
+  },
+  {
+    averageCpuTempCelsius: 110,
+    percentUsageSystem: 26,
+    percentUsageUser: 30,
+    scalingCurrentFrequencyKhz: 900,
+  },
 ];
 
-/* @type {!Array<!MemoryUsage>} */
+/** @type {!Array<!MemoryUsage>} */
 export const fakeMemoryUsage = [
   {
-    available_memory_kib: 57000,
-    free_memory_kib: 15000,
-    total_memory_kib: 128000,
+    availableMemoryKib: 57000,
+    freeMemoryKib: 15000,
+    totalMemoryKib: 128000,
   },
   {
-    available_memory_kib: 52000,
-    free_memory_kib: 15000,
-    total_memory_kib: 128000,
+    availableMemoryKib: 52000,
+    freeMemoryKib: 15000,
+    totalMemoryKib: 128000,
   },
   {
-    available_memory_kib: 53000,
-    free_memory_kib: 15000,
-    total_memory_kib: 128000,
+    availableMemoryKib: 53000,
+    freeMemoryKib: 15000,
+    totalMemoryKib: 128000,
   },
   {
-    available_memory_kib: 65000,
-    free_memory_kib: 15000,
-    total_memory_kib: 128000,
+    availableMemoryKib: 65000,
+    freeMemoryKib: 15000,
+    totalMemoryKib: 128000,
   }
 ];
 
-/* @type {!SystemInfo} */
+/** @type {!SystemInfo} */
 export const fakeSystemInfo = {
-  board_name: 'CrOS Board',
-  cpu_model_name: 'BestCpu SoFast 1000',
-  cpu_threads_count: 8,
-  device_capabilities: {has_battery: true},
-  total_memory_kib: 128000,
-  version: {milestone_version: 'M99'},
+  boardName: 'CrOS Board',
+  cpuModelName: 'BestCpu SoFast 1000',
+  cpuThreadsCount: 8,
+  cpuMaxClockSpeedKhz: 1000,
+  deviceCapabilities: {hasBattery: true},
+  marketingName: 'Coolest Chromebook',
+  totalMemoryKib: 128000,
+  versionInfo: {milestoneVersion: 'M99', fullVersionString: 'M99.1234.5.6'},
+};
+
+/** @type {!SystemInfo} */
+export const fakeSystemInfoWithoutBattery = {
+  boardName: 'CrOS Board',
+  cpuModelName: 'BestCpu SoFast 1000',
+  cpuThreadsCount: 8,
+  cpuMaxClockSpeedKhz: 1000,
+  deviceCapabilities: {hasBattery: false},
+  marketingName: 'Coolest Chromebook',
+  totalMemoryKib: 128000,
+  versionInfo: {milestoneVersion: 'M99', fullVersionString: 'M99.1234.5.6'},
+};
+
+/** @type {!SystemInfo} */
+export const fakeSystemInfoWithTBD = {
+  boardName: 'CrOS Board',
+  cpuModelName: 'BestCpu SoFast 1000',
+  cpuThreadsCount: 8,
+  cpuMaxClockSpeedKhz: 1000,
+  deviceCapabilities: {hasBattery: true},
+  marketingName: 'TBD',
+  totalMemoryKib: 128000,
+  versionInfo: {milestoneVersion: 'M99', fullVersionString: 'M99.1234.5.6'},
+};
+
+/** @type {!SystemInfo} */
+export const fakeSystemInfoWithoutBoardName = {
+  boardName: '',
+  cpuModelName: 'BestCpu SoFast 1000',
+  cpuThreadsCount: 8,
+  cpuMaxClockSpeedKhz: 1000,
+  deviceCapabilities: {hasBattery: true},
+  marketingName: 'TBD',
+  totalMemoryKib: 128000,
+  versionInfo: {milestoneVersion: 'M99', fullVersionString: 'M99.1234.5.6'},
+};
+/** @type {!Map<!RoutineType, !StandardRoutineResult>} */
+export const fakeRoutineResults = new Map([
+  [
+    chromeos.diagnostics.mojom.RoutineType.kCpuStress,
+    chromeos.diagnostics.mojom.StandardRoutineResult.kTestPassed
+  ],
+  [
+    chromeos.diagnostics.mojom.RoutineType.kCpuCache,
+    chromeos.diagnostics.mojom.StandardRoutineResult.kTestPassed
+  ],
+  [
+    chromeos.diagnostics.mojom.RoutineType.kCpuFloatingPoint,
+    chromeos.diagnostics.mojom.StandardRoutineResult.kTestFailed
+  ],
+  [
+    chromeos.diagnostics.mojom.RoutineType.kCpuPrime,
+    chromeos.diagnostics.mojom.StandardRoutineResult.kExecutionError
+  ],
+  [
+    chromeos.diagnostics.mojom.RoutineType.kMemory,
+    chromeos.diagnostics.mojom.StandardRoutineResult.kTestPassed
+  ],
+]);
+
+/** @type {!Map<!RoutineType, !PowerRoutineResult>} */
+export const fakePowerRoutineResults = new Map([
+  [
+    chromeos.diagnostics.mojom.RoutineType.kBatteryCharge, {
+      result: chromeos.diagnostics.mojom.StandardRoutineResult.kTestPassed,
+      is_charging: true,
+      percent_delta: 5,
+      time_delta_seconds: 10
+    }
+  ],
+  [
+    chromeos.diagnostics.mojom.RoutineType.kBatteryDischarge, {
+      result: chromeos.diagnostics.mojom.StandardRoutineResult.kUnableToRun,
+      is_charging: false,
+      percent_delta: 0,
+      time_delta_seconds: 0
+    }
+  ],
+]);
+
+/** @type {!NetworkGuidInfo} */
+export const fakeAllNetworksAvailable = {
+  networkGuids: ['wifiGuid', 'ethernetGuid', 'cellularGuid'],
+  activeGuid: 'ethernetGuid',
+};
+
+/** @type {!NetworkGuidInfo} */
+export const fakeWifiAndCellularNetworksAvailable = {
+  networkGuids: ['cellularGuid', 'wifiGuid'],
+  activeGuid: 'wifiGuid',
+};
+
+/** @type {!Array<!NetworkGuidInfo>} */
+export const fakeNetworkGuidInfoList = [
+  fakeAllNetworksAvailable,
+  fakeWifiAndCellularNetworksAvailable,
+];
+
+/** @type {!Network} */
+export let fakeWifiNetwork = {
+  state: NetworkState.kConnected,
+  type: NetworkType.kWiFi,
+  networkProperties: {
+    signalStrength: 65,
+    frequency: 5745,
+    bssid: '44:07:0b:06:2d:85',
+    ssid: 'Dial Up',
+  },
+  guid: 'wifiGuid',
+  name: 'Dial Up',
+  macAddress: '84:C5:A6:30:3F:31',
+  ipConfigProperties: {
+    ipAddress: '192.168.86.197',
+    gateway: '192.168.86.1',
+    nameServers: ['192.168.86.1'],
+    subnetMask: '255.255.255.0',
+  },
+};
+
+
+/** @type {!Network} */
+export let fakeEthernetNetwork = {
+  state: NetworkState.kOnline,
+  type: NetworkType.kEthernet,
+  networkProperties: {},
+  guid: 'ethernetGuid',
+  name: 'ethernetName',
+  macAddress: '81:C5:A6:30:3F:31',
+  ipConfigProperties: null,
+};
+
+/** @type {!Network} */
+export let fakeCellularNetwork = {
+  state: NetworkState.kConnected,
+  type: NetworkType.kCellular,
+  networkProperties: {},
+  guid: 'cellularGuid',
+  name: 'cellularName',
+  macAddress: '85:C5:A6:30:3F:31',
+  ipConfigProperties: null,
 };

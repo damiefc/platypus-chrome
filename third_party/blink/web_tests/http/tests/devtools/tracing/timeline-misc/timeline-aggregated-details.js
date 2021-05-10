@@ -4,8 +4,8 @@
 
 (async function() {
   TestRunner.addResult(`Test timeline aggregated details.\n`);
-  await TestRunner.loadModule('performance_test_runner');
-  await TestRunner.loadModule('network_test_runner');
+  await TestRunner.loadModule('timeline'); await TestRunner.loadTestModule('performance_test_runner');
+  await TestRunner.loadTestModule('network_test_runner');
   await TestRunner.showPanel('timeline');
 
   TestRunner.addResult('');
@@ -588,7 +588,7 @@
     } else {
       TestRunner.addResult(type);
     }
-    var rootNode = tree._dataGrid.rootNode();
+    var rootNode = tree.dataGrid.rootNode();
     for (var node of rootNode.children)
       printEventTree(1, node._profileNode, node._treeView);
   }

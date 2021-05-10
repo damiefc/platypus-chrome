@@ -13,9 +13,6 @@
 
 class SigninClient;
 
-// Enables usage of Gaia Auth Multilogin endpoint for identity consistency.
-extern const base::Feature kUseMultiloginEndpoint;
-
 namespace signin {
 
 // AccountReconcilorDelegate specialized for Dice.
@@ -27,8 +24,6 @@ class DiceAccountReconcilorDelegate : public AccountReconcilorDelegate {
 
   // AccountReconcilorDelegate:
   bool IsReconcileEnabled() const override;
-  bool IsMultiloginEndpointEnabled() const override;
-  bool IsAccountConsistencyEnforced() const override;
   gaia::GaiaSource GetGaiaApiSource() const override;
   CoreAccountId GetFirstGaiaAccountForReconcile(
       const std::vector<CoreAccountId>& chrome_accounts,
@@ -41,8 +36,7 @@ class DiceAccountReconcilorDelegate : public AccountReconcilorDelegate {
   // Returns true if in force migration to dice state.
   bool ShouldRevokeTokensNotInCookies() const override;
   // Disables force dice migration and sets dice migration as completed.
-  void OnRevokeTokensNotInCookiesCompleted(
-      RevokeTokenAction revoke_token_action) override;
+  void OnRevokeTokensNotInCookiesCompleted() override;
   void OnReconcileFinished(const CoreAccountId& first_account) override;
   bool ShouldRevokeTokensOnCookieDeleted() override;
   bool ShouldRevokeTokensBeforeMultilogin(

@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -17,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/profiles/profile.h"
@@ -45,9 +46,9 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/service_names.mojom.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/hit_test_region_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_notification_tracker.h"
 #include "content/public/test/test_utils.h"
@@ -62,7 +63,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "url/gurl.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
@@ -488,18 +489,15 @@ class MailtoExternalProtocolHandlerDelegate
 // This test is not run on ChromeOS because it registers a custom handler (see
 // ProtocolHandlerRegistry::InstallDefaultsForChromeOS), and handles mailto:
 // navigations before getting to external protocol code.
-// Flaky on Windows. See https://crbug.com/980446
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
-#define MAYBE_LaunchExternalProtocolFromSubframe \
-  DISABLED_LaunchExternalProtocolFromSubframe
-#else
-#define MAYBE_LaunchExternalProtocolFromSubframe \
-  LaunchExternalProtocolFromSubframe
-#endif
+
 // This test verifies that external protocol requests succeed when made from an
 // OOPIF (https://crbug.com/668289).
+
+// Disabled due to flakiness. If enabled, still skip for ChromeOS based on
+// comment above.
+// See https://crbug.com/980446
 IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest,
-                       MAYBE_LaunchExternalProtocolFromSubframe) {
+                       DISABLED_LaunchExternalProtocolFromSubframe) {
   GURL start_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
 
   ui_test_utils::NavigateToURL(browser(), start_url);
@@ -1447,11 +1445,18 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTestWithVerifiedUserActivation,
       ChildFrameAt(web_contents->GetMainFrame(), 0);
   content::RenderFrameHost* frame_b = ChildFrameAt(frame_a, 0);
 
-  // Activate subframe a. Using frame_b's bound to find a point in subframe a.
-  gfx::Rect bounds = frame_b->GetView()->GetViewBounds();
+  // The test becomes flaky if we don't wait for frame_a's hit-test data before
+  // sending the mouse-event below (crbug.com/1119342).
+  content::WaitForHitTestData(frame_a);
+
+  // Activate frame_a by clicking at the midpoints of top-left corners of
+  // frame_a and frame_b.
+  gfx::Rect bounds_a = frame_a->GetView()->GetViewBounds();
+  gfx::Rect bounds_b = frame_b->GetView()->GetViewBounds();
   content::SimulateMouseClickAt(web_contents, 0 /* modifiers */,
                                 blink::WebMouseEvent::Button::kLeft,
-                                gfx::Point(bounds.x() - 5, bounds.y() - 5));
+                                gfx::Point((bounds_a.x() + bounds_b.x()) / 2,
+                                           (bounds_a.y() + bounds_b.y()) / 2));
 
   // Add a popup observer.
   content::TestNavigationObserver popup_observer(nullptr);
@@ -1502,7 +1507,7 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, JSPrintDuringSwap) {
   EXPECT_TRUE(watcher.did_exit_normally());
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // This test verifies that an OOPIF created in a tab on a secondary display
 // doesn't initialize its device scale factor based on the primary display.
 // Note: This test could probably be expanded to run on all ASH platforms.

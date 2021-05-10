@@ -3,20 +3,25 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_elements/cr_grid/cr_grid.js';
-
 import '../../img.js';
+import '../../strings.m.js';
+import '../module_header.js';
 
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {I18nBehavior, loadTimeData} from '../../i18n_setup.js';
 import {ModuleDescriptor} from '../module_descriptor.js';
 
-/**
- * @fileoverview A dummy module, which serves as an example and a helper to
- * build out the NTP module framework.
- */
+import {FooProxy} from './foo_proxy.js';
 
-class DummyModuleElement extends PolymerElement {
+/**
+ * A dummy module, which serves as an example and a helper to build out the NTP
+ * module framework.
+ * @polymer
+ * @extends {PolymerElement}
+ */
+class DummyModuleElement extends mixinBehaviors
+([I18nBehavior], PolymerElement) {
   static get is() {
     return 'ntp-dummy-module';
   }
@@ -27,77 +32,59 @@ class DummyModuleElement extends PolymerElement {
 
   static get properties() {
     return {
-      tiles: {
-        type: Array,
-        value: () => ([
-          {
-            label: 'item1',
-            value: 'foo',
-            imageUrl: 'https://lh4.googleusercontent.com/proxy/' +
-                'kFIJNnm2DMbS3B5LXaIdm2JKI6twGWwmzQbcJCfqTfuaH_' +
-                'ULD50v1Z3BGPEF32xTPRvgGLx492zcy_kcatCde2wmz-9Z' +
-                'YFqifbJRMl2DzyE=w170-h85-p-k-no-nd-mv',
-          },
-          {
-            label: 'item2',
-            value: 'bar',
-            imageUrl: 'https://lh6.googleusercontent.com/proxy/' +
-                'KyyCsF6dIQ783r3Znmvdo76QY2RgzcR5t4rnA5kKjsmrlp' +
-                'sb_pWGndQkyuAI4mv68X_9ZX2Edd-0FP4iQZRFm8UAW3oD' +
-                'X8Coqk3C85UNAX3H4Eh_5wGyDB0SY6HOQjOXVQ=w170-h85-p-k-no-nd-mv',
-          },
-          {
-            label: 'item3',
-            value: 'baz',
-            imageUrl: 'https://lh6.googleusercontent.com/proxy/' +
-                '4IP40Q18w6aDF4oS4WRnUj0MlCCKPK-vLHqSd4r-RfS6Jx' +
-                'gblG5WJuRYpkJkoTzLMS0qv3Sxhf9wdaKkn3vHnyy6oe7Ah' +
-                '5y0=w170-h85-p-k-no-nd-mv',
-          },
-          {
-            label: 'item4',
-            value: 'foo',
-            imageUrl: 'https://lh3.googleusercontent.com/proxy/' +
-                'd_4gDNBtm9Ddv8zqqm0MVY93_j-_e5M-bGgH-bSAfIR65F' +
-                'YGacJTemvNp9fDT0eiIbi3bzrf7HMMsupe2QIIfm5H7BMH' +
-                'Y3AI5rkYUpx-lQ=w170-h85-p-k-no-nd-mv',
-          },
-          {
-            label: 'item5',
-            value: 'bar',
-            imageUrl: 'https://lh5.googleusercontent.com/proxy/' +
-                'xvtq6_782kBajCBr0GISHpujOb51XLKUeEOJ2lLPKh12-x' +
-                'NBTCtsoHT14NQcaH9l4JhatcXEMBkqgUeCWhb3XhdLnD1B' +
-                'iNzQ_LVydwg=w170-h85-p-k-no-nd-mv',
-          },
-          {
-            label: 'item6',
-            value: 'baz',
-            imageUrl: 'https://lh6.googleusercontent.com/proxy/' +
-                'fUx750lchxFJb3f37v_-4iJPzcTKtJbd5LDRO7S9Xy7nkP' +
-                'zh7HFU61tN36j4Diaa9Yk3K7kWshRwmqcrulnhbeJrRpIn' +
-                '79PjHN-N=w170-h85-p-k-no-nd-mv',
-          },
-        ]),
-      }
+      /** @type {!Array<!foo.mojom.FooDataItem>} */
+      tiles: Array,
+
+      /** @type {!string} */
+      title: String,
     };
+  }
+
+  constructor() {
+    super();
+    this.initializeData_();
+  }
+
+  /** @private */
+  async initializeData_() {
+    const tileData = await FooProxy.getInstance().handler.getData();
+    this.tiles = tileData.data;
+  }
+
+  /** @private */
+  onDisableButtonClick_() {
+    this.dispatchEvent(new CustomEvent('disable-module', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        message: loadTimeData.getStringF(
+            'disableModuleToastMessage',
+            loadTimeData.getString('modulesDummyLower')),
+      },
+    }));
   }
 }
 
 customElements.define(DummyModuleElement.is, DummyModuleElement);
 
+/**
+ * @param {!string} titleId
+ * @return {!DummyModuleElement}
+ */
+function createDummyElement(titleId) {
+  const element = new DummyModuleElement();
+  element.title = loadTimeData.getString(titleId);
+  return element;
+}
+
 /** @type {!ModuleDescriptor} */
 export const dummyDescriptor = new ModuleDescriptor(
     /*id=*/ 'dummy',
-    /*heightPx=*/ 260, () => Promise.resolve({
-      element: new DummyModuleElement(),
-      title: loadTimeData.getString('modulesDummyTitle'),
-    }));
+    /*name=*/ loadTimeData.getString('modulesDummyTitle'),
+    () => Promise.resolve(createDummyElement('modulesDummyTitle')));
 
 /** @type {!ModuleDescriptor} */
 export const dummyDescriptor2 = new ModuleDescriptor(
     /*id=*/ 'dummy2',
-    /*heightPx=*/ 260, () => Promise.resolve({
-      element: new DummyModuleElement(),
-      title: loadTimeData.getString('modulesDummy2Title'),
-    }));
+    /*name=*/ loadTimeData.getString('modulesDummy2Title'),
+    () => Promise.resolve(createDummyElement('modulesDummy2Title')));

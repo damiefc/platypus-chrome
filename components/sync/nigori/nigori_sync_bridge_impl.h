@@ -16,11 +16,12 @@
 #include "base/optional.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
+#include "components/sync/engine/nigori/key_derivation_params.h"
+#include "components/sync/engine/nigori/keystore_keys_handler.h"
 #include "components/sync/engine/sync_encryption_handler.h"
 #include "components/sync/model/conflict_resolution.h"
 #include "components/sync/model/model_error.h"
 #include "components/sync/nigori/cryptographer_impl.h"
-#include "components/sync/nigori/keystore_keys_handler.h"
 #include "components/sync/nigori/nigori_local_change_processor.h"
 #include "components/sync/nigori/nigori_state.h"
 #include "components/sync/nigori/nigori_sync_bridge.h"
@@ -61,15 +62,16 @@ class NigoriSyncBridgeImpl : public KeystoreKeysHandler,
   // SyncEncryptionHandler implementation.
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
-  bool Init() override;
+  void NotifyInitialStateToObservers() override;
   void SetEncryptionPassphrase(const std::string& passphrase) override;
   void SetDecryptionPassphrase(const std::string& passphrase) override;
   void AddTrustedVaultDecryptionKeys(
       const std::vector<std::vector<uint8_t>>& keys) override;
-  void EnableEncryptEverything() override;
-  bool IsEncryptEverythingEnabled() const override;
-  base::Time GetKeystoreMigrationTime() const override;
+  base::Time GetKeystoreMigrationTime() override;
   KeystoreKeysHandler* GetKeystoreKeysHandler() override;
+  ModelTypeSet GetEncryptedTypes() override;
+  Cryptographer* GetCryptographer() override;
+  PassphraseType GetPassphraseType() override;
 
   // KeystoreKeysHandler implementation.
   bool NeedKeystoreKey() const override;
@@ -83,12 +85,7 @@ class NigoriSyncBridgeImpl : public KeystoreKeysHandler,
   std::unique_ptr<EntityData> GetData() override;
   void ApplyDisableSyncChanges() override;
 
-  // TODO(crbug.com/922900): investigate whether we need this getter outside of
-  // tests and decide whether this method should be a part of
-  // SyncEncryptionHandler interface.
-  const CryptographerImpl& GetCryptographerForTesting() const;
-  sync_pb::NigoriSpecifics::PassphraseType GetPassphraseTypeForTesting() const;
-  ModelTypeSet GetEncryptedTypesForTesting() const;
+  const CryptographerImpl& GetCryptographerImplForTesting() const;
   bool HasPendingKeysForTesting() const;
   KeyDerivationParams GetCustomPassphraseKeyDerivationParamsForTesting() const;
 
@@ -99,10 +96,6 @@ class NigoriSyncBridgeImpl : public KeystoreKeysHandler,
  private:
   base::Optional<ModelError> UpdateLocalState(
       const sync_pb::NigoriSpecifics& specifics);
-
-  base::Optional<ModelError> UpdateCryptographer(
-      const sync_pb::EncryptedData& encryption_keybag,
-      const NigoriKeyBag& decryption_key_bag);
 
   base::Optional<sync_pb::NigoriKey> TryDecryptPendingKeystoreDecryptorToken(
       const sync_pb::EncryptedData& keystore_decryptor_token);

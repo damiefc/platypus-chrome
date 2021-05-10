@@ -379,12 +379,14 @@ export class PasswordSectionElementFactory {
   /**
    * Helper method used to create a password editing dialog.
    * @param {!MultiStorePasswordUiEntry} passwordEntry
+   * @param {!Array<!MultiStorePasswordUiEntry>} passwords
    * @return {!Object}
    */
-  createPasswordEditDialog(passwordEntry) {
+  createPasswordEditDialog(passwordEntry, passwords) {
     const passwordDialog = this.document.createElement('password-edit-dialog');
     passwordDialog.entry = passwordEntry;
     passwordDialog.password = '';
+    passwordDialog.savedPasswords = passwords ? passwords : [];
     this.document.body.appendChild(passwordDialog);
     flush();
     return passwordDialog;
@@ -414,11 +416,40 @@ export class PasswordSectionElementFactory {
   }
 }
 
+/**
+ * Helper class for creating password-device-section sub-element from fake data
+ * and appending them to the document.
+ */
+export class PasswordDeviceSectionElementFactory {
+  /**
+   * @param {HTMLDocument} document The test's |document| object.
+   */
+  constructor(document) {
+    this.document = document;
+  }
+
+  /**
+   * Helper method used to create a move multiple password to the Google Account
+   * dialog.
+   * @param {!Array<!MultiStorePasswordUiEntry>} passwordsToMove
+   * @return {!Object}
+   */
+  createMoveMultiplePasswordsDialog(passwordsToMove) {
+    const moveDialog = this.document.createElement(
+        'password-move-multiple-passwords-to-account-dialog');
+    moveDialog.passwordsToMove = passwordsToMove;
+    this.document.body.appendChild(moveDialog);
+    flush();
+    return moveDialog;
+  }
+}
+
 /** Helper class to track AutofillManager expectations. */
 export class AutofillManagerExpectations {
   constructor() {
     this.requestedAddresses = 0;
     this.listeningAddresses = 0;
+    this.removeAddress = 0;
   }
 }
 
@@ -462,7 +493,9 @@ export class TestAutofillManager {
   saveAddress() {}
 
   /** @override */
-  removeAddress() {}
+  removeAddress() {
+    this.actual_.removeAddress++;
+  }
 
   /**
    * Verifies expectations.
@@ -472,6 +505,7 @@ export class TestAutofillManager {
     const actual = this.actual_;
     assertEquals(expected.requestedAddresses, actual.requestedAddresses);
     assertEquals(expected.listeningAddresses, actual.listeningAddresses);
+    assertEquals(expected.removeAddress, actual.removeAddress);
   }
 }
 

@@ -13,7 +13,7 @@
 #include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "ui/gl/android/android_surface_control_compat.h"
+#include "ui/gfx/android/android_surface_control_compat.h"
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_surface_egl.h"
 
@@ -55,6 +55,7 @@ class GL_EXPORT GLSurfaceEGLSurfaceControl : public GLSurfaceEGL {
                             std::unique_ptr<gfx::GpuFence> gpu_fence) override;
   bool IsSurfaceless() const override;
   void* GetHandle() override;
+  void PreserveChildSurfaceControls() override;
 
   // Sync versions of frame update, should never be used.
   gfx::SwapResult SwapBuffers(PresentationCallback callback) override;
@@ -90,7 +91,7 @@ class GL_EXPORT GLSurfaceEGLSurfaceControl : public GLSurfaceEGL {
 
   struct SurfaceState {
     SurfaceState();
-    SurfaceState(const SurfaceControl::Surface& parent,
+    SurfaceState(const gfx::SurfaceControl::Surface& parent,
                  const std::string& name);
     ~SurfaceState();
 
@@ -112,7 +113,7 @@ class GL_EXPORT GLSurfaceEGLSurfaceControl : public GLSurfaceEGL {
 
     // Indicates whether the |surface| will be visible or hidden.
     bool visibility = true;
-    scoped_refptr<SurfaceControl::Surface> surface;
+    scoped_refptr<gfx::SurfaceControl::Surface> surface;
   };
 
   struct ResourceRef {
@@ -122,7 +123,7 @@ class GL_EXPORT GLSurfaceEGLSurfaceControl : public GLSurfaceEGL {
     ResourceRef(ResourceRef&& other);
     ResourceRef& operator=(ResourceRef&& other);
 
-    scoped_refptr<SurfaceControl::Surface> surface;
+    scoped_refptr<gfx::SurfaceControl::Surface> surface;
     std::unique_ptr<base::android::ScopedHardwareBufferFenceSync> scoped_buffer;
   };
   using ResourceRefs = base::flat_map<ASurfaceControl*, ResourceRef>;
@@ -153,6 +154,27 @@ class GL_EXPORT GLSurfaceEGLSurfaceControl : public GLSurfaceEGL {
     base::ScopedFD ready_fence;
   };
 
+  using TransactionId = uint64_t;
+  class TransactionAckTimeoutManager {
+   public:
+    TransactionAckTimeoutManager(
+        scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+    ~TransactionAckTimeoutManager();
+
+    void ScheduleHangDetection();
+    void OnTransactionAck();
+
+   private:
+    void OnTransactionTimeout(TransactionId transaction_id);
+
+    scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner_;
+    TransactionId current_transaction_id_ = 0;
+    TransactionId last_acked_transaction_id_ = 0;
+    base::CancelableOnceClosure hang_detection_cb_;
+
+    DISALLOW_COPY_AND_ASSIGN(TransactionAckTimeoutManager);
+  };
+
   void CommitPendingTransaction(const gfx::Rect& damage_rect,
                                 SwapCompletionCallback completion_callback,
                                 PresentationCallback callback);
@@ -164,8 +186,13 @@ class GL_EXPORT GLSurfaceEGLSurfaceControl : public GLSurfaceEGL {
       PresentationCallback presentation_callback,
       ResourceRefs released_resources,
       base::Optional<PrimaryPlaneFences> primary_plane_fences,
-      SurfaceControl::TransactionStats transaction_stats);
+      gfx::SurfaceControl::TransactionStats transaction_stats);
 
+  // Called on the |gpu_task_runner_| when a transaction is committed by the
+  // framework.
+  void OnTransactionCommittedOnGpuThread();
+
+  void AdvanceTransactionQueue();
   void CheckPendingPresentationCallbacks();
 
   gfx::Rect ApplyDisplayInverse(const gfx::Rect& input) const;
@@ -179,7 +206,7 @@ class GL_EXPORT GLSurfaceEGLSurfaceControl : public GLSurfaceEGL {
   gfx::Rect window_rect_;
 
   // Holds the surface state changes made since the last call to SwapBuffers.
-  base::Optional<SurfaceControl::Transaction> pending_transaction_;
+  base::Optional<gfx::SurfaceControl::Transaction> pending_transaction_;
   size_t pending_surfaces_count_ = 0u;
   // Resources in the pending frame, for which updates are being
   // collected in |pending_transaction_|. These are resources for which the
@@ -192,7 +219,7 @@ class GL_EXPORT GLSurfaceEGLSurfaceControl : public GLSurfaceEGL {
   base::Optional<PrimaryPlaneFences> primary_plane_fences_;
 
   // Transactions waiting to be applied once the previous transaction is acked.
-  std::queue<SurfaceControl::Transaction> pending_transaction_queue_;
+  std::queue<gfx::SurfaceControl::Transaction> pending_transaction_queue_;
 
   // PresentationCallbacks for transactions which have been acked but their
   // present fence has not fired yet.
@@ -209,7 +236,7 @@ class GL_EXPORT GLSurfaceEGLSurfaceControl : public GLSurfaceEGL {
 
   // The root surface tied to the ANativeWindow that places the content of this
   // GLSurface in the java view tree.
-  scoped_refptr<SurfaceControl::Surface> root_surface_;
+  scoped_refptr<gfx::SurfaceControl::Surface> root_surface_;
 
   // The last context made current with this surface.
   scoped_refptr<GLContext> context_;
@@ -228,7 +255,14 @@ class GL_EXPORT GLSurfaceEGLSurfaceControl : public GLSurfaceEGL {
   // Set if a swap failed and the surface is no longer usable.
   bool surface_lost_ = false;
 
+  TransactionAckTimeoutManager transaction_ack_timeout_manager_;
+
+  bool preserve_children_ = false;
+
   scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner_;
+
+  const bool using_on_commit_callback_;
+
   base::WeakPtrFactory<GLSurfaceEGLSurfaceControl> weak_factory_{this};
 };
 

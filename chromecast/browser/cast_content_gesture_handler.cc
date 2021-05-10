@@ -4,6 +4,7 @@
 
 #include "chromecast/browser/cast_content_gesture_handler.h"
 
+#include "base/callback_helpers.h"
 #include "chromecast/base/chromecast_switches.h"
 
 namespace chromecast {
@@ -93,7 +94,7 @@ void CastContentGestureHandler::HandleSideSwipe(
       if (gesture_type == GestureType::GO_BACK &&
           touch_location.x() < back_horizontal_threshold_) {
         DVLOG(1) << "swipe gesture cancelled";
-        delegate_->CancelGesture(GestureType::GO_BACK, touch_location);
+        delegate_->CancelGesture(GestureType::GO_BACK);
         return;
       }
       delegate_->ConsumeGesture(gesture_type, base::DoNothing());

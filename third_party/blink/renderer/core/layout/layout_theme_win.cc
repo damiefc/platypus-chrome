@@ -7,7 +7,6 @@
 #include <windows.h>
 
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/web_test_support.h"
 
 namespace blink {
@@ -21,8 +20,9 @@ LayoutTheme& LayoutTheme::NativeTheme() {
   return *layout_theme;
 }
 
-Color LayoutThemeWin::SystemColor(CSSValueID css_value_id,
-                                  ColorScheme color_scheme) const {
+Color LayoutThemeWin::SystemColor(
+    CSSValueID css_value_id,
+    mojom::blink::ColorScheme color_scheme) const {
   blink::WebThemeEngine::SystemThemeColor theme_color;
   switch (css_value_id) {
     case CSSValueID::kActivetext:
@@ -59,8 +59,13 @@ Color LayoutThemeWin::SystemColor(CSSValueID css_value_id,
       return LayoutThemeDefault::SystemColor(css_value_id, color_scheme);
   }
 
+  // Fall back to the default system colors if the color scheme is dark and
+  // forced colors is not enabled.
   if (!WebTestSupport::IsRunningWebTest() && Platform::Current() &&
-      Platform::Current()->ThemeEngine()) {
+      Platform::Current()->ThemeEngine() &&
+      (color_scheme != mojom::blink::ColorScheme::kDark ||
+       Platform::Current()->ThemeEngine()->GetForcedColors() !=
+           ForcedColors::kNone)) {
     const base::Optional<SkColor> system_color =
         Platform::Current()->ThemeEngine()->GetSystemColor(theme_color);
     if (system_color)

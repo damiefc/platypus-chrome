@@ -9,7 +9,6 @@
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/ascii_ctype.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
@@ -31,14 +30,11 @@ Vector<uint8_t> BufferSourceToVector(
   if (application_server_key.IsArrayBuffer()) {
     input =
         static_cast<char*>(application_server_key.GetAsArrayBuffer()->Data());
-    length = application_server_key.GetAsArrayBuffer()->ByteLengthAsSizeT();
+    length = application_server_key.GetAsArrayBuffer()->ByteLength();
   } else if (application_server_key.IsArrayBufferView()) {
     input = static_cast<char*>(
-        application_server_key.GetAsArrayBufferView().View()->buffer()->Data());
-    length = application_server_key.GetAsArrayBufferView()
-                 .View()
-                 ->buffer()
-                 ->ByteLengthAsSizeT();
+        application_server_key.GetAsArrayBufferView()->BaseAddress());
+    length = application_server_key.GetAsArrayBufferView()->byteLength();
   } else if (application_server_key.IsString()) {
     if (!Base64UnpaddedURLDecode(application_server_key.GetAsString(),
                                  decoded_application_server_key)) {

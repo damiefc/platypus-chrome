@@ -5,8 +5,6 @@
 #ifndef CHROME_BROWSER_BROWSER_PROCESS_PLATFORM_PART_BASE_H_
 #define CHROME_BROWSER_BROWSER_PROCESS_PLATFORM_PART_BASE_H_
 
-#include <memory>
-
 #include "base/macros.h"
 #include "content/public/browser/content_browser_client.h"
 
@@ -26,7 +24,10 @@ class BrowserProcessPlatformPartBase {
   virtual void PlatformSpecificCommandLineProcessing(
       const base::CommandLine& command_line);
 
-  // Called from BrowserProcessImpl::StartTearDown().
+  // Called at the very beginning of BrowserProcessImpl::StartTearDown().
+  virtual void BeginStartTearDown();
+
+  // Called in the middle of BrowserProcessImpl::StartTearDown().
   virtual void StartTearDown();
 
   // Called from AttemptExitInternal().

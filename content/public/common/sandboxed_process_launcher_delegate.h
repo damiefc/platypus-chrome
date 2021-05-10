@@ -35,6 +35,8 @@ class CONTENT_EXPORT SandboxedProcessLauncherDelegate
   bool GetAppContainerId(std::string* appcontainer_id) override;
   bool PreSpawnTarget(sandbox::TargetPolicy* policy) override;
   void PostSpawnTarget(base::ProcessHandle process) override;
+  bool ShouldUnsandboxedRunInJob() override;
+  bool CetCompatible() override;
 
   // Override to return true if the process should be launched as an elevated
   // process (which implies no sandbox).
@@ -55,7 +57,11 @@ class CONTENT_EXPORT SandboxedProcessLauncherDelegate
   // Whether or not to disclaim TCC responsibility for the process, defaults to
   // false. See base::LaunchOptions::disclaim_responsibility.
   virtual bool DisclaimResponsibility();
-#endif
+
+  // Whether or not to enable CPU security mitigations against side-channel
+  // attacks. See base::LaunchOptions::enable_cpu_security_mitigations.
+  virtual bool EnableCpuSecurityMitigations();
+#endif  // OS_MAC
 };
 
 }  // namespace content

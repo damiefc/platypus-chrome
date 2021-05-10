@@ -169,12 +169,12 @@ class FetchDataLoaderAsArrayBuffer final : public FetchDataLoader,
           NOTREACHED();
           return;
         case BytesConsumer::Result::kDone: {
-          DOMArrayBuffer* result = BuildArrayBuffer();
-          if (!result) {
+          DOMArrayBuffer* array_buffer = BuildArrayBuffer();
+          if (!array_buffer) {
             client_->DidFetchDataLoadFailed();
             return;
           }
-          client_->DidFetchDataLoadedArrayBuffer(result);
+          client_->DidFetchDataLoadedArrayBuffer(array_buffer);
           return;
         }
         case BytesConsumer::Result::kError:
@@ -402,7 +402,7 @@ class FetchDataLoaderAsFormData final : public FetchDataLoader,
           string_decoder_ = std::make_unique<TextResourceDecoder>(
               TextResourceDecoderOptions::CreateUTF8DecodeWithoutBOM());
         }
-        string_builder_.reset(new StringBuilder);
+        string_builder_ = std::make_unique<StringBuilder>();
       }
       return true;
     }
@@ -559,7 +559,7 @@ class FetchDataLoaderAsDataPipe final : public FetchDataLoader,
       options.capacity_num_bytes = 0;
 
       MojoResult rv =
-          mojo::CreateDataPipe(&options, &out_data_pipe_, &pipe_consumer);
+          mojo::CreateDataPipe(&options, out_data_pipe_, pipe_consumer);
       if (rv != MOJO_RESULT_OK) {
         StopInternal();
         client_->DidFetchDataLoadFailed();

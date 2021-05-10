@@ -11,9 +11,12 @@
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/devtools/protocol/devtools_domain_handler.h"
 #include "content/browser/devtools/protocol/storage.h"
+
+namespace storage {
+class QuotaOverrideHandle;
+}
 
 namespace content {
 class StoragePartition;
@@ -41,6 +44,13 @@ class StorageHandler : public DevToolsDomainHandler,
       const String& origin,
       std::unique_ptr<GetUsageAndQuotaCallback> callback) override;
 
+  // Storage Quota Override
+  void GetQuotaOverrideHandle();
+  void OverrideQuotaForOrigin(
+      const String& origin,
+      Maybe<double> quota_size,
+      std::unique_ptr<OverrideQuotaForOriginCallback> callback) override;
+
   // Cookies management
   void GetCookies(
       Maybe<std::string> browser_context_id,
@@ -61,6 +71,12 @@ class StorageHandler : public DevToolsDomainHandler,
   Response TrackIndexedDBForOrigin(const std::string& origin) override;
   Response UntrackIndexedDBForOrigin(const std::string& origin) override;
 
+  void GetTrustTokens(
+      std::unique_ptr<GetTrustTokensCallback> callback) override;
+  void ClearTrustTokens(
+      const std::string& issuerOrigin,
+      std::unique_ptr<ClearTrustTokensCallback> callback) override;
+
  private:
   // See definition for lifetime information.
   class CacheStorageObserver;
@@ -75,8 +91,8 @@ class StorageHandler : public DevToolsDomainHandler,
                                         const std::string& name);
   void NotifyIndexedDBListChanged(const std::string& origin);
   void NotifyIndexedDBContentChanged(const std::string& origin,
-                                     const base::string16& database_name,
-                                     const base::string16& object_store_name);
+                                     const std::u16string& database_name,
+                                     const std::u16string& object_store_name);
 
   Response FindStoragePartition(const Maybe<std::string>& browser_context_id,
                                 StoragePartition** storage_partition);
@@ -85,6 +101,9 @@ class StorageHandler : public DevToolsDomainHandler,
   StoragePartition* storage_partition_;
   std::unique_ptr<CacheStorageObserver> cache_storage_observer_;
   std::unique_ptr<IndexedDBObserver> indexed_db_observer_;
+
+  // Exposes the API for managing storage quota overrides.
+  std::unique_ptr<storage::QuotaOverrideHandle> quota_override_handle_;
 
   base::WeakPtrFactory<StorageHandler> weak_ptr_factory_{this};
 

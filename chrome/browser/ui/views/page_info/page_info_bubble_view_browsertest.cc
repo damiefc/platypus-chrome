@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 
 #include "base/run_loop.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
@@ -28,8 +28,9 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/page_info/page_info.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/safe_browsing/content/password_protection/metrics_util.h"
+#include "components/safe_browsing/content/password_protection/password_protection_test_util.h"
 #include "components/safe_browsing/core/features.h"
+#include "components/safe_browsing/core/password_protection/metrics_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -102,7 +103,7 @@ void ClickAndWaitForSettingsPageToOpen(views::View* site_settings_button) {
   content::WebContentsAddedObserver new_tab_observer;
   PerformMouseClickOnView(site_settings_button);
 
-  base::string16 expected_title(base::ASCIIToUTF16("Settings"));
+  std::u16string expected_title(u"Settings");
   content::TitleWatcher title_watcher(new_tab_observer.GetWebContents(),
                                       expected_title);
   EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
@@ -178,8 +179,7 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
     } else if (name == kInternalViewSource) {
       constexpr char kTestHtml[] = "/viewsource/test.html";
       ASSERT_TRUE(embedded_test_server()->Start());
-      url = GURL(content::kViewSourceScheme +
-                 std::string(url::kStandardSchemeSeparator) +
+      url = GURL(content::kViewSourceScheme + std::string(":") +
                  embedded_test_server()->GetURL(kTestHtml).spec());
     } else if (name == kFile) {
       url = file_url;
@@ -188,6 +188,7 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
     ui_test_utils::NavigateToURL(browser(), url);
     OpenPageInfoBubble(browser());
 
+    safe_browsing::ReusedPasswordAccountType reused_password_account_type;
     PageInfoUI::IdentityInfo identity;
     if (name == kInsecure) {
       identity.identity_status = PageInfo::SITE_IDENTITY_STATUS_NO_CERT;
@@ -218,17 +219,29 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
       identity.safe_browsing_status =
           PageInfo::SAFE_BROWSING_STATUS_UNWANTED_SOFTWARE;
     } else if (name == kSignInSyncPasswordReuse) {
+      reused_password_account_type.set_account_type(
+          safe_browsing::ReusedPasswordAccountType::GSUITE);
       identity.safe_browsing_status =
           PageInfo::SAFE_BROWSING_STATUS_SIGNED_IN_SYNC_PASSWORD_REUSE;
+      identity.show_change_password_buttons = true;
     } else if (name == kSignInNonSyncPasswordReuse) {
+      reused_password_account_type.set_account_type(
+          safe_browsing::ReusedPasswordAccountType::GMAIL);
       identity.safe_browsing_status =
           PageInfo::SAFE_BROWSING_STATUS_SIGNED_IN_NON_SYNC_PASSWORD_REUSE;
+      identity.show_change_password_buttons = true;
     } else if (name == kEnterprisePasswordReuse) {
+      reused_password_account_type.set_account_type(
+          safe_browsing::ReusedPasswordAccountType::NON_GAIA_ENTERPRISE);
       identity.safe_browsing_status =
           PageInfo::SAFE_BROWSING_STATUS_ENTERPRISE_PASSWORD_REUSE;
+      identity.show_change_password_buttons = true;
     } else if (name == kSavedPasswordReuse) {
+      reused_password_account_type.set_account_type(
+          safe_browsing::ReusedPasswordAccountType::SAVED_PASSWORD);
       identity.safe_browsing_status =
           PageInfo::SAFE_BROWSING_STATUS_SAVED_PASSWORD_REUSE;
+      identity.show_change_password_buttons = true;
     } else if (name == kMalwareAndBadCert) {
       identity.identity_status = PageInfo::SITE_IDENTITY_STATUS_ERROR;
       identity.certificate = net::ImportCertFromFile(
@@ -260,7 +273,6 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
                 ->Get(info.type)
                 ->GetInitialDefaultSetting();
         info.source = content_settings::SettingSource::SETTING_SOURCE_USER;
-        info.is_incognito = false;
         permissions_list.push_back(info);
       }
 
@@ -278,6 +290,20 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
 
       page_info_bubble_view->SetPermissionInfo(permissions_list,
                                                std::move(chosen_object_list));
+    }
+
+    if (name == kSignInSyncPasswordReuse ||
+        name == kSignInNonSyncPasswordReuse ||
+        name == kEnterprisePasswordReuse || name == kSavedPasswordReuse) {
+      safe_browsing::ChromePasswordProtectionService* service =
+          safe_browsing::ChromePasswordProtectionService::
+              GetPasswordProtectionService(browser()->profile());
+      service->set_reused_password_account_type_for_last_shown_warning(
+          reused_password_account_type);
+      std::vector<size_t> placeholder_offsets;
+      identity.safe_browsing_details = service->GetWarningDetailText(
+          service->reused_password_account_type_for_last_shown_warning(),
+          &placeholder_offsets);
     }
 
     if (name != kInsecure && name.find(kInternal) == std::string::npos &&
@@ -325,9 +351,11 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
         ->GetMainFrame()
         ->ExecuteJavaScriptForTests(
             base::ASCIIToUTF16(js),
-            base::BindOnce([](const base::Closure& quit_callback,
-                              base::Value result) { quit_callback.Run(); },
-                           run_loop.QuitClosure()));
+            base::BindOnce(
+                [](base::OnceClosure quit_callback, base::Value result) {
+                  std::move(quit_callback).Run();
+                },
+                run_loop.QuitClosure()));
     run_loop.Run();
   }
 
@@ -344,7 +372,6 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
     permission.setting = ContentSetting::CONTENT_SETTING_BLOCK;
     permission.default_setting = ContentSetting::CONTENT_SETTING_ASK;
     permission.source = content_settings::SettingSource::SETTING_SOURCE_USER;
-    permission.is_incognito = false;
     page_info_bubble_view->OnPermissionChanged(permission);
   }
 
@@ -355,7 +382,7 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
         ->SetIdentityInfo(identity_info);
   }
 
-  base::string16 GetCertificateButtonTitle() const {
+  std::u16string GetCertificateButtonTitle() const {
     // Only PageInfoBubbleViewBrowserTest can access certificate_button_ in
     // PageInfoBubbleView, or title() in HoverButton.
     PageInfoBubbleView* page_info_bubble_view =
@@ -364,14 +391,14 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
     return page_info_bubble_view->certificate_button_->title()->GetText();
   }
 
-  base::string16 GetCertificateButtonSubtitle() const {
+  std::u16string GetCertificateButtonSubtitle() const {
     PageInfoBubbleView* page_info_bubble_view =
         static_cast<PageInfoBubbleView*>(
             PageInfoBubbleView::GetPageInfoBubbleForTesting());
     return page_info_bubble_view->certificate_button_->subtitle()->GetText();
   }
 
-  const base::string16 GetPageInfoBubbleViewDetailText() {
+  const std::u16string GetPageInfoBubbleViewDetailText() {
     PageInfoBubbleView* page_info_bubble_view =
         static_cast<PageInfoBubbleView*>(
             PageInfoBubbleView::GetPageInfoBubbleForTesting());
@@ -483,8 +510,10 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
   service->set_reused_password_account_type_for_last_shown_warning(
       reused_password_account_type);
 
+  scoped_refptr<safe_browsing::PasswordProtectionRequest> request =
+      safe_browsing::CreateDummyRequest(contents);
   service->ShowModalWarning(
-      contents, safe_browsing::RequestOutcome::UNKNOWN,
+      request.get(),
       safe_browsing::LoginReputationClientResponse::VERDICT_TYPE_UNSPECIFIED,
       "unused_token", reused_password_account_type);
 
@@ -562,8 +591,10 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
   service->set_reused_password_account_type_for_last_shown_warning(
       reused_password_account_type);
 
+  scoped_refptr<safe_browsing::PasswordProtectionRequest> request =
+      safe_browsing::CreateDummyRequest(contents);
   service->ShowModalWarning(
-      contents, safe_browsing::RequestOutcome::UNKNOWN,
+      request.get(),
       safe_browsing::LoginReputationClientResponse::VERDICT_TYPE_UNSPECIFIED,
       "unused_token", reused_password_account_type);
 
@@ -669,12 +700,6 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
   ShowAndVerifyUi();
 }
 
-// Shows the Page Info bubble Safe Browsing warning after detecting the user has
-// re-used an existing password on a site, e.g. due to phishing.
-IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, InvokeUi_PasswordReuse) {
-  ShowAndVerifyUi();
-}
-
 // Shows the Page Info bubble for a site flagged for malware that also has a bad
 // certificate.
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
@@ -706,6 +731,36 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
 // set. All permissions will show regardless of its factory default value.
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
                        InvokeUi_BlockAllPermissions) {
+  ShowAndVerifyUi();
+}
+
+// Shows the Page Info bubble Safe Browsing warning after detecting the user has
+// re-used an existing password on a site, e.g. due to phishing.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeUi_SavedPasswordReuse) {
+  ShowAndVerifyUi();
+}
+
+// Shows the Page Info bubble Safe Browsing warning after detecting the
+// signed-in syncing user has re-used an existing password on a site, e.g. due
+// to phishing.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeUi_SignInSyncPasswordReuse) {
+  ShowAndVerifyUi();
+}
+// Shows the Page Info bubble Safe Browsing warning after detecting the
+// signed-in not syncing user has re-used an existing password on a site, e.g.
+// due to phishing.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeUi_SignInNonSyncPasswordReuse) {
+  ShowAndVerifyUi();
+}
+
+// Shows the Page Info bubble Safe Browsing warning after detecting the
+// enterprise user has re-used an existing password on a site, e.g. due to
+// phishing.
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                       InvokeUi_EnterprisePasswordReuse) {
   ShowAndVerifyUi();
 }
 
@@ -816,7 +871,7 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, BlockedAndInvalidCert) {
             l10n_util::GetStringUTF16(IDS_PAGE_INFO_MALWARE_SUMMARY));
 
   // ...and has a "Certificate (Invalid)" button.
-  const base::string16 invalid_parens = l10n_util::GetStringUTF16(
+  const std::u16string invalid_parens = l10n_util::GetStringUTF16(
       IDS_PAGE_INFO_CERTIFICATE_INVALID_PARENTHESIZED);
   EXPECT_EQ(GetCertificateButtonTitle(),
             l10n_util::GetStringFUTF16(IDS_PAGE_INFO_CERTIFICATE_BUTTON_TEXT,
@@ -862,7 +917,7 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, MalwareAndEvCert) {
   EXPECT_EQ(GetCertificateButtonSubtitle(),
             l10n_util::GetStringFUTF16(
                 IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_VERIFIED,
-                base::UTF8ToUTF16("Thawte Inc"), base::UTF8ToUTF16("US")));
+                u"Thawte Inc", u"US"));
 }
 
 namespace {
@@ -946,7 +1001,7 @@ class ViewFocusTracker : public FocusTracker, public views::ViewObserver {
  public:
   explicit ViewFocusTracker(views::View* view)
       : FocusTracker(view->HasFocus()) {
-    scoped_observer_.Add(view);
+    scoped_observation_.Observe(view);
   }
 
   void OnViewFocused(views::View* observed_view) override { OnFocused(); }
@@ -954,7 +1009,8 @@ class ViewFocusTracker : public FocusTracker, public views::ViewObserver {
   void OnViewBlurred(views::View* observed_view) override { OnBlurred(); }
 
  private:
-  ScopedObserver<views::View, views::ViewObserver> scoped_observer_{this};
+  base::ScopedObservation<views::View, views::ViewObserver> scoped_observation_{
+      this};
 };
 
 }  // namespace

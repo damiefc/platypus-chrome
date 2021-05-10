@@ -55,8 +55,8 @@ TEST_F(FileSystemProviderOperationsUnmountTest, Execute) {
   Unmount unmount(NULL, file_system_info_,
                   base::BindOnce(&util::LogStatusCallback, &callback_log));
   unmount.SetDispatchEventImplForTesting(
-      base::Bind(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
-                 base::Unretained(&dispatcher)));
+      base::BindRepeating(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
+                          base::Unretained(&dispatcher)));
 
   EXPECT_TRUE(unmount.Execute(kRequestId));
 
@@ -84,8 +84,8 @@ TEST_F(FileSystemProviderOperationsUnmountTest, Execute_NoListener) {
   Unmount unmount(NULL, file_system_info_,
                   base::BindOnce(&util::LogStatusCallback, &callback_log));
   unmount.SetDispatchEventImplForTesting(
-      base::Bind(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
-                 base::Unretained(&dispatcher)));
+      base::BindRepeating(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
+                          base::Unretained(&dispatcher)));
 
   EXPECT_FALSE(unmount.Execute(kRequestId));
 }
@@ -100,13 +100,12 @@ TEST_F(FileSystemProviderOperationsUnmountTest, OnSuccess) {
   Unmount unmount(NULL, file_system_info_,
                   base::BindOnce(&util::LogStatusCallback, &callback_log));
   unmount.SetDispatchEventImplForTesting(
-      base::Bind(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
-                 base::Unretained(&dispatcher)));
+      base::BindRepeating(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
+                          base::Unretained(&dispatcher)));
 
   EXPECT_TRUE(unmount.Execute(kRequestId));
 
-  unmount.OnSuccess(kRequestId,
-                    std::unique_ptr<RequestValue>(new RequestValue()),
+  unmount.OnSuccess(kRequestId, std::make_unique<RequestValue>(),
                     false /* has_more */);
   ASSERT_EQ(1u, callback_log.size());
   base::File::Error event_result = callback_log[0];
@@ -120,12 +119,12 @@ TEST_F(FileSystemProviderOperationsUnmountTest, OnError) {
   Unmount unmount(NULL, file_system_info_,
                   base::BindOnce(&util::LogStatusCallback, &callback_log));
   unmount.SetDispatchEventImplForTesting(
-      base::Bind(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
-                 base::Unretained(&dispatcher)));
+      base::BindRepeating(&util::LoggingDispatchEventImpl::OnDispatchEventImpl,
+                          base::Unretained(&dispatcher)));
 
   EXPECT_TRUE(unmount.Execute(kRequestId));
 
-  unmount.OnError(kRequestId, std::unique_ptr<RequestValue>(new RequestValue()),
+  unmount.OnError(kRequestId, std::make_unique<RequestValue>(),
                   base::File::FILE_ERROR_NOT_FOUND);
   ASSERT_EQ(1u, callback_log.size());
   base::File::Error event_result = callback_log[0];

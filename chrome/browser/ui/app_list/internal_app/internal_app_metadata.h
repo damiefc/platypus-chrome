@@ -54,7 +54,7 @@ struct InternalApp {
 const std::vector<InternalApp>& GetInternalAppList(const Profile* profile);
 
 // Returns true if the app should only be shown as a suggestion chip.
-bool IsSuggestionChip(const std::string& app_id, Profile* profile);
+bool IsSuggestionChip(const std::string& app_id);
 
 // Returns InternalApp by |app_id|.
 // Returns nullptr if |app_id| does not correspond to an internal app.
@@ -71,7 +71,7 @@ bool IsInternalApp(const std::string& app_id);
 // |test_delegate| is used to mock OpenTabsUIDelegate in test.
 bool HasRecommendableForeignTab(
     Profile* profile,
-    base::string16* title,
+    std::u16string* title,
     GURL* url,
     sync_sessions::OpenTabsUIDelegate* test_delegate);
 

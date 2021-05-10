@@ -32,8 +32,7 @@ class FakeCaptureContentLayerClient : public FakeContentLayerClient {
     holders_.push_back(holder);
   }
 
-  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      PaintingControlSetting painting_control) override {
+  scoped_refptr<DisplayItemList> PaintContentsToDisplayList() override {
     auto display_list = base::MakeRefCounted<DisplayItemList>();
     for (auto& holder : holders_) {
       display_list->StartPaint();
@@ -72,7 +71,8 @@ class LayerTreeHostCaptureContentTest : public LayerTreeTest {
     root->AddChild(root_picture_layer_);
 
     layer_tree_host()->SetRootLayer(root);
-    layer_tree_host()->SetViewportVisibleRect(gfx::Rect(device_bounds_));
+    layer_tree_host()->SetVisualDeviceViewportIntersectionRect(
+        gfx::Rect(device_bounds_));
   }
 
   void VerifyCapturedContent(std::vector<FakeTextHolder>* expected_result) {

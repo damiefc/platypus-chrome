@@ -10,7 +10,7 @@
 
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "chrome/browser/chromeos/arc/optin/arc_optin_preference_handler_observer.h"
+#include "chrome/browser/ash/arc/optin/arc_optin_preference_handler_observer.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chromeos/network/network_state_handler_observer.h"
@@ -125,7 +125,7 @@ class ArcTermsOfServiceScreenHandler
                     bool review_arc_settings,
                     const std::string& tos_content);
   // Loads Play Store ToS content in case default network exists. If
-  // |ignore_network_state| is set then network state is not checked.
+  // `ignore_network_state` is set then network state is not checked.
   void MaybeLoadPlayStoreToS(bool ignore_network_state);
 
   void StartNetworkAndTimeZoneObserving();

@@ -4,12 +4,13 @@
 
 #include "chrome/browser/web_applications/test/web_app_registration_waiter.h"
 
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace web_app {
 
-WebAppRegistrationWaiter::WebAppRegistrationWaiter(PendingAppManager* manager)
+WebAppRegistrationWaiter::WebAppRegistrationWaiter(
+    ExternallyManagedAppManager* manager)
     : manager_(manager) {
   manager_->SetRegistrationCallbackForTesting(base::BindLambdaForTesting(
       [this](const GURL& install_url, RegistrationResultCode code) {

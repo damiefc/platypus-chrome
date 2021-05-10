@@ -17,6 +17,7 @@
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/chromeos_buildflags.h"
 #include "components/policy/policy_constants.h"
 #include "net/base/network_change_notifier.h"
 #include "remoting/base/auto_thread_task_runner.h"
@@ -219,7 +220,7 @@ void It2MeHostTest::SetUp() {
   // network thread. base::GetLinuxDistro() caches the result.
   base::GetLinuxDistro();
 #endif
-  run_loop_.reset(new base::RunLoop());
+  run_loop_ = std::make_unique<base::RunLoop>();
 
   network_change_notifier_ = net::NetworkChangeNotifier::CreateIfNeeded();
 
@@ -227,8 +228,8 @@ void It2MeHostTest::SetUp() {
       base::ThreadTaskRunnerHandle::Get(), run_loop_->QuitClosure()));
   network_task_runner_ = host_context_->network_task_runner();
   ui_task_runner_ = host_context_->ui_task_runner();
-  fake_bot_signal_strategy_.reset(
-      new FakeSignalStrategy(SignalingAddress("fake_bot_jid")));
+  fake_bot_signal_strategy_ =
+      std::make_unique<FakeSignalStrategy>(SignalingAddress("fake_bot_jid"));
 }
 
 void It2MeHostTest::TearDown() {
@@ -419,7 +420,7 @@ TEST_F(It2MeHostTest, IceConfig) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, NatTraversalPolicy_Enabled) {
+TEST_F(It2MeHostTest, NatTraversalPolicyEnabled) {
   SetPolicies(
       {{policy::key::kRemoteAccessHostFirewallTraversal, base::Value(true)}});
 
@@ -432,7 +433,7 @@ TEST_F(It2MeHostTest, NatTraversalPolicy_Enabled) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, NatTraversalPolicy_Disabled) {
+TEST_F(It2MeHostTest, NatTraversalPolicyDisabled) {
   SetPolicies(
       {{policy::key::kRemoteAccessHostFirewallTraversal, base::Value(false)}});
 
@@ -445,7 +446,9 @@ TEST_F(It2MeHostTest, NatTraversalPolicy_Disabled) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, NatTraversalPolicy_DisabledTransitionCausesDisconnect) {
+// TODO(crbug/1122155): flaky test.
+TEST_F(It2MeHostTest,
+       DISABLED_NatTraversalPolicyDisabledTransitionCausesDisconnect) {
   StartHost();
   ASSERT_EQ(It2MeHostState::kReceivedAccessCode, last_host_state_);
 
@@ -463,7 +466,7 @@ TEST_F(It2MeHostTest, NatTraversalPolicy_DisabledTransitionCausesDisconnect) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, RelayPolicy_Enabled) {
+TEST_F(It2MeHostTest, RelayPolicyEnabled) {
   SetPolicies({{policy::key::kRemoteAccessHostAllowRelayedConnection,
                 base::Value(true)}});
 
@@ -476,7 +479,7 @@ TEST_F(It2MeHostTest, RelayPolicy_Enabled) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, RelayPolicy_Disabled) {
+TEST_F(It2MeHostTest, RelayPolicyDisabled) {
   SetPolicies({{policy::key::kRemoteAccessHostAllowRelayedConnection,
                 base::Value(false)}});
 
@@ -490,7 +493,7 @@ TEST_F(It2MeHostTest, RelayPolicy_Disabled) {
 }
 
 // TODO(crbug.com/1126973): Flaky test.
-TEST_F(It2MeHostTest, DISABLED_RelayPolicy_DisabledTransitionCausesDisconnect) {
+TEST_F(It2MeHostTest, DISABLED_RelayPolicyDisabledTransitionCausesDisconnect) {
   StartHost();
   ASSERT_EQ(It2MeHostState::kReceivedAccessCode, last_host_state_);
 
@@ -508,7 +511,7 @@ TEST_F(It2MeHostTest, DISABLED_RelayPolicy_DisabledTransitionCausesDisconnect) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, HostValidation_HostDomainListPolicy_MatchingDomain) {
+TEST_F(It2MeHostTest, HostValidationHostDomainListPolicyMatchingDomain) {
   SetPolicies({{policy::key::kRemoteAccessHostDomainList,
                 MakeList({kMatchingDomain})}});
   StartHost();
@@ -517,7 +520,7 @@ TEST_F(It2MeHostTest, HostValidation_HostDomainListPolicy_MatchingDomain) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, HostValidation_HostDomainListPolicy_MatchStart) {
+TEST_F(It2MeHostTest, HostValidationHostDomainListPolicyMatchStart) {
   SetPolicies({{policy::key::kRemoteAccessHostDomainList,
                 MakeList({kMismatchedDomain2})}});
   StartHost();
@@ -526,7 +529,7 @@ TEST_F(It2MeHostTest, HostValidation_HostDomainListPolicy_MatchStart) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, HostValidation_HostDomainListPolicy_MatchEnd) {
+TEST_F(It2MeHostTest, HostValidationHostDomainListPolicyMatchEnd) {
   SetPolicies({{policy::key::kRemoteAccessHostDomainList,
                 MakeList({kMismatchedDomain1})}});
   StartHost();
@@ -535,7 +538,7 @@ TEST_F(It2MeHostTest, HostValidation_HostDomainListPolicy_MatchEnd) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, HostValidation_HostDomainListPolicy_MatchFirst) {
+TEST_F(It2MeHostTest, HostValidationHostDomainListPolicyMatchFirst) {
   SetPolicies({{policy::key::kRemoteAccessHostDomainList,
                 MakeList({kMatchingDomain, kMismatchedDomain1})}});
   StartHost();
@@ -544,7 +547,7 @@ TEST_F(It2MeHostTest, HostValidation_HostDomainListPolicy_MatchFirst) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, HostValidation_HostDomainListPolicy_MatchSecond) {
+TEST_F(It2MeHostTest, HostValidationHostDomainListPolicyMatchSecond) {
   SetPolicies({{policy::key::kRemoteAccessHostDomainList,
                 MakeList({kMismatchedDomain1, kMatchingDomain})}});
   StartHost();
@@ -553,7 +556,7 @@ TEST_F(It2MeHostTest, HostValidation_HostDomainListPolicy_MatchSecond) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, HostValidation_HostDomainListPolicy_NoMatch) {
+TEST_F(It2MeHostTest, HostValidationHostDomainListPolicyNoMatch) {
   SetPolicies({{policy::key::kRemoteAccessHostDomainList,
                 MakeList({kMismatchedDomain1, kMismatchedDomain2,
                           kMismatchedDomain3})}});
@@ -563,7 +566,7 @@ TEST_F(It2MeHostTest, HostValidation_HostDomainListPolicy_NoMatch) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, ConnectionValidation_NoClientDomainListPolicy_ValidJid) {
+TEST_F(It2MeHostTest, ConnectionValidationNoClientDomainListPolicyValidJid) {
   StartHost();
   RunValidationCallback(kTestClientJid);
   ASSERT_EQ(ValidationResult::SUCCESS, validation_result_);
@@ -572,8 +575,7 @@ TEST_F(It2MeHostTest, ConnectionValidation_NoClientDomainListPolicy_ValidJid) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest,
-       ConnectionValidation_NoClientDomainListPolicy_InvalidJid) {
+TEST_F(It2MeHostTest, ConnectionValidationNoClientDomainListPolicyInvalidJid) {
   StartHost();
   RunValidationCallback(kTestClientUsernameNoJid);
   ASSERT_EQ(ValidationResult::ERROR_INVALID_ACCOUNT, validation_result_);
@@ -582,7 +584,7 @@ TEST_F(It2MeHostTest,
 }
 
 TEST_F(It2MeHostTest,
-       ConnectionValidation_NoClientDomainListPolicy_InvalidUsername) {
+       ConnectionValidationNoClientDomainListPolicyInvalidUsername) {
   StartHost();
   dialog_factory_->set_remote_user_email("fake");
   RunValidationCallback(kTestClientJidWithSlash);
@@ -593,7 +595,7 @@ TEST_F(It2MeHostTest,
 }
 
 TEST_F(It2MeHostTest,
-       ConnectionValidation_NoClientDomainListPolicy_ResourceOnly) {
+       ConnectionValidationNoClientDomainListPolicyResourceOnly) {
   StartHost();
   RunValidationCallback(kResourceOnly);
   ASSERT_EQ(ValidationResult::ERROR_INVALID_ACCOUNT, validation_result_);
@@ -602,7 +604,7 @@ TEST_F(It2MeHostTest,
 }
 
 TEST_F(It2MeHostTest,
-       ConnectionValidation_ClientDomainListPolicy_MatchingDomain) {
+       ConnectionValidationClientDomainListPolicyMatchingDomain) {
   SetPolicies({{policy::key::kRemoteAccessHostClientDomainList,
                 MakeList({kMatchingDomain})}});
   StartHost();
@@ -614,7 +616,7 @@ TEST_F(It2MeHostTest,
 }
 
 TEST_F(It2MeHostTest,
-       ConnectionValidation_ClientDomainListPolicy_InvalidUserName) {
+       ConnectionValidationClientDomainListPolicyInvalidUserName) {
   SetPolicies({{policy::key::kRemoteAccessHostClientDomainList,
                 MakeList({kMatchingDomain})}});
   StartHost();
@@ -624,7 +626,7 @@ TEST_F(It2MeHostTest,
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, ConnectionValidation_ClientDomainListPolicy_NoJid) {
+TEST_F(It2MeHostTest, ConnectionValidationClientDomainListPolicyNoJid) {
   SetPolicies({{policy::key::kRemoteAccessHostClientDomainList,
                 MakeList({kMatchingDomain})}});
   StartHost();
@@ -634,7 +636,7 @@ TEST_F(It2MeHostTest, ConnectionValidation_ClientDomainListPolicy_NoJid) {
   ASSERT_EQ(ValidationResult::ERROR_INVALID_ACCOUNT, validation_result_);
 }
 
-TEST_F(It2MeHostTest, ConnectionValidation_WrongClientDomain_MatchStart) {
+TEST_F(It2MeHostTest, ConnectionValidationWrongClientDomainMatchStart) {
   SetPolicies({{policy::key::kRemoteAccessHostClientDomainList,
                 MakeList({kMismatchedDomain2})}});
   StartHost();
@@ -644,7 +646,7 @@ TEST_F(It2MeHostTest, ConnectionValidation_WrongClientDomain_MatchStart) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, ConnectionValidation_WrongClientDomain_MatchEnd) {
+TEST_F(It2MeHostTest, ConnectionValidationWrongClientDomainMatchEnd) {
   SetPolicies({{policy::key::kRemoteAccessHostClientDomainList,
                 MakeList({kMismatchedDomain1})}});
   StartHost();
@@ -654,7 +656,7 @@ TEST_F(It2MeHostTest, ConnectionValidation_WrongClientDomain_MatchEnd) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, ConnectionValidation_ClientDomainListPolicy_MatchFirst) {
+TEST_F(It2MeHostTest, ConnectionValidationClientDomainListPolicyMatchFirst) {
   SetPolicies({{policy::key::kRemoteAccessHostClientDomainList,
                 MakeList({kMatchingDomain, kMismatchedDomain1})}});
   StartHost();
@@ -665,7 +667,7 @@ TEST_F(It2MeHostTest, ConnectionValidation_ClientDomainListPolicy_MatchFirst) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, ConnectionValidation_ClientDomainListPolicy_MatchSecond) {
+TEST_F(It2MeHostTest, ConnectionValidationClientDomainListPolicyMatchSecond) {
   SetPolicies({{policy::key::kRemoteAccessHostClientDomainList,
                 MakeList({kMismatchedDomain1, kMatchingDomain})}});
   StartHost();
@@ -676,7 +678,7 @@ TEST_F(It2MeHostTest, ConnectionValidation_ClientDomainListPolicy_MatchSecond) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, ConnectionValidation_ClientDomainListPolicy_NoMatch) {
+TEST_F(It2MeHostTest, ConnectionValidationClientDomainListPolicyNoMatch) {
   SetPolicies({{policy::key::kRemoteAccessHostClientDomainList,
                 MakeList({kMismatchedDomain1, kMismatchedDomain2,
                           kMismatchedDomain3})}});
@@ -687,7 +689,7 @@ TEST_F(It2MeHostTest, ConnectionValidation_ClientDomainListPolicy_NoMatch) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, HostUdpPortRangePolicy_ValidRange) {
+TEST_F(It2MeHostTest, HostUdpPortRangePolicyValidRange) {
   PortRange port_range_actual;
   ASSERT_TRUE(PortRange::Parse(kPortRange, &port_range_actual));
   SetPolicies(
@@ -699,14 +701,14 @@ TEST_F(It2MeHostTest, HostUdpPortRangePolicy_ValidRange) {
   ASSERT_EQ(port_range_actual.max_port, port_range.max_port);
 }
 
-TEST_F(It2MeHostTest, HostUdpPortRangePolicy_NoRange) {
+TEST_F(It2MeHostTest, HostUdpPortRangePolicyNoRange) {
   StartHost();
   PortRange port_range =
       GetHost()->transport_context_for_tests()->network_settings().port_range;
   ASSERT_TRUE(port_range.is_null());
 }
 
-TEST_F(It2MeHostTest, ConnectionValidation_ConfirmationDialog_Accept) {
+TEST_F(It2MeHostTest, ConnectionValidationConfirmationDialogAccept) {
   StartHost();
   RunValidationCallback(kTestClientJid);
   ASSERT_EQ(ValidationResult::SUCCESS, validation_result_);
@@ -715,7 +717,7 @@ TEST_F(It2MeHostTest, ConnectionValidation_ConfirmationDialog_Accept) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-TEST_F(It2MeHostTest, ConnectionValidation_ConfirmationDialog_Reject) {
+TEST_F(It2MeHostTest, ConnectionValidationConfirmationDialogReject) {
   StartHost();
   dialog_factory_->set_dialog_result(DialogResult::CANCEL);
   RunValidationCallback(kTestClientJid);
@@ -736,7 +738,7 @@ TEST_F(It2MeHostTest, MultipleConnectionsTriggerDisconnect) {
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(It2MeHostTest, ConnectRespectsSuppressDialogsParameter) {
   StartHost(false);
   EXPECT_FALSE(dialog_factory_->dialog_created());

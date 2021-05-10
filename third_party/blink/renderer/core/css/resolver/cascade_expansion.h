@@ -98,9 +98,12 @@ class CORE_EXPORT CascadeExpansion {
     return PropertyAt(index_).Value();
   }
   inline CascadePriority Priority() const { return priority_; }
+  uint16_t TreeOrder() const;
 
  private:
-  static bool IsAffectedByAll(CSSPropertyID);
+  friend class CascadeExpansionTest;
+
+  static bool IsInAllExpansion(CSSPropertyID);
 
   bool ShouldEmitVisited() const;
 

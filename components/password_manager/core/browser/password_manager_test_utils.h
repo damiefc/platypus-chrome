@@ -12,14 +12,11 @@
 #include "base/memory/ref_counted.h"
 #include "components/password_manager/core/browser/origin_credential_store.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "components/password_manager/core/browser/password_hash_data.h"
+#include "components/password_manager/core/browser/password_reuse_detector_consumer.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "url/gurl.h"
-
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
-#include "components/password_manager/core/browser/password_hash_data.h"  // nogncheck
-#include "components/password_manager/core/browser/password_reuse_detector_consumer.h"  // nogncheck
-#endif
 
 namespace password_manager {
 
@@ -57,11 +54,11 @@ struct PasswordFormData {
   const char* signon_realm;
   const char* origin;
   const char* action;
-  const wchar_t* submit_element;
-  const wchar_t* username_element;
-  const wchar_t* password_element;
-  const wchar_t* username_value;  // Set to NULL for a blacklist entry.
-  const wchar_t* password_value;
+  const char16_t* submit_element;
+  const char16_t* username_element;
+  const char16_t* password_element;
+  const char16_t* username_value;  // Set to NULL for a blocklist entry.
+  const char16_t* password_value;
   const double last_usage_time;
   const double creation_time;
 };
@@ -110,7 +107,6 @@ class MockPasswordStoreObserver : public PasswordStore::Observer {
   MOCK_METHOD1(OnLoginsChanged, void(const PasswordStoreChangeList& changes));
 };
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 class MockPasswordReuseDetectorConsumer : public PasswordReuseDetectorConsumer {
  public:
   MockPasswordReuseDetectorConsumer();
@@ -129,13 +125,13 @@ class PasswordHashDataMatcher
     : public ::testing::MatcherInterface<base::Optional<PasswordHashData>> {
  public:
   explicit PasswordHashDataMatcher(base::Optional<PasswordHashData> expected);
-  virtual ~PasswordHashDataMatcher() {}
+  ~PasswordHashDataMatcher() override = default;
 
   // ::testing::MatcherInterface overrides
-  virtual bool MatchAndExplain(base::Optional<PasswordHashData> hash_data,
-                               ::testing::MatchResultListener* listener) const;
-  virtual void DescribeTo(::std::ostream* os) const;
-  virtual void DescribeNegationTo(::std::ostream* os) const;
+  bool MatchAndExplain(base::Optional<PasswordHashData> hash_data,
+                       ::testing::MatchResultListener* listener) const override;
+  void DescribeTo(::std::ostream* os) const override;
+  void DescribeNegationTo(::std::ostream* os) const override;
 
  private:
   const base::Optional<PasswordHashData> expected_;
@@ -145,7 +141,6 @@ class PasswordHashDataMatcher
 
 ::testing::Matcher<base::Optional<PasswordHashData>> Matches(
     base::Optional<PasswordHashData> expected);
-#endif
 
 }  // namespace password_manager
 

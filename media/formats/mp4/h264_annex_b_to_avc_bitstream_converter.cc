@@ -58,6 +58,9 @@ Status H264AnnexBToAvcBitstreamConverter::ConvertChunk(
                     "Failed to parse H.264 stream");
 
     switch (nalu.nal_unit_type) {
+      case H264NALU::kAUD: {
+        break;
+      }
       case H264NALU::kSPS: {
         int sps_id = -1;
         result = parser_.ParseSPS(&sps_id);
@@ -75,7 +78,7 @@ Status H264AnnexBToAvcBitstreamConverter::ConvertChunk(
       }
 
       case H264NALU::kSPSExt: {
-        NOTREACHED() << "SPS extensions are not supported yet.";
+        // SPS extensions are not supported yet.
         break;
       }
 
@@ -92,7 +95,7 @@ Status H264AnnexBToAvcBitstreamConverter::ConvertChunk(
                                  blob(nalu.data, nalu.data + nalu.size));
         pps_to_include.insert(pps_id);
         if (auto* pps = parser_.GetPPS(pps_id))
-          pps_to_include.insert(pps->seq_parameter_set_id);
+          sps_to_include.insert(pps->seq_parameter_set_id);
         config_changed = true;
         break;
       }
@@ -201,6 +204,6 @@ Status H264AnnexBToAvcBitstreamConverter::ConvertChunk(
     *config_changed_out = config_changed;
 
   return Status();
-}  // namespace media
+}
 
 }  // namespace media

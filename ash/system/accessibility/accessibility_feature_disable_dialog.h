@@ -5,10 +5,11 @@
 #ifndef ASH_SYSTEM_ACCESSIBILITY_ACCESSIBILITY_FEATURE_DISABLE_DIALOG_H_
 #define ASH_SYSTEM_ACCESSIBILITY_ACCESSIBILITY_FEATURE_DISABLE_DIALOG_H_
 
+#include <string>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/strings/string16.h"
 #include "ui/views/window/dialog_delegate.h"
 
 namespace ash {
@@ -20,7 +21,6 @@ namespace ash {
 class AccessibilityFeatureDisableDialog : public views::DialogDelegateView {
  public:
   AccessibilityFeatureDisableDialog(int window_title_text_id,
-                                    int dialog_text_id,
                                     base::OnceClosure on_accept_callback,
                                     base::OnceClosure on_cancel_callback);
   ~AccessibilityFeatureDisableDialog() override;

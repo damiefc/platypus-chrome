@@ -39,19 +39,24 @@ gfx::mojom::GpuMemoryBufferPlatformHandlePtr StructTraits<
 #else
       break;
 #endif
-    case gfx::IO_SURFACE_BUFFER:
+    case gfx::IO_SURFACE_BUFFER: {
 #if defined(OS_MAC)
+      gfx::ScopedRefCountedIOSurfaceMachPort io_surface_mach_port(
+          IOSurfaceCreateMachPort(handle.io_surface.get()));
       return gfx::mojom::GpuMemoryBufferPlatformHandle::NewMachPort(
           mojo::PlatformHandle(
-              base::mac::RetainMachSendRight(handle.mach_port.get())));
+              base::mac::RetainMachSendRight(io_surface_mach_port.get())));
 #else
       break;
 #endif
+    }
     case gfx::DXGI_SHARED_HANDLE:
 #if defined(OS_WIN)
       DCHECK(handle.dxgi_handle.IsValid());
       return gfx::mojom::GpuMemoryBufferPlatformHandle::NewDxgiHandle(
-          mojo::PlatformHandle(std::move(handle.dxgi_handle)));
+          gfx::mojom::DxgiHandle::New(
+              mojo::PlatformHandle(std::move(handle.dxgi_handle)),
+              std::move(handle.region)));
 #else
       break;
 #endif
@@ -121,14 +126,22 @@ bool StructTraits<gfx::mojom::GpuMemoryBufferHandleDataView,
       out->type = gfx::IO_SURFACE_BUFFER;
       if (!platform_handle->get_mach_port().is_mach_send())
         return false;
-      out->mach_port.reset(
+      gfx::ScopedRefCountedIOSurfaceMachPort io_surface_mach_port(
           platform_handle->get_mach_port().ReleaseMachSendRight());
+      if (io_surface_mach_port) {
+        out->io_surface.reset(
+            IOSurfaceLookupFromMachPort(io_surface_mach_port.get()));
+      } else {
+        out->io_surface.reset();
+      }
       return true;
     }
 #elif defined(OS_WIN)
     case gfx::mojom::GpuMemoryBufferPlatformHandleDataView::Tag::DXGI_HANDLE: {
       out->type = gfx::DXGI_SHARED_HANDLE;
-      out->dxgi_handle = platform_handle->get_dxgi_handle().TakeHandle();
+      auto dxgi_handle = std::move(platform_handle->get_dxgi_handle());
+      out->dxgi_handle = dxgi_handle->buffer_handle.TakeHandle();
+      out->region = std::move(dxgi_handle->shared_memory_handle);
       return true;
     }
 #elif defined(OS_ANDROID)

@@ -8,15 +8,19 @@
 
 #include "base/ios/ios_util.h"
 #include "base/mac/foundation_util.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_features.h"
-#import "components/autofill/ios/browser/js_suggestion_manager.h"
 #include "components/keyed_service/core/service_access_type.h"
+#include "components/password_manager/core/browser/manage_passwords_referrer.h"
+#include "components/password_manager/core/browser/password_ui_utils.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_mediator.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_view_controller.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/address_coordinator.h"
@@ -69,6 +73,9 @@
 
 // Reauthentication Module used for re-authentication.
 @property(nonatomic, strong) ReauthenticationModule* reauthenticationModule;
+
+// Modal alert.
+@property(nonatomic, strong) AlertCoordinator* alertCoordinator;
 
 @end
 
@@ -152,7 +159,8 @@
   [self.childCoordinators removeAllObjects];
 }
 
-- (void)startPasswordsFromButton:(UIButton*)button {
+- (void)startPasswordsFromButton:(UIButton*)button
+          invokedOnPasswordField:(BOOL)invokedOnPasswordField {
   WebStateList* webStateList = self.browser->GetWebStateList();
   DCHECK(webStateList->GetActiveWebState());
   const GURL& URL = webStateList->GetActiveWebState()->GetLastCommittedURL();
@@ -161,7 +169,8 @@
           initWithBaseViewController:self.baseViewController
                              browser:self.browser
                                  URL:URL
-                    injectionHandler:self.injectionHandler];
+                    injectionHandler:self.injectionHandler
+              invokedOnPasswordField:invokedOnPasswordField];
   passwordCoordinator.delegate = self;
   if (IsIPadIdiom()) {
     [passwordCoordinator presentFromButton:button];
@@ -243,7 +252,10 @@
 
 - (void)passwordButtonPressed:(UIButton*)sender {
   [self stopChildren];
-  [self startPasswordsFromButton:sender];
+  BOOL invokedOnPasswordField =
+      [self.formInputAccessoryMediator lastFocusedFieldWasPassword];
+  [self startPasswordsFromButton:sender
+          invokedOnPasswordField:invokedOnPasswordField];
   [self.formInputAccessoryViewController lockManualFallbackView];
   [self.formInputAccessoryMediator disableSuggestions];
 }
@@ -260,15 +272,13 @@
 - (void)openPasswordSettings {
   [self reset];
   [self.navigator openPasswordSettings];
+  UMA_HISTOGRAM_ENUMERATION(
+      "PasswordManager.ManagePasswordsReferrer",
+      password_manager::ManagePasswordsReferrer::kPasswordsAccessorySheet);
 }
 
 - (void)openAllPasswordsPicker {
-  [self reset];
-  self.allPasswordCoordinator = [[ManualFillAllPasswordCoordinator alloc]
-      initWithBaseViewController:self.baseViewController
-                         browser:self.browser
-                injectionHandler:self.injectionHandler];
-  [self.allPasswordCoordinator start];
+  [self showConfirmationDialogToUseOtherPassword];
 }
 
 #pragma mark - CardCoordinatorDelegate
@@ -342,6 +352,52 @@
   [self.baseViewController presentViewController:alertController
                                         animated:YES
                                       completion:nil];
+}
+
+#pragma mark - Private
+
+// Shows confirmation dialog before opening Other passwords.
+- (void)showConfirmationDialogToUseOtherPassword {
+  WebStateList* webStateList = self.browser->GetWebStateList();
+  const GURL& URL = webStateList->GetActiveWebState()->GetLastCommittedURL();
+  std::u16string origin = base::ASCIIToUTF16(
+      password_manager::GetShownOrigin(url::Origin::Create(URL)));
+  NSString* title =
+      l10n_util::GetNSString(IDS_IOS_CONFIRM_USING_OTHER_PASSWORD_TITLE);
+  NSString* message = l10n_util::GetNSStringF(
+      IDS_IOS_CONFIRM_USING_OTHER_PASSWORD_DESCRIPTION, origin);
+
+  self.alertCoordinator = [[AlertCoordinator alloc]
+      initWithBaseViewController:self.baseViewController
+                         browser:self.browser
+                           title:title
+                         message:message];
+
+  __weak __typeof__(self) weakSelf = self;
+
+  [self.alertCoordinator addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
+                                   action:nil
+                                    style:UIAlertActionStyleCancel];
+
+  NSString* actionTitle =
+      l10n_util::GetNSString(IDS_IOS_CONFIRM_USING_OTHER_PASSWORD_CONTINUE);
+  [self.alertCoordinator addItemWithTitle:actionTitle
+                                   action:^{
+                                     [weakSelf showAllPasswords];
+                                   }
+                                    style:UIAlertActionStyleDefault];
+
+  [self.alertCoordinator start];
+}
+
+// Opens other passwords.
+- (void)showAllPasswords {
+  [self reset];
+  self.allPasswordCoordinator = [[ManualFillAllPasswordCoordinator alloc]
+      initWithBaseViewController:self.baseViewController
+                         browser:self.browser
+                injectionHandler:self.injectionHandler];
+  [self.allPasswordCoordinator start];
 }
 
 @end

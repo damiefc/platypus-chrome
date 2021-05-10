@@ -85,7 +85,8 @@ LayoutCustomScrollbarPart* LayoutCustomScrollbarPart::CreateAnonymous(
     CustomScrollbar* scrollbar,
     ScrollbarPart part) {
   LayoutCustomScrollbarPart* layout_object =
-      new LayoutCustomScrollbarPart(scrollable_area, scrollbar, part);
+      MakeGarbageCollected<LayoutCustomScrollbarPart>(scrollable_area,
+                                                      scrollbar, part);
   RecordScrollbarPartStats(*document, part);
   layout_object->SetDocumentForAnonymous(document);
   return layout_object;
@@ -97,10 +98,10 @@ int LayoutCustomScrollbarPart::ComputeSize(SizeType size_type,
                                            const Length& length,
                                            int container_size) const {
   NOT_DESTROYED();
-  if (!length.IsIntrinsicOrAuto() || (size_type == kMinSize && length.IsAuto()))
+  if (length.IsSpecified() || (size_type == kMinSize && length.IsAuto()))
     return MinimumValueForLength(length, LayoutUnit(container_size)).ToInt();
   return CustomScrollbarTheme::GetCustomScrollbarTheme()->ScrollbarThickness(
-      scrollbar_->ScaleFromDIP());
+      scrollbar_->ScaleFromDIP(), StyleRef().ScrollbarWidth());
 }
 
 int LayoutCustomScrollbarPart::ComputeWidth(int container_width) const {

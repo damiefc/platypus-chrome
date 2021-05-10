@@ -18,9 +18,13 @@ import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.ConfigurationChangedObserver;
+import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.ButtonData;
+import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
 import org.chromium.chrome.browser.toolbar.ButtonDataProvider;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogManagerObserver;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -47,7 +51,7 @@ public class ShareButtonController implements ButtonDataProvider, ConfigurationC
     // The activity tab provider.
     private ActivityTabProvider mTabProvider;
 
-    private ButtonData mButtonData;
+    private ButtonDataImpl mButtonData;
     private ObserverList<ButtonDataObserver> mObservers = new ObserverList<>();
     private OnClickListener mOnClickListener;
 
@@ -68,11 +72,14 @@ public class ShareButtonController implements ButtonDataProvider, ConfigurationC
      * @param activityLifecycleDispatcher Dispatcher for activity lifecycle events, e.g.
      * configuration changes.
      * @param modalDialogManager dispatcher for modal lifecycles events
+     * @param onShareRunnable A {@link Runnable} to execute when a share event occurs. This object
+     *                        does not actually handle sharing, but can provide supplemental
+     *                        functionality when the share button is pressed.
      */
     public ShareButtonController(Context context, ActivityTabProvider tabProvider,
             ObservableSupplier<ShareDelegate> shareDelegateSupplier, ShareUtils shareUtils,
             ActivityLifecycleDispatcher activityLifecycleDispatcher,
-            ModalDialogManager modalDialogManager) {
+            ModalDialogManager modalDialogManager, Runnable onShareRunnable) {
         mContext = context;
 
         mActivityLifecycleDispatcher = activityLifecycleDispatcher;
@@ -89,29 +96,31 @@ public class ShareButtonController implements ButtonDataProvider, ConfigurationC
             Tab tab = mTabProvider.get();
             assert tab != null : "Tab became null after share button was displayed";
             if (tab == null) return;
+            if (onShareRunnable != null) onShareRunnable.run();
             RecordUserAction.record("MobileTopToolbarShareButton");
-            shareDelegate.share(tab, /*shareDirectly=*/false);
+            shareDelegate.share(tab, /*shareDirectly=*/false, ShareOrigin.TOP_TOOLBAR);
         });
 
         mModalDialogManagerObserver = new ModalDialogManagerObserver() {
             @Override
             public void onDialogAdded(PropertyModel model) {
-                mButtonData.isEnabled = false;
-                notifyObservers(mButtonData.canShow);
+                mButtonData.setEnabled(false);
+                notifyObservers(mButtonData.canShow());
             }
 
             @Override
             public void onLastDialogDismissed() {
-                mButtonData.isEnabled = true;
-                notifyObservers(mButtonData.canShow);
+                mButtonData.setEnabled(true);
+                notifyObservers(mButtonData.canShow());
             }
         };
         mModalDialogManager = modalDialogManager;
         mModalDialogManager.addObserver(mModalDialogManagerObserver);
 
-        mButtonData = new ButtonData(false,
+        mButtonData = new ButtonDataImpl(/*canShow=*/false,
                 AppCompatResources.getDrawable(mContext, R.drawable.ic_toolbar_share_offset_24dp),
-                mOnClickListener, R.string.share, true, null, true);
+                mOnClickListener, R.string.share, /*supportsTinting=*/true,
+                /*iphCommandBuilder=*/null, /*isEnabled=*/true, AdaptiveToolbarButtonVariant.SHARE);
 
         mScreenWidthDp = mContext.getResources().getConfiguration().screenWidthDp;
     }
@@ -123,7 +132,7 @@ public class ShareButtonController implements ButtonDataProvider, ConfigurationC
         }
         mScreenWidthDp = configuration.screenWidthDp;
         updateButtonVisibility(mTabProvider.get());
-        notifyObservers(mButtonData.canShow);
+        notifyObservers(mButtonData.canShow());
     }
 
     @Override
@@ -157,9 +166,8 @@ public class ShareButtonController implements ButtonDataProvider, ConfigurationC
 
     private void updateButtonVisibility(Tab tab) {
         if (tab == null || tab.getWebContents() == null || mTabProvider == null
-                || mTabProvider.get() == null
-                || !ChromeFeatureList.isEnabled(ChromeFeatureList.SHARE_BUTTON_IN_TOP_TOOLBAR)) {
-            mButtonData.canShow = false;
+                || mTabProvider.get() == null || !isFeatureEnabled()) {
+            mButtonData.setCanShow(false);
             return;
         }
 
@@ -171,11 +179,20 @@ public class ShareButtonController implements ButtonDataProvider, ConfigurationC
         boolean isDeviceWideEnough = mScreenWidthDp > mMinimumWidthDp;
 
         if (mShareDelegateSupplier.get() == null || !isDeviceWideEnough) {
-            mButtonData.canShow = false;
+            mButtonData.setCanShow(false);
             return;
         }
 
-        mButtonData.canShow = mShareUtils.shouldEnableShare(tab);
+        mButtonData.setCanShow(mShareUtils.shouldEnableShare(tab));
+    }
+
+    private static boolean isFeatureEnabled() {
+        if (AdaptiveToolbarFeatures.isEnabled()) {
+            return AdaptiveToolbarFeatures.getSingleVariantMode()
+                    == AdaptiveToolbarButtonVariant.SHARE;
+        } else {
+            return ChromeFeatureList.isEnabled(ChromeFeatureList.SHARE_BUTTON_IN_TOP_TOOLBAR);
+        }
     }
 
     private void notifyObservers(boolean hint) {

@@ -4,18 +4,12 @@
 
 package org.chromium.chrome.browser.browserservices;
 
-import static org.chromium.chrome.browser.browserservices.TrustedWebActivityTestUtil.createSession;
-import static org.chromium.chrome.browser.browserservices.TrustedWebActivityTestUtil.spoofVerification;
-
 import android.app.Activity;
-import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.support.test.InstrumentationRegistry;
 
-import androidx.browser.customtabs.CustomTabsIntent;
-import androidx.browser.customtabs.CustomTabsSession;
 import androidx.test.filters.MediumTest;
 
 import org.junit.Test;
@@ -23,15 +17,13 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Matchers;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.webapk.lib.client.WebApkValidator;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.webapk.lib.common.WebApkConstants;
-
-import java.util.concurrent.TimeoutException;
 
 /**
  * Instrumentation tests for launching site settings for WebApks.
@@ -44,32 +36,26 @@ import java.util.concurrent.TimeoutException;
 public class ManageTrustedWebActivityDataActivityTest {
     private static final String SETTINGS_ACTIVITY_NAME =
             "org.chromium.chrome.browser.settings.SettingsActivity";
-    private static final String WEBAPK_TEST_URL = "https://www.example.com";
-    private static final String TEST_PACKAGE_NAME =
-            InstrumentationRegistry.getTargetContext().getPackageName();
+    private static final String WEBAPK_TEST_URL = "https://pwa-directory.appspot.com/";
+    private static final String TEST_PACKAGE_NAME = "org.chromium.webapk.test";
 
     @Test
     @MediumTest
-    public void launchesWebApkSiteSettings() {
-        Intent siteSettingsIntent =
-                createWebApkSiteSettingsIntent(TEST_PACKAGE_NAME, Uri.parse(WEBAPK_TEST_URL));
-
+    public void launchesWebApkSiteSettings() throws Exception {
         WebApkValidator.setDisableValidationForTesting(true);
-        try {
-            launchSiteSettingsIntent(siteSettingsIntent);
+        ManageTrustedWebActivityDataActivity.setCallingPackageForTesting(TEST_PACKAGE_NAME);
+        TrustedWebActivityTestUtil.spoofVerification(TEST_PACKAGE_NAME, WEBAPK_TEST_URL);
+        launchSettings(TEST_PACKAGE_NAME, Uri.parse(WEBAPK_TEST_URL));
 
-            // Check settings activity is running.
-            CriteriaHelper.pollUiThread(() -> {
-                try {
-                    Criteria.checkThat("Site settings activity was not launched",
-                            siteSettingsActivityRunning(), Matchers.is(true));
-                } catch (PackageManager.NameNotFoundException e) {
-                    e.printStackTrace();
-                }
-            });
-        } catch (TimeoutException e) {
-            e.printStackTrace();
-        }
+        // Check settings activity is running.
+        CriteriaHelper.pollUiThread(() -> {
+            try {
+                Criteria.checkThat("Site settings activity was not launched",
+                        siteSettingsActivityRunning(), Matchers.is(true));
+            } catch (PackageManager.NameNotFoundException e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     private boolean siteSettingsActivityRunning() throws PackageManager.NameNotFoundException {
@@ -83,28 +69,15 @@ public class ManageTrustedWebActivityDataActivityTest {
         return false;
     }
 
-    private static Intent createWebApkSiteSettingsIntent(String packageName, Uri uri) {
-        // CustomTabsIntent builder is used just to put in the session extras.
-        CustomTabsIntent.Builder builder =
-                new CustomTabsIntent.Builder(CustomTabsSession.createMockSessionForTesting(
-                        new ComponentName(InstrumentationRegistry.getTargetContext(),
-                                ManageTrustedWebActivityDataActivity.class)));
-        Intent intent = builder.build().intent;
+    private static void launchSettings(String packageName, Uri uri) {
+        Intent intent = new Intent();
         intent.setAction(
                 "android.support.customtabs.action.ACTION_MANAGE_TRUSTED_WEB_ACTIVITY_DATA");
-        intent.setPackage(packageName);
+        intent.setPackage(InstrumentationRegistry.getTargetContext().getPackageName());
         intent.setData(uri);
         intent.putExtra(WebApkConstants.EXTRA_IS_WEBAPK, true);
         // The following flag is required because the test starts the intent outside of an activity.
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        return intent;
-    }
-
-    public void launchSiteSettingsIntent(Intent intent) throws TimeoutException {
-        String url = intent.getData().toString();
-        spoofVerification(TEST_PACKAGE_NAME, url);
-        createSession(intent, TEST_PACKAGE_NAME);
-
         InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
     }
 }

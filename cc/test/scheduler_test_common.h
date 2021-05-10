@@ -12,6 +12,7 @@
 
 #include "base/time/time.h"
 #include "cc/metrics/compositor_timing_history.h"
+#include "cc/metrics/dropped_frame_counter.h"
 #include "cc/scheduler/scheduler.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -59,17 +60,12 @@ class FakeCompositorTimingHistory : public CompositorTimingHistory {
   base::TimeDelta DrawDurationEstimate() const override;
 
  protected:
-  FakeCompositorTimingHistory(
-      bool using_synchronous_renderer_compositor,
-      std::unique_ptr<RenderingStatsInstrumentation>
-          rendering_stats_instrumentation_owned,
-      std::unique_ptr<CompositorFrameReportingController>
-          reporting_controller_owned_);
+  FakeCompositorTimingHistory(bool using_synchronous_renderer_compositor,
+                              std::unique_ptr<RenderingStatsInstrumentation>
+                                  rendering_stats_instrumentation_owned);
 
   std::unique_ptr<RenderingStatsInstrumentation>
       rendering_stats_instrumentation_owned_;
-  std::unique_ptr<CompositorFrameReportingController>
-      reporting_controller_owned_;
 
   base::TimeDelta begin_main_frame_queue_duration_critical_;
   base::TimeDelta begin_main_frame_queue_duration_not_critical_;
@@ -89,7 +85,9 @@ class TestScheduler : public Scheduler {
       const SchedulerSettings& scheduler_settings,
       int layer_tree_host_id,
       base::SingleThreadTaskRunner* task_runner,
-      std::unique_ptr<CompositorTimingHistory> compositor_timing_history);
+      std::unique_ptr<CompositorTimingHistory> compositor_timing_history,
+      CompositorFrameReportingController*
+          compositor_frame_reporting_controller);
   TestScheduler(const TestScheduler&) = delete;
 
   TestScheduler& operator=(const TestScheduler&) = delete;

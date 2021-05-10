@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/chromeos_buildflags.h"
 #include "dbus/property.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_gatt_characteristic.h"
@@ -154,8 +155,7 @@ bool BluetoothRemoteGattCharacteristicBlueZ::IsNotifying() const {
 }
 
 void BluetoothRemoteGattCharacteristicBlueZ::ReadRemoteCharacteristic(
-    ValueCallback callback,
-    ErrorCallback error_callback) {
+    ValueCallback callback) {
   DVLOG(1) << "Sending GATT characteristic read request to characteristic: "
            << GetIdentifier() << ", UUID: " << GetUUID().canonical_value()
            << ".";
@@ -163,13 +163,14 @@ void BluetoothRemoteGattCharacteristicBlueZ::ReadRemoteCharacteristic(
   DCHECK_GE(num_of_characteristic_value_read_in_progress_, 0);
   ++num_of_characteristic_value_read_in_progress_;
 
+  auto split_callback = base::SplitOnceCallback(std::move(callback));
   bluez::BluezDBusManager::Get()
       ->GetBluetoothGattCharacteristicClient()
       ->ReadValue(
-          object_path(), std::move(callback),
+          object_path(), std::move(split_callback.first),
           base::BindOnce(&BluetoothRemoteGattCharacteristicBlueZ::OnReadError,
                          weak_ptr_factory_.GetWeakPtr(),
-                         std::move(error_callback)));
+                         std::move(split_callback.second)));
 }
 
 void BluetoothRemoteGattCharacteristicBlueZ::WriteRemoteCharacteristic(
@@ -219,7 +220,7 @@ void BluetoothRemoteGattCharacteristicBlueZ::
                          std::move(error_callback)));
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void BluetoothRemoteGattCharacteristicBlueZ::PrepareWriteRemoteCharacteristic(
     const std::vector<uint8_t>& value,
     base::OnceClosure callback,
@@ -241,7 +242,7 @@ void BluetoothRemoteGattCharacteristicBlueZ::PrepareWriteRemoteCharacteristic(
 
 void BluetoothRemoteGattCharacteristicBlueZ::SubscribeToNotifications(
     device::BluetoothRemoteGattDescriptor* ccc_descriptor,
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     NotificationType notification_type,
 #endif
     base::OnceClosure callback,
@@ -250,7 +251,7 @@ void BluetoothRemoteGattCharacteristicBlueZ::SubscribeToNotifications(
       ->GetBluetoothGattCharacteristicClient()
       ->StartNotify(
           object_path(),
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
           notification_type,
 #endif
           base::BindOnce(
@@ -265,18 +266,18 @@ void BluetoothRemoteGattCharacteristicBlueZ::UnsubscribeFromNotifications(
     device::BluetoothRemoteGattDescriptor* ccc_descriptor,
     base::OnceClosure callback,
     ErrorCallback error_callback) {
-  auto repeating_callback =
-      base::AdaptCallbackForRepeating(std::move(callback));
+  auto split_callback = base::SplitOnceCallback(std::move(callback));
   bluez::BluezDBusManager::Get()
       ->GetBluetoothGattCharacteristicClient()
       ->StopNotify(
           object_path(),
           base::BindOnce(
               &BluetoothRemoteGattCharacteristicBlueZ::OnStopNotifySuccess,
-              weak_ptr_factory_.GetWeakPtr(), repeating_callback),
+              weak_ptr_factory_.GetWeakPtr(), std::move(split_callback.first)),
           base::BindOnce(
               &BluetoothRemoteGattCharacteristicBlueZ::OnStopNotifyError,
-              weak_ptr_factory_.GetWeakPtr(), repeating_callback));
+              weak_ptr_factory_.GetWeakPtr(),
+              std::move(split_callback.second)));
 }
 
 void BluetoothRemoteGattCharacteristicBlueZ::GattDescriptorAdded(
@@ -402,15 +403,17 @@ void BluetoothRemoteGattCharacteristicBlueZ::OnStopNotifyError(
 }
 
 void BluetoothRemoteGattCharacteristicBlueZ::OnReadError(
-    ErrorCallback error_callback,
+    ValueCallback callback,
     const std::string& error_name,
     const std::string& error_message) {
   DVLOG(1) << "Operation failed: " << error_name
            << ", message: " << error_message;
   --num_of_characteristic_value_read_in_progress_;
   DCHECK_GE(num_of_characteristic_value_read_in_progress_, 0);
-  std::move(error_callback)
-      .Run(BluetoothGattServiceBlueZ::DBusErrorToServiceError(error_name));
+  std::move(callback).Run(
+      base::make_optional(
+          BluetoothGattServiceBlueZ::DBusErrorToServiceError(error_name)),
+      /*value=*/std::vector<uint8_t>());
 }
 
 void BluetoothRemoteGattCharacteristicBlueZ::OnWriteError(

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -10,7 +11,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/threading/platform_thread.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -194,7 +195,8 @@ class BindTaskRunnerTest : public testing::Test {
     remote_task_runner_ = scoped_refptr<TestTaskRunner>(new TestTaskRunner);
 
     auto receiver = remote_.BindNewPipeAndPassReceiver(remote_task_runner_);
-    impl_.reset(new ImplType(std::move(receiver), receiver_task_runner_));
+    impl_ =
+        std::make_unique<ImplType>(std::move(receiver), receiver_task_runner_);
   }
 
   base::test::SingleThreadTaskEnvironment task_environment_;
@@ -221,9 +223,9 @@ class AssociatedBindTaskRunnerTest : public testing::Test {
 
     auto connection_receiver = connection_remote_.BindNewPipeAndPassReceiver(
         connection_remote_task_runner_);
-    connection_impl_.reset(new IntegerSenderConnectionImpl(
+    connection_impl_ = std::make_unique<IntegerSenderConnectionImpl>(
         std::move(connection_receiver), connection_receiver_task_runner_,
-        sender_receiver_task_runner_));
+        sender_receiver_task_runner_);
 
     connection_impl_->set_get_sender_notification(base::BindOnce(
         &AssociatedBindTaskRunnerTest::QuitTaskRunner, base::Unretained(this)));

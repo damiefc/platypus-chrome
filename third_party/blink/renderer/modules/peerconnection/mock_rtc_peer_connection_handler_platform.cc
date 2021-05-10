@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/modules/peerconnection/mock_rtc_peer_connection_handler_platform.h"
 
+#include <memory>
 #include <utility>
 
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
@@ -236,6 +237,18 @@ class MockRTCPeerConnectionHandlerPlatform::DummyRTCRtpTransceiverPlatform
       const override {
     return base::nullopt;
   }
+  webrtc::RTCError SetOfferedRtpHeaderExtensions(
+      Vector<webrtc::RtpHeaderExtensionCapability> header_extensions) override {
+    return webrtc::RTCError(webrtc::RTCErrorType::UNSUPPORTED_OPERATION);
+  }
+  Vector<webrtc::RtpHeaderExtensionCapability> HeaderExtensionsNegotiated()
+      const override {
+    return {};
+  }
+  Vector<webrtc::RtpHeaderExtensionCapability> HeaderExtensionsToOffer()
+      const override {
+    return {};
+  }
 
  private:
   scoped_refptr<DummyTransceiverInternal> internal_;
@@ -251,7 +264,8 @@ MockRTCPeerConnectionHandlerPlatform::~MockRTCPeerConnectionHandlerPlatform() =
 bool MockRTCPeerConnectionHandlerPlatform::Initialize(
     const webrtc::PeerConnectionInterface::RTCConfiguration&,
     const MediaConstraints&,
-    WebLocalFrame*) {
+    WebLocalFrame*,
+    ExceptionState&) {
   return true;
 }
 
@@ -280,11 +294,11 @@ void MockRTCPeerConnectionHandlerPlatform::SetLocalDescription(
 
 void MockRTCPeerConnectionHandlerPlatform::SetLocalDescription(
     RTCVoidRequest*,
-    RTCSessionDescriptionPlatform*) {}
+    ParsedSessionDescription) {}
 
 void MockRTCPeerConnectionHandlerPlatform::SetRemoteDescription(
     RTCVoidRequest*,
-    RTCSessionDescriptionPlatform*) {}
+    ParsedSessionDescription) {}
 
 const webrtc::PeerConnectionInterface::RTCConfiguration&
 MockRTCPeerConnectionHandlerPlatform::GetConfiguration() const {
@@ -313,9 +327,8 @@ webrtc::RTCErrorOr<std::unique_ptr<RTCRtpTransceiverPlatform>>
 MockRTCPeerConnectionHandlerPlatform::AddTransceiverWithTrack(
     MediaStreamComponent* component,
     const webrtc::RtpTransceiverInit&) {
-  transceivers_.push_back(std::unique_ptr<DummyRTCRtpTransceiverPlatform>(
-      new DummyRTCRtpTransceiverPlatform(component->Source()->GetType(),
-                                         component)));
+  transceivers_.push_back(std::make_unique<DummyRTCRtpTransceiverPlatform>(
+      component->Source()->GetType(), component));
   std::unique_ptr<DummyRTCRtpTransceiverPlatform> copy(
       new DummyRTCRtpTransceiverPlatform(*transceivers_.back()));
   return std::unique_ptr<RTCRtpTransceiverPlatform>(std::move(copy));
@@ -325,11 +338,10 @@ webrtc::RTCErrorOr<std::unique_ptr<RTCRtpTransceiverPlatform>>
 MockRTCPeerConnectionHandlerPlatform::AddTransceiverWithKind(
     const String& kind,
     const webrtc::RtpTransceiverInit&) {
-  transceivers_.push_back(std::unique_ptr<DummyRTCRtpTransceiverPlatform>(
-      new DummyRTCRtpTransceiverPlatform(
-          kind == "audio" ? MediaStreamSource::StreamType::kTypeAudio
-                          : MediaStreamSource::StreamType::kTypeVideo,
-          nullptr /*MediaStreamComponent*/)));
+  transceivers_.push_back(std::make_unique<DummyRTCRtpTransceiverPlatform>(
+      kind == "audio" ? MediaStreamSource::StreamType::kTypeAudio
+                      : MediaStreamSource::StreamType::kTypeVideo,
+      nullptr /*MediaStreamComponent*/));
   std::unique_ptr<DummyRTCRtpTransceiverPlatform> copy(
       new DummyRTCRtpTransceiverPlatform(*transceivers_.back()));
   return std::unique_ptr<RTCRtpTransceiverPlatform>(std::move(copy));
@@ -339,9 +351,8 @@ webrtc::RTCErrorOr<std::unique_ptr<RTCRtpTransceiverPlatform>>
 MockRTCPeerConnectionHandlerPlatform::AddTrack(
     MediaStreamComponent* component,
     const MediaStreamDescriptorVector&) {
-  transceivers_.push_back(std::unique_ptr<DummyRTCRtpTransceiverPlatform>(
-      new DummyRTCRtpTransceiverPlatform(component->Source()->GetType(),
-                                         component)));
+  transceivers_.push_back(std::make_unique<DummyRTCRtpTransceiverPlatform>(
+      component->Source()->GetType(), component));
   std::unique_ptr<DummyRTCRtpTransceiverPlatform> copy(
       new DummyRTCRtpTransceiverPlatform(*transceivers_.back()));
   return std::unique_ptr<RTCRtpTransceiverPlatform>(std::move(copy));

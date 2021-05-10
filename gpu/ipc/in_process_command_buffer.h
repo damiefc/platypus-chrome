@@ -41,6 +41,7 @@
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/ipc/command_buffer_task_executor.h"
+#include "gpu/ipc/display_compositor_memory_and_task_controller_on_gpu.h"
 #include "gpu/ipc/gl_in_process_context_export.h"
 #include "gpu/ipc/gpu_task_scheduler_helper.h"
 #include "gpu/ipc/service/context_url.h"
@@ -81,6 +82,10 @@ class SyncPointClientState;
 struct ContextCreationAttribs;
 struct SwapBuffersCompleteParams;
 
+namespace webgpu {
+class WebGPUDecoder;
+}
+
 namespace raster {
 class GrShaderCache;
 }
@@ -118,6 +123,7 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
       GpuChannelManagerDelegate* gpu_channel_manager_delegate,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       SingleTaskSequence* task_sequence,
+      DisplayCompositorMemoryAndTaskControllerOnGpu* gpu_dependency,
       gpu::raster::GrShaderCache* gr_shader_cache,
       GpuProcessActivityFlags* activity_flags);
 
@@ -209,6 +215,7 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
 
   gpu::ServiceTransferCache* GetTransferCacheForTest() const;
   int GetRasterDecoderIdForTest() const;
+  webgpu::WebGPUDecoder* GetWebGPUDecoderForTest() const;
 
   CommandBufferTaskExecutor* service_for_testing() const {
     return task_executor_;
@@ -240,35 +247,29 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
   // and |surface_handle| provided in Initialize outlive this callback.
   base::ScopedClosureRunner GetCacheBackBufferCb();
 
-  gpu::SharedImageManager* GetSharedImageManager() {
-    return task_executor_->shared_image_manager();
-  }
-
-  gpu::MemoryTracker* GetMemoryTracker() {
-    // Should only be called after initialization.
-    DCHECK(context_group_);
-    return context_group_->memory_tracker();
-  }
-
  private:
   struct InitializeOnGpuThreadParams {
     SurfaceHandle surface_handle;
     const ContextCreationAttribs& attribs;
     Capabilities* capabilities;  // Ouptut.
     ImageFactory* image_factory;
+    DisplayCompositorMemoryAndTaskControllerOnGpu* gpu_dependency;
     gpu::raster::GrShaderCache* gr_shader_cache;
     GpuProcessActivityFlags* activity_flags;
 
-    InitializeOnGpuThreadParams(SurfaceHandle surface_handle,
-                                const ContextCreationAttribs& attribs,
-                                Capabilities* capabilities,
-                                ImageFactory* image_factory,
-                                gpu::raster::GrShaderCache* gr_shader_cache,
-                                GpuProcessActivityFlags* activity_flags)
+    InitializeOnGpuThreadParams(
+        SurfaceHandle surface_handle,
+        const ContextCreationAttribs& attribs,
+        Capabilities* capabilities,
+        ImageFactory* image_factory,
+        DisplayCompositorMemoryAndTaskControllerOnGpu* gpu_dependency,
+        gpu::raster::GrShaderCache* gr_shader_cache,
+        GpuProcessActivityFlags* activity_flags)
         : surface_handle(surface_handle),
           attribs(attribs),
           capabilities(capabilities),
           image_factory(image_factory),
+          gpu_dependency(gpu_dependency),
           gr_shader_cache(gr_shader_cache),
           activity_flags(activity_flags) {}
   };
@@ -279,6 +280,8 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
       const InitializeOnGpuThreadParams& params);
   void Destroy();
   bool DestroyOnGpuThread();
+
+  void ReportTaskReady(base::TimeTicks task_ready);
 
   // Flush up to put_offset. If execution is deferred either by yielding, or due
   // to a sync token wait, HasUnprocessedCommandsOnGpuThread() returns true.
@@ -300,9 +303,13 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
   base::OnceClosure WrapClientCallback(base::OnceClosure callback);
 
   void RunTaskOnGpuThread(base::OnceClosure task);
+
+  using ReportingCallback =
+      base::OnceCallback<void(base::TimeTicks task_ready)>;
   void ScheduleGpuTask(
       base::OnceClosure task,
-      std::vector<SyncToken> sync_token_fences = std::vector<SyncToken>());
+      std::vector<SyncToken> sync_token_fences = std::vector<SyncToken>(),
+      ReportingCallback report_callback = ReportingCallback());
   void ContinueGpuTask(base::OnceClosure task);
 
   void SignalSyncTokenOnGpuThread(const SyncToken& sync_token,
@@ -348,7 +355,6 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
   void HandleGpuVSyncOnOriginThread(base::TimeTicks vsync_time,
                                     base::TimeDelta vsync_interval);
 
-  const CommandBufferId command_buffer_id_;
   const ContextUrl active_url_;
 
   bool is_offscreen_ = false;
@@ -360,6 +366,9 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
 
   // Members accessed on the gpu thread (possibly with the exception of
   // creation):
+  DisplayCompositorMemoryAndTaskControllerOnGpu* gpu_dependency_;
+  std::unique_ptr<DisplayCompositorMemoryAndTaskControllerOnGpu>
+      gpu_dependency_holder_;
   bool use_virtualized_gl_context_ = false;
   raster::GrShaderCache* gr_shader_cache_ = nullptr;
   scoped_refptr<base::SingleThreadTaskRunner> origin_task_runner_;
@@ -399,7 +408,7 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
   CommandBufferTaskExecutor* const task_executor_;
 
   // If no SingleTaskSequence is passed in, create our own.
-  scoped_refptr<GpuTaskSchedulerHelper> task_scheduler_holder_;
+  std::unique_ptr<GpuTaskSchedulerHelper> task_scheduler_holder_;
 
   // Pointer to the SingleTaskSequence that actually does the scheduling.
   SingleTaskSequence* task_sequence_;
@@ -422,12 +431,14 @@ class GL_IN_PROCESS_CONTEXT_EXPORT InProcessCommandBuffer
     uint32_t flags;
     base::TimeTicks viz_scheduled_draw;
     base::TimeTicks gpu_started_draw;
+    base::TimeTicks gpu_task_ready;
   };
   base::circular_deque<SwapBufferParams> pending_presented_params_;
   base::circular_deque<SwapBufferParams> pending_swap_completed_params_;
   bool should_measure_next_flush_ = false;
   base::TimeTicks viz_scheduled_draw_;
   base::TimeTicks gpu_started_draw_;
+  base::TimeTicks gpu_task_ready_;
 
   scoped_refptr<SharedContextState> context_state_;
 

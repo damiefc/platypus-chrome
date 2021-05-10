@@ -24,26 +24,14 @@ namespace {
 constexpr int kAlertIconSizeDp = 20;
 
 }  // namespace
-
 LoginErrorBubble::LoginErrorBubble()
-    : LoginErrorBubble(nullptr /*content*/,
-                       nullptr /*anchor_view*/,
-                       false /*is_persistent*/) {}
+    : LoginErrorBubble(nullptr /*content*/, nullptr /*anchor_view*/) {}
 
 LoginErrorBubble::LoginErrorBubble(views::View* content,
-                                   views::View* anchor_view,
-                                   bool is_persistent)
-    : LoginBaseBubbleView(anchor_view), is_persistent_(is_persistent) {
-  views::ImageView* alert_icon = new views::ImageView();
-  alert_icon->SetPreferredSize(gfx::Size(kAlertIconSizeDp, kAlertIconSizeDp));
-  alert_icon->SetImage(
-      gfx::CreateVectorIcon(kLockScreenAlertIcon, SK_ColorWHITE));
-  AddChildView(alert_icon);
-
-  if (content) {
-    content_ = content;
-    AddChildView(content);
-  }
+                                   views::View* anchor_view)
+    : LoginBaseBubbleView(anchor_view) {
+  alert_icon_ = AddChildView(std::make_unique<views::ImageView>());
+  alert_icon_->SetPreferredSize(gfx::Size(kAlertIconSizeDp, kAlertIconSizeDp));
 }
 
 LoginErrorBubble::~LoginErrorBubble() = default;
@@ -51,25 +39,12 @@ LoginErrorBubble::~LoginErrorBubble() = default;
 void LoginErrorBubble::SetContent(views::View* content) {
   if (content_)
     delete content_;
-  content_ = content;
-  AddChildView(content_);
+  content_ = AddChildView(content);
 }
 
-void LoginErrorBubble::SetTextContent(const base::string16& message) {
-  SetContent(
-      login_views_utils::CreateBubbleLabel(message, gfx::kGoogleGrey200, this));
-}
-
-void LoginErrorBubble::SetAccessibleName(const base::string16& name) {
-  accessible_name_ = name;
-}
-
-bool LoginErrorBubble::IsPersistent() const {
-  return is_persistent_;
-}
-
-void LoginErrorBubble::SetPersistent(bool persistent) {
-  is_persistent_ = persistent;
+void LoginErrorBubble::SetTextContent(const std::u16string& message) {
+  message_ = message;
+  SetContent(login_views_utils::CreateBubbleLabel(message, this));
 }
 
 const char* LoginErrorBubble::GetClassName() const {
@@ -79,6 +54,19 @@ const char* LoginErrorBubble::GetClassName() const {
 void LoginErrorBubble::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kAlertDialog;
   node_data->SetName(accessible_name_);
+}
+
+void LoginErrorBubble::OnThemeChanged() {
+  LoginBaseBubbleView::OnThemeChanged();
+  alert_icon_->SetImage(gfx::CreateVectorIcon(
+      kLockScreenAlertIcon,
+      AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kIconColorPrimary)));
+  // It is assumed that we will not have an external call to SetTextContent
+  // followed by a call to SetContent (in such a case, the content would be
+  // erased on theme changed and replaced with the prior message).
+  if (!message_.empty())
+    SetTextContent(message_);
 }
 
 }  // namespace ash

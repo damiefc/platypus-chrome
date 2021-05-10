@@ -2,20 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {assertInstanceof, assertString} from '../../../chrome_util.js';
 import {Filenamer} from '../../../models/file_namer.js';
 import * as filesystem from '../../../models/file_system.js';
 import {DeviceOperator, parseMetadata} from '../../../mojo/device_operator.js';
 import {CrosImageCapture} from '../../../mojo/image_capture.js';
-import {PerfEvent} from '../../../perf.js';
 import * as state from '../../../state.js';
 import * as toast from '../../../toast.js';
 import {
   Facing,  // eslint-disable-line no-unused-vars
+  PerfEvent,
   Resolution,
 } from '../../../type.js';
 import * as util from '../../../util.js';
 
-import {ModeBase} from './mode_base.js';
+import {ModeBase, ModeFactory} from './mode_base.js';
 
 /**
  * Contains photo taking result.
@@ -47,7 +48,6 @@ export class PhotoHandler {
    */
   playShutterEffect() {}
 }
-
 
 /**
  * Photo mode capture controller.
@@ -220,5 +220,47 @@ export class Photo extends ModeBase {
           this.metadataObserverId_}`);
     }
     this.metadataObserverId_ = null;
+  }
+}
+
+/**
+ * Factory for creating photo mode capture object.
+ */
+export class PhotoFactory extends ModeFactory {
+  /**
+   * @param {!PhotoHandler} handler
+   */
+  constructor(handler) {
+    super();
+
+    /**
+     * @const {!PhotoHandler}
+     * @protected
+     */
+    this.handler_ = handler;
+  }
+
+  /**
+   * @override
+   */
+  async prepareDevice(constraints, resolution) {
+    this.captureResolution_ = resolution;
+    const deviceOperator = await DeviceOperator.getInstance();
+    if (deviceOperator !== null) {
+      const deviceId = assertString(constraints.video.deviceId.exact);
+      await deviceOperator.setCaptureIntent(
+          deviceId, cros.mojom.CaptureIntent.STILL_CAPTURE);
+      await deviceOperator.setStillCaptureResolution(
+          deviceId, assertInstanceof(this.captureResolution_, Resolution));
+    }
+  }
+
+  /**
+   * @override
+   */
+  produce_() {
+    return new Photo(
+        this.previewStream_, this.facing_, this.captureResolution_,
+        this.handler_);
   }
 }

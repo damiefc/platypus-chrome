@@ -4,7 +4,8 @@
 
 #include "chrome/browser/extensions/api/passwords_private/test_passwords_private_delegate.h"
 
-#include "base/strings/string16.h"
+#include <string>
+
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router.h"
@@ -63,8 +64,8 @@ void TestPasswordsPrivateDelegate::GetPasswordExceptionsList(
 
 bool TestPasswordsPrivateDelegate::ChangeSavedPassword(
     const std::vector<int>& ids,
-    const base::string16& new_username,
-    const base::string16& new_password) {
+    const std::u16string& new_username,
+    const std::u16string& new_password) {
   for (int id : ids) {
     if (static_cast<size_t>(id) >= current_entries_.size()) {
       return false;
@@ -135,10 +136,10 @@ void TestPasswordsPrivateDelegate::RequestPlaintextPassword(
   std::move(callback).Run(plaintext_password_);
 }
 
-void TestPasswordsPrivateDelegate::MovePasswordToAccount(
-    int id,
+void TestPasswordsPrivateDelegate::MovePasswordsToAccount(
+    const std::vector<int>& ids,
     content::WebContents* web_contents) {
-  last_moved_password_ = id;
+  last_moved_passwords_ = ids;
 }
 
 void TestPasswordsPrivateDelegate::ImportPasswords(
@@ -275,6 +276,11 @@ TestPasswordsPrivateDelegate::GetPasswordCheckStatus() {
           TimeFormat::FORMAT_ELAPSED, TimeFormat::LENGTH_SHORT,
           base::TimeDelta::FromMinutes(5))));
   return status;
+}
+
+password_manager::InsecureCredentialsManager*
+TestPasswordsPrivateDelegate::GetInsecureCredentialsManager() {
+  return nullptr;
 }
 
 void TestPasswordsPrivateDelegate::SetProfile(Profile* profile) {

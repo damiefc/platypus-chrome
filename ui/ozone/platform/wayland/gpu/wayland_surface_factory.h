@@ -28,11 +28,11 @@ class WaylandSurfaceFactory : public SurfaceFactoryOzone {
 
   // SurfaceFactoryOzone overrides:
   std::vector<gl::GLImplementation> GetAllowedGLImplementations() override;
-  GLOzone* GetGLOzone(gl::GLImplementation implementation) override;
+  GLOzone* GetGLOzone(const gl::GLImplementationParts& implementation) override;
 #if BUILDFLAG(ENABLE_VULKAN)
   std::unique_ptr<gpu::VulkanImplementation> CreateVulkanImplementation(
-      bool allow_protected_memory,
-      bool enforce_protected_memory) override;
+      bool use_swiftshader,
+      bool allow_protected_memory) override;
 #endif
   std::unique_ptr<SurfaceOzoneCanvas> CreateCanvasForWidget(
       gfx::AcceleratedWidget widget) override;

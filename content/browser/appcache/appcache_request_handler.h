@@ -17,6 +17,7 @@
 #include "content/browser/appcache/appcache_service_impl.h"
 #include "content/browser/loader/navigation_loader_interceptor.h"
 #include "content/browser/loader/single_request_url_loader_factory.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -35,6 +36,8 @@ class AppCacheSubresourceURLFactory;
 class AppCacheRequest;
 class AppCacheRequestHandlerTest;
 class AppCacheHost;
+
+CONTENT_EXPORT extern const base::Feature kAppCacheAlwaysFallbackToNetwork;
 
 // An instance is created for each net::URLRequest. The instance survives all
 // http transactions involved in the processing of its net::URLRequest, and is
@@ -97,9 +100,11 @@ class CONTENT_EXPORT AppCacheRequestHandler
   static std::unique_ptr<AppCacheRequestHandler>
   InitializeForMainResourceNetworkService(
       const network::ResourceRequest& request,
-      base::WeakPtr<AppCacheHost> appcache_host);
+      base::WeakPtr<AppCacheHost> appcache_host,
+      int frame_tree_node_id);
 
-  static bool IsMainResourceType(blink::mojom::ResourceType type);
+  static bool IsMainRequestDestination(
+      network::mojom::RequestDestination destination);
 
   // Called by unittests to indicate that we are in test mode.
   static void SetRunningInTests(bool in_tests);
@@ -111,9 +116,10 @@ class CONTENT_EXPORT AppCacheRequestHandler
 
   // Callers should use AppCacheHost::CreateRequestHandler.
   AppCacheRequestHandler(AppCacheHost* host,
-                         blink::mojom::ResourceType resource_type,
+                         network::mojom::RequestDestination request_destination,
                          bool should_reset_appcache,
-                         std::unique_ptr<AppCacheRequest> request);
+                         std::unique_ptr<AppCacheRequest> request,
+                         int frame_tree_node_id);
 
   void MaybeCreateLoaderInternal(
       const network::ResourceRequest& resource_request,
@@ -144,7 +150,7 @@ class CONTENT_EXPORT AppCacheRequestHandler
   AppCacheStorage* storage() const;
 
   bool is_main_resource() const {
-    return IsMainResourceType(resource_type_);
+    return IsMainRequestDestination(request_destination_);
   }
 
   // These are called on each request intercept opportunity, by the various
@@ -178,7 +184,6 @@ class CONTENT_EXPORT AppCacheRequestHandler
   // runs for the main resource. This flips |should_create_subresource_loader_|
   // if a non-null |handler| is given. Always invokes |callback| with |handler|.
   void RunLoaderCallbackForMainResource(
-      int frame_tree_node_id,
       BrowserContext* browser_context,
       LoaderCallback callback,
       SingleRequestURLLoaderFactory::RequestHandler handler);
@@ -199,7 +204,7 @@ class CONTENT_EXPORT AppCacheRequestHandler
   AppCacheHost* host_;
 
   // Frame vs subresource vs sharedworker loads are somewhat different.
-  blink::mojom::ResourceType resource_type_;
+  network::mojom::RequestDestination request_destination_;
 
   // True if corresponding AppCache group should be resetted before load.
   bool should_reset_appcache_;
@@ -255,6 +260,8 @@ class CONTENT_EXPORT AppCacheRequestHandler
   // (i.e. when |loader_callback_| is fired with a non-null
   // RequestHandler for non-error cases.
   bool should_create_subresource_loader_ = false;
+
+  int frame_tree_node_id_ = FrameTreeNode::kFrameTreeNodeInvalidId;
 
   // The AppCache host instance. We pass this to the
   // AppCacheSubresourceURLFactory instance on creation.

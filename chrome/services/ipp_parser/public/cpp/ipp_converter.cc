@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/strings/strcat.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/values.h"
 #include "net/http/http_util.h"
@@ -74,12 +75,12 @@ base::Optional<HttpHeader> ParseHeader(base::StringPiece header) {
   const size_t value_begin_index = key_end_index + 1;
   if (value_begin_index == header.size()) {
     // Empty header value is valid
-    return HttpHeader{key.as_string(), ""};
+    return HttpHeader{std::string(key), ""};
   }
 
   base::StringPiece value = header.substr(value_begin_index);
   value = net::HttpUtil::TrimLWS(value);
-  return HttpHeader{key.as_string(), value.as_string()};
+  return HttpHeader{std::string(key), std::string(value)};
 }
 
 // Converts |value_tag| to corresponding mojom type for marshalling.
@@ -105,6 +106,13 @@ base::Optional<ValueType> ValueTagToType(const int value_tag) {
     case IPP_TAG_TEXTLANG:
     case IPP_TAG_NAMELANG:
       return ValueType::STRING;
+
+    // Octet (binary) string
+    case IPP_TAG_STRING:
+      return ValueType::OCTET;
+
+    case IPP_TAG_RESOLUTION:
+      return ValueType::RESOLUTION;
 
     default:
       break;
@@ -157,6 +165,46 @@ base::Optional<std::vector<std::string>> IppGetStrings(ipp_attribute_t* attr) {
   }
   return ret;
 }
+
+base::Optional<std::vector<std::vector<uint8_t>>> IppGetOctets(
+    ipp_attribute_t* attr) {
+  const size_t count = ippGetCount(attr);
+
+  std::vector<std::vector<uint8_t>> ret;
+  ret.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    int len = 0;
+    const uint8_t* v =
+        static_cast<const uint8_t*>(ippGetOctetString(attr, i, &len));
+    if (!v || len <= 0) {
+      return base::nullopt;
+    }
+    ret.emplace_back(v, v + len);
+  }
+  return ret;
+}
+
+base::Optional<std::vector<ipp_parser::mojom::ResolutionPtr>> IppGetResolutions(
+    ipp_attribute_t* attr) {
+  const size_t count = ippGetCount(attr);
+
+  std::vector<ipp_parser::mojom::ResolutionPtr> ret;
+  ret.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    int xres = 0;
+    int yres = 0;
+    ipp_res_t units{};
+    xres = ippGetResolution(attr, i, &yres, &units);
+    if (xres <= 0 || yres <= 0 || units != IPP_RES_PER_INCH) {
+      LOG(ERROR) << "bad resolution: " << xres << ", " << yres << ", "
+                 << int(units);
+      return base::nullopt;
+    }
+    ret.push_back(ipp_parser::mojom::Resolution(xres, yres).Clone());
+  }
+  return ret;
+}
+
 }  // namespace
 
 base::Optional<std::vector<std::string>> ParseRequestLine(
@@ -393,6 +441,22 @@ ipp_parser::mojom::IppMessagePtr ConvertIppToMojo(ipp_t* ipp) {
           return nullptr;
         }
         attrptr->value->set_strings(*vals);
+        break;
+      }
+      case ValueType::OCTET: {
+        auto vals = IppGetOctets(attr);
+        if (!vals.has_value()) {
+          return nullptr;
+        }
+        attrptr->value->set_octets(*vals);
+        break;
+      }
+      case ValueType::RESOLUTION: {
+        auto vals = IppGetResolutions(attr);
+        if (!vals.has_value()) {
+          return nullptr;
+        }
+        attrptr->value->set_resolutions(std::move(*vals));
         break;
       }
       default:

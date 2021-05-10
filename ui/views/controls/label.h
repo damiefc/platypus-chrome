@@ -6,17 +6,18 @@
 #define UI_VIEWS_CONTROLS_LABEL_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/optional.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/render_text.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/context_menu_controller.h"
-#include "ui/views/metadata/metadata_header_macros.h"
 #include "ui/views/metadata/view_factory.h"
 #include "ui/views/selection_controller_delegate.h"
 #include "ui/views/style/typography.h"
@@ -60,20 +61,20 @@ class VIEWS_EXPORT Label : public View,
   // TODO(tapted): Remove these. Callers must specify a context or use the
   // constructor taking a CustomFont.
   Label();
-  explicit Label(const base::string16& text);
+  explicit Label(const std::u16string& text);
 
   // Construct a Label in the given |text_context|. The |text_style| can change
   // later, so provide a default. The |text_context| is fixed.
   // By default text directionality will be derived from the label text, however
   // it can be overriden with |directionality_mode|.
-  Label(const base::string16& text,
+  Label(const std::u16string& text,
         int text_context,
         int text_style = style::STYLE_PRIMARY,
         gfx::DirectionalityMode directionality_mode =
             gfx::DirectionalityMode::DIRECTIONALITY_FROM_TEXT);
 
   // Construct a Label with the given |font| description.
-  Label(const base::string16& text, const CustomFont& font);
+  Label(const std::u16string& text, const CustomFont& font);
 
   ~Label() override;
 
@@ -86,17 +87,28 @@ class VIEWS_EXPORT Label : public View,
   virtual void SetFontList(const gfx::FontList& font_list);
 
   // Get or set the label text.
-  const base::string16& GetText() const;
-  virtual void SetText(const base::string16& text);
+  const std::u16string& GetText() const;
+  virtual void SetText(const std::u16string& text);
+
+  // Set the accessibility name that will be announced by the screen reader.
+  // If this function is not called, the screen reader defaults to verbalizing
+  // the text value.
+  void SetAccessibleName(const std::u16string& name);
+  const std::u16string& GetAccessibleName() const;
 
   // Where the label appears in the UI. Passed in from the constructor. This is
   // a value from views::style::TextContext or an enum that extends it.
   int GetTextContext() const;
+  void SetTextContext(int text_context);
 
   // The style of the label.  This is a value from views::style::TextStyle or an
   // enum that extends it.
   int GetTextStyle() const;
   void SetTextStyle(int style);
+
+  // Applies |style| to a specific |range|.  This is unimplemented for styles
+  // that vary from the global text style by anything besides weight.
+  void SetTextStyleRange(int style, const gfx::Range& range);
 
   // Enables or disables auto-color-readability (enabled by default).  If this
   // is enabled, then calls to set any foreground or background color will
@@ -138,6 +150,16 @@ class VIEWS_EXPORT Label : public View,
   bool GetSubpixelRenderingEnabled() const;
   void SetSubpixelRenderingEnabled(bool subpixel_rendering_enabled);
 
+  // Gets/Sets whether the DCHECK() checking that subpixel-rendered text is
+  // only drawn onto opaque layers is skipped. Use this to suppress false
+  // positives - for example, if the label is drawn onto an opaque region of a
+  // non-opaque layer. If possible, prefer making the layer opaque or painting
+  // onto an opaque views::Background, as those cases are detected and
+  // excluded by this DCHECK automatically.
+  bool GetSkipSubpixelRenderingOpacityCheck() const;
+  void SetSkipSubpixelRenderingOpacityCheck(
+      bool skip_subpixel_rendering_opacity_check);
+
   // Gets/Sets the horizontal alignment; the argument value is mirrored in RTL
   // UI.
   gfx::HorizontalAlignment GetHorizontalAlignment() const;
@@ -164,6 +186,10 @@ class VIEWS_EXPORT Label : public View,
   // elide the rest (currently only ELIDE_TAIL supported). See gfx::RenderText.
   int GetMaxLines() const;
   void SetMaxLines(int max_lines);
+
+  // If single-line, a non-zero value will help determine the amount of space
+  // needed *after* elision, which may be less than the passed |max_width|.
+  void SetMaximumWidthSingleLine(int max_width);
 
   // Returns the number of lines required to render all text. The actual number
   // of rendered lines might be limited by |max_lines_| which elides the rest.
@@ -203,8 +229,8 @@ class VIEWS_EXPORT Label : public View,
   // to show the full text if it is wider than its bounds.  Calling this
   // overrides the default behavior and lets you set a custom tooltip.  To
   // revert to default behavior, call this with an empty string.
-  base::string16 GetTooltipText() const;
-  void SetTooltipText(const base::string16& tooltip_text);
+  std::u16string GetTooltipText() const;
+  void SetTooltipText(const std::u16string& tooltip_text);
 
   // Get or set whether this label can act as a tooltip handler; the default is
   // true.  Set to false whenever an ancestor view should handle tooltips
@@ -231,7 +257,7 @@ class VIEWS_EXPORT Label : public View,
   void SetCollapseWhenHidden(bool value);
 
   // Get the text as displayed to the user, respecting the obscured flag.
-  base::string16 GetDisplayTextForTesting();
+  std::u16string GetDisplayTextForTesting();
 
   // Get the text direction, as displayed to the user.
   base::i18n::TextDirection GetTextDirectionForTesting();
@@ -264,7 +290,11 @@ class VIEWS_EXPORT Label : public View,
   // |range| endpoints don't lie on grapheme boundaries.
   void SelectRange(const gfx::Range& range);
 
-  views::PropertyChangedSubscription AddTextChangedCallback(
+  // Get the visual bounds containing the logical substring of the full text
+  // within the |range|. See gfx::RenderText.
+  std::vector<gfx::Rect> GetSubstringBounds(const gfx::Range& range);
+
+  base::CallbackListSubscription AddTextChangedCallback(
       views::PropertyChangedCallback callback) WARN_UNUSED_RESULT;
 
   // View:
@@ -276,7 +306,7 @@ class VIEWS_EXPORT Label : public View,
   bool GetCanProcessEventsWithinSubtree() const override;
   WordLookupClient* GetWordLookupClient() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-  base::string16 GetTooltipText(const gfx::Point& p) const override;
+  std::u16string GetTooltipText(const gfx::Point& p) const override;
 
  protected:
   // Create a single RenderText instance to actually be painted.
@@ -314,6 +344,7 @@ class VIEWS_EXPORT Label : public View,
   FRIEND_TEST_ALL_PREFIXES(LabelTest, FocusBounds);
   FRIEND_TEST_ALL_PREFIXES(LabelTest, MultiLineSizingWithElide);
   FRIEND_TEST_ALL_PREFIXES(LabelTest, IsDisplayTextTruncated);
+  FRIEND_TEST_ALL_PREFIXES(LabelTest, ChecksSubpixelRenderingOntoOpaqueSurface);
   friend class LabelSelectionTest;
 
   // ContextMenuController overrides:
@@ -352,7 +383,7 @@ class VIEWS_EXPORT Label : public View,
 
   const gfx::RenderText* GetRenderTextForSelectionController() const;
 
-  void Init(const base::string16& text,
+  void Init(const std::u16string& text,
             const gfx::FontList& font_list,
             gfx::DirectionalityMode directionality_mode);
 
@@ -384,7 +415,7 @@ class VIEWS_EXPORT Label : public View,
   void ClearDisplayText();
 
   // Returns the currently selected text.
-  base::string16 GetSelectedText() const;
+  std::u16string GetSelectedText() const;
 
   // Updates the clipboard with the currently selected text.
   void CopyToClipboard();
@@ -392,7 +423,10 @@ class VIEWS_EXPORT Label : public View,
   // Builds |context_menu_contents_|.
   void BuildContextMenuContents();
 
-  const int text_context_;
+  // Updates the elide behavior used by |full_text_|.
+  void UpdateFullTextElideBehavior();
+
+  int text_context_;
   int text_style_;
   base::Optional<int> line_height_;
 
@@ -423,18 +457,25 @@ class VIEWS_EXPORT Label : public View,
   gfx::ElideBehavior elide_behavior_ = gfx::ELIDE_TAIL;
 
   bool subpixel_rendering_enabled_ = true;
+  bool skip_subpixel_rendering_opacity_check_ = false;
   bool auto_color_readability_enabled_ = true;
   // TODO(mukai): remove |multi_line_| when all RenderText can render multiline.
   bool multi_line_ = false;
   int max_lines_ = 0;
-  base::string16 tooltip_text_;
+  std::u16string tooltip_text_;
   bool handles_tooltips_ = true;
   // Whether to collapse the label when it's not visible.
   bool collapse_when_hidden_ = false;
   int fixed_width_ = 0;
+  // This is used only for multi-line mode.
   int max_width_ = 0;
+  // This is used in single-line mode.
+  int max_width_single_line_ = 0;
 
   std::unique_ptr<SelectionController> selection_controller_;
+
+  // Accessibility data.
+  std::u16string accessible_name_;
 
   // Context menu related members.
   ui::SimpleMenuModel context_menu_contents_;
@@ -445,8 +486,9 @@ class VIEWS_EXPORT Label : public View,
 
 BEGIN_VIEW_BUILDER(VIEWS_EXPORT, Label, View)
 VIEW_BUILDER_PROPERTY(const gfx::FontList&, FontList)
-VIEW_BUILDER_PROPERTY(const base::string16&, Text)
+VIEW_BUILDER_PROPERTY(const std::u16string&, Text)
 VIEW_BUILDER_PROPERTY(int, TextStyle)
+VIEW_BUILDER_PROPERTY(int, TextContext)
 VIEW_BUILDER_PROPERTY(bool, AutoColorReadabilityEnabled)
 VIEW_BUILDER_PROPERTY(SkColor, EnabledColor)
 VIEW_BUILDER_PROPERTY(SkColor, BackgroundColor)
@@ -454,6 +496,7 @@ VIEW_BUILDER_PROPERTY(SkColor, SelectionTextColor)
 VIEW_BUILDER_PROPERTY(SkColor, SelectionBackgroundColor)
 VIEW_BUILDER_PROPERTY(const gfx::ShadowValues&, Shadows)
 VIEW_BUILDER_PROPERTY(bool, SubpixelRenderingEnabled)
+VIEW_BUILDER_PROPERTY(bool, SkipSubpixelRenderingOpacityCheck)
 VIEW_BUILDER_PROPERTY(gfx::HorizontalAlignment, HorizontalAlignment)
 VIEW_BUILDER_PROPERTY(gfx::VerticalAlignment, VerticalAlignment)
 VIEW_BUILDER_PROPERTY(int, LineHeight)
@@ -463,13 +506,15 @@ VIEW_BUILDER_PROPERTY(bool, Obscured)
 VIEW_BUILDER_PROPERTY(bool, AllowCharacterBreak)
 VIEW_BUILDER_PROPERTY(size_t, TruncateLength)
 VIEW_BUILDER_PROPERTY(gfx::ElideBehavior, ElideBehavior)
-VIEW_BUILDER_PROPERTY(const base::string16&, TooltipText)
+VIEW_BUILDER_PROPERTY(const std::u16string&, TooltipText)
 VIEW_BUILDER_PROPERTY(bool, HandlesTooltips)
 VIEW_BUILDER_PROPERTY(int, MaximumWidth)
 VIEW_BUILDER_PROPERTY(bool, CollapseWhenHidden)
 VIEW_BUILDER_PROPERTY(bool, Selectable)
-END_VIEW_BUILDER(VIEWS_EXPORT, Label)
+END_VIEW_BUILDER
 
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, Label)
 
 #endif  // UI_VIEWS_CONTROLS_LABEL_H_

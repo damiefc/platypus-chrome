@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/css/css_string_value.h"
 #include "third_party/blink/renderer/core/css/css_unicode_range_value.h"
 #include "third_party/blink/renderer/core/css/css_value.h"
+#include "third_party/blink/renderer/core/css/css_value_pair.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_mode.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_range.h"
@@ -164,18 +165,22 @@ CSSValue* ConsumeTimeRange(CSSParserTokenRange& range,
 
 CSSValue* ConsumeDescriptor(StyleRule::RuleType rule_type,
                             AtRuleDescriptorID id,
-                            CSSParserTokenRange& range,
+                            const CSSTokenizedValue& tokenized_value,
                             const CSSParserContext& context) {
   using Parser = AtRuleDescriptorParser;
+  CSSParserTokenRange range = tokenized_value.range;
 
   switch (rule_type) {
     case StyleRule::kFontFace:
       return Parser::ParseFontFaceDescriptor(id, range, context);
     case StyleRule::kProperty:
-      return Parser::ParseAtPropertyDescriptor(id, range, context);
+      return Parser::ParseAtPropertyDescriptor(id, tokenized_value, context);
+    case StyleRule::kCounterStyle:
+      return Parser::ParseAtCounterStyleDescriptor(id, range, context);
     case StyleRule::kScrollTimeline:
       return Parser::ParseAtScrollTimelineDescriptor(id, range, context);
     case StyleRule::kCharset:
+    case StyleRule::kContainer:
     case StyleRule::kStyle:
     case StyleRule::kImport:
     case StyleRule::kMedia:
@@ -205,9 +210,23 @@ CSSValue* ConsumeFontMetricOverride(CSSParserTokenRange& range,
 
 CSSValue* ConsumeAdvanceOverride(CSSParserTokenRange& range,
                                  const CSSParserContext& context) {
-  if (!RuntimeEnabledFeatures::CSSFontMetricsOverrideEnabled())
+  if (!RuntimeEnabledFeatures::CSSFontFaceAdvanceOverrideEnabled())
     return nullptr;
-  return css_parsing_utils::ConsumeNumber(range, context, kValueRangeAll);
+  if (CSSIdentifierValue* normal =
+          css_parsing_utils::ConsumeIdent<CSSValueID::kNormal>(range)) {
+    return normal;
+  }
+  CSSValue* override_horizontal =
+      css_parsing_utils::ConsumePercent(range, context, kValueRangeNonNegative);
+  if (!override_horizontal)
+    return nullptr;
+  CSSValue* override_vertical_upright =
+      css_parsing_utils::ConsumePercent(range, context, kValueRangeNonNegative);
+  if (!override_vertical_upright)
+    override_vertical_upright = override_horizontal;
+  return MakeGarbageCollected<CSSValuePair>(override_horizontal,
+                                            override_vertical_upright,
+                                            CSSValuePair::kDropIdenticalValues);
 }
 
 }  // namespace
@@ -267,6 +286,12 @@ CSSValue* AtRuleDescriptorParser::ParseFontFaceDescriptor(
     case AtRuleDescriptorID::AdvanceOverride:
       parsed_value = ConsumeAdvanceOverride(range, context);
       break;
+    case AtRuleDescriptorID::SizeAdjust:
+      if (RuntimeEnabledFeatures::CSSFontFaceSizeAdjustEnabled()) {
+        parsed_value = css_parsing_utils::ConsumePercent(
+            range, context, kValueRangeNonNegative);
+      }
+      break;
     default:
       break;
   }
@@ -302,9 +327,10 @@ CSSValue* AtRuleDescriptorParser::ParseFontFaceDeclaration(
 
 CSSValue* AtRuleDescriptorParser::ParseAtPropertyDescriptor(
     AtRuleDescriptorID id,
-    CSSParserTokenRange& range,
+    const CSSTokenizedValue& tokenized_value,
     const CSSParserContext& context) {
   CSSValue* parsed_value = nullptr;
+  CSSParserTokenRange range = tokenized_value.range;
   switch (id) {
     case AtRuleDescriptorID::Syntax:
       range.ConsumeWhitespace();
@@ -313,7 +339,8 @@ CSSValue* AtRuleDescriptorParser::ParseAtPropertyDescriptor(
     case AtRuleDescriptorID::InitialValue: {
       // Note that we must retain leading whitespace here.
       return CSSVariableParser::ParseDeclarationValue(
-          g_null_atom, range, false /* is_animation_tainted */, context);
+          g_null_atom, tokenized_value, false /* is_animation_tainted */,
+          context);
     }
     case AtRuleDescriptorID::Inherits:
       range.ConsumeWhitespace();
@@ -365,10 +392,10 @@ CSSValue* AtRuleDescriptorParser::ParseAtScrollTimelineDescriptor(
 bool AtRuleDescriptorParser::ParseAtRule(
     StyleRule::RuleType rule_type,
     AtRuleDescriptorID id,
-    CSSParserTokenRange& range,
+    const CSSTokenizedValue& tokenized_value,
     const CSSParserContext& context,
     HeapVector<CSSPropertyValue, 256>& parsed_descriptors) {
-  CSSValue* result = ConsumeDescriptor(rule_type, id, range, context);
+  CSSValue* result = ConsumeDescriptor(rule_type, id, tokenized_value, context);
 
   if (!result)
     return false;

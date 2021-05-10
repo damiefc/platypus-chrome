@@ -8,6 +8,8 @@
 
 #include "base/feature_list.h"
 #include "build/buildflag.h"
+#include "chrome/browser/content_settings/one_time_geolocation_permission_provider.h"
+#include "chrome/browser/permissions/last_tab_standing_tracker_factory.h"
 #include "chrome/browser/profiles/off_the_record_profile_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -44,6 +46,7 @@ HostContentSettingsMapFactory::HostContentSettingsMapFactory()
     : RefcountedBrowserContextKeyedServiceFactory(
         "HostContentSettingsMap",
         BrowserContextDependencyManager::GetInstance()) {
+  DependsOn(LastTabStandingTrackerFactory::GetInstance());
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   DependsOn(SupervisedUserSettingsServiceFactory::GetInstance());
 #endif
@@ -96,6 +99,16 @@ scoped_refptr<RefcountedKeyedService>
       HostContentSettingsMap::WEBUI_ALLOWLIST_PROVIDER,
       std::move(allowlist_provider));
 
+  if (base::FeatureList::IsEnabled(
+          permissions::features::kOneTimeGeolocationPermission)) {
+    auto one_time_geolocation_provider =
+        std::make_unique<OneTimeGeolocationPermissionProvider>(context);
+
+    settings_map->RegisterProvider(
+        HostContentSettingsMap::ONE_TIME_GEOLOCATION_PROVIDER,
+        std::move(one_time_geolocation_provider));
+  }
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // These must be registered before before the HostSettings are passed over to
   // the IOThread.  Simplest to do this on construction.
@@ -115,7 +128,7 @@ scoped_refptr<RefcountedKeyedService>
 #endif // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #if defined(OS_ANDROID)
-  if (profile->IsRegularProfile()) {
+  if (!profile->IsOffTheRecord()) {
     auto channels_provider =
         std::make_unique<NotificationChannelsProviderAndroid>();
 

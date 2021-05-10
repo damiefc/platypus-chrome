@@ -13,8 +13,8 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "chrome/browser/ui/app_list/search/mixer.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/app_launch_data.h"
 
@@ -32,6 +32,7 @@ namespace app_list {
 
 class SearchMetricsObserver;
 class SearchProvider;
+class RankerDelegate;
 enum class RankingItemType;
 
 // Controller that collects query from given SearchBoxModel, dispatches it
@@ -42,27 +43,38 @@ class SearchController {
   using ResultsChangedCallback =
       base::RepeatingCallback<void(ash::AppListSearchResultType)>;
 
+  using ProviderType = ash::AppListSearchResultType;
+  using ResultType = ash::AppListSearchResultType;
+
+  using Results = std::vector<std::unique_ptr<ChromeSearchResult>>;
+  using ResultsMap = base::flat_map<ProviderType, Results>;
+
   SearchController(AppListModelUpdater* model_updater,
                    AppListControllerDelegate* list_controller,
                    ash::AppListNotifier* notifier,
                    Profile* profile);
   virtual ~SearchController();
 
+  SearchController(const SearchController&) = delete;
+  SearchController& operator=(const SearchController&) = delete;
+
   void InitializeRankers();
 
-  void Start(const base::string16& query);
+  void Start(const std::u16string& query);
   void ViewClosing();
 
   void OpenResult(ChromeSearchResult* result, int event_flags);
-  void InvokeResultAction(ChromeSearchResult* result,
-                          int action_index,
-                          int event_flags);
+  void InvokeResultAction(ChromeSearchResult* result, int action_index);
 
   // Adds a new mixer group. See Mixer::AddGroup.
   size_t AddGroup(size_t max_results);
 
   // Takes ownership of |provider| and associates it with given mixer group.
   void AddProvider(size_t group_id, std::unique_ptr<SearchProvider> provider);
+
+  // Update the controller with the given results. Used only if the categorical
+  // search feature flag is enabled.
+  void SetResults(ash::AppListSearchResultType provider_type, Results results);
 
   virtual ChromeSearchResult* FindSearchResult(const std::string& result_id);
   ChromeSearchResult* GetResultByTitleForTest(const std::string& title);
@@ -78,9 +90,8 @@ class SearchController {
 
   // Called when items in the results list have been on screen for some amount
   // of time, or the user clicked a search result.
-  // TODO(959679): Rename this function to better reflect its nature.
-  void OnSearchResultsDisplayed(
-      const base::string16& trimmed_query,
+  void OnSearchResultsImpressionMade(
+      const std::u16string& trimmed_query,
       const ash::SearchResultIdWithPositionIndices& results,
       int launched_index);
 
@@ -103,7 +114,7 @@ class SearchController {
   bool query_for_recommendation_ = false;
 
   // The query associated with the most recent search.
-  base::string16 last_query_;
+  std::u16string last_query_;
 
   // The ID of the most recently launched app. This is used for app list launch
   // recording.
@@ -112,13 +123,24 @@ class SearchController {
   // If set, called when OnResultsChanged is invoked.
   ResultsChangedCallback results_changed_callback_;
 
+  // TODO(crbug/1199206): As part of the prototyping for category-based search,
+  // the behaviour of this class is significantly changed depending on whether
+  // the CategoricalSearch feature flag is enabled. Eventually, we intend to
+  // remove the Mixer class entirely.
+
+  // Top-level result ranker. Replaces the Mixer if the categorical search flag
+  // is enabled.
+  std::unique_ptr<RankerDelegate> ranker_;
+
+  // Storage for all search results for the current query. Only used when
+  // categorical search is enabled.
+  ResultsMap results_;
+
   std::unique_ptr<Mixer> mixer_;
   std::unique_ptr<SearchMetricsObserver> metrics_observer_;
   using Providers = std::vector<std::unique_ptr<SearchProvider>>;
   Providers providers_;
   AppListControllerDelegate* list_controller_;
-
-  DISALLOW_COPY_AND_ASSIGN(SearchController);
 };
 
 }  // namespace app_list

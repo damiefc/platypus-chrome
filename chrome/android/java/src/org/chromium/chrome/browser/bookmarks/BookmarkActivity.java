@@ -10,6 +10,8 @@ import android.text.TextUtils;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.IntentUtils;
+import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.SnackbarActivity;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -28,7 +30,12 @@ public class BookmarkActivity extends SnackbarActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mBookmarkManager = new BookmarkManager(this, true, getSnackbarManager());
+        boolean isIncognito = IntentUtils.safeGetBooleanExtra(
+                getIntent(), IntentHandler.EXTRA_INCOGNITO_MODE, false);
+        mBookmarkManager = new BookmarkManager(this,
+                IntentUtils.safeGetParcelableExtra(
+                        getIntent(), IntentHandler.EXTRA_PARENT_COMPONENT),
+                true, isIncognito, getSnackbarManager());
         String url = getIntent().getDataString();
         if (TextUtils.isEmpty(url)) url = UrlConstants.BOOKMARKS_URL;
         mBookmarkManager.updateForUrl(url);

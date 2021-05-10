@@ -19,6 +19,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
@@ -175,7 +176,7 @@ class AudioInputStreamWrapper {
   explicit AudioInputStreamWrapper(AudioManager* audio_manager)
       : audio_man_(audio_manager) {
     EXPECT_TRUE(SUCCEEDED(CoreAudioUtil::GetPreferredAudioParameters(
-        AudioDeviceDescription::kDefaultDeviceId, false, &default_params_)));
+        device_id_, false, &default_params_)));
     EXPECT_EQ(format(), AudioParameters::AUDIO_PCM_LOW_LATENCY);
     frames_per_buffer_ = default_params_.frames_per_buffer();
   }
@@ -183,6 +184,15 @@ class AudioInputStreamWrapper {
   AudioInputStreamWrapper(AudioManager* audio_manager,
                           const AudioParameters& default_params)
       : audio_man_(audio_manager), default_params_(default_params) {
+    EXPECT_EQ(format(), AudioParameters::AUDIO_PCM_LOW_LATENCY);
+    frames_per_buffer_ = default_params_.frames_per_buffer();
+  }
+
+  AudioInputStreamWrapper(AudioManager* audio_manager,
+                          const std::string& device_id)
+      : audio_man_(audio_manager), device_id_(device_id) {
+    EXPECT_TRUE(SUCCEEDED(CoreAudioUtil::GetPreferredAudioParameters(
+        device_id_, false, &default_params_)));
     EXPECT_EQ(format(), AudioParameters::AUDIO_PCM_LOW_LATENCY);
     frames_per_buffer_ = default_params_.frames_per_buffer();
   }
@@ -205,20 +215,21 @@ class AudioInputStreamWrapper {
   }
   int sample_rate() const { return default_params_.sample_rate(); }
   int frames_per_buffer() const { return frames_per_buffer_; }
+  std::string device_id() const { return device_id_; }
 
  private:
   AudioInputStream* CreateInputStream() {
     AudioParameters params = default_params_;
     params.set_frames_per_buffer(frames_per_buffer_);
     AudioInputStream* ais = audio_man_->MakeAudioInputStream(
-        params, AudioDeviceDescription::kDefaultDeviceId,
-        base::BindRepeating(&LogCallbackDummy));
+        params, device_id_, base::BindRepeating(&LogCallbackDummy));
     EXPECT_TRUE(ais);
     return ais;
   }
 
   AudioManager* audio_man_;
   AudioParameters default_params_;
+  std::string device_id_ = AudioDeviceDescription::kDefaultDeviceId;
   int frames_per_buffer_;
 };
 
@@ -337,8 +348,28 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamOpenAndClose) {
   ABORT_AUDIO_TEST_IF_NOT(HasCoreAudioAndInputDevices(audio_manager_.get()));
   ScopedAudioInputStream ais(
       CreateDefaultAudioInputStream(audio_manager_.get()));
-  EXPECT_TRUE(ais->Open());
+  EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kSuccess);
   ais.Close();
+}
+
+// Test Open(), Close() calling sequences for all available devices.
+TEST_F(WinAudioInputTest, WASAPIAudioInputStreamOpenAndCloseForAllDevices) {
+  AudioDeviceInfoAccessorForTests device_info_accessor(audio_manager_.get());
+  ABORT_AUDIO_TEST_IF_NOT(device_info_accessor.HasAudioInputDevices() &&
+                          CoreAudioUtil::IsSupported());
+
+  // Retrieve a list of all available input devices.
+  media::AudioDeviceDescriptions device_descriptions;
+  device_info_accessor.GetAudioInputDeviceDescriptions(&device_descriptions);
+
+  // Open and close an audio input stream for all available devices.
+  for (const auto& device : device_descriptions) {
+    AudioInputStreamWrapper aisw(audio_manager_.get(), device.unique_id);
+    {
+      ScopedAudioInputStream ais(aisw.Create());
+      EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kSuccess);
+    }
+  }
 }
 
 // Test Open(), Start(), Close() calling sequence.
@@ -346,7 +377,7 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamOpenStartAndClose) {
   ABORT_AUDIO_TEST_IF_NOT(HasCoreAudioAndInputDevices(audio_manager_.get()));
   ScopedAudioInputStream ais(
       CreateDefaultAudioInputStream(audio_manager_.get()));
-  EXPECT_TRUE(ais->Open());
+  EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kSuccess);
   MockAudioInputCallback sink;
   ais->Start(&sink);
   ais.Close();
@@ -362,11 +393,33 @@ TEST_P(WinAudioInputTest, WASAPIAudioInputStreamOpenStartStopAndClose) {
       : feature_list.InitAndDisableFeature(media::kWasapiRawAudioCapture);
   ScopedAudioInputStream ais(
       CreateDefaultAudioInputStream(audio_manager_.get()));
-  EXPECT_TRUE(ais->Open());
+  EXPECT_TRUE(ais->SetAutomaticGainControl(true));
+  EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kSuccess);
   MockAudioInputCallback sink;
   ais->Start(&sink);
   ais->Stop();
   ais.Close();
+}
+
+// Verify that histograms are created as expected. Only covers the latest
+// histograms.
+TEST_F(WinAudioInputTest, WASAPIAudioInputStreamHistograms) {
+  ABORT_AUDIO_TEST_IF_NOT(HasCoreAudioAndInputDevices(audio_manager_.get()));
+  base::HistogramTester histogram_tester;
+  ScopedAudioInputStream ais(
+      CreateDefaultAudioInputStream(audio_manager_.get()));
+  EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kSuccess);
+  FakeAudioInputCallback sink;
+  ais->Start(&sink);
+  sink.WaitForData();
+  sink.WaitForData();
+  ais->Stop();
+  ais.Close();
+  histogram_tester.ExpectTotalCount("Media.Audio.Capture.Win.Glitches", 1);
+  histogram_tester.ExpectTotalCount("Media.Audio.Capture.Win.TimestampErrors",
+                                    1);
+  histogram_tester.ExpectTotalCount(
+      "Media.Audio.Capture.Win.TimeUntilFirstTimestampError", 0);
 }
 
 // Test some additional calling sequences.
@@ -376,8 +429,8 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamMiscCallingSequences) {
       CreateDefaultAudioInputStream(audio_manager_.get()));
 
   // Open(), Open() should fail the second time.
-  EXPECT_TRUE(ais->Open());
-  EXPECT_FALSE(ais->Open());
+  EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kSuccess);
+  EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kAlreadyOpen);
 
   FakeAudioInputCallback sink;
 
@@ -406,7 +459,7 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
   // the shared mixing rate. The default buffer size is 10ms.
   AudioInputStreamWrapper aisw(audio_manager_.get());
   ScopedAudioInputStream ais(aisw.Create());
-  EXPECT_TRUE(ais->Open());
+  EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kSuccess);
 
   MockAudioInputCallback sink;
 
@@ -438,7 +491,7 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
 
   count = 0;
   ais.Reset(aisw.Create(2 * frames_per_buffer_10ms));
-  EXPECT_TRUE(ais->Open());
+  EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kSuccess);
   bytes_per_packet = aisw.channels() * aisw.frames_per_buffer() *
                      SampleFormatToBytesPerChannel(kSampleFormat);
 
@@ -459,7 +512,7 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamTestPacketSizes) {
 
   count = 0;
   ais.Reset(aisw.Create(frames_per_buffer_10ms / 2));
-  EXPECT_TRUE(ais->Open());
+  EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kSuccess);
   bytes_per_packet = aisw.channels() * aisw.frames_per_buffer() *
                      SampleFormatToBytesPerChannel(kSampleFormat);
 
@@ -494,7 +547,7 @@ TEST_F(WinAudioInputTest, WASAPIAudioInputStreamLoopback) {
   ScopedAudioInputStream stream(audio_manager_->MakeAudioInputStream(
       params, AudioDeviceDescription::kLoopbackInputDeviceId,
       base::BindRepeating(&LogCallbackDummy)));
-  ASSERT_TRUE(stream->Open());
+  EXPECT_EQ(stream->Open(), AudioInputStream::OpenOutcome::kSuccess);
   FakeAudioInputCallback sink;
   stream->Start(&sink);
   ASSERT_FALSE(sink.error());
@@ -522,7 +575,7 @@ TEST_F(WinAudioInputTest, DISABLED_WASAPIAudioInputStreamRecordToFile) {
 
   AudioInputStreamWrapper aisw(audio_manager_.get());
   ScopedAudioInputStream ais(aisw.Create());
-  ASSERT_TRUE(ais->Open());
+  EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kSuccess);
 
   VLOG(0) << ">> Sample rate: " << aisw.sample_rate() << " [Hz]";
   WriteToFileAudioSink file_sink(file_name);
@@ -549,7 +602,7 @@ TEST_F(WinAudioInputTest, DISABLED_WASAPIAudioInputStreamRecordToFileRAW) {
 
   AudioInputStreamWrapper aisw(audio_manager_.get());
   ScopedAudioInputStream ais(aisw.Create());
-  ASSERT_TRUE(ais->Open());
+  EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kSuccess);
 
   VLOG(0) << ">> Sample rate: " << aisw.sample_rate() << " [Hz]";
   WriteToFileAudioSink file_sink(file_name);
@@ -603,7 +656,7 @@ TEST_F(WinAudioInputTest, DISABLED_WASAPIAudioInputStreamResampleToFile) {
 
     AudioInputStreamWrapper aisw(audio_manager_.get(), params);
     ScopedAudioInputStream ais(aisw.Create());
-    ASSERT_TRUE(ais->Open());
+    EXPECT_EQ(ais->Open(), AudioInputStream::OpenOutcome::kSuccess);
 
     VLOG(0) << ">> Resampled rate will be: " << aisw.sample_rate() << " [Hz]";
     VLOG(0) << ">> New layout will be: "

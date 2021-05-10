@@ -5,8 +5,6 @@
 #ifndef CONTENT_BROWSER_MEDIA_SESSION_MEDIA_SESSION_UMA_HELPER_H_
 #define CONTENT_BROWSER_MEDIA_SESSION_MEDIA_SESSION_UMA_HELPER_H_
 
-#include <memory>
-
 #include "base/time/clock.h"
 #include "content/common/content_export.h"
 
@@ -48,7 +46,10 @@ class CONTENT_EXPORT MediaSessionUmaHelper {
     EnterPictureInPicture = 13,
     ExitPictureInPicture = 14,
     SwitchAudioDevice = 15,
-    kMaxValue = SwitchAudioDevice,
+    ToggleMicrophone = 16,
+    ToggleCamera = 17,
+    HangUp = 18,
+    kMaxValue = HangUp,
   };
 
   MediaSessionUmaHelper();

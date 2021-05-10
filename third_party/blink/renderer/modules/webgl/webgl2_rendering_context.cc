@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/modules/webgl/webgl_multi_draw.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_multi_draw_instanced_base_vertex_base_instance.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_video_texture.h"
+#include "third_party/blink/renderer/modules/webgl/webgl_webcodecs_video_frame.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 
 namespace blink {
@@ -88,15 +89,15 @@ CanvasRenderingContext* WebGL2RenderingContext::Factory::Create(
     attribs.xr_compatible = false;
   }
 
-  bool using_gpu_compositing;
+  Platform::GraphicsInfo graphics_info;
   std::unique_ptr<WebGraphicsContext3DProvider> context_provider(
       CreateWebGraphicsContext3DProvider(
-          host, attribs, Platform::kWebGL2ContextType, &using_gpu_compositing));
+          host, attribs, Platform::kWebGL2ContextType, &graphics_info));
   if (!ShouldCreateContext(context_provider.get(), host))
     return nullptr;
   WebGL2RenderingContext* rendering_context =
       MakeGarbageCollected<WebGL2RenderingContext>(
-          host, std::move(context_provider), using_gpu_compositing, attribs);
+          host, std::move(context_provider), graphics_info, attribs);
 
   if (!rendering_context->GetDrawingBuffer()) {
     host->HostDispatchEvent(
@@ -107,7 +108,8 @@ CanvasRenderingContext* WebGL2RenderingContext::Factory::Create(
 
   rendering_context->InitializeNewContext();
   rendering_context->RegisterContextExtensions();
-
+  rendering_context->RecordUKMCanvasRenderingAPI(
+      CanvasRenderingContext::CanvasRenderingAPI::kWebgl2);
   return rendering_context;
 }
 
@@ -120,11 +122,11 @@ void WebGL2RenderingContext::Factory::OnError(HTMLCanvasElement* canvas,
 WebGL2RenderingContext::WebGL2RenderingContext(
     CanvasRenderingContextHost* host,
     std::unique_ptr<WebGraphicsContext3DProvider> context_provider,
-    bool using_gpu_compositing,
+    const Platform::GraphicsInfo& graphics_info,
     const CanvasContextCreationAttributesCore& requested_attributes)
     : WebGL2RenderingContextBase(host,
                                  std::move(context_provider),
-                                 using_gpu_compositing,
+                                 graphics_info,
                                  requested_attributes,
                                  Platform::kWebGL2ContextType) {}
 
@@ -171,6 +173,7 @@ void WebGL2RenderingContext::RegisterContextExtensions() {
   RegisterExtension(webgl_multi_draw_instanced_base_vertex_base_instance_,
                     kDraftExtension);
   RegisterExtension(webgl_video_texture_, kDraftExtension);
+  RegisterExtension(webgl_webcodecs_video_frame_, kDraftExtension);
   RegisterExtension(ovr_multiview2_);
 }
 
@@ -200,6 +203,7 @@ void WebGL2RenderingContext::Trace(Visitor* visitor) const {
   visitor->Trace(webgl_multi_draw_);
   visitor->Trace(webgl_multi_draw_instanced_base_vertex_base_instance_);
   visitor->Trace(webgl_video_texture_);
+  visitor->Trace(webgl_webcodecs_video_frame_);
   WebGL2RenderingContextBase::Trace(visitor);
 }
 

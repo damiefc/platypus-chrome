@@ -8,8 +8,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
-#include "base/callback_forward.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/task_environment.h"
@@ -42,8 +41,8 @@ class TestBrowserClient : public ContentBrowserClient {
       BrowserContext* browser_context,
       const GURL& site) override {
     return content::StoragePartitionConfig::Create(
-        "PartitionDomain" + site.spec(), "Partition" + site.spec(),
-        false /* in_memory */);
+        browser_context, "PartitionDomain" + site.spec(),
+        "Partition" + site.spec(), false /* in_memory */);
   }
 };
 
@@ -61,8 +60,7 @@ class BackgroundSyncSchedulerTest : public testing::Test {
     auto* scheduler = BackgroundSyncScheduler::GetFor(&test_browser_context_);
     DCHECK(scheduler);
     auto* storage_partition = static_cast<StoragePartitionImpl*>(
-        BrowserContext::GetStoragePartitionForSite(&test_browser_context_,
-                                                   url));
+        test_browser_context_.GetStoragePartitionForUrl(url));
     DCHECK(storage_partition);
 
     scheduler->ScheduleDelayedProcessing(storage_partition, sync_type, delay,
@@ -74,8 +72,7 @@ class BackgroundSyncSchedulerTest : public testing::Test {
     auto* scheduler = BackgroundSyncScheduler::GetFor(&test_browser_context_);
     DCHECK(scheduler);
     auto* storage_partition = static_cast<StoragePartitionImpl*>(
-        BrowserContext::GetStoragePartitionForSite(&test_browser_context_,
-                                                   url));
+        test_browser_context_.GetStoragePartitionForUrl(url));
     DCHECK(storage_partition);
 
     scheduler->CancelDelayedProcessing(storage_partition, sync_type);

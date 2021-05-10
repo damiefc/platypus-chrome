@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/css/resolver/font_style_resolver.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/canvas/text_metrics.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
@@ -25,7 +26,6 @@
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/text/bidi_text_run.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/linked_hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
@@ -74,6 +74,19 @@ OffscreenFontCache& GetOffscreenFontCache() {
 }  // namespace
 
 namespace blink {
+
+CanvasRenderingContext* OffscreenCanvasRenderingContext2D::Factory::Create(
+    CanvasRenderingContextHost* host,
+    const CanvasContextCreationAttributesCore& attrs) {
+  DCHECK(host->IsOffscreenCanvas());
+  CanvasRenderingContext* rendering_context =
+      MakeGarbageCollected<OffscreenCanvasRenderingContext2D>(
+          static_cast<OffscreenCanvas*>(host), attrs);
+  DCHECK(rendering_context);
+  rendering_context->RecordUKMCanvasRenderingAPI(
+      CanvasRenderingContext::CanvasRenderingAPI::k2D);
+  return rendering_context;
+}
 
 OffscreenCanvasRenderingContext2D::~OffscreenCanvasRenderingContext2D() =
     default;
@@ -191,7 +204,7 @@ OffscreenCanvasRenderingContext2D::ProduceCanvasResource() {
   if (!frame)
     return nullptr;
 
-  frame->SetOriginClean(this->OriginClean());
+  frame->SetOriginClean(OriginClean());
   return frame;
 }
 
@@ -217,7 +230,7 @@ ImageBitmap* OffscreenCanvasRenderingContext2D::TransferToImageBitmap(
   scoped_refptr<StaticBitmapImage> image = GetImage();
   if (!image)
     return nullptr;
-  image->SetOriginClean(this->OriginClean());
+  image->SetOriginClean(OriginClean());
   // Before discarding the image resource, we need to flush pending render ops
   // to fully resolve the snapshot.
   image->PaintImageForCurrentFrame().FlushPendingSkiaOps();
@@ -283,7 +296,7 @@ sk_sp<PaintFilter> OffscreenCanvasRenderingContext2D::StateGetFilter() {
 }
 
 void OffscreenCanvasRenderingContext2D::SnapshotStateForFilter() {
-  ModifiableState().SetFontForFilter(AccessFont());
+  GetState().SetFontForFilter(AccessFont());
 }
 
 void OffscreenCanvasRenderingContext2D::ValidateStateStackWithCanvas(
@@ -304,16 +317,9 @@ bool OffscreenCanvasRenderingContext2D::IsPaintable() const {
   return Host()->ResourceProvider();
 }
 
-String OffscreenCanvasRenderingContext2D::ColorSpaceAsString() const {
-  return CanvasRenderingContext::ColorSpaceAsString();
-}
-
-CanvasPixelFormat OffscreenCanvasRenderingContext2D::PixelFormat() const {
-  return ColorParams().PixelFormat();
-}
-
-CanvasColorParams OffscreenCanvasRenderingContext2D::ColorParams() const {
-  return CanvasRenderingContext::ColorParams();
+CanvasColorParams OffscreenCanvasRenderingContext2D::GetCanvas2DColorParams()
+    const {
+  return CanvasRenderingContext::CanvasRenderingContextColorParams();
 }
 
 bool OffscreenCanvasRenderingContext2D::WritePixels(
@@ -389,16 +395,15 @@ void OffscreenCanvasRenderingContext2D::setFont(const String& new_font) {
 
   FontDescription* cached_font = font_cache.GetFont(new_font);
   if (cached_font) {
-    ModifiableState().SetFont(*cached_font, Host()->GetFontSelector());
+    GetState().SetFont(*cached_font, Host()->GetFontSelector());
   } else {
     auto* style =
         MakeGarbageCollected<MutableCSSPropertyValueSet>(kHTMLStandardMode);
     if (!style)
       return;
 
-    CSSParser::ParseValue(
-        style, CSSPropertyID::kFont, new_font, true,
-        Host()->GetTopExecutionContext()->GetSecureContextMode());
+    CSSParser::ParseValue(style, CSSPropertyID::kFont, new_font, true,
+                          Host()->GetTopExecutionContext());
 
     // According to
     // http://lists.w3.org/Archives/Public/public-html/2009Jul/0947.html,
@@ -412,9 +417,9 @@ void OffscreenCanvasRenderingContext2D::setFont(const String& new_font) {
         FontStyleResolver::ComputeFont(*style, Host()->GetFontSelector());
 
     font_cache.AddFont(new_font, desc);
-    ModifiableState().SetFont(desc, Host()->GetFontSelector());
+    GetState().SetFont(desc, Host()->GetFontSelector());
   }
-  ModifiableState().SetUnparsedFont(new_font);
+  GetState().SetUnparsedFont(new_font);
   if (bernoulli_distribution_(random_generator_)) {
     base::TimeDelta elapsed = base::TimeTicks::Now() - start_time;
     base::UmaHistogramMicrosecondsTimesUnderTenMilliseconds(
@@ -441,6 +446,55 @@ String OffscreenCanvasRenderingContext2D::direction() const {
              ? kRtlDirectionString
              : kLtrDirectionString;
 }
+void OffscreenCanvasRenderingContext2D::setTextLetterSpacing(
+    const double letter_spacing) {
+  if (UNLIKELY(!std::isfinite(letter_spacing)))
+    return;
+
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+
+  float letter_spacing_float = clampTo<float>(letter_spacing);
+  GetState().SetTextLetterSpacing(letter_spacing_float,
+                                  Host()->GetFontSelector());
+}
+
+void OffscreenCanvasRenderingContext2D::setTextWordSpacing(
+    const double word_spacing) {
+  if (UNLIKELY(!std::isfinite(word_spacing)))
+    return;
+
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+
+  float word_spacing_float = clampTo<float>(word_spacing);
+  GetState().SetTextWordSpacing(word_spacing_float, Host()->GetFontSelector());
+}
+
+void OffscreenCanvasRenderingContext2D::setTextRendering(
+    const String& text_rendering_string) {
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+
+  TextRenderingMode text_rendering_mode;
+  String text_rendering = text_rendering_string.LowerASCII();
+
+  if (text_rendering == kAutoRendering)
+    text_rendering_mode = TextRenderingMode::kAutoTextRendering;
+  else if (text_rendering == kOptimizeSpeedRendering)
+    text_rendering_mode = TextRenderingMode::kOptimizeSpeed;
+  else if (text_rendering == kOptimizeLegibilityRendering)
+    text_rendering_mode = TextRenderingMode::kOptimizeLegibility;
+  else if (text_rendering == kGeometricPrecisionRendering)
+    text_rendering_mode = TextRenderingMode::kGeometricPrecision;
+  else
+    return;
+
+  if (GetState().GetTextRendering() == text_rendering_mode)
+    return;
+
+  GetState().SetTextRendering(text_rendering_mode, Host()->GetFontSelector());
+}
 
 void OffscreenCanvasRenderingContext2D::setDirection(
     const String& direction_string) {
@@ -455,7 +509,91 @@ void OffscreenCanvasRenderingContext2D::setDirection(
     return;
 
   if (GetState().GetDirection() != direction)
-    ModifiableState().SetDirection(direction);
+    GetState().SetDirection(direction);
+}
+
+void OffscreenCanvasRenderingContext2D::setFontKerning(
+    const String& font_kerning_string) {
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+  FontDescription::Kerning kerning;
+  String font_kerning = font_kerning_string.LowerASCII();
+  if (font_kerning == kAutoKerningString)
+    kerning = FontDescription::kAutoKerning;
+  else if (font_kerning == kNoneKerningString)
+    kerning = FontDescription::kNoneKerning;
+  else if (font_kerning == kNormalKerningString)
+    kerning = FontDescription::kNormalKerning;
+  else
+    return;
+
+  if (GetState().GetFontKerning() == kerning)
+    return;
+
+  GetState().SetFontKerning(kerning, Host()->GetFontSelector());
+}
+
+void OffscreenCanvasRenderingContext2D::setFontStretch(
+    const String& font_stretch) {
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+
+  String font_stretch_string = font_stretch.LowerASCII();
+  FontSelectionValue stretch_vale;
+  if (font_stretch_string == kUltraCondensedString)
+    stretch_vale = UltraCondensedWidthValue();
+  else if (font_stretch_string == kExtraCondensedString)
+    stretch_vale = ExtraCondensedWidthValue();
+  else if (font_stretch_string == kCondensedString)
+    stretch_vale = CondensedWidthValue();
+  else if (font_stretch_string == kSemiCondensedString)
+    stretch_vale = SemiCondensedWidthValue();
+  else if (font_stretch_string == kNormalStretchString)
+    stretch_vale = NormalWidthValue();
+  else if (font_stretch_string == kSemiExpandedString)
+    stretch_vale = SemiExpandedWidthValue();
+  else if (font_stretch_string == kExpandedString)
+    stretch_vale = ExpandedWidthValue();
+  else if (font_stretch_string == kExtraExpandedString)
+    stretch_vale = ExtraExpandedWidthValue();
+  else if (font_stretch_string == kUltraExpandedString)
+    stretch_vale = UltraExpandedWidthValue();
+  else
+    return;
+
+  if (GetState().GetFontStretch() == stretch_vale)
+    return;
+
+  GetState().SetFontStretch(stretch_vale, Host()->GetFontSelector());
+}
+
+void OffscreenCanvasRenderingContext2D::setFontVariantCaps(
+    const String& font_variant_caps_string) {
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+  FontDescription::FontVariantCaps variant_caps;
+  String variant_caps_lower = font_variant_caps_string.LowerASCII();
+  if (variant_caps_lower == kNormalVariantString)
+    variant_caps = FontDescription::kCapsNormal;
+  else if (variant_caps_lower == kSmallCapsVariantString)
+    variant_caps = FontDescription::kSmallCaps;
+  else if (variant_caps_lower == kAllSmallCapsVariantString)
+    variant_caps = FontDescription::kAllSmallCaps;
+  else if (variant_caps_lower == kPetiteVariantString)
+    variant_caps = FontDescription::kPetiteCaps;
+  else if (variant_caps_lower == kAllPetiteVariantString)
+    variant_caps = FontDescription::kAllPetiteCaps;
+  else if (variant_caps_lower == kUnicaseVariantString)
+    variant_caps = FontDescription::kUnicase;
+  else if (variant_caps_lower == kTitlingCapsVariantString)
+    variant_caps = FontDescription::kTitlingCaps;
+  else
+    return;
+
+  if (GetState().GetFontVariantCaps() == variant_caps)
+    return;
+
+  GetState().SetFontVariantCaps(variant_caps, Host()->GetFontSelector());
 }
 
 void OffscreenCanvasRenderingContext2D::fillText(const String& text,
@@ -547,7 +685,6 @@ void OffscreenCanvasRenderingContext2D::DrawTextInternal(
       break;
   }
 
-  TextRunPaintInfo text_run_paint_info(text_run);
   FloatRect bounds(
       location.X() - font_metrics.Height() / 2,
       location.Y() - font_metrics.Ascent() - font_metrics.LineGap(),
@@ -566,12 +703,16 @@ void OffscreenCanvasRenderingContext2D::DrawTextInternal(
   }
 
   Draw(
-      [&font, &text_run_paint_info, &location](
+      [this, text = std::move(text), direction, location](
           cc::PaintCanvas* paint_canvas,
           const PaintFlags* flags) /* draw lambda */ {
-        font.DrawBidiText(paint_canvas, text_run_paint_info, location,
-                          Font::kUseFallbackIfFontNotReady, kCDeviceScaleFactor,
-                          *flags);
+        TextRun text_run(text, 0, 0, TextRun::kAllowTrailingExpansion,
+                         direction, false);
+        text_run.SetNormalizeSpace(true);
+        TextRunPaintInfo text_run_paint_info(text_run);
+        this->AccessFont().DrawBidiText(
+            paint_canvas, text_run_paint_info, location,
+            Font::kUseFallbackIfFontNotReady, kCDeviceScaleFactor, *flags);
       },
       [](const SkIRect& rect)  // overdraw test lambda
       { return false; },
@@ -590,12 +731,7 @@ TextMetrics* OffscreenCanvasRenderingContext2D::measureText(
     const String& text) {
   const Font& font = AccessFont();
 
-  TextDirection direction;
-  if (GetState().GetDirection() ==
-      CanvasRenderingContext2DState::kDirectionInherit)
-    direction = DetermineDirectionality(text);
-  else
-    direction = ToTextDirection(GetState().GetDirection());
+  TextDirection direction = ToTextDirection(GetState().GetDirection());
 
   return MakeGarbageCollected<TextMetrics>(font, direction,
                                            GetState().GetTextBaseline(),

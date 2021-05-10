@@ -5,10 +5,12 @@
 #include "ios/chrome/browser/browser_state/off_the_record_chrome_browser_state_impl.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "base/metrics/user_metrics.h"
 #include "base/notreached.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
+#include "components/profile_metrics/browser_profile_type.h"
 #include "components/proxy_config/ios/proxy_service_factory.h"
 #include "components/proxy_config/pref_proxy_config_tracker.h"
 #include "components/sync_preferences/pref_service_syncable.h"
@@ -34,6 +36,9 @@ OffTheRecordChromeBrowserStateImpl::OffTheRecordChromeBrowserStateImpl(
   io_data_.reset(new OffTheRecordChromeBrowserStateIOData::Handle(this));
   BrowserStateDependencyManager::GetInstance()->CreateBrowserStateServices(
       this);
+  profile_metrics::SetBrowserProfileType(
+      this, profile_metrics::BrowserProfileType::kIncognito);
+  base::RecordAction(base::UserMetricsAction("IncognitoMode_Started"));
 }
 
 OffTheRecordChromeBrowserStateImpl::~OffTheRecordChromeBrowserStateImpl() {
@@ -82,10 +87,6 @@ PrefService* OffTheRecordChromeBrowserStateImpl::GetPrefs() {
   return prefs_.get();
 }
 
-PrefService* OffTheRecordChromeBrowserStateImpl::GetOffTheRecordPrefs() {
-  return GetPrefs();
-}
-
 bool OffTheRecordChromeBrowserStateImpl::IsOffTheRecord() const {
   return true;
 }
@@ -116,12 +117,12 @@ OffTheRecordChromeBrowserStateImpl::CreateRequestContext(
 
 void OffTheRecordChromeBrowserStateImpl::ClearNetworkingHistorySince(
     base::Time time,
-    const base::Closure& completion) {
+    base::OnceClosure completion) {
   // Nothing to do here, our transport security state is read-only.
   // Still, fire the callback to indicate we have finished, otherwise the
   // BrowsingDataRemover will never be destroyed and the dialog will never be
   // closed. We must do this asynchronously in order to avoid reentrancy issues.
   if (!completion.is_null()) {
-    base::PostTask(FROM_HERE, {web::WebThread::UI}, completion);
+    base::PostTask(FROM_HERE, {web::WebThread::UI}, std::move(completion));
   }
 }

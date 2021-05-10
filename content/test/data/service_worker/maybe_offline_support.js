@@ -33,13 +33,13 @@ self.addEventListener("fetch", event => {
     );
   } else if (param.has("sleep_then_fetch")) {
     event.respondWith(
-      sleep(param.get("sleep") || 0, event.request.url).then(() => {
+      sleep(param.get("sleep") || 0).then(() => {
         return fetch(event.request.url);
       })
     );
   } else if (param.has("sleep_then_offline")) {
     event.respondWith(
-      sleep(param.get("sleep") || 0, event.request.url).then(() => {
+      sleep(param.get("sleep") || 0).then(() => {
         return new Response("Hello Offline page");
       })
     );
@@ -49,6 +49,12 @@ self.addEventListener("fetch", event => {
       await cache.add(event.request);
       return cache.match(event.request);
     })());
+  } else if (param.has("redirect")) {
+    const headers = new Headers();
+    headers.append("Location", "https://a.com");
+    event.respondWith(
+      new Response("Redirect", {"status": 301, "headers": headers})
+    );
   } else {
     // fallback case: do nothing.
   }

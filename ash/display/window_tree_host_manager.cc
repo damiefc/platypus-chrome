@@ -10,23 +10,26 @@
 #include <memory>
 #include <utility>
 
+#include "ash/accessibility/magnifier/magnification_controller.h"
+#include "ash/accessibility/magnifier/partial_magnification_controller.h"
 #include "ash/display/cursor_window_controller.h"
 #include "ash/display/mirror_window_controller.h"
 #include "ash/display/root_window_transformers.h"
+#include "ash/frame_throttler/frame_throttling_controller.h"
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
 #include "ash/host/root_window_transformer.h"
-#include "ash/magnifier/magnification_controller.h"
-#include "ash/magnifier/partial_magnification_controller.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/root_window_controller.h"
 #include "ash/root_window_settings.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -67,6 +70,12 @@ int64_t primary_display_id = -1;
 // The default memory limit: 512mb.
 const char kUICompositorDefaultMemoryLimitMB[] = "512";
 
+// An UMA signal for the current effective resolution is sent at this rate. This
+// keeps track of the effective resolution most used on internal display by the
+// user.
+constexpr base::TimeDelta kEffectiveResolutionRepeatingDelay =
+    base::TimeDelta::FromMinutes(30);
+
 display::DisplayManager* GetDisplayManager() {
   return Shell::Get()->display_manager();
 }
@@ -96,6 +105,47 @@ void ClearDisplayPropertiesOnHost(AshWindowTreeHost* ash_host) {
 aura::Window* GetWindow(AshWindowTreeHost* ash_host) {
   CHECK(ash_host->AsWindowTreeHost());
   return ash_host->AsWindowTreeHost()->window();
+}
+
+// Returns the index to the enum - |EffectiveResolution|. The enum value
+// represents the resolution that exactly matches the primary display's
+// effective resolution.
+int GetEffectiveResolutionUMAIndex(const display::Display& display) {
+  const gfx::Size effective_size = display.size();
+
+  // The UMA enum index for portrait mode has 1 subtracted from itself. This
+  // differentiates it from the landscape mode.
+  return effective_size.width() > effective_size.height()
+             ? effective_size.width() * effective_size.height()
+             : effective_size.width() * effective_size.height() - 1;
+}
+
+void RepeatingEffectiveResolutionUMA(base::RepeatingTimer* timer,
+                                     bool is_first_run) {
+  display::Display internal_display;
+  const auto* session_controller = Shell::Get()->session_controller();
+
+  // Record the UMA only when this is an active user session and the
+  // internal display is present.
+  if (display::Display::HasInternalDisplay() &&
+      display::Screen::GetScreen()->GetDisplayWithDisplayId(
+          display::Display::InternalDisplayId(), &internal_display) &&
+      session_controller->IsActiveUserSessionStarted() &&
+      session_controller->GetSessionState() ==
+          session_manager::SessionState::ACTIVE) {
+    base::UmaHistogramSparse(
+        "Ash.Display.InternalDisplay.ActiveEffectiveResolution",
+        GetEffectiveResolutionUMAIndex(internal_display));
+  }
+
+  // The first run of the repeating timer is half the actual delay. Reset the
+  // timer after the first run with the correct delay.
+  if (is_first_run && timer) {
+    timer->Start(
+        FROM_HERE, kEffectiveResolutionRepeatingDelay,
+        base::BindRepeating(&RepeatingEffectiveResolutionUMA,
+                            nullptr /*timer=*/, false /*is_first_run=*/));
+  }
 }
 
 }  // namespace
@@ -191,11 +241,22 @@ void WindowTreeHostManager::Start() {
       ->content_protection_manager()
       ->AddObserver(this);
   Shell::Get()->display_manager()->set_delegate(this);
+
+  // Start a repeating timer to send UMA at fixed intervals. The first run is at
+  // half the delay time.
+  effective_resolution_UMA_timer_ = std::make_unique<base::RepeatingTimer>();
+  effective_resolution_UMA_timer_->Start(
+      FROM_HERE, kEffectiveResolutionRepeatingDelay / 2,
+      base::BindRepeating(&RepeatingEffectiveResolutionUMA,
+                          effective_resolution_UMA_timer_.get(),
+                          true /*is_first_run=*/));
 }
 
 void WindowTreeHostManager::Shutdown() {
   for (auto& observer : observers_)
     observer.OnWindowTreeHostManagerShutdown();
+
+  effective_resolution_UMA_timer_->Reset();
 
   // Unset the display manager's delegate here because
   // DisplayManager outlives WindowTreeHostManager.
@@ -730,7 +791,7 @@ void WindowTreeHostManager::SetPrimaryDisplayId(int64_t id) {
   GetRootWindowSettings(non_primary_window)->display_id =
       old_primary_display.id();
 
-  base::string16 old_primary_title = primary_window->GetTitle();
+  std::u16string old_primary_title = primary_window->GetTitle();
   primary_window->SetTitle(non_primary_window->GetTitle());
   non_primary_window->SetTitle(old_primary_title);
 
@@ -808,6 +869,7 @@ AshWindowTreeHost* WindowTreeHostManager::AddWindowTreeHostForDisplay(
   AshWindowTreeHost* ash_host =
       AshWindowTreeHost::Create(params_with_bounds).release();
   aura::WindowTreeHost* host = ash_host->AsWindowTreeHost();
+  Shell::Get()->frame_throttling_controller()->OnWindowTreeHostCreated(host);
   DCHECK(!host->has_input_method());
   if (!input_method_) {  // Singleton input method instance for Ash.
     input_method_ = ui::CreateInputMethod(this, host->GetAcceleratedWidget());

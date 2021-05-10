@@ -114,17 +114,6 @@ bool SiteIsolationPolicy::IsErrorPageIsolationEnabled(bool in_main_frame) {
 }
 
 // static
-bool SiteIsolationPolicy::ShouldPdfCompositorBeEnabledForOopifs() {
-  // TODO(weili): We only create pdf compositor client and use pdf compositor
-  // service when site-per-process or isolate-origins flag/feature is enabled,
-  // or top-document-isolation feature is enabled. This may not cover all cases
-  // where OOPIF is used such as isolate-extensions, but should be good for
-  // feature testing purpose. Eventually, we will remove this check and use pdf
-  // compositor service by default for printing.
-  return AreIsolatedOriginsEnabled() || UseDedicatedProcessesForAllSites();
-}
-
-// static
 bool SiteIsolationPolicy::AreDynamicIsolatedOriginsEnabled() {
   return !IsSiteIsolationDisabled();
 }
@@ -141,6 +130,54 @@ bool SiteIsolationPolicy::ArePreloadedIsolatedOriginsEnabled() {
     return false;
 
   return true;
+}
+
+// static
+bool SiteIsolationPolicy::IsProcessIsolationForOriginAgentClusterEnabled() {
+  // If strict site isolation is in use (either by default on desktop or via a
+  // user opt-in on Android), unconditionally enable opt-in origin isolation.
+  if (UseDedicatedProcessesForAllSites())
+    return true;
+
+  // Otherwise, if site isolation is disabled (e.g., on Android due to being
+  // under a memory threshold), turn off opt-in origin isolation.
+  if (IsSiteIsolationDisabled())
+    return false;
+
+  return IsOriginAgentClusterEnabled();
+}
+
+// static
+bool SiteIsolationPolicy::IsOriginAgentClusterEnabled() {
+  return base::FeatureList::IsEnabled(features::kOriginIsolationHeader);
+}
+
+// static
+bool SiteIsolationPolicy::IsSiteIsolationForCOOPEnabled() {
+  // If the user has explicitly enabled site isolation for OAuth sites from the
+  // command line, honor this regardless of policies that may disable site
+  // isolation.
+  if (base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
+          features::kSiteIsolationForCrossOriginOpenerPolicy.name,
+          base::FeatureList::OVERRIDE_ENABLE_FEATURE)) {
+    return true;
+  }
+
+  // Don't apply COOP isolation if site isolation has been disabled (e.g., due
+  // to memory thresholds).
+  if (!SiteIsolationPolicy::AreDynamicIsolatedOriginsEnabled())
+    return false;
+
+  // COOP isolation is only needed on platforms where strict site isolation is
+  // not used.
+  if (UseDedicatedProcessesForAllSites())
+    return false;
+
+  // The feature needs to be checked last, because checking the feature
+  // activates the field trial and assigns the client either to a control or an
+  // experiment group - such assignment should be final.
+  return base::FeatureList::IsEnabled(
+      features::kSiteIsolationForCrossOriginOpenerPolicy);
 }
 
 // static
@@ -177,18 +214,18 @@ void SiteIsolationPolicy::ApplyGlobalIsolatedOrigins() {
       ChildProcessSecurityPolicy::GetInstance();
 
   std::string from_cmdline = GetIsolatedOriginsFromCommandLine();
-  policy->AddIsolatedOrigins(
+  policy->AddFutureIsolatedOrigins(
       from_cmdline,
       ChildProcessSecurityPolicy::IsolatedOriginSource::COMMAND_LINE);
 
   std::string from_trial = GetIsolatedOriginsFromFieldTrial();
-  policy->AddIsolatedOrigins(
+  policy->AddFutureIsolatedOrigins(
       from_trial,
       ChildProcessSecurityPolicy::IsolatedOriginSource::FIELD_TRIAL);
 
   std::vector<url::Origin> from_embedder =
       GetContentClient()->browser()->GetOriginsRequiringDedicatedProcess();
-  policy->AddIsolatedOrigins(
+  policy->AddFutureIsolatedOrigins(
       from_embedder,
       ChildProcessSecurityPolicy::IsolatedOriginSource::BUILT_IN);
 }

@@ -58,8 +58,9 @@ void OtherTransportsMenuModel::PopulateWithTransportsExceptFor(
     AuthenticatorTransport current_transport) {
   for (const auto transport :
        dialog_model_->transport_availability()->available_transports) {
-    if (transport == current_transport)
+    if (transport == current_transport) {
       continue;
+    }
 
     auto name = GetTransportHumanReadableName(
         transport, TransportSelectionContext::kOtherTransportsMenu);
@@ -108,6 +109,8 @@ void OtherTransportsMenuModel::ExecuteCommand(int command_id, int event_flags) {
   dialog_model_->StartGuidedFlowForTransport(selected_transport);
 }
 
-void OtherTransportsMenuModel::OnModelDestroyed() {
+void OtherTransportsMenuModel::OnModelDestroyed(
+    AuthenticatorRequestDialogModel* model) {
+  DCHECK(model == dialog_model_);
   dialog_model_ = nullptr;
 }

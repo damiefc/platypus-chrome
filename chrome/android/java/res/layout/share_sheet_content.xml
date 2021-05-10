@@ -24,6 +24,7 @@
       android:layout_height="wrap_content"
       android:paddingBottom="20dp"
       android:paddingStart="16dp"
+      android:paddingEnd="16dp"
       android:paddingTop="24dp">
 
       <org.chromium.components.browser_ui.widget.RoundedCornerImageView
@@ -43,12 +44,14 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_toEndOf="@id/image_preview"
+        android:layout_toStartOf="@id/image_preview_link"
         android:maxLines="1"
         android:minHeight="18dp"
         android:paddingEnd="16dp"
         android:paddingStart="12dp"
         android:paddingBottom="4dp"
-        android:textAlignment="viewStart"/>
+        android:textAlignment="gravity"
+        android:textDirection="locale"/>
 
       <TextView
         android:id="@+id/subtitle_preview"
@@ -57,13 +60,25 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_toEndOf="@id/image_preview"
+        android:layout_toStartOf="@id/image_preview_link"
         android:layout_centerVertical="true"
         android:maxLines="1"
         android:minHeight="18dp"
         android:paddingEnd="16dp"
         android:paddingStart="12dp"
-        android:textAlignment="viewStart"
+        android:textAlignment="gravity"
+        android:textDirection="locale"
         android:textAppearance="@style/TextAppearance.TextMedium.Primary"/>
+
+      <org.chromium.ui.widget.ChromeImageView
+          android:id="@+id/image_preview_link"
+          android:layout_height="@dimen/sharing_hub_preview_icon_size"
+          android:layout_width="@dimen/sharing_hub_preview_icon_size"
+          android:layout_alignParentEnd="true"
+          android:visibility="gone"
+          android:clickable="true"
+          android:focusable="true"
+          android:background="?attr/selectableItemBackground"/>
     </RelativeLayout>
 
     <View
@@ -79,14 +94,13 @@
       android:layout_height="113dp"
       android:minHeight="@dimen/min_touch_target_size"
       android:orientation="horizontal"
-      android:paddingEnd="16dp" />
+      android:paddingStart="8dp"
+      android:paddingEnd="8dp" />
 
     <View
       android:id="@+id/share_sheet_divider"
       android:background="@color/divider_line_bg_color"
       android:layout_height="1dp"
-      android:layout_marginLeft="16dp"
-      android:layout_marginRight="16dp"
       android:layout_width="match_parent"
       android:visibility="gone" />
 
@@ -96,7 +110,8 @@
       android:layout_width="wrap_content"
       android:layout_height="113dp"
       android:minHeight="@dimen/min_touch_target_size"
-      android:paddingEnd="16dp"
+      android:paddingStart="8dp"
+      android:paddingEnd="8dp"
       android:visibility="gone" />
   </LinearLayout>
 </ScrollView>

@@ -41,6 +41,9 @@ namespace chromeos {
 // SessionManagerClient is used to communicate with the session manager.
 class COMPONENT_EXPORT(SESSION_MANAGER) SessionManagerClient {
  public:
+  static constexpr base::ObserverListPolicy kObserverListPolicy =
+      base::ObserverListPolicy::EXISTING_ONLY;
+
   // The result type received from session manager on request to retrieve the
   // policy. Used to define the buckets for an enumerated UMA histogram.
   // Hence,
@@ -72,6 +75,13 @@ class COMPONENT_EXPORT(SESSION_MANAGER) SessionManagerClient {
     NEED_POWERWASH = 3,
   };
 
+  enum class RestartJobReason : uint32_t {
+    // Restart browser for Guest session.
+    kGuest = 0,
+    // Restart browser without user session for headless Chromium.
+    kUserless = 1,
+  };
+
   // Interface for observing changes from the session manager.
   class Observer {
    public:
@@ -88,6 +98,9 @@ class COMPONENT_EXPORT(SESSION_MANAGER) SessionManagerClient {
 
     // Called when the ARC instance is stopped after it had already started.
     virtual void ArcInstanceStopped() {}
+
+    // Called when screen lock state is updated.
+    virtual void ScreenLockedStateUpdated() {}
   };
 
   // Interface for performing actions on behalf of the stub implementation.
@@ -148,8 +161,11 @@ class COMPONENT_EXPORT(SESSION_MANAGER) SessionManagerClient {
   // request originates from belongs to the browser itself.
   // This method duplicates |socket_fd| so it's OK to close the FD without
   // waiting for the result.
+  // |reason| - restart job without user session (for headless chromium)
+  // or with user session (for guest sessions only).
   virtual void RestartJob(int socket_fd,
                           const std::vector<std::string>& argv,
+                          RestartJobReason reason,
                           VoidDBusMethodCallback callback) = 0;
 
   // Sends the user's password to the session manager.
@@ -295,13 +311,6 @@ class COMPONENT_EXPORT(SESSION_MANAGER) SessionManagerClient {
       const cryptohome::AccountIdentifier& cryptohome_id,
       std::string* policy_out) = 0;
 
-  // Fetches the user policy blob for a hidden user home mount. |callback| is
-  // invoked upon completition.
-  // DEPRECATED, use RetrievePolicy() instead.
-  virtual void RetrievePolicyForUserWithoutSession(
-      const cryptohome::AccountIdentifier& cryptohome_id,
-      RetrievePolicyCallback callback) = 0;
-
   // Fetches the policy blob associated with the specified device-local account
   // from session manager.  |callback| is invoked up on completion.
   // DEPRECATED, use RetrievePolicy() instead.
@@ -375,6 +384,12 @@ class COMPONENT_EXPORT(SESSION_MANAGER) SessionManagerClient {
   virtual void SetFlagsForUser(
       const cryptohome::AccountIdentifier& cryptohome_id,
       const std::vector<std::string>& flags) = 0;
+
+  // Sets feature flags to pass next time Chrome gets restarted by the session
+  // manager.
+  virtual void SetFeatureFlagsForUser(
+      const cryptohome::AccountIdentifier& cryptohome_id,
+      const std::vector<std::string>& feature_flags) = 0;
 
   using StateKeysCallback =
       base::OnceCallback<void(const std::vector<std::string>& state_keys)>;
@@ -462,5 +477,10 @@ class COMPONENT_EXPORT(SESSION_MANAGER) SessionManagerClient {
 };
 
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove when moved to ash.
+namespace ash {
+using ::chromeos::SessionManagerClient;
+}
 
 #endif  // CHROMEOS_DBUS_SESSION_MANAGER_SESSION_MANAGER_CLIENT_H_

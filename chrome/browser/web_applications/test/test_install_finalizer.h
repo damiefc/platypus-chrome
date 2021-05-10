@@ -9,7 +9,6 @@
 #include <memory>
 #include <set>
 
-#include "base/macros.h"
 #include "base/optional.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
 
@@ -23,6 +22,8 @@ class TestInstallFinalizer final : public InstallFinalizer {
   static AppId GetAppIdForUrl(const GURL& url);
 
   TestInstallFinalizer();
+  TestInstallFinalizer(const TestInstallFinalizer&) = delete;
+  TestInstallFinalizer& operator=(const TestInstallFinalizer&) = delete;
   ~TestInstallFinalizer() override;
 
   // InstallFinalizer:
@@ -32,21 +33,21 @@ class TestInstallFinalizer final : public InstallFinalizer {
   void FinalizeUninstallAfterSync(const AppId& app_id,
                                   UninstallWebAppCallback callback) override;
   void FinalizeUpdate(const WebApplicationInfo& web_app_info,
+                      content::WebContents* web_contents,
                       InstallFinalizedCallback callback) override;
-  void UninstallExternalWebApp(const AppId& app_id,
-                               ExternalInstallSource external_install_source,
-                               UninstallWebAppCallback callback) override;
+  void UninstallExternalWebApp(
+      const AppId& app_id,
+      webapps::WebappUninstallSource external_install_source,
+      UninstallWebAppCallback callback) override;
   void UninstallExternalWebAppByUrl(
       const GURL& app_url,
-      ExternalInstallSource external_install_source,
+      webapps::WebappUninstallSource external_install_source,
       UninstallWebAppCallback callback) override;
-  bool CanUserUninstallFromSync(const AppId& app_id) const override;
-  void UninstallWebAppFromSyncByUser(const AppId& app_id,
-                                     UninstallWebAppCallback callback) override;
-  bool CanUserUninstallExternalApp(const AppId& app_id) const override;
-  void UninstallExternalAppByUser(const AppId& app_id,
-                                  UninstallWebAppCallback callback) override;
-  bool WasExternalAppUninstalledByUser(const AppId& app_id) const override;
+  bool CanUserUninstallWebApp(const AppId& app_id) const override;
+  void UninstallWebApp(const AppId& app_id,
+                       webapps::WebappUninstallSource uninstall_source,
+                       UninstallWebAppCallback callback) override;
+  bool WasPreinstalledWebAppUninstalled(const AppId& app_id) const override;
   bool CanReparentTab(const AppId& app_id,
                       bool shortcut_created) const override;
   void ReparentTab(const AppId& app_id,
@@ -93,7 +94,6 @@ class TestInstallFinalizer final : public InstallFinalizer {
 
   int num_reparent_tab_calls_ = 0;
 
-  DISALLOW_COPY_AND_ASSIGN(TestInstallFinalizer);
 };
 
 }  // namespace web_app

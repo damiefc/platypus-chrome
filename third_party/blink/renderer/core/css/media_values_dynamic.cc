@@ -6,7 +6,6 @@
 
 #include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/common/css/navigation_controls.h"
-#include "third_party/blink/public/common/css/preferred_color_scheme.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_resolution_units.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
@@ -17,7 +16,7 @@
 namespace blink {
 
 MediaValues* MediaValuesDynamic::Create(Document& document) {
-  return MediaValuesDynamic::Create(document.GetFrameOfTreeRootDocument());
+  return MediaValuesDynamic::Create(document.GetFrame());
 }
 
 MediaValues* MediaValuesDynamic::Create(LocalFrame* frame) {
@@ -100,7 +99,7 @@ int MediaValuesDynamic::MonochromeBitsPerComponent() const {
   return CalculateMonochromeBitsPerComponent(frame_);
 }
 
-ui::PointerType MediaValuesDynamic::PrimaryPointerType() const {
+mojom::blink::PointerType MediaValuesDynamic::PrimaryPointerType() const {
   return CalculatePrimaryPointerType(frame_);
 }
 
@@ -108,7 +107,7 @@ int MediaValuesDynamic::AvailablePointerTypes() const {
   return CalculateAvailablePointerTypes(frame_);
 }
 
-ui::HoverType MediaValuesDynamic::PrimaryHoverType() const {
+mojom::blink::HoverType MediaValuesDynamic::PrimaryHoverType() const {
   return CalculatePrimaryHoverType(frame_);
 }
 
@@ -140,8 +139,14 @@ ColorSpaceGamut MediaValuesDynamic::ColorGamut() const {
   return CalculateColorGamut(frame_);
 }
 
-PreferredColorScheme MediaValuesDynamic::GetPreferredColorScheme() const {
+mojom::blink::PreferredColorScheme MediaValuesDynamic::GetPreferredColorScheme()
+    const {
   return CalculatePreferredColorScheme(frame_);
+}
+
+mojom::blink::PreferredContrast MediaValuesDynamic::GetPreferredContrast()
+    const {
+  return CalculatePreferredContrast(frame_);
 }
 
 bool MediaValuesDynamic::PrefersReducedMotion() const {
@@ -162,6 +167,10 @@ NavigationControls MediaValuesDynamic::GetNavigationControls() const {
 
 ScreenSpanning MediaValuesDynamic::GetScreenSpanning() const {
   return CalculateScreenSpanning(frame_);
+}
+
+DevicePosture MediaValuesDynamic::GetDevicePosture() const {
+  return CalculateDevicePosture(frame_);
 }
 
 Document* MediaValuesDynamic::GetDocument() const {

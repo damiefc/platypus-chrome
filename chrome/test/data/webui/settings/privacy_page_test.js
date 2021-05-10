@@ -6,18 +6,17 @@
 import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {ClearBrowsingDataBrowserProxyImpl, CookieControlsMode, SafeBrowsingSetting, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
-import {HatsBrowserProxyImpl, MetricsBrowserProxyImpl, PrivacyElementInteractions, PrivacyPageBrowserProxyImpl, Route, Router, routes, SecureDnsMode, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
+import {ClearBrowsingDataBrowserProxyImpl, ContentSettingsTypes, CookieControlsMode, SafeBrowsingSetting, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+import {HatsBrowserProxyImpl, MetricsBrowserProxyImpl, PrivacyElementInteractions, PrivacyPageBrowserProxyImpl, Route, Router, routes, SecureDnsMode} from 'chrome://settings/settings.js';
 
 import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
-import {flushTasks} from '../test_util.m.js';
+import {flushTasks, isChildVisible, isVisible} from '../test_util.m.js';
 
 import {TestClearBrowsingDataBrowserProxy} from './test_clear_browsing_data_browser_proxy.js';
 import {TestHatsBrowserProxy} from './test_hats_browser_proxy.js';
 import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 import {TestPrivacyPageBrowserProxy} from './test_privacy_page_browser_proxy.js';
 import {TestSiteSettingsPrefsBrowserProxy} from './test_site_settings_prefs_browser_proxy.js';
-import {TestSyncBrowserProxy} from './test_sync_browser_proxy.m.js';
 
 // clang-format on
 
@@ -29,17 +28,21 @@ const redesignedPages = [
   routes.SITE_SETTINGS_BACKGROUND_SYNC,
   routes.SITE_SETTINGS_CAMERA,
   routes.SITE_SETTINGS_CLIPBOARD,
-  routes.SITE_SETTINGS_FLASH,
+  routes.SITE_SETTINGS_HANDLERS,
+  routes.SITE_SETTINGS_HID_DEVICES,
+  routes.SITE_SETTINGS_IDLE_DETECTION,
   routes.SITE_SETTINGS_IMAGES,
   routes.SITE_SETTINGS_JAVASCRIPT,
   routes.SITE_SETTINGS_LOCATION,
   routes.SITE_SETTINGS_MICROPHONE,
   routes.SITE_SETTINGS_MIDI_DEVICES,
+  routes.SITE_SETTINGS_NOTIFICATIONS,
+  routes.SITE_SETTINGS_PDF_DOCUMENTS,
   routes.SITE_SETTINGS_POPUPS,
+  routes.SITE_SETTINGS_PROTECTED_CONTENT,
   routes.SITE_SETTINGS_SENSORS,
   routes.SITE_SETTINGS_SERIAL_PORTS,
   routes.SITE_SETTINGS_SOUND,
-  routes.SITE_SETTINGS_UNSANDBOXED_PLUGINS,
   routes.SITE_SETTINGS_USB_DEVICES,
   routes.SITE_SETTINGS_VR,
 
@@ -54,14 +57,12 @@ const redesignedPages = [
 
 /** @type {!Array<!Route>} */
 const notRedesignedPages = [
-  routes.SITE_SETTINGS_NOTIFICATIONS,
-  routes.SITE_SETTINGS_HID_DEVICES,
-
   // Content settings that depend on flags being enabled.
   // routes.SITE_SETTINGS_BLUETOOTH_SCANNING,
   // routes.SITE_SETTINGS_BLUETOOTH_DEVICES,
   // routes.SITE_SETTINGS_WINDOW_PLACEMENT,
   // routes.SITE_SETTINGS_FONT_ACCESS,
+  // routes.SITE_SETTINGS_FILE_HANDLING,
 ];
 
 suite('PrivacyPage', function() {
@@ -80,17 +81,16 @@ suite('PrivacyPage', function() {
   suiteSetup(function() {
     loadTimeData.overrideValues({
       enableContentSettingsRedesign: false,
+      privacySandboxSettingsEnabled: false,
     });
   });
 
-  setup(async function() {
+  setup(function() {
     testClearBrowsingDataBrowserProxy = new TestClearBrowsingDataBrowserProxy();
     ClearBrowsingDataBrowserProxyImpl.instance_ =
         testClearBrowsingDataBrowserProxy;
     const testBrowserProxy = new TestPrivacyPageBrowserProxy();
     PrivacyPageBrowserProxyImpl.instance_ = testBrowserProxy;
-    const testSyncBrowserProxy = new TestSyncBrowserProxy();
-    SyncBrowserProxyImpl.instance_ = testSyncBrowserProxy;
     siteSettingsBrowserProxy = new TestSiteSettingsPrefsBrowserProxy();
     SiteSettingsPrefsBrowserProxyImpl.instance_ = siteSettingsBrowserProxy;
     siteSettingsBrowserProxy.setCookieSettingDescription(testLabels[0]);
@@ -113,7 +113,7 @@ suite('PrivacyPage', function() {
           {mode: {value: SecureDnsMode.AUTOMATIC}, templates: {value: ''}},
     };
     document.body.appendChild(page);
-    return testSyncBrowserProxy.whenCalled('getSyncStatus');
+    return flushTasks();
   });
 
   teardown(function() {
@@ -143,18 +143,80 @@ suite('PrivacyPage', function() {
     // Ensure pages are visited so that HTML components are stamped.
     redesignedPages.forEach(route => Router.getInstance().navigateTo(route));
     notRedesignedPages.forEach(route => Router.getInstance().navigateTo(route));
+    await flushTasks();
 
     assertFalse(loadTimeData.getBoolean('enableContentSettingsRedesign'));
+    // protocol handlers, pdf documents, and protected content do not use
+    // category-default-setting, resulting in the -3 below.
     assertEquals(
         page.root.querySelectorAll('category-default-setting').length,
-        redesignedPages.length + notRedesignedPages.length);
+        redesignedPages.length + notRedesignedPages.length - 3);
     assertEquals(
         page.root.querySelectorAll('settings-category-default-radio-group')
             .length,
         0);
+    assertFalse(isChildVisible(page, '#notficationRadioGroup'));
+  });
+
+  test('privacySandboxRowNotVisible', function() {
+    assertFalse(isChildVisible(page, '#privacySandboxLinkRow'));
   });
 });
 
+suite('PrivacySandboxSettingsEnabled', function() {
+  /** @type {?TestMetricsBrowserProxy} */
+  let metricsBrowserProxy = null;
+  /** @type {!SettingsPrivacyPageElement} */
+  let page;
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      privacySandboxSettingsEnabled: true,
+    });
+  });
+
+  setup(function() {
+    metricsBrowserProxy = new TestMetricsBrowserProxy();
+    MetricsBrowserProxyImpl.instance_ = metricsBrowserProxy;
+
+    document.body.innerHTML = '';
+    page = /** @type {!SettingsPrivacyPageElement} */
+        (document.createElement('settings-privacy-page'));
+    page.prefs = {
+      privacy_sandbox: {
+        apis_enabled: {value: true},
+      },
+    };
+    document.body.appendChild(page);
+    return flushTasks();
+  });
+
+  test('privacySandboxRowVisible', function() {
+    assertTrue(isChildVisible(page, '#privacySandboxLinkRow'));
+  });
+
+  test('privacySandboxRowSublabel', async function() {
+    page.set('prefs.privacy_sandbox.apis_enabled.value', true);
+    await flushTasks();
+    assertEquals(
+        loadTimeData.getString('privacySandboxTrialsEnabled'),
+        page.$$('#privacySandboxLinkRow').subLabel);
+
+    page.set('prefs.privacy_sandbox.apis_enabled.value', false);
+    await flushTasks();
+    assertEquals(
+        loadTimeData.getString('privacySandboxTrialsDisabled'),
+        page.$$('#privacySandboxLinkRow').subLabel);
+  });
+
+  test('clickPrivacySandboxRow', async function() {
+    page.$$('#privacySandboxLinkRow').click();
+    // Ensure UMA is logged.
+    assertEquals(
+        'Settings.PrivacySandbox.OpenedFromSettingsParent',
+        await metricsBrowserProxy.whenCalled('recordAction'));
+  });
+});
 
 suite('ContentSettingsRedesign', function() {
   /** @type {!SettingsPrivacyPageElement} */
@@ -183,15 +245,33 @@ suite('ContentSettingsRedesign', function() {
     // Ensure pages are visited so that HTML components are stamped.
     redesignedPages.forEach(route => Router.getInstance().navigateTo(route));
     notRedesignedPages.forEach(route => Router.getInstance().navigateTo(route));
+    await flushTasks();
 
     assertTrue(loadTimeData.getBoolean('enableContentSettingsRedesign'));
     assertEquals(
         page.root.querySelectorAll('category-default-setting').length,
         notRedesignedPages.length);
+    // All redesigned pages, except notifications, protocol handlers, pdf
+    // documents, and protected content, will use a
+    // settings-category-default-radio-group.
     assertEquals(
         page.root.querySelectorAll('settings-category-default-radio-group')
             .length,
-        redesignedPages.length);
+        redesignedPages.length - 4);
+  });
+
+  test('NotificationPageRedesign', async function() {
+    Router.getInstance().navigateTo(routes.SITE_SETTINGS_NOTIFICATIONS);
+    await flushTasks();
+
+    assertTrue(isChildVisible(page, '#notificationRadioGroup'));
+    const categorySettingExceptions =
+        /** @type {!CategorySettingExceptionsElement} */
+        (page.$$('category-setting-exceptions'));
+    assertTrue(isVisible(categorySettingExceptions));
+    assertEquals(
+        ContentSettingsTypes.NOTIFICATIONS, categorySettingExceptions.category);
+    assertFalse(isChildVisible(page, 'category-default-setting'));
   });
 });
 
@@ -345,6 +425,7 @@ suite('HappinessTrackingSurveys', function() {
 
   teardown(function() {
     page.remove();
+    Router.getInstance().navigateTo(routes.BASIC);
   });
 
   test('ClearBrowsingDataTrigger', function() {

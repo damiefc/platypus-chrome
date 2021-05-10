@@ -5,7 +5,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -49,7 +49,7 @@ class CodecImageTest : public testing::Test {
         .WillByDefault(Return(MEDIA_CODEC_OK));
 
     gl::init::InitializeStaticGLBindingsImplementation(
-        gl::kGLImplementationEGLGLES2, false);
+        gl::GLImplementationParts(gl::kGLImplementationEGLGLES2), false);
     gl::init::InitializeGLOneOffPlatformImplementation(false, false, false);
 
     surface_ = new gl::PbufferGLSurfaceEGL(gfx::Size(320, 240));

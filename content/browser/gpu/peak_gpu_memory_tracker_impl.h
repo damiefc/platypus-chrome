@@ -5,8 +5,8 @@
 #ifndef CONTENT_BROWSER_GPU_PEAK_GPU_MEMORY_TRACKER_IMPL_H_
 #define CONTENT_BROWSER_GPU_PEAK_GPU_MEMORY_TRACKER_IMPL_H_
 
-#include "base/bind_helpers.h"
 #include "base/callback_forward.h"
+#include "base/callback_helpers.h"
 #include "base/single_thread_task_runner.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/peak_gpu_memory_tracker.h"
@@ -38,7 +38,7 @@ class CONTENT_EXPORT PeakGpuMemoryTrackerImpl : public PeakGpuMemoryTracker {
  private:
   friend class PeakGpuMemoryTrackerImplTest;
 
-  // A callback which will be ran after receiving a callback from the
+  // A callback which will be run after receiving a callback from the
   // GpuService. For use by tests to synchronize work done on the IO thread.
   base::OnceClosure post_gpu_service_callback_for_testing_ = base::DoNothing();
 

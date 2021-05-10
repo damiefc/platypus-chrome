@@ -128,7 +128,7 @@ void PrintingContextMac::AskUserForSettings(int max_pages,
     __block auto block_callback = std::move(callback);
     [CATransaction setCompletionBlock:^{
       NSInteger selection = [panel runModalWithPrintInfo:print_info];
-      if (selection == NSOKButton) {
+      if (selection == NSModalResponseOK) {
         print_info_.reset([[panel printInfo] retain]);
         settings_->set_ranges(GetPageRangesFromPrintInfo());
         InitPrintSettingsFromPrintInfo();
@@ -188,7 +188,8 @@ PrintingContext::Result PrintingContextMac::UpdatePrinterSettings(
         !SetCopiesInPrintSettings(settings_->copies()) ||
         !SetCollateInPrintSettings(settings_->collate()) ||
         !SetDuplexModeInPrintSettings(settings_->duplex_mode()) ||
-        !SetOutputColor(static_cast<int>(settings_->color()))) {
+        !SetOutputColor(static_cast<int>(settings_->color())) ||
+        !SetResolution(settings_->dpi_size())) {
       return OnError();
     }
   }
@@ -407,6 +408,26 @@ bool PrintingContextMac::SetOutputColor(int color_mode) {
                                  output_color.get(), false) == noErr;
 }
 
+bool PrintingContextMac::SetResolution(const gfx::Size& dpi_size) {
+  if (dpi_size.IsEmpty())
+    return true;
+
+  PMPrintSession print_session =
+      static_cast<PMPrintSession>([print_info_.get() PMPrintSession]);
+  PMPrinter current_printer;
+  if (PMSessionGetCurrentPrinter(print_session, &current_printer) != noErr)
+    return false;
+
+  PMResolution resolution;
+  resolution.hRes = dpi_size.width();
+  resolution.vRes = dpi_size.height();
+
+  PMPrintSettings print_settings =
+      static_cast<PMPrintSettings>([print_info_.get() PMPrintSettings]);
+  return PMPrinterSetOutputResolution(current_printer, print_settings,
+                                      &resolution) == noErr;
+}
+
 PageRanges PrintingContextMac::GetPageRangesFromPrintInfo() {
   PageRanges page_ranges;
   NSDictionary* print_info_dict = [print_info_.get() dictionary];
@@ -420,7 +441,7 @@ PageRanges PrintingContextMac::GetPageRangesFromPrintInfo() {
 }
 
 PrintingContext::Result PrintingContextMac::NewDocument(
-    const base::string16& document_name) {
+    const std::u16string& document_name) {
   DCHECK(!in_print_job_);
 
   in_print_job_ = true;

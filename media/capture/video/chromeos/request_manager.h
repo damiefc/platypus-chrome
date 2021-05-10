@@ -12,10 +12,12 @@
 #include <set>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "media/capture/mojom/image_capture.mojom.h"
 #include "media/capture/video/chromeos/camera_app_device_impl.h"
+#include "media/capture/video/chromeos/camera_device_context.h"
 #include "media/capture/video/chromeos/camera_device_delegate.h"
 #include "media/capture/video/chromeos/capture_metadata_dispatcher.h"
 #include "media/capture/video/chromeos/mojom/camera3.mojom.h"
@@ -29,7 +31,6 @@
 namespace media {
 
 class CameraBufferFactory;
-class CameraDeviceContext;
 
 // The JPEG transport header as defined by Android camera HAL v3 API.  The JPEG
 // transport header is at the end of the blob buffer filled by the HAL.
@@ -44,7 +45,6 @@ constexpr int32_t kMinConfiguredStreams = 1;
 
 // Maximum configured streams could contain two optional YUV streams.
 constexpr int32_t kMaxConfiguredStreams = 4;
-
 
 // RequestManager is responsible for managing the flow for sending capture
 // requests and receiving capture results. Having RequestBuilder to build
@@ -99,7 +99,8 @@ class CAPTURE_EXPORT RequestManager final
     int32_t orientation;
   };
 
-  RequestManager(mojo::PendingReceiver<cros::mojom::Camera3CallbackOps>
+  RequestManager(const std::string& device_id,
+                 mojo::PendingReceiver<cros::mojom::Camera3CallbackOps>
                      callback_ops_receiver,
                  std::unique_ptr<StreamCaptureInterface> capture_interface,
                  CameraDeviceContext* device_context,
@@ -107,13 +108,13 @@ class CAPTURE_EXPORT RequestManager final
                  std::unique_ptr<CameraBufferFactory> camera_buffer_factory,
                  BlobifyCallback blobify_callback,
                  scoped_refptr<base::SingleThreadTaskRunner> ipc_task_runner,
-                 CameraAppDeviceImpl* camera_app_device);
+                 uint32_t device_api_version);
   ~RequestManager() override;
 
   // Sets up the stream context and allocate buffers according to the
   // configuration specified in |streams|.
   void SetUpStreamsAndBuffers(
-      VideoCaptureFormat capture_format,
+      base::flat_map<ClientType, VideoCaptureParams> capture_params,
       const cros::mojom::CameraMetadataPtr& static_metadata,
       std::vector<cros::mojom::Camera3StreamPtr> streams);
 
@@ -226,6 +227,8 @@ class CAPTURE_EXPORT RequestManager final
                                 cros::mojom::CameraMetadataPtr* settings,
                                 TakePhotoCallback* callback);
 
+  bool TryPrepareRecordingRequest(std::set<StreamType>* stream_types);
+
   // Callback for ProcessCaptureRequest().
   void OnProcessedCaptureRequest(int32_t result);
 
@@ -256,19 +259,25 @@ class CAPTURE_EXPORT RequestManager final
   void SubmitCaptureResult(uint32_t frame_number,
                            StreamType stream_type,
                            cros::mojom::Camera3StreamBufferPtr stream_buffer);
-  void SubmitCapturedPreviewBuffer(uint32_t frame_number,
-                                   uint64_t buffer_ipc_id);
+  void SubmitCapturedPreviewRecordingBuffer(uint32_t frame_number,
+                                            uint64_t buffer_ipc_id,
+                                            StreamType stream_type);
   void SubmitCapturedJpegBuffer(uint32_t frame_number, uint64_t buffer_ipc_id);
 
   // If there are some metadata set by SetCaptureMetadata() or
   // SetRepeatingCaptureMetadata(), update them onto |capture_settings|.
   void UpdateCaptureSettings(cros::mojom::CameraMetadataPtr* capture_settings);
 
+  // The unique device id which is retrieved from VideoCaptureDeviceDescriptor.
+  std::string device_id_;
+
   mojo::Receiver<cros::mojom::Camera3CallbackOps> callback_ops_;
 
   std::unique_ptr<StreamCaptureInterface> capture_interface_;
 
   CameraDeviceContext* device_context_;
+
+  bool zero_shutter_lag_supported_;
 
   bool video_capture_use_gmb_;
 
@@ -361,7 +370,10 @@ class CAPTURE_EXPORT RequestManager final
   // duplicate or out of order of frames.
   std::map<StreamType, uint32_t> last_received_frame_number_map_;
 
-  CameraAppDeviceImpl* camera_app_device_;  // Weak.
+  base::WeakPtr<CameraAppDeviceImpl> camera_app_device_;
+
+  // The API version of the camera device.
+  uint32_t device_api_version_;
 
   base::WeakPtrFactory<RequestManager> weak_ptr_factory_{this};
 

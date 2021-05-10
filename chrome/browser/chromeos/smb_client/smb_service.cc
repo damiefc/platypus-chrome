@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -16,11 +16,11 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/unguessable_token.h"
+#include "chrome/browser/ash/kerberos/kerberos_credentials_manager.h"
+#include "chrome/browser/ash/kerberos/kerberos_credentials_manager_factory.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/file_system_provider/mount_path_util.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_info.h"
-#include "chrome/browser/chromeos/kerberos/kerberos_credentials_manager.h"
-#include "chrome/browser/chromeos/kerberos/kerberos_credentials_manager_factory.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/smb_client/discovery/mdns_host_locator.h"
 #include "chrome/browser/chromeos/smb_client/discovery/netbios_client.h"
 #include "chrome/browser/chromeos/smb_client/discovery/netbios_host_locator.h"
@@ -78,13 +78,14 @@ net::NetworkInterfaceList GetInterfaces() {
 
 std::unique_ptr<NetBiosClientInterface> GetNetBiosClient(Profile* profile) {
   auto* network_context =
-      content::BrowserContext::GetDefaultStoragePartition(profile)
-          ->GetNetworkContext();
+      profile->GetDefaultStoragePartition()->GetNetworkContext();
   return std::make_unique<NetBiosClient>(network_context);
 }
 
+// TODO(crbug.com/1203884): Remove this method and any code conditional on it
+// being false.
 bool IsSmbFsEnabled() {
-  return base::FeatureList::IsEnabled(features::kSmbFs);
+  return true;
 }
 
 // Metric recording functions.
@@ -358,7 +359,10 @@ void SmbService::Mount(const file_system_provider::MountOptions& options,
     // workgroup if necessary.
     username = username_input;
     password = password_input;
-    ParseUserName(username_input, &username, &workgroup);
+    if (!ParseUserName(username_input, &username, &workgroup)) {
+      std::move(callback).Run(SmbMountResult::kInvalidUsername);
+      return;
+    }
   }
 
   // Construct the file system ID before calling mount so that numerous
@@ -481,7 +485,7 @@ void SmbService::MountInternal(
                                     mount_id, std::move(callback)));
   } else {
     // If using kerberos, the hostname should not be resolved since kerberos
-    // service tickets are keyed on hosname.
+    // service tickets are keyed on hostname.
     const SmbUrl url = info.use_kerberos()
                            ? info.share_url()
                            : share_finder_->GetResolvedUrl(info.share_url());
@@ -675,7 +679,7 @@ void SmbService::Remount(const ProvidedFileSystemInfo& file_system_info) {
   }
 
   // If using kerberos, the hostname should not be resolved since kerberos
-  // service tickets are keyed on hosname.
+  // service tickets are keyed on hostname.
   const SmbUrl resolved_url = is_kerberos_chromad
                                   ? parsed_url
                                   : share_finder_->GetResolvedUrl(parsed_url);

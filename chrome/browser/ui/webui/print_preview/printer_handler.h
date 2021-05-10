@@ -11,8 +11,8 @@
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/strings/string16.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
 
 namespace content {
@@ -49,7 +49,7 @@ class PrinterHandler {
   using PrintCallback = base::OnceCallback<void(const base::Value& error)>;
   using GetPrinterInfoCallback =
       base::OnceCallback<void(const base::DictionaryValue& printer_info)>;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   using GetEulaUrlCallback =
       base::OnceCallback<void(const std::string& license)>;
   using PrinterStatusRequestCallback =
@@ -112,12 +112,12 @@ class PrinterHandler {
   // |settings|: The print job settings.
   // |print_data|: The document bytes to print.
   // |callback| should be called in the response to the request.
-  virtual void StartPrint(const base::string16& job_title,
+  virtual void StartPrint(const std::u16string& job_title,
                           base::Value settings,
                           scoped_refptr<base::RefCountedMemory> print_data,
                           PrintCallback callback) = 0;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Starts getting the printer's PPD EULA URL with the provided destination ID.
   // |destination_id|: The ID of the printer.
   // |callback| should be called in response to the request.

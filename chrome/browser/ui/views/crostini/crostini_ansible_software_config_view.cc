@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/views/crostini/crostini_ansible_software_config_view.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -12,6 +12,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/network_service_instance.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/devicetype_utils.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/layout/box_layout.h"
@@ -60,7 +61,7 @@ bool CrostiniAnsibleSoftwareConfigView::Accept() {
   return true;
 }
 
-base::string16 CrostiniAnsibleSoftwareConfigView::GetSubtextLabel() const {
+std::u16string CrostiniAnsibleSoftwareConfigView::GetSubtextLabel() const {
   switch (state_) {
     case State::CONFIGURING:
       return l10n_util::GetStringUTF16(
@@ -72,13 +73,6 @@ base::string16 CrostiniAnsibleSoftwareConfigView::GetSubtextLabel() const {
       return l10n_util::GetStringUTF16(
           IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_OFFLINE_SUBTEXT);
   }
-}
-
-gfx::Size CrostiniAnsibleSoftwareConfigView::CalculatePreferredSize() const {
-  const int dialog_width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                               DISTANCE_STANDALONE_BUBBLE_PREFERRED_WIDTH) -
-                           margins().width();
-  return gfx::Size(dialog_width, GetHeightForWidth(dialog_width));
 }
 
 void CrostiniAnsibleSoftwareConfigView::
@@ -102,7 +96,7 @@ void CrostiniAnsibleSoftwareConfigView::OnAnsibleSoftwareConfigurationFinished(
   GetWidget()->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
 }
 
-base::string16
+std::u16string
 CrostiniAnsibleSoftwareConfigView::GetSubtextLabelStringForTesting() {
   return subtext_label_->GetText();
 }
@@ -119,13 +113,16 @@ CrostiniAnsibleSoftwareConfigView::CrostiniAnsibleSoftwareConfigView(
           crostini::AnsibleManagementService::GetForProfile(profile)) {
   ansible_management_service_->AddObserver(this);
 
+  set_fixed_width(ChromeLayoutProvider::Get()->GetDistanceMetric(
+      DISTANCE_STANDALONE_BUBBLE_PREFERRED_WIDTH));
+
   views::LayoutProvider* provider = views::LayoutProvider::Get();
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical,
       provider->GetInsetsMetric(views::InsetsMetric::INSETS_DIALOG),
       provider->GetDistanceMetric(views::DISTANCE_UNRELATED_CONTROL_VERTICAL)));
   set_margins(provider->GetDialogInsetsForContentType(
-      views::DialogContentType::TEXT, views::DialogContentType::CONTROL));
+      views::DialogContentType::kText, views::DialogContentType::kControl));
 
   auto subtext_label = std::make_unique<views::Label>();
   subtext_label->SetMultiLine(true);
@@ -151,7 +148,7 @@ CrostiniAnsibleSoftwareConfigView::~CrostiniAnsibleSoftwareConfigView() {
 }
 
 // static
-base::string16 CrostiniAnsibleSoftwareConfigView::GetWindowTitleForState(
+std::u16string CrostiniAnsibleSoftwareConfigView::GetWindowTitleForState(
     State state) {
   switch (state) {
     case State::CONFIGURING:
@@ -186,3 +183,8 @@ void CrostiniAnsibleSoftwareConfigView::OnStateChanged() {
   if (GetWidget())
     GetWidget()->SetSize(GetWidget()->non_client_view()->GetPreferredSize());
 }
+
+BEGIN_METADATA(CrostiniAnsibleSoftwareConfigView,
+               views::BubbleDialogDelegateView)
+ADD_READONLY_PROPERTY_METADATA(std::u16string, SubtextLabel)
+END_METADATA

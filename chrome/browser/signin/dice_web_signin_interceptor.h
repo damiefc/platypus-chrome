@@ -28,6 +28,10 @@ namespace content {
 class WebContents;
 }
 
+namespace user_prefs {
+class PrefRegistrySyncable;
+}
+
 struct AccountInfo;
 class Browser;
 class DiceSignedInProfileCreator;
@@ -63,9 +67,55 @@ enum class SigninInterceptionHeuristicOutcome {
   kAbortProfileCreationDisallowed = 9,
   // The interceptor was shut down before the heuristic completed.
   kAbortShutdown = 10,
+  // The interceptor is not offered when WebContents has no browser associated.
+  kAbortNoBrowser = 11,
+  // A password update is required for the account, and this takes priority over
+  // signin interception.
+  kAbortPasswordUpdate = 12,
+  // A password update will be required for the account: the password used on
+  // the form does not match the stored password.
+  kAbortPasswordUpdatePending = 13,
+  // The user already declined a new profile for this account, the UI is not
+  // shown again.
+  kAbortUserDeclinedProfileForAccount = 14,
+  // Signin interception is disabled by the SigninInterceptionEnabled policy.
+  kAbortInterceptionDisabled = 15,
 
-  kMaxValue = kAbortShutdown,
+  kMaxValue = kAbortInterceptionDisabled,
 };
+
+// User selection in the interception bubble.
+enum class SigninInterceptionUserChoice { kAccept, kDecline, kGuest };
+
+// User action resulting from the interception bubble.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class SigninInterceptionResult {
+  kAccepted = 0,
+  kDeclined = 1,
+  kIgnored = 2,
+
+  // Used when the bubble was not shown because it's not implemented.
+  kNotDisplayed = 3,
+
+  // Accepted to be opened in Guest profile.
+  kAcceptedWithGuest = 4,
+
+  kMaxValue = kAcceptedWithGuest,
+};
+
+// The ScopedDiceWebSigninInterceptionBubbleHandle closes the signin intercept
+// bubble when it is destroyed, if the bubble is still opened. Note that this
+// handle does not prevent the bubble from being closed for other reasons.
+class ScopedDiceWebSigninInterceptionBubbleHandle {
+ public:
+  virtual ~ScopedDiceWebSigninInterceptionBubbleHandle() = 0;
+};
+
+// Returns whether the heuristic outcome is a success (the signin should be
+// intercepted).
+bool SigninInterceptionHeuristicOutcomeIsSuccess(
+    SigninInterceptionHeuristicOutcome outcome);
 
 // Called after web signed in, after a successful token exchange through Dice.
 // The DiceWebSigninInterceptor may offer the user to create a new profile or
@@ -73,13 +123,18 @@ enum class SigninInterceptionHeuristicOutcome {
 //
 // Implementation notes: here is how an entire interception flow work for the
 // enterprise or multi-user case:
-// * MaybeInterceptSignin() is called when the new signin happens.
+// * MaybeInterceptWebSignin() is called when the new signin happens.
 // * Wait until the account info is downloaded.
-// * Interception UI is shown by the delegate.
+// * Interception UI is shown by the delegate. Keep a handle on the bubble.
 // * If the user approved, a new profile is created and the token is moved from
 //   this profile to the new profile, using DiceSignedInProfileCreator.
 // * At this point, the flow ends in this profile, and continues in the new
-//   profile using DiceInterceptedSessionStartupHelper.
+//   profile using DiceInterceptedSessionStartupHelper to add the account.
+// * When the account is available on the web in the new profile:
+//   - A new browser window is created for the new profile,
+//   - The tab is moved to the new profile,
+//   - The interception bubble is closed by deleting the handle,
+//   - The profile customization bubble is shown.
 class DiceWebSigninInterceptor : public KeyedService,
                                  public content::WebContentsObserver,
                                  public signin::IdentityManager::Observer {
@@ -95,6 +150,7 @@ class DiceWebSigninInterceptor : public KeyedService,
       AccountInfo intercepted_account;
       AccountInfo primary_account;
       SkColor profile_highlight_color;
+      bool show_guest_option;
     };
 
     virtual ~Delegate() = default;
@@ -103,10 +159,18 @@ class DiceWebSigninInterceptor : public KeyedService,
     // whether the user should continue in a new profile.
     // The callback is never called if the delegate is deleted before it
     // completes.
-    virtual void ShowSigninInterceptionBubble(
+    // May return a nullptr handle if the bubble cannot be shown.
+    // Warning: the handle closes the bubble when it is destroyed ; it is the
+    // responsibility of the caller to keep the handle alive until the bubble
+    // should be closed.
+    // The callback must not be called synchronously if this function returns a
+    // valid handle (because the caller needs to be able to close the bubble
+    // from the callback).
+    virtual std::unique_ptr<ScopedDiceWebSigninInterceptionBubbleHandle>
+    ShowSigninInterceptionBubble(
         content::WebContents* web_contents,
         const BubbleParameters& bubble_parameters,
-        base::OnceCallback<void(bool)> callback) = 0;
+        base::OnceCallback<void(SigninInterceptionResult)> callback) = 0;
 
     // Shows the profile customization bubble.
     virtual void ShowProfileCustomizationBubble(Browser* browser) = 0;
@@ -118,6 +182,8 @@ class DiceWebSigninInterceptor : public KeyedService,
 
   DiceWebSigninInterceptor(const DiceWebSigninInterceptor&) = delete;
   DiceWebSigninInterceptor& operator=(const DiceWebSigninInterceptor&) = delete;
+
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // Called when an account has been added in Chrome from the web (using the
   // DICE protocol).
@@ -140,12 +206,29 @@ class DiceWebSigninInterceptor : public KeyedService,
   // `intercepted_contents` may be null if the tab was already closed.
   // The intercepted web contents belong to the source profile (which is not the
   // profile attached to this service).
-  // `show_customization_bubble` indicates whether the customization bubble
-  // should be shown after the browser is opened.
   void CreateBrowserAfterSigninInterception(
       CoreAccountId account_id,
       content::WebContents* intercepted_contents,
-      bool show_customization_bubble);
+      std::unique_ptr<ScopedDiceWebSigninInterceptionBubbleHandle>
+          bubble_handle,
+      bool is_new_profile);
+
+  // Returns the outcome of the interception heuristic.
+  // If the outcome is kInterceptProfileSwitch, the target profile is returned
+  // in |entry|.
+  // In some cases the outcome cannot be fully computed synchronously, when this
+  // happens, the signin interception is highly likely (but not guaranteed).
+  base::Optional<SigninInterceptionHeuristicOutcome> GetHeuristicOutcome(
+      bool is_new_account,
+      bool is_sync_signin,
+      const std::string& email,
+      const ProfileAttributesEntry** entry = nullptr) const;
+
+  // Returns true if the interception is in progress (running the heuristic or
+  // showing on screen).
+  bool is_interception_in_progress() const {
+    return is_interception_in_progress_;
+  }
 
   // KeyedService:
   void Shutdown() override;
@@ -161,12 +244,7 @@ class DiceWebSigninInterceptor : public KeyedService,
                            ShouldShowEnterpriseBubbleWithoutUPA);
   FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
                            ShouldShowMultiUserBubble);
-  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
-                           InterceptionInProgress);
-  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
-                           NoInterceptionWithOneAccount);
-  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
-                           ProfileCreationDisallowed);
+  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest, PersistentHash);
 
   // Cancels any current signin interception and resets the interceptor to its
   // initial state.
@@ -174,10 +252,12 @@ class DiceWebSigninInterceptor : public KeyedService,
 
   // Helper functions to determine which interception UI should be shown.
   const ProfileAttributesEntry* ShouldShowProfileSwitchBubble(
-      const CoreAccountInfo& intercepted_account_info,
-      ProfileAttributesStorage* profile_attribute_storage);
-  bool ShouldShowEnterpriseBubble(const AccountInfo& intercepted_account_info);
-  bool ShouldShowMultiUserBubble(const AccountInfo& intercepted_account_info);
+      const std::string& intercepted_email,
+      ProfileAttributesStorage* profile_attribute_storage) const;
+  bool ShouldShowEnterpriseBubble(
+      const AccountInfo& intercepted_account_info) const;
+  bool ShouldShowMultiUserBubble(
+      const AccountInfo& intercepted_account_info) const;
 
   // signin::IdentityManager::Observer:
   void OnExtendedAccountInfoUpdated(const AccountInfo& info) override;
@@ -186,11 +266,14 @@ class DiceWebSigninInterceptor : public KeyedService,
   void OnExtendedAccountInfoFetchTimeout();
 
   // Called after the user chose whether a new profile would be created.
-  void OnProfileCreationChoice(SkColor profile_color, bool create);
+  void OnProfileCreationChoice(const AccountInfo& account_info,
+                               SkColor profile_color,
+                               SigninInterceptionResult create);
   // Called after the user chose whether the session should continue in a new
   // profile.
-  void OnProfileSwitchChoice(const base::FilePath& profile_path,
-                             bool switch_profile);
+  void OnProfileSwitchChoice(const std::string& email,
+                             const base::FilePath& profile_path,
+                             SigninInterceptionResult switch_profile);
 
   // Called when the new profile is created or loaded from disk.
   // `profile_color` is set as theme color for the profile ; it should be
@@ -200,7 +283,27 @@ class DiceWebSigninInterceptor : public KeyedService,
 
   // Called when the new browser is created after interception. Passed as
   // callback to `session_startup_helper_`.
-  void OnNewBrowserCreated(bool show_customization_bubble);
+  void OnNewBrowserCreated(bool is_new_profile);
+
+  // Returns a 8-bit hash of the email that can be persisted.
+  static std::string GetPersistentEmailHash(const std::string& email);
+
+  // Should be called when the user declines profile creation or profile switch,
+  // in order to remember their decision. This information is stored in prefs.
+  // Only a hash of the email is saved, as Chrome does not need to store the
+  // actual email, but only need to compare emails. The hash has low entropy to
+  // ensure it cannot be reversed.
+  void RecordProfileCreationDeclined(const std::string& email);
+  void RecordProfileSwitchDeclined(const std::string& email);
+
+  // Checks if the user previously declined 2 times creating a new profile for
+  // this account.
+  bool HasUserDeclinedProfileCreation(const std::string& email) const;
+
+  // Checks if the user previously declined more than a threshold number of
+  // times switching to a new profile for this account. The limit is set up
+  // via an experiment parameter.
+  bool HasUserDeclinedProfileSwitch(const std::string& email) const;
 
   Profile* const profile_;
   signin::IdentityManager* const identity_manager_;
@@ -218,6 +321,9 @@ class DiceWebSigninInterceptor : public KeyedService,
   // is cancelled if the account info cannot be fetched quickly.
   base::CancelableOnceCallback<void()> on_account_info_update_timeout_;
   std::unique_ptr<DiceSignedInProfileCreator> dice_signed_in_profile_creator_;
+  // Used to retain the interception UI bubble until profile creation completes.
+  std::unique_ptr<ScopedDiceWebSigninInterceptionBubbleHandle>
+      interception_bubble_handle_;
   // Used for metrics:
   bool was_interception_ui_displayed_ = false;
   base::TimeTicks account_info_fetch_start_time_;

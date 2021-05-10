@@ -5,6 +5,7 @@
 #include "components/password_manager/core/browser/http_credentials_cleaner.h"
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "components/password_manager/core/browser/http_password_store_migrator.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
@@ -52,7 +53,8 @@ void HttpCredentialCleaner::OnGetPasswordStoreResults(
       PostHSTSQueryForHostAndNetworkContext(
           origin, network_context_getter_.Run(),
           base::BindOnce(&HttpCredentialCleaner::OnHSTSQueryResult,
-                         base::Unretained(this), std::move(form), form_key));
+                         weak_ptr_factory_.GetWeakPtr(), std::move(form),
+                         form_key));
       ++total_http_credentials_;
     } else {  // HTTPS
       https_credentials_map_[form_key].insert(form->password_value);

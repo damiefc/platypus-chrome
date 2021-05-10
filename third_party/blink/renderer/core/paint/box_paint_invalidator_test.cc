@@ -29,11 +29,10 @@ class BoxPaintInvalidatorTest : public PaintAndRasterInvalidationTest {
   PaintInvalidationReason ComputePaintInvalidationReason(
       LayoutBox& box,
       const PhysicalOffset& old_paint_offset) {
-    FragmentData fragment_data;
     PaintInvalidatorContext context;
     context.old_paint_offset = old_paint_offset;
-    fragment_data_.SetPaintOffset(box.FirstFragment().PaintOffset());
-    context.fragment_data = &fragment_data_;
+    fragment_data_->SetPaintOffset(box.FirstFragment().PaintOffset());
+    context.fragment_data = fragment_data_;
     return BoxPaintInvalidator(box, context).ComputePaintInvalidationReason();
   }
 
@@ -45,7 +44,7 @@ class BoxPaintInvalidatorTest : public PaintAndRasterInvalidationTest {
 
     UpdateAllLifecyclePhasesForTest();
     auto& target = *GetDocument().getElementById("target");
-    auto& box = *ToLayoutBox(target.GetLayoutObject());
+    auto& box = *target.GetLayoutBox();
     auto paint_offset = box.FirstFragment().PaintOffset();
     box.SetShouldCheckForPaintInvalidation();
 
@@ -95,7 +94,8 @@ class BoxPaintInvalidatorTest : public PaintAndRasterInvalidationTest {
   }
 
  private:
-  FragmentData fragment_data_;
+  Persistent<FragmentData> fragment_data_ =
+      MakeGarbageCollected<FragmentData>();
 };
 
 INSTANTIATE_PAINT_TEST_SUITE_P(BoxPaintInvalidatorTest);
@@ -106,7 +106,7 @@ INSTANTIATE_PAINT_TEST_SUITE_P(BoxPaintInvalidatorTest);
 TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonEmptyContent) {
   SetUpHTML();
   auto& target = *GetDocument().getElementById("target");
-  auto& box = *ToLayoutBox(target.GetLayoutObject());
+  auto& box = *target.GetLayoutBox();
   // Remove border.
   target.setAttribute(html_names::kClassAttr, "");
   UpdateAllLifecyclePhasesForTest();
@@ -127,7 +127,6 @@ TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonEmptyContent) {
   target.setAttribute(html_names::kStyleAttr, "width: 200px");
   GetDocument().View()->UpdateLifecycleToLayoutClean(
       DocumentUpdateReason::kTest);
-
   EXPECT_EQ(PaintInvalidationReason::kIncremental,
             ComputePaintInvalidationReason(box, paint_offset));
 }
@@ -135,7 +134,7 @@ TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonEmptyContent) {
 TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonBasic) {
   SetUpHTML();
   auto& target = *GetDocument().getElementById("target");
-  auto& box = *ToLayoutBox(target.GetLayoutObject());
+  auto& box = *target.GetLayoutBox();
   // Remove border.
   target.setAttribute(html_names::kClassAttr, "");
   target.setAttribute(html_names::kStyleAttr, "background: blue");
@@ -153,7 +152,6 @@ TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonBasic) {
   target.setAttribute(html_names::kStyleAttr, "background: blue; width: 200px");
   GetDocument().View()->UpdateLifecycleToLayoutClean(
       DocumentUpdateReason::kTest);
-
   EXPECT_EQ(PaintInvalidationReason::kIncremental,
             ComputePaintInvalidationReason(box, paint_offset));
 
@@ -270,50 +268,7 @@ TEST_P(BoxPaintInvalidatorTest, InvalidateHitTestOnCompositingStyleChange) {
   auto& target = *GetDocument().getElementById("target");
   target.setAttribute(html_names::kStyleAttr, "");
   UpdateAllLifecyclePhasesForTest();
-  // This test passes if no underinvalidation occurs.
-}
-
-TEST_P(BoxPaintInvalidatorTest, InvalidatePaintRectangle) {
-  SetBodyInnerHTML(R"HTML(
-    <div id="target" style="width: 200px; height: 200px; background: blue">
-    </div>
-  )HTML");
-
-  GetDocument().View()->SetTracksRasterInvalidations(true);
-
-  auto* target = ToLayoutBox(GetLayoutObjectByElementId("target"));
-  auto* display_item_client = static_cast<DisplayItemClient*>(target);
-  EXPECT_FALSE(target->HasPartialInvalidationRect());
-  EXPECT_TRUE(display_item_client->PartialInvalidationVisualRect().IsEmpty());
-
-  target->InvalidatePaintRectangle(PhysicalRect(10, 10, 50, 50));
-  target->InvalidatePaintRectangle(PhysicalRect(30, 30, 60, 60));
-  EXPECT_TRUE(target->HasPartialInvalidationRect());
-  EXPECT_TRUE(target->ShouldCheckForPaintInvalidation());
-
-  EXPECT_TRUE(display_item_client->IsValid());
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
-  EXPECT_EQ(IntRect(18, 18, 80, 80),
-            display_item_client->PartialInvalidationVisualRect());
-  EXPECT_FALSE(display_item_client->IsValid());
-
-  target->InvalidatePaintRectangle(PhysicalRect(30, 30, 50, 80));
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
-  // PartialInvalidationVisualRect should accumulate until painting.
-  EXPECT_EQ(IntRect(18, 18, 80, 100),
-            display_item_client->PartialInvalidationVisualRect());
-
-  UpdateAllLifecyclePhasesForTest();
-  EXPECT_THAT(GetRasterInvalidationTracking()->Invalidations(),
-              UnorderedElementsAre(RasterInvalidationInfo{
-                  target, target->DebugName(), IntRect(18, 18, 80, 100),
-                  PaintInvalidationReason::kRectangle}));
-
-  EXPECT_TRUE(display_item_client->IsValid());
-  EXPECT_TRUE(display_item_client->PartialInvalidationVisualRect().IsEmpty());
-  EXPECT_FALSE(target->HasPartialInvalidationRect());
+  // This test passes if no under-invalidation occurs.
 }
 
 }  // namespace blink

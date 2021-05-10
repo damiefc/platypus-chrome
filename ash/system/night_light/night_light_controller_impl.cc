@@ -24,6 +24,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "cc/base/math_util.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -170,12 +171,13 @@ int GetTemperatureRange(float temperature) {
 
 // Returns the color matrix that corresponds to the given |temperature|.
 // The matrix will be affected by the current |ambient_temperature_| if
-// GetAmbientColorEnabled() returns true.
+// |apply_ambient_temperature| is true.
 // If |in_linear_gamma_space| is true, the generated matrix is the one that
 // should be applied after gamma correction, and it corresponds to the
 // non-linear temperature value for the given |temperature|.
 SkMatrix44 MatrixFromTemperature(float temperature,
-                                 bool in_linear_gamma_space) {
+                                 bool in_linear_gamma_space,
+                                 bool apply_ambient_temperature) {
   if (in_linear_gamma_space)
     temperature =
         NightLightControllerImpl::GetNonLinearTemperature(temperature);
@@ -194,7 +196,7 @@ SkMatrix44 MatrixFromTemperature(float temperature,
 
   auto* night_light_controller = Shell::Get()->night_light_controller();
   DCHECK(night_light_controller);
-  if (night_light_controller->GetAmbientColorEnabled()) {
+  if (apply_ambient_temperature) {
     const gfx::Vector3dF& ambient_rgb_scaling_factors =
         night_light_controller->ambient_rgb_scaling_factors();
 
@@ -265,10 +267,18 @@ void ApplyTemperatureToHost(aura::WindowTreeHost* host, float temperature) {
     return;
   }
 
+  auto* night_light_controller = Shell::Get()->night_light_controller();
+  DCHECK(night_light_controller);
+
+  // Only apply ambient EQ to internal displays.
+  const bool apply_ambient_temperature =
+      night_light_controller->GetAmbientColorEnabled() &&
+      display::Display::IsInternalDisplayId(display_id);
+
   const SkMatrix44 linear_gamma_space_matrix =
-      MatrixFromTemperature(temperature, true);
+      MatrixFromTemperature(temperature, true, apply_ambient_temperature);
   const SkMatrix44 gamma_compressed_matrix =
-      MatrixFromTemperature(temperature, false);
+      MatrixFromTemperature(temperature, false, apply_ambient_temperature);
   const bool crtc_result = AttemptSettingHardwareCtm(
       display_id, linear_gamma_space_matrix, gamma_compressed_matrix);
   UpdateCompositorMatrix(host, gamma_compressed_matrix, crtc_result);
@@ -280,19 +290,12 @@ void ApplyTemperatureToHost(aura::WindowTreeHost* host, float temperature) {
 // by the current |ambient_temperature_| if GetAmbientColorEnabled() returns
 // true.
 void ApplyTemperatureToAllDisplays(float temperature) {
-  const SkMatrix44 linear_gamma_space_matrix =
-      MatrixFromTemperature(temperature, true);
-  const SkMatrix44 gamma_compressed_matrix =
-      MatrixFromTemperature(temperature, false);
 
   Shell* shell = Shell::Get();
   WindowTreeHostManager* wth_manager = shell->window_tree_host_manager();
   for (int64_t display_id :
        shell->display_manager()->GetCurrentDisplayIdList()) {
     DCHECK_NE(display_id, display::kUnifiedDisplayId);
-
-    const bool crtc_result = AttemptSettingHardwareCtm(
-        display_id, linear_gamma_space_matrix, gamma_compressed_matrix);
 
     aura::Window* root_window =
         wth_manager->GetRootWindowForDisplayId(display_id);
@@ -305,7 +308,7 @@ void ApplyTemperatureToAllDisplays(float temperature) {
 
     auto* host = root_window->GetHost();
     DCHECK(host);
-    UpdateCompositorMatrix(host, gamma_compressed_matrix, crtc_result);
+    ApplyTemperatureToHost(host, temperature);
   }
 }
 
@@ -705,8 +708,7 @@ bool NightLightControllerImpl::GetEnabled() const {
          active_user_pref_service_->GetBoolean(prefs::kNightLightEnabled);
 }
 
-void NightLightControllerImpl::SuspendDone(
-    const base::TimeDelta& sleep_duration) {
+void NightLightControllerImpl::SuspendDone(base::TimeDelta sleep_duration) {
   // Time changes while the device is suspended. We need to refresh the schedule
   // upon device resume to know what the status should be now.
   Refresh(/*did_schedule_change=*/true,
@@ -723,7 +725,7 @@ void NightLightControllerImpl::Close(bool by_user) {
 
 void NightLightControllerImpl::Click(
     const base::Optional<int>& button_index,
-    const base::Optional<base::string16>& reply) {
+    const base::Optional<std::u16string>& reply) {
   auto* shell = Shell::Get();
 
   DCHECK(!button_index.has_value());
@@ -823,7 +825,7 @@ void NightLightControllerImpl::ShowAutoNightLightNotification() {
           message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId,
           l10n_util::GetStringUTF16(IDS_ASH_AUTO_NIGHT_LIGHT_NOTIFY_TITLE),
           l10n_util::GetStringUTF16(IDS_ASH_AUTO_NIGHT_LIGHT_NOTIFY_BODY),
-          base::string16(), GURL(),
+          std::u16string(), GURL(),
           message_center::NotifierId(
               message_center::NotifierType::SYSTEM_COMPONENT, kNotifierId),
           message_center::RichNotificationData{},

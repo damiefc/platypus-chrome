@@ -8,6 +8,7 @@
 #include "base/containers/flat_set.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/post_task.h"
+#include "base/tracing/tracing_tls.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/system/data_pipe_drainer.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_producer.h"
@@ -41,6 +42,8 @@ constexpr size_t kDefaultSMBPageSizeBytes = 32 * 1024;
 
 // TODO(crbug.com/839071): Figure out a good buffer size.
 constexpr size_t kDefaultSMBSizeBytes = 4 * 1024 * 1024;
+
+constexpr char kErrorTracingFailed[] = "Tracing failed";
 
 }  // namespace
 
@@ -110,9 +113,9 @@ class ProducerEndpoint : public perfetto::ProducerEndpoint,
     // We need to make sure the CommitData IPC is sent off without triggering
     // any trace events, as that could stall waiting for SMB chunks to be freed
     // up which requires the tracing service to receive the IPC.
-    if (!TraceEventDataSource::GetThreadIsInTraceEventTLS()->Get()) {
-      AutoThreadLocalBoolean thread_is_in_trace_event(
-          TraceEventDataSource::GetThreadIsInTraceEventTLS());
+    if (!base::tracing::GetThreadIsInTraceEventTLS()->Get()) {
+      base::tracing::AutoThreadLocalBoolean thread_is_in_trace_event(
+          base::tracing::GetThreadIsInTraceEventTLS());
       producer_host_->CommitData(commit, std::move(commit_callback));
       return;
     }
@@ -364,8 +367,14 @@ class ConsumerEndpoint : public perfetto::ConsumerEndpoint,
   void EnableTracing(const perfetto::TraceConfig& trace_config,
                      perfetto::base::ScopedFile file) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    DCHECK(!file);  // Direct tracing to a file isn't supported.
     trace_config_ = trace_config;
+#if defined(OS_WIN)
+    // TODO(crbug.com/1158482): Add support on Windows.
+    DCHECK(!file)
+        << "Tracing directly to a file isn't supported on Windows yet";
+#else
+    output_file_ = base::File(file.release());
+#endif
     if (!trace_config.deferred_start())
       StartTracing();
   }
@@ -378,30 +387,11 @@ class ConsumerEndpoint : public perfetto::ConsumerEndpoint,
 
   void StartTracing() override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    auto priority = mojom::TracingClientPriority::kUnknown;
-    for (const auto& data_source : trace_config_.data_sources()) {
-      if (!data_source.has_config() ||
-          !data_source.config().has_chrome_config()) {
-        continue;
-      }
-      switch (data_source.config().chrome_config().client_priority()) {
-        case perfetto::protos::gen::ChromeConfig::BACKGROUND:
-          priority =
-              std::max(priority, mojom::TracingClientPriority::kBackground);
-          break;
-        case perfetto::protos::gen::ChromeConfig::USER_INITIATED:
-          priority =
-              std::max(priority, mojom::TracingClientPriority::kUserInitiated);
-          break;
-        default:
-        case perfetto::protos::gen::ChromeConfig::UNKNOWN:
-          break;
-      }
-    }
+    tracing_failed_ = false;
     consumer_host_->EnableTracing(
         tracing_session_host_.BindNewPipeAndPassReceiver(),
         tracing_session_client_.BindNewPipeAndPassRemote(), trace_config_,
-        priority);
+        std::move(output_file_));
     tracing_session_host_.set_disconnect_handler(base::BindOnce(
         &ConsumerEndpoint::OnTracingFailed, base::Unretained(this)));
     tracing_session_client_.set_disconnect_handler(base::BindOnce(
@@ -410,7 +400,8 @@ class ConsumerEndpoint : public perfetto::ConsumerEndpoint,
 
   void DisableTracing() override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    tracing_session_host_->DisableTracing();
+    if (tracing_session_host_)
+      tracing_session_host_->DisableTracing();
   }
 
   void Flush(uint32_t timeout_ms, FlushCallback callback) override {
@@ -428,7 +419,7 @@ class ConsumerEndpoint : public perfetto::ConsumerEndpoint,
     mojo::ScopedDataPipeProducerHandle producer_handle;
     mojo::ScopedDataPipeConsumerHandle consumer_handle;
     MojoResult result =
-        mojo::CreateDataPipe(nullptr, &producer_handle, &consumer_handle);
+        mojo::CreateDataPipe(nullptr, producer_handle, consumer_handle);
     if (result != MOJO_RESULT_OK) {
       OnTracingFailed();
       return;
@@ -443,8 +434,9 @@ class ConsumerEndpoint : public perfetto::ConsumerEndpoint,
       if (data_source.config().has_chrome_config() &&
           data_source.config().chrome_config().convert_to_legacy_json()) {
         tracing_session_host_->DisableTracingAndEmitJson(
-            /*agent_label_filter=*/"", std::move(producer_handle),
-            /*privacy_filter_enabled=*/false,
+            data_source.config().chrome_config().json_agent_label_filter(),
+            std::move(producer_handle),
+            data_source.config().chrome_config().privacy_filtering_enabled(),
             base::BindOnce(&ConsumerEndpoint::OnReadBuffersComplete,
                            base::Unretained(this)));
         return;
@@ -509,8 +501,10 @@ class ConsumerEndpoint : public perfetto::ConsumerEndpoint,
 
   void ObserveEvents(uint32_t events_mask) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    // Only some events are currently supported by this backend.
     DCHECK(!(events_mask &
-             ~perfetto::ObservableEvents::TYPE_DATA_SOURCES_INSTANCES));
+             ~(perfetto::ObservableEvents::TYPE_DATA_SOURCES_INSTANCES |
+               perfetto::ObservableEvents::TYPE_ALL_DATA_SOURCES_STARTED)));
     observed_events_mask_ = events_mask;
   }
 
@@ -526,21 +520,29 @@ class ConsumerEndpoint : public perfetto::ConsumerEndpoint,
     NOTREACHED();
   }
 
+  void SaveTraceForBugreport(SaveTraceForBugreportCallback) override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    // Not implemented yet.
+    NOTREACHED();
+  }
+
   // tracing::mojom::TracingSessionClient implementation:
   void OnTracingEnabled() override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     // TODO(skyostil): Wire up full data source state. For now Perfetto just
     // needs to know all data sources have started.
     if (observed_events_mask_ &
-        perfetto::ObservableEvents::TYPE_DATA_SOURCES_INSTANCES) {
+        (perfetto::ObservableEvents::TYPE_ALL_DATA_SOURCES_STARTED |
+         perfetto::ObservableEvents::TYPE_DATA_SOURCES_INSTANCES)) {
       perfetto::ObservableEvents events;
       events.add_instance_state_changes()->set_state(
           perfetto::ObservableEvents::DATA_SOURCE_INSTANCE_STATE_STARTED);
+      events.set_all_data_sources_started(true);
       consumer_->OnObservableEvents(events);
     }
   }
 
-  void OnTracingDisabled() override {
+  void OnTracingDisabled(bool tracing_succeeded) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     // TODO(skyostil): Wire up full data source state. For now Perfetto just
     // needs to know all data sources have stopped.
@@ -551,7 +553,8 @@ class ConsumerEndpoint : public perfetto::ConsumerEndpoint,
           perfetto::ObservableEvents::DATA_SOURCE_INSTANCE_STATE_STOPPED);
       consumer_->OnObservableEvents(events);
     }
-    consumer_->OnTracingDisabled();
+    consumer_->OnTracingDisabled(
+        tracing_succeeded && !tracing_failed_ ? "" : kErrorTracingFailed);
   }
 
   // mojo::DataPipeDrainer::Client implementation:
@@ -614,7 +617,7 @@ class ConsumerEndpoint : public perfetto::ConsumerEndpoint,
 
   void OnTracingFailed() {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    // TODO(skyostil): Inform the crew.
+    tracing_failed_ = true;
     tracing_session_host_.reset();
     tracing_session_client_.reset();
     drainer_.reset();
@@ -642,8 +645,10 @@ class ConsumerEndpoint : public perfetto::ConsumerEndpoint,
       this};
   std::unique_ptr<mojo::DataPipeDrainer> drainer_;
   perfetto::TraceConfig trace_config_;
+  base::File output_file_;
 
   std::unique_ptr<TracePacketTokenizer> tokenizer_;
+  bool tracing_failed_ = false;
   bool read_buffers_complete_ = false;
   bool trace_data_complete_ = false;
   uint32_t observed_events_mask_ = 0;

@@ -13,7 +13,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -299,7 +298,7 @@ void SafeBrowsingReporter::UploadWithRetry(
             << static_cast<int>(result);
   done_callback_runner_->PostTask(
       FROM_HERE, base::BindOnce(done_callback_, result, serialized_report,
-                                base::Passed(&response)));
+                                std::move(response)));
 }
 
 SafeBrowsingReporter::Result SafeBrowsingReporter::PerformUploadWithRetries(

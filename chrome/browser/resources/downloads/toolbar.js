@@ -4,7 +4,7 @@
 
 import 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.m.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
-import 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar.m.js';
+import 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar.js';
 import 'chrome://resources/cr_elements/hidden_style_css.m.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
@@ -18,6 +18,8 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BrowserProxy} from './browser_proxy.js';
+import {Data} from './data.js';
+import {PageHandlerInterface} from './downloads.mojom-webui.js';
 import {SearchService} from './search_service.js';
 
 Polymer({
@@ -32,7 +34,7 @@ Polymer({
       observer: 'updateClearAll_',
     },
 
-    /** @type {!Array<!downloads.Data>} */
+    /** @type {!Array<!Data>} */
     items: {
       type: Array,
       value: Array,
@@ -44,7 +46,7 @@ Polymer({
     },
   },
 
-  /** @private {?downloads.mojom.PageHandlerInterface} */
+  /** @private {?PageHandlerInterface} */
   mojoHandler_: null,
 
   /** @override */
@@ -82,7 +84,7 @@ Polymer({
   },
 
   /** @private */
-  onClearAllTap_() {
+  onClearAllTap_(e) {
     assert(this.canClearAll());
     this.mojoHandler_.clearAll();
     this.$.moreActionsMenu.close();
@@ -90,11 +92,9 @@ Polymer({
         this.items.some(data => !data.isDangerous && !data.isMixedContent);
     getToastManager().show(loadTimeData.getString('toastClearedAll'),
         /* hideSlotted= */ !canUndo);
-    if (canUndo) {
-      this.fire('iron-announce', {
-        text: loadTimeData.getString('undoDescription'),
-      });
-    }
+    // Stop propagating a click to the document to remove toast.
+    e.stopPropagation();
+    e.preventDefault();
   },
 
   /** @private */

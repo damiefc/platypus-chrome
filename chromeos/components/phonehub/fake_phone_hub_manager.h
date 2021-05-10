@@ -7,14 +7,17 @@
 
 #include <memory>
 
+#include "chromeos/components/phonehub/fake_browser_tabs_model_provider.h"
 #include "chromeos/components/phonehub/fake_connection_scheduler.h"
 #include "chromeos/components/phonehub/fake_do_not_disturb_controller.h"
 #include "chromeos/components/phonehub/fake_feature_status_provider.h"
 #include "chromeos/components/phonehub/fake_find_my_device_controller.h"
 #include "chromeos/components/phonehub/fake_notification_access_manager.h"
+#include "chromeos/components/phonehub/fake_notification_interaction_handler.h"
 #include "chromeos/components/phonehub/fake_notification_manager.h"
 #include "chromeos/components/phonehub/fake_onboarding_ui_tracker.h"
 #include "chromeos/components/phonehub/fake_tether_controller.h"
+#include "chromeos/components/phonehub/fake_user_action_recorder.h"
 #include "chromeos/components/phonehub/mutable_phone_model.h"
 #include "chromeos/components/phonehub/phone_hub_manager.h"
 
@@ -43,6 +46,10 @@ class FakePhoneHubManager : public PhoneHubManager {
     return &fake_notification_access_manager_;
   }
 
+  FakeNotificationInteractionHandler* fake_notification_interaction_handler() {
+    return &fake_notification_interaction_handler_;
+  }
+
   FakeNotificationManager* fake_notification_manager() {
     return &fake_notification_manager_;
   }
@@ -61,27 +68,41 @@ class FakePhoneHubManager : public PhoneHubManager {
     return &fake_connection_scheduler_;
   }
 
+  FakeUserActionRecorder* fake_user_action_recorder() {
+    return &fake_user_action_recorder_;
+  }
+
+  FakeBrowserTabsModelProvider* fake_browser_tabs_model_provider() {
+    return &fake_browser_tabs_model_provider_;
+  }
+
  private:
   // PhoneHubManager:
+  BrowserTabsModelProvider* GetBrowserTabsModelProvider() override;
   DoNotDisturbController* GetDoNotDisturbController() override;
   FeatureStatusProvider* GetFeatureStatusProvider() override;
   FindMyDeviceController* GetFindMyDeviceController() override;
   NotificationAccessManager* GetNotificationAccessManager() override;
+  NotificationInteractionHandler* GetNotificationInteractionHandler() override;
   NotificationManager* GetNotificationManager() override;
   OnboardingUiTracker* GetOnboardingUiTracker() override;
   PhoneModel* GetPhoneModel() override;
   TetherController* GetTetherController() override;
   ConnectionScheduler* GetConnectionScheduler() override;
+  UserActionRecorder* GetUserActionRecorder() override;
 
   FakeDoNotDisturbController fake_do_not_disturb_controller_;
   FakeFeatureStatusProvider fake_feature_status_provider_;
   FakeFindMyDeviceController fake_find_my_device_controller_;
   FakeNotificationAccessManager fake_notification_access_manager_;
+  FakeNotificationInteractionHandler fake_notification_interaction_handler_;
   FakeNotificationManager fake_notification_manager_;
   FakeOnboardingUiTracker fake_onboarding_ui_tracker_;
   MutablePhoneModel mutable_phone_model_;
   FakeTetherController fake_tether_controller_;
   FakeConnectionScheduler fake_connection_scheduler_;
+  FakeUserActionRecorder fake_user_action_recorder_;
+  FakeBrowserTabsModelProvider fake_browser_tabs_model_provider_;
 };
 
 }  // namespace phonehub

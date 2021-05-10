@@ -63,7 +63,6 @@
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
@@ -115,7 +114,6 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
   void DidReceiveResponse(uint64_t, const ResourceResponse&) override;
   void DidDownloadData(uint64_t /*dataLength*/) override;
   void DidReceiveData(const char*, unsigned /*dataLength*/) override;
-  void DidReceiveCachedMetadata(const char*, int /*dataLength*/) override;
   void DidFinishLoading(uint64_t /*identifier*/) override;
   void DidFail(const ResourceError&) override;
   void DidFailRedirectCheck() override;
@@ -142,6 +140,11 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
     return client;
   }
 
+  void Trace(Visitor* visitor) const final {
+    visitor->Trace(error_timer_);
+    ThreadableLoaderClient::Trace(visitor);
+  }
+
  private:
   void NotifyError(TimerBase*);
 
@@ -152,7 +155,7 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
   network::mojom::CredentialsMode credentials_mode_;
   base::Optional<WebURLError> error_;
 
-  TaskRunnerTimer<ClientAdapter> error_timer_;
+  HeapTaskRunnerTimer<ClientAdapter> error_timer_;
   bool enable_error_notifications_;
   bool did_fail_;
 
@@ -254,15 +257,6 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::DidReceiveData(
   CHECK_LE(data_length, static_cast<unsigned>(std::numeric_limits<int>::max()));
 
   client_->DidReceiveData(data, data_length);
-}
-
-void WebAssociatedURLLoaderImpl::ClientAdapter::DidReceiveCachedMetadata(
-    const char* data,
-    int data_length) {
-  if (!client_)
-    return;
-
-  client_->DidReceiveCachedMetadata(data, data_length);
 }
 
 void WebAssociatedURLLoaderImpl::ClientAdapter::DidFinishLoading(
@@ -423,19 +417,20 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
     }
 
     ResourceRequest& webcore_request = new_request.ToMutableResourceRequest();
-    mojom::RequestContextType context = webcore_request.GetRequestContext();
-    if (context == mojom::RequestContextType::UNSPECIFIED) {
+    mojom::blink::RequestContextType context =
+        webcore_request.GetRequestContext();
+    if (context == mojom::blink::RequestContextType::UNSPECIFIED) {
       // TODO(yoav): We load URLs without setting a TargetType (and therefore a
       // request context) in several places in content/
       // (P2PPortAllocatorSession::AllocateLegacyRelaySession, for example).
       // Remove this once those places are patched up.
-      new_request.SetRequestContext(mojom::RequestContextType::INTERNAL);
+      new_request.SetRequestContext(mojom::blink::RequestContextType::INTERNAL);
       new_request.SetRequestDestination(
           network::mojom::RequestDestination::kEmpty);
-    } else if (context == mojom::RequestContextType::VIDEO) {
+    } else if (context == mojom::blink::RequestContextType::VIDEO) {
       resource_loader_options.initiator_info.name =
           fetch_initiator_type_names::kVideo;
-    } else if (context == mojom::RequestContextType::AUDIO) {
+    } else if (context == mojom::blink::RequestContextType::AUDIO) {
       resource_loader_options.initiator_info.name =
           fetch_initiator_type_names::kAudio;
     }

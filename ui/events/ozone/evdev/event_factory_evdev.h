@@ -8,7 +8,6 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/component_export.h"
-#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/task_runner.h"
@@ -132,7 +131,10 @@ class COMPONENT_EXPORT(EVDEV) EventFactoryEvdev : public DeviceEventObserver,
   EventModifiers modifiers_;
 
   // Mouse button map.
-  MouseButtonMapEvdev button_map_;
+  MouseButtonMapEvdev mouse_button_map_;
+
+  // Pointing stick (a.k.a. TrackPoint) button map.
+  MouseButtonMapEvdev pointing_stick_button_map_;
 
   // Keyboard state.
   KeyboardEvdev keyboard_;

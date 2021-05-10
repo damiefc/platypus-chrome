@@ -22,6 +22,7 @@ import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.download.DownloadOpenSource;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.net.connectivitydetector.ConnectivityDetector;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -78,7 +79,7 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
         if (isUsingTopSnackbar()) {
             mTopSnackbarManager = new TopSnackbarManager();
         }
-        mConnectivityDetector = new ConnectivityDetector(this);
+        mConnectivityDetector = new ConnectivityDetector(this, "OfflineIndicatorController");
         ApplicationStatus.registerApplicationStateListener(this);
     }
 
@@ -116,8 +117,8 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
     @Override
     public void onAction(Object actionData) {
         mIsShowingOfflineIndicator = false;
-        DownloadUtils.showDownloadManager(
-                null, null, DownloadOpenSource.OFFLINE_INDICATOR, true /*showPrefetchedContent*/);
+        DownloadUtils.showDownloadManager(null, null, null, DownloadOpenSource.OFFLINE_INDICATOR,
+                true /*showPrefetchedContent*/);
         RecordHistogram.recordEnumeratedHistogram(
                 "OfflineIndicator.CTR", OFFLINE_INDICATOR_CTR_CLICKED, OFFLINE_INDICATOR_CTR_COUNT);
     }

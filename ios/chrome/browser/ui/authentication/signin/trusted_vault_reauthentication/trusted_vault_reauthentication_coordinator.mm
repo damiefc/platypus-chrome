@@ -68,10 +68,11 @@ using l10n_util::GetNSStringF;
   void (^cancelCompletion)(void) = ^() {
     // The reauthentication callback is dropped when the dialog is canceled.
     // The completion block has to be called explicitly.
+    SigninCompletionInfo* completionInfo = [SigninCompletionInfo
+        signinCompletionInfoWithIdentity:weakSelf.identity];
     [weakSelf
         runCompletionCallbackWithSigninResult:SigninCoordinatorResultInterrupted
-                                     identity:self.identity
-                   showAdvancedSettingsSignin:NO];
+                               completionInfo:completionInfo];
     if (completion) {
       completion();
     }
@@ -83,6 +84,10 @@ using l10n_util::GetNSStringF;
 
 - (void)start {
   [super start];
+  AuthenticationService* authenticationService =
+      AuthenticationServiceFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+  DCHECK(authenticationService->IsAuthenticated());
   // TODO(crbug.com/1019685): keys should be fetched to be sure the reauth is
   // still needed. The reauth should be really started only when fetch is
   // failed. If the fetch is success full, the coordinator can be closed
@@ -135,9 +140,10 @@ using l10n_util::GetNSStringF;
   SigninCoordinatorResult result = success
                                        ? SigninCoordinatorResultSuccess
                                        : SigninCoordinatorResultCanceledByUser;
+  SigninCompletionInfo* completionInfo =
+      [SigninCompletionInfo signinCompletionInfoWithIdentity:self.identity];
   [self runCompletionCallbackWithSigninResult:result
-                                     identity:self.identity
-                   showAdvancedSettingsSignin:NO];
+                               completionInfo:completionInfo];
 }
 
 @end

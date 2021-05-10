@@ -20,7 +20,7 @@ const base::FilePath::CharType kDataRoot[] =
 
 // The title of the Origin Policy error interstitial. This is used to determine
 // whether the page load was blocked by the origin policy throttle.
-const char kErrorInterstitialTitle[] = "Origin Policy Error";
+const char16_t kErrorInterstitialTitle[] = u"Origin Policy Error";
 }  // namespace
 
 namespace content {
@@ -53,10 +53,10 @@ class OriginPolicyBrowserTest : public InProcessBrowserTest {
   // Most tests here are set up to use the page title to distinguish between
   // successful load or the error page. For those tests, this method implements
   // the bulk of the test logic.
-  base::string16 NavigateToAndReturnTitle(const char* url) {
+  std::u16string NavigateToAndReturnTitle(const char* url) {
     EXPECT_TRUE(server());
     ui_test_utils::NavigateToURL(browser(), GURL(server()->GetURL(url)));
-    base::string16 title;
+    std::u16string title;
     ui_test_utils::GetCurrentTabTitle(browser(), &title);
     return title;
   }
@@ -85,7 +85,7 @@ class OriginPolicyBrowserTest : public InProcessBrowserTest {
     }
 
     // If we return nullptr, then the server will do the default behavior.
-    return std::unique_ptr<net::test_server::HttpResponse>();
+    return nullptr;
   }
 
   std::unique_ptr<net::test_server::EmbeddedTestServer> server_;
@@ -98,46 +98,46 @@ class OriginPolicyBrowserTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(OriginPolicyBrowserTest, PageWithoutPolicy) {
-  EXPECT_EQ(base::ASCIIToUTF16("Page Without Policy"),
+  EXPECT_EQ(u"Page Without Policy",
             NavigateToAndReturnTitle("/page-without-policy.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(OriginPolicyBrowserTest, PageWithoutPolicyPolicy404s) {
   SetStatus(net::HTTP_NOT_FOUND);
-  EXPECT_EQ(base::ASCIIToUTF16("Page Without Policy"),
+  EXPECT_EQ(u"Page Without Policy",
             NavigateToAndReturnTitle("/page-without-policy.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(OriginPolicyBrowserTest, PageWithoutPolicyPolicy301s) {
   SetStatus(net::HTTP_MOVED_PERMANENTLY);
   SetLocationHeader("/.well-known/origin-policy/example-policy");
-  EXPECT_EQ(base::ASCIIToUTF16("Page Without Policy"),
+  EXPECT_EQ(u"Page Without Policy",
             NavigateToAndReturnTitle("/page-without-policy.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(OriginPolicyBrowserTest, ApplyPolicy) {
-  EXPECT_EQ(base::ASCIIToUTF16("Page With Policy"),
+  EXPECT_EQ(u"Page With Policy",
             NavigateToAndReturnTitle("/page-with-policy.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(OriginPolicyBrowserTest, ErrorPolicy301Redirect) {
   SetStatus(net::HTTP_MOVED_PERMANENTLY);
   SetLocationHeader("/.well-known/origin-policy/example-policy");
-  EXPECT_EQ(base::ASCIIToUTF16(kErrorInterstitialTitle),
+  EXPECT_EQ(kErrorInterstitialTitle,
             NavigateToAndReturnTitle("/page-with-policy.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(OriginPolicyBrowserTest, ErrorPolicy302Redirect) {
   SetStatus(net::HTTP_FOUND);
   SetLocationHeader("/.well-known/origin-policy/example-policy");
-  EXPECT_EQ(base::ASCIIToUTF16(kErrorInterstitialTitle),
+  EXPECT_EQ(kErrorInterstitialTitle,
             NavigateToAndReturnTitle("/page-with-policy.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(OriginPolicyBrowserTest, ErrorPolicy307Redirect) {
   SetStatus(net::HTTP_TEMPORARY_REDIRECT);
   SetLocationHeader("/.well-known/origin-policy/example-policy");
-  EXPECT_EQ(base::ASCIIToUTF16(kErrorInterstitialTitle),
+  EXPECT_EQ(kErrorInterstitialTitle,
             NavigateToAndReturnTitle("/page-with-policy.html"));
 }
 

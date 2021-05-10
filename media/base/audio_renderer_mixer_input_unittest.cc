@@ -6,7 +6,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
@@ -42,7 +42,7 @@ class AudioRendererMixerInputTest : public testing::Test,
                         kSampleRate, kBufferSize);
 
     CreateMixerInput(kDefaultDeviceId);
-    fake_callback_.reset(new FakeAudioRenderCallback(0, kSampleRate));
+    fake_callback_ = std::make_unique<FakeAudioRenderCallback>(0, kSampleRate);
     audio_bus_ = AudioBus::Create(audio_parameters_);
   }
 

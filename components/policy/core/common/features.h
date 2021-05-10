@@ -6,17 +6,12 @@
 #define COMPONENTS_POLICY_CORE_COMMON_FEATURES_H_
 
 #include "base/feature_list.h"
+#include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
 #include "components/policy/policy_export.h"
 
 namespace policy {
 namespace features {
-
-#if defined(OS_APPLE)
-// Feature that controls whether the browser ignores sensitive policies on an
-// unmanaged Mac.
-POLICY_EXPORT extern const base::Feature kIgnoreSensitivePoliciesOnUnmanagedMac;
-#endif
 
 // Feature that controls whether the browser registers for FCM invalidations for
 // Machine Level Policies. If enabled, |kCBCMServiceAccounts| must also be
@@ -27,6 +22,17 @@ POLICY_EXPORT extern const base::Feature kCBCMPolicyInvalidations;
 // the browser will register for remote commands FCM invalidations, and fetch
 // remote commands when fetching policies.
 POLICY_EXPORT extern const base::Feature kCBCMRemoteCommands;
+
+// PolicyBlocklistThrottle defers navigations until policies are loaded.
+POLICY_EXPORT extern const base::Feature
+    kPolicyBlocklistThrottleRequiresPoliciesLoaded;
+
+// Max time to defer the navigation while waiting for policies to load.
+POLICY_EXPORT extern const base::FeatureParam<base::TimeDelta>
+    kPolicyBlocklistThrottlePolicyLoadTimeout;
+
+// Update browser device identifier during enrollment and fetching policies.
+POLICY_EXPORT extern const base::Feature kUploadBrowserDeviceIdentifier;
 
 }  // namespace features
 }  // namespace policy

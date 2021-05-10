@@ -11,8 +11,9 @@
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/timer/timer.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/tabs/tab_drag_context.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
@@ -146,7 +147,7 @@ class TabDragController : public views::WidgetObserver {
  private:
   friend class TabDragControllerTest;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   class DeferredTargetTabstripObserver;
 #endif
 
@@ -279,6 +280,11 @@ class TabDragController : public views::WidgetObserver {
   // A tab was closed in the active tabstrip. Clean up if we were dragging it.
   void OnActiveStripWebContentsRemoved(content::WebContents* contents);
 
+  // The WebContents in a tab was replaced in the active tabstrip. Update our
+  // canonical reference if we were dragging that tab.
+  void OnActiveStripWebContentsReplaced(content::WebContents* previous,
+                                        content::WebContents* next);
+
   // Initialize the offset used to calculate the position to create windows
   // in |GetWindowCreatePoint|. This should only be invoked from |Init|.
   void InitWindowCreatePoint();
@@ -322,8 +328,9 @@ class TabDragController : public views::WidgetObserver {
   void MoveAttachedToNextStackedIndex(const gfx::Point& point_in_screen);
   void MoveAttachedToPreviousStackedIndex(const gfx::Point& point_in_screen);
 
-  // Handles dragging tabs while the tabs are attached.
-  void MoveAttached(const gfx::Point& point_in_screen);
+  // Handles dragging tabs while the tabs are attached. |just_attached| should
+  // be true iff this is the first call to MoveAttached after attaching.
+  void MoveAttached(const gfx::Point& point_in_screen, bool just_attached);
 
   // If necessary starts the |move_stacked_timer_|. The timer is started if
   // close enough to an edge with stacked tabs.
@@ -346,12 +353,27 @@ class TabDragController : public views::WidgetObserver {
 
   // Attach the dragged Tab to the specified TabDragContext. If
   // |set_capture| is true, the newly attached context will have capture.
+  // This can only be used to pass ownership of |this| through |controller|.
+  // |controller| must be nullptr if |attached_context| already owns |this|.
   void Attach(TabDragContext* attached_context,
               const gfx::Point& point_in_screen,
+              std::unique_ptr<TabDragController> controller,
               bool set_capture = true);
 
-  // Detach the dragged Tab from the current TabDragContext.
-  void Detach(ReleaseCapture release_capture);
+  // Detach the dragged Tab from the current TabDragContext. Returns
+  // ownership of the owned controller, which must be |this|, if
+  // |attached_context_| currently owns a controller. Otherwise returns
+  // nullptr.
+  std::unique_ptr<TabDragController> Detach(ReleaseCapture release_capture);
+
+  // Detach from |attached_context_| and attach to |target_context| instead.
+  // See Detach/Attach for parameter documentation. Transfers ownership of
+  // |this| from |attached_context_| (which must own |this|) to
+  // |target_context|.
+  void DetachAndAttachToNewContext(ReleaseCapture release_capture,
+                                   TabDragContext* target_context,
+                                   const gfx::Point& point_in_screen,
+                                   bool set_capture = true);
 
   // Detaches the tabs being dragged, creates a new Browser to contain them and
   // runs a nested move loop.
@@ -543,7 +565,7 @@ class TabDragController : public views::WidgetObserver {
   // null if the dragged Tab is detached.
   TabDragContext* attached_context_;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Observe the target TabDragContext to attach to after the drag
   // ends. It's only possible to happen in Chrome OS tablet mode, if the dragged
   // tabs are dragged over an overview window, we should wait until the drag
@@ -693,7 +715,8 @@ class TabDragController : public views::WidgetObserver {
 
   std::unique_ptr<WindowFinder> window_finder_;
 
-  ScopedObserver<views::Widget, views::WidgetObserver> widget_observer_{this};
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
 
   base::WeakPtrFactory<TabDragController> weak_factory_{this};
 };

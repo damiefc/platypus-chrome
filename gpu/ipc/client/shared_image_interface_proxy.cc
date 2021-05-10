@@ -156,6 +156,7 @@ Mailbox SharedImageInterfaceProxy::CreateSharedImage(
 Mailbox SharedImageInterfaceProxy::CreateSharedImage(
     gfx::GpuMemoryBuffer* gpu_memory_buffer,
     GpuMemoryBufferManager* gpu_memory_buffer_manager,
+    gfx::BufferPlane plane,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
@@ -170,8 +171,9 @@ Mailbox SharedImageInterfaceProxy::CreateSharedImage(
   GpuChannelMsg_CreateGMBSharedImage_Params params;
   params.mailbox = mailbox;
   params.handle = gpu_memory_buffer->CloneHandle();
-  params.size = gpu_memory_buffer->GetSize();
+  params.size = gpu_memory_buffer->GetSizeOfPlane(plane);
   params.format = gpu_memory_buffer->GetFormat();
+  params.plane = plane;
   params.color_space = color_space;
   params.usage = usage;
   params.surface_origin = surface_origin;
@@ -306,7 +308,7 @@ void SharedImageInterfaceProxy::WaitSyncToken(const SyncToken& sync_token) {
       GenerateDependenciesFromSyncToken(std::move(sync_token), host_);
   {
     base::AutoLock lock(lock_);
-    last_flush_id_ = host_->EnqueueDeferredMessage(GpuChannelMsg_Nop(),
+    last_flush_id_ = host_->EnqueueDeferredMessage(GpuChannelMsg_Nop(route_id_),
                                                    std::move(dependencies));
   }
 }

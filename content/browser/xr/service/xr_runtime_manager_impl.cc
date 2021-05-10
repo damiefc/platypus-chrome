@@ -3,22 +3,26 @@
 // found in the LICENSE file.
 
 #include "content/browser/xr/service/xr_runtime_manager_impl.h"
-#include "content/public/browser/xr_runtime_manager.h"
 
 #include <string>
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/common/trace_event_common.h"
+#include "content/browser/xr/service/xr_frame_sink_client_impl.h"
 #include "content/browser/xr/xr_utils.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/device_service.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/gpu_utils.h"
+#include "content/public/browser/xr_runtime_manager.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "device/base/features.h"
@@ -54,6 +58,19 @@ bool IsEnabled(const base::CommandLine* command_line,
               name) == 0);
 }
 #endif
+
+std::unique_ptr<device::XrFrameSinkClient> FrameSinkClientFactory(
+    int32_t render_process_id,
+    int32_t render_frame_id) {
+  // The XrFrameSinkClientImpl needs to be constructed (and destructed) on the
+  // main thread. Currently, the only runtime that uses this is ArCore, which
+  // runs on the browser main thread (which per comments in
+  // content/public/browser/browser_thread.h is also the UI thread).
+  DCHECK(GetUIThreadTaskRunner({})->BelongsToCurrentThread())
+      << "Must construct XrFrameSinkClient from UI thread";
+  return std::make_unique<XrFrameSinkClientImpl>(render_process_id,
+                                                 render_frame_id);
+}
 
 }  // namespace
 
@@ -127,6 +144,19 @@ XRRuntimeManagerImpl::GetOrCreateInstance() {
   return CreateInstance(std::move(providers));
 }
 
+// static
+content::WebContents* XRRuntimeManagerImpl::GetImmersiveSessionWebContents() {
+  if (!g_xr_runtime_manager)
+    return nullptr;
+  BrowserXRRuntimeImpl* browser_xr_runtime =
+      g_xr_runtime_manager->GetCurrentlyPresentingImmersiveRuntime();
+  if (!browser_xr_runtime)
+    return nullptr;
+  VRServiceImpl* vr_service =
+      browser_xr_runtime->GetServiceWithActiveImmersiveSession();
+  return vr_service ? vr_service->GetWebContents() : nullptr;
+}
+
 void XRRuntimeManagerImpl::AddService(VRServiceImpl* service) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DVLOG(2) << __func__;
@@ -166,7 +196,7 @@ BrowserXRRuntimeImpl* XRRuntimeManagerImpl::GetRuntimeForOptions(
   BrowserXRRuntimeImpl* runtime = nullptr;
   switch (options->mode) {
     case device::mojom::XRSessionMode::kImmersiveAr:
-      runtime = GetRuntime(device::mojom::XRDeviceId::ARCORE_DEVICE_ID);
+      runtime = GetImmersiveArRuntime();
       break;
     case device::mojom::XRSessionMode::kImmersiveVr:
       runtime = GetImmersiveVrRuntime();
@@ -198,25 +228,26 @@ BrowserXRRuntimeImpl* XRRuntimeManagerImpl::GetImmersiveVrRuntime() {
     return openxr;
 #endif
 
-#if BUILDFLAG(ENABLE_OCULUS_VR)
-  auto* oculus = GetRuntime(device::mojom::XRDeviceId::OCULUS_DEVICE_ID);
-  if (oculus)
-    return oculus;
-#endif
-
-#if BUILDFLAG(ENABLE_WINDOWS_MR)
-  auto* wmr = GetRuntime(device::mojom::XRDeviceId::WINDOWS_MIXED_REALITY_ID);
-  if (wmr)
-    return wmr;
-#endif
-
   return nullptr;
 }
 
 BrowserXRRuntimeImpl* XRRuntimeManagerImpl::GetImmersiveArRuntime() {
-  device::mojom::XRSessionOptions options = {};
-  options.mode = device::mojom::XRSessionMode::kImmersiveAr;
-  return GetRuntimeForOptions(&options);
+#if defined(OS_ANDROID)
+  auto* arcore_runtime =
+      GetRuntime(device::mojom::XRDeviceId::ARCORE_DEVICE_ID);
+  if (arcore_runtime && arcore_runtime->SupportsArBlendMode())
+    return arcore_runtime;
+#endif
+
+#if BUILDFLAG(ENABLE_OPENXR)
+  if (base::FeatureList::IsEnabled(features::kOpenXrExtendedFeatureSupport)) {
+    auto* openxr = GetRuntime(device::mojom::XRDeviceId::OPENXR_DEVICE_ID);
+    if (openxr && openxr->SupportsArBlendMode())
+      return openxr;
+  }
+#endif
+
+  return nullptr;
 }
 
 device::mojom::VRDisplayInfoPtr XRRuntimeManagerImpl::GetCurrentVRDisplayInfo(
@@ -477,7 +508,8 @@ void XRRuntimeManagerImpl::InitializeProviders() {
         base::BindRepeating(&XRRuntimeManagerImpl::RemoveRuntime,
                             base::Unretained(this)),
         base::BindOnce(&XRRuntimeManagerImpl::OnProviderInitialized,
-                       base::Unretained(this)));
+                       base::Unretained(this)),
+        base::BindRepeating(&FrameSinkClientFactory));
   }
 
   providers_initialized_ = true;

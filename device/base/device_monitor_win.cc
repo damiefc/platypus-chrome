@@ -14,7 +14,7 @@
 
 #include "base/at_exit.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
@@ -83,7 +83,7 @@ class DeviceMonitorMessageWindow {
   }
 
   bool Init() {
-    window_.reset(new base::win::MessageWindow());
+    window_ = std::make_unique<base::win::MessageWindow>();
     if (!window_->CreateNamed(
             base::BindRepeating(&DeviceMonitorMessageWindow::HandleMessage,
                                 base::Unretained(this)),

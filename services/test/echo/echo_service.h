@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef SERVICES_ECHO_ECHO_SERVICE_H_
-#define SERVICES_ECHO_ECHO_SERVICE_H_
+#ifndef SERVICES_TEST_ECHO_ECHO_SERVICE_H_
+#define SERVICES_TEST_ECHO_ECHO_SERVICE_H_
 
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -21,6 +21,8 @@ class EchoService : public mojom::EchoService {
   // mojom::EchoService:
   void EchoString(const std::string& input,
                   EchoStringCallback callback) override;
+  void EchoStringToSharedMemory(const std::string& input,
+                                base::UnsafeSharedMemoryRegion region) override;
   void Quit() override;
   void Crash() override;
 
@@ -31,4 +33,4 @@ class EchoService : public mojom::EchoService {
 
 }  // namespace echo
 
-#endif  // SERVICES_ECHO_ECHO_SERVICE_H_
+#endif  // SERVICES_TEST_ECHO_ECHO_SERVICE_H_

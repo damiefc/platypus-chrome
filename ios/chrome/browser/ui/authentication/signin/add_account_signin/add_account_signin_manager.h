@@ -18,14 +18,16 @@ namespace signin {
 class IdentityManager;
 }
 
+// Callback to open account creation URL. Related to
+// |openAccountCreationURLCallback|.
+typedef void (^AddAccountOpenAccountCreationURLCallback)(NSURL* URL);
+
 // Delegate that displays screens for the add account flows.
 @protocol AddAccountSigninManagerDelegate
 
 // Shows alert modal dialog and interrupts sign-in operation.
 // |error| is the error to be displayed.
-// |identity| is the identity of the account that failed to add.
-- (void)addAccountSigninManagerFailedWithError:(NSError*)error
-                                      identity:(ChromeIdentity*)identity;
+- (void)addAccountSigninManagerFailedWithError:(NSError*)error;
 
 // Completes the sign-in operation.
 // |signinResult| is the state of sign-in at add account flow completion.
@@ -39,6 +41,13 @@ class IdentityManager;
 
 // Manager that handles add account and reauthentication UI.
 @interface AddAccountSigninManager : NSObject
+
+// This callback is in charge to open the URL. This callback is used when
+// GCRSSOService is initialized with GCRSSOAccountCreationWithURL.
+// If this callback is missing with GCRSSOAccountCreationWithURL, the default
+// browser is used to open the URL.
+@property(nonatomic, copy)
+    AddAccountOpenAccountCreationURLCallback openAccountCreationURLCallback;
 
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)

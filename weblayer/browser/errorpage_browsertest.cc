@@ -5,14 +5,14 @@
 #include "weblayer/test/weblayer_browser_test.h"
 
 #include "base/macros.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "components/embedder_support/switches.h"
 #include "components/error_page/content/browser/net_error_auto_reloader.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/url_loader_interceptor.h"
 #include "net/test/url_request/url_request_failed_job.h"
 #include "weblayer/browser/tab_impl.h"
-#include "weblayer/public/common/switches.h"
 #include "weblayer/public/navigation_controller.h"
 #include "weblayer/shell/browser/shell.h"
 #include "weblayer/test/weblayer_browser_test_utils.h"
@@ -34,7 +34,7 @@ IN_PROC_BROWSER_TEST_F(ErrorPageBrowserTest, NameNotResolved) {
 
   // Currently, interstitials for error pages are displayed only on Android.
 #if defined(OS_ANDROID)
-  base::string16 expected_title =
+  std::u16string expected_title =
       l10n_util::GetStringUTF16(IDS_ANDROID_ERROR_PAGE_WEBPAGE_NOT_AVAILABLE);
   EXPECT_EQ(expected_title, GetTitle(shell()));
 #endif
@@ -55,7 +55,7 @@ class ErrorPageReloadBrowserTest : public ErrorPageBrowserTest {
   ErrorPageReloadBrowserTest() = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kEnableAutoReload);
+    command_line->AppendSwitch(embedder_support::kEnableAutoReload);
     ErrorPageBrowserTest::SetUpCommandLine(command_line);
   }
 
@@ -72,9 +72,12 @@ class ErrorPageReloadBrowserTest : public ErrorPageBrowserTest {
       WARN_UNUSED_RESULT {
     content::TestNavigationManager navigation(web_contents(), url);
     NavigationController::NavigateParams params;
-    params.disable_network_error_auto_reload =
-        disable_network_error_auto_reload;
-    shell()->tab()->GetNavigationController()->Navigate(url, params);
+    auto* navigation_controller = shell()->tab()->GetNavigationController();
+    std::unique_ptr<DisableAutoReload> disable_auto_reload;
+    if (disable_network_error_auto_reload)
+      disable_auto_reload =
+          std::make_unique<DisableAutoReload>(navigation_controller);
+    navigation_controller->Navigate(url, params);
     navigation.WaitForNavigationFinished();
     return navigation.was_successful();
   }
@@ -98,6 +101,23 @@ class ErrorPageReloadBrowserTest : public ErrorPageBrowserTest {
   }
 
  private:
+  class DisableAutoReload : public NavigationObserver {
+   public:
+    explicit DisableAutoReload(NavigationController* controller)
+        : controller_(controller) {
+      controller_->AddObserver(this);
+    }
+    ~DisableAutoReload() override { controller_->RemoveObserver(this); }
+
+    // NavigationObserver implementation:
+    void NavigationStarted(Navigation* navigation) override {
+      navigation->DisableNetworkErrorAutoReload();
+    }
+
+   private:
+    NavigationController* controller_;
+  };
+
   base::test::ScopedFeatureList feature_list_;
 };
 

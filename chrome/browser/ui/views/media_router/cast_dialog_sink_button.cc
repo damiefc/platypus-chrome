@@ -5,18 +5,31 @@
 #include "chrome/browser/ui/views/media_router/cast_dialog_sink_button.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/debug/stack_trace.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/branding_buildflags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/media/router/media_router_feature.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/media_router/ui_media_sink.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/media_router/cast_dialog_helper.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/media_router/common/issue.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -25,6 +38,7 @@
 #include "ui/views/controls/color_tracking_icon_view.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/controls/throbber.h"
+#include "ui/views/layout/box_layout.h"
 #include "ui/views/vector_icons.h"
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -70,7 +84,11 @@ std::unique_ptr<views::View> CreatePrimaryIconForSink(const UIMediaSink& sink) {
   return CreatePrimaryIconView(CreateSinkIcon(sink.icon_type));
 }
 
-base::string16 GetStatusTextForSink(const UIMediaSink& sink) {
+bool IsIncompatibleDialSink(const UIMediaSink& sink) {
+  return sink.provider == MediaRouteProviderId::DIAL && sink.cast_modes.empty();
+}
+
+std::u16string GetStatusTextForSink(const UIMediaSink& sink) {
   if (sink.issue)
     return base::UTF8ToUTF16(sink.issue->info().title);
   // If the sink is disconnecting, say so instead of using the source info
@@ -85,16 +103,15 @@ base::string16 GetStatusTextForSink(const UIMediaSink& sink) {
     case UIMediaSinkState::CONNECTING:
       return l10n_util::GetStringUTF16(IDS_MEDIA_ROUTER_SINK_CONNECTING);
     default:
-      return base::string16();
+      return std::u16string();
   }
 }
 
 }  // namespace
 
-CastDialogSinkButton::CastDialogSinkButton(
-    views::ButtonListener* button_listener,
-    const UIMediaSink& sink)
-    : HoverButton(button_listener,
+CastDialogSinkButton::CastDialogSinkButton(PressedCallback callback,
+                                           const UIMediaSink& sink)
+    : HoverButton(std::move(callback),
                   CreatePrimaryIconForSink(sink),
                   sink.friendly_name,
                   GetStatusTextForSink(sink),
@@ -104,18 +121,10 @@ CastDialogSinkButton::CastDialogSinkButton(
              sink.state == UIMediaSinkState::CONNECTED);
 }
 
-CastDialogSinkButton::CastDialogSinkButton(
-    views::ButtonListener* button_listener,
-    const UIMediaSink& sink,
-    int button_tag)
-    : CastDialogSinkButton(button_listener, sink) {
-  set_tag(button_tag);
-}
-
 CastDialogSinkButton::~CastDialogSinkButton() = default;
 
 void CastDialogSinkButton::OverrideStatusText(
-    const base::string16& status_text) {
+    const std::u16string& status_text) {
   if (subtitle()) {
     if (!saved_status_text_)
       saved_status_text_ = subtitle()->GetText();
@@ -146,7 +155,8 @@ void CastDialogSinkButton::OnMouseReleased(const ui::MouseEvent& event) {
 void CastDialogSinkButton::OnEnabledChanged() {
   // Prevent a DCHECK failure seen at https://crbug.com/912687 by not having an
   // InkDrop if the button is disabled.
-  SetInkDropMode(GetEnabled() ? InkDropMode::ON : InkDropMode::OFF);
+  ink_drop()->SetMode(GetEnabled() ? views::InkDropHost::InkDropMode::ON
+                                   : views::InkDropHost::InkDropMode::OFF);
   // If the button has a state other than AVAILABLE (e.g. CONNECTED), there is
   // no need to change the status or the icon.
   if (sink_.state != UIMediaSinkState::AVAILABLE)
@@ -162,8 +172,13 @@ void CastDialogSinkButton::OnEnabledChanged() {
         ->SetImage(CreateSinkIcon(sink_.icon_type));
   } else {
     SetTitleTextStyle(views::style::STYLE_DISABLED, background_color);
-    OverrideStatusText(
-        l10n_util::GetStringUTF16(IDS_MEDIA_ROUTER_SOURCE_NOT_SUPPORTED));
+    if (IsIncompatibleDialSink(sink_)) {
+      OverrideStatusText(
+          l10n_util::GetStringUTF16(IDS_MEDIA_ROUTER_AVAILABLE_SPECIFIC_SITES));
+    } else {
+      OverrideStatusText(
+          l10n_util::GetStringUTF16(IDS_MEDIA_ROUTER_SOURCE_NOT_SUPPORTED));
+    }
     static_cast<views::ImageView*>(icon_view())
         ->SetImage(CreateDisabledSinkIcon(sink_.icon_type));
   }
@@ -215,22 +230,9 @@ const gfx::VectorIcon* CastDialogSinkButton::GetVectorIcon(
     case SinkIconType::CAST_AUDIO:
       vector_icon = &kSpeakerIcon;
       break;
-    case SinkIconType::EDUCATION:
-      vector_icon = &kCastForEducationIcon;
-      break;
     case SinkIconType::WIRED_DISPLAY:
       vector_icon = &kInputIcon;
       break;
-// Use proprietary icons only in Chrome builds. The default TV icon is used
-// instead for these sink types in Chromium builds.
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-    case SinkIconType::MEETING:
-      vector_icon = &vector_icons::kMeetIcon;
-      break;
-    case SinkIconType::HANGOUT:
-      vector_icon = &vector_icons::kHangoutIcon;
-      break;
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
     case SinkIconType::CAST:
     case SinkIconType::GENERIC:
     default:
@@ -239,5 +241,14 @@ const gfx::VectorIcon* CastDialogSinkButton::GetVectorIcon(
   }
   return vector_icon;
 }
+
+// static
+const gfx::VectorIcon* CastDialogSinkButton::GetVectorIcon(UIMediaSink sink) {
+  return sink.issue ? &::vector_icons::kInfoOutlineIcon
+                    : GetVectorIcon(sink.icon_type);
+}
+
+BEGIN_METADATA(CastDialogSinkButton, HoverButton)
+END_METADATA
 
 }  // namespace media_router

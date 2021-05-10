@@ -4,11 +4,11 @@
 
 #include "chrome/browser/ui/passwords/manage_passwords_test.h"
 
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/password_manager/password_manager_test_base.h"
@@ -22,8 +22,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/mock_password_form_manager_for_ui.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
@@ -42,7 +42,7 @@ using testing::Return;
 using testing::ReturnRef;
 
 namespace {
-constexpr char kTestUsername[] = "test_username";
+constexpr char16_t kTestUsername[] = u"test_username";
 constexpr char kTestOrigin[] = "https://www.example.com";
 }  // namespace
 
@@ -51,16 +51,15 @@ ManagePasswordsTest::ManagePasswordsTest() {
 
   password_form_.signon_realm = kTestOrigin;
   password_form_.url = GURL(kTestOrigin);
-  password_form_.username_value = ASCIIToUTF16(kTestUsername);
-  password_form_.password_value = ASCIIToUTF16("test_password");
+  password_form_.username_value = kTestUsername;
+  password_form_.password_value = u"test_password";
 
   federated_form_.signon_realm =
       "federation://example.com/somelongeroriginurl.com";
   federated_form_.url = GURL(kTestOrigin);
   federated_form_.federation_origin =
       url::Origin::Create(GURL("https://somelongeroriginurl.com/"));
-  federated_form_.username_value =
-      base::ASCIIToUTF16("test_federation_username");
+  federated_form_.username_value = u"test_federation_username";
 
   // Create a simple sign-in form.
   observed_form_.url = password_form_.url;
@@ -71,7 +70,7 @@ ManagePasswordsTest::ManagePasswordsTest() {
   observed_form_.fields.push_back(field);
 
   submitted_form_ = observed_form_;
-  submitted_form_.fields[1].value = ASCIIToUTF16("password");
+  submitted_form_.fields[1].value = u"password";
 
   // Turn off waiting for server predictions in order to avoid dealing with
   // posted tasks in PasswordFormManager.
@@ -81,12 +80,23 @@ ManagePasswordsTest::ManagePasswordsTest() {
 ManagePasswordsTest::~ManagePasswordsTest() = default;
 
 void ManagePasswordsTest::SetUpOnMainThread() {
-  PasswordStoreFactory::GetInstance()->SetTestingFactory(
-      browser()->profile(),
-      base::BindRepeating(
-          &password_manager::BuildPasswordStore<
-              content::BrowserContext, password_manager::TestPasswordStore>));
   AddTabAtIndex(0, GURL(kTestOrigin), ui::PAGE_TRANSITION_TYPED);
+}
+
+void ManagePasswordsTest::SetUpInProcessBrowserTestFixture() {
+  InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
+  create_services_subscription_ =
+      BrowserContextDependencyManager::GetInstance()
+          ->RegisterCreateServicesCallbackForTesting(
+              base::BindRepeating([](content::BrowserContext* context) {
+                // Overwrite the password store early before it's accessed by
+                // safe browsing.
+                PasswordStoreFactory::GetInstance()->SetTestingFactory(
+                    context,
+                    base::BindRepeating(&password_manager::BuildPasswordStore<
+                                        content::BrowserContext,
+                                        password_manager::TestPasswordStore>));
+              }));
 }
 
 void ManagePasswordsTest::ExecuteManagePasswordsCommand() {
@@ -99,7 +109,7 @@ void ManagePasswordsTest::ExecuteManagePasswordsCommand() {
 }
 
 void ManagePasswordsTest::SetupManagingPasswords() {
-  std::vector<const autofill::PasswordForm*> forms;
+  std::vector<const password_manager::PasswordForm*> forms;
   for (auto* form : {&password_form_, &federated_form_}) {
     forms.push_back(form);
     GetController()->OnPasswordAutofilled(forms, url::Origin::Create(form->url),
@@ -116,15 +126,14 @@ void ManagePasswordsTest::SetupAutomaticPassword() {
 }
 
 void ManagePasswordsTest::SetupAutoSignin(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials) {
+    std::vector<std::unique_ptr<password_manager::PasswordForm>>
+        local_credentials) {
   ASSERT_FALSE(local_credentials.empty());
   url::Origin origin = url::Origin::Create(local_credentials[0]->url);
   GetController()->OnAutoSignin(std::move(local_credentials), origin);
 }
 
 void ManagePasswordsTest::SetupSafeState() {
-  DCHECK(base::FeatureList::IsEnabled(
-      password_manager::features::kCompromisedPasswordsReengagement));
   browser()->profile()->GetPrefs()->SetDouble(
       password_manager::prefs::kLastTimePasswordCheckCompleted,
       (base::Time::Now() - base::TimeDelta::FromMinutes(1)).ToDoubleT());
@@ -139,17 +148,18 @@ void ManagePasswordsTest::SetupSafeState() {
 }
 
 void ManagePasswordsTest::SetupMoreToFixState() {
-  DCHECK(base::FeatureList::IsEnabled(
-      password_manager::features::kCompromisedPasswordsReengagement));
+  browser()->profile()->GetPrefs()->SetDouble(
+      password_manager::prefs::kLastTimePasswordCheckCompleted,
+      (base::Time::Now() - base::TimeDelta::FromMinutes(1)).ToDoubleT());
   scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
-  // This is an unrelated compromised credential that should still be fixed.
-  password_manager::CompromisedCredentials compromised = {
-      .signon_realm = "https://somesite.com/",
-      .username = ASCIIToUTF16(kTestUsername),
-  };
-  password_store->AddCompromisedCredentials(compromised);
+  // This is an unrelated insecure credential that should still be fixed.
+  password_manager::InsecureCredential credential(
+      "https://somesite.com/", kTestUsername, base::Time(),
+      password_manager::InsecureType::kLeaked,
+      password_manager::IsMuted(false));
+  password_store->AddInsecureCredential(credential);
   SetupPendingPassword();
   GetController()->SavePassword(password_form_.username_value,
                                 password_form_.password_value);
@@ -158,33 +168,6 @@ void ManagePasswordsTest::SetupMoreToFixState() {
 
   EXPECT_EQ(GetController()->GetState(),
             password_manager::ui::PASSWORD_UPDATED_MORE_TO_FIX);
-}
-
-void ManagePasswordsTest::SetupUnsafeState() {
-  DCHECK(base::FeatureList::IsEnabled(
-      password_manager::features::kCompromisedPasswordsReengagement));
-  scoped_refptr<password_manager::PasswordStore> password_store =
-      PasswordStoreFactory::GetForProfile(browser()->profile(),
-                                          ServiceAccessType::IMPLICIT_ACCESS);
-  // This is an unrelated compromised credential that should still be fixed.
-  password_manager::CompromisedCredentials some_compromised = {
-      .signon_realm = "https://somesite.com/",
-      .username = ASCIIToUTF16(kTestUsername),
-  };
-  password_manager::CompromisedCredentials current_compromised = {
-      .signon_realm = password_form_.signon_realm,
-      .username = password_form_.username_value,
-  };
-  password_store->AddCompromisedCredentials(some_compromised);
-  password_store->AddCompromisedCredentials(current_compromised);
-  SetupPendingPassword();
-  GetController()->SavePassword(password_form_.username_value,
-                                password_form_.password_value);
-  GetController()->OnBubbleHidden();
-  PasswordManagerBrowserTestBase::WaitForPasswordStore(browser());
-
-  EXPECT_EQ(GetController()->GetState(),
-            password_manager::ui::PASSWORD_UPDATED_UNSAFE_STATE);
 }
 
 void ManagePasswordsTest::SetupMovingPasswords() {
@@ -197,12 +180,14 @@ void ManagePasswordsTest::SetupMovingPasswords() {
       testing::NiceMock<password_manager::MockPasswordFormManagerForUI>>();
   password_manager::MockPasswordFormManagerForUI* form_manager_ptr =
       form_manager.get();
-  std::vector<const autofill::PasswordForm*> best_matches = {test_form()};
+  std::vector<const password_manager::PasswordForm*> best_matches = {
+      test_form()};
   EXPECT_CALL(*form_manager, GetBestMatches).WillOnce(ReturnRef(best_matches));
   ON_CALL(*form_manager, GetPendingCredentials)
       .WillByDefault(ReturnRef(*test_form()));
   ON_CALL(*form_manager, GetFederatedMatches)
-      .WillByDefault(Return(std::vector<const autofill::PasswordForm*>{}));
+      .WillByDefault(
+          Return(std::vector<const password_manager::PasswordForm*>{}));
   ON_CALL(*form_manager, GetURL).WillByDefault(ReturnRef(test_form()->url));
   GetController()->OnShowMoveToAccountBubble(std::move(form_manager));
   // Clearing the mock here ensures that |GetBestMatches| won't be called with a
@@ -229,11 +214,11 @@ std::unique_ptr<PasswordFormManager> ManagePasswordsTest::CreateFormManager() {
           base::WrapUnique(new password_manager::StubFormSaver)),
       nullptr /*  metrics_recorder */);
 
-  password_manager::CompromisedCredentials compromised = {
-      .signon_realm = password_form_.signon_realm,
-      .username = password_form_.username_value,
-  };
-  fetcher_.set_compromised({compromised});
+  password_manager::InsecureCredential credential(
+      password_form_.signon_realm, password_form_.username_value, base::Time(),
+      password_manager::InsecureType::kLeaked,
+      password_manager::IsMuted(false));
+  fetcher_.set_insecure_credentials({credential});
 
   fetcher_.NotifyFetchCompleted();
 

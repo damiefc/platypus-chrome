@@ -10,6 +10,7 @@
 #include "base/run_loop.h"
 #include "base/task/post_task.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/storage/settings_sync_util.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_system_factory.h"
@@ -25,18 +26,19 @@
 #include "components/policy/core/common/schema.h"
 #include "components/policy/core/common/schema_map.h"
 #include "components/policy/core/common/schema_registry.h"
-#include "components/sync/model/fake_sync_change_processor.h"
 #include "components/sync/model/sync_change.h"
 #include "components/sync/model/sync_change_processor.h"
-#include "components/sync/model/sync_change_processor_wrapper_for_test.h"
 #include "components/sync/model/sync_error_factory.h"
-#include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync/model/syncable_service.h"
+#include "components/sync/test/model/fake_sync_change_processor.h"
+#include "components/sync/test/model/sync_change_processor_wrapper_for_test.h"
+#include "components/sync/test/model/sync_error_factory_mock.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/api/storage/backend_task_runner.h"
-#include "extensions/browser/api/storage/settings_namespace.h"
+#include "extensions/browser/api/storage/storage_area_namespace.h"
 #include "extensions/browser/api/storage/storage_frontend.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/value_store/settings_namespace.h"
 #include "extensions/common/value_builder.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
@@ -44,14 +46,10 @@
 
 namespace extensions {
 
-using settings_namespace::LOCAL;
-using settings_namespace::MANAGED;
-using settings_namespace::Namespace;
-using settings_namespace::SYNC;
-using settings_namespace::ToString;
-using testing::Mock;
-using testing::Return;
 using testing::_;
+using testing::Mock;
+using testing::NiceMock;
+using testing::Return;
 
 namespace {
 
@@ -78,40 +76,36 @@ class ExtensionSettingsApiTest : public ExtensionApiTest {
   void SetUpInProcessBrowserTestFixture() override {
     ExtensionApiTest::SetUpInProcessBrowserTestFixture();
 
-    EXPECT_CALL(policy_provider_, IsInitializationComplete(_))
-        .WillRepeatedly(Return(true));
+    ON_CALL(policy_provider_, IsInitializationComplete(_))
+        .WillByDefault(Return(true));
+    ON_CALL(policy_provider_, IsFirstPolicyLoadComplete(_))
+        .WillByDefault(Return(true));
     policy_provider_.SetAutoRefresh();
     policy::BrowserPolicyConnector::SetPolicyProviderForTesting(
         &policy_provider_);
   }
 
-  void ReplyWhenSatisfied(
-      Namespace settings_namespace,
-      const std::string& normal_action,
-      const std::string& incognito_action) {
-    MaybeLoadAndReplyWhenSatisfied(
-        settings_namespace, normal_action, incognito_action, NULL, false);
+  void ReplyWhenSatisfied(StorageAreaNamespace storage_area,
+                          const std::string& normal_action,
+                          const std::string& incognito_action) {
+    MaybeLoadAndReplyWhenSatisfied(storage_area, normal_action,
+                                   incognito_action, nullptr, false);
   }
 
   const Extension* LoadAndReplyWhenSatisfied(
-      Namespace settings_namespace,
+      StorageAreaNamespace storage_area,
       const std::string& normal_action,
       const std::string& incognito_action,
       const std::string& extension_dir) {
     return MaybeLoadAndReplyWhenSatisfied(
-        settings_namespace,
-        normal_action,
-        incognito_action,
-        &extension_dir,
-        false);
+        storage_area, normal_action, incognito_action, &extension_dir, false);
   }
 
-  void FinalReplyWhenSatisfied(
-      Namespace settings_namespace,
-      const std::string& normal_action,
-      const std::string& incognito_action) {
-    MaybeLoadAndReplyWhenSatisfied(
-        settings_namespace, normal_action, incognito_action, NULL, true);
+  void FinalReplyWhenSatisfied(StorageAreaNamespace storage_area,
+                               const std::string& normal_action,
+                               const std::string& incognito_action) {
+    MaybeLoadAndReplyWhenSatisfied(storage_area, normal_action,
+                                   incognito_action, nullptr, true);
   }
 
   static void InitSyncOnBackgroundSequence(
@@ -129,7 +123,7 @@ class ExtensionSettingsApiTest : public ExtensionApiTest {
                 kModelType, syncer::SyncDataList(),
                 std::make_unique<syncer::SyncChangeProcessorWrapperForTest>(
                     sync_processor),
-                std::make_unique<syncer::SyncErrorFactoryMock>())
+                std::make_unique<NiceMock<syncer::SyncErrorFactoryMock>>())
             .has_value());
   }
 
@@ -185,7 +179,7 @@ class ExtensionSettingsApiTest : public ExtensionApiTest {
 
  private:
   const Extension* MaybeLoadAndReplyWhenSatisfied(
-      Namespace settings_namespace,
+      StorageAreaNamespace storage_area,
       const std::string& normal_action,
       const std::string& incognito_action,
       // May be NULL to imply not loading the extension.
@@ -198,27 +192,26 @@ class ExtensionSettingsApiTest : public ExtensionApiTest {
     // initialisation race conditions.
     const Extension* extension = NULL;
     if (extension_dir) {
-      extension = LoadExtensionIncognito(
-          test_data_dir_.AppendASCII("settings").AppendASCII(*extension_dir));
+      extension = LoadExtension(
+          test_data_dir_.AppendASCII("settings").AppendASCII(*extension_dir),
+          {.allow_in_incognito = true});
       EXPECT_TRUE(extension);
     }
 
     EXPECT_TRUE(listener.WaitUntilSatisfied());
     EXPECT_TRUE(listener_incognito.WaitUntilSatisfied());
 
-    listener.Reply(
-        CreateMessage(settings_namespace, normal_action, is_final_action));
+    listener.Reply(CreateMessage(storage_area, normal_action, is_final_action));
     listener_incognito.Reply(
-        CreateMessage(settings_namespace, incognito_action, is_final_action));
+        CreateMessage(storage_area, incognito_action, is_final_action));
     return extension;
   }
 
-  std::string CreateMessage(
-      Namespace settings_namespace,
-      const std::string& action,
-      bool is_final_action) {
+  std::string CreateMessage(StorageAreaNamespace storage_area,
+                            const std::string& action,
+                            bool is_final_action) {
     base::DictionaryValue message;
-    message.SetString("namespace", ToString(settings_namespace));
+    message.SetString("namespace", StorageAreaToString(storage_area));
     message.SetString("action", action);
     message.SetBoolean("isFinalAction", is_final_action);
     std::string message_json;
@@ -232,7 +225,7 @@ class ExtensionSettingsApiTest : public ExtensionApiTest {
   }
 
  protected:
-  policy::MockConfigurationPolicyProvider policy_provider_;
+  testing::NiceMock<policy::MockConfigurationPolicyProvider> policy_provider_;
 };
 
 IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, SimpleTest) {
@@ -249,18 +242,19 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, SplitModeIncognito) {
   ResultCatcher catcher, catcher_incognito;
   catcher.RestrictToBrowserContext(browser()->profile());
   catcher_incognito.RestrictToBrowserContext(
-      browser()->profile()->GetPrimaryOTRProfile());
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true));
 
-  LoadAndReplyWhenSatisfied(SYNC,
-      "assertEmpty", "assertEmpty", "split_incognito");
-  ReplyWhenSatisfied(SYNC, "noop", "setFoo");
-  ReplyWhenSatisfied(SYNC, "assertFoo", "assertFoo");
-  ReplyWhenSatisfied(SYNC, "clear", "noop");
-  ReplyWhenSatisfied(SYNC, "assertEmpty", "assertEmpty");
-  ReplyWhenSatisfied(SYNC, "setFoo", "noop");
-  ReplyWhenSatisfied(SYNC, "assertFoo", "assertFoo");
-  ReplyWhenSatisfied(SYNC, "noop", "removeFoo");
-  FinalReplyWhenSatisfied(SYNC, "assertEmpty", "assertEmpty");
+  LoadAndReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertEmpty",
+                            "assertEmpty", "split_incognito");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "noop", "setFoo");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertFoo", "assertFoo");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "clear", "noop");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertEmpty", "assertEmpty");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "setFoo", "noop");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertFoo", "assertFoo");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "noop", "removeFoo");
+  FinalReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertEmpty",
+                          "assertEmpty");
 
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
   EXPECT_TRUE(catcher_incognito.GetNextResult()) << catcher.message();
@@ -273,17 +267,20 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest,
   ResultCatcher catcher, catcher_incognito;
   catcher.RestrictToBrowserContext(browser()->profile());
   catcher_incognito.RestrictToBrowserContext(
-      browser()->profile()->GetPrimaryOTRProfile());
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true));
 
-  LoadAndReplyWhenSatisfied(SYNC,
-      "assertNoNotifications", "assertNoNotifications", "split_incognito");
-  ReplyWhenSatisfied(SYNC, "noop", "setFoo");
-  ReplyWhenSatisfied(SYNC,
-      "assertAddFooNotification", "assertAddFooNotification");
-  ReplyWhenSatisfied(SYNC, "clearNotifications", "clearNotifications");
-  ReplyWhenSatisfied(SYNC, "removeFoo", "noop");
-  FinalReplyWhenSatisfied(SYNC,
-      "assertDeleteFooNotification", "assertDeleteFooNotification");
+  LoadAndReplyWhenSatisfied(StorageAreaNamespace::kSync,
+                            "assertNoNotifications", "assertNoNotifications",
+                            "split_incognito");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "noop", "setFoo");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertAddFooNotification",
+                     "assertAddFooNotification");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "clearNotifications",
+                     "clearNotifications");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "removeFoo", "noop");
+  FinalReplyWhenSatisfied(StorageAreaNamespace::kSync,
+                          "assertDeleteFooNotification",
+                          "assertDeleteFooNotification");
 
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
   EXPECT_TRUE(catcher_incognito.GetNextResult()) << catcher.message();
@@ -296,44 +293,56 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest,
   ResultCatcher catcher, catcher_incognito;
   catcher.RestrictToBrowserContext(browser()->profile());
   catcher_incognito.RestrictToBrowserContext(
-      browser()->profile()->GetPrimaryOTRProfile());
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true));
 
-  LoadAndReplyWhenSatisfied(SYNC,
-      "assertNoNotifications", "assertNoNotifications", "split_incognito");
+  LoadAndReplyWhenSatisfied(StorageAreaNamespace::kSync,
+                            "assertNoNotifications", "assertNoNotifications",
+                            "split_incognito");
 
-  ReplyWhenSatisfied(SYNC, "noop", "setFoo");
-  ReplyWhenSatisfied(SYNC, "assertFoo", "assertFoo");
-  ReplyWhenSatisfied(SYNC,
-      "assertAddFooNotification", "assertAddFooNotification");
-  ReplyWhenSatisfied(LOCAL, "assertEmpty", "assertEmpty");
-  ReplyWhenSatisfied(LOCAL, "assertNoNotifications", "assertNoNotifications");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "noop", "setFoo");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertFoo", "assertFoo");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertAddFooNotification",
+                     "assertAddFooNotification");
+  ReplyWhenSatisfied(StorageAreaNamespace::kLocal, "assertEmpty",
+                     "assertEmpty");
+  ReplyWhenSatisfied(StorageAreaNamespace::kLocal, "assertNoNotifications",
+                     "assertNoNotifications");
 
-  ReplyWhenSatisfied(SYNC, "clearNotifications", "clearNotifications");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "clearNotifications",
+                     "clearNotifications");
 
-  ReplyWhenSatisfied(LOCAL, "setFoo", "noop");
-  ReplyWhenSatisfied(LOCAL, "assertFoo", "assertFoo");
-  ReplyWhenSatisfied(LOCAL,
-      "assertAddFooNotification", "assertAddFooNotification");
-  ReplyWhenSatisfied(SYNC, "assertFoo", "assertFoo");
-  ReplyWhenSatisfied(SYNC, "assertNoNotifications", "assertNoNotifications");
+  ReplyWhenSatisfied(StorageAreaNamespace::kLocal, "setFoo", "noop");
+  ReplyWhenSatisfied(StorageAreaNamespace::kLocal, "assertFoo", "assertFoo");
+  ReplyWhenSatisfied(StorageAreaNamespace::kLocal, "assertAddFooNotification",
+                     "assertAddFooNotification");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertFoo", "assertFoo");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertNoNotifications",
+                     "assertNoNotifications");
 
-  ReplyWhenSatisfied(LOCAL, "clearNotifications", "clearNotifications");
+  ReplyWhenSatisfied(StorageAreaNamespace::kLocal, "clearNotifications",
+                     "clearNotifications");
 
-  ReplyWhenSatisfied(LOCAL, "noop", "removeFoo");
-  ReplyWhenSatisfied(LOCAL, "assertEmpty", "assertEmpty");
-  ReplyWhenSatisfied(LOCAL,
-      "assertDeleteFooNotification", "assertDeleteFooNotification");
-  ReplyWhenSatisfied(SYNC, "assertFoo", "assertFoo");
-  ReplyWhenSatisfied(SYNC, "assertNoNotifications", "assertNoNotifications");
+  ReplyWhenSatisfied(StorageAreaNamespace::kLocal, "noop", "removeFoo");
+  ReplyWhenSatisfied(StorageAreaNamespace::kLocal, "assertEmpty",
+                     "assertEmpty");
+  ReplyWhenSatisfied(StorageAreaNamespace::kLocal,
+                     "assertDeleteFooNotification",
+                     "assertDeleteFooNotification");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertFoo", "assertFoo");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertNoNotifications",
+                     "assertNoNotifications");
 
-  ReplyWhenSatisfied(LOCAL, "clearNotifications", "clearNotifications");
+  ReplyWhenSatisfied(StorageAreaNamespace::kLocal, "clearNotifications",
+                     "clearNotifications");
 
-  ReplyWhenSatisfied(SYNC, "removeFoo", "noop");
-  ReplyWhenSatisfied(SYNC, "assertEmpty", "assertEmpty");
-  ReplyWhenSatisfied(SYNC,
-      "assertDeleteFooNotification", "assertDeleteFooNotification");
-  ReplyWhenSatisfied(LOCAL, "assertNoNotifications", "assertNoNotifications");
-  FinalReplyWhenSatisfied(LOCAL, "assertEmpty", "assertEmpty");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "removeFoo", "noop");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertEmpty", "assertEmpty");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertDeleteFooNotification",
+                     "assertDeleteFooNotification");
+  ReplyWhenSatisfied(StorageAreaNamespace::kLocal, "assertNoNotifications",
+                     "assertNoNotifications");
+  FinalReplyWhenSatisfied(StorageAreaNamespace::kLocal, "assertEmpty",
+                          "assertEmpty");
 
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
   EXPECT_TRUE(catcher_incognito.GetNextResult()) << catcher.message();
@@ -346,11 +355,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest,
   ResultCatcher catcher, catcher_incognito;
   catcher.RestrictToBrowserContext(browser()->profile());
   catcher_incognito.RestrictToBrowserContext(
-      browser()->profile()->GetPrimaryOTRProfile());
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true));
 
-  const Extension* extension =
-      LoadAndReplyWhenSatisfied(SYNC,
-          "assertNoNotifications", "assertNoNotifications", "split_incognito");
+  const Extension* extension = LoadAndReplyWhenSatisfied(
+      StorageAreaNamespace::kSync, "assertNoNotifications",
+      "assertNoNotifications", "split_incognito");
   const std::string& extension_id = extension->id();
 
   syncer::FakeSyncChangeProcessor sync_processor;
@@ -363,9 +372,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest,
       extension_id, "foo", bar, kModelType));
   SendChanges(sync_changes);
 
-  ReplyWhenSatisfied(SYNC,
-      "assertAddFooNotification", "assertAddFooNotification");
-  ReplyWhenSatisfied(SYNC, "clearNotifications", "clearNotifications");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "assertAddFooNotification",
+                     "assertAddFooNotification");
+  ReplyWhenSatisfied(StorageAreaNamespace::kSync, "clearNotifications",
+                     "clearNotifications");
 
   // Remove "foo" via sync.
   sync_changes.clear();
@@ -373,8 +383,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest,
       extension_id, "foo", kModelType));
   SendChanges(sync_changes);
 
-  FinalReplyWhenSatisfied(SYNC,
-      "assertDeleteFooNotification", "assertDeleteFooNotification");
+  FinalReplyWhenSatisfied(StorageAreaNamespace::kSync,
+                          "assertDeleteFooNotification",
+                          "assertDeleteFooNotification");
 
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
   EXPECT_TRUE(catcher_incognito.GetNextResult()) << catcher.message();
@@ -389,11 +400,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest,
   ResultCatcher catcher, catcher_incognito;
   catcher.RestrictToBrowserContext(browser()->profile());
   catcher_incognito.RestrictToBrowserContext(
-      browser()->profile()->GetPrimaryOTRProfile());
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true));
 
-  const Extension* extension =
-      LoadAndReplyWhenSatisfied(LOCAL,
-          "assertNoNotifications", "assertNoNotifications", "split_incognito");
+  const Extension* extension = LoadAndReplyWhenSatisfied(
+      StorageAreaNamespace::kLocal, "assertNoNotifications",
+      "assertNoNotifications", "split_incognito");
   const std::string& extension_id = extension->id();
 
   syncer::FakeSyncChangeProcessor sync_processor;
@@ -406,7 +417,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest,
       extension_id, "foo", bar, kModelType));
   SendChanges(sync_changes);
 
-  ReplyWhenSatisfied(LOCAL, "assertNoNotifications", "assertNoNotifications");
+  ReplyWhenSatisfied(StorageAreaNamespace::kLocal, "assertNoNotifications",
+                     "assertNoNotifications");
 
   // Remove "foo" via sync.
   sync_changes.clear();
@@ -414,8 +426,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest,
       extension_id, "foo", kModelType));
   SendChanges(sync_changes);
 
-  FinalReplyWhenSatisfied(LOCAL,
-      "assertNoNotifications", "assertNoNotifications");
+  FinalReplyWhenSatisfied(StorageAreaNamespace::kLocal, "assertNoNotifications",
+                          "assertNoNotifications");
 
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
   EXPECT_TRUE(catcher_incognito.GetNextResult()) << catcher.message();
@@ -423,13 +435,15 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest,
 
 IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, IsStorageEnabled) {
   StorageFrontend* frontend = StorageFrontend::Get(browser()->profile());
-  EXPECT_TRUE(frontend->IsStorageEnabled(LOCAL));
-  EXPECT_TRUE(frontend->IsStorageEnabled(SYNC));
+  EXPECT_TRUE(frontend->IsStorageEnabled(settings_namespace::LOCAL));
+  EXPECT_TRUE(frontend->IsStorageEnabled(settings_namespace::SYNC));
 
-  EXPECT_TRUE(frontend->IsStorageEnabled(MANAGED));
+  EXPECT_TRUE(frontend->IsStorageEnabled(settings_namespace::MANAGED));
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, ExtensionsSchemas) {
+// Bulk disabled as part of arm64 bot stabilization: https://crbug.com/1154345
+// TODO(crbug.com/1177118) Re-enable test
+IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, DISABLED_ExtensionsSchemas) {
   // Verifies that the Schemas for the extensions domain are created on startup.
   Profile* profile = browser()->profile();
   ExtensionSystem* extension_system = ExtensionSystem::Get(profile);
@@ -451,7 +465,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, ExtensionsSchemas) {
   EXPECT_FALSE(registry->schema_map()->GetSchema(policy::PolicyNamespace(
       policy::POLICY_DOMAIN_EXTENSIONS, kManagedStorageExtensionId)));
 
-  MockSchemaRegistryObserver observer;
+  NiceMock<MockSchemaRegistryObserver> observer;
   registry->AddObserver(&observer);
 
   // Install a managed extension.
@@ -508,7 +522,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, ExtensionsSchemas) {
   EXPECT_EQ(base::Value::Type::INTEGER, dict.GetProperty("anything").type());
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, ManagedStorage) {
+// Bulk disabled as part of arm64 bot stabilization: https://crbug.com/1154345
+// TODO(crbug.com/1177118) Re-enable test
+IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, DISABLED_ManagedStorage) {
   // Set policies for the test extension.
   std::unique_ptr<base::DictionaryValue> policy =
       extensions::DictionaryBuilder()
@@ -597,8 +613,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, ManagedStorageEvents) {
 IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, ManagedStorageDisabled) {
   // Disable the 'managed' namespace.
   StorageFrontend* frontend = StorageFrontend::Get(browser()->profile());
-  frontend->DisableStorageForTesting(MANAGED);
-  EXPECT_FALSE(frontend->IsStorageEnabled(MANAGED));
+  frontend->DisableStorageForTesting(settings_namespace::MANAGED);
+  EXPECT_FALSE(frontend->IsStorageEnabled(settings_namespace::MANAGED));
   // Now run the extension.
   ASSERT_TRUE(RunExtensionTest("settings/managed_storage_disabled"))
       << message_;

@@ -8,7 +8,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
@@ -55,11 +54,11 @@ class ChromeDataUseMeasurementBrowsertestBase : public InProcessBrowserTest {
     return local_state()
                ->GetDictionary(
                    data_use_measurement::prefs::kDataUsedUserForeground)
-               ->size() +
+               ->DictSize() +
            local_state()
                ->GetDictionary(
                    data_use_measurement::prefs::kDataUsedUserBackground)
-               ->size();
+               ->DictSize();
   }
 
   void RetryUntilUserInitiatedDataUsePrefHasEntry() {
@@ -82,8 +81,15 @@ class ChromeDataUseMeasurementBrowsertest
   }
 };
 
+// Flaky on Linux (and Linux MSAN): https://crbug.com/1141975.
+#if defined(OS_LINUX)
+#define MAYBE_DataUseTrackerPrefsUpdated DISABLED_DataUseTrackerPrefsUpdated
+#else
+#define MAYBE_DataUseTrackerPrefsUpdated DataUseTrackerPrefsUpdated
+#endif
+
 IN_PROC_BROWSER_TEST_F(ChromeDataUseMeasurementBrowsertest,
-                       DataUseTrackerPrefsUpdated) {
+                       MAYBE_DataUseTrackerPrefsUpdated) {
   SimulateNetworkChange(network::mojom::ConnectionType::CONNECTION_3G);
 
   ui_test_utils::NavigateToURL(browser(),

@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/flat_set.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
@@ -142,7 +142,7 @@ class IconCacherTestBase : public ::testing::Test {
 class IconCacherTestPopularSites : public IconCacherTestBase {
  protected:
   IconCacherTestPopularSites()
-      : site_(base::string16(),  // title, unused
+      : site_(std::u16string(),  // title, unused
               GURL("http://url.google/"),
               GURL("http://url.google/icon.png"),
               GURL("http://url.google/favicon.ico"),

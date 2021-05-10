@@ -4,8 +4,9 @@
 
 #include "chromeos/components/cdm_factory_daemon/cdm_factory_daemon_proxy.h"
 
+#include "ash/shell.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
@@ -18,6 +19,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/system/invitation.h"
+#include "ui/display/manager/display_manager.h"
 
 namespace chromeos {
 namespace {
@@ -96,6 +98,31 @@ void CdmFactoryDaemonProxy::ConnectOemCrypto(
 void CdmFactoryDaemonProxy::GetOutputProtection(
     mojo::PendingReceiver<cdm::mojom::OutputProtection> output_protection) {
   OutputProtectionImpl::Create(std::move(output_protection));
+}
+
+void CdmFactoryDaemonProxy::GetHwConfigData(GetHwConfigDataCallback callback) {
+  DCHECK(mojo_task_runner_->RunsTasksInCurrentSequence());
+  DVLOG(1) << "CdmFactoryDaemonProxy::GetHwConfigData called";
+  if (daemon_remote_.is_bound()) {
+    DVLOG(1) << "CdmFactoryDaemon mojo connection already exists, re-use it";
+    ProxyGetHwConfigData(std::move(callback));
+    return;
+  }
+
+  EstablishDaemonConnection(
+      base::BindOnce(&CdmFactoryDaemonProxy::ProxyGetHwConfigData,
+                     base::Unretained(this), std::move(callback)));
+}
+
+void CdmFactoryDaemonProxy::GetScreenResolutions(
+    GetScreenResolutionsCallback callback) {
+  const std::vector<display::DisplaySnapshot*>& displays =
+      ash::Shell::Get()->display_manager()->configurator()->cached_displays();
+  std::vector<gfx::Size> resolutions;
+  for (display::DisplaySnapshot* display : displays)
+    resolutions.emplace_back(display->native_mode()->size());
+
+  std::move(callback).Run(std::move(resolutions));
 }
 
 void CdmFactoryDaemonProxy::SendDBusRequest(base::ScopedFD fd,
@@ -184,6 +211,16 @@ void CdmFactoryDaemonProxy::CompleteOemCryptoConnection(
   daemon_remote_->ConnectOemCrypto(std::move(oemcryptor),
                                    std::move(protected_buffer_manager),
                                    std::move(output_protection));
+}
+
+void CdmFactoryDaemonProxy::ProxyGetHwConfigData(
+    GetHwConfigDataCallback callback) {
+  if (!daemon_remote_ || !daemon_remote_.is_bound()) {
+    LOG(ERROR) << "daemon_remote_ interface is not connected";
+    std::move(callback).Run(false, std::vector<uint8_t>());
+    return;
+  }
+  daemon_remote_->GetHwConfigData(std::move(callback));
 }
 
 // static

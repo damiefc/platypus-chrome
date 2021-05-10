@@ -61,7 +61,7 @@ WebLocalFrame* ToWebLocalFrame(LocalFrame* frame) {
   if (!frame)
     return nullptr;
 
-  return static_cast<WebLocalFrame*>(WebFrame::FromFrame(frame));
+  return static_cast<WebLocalFrame*>(WebFrame::FromCoreFrame(frame));
 }
 
 }  // namespace
@@ -110,8 +110,6 @@ void TrackAudioRenderer::OnRenderError() {
 // WebMediaStreamAudioSink implementation
 void TrackAudioRenderer::OnData(const media::AudioBus& audio_bus,
                                 base::TimeTicks reference_time) {
-  DCHECK(!reference_time.is_null());
-
   TRACE_EVENT1("audio", "TrackAudioRenderer::OnData", "reference time (ms)",
                (reference_time - base::TimeTicks()).InMillisecondsF());
 

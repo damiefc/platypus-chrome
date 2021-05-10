@@ -8,7 +8,9 @@
 #include <memory>
 #include <vector>
 
+#include "ash/public/cpp/app_list/app_list_color_provider.h"
 #include "ash/search_box/search_box_view_delegate.h"
+#include "base/bind.h"
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/ime/text_input_flags.h"
@@ -81,8 +83,8 @@ class SearchBoxBackground : public views::Background {
 // fullscreen launcher.
 class SearchBoxImageButton : public views::ImageButton {
  public:
-  explicit SearchBoxImageButton(views::ButtonListener* listener)
-      : ImageButton(listener) {
+  explicit SearchBoxImageButton(PressedCallback callback)
+      : ImageButton(std::move(callback)) {
     SetFocusBehavior(FocusBehavior::ALWAYS);
 
     // Avoid drawing default dashed focus and draw customized focus in
@@ -91,9 +93,36 @@ class SearchBoxImageButton : public views::ImageButton {
 
     SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
-    SetInkDropMode(InkDropMode::ON);
+    ink_drop()->SetMode(views::InkDropHost::InkDropMode::ON);
     // InkDropState will reset after clicking.
     SetHasInkDropActionOnClick(true);
+    ink_drop()->SetCreateHighlightCallback(base::BindRepeating(
+        [](InkDropHostView* host) {
+          constexpr SkColor ripple_color =
+              SkColorSetA(gfx::kGoogleGrey900, 0x12);
+          auto highlight = std::make_unique<views::InkDropHighlight>(
+              gfx::SizeF(host->size()), ripple_color);
+          highlight->set_visible_opacity(1.f);
+          return highlight;
+        },
+        this));
+    ink_drop()->SetCreateRippleCallback(base::BindRepeating(
+        [](SearchBoxImageButton* host)
+            -> std::unique_ptr<views::InkDropRipple> {
+          const gfx::Point center = host->GetLocalBounds().CenterPoint();
+          const int ripple_radius = host->GetInkDropRadius();
+          gfx::Rect bounds(center.x() - ripple_radius,
+                           center.y() - ripple_radius, 2 * ripple_radius,
+                           2 * ripple_radius);
+          constexpr SkColor ripple_color =
+              SkColorSetA(gfx::kGoogleGrey900, 0x17);
+
+          return std::make_unique<views::FloodFillInkDropRipple>(
+              host->size(), host->GetLocalBounds().InsetsFrom(bounds),
+              host->ink_drop()->GetInkDropCenterBasedOnLastEvent(),
+              ripple_color, 1.0f);
+        },
+        this));
 
     SetPreferredSize({kSearchBoxButtonSizeDip, kSearchBoxButtonSizeDip});
     SetImageHorizontalAlignment(ALIGN_CENTER);
@@ -115,30 +144,14 @@ class SearchBoxImageButton : public views::ImageButton {
     return Button::OnKeyPressed(event);
   }
 
-  void OnFocus() override { SchedulePaint(); }
-
-  void OnBlur() override { SchedulePaint(); }
-
-  // views::InkDropHostView:
-  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override {
-    const gfx::Point center = GetLocalBounds().CenterPoint();
-    const int ripple_radius = GetInkDropRadius();
-    gfx::Rect bounds(center.x() - ripple_radius, center.y() - ripple_radius,
-                     2 * ripple_radius, 2 * ripple_radius);
-    constexpr SkColor ripple_color = SkColorSetA(gfx::kGoogleGrey900, 0x17);
-
-    return std::make_unique<views::FloodFillInkDropRipple>(
-        size(), GetLocalBounds().InsetsFrom(bounds),
-        GetInkDropCenterBasedOnLastEvent(), ripple_color, 1.0f);
+  void OnFocus() override {
+    views::ImageButton::OnFocus();
+    SchedulePaint();
   }
 
-  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
-      const override {
-    constexpr SkColor ripple_color = SkColorSetA(gfx::kGoogleGrey900, 0x12);
-    auto highlight = std::make_unique<views::InkDropHighlight>(
-        gfx::SizeF(size()), ripple_color);
-    highlight->set_visible_opacity(1.f);
-    return highlight;
+  void OnBlur() override {
+    views::ImageButton::OnBlur();
+    SchedulePaint();
   }
 
  private:
@@ -171,19 +184,6 @@ class SearchBoxTextfield : public views::Textfield {
   ~SearchBoxTextfield() override = default;
 
   // Overridden from views::View:
-  void ShowContextMenu(const gfx::Point& p,
-                       ui::MenuSourceType source_type) override {
-    views::View* selected_view =
-        search_box_view_->GetSelectedViewInContentsView();
-    if (source_type != ui::MENU_SOURCE_KEYBOARD || !selected_view) {
-      views::Textfield::ShowContextMenu(p, source_type);
-      return;
-    }
-    selected_view->ShowContextMenu(
-        selected_view->GetKeyboardContextMenuLocation(),
-        ui::MENU_SOURCE_KEYBOARD);
-  }
-
   void OnFocus() override {
     search_box_view_->OnSearchBoxFocusedChanged();
     Textfield::OnFocus();
@@ -240,7 +240,8 @@ SearchBoxViewBase::SearchBoxViewBase(SearchBoxViewDelegate* delegate)
   AddChildView(content_container_);
 
   content_container_->SetBackground(std::make_unique<SearchBoxBackground>(
-      kSearchBoxBorderCornerRadius, kSearchBoxBackgroundDefault));
+      kSearchBoxBorderCornerRadius,
+      ash::AppListColorProvider::Get()->GetSearchBoxBackgroundColor()));
 
   box_layout_ =
       content_container_->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -260,12 +261,15 @@ SearchBoxViewBase::SearchBoxViewBase(SearchBoxViewDelegate* delegate)
   search_box_->SetTextInputType(ui::TEXT_INPUT_TYPE_SEARCH);
   search_box_->SetTextInputFlags(ui::TEXT_INPUT_FLAG_AUTOCORRECT_OFF);
 
-  back_button_ = new SearchBoxImageButton(this);
+  back_button_ = new SearchBoxImageButton(base::BindRepeating(
+      &SearchBoxViewDelegate::BackButtonPressed, base::Unretained(delegate_)));
   content_container_->AddChildView(back_button_);
 
   search_icon_ = new views::ImageView();
   content_container_->AddChildView(search_icon_);
-  search_box_->set_placeholder_text_color(search_box_color_);
+  search_box_->set_placeholder_text_color(
+      ash::AppListColorProvider::Get()->GetSearchBoxSecondaryTextColor(
+          kDefaultSearchboxPlaceholderTextColor));
   search_box_->set_placeholder_text_draw_flags(gfx::Canvas::TEXT_ALIGN_CENTER);
   search_box_->SetFontList(search_box_->GetFontList().DeriveWithSizeDelta(2));
   search_box_->SetCursorEnabled(is_search_box_active_);
@@ -278,13 +282,16 @@ SearchBoxViewBase::SearchBoxViewBase(SearchBoxViewDelegate* delegate)
   search_box_right_space_->SetPreferredSize(gfx::Size(kSearchBoxIconSize, 0));
   content_container_->AddChildView(search_box_right_space_);
 
-  assistant_button_ = new SearchBoxImageButton(this);
-  assistant_button_->EnableCanvasFlippingForRTLUI(false);
+  assistant_button_ = new SearchBoxImageButton(
+      base::BindRepeating(&SearchBoxViewDelegate::AssistantButtonPressed,
+                          base::Unretained(delegate_)));
+  assistant_button_->SetFlipCanvasOnPaintForRTLUI(false);
   // Default hidden, child class should decide if it should shown.
   assistant_button_->SetVisible(false);
   content_container_->AddChildView(assistant_button_);
 
-  close_button_ = new SearchBoxImageButton(this);
+  close_button_ = new SearchBoxImageButton(base::BindRepeating(
+      &SearchBoxViewBase::ClearSearch, base::Unretained(this)));
   content_container_->AddChildView(close_button_);
 }
 
@@ -341,6 +348,11 @@ void SearchBoxViewBase::SetSearchBoxActive(bool active,
       active ? (base::i18n::IsRTL() ? gfx::Canvas::TEXT_ALIGN_RIGHT
                                     : gfx::Canvas::TEXT_ALIGN_LEFT)
              : gfx::Canvas::TEXT_ALIGN_CENTER);
+  search_box_->set_placeholder_text_color(
+      active ? AppListColorProvider::Get()->GetSearchBoxSecondaryTextColor(
+                   kZeroQuerySearchboxColor)
+             : ash::AppListColorProvider::Get()->GetSearchBoxTextColor(
+                   kDefaultSearchboxPlaceholderTextColor));
   search_box_->SetCursorEnabled(active);
 
   if (active) {
@@ -355,6 +367,7 @@ void SearchBoxViewBase::SetSearchBoxActive(bool active,
   if (event_type != ui::ET_KEY_PRESSED && event_type != ui::ET_KEY_RELEASED)
     UpdateKeyboardVisibility();
   UpdateButtonsVisisbility();
+  OnSearchBoxActiveChanged(active);
 
   NotifyActiveChanged();
 
@@ -403,19 +416,6 @@ ax::mojom::Role SearchBoxViewBase::GetAccessibleWindowRole() {
   return ax::mojom::Role::kGroup;
 }
 
-void SearchBoxViewBase::ButtonPressed(views::Button* sender,
-                                      const ui::Event& event) {
-  if (assistant_button_ && sender == assistant_button_) {
-    delegate_->AssistantButtonPressed();
-  } else if (back_button_ && sender == back_button_) {
-    delegate_->BackButtonPressed();
-  } else if (close_button_ && sender == close_button_) {
-    ClearSearch();
-  } else {
-    NOTREACHED();
-  }
-}
-
 void SearchBoxViewBase::OnSearchBoxFocusedChanged() {
   UpdateSearchBoxBorder();
   Layout();
@@ -425,7 +425,7 @@ void SearchBoxViewBase::OnSearchBoxFocusedChanged() {
 }
 
 bool SearchBoxViewBase::IsSearchBoxTrimmedQueryEmpty() const {
-  base::string16 trimmed_query;
+  std::u16string trimmed_query;
   base::TrimWhitespace(search_box_->GetText(), base::TrimPositions::TRIM_ALL,
                        &trimmed_query);
   return trimmed_query.empty();
@@ -433,10 +433,10 @@ bool SearchBoxViewBase::IsSearchBoxTrimmedQueryEmpty() const {
 
 void SearchBoxViewBase::ClearSearch() {
   // Avoid setting |search_box_| text to empty if it is already empty.
-  if (search_box_->GetText() == base::string16())
+  if (search_box_->GetText() == std::u16string())
     return;
 
-  search_box_->SetText(base::string16());
+  search_box_->SetText(std::u16string());
   UpdateButtonsVisisbility();
   // Updates model and fires query changed manually because SetText() above
   // does not generate ContentsChanged() notification.
@@ -444,9 +444,7 @@ void SearchBoxViewBase::ClearSearch() {
   NotifyQueryChanged();
 }
 
-views::View* SearchBoxViewBase::GetSelectedViewInContentsView() {
-  return nullptr;
-}
+void SearchBoxViewBase::OnSearchBoxActiveChanged(bool active) {}
 
 void SearchBoxViewBase::NotifyQueryChanged() {
   DCHECK(delegate_);
@@ -456,11 +454,6 @@ void SearchBoxViewBase::NotifyQueryChanged() {
 void SearchBoxViewBase::NotifyActiveChanged() {
   DCHECK(delegate_);
   delegate_->ActiveChanged(this);
-}
-
-void SearchBoxViewBase::SetSearchBoxColor(SkColor color) {
-  search_box_color_ =
-      SK_ColorTRANSPARENT == color ? kDefaultSearchboxColor : color;
 }
 
 void SearchBoxViewBase::UpdateButtonsVisisbility() {
@@ -489,7 +482,7 @@ void SearchBoxViewBase::UpdateButtonsVisisbility() {
 }
 
 void SearchBoxViewBase::ContentsChanged(views::Textfield* sender,
-                                        const base::string16& new_contents) {
+                                        const std::u16string& new_contents) {
   // Set search box focused when query changes.
   search_box_->RequestFocus();
   UpdateModel(true);
@@ -544,7 +537,6 @@ void SearchBoxViewBase::HandleSearchBoxEvent(ui::LocatedEvent* located_event) {
     // should reopen it.
     UpdateKeyboardVisibility();
   }
-  located_event->SetHandled();
 }
 
 // TODO(crbug.com/755219): Unify this with SetBackgroundColor.

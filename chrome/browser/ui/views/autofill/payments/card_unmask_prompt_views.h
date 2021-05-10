@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "chrome/browser/ui/autofill/payments/autofill_dialog_models.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_view.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -34,26 +35,25 @@ class CardUnmaskPromptViews : public CardUnmaskPromptView,
                               public views::BubbleDialogDelegateView,
                               public views::TextfieldController {
  public:
+  METADATA_HEADER(CardUnmaskPromptViews);
   CardUnmaskPromptViews(CardUnmaskPromptController* controller,
                         content::WebContents* web_contents);
+  CardUnmaskPromptViews(const CardUnmaskPromptViews&) = delete;
+  CardUnmaskPromptViews& operator=(const CardUnmaskPromptViews&) = delete;
   ~CardUnmaskPromptViews() override;
 
   // CardUnmaskPromptView:
   void Show() override;
   void ControllerGone() override;
   void DisableAndWaitForVerification() override;
-  void GotVerificationResult(const base::string16& error_message,
+  void GotVerificationResult(const std::u16string& error_message,
                              bool allow_retry) override;
 
-  // views::DialogDelegateView
+  // views::BubbleDialogDelegateView:
   View* GetContentsView() override;
-
-  // views::View
-  gfx::Size CalculatePreferredSize() const override;
   void AddedToWidget() override;
   void OnThemeChanged() override;
-  ui::ModalType GetModalType() const override;
-  base::string16 GetWindowTitle() const override;
+  std::u16string GetWindowTitle() const override;
   void DeleteDelegate() override;
   bool IsDialogButtonEnabled(ui::DialogButton button) const override;
   View* GetInitiallyFocusedView() override;
@@ -63,13 +63,13 @@ class CardUnmaskPromptViews : public CardUnmaskPromptView,
 
   // views::TextfieldController
   void ContentsChanged(views::Textfield* sender,
-                       const base::string16& new_contents) override;
+                       const std::u16string& new_contents) override;
 
  private:
   friend class CardUnmaskPromptViewTesterViews;
 
   void InitIfNecessary();
-  void SetRetriableErrorMessage(const base::string16& message);
+  void SetRetriableErrorMessage(const std::u16string& message);
   bool ExpirationDateIsValid() const;
   void SetInputsEnabled(bool enabled);
   void ShowNewCardLink();
@@ -112,8 +112,6 @@ class CardUnmaskPromptViews : public CardUnmaskPromptView,
   views::Throbber* progress_throbber_ = nullptr;
 
   base::WeakPtrFactory<CardUnmaskPromptViews> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(CardUnmaskPromptViews);
 };
 
 }  // namespace autofill

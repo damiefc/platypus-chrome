@@ -5,12 +5,14 @@
 #ifndef CHROME_BROWSER_CHROMEOS_EXTENSIONS_DOCUMENT_SCAN_DOCUMENT_SCAN_API_H_
 #define CHROME_BROWSER_CHROMEOS_EXTENSIONS_DOCUMENT_SCAN_DOCUMENT_SCAN_API_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "base/optional.h"
 #include "chrome/common/extensions/api/document_scan.h"
+#include "chromeos/dbus/lorgnette/lorgnette_service.pb.h"
 #include "extensions/browser/extension_function.h"
 
 namespace extensions {
@@ -34,8 +36,8 @@ class DocumentScanScanFunction : public ExtensionFunction {
   friend class DocumentScanScanFunctionTest;
 
   void OnNamesReceived(std::vector<std::string> scanner_names);
-  void OnPageReceived(std::string scanned_image);
-  void OnScanCompleted(bool success);
+  void OnPageReceived(std::string scanned_image, uint32_t /*page_number*/);
+  void OnScanCompleted(lorgnette::ScanFailureMode failure_mode);
 
   base::Optional<std::string> scan_data_;
   std::unique_ptr<document_scan::Scan::Params> params_;

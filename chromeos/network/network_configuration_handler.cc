@@ -9,7 +9,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/format_macros.h"
 #include "base/guid.h"
 #include "base/json/json_writer.h"
@@ -18,8 +19,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chromeos/dbus/shill/shill_manager_client.h"
 #include "chromeos/dbus/shill/shill_profile_client.h"
@@ -261,7 +260,7 @@ void NetworkConfigurationHandler::GetShillProperties(
       network_state_handler_->GetNetworkState(service_path);
   if (network_state &&
       (NetworkTypePattern::Tether().MatchesType(network_state->type()) ||
-       network_state->IsDefaultCellular())) {
+       network_state->IsNonShillCellularNetwork())) {
     // This is a Tether network or a Cellular network with no Service.
     // Provide properties from NetworkState.
     base::Value dictionary(base::Value::Type::DICTIONARY);
@@ -281,7 +280,7 @@ void NetworkConfigurationHandler::SetShillProperties(
     const base::DictionaryValue& shill_properties,
     base::OnceClosure callback,
     network_handler::ErrorCallback error_callback) {
-  if (shill_properties.empty()) {
+  if (shill_properties.DictEmpty()) {
     if (!callback.is_null())
       std::move(callback).Run();
     return;
@@ -381,7 +380,7 @@ void NetworkConfigurationHandler::CreateShillConfiguration(
       dbus::ObjectPath(profile_path), *properties_to_set,
       base::BindOnce(&NetworkConfigurationHandler::ConfigurationCompleted,
                      weak_ptr_factory_.GetWeakPtr(), profile_path, guid,
-                     base::Passed(&properties_copy), std::move(callback)),
+                     std::move(properties_copy), std::move(callback)),
       base::BindOnce(&NetworkConfigurationHandler::ConfigurationFailed,
                      weak_ptr_factory_.GetWeakPtr(),
                      std::move(error_callback)));

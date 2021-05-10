@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/chrome_content_settings_utils.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -149,13 +149,13 @@ void DownloadRequestLimiter::TabDownloadState::DidStartNavigation(
                                      PROMPT_BEFORE_DOWNLOAD);
       return;
     }
-
-    // If this is a forward/back navigation, also don't reset a prompting or
-    // blocking limiter state unless a new host is encounted. This prevents a
-    // page to use history forward/backward to trigger multiple downloads.
-    if (IsNavigationRestricted(navigation_handle))
-      return;
   }
+
+  // If this is a forward/back navigation, also don't reset a prompting or
+  // blocking limiter state if an origin is limited. This prevents a page
+  // to use history forward/backward to trigger multiple downloads.
+  if (!shouldClearDownloadState(navigation_handle))
+    return;
 
   if (status_ == DownloadRequestLimiter::ALLOW_ALL_DOWNLOADS ||
       status_ == DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED) {
@@ -178,9 +178,9 @@ void DownloadRequestLimiter::TabDownloadState::DidFinishNavigation(
     return;
 
   // Treat browser-initiated navigations as user interactions as long as the
-  // navigation isn't restricted.
+  // navigation can clear download state.
   if (!navigation_handle->IsRendererInitiated() &&
-      !IsNavigationRestricted(navigation_handle)) {
+      shouldClearDownloadState(navigation_handle)) {
     OnUserInteraction();
     return;
   }
@@ -259,7 +259,7 @@ void DownloadRequestLimiter::TabDownloadState::SetContentSetting(
     return;
   settings->SetContentSettingDefaultScope(
       request_origin.GetURL(), GURL(), ContentSettingsType::AUTOMATIC_DOWNLOADS,
-      std::string(), setting);
+      setting);
 }
 
 void DownloadRequestLimiter::TabDownloadState::Cancel(
@@ -337,8 +337,7 @@ void DownloadRequestLimiter::TabDownloadState::OnUserInteraction() {
 void DownloadRequestLimiter::TabDownloadState::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type,
-    const std::string& resource_identifier) {
+    ContentSettingsType content_type) {
   if (content_type != ContentSettingsType::AUTOMATIC_DOWNLOADS)
     return;
 
@@ -348,7 +347,7 @@ void DownloadRequestLimiter::TabDownloadState::OnContentSettingChanged(
   GURL origin = origin_.GetURL();
   // Analogous to PageSpecificContentSettings::OnContentSettingChanged:
   const ContentSettingsDetails details(primary_pattern, secondary_pattern,
-                                       content_type, resource_identifier);
+                                       content_type);
 
   // Check if the settings change affects the most recent origin passed
   // to SetDownloadStatusAndNotify(). If so, we need to update the omnibox
@@ -372,7 +371,7 @@ void DownloadRequestLimiter::TabDownloadState::OnContentSettingChanged(
     return;
 
   ContentSetting setting = content_settings->GetContentSetting(
-      origin, origin, ContentSettingsType::AUTOMATIC_DOWNLOADS, std::string());
+      origin, origin, ContentSettingsType::AUTOMATIC_DOWNLOADS);
 
   // Update the internal state to match if necessary.
   SetDownloadStatusAndNotifyImpl(origin_, GetDownloadStatusFromSetting(setting),
@@ -451,16 +450,19 @@ void DownloadRequestLimiter::TabDownloadState::SetDownloadStatusAndNotifyImpl(
   content_settings::UpdateLocationBarUiForWebContents(web_contents());
 }
 
-bool DownloadRequestLimiter::TabDownloadState::IsNavigationRestricted(
+bool DownloadRequestLimiter::TabDownloadState::shouldClearDownloadState(
     content::NavigationHandle* navigation_handle) {
-  url::Origin origin = url::Origin::Create(navigation_handle->GetURL());
+  // For forward/backward navigations, don't clear download state if some
+  // origins are restricted.
   if (navigation_handle->GetPageTransition() &
       ui::PAGE_TRANSITION_FORWARD_BACK) {
-    auto it = download_status_map_.find(origin);
-    if (it != download_status_map_.end())
-      return it->second != ALLOW_ALL_DOWNLOADS;
+    for (const auto& entry : download_status_map_) {
+      if (entry.second == PROMPT_BEFORE_DOWNLOAD ||
+          entry.second == DOWNLOADS_NOT_ALLOWED)
+        return false;
+    }
   }
-  return false;
+  return true;
 }
 
 // DownloadRequestLimiter ------------------------------------------------------
@@ -577,7 +579,7 @@ ContentSetting DownloadRequestLimiter::GetAutoDownloadContentSetting(
   if (content_settings) {
     setting = content_settings->GetContentSetting(
         request_initiator, request_initiator,
-        ContentSettingsType::AUTOMATIC_DOWNLOADS, std::string());
+        ContentSettingsType::AUTOMATIC_DOWNLOADS);
   }
   return setting;
 }

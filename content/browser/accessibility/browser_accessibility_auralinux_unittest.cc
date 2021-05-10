@@ -30,18 +30,18 @@ class BrowserAccessibilityAuraLinuxTest : public testing::Test {
   void SetUp() override;
 
   content::BrowserTaskEnvironment task_environment_;
+  ui::testing::ScopedAxModeSetter ax_mode_setter_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserAccessibilityAuraLinuxTest);
 };
 
-BrowserAccessibilityAuraLinuxTest::BrowserAccessibilityAuraLinuxTest() =
-    default;
+BrowserAccessibilityAuraLinuxTest::BrowserAccessibilityAuraLinuxTest()
+    : ax_mode_setter_(ui::kAXModeComplete) {}
 
 BrowserAccessibilityAuraLinuxTest::~BrowserAccessibilityAuraLinuxTest() =
     default;
 
 void BrowserAccessibilityAuraLinuxTest::SetUp() {
-  ui::AXPlatformNode::NotifyAddAXModeFlags(ui::kAXModeComplete);
   test_browser_accessibility_delegate_ =
       std::make_unique<TestBrowserAccessibilityDelegate>();
 }
@@ -151,7 +151,7 @@ TEST_F(BrowserAccessibilityAuraLinuxTest, TestComplexHypertext) {
   const std::string link_text_name = "Blue";
   // Each control (combo / check box, radio button and link) will be represented
   // by an embedded object character.
-  const base::string16 string16_embed(
+  const std::u16string string16_embed(
       1, ui::AXPlatformNodeAuraLinux::kEmbeddedCharacter);
   const std::string embed = base::UTF16ToUTF8(string16_embed);
   const std::string root_hypertext =
@@ -166,6 +166,7 @@ TEST_F(BrowserAccessibilityAuraLinuxTest, TestComplexHypertext) {
   combo_box.id = 12;
   combo_box.role = ax::mojom::Role::kTextFieldWithComboBox;
   combo_box.AddState(ax::mojom::State::kEditable);
+  combo_box.AddStringAttribute(ax::mojom::StringAttribute::kHtmlTag, "input");
   combo_box.SetName(combo_box_name);
   combo_box.SetValue(combo_box_value);
 
@@ -674,6 +675,7 @@ TEST_F(BrowserAccessibilityAuraLinuxTest,
   combo_box.id = 2;
   combo_box.role = ax::mojom::Role::kTextFieldWithComboBox;
   combo_box.AddState(ax::mojom::State::kEditable);
+  combo_box.AddStringAttribute(ax::mojom::StringAttribute::kHtmlTag, "input");
   combo_box.AddState(ax::mojom::State::kFocusable);
   combo_box.SetValue(value1 + value2);
 

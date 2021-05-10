@@ -26,6 +26,7 @@ void PaymentRequestDisplayManager::DisplayHandle::Show(
     base::WeakPtr<PaymentRequest> request) {
   DCHECK(request);
   DCHECK(delegate_);
+  was_shown_ = true;
   delegate_->ShowDialog(request);
 }
 
@@ -48,7 +49,7 @@ PaymentRequestDisplayManager::~PaymentRequestDisplayManager() {}
 
 std::unique_ptr<PaymentRequestDisplayManager::DisplayHandle>
 PaymentRequestDisplayManager::TryShow(ContentPaymentRequestDelegate* delegate) {
-  std::unique_ptr<PaymentRequestDisplayManager::DisplayHandle> handle = nullptr;
+  std::unique_ptr<PaymentRequestDisplayManager::DisplayHandle> handle;
   if (!current_handle_) {
     handle = std::make_unique<PaymentRequestDisplayManager::DisplayHandle>(
         this, delegate);

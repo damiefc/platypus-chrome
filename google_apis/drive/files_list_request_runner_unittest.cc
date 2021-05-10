@@ -24,7 +24,7 @@
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
-#include "services/network/test/test_network_service_client.h"
+#include "services/network/test/fake_test_cert_verifier_params_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -75,18 +75,21 @@ class FilesListRequestRunnerTest : public testing::Test {
         network_service_remote.BindNewPipeAndPassReceiver());
     network::mojom::NetworkContextParamsPtr context_params =
         network::mojom::NetworkContextParams::New();
+    // Use a dummy CertVerifier that always passes cert verification, since
+    // these unittests don't need to test CertVerifier behavior.
+    context_params->cert_verifier_params =
+        network::FakeTestCertVerifierParamsFactory::GetCertVerifierParams();
     network_service_remote->CreateNetworkContext(
         network_context_.BindNewPipeAndPassReceiver(),
         std::move(context_params));
 
-    mojo::PendingRemote<network::mojom::NetworkServiceClient>
-        network_service_client_remote;
-    network_service_client_ =
-        std::make_unique<network::TestNetworkServiceClient>(
-            network_service_client_remote.InitWithNewPipeAndPassReceiver());
-    network_service_remote->SetClient(
-        std::move(network_service_client_remote),
-        network::mojom::NetworkServiceParams::New());
+    mojo::PendingReceiver<network::mojom::URLLoaderNetworkServiceObserver>
+        default_observer_receiver;
+    network::mojom::NetworkServiceParamsPtr network_service_params =
+        network::mojom::NetworkServiceParams::New();
+    network_service_params->default_observer =
+        default_observer_receiver.InitWithNewPipeAndPassRemote();
+    network_service_remote->SetParams(std::move(network_service_params));
 
     network::mojom::URLLoaderFactoryParamsPtr params =
         network::mojom::URLLoaderFactoryParams::New();
@@ -106,18 +109,18 @@ class FilesListRequestRunnerTest : public testing::Test {
         TRAFFIC_ANNOTATION_FOR_TESTS);
 
     test_server_.RegisterRequestHandler(
-        base::Bind(&FilesListRequestRunnerTest::OnFilesListRequest,
-                   base::Unretained(this), test_server_.base_url()));
+        base::BindRepeating(&FilesListRequestRunnerTest::OnFilesListRequest,
+                            base::Unretained(this), test_server_.base_url()));
     ASSERT_TRUE(test_server_.Start());
 
-    runner_.reset(new FilesListRequestRunner(
+    runner_ = std::make_unique<FilesListRequestRunner>(
         request_sender_.get(),
         google_apis::DriveApiUrlGenerator(test_server_.base_url(),
-                                          test_server_.GetURL("/thumbnail/"))));
+                                          test_server_.GetURL("/thumbnail/")));
   }
 
   void TearDown() override {
-    on_completed_callback_ = base::Closure();
+    on_completed_callback_ = base::OnceClosure();
     http_request_.reset();
     response_error_.reset();
     response_entry_.reset();
@@ -126,9 +129,9 @@ class FilesListRequestRunnerTest : public testing::Test {
   // Called when the request is completed and no more backoff retries will
   // happen.
   void OnCompleted(DriveApiErrorCode error, std::unique_ptr<FileList> entry) {
-    response_error_.reset(new DriveApiErrorCode(error));
+    response_error_ = std::make_unique<DriveApiErrorCode>(error);
     response_entry_ = std::move(entry);
-    on_completed_callback_.Run();
+    std::move(on_completed_callback_).Run();
   }
 
  protected:
@@ -136,7 +139,8 @@ class FilesListRequestRunnerTest : public testing::Test {
   // request.
   void SetFakeServerResponse(net::HttpStatusCode code,
                              const std::string& content) {
-    fake_server_response_.reset(new net::test_server::BasicHttpResponse);
+    fake_server_response_ =
+        std::make_unique<net::test_server::BasicHttpResponse>();
     fake_server_response_->set_code(code);
     fake_server_response_->set_content(content);
     fake_server_response_->set_content_type("application/json");
@@ -146,7 +150,7 @@ class FilesListRequestRunnerTest : public testing::Test {
   std::unique_ptr<net::test_server::HttpResponse> OnFilesListRequest(
       const GURL& base_url,
       const net::test_server::HttpRequest& request) {
-    http_request_.reset(new net::test_server::HttpRequest(request));
+    http_request_ = std::make_unique<net::test_server::HttpRequest>(request);
     return std::move(fake_server_response_);
   }
 
@@ -156,12 +160,11 @@ class FilesListRequestRunnerTest : public testing::Test {
   net::EmbeddedTestServer test_server_;
   std::unique_ptr<FilesListRequestRunner> runner_;
   std::unique_ptr<network::mojom::NetworkService> network_service_;
-  std::unique_ptr<network::mojom::NetworkServiceClient> network_service_client_;
   mojo::Remote<network::mojom::NetworkContext> network_context_;
   mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory_;
   scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
       test_shared_loader_factory_;
-  base::Closure on_completed_callback_;
+  base::OnceClosure on_completed_callback_;
 
   // Response set by test cases to be returned from the HTTP server.
   std::unique_ptr<net::test_server::BasicHttpResponse> fake_server_response_;
@@ -176,8 +179,8 @@ TEST_F(FilesListRequestRunnerTest, Success_NoBackoff) {
   SetFakeServerResponse(net::HTTP_OK, kSuccessResource);
   runner_->CreateAndStartWithSizeBackoff(
       kMaxResults, FilesListCorpora::DEFAULT, std::string(), kQuery, kFields,
-      base::Bind(&FilesListRequestRunnerTest::OnCompleted,
-                 base::Unretained(this)));
+      base::BindOnce(&FilesListRequestRunnerTest::OnCompleted,
+                     base::Unretained(this)));
 
   base::RunLoop run_loop;
   on_completed_callback_ = run_loop.QuitClosure();
@@ -199,8 +202,8 @@ TEST_F(FilesListRequestRunnerTest, Success_Backoff) {
                         kResponseTooLargeErrorResource);
   runner_->CreateAndStartWithSizeBackoff(
       kMaxResults, FilesListCorpora::DEFAULT, std::string(), kQuery, kFields,
-      base::Bind(&FilesListRequestRunnerTest::OnCompleted,
-                 base::Unretained(this)));
+      base::BindOnce(&FilesListRequestRunnerTest::OnCompleted,
+                     base::Unretained(this)));
   {
     base::RunLoop run_loop;
     runner_->SetRequestCompletedCallbackForTesting(run_loop.QuitClosure());
@@ -239,8 +242,8 @@ TEST_F(FilesListRequestRunnerTest, Failure_TooManyBackoffs) {
                         kResponseTooLargeErrorResource);
   runner_->CreateAndStartWithSizeBackoff(
       kMaxResults, FilesListCorpora::DEFAULT, std::string(), kQuery, kFields,
-      base::Bind(&FilesListRequestRunnerTest::OnCompleted,
-                 base::Unretained(this)));
+      base::BindOnce(&FilesListRequestRunnerTest::OnCompleted,
+                     base::Unretained(this)));
   {
     base::RunLoop run_loop;
     runner_->SetRequestCompletedCallbackForTesting(run_loop.QuitClosure());
@@ -298,8 +301,8 @@ TEST_F(FilesListRequestRunnerTest, Failure_AnotherError) {
                         kQuotaExceededErrorResource);
   runner_->CreateAndStartWithSizeBackoff(
       kMaxResults, FilesListCorpora::DEFAULT, std::string(), kQuery, kFields,
-      base::Bind(&FilesListRequestRunnerTest::OnCompleted,
-                 base::Unretained(this)));
+      base::BindOnce(&FilesListRequestRunnerTest::OnCompleted,
+                     base::Unretained(this)));
 
   base::RunLoop run_loop;
   on_completed_callback_ = run_loop.QuitClosure();

@@ -12,16 +12,12 @@
 #include "ash/assistant/ui/main_stage/element_animator.h"
 #include "ash/public/cpp/assistant/controller/assistant_interaction_controller.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/callback_layer_animation_observer.h"
+#include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 
 namespace ash {
-
-namespace {
-
-using chromeos::assistant::features::IsResponseProcessingV2Enabled;
-
-}  // namespace
 
 // AnimatedContainerView::ScopedDisablePreferredSizeChanged --------------------
 
@@ -45,14 +41,14 @@ class AnimatedContainerView::ScopedDisablePreferredSizeChanged {
 
 AnimatedContainerView::AnimatedContainerView(AssistantViewDelegate* delegate)
     : delegate_(delegate) {
-  assistant_controller_observer_.Add(AssistantController::Get());
+  assistant_controller_observation_.Observe(AssistantController::Get());
   AssistantInteractionController::Get()->GetModel()->AddObserver(this);
 
   AddScrollViewObserver(this);
 }
 
 AnimatedContainerView::~AnimatedContainerView() {
-  if (IsResponseProcessingV2Enabled() && response_)
+  if (response_)
     response_.get()->RemoveObserver(this);
 
   if (AssistantInteractionController::Get())
@@ -81,7 +77,9 @@ void AnimatedContainerView::OnChildViewRemoved(View* observed_view,
 
 void AnimatedContainerView::OnAssistantControllerDestroying() {
   AssistantInteractionController::Get()->GetModel()->RemoveObserver(this);
-  assistant_controller_observer_.Remove(AssistantController::Get());
+  DCHECK(assistant_controller_observation_.IsObservingSource(
+      AssistantController::Get()));
+  assistant_controller_observation_.Reset();
 }
 
 void AnimatedContainerView::OnCommittedQueryChanged(
@@ -119,7 +117,7 @@ void AnimatedContainerView::OnSuggestionsAdded(
 }
 
 void AnimatedContainerView::RemoveAllViews() {
-  if (IsResponseProcessingV2Enabled() && response_)
+  if (response_)
     response_.get()->RemoveObserver(this);
 
   // We explicitly abort all in progress animations here because we will remove
@@ -169,7 +167,7 @@ std::unique_ptr<ElementAnimator> AnimatedContainerView::HandleSuggestion(
 
 void AnimatedContainerView::ChangeResponse(
     const scoped_refptr<const AssistantResponse>& response) {
-  if (IsResponseProcessingV2Enabled() && response_)
+  if (response_)
     response_.get()->RemoveObserver(this);
 
   // We may have to postpone the response while we animate the previous response
@@ -209,13 +207,6 @@ void AnimatedContainerView::ChangeResponse(
 
 void AnimatedContainerView::AddResponse(
     scoped_refptr<const AssistantResponse> response) {
-  if (!IsResponseProcessingV2Enabled()) {
-    // The response should be fully processed before it is presented.
-    // Note that ProcessingState is only used in v1 of response processing.
-    DCHECK_EQ(AssistantResponse::ProcessingState::kProcessed,
-              response->processing_state());
-  }
-
   // All children should be animated out and removed before the new response is
   // added.
   DCHECK(content_view()->children().empty());
@@ -224,11 +215,9 @@ void AnimatedContainerView::AddResponse(
   // destroyed before we have removed associated views from the view hierarchy.
   response_ = std::move(response);
 
-  if (IsResponseProcessingV2Enabled()) {
-    // In response processing v2, we observe the |response_| so that we handle
-    // new suggestions and UI elements that continue to stream in.
-    response_.get()->AddObserver(this);
-  }
+  // In response processing v2, we observe the |response_| so that we handle
+  // new suggestions and UI elements that continue to stream in.
+  response_.get()->AddObserver(this);
 
   // We can prevent over-propagation of the PreferredSizeChanged event by
   // stopping propagation during batched view hierarchy add/remove operations.
@@ -377,5 +366,8 @@ bool AnimatedContainerView::FadeOutObserverCallback(
   // We return true to delete our observer.
   return true;
 }
+
+BEGIN_METADATA(AnimatedContainerView, AssistantScrollView)
+END_METADATA
 
 }  // namespace ash

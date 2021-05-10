@@ -7,9 +7,6 @@
 #include "base/android/android_hardware_buffer_compat.h"
 #include "base/numerics/math_constants.h"
 #include "base/single_thread_task_runner.h"
-#include "ui/display/display.h"
-#include "ui/gfx/buffer_types.h"
-#include "ui/gl/gl_image_ahardwarebuffer.h"
 
 namespace {}
 
@@ -20,12 +17,36 @@ FakeArCore::FakeArCore()
 
 FakeArCore::~FakeArCore() = default;
 
-bool FakeArCore::Initialize(
+ArCore::MinMaxRange FakeArCore::GetTargetFramerateRange() {
+  return {30.f, 30.f};
+}
+
+base::Optional<ArCore::InitializeResult> FakeArCore::Initialize(
     base::android::ScopedJavaLocalRef<jobject> application_context,
     const std::unordered_set<device::mojom::XRSessionFeature>&
-        enabled_features) {
+        required_features,
+    const std::unordered_set<device::mojom::XRSessionFeature>&
+        optional_features,
+    const std::vector<device::mojom::XRTrackedImagePtr>& tracked_images,
+    base::Optional<ArCore::DepthSensingConfiguration> depth_sensing_config) {
   DCHECK(IsOnGlThread());
-  return true;
+
+  std::unordered_set<device::mojom::XRSessionFeature> enabled_features;
+  enabled_features.insert(required_features.begin(), required_features.end());
+  enabled_features.insert(optional_features.begin(), optional_features.end());
+
+  // Fake device does not support depth for now:
+  if (base::Contains(required_features,
+                     device::mojom::XRSessionFeature::DEPTH)) {
+    return base::nullopt;
+  }
+
+  if (base::Contains(optional_features,
+                     device::mojom::XRSessionFeature::DEPTH)) {
+    enabled_features.erase(device::mojom::XRSessionFeature::DEPTH);
+  }
+
+  return ArCore::InitializeResult(enabled_features, base::nullopt);
 }
 
 void FakeArCore::SetDisplayGeometry(
@@ -35,6 +56,10 @@ void FakeArCore::SetDisplayGeometry(
 
   display_rotation_ = display_rotation;
   frame_size_ = frame_size;
+}
+
+gfx::Size FakeArCore::GetUncroppedCameraImageSize() const {
+  return {1920, 960};
 }
 
 void FakeArCore::SetCameraTexture(uint32_t texture) {
@@ -338,6 +363,11 @@ void FakeArCore::ProcessAnchorCreationRequests(
 void FakeArCore::DetachAnchor(uint64_t anchor_id) {
   auto count = anchors_.erase(anchor_id);
   DCHECK_EQ(1u, count);
+}
+
+mojom::XRTrackedImagesDataPtr FakeArCore::GetTrackedImages() {
+  std::vector<mojom::XRTrackedImageDataPtr> images_data;
+  return mojom::XRTrackedImagesData::New(std::move(images_data), base::nullopt);
 }
 
 void FakeArCore::Pause() {

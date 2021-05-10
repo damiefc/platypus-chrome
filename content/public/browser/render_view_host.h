@@ -5,7 +5,6 @@
 #ifndef CONTENT_PUBLIC_BROWSER_RENDER_VIEW_HOST_H_
 #define CONTENT_PUBLIC_BROWSER_RENDER_VIEW_HOST_H_
 
-#include "base/callback_forward.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/common/drop_data.h"
@@ -25,7 +24,6 @@ class RenderFrameHost;
 class RenderProcessHost;
 class RenderViewHostDelegate;
 class RenderWidgetHost;
-class SiteInstance;
 
 // A RenderViewHost is responsible for creating and talking to a RenderView
 // object in a child process. It exposes a high level API to users, for things
@@ -46,7 +44,7 @@ class SiteInstance;
 //
 // For context, please see https://crbug.com/467770 and
 // https://www.chromium.org/developers/design-documents/site-isolation.
-class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
+class CONTENT_EXPORT RenderViewHost {
  public:
   // Returns the RenderViewHost given its ID and the ID of its render process.
   // Returns nullptr if the IDs do not correspond to a live RenderViewHost.
@@ -56,7 +54,7 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
   // RenderWidgetHost. Returns nullptr if there is no such RenderViewHost.
   static RenderViewHost* From(RenderWidgetHost* rwh);
 
-  ~RenderViewHost() override {}
+  virtual ~RenderViewHost() {}
 
   // Returns the RenderWidgetHost for this RenderViewHost.
   virtual RenderWidgetHost* GetWidget() = 0;
@@ -86,14 +84,11 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
 
   virtual RenderViewHostDelegate* GetDelegate() = 0;
 
-  virtual SiteInstance* GetSiteInstance() = 0;
-
   // Returns true if the RenderView is active and has not crashed.
   virtual bool IsRenderViewLive() = 0;
 
-  // Notification that a move or resize renderer's containing window has
-  // started.
-  virtual void NotifyMoveOrResizeStarted() = 0;
+  // Write a representation of this object into a trace.
+  virtual void WriteIntoTrace(perfetto::TracedValue context) = 0;
 
  private:
   // This interface should only be implemented inside content.

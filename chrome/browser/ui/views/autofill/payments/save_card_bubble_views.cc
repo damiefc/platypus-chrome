@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/autofill/payments/dialog_view_ids.h"
@@ -31,36 +30,27 @@
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/box_layout_view.h"
 #include "ui/views/style/typography.h"
 
 namespace autofill {
-
-SaveCardBubbleViews::SyncPromoDelegate::SyncPromoDelegate(
-    SaveCardBubbleController* controller,
-    signin_metrics::AccessPoint access_point)
-    : controller_(controller), access_point_(access_point) {
-  DCHECK(controller_);
-}
-
-void SaveCardBubbleViews::SyncPromoDelegate::OnEnableSync(
-    const AccountInfo& account,
-    bool is_default_promo_account) {
-  controller_->OnSyncPromoAccepted(account, access_point_,
-                                   is_default_promo_account);
-}
 
 SaveCardBubbleViews::SaveCardBubbleViews(views::View* anchor_view,
                                          content::WebContents* web_contents,
                                          SaveCardBubbleController* controller)
     : LocationBarBubbleDelegateView(anchor_view, web_contents),
       controller_(controller) {
+  DCHECK(controller);
   SetButtonLabel(ui::DIALOG_BUTTON_OK, controller->GetAcceptButtonText());
   SetButtonLabel(ui::DIALOG_BUTTON_CANCEL, controller->GetDeclineButtonText());
   SetCancelCallback(base::BindOnce(&SaveCardBubbleViews::OnDialogCancelled,
                                    base::Unretained(this)));
   SetAcceptCallback(base::BindOnce(&SaveCardBubbleViews::OnDialogAccepted,
                                    base::Unretained(this)));
-  DCHECK(controller);
+
+  SetShowCloseButton(true);
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
   chrome::RecordDialogCreation(chrome::DialogIdentifier::SAVE_CARD);
 }
 
@@ -94,13 +84,6 @@ void SaveCardBubbleViews::OnDialogCancelled() {
     controller_->OnCancelButton();
 }
 
-gfx::Size SaveCardBubbleViews::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
-}
-
 void SaveCardBubbleViews::AddedToWidget() {
   // Use a custom title container if offering to upload a server card.
   // Done when this view is added to the widget, so the bubble frame
@@ -112,12 +95,8 @@ void SaveCardBubbleViews::AddedToWidget() {
       std::make_unique<TitleWithIconAndSeparatorView>(GetWindowTitle()));
 }
 
-bool SaveCardBubbleViews::ShouldShowCloseButton() const {
-  return true;
-}
-
-base::string16 SaveCardBubbleViews::GetWindowTitle() const {
-  return controller_ ? controller_->GetWindowTitle() : base::string16();
+std::u16string SaveCardBubbleViews::GetWindowTitle() const {
+  return controller_ ? controller_->GetWindowTitle() : std::u16string();
 }
 
 void SaveCardBubbleViews::WindowClosing() {
@@ -137,7 +116,7 @@ views::View* SaveCardBubbleViews::GetFootnoteViewForTesting() {
   return footnote_view_;
 }
 
-const base::string16 SaveCardBubbleViews::GetCardIdentifierString() const {
+const std::u16string SaveCardBubbleViews::GetCardIdentifierString() const {
   return controller_->GetCard().CardIdentifierStringForAutofillDisplay();
 }
 
@@ -145,71 +124,59 @@ SaveCardBubbleViews::~SaveCardBubbleViews() = default;
 
 // Overridden
 std::unique_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
-  std::unique_ptr<views::View> view = std::make_unique<views::View>();
-  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+  ChromeLayoutProvider* const provider = ChromeLayoutProvider::Get();
 
-  view->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(),
-      provider->GetDistanceMetric(views::DISTANCE_UNRELATED_CONTROL_VERTICAL)));
+  auto view = std::make_unique<views::BoxLayoutView>();
+  view->SetOrientation(views::BoxLayout::Orientation::kVertical);
+  view->SetBetweenChildSpacing(
+      provider->GetDistanceMetric(views::DISTANCE_UNRELATED_CONTROL_VERTICAL));
 
   // If applicable, add the upload explanation label.  Appears above the card
   // info.
-  base::string16 explanation = controller_->GetExplanatoryMessage();
+  std::u16string explanation = controller_->GetExplanatoryMessage();
   if (!explanation.empty()) {
-    auto* explanation_label =
-        new views::Label(explanation, views::style::CONTEXT_DIALOG_BODY_TEXT,
-                         views::style::STYLE_SECONDARY);
+    auto* const explanation_label =
+        view->AddChildView(std::make_unique<views::Label>(
+            explanation, views::style::CONTEXT_DIALOG_BODY_TEXT,
+            views::style::STYLE_SECONDARY));
     explanation_label->SetMultiLine(true);
     explanation_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    view->AddChildView(explanation_label);
   }
 
   // Add the card network icon, last four digits and expiration date.
-  auto* description_view = new views::View();
-  views::BoxLayout* box_layout =
-      description_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
-          provider->GetDistanceMetric(
-              views::DISTANCE_RELATED_BUTTON_HORIZONTAL)));
-  view->AddChildView(description_view);
+  auto* description_view =
+      view->AddChildView(std::make_unique<views::BoxLayoutView>());
+  description_view->SetBetweenChildSpacing(
+      provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL));
 
   const CreditCard& card = controller_->GetCard();
-  auto* card_network_icon = new views::ImageView();
+  auto* const card_network_icon =
+      description_view->AddChildView(std::make_unique<views::ImageView>());
   card_network_icon->SetImage(
       ui::ResourceBundle::GetSharedInstance()
           .GetImageNamed(CreditCard::IconResourceId(card.network()))
           .AsImageSkia());
   card_network_icon->SetTooltipText(card.NetworkForDisplay());
-  description_view->AddChildView(card_network_icon);
 
-  views::Label* label = description_view->AddChildView(new views::Label(
-      GetCardIdentifierString(), views::style::CONTEXT_DIALOG_BODY_TEXT,
-      views::style::STYLE_PRIMARY));
-  label->SetMultiLine(true);
-  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  int label_width =
-      GetPreferredSize().width() -
-      card_network_icon->GetPreferredSize().width() -
-      provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
+  auto* const card_identifier_label =
+      description_view->AddChildView(std::make_unique<views::Label>(
+          GetCardIdentifierString(), views::style::CONTEXT_DIALOG_BODY_TEXT,
+          views::style::STYLE_PRIMARY));
+  card_identifier_label->SetMultiLine(true);
+  card_identifier_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+
+  // Flex |card_identifier_label| to fill up remaining space and tail align the
+  // expiry date.
+  description_view->SetFlexForView(card_identifier_label, 1);
 
   if (!card.IsExpired(base::Time::Now())) {
-    // The spacer will stretch to use the available horizontal space in the
-    // dialog, which will end-align the expiration date label.
-    auto* spacer = new views::View();
-    description_view->AddChildView(spacer);
-    box_layout->SetFlexForView(spacer, /*flex=*/1);
-
-    auto* expiration_date_label = new views::Label(
-        card.AbbreviatedExpirationDateForDisplay(false),
-        views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_SECONDARY);
+    auto* expiration_date_label =
+        description_view->AddChildView(std::make_unique<views::Label>(
+            card.AbbreviatedExpirationDateForDisplay(false),
+            views::style::CONTEXT_DIALOG_BODY_TEXT,
+            views::style::STYLE_SECONDARY));
     expiration_date_label->SetID(DialogViewId::EXPIRATION_DATE_LABEL);
-    description_view->AddChildView(expiration_date_label);
-    constexpr int kExpirationDateLabelWidth = 60;
-    label_width -=
-        kExpirationDateLabelWidth +
-        provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
   }
-  label->SetMaximumWidth(label_width);
   return view;
 }
 
@@ -232,13 +199,15 @@ void SaveCardBubbleViews::Init() {
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
   // For server cards, there is an explanation between the title and the
-  // controls; use views::TEXT. For local cards, since there is no explanation,
-  // use views::CONTROL instead.
+  // controls; use DialogContentType::kText. For local cards, since there is no
+  // explanation, use DialogContentType::kControl instead.
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
-      controller_->GetExplanatoryMessage().empty() ? views::CONTROL
-                                                   : views::TEXT,
-      GetDialogButtons() == ui::DIALOG_BUTTON_NONE ? views::TEXT
-                                                   : views::CONTROL));
+      controller_->GetExplanatoryMessage().empty()
+          ? views::DialogContentType::kControl
+          : views::DialogContentType::kText,
+      GetDialogButtons() == ui::DIALOG_BUTTON_NONE
+          ? views::DialogContentType::kText
+          : views::DialogContentType::kControl));
   AddChildView(CreateMainContentView().release());
 }
 

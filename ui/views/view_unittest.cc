@@ -14,10 +14,10 @@
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
 
+#include "base/containers/contains.h"
 #include "base/macros.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -33,6 +33,7 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_types.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/compositor/layer.h"
@@ -55,7 +56,6 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/metadata/metadata_types.h"
 #include "ui/views/paint_info.h"
 #include "ui/views/test/view_metadata_test_utils.h"
 #include "ui/views/test/views_test_base.h"
@@ -65,7 +65,6 @@
 #include "ui/views/widget/root_view.h"
 #include "ui/views/window/dialog_delegate.h"
 
-using base::ASCIIToUTF16;
 using testing::ElementsAre;
 
 namespace {
@@ -1964,9 +1963,9 @@ TEST_F(ViewTest, NotifyEnterExitOnChild) {
 }
 
 TEST_F(ViewTest, Textfield) {
-  const base::string16 kText = ASCIIToUTF16(
-      "Reality is that which, when you stop believing it, doesn't go away.");
-  const base::string16 kExtraText = ASCIIToUTF16("Pretty deep, Philip!");
+  const std::u16string kText =
+      u"Reality is that which, when you stop believing it, doesn't go away.";
+  const std::u16string kExtraText = u"Pretty deep, Philip!";
 
   Widget* widget = new Widget;
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
@@ -1982,7 +1981,7 @@ TEST_F(ViewTest, Textfield) {
   EXPECT_EQ(kText, textfield->GetText());
   textfield->AppendText(kExtraText);
   EXPECT_EQ(kText + kExtraText, textfield->GetText());
-  textfield->SetText(base::string16());
+  textfield->SetText(std::u16string());
   EXPECT_TRUE(textfield->GetText().empty());
 
   // Test selection related methods.
@@ -1998,10 +1997,9 @@ TEST_F(ViewTest, Textfield) {
 
 // Tests that the Textfield view respond appropiately to cut/copy/paste.
 TEST_F(ViewTest, TextfieldCutCopyPaste) {
-  const base::string16 kNormalText = ASCIIToUTF16("Normal");
-  const base::string16 kReadOnlyText = ASCIIToUTF16("Read only");
-  const base::string16 kPasswordText =
-      ASCIIToUTF16("Password! ** Secret stuff **");
+  const std::u16string kNormalText = u"Normal";
+  const std::u16string kReadOnlyText = u"Read only";
+  const std::u16string kPasswordText = u"Password! ** Secret stuff **";
 
   ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
 
@@ -2031,7 +2029,7 @@ TEST_F(ViewTest, TextfieldCutCopyPaste) {
 
   normal->SelectAll(false);
   normal->ExecuteCommand(Textfield::kCut, 0);
-  base::string16 result;
+  std::u16string result;
   clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr,
                       &result);
   EXPECT_EQ(kNormalText, result);
@@ -2286,7 +2284,7 @@ TEST_F(ViewTest, HandleAccelerator) {
 // TODO(themblsha): Bring this up on non-Mac platforms. It currently fails
 // because TestView::AcceleratorPressed() is not called. See
 // http://crbug.com/667757.
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
 // Test that BridgedContentView correctly handles Accelerator key events when
 // subject to OS event dispatch.
 TEST_F(ViewTest, ActivateAcceleratorOnMac) {
@@ -2329,11 +2327,11 @@ TEST_F(ViewTest, ActivateAcceleratorOnMac) {
                              key_down_accelerator.modifiers());
   EXPECT_EQ(view->accelerator_count_map_[key_down_accelerator], 1);
 }
-#endif  // OS_APPLE
+#endif  // OS_MAC
 
 // TODO(crbug.com/667757): these tests were initially commented out when getting
 // aura to run. Figure out if still valuable and either nuke or fix.
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
 TEST_F(ViewTest, ActivateAccelerator) {
   ui::Accelerator return_accelerator(ui::VKEY_RETURN, ui::EF_NONE);
   TestViewWidget test_widget(CreateParams(Widget::InitParams::TYPE_POPUP),
@@ -2415,91 +2413,7 @@ TEST_F(ViewTest, ViewInHiddenWidgetWithAccelerator) {
   EXPECT_FALSE(focus_manager->ProcessAccelerator(return_accelerator));
   EXPECT_EQ(1, view->accelerator_count_map_[return_accelerator]);
 }
-#endif  // OS_APPLE
-
-// TODO(crbug.com/667757): these tests were initially commented out when getting
-// aura to run. Figure out if still valuable and either nuke or fix.
-#if 0
-////////////////////////////////////////////////////////////////////////////////
-// Mouse-wheel message rerouting
-////////////////////////////////////////////////////////////////////////////////
-class ScrollableTestView : public View {
- public:
-  ScrollableTestView() { }
-
-  virtual gfx::Size GetPreferredSize() {
-    return gfx::Size(100, 10000);
-  }
-
-  virtual void Layout() {
-    SizeToPreferredSize();
-  }
-};
-
-class TestViewWithControls : public View {
- public:
-  TestViewWithControls() {
-    text_field_ = new Textfield();
-    AddChildView(text_field_);
-  }
-
-  Textfield* text_field_;
-};
-
-class SimpleWidgetDelegate : public WidgetDelegate {
- public:
-  explicit SimpleWidgetDelegate(View* contents) : contents_(contents) {  }
-
-  virtual void DeleteDelegate() { delete this; }
-
-  virtual View* GetContentsView() { return contents_; }
-
-  virtual Widget* GetWidget() { return contents_->GetWidget(); }
-  virtual const Widget* GetWidget() const { return contents_->GetWidget(); }
-
- private:
-  View* contents_;
-};
-
-// Tests that the mouse-wheel messages are correctly rerouted to the window
-// under the mouse.
-// TODO(jcampan): http://crbug.com/10572 Disabled as it fails on the Vista build
-//                bot.
-// Note that this fails for a variety of reasons:
-// - focused view is apparently reset across window activations and never
-//   properly restored
-// - this test depends on you not having any other window visible open under the
-//   area that it opens the test windows. --beng
-TEST_F(ViewTest, DISABLED_RerouteMouseWheelTest) {
-  TestViewWithControls* view_with_controls = new TestViewWithControls();
-  Widget* window1 = Widget::CreateWindowWithBounds(
-      new SimpleWidgetDelegate(view_with_controls),
-      gfx::Rect(0, 0, 100, 100));
-  window1->Show();
-  ScrollView* scroll_view = new ScrollView();
-  scroll_view->SetContents(new ScrollableTestView());
-  Widget* window2 = Widget::CreateWindowWithBounds(
-      new SimpleWidgetDelegate(scroll_view),
-      gfx::Rect(200, 200, 100, 100));
-  window2->Show();
-  EXPECT_EQ(0, scroll_view->GetVisibleRect().y());
-
-  // Make the window1 active, as this is what it would be in real-world.
-  window1->Activate();
-
-  // Let's send a mouse-wheel message to the different controls and check that
-  // it is rerouted to the window under the mouse (effectively scrolling the
-  // scroll-view).
-
-  // First to the Window's HWND.
-  ::SendMessage(view_with_controls->GetWidget()->GetNativeView(),
-                WM_MOUSEWHEEL, MAKEWPARAM(0, -20), MAKELPARAM(250, 250));
-  EXPECT_EQ(20, scroll_view->GetVisibleRect().y());
-
-  window1->CloseNow();
-  window2->CloseNow();
-}
-#endif  // 0
+#endif  // OS_MAC
 
 ////////////////////////////////////////////////////////////////////////////////
 // Native view hierachy
@@ -2530,8 +2444,10 @@ class ToplevelWidgetObserverView : public View {
   DISALLOW_COPY_AND_ASSIGN(ToplevelWidgetObserverView);
 };
 
-// Test that a view can track the current top level widget by overriding
-// View::ViewHierarchyChanged() and View::NativeViewHierarchyChanged().
+// Test that
+// a) a view can track the current top level widget by overriding
+//    View::ViewHierarchyChanged() and View::NativeViewHierarchyChanged().
+// b) a widget has the correct parent after reparenting.
 TEST_F(ViewTest, NativeViewHierarchyChanged) {
   std::unique_ptr<Widget> toplevel1(new Widget);
   Widget::InitParams toplevel1_params =
@@ -2549,6 +2465,7 @@ TEST_F(ViewTest, NativeViewHierarchyChanged) {
   Widget::InitParams child_params(Widget::InitParams::TYPE_CONTROL);
   child_params.parent = toplevel1->GetNativeView();
   child->Init(std::move(child_params));
+  EXPECT_EQ(toplevel1.get(), child->parent());
 
   auto owning_observer_view = std::make_unique<ToplevelWidgetObserverView>();
   EXPECT_EQ(nullptr, owning_observer_view->toplevel());
@@ -2560,6 +2477,7 @@ TEST_F(ViewTest, NativeViewHierarchyChanged) {
   Widget::ReparentNativeView(child->GetNativeView(),
                              toplevel2->GetNativeView());
   EXPECT_EQ(toplevel2.get(), observer_view->toplevel());
+  EXPECT_EQ(toplevel2.get(), child->parent());
 
   owning_observer_view =
       observer_view->parent()->RemoveChildViewT(observer_view);
@@ -5455,16 +5373,28 @@ TEST_F(ViewTest, TestEnabledPropertyMetadata) {
   auto subscription = test_view->AddEnabledChangedCallback(base::BindRepeating(
       [](bool* enabled_changed) { *enabled_changed = true; },
       &enabled_changed));
-  views::metadata::ClassMetaData* view_metadata = View::MetaData();
+  ui::metadata::ClassMetaData* view_metadata = View::MetaData();
   ASSERT_TRUE(view_metadata);
-  views::metadata::MemberMetaDataBase* enabled_property =
+  ui::metadata::MemberMetaDataBase* enabled_property =
       view_metadata->FindMemberData("Enabled");
   ASSERT_TRUE(enabled_property);
-  base::string16 false_value = base::ASCIIToUTF16("false");
+  std::u16string false_value = u"false";
   enabled_property->SetValueAsString(test_view.get(), false_value);
   EXPECT_TRUE(enabled_changed);
   EXPECT_FALSE(test_view->GetEnabled());
   EXPECT_EQ(enabled_property->GetValueAsString(test_view.get()), false_value);
+}
+
+TEST_F(ViewTest, TestMarginsPropertyMetadata) {
+  auto test_view = std::make_unique<View>();
+  ui::metadata::ClassMetaData* view_metadata = View::MetaData();
+  ASSERT_TRUE(view_metadata);
+  ui::metadata::MemberMetaDataBase* insets_property =
+      view_metadata->FindMemberData("kMarginsKey");
+  ASSERT_TRUE(insets_property);
+  std::u16string insets_value = u"8,8,8,8";
+  insets_property->SetValueAsString(test_view.get(), insets_value);
+  EXPECT_EQ(insets_property->GetValueAsString(test_view.get()), insets_value);
 }
 
 TEST_F(ViewTest, TestEnabledChangedCallback) {

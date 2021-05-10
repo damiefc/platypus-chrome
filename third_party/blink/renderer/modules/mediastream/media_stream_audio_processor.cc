@@ -6,9 +6,11 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -28,6 +30,8 @@
 #include "media/base/limits.h"
 #include "media/webrtc/helpers.h"
 #include "media/webrtc/webrtc_switches.h"
+#include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl.h"
 #include "third_party/blink/renderer/platform/mediastream/aec_dump_agent_impl.h"
@@ -62,17 +66,11 @@ namespace {
 
 using webrtc::AudioProcessing;
 
-bool UseMultiChannelCaptureProcessing() {
-  return base::FeatureList::IsEnabled(
-      features::kWebRtcEnableCaptureMultiChannelApm);
-}
-
 bool Allow48kHzApmProcessing() {
   return base::FeatureList::IsEnabled(
-      features::kWebRtcAllow48kHzProcessingOnArm);
+      ::features::kWebRtcAllow48kHzProcessingOnArm);
 }
 
-constexpr int kAudioProcessingNumberOfChannels = 1;
 constexpr int kBuffersPerSecond = 100;  // 10 ms per buffer.
 
 }  // namespace
@@ -89,6 +87,7 @@ class MediaStreamAudioBus {
   MediaStreamAudioBus(int channels, int frames)
       : bus_(media::AudioBus::Create(channels, frames)),
         channel_ptrs_(new float*[channels]) {
+    bus_->Zero();
     // May be created in the main render thread and used in the audio threads.
     DETACH_FROM_THREAD(thread_checker_);
   }
@@ -147,7 +146,8 @@ class MediaStreamAudioFifo {
       // possible, twice the larger of the two is a (probably) loose upper bound
       // on the FIFO size.
       const int fifo_frames = 2 * std::max(source_frames, destination_frames);
-      fifo_.reset(new media::AudioFifo(destination_channels, fifo_frames));
+      fifo_ =
+          std::make_unique<media::AudioFifo>(destination_channels, fifo_frames);
     }
 
     // May be created in the main render thread and used in the audio threads.
@@ -237,6 +237,7 @@ class MediaStreamAudioFifo {
 
 MediaStreamAudioProcessor::MediaStreamAudioProcessor(
     const blink::AudioProcessingProperties& properties,
+    bool use_capture_multi_channel_processing,
     blink::WebRtcPlayoutDataSource* playout_data_source)
     : render_delay_ms_(0),
       audio_delay_stats_reporter_(kBuffersPerSecond),
@@ -247,10 +248,13 @@ MediaStreamAudioProcessor::MediaStreamAudioProcessor(
       aec_dump_agent_impl_(AecDumpAgentImpl::Create(this)),
       stopped_(false),
       use_capture_multi_channel_processing_(
-          UseMultiChannelCaptureProcessing()) {
+          use_capture_multi_channel_processing) {
   DCHECK(main_thread_runner_);
   DETACH_FROM_THREAD(capture_thread_checker_);
   DETACH_FROM_THREAD(render_thread_checker_);
+  SendLogMessage(
+      String::Format("%s({use_capture_multi_channel_processing=%s})", __func__,
+                     use_capture_multi_channel_processing ? "true" : "false"));
 
   InitializeAudioProcessingModule(properties);
 }
@@ -288,6 +292,7 @@ void MediaStreamAudioProcessor::PushCaptureData(
 
 bool MediaStreamAudioProcessor::ProcessAndConsumeData(
     int volume,
+    int num_preferred_channels,
     bool key_pressed,
     media::AudioBus** processed_data,
     base::TimeDelta* capture_delay,
@@ -308,9 +313,10 @@ bool MediaStreamAudioProcessor::ProcessAndConsumeData(
   *new_volume = 0;
   if (audio_processing_) {
     output_bus = output_bus_.get();
-    *new_volume = ProcessData(process_bus->channel_ptrs(),
-                              process_bus->bus()->frames(), *capture_delay,
-                              volume, key_pressed, output_bus->channel_ptrs());
+    *new_volume =
+        ProcessData(process_bus->channel_ptrs(), process_bus->bus()->frames(),
+                    *capture_delay, volume, key_pressed, num_preferred_channels,
+                    output_bus->channel_ptrs());
   }
 
   // Swap channels before interleaving the data.
@@ -353,6 +359,17 @@ const media::AudioParameters& MediaStreamAudioProcessor::InputFormat() const {
 
 const media::AudioParameters& MediaStreamAudioProcessor::OutputFormat() const {
   return output_format_;
+}
+
+void MediaStreamAudioProcessor::SetOutputWillBeMuted(bool muted) {
+  DCHECK(main_thread_runner_->BelongsToCurrentThread());
+  DCHECK(base::FeatureList::IsEnabled(
+      features::kMinimizeAudioProcessingForUnusedOutput));
+  SendLogMessage(
+      String::Format("%s({muted=%s})", __func__, muted ? "true" : "false"));
+  if (audio_processing_) {
+    audio_processing_->set_output_will_be_muted(muted);
+  }
 }
 
 void MediaStreamAudioProcessor::OnStartDump(base::File dump_file) {
@@ -492,6 +509,7 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
     const blink::AudioProcessingProperties& properties) {
   DCHECK(main_thread_runner_->BelongsToCurrentThread());
   DCHECK(!audio_processing_);
+  SendLogMessage(String::Format("%s()", __func__));
 
   // Note: The audio mirroring constraint (i.e., swap left and right channels)
   // is handled within this MediaStreamAudioProcessor and does not, by itself,
@@ -535,7 +553,7 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
     auto* experimental_agc =
         new webrtc::ExperimentalAgc(true, startup_min_volume.value_or(0));
     experimental_agc->digital_adaptive_disabled =
-        base::FeatureList::IsEnabled(features::kWebRtcHybridAgc);
+        base::FeatureList::IsEnabled(::features::kWebRtcHybridAgc);
 
     config.Set<webrtc::ExperimentalAgc>(experimental_agc);
 #if BUILDFLAG(IS_CHROMECAST)
@@ -581,30 +599,55 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
 
   if (properties.goog_auto_gain_control ||
       properties.goog_experimental_auto_gain_control) {
-    bool use_hybrid_agc = false;
-    base::Optional<bool> use_peaks_not_rms;
-    base::Optional<int> saturation_margin;
-    if (properties.goog_experimental_auto_gain_control) {
-      use_hybrid_agc = base::FeatureList::IsEnabled(features::kWebRtcHybridAgc);
-      if (use_hybrid_agc) {
-        DCHECK(properties.goog_auto_gain_control)
-            << "Cannot enable hybrid AGC when AGC is disabled.";
-      }
-      use_peaks_not_rms = base::GetFieldTrialParamByFeatureAsBool(
-          features::kWebRtcHybridAgc, "use_peaks_not_rms", false);
-      saturation_margin = base::GetFieldTrialParamByFeatureAsInt(
-          features::kWebRtcHybridAgc, "saturation_margin", -1);
+    base::Optional<blink::AdaptiveGainController2Properties> agc2_properties;
+    if (properties.goog_experimental_auto_gain_control &&
+        base::FeatureList::IsEnabled(::features::kWebRtcHybridAgc)) {
+      DCHECK(properties.goog_auto_gain_control)
+          << "Cannot enable hybrid AGC when AGC is disabled.";
+      agc2_properties = blink::AdaptiveGainController2Properties{};
+      agc2_properties->vad_probability_attack =
+          base::GetFieldTrialParamByFeatureAsDouble(
+              ::features::kWebRtcHybridAgc, "vad_probability_attack", 0.3);
+      agc2_properties->use_peaks_not_rms =
+          base::GetFieldTrialParamByFeatureAsBool(::features::kWebRtcHybridAgc,
+                                                  "use_peaks_not_rms", false);
+      agc2_properties->level_estimator_speech_frames_threshold =
+          base::GetFieldTrialParamByFeatureAsInt(
+              ::features::kWebRtcHybridAgc,
+              "level_estimator_speech_frames_threshold", 6);
+      agc2_properties->initial_saturation_margin_db =
+          base::GetFieldTrialParamByFeatureAsInt(
+              ::features::kWebRtcHybridAgc, "initial_saturation_margin", 20);
+      agc2_properties->extra_saturation_margin_db =
+          base::GetFieldTrialParamByFeatureAsInt(::features::kWebRtcHybridAgc,
+                                                 "extra_saturation_margin", 5);
+      agc2_properties->gain_applier_speech_frames_threshold =
+          base::GetFieldTrialParamByFeatureAsInt(
+              ::features::kWebRtcHybridAgc,
+              "gain_applier_speech_frames_threshold", 6);
+      agc2_properties->max_gain_change_db_per_second =
+          base::GetFieldTrialParamByFeatureAsInt(
+              ::features::kWebRtcHybridAgc, "max_gain_change_db_per_second", 3);
+      agc2_properties->max_output_noise_level_dbfs =
+          base::GetFieldTrialParamByFeatureAsInt(
+              ::features::kWebRtcHybridAgc, "max_output_noise_level_dbfs", -55);
+      agc2_properties->sse2_allowed = base::GetFieldTrialParamByFeatureAsBool(
+          ::features::kWebRtcHybridAgc, "sse2_allowed", true);
+      agc2_properties->avx2_allowed = base::GetFieldTrialParamByFeatureAsBool(
+          ::features::kWebRtcHybridAgc, "avx2_allowed", true);
+      agc2_properties->neon_allowed = base::GetFieldTrialParamByFeatureAsBool(
+          ::features::kWebRtcHybridAgc, "neon_allowed", true);
     }
     blink::ConfigAutomaticGainControl(
-        &apm_config, properties.goog_auto_gain_control,
-        properties.goog_experimental_auto_gain_control, use_hybrid_agc,
-        use_peaks_not_rms, saturation_margin, gain_control_compression_gain_db);
+        properties.goog_auto_gain_control,
+        properties.goog_experimental_auto_gain_control, agc2_properties,
+        gain_control_compression_gain_db, apm_config);
   }
 
   if (goog_typing_detection) {
     // TODO(xians): Remove this |typing_detector_| after the typing suppression
     // is enabled by default.
-    typing_detector_.reset(new webrtc::TypingDetection());
+    typing_detector_ = std::make_unique<webrtc::TypingDetection>();
     blink::EnableTypingDetection(&apm_config, typing_detector_.get());
   }
 
@@ -622,6 +665,9 @@ void MediaStreamAudioProcessor::InitializeCaptureFifo(
     const media::AudioParameters& input_format) {
   DCHECK(main_thread_runner_->BelongsToCurrentThread());
   DCHECK(input_format.IsValid());
+  SendLogMessage(String::Format("%s({input_format=[%s]})", __func__,
+                                input_format.AsHumanReadableString().c_str()));
+
   input_format_ = input_format;
 
   // TODO(crbug/881275): For now, we assume fixed parameters for the output when
@@ -639,26 +685,43 @@ void MediaStreamAudioProcessor::InitializeCaptureFifo(
 #endif  // BUILDFLAG(IS_CHROMECAST)
                                      : input_format.sample_rate();
 
-  media::ChannelLayout output_channel_layout;
-  if (!audio_processing_ || use_capture_multi_channel_processing_) {
-    output_channel_layout = input_format.channel_layout();
-  } else {
-    output_channel_layout =
-        media::GuessChannelLayout(kAudioProcessingNumberOfChannels);
-  }
-
   // The output channels from the fifo is normally the same as input.
   int fifo_output_channels = input_format.channels();
 
-  // Special case for if we have a keyboard mic channel on the input and no
-  // audio processing is used. We will then have the fifo strip away that
-  // channel. So we use stereo as output layout, and also change the output
-  // channels for the fifo.
-  if (input_format.channel_layout() ==
-          media::CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC &&
-      !audio_processing_) {
-    output_channel_layout = media::CHANNEL_LAYOUT_STEREO;
-    fifo_output_channels = ChannelLayoutToChannelCount(output_channel_layout);
+  media::ChannelLayout output_channel_layout;
+  if (!audio_processing_) {
+    if (input_format.channel_layout() ==
+        media::CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC) {
+      // Special case for if we have a keyboard mic channel on the input and no
+      // audio processing is used. We will then have the fifo strip away that
+      // channel. So we use stereo as output layout, and also change the output
+      // channels for the fifo.
+      output_channel_layout = media::CHANNEL_LAYOUT_STEREO;
+      fifo_output_channels = ChannelLayoutToChannelCount(output_channel_layout);
+    } else {
+      output_channel_layout = input_format.channel_layout();
+    }
+  } else if (use_capture_multi_channel_processing_) {
+    // The number of output channels is equal to the number of input channels.
+    // If the media stream audio processor receives stereo input it will output
+    // stereo. To reduce computational complexity, APM will not perform full
+    // multichannel processing unless any sink requests more than one channel.
+    // If the input is multichannel but the sinks are not interested in more
+    // than one channel, APM will internally downmix the signal to mono and
+    // process it. The processed mono signal will then be upmixed to same number
+    // of channels as the input before leaving the media stream audio processor.
+    // If a sink later requests stereo, APM will start performing true stereo
+    // processing. There will be no need to change the output format.
+
+    // The keyboard mic channel shall not be part of the output.
+    if (input_format.channel_layout() ==
+        media::CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC) {
+      output_channel_layout = media::CHANNEL_LAYOUT_STEREO;
+    } else {
+      output_channel_layout = input_format.channel_layout();
+    }
+  } else {
+    output_channel_layout = media::CHANNEL_LAYOUT_MONO;
   }
 
   // webrtc::AudioProcessing requires a 10 ms chunk size. We use this native
@@ -681,15 +744,25 @@ void MediaStreamAudioProcessor::InitializeCaptureFifo(
   output_format_ = media::AudioParameters(
       media::AudioParameters::AUDIO_PCM_LOW_LATENCY, output_channel_layout,
       output_sample_rate, output_frames);
+  if (output_channel_layout == media::CHANNEL_LAYOUT_DISCRETE) {
+    // Explicitly set number of channels for discrete channel layouts.
+    output_format_.set_channels_for_discrete(input_format.channels());
+  }
+  SendLogMessage(
+      String::Format("%s => (output_format=[%s])", __func__,
+                     output_format_.AsHumanReadableString().c_str()));
+  SendLogMessage(
+      String::Format("%s => (FIFO: processing_frames=%d, output_channels=%d)",
+                     __func__, processing_frames, fifo_output_channels));
 
-  capture_fifo_.reset(
-      new MediaStreamAudioFifo(input_format.channels(), fifo_output_channels,
-                               input_format.frames_per_buffer(),
-                               processing_frames, input_format.sample_rate()));
+  capture_fifo_ = std::make_unique<MediaStreamAudioFifo>(
+      input_format.channels(), fifo_output_channels,
+      input_format.frames_per_buffer(), processing_frames,
+      input_format.sample_rate());
 
   if (audio_processing_) {
-    output_bus_.reset(
-        new MediaStreamAudioBus(output_format_.channels(), output_frames));
+    output_bus_ = std::make_unique<MediaStreamAudioBus>(
+        output_format_.channels(), output_frames);
   }
 }
 
@@ -698,6 +771,7 @@ int MediaStreamAudioProcessor::ProcessData(const float* const* process_ptrs,
                                            base::TimeDelta capture_delay,
                                            int volume,
                                            bool key_pressed,
+                                           int num_preferred_channels,
                                            float* const* output_ptrs) {
   DCHECK(audio_processing_);
   DCHECK_CALLED_ON_VALID_THREAD(capture_thread_checker_);
@@ -726,13 +800,46 @@ int MediaStreamAudioProcessor::ProcessData(const float* const* process_ptrs,
   webrtc::AudioProcessing* ap = audio_processing_.get();
   ap->set_stream_delay_ms(total_delay_ms);
 
+  // Keep track of the maximum number of preferred channels. The number of
+  // output channels of APM can increase if preferred by the sinks, but
+  // never decrease.
+  max_num_preferred_output_channels_ =
+      std::max(max_num_preferred_output_channels_, num_preferred_channels);
+
   DCHECK_LE(volume, WebRtcAudioDeviceImpl::kMaxVolumeLevel);
   ap->set_stream_analog_level(volume);
   ap->set_stream_key_pressed(key_pressed);
 
+  // Depending on how many channels the sinks prefer, the number of APM output
+  // channels is allowed to vary between 1 and the number of channels of the
+  // output format. The output format in turn depends on the input format.
+  // Example: With a stereo mic the output format will have 2 channels, and APM
+  // will produce 1 or 2 output channels depending on the sinks.
+  int num_apm_output_channels =
+      std::min(max_num_preferred_output_channels_, output_format_.channels());
+
+  // Limit number of apm output channels to 2 to avoid potential problems with
+  // discrete channel mapping.
+  num_apm_output_channels = std::min(num_apm_output_channels, 2);
+
+  CHECK_GE(num_apm_output_channels, 1);
+  const webrtc::StreamConfig apm_output_config = webrtc::StreamConfig(
+      output_format_.sample_rate(), num_apm_output_channels, false);
+
   int err = ap->ProcessStream(process_ptrs, CreateStreamConfig(input_format_),
-                              CreateStreamConfig(output_format_), output_ptrs);
+                              apm_output_config, output_ptrs);
   DCHECK_EQ(err, 0) << "ProcessStream() error: " << err;
+
+  // Upmix if the number of channels processed by APM is less than the number
+  // specified in the output format. Channels above stereo will be set to zero.
+  if (num_apm_output_channels < output_format_.channels()) {
+    if (num_apm_output_channels == 1) {
+      // The right channel is a copy of the left channel. Remaining channels
+      // have already been set to zero at initialization.
+      memcpy(&output_ptrs[1][0], &output_ptrs[0][0],
+             output_format_.frames_per_buffer() * sizeof(output_ptrs[0][0]));
+    }
+  }
 
   if (typing_detector_) {
     // Ignore remote tracks to avoid unnecessary stats computation.
@@ -756,6 +863,13 @@ int MediaStreamAudioProcessor::ProcessData(const float* const* process_ptrs,
 
 void MediaStreamAudioProcessor::UpdateAecStats() {
   DCHECK(main_thread_runner_->BelongsToCurrentThread());
+}
+
+void MediaStreamAudioProcessor::SendLogMessage(const WTF::String& message) {
+  WebRtcLogMessage(String::Format("MSAP::%s [this=0x%" PRIXPTR "]",
+                                  message.Utf8().c_str(),
+                                  reinterpret_cast<uintptr_t>(this))
+                       .Utf8());
 }
 
 }  // namespace blink

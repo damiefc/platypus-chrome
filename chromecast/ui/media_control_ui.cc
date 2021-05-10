@@ -5,13 +5,15 @@
 #include "chromecast/ui/media_control_ui.h"
 
 #include <algorithm>
+#include <string>
 
 #include "base/bind.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_checker.h"
 #include "chromecast/graphics/cast_window_manager.h"
 #include "ui/aura/window.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -37,8 +39,11 @@ void SetButtonImage(views::ImageButton* button, const gfx::VectorIcon& icon) {
 // A view that invokes an |on_tapped| closure whenever it detects a tap gesture.
 class TouchView : public views::View {
  public:
+  METADATA_HEADER(TouchView);
   explicit TouchView(base::RepeatingClosure on_tapped)
       : on_tapped_(std::move(on_tapped)) {}
+  TouchView(const TouchView&) = delete;
+  TouchView& operator=(const TouchView&) = delete;
 
  private:
   // views::View implementation:
@@ -49,9 +54,10 @@ class TouchView : public views::View {
   }
 
   base::RepeatingClosure on_tapped_;
-
-  DISALLOW_COPY_AND_ASSIGN(TouchView);
 };
+
+BEGIN_METADATA(TouchView, views::View)
+END_METADATA
 
 }  // namespace
 
@@ -80,21 +86,25 @@ MediaControlUi::MediaControlUi(CastWindowManager* window_manager)
 
   // Buttons.
   btn_previous_ = view_->AddChildView(
-      CreateImageButton(vector_icons::kPreviousIcon, kButtonSmallHeight));
+      CreateImageButton(mojom::MediaCommand::PREVIOUS,
+                        vector_icons::kPreviousIcon, kButtonSmallHeight));
   btn_play_pause_ = view_->AddChildView(
-      CreateImageButton(vector_icons::kPlayIcon, kButtonBigHeight));
-  btn_next_ = view_->AddChildView(
-      CreateImageButton(vector_icons::kNextIcon, kButtonSmallHeight));
+      CreateImageButton(mojom::MediaCommand::TOGGLE_PLAY_PAUSE,
+                        vector_icons::kPlayIcon, kButtonBigHeight));
+  btn_next_ = view_->AddChildView(CreateImageButton(
+      mojom::MediaCommand::NEXT, vector_icons::kNextIcon, kButtonSmallHeight));
   btn_replay30_ = view_->AddChildView(
-      CreateImageButton(vector_icons::kBack30Icon, kButtonSmallHeight));
+      CreateImageButton(mojom::MediaCommand::REPLAY_30_SECONDS,
+                        vector_icons::kBack30Icon, kButtonSmallHeight));
   btn_forward30_ = view_->AddChildView(
-      CreateImageButton(vector_icons::kForward30Icon, kButtonSmallHeight));
+      CreateImageButton(mojom::MediaCommand::FORWARD_30_SECONDS,
+                        vector_icons::kForward30Icon, kButtonSmallHeight));
 
   // Labels.
   lbl_title_ =
-      view_->AddChildView(std::make_unique<views::Label>(base::string16()));
+      view_->AddChildView(std::make_unique<views::Label>(std::u16string()));
   lbl_meta_ =
-      view_->AddChildView(std::make_unique<views::Label>(base::string16()));
+      view_->AddChildView(std::make_unique<views::Label>(std::u16string()));
 
   // Progress Bar.
   progress_bar_ = view_->AddChildView(std::make_unique<views::ProgressBar>());
@@ -213,26 +223,10 @@ void MediaControlUi::UpdateMediaTime() {
   }
 }
 
-void MediaControlUi::ButtonPressed(views::Button* sender,
-                                   const ui::Event& event) {
+void MediaControlUi::ButtonPressed(mojom::MediaCommand command) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!client_) {
-    return;
-  }
-
-  if (sender == btn_previous_) {
-    client_->Execute(mojom::MediaCommand::PREVIOUS);
-  } else if (sender == btn_play_pause_) {
-    client_->Execute(mojom::MediaCommand::TOGGLE_PLAY_PAUSE);
-  } else if (sender == btn_next_) {
-    client_->Execute(mojom::MediaCommand::NEXT);
-  } else if (sender == btn_replay30_) {
-    client_->Execute(mojom::MediaCommand::REPLAY_30_SECONDS);
-  } else if (sender == btn_forward30_) {
-    client_->Execute(mojom::MediaCommand::FORWARD_30_SECONDS);
-  } else {
-    NOTREACHED();
-  }
+  if (client_)
+    client_->Execute(command);
 }
 
 void MediaControlUi::OnTapped() {
@@ -241,14 +235,17 @@ void MediaControlUi::OnTapped() {
 }
 
 std::unique_ptr<views::ImageButton> MediaControlUi::CreateImageButton(
+    mojom::MediaCommand command,
     const gfx::VectorIcon& icon,
     int height) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  auto button = std::make_unique<views::ImageButton>(this);
+  auto button = std::make_unique<views::ImageButton>(base::BindRepeating(
+      &MediaControlUi::ButtonPressed, base::Unretained(this), command));
   button->SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
   button->SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
   button->SetSize(gfx::Size(height, height));
+  button->SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
   SetButtonImage(button.get(), icon);
 
   return button;

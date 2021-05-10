@@ -6,10 +6,17 @@
 #include "base/feature_list.h"
 
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/policy/browser_signin_policy_handler.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
+#include "chrome/browser/profiles/profiles_state.h"
+#include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/signin_util.h"
+#include "chrome/browser/ui/managed_ui.h"
+#include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/signin/profile_creation_customize_themes_handler.h"
 #include "chrome/browser/ui/webui/signin/profile_picker_handler.h"
@@ -21,10 +28,14 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/profile_picker_resources.h"
 #include "chrome/grit/profile_picker_resources_map.h"
+#include "components/policy/core/common/policy_map.h"
+#include "components/policy/core/common/policy_service.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/webui/mojo_web_ui_controller.h"
 #include "url/gurl.h"
@@ -34,41 +45,76 @@ namespace {
 // Miniumum size for the picker UI.
 constexpr int kMinimumPickerSizePx = 620;
 
-bool IsProfileCreationAllowed() {
-  PrefService* service = g_browser_process->local_state();
-  DCHECK(service);
-  return service->GetBoolean(prefs::kBrowserAddPersonEnabled);
+bool IsBrowserSigninAllowed() {
+  policy::PolicyService* policy_service = g_browser_process->policy_service();
+  DCHECK(policy_service);
+  const policy::PolicyMap& policies = policy_service->GetPolicies(
+      policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME, std::string()));
+
+  const base::Value* browser_signin_value =
+      policies.GetValue(policy::key::kBrowserSignin);
+
+  if (!browser_signin_value)
+    return true;
+
+  DCHECK(browser_signin_value->is_int());
+  return static_cast<policy::BrowserSigninMode>(
+             browser_signin_value->GetInt()) !=
+         policy::BrowserSigninMode::kDisabled;
 }
 
-bool IsGuestModeEnabled() {
-  PrefService* service = g_browser_process->local_state();
-  DCHECK(service);
-  return service->GetBoolean(prefs::kBrowserGuestModeEnabled);
+bool IsSignInProfileCreationFlowSupported() {
+  return AccountConsistencyModeManager::IsDiceSignInAllowed() &&
+         base::FeatureList::IsEnabled(features::kSignInProfileCreation);
+}
+
+std::string GetManagedDeviceDisclaimer() {
+  if (!base::FeatureList::IsEnabled(features::kSignInProfileCreationEnterprise))
+    return std::string();
+  base::Optional<std::string> device_manager =
+      chrome::GetDeviceManagerIdentity();
+  if (!device_manager)
+    return std::string();
+  if (device_manager->empty()) {
+    return l10n_util::GetStringUTF8(
+        IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_DEVICE_MANAGED_DESCRIPTION);
+  }
+  return l10n_util::GetStringFUTF8(
+      IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_DEVICE_MANAGED_BY_DESCRIPTION,
+      base::UTF8ToUTF16(*device_manager));
 }
 
 void AddStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
-      {"mainViewTitle", IDS_PROFILE_PICKER_MAIN_VIEW_TITLE},
       {"mainViewSubtitle", IDS_PROFILE_PICKER_MAIN_VIEW_SUBTITLE},
       {"addSpaceButton", IDS_PROFILE_PICKER_ADD_SPACE_BUTTON},
       {"askOnStartupCheckboxText", IDS_PROFILE_PICKER_ASK_ON_STARTUP},
       {"browseAsGuestButton", IDS_PROFILE_PICKER_BROWSE_AS_GUEST_BUTTON},
+      {"needsSigninPrompt",
+       IDS_PROFILE_PICKER_PROFILE_CARD_NEEDS_SIGNIN_PROMPT},
+      {"profileCardButtonLabel", IDS_PROFILE_PICKER_PROFILE_CARD_LABEL},
+      {"profileCardInputLabel", IDS_PROFILE_PICKER_PROFILE_CARD_INPUT_LABEL},
       {"menu", IDS_MENU},
-      {"profileMenuName", IDS_PROFILE_PICKER_PROFILE_MENU_BUTTON_NAME},
+      {"cancel", IDS_CANCEL},
+      {"profileMenuName", IDS_SETTINGS_MORE_ACTIONS},
       {"profileMenuRemoveText", IDS_PROFILE_PICKER_PROFILE_MENU_REMOVE_TEXT},
       {"profileMenuCustomizeText",
        IDS_PROFILE_PICKER_PROFILE_MENU_CUSTOMIZE_TEXT},
       {"removeWarningLocalProfile",
        IDS_PROFILE_PICKER_REMOVE_WARNING_LOCAL_PROFILE},
+      {"removeWarningLocalProfileTitle",
+       IDS_PROFILE_PICKER_REMOVE_WARNING_LOCAL_PROFILE_TITLE},
       {"removeWarningSignedInProfile",
        IDS_PROFILE_PICKER_REMOVE_WARNING_SIGNED_IN_PROFILE},
+      {"removeWarningSignedInProfileTitle",
+       IDS_PROFILE_PICKER_REMOVE_WARNING_SIGNED_IN_PROFILE_TITLE},
       {"removeWarningHistory", IDS_PROFILE_PICKER_REMOVE_WARNING_HISTORY},
       {"removeWarningPasswords", IDS_PROFILE_PICKER_REMOVE_WARNING_PASSWORDS},
       {"removeWarningBookmarks", IDS_PROFILE_PICKER_REMOVE_WARNING_BOOKMARKS},
       {"removeWarningAutofill", IDS_PROFILE_PICKER_REMOVE_WARNING_AUTOFILL},
       {"removeWarningCalculating",
        IDS_PROFILE_PICKER_REMOVE_WARNING_CALCULATING},
-      {"backButtonLabel", IDS_PROFILE_PICKER_BACK_BUTTON_LABEL},
+      {"backButtonAriaLabel", IDS_PROFILE_PICKER_BACK_BUTTON_ARIA_LABEL},
       {"profileTypeChoiceTitle",
        IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_PROFILE_TYPE_CHOICE_TITLE},
       {"profileTypeChoiceSubtitle",
@@ -79,6 +125,8 @@ void AddStrings(content::WebUIDataSource* html_source) {
        IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_NOT_NOW_BUTTON_LABEL},
       {"localProfileCreationTitle",
        IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_LOCAL_PROFILE_CREATION_TITLE},
+      {"localProfileCreationCustomizeAvatarLabel",
+       IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_LOCAL_PROFILE_CREATION_CUSTOMIZE_AVATAR_BUTTON_LABEL},
       {"localProfileCreationThemeText",
        IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_LOCAL_PROFILE_CREATION_THEME_TEXT},
       {"createProfileNamePlaceholder",
@@ -87,6 +135,15 @@ void AddStrings(content::WebUIDataSource* html_source) {
        IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_LOCAL_PROFILE_CREATION_SHORTCUT_TEXT},
       {"createProfileConfirm",
        IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_LOCAL_PROFILE_CREATION_DONE},
+      {"defaultAvatarLabel", IDS_DEFAULT_AVATAR_LABEL_26},
+      {"selectAnAvatarDialogTitle",
+       IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_LOCAL_PROFILE_CREATION_AVATAR_TEXT},
+      {"selectAvatarDoneButtonLabel",
+       IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_LOCAL_PROFILE_CREATION_AVATAR_DONE},
+      {"profileSwitchTitle", IDS_PROFILE_PICKER_PROFILE_SWITCH_TITLE},
+      {"profileSwitchSubtitle", IDS_PROFILE_PICKER_PROFILE_SWITCH_SUBTITLE},
+      {"switchButtonLabel",
+       IDS_PROFILE_PICKER_PROFILE_SWITCH_SWITCH_BUTTON_LABEL},
 
       // Color picker.
       {"colorPickerLabel", IDS_NTP_CUSTOMIZE_COLOR_PICKER_LABEL},
@@ -94,26 +151,45 @@ void AddStrings(content::WebUIDataSource* html_source) {
       {"thirdPartyThemeDescription", IDS_NTP_CUSTOMIZE_3PT_THEME_DESC},
       {"uninstallThirdPartyThemeButton", IDS_NTP_CUSTOMIZE_3PT_THEME_UNINSTALL},
   };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  html_source->AddLocalizedStrings(kLocalizedStrings);
+  html_source->AddLocalizedString("mainViewTitle",
+                                  ProfilePicker::Shown()
+                                      ? IDS_PROFILE_PICKER_MAIN_VIEW_TITLE_V2
+                                      : IDS_PROFILE_PICKER_MAIN_VIEW_TITLE);
+
+  ProfilePicker::AvailabilityOnStartup availability_on_startup =
+      static_cast<ProfilePicker::AvailabilityOnStartup>(
+          g_browser_process->local_state()->GetInteger(
+              prefs::kBrowserProfilePickerAvailabilityOnStartup));
+  bool ask_on_startup_allowed =
+      availability_on_startup ==
+          ProfilePicker::AvailabilityOnStartup::kEnabled &&
+      base::FeatureList::IsEnabled(kEnableProfilePickerOnStartupFeature);
   html_source->AddBoolean("askOnStartup",
                           g_browser_process->local_state()->GetBoolean(
                               prefs::kBrowserShowProfilePickerOnStartup));
-  html_source->AddBoolean(
-      "signInProfileCreationFlowSupported",
-      base::FeatureList::IsEnabled(features::kProfilesUIRevamp));
+  html_source->AddBoolean("signInProfileCreationFlowSupported",
+                          IsSignInProfileCreationFlowSupported());
 
   html_source->AddString("minimumPickerSize",
                          base::StringPrintf("%ipx", kMinimumPickerSizePx));
 
+  html_source->AddInteger("placeholderAvatarIndex",
+                          profiles::GetPlaceholderAvatarIndex());
+
+  html_source->AddString("managedDeviceDisclaimer",
+                         GetManagedDeviceDisclaimer());
+
   // Add policies.
+  html_source->AddBoolean("isBrowserSigninAllowed", IsBrowserSigninAllowed());
   html_source->AddBoolean("isForceSigninEnabled",
                           signin_util::IsForceSigninEnabled());
-  html_source->AddBoolean("isGuestModeEnabled", IsGuestModeEnabled());
+  html_source->AddBoolean("isGuestModeEnabled", profiles::IsGuestModeEnabled());
   html_source->AddBoolean("isProfileCreationAllowed",
-                          IsProfileCreationAllowed());
+                          profiles::IsProfileCreationAllowed());
   html_source->AddBoolean("profileShortcutsEnabled",
                           ProfileShortcutManager::IsFeatureEnabled());
-  // TODO(crbug.com/1063856): Check if |BrowserSignin| device policy exists.
+  html_source->AddBoolean("isAskOnStartupAllowed", ask_on_startup_allowed);
 }
 
 }  // namespace
@@ -127,50 +203,19 @@ ProfilePickerUI::ProfilePickerUI(content::WebUI* web_ui)
 
   std::unique_ptr<ProfilePickerHandler> handler =
       std::make_unique<ProfilePickerHandler>();
-  ProfilePickerHandler* raw_handler = handler.get();
+  profile_picker_handler_ = handler.get();
   web_ui->AddMessageHandler(std::move(handler));
 
   if (web_ui->GetWebContents()->GetURL().query() ==
       chrome::kChromeUIProfilePickerStartupQuery) {
-    raw_handler->EnableStartupMetrics();
+    profile_picker_handler_->EnableStartupMetrics();
   }
 
-  std::string generated_path =
-      "@out_folder@/gen/chrome/browser/resources/signin/profile_picker/";
-
   AddStrings(html_source);
-#if BUILDFLAG(OPTIMIZE_WEBUI)
-  webui::SetupBundledWebUIDataSource(
-      html_source, "profile_picker.js",
-      IDR_PROFILE_PICKER_PROFILE_PICKER_ROLLUP_JS,
-      IDR_PROFILE_PICKER_PROFILE_PICKER_HTML);
-  html_source->AddResourcePath("lazy_load.js",
-                               IDR_PROFILE_PICKER_LAZY_LOAD_ROLLUP_JS);
-  html_source->AddResourcePath("shared.rollup.js",
-                               IDR_PROFILE_PICKER_SHARED_ROLLUP_JS);
-  html_source->AddResourcePath("images/left_banner_image.svg",
-                               IDR_PROFILE_PICKER_IMAGES_LEFT_BANNER_IMAGE);
-  html_source->AddResourcePath("images/right_banner_image.svg",
-                               IDR_PROFILE_PICKER_IMAGES_RIGHT_BANNER_IMAGE);
-  html_source->AddResourcePath(
-      "images/dark_mode_left_banner_image.svg",
-      IDR_PROFILE_PICKER_IMAGES_DARK_MODE_LEFT_BANNER_IMAGE);
-  html_source->AddResourcePath(
-      "images/dark_mode_right_banner_image.svg",
-      IDR_PROFILE_PICKER_IMAGES_DARK_MODE_RIGHT_BANNER_IMAGE);
-  html_source->AddResourcePath(
-      "profile_creation_flow/images/banner_light_image.svg",
-      IDR_PROFILE_PICKER_PROFILE_CREATION_FLOW_IMAGES_BANNER_LIGHT_IMAGE);
-  html_source->AddResourcePath(
-      "profile_creation_flow/images/banner_dark_image.svg",
-      IDR_PROFILE_PICKER_PROFILE_CREATION_FLOW_IMAGES_BANNER_DARK_IMAGE);
-#else
-  html_source->AddResourcePath("signin_icons.js", IDR_SIGNIN_ICONS_JS);
   webui::SetupWebUIDataSource(
       html_source,
       base::make_span(kProfilePickerResources, kProfilePickerResourcesSize),
-      generated_path, IDR_PROFILE_PICKER_PROFILE_PICKER_HTML);
-#endif
+      IDR_PROFILE_PICKER_PROFILE_PICKER_HTML);
   content::WebUIDataSource::Add(profile, html_source);
 }
 
@@ -189,6 +234,10 @@ void ProfilePickerUI::BindInterface(
     customize_themes_factory_receiver_.reset();
   }
   customize_themes_factory_receiver_.Bind(std::move(pending_receiver));
+}
+
+ProfilePickerHandler* ProfilePickerUI::GetProfilePickerHandlerForTesting() {
+  return profile_picker_handler_;
 }
 
 void ProfilePickerUI::CreateCustomizeThemesHandler(

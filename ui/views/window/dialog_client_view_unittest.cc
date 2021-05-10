@@ -4,12 +4,13 @@
 
 #include "ui/views/window/dialog_client_view.h"
 
+#include <algorithm>
 #include <map>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/macros.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "ui/base/ui_base_types.h"
@@ -21,6 +22,7 @@
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/metrics.h"
 #include "ui/views/style/platform_style.h"
+#include "ui/views/test/button_test_api.h"
 #include "ui/views/test/test_layout_provider.h"
 #include "ui/views/test/test_views.h"
 #include "ui/views/test/widget_test.h"
@@ -45,7 +47,7 @@ class DialogClientViewTest : public test::WidgetTest,
 
     // Note: not using DialogDelegate::CreateDialogWidget(..), since that can
     // alter the frame type according to the platform.
-    widget_ = new views::Widget;
+    widget_ = new Widget;
     Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
     params.delegate = this;
     widget_->Init(std::move(params));
@@ -93,8 +95,9 @@ class DialogClientViewTest : public test::WidgetTest,
     DialogModelChanged();
   }
 
-  void SetDialogButtonLabel(ui::DialogButton button, const std::string& label) {
-    DialogDelegate::SetButtonLabel(button, base::UTF8ToUTF16(label));
+  void SetDialogButtonLabel(ui::DialogButton button,
+                            const std::u16string& label) {
+    DialogDelegate::SetButtonLabel(button, label);
     DialogModelChanged();
   }
 
@@ -127,14 +130,13 @@ class DialogClientViewTest : public test::WidgetTest,
   // exceeded. The resulting width is around 160 pixels, but depends on system
   // fonts.
   void SetLongCancelLabel() {
-    DialogDelegate::SetButtonLabel(
-        ui::DIALOG_BUTTON_CANCEL, base::ASCIIToUTF16("Cancel Cancel Cancel"));
+    DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
+                                   u"Cancel Cancel Cancel");
     DialogModelChanged();
   }
 
-  views::Button* GetButtonByAccessibleName(views::View* root,
-                                           const base::string16& name) {
-    views::Button* button = Button::AsButton(root);
+  Button* GetButtonByAccessibleName(View* root, const std::u16string& name) {
+    Button* button = Button::AsButton(root);
     if (button && button->GetAccessibleName() == name)
       return button;
     for (auto* child : root->children()) {
@@ -145,9 +147,8 @@ class DialogClientViewTest : public test::WidgetTest,
     return nullptr;
   }
 
-  views::Button* GetButtonByAccessibleName(const std::string& label) {
-    return GetButtonByAccessibleName(widget_->GetRootView(),
-                                     base::UTF8ToUTF16(label));
+  Button* GetButtonByAccessibleName(const std::u16string& name) {
+    return GetButtonByAccessibleName(widget_->GetRootView(), name);
   }
 
   DialogClientView* client_view() {
@@ -396,8 +397,8 @@ TEST_F(DialogClientViewTest, LinkedWidthDoesLink) {
   layout_provider()->SetDistanceMetric(DISTANCE_BUTTON_MAX_LINKABLE_WIDTH, 200);
 
   // The extra view should also match, if it's a matching button type.
-  View* extra_button =
-      SetExtraView(std::make_unique<LabelButton>(nullptr, base::string16()));
+  View* extra_button = SetExtraView(std::make_unique<LabelButton>(
+      Button::PressedCallback(), std::u16string()));
   CheckContentsIsSetToPreferredSize();
   EXPECT_EQ(cancel_button_width, extra_button->width());
 }
@@ -442,7 +443,7 @@ TEST_F(DialogClientViewTest, LinkedWidthDoesntLink) {
 
   // Checkbox extends LabelButton, but it should not participate in linking.
   View* extra_button =
-      SetExtraView(std::make_unique<Checkbox>(base::string16()));
+      SetExtraView(std::make_unique<Checkbox>(std::u16string()));
   CheckContentsIsSetToPreferredSize();
   EXPECT_NE(cancel_button_width, extra_button->width());
 }
@@ -512,16 +513,16 @@ TEST_F(DialogClientViewTest, IgnorePossiblyUnintendedClicks_ClickAfterShown) {
   // Should ignore clicks right after the dialog is shown.
   ui::MouseEvent mouse_event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                              ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
-  client_view()->ButtonPressed(client_view()->ok_button(), mouse_event);
-  client_view()->ButtonPressed(client_view()->cancel_button(), mouse_event);
+  test::ButtonTestApi(client_view()->ok_button()).NotifyClick(mouse_event);
+  test::ButtonTestApi cancel_button(client_view()->cancel_button());
+  cancel_button.NotifyClick(mouse_event);
   EXPECT_FALSE(widget()->IsClosed());
 
-  client_view()->ButtonPressed(
-      client_view()->cancel_button(),
-      ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                     ui::EventTimeForNow() + base::TimeDelta::FromMilliseconds(
-                                                 GetDoubleClickInterval()),
-                     ui::EF_NONE, ui::EF_NONE));
+  cancel_button.NotifyClick(ui::MouseEvent(
+      ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+      ui::EventTimeForNow() +
+          base::TimeDelta::FromMilliseconds(GetDoubleClickInterval()),
+      ui::EF_NONE, ui::EF_NONE));
   EXPECT_TRUE(widget()->IsClosed());
 }
 
@@ -538,8 +539,9 @@ TEST_F(DialogClientViewTest, IgnorePossiblyUnintendedClicks_RepeatedClicks) {
   // Should ignore clicks right after the dialog is shown.
   ui::MouseEvent mouse_event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                              kNow, ui::EF_NONE, ui::EF_NONE);
-  client_view()->ButtonPressed(client_view()->ok_button(), mouse_event);
-  client_view()->ButtonPressed(client_view()->cancel_button(), mouse_event);
+  test::ButtonTestApi(client_view()->ok_button()).NotifyClick(mouse_event);
+  test::ButtonTestApi cancel_button(client_view()->cancel_button());
+  cancel_button.NotifyClick(mouse_event);
   EXPECT_FALSE(widget()->IsClosed());
 
   // Should ignore repeated clicks with short intervals, even though enough time
@@ -549,20 +551,18 @@ TEST_F(DialogClientViewTest, IgnorePossiblyUnintendedClicks_RepeatedClicks) {
   ASSERT_TRUE(kNumClicks * kRepeatedClickInterval > kShortClickInterval);
   base::TimeTicks event_time = kNow;
   for (size_t i = 0; i < kNumClicks; i++) {
-    client_view()->ButtonPressed(
-        client_view()->cancel_button(),
-        ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                       event_time, ui::EF_NONE, ui::EF_NONE));
+    cancel_button.NotifyClick(ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(),
+                                             gfx::Point(), event_time,
+                                             ui::EF_NONE, ui::EF_NONE));
     EXPECT_FALSE(widget()->IsClosed());
     event_time += kRepeatedClickInterval;
   }
 
   // Sufficient time passed, events are now allowed.
   event_time += kShortClickInterval;
-  client_view()->ButtonPressed(
-      client_view()->cancel_button(),
-      ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                     event_time, ui::EF_NONE, ui::EF_NONE));
+  cancel_button.NotifyClick(ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(),
+                                           gfx::Point(), event_time,
+                                           ui::EF_NONE, ui::EF_NONE));
   EXPECT_TRUE(widget()->IsClosed());
 }
 
@@ -579,16 +579,16 @@ TEST_F(DialogClientViewTest, ButtonLayoutWithExtra) {
   // Note that cancel & ok may swap order depending on
   // PlatformStyle::kIsOkButtonLeading; these invariants hold for either order.
   SetDialogButtons(ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL);
-  SetDialogButtonLabel(ui::DIALOG_BUTTON_OK, "ok");
-  SetDialogButtonLabel(ui::DIALOG_BUTTON_CANCEL, "cancel");
+  SetDialogButtonLabel(ui::DIALOG_BUTTON_OK, u"ok");
+  SetDialogButtonLabel(ui::DIALOG_BUTTON_CANCEL, u"cancel");
   SetExtraView(
-      std::make_unique<LabelButton>(nullptr, base::UTF8ToUTF16("extra")));
+      std::make_unique<LabelButton>(Button::PressedCallback(), u"extra"));
 
   widget()->Show();
 
-  Button* ok = GetButtonByAccessibleName("ok");
-  Button* cancel = GetButtonByAccessibleName("cancel");
-  Button* extra = GetButtonByAccessibleName("extra");
+  Button* ok = GetButtonByAccessibleName(u"ok");
+  Button* cancel = GetButtonByAccessibleName(u"cancel");
+  Button* extra = GetButtonByAccessibleName(u"extra");
 
   ASSERT_NE(ok, cancel);
   ASSERT_NE(ok, extra);

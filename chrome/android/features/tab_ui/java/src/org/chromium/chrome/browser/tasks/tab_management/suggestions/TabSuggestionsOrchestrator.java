@@ -18,7 +18,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
-import org.chromium.chrome.browser.lifecycle.Destroyable;
+import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.suggestions.TabSuggestion.TabSuggestionAction;
 
@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit;
  * Represents the entry point for the TabSuggestions component. Responsible for
  * registering and invoking the different {@link TabSuggestionsFetcher}.
  */
-public class TabSuggestionsOrchestrator implements TabSuggestions, Destroyable {
+public class TabSuggestionsOrchestrator implements TabSuggestions, DestroyObserver {
     public static final String TAB_SUGGESTIONS_UMA_PREFIX = "TabSuggestionsOrchestrator";
     private static final String LAST_TIMESTAMP_KEY = "LastTimestamp";
     private static final String BACKOFF_COUNT_KEY = "BackoffCountKey";
@@ -46,7 +46,7 @@ public class TabSuggestionsOrchestrator implements TabSuggestions, Destroyable {
     private static final int MIN_CLOSE_SUGGESTIONS_THRESHOLD = 3;
     private static final String SHARED_PREFERENCES_ID = "TabsuggestionsPreferences";
 
-    private static final int MIN_TIME_BETWEEN_PREFETCHES_DEFAULT_MS = 5000;
+    private static final int MIN_TIME_BETWEEN_PREFETCHES_DEFAULT_MS = 30000;
 
     protected TabContextObserver mTabContextObserver;
     protected TabSuggestionFeedback mTabSuggestionFeedback;
@@ -130,7 +130,7 @@ public class TabSuggestionsOrchestrator implements TabSuggestions, Destroyable {
     }
 
     @Override
-    public void destroy() {
+    public void onDestroy() {
         mTabContextObserver.destroy();
         mActivityLifecycleDispatcher.unregister(this);
     }

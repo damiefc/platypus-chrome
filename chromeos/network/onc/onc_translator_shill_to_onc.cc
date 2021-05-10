@@ -167,6 +167,13 @@ class ShillToONCTranslator {
   // entry from |shill_dictionary_| to |onc_object_| if it exists.
   void CopyProperty(const OncFieldSignature* field_signature);
 
+  // Applies defaults to fields according to |onc_signature_|.
+  void SetDefaultsAccordingToSignature();
+
+  // Applies defaults to fields according to |value_signature|.
+  void SetDefaultsAccordingToSignature(
+      const OncValueSignature* value_signature);
+
   // If existent, translates the entry at |shill_property_name| in
   // |shill_dictionary_| using |table|. It is an error if no matching table
   // entry is found. Writes the result as entry at |onc_field_name| in
@@ -191,7 +198,7 @@ class ShillToONCTranslator {
 
 std::unique_ptr<base::DictionaryValue>
 ShillToONCTranslator::CreateTranslatedONCObject() {
-  onc_object_.reset(new base::Value(base::Value::Type::DICTIONARY));
+  onc_object_ = std::make_unique<base::Value>(base::Value::Type::DICTIONARY);
   if (onc_signature_ == &kNetworkWithStateSignature) {
     TranslateNetworkWithState();
   } else if (onc_signature_ == &kEthernetSignature) {
@@ -224,6 +231,9 @@ ShillToONCTranslator::CreateTranslatedONCObject() {
   } else {
     CopyPropertiesAccordingToSignature();
   }
+
+  SetDefaultsAccordingToSignature();
+
   return base::DictionaryValue::From(std::move(onc_object_));
 }
 
@@ -557,15 +567,15 @@ void ShillToONCTranslator::TranslateNetworkWithState() {
     }
     onc_object_->SetKey(::onc::network_config::kConnectionState,
                         base::Value(onc_state));
-    // Only set 'RestrictedConnectivity' if captive portal state is true.
-    if (NetworkState::NetworkStateIsCaptivePortal(*shill_dictionary_)) {
+  }
+
+  if (network_state_) {
+    // Only visible networks set RestrictedConnectivity, and only if true.
+    if (network_state_->IsCaptivePortal()) {
       onc_object_->SetKey(::onc::network_config::kRestrictedConnectivity,
                           base::Value(true));
     }
-  }
-
-  // Non-visible networks (with null network_state_) do not set ErrorState.
-  if (network_state_) {
+    // Only visible networks set ErrorState, and only if not empty.
     if (!network_state_->GetError().empty()) {
       onc_object_->SetKey(::onc::network_config::kErrorState,
                           base::Value(network_state_->GetError()));
@@ -645,11 +655,10 @@ void ShillToONCTranslator::TranslateNetworkWithState() {
   const std::string* proxy_config_str =
       shill_dictionary_->FindStringKey(shill::kProxyConfigProperty);
   if (proxy_config_str && !proxy_config_str->empty()) {
-    std::unique_ptr<base::Value> proxy_config_value(
-        ReadDictionaryFromJson(*proxy_config_str));
-    if (proxy_config_value) {
+    base::Value proxy_config_value = ReadDictionaryFromJson(*proxy_config_str);
+    if (!proxy_config_value.is_none()) {
       base::Value proxy_settings =
-          ConvertProxyConfigToOncProxySettings(*proxy_config_value);
+          ConvertProxyConfigToOncProxySettings(proxy_config_value);
       if (!proxy_settings.is_none()) {
         onc_object_->SetKey(::onc::network_config::kProxySettings,
                             std::move(proxy_settings));
@@ -753,7 +762,7 @@ void ShillToONCTranslator::TranslateAndAddNestedObject(
                                          network_state_);
   std::unique_ptr<base::DictionaryValue> nested_object =
       nested_translator.CreateTranslatedONCObject();
-  if (nested_object->empty())
+  if (nested_object->DictEmpty())
     return;
   onc_object_->SetKey(onc_field_name, std::move(*nested_object));
 }
@@ -788,7 +797,7 @@ void ShillToONCTranslator::TranslateAndAddListOfObjects(
     std::unique_ptr<base::DictionaryValue> nested_object =
         nested_translator.CreateTranslatedONCObject();
     // If the nested object couldn't be parsed, simply omit it.
-    if (nested_object->empty())
+    if (nested_object->DictEmpty())
       continue;
     result.Append(std::move(*nested_object));
   }
@@ -840,6 +849,27 @@ void ShillToONCTranslator::CopyProperty(
   }
 
   onc_object_->SetKey(field_signature->onc_field_name, shill_value->Clone());
+}
+
+void ShillToONCTranslator::SetDefaultsAccordingToSignature() {
+  SetDefaultsAccordingToSignature(onc_signature_);
+}
+
+void ShillToONCTranslator::SetDefaultsAccordingToSignature(
+    const OncValueSignature* value_signature) {
+  if (value_signature->base_signature)
+    SetDefaultsAccordingToSignature(value_signature->base_signature);
+  if (!value_signature->fields)
+    return;
+  for (const OncFieldSignature* field_signature = value_signature->fields;
+       field_signature->onc_field_name != nullptr; ++field_signature) {
+    if (!field_signature->default_value_setter)
+      continue;
+    if (onc_object_->FindKey(field_signature->onc_field_name))
+      continue;
+    onc_object_->SetKey(field_signature->onc_field_name,
+                        field_signature->default_value_setter());
+  }
 }
 
 void ShillToONCTranslator::TranslateWithTableAndSet(

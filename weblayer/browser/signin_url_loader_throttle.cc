@@ -4,12 +4,12 @@
 
 #include "weblayer/browser/signin_url_loader_throttle.h"
 
-#include "base/task/post_task.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/public/base/account_consistency_method.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/base/url_util.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
@@ -60,7 +60,7 @@ SigninURLLoaderThrottle::~SigninURLLoaderThrottle() = default;
 std::unique_ptr<SigninURLLoaderThrottle> SigninURLLoaderThrottle::Create(
     content::BrowserContext* browser_context,
     content::WebContents::Getter web_contents_getter) {
-  if (browser_context->IsOffTheRecord() || !GetDelegate(web_contents_getter))
+  if (!GetDelegate(web_contents_getter))
     return nullptr;
 
   // Use base::WrapUnique + new because of the constructor is private.
@@ -141,8 +141,12 @@ void SigninURLLoaderThrottle::ProcessRequest(
   // Disable incognito and adding accounts for now. This shouldn't matter in
   // practice though since we are skipping the /SignOutOptions page completely
   // with the manage=true param.
+  //
+  // TODO(crbug.com/1134042): Check whether the child account status should also
+  // be sent in the Mirror request header from WebLayer.
   signin::AppendOrRemoveMirrorRequestHeader(
       &request_adapter, new_url, delegate->GetGaiaId(),
+      base::nullopt /* is_child_account */,
       signin::AccountConsistencyMethod::kMirror,
       CookieSettingsFactory::GetForBrowserContext(browser_context_).get(),
       signin::PROFILE_MODE_INCOGNITO_DISABLED |
@@ -184,8 +188,8 @@ void SigninURLLoaderThrottle::ProcessResponse(
 
   // Post a task even if we are already on the UI thread to avoid making any
   // requests while processing a throttle event.
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&ProcessMirrorHeader, web_contents_getter_, params));
 }
 

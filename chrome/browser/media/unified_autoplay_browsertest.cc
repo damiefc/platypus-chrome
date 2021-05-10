@@ -41,9 +41,9 @@ class ChromeContentBrowserClientOverrideWebAppScope
   ~ChromeContentBrowserClientOverrideWebAppScope() override = default;
 
   void OverrideWebkitPrefs(
-      content::RenderViewHost* rvh,
+      content::WebContents* web_contents,
       blink::web_pref::WebPreferences* web_prefs) override {
-    ChromeContentBrowserClient::OverrideWebkitPrefs(rvh, web_prefs);
+    ChromeContentBrowserClient::OverrideWebkitPrefs(web_contents, web_prefs);
 
     web_prefs->web_app_scope = web_app_scope_;
   }
@@ -424,9 +424,8 @@ IN_PROC_BROWSER_TEST_F(UnifiedAutoplayBrowserTest,
 class UnifiedAutoplaySettingBrowserTest : public UnifiedAutoplayBrowserTest {
  public:
   UnifiedAutoplaySettingBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {media::kAutoplayDisableSettings, media::kAutoplayWhitelistSettings},
-        {});
+    scoped_feature_list_.InitWithFeatures({media::kAutoplayDisableSettings},
+                                          {});
   }
 
   ~UnifiedAutoplaySettingBrowserTest() override = default;
@@ -481,8 +480,7 @@ IN_PROC_BROWSER_TEST_F(UnifiedAutoplaySettingBrowserTest, DISABLED_Allow) {
   GURL foo_url(embedded_test_server()->GetURL("foo.com", kFramedTestPagePath));
 
   GetSettingsMap()->SetContentSettingDefaultScope(
-      main_url, main_url, ContentSettingsType::SOUND, std::string(),
-      CONTENT_SETTING_ALLOW);
+      main_url, main_url, ContentSettingsType::SOUND, CONTENT_SETTING_ALLOW);
 
   NavigateFrameAndWait(main_frame(), main_url);
   NavigateFrameAndWait(first_child(), foo_url);
@@ -510,7 +508,7 @@ IN_PROC_BROWSER_TEST_F(UnifiedAutoplaySettingBrowserTest, Allow_Wildcard) {
   ContentSettingsPattern pattern(ContentSettingsPattern::FromString("[*.]com"));
   GetSettingsMap()->SetWebsiteSettingCustomScope(
       pattern, ContentSettingsPattern::Wildcard(), ContentSettingsType::SOUND,
-      std::string(), std::make_unique<base::Value>(CONTENT_SETTING_ALLOW));
+      std::make_unique<base::Value>(CONTENT_SETTING_ALLOW));
 
   NavigateFrameAndWait(main_frame(), main_url);
   EXPECT_TRUE(AutoplayAllowed(main_frame()));
@@ -529,8 +527,7 @@ IN_PROC_BROWSER_TEST_F(UnifiedAutoplaySettingBrowserTest, DISABLED_Block) {
   GURL foo_url(embedded_test_server()->GetURL("foo.com", kFramedTestPagePath));
 
   GetSettingsMap()->SetContentSettingDefaultScope(
-      main_url, main_url, ContentSettingsType::SOUND, std::string(),
-      CONTENT_SETTING_BLOCK);
+      main_url, main_url, ContentSettingsType::SOUND, CONTENT_SETTING_BLOCK);
 
   NavigateFrameAndWait(main_frame(), main_url);
   NavigateFrameAndWait(first_child(), foo_url);
@@ -549,11 +546,10 @@ IN_PROC_BROWSER_TEST_F(UnifiedAutoplaySettingBrowserTest, Block_Wildcard) {
   ContentSettingsPattern pattern(ContentSettingsPattern::FromString("[*.]com"));
   GetSettingsMap()->SetWebsiteSettingCustomScope(
       pattern, ContentSettingsPattern::Wildcard(), ContentSettingsType::SOUND,
-      std::string(), std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
+      std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
 
   GetSettingsMap()->SetContentSettingDefaultScope(
-      foo_url, foo_url, ContentSettingsType::SOUND, std::string(),
-      CONTENT_SETTING_ALLOW);
+      foo_url, foo_url, ContentSettingsType::SOUND, CONTENT_SETTING_ALLOW);
 
   NavigateFrameAndWait(main_frame(), main_url);
   EXPECT_FALSE(AutoplayAllowed(main_frame()));
@@ -573,8 +569,8 @@ IN_PROC_BROWSER_TEST_F(UnifiedAutoplaySettingBrowserTest,
   GURL foo_url(embedded_test_server()->GetURL("foo.com", kFramedTestPagePath));
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            GetSettingsMap()->GetContentSetting(
-                main_url, main_url, ContentSettingsType::SOUND, std::string()));
+            GetSettingsMap()->GetContentSetting(main_url, main_url,
+                                                ContentSettingsType::SOUND));
 
   NavigateFrameAndWait(main_frame(), main_url);
   NavigateFrameAndWait(first_child(), foo_url);

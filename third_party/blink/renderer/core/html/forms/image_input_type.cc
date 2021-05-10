@@ -109,11 +109,11 @@ LayoutObject* ImageInputType::CreateLayoutObject(const ComputedStyle& style,
                                                  LegacyLayout legacy) const {
   if (use_fallback_content_) {
     if (style.Display() == EDisplay::kInline)
-      return new LayoutInline(&GetElement());
+      return MakeGarbageCollected<LayoutInline>(&GetElement());
 
     return LayoutObjectFactory::CreateBlockFlow(GetElement(), style, legacy);
   }
-  LayoutImage* image = new LayoutImage(&GetElement());
+  LayoutImage* image = MakeGarbageCollected<LayoutImage>(&GetElement());
   image->SetImageResource(MakeGarbageCollected<LayoutImageResource>());
   return image;
 }
@@ -141,13 +141,6 @@ void ImageInputType::ValueAttributeChanged() {
   BaseButtonInputType::ValueAttributeChanged();
 }
 
-void ImageInputType::StartResourceLoading() {
-  BaseButtonInputType::StartResourceLoading();
-
-  HTMLImageLoader& image_loader = GetElement().EnsureImageLoader();
-  image_loader.UpdateFromElement();
-}
-
 void ImageInputType::OnAttachWithLayoutObject() {
   LayoutObject* layout_object = GetElement().GetLayoutObject();
   DCHECK(layout_object);
@@ -155,8 +148,9 @@ void ImageInputType::OnAttachWithLayoutObject() {
     return;
 
   HTMLImageLoader& image_loader = GetElement().EnsureImageLoader();
+  image_loader.UpdateFromElement();
   LayoutImageResource* image_resource =
-      ToLayoutImage(layout_object)->ImageResource();
+      To<LayoutImage>(layout_object)->ImageResource();
   image_resource->SetImageResource(image_loader.GetContent());
 }
 
@@ -188,7 +182,7 @@ unsigned ImageInputType::Height() const {
     HTMLImageLoader* image_loader = GetElement().ImageLoader();
     if (image_loader && image_loader->GetContent()) {
       return image_loader->GetContent()
-          ->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(nullptr))
+          ->IntrinsicSize(kRespectImageOrientation)
           .Height();
     }
   }
@@ -214,7 +208,7 @@ unsigned ImageInputType::Width() const {
     HTMLImageLoader* image_loader = GetElement().ImageLoader();
     if (image_loader && image_loader->GetContent()) {
       return image_loader->GetContent()
-          ->IntrinsicSize(LayoutObject::ShouldRespectImageOrientation(nullptr))
+          ->IntrinsicSize(kRespectImageOrientation)
           .Width();
     }
   }

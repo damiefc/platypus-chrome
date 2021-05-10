@@ -9,13 +9,14 @@
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_root.h"
 #include "third_party/blink/renderer/core/paint/box_painter.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
+#include "third_party/blink/renderer/core/paint/highlight_painting_utils.h"
 #include "third_party/blink/renderer/core/paint/object_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/paint/scoped_paint_state.h"
 #include "third_party/blink/renderer/core/paint/scrollable_area_painter.h"
-#include "third_party/blink/renderer/core/paint/selection_painting_utils.h"
+#include "third_party/blink/renderer/core/paint/selection_bounds_recorder.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_cache_skipper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
 #include "third_party/blink/renderer/platform/graphics/paint/scoped_paint_chunk_properties.h"
@@ -103,16 +104,13 @@ void ReplacedPainter::Paint(const PaintInfo& paint_info) {
     if (layout_replaced_.StyleRef().Visibility() == EVisibility::kVisible) {
       if (layout_replaced_.HasBoxDecorationBackground())
         should_paint_background = true;
-      if (layout_replaced_.HasEffectiveAllowedTouchAction())
+      if (layout_replaced_.HasEffectiveAllowedTouchAction() ||
+          layout_replaced_.InsideBlockingWheelEventHandler()) {
         should_paint_background = true;
+      }
     }
     if (should_paint_background) {
-      if (layout_replaced_.HasLayer() &&
-          layout_replaced_.Layer()->GetCompositingState() ==
-              kPaintsIntoOwnBacking &&
-          layout_replaced_.Layer()
-              ->GetCompositedLayerMapping()
-              ->DrawsBackgroundOntoContentLayer()) {
+      if (layout_replaced_.DrawsBackgroundOntoContentLayer()) {
         // If the background paints into the content layer, we can skip painting
         // the background but still need to paint the hit test rects.
         BoxPainter(layout_replaced_)
@@ -158,7 +156,8 @@ void ReplacedPainter::Paint(const PaintInfo& paint_info) {
                                    content_paint_state.PaintOffset());
   }
 
-  if (layout_replaced_.CanResize()) {
+  if (layout_replaced_.StyleRef().Visibility() == EVisibility::kVisible &&
+      layout_replaced_.CanResize()) {
     auto* scrollable_area = layout_replaced_.GetScrollableArea();
     DCHECK(scrollable_area);
     if (!scrollable_area->HasLayerForScrollCorner()) {
@@ -174,10 +173,28 @@ void ReplacedPainter::Paint(const PaintInfo& paint_info) {
   bool draw_selection_tint =
       local_paint_info.phase == PaintPhase::kForeground &&
       layout_replaced_.IsSelected() && layout_replaced_.CanBeSelectionLeaf() &&
-      !local_paint_info.IsPrinting();
-  if (draw_selection_tint && !DrawingRecorder::UseCachedDrawingIfPossible(
-                                 local_paint_info.context, layout_replaced_,
-                                 DisplayItem::kSelectionTint)) {
+      !layout_replaced_.GetDocument().Printing();
+  if (!draw_selection_tint)
+    return;
+
+  base::Optional<SelectionBoundsRecorder> selection_recorder;
+  const FrameSelection& frame_selection =
+      layout_replaced_.GetFrame()->Selection();
+  SelectionState selection_state = layout_replaced_.GetSelectionState();
+  if (SelectionBoundsRecorder::ShouldRecordSelection(frame_selection,
+                                                     selection_state)) {
+    PhysicalRect selection_rect = layout_replaced_.LocalSelectionVisualRect();
+    selection_rect.Move(paint_offset);
+    const ComputedStyle& style = layout_replaced_.StyleRef();
+    selection_recorder.emplace(selection_state, selection_rect,
+                               local_paint_info.context.GetPaintController(),
+                               style.Direction(), style.GetWritingMode(),
+                               layout_replaced_);
+  }
+
+  if (!DrawingRecorder::UseCachedDrawingIfPossible(
+          local_paint_info.context, layout_replaced_,
+          DisplayItem::kSelectionTint)) {
     PhysicalRect selection_painting_rect =
         layout_replaced_.LocalSelectionVisualRect();
     selection_painting_rect.Move(paint_offset);
@@ -187,9 +204,9 @@ void ReplacedPainter::Paint(const PaintInfo& paint_info) {
     DrawingRecorder recorder(local_paint_info.context, layout_replaced_,
                              DisplayItem::kSelectionTint,
                              selection_painting_int_rect);
-    Color selection_bg = SelectionPaintingUtils::SelectionBackgroundColor(
+    Color selection_bg = HighlightPaintingUtils::HighlightBackgroundColor(
         layout_replaced_.GetDocument(), layout_replaced_.StyleRef(),
-        layout_replaced_.GetNode());
+        layout_replaced_.GetNode(), kPseudoIdSelection);
     local_paint_info.context.FillRect(selection_painting_int_rect,
                                       selection_bg);
   }

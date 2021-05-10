@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.tasks.pseudotab;
 
 import android.os.SystemClock;
+import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -23,8 +24,8 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore;
 import org.chromium.chrome.browser.tabmodel.TabbedModeTabPersistencePolicy;
 import org.chromium.chrome.browser.tabpersistence.TabStateDirectory;
-import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -89,7 +90,7 @@ public class PseudoTab {
                 if (cached.getTab() == tab) {
                     return cached;
                 } else {
-                    assert cached.getTab().getWebContents() == null
+                    assert tab.getWebContents() == null || cached.getTab().getWebContents() == null
                             || cached.getTab().getWebContents().getTopLevelNativeWindow() == null;
                     return new PseudoTab(tab);
                 }
@@ -179,8 +180,9 @@ public class PseudoTab {
      * @return The URL
      */
     public String getUrl() {
+        // TODO(crbug/783819): Return the GURL directly.
         if (mTab != null && mTab.get() != null && mTab.get().isInitialized()) {
-            return mTab.get().getUrlString();
+            return mTab.get().getUrl() != null ? mTab.get().getUrl().getSpec() : null;
         }
         assert mTabId != null;
         return TabAttributeCache.getUrl(mTabId);
@@ -199,24 +201,23 @@ public class PseudoTab {
     }
 
     /**
+     * @return The timestamp of the {@link PseudoTab}.
+     */
+    public long getTimestampMillis() {
+        if (mTab != null && mTab.get() != null && mTab.get().isInitialized()) {
+            return CriticalPersistedTabData.from(mTab.get()).getTimestampMillis();
+        }
+        assert mTabId != null;
+        return TabAttributeCache.getTimestampMillis(mTabId);
+    }
+
+    /**
      * @return Whether the {@link PseudoTab} is in the Incognito mode.
      */
     public boolean isIncognito() {
         if (mTab != null && mTab.get() != null) return mTab.get().isIncognito();
         assert mTabId != null;
         return false;
-    }
-
-    /**
-     * @return {@link Tab#getTimestampMillis()} of the underlying real {@link Tab}
-     */
-    public long getTimestampMillis() {
-        assert mTab != null
-                && mTab.get() != null : "getTimestampMillis can only be used with real tabs";
-        if (!mTab.get().isInitialized()) {
-            return CriticalPersistedTabData.INVALID_TIMESTAMP;
-        }
-        return CriticalPersistedTabData.from(mTab.get()).getTimestampMillis();
     }
 
     /**
@@ -245,6 +246,11 @@ public class PseudoTab {
     public static void clearForTesting() {
         synchronized (sLock) {
             sAllTabs.clear();
+            sReadStateFile = false;
+            sActiveTabFromStateFile = null;
+            if (sAllTabsFromStateFile != null) {
+                sAllTabsFromStateFile.clear();
+            }
         }
     }
 
@@ -314,7 +320,8 @@ public class PseudoTab {
     }
 
     private static void readAllPseudoTabsFromStateFile() {
-        assert CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START);
+        assert CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)
+                || CachedFeatureFlags.isEnabled(ChromeFeatureList.PAINT_PREVIEW_SHOW_ON_STARTUP);
         if (sReadStateFile) return;
         sReadStateFile = true;
 
@@ -347,8 +354,10 @@ public class PseudoTab {
                     (index, id, url, isIncognito, isStandardActiveIndex, isIncognitoActiveIndex)
                             -> {
                         // Skip restoring of non-selected NTP to match the real restoration logic.
-                        if (ReturnToChromeExperimentsUtil.isCanonicalizedNTPUrl(url)
-                                && !isStandardActiveIndex) {
+                        if (UrlUtilities.isCanonicalizedNTPUrl(url) && !isStandardActiveIndex) {
+                            return;
+                        } else if (TextUtils.isEmpty(url)) {
+                            // Skip restoring of empty Tabs.
                             return;
                         }
                         PseudoTab tab = PseudoTab.fromTabId(id);

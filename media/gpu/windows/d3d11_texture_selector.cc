@@ -9,6 +9,7 @@
 #include "base/feature_list.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
+#include "media/base/win/mf_helpers.h"
 #include "media/gpu/windows/d3d11_copying_texture_wrapper.h"
 #include "media/gpu/windows/d3d11_video_device_format_support.h"
 #include "ui/gfx/geometry/size.h"
@@ -16,8 +17,15 @@
 namespace media {
 
 TextureSelector::TextureSelector(VideoPixelFormat pixfmt,
-                                 DXGI_FORMAT output_dxgifmt)
-    : pixel_format_(pixfmt), output_dxgifmt_(output_dxgifmt) {}
+                                 DXGI_FORMAT output_dxgifmt,
+                                 ComD3D11VideoDevice video_device,
+                                 ComD3D11DeviceContext device_context)
+    : pixel_format_(pixfmt),
+      output_dxgifmt_(output_dxgifmt),
+      video_device_(std::move(video_device)),
+      device_context_(std::move(device_context)) {}
+
+TextureSelector::~TextureSelector() = default;
 
 bool SupportsZeroCopy(const gpu::GpuPreferences& preferences,
                       const gpu::GpuDriverBugWorkarounds& workarounds) {
@@ -37,6 +45,8 @@ std::unique_ptr<TextureSelector> TextureSelector::Create(
     DXGI_FORMAT decoder_output_format,
     TextureSelector::HDRMode hdr_output_mode,
     const FormatSupportChecker* format_checker,
+    ComD3D11VideoDevice video_device,
+    ComD3D11DeviceContext device_context,
     MediaLog* media_log) {
   VideoPixelFormat output_pixel_format;
   DXGI_FORMAT output_dxgi_format;
@@ -56,7 +66,6 @@ std::unique_ptr<TextureSelector> TextureSelector::Create(
     }
     case DXGI_FORMAT_P010: {
       MEDIA_LOG(INFO, media_log) << "D3D11VideoDecoder producing P010";
-      output_pixel_format = PIXEL_FORMAT_ARGB;
 
       // TODO(liberato): handle case where we bind P010 directly (see dxva).
 
@@ -84,6 +93,7 @@ std::unique_ptr<TextureSelector> TextureSelector::Create(
           // TODO(liberato): use the format checker, else bind P010.
           MEDIA_LOG(INFO, media_log) << "D3D11VideoDecoder: 8 bit sRGB";
           output_dxgi_format = DXGI_FORMAT_B8G8R8A8_UNORM;
+          output_pixel_format = PIXEL_FORMAT_ARGB;
           output_color_space = gfx::ColorSpace::CreateSRGB();
         } else {
           // Bind P010 directly, since we can't copy.
@@ -102,12 +112,14 @@ std::unique_ptr<TextureSelector> TextureSelector::Create(
                 DXGI_FORMAT_R16G16B16A16_FLOAT)) {
           MEDIA_LOG(INFO, media_log) << "D3D11VideoDecoder: fp16 scRGBLinear";
           output_dxgi_format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+          output_pixel_format = PIXEL_FORMAT_RGBAF16;
           output_color_space = gfx::ColorSpace::CreateSCRGBLinear();
         } else if (format_checker->CheckOutputFormatSupport(
                        DXGI_FORMAT_R10G10B10A2_UNORM)) {
-          MEDIA_LOG(INFO, media_log) << "D3D11VideoDecoder: BGRA10 scRGBLinear";
+          MEDIA_LOG(INFO, media_log) << "D3D11VideoDecoder: RGB10A2 HDR10/PQ";
           output_dxgi_format = DXGI_FORMAT_R10G10B10A2_UNORM;
-          output_color_space = gfx::ColorSpace::CreateSCRGBLinear();
+          output_pixel_format = PIXEL_FORMAT_XB30;
+          output_color_space = gfx::ColorSpace::CreateHDR10();
         } else {
           // No support at all.  Just bind P010, and hope for the best.
           MEDIA_LOG(INFO, media_log)
@@ -119,18 +131,11 @@ std::unique_ptr<TextureSelector> TextureSelector::Create(
           output_color_space.reset();
         }
 
-        // TODO(liberato): Handle HLG, if we can get the input color space.
-        // The rough outline looks something like this:
-#if 0
-        if (hlg) {
-        video_context1->VideoProcessorSetStreamColorSpace1(
-        d3d11_processor_.Get(), 0,
-        DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020);
-    video_context1->VideoProcessorSetOutputColorSpace1(
-        d3d11_processor_.Get(), DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
-    dx11_converter_output_color_space_ = color_space.GetAsFullRangeRGB();
-  }
-#endif
+        // TODO(liberato): Handle HLG, if we can get the input color space. The
+        // VideoProcessor doesn't support HLG, so we need to use it only for YUV
+        // -> RGB conversion by setting the input color space to PQ YUV and the
+        // output color space to PQ RGB. The texture should then be marked as
+        // full range HLG so that Chrome's color management can fix it up.
       }
       break;
     }
@@ -145,9 +150,10 @@ std::unique_ptr<TextureSelector> TextureSelector::Create(
   // If we're trying to produce an output texture that's different from what
   // the decoder is providing, then we need to copy it.  If sharing decoder
   // textures is not allowed, then copy either way.
-  bool needs_texture_copy = !SupportsZeroCopy(gpu_preferences, workarounds) ||
-                            (decoder_output_format != output_dxgi_format) ||
-               base::FeatureList::IsEnabled(kD3D11VideoDecoderAlwaysCopy);
+  bool needs_texture_copy =
+      !SupportsZeroCopy(gpu_preferences, workarounds) ||
+      (decoder_output_format != output_dxgi_format) ||
+      base::FeatureList::IsEnabled(kD3D11VideoDecoderAlwaysCopy);
 
   MEDIA_LOG(INFO, media_log)
       << "D3D11VideoDecoder output color space: "
@@ -158,25 +164,23 @@ std::unique_ptr<TextureSelector> TextureSelector::Create(
     MEDIA_LOG(INFO, media_log) << "D3D11VideoDecoder is copying textures";
     return std::make_unique<CopyTextureSelector>(
         output_pixel_format, decoder_output_format, output_dxgi_format,
-        output_color_space);
+        output_color_space, std::move(video_device), std::move(device_context));
   } else {
     MEDIA_LOG(INFO, media_log) << "D3D11VideoDecoder is binding textures";
     // Binding can't change the color space.  The consumer has to do it, if they
     // want to.
     DCHECK(!output_color_space);
-    return std::make_unique<TextureSelector>(output_pixel_format,
-                                             output_dxgi_format);
+    return std::make_unique<TextureSelector>(
+        output_pixel_format, output_dxgi_format, std::move(video_device),
+        std::move(device_context));
   }
 }
 
 std::unique_ptr<Texture2DWrapper> TextureSelector::CreateTextureWrapper(
     ComD3D11Device device,
-    ComD3D11VideoDevice video_device,
-    ComD3D11DeviceContext device_context,
     gfx::Size size) {
   // TODO(liberato): If the output format is rgb, then create a pbuffer wrapper.
-  return std::make_unique<DefaultTexture2DWrapper>(size, OutputDXGIFormat(),
-                                                   PixelFormat());
+  return std::make_unique<DefaultTexture2DWrapper>(size, OutputDXGIFormat());
 }
 
 bool TextureSelector::WillCopyForTesting() const {
@@ -187,16 +191,22 @@ CopyTextureSelector::CopyTextureSelector(
     VideoPixelFormat pixfmt,
     DXGI_FORMAT input_dxgifmt,
     DXGI_FORMAT output_dxgifmt,
-    base::Optional<gfx::ColorSpace> output_color_space)
-    : TextureSelector(pixfmt, output_dxgifmt),
-      output_color_space_(std::move(output_color_space)) {}
+    base::Optional<gfx::ColorSpace> output_color_space,
+    ComD3D11VideoDevice video_device,
+    ComD3D11DeviceContext device_context)
+    : TextureSelector(pixfmt,
+                      output_dxgifmt,
+                      std::move(video_device),
+                      std::move(device_context)),
+      output_color_space_(std::move(output_color_space)),
+      video_processor_proxy_(
+          base::MakeRefCounted<VideoProcessorProxy>(this->video_device(),
+                                                    this->device_context())) {}
 
 CopyTextureSelector::~CopyTextureSelector() = default;
 
 std::unique_ptr<Texture2DWrapper> CopyTextureSelector::CreateTextureWrapper(
     ComD3D11Device device,
-    ComD3D11VideoDevice video_device,
-    ComD3D11DeviceContext device_context,
     gfx::Size size) {
   D3D11_TEXTURE2D_DESC texture_desc = {};
   texture_desc.MipLevels = 1;
@@ -211,15 +221,16 @@ std::unique_ptr<Texture2DWrapper> CopyTextureSelector::CreateTextureWrapper(
   texture_desc.Height = size.height();
 
   ComD3D11Texture2D out_texture;
-  if (!SUCCEEDED(device->CreateTexture2D(&texture_desc, nullptr, &out_texture)))
+  if (FAILED(device->CreateTexture2D(&texture_desc, nullptr, &out_texture)))
+    return nullptr;
+
+  if (FAILED(
+          SetDebugName(out_texture.Get(), "D3D11Decoder_CopyTextureSelector")))
     return nullptr;
 
   return std::make_unique<CopyingTexture2DWrapper>(
-      size,
-      std::make_unique<DefaultTexture2DWrapper>(size, OutputDXGIFormat(),
-                                                PixelFormat()),
-      std::make_unique<VideoProcessorProxy>(video_device, device_context),
-      out_texture, output_color_space_);
+      size, std::make_unique<DefaultTexture2DWrapper>(size, OutputDXGIFormat()),
+      video_processor_proxy_, out_texture, output_color_space_);
 }
 
 bool CopyTextureSelector::WillCopyForTesting() const {

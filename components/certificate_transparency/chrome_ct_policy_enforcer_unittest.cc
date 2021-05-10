@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/build_time.h"
 #include "base/stl_util.h"
@@ -16,7 +17,6 @@
 #include "crypto/rsa_private_key.h"
 #include "crypto/sha2.h"
 #include "net/cert/ct_policy_status.h"
-#include "net/cert/ct_verify_result.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
 #include "net/log/net_log_with_source.h"
@@ -48,7 +48,7 @@ class ChromeCTPolicyEnforcerTest : public ::testing::Test {
     auto enforcer = std::make_unique<ChromeCTPolicyEnforcer>(
         base::GetBuildTime(), GetDisqualifiedLogs(), GetLogsOperatedByGoogle());
     enforcer->SetClockForTesting(&clock_);
-    policy_enforcer_.reset(enforcer.release());
+    policy_enforcer_ = std::move(enforcer);
 
     std::string der_test_cert(net::ct::GetDerEncodedX509Cert());
     chain_ = X509Certificate::CreateFromBytes(der_test_cert.data(),

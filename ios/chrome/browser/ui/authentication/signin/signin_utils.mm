@@ -6,11 +6,16 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "base/version.h"
+#import "components/policy/core/common/policy_loader_ios_constants.h"
+#import "components/policy/policy_constants.h"
+#import "components/prefs/pref_service.h"
 #import "components/signin/ios/browser/features.h"
+#import "components/signin/public/base/signin_pref_names.h"
 #import "components/version_info/version_info.h"
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/user_signin_constants.h"
@@ -49,10 +54,9 @@ NSSet* GaiaIdSetWithIdentities(NSArray* identities) {
 
 #pragma mark - Public
 
-bool SigninShouldPresentUserSigninUpgrade(ChromeBrowserState* browserState) {
-  if (signin::ForceStartupSigninPromo())
-    return true;
+namespace signin {
 
+bool ShouldPresentUserSigninUpgrade(ChromeBrowserState* browserState) {
   if (tests_hook::DisableSigninRecallPromo())
     return false;
 
@@ -64,11 +68,18 @@ bool SigninShouldPresentUserSigninUpgrade(ChromeBrowserState* browserState) {
   if (net::NetworkChangeNotifier::IsOffline())
     return false;
 
+  // Sign-in can be disabled by policy.
+  if (!signin::IsSigninAllowed(browserState->GetPrefs()))
+    return false;
+
   AuthenticationService* authService =
       AuthenticationServiceFactory::GetForBrowserState(browserState);
   // Do not show the SSO promo if the user is already logged in.
   if (authService->IsAuthenticated())
     return false;
+
+  if (signin::ForceStartupSigninPromo())
+    return true;
 
   // Show the promo at most every two major versions.
   NSUserDefaults* standardDefaults = [NSUserDefaults standardUserDefaults];
@@ -81,9 +92,10 @@ bool SigninShouldPresentUserSigninUpgrade(ChromeBrowserState* browserState) {
       return false;
   }
   // Don't show the promo if there is no identities.
-  NSArray* identities = ios::GetChromeBrowserProvider()
-                            ->GetChromeIdentityService()
-                            ->GetAllIdentitiesSortedForDisplay();
+  NSArray* identities =
+      ios::GetChromeBrowserProvider()
+          ->GetChromeIdentityService()
+          ->GetAllIdentitiesSortedForDisplay(browserState->GetPrefs());
   if ([identities count] == 0)
     return false;
   // The sign-in promo should be shown twice, even if no account has been added.
@@ -102,14 +114,16 @@ bool SigninShouldPresentUserSigninUpgrade(ChromeBrowserState* browserState) {
          ![lastKnownGaiaIdSet isEqualToSet:currentGaiaIdSet];
 }
 
-void SigninRecordVersionSeen() {
+void RecordVersionSeenWithPrefService(PrefService* prefService) {
+  DCHECK(prefService);
+
   NSUserDefaults* standardDefaults = [NSUserDefaults standardUserDefaults];
   [standardDefaults
       setObject:base::SysUTF8ToNSString(CurrentVersion().GetString())
          forKey:kDisplayedSSORecallForMajorVersionKey];
   NSArray* identities = ios::GetChromeBrowserProvider()
                             ->GetChromeIdentityService()
-                            ->GetAllIdentitiesSortedForDisplay();
+                            ->GetAllIdentitiesSortedForDisplay(prefService);
   NSArray* gaiaIdList = GaiaIdSetWithIdentities(identities).allObjects;
   [standardDefaults setObject:gaiaIdList
                        forKey:kLastShownAccountGaiaIdVersionKey];
@@ -120,6 +134,27 @@ void SigninRecordVersionSeen() {
                         forKey:kSigninPromoViewDisplayCountKey];
 }
 
-void SetSigninCurrentVersionForTesting(Version* version) {
+void SetCurrentVersionForTesting(Version* version) {
   g_current_version_for_test = version;
 }
+
+bool IsSigninAllowed(const PrefService* prefs) {
+  return prefs->GetBoolean(prefs::kSigninAllowed);
+}
+
+bool IsSigninAllowedByPolicy() {
+  NSDictionary* configuration = [[NSUserDefaults standardUserDefaults]
+      dictionaryForKey:kPolicyLoaderIOSConfigurationKey];
+
+  NSValue* value = [configuration
+      valueForKey:base::SysUTF8ToNSString(policy::key::kBrowserSignin)];
+  if (!value) {
+    return true;
+  }
+
+  BrowserSigninMode signin_mode;
+  [value getValue:&signin_mode];
+  return signin_mode == BrowserSigninMode::kEnabled;
+}
+
+}  // namespace signin

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef UI_OZONE_PLATFORM_DRM_GPU_GBM_BUFFER_H_
-#define UI_OZONE_PLATFORM_DRM_GPU_GBM_BUFFER_H_
+#ifndef UI_OZONE_PLATFORM_DRM_GPU_GBM_PIXMAP_H_
+#define UI_OZONE_PLATFORM_DRM_GPU_GBM_PIXMAP_H_
 
 #include <memory>
 #include <vector>
@@ -41,7 +41,8 @@ class GbmPixmap : public gfx::NativePixmap {
                             const gfx::Rect& display_bounds,
                             const gfx::RectF& crop_rect,
                             bool enable_blend,
-                            std::unique_ptr<gfx::GpuFence> gpu_fence) override;
+                            std::vector<gfx::GpuFence> acquire_fences,
+                            std::vector<gfx::GpuFence> release_fences) override;
   gfx::NativePixmapHandle ExportHandle() override;
 
   GbmBuffer* buffer() const { return buffer_.get(); }
@@ -61,4 +62,4 @@ class GbmPixmap : public gfx::NativePixmap {
 
 }  // namespace ui
 
-#endif  // UI_OZONE_PLATFORM_DRM_GPU_GBM_BUFFER_H_
+#endif  // UI_OZONE_PLATFORM_DRM_GPU_GBM_PIXMAP_H_

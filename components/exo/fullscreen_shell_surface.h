@@ -79,7 +79,6 @@ class FullscreenShellSurface : public SurfaceTreeHost,
 
   void SetChildAxTreeId(ui::AXTreeID child_ax_tree_id);
   void SetEnabled(bool enabled);
-  void GetAccessibleNodeData(ui::AXNodeData* node_data);
 
  private:
   class FullscreenShellView;
@@ -103,4 +102,4 @@ class FullscreenShellSurface : public SurfaceTreeHost,
 
 }  // namespace exo
 
-#endif  // COMPONENTS_EXO_FULLSCREEN_SHELL_SURFACE_H
+#endif  // COMPONENTS_EXO_FULLSCREEN_SHELL_SURFACE_H_

@@ -8,7 +8,7 @@
 
 #include "base/at_exit.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
@@ -197,20 +197,6 @@ void TestGpuServiceHolder::InitializeOnGpuThread(
 #if BUILDFLAG(ENABLE_VULKAN)
     bool use_swiftshader = gpu_preferences.use_vulkan ==
                            gpu::VulkanImplementationName::kSwiftshader;
-    bool is_non_ozone_x11 = false;
-#if defined(USE_X11)
-    is_non_ozone_x11 = !features::IsUsingOzonePlatform();
-#endif  // defined(USE_X11)
-
-    if (!is_non_ozone_x11) {
-      // TODO(samans): Support Swiftshader on more platforms.
-      // https://crbug.com/963988
-      LOG_IF(ERROR, use_swiftshader) << "Unable to use Vulkan Swiftshader on "
-                                        "this platform. Falling back to "
-                                        "GPU.";
-      use_swiftshader = false;
-    }
-
     vulkan_implementation_ = gpu::CreateVulkanImplementation(use_swiftshader);
     if (!vulkan_implementation_ ||
         !vulkan_implementation_->InitializeVulkanInstance(
@@ -234,7 +220,7 @@ void TestGpuServiceHolder::InitializeOnGpuThread(
   gpu_feature_info.status_values[gpu::GPU_FEATURE_TYPE_OOP_RASTERIZATION] =
       gpu::kGpuFeatureStatusEnabled;
 
-  // TODO(sgilhuly): Investigate why creating a GPUInfo and GpuFeatureInfo from
+  // TODO(rivr): Investigate why creating a GPUInfo and GpuFeatureInfo from
   // the command line causes the test SkiaOutputSurfaceImplTest.SubmitPaint to
   // fail on Android.
   gpu_service_ = std::make_unique<GpuServiceImpl>(
@@ -242,7 +228,7 @@ void TestGpuServiceHolder::InitializeOnGpuThread(
       gpu_feature_info, gpu_preferences,
       /*gpu_info_for_hardware_gpu=*/gpu::GPUInfo(),
       /*gpu_feature_info_for_hardware_gpu=*/gpu::GpuFeatureInfo(),
-      /*gpu_extra_info=*/gpu::GpuExtraInfo(),
+      /*gpu_extra_info=*/gfx::GpuExtraInfo(),
 #if BUILDFLAG(ENABLE_VULKAN)
       vulkan_implementation_.get(),
 #else

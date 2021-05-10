@@ -12,13 +12,13 @@
 #include <memory>
 #include <utility>
 
+#include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -364,11 +364,12 @@ SkBitmap CreateLowQualityResizedBitmap(const SkBitmap& source_bitmap,
   SkBitmap scaled_bitmap;
   scaled_bitmap.allocN32Pixels(scaled_size.width(), scaled_size.height());
   scaled_bitmap.eraseARGB(0, 0, 0, 0);
-  SkCanvas canvas(scaled_bitmap);
+  SkCanvas canvas(scaled_bitmap, SkSurfaceProps{});
   SkRect scaled_bounds = RectToSkRect(gfx::Rect(scaled_size));
   // Note(oshima): The following scaling code doesn't work with
   // a mask image.
-  canvas.drawBitmapRect(source_bitmap, scaled_bounds, nullptr);
+  canvas.drawImageRect(source_bitmap.asImage(), scaled_bounds,
+                       SkSamplingOptions());
   return scaled_bitmap;
 }
 
@@ -734,8 +735,7 @@ scoped_refptr<BrowserThemePack> BrowserThemePack::BuildFromDataPack(
   pack->set_extension_id(expected_id);
   // Scale factor parameter is moot as data pack has image resources for all
   // supported scale factors.
-  pack->data_pack_.reset(
-      new ui::DataPack(ui::SCALE_FACTOR_NONE));
+  pack->data_pack_ = std::make_unique<ui::DataPack>(ui::SCALE_FACTOR_NONE);
 
   if (!pack->data_pack_->LoadFromPath(path)) {
     LOG(ERROR) << "Failed to load theme data pack.";
@@ -1317,9 +1317,8 @@ void BrowserThemePack::SetDisplayPropertiesFromJSON(
         break;
       }
       case TP::NTP_LOGO_ALTERNATE: {
-        int val = 0;
-        if (iter.value().GetAsInteger(&val))
-          temp_properties[TP::NTP_LOGO_ALTERNATE] = val;
+        if (iter.value().is_int())
+          temp_properties[TP::NTP_LOGO_ALTERNATE] = iter.value().GetInt();
         break;
       }
     }

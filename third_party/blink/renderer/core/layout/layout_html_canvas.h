@@ -46,6 +46,8 @@ class CORE_EXPORT LayoutHTMLCanvas final : public LayoutReplaced {
 
   void CanvasSizeChanged();
 
+  bool DrawsBackgroundOntoContentLayer() const final;
+
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
 
   const char* GetName() const override {
@@ -70,7 +72,12 @@ class CORE_EXPORT LayoutHTMLCanvas final : public LayoutReplaced {
   CompositingReasons AdditionalCompositingReasons() const override;
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutHTMLCanvas, IsCanvas());
+template <>
+struct DowncastTraits<LayoutHTMLCanvas> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsCanvas();
+  }
+};
 
 }  // namespace blink
 

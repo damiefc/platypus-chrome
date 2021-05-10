@@ -38,6 +38,8 @@
 #include "third_party/blink/renderer/platform/wtf/hash_traits.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/skia/include/core/SkSize.h"
+#include "ui/gfx/geometry/scroll_offset.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
@@ -60,6 +62,8 @@ class PLATFORM_EXPORT FloatSize {
       : width_(width), height_(height) {}
   constexpr explicit FloatSize(const IntSize& s)
       : FloatSize(s.Width(), s.Height()) {}
+  constexpr explicit FloatSize(const gfx::Size& s)
+      : FloatSize(s.width(), s.height()) {}
   constexpr explicit FloatSize(const gfx::SizeF& s)
       : FloatSize(s.width(), s.height()) {}
   explicit FloatSize(const SkSize& s) : FloatSize(s.width(), s.height()) {}
@@ -149,6 +153,13 @@ class PLATFORM_EXPORT FloatSize {
   // not. The Vector2dF type is used for offsets instead.
   constexpr explicit operator gfx::Vector2dF() const {
     return gfx::Vector2dF(width_, height_);
+  }
+
+  // blink::ScrollOffset is typedef'd as FloatSize. When exposing outside blink
+  // it should probably be exposed as a gfx::ScrollOffset (as opposed to a
+  // Vector2dF).
+  constexpr explicit operator gfx::ScrollOffset() const {
+    return gfx::ScrollOffset(width_, height_);
   }
 
   String ToString() const;

@@ -5,7 +5,7 @@
 #include "ui/views/test/widget_test.h"
 
 #include "base/rand_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/native_widget_types.h"
@@ -48,10 +48,6 @@ View* AnyViewWithClassName(Widget* widget, const std::string& classname) {
   return AnyViewMatchingPredicate(widget, [&](const View* view) {
     return view->GetClassName() == classname;
   });
-}
-
-void WidgetTest::WidgetCloser::operator()(Widget* widget) const {
-  widget->CloseNow();
 }
 
 WidgetTest::WidgetTest() = default;
@@ -247,8 +243,13 @@ void WidgetClosingObserver::OnWidgetClosing(Widget* widget) {
     run_loop_.Quit();
 }
 
-WidgetDestroyedWaiter::WidgetDestroyedWaiter(Widget* widget) {
+WidgetDestroyedWaiter::WidgetDestroyedWaiter(Widget* widget) : widget_(widget) {
   widget->AddObserver(this);
+}
+
+WidgetDestroyedWaiter::~WidgetDestroyedWaiter() {
+  if (widget_)
+    widget_->RemoveObserver(this);
 }
 
 void WidgetDestroyedWaiter::Wait() {
@@ -257,6 +258,7 @@ void WidgetDestroyedWaiter::Wait() {
 
 void WidgetDestroyedWaiter::OnWidgetDestroyed(Widget* widget) {
   widget->RemoveObserver(this);
+  widget_ = nullptr;
   run_loop_.Quit();
 }
 
@@ -265,7 +267,7 @@ WidgetVisibleWaiter::~WidgetVisibleWaiter() = default;
 
 void WidgetVisibleWaiter::Wait() {
   if (!widget_->IsVisible()) {
-    widget_observer_.Add(widget_);
+    widget_observation_.Observe(widget_);
     run_loop_.Run();
   }
 }
@@ -274,7 +276,8 @@ void WidgetVisibleWaiter::OnWidgetVisibilityChanged(Widget* widget,
                                                     bool visible) {
   DCHECK_EQ(widget_, widget);
   if (visible) {
-    widget_observer_.Remove(widget);
+    DCHECK(widget_observation_.IsObservingSource(widget));
+    widget_observation_.Reset();
     run_loop_.Quit();
   }
 }
@@ -284,7 +287,8 @@ void WidgetVisibleWaiter::OnWidgetDestroying(Widget* widget) {
   ADD_FAILURE() << "Widget destroying before it became visible!";
   // Even though the test failed, be polite and remove the observer so we
   // don't crash with a UAF in the destructor.
-  widget_observer_.Remove(widget);
+  DCHECK(widget_observation_.IsObservingSource(widget));
+  widget_observation_.Reset();
 }
 
 }  // namespace test

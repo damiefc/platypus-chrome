@@ -21,9 +21,8 @@
 #import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_opener.h"
-#import "ios/web/public/deprecated/crw_test_js_injection_receiver.h"
-#import "ios/web/public/test/fakes/test_navigation_manager.h"
-#import "ios/web/public/test/fakes/test_web_state.h"
+#import "ios/web/public/test/fakes/fake_navigation_manager.h"
+#import "ios/web/public/test/fakes/fake_web_state.h"
 #include "ios/web/public/test/web_task_environment.h"
 #include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -98,21 +97,15 @@ class TranslateInfobarMediatorTest : public PlatformTest {
   LegacyTranslateInfobarMediator* mediator() { return mediator_; }
 
   void CreateTranslateClient() {
-    auto web_state = std::make_unique<web::TestWebState>();
+    auto web_state = std::make_unique<web::FakeWebState>();
 
     // Set up browser state.
     web_state->SetBrowserState(browser_state_.get());
 
     // Set up navigation manager.
-    std::unique_ptr<web::TestNavigationManager> navigation_manager =
-        std::make_unique<web::TestNavigationManager>();
+    auto navigation_manager = std::make_unique<web::FakeNavigationManager>();
     navigation_manager->SetBrowserState(browser_state_.get());
     web_state->SetNavigationManager(std::move(navigation_manager));
-
-    // Set up JS injection receiver.
-    CRWTestJSInjectionReceiver* injectionReceiver =
-        [[CRWTestJSInjectionReceiver alloc] init];
-    web_state->SetJSInjectionReceiver(injectionReceiver);
 
     // Create IOSLanguageDetectionTabHelper.
     language::IOSLanguageDetectionTabHelper::CreateForWebState(
@@ -186,8 +179,8 @@ TEST_F(TranslateInfobarMediatorTest, InstallHandlers) {
 // options popup menu on its consumer.
 TEST_F(TranslateInfobarMediatorTest, TranslateOptionMenuItems) {
   // Set up what TranslateInfoBarDelegate should return.
-  EXPECT_CALL(*GetDelegate(), original_language_name())
-      .WillRepeatedly(testing::Return(base::UTF8ToUTF16("French")));
+  EXPECT_CALL(*GetDelegate(), source_language_name())
+      .WillRepeatedly(testing::Return(u"French"));
   EXPECT_CALL(*GetDelegate(), ShouldAlwaysTranslate())
       .WillOnce(testing::Return(true));
 
@@ -237,11 +230,11 @@ TEST_F(TranslateInfobarMediatorTest, LanguageSelectionMenuItems) {
   EXPECT_CALL(*GetDelegate(), language_code_at(0))
       .WillOnce(testing::Return("en"));
   EXPECT_CALL(*GetDelegate(), language_name_at(0))
-      .WillOnce(testing::Return(base::UTF8ToUTF16("English")));
+      .WillOnce(testing::Return(u"English"));
   EXPECT_CALL(*GetDelegate(), language_code_at(2))
       .WillOnce(testing::Return("fr"));
   EXPECT_CALL(*GetDelegate(), language_name_at(2))
-      .WillOnce(testing::Return(base::UTF8ToUTF16("French")));
+      .WillOnce(testing::Return(u"French"));
 
   LegacyTranslateInfobarMediator* translate_infobar_mediator = mediator();
   translate_infobar_mediator.type = TranslatePopupMenuTypeLanguageSelection;

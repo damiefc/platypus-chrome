@@ -29,11 +29,12 @@
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/test_tab_strip_model_delegate.h"
-#include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/user_education/mock_feature_promo_controller.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/reading_list/core/reading_list_model.h"
 #include "components/reading_list/core/reading_list_model_observer.h"
+#include "components/reading_list/features/reading_list_switches.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
@@ -249,9 +250,8 @@ class MockTabStripModelObserver : public TabStripModelObserver {
         break;
       }
       case TabStripModelChange::kRemoved: {
-        const bool will_be_deleted = change.GetRemove()->will_be_deleted;
         for (const auto& contents : change.GetRemove()->contents) {
-          if (will_be_deleted)
+          if (contents.will_be_deleted)
             PushCloseState(contents.contents, contents.index);
           PushDetachState(contents.contents, contents.index,
                           selection.old_contents == contents.contents);
@@ -380,7 +380,7 @@ class TabStripModelTest : public testing::Test {
   std::unique_ptr<WebContents> CreateWebContentsWithSharedRPH(
       WebContents* web_contents) {
     WebContents::CreateParams create_params(
-        profile(), web_contents->GetRenderViewHost()->GetSiteInstance());
+        profile(), web_contents->GetMainFrame()->GetSiteInstance());
     std::unique_ptr<WebContents> retval = WebContents::Create(create_params);
     EXPECT_EQ(retval->GetMainFrame()->GetProcess(),
               web_contents->GetMainFrame()->GetProcess());
@@ -447,7 +447,7 @@ class TabStripModelTest : public testing::Test {
       ASSERT_TRUE(base::StringToInt(sel, &value));
       selection_model.AddIndexToSelection(value);
     }
-    selection_model.set_active(selection_model.selected_indices()[0]);
+    selection_model.set_active(*selection_model.selected_indices().begin());
     model->SetSelectionFromModel(selection_model);
   }
 
@@ -1810,6 +1810,8 @@ TEST_F(TabStripModelTest, AddWebContents_ForgetOpeners) {
 TEST_F(TabStripModelTest, AddWebContents_LinkOpensInSameGroupAsOpener) {
   TestTabStripModelDelegate delegate;
   TabStripModel tabstrip(&delegate, profile());
+  MockTabStripModelObserver observer;
+  tabstrip.AddObserver(&observer);
   ASSERT_TRUE(tabstrip.empty());
 
   // Open the home page and add the tab to a group.
@@ -1820,6 +1822,7 @@ TEST_F(TabStripModelTest, AddWebContents_LinkOpensInSameGroupAsOpener) {
   ASSERT_EQ(1, tabstrip.count());
   tab_groups::TabGroupId group_id = tabstrip.AddToNewGroup({0});
   ASSERT_EQ(tabstrip.GetTabGroupForTab(0), group_id);
+  ASSERT_EQ(observer.group_update(group_id).contents_update_count, 1);
 
   // Open a tab by simulating a link that opens in a new tab.
   std::unique_ptr<WebContents> contents = CreateWebContents();
@@ -1827,6 +1830,9 @@ TEST_F(TabStripModelTest, AddWebContents_LinkOpensInSameGroupAsOpener) {
                           TabStripModel::ADD_ACTIVE);
   EXPECT_EQ(2, tabstrip.count());
   EXPECT_EQ(tabstrip.GetTabGroupForTab(1), group_id);
+
+  // There should have been a separate notification for the tab being grouped.
+  EXPECT_EQ(observer.group_update(group_id).contents_update_count, 2);
 
   tabstrip.CloseAllTabs();
   ASSERT_TRUE(tabstrip.empty());
@@ -3714,7 +3720,7 @@ TEST_F(TabStripModelTest, SetVisualDataForGroup) {
   const tab_groups::TabGroupId group = strip.AddToNewGroup({0});
 
   const tab_groups::TabGroupVisualData new_data(
-      base::ASCIIToUTF16("Foo"), tab_groups::TabGroupColorId::kCyan);
+      u"Foo", tab_groups::TabGroupColorId::kCyan);
   strip.group_model()->GetTabGroup(group)->SetVisualData(new_data);
   const tab_groups::TabGroupVisualData* data =
       strip.group_model()->GetTabGroup(group)->visual_data();
@@ -3738,7 +3744,7 @@ TEST_F(TabStripModelTest, VisualDataChangeNotifiesObservers) {
   EXPECT_EQ(1, observer.group_update(group).contents_update_count);
 
   const tab_groups::TabGroupVisualData new_data(
-      base::ASCIIToUTF16("Foo"), tab_groups::TabGroupColorId::kBlue);
+      u"Foo", tab_groups::TabGroupColorId::kBlue);
   strip.group_model()->GetTabGroup(group)->SetVisualData(new_data);
 
   // Now check that we are notified when we change it, once at creation
@@ -4122,10 +4128,27 @@ TEST_F(TabStripModelTest, MoveTabsToNewWindow) {
   strip.CloseAllTabs();
 }
 
+TEST_F(TabStripModelTest, SurroundingGroupAtIndex) {
+  TestTabStripModelDelegate delegate;
+  TabStripModel strip(&delegate, profile());
+  PrepareTabs(&strip, 4);
+
+  auto group1 = strip.AddToNewGroup({1, 2});
+  strip.AddToNewGroup({3});
+
+  EXPECT_EQ(base::nullopt, strip.GetSurroundingTabGroup(0));
+  EXPECT_EQ(base::nullopt, strip.GetSurroundingTabGroup(1));
+  EXPECT_EQ(group1, strip.GetSurroundingTabGroup(2));
+  EXPECT_EQ(base::nullopt, strip.GetSurroundingTabGroup(3));
+  EXPECT_EQ(base::nullopt, strip.GetSurroundingTabGroup(4));
+
+  strip.CloseAllTabs();
+}
+
 class TabStripModelTestWithReadLaterEnabled : public BrowserWithTestWindowTest {
  public:
   TabStripModelTestWithReadLaterEnabled() {
-    feature_list_.InitAndEnableFeature(features::kReadLater);
+    feature_list_.InitAndEnableFeature(reading_list::switches::kReadLater);
   }
   TabStripModelTestWithReadLaterEnabled(
       const TabStripModelTestWithReadLaterEnabled&) = delete;
@@ -4159,8 +4182,22 @@ class TabStripModelTestWithReadLaterEnabled : public BrowserWithTestWindowTest {
                                         base::ASCIIToUTF16(title));
   }
 
+  std::unique_ptr<BrowserWindow> CreateBrowserWindow() override {
+    auto test_window = std::make_unique<TestBrowserWindow>();
+
+    // This test only supports one window.
+    DCHECK(!mock_promo_controller_);
+
+    mock_promo_controller_ = static_cast<MockFeaturePromoController*>(
+        test_window->SetFeaturePromoController(
+            std::make_unique<MockFeaturePromoController>()));
+    return test_window;
+  }
+
  private:
   base::test::ScopedFeatureList feature_list_;
+
+  MockFeaturePromoController* mock_promo_controller_ = nullptr;
 };
 
 TEST_F(TabStripModelTestWithReadLaterEnabled, AddToReadLater) {
@@ -4171,11 +4208,11 @@ TEST_F(TabStripModelTestWithReadLaterEnabled, AddToReadLater) {
   TabStripModel* tabstrip = browser()->tab_strip_model();
   EXPECT_EQ(tabstrip->count(), 2);
 
-  // Add first tab to Read Later and verify it has been added and the tab has
-  // been closed.
+  // Add first tab to Read Later and verify it has been added.
   GURL expected_url = tabstrip->GetWebContentsAt(0)->GetURL();
   tabstrip->AddToReadLater({0});
+
   EXPECT_EQ(reading_list_model->size(), 1u);
   EXPECT_NE(reading_list_model->GetEntryByURL(expected_url), nullptr);
-  EXPECT_EQ(tabstrip->count(), 1);
+  EXPECT_EQ(tabstrip->count(), 2);
 }

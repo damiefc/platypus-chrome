@@ -13,6 +13,7 @@
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "components/arc/mojom/app.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/insets.h"
@@ -31,14 +32,14 @@ ArcAppInfoLinksPanel::ArcAppInfoLinksPanel(Profile* profile,
   auto manage_link = std::make_unique<views::Link>(
       l10n_util::GetStringUTF16(IDS_ARC_APPLICATION_INFO_MANAGE_LINK));
   manage_link->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  manage_link->set_callback(base::BindRepeating(
+  manage_link->SetCallback(base::BindRepeating(
       &ArcAppInfoLinksPanel::LinkClicked, base::Unretained(this)));
   manage_link->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
   manage_link_ = AddChildView(std::move(manage_link));
 
   ArcAppListPrefs* const arc_prefs = ArcAppListPrefs::Get(profile_);
   DCHECK(arc_prefs);
-  app_list_observer_.Add(arc_prefs);
+  app_list_observation_.Observe(arc_prefs);
 
   std::unique_ptr<ArcAppListPrefs::AppInfo> app_info =
       ArcAppListPrefs::Get(profile)->GetApp(arc::kSettingsAppId);
@@ -81,3 +82,6 @@ void ArcAppInfoLinksPanel::LinkClicked() {
     Close();
   }
 }
+
+BEGIN_METADATA(ArcAppInfoLinksPanel, AppInfoPanel)
+END_METADATA

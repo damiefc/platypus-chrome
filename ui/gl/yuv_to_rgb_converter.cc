@@ -189,6 +189,16 @@ YUVToRGBConverter::YUVToRGBConverter(const GLVersionInfo& gl_version_info,
   if (has_vertex_array_objects) {
     glGenVertexArraysOES(1, &vertex_array_object_);
   }
+
+  has_get_tex_level_parameter_ =
+      !gl_version_info.is_es || gl_version_info.IsAtLeastGLES(3, 1) ||
+      g_current_gl_driver->ext.b_GL_ANGLE_get_tex_level_parameter;
+  has_robust_resource_init_ =
+      g_current_gl_driver->ext.b_GL_ANGLE_robust_resource_initialization;
+
+  has_sampler_objects_ = gl_version_info.IsAtLeastGLES(3, 0) ||
+                         gl_version_info.IsAtLeastGL(3, 3) ||
+                         g_current_gl_driver->ext.b_GL_ARB_sampler_objects;
 }
 
 YUVToRGBConverter::~YUVToRGBConverter() {
@@ -227,15 +237,54 @@ void YUVToRGBConverter::CopyYUV420ToRGB(unsigned target,
   GLint old_texture0_binding = -1;
   glActiveTexture(GL_TEXTURE0);
   glGetIntegerv(source_target_getter, &old_texture0_binding);
+  GLint old_sampler0_binding = -1;
+  if (has_sampler_objects_) {
+    glGetIntegerv(GL_SAMPLER_BINDING, &old_sampler0_binding);
+    glBindSampler(0, 0);
+  }
   GLint old_texture1_binding = -1;
   glActiveTexture(GL_TEXTURE1);
   glGetIntegerv(source_target_getter, &old_texture1_binding);
+  GLint old_sampler1_binding = -1;
+  if (has_sampler_objects_) {
+    glGetIntegerv(GL_SAMPLER_BINDING, &old_sampler1_binding);
+    glBindSampler(1, 0);
+  }
 
   // Allocate the rgb texture.
   glActiveTexture(old_active_texture);
   glBindTexture(target, rgb_texture);
-  glTexImage2D(target, 0, GL_RGB, size.width(), size.height(), 0, GL_RGB,
-               rgb_texture_type, nullptr);
+
+  bool needs_texture_init = true;
+  if (has_get_tex_level_parameter_) {
+    GLint current_internal_format = 0;
+    glGetTexLevelParameteriv(target, 0, GL_TEXTURE_INTERNAL_FORMAT,
+                             &current_internal_format);
+
+    GLint current_type = 0;
+    glGetTexLevelParameteriv(target, 0, GL_TEXTURE_RED_TYPE, &current_type);
+
+    GLint current_width = 0;
+    glGetTexLevelParameteriv(target, 0, GL_TEXTURE_WIDTH, &current_width);
+
+    GLint current_height = 0;
+    glGetTexLevelParameteriv(target, 0, GL_TEXTURE_HEIGHT, &current_height);
+
+    if (current_internal_format == GL_RGB &&
+        static_cast<unsigned>(current_type) == rgb_texture_type &&
+        current_width == size.width() && current_height == size.height()) {
+      needs_texture_init = false;
+    }
+  }
+  if (needs_texture_init) {
+    glTexImage2D(target, 0, GL_RGB, size.width(), size.height(), 0, GL_RGB,
+                 rgb_texture_type, nullptr);
+    if (has_robust_resource_init_) {
+      // We're about to overwrite the whole texture with a draw, notify the
+      // driver that it doesn't need to perform robust resource init.
+      glTexParameteri(target, GL_RESOURCE_INITIALIZED_ANGLE, GL_TRUE);
+    }
+  }
 
   // Set up and issue the draw call.
   glActiveTexture(GL_TEXTURE0);
@@ -277,6 +326,10 @@ void YUVToRGBConverter::CopyYUV420ToRGB(unsigned target,
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(source_texture_target_, old_texture1_binding);
   glActiveTexture(old_active_texture);
+  if (old_sampler0_binding > 0)
+    glBindSampler(0, old_sampler0_binding);
+  if (old_sampler1_binding > 0)
+    glBindSampler(1, old_sampler1_binding);
 }
 
 }  // namespace gl

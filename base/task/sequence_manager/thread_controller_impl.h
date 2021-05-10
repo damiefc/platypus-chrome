@@ -96,10 +96,12 @@ class BASE_EXPORT ThreadControllerImpl : public ThreadController,
     MainSequenceOnly();
     ~MainSequenceOnly();
 
-    int nesting_depth = 0;
     int work_batch_size_ = 1;
 
     TimeTicks next_delayed_do_work = TimeTicks::Max();
+
+    // Tracks the number and state of each run-level managed by this instance.
+    RunLevelTracker run_level_tracker;
   };
 
   scoped_refptr<AssociatedThreadId> associated_thread_;
@@ -118,7 +120,7 @@ class BASE_EXPORT ThreadControllerImpl : public ThreadController,
   const TickClock* time_source_;
   RepeatingClosure immediate_do_work_closure_;
   RepeatingClosure delayed_do_work_closure_;
-  CancelableClosure cancelable_delayed_do_work_closure_;
+  CancelableRepeatingClosure cancelable_delayed_do_work_closure_;
   SequencedTaskSource* sequence_ = nullptr;  // Not owned.
   TaskAnnotator task_annotator_;
   WorkDeduplicator work_deduplicator_;

@@ -103,8 +103,8 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
   // of |reposition| and |animate| is false, the stacking order will be adjusted
   // immediately.
   // Note: OverviewSession has versions of the Add/Remove items. Those are
-  // preferred as they update other things like the overview accessibility
-  // annotator.
+  // preferred as they will call into these functions and update other things
+  // like the overview accessibility annotator and the no recent items widget.
   void AddItem(aura::Window* window,
                bool reposition,
                bool animate,
@@ -262,22 +262,6 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
   // Clears |nudge_data_|.
   void EndNudge();
 
-  // Called after PositionWindows when entering overview from the home launcher
-  // screen. Translates all windows vertically and animates to their final
-  // locations.
-  void SlideWindowsIn();
-
-  // Update the y position and opacity of the entire grid. Does this by
-  // transforming the windows in |window_list_|. If |callback| is non null, the
-  // transformation and opacity change should be animated. The animation
-  // settings will be set by the caller via |callback|. Returns the settings of
-  // the first window we are animating; the caller will observe this animation.
-  // The returned object may be nullptr.
-  std::unique_ptr<ui::ScopedLayerAnimationSettings> UpdateYPositionAndOpacity(
-      float new_y,
-      float opacity,
-      OverviewSession::UpdateAnimationSettingsCallback callback);
-
   // Returns the window of the overview item that contains |location_in_screen|.
   // |ignored_item| is excluded from consideration. Overview items covered by
   // |ignored_item| are eligible.
@@ -291,6 +275,11 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
   // Gets the effective bounds of this grid (the area in which the windows are
   // positioned, taking into account the availability of the Desks bar).
   gfx::Rect GetGridEffectiveBounds() const;
+
+  // Gets the insets of the grid. Either |bounds_| or GetGridEffectiveBounds
+  // does not exclude the insets from its bounds. But like PositionWindows needs
+  // to position the overview windows in the bounds exclude the insets.
+  gfx::Insets GetGridInsets() const;
 
   // Called when a window is being dragged in Overview Mode. If
   // |update_desks_bar_drag_details| is true, it will update the drag details
@@ -325,10 +314,6 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
   // bounds of the window are considered extreme, or if the window is in
   // splitview or entering splitview.
   int CalculateWidthAndMaybeSetUnclippedBounds(OverviewItem* item, int height);
-
-  // Called when a desk is added or removed to update the bounds of the desks
-  // widget as it may need to switch between default and compact layouts.
-  void OnDesksChanged();
 
   // Returns true if any desk name is being modified in its mini view on this
   // grid.

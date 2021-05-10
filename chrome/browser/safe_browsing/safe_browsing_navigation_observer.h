@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_SAFE_BROWSING_SAFE_BROWSING_NAVIGATION_OBSERVER_H_
 #define CHROME_BROWSER_SAFE_BROWSING_SAFE_BROWSING_NAVIGATION_OBSERVER_H_
 
+#include <unordered_map>
+
 #include "base/scoped_observer.h"
 #include "base/supports_user_data.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
@@ -28,6 +30,7 @@ class SafeBrowsingNavigationObserverManager;
 struct NavigationEvent {
   NavigationEvent();
   NavigationEvent(NavigationEvent&& nav_event);
+  NavigationEvent(const NavigationEvent& nav_event);
   NavigationEvent& operator=(NavigationEvent&& nav_event);
   ~NavigationEvent();
 
@@ -140,8 +143,7 @@ class SafeBrowsingNavigationObserver : public base::SupportsUserData::Data,
   // content_settings::Observer overrides.
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type,
-                               const std::string& resource_identifier) override;
+                               ContentSettingsType content_type) override;
 
   // Map keyed on NavigationHandle* to keep track of all the ongoing navigation
   // events. NavigationHandle pointers are owned by RenderFrameHost. Since a

@@ -4,6 +4,7 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/chromecast_build.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//content/public/common/zygote/features.gni")
@@ -11,13 +12,6 @@ import("//media/media_options.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//ppapi/buildflags/buildflags.gni")
 import("//third_party/webrtc/webrtc.gni")
-
-# This file depends on the legacy global sources assignment filter. It should
-# be converted to check target platform before assigning source files to the
-# sources variable. Remove this import and set_sources_assignment_filter call
-# when the file has been converted. See https://crbug.com/1018739 for details.
-import("//build/config/deprecated_default_sources_assignment_filter.gni")
-set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
 
 # See //content/BUILD.gn for how this works.
 group("common") {
@@ -68,7 +62,10 @@ source_set("static_switches") {
   public_configs = [ ":static_switches_defines" ]
 
   # Deps required by the above headers.
-  deps = [ "//media:media_buildflags" ]
+  deps = [
+    "//build:chromeos_buildflags",
+    "//media:media_buildflags",
+  ]
 }
 
 # This target allows you to use the content_features constants and statically
@@ -82,9 +79,14 @@ source_set("static_features") {
   ]
   public_deps = [ "//base" ]
 
+  deps = [
+    "//build:chromeos_buildflags",
+    "//content/common:buildflags",
+  ]
+
   public_configs = [ ":static_switches_defines" ]
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     public_deps += [ "//media/capture/video/chromeos/public" ]
   }
 }
@@ -95,14 +97,12 @@ source_set("common_sources") {
 
   sources = [
     "bindings_policy.h",
-    "browser_controls_state.h",
     "cdm_info.h",
     "child_process_host.h",
     "child_process_host_delegate.h",
     "common_param_traits.cc",
     "common_param_traits.h",
     "common_param_traits_macros.h",
-    "common_sandbox_support_linux.h",
     "console_message_level.h",
     "content_client.cc",
     "content_client.h",
@@ -119,28 +119,15 @@ source_set("common_sources") {
     "content_switches.h",
     "drop_data.cc",
     "drop_data.h",
-    "font_cache_dispatcher_win.h",
-    "frame_navigate_params.cc",
-    "frame_navigate_params.h",
-    "impression.cc",
-    "impression.h",
-    "injection_test_mac.h",
-    "injection_test_win.h",
     "input_event_ack_state.h",
     "isolated_world_ids.h",
     "javascript_dialog_type.h",
     "main_function_params.h",
-    "menu_item.cc",
-    "menu_item.h",
     "mhtml_generation_params.cc",
     "mhtml_generation_params.h",
-    "navigation_policy.cc",
-    "navigation_policy.h",
     "network_service_util.cc",
     "network_service_util.h",
     "origin_util.h",
-    "page_state.cc",
-    "page_state.h",
     "page_type.h",
     "page_visibility_state.h",
     "page_zoom.h",
@@ -154,22 +141,17 @@ source_set("common_sources") {
     "referrer.h",
     "referrer_type_converters.cc",
     "referrer_type_converters.h",
-    "resource_intercept_policy.h",
-    "resource_request_body_android.cc",
-    "resource_request_body_android.h",
+    "resource_request_blocked_reason.h",
     "resource_usage_reporter_type_converters.cc",
     "resource_usage_reporter_type_converters.h",
     "result_codes.h",
     "sandbox_init.h",
     "sandboxed_process_launcher_delegate.cc",
     "sandboxed_process_launcher_delegate.h",
-    "service_manager_connection.h",
     "socket_permission_request.h",
     "stop_find_action.h",
     "storage_quota_params.h",
     "three_d_api_types.h",
-    "untrustworthy_context_menu_params.cc",
-    "untrustworthy_context_menu_params.h",
     "url_constants.cc",
     "url_constants.h",
     "url_utils.cc",
@@ -183,6 +165,21 @@ source_set("common_sources") {
     "widget_type.h",
   ]
 
+  if (is_win) {
+    sources += [ "font_cache_dispatcher_win.h" ]
+  }
+
+  if (is_android) {
+    sources += [
+      "resource_request_body_android.cc",
+      "resource_request_body_android.h",
+    ]
+  }
+
+  if (is_linux || is_chromeos) {
+    sources += [ "common_sandbox_support_linux.h" ]
+  }
+
   configs += [
     "//build/config:precompiled_headers",
     "//content:content_implementation",
@@ -193,7 +190,7 @@ source_set("common_sources") {
   public_deps = [
     ":interfaces",
     ":renderer_type",
-    ":service_names",
+    ":trust_tokens_mojo_bindings",
     "//content/common",
     "//content/public/common/zygote:buildflags",
     "//ipc",
@@ -215,6 +212,7 @@ source_set("common_sources") {
   deps = [
     ":content_descriptor_keys",
     "//build:branding_buildflags",
+    "//build:chromeos_buildflags",
 
     # This looks needless as we have //content/common in public_deps, but it's
     # needed because of allow_circular_includes_from.
@@ -244,11 +242,10 @@ source_set("common_sources") {
   }
 
   if (is_android) {
-    sources += [ "cpu_affinity.h" ]
     deps += [ "//content/public/android:jni" ]
   }
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     public_deps += [ "//media/capture/video/chromeos/public" ]
   }
 
@@ -314,9 +311,7 @@ mojom("interfaces") {
   ]
 
   sources = [
-    "browser_controls_state.mojom",
     "drop_data.mojom",
-    "fullscreen_video_element.mojom",
     "resource_usage_reporter.mojom",
     "was_activated_option.mojom",
     "webplugininfo.mojom",
@@ -349,17 +344,6 @@ mojom("interfaces") {
     {
       types = [
         {
-          mojom = "content.mojom.BrowserControlsState"
-          cpp = "::content::BrowserControlsState"
-        },
-      ]
-      traits_headers = [ "browser_controls_state.h" ]
-      traits_private_headers = _common_param_traits_headers
-      traits_deps = _common_param_traits_deps
-    },
-    {
-      types = [
-        {
           mojom = "content.mojom.DropData"
           cpp = "::content::DropData"
         },
@@ -386,10 +370,19 @@ mojom("interfaces") {
   ]
 }
 
-mojom("renderer_type") {
-  sources = [ "media_playback_renderer_type.mojom" ]
+mojom("trust_tokens_mojo_bindings") {
+  generate_java = true
+  sources = [ "trust_tokens.mojom" ]
+  public_deps = [
+    "//services/network/public/mojom",
+
+    # Generating Java code requires that we depend directly, not transitively,
+    # on this target, because it contains symbols needed by the generated Java
+    # classes.
+    "//services/network/public/mojom:url_loader_base",
+  ]
 }
 
-mojom("service_names") {
-  sources = [ "service_names.mojom" ]
+mojom("renderer_type") {
+  sources = [ "media_playback_renderer_type.mojom" ]
 }

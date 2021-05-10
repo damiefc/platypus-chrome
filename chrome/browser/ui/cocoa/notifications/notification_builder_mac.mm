@@ -8,27 +8,9 @@
 
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsobject.h"
-
-#include "chrome/browser/ui/cocoa/notifications/notification_constants_mac.h"
+#include "chrome/services/mac_notifications/public/cpp/notification_constants_mac.h"
 
 @implementation NotificationBuilder
-
-- (instancetype)initWithCloseLabel:(NSString*)closeLabel
-                      optionsLabel:(NSString*)optionsLabel
-                     settingsLabel:(NSString*)settingsLabel {
-  if ((self = [super init])) {
-    [_notificationData
-        setObject:closeLabel
-           forKey:notification_constants::kNotificationCloseButtonTag];
-    [_notificationData
-        setObject:optionsLabel
-           forKey:notification_constants::kNotificationOptionsButtonTag];
-    [_notificationData
-        setObject:settingsLabel
-           forKey:notification_constants::kNotificationSettingsButtonTag];
-  }
-  return self;
-}
 
 - (NSUserNotification*)buildUserNotification {
   base::scoped_nsobject<NSUserNotification> toast(
@@ -44,18 +26,10 @@
 
   // Icon
   if ([_notificationData
-          objectForKey:notification_constants::kNotificationImage]) {
-    if ([[NSImage class] conformsToProtocol:@protocol(NSSecureCoding)]) {
-      NSImage* image = [_notificationData
-          objectForKey:notification_constants::kNotificationImage];
-      [toast setContentImage:image];
-    } else {  // NSImage only conforms to NSSecureCoding from 10.10 onwards.
-      base::scoped_nsobject<NSImage> image([[NSImage alloc]
-          initWithData:
-              [_notificationData
-                  objectForKey:notification_constants::kNotificationImage]]);
-      [toast setContentImage:image];
-    }
+          objectForKey:notification_constants::kNotificationIcon]) {
+    NSImage* image = [_notificationData
+        objectForKey:notification_constants::kNotificationIcon];
+    [toast setContentImage:image];
   }
 
   // Type (needed to define the buttons)
@@ -81,68 +55,73 @@
 
     [toast setValue:@YES forKey:@"_showsButtons"];
     // A default close button label is provided by the platform but we
-    // explicitly override it in case the user decides to not
-    // use the OS language in Chrome.
-    [toast
-        setOtherButtonTitle:[_notificationData
-                                objectForKey:notification_constants::
-                                                 kNotificationCloseButtonTag]];
+    // explicitly override it in case the user decides to not use the OS
+    // language in Chrome. macOS 11 shows a close button in the top-left corner.
+    if (!base::mac::IsAtLeastOS11()) {
+      [toast
+          setOtherButtonTitle:
+              [_notificationData objectForKey:notification_constants::
+                                                  kNotificationCloseButtonTag]];
+    }
 
-    // Display the Settings button as the action button if there are either no
-    // developer-provided action buttons, or the alternate action menu is not
-    // available on this Mac version. This avoids needlessly showing the menu.
-    if (![_notificationData
-            objectForKey:notification_constants::kNotificationButtonOne] ||
-        ![toast respondsToSelector:@selector(_alwaysShowAlternateActionMenu)]) {
-      if (settingsButton) {
-        [toast setActionButtonTitle:
-                   [_notificationData
-                       objectForKey:notification_constants::
-                                        kNotificationSettingsButtonTag]];
-      } else {
-        [toast setHasActionButton:NO];
+    NSMutableArray* buttons = [NSMutableArray arrayWithCapacity:3];
+    if ([_notificationData
+            objectForKey:notification_constants::kNotificationButtonOne]) {
+      [buttons addObject:[_notificationData
+                             objectForKey:notification_constants::
+                                              kNotificationButtonOne]];
+    }
+    if ([_notificationData
+            objectForKey:notification_constants::kNotificationButtonTwo]) {
+      [buttons addObject:[_notificationData
+                             objectForKey:notification_constants::
+                                              kNotificationButtonTwo]];
+    }
+    if (settingsButton) {
+      // If we can't show an action menu but need a settings button, only show
+      // the settings button and don't show developer provided actions.
+      if (![toast
+              respondsToSelector:@selector(_alwaysShowAlternateActionMenu)]) {
+        [buttons removeAllObjects];
       }
+      [buttons addObject:[_notificationData
+                             objectForKey:notification_constants::
+                                              kNotificationSettingsButtonTag]];
+    }
 
+    if ([buttons count] == 0) {
+      // Don't show action button if no actions needed.
+      [toast setHasActionButton:NO];
+    } else if ([buttons count] == 1) {
+      // Only one action so we don't need a menu. Just set the button title.
+      [toast setActionButtonTitle:[buttons firstObject]];
     } else {
-      // Otherwise show the alternate menu, then show the developer actions and
-      // finally the settings one if needed.
+      // Show the alternate menu with developer actions and settings if needed.
       DCHECK(
           [toast respondsToSelector:@selector(_alwaysShowAlternateActionMenu)]);
       DCHECK(
           [toast respondsToSelector:@selector(_alternateActionButtonTitles)]);
-      [toast setActionButtonTitle:
-                 [_notificationData
-                     objectForKey:notification_constants::
-                                      kNotificationOptionsButtonTag]];
+      // macOS 11 does not support overriding the text of the overflow button
+      // and will always show "Options" via this API. Setting actionButtonTitle
+      // just appends another button into the overflow menu. Only the new
+      // UNNotification API allows overriding this title on macOS 11.
+      if (base::mac::IsAtLeastOS11()) {
+        [toast setValue:@NO forKey:@"_hasActionButton"];
+      } else {
+        [toast setActionButtonTitle:
+                   [_notificationData
+                       objectForKey:notification_constants::
+                                        kNotificationOptionsButtonTag]];
+      }
       [toast setValue:@YES forKey:@"_alwaysShowAlternateActionMenu"];
-
-      NSMutableArray* buttons = [NSMutableArray arrayWithCapacity:3];
-      [buttons addObject:[_notificationData
-                             objectForKey:notification_constants::
-                                              kNotificationButtonOne]];
-      if ([_notificationData
-              objectForKey:notification_constants::kNotificationButtonTwo]) {
-        [buttons addObject:[_notificationData
-                               objectForKey:notification_constants::
-                                                kNotificationButtonTwo]];
-      }
-      if (settingsButton) {
-        [buttons
-            addObject:[_notificationData
-                          objectForKey:notification_constants::
-                                           kNotificationSettingsButtonTag]];
-      }
-
       [toast setValue:buttons forKey:@"_alternateActionButtonTitles"];
     }
   }
 
-  // Tag
-  if ([toast respondsToSelector:@selector(setIdentifier:)] &&
-      [_notificationData
-          objectForKey:notification_constants::kNotificationTag]) {
-    [toast setValue:[_notificationData
-                        objectForKey:notification_constants::kNotificationTag]
+  // Identifier
+  if ([toast respondsToSelector:@selector(setIdentifier:)]) {
+    [toast setValue:[_notificationData objectForKey:notification_constants::
+                                                        kNotificationIdentifier]
              forKey:@"identifier"];
   }
 

@@ -18,6 +18,9 @@
 #include "components/payments/content/android_app_communication_test_support.h"
 #include "components/payments/core/android_app_description.h"
 #include "components/payments/core/method_strings.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/test/test_web_contents_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -28,7 +31,8 @@ class AndroidPaymentAppTest : public testing::Test,
                               public PaymentApp::Delegate {
  public:
   static std::unique_ptr<AndroidPaymentApp> CreateAndroidPaymentApp(
-      base::WeakPtr<AndroidAppCommunication> communication) {
+      base::WeakPtr<AndroidAppCommunication> communication,
+      content::WebContents* web_contents) {
     std::set<std::string> payment_method_names;
     payment_method_names.insert(methods::kGooglePlayBilling);
     auto stringified_method_data =
@@ -47,11 +51,14 @@ class AndroidPaymentAppTest : public testing::Test,
         payment_method_names, std::move(stringified_method_data),
         GURL("https://top-level-origin.com"),
         GURL("https://payment-request-origin.com"), "payment-request-id",
-        std::move(description), communication);
+        std::move(description), communication,
+        web_contents->GetMainFrame()->GetGlobalFrameRoutingId());
   }
 
   AndroidPaymentAppTest()
-      : support_(AndroidAppCommunicationTestSupport::Create()) {}
+      : support_(AndroidAppCommunicationTestSupport::Create()),
+        web_contents_(
+            web_contents_factory_.CreateWebContents(support_->context())) {}
 
   ~AndroidPaymentAppTest() override = default;
 
@@ -72,12 +79,16 @@ class AndroidPaymentAppTest : public testing::Test,
   }
 
   std::unique_ptr<AndroidAppCommunicationTestSupport> support_;
+  content::TestWebContentsFactory web_contents_factory_;
+  content::WebContents* web_contents_;
   std::unique_ptr<AndroidAppCommunicationTestSupport::ScopedInitialization>
       scoped_initialization_;
   base::WeakPtr<AndroidAppCommunication> communication_;
   std::string method_name_;
   std::string stringified_details_;
   std::string error_message_;
+
+  base::WeakPtrFactory<AndroidPaymentAppTest> weak_ptr_factory_{this};
 };
 
 TEST_F(AndroidPaymentAppTest, BrowserShutdown) {
@@ -87,8 +98,8 @@ TEST_F(AndroidPaymentAppTest, BrowserShutdown) {
 
   support_->ExpectNoPaymentAppInvoke();
 
-  auto app = CreateAndroidPaymentApp(communication_);
-  app->InvokePaymentApp(/*delegate=*/this);
+  auto app = CreateAndroidPaymentApp(communication_, web_contents_);
+  app->InvokePaymentApp(/*delegate=*/weak_ptr_factory_.GetWeakPtr());
 
   EXPECT_TRUE(error_message_.empty());
   EXPECT_TRUE(method_name_.empty());
@@ -103,8 +114,8 @@ TEST_F(AndroidPaymentAppTest, UnableToCommunicateToAndroidApps) {
 
   support_->ExpectNoPaymentAppInvoke();
 
-  auto app = CreateAndroidPaymentApp(communication_);
-  app->InvokePaymentApp(/*delegate=*/this);
+  auto app = CreateAndroidPaymentApp(communication_, web_contents_);
+  app->InvokePaymentApp(/*delegate=*/weak_ptr_factory_.GetWeakPtr());
 
   EXPECT_EQ("Unable to invoke Android apps.", error_message_);
   EXPECT_TRUE(method_name_.empty());
@@ -122,8 +133,8 @@ TEST_F(AndroidPaymentAppTest, OnInstrumentDetailsError) {
       /*payment_method_identifier=*/methods::kGooglePlayBilling,
       /*stringified_details=*/"{}");
 
-  auto app = CreateAndroidPaymentApp(communication_);
-  app->InvokePaymentApp(/*delegate=*/this);
+  auto app = CreateAndroidPaymentApp(communication_, web_contents_);
+  app->InvokePaymentApp(/*delegate=*/weak_ptr_factory_.GetWeakPtr());
 
   if (support_->AreAndroidAppsSupportedOnThisPlatform()) {
     EXPECT_EQ("User closed the payment app.", error_message_);
@@ -146,8 +157,8 @@ TEST_F(AndroidPaymentAppTest, OnInstrumentDetailsReady) {
       /*payment_method_identifier=*/methods::kGooglePlayBilling,
       /*stringified_details=*/"{\"status\": \"ok\"}");
 
-  auto app = CreateAndroidPaymentApp(communication_);
-  app->InvokePaymentApp(/*delegate=*/this);
+  auto app = CreateAndroidPaymentApp(communication_, web_contents_);
+  app->InvokePaymentApp(/*delegate=*/weak_ptr_factory_.GetWeakPtr());
 
   if (support_->AreAndroidAppsSupportedOnThisPlatform()) {
     EXPECT_TRUE(error_message_.empty());

@@ -6,10 +6,10 @@
 
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/components/quick_answers/utils/quick_answers_metrics.h"
 #include "chromeos/components/quick_answers/utils/quick_answers_utils.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "third_party/icu/source/common/unicode/locid.h"
 
 namespace chromeos {
@@ -83,11 +83,6 @@ void QuickAnswersClient::OnAssistantContextEnabled(bool enabled) {
   NotifyEligibilityChanged();
 }
 
-void QuickAnswersClient::OnAssistantQuickAnswersEnabled(bool enabled) {
-  quick_answers_settings_enabled_ = enabled;
-  NotifyEligibilityChanged();
-}
-
 void QuickAnswersClient::OnLocaleChanged(const std::string& locale) {
   locale_supported_ = IsQuickAnswersAllowedForLocale(
       locale, icu::Locale::getDefault().getName());
@@ -134,8 +129,6 @@ void QuickAnswersClient::NotifyEligibilityChanged() {
   bool is_eligible =
       (chromeos::features::IsQuickAnswersEnabled() && assistant_state_ &&
        assistant_enabled_ && locale_supported_ && assistant_context_enabled_ &&
-       (!chromeos::features::IsQuickAnswersSettingToggleEnabled() ||
-        quick_answers_settings_enabled_) &&
        assistant_allowed_state_ ==
            chromeos::assistant::AssistantAllowedState::ALLOWED);
 
@@ -196,13 +189,16 @@ void QuickAnswersClient::IntentGeneratorCallback(
 
   delegate_->OnRequestPreprocessFinished(processed_request);
 
-  if (features::IsQuickAnswersTextAnnotatorEnabled()) {
+  if (features::ShouldUseQuickAnswersTextAnnotator()) {
     RecordIntentType(intent_info.intent_type);
     if (intent_info.intent_type == IntentType::kUnknown) {
       // Don't fetch answer if no intent is generated.
       return;
     }
   }
+
+  RecordRequestTextLength(intent_info.intent_type,
+                          quick_answers_request.selected_text.length());
 
   if (!skip_fetch)
     FetchQuickAnswers(processed_request);

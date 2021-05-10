@@ -6,6 +6,8 @@
 #define CHROME_BROWSER_ANDROID_VR_ARCORE_DEVICE_FAKE_ARCORE_H_
 
 #include <memory>
+#include <unordered_map>
+
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
@@ -22,13 +24,20 @@ class FakeArCore : public ArCore {
   ~FakeArCore() override;
 
   // ArCore implementation.
-  bool Initialize(
+  base::Optional<ArCore::InitializeResult> Initialize(
       base::android::ScopedJavaLocalRef<jobject> application_context,
       const std::unordered_set<device::mojom::XRSessionFeature>&
-          enabled_features) override;
+          required_features,
+      const std::unordered_set<device::mojom::XRSessionFeature>&
+          optional_features,
+      const std::vector<device::mojom::XRTrackedImagePtr>& tracked_images,
+      base::Optional<ArCore::DepthSensingConfiguration> depth_sensing_config)
+      override;
+  MinMaxRange GetTargetFramerateRange() override;
   void SetCameraTexture(uint32_t texture) override;
   void SetDisplayGeometry(const gfx::Size& frame_size,
                           display::Display::Rotation display_rotation) override;
+  gfx::Size GetUncroppedCameraImageSize() const override;
 
   gfx::Transform GetProjectionMatrix(float near, float far) override;
   mojom::VRPosePtr Update(bool* camera_updated) override;
@@ -78,6 +87,8 @@ class FakeArCore : public ArCore {
       const base::TimeTicks& frame_time) override;
 
   void DetachAnchor(uint64_t anchor_id) override;
+
+  mojom::XRTrackedImagesDataPtr GetTrackedImages() override;
 
   void SetCameraAspect(float aspect) { camera_aspect_ = aspect; }
 

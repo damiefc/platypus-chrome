@@ -21,7 +21,6 @@ class TopShortcutsView;
 class UnifiedMediaControlsContainer;
 class NotificationHiddenView;
 class PageIndicatorView;
-class UnifiedManagedDeviceView;
 class UnifiedSystemInfoView;
 class UnifiedSystemTrayController;
 
@@ -65,9 +64,6 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
                                          public views::FocusTraversable,
                                          public views::FocusChangeListener {
  public:
-  // Get focus ring color for system tray elements.
-  static SkColor GetFocusRingColor();
-
   UnifiedSystemTrayView(UnifiedSystemTrayController* controller,
                         bool initially_expanded);
   ~UnifiedSystemTrayView() override;
@@ -124,15 +120,14 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
   int GetVisibleFeaturePodCount() const;
 
   // Get the accessible name for the currently shown detailed view.
-  base::string16 GetDetailedViewAccessibleName() const;
+  std::u16string GetDetailedViewAccessibleName() const;
 
   // Returns true if a detailed view is being shown in the tray. (e.g Bluetooth
   // Settings).
   bool IsDetailedViewShown() const;
 
-  // Show and hide media controls view.
+  // Show media controls view.
   void ShowMediaControls();
-  void HideMediaControls();
 
   // views::View:
   gfx::Size CalculatePreferredSize() const override;
@@ -166,6 +161,9 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
   PageIndicatorView* page_indicator_view_for_test() {
     return page_indicator_view_;
   }
+  UnifiedMediaControlsContainer* media_controls_container_for_testing() {
+    return media_controls_container_;
+  }
 
  private:
   class SystemTrayContainer;
@@ -194,9 +192,6 @@ class ASH_EXPORT UnifiedSystemTrayView : public views::View,
 
   // Null if media::kGlobalMediaControlsForChromeOS is disabled.
   UnifiedMediaControlsContainer* media_controls_container_ = nullptr;
-
-  // Null if kManagedDeviceUIRedesign is disabled.
-  UnifiedManagedDeviceView* managed_device_view_ = nullptr;
 
   // The maximum height available to the view.
   int max_height_ = 0;

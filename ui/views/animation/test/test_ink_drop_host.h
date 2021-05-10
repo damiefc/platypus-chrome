@@ -42,13 +42,6 @@ class TestInkDropHost : public InkDropHostView {
     disable_timers_for_test_ = disable_timers_for_test;
   }
 
-  // InkDropHostView:
-  void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
-  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
-  std::unique_ptr<InkDrop> CreateInkDrop() override;
-  std::unique_ptr<InkDropRipple> CreateInkDropRipple() const override;
-  std::unique_ptr<InkDropHighlight> CreateInkDropHighlight() const override;
-
  private:
   int num_ink_drop_layers_added_ = 0;
   int num_ink_drop_layers_removed_ = 0;

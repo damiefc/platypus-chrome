@@ -20,6 +20,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
@@ -54,8 +55,8 @@ public class PaymentRequestPaymentAppAndBasicCardWithModifiersTest {
     public void setUp() throws Throwable {
         mHelper = new AutofillTestHelper();
         mBillingAddressId = mHelper.setProfile(new AutofillProfile("", "https://example.com", true,
-                "Jon Doe", "Google", "340 Main St", "CA", "Los Angeles", "", "90291", "", "US",
-                "310-310-6000", "jon.doe@gmail.com", "en-US"));
+                "" /* honorific prefix */, "Jon Doe", "Google", "340 Main St", "CA", "Los Angeles",
+                "", "90291", "", "US", "310-310-6000", "jon.doe@gmail.com", "en-US"));
     }
 
     protected String getPrimaryButtonLabel() {
@@ -71,6 +72,7 @@ public class PaymentRequestPaymentAppAndBasicCardWithModifiersTest {
     @Test
     @MediumTest
     @Feature({"Payments"})
+    @FlakyTest(message = "https://crbug.com/1182584")
     public void testUpdateTotalAndInstrumentLabelWithBobPayModifiers() throws TimeoutException {
         // Mastercard card with complete set of information and unknown type.
         mHelper.setCreditCard(new CreditCard(/*guid=*/"", "https://example.com", true /* isLocal */,
@@ -194,9 +196,10 @@ public class PaymentRequestPaymentAppAndBasicCardWithModifiersTest {
     @Feature({"Payments"})
     public void testPaymentAppCanPayWithModifiers() throws TimeoutException {
         // Add a credit card to force showing payment sheet UI.
-        String billingAddressId = mHelper.setProfile(new AutofillProfile("", "https://example.com",
-                true, "John Smith", "Google", "340 Main St", "CA", "Los Angeles", "", "90291", "",
-                "US", "310-310-6000", "john.smith@gmail.com", "en-US"));
+        String billingAddressId = mHelper.setProfile(
+                new AutofillProfile("", "https://example.com", true, "" /* honorific prefix */,
+                        "John Smith", "Google", "340 Main St", "CA", "Los Angeles", "", "90291", "",
+                        "US", "310-310-6000", "john.smith@gmail.com", "en-US"));
         mHelper.setCreditCard(new CreditCard(/*guid=*/"", "https://example.com", true, true,
                 "Jon Doe", "4111111111111111", "1111", "12", "2050", "visa", R.drawable.visa_card,
                 billingAddressId, "" /* serverId */));

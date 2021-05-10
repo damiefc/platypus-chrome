@@ -5,7 +5,6 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_OFFSCREEN_CANVAS_PLACEHOLDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_OFFSCREEN_CANVAS_PLACEHOLDER_H_
 
-#include <memory>
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
@@ -50,6 +49,8 @@ class PLATFORM_EXPORT OffscreenCanvasPlaceholder {
 
   void UpdateOffscreenCanvasFilterQuality(SkFilterQuality filter_quality);
 
+  virtual bool HasCanvasCapture() const { return false; }
+
  private:
   bool PostSetSuspendAnimationToOffscreenCanvasThread(bool suspend);
 
@@ -57,7 +58,7 @@ class PLATFORM_EXPORT OffscreenCanvasPlaceholder {
   scoped_refptr<CanvasResource> placeholder_frame_;
   base::WeakPtr<CanvasResourceDispatcher> frame_dispatcher_;
   scoped_refptr<base::SingleThreadTaskRunner> frame_dispatcher_task_runner_;
-  viz::ResourceId placeholder_frame_resource_id_ = 0;
+  viz::ResourceId placeholder_frame_resource_id_ = viz::kInvalidResourceId;
 
   enum {
     kNoPlaceholderId = -1,
@@ -76,4 +77,4 @@ class PLATFORM_EXPORT OffscreenCanvasPlaceholder {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_OFFSCREEN_CANVAS_PLACEHOLDER_H_

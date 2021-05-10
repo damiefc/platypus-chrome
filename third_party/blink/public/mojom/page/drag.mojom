@@ -5,24 +5,13 @@
 module blink.mojom;
 
 import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/big_buffer.mojom";
 import "mojo/public/mojom/base/string16.mojom";
 import "services/network/public/mojom/referrer_policy.mojom";
 import "ui/base/dragdrop/mojom/drag_drop_types.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 import "url/mojom/url.mojom";
-import "third_party/blink/public/mojom/file_system_access/native_file_system_drag_drop_token.mojom";
-
-// "Verb" of a drag-and-drop operation as negotiated between the source and
-// destination. It's typemapped to blink::DragOperation.
-enum DragOperation {
-  kNone,
-  kCopy,
-  kLink,
-  kGeneric,
-  kPrivate,
-  kMove,
-  kDelete,
-};
+import "third_party/blink/public/mojom/data_transfer/data_transfer.mojom";
 
 // This struct encodes what drag-and-drop operations are allowed. It's
 // typemapped to blink::DragOperationsMask.
@@ -31,10 +20,7 @@ enum DragOperation {
 struct AllowedDragOperations {
   bool allow_copy;
   bool allow_link;
-  bool allow_generic;
-  bool allow_private;
   bool allow_move;
-  bool allow_delete;
 };
 
 // Used when dragging images, links, plain text, HTML content or other
@@ -44,7 +30,7 @@ struct DragItemString {
   string string_type;
   // Depending of the value of `string_type`, it contains the dragged link,
   // text, HTML markup or any other data.
-  mojo_base.mojom.String16 string_data;
+  mojo_base.mojom.BigString16 string_data;
 
   // Title associated with a link. Only valid when string_type == "text/uri-list".
   mojo_base.mojom.String16? title;
@@ -54,17 +40,10 @@ struct DragItemString {
   url.mojom.Url? base_url;
 };
 
-// Used for dragging a list of files.
-struct DragItemFile {
-  mojo_base.mojom.FilePath path;
-  mojo_base.mojom.FilePath display_name;
-  pending_remote<NativeFileSystemDragDropToken>? native_file_system_token;
-};
-
 // Only used when dragging images out of Blink.
 struct DragItemBinary {
   // Image data.
-  array<uint8> data;
+  mojo_base.mojom.BigBuffer data;
   url.mojom.Url source_url;
   mojo_base.mojom.FilePath filename_extension;
   // Content-Disposition response header.
@@ -75,12 +54,12 @@ struct DragItemBinary {
 struct DragItemFileSystemFile {
   url.mojom.Url url;
   int64 size;
-  string file_system_id;
+  string? file_system_id;
 };
 
 union DragItem {
   DragItemString string;
-  DragItemFile file;
+  DataTransferFile file;
   DragItemBinary binary;
   DragItemFileSystemFile file_system_file;
 };

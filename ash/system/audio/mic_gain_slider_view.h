@@ -5,16 +5,18 @@
 #ifndef ASH_SYSTEM_AUDIO_MIC_GAIN_SLIDER_VIEW_H_
 #define ASH_SYSTEM_AUDIO_MIC_GAIN_SLIDER_VIEW_H_
 
+#include "ash/components/audio/cras_audio_handler.h"
 #include "ash/system/unified/unified_slider_view.h"
-#include "chromeos/audio/cras_audio_handler.h"
+#include "ui/views/controls/label.h"
 
 namespace ash {
 
 class MicGainSliderController;
 
 class MicGainSliderView : public UnifiedSliderView,
-                          public chromeos::CrasAudioHandler::AudioObserver {
+                          public CrasAudioHandler::AudioObserver {
  public:
+  explicit MicGainSliderView(MicGainSliderController* controller);
   MicGainSliderView(MicGainSliderController* controller,
                     uint64_t device_id,
                     bool internal);
@@ -25,13 +27,17 @@ class MicGainSliderView : public UnifiedSliderView,
   // CrasAudioHandler::AudioObserver:
   void OnInputNodeGainChanged(uint64_t node_id, int gain) override;
   void OnInputMuteChanged(bool mute_on) override;
+  void OnInputMutedByMicrophoneMuteSwitchChanged(bool muted) override;
   void OnActiveInputNodeChanged() override;
 
   // views::View:
   const char* GetClassName() const override;
+  void OnThemeChanged() override;
 
  private:
   void Update(bool by_user);
+
+  views::Label* toast_label_ = nullptr;
 
   // device id for the input device tied to this slider.
   const uint64_t device_id_;

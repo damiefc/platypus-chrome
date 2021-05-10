@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -31,6 +31,7 @@
 #include "components/viz/service/display_embedder/skia_output_surface_dependency_impl.h"
 #include "components/viz/service/display_embedder/skia_output_surface_impl.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/gl/gpu_service_impl.h"
 #include "components/viz/test/test_gpu_service_holder.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -125,11 +126,6 @@ class DirectOutputSurface : public viz::OutputSurface {
   gfx::OverlayTransform GetDisplayTransform() override {
     return gfx::OVERLAY_TRANSFORM_NONE;
   }
-  scoped_refptr<gpu::GpuTaskSchedulerHelper> GetGpuTaskSchedulerHelper()
-      override {
-    return nullptr;
-  }
-  gpu::MemoryTracker* GetMemoryTracker() override { return nullptr; }
 
  private:
   void OnSwapBuffersComplete() {
@@ -137,7 +133,8 @@ class DirectOutputSurface : public viz::OutputSurface {
     // so we provide dummy values here.
     base::TimeTicks now = base::TimeTicks::Now();
     gfx::SwapTimings timings = {now, now};
-    client_->DidReceiveSwapBuffersAck(timings);
+    client_->DidReceiveSwapBuffersAck(timings,
+                                      /*release_fence=*/gfx::GpuFenceHandle());
     client_->DidReceivePresentationFeedback(gfx::PresentationFeedback());
   }
 
@@ -149,7 +146,7 @@ class DirectOutputSurface : public viz::OutputSurface {
 
 }  // namespace
 
-// TODO(sgilhuly): This class is managed heavily by InProcessTransportFactory.
+// TODO(rivr): This class is managed heavily by InProcessTransportFactory.
 // Move some of the logic in here and simplify the interface.
 class InProcessContextFactory::PerCompositorData
     : public viz::mojom::DisplayPrivate {
@@ -191,10 +188,11 @@ class InProcessContextFactory::PerCompositorData
   void UpdateRefreshRate(float refresh_rate) override {}
   void SetSupportedRefreshRates(
       const std::vector<float>& refresh_rates) override {}
+  void PreserveChildSurfaceControls() override {}
 #endif
 
   void SetDelegatedInkPointRenderer(
-      mojo::PendingReceiver<viz::mojom::DelegatedInkPointRenderer> receiver)
+      mojo::PendingReceiver<gfx::mojom::DelegatedInkPointRenderer> receiver)
       override {}
 
   void SetSurfaceHandle(gpu::SurfaceHandle surface_handle) {
@@ -323,18 +321,27 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
   DCHECK_EQ(context_result, gpu::ContextResult::kSuccess);
 
   std::unique_ptr<viz::OutputSurface> display_output_surface;
+  std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+      display_dependency;
 
   if (renderer_settings_.use_skia_renderer) {
+    auto skia_deps = std::make_unique<viz::SkiaOutputSurfaceDependencyImpl>(
+        viz::TestGpuServiceHolder::GetInstance()->gpu_service(),
+        gpu::kNullSurfaceHandle);
+    display_dependency =
+        std::make_unique<viz::DisplayCompositorMemoryAndTaskController>(
+            std::move(skia_deps));
     display_output_surface = viz::SkiaOutputSurfaceImpl::Create(
-        std::make_unique<viz::SkiaOutputSurfaceDependencyImpl>(
-            viz::TestGpuServiceHolder::GetInstance()->gpu_service(),
-            gpu::kNullSurfaceHandle),
-        renderer_settings_, &debug_settings_);
+        display_dependency.get(), renderer_settings_, &debug_settings_);
   } else if (use_test_surface_) {
+    // The |context_provider| will contain an InProcessCommandBuffer, which will
+    // make a gpu::GpuTaskSchedulerHelper if one is not provided.
     gfx::SurfaceOrigin surface_origin = gfx::SurfaceOrigin::kBottomLeft;
     display_output_surface = std::make_unique<cc::PixelTestOutputSurface>(
         context_provider, surface_origin);
   } else {
+    // The |context_provider| will contain an InProcessCommandBuffer, which will
+    // make a gpu::GpuTaskSchedulerHelper if one is not provided.
     display_output_surface =
         std::make_unique<DirectOutputSurface>(context_provider);
   }
@@ -362,9 +369,9 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
 
   data->SetDisplay(std::make_unique<viz::Display>(
       &shared_bitmap_manager_, renderer_settings_, &debug_settings_,
-      compositor->frame_sink_id(), std::move(display_output_surface),
-      std::move(overlay_processor), std::move(scheduler),
-      compositor->task_runner()));
+      compositor->frame_sink_id(), std::move(display_dependency),
+      std::move(display_output_surface), std::move(overlay_processor),
+      std::move(scheduler), compositor->task_runner()));
   frame_sink_manager_->RegisterBeginFrameSource(begin_frame_source.get(),
                                                 compositor->frame_sink_id());
   // Note that we are careful not to destroy a prior |data->begin_frame_source|
@@ -430,6 +437,10 @@ cc::TaskGraphRunner* InProcessContextFactory::GetTaskGraphRunner() {
 
 viz::FrameSinkId InProcessContextFactory::AllocateFrameSinkId() {
   return frame_sink_id_allocator_.NextFrameSinkId();
+}
+
+viz::SubtreeCaptureId InProcessContextFactory::AllocateSubtreeCaptureId() {
+  return subtree_capture_id_allocator_.NextSubtreeCaptureId();
 }
 
 viz::HostFrameSinkManager* InProcessContextFactory::GetHostFrameSinkManager() {

@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/callback_forward.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
 #include "base/task/task_traits.h"
@@ -20,19 +19,20 @@
 #include "build/build_config.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_service.h"
+#include "components/profile_metrics/browser_profile_type.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/device_service.h"
 #include "content/public/browser/download_manager.h"
+#include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
-#include "weblayer/browser/android/metrics/weblayer_metrics_service_client.h"
 #include "weblayer/browser/browser_context_impl.h"
 #include "weblayer/browser/browser_impl.h"
 #include "weblayer/browser/browser_list.h"
@@ -40,6 +40,7 @@
 #include "weblayer/browser/cookie_manager_impl.h"
 #include "weblayer/browser/favicon/favicon_service_impl.h"
 #include "weblayer/browser/favicon/favicon_service_impl_factory.h"
+#include "weblayer/browser/no_state_prefetch/prerender_controller_impl.h"
 #include "weblayer/browser/persistence/browser_persister_file_utils.h"
 #include "weblayer/browser/tab_impl.h"
 
@@ -51,10 +52,10 @@
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/unified_consent/pref_names.h"
 #include "ui/gfx/android/java_bitmap.h"
+#include "weblayer/browser/android/metrics/weblayer_metrics_service_client.h"
 #include "weblayer/browser/browser_process.h"
 #include "weblayer/browser/java/jni/ProfileImpl_jni.h"
 #include "weblayer/browser/safe_browsing/safe_browsing_service.h"
-#include "weblayer/browser/user_agent.h"
 #endif
 
 #if defined(OS_POSIX)
@@ -70,6 +71,15 @@ namespace weblayer {
 namespace {
 
 bool g_first_profile_created = false;
+
+// Simulates a WeakPtr for WebContents. Specifically if the WebContents
+// supplied to the constructor is destroyed then web_contents() returns
+// null.
+class WebContentsTracker : public content::WebContentsObserver {
+ public:
+  explicit WebContentsTracker(content::WebContents* web_contents)
+      : content::WebContentsObserver(web_contents) {}
+};
 
 // TaskRunner used by MarkProfileAsDeleted and NukeProfilesMarkedForDeletion to
 // esnure that Nuke happens before any Mark in this process.
@@ -123,7 +133,7 @@ void OnDidGetCachedFaviconForPageUrl(
     gfx::Image image) {
   SkBitmap favicon = image.AsImageSkia().GetRepresentation(1.0f).GetBitmap();
   base::android::RunObjectCallbackAndroid(
-      callback, favicon.empty() ? nullptr : gfx::ConvertToJavaBitmap(&favicon));
+      callback, favicon.empty() ? nullptr : gfx::ConvertToJavaBitmap(favicon));
 }
 
 #endif  // OS_ANDROID
@@ -174,14 +184,19 @@ base::FilePath ProfileImpl::GetCachePath(content::BrowserContext* context) {
   return profile->info_.cache_path;
 }
 
-ProfileImpl::ProfileImpl(const std::string& name)
+ProfileImpl::ProfileImpl(const std::string& name, bool is_incognito)
     : download_directory_(BrowserContextImpl::GetDefaultDownloadDirectory()) {
   {
     base::ScopedAllowBlocking allow_blocking;
-    info_ = CreateProfileInfo(name);
+    info_ = CreateProfileInfo(name, is_incognito);
   }
 
   GetProfiles().insert(this);
+  profile_metrics::SetBrowserProfileType(
+      GetBrowserContext(), is_incognito
+                               ? profile_metrics::BrowserProfileType::kIncognito
+                               : profile_metrics::BrowserProfileType::kRegular);
+
   for (auto& observer : GetObservers())
     observer.ProfileCreated(this);
 
@@ -262,6 +277,11 @@ void ProfileImpl::DownloadsInitialized() {
 #endif
 }
 
+void ProfileImpl::MarkAsDeleted() {
+  GetBackgroundDiskOperationTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&MarkProfileAsDeleted, info_));
+}
+
 void ProfileImpl::ClearBrowsingData(
     const std::vector<BrowsingDataType>& data_types,
     base::Time from_time,
@@ -283,6 +303,7 @@ void ProfileImpl::ClearBrowsingData(
         remove_mask |= content::BrowsingDataRemover::DATA_TYPE_MEDIA_LICENSES;
         remove_mask |= BrowsingDataRemoverDelegate::DATA_TYPE_ISOLATED_ORIGINS;
         remove_mask |= BrowsingDataRemoverDelegate::DATA_TYPE_FAVICONS;
+        remove_mask |= BrowsingDataRemoverDelegate::DATA_TYPE_AD_INTERVENTIONS;
         remove_mask |= content::BrowsingDataRemover::DATA_TYPE_TRUST_TOKENS;
         remove_mask |= content::BrowsingDataRemover::DATA_TYPE_CONVERSIONS;
         break;
@@ -308,10 +329,22 @@ void ProfileImpl::SetDownloadDelegate(DownloadDelegate* delegate) {
   download_delegate_ = delegate;
 }
 
+void ProfileImpl::SetGoogleAccountAccessTokenFetchDelegate(
+    GoogleAccountAccessTokenFetchDelegate* delegate) {
+  access_token_fetch_delegate_ = delegate;
+}
+
 CookieManager* ProfileImpl::GetCookieManager() {
   if (!cookie_manager_)
     cookie_manager_ = std::make_unique<CookieManagerImpl>(GetBrowserContext());
   return cookie_manager_.get();
+}
+
+PrerenderController* ProfileImpl::GetPrerenderController() {
+  if (!prerender_controller_)
+    prerender_controller_ =
+        std::make_unique<PrerenderControllerImpl>(GetBrowserContext());
+  return prerender_controller_.get();
 }
 
 void ProfileImpl::GetBrowserPersistenceIds(
@@ -368,20 +401,19 @@ void ProfileImpl::ClearRendererCache() {
 }
 
 void ProfileImpl::OnLocaleChanged() {
-  content::BrowserContext::ForEachStoragePartition(
-      GetBrowserContext(),
-      base::BindRepeating(
-          [](const std::string& accept_language,
-             content::StoragePartition* storage_partition) {
-            storage_partition->GetNetworkContext()->SetAcceptLanguage(
-                accept_language);
-          },
-          i18n::GetAcceptLangs()));
+  GetBrowserContext()->ForEachStoragePartition(base::BindRepeating(
+      [](const std::string& accept_language,
+         content::StoragePartition* storage_partition) {
+        storage_partition->GetNetworkContext()->SetAcceptLanguage(
+            accept_language);
+      },
+      i18n::GetAcceptLangs()));
 }
 
 // static
-std::unique_ptr<Profile> Profile::Create(const std::string& name) {
-  return std::make_unique<ProfileImpl>(name);
+std::unique_ptr<Profile> Profile::Create(const std::string& name,
+                                         bool is_incognito) {
+  return std::make_unique<ProfileImpl>(name, is_incognito);
 }
 
 // static
@@ -429,16 +461,19 @@ void ProfileImpl::OnProfileMarked(std::unique_ptr<ProfileImpl> profile,
 ProfileImpl::ProfileImpl(
     JNIEnv* env,
     const base::android::JavaParamRef<jstring>& name,
-    const base::android::JavaParamRef<jobject>& java_profile)
-    : ProfileImpl(ConvertJavaStringToUTF8(env, name)) {
+    const base::android::JavaParamRef<jobject>& java_profile,
+    bool is_incognito)
+    : ProfileImpl(ConvertJavaStringToUTF8(env, name), is_incognito) {
   java_profile_ = java_profile;
 }
 
 static jlong JNI_ProfileImpl_CreateProfile(
     JNIEnv* env,
     const base::android::JavaParamRef<jstring>& name,
-    const base::android::JavaParamRef<jobject>& java_profile) {
-  return reinterpret_cast<jlong>(new ProfileImpl(env, name, java_profile));
+    const base::android::JavaParamRef<jobject>& java_profile,
+    jboolean is_incognito) {
+  return reinterpret_cast<jlong>(
+      new ProfileImpl(env, name, java_profile, is_incognito));
 }
 
 static void JNI_ProfileImpl_DeleteProfile(JNIEnv* env, jlong profile) {
@@ -511,6 +546,10 @@ jlong ProfileImpl::GetCookieManager(JNIEnv* env) {
   return reinterpret_cast<jlong>(GetCookieManager());
 }
 
+jlong ProfileImpl::GetPrerenderController(JNIEnv* env) {
+  return reinterpret_cast<jlong>(GetPrerenderController());
+}
+
 void ProfileImpl::EnsureBrowserContextInitialized(JNIEnv* env) {
   content::BrowserContext::GetDownloadManager(GetBrowserContext());
 }
@@ -563,6 +602,39 @@ void ProfileImpl::GetCachedFaviconForPageUrl(
 
 base::FilePath ProfileImpl::GetBrowserPersisterDataBaseDir() const {
   return ComputeBrowserPersisterDataBaseDir(info_);
+}
+
+content::WebContents* ProfileImpl::OpenUrl(
+    const content::OpenURLParams& params) {
+#if !defined(OS_ANDROID)
+  return nullptr;
+#else
+  // We expect only NEW_FOREGROUND_TAB. The NEW_POPUP disposition is only used
+  // for payment handler windows, but WebLayer (and Android Chrome) do not
+  // support that. See ContentBrowserClient::ShowPaymentHandlerWindow().
+  DCHECK_EQ(params.disposition, WindowOpenDisposition::NEW_FOREGROUND_TAB);
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  BrowserImpl* browser = reinterpret_cast<BrowserImpl*>(
+      Java_ProfileImpl_getBrowserForNewTab(env, java_profile_));
+  if (!browser)
+    return nullptr;
+
+  std::unique_ptr<content::WebContents> new_tab_contents =
+      content::WebContents::Create(
+          content::WebContents::CreateParams(GetBrowserContext()));
+  WebContentsTracker tracker(new_tab_contents.get());
+  Tab* tab = browser->CreateTab(std::move(new_tab_contents));
+
+  if (!tracker.web_contents())
+    return nullptr;
+
+  Java_ProfileImpl_onTabAdded(env, java_profile_,
+                              static_cast<TabImpl*>(tab)->GetJavaTab());
+  tracker.web_contents()->GetController().LoadURLWithParams(
+      content::NavigationController::LoadURLParams(params));
+  return tracker.web_contents();
+#endif  // defined(OS_ANDROID)
 }
 
 void ProfileImpl::SetBooleanSetting(SettingType type, bool value) {

@@ -33,14 +33,13 @@ class RelaunchRecommendedBubbleView : public LocationBarBubbleDelegateView {
 
   // LocationBarBubbleDelegateView:
   bool Accept() override;
-  base::string16 GetWindowTitle() const override;
+  std::u16string GetWindowTitle() const override;
   bool ShouldShowCloseButton() const override;
   gfx::ImageSkia GetWindowIcon() override;
 
  protected:
   // LocationBarBubbleDelegateView:
   void Init() override;
-  gfx::Size CalculatePreferredSize() const override;
   void VisibilityChanged(views::View* starting_from, bool is_visible) override;
 
  private:

@@ -12,6 +12,8 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/optional.h"
+#include "build/chromeos_buildflags.h"
 #include "dbus/object_path.h"
 #include "dbus/property.h"
 #include "device/bluetooth/bluetooth_export.h"
@@ -79,8 +81,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattCharacteristicClient
   using ErrorCallback =
       base::OnceCallback<void(const std::string& error_name,
                               const std::string& error_message)>;
-  using ValueCallback =
-      base::OnceCallback<void(const std::vector<uint8_t>& value)>;
+  using ValueCallback = base::OnceCallback<void(
+      base::Optional<device::BluetoothGattService::GattErrorCode> error_code,
+      const std::vector<uint8_t>& value)>;
 
   ~BluetoothGattCharacteristicClient() override;
 
@@ -125,7 +128,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattCharacteristicClient
   // Starts a notification session from this characteristic with object path
   // |object_path| if it supports value notifications or indications. Invokes
   // |callback| on success and |error_callback| on failure.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   virtual void StartNotify(
       const dbus::ObjectPath& object_path,
       device::BluetoothGattCharacteristic::NotificationType notification_type,

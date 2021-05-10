@@ -25,18 +25,8 @@ namespace {
 // TODO(alokp): Query the preferred value from media backend.
 const int kDefaultSampleRate = 48000;
 
-// Define bounds for the output buffer size (in frames).
-// TODO(alokp): Query the preferred value from media backend.
-static const int kMinimumOutputBufferSize =
-    BUILDFLAG(MINIMUM_OUTPUT_BUFFER_SIZE_IN_FRAMES);
-static const int kMaximumOutputBufferSize =
-    BUILDFLAG(MAXIMUM_OUTPUT_BUFFER_SIZE_IN_FRAMES);
-static const int kDefaultOutputBufferSize =
-    BUILDFLAG(DEFAULT_OUTPUT_BUFFER_SIZE_IN_FRAMES);
-
 // TODO(jyw): Query the preferred value from media backend.
 static const int kDefaultInputBufferSize = 1024;
-
 }  // namespace
 
 namespace chromecast {
@@ -45,16 +35,16 @@ namespace media {
 CastAudioManager::CastAudioManager(
     std::unique_ptr<::media::AudioThread> audio_thread,
     ::media::AudioLogFactory* audio_log_factory,
+    CastAudioManagerHelper::Delegate* delegate,
     base::RepeatingCallback<CmaBackendFactory*()> backend_factory_getter,
-    CastAudioManagerHelper::GetSessionIdCallback get_session_id_callback,
     scoped_refptr<base::SingleThreadTaskRunner> browser_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
     mojo::PendingRemote<chromecast::mojom::ServiceConnector> connector,
     bool use_mixer)
     : CastAudioManager(std::move(audio_thread),
                        audio_log_factory,
+                       delegate,
                        std::move(backend_factory_getter),
-                       std::move(get_session_id_callback),
                        std::move(browser_task_runner),
                        std::move(media_task_runner),
                        std::move(connector),
@@ -64,8 +54,8 @@ CastAudioManager::CastAudioManager(
 CastAudioManager::CastAudioManager(
     std::unique_ptr<::media::AudioThread> audio_thread,
     ::media::AudioLogFactory* audio_log_factory,
+    CastAudioManagerHelper::Delegate* delegate,
     base::RepeatingCallback<CmaBackendFactory*()> backend_factory_getter,
-    CastAudioManagerHelper::GetSessionIdCallback get_session_id_callback,
     scoped_refptr<base::SingleThreadTaskRunner> browser_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
     mojo::PendingRemote<chromecast::mojom::ServiceConnector> connector,
@@ -73,8 +63,8 @@ CastAudioManager::CastAudioManager(
     bool force_use_cma_backend_for_output)
     : AudioManagerBase(std::move(audio_thread), audio_log_factory),
       helper_(this,
+              delegate,
               std::move(backend_factory_getter),
-              std::move(get_session_id_callback),
               std::move(media_task_runner),
               std::move(connector)),
       browser_task_runner_(std::move(browser_task_runner)),
@@ -201,18 +191,8 @@ void CastAudioManager::ReleaseOutputStream(::media::AudioOutputStream* stream) {
     const ::media::AudioParameters& input_params) {
   ::media::ChannelLayout channel_layout = ::media::CHANNEL_LAYOUT_STEREO;
   int sample_rate = kDefaultSampleRate;
-  int buffer_size = kDefaultOutputBufferSize;
-  if (input_params.IsValid()) {
-    // Do not change:
-    // - the channel layout
-    // - the number of bits per sample
-    // We support stereo only with 16 bits per sample.
-    sample_rate = input_params.sample_rate();
-    buffer_size = std::min(
-        kMaximumOutputBufferSize,
-        std::max(kMinimumOutputBufferSize, input_params.frames_per_buffer()));
-  }
-
+  // Set buffer size to 10ms of the sample rate.
+  int buffer_size = sample_rate / 100;
   ::media::AudioParameters output_params(
       ::media::AudioParameters::AUDIO_PCM_LOW_LATENCY, channel_layout,
       sample_rate, buffer_size);

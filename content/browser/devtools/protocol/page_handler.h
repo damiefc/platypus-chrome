@@ -15,7 +15,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/trees/render_frame_metadata.h"
@@ -84,19 +84,22 @@ class PageHandler : public DevToolsDomainHandler,
   using JavaScriptDialogCallback =
       content::JavaScriptDialogManager::DialogClosedCallback;
   void DidRunJavaScriptDialog(const GURL& url,
-                              const base::string16& message,
-                              const base::string16& default_prompt,
+                              const std::u16string& message,
+                              const std::u16string& default_prompt,
                               JavaScriptDialogType dialog_type,
                               bool has_non_devtools_handlers,
                               JavaScriptDialogCallback callback);
   void DidRunBeforeUnloadConfirm(const GURL& url,
                                  bool has_non_devtools_handlers,
                                  JavaScriptDialogCallback callback);
-  void DidCloseJavaScriptDialog(bool success, const base::string16& user_input);
+  void DidCloseJavaScriptDialog(bool success, const std::u16string& user_input);
   void NavigationReset(NavigationRequest* navigation_request);
   void DownloadWillBegin(FrameTreeNode* ftn, download::DownloadItem* item);
 
   WebContentsImpl* GetWebContents();
+
+  void BackForwardCacheNotUsed(const NavigationRequest* nav_request);
+  bool ShouldBypassCSP();
 
   Response Enable() override;
   Response Disable() override;
@@ -126,6 +129,7 @@ class PageHandler : public DevToolsDomainHandler,
       Maybe<int> quality,
       Maybe<Page::Viewport> clip,
       Maybe<bool> from_surface,
+      Maybe<bool> capture_beyond_viewport,
       std::unique_ptr<CaptureScreenshotCallback> callback) override;
   void CaptureSnapshot(
       Maybe<std::string> format,
@@ -173,6 +177,8 @@ class PageHandler : public DevToolsDomainHandler,
   void GetManifestIcons(
       std::unique_ptr<GetManifestIconsCallback> callback) override;
 
+  Response SetBypassCSP(bool enabled) override;
+
  private:
   enum EncodingFormat { PNG, JPEG };
 
@@ -187,13 +193,15 @@ class PageHandler : public DevToolsDomainHandler,
       std::unique_ptr<Page::ScreencastFrameMetadata> metadata,
       const protocol::Binary& data);
 
-  void ScreenshotCaptured(std::unique_ptr<CaptureScreenshotCallback> callback,
-                          const std::string& format,
-                          int quality,
-                          const gfx::Size& original_view_size,
-                          const gfx::Size& requested_image_size,
-                          const blink::DeviceEmulationParams& original_params,
-                          const gfx::Image& image);
+  void ScreenshotCaptured(
+      std::unique_ptr<CaptureScreenshotCallback> callback,
+      const std::string& format,
+      int quality,
+      const gfx::Size& original_view_size,
+      const gfx::Size& requested_image_size,
+      const blink::DeviceEmulationParams& original_params,
+      const base::Optional<blink::web_pref::WebPreferences>& original_web_prefs,
+      const gfx::Image& image);
 
   void GotManifest(std::unique_ptr<GetAppManifestCallback> callback,
                    const GURL& manifest_url,
@@ -210,6 +218,7 @@ class PageHandler : public DevToolsDomainHandler,
   void OnDownloadDestroyed(download::DownloadItem* item) override;
 
   bool enabled_;
+  bool bypass_csp_ = false;
 
   bool screencast_enabled_;
   std::string screencast_format_;
@@ -237,8 +246,11 @@ class PageHandler : public DevToolsDomainHandler,
   BrowserHandler* browser_handler_;
 
   std::unique_ptr<Page::Frontend> frontend_;
-  ScopedObserver<RenderWidgetHost, RenderWidgetHostObserver> observer_{this};
+
+  base::ScopedObservation<RenderWidgetHost, RenderWidgetHostObserver>
+      observation_{this};
   JavaScriptDialogCallback pending_dialog_;
+  // Maps DevTools navigation tokens to pending NavigateCallbacks.
   base::flat_map<base::UnguessableToken, std::unique_ptr<NavigateCallback>>
       navigate_callbacks_;
   base::flat_set<download::DownloadItem*> pending_downloads_;

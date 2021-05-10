@@ -15,6 +15,7 @@
 #include "base/callback_forward.h"
 #include "base/component_export.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 
 class GURL;
@@ -26,7 +27,7 @@ namespace base {
 class FilePath;
 class TickClock;
 class TimeDelta;
-}
+}  // namespace base
 
 namespace net {
 class HttpResponseHeaders;
@@ -348,6 +349,12 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
   // caller of completion.
   virtual const mojom::URLResponseHead* ResponseInfo() const = 0;
 
+  // The URLLoaderCompletionStatus for the request. Will be nullopt if the
+  // response never completed. May only be called once the loader has informed
+  // the caller of completion.
+  virtual const base::Optional<URLLoaderCompletionStatus>& CompletionStatus()
+      const = 0;
+
   // Returns the URL that this loader is processing. May only be called once the
   // loader has informed the caller of completion.
   virtual const GURL& GetFinalURL() const = 0;
@@ -368,6 +375,9 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
   // the method returns the total bytes decompressed bytes until the failure
   // occurred.
   virtual int64_t GetContentSize() const = 0;
+
+  // Returns the number of times retry has been attempted.
+  virtual int GetNumRetries() const = 0;
 
  protected:
   SimpleURLLoader();

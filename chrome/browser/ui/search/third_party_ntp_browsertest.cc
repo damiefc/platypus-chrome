@@ -49,8 +49,7 @@ IN_PROC_BROWSER_TEST_F(ThirdPartyNTPBrowserTest, EmbeddedMostVisitedIframe) {
       https_test_server().GetURL("ntp.com", "/instant_extended.html");
   GURL ntp_url =
       https_test_server().GetURL("ntp.com", "/instant_extended_ntp.html");
-  InstantTestBase::Init(base_url, ntp_url, false);
-  SetupInstant(browser());
+  SetupInstant(browser()->profile(), base_url, ntp_url);
 
   // Navigate to the NTP URL and verify that the resulting process is marked as
   // an Instant process.
@@ -95,8 +94,7 @@ IN_PROC_BROWSER_TEST_F(ThirdPartyNTPBrowserTest, ProcessPerSite) {
       https_test_server().GetURL("ntp.com", "/instant_extended.html");
   GURL ntp_url =
       https_test_server().GetURL("ntp.com", "/instant_extended_ntp.html");
-  InstantTestBase::Init(base_url, ntp_url, false);
-  SetupInstant(browser());
+  SetupInstant(browser()->profile(), base_url, ntp_url);
 
   // Open NTP in |tab1|.
   content::WebContents* tab1;
@@ -104,17 +102,15 @@ IN_PROC_BROWSER_TEST_F(ThirdPartyNTPBrowserTest, ProcessPerSite) {
     content::WebContentsAddedObserver tab1_observer;
 
     // Try to simulate as closely as possible what would have happened in the
-    // real user interaction.  In particular, do *not* use
-    // local_ntp_test_utils::OpenNewTab, which requires the caller to specify
-    // the URL of the new tab.
+    // real user interaction.
     chrome::NewTab(browser());
 
     // Wait for the new tab.
     tab1 = tab1_observer.GetWebContents();
     ASSERT_TRUE(WaitForLoadStop(tab1));
 
-    // Sanity check: the NTP should be provided by |ntp_url| (and not by
-    // chrome-search://local-ntp [1st-party NTP] or chrome://ntp [incognito]).
+    // Sanity check: the NTP should be provided by |ntp_url| and not by
+    // chrome://new-tab-page [1P WebUI NTP] or chrome://newtab [incognito].
     EXPECT_EQ(ntp_url, content::EvalJs(tab1, "window.location.href"));
   }
 
@@ -131,4 +127,25 @@ IN_PROC_BROWSER_TEST_F(ThirdPartyNTPBrowserTest, ProcessPerSite) {
   // Verify that |tab1| and |tab2| share a process.
   EXPECT_EQ(tab1->GetMainFrame()->GetProcess(),
             tab2->GetMainFrame()->GetProcess());
+}
+
+// Verify that a third-party NTP commits in a remote NTP SiteInstance.
+IN_PROC_BROWSER_TEST_F(ThirdPartyNTPBrowserTest, VerifySiteInstance) {
+  // Setup and navigate to third-party NTP.
+  GURL base_url =
+      https_test_server().GetURL("ntp.com", "/instant_extended.html");
+  GURL ntp_url =
+      https_test_server().GetURL("ntp.com", "/instant_extended_ntp.html");
+  SetupInstant(browser()->profile(), base_url, ntp_url);
+  ui_test_utils::NavigateToURL(browser(), ntp_url);
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Sanity check: the NTP should be provided by |ntp_url| and not by
+  // chrome://new-tab-page [1P WebUI NTP] or chrome://newtab [incognito].
+  EXPECT_EQ(ntp_url, content::EvalJs(web_contents, "window.location.href"));
+
+  // Verify that NTP committed in remote NTP SiteInstance.
+  EXPECT_EQ(GURL("chrome-search://remote-ntp/"),
+            web_contents->GetMainFrame()->GetSiteInstance()->GetSiteURL());
 }

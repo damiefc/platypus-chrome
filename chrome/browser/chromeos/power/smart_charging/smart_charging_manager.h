@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/power/ml/boot_clock.h"
@@ -74,9 +74,9 @@ class SmartChargingManager : public ui::UserActivityObserver,
   void ShutdownRequested(power_manager::RequestShutdownReason reason) override;
   void SuspendImminent(power_manager::SuspendImminent::Reason reason) override;
   void LidEventReceived(chromeos::PowerManagerClient::LidState state,
-                        const base::TimeTicks& timestamp) override;
+                        base::TimeTicks timestamp) override;
   void TabletModeEventReceived(chromeos::PowerManagerClient::TabletMode mode,
-                               const base::TimeTicks& timestamp) override;
+                               base::TimeTicks timestamp) override;
 
   // viz::mojom::VideoDetectorObserver overrides:
   void OnVideoActivityStarted() override;
@@ -127,15 +127,15 @@ class SmartChargingManager : public ui::UserActivityObserver,
   // Gets the "plug in" and "unplug" events of the last charge.
   std::tuple<PastEvent, PastEvent> GetLastChargeEvents();
 
-  ScopedObserver<ui::UserActivityDetector, ui::UserActivityObserver>
-      user_activity_observer_{this};
+  base::ScopedObservation<ui::UserActivityDetector, ui::UserActivityObserver>
+      user_activity_observation_{this};
 
-  ScopedObserver<chromeos::PowerManagerClient,
-                 chromeos::PowerManagerClient::Observer>
-      power_manager_client_observer_{this};
-  ScopedObserver<session_manager::SessionManager,
-                 session_manager::SessionManagerObserver>
-      session_manager_observer_{this};
+  base::ScopedObservation<chromeos::PowerManagerClient,
+                          chromeos::PowerManagerClient::Observer>
+      power_manager_client_observation_{this};
+  base::ScopedObservation<session_manager::SessionManager,
+                          session_manager::SessionManagerObserver>
+      session_manager_observation_{this};
 
   // Timer to trigger periodically for logging data.
   const std::unique_ptr<base::RepeatingTimer> periodic_timer_;

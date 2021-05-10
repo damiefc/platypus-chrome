@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/sequenced_task_runner.h"
+#include "base/strings/strcat.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "content/browser/conversions/conversion_manager_impl.h"
@@ -125,9 +126,8 @@ IN_PROC_BROWSER_TEST_F(ConversionsBrowserTest,
                        ImpressionConversion_ReportSent) {
   // Expected reports must be registered before the server starts.
   ExpectedReportWaiter expected_report(
-      GURL(
-          "https://a.test/.well-known/"
-          "register-conversion?impression-data=1&conversion-data=7&credit=100"),
+      GURL("https://a.test/.well-known/"
+           "register-conversion?impression-data=1&conversion-data=7"),
       https_server());
   ASSERT_TRUE(https_server()->Start());
 
@@ -161,11 +161,87 @@ IN_PROC_BROWSER_TEST_F(ConversionsBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(ConversionsBrowserTest,
+                       WindowOpenDeprecatedAPI_NoException) {
+  // Expected reports must be registered before the server starts.
+  ExpectedReportWaiter expected_report(
+      GURL("https://a.test/.well-known/"
+           "register-conversion?impression-data=1&conversion-data=7"),
+      https_server());
+  ASSERT_TRUE(https_server()->Start());
+
+  GURL impression_url = https_server()->GetURL(
+      "a.test", "/conversions/page_with_impression_creator.html");
+  EXPECT_TRUE(NavigateToURL(web_contents(), impression_url));
+
+  // Create an anchor tag with impression attributes and click the link. By
+  // default the target is set to "_top".
+  GURL conversion_url = https_server()->GetURL(
+      "b.test", "/conversions/page_with_conversion_redirect.html");
+  TestNavigationObserver observer(web_contents());
+  EXPECT_TRUE(
+      ExecJs(web_contents(),
+             JsReplace(R"(window.open($1, '_top', '',
+               {impressionData: '1', conversionDestination: $2});)",
+                       conversion_url, url::Origin::Create(conversion_url))));
+  observer.Wait();
+
+  // Register a conversion with the original page as the reporting origin.
+  EXPECT_TRUE(
+      ExecJs(web_contents(), JsReplace("registerConversionForOrigin(7, $1)",
+                                       url::Origin::Create(impression_url))));
+
+  // TODO(johnidel): This API surface was removed due to
+  // https://crbug.com/1187881. This test should be updated to verify the
+  // behavior with the new surface.
+  base::RunLoop run_loop;
+  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, run_loop.QuitClosure(),
+      base::TimeDelta::FromMilliseconds(100));
+  run_loop.Run();
+  EXPECT_FALSE(expected_report.HasRequest());
+}
+
+IN_PROC_BROWSER_TEST_F(ConversionsBrowserTest,
+                       WindowOpenImpressionConversion_ReportSent) {
+  // Expected reports must be registered before the server starts.
+  ExpectedReportWaiter expected_report(
+      GURL("https://a.test/.well-known/"
+           "register-conversion?impression-data=1&conversion-data=7"),
+      https_server());
+  ASSERT_TRUE(https_server()->Start());
+
+  GURL impression_url = https_server()->GetURL(
+      "a.test", "/conversions/page_with_impression_creator.html");
+  EXPECT_TRUE(NavigateToURL(web_contents(), impression_url));
+
+  GURL conversion_url = https_server()->GetURL(
+      "b.test", "/conversions/page_with_conversion_redirect.html");
+
+  // We can't use `JsReplace` directly to input the origin as it will use string
+  // literals which shouldn't be provided in the window features string.
+  std::string window_features =
+      base::StrCat({"attributionsourceeventid=1,attributiondestination=",
+                    url::Origin::Create(conversion_url).Serialize()});
+
+  TestNavigationObserver observer(web_contents());
+  EXPECT_TRUE(
+      ExecJs(web_contents(), JsReplace(R"(window.open($1, '_top', $2);)",
+                                       conversion_url, window_features)));
+  observer.Wait();
+
+  // Register a conversion with the original page as the reporting origin.
+  EXPECT_TRUE(
+      ExecJs(web_contents(), JsReplace("registerConversionForOrigin(7, $1)",
+                                       url::Origin::Create(impression_url))));
+
+  EXPECT_EQ(expected_report.expected_url, expected_report.WaitForRequestUrl());
+}
+
+IN_PROC_BROWSER_TEST_F(ConversionsBrowserTest,
                        ImpressionFromCrossOriginSubframe_ReportSent) {
   ExpectedReportWaiter expected_report(
-      GURL(
-          "https://a.test/.well-known/"
-          "register-conversion?impression-data=1&conversion-data=7&credit=100"),
+      GURL("https://a.test/.well-known/"
+           "register-conversion?impression-data=1&conversion-data=7"),
       https_server());
   ASSERT_TRUE(https_server()->Start());
 
@@ -207,18 +283,138 @@ IN_PROC_BROWSER_TEST_F(ConversionsBrowserTest,
   EXPECT_EQ(expected_report.expected_url, expected_report.WaitForRequestUrl());
 }
 
+IN_PROC_BROWSER_TEST_F(ConversionsBrowserTest,
+                       ImpressionOnNoOpenerNavigation_ReportSent) {
+  ExpectedReportWaiter expected_report(
+      GURL("https://a.test/.well-known/"
+           "register-conversion?impression-data=1&conversion-data=7"),
+      https_server());
+  ASSERT_TRUE(https_server()->Start());
+
+  GURL impression_url = https_server()->GetURL(
+      "a.test", "/conversions/page_with_impression_creator.html");
+  EXPECT_TRUE(NavigateToURL(web_contents(), impression_url));
+
+  GURL conversion_url = https_server()->GetURL(
+      "b.test", "/conversions/page_with_conversion_redirect.html");
+
+  // target="_blank" navs are rel="noopener" by default.
+  EXPECT_TRUE(
+      ExecJs(web_contents(),
+             JsReplace(R"(
+    createImpressionTagWithTarget("link" /* id */,
+                        $1 /* url */,
+                        "1" /* impression data */,
+                        $2 /* conversion_destination */,
+                        "_blank");)",
+                       conversion_url, url::Origin::Create(conversion_url))));
+
+  TestNavigationObserver observer(nullptr);
+  observer.StartWatchingNewWebContents();
+  EXPECT_TRUE(ExecJs(shell(), "simulateClick('link');"));
+  observer.Wait();
+
+  EXPECT_TRUE(ExecJs(Shell::windows()[1]->web_contents(),
+                     JsReplace("registerConversionForOrigin(7, $1)",
+                               url::Origin::Create(impression_url))));
+
+  EXPECT_EQ(expected_report.expected_url, expected_report.WaitForRequestUrl());
+}
+
+IN_PROC_BROWSER_TEST_F(ConversionsBrowserTest,
+                       ImpressionConversionSameDomain_ReportSent) {
+  // Expected reports must be registered before the server starts.
+  ExpectedReportWaiter expected_report(
+      GURL("https://a.test/.well-known/"
+           "register-conversion?impression-data=1&conversion-data=7"),
+      https_server());
+  ASSERT_TRUE(https_server()->Start());
+
+  GURL impression_url = https_server()->GetURL(
+      "a.test", "/conversions/page_with_impression_creator.html");
+  EXPECT_TRUE(NavigateToURL(web_contents(), impression_url));
+
+  // Create an anchor tag with impression attributes and click the link. By
+  // default the target is set to "_top".
+  GURL conversion_url = https_server()->GetURL(
+      "b.test", "/conversions/page_with_conversion_redirect.html");
+  GURL conversion_dest_url = https_server()->GetURL(
+      "sub.b.test", "/conversions/page_with_conversion_redirect.html");
+  EXPECT_TRUE(ExecJs(
+      web_contents(),
+      JsReplace(R"(
+    createImpressionTag("link" /* id */,
+                        $1 /* url */,
+                        "1" /* impression data */,
+                        $2 /* conversion_destination */);)",
+                conversion_url, url::Origin::Create(conversion_dest_url))));
+
+  TestNavigationObserver observer(web_contents());
+  EXPECT_TRUE(ExecJs(shell(), "simulateClick('link');"));
+  observer.Wait();
+
+  // Register a conversion with the original page as the reporting origin.
+  EXPECT_TRUE(
+      ExecJs(web_contents(), JsReplace("registerConversionForOrigin(7, $1)",
+                                       url::Origin::Create(impression_url))));
+
+  EXPECT_EQ(expected_report.expected_url, expected_report.WaitForRequestUrl());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    ConversionsBrowserTest,
+    ConversionOnDifferentSubdomainThanLandingPage_ReportSent) {
+  // Expected reports must be registered before the server starts.
+  ExpectedReportWaiter expected_report(
+      GURL("https://a.test/.well-known/"
+           "register-conversion?impression-data=1&conversion-data=7"),
+      https_server());
+  ASSERT_TRUE(https_server()->Start());
+
+  GURL impression_url = https_server()->GetURL(
+      "a.test", "/conversions/page_with_impression_creator.html");
+  EXPECT_TRUE(NavigateToURL(web_contents(), impression_url));
+
+  // Create an anchor tag with impression attributes and click the link. By
+  // default the target is set to "_top".
+  GURL conversion_landing_url = https_server()->GetURL(
+      "b.test", "/conversions/page_with_conversion_redirect.html");
+  GURL conversion_dest_url = https_server()->GetURL(
+      "sub.b.test", "/conversions/page_with_conversion_redirect.html");
+  EXPECT_TRUE(ExecJs(web_contents(),
+                     JsReplace(R"(
+    createImpressionTag("link" /* id */,
+                        $1 /* url */,
+                        "1" /* impression data */,
+                        $2 /* conversion_destination */);)",
+                               conversion_landing_url,
+                               url::Origin::Create(conversion_dest_url))));
+
+  TestNavigationObserver observer(web_contents());
+  EXPECT_TRUE(ExecJs(shell(), "simulateClick('link');"));
+  observer.Wait();
+
+  // Navigate to a same domain origin that is different than the landing page
+  // for the click and convert there. A report should still be sent.
+  GURL conversion_url = https_server()->GetURL(
+      "other.b.test", "/conversions/page_with_conversion_redirect.html");
+  EXPECT_TRUE(NavigateToURL(web_contents(), conversion_url));
+
+  // Register a conversion with the original page as the reporting origin.
+  EXPECT_TRUE(
+      ExecJs(web_contents(), JsReplace("registerConversionForOrigin(7, $1)",
+                                       url::Origin::Create(impression_url))));
+
+  EXPECT_EQ(expected_report.expected_url, expected_report.WaitForRequestUrl());
+}
+
 IN_PROC_BROWSER_TEST_F(
     ConversionsBrowserTest,
     MultipleImpressionsPerConversion_ReportsSentWithAttribution) {
   std::vector<ExpectedReportWaiter> expected_reports;
   expected_reports.emplace_back(
       GURL("https://d.test/.well-known/"
-           "register-conversion?impression-data=1&conversion-data=7&credit=0"),
-      https_server());
-  expected_reports.emplace_back(
-      GURL(
-          "https://d.test/.well-known/"
-          "register-conversion?impression-data=2&conversion-data=7&credit=100"),
+           "register-conversion?impression-data=2&conversion-data=7"),
       https_server());
   ASSERT_TRUE(https_server()->Start());
 
@@ -279,9 +475,8 @@ IN_PROC_BROWSER_TEST_F(ConversionsBrowserTest,
 
   // Expected reports must be registered before the server starts.
   ExpectedReportWaiter expected_report(
-      GURL(
-          "https://a.test/.well-known/"
-          "register-conversion?impression-data=1&conversion-data=7&credit=100"),
+      GURL("https://a.test/.well-known/"
+           "register-conversion?impression-data=1&conversion-data=7"),
       https_server());
   ASSERT_TRUE(https_server()->Start());
 

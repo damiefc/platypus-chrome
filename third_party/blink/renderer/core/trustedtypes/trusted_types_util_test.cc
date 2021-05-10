@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_html.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_script.h"
@@ -29,10 +30,11 @@ void TrustedTypesCheckForHTMLThrows(const String& string) {
   String s = TrustedTypesCheckForHTML(string, window, exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
-  window->GetContentSecurityPolicy()->DidReceiveHeader(
+  window->GetContentSecurityPolicy()->AddPolicies(ParseContentSecurityPolicies(
       "require-trusted-types-for 'script'",
       network::mojom::ContentSecurityPolicyType::kEnforce,
-      network::mojom::ContentSecurityPolicySource::kMeta);
+      network::mojom::ContentSecurityPolicySource::kMeta,
+      *(window->GetSecurityOrigin())));
   ASSERT_FALSE(exception_state.HadException());
   String s1 = TrustedTypesCheckForHTML(string, window, exception_state);
   EXPECT_TRUE(exception_state.HadException());
@@ -49,10 +51,11 @@ void TrustedTypesCheckForScriptThrows(const String& string) {
   String s = TrustedTypesCheckForScript(string, window, exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
-  window->GetContentSecurityPolicy()->DidReceiveHeader(
+  window->GetContentSecurityPolicy()->AddPolicies(ParseContentSecurityPolicies(
       "require-trusted-types-for 'script'",
       network::mojom::ContentSecurityPolicyType::kEnforce,
-      network::mojom::ContentSecurityPolicySource::kMeta);
+      network::mojom::ContentSecurityPolicySource::kMeta,
+      *(window->GetSecurityOrigin())));
   ASSERT_FALSE(exception_state.HadException());
   String s1 = TrustedTypesCheckForScript(string, window, exception_state);
   EXPECT_TRUE(exception_state.HadException());
@@ -69,10 +72,11 @@ void TrustedTypesCheckForScriptURLThrows(const String& string) {
   String s = TrustedTypesCheckForScriptURL(string, window, exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
-  window->GetContentSecurityPolicy()->DidReceiveHeader(
+  window->GetContentSecurityPolicy()->AddPolicies(ParseContentSecurityPolicies(
       "require-trusted-types-for 'script'",
       network::mojom::ContentSecurityPolicyType::kEnforce,
-      network::mojom::ContentSecurityPolicySource::kMeta);
+      network::mojom::ContentSecurityPolicySource::kMeta,
+      *(window->GetSecurityOrigin())));
   ASSERT_FALSE(exception_state.HadException());
   String s1 = TrustedTypesCheckForScriptURL(string, window, exception_state);
   EXPECT_TRUE(exception_state.HadException());

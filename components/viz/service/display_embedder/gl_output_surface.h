@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/callback_helpers.h"
 #include "components/viz/common/display/update_vsync_parameters_callback.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display_embedder/viz_process_context_provider.h"
@@ -54,9 +55,6 @@ class GLOutputSurface : public OutputSurface {
   base::ScopedClosureRunner GetCacheBackBufferCb() override;
 
   gpu::SurfaceHandle GetSurfaceHandle() const override;
-  scoped_refptr<gpu::GpuTaskSchedulerHelper> GetGpuTaskSchedulerHelper()
-      override;
-  gpu::MemoryTracker* GetMemoryTracker() override;
   void SetFrameRate(float frame_rate) override;
   void SetNeedsMeasureNextDrawLatency() override;
 

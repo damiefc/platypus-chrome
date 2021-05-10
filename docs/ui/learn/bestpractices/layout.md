@@ -106,7 +106,7 @@ SubtleNotificationView::SubtleNotificationView()
     : instruction_view_(nullptr) {
   ...
   instruction_view_ =
-      new InstructionView(base::string16());
+      new InstructionView(std::u16string());
 
   int outer_padding_horiz = kOuterPaddingHorizPx;
   int outer_padding_vert = kOuterPaddingVertPx;
@@ -135,7 +135,7 @@ SubtleNotificationView::SubtleNotificationView()
     : instruction_view_(nullptr) {
   ...
   AddChildView(std::make_unique<InstructionView>(
-      base::string16()));
+      std::u16string()));
 
   const gfx::Insets kDialogInsets =
       ChromeLayoutProvider::Get()->GetInsetsMetric(
@@ -335,7 +335,7 @@ TabGroupEditorBubbleView::TabGroupEditorBubbleView(
     group_modifier_container->AddChildView(
         std::make_unique<ColorPickerView>(
             colors_, background_color(), initial_color,
-            base::Bind(
+            base::BindRepeating(
                 &TabGroupEditorBubbleView::UpdateGroup,
                 base::Unretained(this))));
   ...
@@ -433,7 +433,7 @@ TabGroupEditorBubbleView::TabGroupEditorBubbleView(
       group_modifier_container->AddChildView(
           std::make_unique<ColorPickerView>(
               this, colors_, initial_color_id,
-              base::Bind(
+              base::BindRepeating(
                 &TabGroupEditorBubbleView::UpdateGroup,
                 base::Unretained(this))));
   color_selector_->SetProperty(
@@ -512,13 +512,12 @@ in clearer code.
 // |           | subtitle            |                |
 // +-----------+---------------------+----------------+
 HoverButton::HoverButton(
-    views::ButtonListener* button_listener,
+    ...
     std::unique_ptr<views::View> icon_view,
-    const base::string16& title,
-    const base::string16& subtitle,
+    const std::u16string& title,
+    const std::u16string& subtitle,
     std::unique_ptr<views::View> secondary_view,
-    bool resize_row_for_secondary_view,
-    bool secondary_view_can_process_events) {
+    ...) {
   ...
   views::GridLayout* grid_layout =
       SetLayoutManager(
@@ -591,13 +590,12 @@ HoverButton::HoverButton(
 // |           | subtitle            |                |
 // +-----------+---------------------+----------------+
 HoverButton::HoverButton(
-    views::ButtonListener* button_listener,
+    ...
     std::unique_ptr<views::View> icon_view,
-    const base::string16& title,
-    const base::string16& subtitle,
+    const std::u16string& title,
+    const std::u16string& subtitle,
     std::unique_ptr<views::View> secondary_view,
-    bool resize_row_for_secondary_view,
-    bool secondary_view_can_process_events) {
+    ...) {
   ...
   SetLayoutManager(
       std::make_unique<views::FlexLayout>())
@@ -874,7 +872,7 @@ class FindBarView::FindBarButton
     const gfx::Point center = bounds.CenterPoint();
     const int radius = views::LayoutProvider::Get()
         ->GetCornerRadiusMetric(
-            views::EMPHASIS_MAXIMUM, bounds.size());
+            views::Emphasis::kMaximum, bounds.size());
     highlight_path->addCircle(
         center.x(), center.y(), radius);
     SetProperty(views::kHighlightPathKey,

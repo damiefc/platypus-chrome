@@ -53,11 +53,7 @@ Vector<String> LayoutObjectToDebugStringList(NGInlineCursor cursor) {
 }
 
 class NGInlineCursorTest : public NGLayoutTest,
-                           private ScopedLayoutNGFragmentItemForTest,
                            public testing::WithParamInterface<bool> {
- public:
-  NGInlineCursorTest() : ScopedLayoutNGFragmentItemForTest(GetParam()) {}
-
  protected:
   NGInlineCursor SetupCursor(const String& html) {
     SetBodyInnerHTML(html);
@@ -84,20 +80,7 @@ class NGInlineCursorTest : public NGLayoutTest,
   // Test |MoveToNextSibling| and |NGInlineBackwardCursor| return the same
   // instances, except that the order is reversed.
   void TestPrevoiusSibling(const NGInlineCursor& start) {
-    if (start.IsPaintFragmentCursor()) {
-      Vector<const NGPaintFragment*> forwards;
-      for (NGInlineCursor cursor(start); cursor;
-           cursor.MoveToNextSkippingChildren())
-        forwards.push_back(cursor.CurrentPaintFragment());
-      Vector<const NGPaintFragment*> backwards;
-      for (NGInlineBackwardCursor cursor(start); cursor;
-           cursor.MoveToPreviousSibling())
-        backwards.push_back(cursor.Current().PaintFragment());
-      backwards.Reverse();
-      EXPECT_THAT(backwards, forwards);
-      return;
-    }
-    DCHECK(start.IsItemCursor());
+    DCHECK(start.HasRoot());
     Vector<const NGFragmentItem*> forwards;
     for (NGInlineCursor cursor(start); cursor;
          cursor.MoveToNextSkippingChildren())
@@ -201,8 +184,7 @@ TEST_P(NGInlineCursorTest, ContainingLine) {
   cursor.MoveToContainingLine();
   EXPECT_EQ(line1, cursor);
 
-  const LayoutInline& target =
-      ToLayoutInline(*GetLayoutObjectByElementId("target"));
+  const auto& target = To<LayoutInline>(*GetLayoutObjectByElementId("target"));
   cursor.MoveTo(target);
   cursor.MoveToContainingLine();
   EXPECT_EQ(line1, cursor);
@@ -295,6 +277,34 @@ TEST_P(NGInlineCursorTest, CulledInlineWithoutRoot) {
   cursor.MoveToIncludingCulledInline(*layout_inline_a);
   EXPECT_THAT(LayoutObjectToDebugStringList(cursor),
               ElementsAre("abc", "", "xyz"));
+}
+
+TEST_P(NGInlineCursorTest, CursorForMovingAcrossFragmentainer) {
+  RuntimeEnabledFeaturesTestHelpers::ScopedLayoutNGBlockFragmentation
+      block_fragmentation(true);
+  LoadAhem();
+  InsertStyleElement(
+      "div { font: 10px/15px Ahem; column-count: 2; width: 20ch; }");
+  SetBodyInnerHTML("<div id=m>abc<br>def<br><b id=t>ghi</b><br>jkl<br></div>");
+  // The HTML is rendered as:
+  //    abc ghi
+  //    def jkl
+
+  // MoveTo(LayoutObject) makes |NGInlineCursor| to be able to move across
+  // fragmentainer.
+  NGInlineCursor cursor;
+  cursor.MoveTo(*GetElementById("t")->firstChild()->GetLayoutObject());
+  ASSERT_TRUE(cursor.IsBlockFragmented()) << cursor;
+
+  NGInlineCursor cursor2(cursor.ContainerFragment());
+  ASSERT_FALSE(cursor2.IsBlockFragmented()) << cursor2;
+  cursor2.MoveTo(*cursor.CurrentItem());
+  ASSERT_FALSE(cursor2.IsBlockFragmented());
+
+  NGInlineCursor cursor3 = cursor2.CursorForMovingAcrossFragmentainer();
+  EXPECT_TRUE(cursor3.IsBlockFragmented()) << cursor3;
+  EXPECT_EQ(&cursor2.ContainerFragment(), &cursor3.ContainerFragment());
+  EXPECT_EQ(cursor2.CurrentItem(), cursor3.CurrentItem());
 }
 
 TEST_P(NGInlineCursorTest, FirstChild) {
@@ -460,6 +470,29 @@ TEST_P(NGInlineCursorTest, Next) {
   Vector<String> list = ToDebugStringList(cursor);
   EXPECT_THAT(list, ElementsAre("#linebox", "text1", "#span1", "text2",
                                 "#span2", "text3", "text4", "text5"));
+}
+
+TEST_P(NGInlineCursorTest, NextIncludingFragmentainer) {
+  RuntimeEnabledFeaturesTestHelpers::ScopedLayoutNGBlockFragmentation
+      block_fragmentation(true);
+  // TDOO(yosin): Remove style for <b> once NGFragmentItem don't do culled
+  // inline.
+  LoadAhem();
+  InsertStyleElement(
+      "b { background: gray; }"
+      "div { font: 10px/15px Ahem; column-count: 2; width: 20ch; }");
+  SetBodyInnerHTML("<div id=m>abc<br>def<br><b>ghi</b><br>jkl</div>");
+  NGInlineCursor cursor;
+  cursor.MoveTo(*GetElementById("m")->firstChild()->GetLayoutObject());
+  ASSERT_TRUE(cursor.IsBlockFragmented()) << cursor;
+  Vector<String> list;
+  while (cursor) {
+    list.push_back(ToDebugString(cursor));
+    cursor.MoveToNextIncludingFragmentainer();
+  }
+  EXPECT_THAT(list,
+              ElementsAre("abc", "", "#linebox", "def", "", "#linebox",
+                          "LayoutInline B", "ghi", "", "#linebox", "jkl"));
 }
 
 TEST_P(NGInlineCursorTest, NextWithEllipsis) {
@@ -770,12 +803,12 @@ TEST_P(NGInlineCursorTest, PositionForPointInChildHorizontalLTR) {
   const auto& text = *To<Text>(GetElementById("root")->firstChild());
   ASSERT_TRUE(cursor.Current().IsLineBox());
   EXPECT_EQ(PhysicalRect(PhysicalOffset(10, 10), PhysicalSize(20, 20)),
-            cursor.Current().RectInContainerBlock());
+            cursor.Current().RectInContainerFragment());
 
   cursor.MoveTo(*text.GetLayoutObject());
   EXPECT_EQ(PhysicalRect(PhysicalOffset(10, 15), PhysicalSize(20, 10)),
-            cursor.Current().RectInContainerBlock());
-  const PhysicalOffset left_top = cursor.Current().OffsetInContainerBlock();
+            cursor.Current().RectInContainerFragment());
+  const PhysicalOffset left_top = cursor.Current().OffsetInContainerFragment();
 
   EXPECT_EQ(PositionWithAffinity(Position(text, 0)),
             cursor.PositionForPointInChild(left_top + PhysicalOffset(-5, 0)));
@@ -807,12 +840,12 @@ TEST_P(NGInlineCursorTest, PositionForPointInChildHorizontalRTL) {
       *To<Text>(GetElementById("root")->firstChild()->firstChild());
   ASSERT_TRUE(cursor.Current().IsLineBox());
   EXPECT_EQ(PhysicalRect(PhysicalOffset(754, 10), PhysicalSize(20, 20)),
-            cursor.Current().RectInContainerBlock());
+            cursor.Current().RectInContainerFragment());
 
   cursor.MoveTo(*text.GetLayoutObject());
   EXPECT_EQ(PhysicalRect(PhysicalOffset(754, 15), PhysicalSize(20, 10)),
-            cursor.Current().RectInContainerBlock());
-  const PhysicalOffset left_top = cursor.Current().OffsetInContainerBlock();
+            cursor.Current().RectInContainerFragment());
+  const PhysicalOffset left_top = cursor.Current().OffsetInContainerFragment();
 
   EXPECT_EQ(PositionWithAffinity(Position(text, 2), TextAffinity::kUpstream),
             cursor.PositionForPointInChild(left_top + PhysicalOffset(-5, 0)));
@@ -843,12 +876,12 @@ TEST_P(NGInlineCursorTest, PositionForPointInChildVerticalLTR) {
   const auto& text = *To<Text>(GetElementById("root")->firstChild());
   ASSERT_TRUE(cursor.Current().IsLineBox());
   EXPECT_EQ(PhysicalRect(PhysicalOffset(10, 10), PhysicalSize(20, 20)),
-            cursor.Current().RectInContainerBlock());
+            cursor.Current().RectInContainerFragment());
 
   cursor.MoveTo(*text.GetLayoutObject());
   EXPECT_EQ(PhysicalRect(PhysicalOffset(15, 10), PhysicalSize(10, 20)),
-            cursor.Current().RectInContainerBlock());
-  const PhysicalOffset left_top = cursor.Current().OffsetInContainerBlock();
+            cursor.Current().RectInContainerFragment());
+  const PhysicalOffset left_top = cursor.Current().OffsetInContainerFragment();
 
   EXPECT_EQ(PositionWithAffinity(Position(text, 0)),
             cursor.PositionForPointInChild(left_top + PhysicalOffset(0, -5)));
@@ -880,12 +913,12 @@ TEST_P(NGInlineCursorTest, PositionForPointInChildVerticalRTL) {
       *To<Text>(GetElementById("root")->firstChild()->firstChild());
   ASSERT_TRUE(cursor.Current().IsLineBox());
   EXPECT_EQ(PhysicalRect(PhysicalOffset(10, 10), PhysicalSize(20, 20)),
-            cursor.Current().RectInContainerBlock());
+            cursor.Current().RectInContainerFragment());
 
   cursor.MoveTo(*text.GetLayoutObject());
   EXPECT_EQ(PhysicalRect(PhysicalOffset(15, 10), PhysicalSize(10, 20)),
-            cursor.Current().RectInContainerBlock());
-  const PhysicalOffset left_top = cursor.Current().OffsetInContainerBlock();
+            cursor.Current().RectInContainerFragment());
+  const PhysicalOffset left_top = cursor.Current().OffsetInContainerFragment();
 
   EXPECT_EQ(PositionWithAffinity(Position(text, 2), TextAffinity::kUpstream),
             cursor.PositionForPointInChild(left_top + PhysicalOffset(0, -5)));
@@ -911,7 +944,7 @@ TEST_P(NGInlineCursorTest, PositionForPointInChildBlockChildren) {
       SetupCursor("<div id=root>a<b id=target><div>x</div></b></div>");
   const Element& target = *GetElementById("target");
   cursor.MoveTo(*target.GetLayoutObject());
-  EXPECT_EQ(PositionWithAffinity(Position(target, 0)),
+  EXPECT_EQ(PositionWithAffinity(Position::FirstPositionInNode(target)),
             cursor.PositionForPointInChild(PhysicalOffset()));
 }
 
@@ -928,6 +961,29 @@ TEST_P(NGInlineCursorTest, Previous) {
   }
   EXPECT_THAT(list, ElementsAre("xyz", "#linebox", "", "DEF", "LayoutInline B",
                                 "abc", "#linebox"));
+}
+
+TEST_P(NGInlineCursorTest, PreviousIncludingFragmentainer) {
+  RuntimeEnabledFeaturesTestHelpers::ScopedLayoutNGBlockFragmentation
+      block_fragmentation(true);
+  // TDOO(yosin): Remove style for <b> once NGFragmentItem don't do culled
+  // inline.
+  LoadAhem();
+  InsertStyleElement(
+      "b { background: gray; }"
+      "div { font: 10px/15px Ahem; column-count: 2; width: 20ch; }");
+  SetBodyInnerHTML("<div id=m>abc<br>def<br><b>ghi</b><br>jkl</div>");
+  NGInlineCursor cursor;
+  cursor.MoveTo(*GetElementById("m")->lastChild()->GetLayoutObject());
+  ASSERT_TRUE(cursor.IsBlockFragmented()) << cursor;
+  Vector<String> list;
+  while (cursor) {
+    list.push_back(ToDebugString(cursor));
+    cursor.MoveToPreviousIncludingFragmentainer();
+  }
+  EXPECT_THAT(list, ElementsAre("jkl", "#linebox", "", "ghi", "LayoutInline B",
+                                "#linebox", "", "def", "#linebox", "", "abc",
+                                "#linebox"));
 }
 
 TEST_P(NGInlineCursorTest, PreviousInlineLeaf) {
@@ -1189,16 +1245,16 @@ TEST_F(NGInlineCursorBlockFragmentationTest, MoveToLayoutObject) {
 
   // Test cursors rooted at |NGFragmentItems|.
   // They can enumerate fragments only in the specified fragmentainer.
-  Vector<const NGFragmentItems*> fragment_items_list;
+  HeapVector<Member<const NGPhysicalBoxFragment>> fragments;
   for (const NGPhysicalBoxFragment& fragment :
        block_flow->PhysicalFragments()) {
-    fragment_items_list.push_back(fragment.Items());
-    DCHECK_NE(fragment_items_list.back(), nullptr);
+    DCHECK(fragment.HasItems());
+    fragments.push_back(&fragment);
   }
-  EXPECT_EQ(fragment_items_list.size(), 3u);
-  TestFragment1(NGInlineCursor(*fragment_items_list[0]));
-  TestFragment2(NGInlineCursor(*fragment_items_list[1]));
-  TestFragment3(NGInlineCursor(*fragment_items_list[2]));
+  EXPECT_EQ(fragments.size(), 3u);
+  TestFragment1(NGInlineCursor(*fragments[0], *fragments[0]->Items()));
+  TestFragment2(NGInlineCursor(*fragments[1], *fragments[1]->Items()));
+  TestFragment3(NGInlineCursor(*fragments[2], *fragments[2]->Items()));
 }
 
 }  // namespace

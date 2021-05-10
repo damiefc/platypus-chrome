@@ -4,10 +4,15 @@
 
 #include "base/path_service.h"
 #include "base/strings/pattern.h"
+#include "base/strings/stringprintf.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "content/browser/renderer_host/back_forward_cache_disable.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -126,14 +131,14 @@ class SplitCacheContentBrowserTest : public ContentBrowserTest {
       return http_response;
     }
 
-    return std::unique_ptr<net::test_server::HttpResponse>();
+    return nullptr;
   }
 
  protected:
   // Creates and loads subframe, waits for load to stop, and then returns
   // subframe from the web contents frame tree.
   RenderFrameHost* CreateSubframe(const GURL& sub_frame) {
-    EXPECT_TRUE(ExecuteScript(shell(), GetSubframeScript(sub_frame)));
+    EXPECT_TRUE(ExecJs(shell(), GetSubframeScript(sub_frame)));
     EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
     return static_cast<WebContentsImpl*>(shell()->web_contents())
@@ -188,8 +193,8 @@ class SplitCacheContentBrowserTest : public ContentBrowserTest {
     // 1) Prevent the old page from entering the back-forward cache. Otherwise
     //    the old process will be kept alive, because it is still being used.
     // 2) Navigate to a WebUI URL, which uses a new process.
-    BackForwardCache::DisableForRenderFrameHost(
-        shell()->web_contents()->GetMainFrame(), "test");
+    DisableForRenderFrameHostForTesting(
+        shell()->web_contents()->GetMainFrame());
     EXPECT_TRUE(NavigateToURL(shell(), GetWebUIURL(kChromeUIGpuHost)));
 
     // In the case of a redirect, the observed URL will be different from
@@ -226,11 +231,10 @@ class SplitCacheContentBrowserTest : public ContentBrowserTest {
     // If there is supposed to be a worker to load this resource, create it.
     // Otherwise, load the resource directly.
     if (worker.is_valid()) {
-      EXPECT_TRUE(
-          ExecuteScript(host_to_load_resource, GetWorkerScript(worker)));
+      EXPECT_TRUE(ExecJs(host_to_load_resource, GetWorkerScript(worker)));
     } else {
-      EXPECT_TRUE(ExecuteScript(host_to_load_resource,
-                                GetLoadResourceScript(resource)));
+      EXPECT_TRUE(
+          ExecJs(host_to_load_resource, GetLoadResourceScript(resource)));
     }
 
     observer.WaitForResourceCompletion(resource);
@@ -336,7 +340,7 @@ class SplitCacheContentBrowserTest : public ContentBrowserTest {
       host_to_load_resource = CreateSubframe(sub_frame);
     }
 
-    EXPECT_TRUE(ExecuteScript(host_to_load_resource, GetWorkerScript(worker)));
+    EXPECT_TRUE(ExecJs(host_to_load_resource, GetWorkerScript(worker)));
 
     observer.WaitForResourceCompletion(GenURL("3p.com", "/script"));
     observer.WaitForResourceCompletion(worker);
@@ -378,34 +382,16 @@ class SplitCacheContentBrowserTest : public ContentBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(SplitCacheContentBrowserTest);
 };
 
-class SplitCacheWithFrameOriginContentBrowserTest
-    : public SplitCacheContentBrowserTest {
- public:
-  SplitCacheWithFrameOriginContentBrowserTest() {
-    feature_list.InitWithFeatures(
-        {net::features::kSplitCacheByNetworkIsolationKey,
-         net::features::kAppendFrameOriginToNetworkIsolationKey},
-        {});
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list;
-};
-
 class SplitCacheRegistrableDomainContentBrowserTest
     : public SplitCacheContentBrowserTest {
  public:
   SplitCacheRegistrableDomainContentBrowserTest() {
-    feature_list.InitWithFeatures(
-        // enabled_features
-        {net::features::kSplitCacheByNetworkIsolationKey,
-         net::features::kAppendFrameOriginToNetworkIsolationKey},
-        // disabled_features
-        {});
+    feature_list_.InitAndEnableFeature(
+        net::features::kSplitCacheByNetworkIsolationKey);
   }
 
  private:
-  base::test::ScopedFeatureList feature_list;
+  base::test::ScopedFeatureList feature_list_;
 };
 
 class SplitCacheContentBrowserTestEnabled
@@ -421,25 +407,24 @@ class SplitCacheContentBrowserTestEnabled
     if (GetParam())
       enabled_features.push_back(blink::features::kPlzDedicatedWorker);
 
-    feature_list.InitWithFeatures(
-        enabled_features,
-        {net::features::kAppendFrameOriginToNetworkIsolationKey});
+    feature_list_.InitWithFeatures(enabled_features,
+                                   {} /* disabled_features */);
   }
 
  private:
-  base::test::ScopedFeatureList feature_list;
+  base::test::ScopedFeatureList feature_list_;
 };
 
 class SplitCacheContentBrowserTestDisabled
     : public SplitCacheContentBrowserTest {
  public:
   SplitCacheContentBrowserTestDisabled() {
-    feature_list.InitAndDisableFeature(
+    feature_list_.InitAndDisableFeature(
         net::features::kSplitCacheByNetworkIsolationKey);
   }
 
  private:
-  base::test::ScopedFeatureList feature_list;
+  base::test::ScopedFeatureList feature_list_;
 };
 
 #if defined(THREAD_SANITIZER)
@@ -478,7 +463,11 @@ IN_PROC_BROWSER_TEST_P(SplitCacheContentBrowserTestEnabled, MAYBE_SplitCache) {
                                GenURL("a.com", "/title1.html")));
 
   // Load the resource from a cross-origin iframe on a page where it's already
-  // cached. It should still be cached.
+  // cached. The cached entry should not be used.
+  EXPECT_FALSE(TestResourceLoad(GenURL("a.com", "/title1.html"),
+                                GenURL("d.com", "/title1.html")));
+
+  // Load the cross-origin iframe against.  The entry should now be cached.
   EXPECT_TRUE(TestResourceLoad(GenURL("a.com", "/title1.html"),
                                GenURL("d.com", "/title1.html")));
 
@@ -512,8 +501,14 @@ IN_PROC_BROWSER_TEST_P(SplitCacheContentBrowserTestEnabled, MAYBE_SplitCache) {
   EXPECT_FALSE(TestResourceLoad(blank_url, GURL()));
 }
 
-IN_PROC_BROWSER_TEST_F(SplitCacheWithFrameOriginContentBrowserTest,
-                       SplitCache) {
+#if defined(THREAD_SANITIZER)
+// Flaky under TSan: https://crbug.com/1185462
+#define MAYBE_SplitCache DISABLED_SplitCache
+#else
+#define MAYBE_SplitCache SplitCache
+#endif
+IN_PROC_BROWSER_TEST_F(SplitCacheRegistrableDomainContentBrowserTest,
+                       MAYBE_SplitCache) {
   // Load a cacheable resource for the first time, and it's not cached.
   EXPECT_FALSE(TestResourceLoad(GenURL("a.com", "/title1.html"), GURL()));
 
@@ -581,10 +576,7 @@ IN_PROC_BROWSER_TEST_F(SplitCacheWithFrameOriginContentBrowserTest,
   // (g.com, g.com).
   EXPECT_FALSE(TestResourceLoadFromPopup(GenURL("a.com", "/title1.html"),
                                          GenURL("g.com", "/title1.html")));
-}
 
-IN_PROC_BROWSER_TEST_F(SplitCacheRegistrableDomainContentBrowserTest,
-                       SplitCache) {
   // Load a cacheable resource for the first time, and it's not cached.
   EXPECT_FALSE(TestResourceLoad(GenURL("a.foo.com", "/title1.html"), GURL()));
 
@@ -619,7 +611,7 @@ IN_PROC_BROWSER_TEST_F(SplitCacheContentBrowserTestDisabled, NonSplitCache) {
                                GenURL("c.com", "/title1.html")));
 }
 
-IN_PROC_BROWSER_TEST_F(SplitCacheWithFrameOriginContentBrowserTest,
+IN_PROC_BROWSER_TEST_F(SplitCacheRegistrableDomainContentBrowserTest,
                        SplitCacheDedicatedWorkers) {
   // Load 3p.com/script from a.com's worker. The first time it's loaded from the
   // network and the second it's cached.
@@ -675,10 +667,11 @@ IN_PROC_BROWSER_TEST_P(SplitCacheContentBrowserTestEnabled,
 
   // Navigate to a subframe with the same top frame origin as in an earlier
   // navigation and same url as already navigated to earlier in a main frame
-  // navigation. It should be a cache hit for the subframe resource.
+  // navigation. It should not be a cache hit since main frame document resource
+  // and subframe document resource have different cache keys.
   EXPECT_FALSE(NavigationResourceCached(
       GenURL("a.com", "/navigation_controller/page_with_iframe.html"),
-      GenURL("a.com", "/title1.html"), true));
+      GenURL("a.com", "/title1.html"), false));
 
   // Navigate to the same subframe document from a different top frame origin.
   // It should be a cache miss.
@@ -687,7 +680,7 @@ IN_PROC_BROWSER_TEST_P(SplitCacheContentBrowserTestEnabled,
       GenURL("a.com", "/title1.html"), false));
 }
 
-IN_PROC_BROWSER_TEST_F(SplitCacheWithFrameOriginContentBrowserTest,
+IN_PROC_BROWSER_TEST_F(SplitCacheRegistrableDomainContentBrowserTest,
                        SubframeNavigationResources) {
   // Navigate for the first time, and it's not cached.
   NavigationResourceCached(
@@ -716,6 +709,142 @@ IN_PROC_BROWSER_TEST_F(SplitCacheWithFrameOriginContentBrowserTest,
   NavigationResourceCached(
       GenURL("a.com", "/navigation_controller/page_with_iframe.html"),
       GenURL("d.com", "/title1.html"), true);
+}
+
+// Tests that when a subresource URL which is same-site to the fetching frame
+// is later used to create a subframe from the same top-level site, it should
+// not be a cache hit (crbug.com/1135149).
+IN_PROC_BROWSER_TEST_F(SplitCacheRegistrableDomainContentBrowserTest,
+                       SubframeNavigationResource) {
+  // main.com iframes 3p.com which fetches a subresource 3p.com/script with
+  // cache key (main.com, 3p.com, 3p.com/script). Then main.com iframes evil.com
+  // which iframes 3p.com/script. It should be a cache miss since the first time
+  // it was fetched as a subresource and second time as a subframe document
+  // resource.
+
+  // Fetch 3p.com/script from a 3p.com iframe, top-level site main.com.
+  TestResourceLoad(GenURL("main.com", "/title1.html") /* top-level frame */,
+                   GenURL("3p.com", "/title1.html") /* subframe */);
+
+  // Create evil.com iframe inside top-level site main.com.
+  NavigationResourceCached(
+      GenURL("main.com", "/navigation_controller/page_with_iframe.html"),
+      GenURL("evil.com", "/title1.html"), false);
+  RenderFrameHostImpl* main_frame = static_cast<RenderFrameHostImpl*>(
+      shell()->web_contents()->GetMainFrame());
+  EXPECT_EQ(1U, main_frame->frame_tree_node()->child_count());
+
+  // Observe network requests.
+  ResourceLoadObserver observer(shell());
+
+  // Now iframe 3p.com/script within evil.com.
+  GURL subframe_url = GenURL("3p.com", "/script");
+  EXPECT_TRUE(ExecJs(main_frame->frame_tree_node()->child_at(0),
+                     GetSubframeScript(subframe_url)));
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  observer.WaitForResourceCompletion(subframe_url);
+  EXPECT_EQ(false, (*observer.FindResource(subframe_url))->was_cached);
+}
+
+namespace {
+
+// This class invokes ComputeHttpCacheSize on the Network Context and
+// waits for the callback to be invoked.
+class SplitCacheComputeHttpCacheSize {
+ public:
+  SplitCacheComputeHttpCacheSize() = default;
+  ~SplitCacheComputeHttpCacheSize() = default;
+
+  int64_t ComputeHttpCacheSize(BrowserContext* context,
+                               base::Time start_time,
+                               base::Time end_time) {
+    last_computed_cache_size_ = -1;
+    auto* network_context =
+        context->GetDefaultStoragePartition()->GetNetworkContext();
+    network::mojom::NetworkContext::ComputeHttpCacheSizeCallback size_callback =
+        base::BindOnce(
+            &SplitCacheComputeHttpCacheSize::ComputeCacheSizeCallback,
+            base::Unretained(this));
+
+    network_context->ComputeHttpCacheSize(start_time, end_time,
+                                          std::move(size_callback));
+    runloop_ = std::make_unique<base::RunLoop>();
+    runloop_->Run();
+    return last_computed_cache_size_;
+  }
+
+  void ComputeCacheSizeCallback(bool is_upper_bound, int64_t size) {
+    last_computed_cache_size_ = size;
+    runloop_->Quit();
+  }
+
+  SplitCacheComputeHttpCacheSize(const SplitCacheComputeHttpCacheSize&) =
+      delete;
+  SplitCacheComputeHttpCacheSize& operator=(
+      const SplitCacheComputeHttpCacheSize&) = delete;
+
+ private:
+  std::unique_ptr<base::RunLoop> runloop_;
+  int64_t last_computed_cache_size_ = -1;
+};
+
+}  // namespace
+
+// Tests that NotifyExternalCacheHit() has the correct value of
+// is_subframe_document_resource by checking that the size of the http cache
+// resources accessed after the resource is loaded from the blink cache is the
+// same as before that.
+// TODO(crbug.com/1166650): Test is flaky on Win.
+#if defined(OS_WIN)
+#define MAYBE_NotifyExternalCacheHitCheckSubframeBit \
+  DISABLED_NotifyExternalCacheHitCheckSubframeBit
+#else
+#define MAYBE_NotifyExternalCacheHitCheckSubframeBit \
+  NotifyExternalCacheHitCheckSubframeBit
+#endif
+IN_PROC_BROWSER_TEST_F(SplitCacheRegistrableDomainContentBrowserTest,
+                       MAYBE_NotifyExternalCacheHitCheckSubframeBit) {
+  ResourceLoadObserver observer(shell());
+  BrowserContext* context = shell()->web_contents()->GetBrowserContext();
+  std::unique_ptr<SplitCacheComputeHttpCacheSize> http_cache_size =
+      std::make_unique<SplitCacheComputeHttpCacheSize>();
+
+  // Since no resources are loaded yet, Http cache's size will be 0.
+  EXPECT_EQ(0, http_cache_size->ComputeHttpCacheSize(context, base::Time(),
+                                                     base::Time::Max()));
+
+  // First fetch will populate the cache.
+  GURL page_url(
+      embedded_test_server()->GetURL("/page_with_cached_subresource.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), page_url));
+
+  // Checking the size of resources should be >0 as resources have been loaded.
+  int64_t size1 = http_cache_size->ComputeHttpCacheSize(context, base::Time(),
+                                                        base::Time::Max());
+  EXPECT_GT(size1, 0);
+  ASSERT_EQ(2U, observer.resource_load_infos().size());
+  EXPECT_TRUE(observer.memory_cached_loaded_urls().empty());
+  observer.Reset();
+
+  // Make sure time has moved forward from when the last entry was cached.
+  base::Time start = base::Time::Now();
+  while (start == base::Time::Now()) {
+  }
+  base::Time after_first = base::Time::Now();
+
+  // Loading again should serve the request out of the in-memory cache.
+  EXPECT_TRUE(NavigateToURL(shell(), page_url));
+
+  ASSERT_EQ(1U, observer.resource_load_infos().size());
+  ASSERT_EQ(1U, observer.memory_cached_loaded_urls().size());
+
+  // Loading from the in-memory cache also changes the last accessed time of
+  // those resources in the http cache. So if we check the size of resources
+  // accessed after the first load till now, it will be the same as before the
+  // 2nd navigation.
+  int64_t size2 = http_cache_size->ComputeHttpCacheSize(context, after_first,
+                                                        base::Time::Max());
+  EXPECT_EQ(size1, size2);
 }
 
 IN_PROC_BROWSER_TEST_P(SplitCacheContentBrowserTestEnabled,
@@ -836,5 +965,67 @@ IN_PROC_BROWSER_TEST_F(SplitCacheContentBrowserTestDisabled,
 INSTANTIATE_TEST_SUITE_P(All,
                          SplitCacheContentBrowserTestEnabled,
                          ::testing::Values(true, false));
+
+class ScopeBlinkMemoryCachePerContext : public SplitCacheContentBrowserTest {
+ public:
+  ScopeBlinkMemoryCachePerContext() {
+    std::vector<base::Feature> enabled_features;
+    enabled_features.push_back(net::features::kSplitCacheByNetworkIsolationKey);
+    enabled_features.push_back(blink::features::kScopeMemoryCachePerContext);
+
+    feature_list.InitWithFeatures(enabled_features, {});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list;
+};
+
+IN_PROC_BROWSER_TEST_F(ScopeBlinkMemoryCachePerContext, CheckFeature) {
+  base::HistogramTester histograms;
+  EXPECT_TRUE(base::FeatureList::IsEnabled(
+      blink::features::kScopeMemoryCachePerContext));
+
+  // This page fetches the same script resource twice.
+  GURL page_url_1(embedded_test_server()->GetURL(
+      "/page_with_multiple_cached_subresources.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), page_url_1));
+
+  content::FetchHistogramsFromChildProcesses();
+
+  // The script is preloaded.
+  histograms.ExpectTotalCount(
+      "Blink.MemoryCache.RevalidationPolicy.Preload.Script", 2);
+  histograms.ExpectBucketCount(
+      "Blink.MemoryCache.RevalidationPolicy.Preload.Script",
+      3 /* RevalidationPolicy::kLoad */, 1);
+  histograms.ExpectBucketCount(
+      "Blink.MemoryCache.RevalidationPolicy.Preload.Script",
+      0 /* RevalidationPolicy::kUse */, 1);
+
+  // Since the script is loaded twice, kUse bucket should have 2.
+  histograms.ExpectTotalCount("Blink.MemoryCache.RevalidationPolicy.Script", 2);
+  histograms.ExpectBucketCount("Blink.MemoryCache.RevalidationPolicy.Script",
+                               0 /* RevalidationPolicy::kUse */, 2);
+
+  // Loading again should not serve the request out of the in-memory cache since
+  // this is a new document.
+  // This page fetches the same script resource once.
+  GURL page_url_2(
+      embedded_test_server()->GetURL("/page_with_cached_subresource.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), page_url_2));
+
+  content::FetchHistogramsFromChildProcesses();
+  histograms.ExpectTotalCount(
+      "Blink.MemoryCache.RevalidationPolicy.Preload.Script", 3);
+  histograms.ExpectBucketCount(
+      "Blink.MemoryCache.RevalidationPolicy.Preload.Script",
+      3 /* RevalidationPolicy::kLoad */, 2);
+  histograms.ExpectBucketCount(
+      "Blink.MemoryCache.RevalidationPolicy.Preload.Script",
+      0 /* RevalidationPolicy::kUse */, 1);
+  histograms.ExpectTotalCount("Blink.MemoryCache.RevalidationPolicy.Script", 3);
+  histograms.ExpectBucketCount("Blink.MemoryCache.RevalidationPolicy.Script",
+                               0 /* RevalidationPolicy::kUse */, 3);
+}
 
 }  // namespace content

@@ -8,10 +8,12 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/core/SkDrawLooper.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
@@ -22,7 +24,6 @@
 #include "ui/views/animation/ink_drop_ripple.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/highlight_path_generator.h"
-#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/painter.h"
 
 namespace views {
@@ -92,10 +93,12 @@ class ToggleButton::ThumbView : public InkDropHostView {
     cc::PaintFlags thumb_flags;
     thumb_flags.setLooper(gfx::CreateShadowDrawLooper(shadows));
     thumb_flags.setAntiAlias(true);
-    const SkColor thumb_on_color = thumb_on_color_.value_or(
-        theme->GetSystemColor(ui::NativeTheme::kColorId_ProminentButtonColor));
-    const SkColor thumb_off_color = thumb_off_color_.value_or(
-        theme->GetSystemColor(ui::NativeTheme::kColorId_ButtonColor));
+    const SkColor thumb_on_color =
+        thumb_on_color_.value_or(theme->GetSystemColor(
+            ui::NativeTheme::kColorId_ToggleButtonThumbColorOn));
+    const SkColor thumb_off_color =
+        thumb_off_color_.value_or(theme->GetSystemColor(
+            ui::NativeTheme::kColorId_ToggleButtonThumbColorOff));
     thumb_flags.setColor(
         color_utils::AlphaBlend(thumb_on_color, thumb_off_color, color_ratio_));
 
@@ -125,22 +128,39 @@ ToggleButton::ToggleButton(PressedCallback callback)
   slide_animation_.SetSlideDuration(base::TimeDelta::FromMilliseconds(80));
   slide_animation_.SetTweenType(gfx::Tween::LINEAR);
   thumb_view_ = AddChildView(std::make_unique<ThumbView>());
-  SetInkDropMode(InkDropMode::ON);
-  SetFocusForPlatform();
+  ink_drop()->SetMode(views::InkDropHost::InkDropMode::ON);
   // TODO(pbos): Update the highlight-path shape so that a FocusRing can be used
   // on top of it to increase contrast. Disabling it for now addresses a
   // regression in crbug.com/1031983, but a matching FocusRing would probably be
   // desirable.
   SetInstallFocusRingOnFocus(false);
   SetHasInkDropActionOnClick(true);
-}
+  views::InkDrop::UseInkDropForSquareRipple(ink_drop(),
+                                            /*highlight_on_hover=*/false);
+  ink_drop()->SetCreateRippleCallback(base::BindRepeating(
+      [](ToggleButton* host) {
+        gfx::Rect rect = host->thumb_view_->GetLocalBounds();
+        rect.Inset(-ThumbView::GetShadowOutsets());
+        return host->ink_drop()->CreateSquareRipple(rect.CenterPoint());
+      },
+      this));
+  ink_drop()->SetBaseColorCallback(base::BindRepeating(
+      [](ToggleButton* host) {
+        return host->GetTrackColor(host->GetIsOn() || host->HasFocus());
+      },
+      this));
 
-ToggleButton::ToggleButton(ButtonListener* listener)
-    : ToggleButton(PressedCallback(listener, this)) {}
+  ink_drop()->SetAddLayerCallback(
+      base::BindRepeating(&InkDropHost::AddInkDropLayer,
+                          base::Unretained(thumb_view_->ink_drop())));
+  ink_drop()->SetRemoveLayerCallback(
+      base::BindRepeating(&InkDropHost::RemoveInkDropLayer,
+                          base::Unretained(thumb_view_->ink_drop())));
+}
 
 ToggleButton::~ToggleButton() {
   // Destroying ink drop early allows ink drop layer to be properly removed,
-  SetInkDropMode(InkDropMode::OFF);
+  ink_drop()->SetMode(views::InkDropHost::InkDropMode::OFF);
 }
 
 void ToggleButton::AnimateIsOn(bool is_on) {
@@ -273,16 +293,16 @@ void ToggleButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
 void ToggleButton::OnFocus() {
   Button::OnFocus();
-  AnimateInkDrop(views::InkDropState::ACTION_PENDING, nullptr);
+  ink_drop()->AnimateToState(views::InkDropState::ACTION_PENDING, nullptr);
 }
 
 void ToggleButton::OnBlur() {
   Button::OnBlur();
 
   // The ink drop may have already gone away if the user clicked after focusing.
-  if (GetInkDrop()->GetTargetInkDropState() ==
+  if (ink_drop()->GetInkDrop()->GetTargetInkDropState() ==
       views::InkDropState::ACTION_PENDING) {
-    AnimateInkDrop(views::InkDropState::ACTION_TRIGGERED, nullptr);
+    ink_drop()->AnimateToState(views::InkDropState::ACTION_TRIGGERED, nullptr);
   }
 }
 
@@ -292,8 +312,8 @@ void ToggleButton::NotifyClick(const ui::Event& event) {
   // Skip over Button::NotifyClick, to customize the ink drop animation.
   // Leave the ripple in place when the button is activated via the keyboard.
   if (!event.IsKeyEvent()) {
-    AnimateInkDrop(InkDropState::ACTION_TRIGGERED,
-                   ui::LocatedEvent::FromIfValid(&event));
+    ink_drop()->AnimateToState(InkDropState::ACTION_TRIGGERED,
+                               ui::LocatedEvent::FromIfValid(&event));
   }
 
   Button::NotifyClick(event);
@@ -315,32 +335,6 @@ void ToggleButton::PaintButtonContents(gfx::Canvas* canvas) {
       GetTrackColor(true), GetTrackColor(false), color_ratio));
   canvas->DrawRoundRect(track_rect, track_rect.height() / 2, track_flags);
   canvas->Restore();
-}
-
-void ToggleButton::AddInkDropLayer(ui::Layer* ink_drop_layer) {
-  thumb_view_->AddInkDropLayer(ink_drop_layer);
-}
-
-void ToggleButton::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
-  thumb_view_->RemoveInkDropLayer(ink_drop_layer);
-}
-
-std::unique_ptr<InkDrop> ToggleButton::CreateInkDrop() {
-  std::unique_ptr<InkDropImpl> ink_drop = Button::CreateDefaultInkDropImpl();
-  ink_drop->SetShowHighlightOnHover(false);
-  ink_drop->SetAutoHighlightMode(
-      InkDropImpl::AutoHighlightMode::HIDE_ON_RIPPLE);
-  return std::move(ink_drop);
-}
-
-std::unique_ptr<InkDropRipple> ToggleButton::CreateInkDropRipple() const {
-  gfx::Rect rect = thumb_view_->GetLocalBounds();
-  rect.Inset(-ThumbView::GetShadowOutsets());
-  return CreateDefaultInkDropRipple(rect.CenterPoint());
-}
-
-SkColor ToggleButton::GetInkDropBaseColor() const {
-  return GetTrackColor(GetIsOn() || HasFocus());
 }
 
 void ToggleButton::AnimationProgressed(const gfx::Animation* animation) {

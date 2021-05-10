@@ -18,6 +18,7 @@
 #include "base/fuchsia/scoped_service_binding.h"
 #include "base/fuchsia/startup_context.h"
 #include "base/logging.h"
+#include "base/strings/stringprintf.h"
 #include "fuchsia/runners/buildflags.h"
 #include "fuchsia/runners/common/web_component.h"
 #include "url/gurl.h"
@@ -33,6 +34,18 @@ fuchsia::web::ContextPtr CreateWebContext(
   context_provider->Create(std::move(context_params), web_context.NewRequest());
 
   return web_context;
+}
+
+bool IsChannelClosed(const zx::channel& channel) {
+  zx_signals_t observed = 0u;
+  zx_status_t status =
+      channel.wait_one(ZX_ERR_PEER_CLOSED, zx::time(), &observed);
+  return status == ZX_OK;
+}
+
+std::string CreateUniqueComponentName() {
+  static int last_component_id_ = 0;
+  return base::StringPrintf("web-component:%d", ++last_component_id_);
 }
 
 }  // namespace
@@ -54,6 +67,12 @@ WebContentRunner::~WebContentRunner() = default;
 void WebContentRunner::CreateFrameWithParams(
     fuchsia::web::CreateFrameParams params,
     fidl::InterfaceRequest<fuchsia::web::Frame> request) {
+  // Synchronously check whether the web.Context channel has closed, to reduce
+  // the chance of issuing CreateFrameWithParams() to an already-closed channel.
+  // This avoids potentially flaking a test - see crbug.com/1173418.
+  if (context_ && IsChannelClosed(context_.channel()))
+    context_.Unbind();
+
   if (!context_) {
     DCHECK(get_context_params_callback_);
     context_ = CreateWebContext(get_context_params_callback_.Run());
@@ -77,8 +96,8 @@ void WebContentRunner::StartComponent(
   }
 
   std::unique_ptr<WebComponent> component = std::make_unique<WebComponent>(
-      this,
-      std::make_unique<base::fuchsia::StartupContext>(std::move(startup_info)),
+      CreateUniqueComponentName(), this,
+      std::make_unique<base::StartupContext>(std::move(startup_info)),
       std::move(controller_request));
 #if BUILDFLAG(WEB_RUNNER_REMOTE_DEBUGGING_PORT) != 0
   component->EnableRemoteDebugging();
@@ -108,4 +127,9 @@ void WebContentRunner::RegisterComponent(
 
 void WebContentRunner::SetOnEmptyCallback(base::OnceClosure on_empty) {
   on_empty_callback_ = std::move(on_empty);
+}
+
+void WebContentRunner::DestroyWebContext() {
+  DCHECK(get_context_params_callback_);
+  context_ = nullptr;
 }

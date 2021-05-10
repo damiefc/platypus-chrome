@@ -5,7 +5,7 @@
 #include "media/gpu/vaapi/vaapi_dmabuf_video_frame_mapper.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "media/base/color_plane_layout.h"
@@ -162,6 +162,7 @@ VaapiDmaBufVideoFrameMapper::VaapiDmaBufVideoFrameMapper(
     : VideoFrameMapper(format),
       vaapi_wrapper_(VaapiWrapper::Create(VaapiWrapper::kVideoProcess,
                                           VAProfileNone,
+                                          EncryptionScheme::kUnencrypted,
                                           base::DoNothing())) {}
 
 VaapiDmaBufVideoFrameMapper::~VaapiDmaBufVideoFrameMapper() {}

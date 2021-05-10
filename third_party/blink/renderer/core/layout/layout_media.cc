@@ -41,6 +41,11 @@ LayoutMedia::LayoutMedia(HTMLMediaElement* video) : LayoutImage(video) {
 
 LayoutMedia::~LayoutMedia() = default;
 
+void LayoutMedia::Trace(Visitor* visitor) const {
+  visitor->Trace(children_);
+  LayoutImage::Trace(visitor);
+}
+
 HTMLMediaElement* LayoutMedia::MediaElement() const {
   NOT_DESTROYED();
   return To<HTMLMediaElement>(GetNode());
@@ -93,7 +98,7 @@ void LayoutMedia::UpdateLayout() {
       width = ComputePanelWidth(new_rect);
     }
 
-    LayoutBox* layout_box = ToLayoutBox(child);
+    auto* layout_box = To<LayoutBox>(child);
     layout_box->SetLocation(new_rect.Location());
     layout_box->SetOverrideLogicalWidth(width);
     layout_box->SetOverrideLogicalHeight(new_rect.Height());

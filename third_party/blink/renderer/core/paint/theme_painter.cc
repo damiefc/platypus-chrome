@@ -23,7 +23,6 @@
 
 #include "build/build_config.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/forms/html_data_list_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_data_list_options_collection.h"
@@ -147,14 +146,14 @@ bool ThemePainter::Paint(const LayoutObject& o,
     case kProgressBarPart:
       COUNT_APPEARANCE(doc, ProgressBar);
       // Note that |-webkit-appearance: progress-bar| works only for <progress>.
-      return PaintProgressBar(element, o, paint_info, r);
+      return PaintProgressBar(element, o, paint_info, r, style);
     case kSliderHorizontalPart: {
       COUNT_APPEARANCE(doc, SliderHorizontal);
-      return PaintSliderTrack(element, o, paint_info, r);
+      return PaintSliderTrack(element, o, paint_info, r, style);
     }
     case kSliderVerticalPart: {
       COUNT_APPEARANCE(doc, SliderVertical);
-      return PaintSliderTrack(element, o, paint_info, r);
+      return PaintSliderTrack(element, o, paint_info, r, style);
     }
     case kSliderThumbHorizontalPart: {
       COUNT_APPEARANCE(doc, SliderThumbHorizontal);
@@ -320,7 +319,7 @@ void ThemePainter::PaintSliderTicks(const LayoutObject& o,
           ->getElementById(shadow_element_names::kIdSliderThumb)
           ->GetLayoutObject();
   if (thumb_layout_object && thumb_layout_object->IsBox())
-    thumb_size = FlooredIntSize(ToLayoutBox(thumb_layout_object)->Size());
+    thumb_size = FlooredIntSize(To<LayoutBox>(thumb_layout_object)->Size());
 
   IntSize tick_size = LayoutTheme::GetTheme().SliderTickSize();
   float zoom_factor = o.StyleRef().EffectiveZoom();
@@ -335,7 +334,7 @@ void ThemePainter::PaintSliderTicks(const LayoutObject& o,
   if (track_layout_object && track_layout_object->IsBox()) {
     track_bounds = IntRect(
         CeiledIntPoint(track_layout_object->FirstFragment().PaintOffset()),
-        FlooredIntSize(ToLayoutBox(track_layout_object)->Size()));
+        FlooredIntSize(To<LayoutBox>(track_layout_object)->Size()));
   }
 
   if (is_horizontal) {

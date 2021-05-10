@@ -8,18 +8,19 @@
 #include <vector>
 
 #include "chrome/browser/web_applications/components/app_icon_manager.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 
 class Profile;
 
 namespace extensions {
 
 // Class used to read icons of extensions-based bookmark apps.
-// TODO(crbug.com/877898): Erase this subclass once BookmarkApps are off
-// Extensions.
+// TODO(crbug.com/1065748): Erase this subclass.
 class BookmarkAppIconManager : public web_app::AppIconManager {
  public:
   explicit BookmarkAppIconManager(Profile* profile);
+  BookmarkAppIconManager(const BookmarkAppIconManager&) = delete;
+  BookmarkAppIconManager& operator=(const BookmarkAppIconManager&) = delete;
   ~BookmarkAppIconManager() override;
 
   // AppIconManager:
@@ -58,7 +59,6 @@ class BookmarkAppIconManager : public web_app::AppIconManager {
  private:
   Profile* const profile_;
 
-  DISALLOW_COPY_AND_ASSIGN(BookmarkAppIconManager);
 };
 
 }  // namespace extensions

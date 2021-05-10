@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/simple_test_clock.h"
@@ -26,8 +26,8 @@ namespace {
 using testing::_;
 using ::testing::Invoke;
 
-const auto kTestTitle = base::UTF8ToUTF16("hello");
-const auto kTestMessage = base::UTF8ToUTF16("world");
+constexpr char16_t kTestTitle[] = u"hello";
+constexpr char16_t kTestMessage[] = u"world";
 
 class UpdateNotificationServiceImplTest : public testing::Test {
  public:

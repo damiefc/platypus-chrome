@@ -11,8 +11,9 @@
 #include <utility>
 #include <vector>
 
+#include "base/android/build_info.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -24,9 +25,7 @@
 #include "chromecast/base/serializers.h"
 #include "chromecast/chromecast_buildflags.h"
 #include "chromecast/media/cma/backend/android/audio_track_jni_headers/VolumeControl_jni.h"
-#if BUILDFLAG(ENABLE_VOLUME_TABLES_ACCESS)
 #include "chromecast/media/cma/backend/android/audio_track_jni_headers/VolumeMap_jni.h"
-#endif
 
 namespace chromecast {
 namespace media {
@@ -133,7 +132,8 @@ void VolumeControlAndroid::OnVolumeChange(
   thread_.task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&VolumeControlAndroid::ReportVolumeChangeOnThread,
-                     base::Unretained(this), (AudioContentType)type, level));
+                     base::Unretained(this),
+                     static_cast<AudioContentType>(type), level));
 }
 
 void VolumeControlAndroid::OnMuteChange(
@@ -142,34 +142,28 @@ void VolumeControlAndroid::OnMuteChange(
     jint type,
     jboolean muted) {
   thread_.task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&VolumeControlAndroid::ReportMuteChangeOnThread,
-                     base::Unretained(this), (AudioContentType)type, muted));
+      FROM_HERE, base::BindOnce(&VolumeControlAndroid::ReportMuteChangeOnThread,
+                                base::Unretained(this),
+                                static_cast<AudioContentType>(type), muted));
 }
 
-#if BUILDFLAG(ENABLE_VOLUME_TABLES_ACCESS)
-
 int VolumeControlAndroid::GetMaxVolumeIndex(AudioContentType type) {
+  if (base::android::BuildInfo::GetInstance()->sdk_int() <
+      base::android::SDK_VERSION_NOUGAT) {
+    return 1;
+  }
   return Java_VolumeMap_getMaxVolumeIndex(base::android::AttachCurrentThread(),
                                           static_cast<int>(type));
 }
 
 float VolumeControlAndroid::VolumeToDbFS(AudioContentType type, float volume) {
+  if (base::android::BuildInfo::GetInstance()->sdk_int() <
+      base::android::SDK_VERSION_NOUGAT) {
+    return 1.0f;
+  }
   return Java_VolumeMap_volumeToDbFs(base::android::AttachCurrentThread(),
                                      static_cast<int>(type), volume);
 }
-
-#else  // Dummies:
-
-int VolumeControlAndroid::GetMaxVolumeIndex(AudioContentType type) {
-  return 1;
-}
-
-float VolumeControlAndroid::VolumeToDbFS(AudioContentType type, float volume) {
-  return 1.0f;
-}
-
-#endif
 
 void VolumeControlAndroid::InitializeOnThread() {
   DCHECK(thread_.task_runner()->BelongsToCurrentThread());
@@ -335,7 +329,7 @@ float VolumeControlAndroid::DbFSToVolumeCached(AudioContentType type,
 
 // static
 void VolumeControl::Initialize(const std::vector<std::string>& argv) {
-  // Nothing to do.
+  GetVolumeControl();
 }
 
 // static

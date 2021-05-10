@@ -4,13 +4,42 @@
 
 #include "storage/browser/file_system/obfuscated_file_util_memory_delegate.h"
 
+#include <algorithm>
 #include <utility>
 
+#include "base/allocator/partition_allocator/partition_alloc_constants.h"
 #include "base/files/file_util.h"
 #include "base/numerics/checked_math.h"
+#include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
+
+namespace {
+
+// We are giving a relatively large quota to in-memory filesystem (see
+// quota_settings.cc), but we do not allocate this memory beforehand for the
+// filesystem. Therefore, specially on low-end devices, a website can get to a
+// state where it has not used all its quota, but there is no more memory
+// available and memory allocation fails and results in Chrome crash.
+// By checking for availability of memory before allocating it, we reduce the
+// crash possibility.
+// Note that quota assignment is the same for on-disk filesystem and the
+// assigned quota is not guaranteed to be allocatable later.
+bool IsMemoryAvailable(int64_t required_memory) {
+#if defined(OS_FUCHSIA)
+  // This function is not implemented on FUCHSIA, yet. (crbug.com/986608)
+  return true;
+#else
+  int64_t max_allocatable =
+      std::min(base::SysInfo::AmountOfAvailablePhysicalMemory(),
+               static_cast<int64_t>(base::MaxDirectMapped()));
+
+  return max_allocatable >= required_memory;
+#endif
+}
+
+}  // namespace
 
 namespace storage {
 
@@ -305,6 +334,12 @@ base::File::Error ObfuscatedFileUtilMemoryDelegate::Truncate(
   if (!dp || !dp->entry || dp->entry->type != Entry::kFile)
     return base::File::FILE_ERROR_NOT_FOUND;
 
+  // Fail if enough memory is not available.
+  if (static_cast<size_t>(length) > dp->entry->file_content.capacity() &&
+      !IsMemoryAvailable(length)) {
+    return base::File::FILE_ERROR_NO_SPACE;
+  }
+
   dp->entry->file_content.resize(length);
   return base::File::FILE_OK;
 }
@@ -356,9 +391,13 @@ base::File::Error ObfuscatedFileUtilMemoryDelegate::CopyOrMoveFile(
     case NativeFileUtil::CopyOrMoveMode::COPY_NOSYNC:
     case NativeFileUtil::CopyOrMoveMode::COPY_SYNC:
       DCHECK(!src_is_directory);
+      // Fail if enough memory is not available.
+      if (!IsMemoryAvailable(src_dp->entry->file_content.size()))
+        return base::File::FILE_ERROR_NO_SPACE;
       if (!CopyOrMoveFileInternal(*src_dp, *dest_dp, false))
         return base::File::FILE_ERROR_FAILED;
       break;
+
     case NativeFileUtil::CopyOrMoveMode::MOVE:
       if (src_is_directory) {
         if (!MoveDirectoryInternal(*src_dp, *dest_dp))
@@ -485,7 +524,7 @@ int ObfuscatedFileUtilMemoryDelegate::WriteFile(
 
   size_t offset_u = static_cast<size_t>(offset);
   // Fail if |offset| or |buf_len| not valid.
-  if (offset < 0 || buf_len < 0 || offset_u > dp->entry->file_content.size())
+  if (offset < 0 || buf_len < 0)
     return net::ERR_REQUEST_RANGE_NOT_SATISFIABLE;
 
   // Fail if result doesn't fit in a std::vector.
@@ -493,13 +532,40 @@ int ObfuscatedFileUtilMemoryDelegate::WriteFile(
       static_cast<size_t>(buf_len))
     return net::ERR_REQUEST_RANGE_NOT_SATISFIABLE;
 
+  const size_t last_position = offset_u + buf_len;
+  if (last_position > dp->entry->file_content.capacity()) {
+    // Fail if enough memory is not available.
+    if (!IsMemoryAvailable(last_position))
+      return net::ERR_FILE_NO_SPACE;
+
+// If required memory is bigger than half of the max allocatable memory block,
+// reserve first to avoid STL getting more than required memory.
+// See crbug.com/1043914 for more context.
+// |MaxDirectMapped| function is not implemented on FUCHSIA, yet.
+// (crbug.com/986608)
+#if !defined(OS_FUCHSIA)
+    if (last_position >= base::MaxDirectMapped() / 2) {
+      // TODO(https://crbug.com/1043914): Allocated memory is rounded up to
+      // 100MB blocks to reduce memory allocation delays. Switch to a more
+      // proper container to remove this dependency.
+      const size_t round_up_size = 100 * 1024 * 1024;
+      size_t rounded_up = ((last_position / round_up_size) + 1) * round_up_size;
+      if (!IsMemoryAvailable(rounded_up))
+        return net::ERR_FILE_NO_SPACE;
+      dp->entry->file_content.reserve(rounded_up);
+    }
+#endif
+  }
+
   if (offset_u == dp->entry->file_content.size()) {
     dp->entry->file_content.insert(dp->entry->file_content.end(), buf->data(),
                                    buf->data() + buf_len);
   } else {
-    if (offset_u + buf_len > dp->entry->file_content.size())
-      dp->entry->file_content.resize(offset_u + buf_len);
+    if (last_position > dp->entry->file_content.size())
+      dp->entry->file_content.resize(last_position);
 
+    // if |offset_u| is larger than the original file size, there will be null
+    // bytes between the end of the file and |offset_u|.
     memcpy(dp->entry->file_content.data() + offset, buf->data(), buf_len);
   }
   return buf_len;
@@ -547,6 +613,10 @@ base::File::Error ObfuscatedFileUtilMemoryDelegate::CopyInForeignFile(
       source_info.size > std::numeric_limits<int>::max()) {
     return base::File::FILE_ERROR_NO_SPACE;
   }
+
+  // Fail if enough memory is not available.
+  if (!IsMemoryAvailable(source_info.size))
+    return base::File::FILE_ERROR_NO_SPACE;
 
   // Create file.
   Entry* entry = &dest_dp->parent->directory_content

@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/strings/string_util.h"
@@ -16,11 +16,12 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/device_event_log/device_event_log.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/dbus/permission_broker/permission_broker_client.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace device {
 
@@ -50,7 +51,7 @@ void SerialIoHandler::Open(const mojom::SerialConnectionOptions& options,
   DCHECK(ui_thread_task_runner_.get());
   MergeConnectionOptions(options);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Note: dbus clients are destroyed in PostDestroyThreads so passing |client|
   // as unretained is safe.
   auto* client = chromeos::PermissionBrokerClient::Get();
@@ -72,10 +73,10 @@ void SerialIoHandler::Open(const mojom::SerialConnectionOptions& options,
       {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&SerialIoHandler::StartOpen, this,
                      base::ThreadTaskRunnerHandle::Get()));
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 void SerialIoHandler::OnPathOpened(
     scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner,
@@ -185,19 +186,23 @@ void SerialIoHandler::DoClose(base::File port) {
   // port closed by destructor.
 }
 
-void SerialIoHandler::Read(std::unique_ptr<WritableBuffer> buffer) {
+void SerialIoHandler::Read(base::span<uint8_t> buffer,
+                           ReadCompleteCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!IsReadPending());
-  pending_read_buffer_ = std::move(buffer);
+  pending_read_buffer_ = buffer;
+  pending_read_callback_ = std::move(callback);
   read_canceled_ = false;
   AddRef();
   ReadImpl();
 }
 
-void SerialIoHandler::Write(std::unique_ptr<ReadOnlyBuffer> buffer) {
+void SerialIoHandler::Write(base::span<const uint8_t> buffer,
+                            WriteCompleteCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!IsWritePending());
-  pending_write_buffer_ = std::move(buffer);
+  pending_write_buffer_ = buffer;
+  pending_write_callback_ = std::move(callback);
   write_canceled_ = false;
   AddRef();
   WriteImpl();
@@ -207,13 +212,8 @@ void SerialIoHandler::ReadCompleted(int bytes_read,
                                     mojom::SerialReceiveError error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(IsReadPending());
-  std::unique_ptr<WritableBuffer> pending_read_buffer =
-      std::move(pending_read_buffer_);
-  if (error == mojom::SerialReceiveError::NONE) {
-    pending_read_buffer->Done(bytes_read);
-  } else {
-    pending_read_buffer->DoneWithError(bytes_read, static_cast<int32_t>(error));
-  }
+  pending_read_buffer_ = base::span<uint8_t>();
+  std::move(pending_read_callback_).Run(bytes_read, error);
   Release();
 }
 
@@ -221,25 +221,19 @@ void SerialIoHandler::WriteCompleted(int bytes_written,
                                      mojom::SerialSendError error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(IsWritePending());
-  std::unique_ptr<ReadOnlyBuffer> pending_write_buffer =
-      std::move(pending_write_buffer_);
-  if (error == mojom::SerialSendError::NONE) {
-    pending_write_buffer->Done(bytes_written);
-  } else {
-    pending_write_buffer->DoneWithError(bytes_written,
-                                        static_cast<int32_t>(error));
-  }
+  pending_write_buffer_ = base::span<const uint8_t>();
+  std::move(pending_write_callback_).Run(bytes_written, error);
   Release();
 }
 
 bool SerialIoHandler::IsReadPending() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return pending_read_buffer_ != NULL;
+  return !pending_read_callback_.is_null();
 }
 
 bool SerialIoHandler::IsWritePending() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return pending_write_buffer_ != NULL;
+  return !pending_write_callback_.is_null();
 }
 
 void SerialIoHandler::CancelRead(mojom::SerialReceiveError reason) {

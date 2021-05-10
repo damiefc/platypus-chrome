@@ -46,10 +46,9 @@ LayoutRubyBase* LayoutRubyBase::CreateAnonymous(Document* document,
                                                 const LayoutRubyRun& ruby_run) {
   LayoutRubyBase* layout_object;
   if (ruby_run.IsLayoutNGObject()) {
-    DCHECK(RuntimeEnabledFeatures::LayoutNGRubyEnabled());
-    layout_object = new LayoutNGRubyBase();
+    layout_object = MakeGarbageCollected<LayoutNGRubyBase>();
   } else {
-    layout_object = new LayoutRubyBase(nullptr);
+    layout_object = MakeGarbageCollected<LayoutRubyBase>(nullptr);
   }
   layout_object->SetDocumentForAnonymous(document);
   return layout_object;

@@ -7,7 +7,7 @@
 #include <limits>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/i18n/character_encoding.h"
 #include "base/i18n/icu_string_conversions.h"
@@ -31,6 +31,7 @@ namespace {
 constexpr char kTextPlain[] = "text/plain";
 constexpr char kTextRTF[] = "text/rtf";
 constexpr char kTextHTML[] = "text/html";
+constexpr char kTextUriList[] = "text/uri-list";
 
 constexpr char kUtfPrefix[] = "UTF";
 constexpr char kEncoding16[] = "16";
@@ -101,9 +102,9 @@ int GetImageTypeRank(const std::string& mime_type) {
   return 2;
 }
 
-base::string16 CodepageToUTF16(const std::vector<uint8_t>& data,
+std::u16string CodepageToUTF16(const std::vector<uint8_t>& data,
                                const std::string& charset_input) {
-  base::string16 output;
+  std::u16string output;
   base::StringPiece piece(reinterpret_cast<const char*>(data.data()),
                           data.size());
   const char* charset = charset_input.c_str();
@@ -240,8 +241,9 @@ void DataSource::GetDataForPreferredMimeTypes(
     ReadDataCallback rtf_reader,
     ReadTextDataCallback html_reader,
     ReadDataCallback image_reader,
+    ReadDataCallback filenames_reader,
     base::RepeatingClosure failure_callback) {
-  std::string text_mime, rtf_mime, html_mime, image_mime;
+  std::string text_mime, rtf_mime, html_mime, image_mime, filenames_mime;
 
   int text_rank = std::numeric_limits<int>::max();
   int html_rank = std::numeric_limits<int>::max();
@@ -286,6 +288,11 @@ void DataSource::GetDataForPreferredMimeTypes(
         image_mime = mime_type;
         image_rank = new_rank;
       }
+    } else if (net::MatchesMimeType(std::string(kTextUriList), mime_type)) {
+      if (filenames_reader.is_null())
+        continue;
+
+      filenames_mime = mime_type;
     }
   }
 
@@ -301,12 +308,13 @@ void DataSource::GetDataForPreferredMimeTypes(
                           std::move(html_reader)),
            failure_callback);
   ReadData(image_mime, std::move(image_reader), failure_callback);
+  ReadData(filenames_mime, std::move(filenames_reader), failure_callback);
 }
 
 void DataSource::OnTextRead(ReadTextDataCallback callback,
                             const std::string& mime_type,
                             const std::vector<uint8_t>& data) {
-  base::string16 output = CodepageToUTF16(data, GetCharset(mime_type));
+  std::u16string output = CodepageToUTF16(data, GetCharset(mime_type));
   std::move(callback).Run(mime_type, std::move(output));
 }
 

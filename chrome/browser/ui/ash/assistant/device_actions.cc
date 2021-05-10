@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
@@ -208,7 +208,7 @@ void DeviceActions::LaunchAndroidIntent(const std::string& intent) {
   app->LaunchIntent(intent, display::kDefaultDisplayId);
 }
 
-void DeviceActions::AddAppListEventSubscriber(
+void DeviceActions::AddAndFireAppListEventSubscriber(
     chromeos::assistant::AppListEventSubscriber* subscriber) {
   auto* prefs = ArcAppListPrefs::Get(ProfileManager::GetActiveUserProfile());
   if (prefs && prefs->package_list_initial_refreshed()) {
@@ -218,8 +218,8 @@ void DeviceActions::AddAppListEventSubscriber(
 
   app_list_subscribers_.AddObserver(subscriber);
 
-  if (prefs && !scoped_prefs_observer_.IsObserving(prefs))
-    scoped_prefs_observer_.Add(prefs);
+  if (prefs && !scoped_prefs_observations_.IsObservingSource(prefs))
+    scoped_prefs_observations_.AddObservation(prefs);
 }
 
 void DeviceActions::RemoveAppListEventSubscriber(

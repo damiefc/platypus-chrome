@@ -12,11 +12,12 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
-import '../settings_shared_css.m.js';
-import '../controls/extension_controlled_indicator.m.js';
-import '../controls/settings_toggle_button.m.js';
-import '../prefs/prefs.m.js';
+import '../settings_shared_css.js';
+import '../controls/extension_controlled_indicator.js';
+import '../controls/settings_toggle_button.js';
+import '../prefs/prefs.js';
 import './address_edit_dialog.js';
+import './address_remove_confirmation_dialog.js';
 import './passwords_shared_css.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
@@ -121,6 +122,9 @@ Polymer({
 
     /** @private */
     showAddressDialog_: Boolean,
+
+    /** @private */
+    showAddressRemoveConfirmationDialog_: Boolean,
   },
 
   listeners: {
@@ -240,8 +244,17 @@ Polymer({
   },
 
   /** @private */
-  onRemoteEditAddressTap_() {
-    window.open(loadTimeData.getString('manageAddressesUrl'));
+  onAddressRemoveConfirmationDialogClose_: function() {
+    // Check if the dialog was confirmed before closing it.
+    if (/** @type {!SettingsAddressRemoveConfirmationDialogElement} */
+        (this.$$('settings-address-remove-confirmation-dialog'))
+            .wasConfirmed()) {
+      this.autofillManager_.removeAddress(
+          /** @type {string} */ (this.activeAddress.guid));
+    }
+    this.showAddressRemoveConfirmationDialog_ = false;
+    focusWithoutInk(assert(this.activeDialogAnchor_));
+    this.activeDialogAnchor_ = null;
   },
 
   /**
@@ -249,8 +262,7 @@ Polymer({
    * @private
    */
   onMenuRemoveAddressTap_() {
-    this.autofillManager_.removeAddress(
-        /** @type {string} */ (this.activeAddress.guid));
+    this.showAddressRemoveConfirmationDialog_ = true;
     this.$.addressSharedMenu.close();
   },
 

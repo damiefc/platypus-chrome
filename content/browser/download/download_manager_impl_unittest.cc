@@ -15,7 +15,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
 #include "base/macros.h"
@@ -23,7 +23,6 @@
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/gmock_callback_support.h"
@@ -47,7 +46,6 @@
 #include "content/public/test/test_browser_context.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/ui_base_features.h"
 #include "url/origin.h"
 
 using base::test::RunOnceCallback;
@@ -423,19 +421,20 @@ class DownloadManagerTest : public testing::Test {
 
     mock_download_item_factory_ = (new MockDownloadItemFactory())->AsWeakPtr();
     mock_download_file_factory_ = (new MockDownloadFileFactory())->AsWeakPtr();
-    mock_download_manager_delegate_.reset(
-        new StrictMock<MockDownloadManagerDelegate>);
+    mock_download_manager_delegate_ =
+        std::make_unique<StrictMock<MockDownloadManagerDelegate>>();
     EXPECT_CALL(*mock_download_manager_delegate_.get(), Shutdown())
         .WillOnce(Return());
     browser_context_ = std::make_unique<TestBrowserContext>();
-    download_manager_.reset(new DownloadManagerImpl(browser_context_.get()));
+    download_manager_ =
+        std::make_unique<DownloadManagerImpl>(browser_context_.get());
     download_manager_->SetDownloadItemFactoryForTesting(
         std::unique_ptr<download::DownloadItemFactory>(
             mock_download_item_factory_.get()));
     download_manager_->SetDownloadFileFactoryForTesting(
         std::unique_ptr<download::DownloadFileFactory>(
             mock_download_file_factory_.get()));
-    observer_.reset(new MockDownloadManagerObserver());
+    observer_ = std::make_unique<MockDownloadManagerObserver>();
     download_manager_->AddObserver(observer_.get());
     download_manager_->SetDelegate(mock_download_manager_delegate_.get());
     download_urls_.push_back(GURL("http://www.url1.com"));
@@ -608,16 +607,17 @@ TEST_F(DownloadManagerTest, StartDownload) {
   EXPECT_CALL(GetMockDownloadManagerDelegate(), GetNextId_(_))
       .WillOnce(RunOnceCallback<0>(local_id));
 
-  // TODO(https://crbug.com/1109690): figure out what to do for Ozone/Linux.
-  // Probably, this can be removed.
-  bool should_call_get_save_dir = true;
-#if defined(USE_X11)
-  should_call_get_save_dir = features::IsUsingOzonePlatform();
+  // TODO(thomasanderson,crbug.com/784010): Remove this when all Linux
+  // distros with versions of GTK lower than 3.14.7 are no longer
+  // supported.  This should happen when support for Ubuntu Trusty and
+  // Debian Jessie are removed.
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+  // Doing nothing will set the default download directory to null.
+  EXPECT_CALL(GetMockDownloadManagerDelegate(), GetSaveDir(_, _, _)).Times(0);
+#else
+  EXPECT_CALL(GetMockDownloadManagerDelegate(), GetSaveDir(_, _, _));
 #endif
-  if (should_call_get_save_dir) {
-    // Doing nothing will set the default download directory to null.
-    EXPECT_CALL(GetMockDownloadManagerDelegate(), GetSaveDir(_, _, _));
-  }
+
   EXPECT_CALL(GetMockDownloadManagerDelegate(),
               ApplicationClientIdForFileScanning())
       .WillRepeatedly(Return("client-id"));
@@ -650,16 +650,17 @@ TEST_F(DownloadManagerTest, StartDownloadWithoutHistoryDB) {
   EXPECT_CALL(GetMockDownloadManagerDelegate(), GetNextId_(_))
       .WillOnce(RunOnceCallback<0>(download::DownloadItem::kInvalidId));
 
-  // TODO(https://crbug.com/1109690): figure out what to do for Ozone/Linux.
-  // Probably, this can be removed.
-  bool should_call_get_save_dir = true;
-#if defined(USE_X11)
-  should_call_get_save_dir = features::IsUsingOzonePlatform();
+  // TODO(thomasanderson,crbug.com/784010): Remove this when all Linux
+  // distros with versions of GTK lower than 3.14.7 are no longer
+  // supported.  This should happen when support for Ubuntu Trusty and
+  // Debian Jessie are removed.
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+  // Doing nothing will set the default download directory to null.
+  EXPECT_CALL(GetMockDownloadManagerDelegate(), GetSaveDir(_, _, _)).Times(0);
+#else
+  EXPECT_CALL(GetMockDownloadManagerDelegate(), GetSaveDir(_, _, _));
 #endif
-  if (should_call_get_save_dir) {
-    // Doing nothing will set the default download directory to null.
-    EXPECT_CALL(GetMockDownloadManagerDelegate(), GetSaveDir(_, _, _));
-  }
+
   EXPECT_CALL(GetMockDownloadManagerDelegate(),
               ApplicationClientIdForFileScanning())
       .WillRepeatedly(Return("client-id"));

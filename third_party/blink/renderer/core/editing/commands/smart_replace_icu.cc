@@ -33,7 +33,6 @@
 
 #if !defined(OS_MAC)
 #include <unicode/uset.h>
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -94,7 +93,7 @@ static USet* GetSmartSet(bool is_previous_character) {
       // Punctuation (kCFCharacterSetPunctuation)
       static const UChar* kPunctuationClass =
           reinterpret_cast<const UChar*>(u"[:P:]");
-      UErrorCode ec = U_ZERO_ERROR;
+      ec = U_ZERO_ERROR;
       USet* icu_punct = uset_openPattern(
           kPunctuationClass, LengthOfNullTerminatedString(kPunctuationClass),
           &ec);

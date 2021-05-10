@@ -99,7 +99,7 @@ class ArcImeService : public KeyedService,
   void OnCursorRectChangedWithSurroundingText(
       const gfx::Rect& rect,
       const gfx::Range& text_range,
-      const base::string16& text_in_range,
+      const std::u16string& text_in_range,
       const gfx::Range& selection_range,
       bool is_screen_coordinates) override;
   bool ShouldEnableKeyEventForwarding() override;
@@ -114,14 +114,16 @@ class ArcImeService : public KeyedService,
   void SetCompositionText(const ui::CompositionText& composition) override;
   uint32_t ConfirmCompositionText(bool keep_selection) override;
   void ClearCompositionText() override;
-  void InsertText(const base::string16& text) override;
+  void InsertText(const std::u16string& text,
+                  InsertTextCursorBehavior cursor_behavior) override;
   void InsertChar(const ui::KeyEvent& event) override;
   ui::TextInputType GetTextInputType() const override;
   gfx::Rect GetCaretBounds() const override;
+  gfx::Rect GetSelectionBoundingBox() const override;
   bool GetTextRange(gfx::Range* range) const override;
   bool GetEditableSelectionRange(gfx::Range* range) const override;
   bool GetTextFromRange(const gfx::Range& range,
-                        base::string16* text) const override;
+                        std::u16string* text) const override;
   void EnsureCaretNotInRect(const gfx::Rect& rect) override;
 
   // Overridden from ui::TextInputClient (with default implementation):
@@ -152,10 +154,13 @@ class ArcImeService : public KeyedService,
       const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) override;
   gfx::Range GetAutocorrectRange() const override;
   gfx::Rect GetAutocorrectCharacterBounds() const override;
-  bool SetAutocorrectRange(const base::string16& autocorrect_text,
-                           const gfx::Range& range) override;
+  bool SetAutocorrectRange(const gfx::Range& range) override;
+  base::Optional<ui::GrammarFragment> GetGrammarFragment(
+      const gfx::Range& range) override;
+  bool ClearGrammarFragments(const gfx::Range& range) override;
+  bool AddGrammarFragments(
+      const std::vector<ui::GrammarFragment>& fragments) override;
   void OnDispatchingKeyEventPostIME(ui::KeyEvent* event) override;
-  void ClearAutocorrectRange() override;
 
   // Normally, the default device scale factor is used to convert from DPI to
   // physical pixels. This method provides a way to override it for testing.
@@ -188,6 +193,9 @@ class ArcImeService : public KeyedService,
   // from Android is valid.
   bool ShouldSendUpdateToInputMethod() const;
 
+  double GetDeviceScaleFactorForKeyboard() const;
+  double GetDeviceScaleFactorForFocusedWindow() const;
+
   std::unique_ptr<ArcImeBridge> ime_bridge_;
   std::unique_ptr<ArcWindowDelegate> arc_window_delegate_;
   ui::TextInputType ime_type_;
@@ -197,7 +205,7 @@ class ArcImeService : public KeyedService,
   gfx::Rect cursor_rect_;
   bool has_composition_text_;
   gfx::Range text_range_;
-  base::string16 text_in_range_;
+  std::u16string text_in_range_;
   gfx::Range selection_range_;
 
   // Return value of IsImeBlocked() last time OnWindowPropertyChanged() is

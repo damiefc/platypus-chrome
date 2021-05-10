@@ -4,21 +4,20 @@
 
 #include "chrome/browser/ui/views/extensions/extension_popup.h"
 
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_view_host.h"
 #include "chrome/browser/ui/browser.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/devtools_agent_host.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_source.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/style/platform_style.h"
 #include "ui/views/widget/widget.h"
 
 #if defined(USE_AURA)
@@ -27,6 +26,9 @@
 #include "ui/wm/core/window_animations.h"
 #include "ui/wm/public/activation_client.h"
 #endif
+
+constexpr gfx::Size ExtensionPopup::kMinSize;
+constexpr gfx::Size ExtensionPopup::kMaxSize;
 
 // static
 void ExtensionPopup::ShowPopup(
@@ -38,6 +40,11 @@ void ExtensionPopup::ShowPopup(
       new ExtensionPopup(std::move(host), anchor_view, arrow, show_action);
   views::BubbleDialogDelegateView::CreateBubble(popup);
 
+  // Check that the preferred adjustment is set to mirror to match
+  // the assumption in the logic to calculate max bounds.
+  DCHECK_EQ(popup->GetBubbleFrameView()->GetPreferredArrowAdjustment(),
+            views::BubbleFrameView::PreferredArrowAdjustment::kMirror);
+
 #if defined(USE_AURA)
   gfx::NativeView native_view = popup->GetWidget()->GetNativeView();
   wm::SetWindowVisibilityAnimationType(
@@ -46,8 +53,8 @@ void ExtensionPopup::ShowPopup(
 
   // This is removed in ExtensionPopup::OnWidgetDestroying(), which is
   // guaranteed to be called before the Widget goes away.  It's not safe to use
-  // a ScopedObserver for this, since the activation client may be deleted
-  // without a call back to this class.
+  // a base::ScopedObservation for this, since the activation client may be
+  // deleted without a call back to this class.
   wm::GetActivationClient(native_view->GetRootWindow())->AddObserver(popup);
 
   chrome::RecordDialogCreation(chrome::DialogIdentifier::EXTENSION_POPUP_AURA);
@@ -61,14 +68,14 @@ ExtensionPopup::~ExtensionPopup() {
 gfx::Size ExtensionPopup::CalculatePreferredSize() const {
   // Constrain the size to popup min/max.
   gfx::Size sz = views::View::CalculatePreferredSize();
-  sz.SetToMax(gfx::Size(kMinWidth, kMinHeight));
-  sz.SetToMin(gfx::Size(kMaxWidth, kMaxHeight));
+  sz.SetToMax(kMinSize);
+  sz.SetToMin(kMaxSize);
   return sz;
 }
 
 void ExtensionPopup::AddedToWidget() {
   BubbleDialogDelegateView::AddedToWidget();
-  const int radius = GetBubbleFrameView()->corner_radius();
+  const int radius = GetBubbleFrameView()->GetCornerRadius();
   const bool contents_has_rounded_corners =
       extension_view_->holder()->SetCornerRadii(gfx::RoundedCornersF(radius));
   SetBorder(views::CreateEmptyBorder(
@@ -122,7 +129,23 @@ void ExtensionPopup::OnWindowActivated(
 #endif  // defined(USE_AURA)
 
 void ExtensionPopup::OnExtensionSizeChanged(ExtensionViewViews* view) {
-  SizeToContents();
+  if (GetWidget())
+    SizeToContents();
+}
+
+gfx::Size ExtensionPopup::GetMinBounds() {
+  return kMinSize;
+}
+
+gfx::Size ExtensionPopup::GetMaxBounds() {
+  gfx::Size max_size = kMaxSize;
+  max_size.SetToMin(
+      BubbleDialogDelegate::GetMaxAvailableScreenSpaceToPlaceBubble(
+          GetAnchorView(), arrow(), adjust_if_offscreen(),
+          views::BubbleFrameView::PreferredArrowAdjustment::kMirror));
+  max_size.SetToMax(kMinSize);
+
+  return max_size;
 }
 
 void ExtensionPopup::OnExtensionUnloaded(
@@ -135,30 +158,22 @@ void ExtensionPopup::OnExtensionUnloaded(
     // try to access the host during Widget closure, destroy it immediately.
     RemoveChildViewT(extension_view_);
 
+    extension_host_observation_.Reset();
     host_.reset();
     // Stop observing the registry immediately to prevent any subsequent
     // notifications, since Widget::Close is asynchronous.
-    extension_registry_observer_.RemoveAll();
+    DCHECK(extension_registry_observation_.IsObserving());
+    extension_registry_observation_.Reset();
 
     GetWidget()->Close();
   }
 }
 
-void ExtensionPopup::Observe(int type,
-                             const content::NotificationSource& source,
-                             const content::NotificationDetails& details) {
-  if (type == content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME) {
-    DCHECK_EQ(host_->host_contents(),
-              content::Source<content::WebContents>(source).ptr());
-    // Show when the content finishes loading and its width is computed.
-    ShowBubble();
-    return;
-  }
-
-  DCHECK_EQ(extensions::NOTIFICATION_EXTENSION_HOST_VIEW_SHOULD_CLOSE, type);
-  // If we aren't the host of the popup, then disregard the notification.
-  if (content::Details<extensions::ExtensionHost>(host_.get()) == details)
-    GetWidget()->Close();
+void ExtensionPopup::DocumentOnLoadCompletedInMainFrame(
+    content::RenderFrameHost* render_frame_host) {
+  // Show when the content finishes loading and its width is computed.
+  ShowBubble();
+  Observe(nullptr);
 }
 
 void ExtensionPopup::OnTabStripModelChanged(
@@ -187,6 +202,12 @@ void ExtensionPopup::DevToolsAgentHostDetached(
     show_action_ = SHOW;
 }
 
+void ExtensionPopup::OnExtensionHostShouldClose(
+    extensions::ExtensionHost* host) {
+  DCHECK_EQ(host, host_.get());
+  GetWidget()->Close();
+}
+
 ExtensionPopup::ExtensionPopup(
     std::unique_ptr<extensions::ExtensionViewHost> host,
     views::View* anchor_view,
@@ -194,9 +215,8 @@ ExtensionPopup::ExtensionPopup(
     ShowAction show_action)
     : BubbleDialogDelegateView(anchor_view,
                                arrow,
-                               views::BubbleBorder::SMALL_SHADOW),
+                               views::BubbleBorder::STANDARD_SHADOW),
       host_(std::move(host)),
-      extension_registry_observer_(this),
       show_action_(show_action) {
   SetButtons(ui::DIALOG_BUTTON_NONE);
   set_use_round_corners(false);
@@ -204,21 +224,25 @@ ExtensionPopup::ExtensionPopup(
   set_margins(gfx::Insets());
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
+  // Set the default value before initializing |extension_view_| to use
+  // the correct value while calculating max bounds.
+  set_adjust_if_offscreen(views::PlatformStyle::kAdjustBubbleIfOffscreen);
+
   extension_view_ =
       AddChildView(std::make_unique<ExtensionViewViews>(host_.get()));
-  extension_view_->set_container(this);
+  extension_view_->SetContainer(this);
+  extension_view_->Init();
 
   // See comments in OnWidgetActivationChanged().
   set_close_on_deactivate(false);
 
-  // Listen for the containing view calling window.close();
-  registrar_.Add(
-      this, extensions::NOTIFICATION_EXTENSION_HOST_VIEW_SHOULD_CLOSE,
-      content::Source<content::BrowserContext>(host_->browser_context()));
   content::DevToolsAgentHost::AddObserver(this);
   host_->browser()->tab_strip_model()->AddObserver(this);
 
-  extension_registry_observer_.Add(
+  // Listen for the containing view calling window.close();
+  extension_host_observation_.Observe(host_.get());
+
+  extension_registry_observation_.Observe(
       extensions::ExtensionRegistry::Get(host_->browser_context()));
 
   // If the host had somehow finished loading, then we'd miss the notification
@@ -227,9 +251,7 @@ ExtensionPopup::ExtensionPopup(
     ShowBubble();
   } else {
     // Wait to show the popup until the contained host finishes loading.
-    registrar_.Add(
-        this, content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
-        content::Source<content::WebContents>(host_->host_contents()));
+    Observe(host_->host_contents());
   }
 }
 
@@ -249,3 +271,6 @@ void ExtensionPopup::CloseUnlessUnderInspection() {
   if (show_action_ != SHOW_AND_INSPECT)
     GetWidget()->CloseWithReason(views::Widget::ClosedReason::kLostFocus);
 }
+
+BEGIN_METADATA(ExtensionPopup, views::BubbleDialogDelegateView)
+END_METADATA

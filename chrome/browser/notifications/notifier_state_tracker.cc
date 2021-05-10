@@ -6,11 +6,13 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
@@ -48,9 +50,8 @@ NotifierStateTracker::NotifierStateTracker(Profile* profile)
       prefs::kMessageCenterDisabledExtensionIds, &disabled_extension_ids_);
 
   disabled_extension_id_pref_.Init(
-      prefs::kMessageCenterDisabledExtensionIds,
-      profile_->GetPrefs(),
-      base::Bind(
+      prefs::kMessageCenterDisabledExtensionIds, profile_->GetPrefs(),
+      base::BindRepeating(
           &NotifierStateTracker::OnStringListPrefChanged,
           base::Unretained(this),
           base::Unretained(prefs::kMessageCenterDisabledExtensionIds),
@@ -80,7 +81,7 @@ bool NotifierStateTracker::IsNotifierEnabled(
       // We do not disable system component notifications.
       return true;
     case message_center::NotifierType::ARC_APPLICATION:
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       // TODO(hriono): Ask Android if the application's notifications are
       // enabled.
       return true;
@@ -88,8 +89,16 @@ bool NotifierStateTracker::IsNotifierEnabled(
       break;
 #endif
     case message_center::NotifierType::CROSTINI_APPLICATION:
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       // Disabling Crostini notifications is not supported yet.
+      return true;
+#else
+      NOTREACHED();
+      break;
+#endif
+    case message_center::NotifierType::PHONE_HUB:
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      // PhoneHub notifications are controlled in their own settings.
       return true;
 #else
       break;
@@ -113,7 +122,7 @@ void NotifierStateTracker::SetNotifierEnabled(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
       pref_name = prefs::kMessageCenterDisabledExtensionIds;
       add_new_item = !enabled;
-      id.reset(new base::Value(notifier_id.id));
+      id = std::make_unique<base::Value>(notifier_id.id);
       FirePermissionLevelChangedEvent(notifier_id, enabled);
 #else
       NOTREACHED();

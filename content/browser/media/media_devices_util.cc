@@ -29,10 +29,9 @@ namespace content {
 
 namespace {
 
-std::string GetDefaultMediaDeviceIDOnUIThread(
-    blink::MediaDeviceType device_type,
-    int render_process_id,
-    int render_frame_id) {
+std::string GetDefaultMediaDeviceIDOnUIThread(MediaDeviceType device_type,
+                                              int render_process_id,
+                                              int render_frame_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   RenderFrameHostImpl* frame_host =
       RenderFrameHostImpl::FromID(render_process_id, render_frame_id);
@@ -45,10 +44,10 @@ std::string GetDefaultMediaDeviceIDOnUIThread(
 
   blink::mojom::MediaStreamType media_stream_type;
   switch (device_type) {
-    case blink::MEDIA_DEVICE_TYPE_AUDIO_INPUT:
+    case MediaDeviceType::MEDIA_AUDIO_INPUT:
       media_stream_type = blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE;
       break;
-    case blink::MEDIA_DEVICE_TYPE_VIDEO_INPUT:
+    case MediaDeviceType::MEDIA_VIDEO_INPUT:
       media_stream_type = blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE;
       break;
     default:
@@ -61,7 +60,7 @@ std::string GetDefaultMediaDeviceIDOnUIThread(
 // This function is intended for testing purposes. It returns an empty string
 // if no default device is supplied via the command line.
 std::string GetDefaultMediaDeviceIDFromCommandLine(
-    blink::MediaDeviceType device_type) {
+    MediaDeviceType device_type) {
   DCHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kUseFakeDeviceForMediaStream));
   const std::string option =
@@ -74,21 +73,21 @@ std::string GetDefaultMediaDeviceIDFromCommandLine(
   option_tokenizer.set_quote_chars("\"");
 
   while (option_tokenizer.GetNext()) {
-    std::vector<std::string> param =
-        base::SplitString(option_tokenizer.token(), "=", base::TRIM_WHITESPACE,
-                          base::SPLIT_WANT_NONEMPTY);
+    std::vector<base::StringPiece> param = base::SplitStringPiece(
+        option_tokenizer.token_piece(), "=", base::TRIM_WHITESPACE,
+        base::SPLIT_WANT_NONEMPTY);
     if (param.size() != 2u) {
       DLOG(WARNING) << "Forgot a value '" << option << "'? Use name=value for "
                     << switches::kUseFakeDeviceForMediaStream << ".";
       return std::string();
     }
 
-    if (device_type == blink::MEDIA_DEVICE_TYPE_AUDIO_INPUT &&
+    if (device_type == MediaDeviceType::MEDIA_AUDIO_INPUT &&
         param.front() == "audio-input-default-id") {
-      return param.back();
-    } else if (device_type == blink::MEDIA_DEVICE_TYPE_VIDEO_INPUT &&
+      return std::string(param.back());
+    } else if (device_type == MediaDeviceType::MEDIA_VIDEO_INPUT &&
                param.front() == "video-input-default-id") {
-      return param.back();
+      return std::string(param.back());
     }
   }
 
@@ -107,7 +106,7 @@ MediaDeviceSaltAndOrigin::MediaDeviceSaltAndOrigin(std::string device_id_salt,
       origin(std::move(origin)) {}
 
 void GetDefaultMediaDeviceID(
-    blink::MediaDeviceType device_type,
+    MediaDeviceType device_type,
     int render_process_id,
     int render_frame_id,
     base::OnceCallback<void(const std::string&)> callback) {
@@ -199,7 +198,7 @@ blink::WebMediaDeviceInfo TranslateMediaDeviceInfo(
       has_permission ? device_info.video_control_support
                      : media::VideoCaptureControlSupport(),
       has_permission ? device_info.video_facing
-                     : media::MEDIA_VIDEO_FACING_NONE);
+                     : blink::mojom::FacingMode::NONE);
 }
 
 blink::WebMediaDeviceInfoArray TranslateMediaDeviceInfoArray(

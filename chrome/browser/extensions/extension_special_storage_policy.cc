@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/check.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
@@ -38,7 +39,15 @@
 using content::BrowserThread;
 using extensions::APIPermission;
 using extensions::Extension;
+using extensions::mojom::APIPermissionID;
 using storage::SpecialStoragePolicy;
+
+namespace {
+// Kill switch for default app protected storage. Enable this make
+// default-installed hosted apps have protected storage.
+const base::Feature kDefaultHostedAppsNeedProtection{
+    "DefaultHostedAppsNeedProtection", base::FEATURE_DISABLED_BY_DEFAULT};
+}  // namespace
 
 class ExtensionSpecialStoragePolicy::CookieSettingsObserver
     : public content_settings::CookieSettings::Observer {
@@ -171,7 +180,19 @@ bool ExtensionSpecialStoragePolicy::IsStorageDurable(const GURL& origin) {
 
 bool ExtensionSpecialStoragePolicy::NeedsProtection(
     const extensions::Extension* extension) {
-  return extension->is_hosted_app() && !extension->from_bookmark();
+  // We only consider "protecting" storage for hosted apps (excluding bookmark
+  // apps, which are only hosted apps as an implementation detail).
+  if (!extension->is_hosted_app() || extension->from_bookmark())
+    return false;
+
+  // Normally, default-installed apps shouldn't have protected storage...
+  if (extension->was_installed_by_default()) {
+    // ... However, we have a kill-switch for this, just in case.
+    return base::FeatureList::IsEnabled(kDefaultHostedAppsNeedProtection);
+  }
+  // Otherwise, this is a user-installed hosted app, and we grant it
+  // special protected storage.
+  return true;
 }
 
 const extensions::ExtensionSet*
@@ -187,31 +208,32 @@ void ExtensionSpecialStoragePolicy::GrantRightsForExtension(
   DCHECK(extension);
 
   int change_flags = 0;
-  if (extensions::ContentCapabilitiesInfo::Get(extension)
-          .permissions.count(APIPermission::kUnlimitedStorage) > 0) {
+  if (extensions::ContentCapabilitiesInfo::Get(extension).permissions.count(
+          APIPermissionID::kUnlimitedStorage) > 0) {
     content_capabilities_unlimited_extensions_.Add(extension);
     change_flags |= SpecialStoragePolicy::STORAGE_UNLIMITED;
   }
 
   if (NeedsProtection(extension) ||
       extension->permissions_data()->HasAPIPermission(
-          APIPermission::kUnlimitedStorage) ||
+          APIPermissionID::kUnlimitedStorage) ||
       extension->permissions_data()->HasAPIPermission(
-          APIPermission::kFileBrowserHandler) ||
+          APIPermissionID::kFileBrowserHandler) ||
       extensions::AppIsolationInfo::HasIsolatedStorage(extension) ||
       extension->is_app()) {
     if (NeedsProtection(extension) && protected_apps_.Add(extension))
       change_flags |= SpecialStoragePolicy::STORAGE_PROTECTED;
 
     if (extension->permissions_data()->HasAPIPermission(
-            APIPermission::kUnlimitedStorage) &&
+            APIPermissionID::kUnlimitedStorage) &&
         unlimited_extensions_.Add(extension)) {
       change_flags |= SpecialStoragePolicy::STORAGE_UNLIMITED;
     }
 
     if (extension->permissions_data()->HasAPIPermission(
-            APIPermission::kFileBrowserHandler))
+            APIPermissionID::kFileBrowserHandler)) {
       file_handler_extensions_.Add(extension);
+    }
 
     if (extensions::AppIsolationInfo::HasIsolatedStorage(extension))
       isolated_extensions_.Add(extension);
@@ -229,30 +251,32 @@ void ExtensionSpecialStoragePolicy::RevokeRightsForExtension(
   DCHECK(extension);
 
   int change_flags = 0;
-  if (extensions::ContentCapabilitiesInfo::Get(extension)
-          .permissions.count(APIPermission::kUnlimitedStorage) > 0) {
+  if (extensions::ContentCapabilitiesInfo::Get(extension).permissions.count(
+          APIPermissionID::kUnlimitedStorage) > 0) {
     content_capabilities_unlimited_extensions_.Remove(extension);
     change_flags |= SpecialStoragePolicy::STORAGE_UNLIMITED;
   }
 
   if (NeedsProtection(extension) ||
       extension->permissions_data()->HasAPIPermission(
-          APIPermission::kUnlimitedStorage) ||
+          APIPermissionID::kUnlimitedStorage) ||
       extension->permissions_data()->HasAPIPermission(
-          APIPermission::kFileBrowserHandler) ||
+          APIPermissionID::kFileBrowserHandler) ||
       extensions::AppIsolationInfo::HasIsolatedStorage(extension) ||
       extension->is_app()) {
     if (NeedsProtection(extension) && protected_apps_.Remove(extension))
       change_flags |= SpecialStoragePolicy::STORAGE_PROTECTED;
 
     if (extension->permissions_data()->HasAPIPermission(
-            APIPermission::kUnlimitedStorage) &&
-        unlimited_extensions_.Remove(extension))
+            APIPermissionID::kUnlimitedStorage) &&
+        unlimited_extensions_.Remove(extension)) {
       change_flags |= SpecialStoragePolicy::STORAGE_UNLIMITED;
+    }
 
     if (extension->permissions_data()->HasAPIPermission(
-            APIPermission::kFileBrowserHandler))
+            APIPermissionID::kFileBrowserHandler)) {
       file_handler_extensions_.Remove(extension);
+    }
 
     if (extensions::AppIsolationInfo::HasIsolatedStorage(extension))
       isolated_extensions_.Remove(extension);

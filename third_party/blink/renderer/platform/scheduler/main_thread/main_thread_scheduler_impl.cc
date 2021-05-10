@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -18,20 +19,25 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/common/scoped_defer_task_posting.h"
+#include "base/task/common/task_annotator.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/trace_event/common/trace_event_common.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "build/build_config.h"
+#include "components/power_scheduler/power_mode.h"
+#include "components/power_scheduler/power_mode_arbiter.h"
+#include "components/power_scheduler/power_mode_voter.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/blink/public/common/input/web_input_event_attribution.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/common/page/launching_process_state.h"
+#include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/scheduler/web_renderer_process_type.h"
-#include "third_party/blink/renderer/platform/bindings/parkable_string_manager.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/renderer_resource_coordinator.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/process_state.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/task_queue_throttler.h"
@@ -43,9 +49,10 @@
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/task_type_names.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/widget_scheduler.h"
-#include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_renderer_scheduler_state.pbzero.h"
+#include "third_party/perfetto/protos/perfetto/trace/track_event/track_event.pbzero.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -81,6 +88,30 @@ v8::RAILMode RAILModeToV8RAILMode(RAILMode rail_mode) {
     default:
       NOTREACHED();
   }
+}
+
+void AddRAILModeToProto(perfetto::protos::pbzero::TrackEvent* event,
+                        RAILMode mode) {
+  perfetto::protos::pbzero::ChromeRAILMode proto_mode;
+  switch (mode) {
+    case RAILMode::kResponse:
+      proto_mode = perfetto::protos::pbzero::ChromeRAILMode::RAIL_MODE_RESPONSE;
+      break;
+    case RAILMode::kAnimation:
+      proto_mode =
+          perfetto::protos::pbzero::ChromeRAILMode::RAIL_MODE_ANIMATION;
+      break;
+    case RAILMode::kIdle:
+      proto_mode = perfetto::protos::pbzero::ChromeRAILMode::RAIL_MODE_IDLE;
+      break;
+    case RAILMode::kLoad:
+      proto_mode = perfetto::protos::pbzero::ChromeRAILMode::RAIL_MODE_LOAD;
+      break;
+    default:
+      proto_mode = perfetto::protos::pbzero::ChromeRAILMode::RAIL_MODE_NONE;
+      break;
+  }
+  event->set_chrome_renderer_scheduler_state()->set_rail_mode(proto_mode);
 }
 
 const char* BackgroundStateToString(bool is_backgrounded) {
@@ -183,16 +214,16 @@ MainThreadSchedulerImpl::MainThreadSchedulerImpl(
     base::Optional<base::Time> initial_virtual_time)
     : sequence_manager_(std::move(sequence_manager)),
       helper_(sequence_manager_.get(), this),
-      idle_helper_(
-          &helper_,
-          this,
-          "MainThreadSchedulerIdlePeriod",
-          base::TimeDelta(),
-          helper_.NewTaskQueue(
-              MainThreadTaskQueue::QueueCreationParams(
-                  MainThreadTaskQueue::QueueType::kIdle)
-                  .SetPrioritisationType(MainThreadTaskQueue::QueueTraits::
-                                             PrioritisationType::kBestEffort))),
+      idle_helper_queue_(helper_.NewTaskQueue(
+          MainThreadTaskQueue::QueueCreationParams(
+              MainThreadTaskQueue::QueueType::kIdle)
+              .SetPrioritisationType(MainThreadTaskQueue::QueueTraits::
+                                         PrioritisationType::kBestEffort))),
+      idle_helper_(&helper_,
+                   this,
+                   "MainThreadSchedulerIdlePeriod",
+                   base::TimeDelta(),
+                   idle_helper_queue_->GetTaskQueue()),
       render_widget_scheduler_signals_(this),
       find_in_page_budget_pool_controller_(
           new FindInPageBudgetPoolController(this)),
@@ -203,8 +234,10 @@ MainThreadSchedulerImpl::MainThreadSchedulerImpl(
               .SetShouldMonitorQuiescence(true)
               .SetPrioritisationType(MainThreadTaskQueue::QueueTraits::
                                          PrioritisationType::kCompositor))),
-      compositor_task_queue_enabled_voter_(
-          compositor_task_queue_->CreateQueueEnabledVoter()),
+      back_forward_cache_ipc_tracking_task_queue_(helper_.NewTaskQueue(
+          MainThreadTaskQueue::QueueCreationParams(
+              MainThreadTaskQueue::QueueType::kIPCTrackingForCachedPages)
+              .SetShouldNotifyObservers(false))),
       memory_purge_task_queue_(helper_.NewTaskQueue(
           MainThreadTaskQueue::QueueCreationParams(
               MainThreadTaskQueue::QueueType::kIdle)
@@ -219,17 +252,25 @@ MainThreadSchedulerImpl::MainThreadSchedulerImpl(
           helper_.ControlMainThreadTaskQueue()->CreateTaskRunner(
               TaskType::kMainThreadTaskQueueControl)),
       main_thread_only_(this,
-                        compositor_task_queue_,
                         helper_.GetClock(),
                         helper_.NowTicks()),
       any_thread_(this),
       policy_may_need_update_(&any_thread_lock_),
       notify_agent_strategy_task_posted_(&any_thread_lock_) {
+  helper_.AttachToCurrentThread();
+
   // Compositor task queue and default task queue should be managed by
   // WebThreadScheduler. Control task queue should not.
   task_runners_.emplace(helper_.DefaultMainThreadTaskQueue(), nullptr);
-  task_runners_.emplace(compositor_task_queue_,
-                        compositor_task_queue_->CreateQueueEnabledVoter());
+  task_runners_.emplace(
+      compositor_task_queue_,
+      compositor_task_queue_->GetTaskQueue()->CreateQueueEnabledVoter());
+  main_thread_only().idle_time_estimator.AddCompositorTaskQueue(
+      compositor_task_queue_);
+
+  back_forward_cache_ipc_tracking_task_runner_ =
+      back_forward_cache_ipc_tracking_task_queue_->CreateTaskRunner(
+          TaskType::kMainThreadTaskQueueIPCTracking);
 
   RegisterTimeDomain(&non_waking_time_domain_);
 
@@ -251,8 +292,8 @@ MainThreadSchedulerImpl::MainThreadSchedulerImpl(
 
   // TaskQueueThrottler requires some task runners, then initialize
   // TaskQueueThrottler after task queues/runners are initialized.
-  task_queue_throttler_.reset(
-      new TaskQueueThrottler(this, &tracing_controller_));
+  task_queue_throttler_ =
+      std::make_unique<TaskQueueThrottler>(this, &tracing_controller_);
   update_policy_closure_ = base::BindRepeating(
       &MainThreadSchedulerImpl::UpdatePolicy, weak_factory_.GetWeakPtr());
   end_renderer_hidden_idle_period_closure_.Reset(base::BindRepeating(
@@ -300,7 +341,7 @@ MainThreadSchedulerImpl::MainThreadSchedulerImpl(
 
   // Explicitly set the priority of this queue since it is not managed by
   // the main thread scheduler.
-  memory_purge_task_queue_->SetQueuePriority(
+  memory_purge_task_queue_->GetTaskQueue()->SetQueuePriority(
       ComputePriority(memory_purge_task_queue_.get()));
 }
 
@@ -309,7 +350,7 @@ MainThreadSchedulerImpl::~MainThreadSchedulerImpl() {
       TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), "MainThreadScheduler",
       this);
 
-  for (auto& pair : task_runners_) {
+  for (const auto& pair : task_runners_) {
     pair.first->ShutdownTaskQueue();
   }
 
@@ -339,11 +380,9 @@ WebThreadScheduler* WebThreadScheduler::MainThreadScheduler() {
 
 MainThreadSchedulerImpl::MainThreadOnly::MainThreadOnly(
     MainThreadSchedulerImpl* main_thread_scheduler_impl,
-    const scoped_refptr<MainThreadTaskQueue>& compositor_task_runner,
     const base::TickClock* time_source,
     base::TimeTicks now)
-    : idle_time_estimator(compositor_task_runner,
-                          time_source,
+    : idle_time_estimator(time_source,
                           kShortIdlePeriodDurationSampleCount,
                           kShortIdlePeriodDurationPercentile),
       current_use_case(UseCase::kNone,
@@ -361,7 +400,7 @@ MainThreadSchedulerImpl::MainThreadOnly::MainThreadOnly(
       rail_mode_for_tracing(current_policy.rail_mode(),
                             "Scheduler.RAILMode",
                             &main_thread_scheduler_impl->tracing_controller_,
-                            RAILModeToString),
+                            &AddRAILModeToProto),
       renderer_hidden(false,
                       "RendererVisibility",
                       &main_thread_scheduler_impl->tracing_controller_,
@@ -445,7 +484,6 @@ MainThreadSchedulerImpl::MainThreadOnly::MainThreadOnly(
       virtual_time_pause_count(0),
       max_virtual_time_task_starvation_count(0),
       virtual_time_stopped(false),
-      nested_runloop(false),
       prioritize_compositing_after_input(
           false,
           "Scheduler.PrioritizeCompositingAfterInput",
@@ -456,9 +494,16 @@ MainThreadSchedulerImpl::MainThreadOnly::MainThreadOnly(
       compositor_priority(TaskQueue::QueuePriority::kNormalPriority,
                           "Scheduler.CompositorPriority",
                           &main_thread_scheduler_impl->tracing_controller_,
-                          TaskQueue::PriorityToString) {}
+                          TaskQueue::PriorityToString),
+      audible_power_mode_voter(
+          power_scheduler::PowerModeArbiter::GetInstance()->NewVoter(
+              "PowerModeVoter.Audible")) {}
 
 MainThreadSchedulerImpl::MainThreadOnly::~MainThreadOnly() = default;
+
+bool MainThreadSchedulerImpl::MainThreadOnly::IsInNestedRunloop() {
+  return nested_runloop_depth != 0;
+}
 
 MainThreadSchedulerImpl::AnyThread::AnyThread(
     MainThreadSchedulerImpl* main_thread_scheduler_impl)
@@ -567,6 +612,13 @@ MainThreadSchedulerImpl::SchedulingSettings::SchedulingSettings() {
       }
     }
   }
+
+  mbi_override_task_runner_handle =
+      base::FeatureList::IsEnabled(kMbiOverrideTaskRunnerHandle);
+
+  mbi_compositor_task_runner_per_agent_scheduling_group =
+      base::FeatureList::IsEnabled(
+          kMbiCompositorTaskRunnerPerAgentSchedulingGroup);
 }
 
 MainThreadSchedulerImpl::AnyThread::~AnyThread() = default;
@@ -665,7 +717,7 @@ MainThreadSchedulerImpl::DeprecatedDefaultTaskRunner() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 MainThreadSchedulerImpl::VirtualTimeControlTaskRunner() {
-  return virtual_time_control_task_queue_->task_runner();
+  return virtual_time_control_task_queue_->GetTaskRunnerWithDefaultTaskType();
 }
 
 scoped_refptr<MainThreadTaskQueue>
@@ -701,7 +753,14 @@ scoped_refptr<MainThreadTaskQueue> MainThreadSchedulerImpl::NewTaskQueue(
   std::unique_ptr<TaskQueue::QueueEnabledVoter> voter;
   if (params.queue_traits.can_be_deferred ||
       params.queue_traits.can_be_paused || params.queue_traits.can_be_frozen) {
-    voter = task_queue->CreateQueueEnabledVoter();
+    voter = task_queue->GetTaskQueue()->CreateQueueEnabledVoter();
+  }
+
+  if (task_queue->GetPrioritisationType() ==
+      MainThreadTaskQueue::QueueTraits::PrioritisationType::kCompositor) {
+    DCHECK(!voter);
+    voter = task_queue->GetTaskQueue()->CreateQueueEnabledVoter();
+    main_thread_only().idle_time_estimator.AddCompositorTaskQueue(task_queue);
   }
 
   auto insert_result = task_runners_.emplace(task_queue, std::move(voter));
@@ -716,10 +775,96 @@ scoped_refptr<MainThreadTaskQueue> MainThreadSchedulerImpl::NewTaskQueue(
   if (main_thread_only().virtual_time_stopped &&
       main_thread_only().use_virtual_time &&
       !task_queue->CanRunWhenVirtualTimePaused()) {
-    task_queue->InsertFence(TaskQueue::InsertFencePosition::kNow);
+    task_queue->GetTaskQueue()->InsertFence(
+        TaskQueue::InsertFencePosition::kNow);
   }
 
   return task_queue;
+}
+
+bool MainThreadSchedulerImpl::IsIpcTrackingEnabledForAllPages() {
+  for (auto* scheduler : main_thread_only().page_schedulers) {
+    if (!(scheduler->IsInBackForwardCache() &&
+          scheduler->has_ipc_detection_enabled())) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void MainThreadSchedulerImpl::UpdateIpcTracking() {
+  bool should_track = IsIpcTrackingEnabledForAllPages();
+  if (should_track == has_ipc_callback_set_)
+    return;
+
+  has_ipc_callback_set_ = should_track;
+  if (has_ipc_callback_set_) {
+    SetOnIPCTaskPostedWhileInBackForwardCacheIfNeeded();
+  } else {
+    DetachOnIPCTaskPostedWhileInBackForwardCacheHandler();
+  }
+}
+
+void MainThreadSchedulerImpl::
+    SetOnIPCTaskPostedWhileInBackForwardCacheIfNeeded() {
+  has_ipc_callback_set_ = true;
+  helper_.DefaultMainThreadTaskQueue()->SetOnIPCTaskPosted(base::BindRepeating(
+      [](scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+         base::WeakPtr<MainThreadSchedulerImpl> main_thread_scheduler,
+         const base::sequence_manager::Task& task) {
+        // Only log IPC tasks. IPC tasks are only logged currently as IPC
+        // hash can be mapped back to a function name, and IPC tasks may
+        // potentially post sensitive information.
+        if (!task.ipc_hash && !task.ipc_interface_name) {
+          return;
+        }
+        base::ScopedDeferTaskPosting::PostOrDefer(
+            task_runner, FROM_HERE,
+            base::BindOnce(&MainThreadSchedulerImpl::
+                               OnIPCTaskPostedWhileInAllPagesBackForwardCache,
+                           main_thread_scheduler, task.ipc_hash,
+                           task.ipc_interface_name),
+            base::TimeDelta());
+      },
+      back_forward_cache_ipc_tracking_task_runner_, GetWeakPtr()));
+}
+
+void MainThreadSchedulerImpl::OnIPCTaskPostedWhileInAllPagesBackForwardCache(
+    uint32_t ipc_hash,
+    const char* ipc_interface_name) {
+  // As this is a multi-threaded environment, we need to check that all page
+  // schedulers are in the cache before logging. There may be instances where
+  // the scheduler has been unfrozen prior to the IPC tracking handler being
+  // reset.
+  if (!IsIpcTrackingEnabledForAllPages()) {
+    return;
+  }
+
+  // IPC tasks may have an IPC interface name in addition to, or instead of an
+  // IPC hash. IPC hash is known from the mojo Accept method. When IPC hash is
+  // 0, then the IPC hash must be calculated form the IPC interface name
+  // instead.
+  if (!ipc_hash) {
+    // base::HashMetricName produces a uint64; however, the MD5 hash calculation
+    // for an IPC interface name is always calculated as uint32; the IPC hash on
+    // a task is also a uint32. The calculation here is meant to mimic the
+    // calculation used in base::MD5Hash32Constexpr.
+    ipc_hash = static_cast<uint32_t>(
+        base::TaskAnnotator::ScopedSetIpcHash::MD5HashMetricName(
+            ipc_interface_name));
+  }
+
+  base::UmaHistogramSparse(
+      "BackForwardCache.Experimental.UnexpectedIPCMessagePostedToCachedFrame."
+      "MethodHash",
+      static_cast<int32_t>(ipc_hash));
+}
+
+void MainThreadSchedulerImpl::
+    DetachOnIPCTaskPostedWhileInBackForwardCacheHandler() {
+  has_ipc_callback_set_ = false;
+  helper_.DefaultMainThreadTaskQueue()
+      ->DetachOnIPCTaskPostedWhileInBackForwardCache();
 }
 
 // TODO(sreejakshetty): Cleanup NewLoadingTaskQueue.
@@ -748,6 +893,12 @@ MainThreadSchedulerImpl::NewThrottleableTaskQueueForTest(
                           .SetCanRunWhenVirtualTimePaused(false));
 }
 
+scoped_refptr<base::sequence_manager::TaskQueue>
+MainThreadSchedulerImpl::NewTaskQueueForTest() {
+  return sequence_manager_->CreateTaskQueue(
+      base::sequence_manager::TaskQueue::Spec("test"));
+}
+
 std::unique_ptr<WebRenderWidgetSchedulingState>
 MainThreadSchedulerImpl::NewRenderWidgetSchedulingState() {
   return render_widget_scheduler_signals_.NewRenderWidgetSchedulingState();
@@ -758,9 +909,7 @@ void MainThreadSchedulerImpl::OnShutdownTaskQueue(
   if (was_shutdown_)
     return;
 
-  if (task_queue_throttler_)
-    task_queue_throttler_->ShutdownTaskQueue(task_queue.get());
-
+  task_queue.get()->DetachOnIPCTaskPostedWhileInBackForwardCache();
   task_runners_.erase(task_queue.get());
 }
 
@@ -876,7 +1025,7 @@ void MainThreadSchedulerImpl::SetAllRenderWidgetsHidden(bool hidden) {
     // hidden.
     base::TimeDelta end_idle_when_hidden_delay =
         base::TimeDelta::FromMilliseconds(kEndIdleWhenHiddenDelayMillis);
-    control_task_queue_->task_runner()->PostDelayedTask(
+    control_task_queue_->GetTaskRunnerWithDefaultTaskType()->PostDelayedTask(
         FROM_HERE, end_renderer_hidden_idle_period_closure_.GetCallback(),
         end_idle_when_hidden_delay);
     main_thread_only().renderer_hidden = true;
@@ -952,7 +1101,6 @@ void MainThreadSchedulerImpl::SetRendererBackgrounded(bool backgrounded) {
     main_thread_only().metrics_helper.OnRendererForegrounded(now);
   }
 
-  ParkableStringManager::Instance().SetRendererBackgrounded(backgrounded);
   memory_purge_manager_.SetRendererBackgrounded(backgrounded);
 }
 
@@ -994,6 +1142,10 @@ void MainThreadSchedulerImpl::OnAudioStateChanged() {
     return;
 
   main_thread_only().is_audio_playing = is_audio_playing;
+
+  main_thread_only().audible_power_mode_voter->VoteFor(
+      is_audio_playing ? power_scheduler::PowerMode::kAudible
+                       : power_scheduler::PowerMode::kIdle);
 }
 
 std::unique_ptr<ThreadScheduler::RendererPauseHandle>
@@ -1219,7 +1371,7 @@ void MainThreadSchedulerImpl::UpdateForInputEventOnCompositorThread(
       !notify_agent_strategy_task_posted_.IsSet() &&
       agent_scheduling_strategy_->ShouldNotifyOnInputEvent()) {
     notify_agent_strategy_task_posted_.SetWhileLocked(true);
-    control_task_queue_->task_runner()->PostTask(
+    control_task_queue_->GetTaskRunnerWithDefaultTaskType()->PostTask(
         FROM_HERE, notify_agent_strategy_on_input_event_closure_);
   }
 
@@ -1323,8 +1475,14 @@ bool MainThreadSchedulerImpl::ShouldYieldForHighPriorityWork() {
     case UseCase::kMainThreadGesture:
     case UseCase::kMainThreadCustomInputHandling:
     case UseCase::kSynchronizedGesture:
-      return compositor_task_queue_->HasTaskToRunImmediately() ||
-             main_thread_only().blocking_input_expected_soon;
+      for (const auto& pair : task_runners_) {
+        if (pair.first->GetPrioritisationType() ==
+                MainThreadTaskQueue::QueueTraits::PrioritisationType::
+                    kCompositor &&
+            pair.first->GetTaskQueue()->HasTaskToRunImmediately())
+          return true;
+      }
+      return main_thread_only().blocking_input_expected_soon;
 
     case UseCase::kTouchstart:
       return true;
@@ -1368,8 +1526,8 @@ void MainThreadSchedulerImpl::EnsureUrgentPolicyUpdatePostedOnMainThread(
   any_thread_lock_.AssertAcquired();
   if (!policy_may_need_update_.IsSet()) {
     policy_may_need_update_.SetWhileLocked(true);
-    control_task_queue_->task_runner()->PostTask(from_here,
-                                                 update_policy_closure_);
+    control_task_queue_->GetTaskRunnerWithDefaultTaskType()->PostTask(
+        from_here, update_policy_closure_);
   }
 }
 
@@ -1574,8 +1732,6 @@ void MainThreadSchedulerImpl::UpdateStateForAllTaskQueues(
     UpdateTaskQueueState(pair.first.get(), pair.second.get(), old_policy,
                          current_policy, should_update_priorities);
   }
-  compositor_task_queue_enabled_voter_->SetVoteToEnable(
-      !current_policy.should_freeze_compositor_task_queue());
 }
 
 void MainThreadSchedulerImpl::UpdateTaskQueueState(
@@ -1585,7 +1741,7 @@ void MainThreadSchedulerImpl::UpdateTaskQueueState(
     const Policy& new_policy,
     bool should_update_priority) const {
   if (should_update_priority)
-    task_queue->SetQueuePriority(ComputePriority(task_queue));
+    task_queue->GetTaskQueue()->SetQueuePriority(ComputePriority(task_queue));
 
   if (task_queue_enabled_voter) {
     bool is_enabled_for_agent =
@@ -1604,10 +1760,16 @@ void MainThreadSchedulerImpl::UpdateTaskQueueState(
   if (old_time_domain_type != new_time_domain_type) {
     if (new_time_domain_type == TimeDomainType::kVirtual) {
       DCHECK(virtual_time_domain_);
-      task_queue->SetTimeDomain(virtual_time_domain_.get());
+      task_queue->GetTaskQueue()->SetTimeDomain(virtual_time_domain_.get());
     } else {
-      task_queue->SetTimeDomain(real_time_domain());
+      task_queue->GetTaskQueue()->SetTimeDomain(real_time_domain());
     }
+  }
+
+  if (task_queue->GetPrioritisationType() ==
+      MainThreadTaskQueue::QueueTraits::PrioritisationType::kCompositor) {
+    task_queue_enabled_voter->SetVoteToEnable(
+        !new_policy.should_freeze_compositor_task_queue());
   }
 }
 
@@ -1734,21 +1896,22 @@ base::TimeTicks MainThreadSchedulerImpl::EnableVirtualTime(
     main_thread_only().initial_virtual_time = base::Time::Now();
   if (main_thread_only().initial_virtual_time_ticks.is_null())
     main_thread_only().initial_virtual_time_ticks = tick_clock()->NowTicks();
-  virtual_time_domain_.reset(new AutoAdvancingVirtualTimeDomain(
+  virtual_time_domain_ = std::make_unique<AutoAdvancingVirtualTimeDomain>(
       main_thread_only().initial_virtual_time +
           main_thread_only().initial_virtual_time_offset,
       main_thread_only().initial_virtual_time_ticks +
           main_thread_only().initial_virtual_time_offset,
-      &helper_, policy));
+      &helper_, policy);
   RegisterTimeDomain(virtual_time_domain_.get());
 
   DCHECK(!virtual_time_control_task_queue_);
   virtual_time_control_task_queue_ =
       helper_.NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
           MainThreadTaskQueue::QueueType::kControl));
-  virtual_time_control_task_queue_->SetQueuePriority(
+  virtual_time_control_task_queue_->GetTaskQueue()->SetQueuePriority(
       TaskQueue::kControlPriority);
-  virtual_time_control_task_queue_->SetTimeDomain(virtual_time_domain_.get());
+  virtual_time_control_task_queue_->GetTaskQueue()->SetTimeDomain(
+      virtual_time_domain_.get());
 
   main_thread_only().use_virtual_time = true;
   ForceUpdatePolicy();
@@ -1814,8 +1977,9 @@ void MainThreadSchedulerImpl::VirtualTimePaused() {
   for (const auto& pair : task_runners_) {
     if (pair.first->CanRunWhenVirtualTimePaused())
       continue;
-    DCHECK(!task_queue_throttler_->IsThrottled(pair.first.get()));
-    pair.first->InsertFence(TaskQueue::InsertFencePosition::kNow);
+    DCHECK(!pair.first->IsThrottled());
+    pair.first->GetTaskQueue()->InsertFence(
+        TaskQueue::InsertFencePosition::kNow);
   }
 }
 
@@ -1823,9 +1987,9 @@ void MainThreadSchedulerImpl::VirtualTimeResumed() {
   for (const auto& pair : task_runners_) {
     if (pair.first->CanRunWhenVirtualTimePaused())
       continue;
-    DCHECK(!task_queue_throttler_->IsThrottled(pair.first.get()));
-    DCHECK(pair.first->HasActiveFence());
-    pair.first->RemoveFence();
+    DCHECK(!pair.first->IsThrottled());
+    DCHECK(pair.first->GetTaskQueue()->HasActiveFence());
+    pair.first->GetTaskQueue()->RemoveFence();
   }
 }
 
@@ -1873,7 +2037,7 @@ void MainThreadSchedulerImpl::ApplyVirtualTimePolicy() {
     case VirtualTimePolicy::kAdvance:
       if (virtual_time_domain_) {
         virtual_time_domain_->SetMaxVirtualTimeTaskStarvationCount(
-            main_thread_only().nested_runloop
+            main_thread_only().IsInNestedRunloop()
                 ? 0
                 : main_thread_only().max_virtual_time_task_starvation_count);
         virtual_time_domain_->SetVirtualTimeFence(base::TimeTicks());
@@ -1890,7 +2054,7 @@ void MainThreadSchedulerImpl::ApplyVirtualTimePolicy() {
     case VirtualTimePolicy::kDeterministicLoading:
       if (virtual_time_domain_) {
         virtual_time_domain_->SetMaxVirtualTimeTaskStarvationCount(
-            main_thread_only().nested_runloop
+            main_thread_only().IsInNestedRunloop()
                 ? 0
                 : main_thread_only().max_virtual_time_task_starvation_count);
       }
@@ -1900,7 +2064,7 @@ void MainThreadSchedulerImpl::ApplyVirtualTimePolicy() {
       // system. We also pause while the renderer is waiting for various
       // asynchronous things e.g. resource load or navigation.
       SetVirtualTimeStopped(main_thread_only().virtual_time_pause_count != 0 ||
-                            main_thread_only().nested_runloop);
+                            main_thread_only().IsInNestedRunloop());
       break;
   }
 }
@@ -1912,138 +2076,103 @@ void MainThreadSchedulerImpl::SetMaxVirtualTimeTaskStarvationCount(
   ApplyVirtualTimePolicy();
 }
 
-std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
-MainThreadSchedulerImpl::AsValue(base::TimeTicks optional_now) const {
-  base::AutoLock lock(any_thread_lock_);
-  return AsValueLocked(optional_now);
-}
-
 void MainThreadSchedulerImpl::CreateTraceEventObjectSnapshot() const {
   TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID(
       TRACE_DISABLED_BY_DEFAULT("renderer.scheduler.debug"),
-      "MainThreadScheduler", this, AsValue(helper_.NowTicks()));
+      "MainThreadScheduler", this, [&](perfetto::TracedValue context) {
+        base::AutoLock lock(any_thread_lock_);
+        WriteIntoTraceLocked(std::move(context), helper_.NowTicks());
+      });
 }
 
 void MainThreadSchedulerImpl::CreateTraceEventObjectSnapshotLocked() const {
   TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID(
       TRACE_DISABLED_BY_DEFAULT("renderer.scheduler.debug"),
-      "MainThreadScheduler", this, AsValueLocked(helper_.NowTicks()));
+      "MainThreadScheduler", this, [&](perfetto::TracedValue context) {
+        WriteIntoTraceLocked(std::move(context), helper_.NowTicks());
+      });
 }
 
-std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
-MainThreadSchedulerImpl::AsValueLocked(base::TimeTicks optional_now) const {
-  auto state = std::make_unique<base::trace_event::TracedValue>();
-  AsValueIntoLocked(state.get(), optional_now);
-  return std::move(state);
-}
-
-std::string MainThreadSchedulerImpl::ToString() const {
-  base::AutoLock lock(any_thread_lock_);
-  base::trace_event::TracedValueJSON value;
-  AsValueIntoLocked(&value, base::TimeTicks());
-  return value.ToJSON();
-}
-
-void MainThreadSchedulerImpl::AsValueIntoLocked(
-    base::trace_event::TracedValue* state,
+void MainThreadSchedulerImpl::WriteIntoTraceLocked(
+    perfetto::TracedValue context,
     base::TimeTicks optional_now) const {
   helper_.CheckOnValidThread();
   any_thread_lock_.AssertAcquired();
 
+  auto dict = std::move(context).WriteDictionary();
+
   if (optional_now.is_null())
     optional_now = helper_.NowTicks();
-  state->SetBoolean(
-      "has_visible_render_widget_with_touch_handler",
-      main_thread_only().has_visible_render_widget_with_touch_handler);
-  state->SetString("current_use_case",
-                   UseCaseToString(main_thread_only().current_use_case));
-  state->SetBoolean(
-      "compositor_will_send_main_frame_not_expected",
-      main_thread_only().compositor_will_send_main_frame_not_expected);
-  state->SetBoolean("blocking_input_expected_soon",
-                    main_thread_only().blocking_input_expected_soon);
-  state->SetString("idle_period_state",
-                   IdleHelper::IdlePeriodStateToString(
-                       idle_helper_.SchedulerIdlePeriodState()));
-  state->SetBoolean("renderer_hidden", main_thread_only().renderer_hidden);
-  state->SetBoolean("waiting_for_any_main_frame_contentful_paint",
-                    any_thread().waiting_for_any_main_frame_contentful_paint);
-  state->SetBoolean("waiting_for_any_main_frame_meaningful_paint",
-                    any_thread().waiting_for_any_main_frame_meaningful_paint);
-  state->SetBoolean("have_seen_input_since_navigation",
-                    any_thread().have_seen_input_since_navigation);
-  state->SetBoolean(
+  dict.Add("has_visible_render_widget_with_touch_handler",
+           main_thread_only().has_visible_render_widget_with_touch_handler);
+  dict.Add("current_use_case",
+           UseCaseToString(main_thread_only().current_use_case));
+  dict.Add("compositor_will_send_main_frame_not_expected",
+           main_thread_only().compositor_will_send_main_frame_not_expected);
+  dict.Add("blocking_input_expected_soon",
+           main_thread_only().blocking_input_expected_soon);
+  dict.Add("idle_period_state", IdleHelper::IdlePeriodStateToString(
+                                    idle_helper_.SchedulerIdlePeriodState()));
+  dict.Add("renderer_hidden", main_thread_only().renderer_hidden);
+  dict.Add("waiting_for_any_main_frame_contentful_paint",
+           any_thread().waiting_for_any_main_frame_contentful_paint);
+  dict.Add("waiting_for_any_main_frame_meaningful_paint",
+           any_thread().waiting_for_any_main_frame_meaningful_paint);
+  dict.Add("have_seen_input_since_navigation",
+           any_thread().have_seen_input_since_navigation);
+  dict.Add(
       "have_reported_blocking_intervention_in_current_policy",
       main_thread_only().have_reported_blocking_intervention_in_current_policy);
-  state->SetBoolean(
+  dict.Add(
       "have_reported_blocking_intervention_since_navigation",
       main_thread_only().have_reported_blocking_intervention_since_navigation);
-  state->SetBoolean("renderer_backgrounded",
-                    main_thread_only().renderer_backgrounded);
-  state->SetBoolean("keep_active_fetch_or_worker",
-                    main_thread_only().keep_active_fetch_or_worker);
-  state->SetDouble("now", (optional_now - base::TimeTicks()).InMillisecondsF());
-  state->SetDouble(
+  dict.Add("renderer_backgrounded", main_thread_only().renderer_backgrounded);
+  dict.Add("keep_active_fetch_or_worker",
+           main_thread_only().keep_active_fetch_or_worker);
+  dict.Add("now", (optional_now - base::TimeTicks()).InMillisecondsF());
+  dict.Add(
       "fling_compositor_escalation_deadline",
       (any_thread().fling_compositor_escalation_deadline - base::TimeTicks())
           .InMillisecondsF());
-  state->SetDouble("last_idle_period_end_time",
-                   (any_thread().last_idle_period_end_time - base::TimeTicks())
-                       .InMillisecondsF());
-  state->SetBoolean("awaiting_touch_start_response",
-                    any_thread().awaiting_touch_start_response);
-  state->SetBoolean("begin_main_frame_on_critical_path",
-                    any_thread().begin_main_frame_on_critical_path);
-  state->SetBoolean("last_gesture_was_compositor_driven",
-                    any_thread().last_gesture_was_compositor_driven);
-  state->SetBoolean("default_gesture_prevented",
-                    any_thread().default_gesture_prevented);
-  state->SetBoolean("is_audio_playing", main_thread_only().is_audio_playing);
-  state->SetBoolean("virtual_time_stopped",
-                    main_thread_only().virtual_time_stopped);
-  state->SetDouble("virtual_time_pause_count",
-                   main_thread_only().virtual_time_pause_count);
-  state->SetString(
-      "virtual_time_policy",
-      VirtualTimePolicyToString(main_thread_only().virtual_time_policy));
-  state->SetBoolean("virtual_time", main_thread_only().use_virtual_time);
+  dict.Add("last_idle_period_end_time",
+           (any_thread().last_idle_period_end_time - base::TimeTicks())
+               .InMillisecondsF());
+  dict.Add("awaiting_touch_start_response",
+           any_thread().awaiting_touch_start_response);
+  dict.Add("begin_main_frame_on_critical_path",
+           any_thread().begin_main_frame_on_critical_path);
+  dict.Add("last_gesture_was_compositor_driven",
+           any_thread().last_gesture_was_compositor_driven);
+  dict.Add("default_gesture_prevented", any_thread().default_gesture_prevented);
+  dict.Add("is_audio_playing", main_thread_only().is_audio_playing);
+  dict.Add("virtual_time_stopped", main_thread_only().virtual_time_stopped);
+  dict.Add("virtual_time_pause_count",
+           main_thread_only().virtual_time_pause_count);
+  dict.Add("virtual_time_policy",
+           VirtualTimePolicyToString(main_thread_only().virtual_time_policy));
+  dict.Add("virtual_time", main_thread_only().use_virtual_time);
 
-  {
-    auto dictionary_scope = state->BeginDictionaryScoped("page_schedulers");
-    for (PageSchedulerImpl* page_scheduler :
-         main_thread_only().page_schedulers) {
-      auto inner_dictionary = state->BeginDictionaryScopedWithCopiedName(
-          PointerToString(page_scheduler));
-      page_scheduler->AsValueInto(state);
-    }
-  }
+  dict.Add("page_schedulers", main_thread_only().page_schedulers);
 
-  {
-    auto dictionary_scope = state->BeginDictionaryScoped("policy");
-    main_thread_only().current_policy.AsValueInto(state);
-  }
+  dict.Add("policy", main_thread_only().current_policy);
 
   // TODO(skyostil): Can we somehow trace how accurate these estimates were?
-  state->SetDouble(
+  dict.Add(
       "longest_jank_free_task_duration",
       main_thread_only().longest_jank_free_task_duration->InMillisecondsF());
-  state->SetDouble(
-      "compositor_frame_interval",
-      main_thread_only().compositor_frame_interval.InMillisecondsF());
-  state->SetDouble(
-      "estimated_next_frame_begin",
-      (main_thread_only().estimated_next_frame_begin - base::TimeTicks())
-          .InMillisecondsF());
-  state->SetBoolean("in_idle_period", any_thread().in_idle_period);
+  dict.Add("compositor_frame_interval",
+           main_thread_only().compositor_frame_interval.InMillisecondsF());
+  dict.Add("estimated_next_frame_begin",
+           (main_thread_only().estimated_next_frame_begin - base::TimeTicks())
+               .InMillisecondsF());
+  dict.Add("in_idle_period", any_thread().in_idle_period);
 
-  any_thread().user_model.AsValueInto(state);
-  render_widget_scheduler_signals_.AsValueInto(state);
+  dict.Add("user_model", any_thread().user_model);
+  dict.Add("render_widget_scheduler_signals", render_widget_scheduler_signals_);
 
-  {
-    auto dictionary_scope =
-        state->BeginDictionaryScoped("task_queue_throttler");
-    task_queue_throttler_->AsValueInto(state, optional_now);
-  }
+  dict.Add("task_queue_throttler", [&](perfetto::TracedValue context) {
+    task_queue_throttler_->WriteIntoTrace(std::move(context), optional_now);
+  });
 }
 
 bool MainThreadSchedulerImpl::Policy::IsQueueEnabled(
@@ -2065,17 +2194,18 @@ MainThreadSchedulerImpl::Policy::GetTimeDomainType() const {
   return TimeDomainType::kReal;
 }
 
-void MainThreadSchedulerImpl::Policy::AsValueInto(
-    base::trace_event::TracedValue* state) const {
-  state->SetString("rail_mode", RAILModeToString(rail_mode()));
-  state->SetString("use_case", UseCaseToString(use_case()));
+void MainThreadSchedulerImpl::Policy::WriteIntoTrace(
+    perfetto::TracedValue context) const {
+  auto dict = std::move(context).WriteDictionary();
+  dict.Add("rail_mode", RAILModeToString(rail_mode()));
+  dict.Add("use_case", UseCaseToString(use_case()));
 
-  state->SetBoolean("should_disable_throttling", should_disable_throttling());
-  state->SetBoolean("should_defer_task_queues", should_defer_task_queues());
-  state->SetBoolean("should_pause_task_queues", should_pause_task_queues());
-  state->SetBoolean("should_pause_task_queues_for_android_webview",
-                    should_pause_task_queues_for_android_webview());
-  state->SetBoolean("use_virtual_time", use_virtual_time());
+  dict.Add("should_disable_throttling", should_disable_throttling());
+  dict.Add("should_defer_task_queues", should_defer_task_queues());
+  dict.Add("should_pause_task_queues", should_pause_task_queues());
+  dict.Add("should_pause_task_queues_for_android_webview",
+           should_pause_task_queues_for_android_webview());
+  dict.Add("use_virtual_time", use_virtual_time());
 }
 
 void MainThreadSchedulerImpl::OnIdlePeriodStarted() {
@@ -2101,7 +2231,7 @@ void MainThreadSchedulerImpl::OnPendingTasksChanged(bool has_tasks) {
   // called) at any moment, including in the middle of allocating an object,
   // when state is not consistent. Posting a task to dispatch notifications
   // minimizes the amount of code that runs and sees an inconsistent state .
-  control_task_queue_->task_runner()->PostTask(
+  control_task_queue_->GetTaskRunnerWithDefaultTaskType()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &MainThreadSchedulerImpl::DispatchRequestBeginMainFrameNotExpected,
@@ -2146,8 +2276,16 @@ void MainThreadSchedulerImpl::DidCommitProvisionalLoad(
   // If this either isn't a history inert commit or it's a reload then we must
   // reset the task cost estimators.
   if (is_main_frame && (!is_web_history_inert_commit || is_reload)) {
-    base::AutoLock lock(any_thread_lock_);
-    ResetForNavigationLocked();
+    RAILMode old_rail_mode;
+    RAILMode new_rail_mode;
+    {
+      base::AutoLock lock(any_thread_lock_);
+      old_rail_mode = main_thread_only().current_policy.rail_mode();
+      ResetForNavigationLocked();
+      new_rail_mode = main_thread_only().current_policy.rail_mode();
+    }
+    if (old_rail_mode == new_rail_mode && isolate())
+      isolate()->UpdateLoadStartTime();
   }
 }
 
@@ -2236,11 +2374,11 @@ void MainThreadSchedulerImpl::SetTopLevelBlameContext(
   //
   // TODO(altimin): automatically enter top-level for all task queues associated
   // with renderer scheduler which do not have a corresponding frame.
-  control_task_queue_->SetBlameContext(blame_context);
-  DefaultTaskQueue()->SetBlameContext(blame_context);
-  compositor_task_queue_->SetBlameContext(blame_context);
+  control_task_queue_->GetTaskQueue()->SetBlameContext(blame_context);
+  DefaultTaskQueue()->GetTaskQueue()->SetBlameContext(blame_context);
+  compositor_task_queue_->GetTaskQueue()->SetBlameContext(blame_context);
   idle_helper_.IdleTaskRunner()->SetBlameContext(blame_context);
-  v8_task_queue_->SetBlameContext(blame_context);
+  v8_task_queue_->GetTaskQueue()->SetBlameContext(blame_context);
 }
 
 void MainThreadSchedulerImpl::AddRAILModeObserver(RAILModeObserver* observer) {
@@ -2314,14 +2452,11 @@ MainThreadSchedulerImpl::NonWakingTaskRunner() {
   return non_waking_task_runner_;
 }
 
-AgentGroupSchedulerImpl& MainThreadSchedulerImpl::EnsureAgentGroupScheduler() {
-  // TODO(crbug/1113102): Currently, MainThreadSchedulerImpl owns
-  // AgentGroupSchedulerImpl
-  if (!agent_group_scheduler_) {
-    agent_group_scheduler_ = std::make_unique<AgentGroupSchedulerImpl>(*this);
-    AddAgentGroupScheduler(agent_group_scheduler_.get());
-  }
-  return *agent_group_scheduler_.get();
+std::unique_ptr<WebAgentGroupScheduler>
+MainThreadSchedulerImpl::CreateAgentGroupScheduler() {
+  auto agent_group_scheduler = std::make_unique<AgentGroupSchedulerImpl>(*this);
+  AddAgentGroupScheduler(agent_group_scheduler.get());
+  return agent_group_scheduler;
 }
 
 void MainThreadSchedulerImpl::RemoveAgentGroupScheduler(
@@ -2330,39 +2465,98 @@ void MainThreadSchedulerImpl::RemoveAgentGroupScheduler(
   agent_group_schedulers_.erase(agent_group_scheduler);
 }
 
-std::unique_ptr<PageScheduler> MainThreadSchedulerImpl::CreatePageScheduler(
-    PageScheduler::Delegate* delegate) {
-  // TODO(crbug/1113102): we'll use the singleton AgentGroupScheduler instance
-  // tentatively.
-  auto page_scheduler = std::make_unique<PageSchedulerImpl>(
-      delegate, EnsureAgentGroupScheduler() /* tentative */);
-  AddPageScheduler(page_scheduler.get());
-  return page_scheduler;
-}
-
-AgentGroupScheduler* MainThreadSchedulerImpl::GetCurrentAgentGroupScheduler() {
+WebAgentGroupScheduler*
+MainThreadSchedulerImpl::GetCurrentAgentGroupScheduler() {
   helper_.CheckOnValidThread();
   return current_agent_group_scheduler_;
 }
 
-void MainThreadSchedulerImpl::SetCurrentAgentGroupScheduler(
-    AgentGroupSchedulerImpl* agent_group_scheduler_impl) {
-  helper_.CheckOnValidThread();
-  if (current_agent_group_scheduler_) {
-    TRACE_EVENT_NESTABLE_ASYNC_END0(
-        TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), "ASG_scope", this);
+void MainThreadSchedulerImpl::BeginAgentGroupSchedulerScope(
+    WebAgentGroupScheduler* next_agent_group_scheduler) {
+  scoped_refptr<base::SingleThreadTaskRunner> next_task_runner;
+  const char* trace_event_scope_name;
+  void* trace_event_scope_id;
+
+  if (next_agent_group_scheduler) {
+    // If the |next_agent_group_scheduler| is not null, it means that a
+    // per-AgentSchedulingGroup task is about to start. In this case, a
+    // per-AgentGroupScheduler scope starts.
+    next_task_runner = next_agent_group_scheduler->DefaultTaskRunner(),
+    trace_event_scope_name = "scheduler.agent_scope";
+    trace_event_scope_id = next_agent_group_scheduler;
   } else {
-    TRACE_EVENT_NESTABLE_ASYNC_END0(
-        TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), "MTS_scope", this);
+    // If the |next_agent_group_scheduler| is null, it means that a
+    // per-thread task is about to start. In this case, a per-thread scope
+    // starts.
+    next_task_runner = helper_.DefaultTaskRunner();
+    trace_event_scope_name = "scheduler.thread_scope";
+    trace_event_scope_id = this;
   }
-  current_agent_group_scheduler_ = agent_group_scheduler_impl;
-  if (current_agent_group_scheduler_) {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
-        TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), "ASG_scope", this);
-  } else {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
-        TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), "MTS_scope", this);
+
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
+      TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), trace_event_scope_name,
+      trace_event_scope_id, "agent_group_scheduler",
+      static_cast<void*>(next_agent_group_scheduler));
+
+  WebAgentGroupScheduler* previous_agent_group_scheduler =
+      current_agent_group_scheduler_;
+  current_agent_group_scheduler_ = next_agent_group_scheduler;
+
+  scoped_refptr<base::SingleThreadTaskRunner> previous_task_runner =
+      base::ThreadTaskRunnerHandle::Get();
+  std::unique_ptr<base::ThreadTaskRunnerHandleOverride>
+      thread_task_runner_handle_override;
+  if (scheduling_settings().mbi_override_task_runner_handle &&
+      next_task_runner != previous_task_runner) {
+    // per-thread and per-AgentSchedulingGroup task runner allows nested
+    // runloop. |MainThreadSchedulerImpl| guarantees that
+    // |ThreadTaskRunnerHandle::Get()| and |SequencedTaskRunnerHandle::Get()|
+    // return a proper task runner even when a nested runloop is used. Because
+    // |MainThreadSchedulerImpl::OnTaskStarted()| always overrides
+    // TTRH/STRH::Get() properly. So there is no concern about returning an
+    // unexpected task runner from TTRH/STRH::Get() in this specific case.
+    thread_task_runner_handle_override =
+        std::unique_ptr<base::ThreadTaskRunnerHandleOverride>(
+            new base::ThreadTaskRunnerHandleOverride(
+                next_task_runner,
+                /*allow_nested_runloop=*/true));
   }
+
+  main_thread_only().agent_group_scheduler_scope_stack.emplace_back(
+      AgentGroupSchedulerScope{
+          std::move(thread_task_runner_handle_override),
+          previous_agent_group_scheduler, next_agent_group_scheduler,
+          std::move(previous_task_runner), std::move(next_task_runner),
+          trace_event_scope_name, trace_event_scope_id});
+}
+
+void MainThreadSchedulerImpl::EndAgentGroupSchedulerScope() {
+  AgentGroupSchedulerScope& agent_group_scheduler_scope =
+      main_thread_only().agent_group_scheduler_scope_stack.back();
+
+  if (scheduling_settings().mbi_override_task_runner_handle) {
+    DCHECK_EQ(base::ThreadTaskRunnerHandle::Get(),
+              agent_group_scheduler_scope.current_task_runner);
+    DCHECK_EQ(base::SequencedTaskRunnerHandle::Get(),
+              agent_group_scheduler_scope.current_task_runner);
+  }
+  agent_group_scheduler_scope.thread_task_runner_handle_override = nullptr;
+  DCHECK_EQ(base::ThreadTaskRunnerHandle::Get(),
+            agent_group_scheduler_scope.previous_task_runner);
+  DCHECK_EQ(base::SequencedTaskRunnerHandle::Get(),
+            agent_group_scheduler_scope.previous_task_runner);
+
+  current_agent_group_scheduler_ =
+      agent_group_scheduler_scope.previous_agent_group_scheduler;
+
+  TRACE_EVENT_NESTABLE_ASYNC_END1(
+      TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+      agent_group_scheduler_scope.trace_event_scope_name,
+      agent_group_scheduler_scope.trace_event_scope_id, "agent_group_scheduler",
+      static_cast<void*>(
+          agent_group_scheduler_scope.current_agent_group_scheduler));
+
+  main_thread_only().agent_group_scheduler_scope_stack.pop_back();
 }
 
 std::unique_ptr<ThreadScheduler::RendererPauseHandle>
@@ -2396,15 +2590,16 @@ const base::TickClock* MainThreadSchedulerImpl::tick_clock() const {
 }
 
 void MainThreadSchedulerImpl::AddAgentGroupScheduler(
-    AgentGroupSchedulerImpl* agent_group_scheduler_impl) {
+    AgentGroupSchedulerImpl* agent_group_scheduler) {
   bool is_new_entry =
-      agent_group_schedulers_.insert(agent_group_scheduler_impl).is_new_entry;
+      agent_group_schedulers_.insert(agent_group_scheduler).is_new_entry;
   DCHECK(is_new_entry);
 }
 
 void MainThreadSchedulerImpl::AddPageScheduler(
     PageSchedulerImpl* page_scheduler) {
   main_thread_only().page_schedulers.insert(page_scheduler);
+  DetachOnIPCTaskPostedWhileInBackForwardCacheHandler();
   if (page_scheduler->IsOrdinary()) {
     memory_purge_manager_.OnPageCreated(
         page_scheduler->GetPageLifecycleState());
@@ -2426,6 +2621,15 @@ void MainThreadSchedulerImpl::RemovePageScheduler(
   if (page_scheduler->IsOrdinary()) {
     memory_purge_manager_.OnPageDestroyed(
         page_scheduler->GetPageLifecycleState());
+  }
+
+  if (IsIpcTrackingEnabledForAllPages()) {
+    SetOnIPCTaskPostedWhileInBackForwardCacheIfNeeded();
+  }
+
+  if (main_thread_only().is_audio_playing && page_scheduler->IsAudioPlaying()) {
+    // This page may have been the only one playing audio.
+    OnAudioStateChanged();
   }
 
   base::AutoLock lock(any_thread_lock_);
@@ -2472,11 +2676,13 @@ void MainThreadSchedulerImpl::OnTaskStarted(
     MainThreadTaskQueue* queue,
     const base::sequence_manager::Task& task,
     const TaskQueue::TaskTiming& task_timing) {
-  SetCurrentAgentGroupScheduler(queue ? queue->GetAgentGroupScheduler()
-                                      : nullptr);
+  if (scheduling_settings().mbi_override_task_runner_handle) {
+    BeginAgentGroupSchedulerScope(queue ? queue->GetAgentGroupScheduler()
+                                        : nullptr);
+  }
 
   main_thread_only().running_queues.push(queue);
-  if (main_thread_only().nested_runloop)
+  if (main_thread_only().IsInNestedRunloop())
     return;
 
   main_thread_only().current_task_start_time = task_timing.start_time();
@@ -2487,9 +2693,9 @@ void MainThreadSchedulerImpl::OnTaskStarted(
           : base::nullopt};
 
   main_thread_only().task_priority_for_tracing =
-      queue
-          ? base::Optional<TaskQueue::QueuePriority>(queue->GetQueuePriority())
-          : base::nullopt;
+      queue ? base::Optional<TaskQueue::QueuePriority>(
+                  queue->GetTaskQueue()->GetQueuePriority())
+            : base::nullopt;
 }
 
 void MainThreadSchedulerImpl::OnTaskCompleted(
@@ -2509,15 +2715,18 @@ void MainThreadSchedulerImpl::OnTaskCompleted(
   if (task_timing->has_wall_time() && queue && queue->GetFrameScheduler())
     queue->GetFrameScheduler()->AddTaskTime(task_timing->wall_duration());
   main_thread_only().running_queues.pop();
-  if (main_thread_only().nested_runloop)
+
+  // The overriding TaskRunnerHandle scope ends here.
+  if (scheduling_settings().mbi_override_task_runner_handle)
+    EndAgentGroupSchedulerScope();
+
+  if (main_thread_only().IsInNestedRunloop())
     return;
 
   DispatchOnTaskCompletionCallbacks();
 
-  if (queue) {
-    task_queue_throttler()->OnTaskRunTimeReported(
-        queue.get(), task_timing->start_time(), task_timing->end_time());
-  }
+  if (queue)
+    queue->OnTaskRunTimeReported(task_timing);
 
   // TODO(altimin): Per-page metrics should also be considered.
   main_thread_only().metrics_helper.RecordTaskMetrics(queue.get(), task,
@@ -2534,10 +2743,6 @@ void MainThreadSchedulerImpl::OnTaskCompleted(
 
   find_in_page_budget_pool_controller_->OnTaskCompleted(queue.get(),
                                                         task_timing);
-
-  // GetCurrentAgentGroupScheduler() should return nullptr when
-  // it's running thread global task runners.
-  SetCurrentAgentGroupScheduler(nullptr);
 }
 
 void MainThreadSchedulerImpl::RecordTaskUkm(
@@ -2658,13 +2863,13 @@ TaskQueue::QueuePriority MainThreadSchedulerImpl::ComputePriority(
 
 void MainThreadSchedulerImpl::OnBeginNestedRunLoop() {
   DCHECK(!main_thread_only().running_queues.empty());
-  main_thread_only().nested_runloop = true;
+  main_thread_only().nested_runloop_depth++;
   ApplyVirtualTimePolicy();
 }
 
 void MainThreadSchedulerImpl::OnExitNestedRunLoop() {
   DCHECK(!main_thread_only().running_queues.empty());
-  main_thread_only().nested_runloop = false;
+  main_thread_only().nested_runloop_depth--;
   ApplyVirtualTimePolicy();
 }
 
@@ -2766,8 +2971,13 @@ TaskQueue::QueuePriority MainThreadSchedulerImpl::ComputeCompositorPriority()
 
 void MainThreadSchedulerImpl::UpdateCompositorTaskQueuePriority() {
   main_thread_only().compositor_priority = ComputeCompositorPriority();
-  CompositorTaskQueue()->SetQueuePriority(
-      ComputePriority(CompositorTaskQueue().get()));
+  for (const auto& pair : task_runners_) {
+    if (pair.first->GetPrioritisationType() !=
+        MainThreadTaskQueue::QueueTraits::PrioritisationType::kCompositor)
+      continue;
+    pair.first->GetTaskQueue()->SetQueuePriority(
+        ComputePriority(pair.first.get()));
+  }
 }
 
 base::Optional<TaskQueue::QueuePriority>
@@ -2813,13 +3023,13 @@ MainThreadSchedulerImpl::ComputeCompositorPriorityFromUseCase() const {
 
 void MainThreadSchedulerImpl::OnSafepointEntered() {
   DCHECK(WTF::IsMainThread());
-  DCHECK(!main_thread_only().nested_runloop);
+  DCHECK(!main_thread_only().IsInNestedRunloop());
   main_thread_only().metrics_helper.OnSafepointEntered(helper_.NowTicks());
 }
 
 void MainThreadSchedulerImpl::OnSafepointExited() {
   DCHECK(WTF::IsMainThread());
-  DCHECK(!main_thread_only().nested_runloop);
+  DCHECK(!main_thread_only().IsInNestedRunloop());
   main_thread_only().metrics_helper.OnSafepointExited(helper_.NowTicks());
 }
 

@@ -16,15 +16,16 @@
 #include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chrome/browser/ash/notifications/echo_dialog_view.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/ui/echo_dialog_view.h"
-#include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/extensions/api/echo_private.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/common/url_constants.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -33,17 +34,9 @@
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/mojom/view_type.mojom.h"
 
 namespace echo_api = extensions::api::echo_private;
-
-namespace {
-
-// URL of "More info" link shown in echo dialog in GetUserConsent function.
-const char kMoreInfoLink[] =
-    "chrome-extension://honijodknafkokifofgiaalefdiedpko/main.html?"
-    "answer=2677280";
-
-}  // namespace
 
 namespace chromeos {
 
@@ -179,7 +172,7 @@ EchoPrivateGetOobeTimestampFunction::GetOobeTimestampOnFileSequence() {
 
 void EchoPrivateGetOobeTimestampFunction::RespondWithResult(
     std::unique_ptr<base::Value> result) {
-  Respond(OneArgument(std::move(result)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 EchoPrivateGetUserConsentFunction::EchoPrivateGetUserConsentFunction()
@@ -212,8 +205,8 @@ void EchoPrivateGetUserConsentFunction::OnCancel() {
 }
 
 void EchoPrivateGetUserConsentFunction::OnMoreInfoLinkClicked() {
-  ChromeExtensionFunctionDetails details(this);
-  NavigateParams params(details.GetProfile(), GURL(kMoreInfoLink),
+  NavigateParams params(Profile::FromBrowserContext(browser_context()),
+                        GURL(chrome::kEchoLearnMoreURL),
                         ui::PAGE_TRANSITION_LINK);
   // Open the link in a new window. The echo dialog is modal, so the current
   // window is useless until the dialog is closed.
@@ -223,13 +216,13 @@ void EchoPrivateGetUserConsentFunction::OnMoreInfoLinkClicked() {
 
 void EchoPrivateGetUserConsentFunction::CheckRedeemOffersAllowed() {
   chromeos::CrosSettingsProvider::TrustedStatus status =
-      chromeos::CrosSettings::Get()->PrepareTrustedValues(base::BindOnce(
+      ash::CrosSettings::Get()->PrepareTrustedValues(base::BindOnce(
           &EchoPrivateGetUserConsentFunction::CheckRedeemOffersAllowed, this));
   if (status == chromeos::CrosSettingsProvider::TEMPORARILY_UNTRUSTED)
     return;
 
   bool allow = true;
-  chromeos::CrosSettings::Get()->GetBoolean(
+  ash::CrosSettings::Get()->GetBoolean(
       chromeos::kAllowRedeemChromeOsRegistrationOffers, &allow);
 
   OnRedeemOffersAllowedChecked(allow);
@@ -254,7 +247,7 @@ void EchoPrivateGetUserConsentFunction::OnRedeemOffersAllowedChecked(
     web_contents = GetSenderWebContents();
 
     if (!web_contents || extensions::GetViewType(web_contents) !=
-                             extensions::VIEW_TYPE_APP_WINDOW) {
+                             extensions::mojom::ViewType::kAppWindow) {
       Respond(Error("Not called from an app window - the tabId is required."));
       return;
     }
@@ -285,7 +278,7 @@ void EchoPrivateGetUserConsentFunction::OnRedeemOffersAllowedChecked(
   AddRef();
 
   // Create and show the dialog.
-  chromeos::EchoDialogView::Params dialog_params;
+  ash::EchoDialogView::Params dialog_params;
   dialog_params.echo_enabled = redeem_offers_allowed_;
   if (dialog_params.echo_enabled) {
     dialog_params.service_name =
@@ -293,8 +286,7 @@ void EchoPrivateGetUserConsentFunction::OnRedeemOffersAllowedChecked(
     dialog_params.origin = base::UTF8ToUTF16(params->consent_requester.origin);
   }
 
-  chromeos::EchoDialogView* dialog =
-      new chromeos::EchoDialogView(this, dialog_params);
+  ash::EchoDialogView* dialog = new ash::EchoDialogView(this, dialog_params);
   dialog->Show(web_contents->GetTopLevelNativeWindow());
 
   // If there is a dialog_shown_callback_, invoke it with the created dialog.
@@ -305,7 +297,7 @@ void EchoPrivateGetUserConsentFunction::OnRedeemOffersAllowedChecked(
 void EchoPrivateGetUserConsentFunction::Finalize(bool consent) {
   // Consent should not be true if offers redeeming is disabled.
   CHECK(redeem_offers_allowed_ || !consent);
-  Respond(OneArgument(std::make_unique<base::Value>(consent)));
+  Respond(OneArgument(base::Value(consent)));
 
   // Release the reference added in |OnRedeemOffersAllowedChecked|, before
   // showing the dialog.

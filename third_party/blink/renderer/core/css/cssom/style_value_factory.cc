@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/core/css/cssom/style_value_factory.h"
 
-#include "third_party/blink/renderer/core/css/css_color_value.h"
+#include "third_party/blink/renderer/core/css/css_color.h"
 #include "third_party/blink/renderer/core/css/css_custom_ident_value.h"
 #include "third_party/blink/renderer/core/css/css_custom_property_declaration.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
@@ -20,7 +20,7 @@
 #include "third_party/blink/renderer/core/css/cssom/css_style_variable_reference_value.h"
 #include "third_party/blink/renderer/core/css/cssom/css_transform_value.h"
 #include "third_party/blink/renderer/core/css/cssom/css_unparsed_value.h"
-#include "third_party/blink/renderer/core/css/cssom/css_unsupported_color_value.h"
+#include "third_party/blink/renderer/core/css/cssom/css_unsupported_color.h"
 #include "third_party/blink/renderer/core/css/cssom/css_unsupported_style_value.h"
 #include "third_party/blink/renderer/core/css/cssom/css_url_image_value.h"
 #include "third_party/blink/renderer/core/css/cssom/cssom_types.h"
@@ -55,8 +55,8 @@ CSSStyleValue* CreateStyleValue(const CSSValue& value) {
     return CSSKeywordValue::FromCSSValue(value);
   if (auto* primitive_value = DynamicTo<CSSPrimitiveValue>(value))
     return CSSNumericValue::FromCSSValue(*primitive_value);
-  if (auto* color_value = DynamicTo<cssvalue::CSSColorValue>(value))
-    return MakeGarbageCollected<CSSUnsupportedColorValue>(*color_value);
+  if (auto* color_value = DynamicTo<cssvalue::CSSColor>(value))
+    return MakeGarbageCollected<CSSUnsupportedColor>(*color_value);
   if (auto* image_value = DynamicTo<CSSImageValue>(value))
     return MakeGarbageCollected<CSSURLImageValue>(*image_value->Clone());
   return nullptr;
@@ -70,7 +70,11 @@ CSSStyleValue* CreateStyleValueWithPropertyInternal(CSSPropertyID property_id,
     case CSSPropertyID::kBorderBottomLeftRadius:
     case CSSPropertyID::kBorderBottomRightRadius:
     case CSSPropertyID::kBorderTopLeftRadius:
-    case CSSPropertyID::kBorderTopRightRadius: {
+    case CSSPropertyID::kBorderTopRightRadius:
+    case CSSPropertyID::kBorderEndEndRadius:
+    case CSSPropertyID::kBorderEndStartRadius:
+    case CSSPropertyID::kBorderStartEndRadius:
+    case CSSPropertyID::kBorderStartStartRadius: {
       // border-radius-* are always stored as pairs, but when both values are
       // the same, we should reify as a single value.
       if (const auto* pair = DynamicTo<CSSValuePair>(value)) {
@@ -287,7 +291,7 @@ CSSStyleValueVector StyleValueFactory::FromString(
   if ((property_id == CSSPropertyID::kVariable && !tokens.IsEmpty()) ||
       CSSVariableParser::ContainsValidVariableReferences(range)) {
     const auto variable_data = CSSVariableData::Create(
-        range, false /* is_animation_tainted */,
+        {range, StringView(css_text)}, false /* is_animation_tainted */,
         false /* needs variable resolution */, parser_context->BaseURL(),
         parser_context->Charset());
     CSSStyleValueVector values;

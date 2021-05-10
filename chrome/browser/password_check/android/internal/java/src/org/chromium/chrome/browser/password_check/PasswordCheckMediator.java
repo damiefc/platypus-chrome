@@ -22,6 +22,7 @@ import static org.chromium.chrome.browser.password_check.PasswordCheckProperties
 import static org.chromium.chrome.browser.password_check.PasswordCheckProperties.VIEW_CREDENTIAL;
 import static org.chromium.chrome.browser.password_check.PasswordCheckProperties.VIEW_DIALOG_HANDLER;
 
+import android.content.Context;
 import android.content.DialogInterface;
 import android.util.Pair;
 
@@ -29,10 +30,12 @@ import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AlertDialog;
 
 import org.chromium.base.task.PostTask;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.password_check.helper.PasswordCheckChangePasswordHelper;
 import org.chromium.chrome.browser.password_check.helper.PasswordCheckIconHelper;
-import org.chromium.chrome.browser.password_check.helper.PasswordCheckReauthenticationHelper;
-import org.chromium.chrome.browser.password_check.helper.PasswordCheckReauthenticationHelper.ReauthReason;
+import org.chromium.chrome.browser.password_manager.settings.PasswordAccessReauthenticationHelper;
+import org.chromium.chrome.browser.password_manager.settings.PasswordAccessReauthenticationHelper.ReauthReason;
+import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.modelutil.ListModel;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
@@ -51,21 +54,23 @@ class PasswordCheckMediator
         implements PasswordCheckCoordinator.CredentialEventHandler, PasswordCheck.Observer {
     private static long sStatusUpdateDelayMillis = 1000;
 
-    private final PasswordCheckReauthenticationHelper mReauthenticationHelper;
+    private final PasswordAccessReauthenticationHelper mReauthenticationHelper;
     private final PasswordCheckChangePasswordHelper mChangePasswordDelegate;
     private PropertyModel mModel;
     private PasswordCheckComponentUi.Delegate mDelegate;
     private Runnable mLaunchCheckupInAccount;
     private HashSet<CompromisedCredential> mPreCheckSet;
+    private final SettingsLauncher mSettingsLauncher;
     private final PasswordCheckIconHelper mIconHelper;
     private long mLastStatusUpdate;
     private boolean mCctIsOpened;
 
     PasswordCheckMediator(PasswordCheckChangePasswordHelper changePasswordDelegate,
-            PasswordCheckReauthenticationHelper reauthenticationHelper,
-            PasswordCheckIconHelper passwordCheckIconHelper) {
+            PasswordAccessReauthenticationHelper reauthenticationHelper,
+            SettingsLauncher settingsLauncher, PasswordCheckIconHelper passwordCheckIconHelper) {
         mChangePasswordDelegate = changePasswordDelegate;
         mReauthenticationHelper = reauthenticationHelper;
+        mSettingsLauncher = settingsLauncher;
         mIconHelper = passwordCheckIconHelper;
     }
 
@@ -227,11 +232,15 @@ class PasswordCheckMediator
     }
 
     @Override
-    public void onEdit(CompromisedCredential credential) {
+    public void onEdit(CompromisedCredential credential, Context context) {
         PasswordCheckMetricsRecorder.recordUiUserAction(
                 PasswordCheckUserAction.EDIT_PASSWORD_CLICK);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.EDIT_PASSWORDS_IN_SETTINGS)) {
+            mDelegate.onEditCredential(credential, context);
+            return;
+        }
         if (!mReauthenticationHelper.canReauthenticate()) {
-            mReauthenticationHelper.showScreenLockToast();
+            mReauthenticationHelper.showScreenLockToast(ReauthReason.VIEW_PASSWORD);
             return;
         }
 
@@ -271,7 +280,7 @@ class PasswordCheckMediator
         PasswordCheckMetricsRecorder.recordUiUserAction(
                 PasswordCheckUserAction.VIEW_PASSWORD_CLICK);
         if (!mReauthenticationHelper.canReauthenticate()) {
-            mReauthenticationHelper.showScreenLockToast();
+            mReauthenticationHelper.showScreenLockToast(ReauthReason.VIEW_PASSWORD);
             return;
         }
 
@@ -348,7 +357,7 @@ class PasswordCheckMediator
     }
 
     private PasswordCheck getPasswordCheck() {
-        PasswordCheck passwordCheck = PasswordCheckFactory.getOrCreate();
+        PasswordCheck passwordCheck = PasswordCheckFactory.getOrCreate(mSettingsLauncher);
         assert passwordCheck != null : "Password Check UI component needs native counterpart!";
         return passwordCheck;
     }

@@ -9,10 +9,11 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -31,6 +32,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -51,7 +53,7 @@ SkBitmap GetGAIAPictureForNTP(const gfx::Image& image) {
   const int kLength = 27;
   SkBitmap bmp = skia::ImageOperations::Resize(*image.ToSkBitmap(),
       skia::ImageOperations::RESIZE_BEST, kLength, kLength);
-  SkCanvas canvas(bmp);
+  SkCanvas canvas(bmp, SkSurfaceProps{});
 
   // Draw a gray border on the inside of the icon.
   SkPaint paint;
@@ -63,13 +65,13 @@ SkBitmap GetGAIAPictureForNTP(const gfx::Image& image) {
 }
 
 // Puts the |content| into an element with the given CSS class.
-base::string16 CreateElementWithClass(const base::string16& content,
-                                      const std::string& tag_name,
-                                      const std::string& css_class,
-                                      const std::string& extends_tag) {
-  base::string16 start_tag = base::ASCIIToUTF16("<" + tag_name +
-      " class='" + css_class + "' is='" + extends_tag + "'>");
-  base::string16 end_tag = base::ASCIIToUTF16("</" + tag_name + ">");
+std::u16string CreateElementWithClass(const std::u16string& content,
+                                      const std::u16string& tag_name,
+                                      const std::u16string& css_class,
+                                      const std::u16string& extends_tag) {
+  std::u16string start_tag = u"<" + tag_name + u" class='" + css_class +
+                             u"' is='" + extends_tag + u"'>";
+  std::u16string end_tag = u"</" + tag_name + u">";
   return start_tag + net::EscapeForHTML(content) + end_tag;
 }
 
@@ -82,14 +84,14 @@ AppLauncherLoginHandler::~AppLauncherLoginHandler() {}
 void AppLauncherLoginHandler::RegisterMessages() {
   profile_info_watcher_ = std::make_unique<ProfileInfoWatcher>(
       Profile::FromWebUI(web_ui()),
-      base::Bind(&AppLauncherLoginHandler::UpdateLogin,
-                 base::Unretained(this)));
+      base::BindRepeating(&AppLauncherLoginHandler::UpdateLogin,
+                          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       "initializeSyncLogin",
       base::BindRepeating(&AppLauncherLoginHandler::HandleInitializeSyncLogin,
                           base::Unretained(this)));
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   web_ui()->RegisterMessageCallback(
       "showSyncLoginUI",
       base::BindRepeating(&AppLauncherLoginHandler::HandleShowSyncLoginUI,
@@ -102,16 +104,17 @@ void AppLauncherLoginHandler::HandleInitializeSyncLogin(
   UpdateLogin();
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 void AppLauncherLoginHandler::HandleShowSyncLoginUI(
     const base::ListValue* args) {
   Profile* profile = Profile::FromWebUI(web_ui());
   if (!signin::ShouldShowPromo(profile))
     return;
 
-  std::string username = IdentityManagerFactory::GetForProfile(profile)
-                             ->GetPrimaryAccountInfo()
-                             .email;
+  std::string username =
+      IdentityManagerFactory::GetForProfile(profile)
+          ->GetPrimaryAccountInfo(signin::ConsentLevel::kSync)
+          .email;
   if (!username.empty())
     return;
 
@@ -125,7 +128,7 @@ void AppLauncherLoginHandler::HandleShowSyncLoginUI(
       web_contents->GetURL().spec() == chrome::kChromeUIAppsURL
           ? signin_metrics::AccessPoint::ACCESS_POINT_APPS_PAGE_LINK
           : signin_metrics::AccessPoint::ACCESS_POINT_NTP_LINK;
-  chrome::ShowBrowserSignin(browser, access_point);
+  chrome::ShowBrowserSignin(browser, access_point, signin::ConsentLevel::kSync);
   RecordInHistogram(NTP_SIGN_IN_PROMO_CLICKED);
 }
 #endif
@@ -139,41 +142,42 @@ void AppLauncherLoginHandler::RecordInHistogram(NTPSignInPromoBuckets type) {
 
 void AppLauncherLoginHandler::UpdateLogin() {
   std::string username = profile_info_watcher_->GetAuthenticatedUsername();
-  base::string16 header, sub_header;
+  std::u16string header, sub_header;
   std::string icon_url;
   Profile* profile = Profile::FromWebUI(web_ui());
   if (!username.empty()) {
     ProfileAttributesStorage& storage =
         g_browser_process->profile_manager()->GetProfileAttributesStorage();
-    ProfileAttributesEntry* entry;
-    if (storage.GetProfileAttributesWithPath(profile->GetPath(), &entry)) {
+    ProfileAttributesEntry* entry =
+        storage.GetProfileAttributesWithPath(profile->GetPath());
+    if (entry) {
       // Only show the profile picture and full name for the single profile
       // case. In the multi-profile case the profile picture is visible in the
       // title bar and the full name can be ambiguous.
       if (storage.GetNumberOfProfiles() == 1) {
-        base::string16 name = entry->GetGAIAName();
+        std::u16string name = entry->GetGAIAName();
         if (!name.empty())
-          header = CreateElementWithClass(name, "span", "profile-name", "");
+          header = CreateElementWithClass(name, u"span", u"profile-name", u"");
         const gfx::Image* image = entry->GetGAIAPicture();
         if (image)
           icon_url = webui::GetBitmapDataUrl(GetGAIAPictureForNTP(*image));
       }
       if (header.empty()) {
-        header = CreateElementWithClass(base::UTF8ToUTF16(username), "span",
-                                        "profile-name", "");
+        header = CreateElementWithClass(base::UTF8ToUTF16(username), u"span",
+                                        u"profile-name", u"");
       }
     }
   } else {
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
     // Chromeos does not show this status header.
     bool is_signin_allowed =
         profile->GetOriginalProfile()->GetPrefs()->GetBoolean(
             prefs::kSigninAllowed);
-    if (!profile->IsLegacySupervised() && is_signin_allowed) {
-      base::string16 signed_in_link = l10n_util::GetStringUTF16(
-          IDS_SYNC_PROMO_NOT_SIGNED_IN_STATUS_LINK);
+    if (is_signin_allowed) {
+      std::u16string signed_in_link =
+          l10n_util::GetStringUTF16(IDS_SYNC_PROMO_NOT_SIGNED_IN_STATUS_LINK);
       signed_in_link =
-          CreateElementWithClass(signed_in_link, "a", "", "action-link");
+          CreateElementWithClass(signed_in_link, u"a", u"", u"action-link");
       header = l10n_util::GetStringFUTF16(
           IDS_SYNC_PROMO_NOT_SIGNED_IN_STATUS_HEADER,
           l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_NAME));
@@ -202,7 +206,7 @@ void AppLauncherLoginHandler::UpdateLogin() {
 
 // static
 bool AppLauncherLoginHandler::ShouldShow(Profile* profile) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // For now we don't care about showing sync status on Chrome OS. The promo
   // UI and the avatar menu don't exist on that platform.
   return false;

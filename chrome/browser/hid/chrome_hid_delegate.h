@@ -11,12 +11,12 @@
 #include "base/observer_list.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/hid/hid_chooser_context.h"
-#include "components/permissions/chooser_context_base.h"
+#include "components/permissions/object_permission_context_base.h"
 #include "content/public/browser/hid_delegate.h"
 
 class ChromeHidDelegate
     : public content::HidDelegate,
-      public permissions::ChooserContextBase::PermissionObserver,
+      public permissions::ObjectPermissionContextBase::PermissionObserver,
       public HidChooserContext::DeviceObserver {
  public:
   ChromeHidDelegate();
@@ -28,11 +28,8 @@ class ChromeHidDelegate
       content::RenderFrameHost* frame,
       std::vector<blink::mojom::HidDeviceFilterPtr> filters,
       content::HidChooser::Callback callback) override;
-  bool CanRequestDevicePermission(
-      content::WebContents* web_contents,
-      const url::Origin& requesting_origin) override;
+  bool CanRequestDevicePermission(content::WebContents* web_contents) override;
   bool HasDevicePermission(content::WebContents* web_contents,
-                           const url::Origin& requesting_origin,
                            const device::mojom::HidDeviceInfo& device) override;
   device::mojom::HidManager* GetHidManager(
       content::WebContents* web_contents) override;
@@ -44,13 +41,13 @@ class ChromeHidDelegate
       content::WebContents* web_contents,
       const std::string& guid) override;
 
-  // permissions::ChooserContextBase::PermissionObserver:
-  void OnPermissionRevoked(const url::Origin& requesting_origin,
-                           const url::Origin& embedding_origin) override;
+  // permissions::ObjectPermissionContextBase::PermissionObserver:
+  void OnPermissionRevoked(const url::Origin& origin) override;
 
   // HidChooserContext::DeviceObserver:
   void OnDeviceAdded(const device::mojom::HidDeviceInfo&) override;
   void OnDeviceRemoved(const device::mojom::HidDeviceInfo&) override;
+  void OnDeviceChanged(const device::mojom::HidDeviceInfo&) override;
   void OnHidManagerConnectionError() override;
   void OnHidChooserContextShutdown() override;
 
@@ -60,8 +57,8 @@ class ChromeHidDelegate
                  &HidChooserContext::AddDeviceObserver,
                  &HidChooserContext::RemoveDeviceObserver>
       device_observer_{this};
-  ScopedObserver<permissions::ChooserContextBase,
-                 permissions::ChooserContextBase::PermissionObserver>
+  ScopedObserver<permissions::ObjectPermissionContextBase,
+                 permissions::ObjectPermissionContextBase::PermissionObserver>
       permission_observer_{this};
   base::ObserverList<content::HidDelegate::Observer> observer_list_;
 };

@@ -7,7 +7,7 @@
 #import <UIKit/UIKit.h>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/format_macros.h"
 #include "base/location.h"
@@ -22,6 +22,7 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/time/time.h"
+#import "ios/chrome/browser/sessions/scene_util.h"
 #import "ios/chrome/browser/sessions/session_ios.h"
 #import "ios/chrome/browser/sessions/session_ios_factory.h"
 #import "ios/chrome/browser/sessions/session_window_ios.h"
@@ -45,11 +46,6 @@
 namespace {
 const NSTimeInterval kSaveDelay = 2.5;     // Value taken from Desktop Chrome.
 NSString* const kRootObjectKey = @"root";  // Key for the root object.
-NSString* const kSessionDirectory =
-    @"Sessions";  // The directory name inside BrowserState directory which
-                  // contain all sessions directories.
-NSString* const kSessionFileName =
-    @"session.plist";  // The session file name on disk.
 }
 
 @implementation NSKeyedUnarchiver (CrLegacySessionCompatibility)
@@ -103,9 +99,11 @@ NSString* const kSessionFileName =
 }
 
 - (void)saveSession:(__weak SessionIOSFactory*)factory
-          directory:(NSString*)directory
+          sessionID:(NSString*)sessionID
+          directory:(const base::FilePath&)directory
         immediately:(BOOL)immediately {
-  NSString* sessionPath = [[self class] sessionPathForDirectory:directory];
+  NSString* sessionPath = [[self class] sessionPathForSessionID:sessionID
+                                                      directory:directory];
   BOOL hadPendingSession = [_pendingSessions objectForKey:sessionPath] != nil;
   [_pendingSessions setObject:factory forKey:sessionPath];
   if (immediately) {
@@ -120,8 +118,10 @@ NSString* const kSessionFileName =
   }
 }
 
-- (SessionIOS*)loadSessionFromDirectory:(NSString*)directory {
-  NSString* sessionPath = [[self class] sessionPathForDirectory:directory];
+- (SessionIOS*)loadSessionWithSessionID:(NSString*)sessionID
+                              directory:(const base::FilePath&)directory {
+  NSString* sessionPath = [[self class] sessionPathForSessionID:sessionID
+                                                      directory:directory];
   base::TimeTicks start_time = base::TimeTicks::Now();
   SessionIOS* session = [self loadSessionFromPath:sessionPath];
   UmaHistogramTimes("Session.WebStates.ReadFromFileTime",
@@ -171,37 +171,43 @@ NSString* const kSessionFileName =
   return base::mac::ObjCCastStrict<SessionIOS>(rootObject);
 }
 
-- (void)deleteLastSessionFileInDirectory:(NSString*)directory
+- (void)deleteAllSessionFilesInDirectory:(const base::FilePath&)directory
                               completion:(base::OnceClosure)callback {
-  NSString* sessionPath = [[self class] sessionPathForDirectory:directory];
-  [self deletePaths:[NSArray arrayWithObject:sessionPath]
-         completion:std::move(callback)];
+  NSString* sessionsDirectory = base::SysUTF8ToNSString(
+      SessionsDirectoryForDirectory(directory).AsUTF8Unsafe());
+  NSArray<NSString*>* allSessionIDs = [[NSFileManager defaultManager]
+      contentsOfDirectoryAtPath:sessionsDirectory
+                          error:nil];
+
+  // If there were no session ids, then scenes are not supported fall back to
+  // the original location.
+  if ([allSessionIDs count] == 0) {
+    allSessionIDs = @[ @"" ];
+  }
+
+  [self deleteSessions:allSessionIDs
+             directory:directory
+            completion:std::move(callback)];
 }
 
 - (void)deleteSessions:(NSArray<NSString*>*)sessionIDs
-    fromBrowserStateDirectory:(NSString*)directory {
-  NSString* sessionsDirectoryPath =
-      [directory stringByAppendingPathComponent:kSessionDirectory];
+             directory:(const base::FilePath&)directory
+            completion:(base::OnceClosure)callback {
   NSMutableArray<NSString*>* paths =
       [NSMutableArray arrayWithCapacity:sessionIDs.count];
   for (NSString* sessionID : sessionIDs) {
-    [paths addObject:[sessionsDirectoryPath
-                         stringByAppendingPathComponent:sessionID]];
+    [paths addObject:[SessionServiceIOS sessionPathForSessionID:sessionID
+                                                      directory:directory]];
   }
-  [self deletePaths:paths completion:base::DoNothing()];
-}
-
-+ (NSString*)sessionPathForDirectory:(NSString*)directory {
-  return [directory stringByAppendingPathComponent:kSessionFileName];
+  [self deletePaths:paths completion:std::move(callback)];
 }
 
 + (NSString*)sessionPathForSessionID:(NSString*)sessionID
-                           directory:(NSString*)directory {
-  if (!sessionID)
-    return [[self class] sessionPathForDirectory:directory];
-  return [NSString pathWithComponents:@[
-    directory, kSessionDirectory, sessionID, kSessionFileName
-  ]];
+                           directory:(const base::FilePath&)directory {
+  DCHECK(sessionID.length != 0);
+  return base::SysUTF8ToNSString(
+      SessionPathForDirectory(directory, sessionID, kSessionFileName)
+          .AsUTF8Unsafe());
 }
 
 #pragma mark - Private methods
@@ -245,6 +251,7 @@ NSString* const kSessionFileName =
 
   @try {
     NSError* error = nil;
+    size_t previous_cert_policy_bytes = web::GetCertPolicyBytesEncoded();
     NSData* sessionData = [NSKeyedArchiver archivedDataWithRootObject:session
                                                 requiringSecureCoding:NO
                                                                 error:&error];
@@ -255,8 +262,12 @@ NSString* const kSessionFileName =
       return;
     }
 
-    UMA_HISTOGRAM_COUNTS_100000("Session.WebStates.SerializedSize",
-                                sessionData.length / 1024);
+    base::UmaHistogramCounts100000(
+        "Session.WebStates.AllSerializedCertPolicyCachesSize",
+        web::GetCertPolicyBytesEncoded() - previous_cert_policy_bytes / 1024);
+
+    base::UmaHistogramCounts100000("Session.WebStates.SerializedSize",
+                                   sessionData.length / 1024);
 
     _taskRunner->PostTask(FROM_HERE, base::BindOnce(^{
                             [self performSaveSessionData:sessionData

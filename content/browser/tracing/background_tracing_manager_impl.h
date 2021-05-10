@@ -105,8 +105,9 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
 
   // Named triggers
   void TriggerNamedEvent(TriggerHandle, StartedFinalizingCallback) override;
-  TriggerHandle RegisterTriggerType(const char* trigger_name) override;
-  std::string GetTriggerNameFromHandle(TriggerHandle handle) const;
+  TriggerHandle RegisterTriggerType(base::StringPiece trigger_name) override;
+  const std::string& GetTriggerNameFromHandle(
+      TriggerHandle trigger_handle) override;
 
   void OnHistogramTrigger(const std::string& histogram_name);
 
@@ -115,6 +116,10 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
   bool HasTraceToUpload() override;
   std::string GetLatestTraceToUpload() override;
   void SetTraceToUpload(std::unique_ptr<std::string> trace_data);
+  std::string GetBackgroundTracingUploadUrl(
+      const std::string& trial_name) override;
+  std::unique_ptr<BackgroundTracingConfig> GetBackgroundTracingConfig(
+      const std::string& trial_name) override;
 
   // Add/remove EnabledStateObserver.
   CONTENT_EXPORT void AddEnabledStateObserver(EnabledStateObserver* observer);
@@ -129,7 +134,7 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
 
   void AddMetadataGeneratorFunction();
 
-  bool IsAllowedFinalization() const;
+  bool IsAllowedFinalization(bool is_crash_scenario) const;
 
   // Called by BackgroundTracingActiveScenario
   void OnStartTracingDone(BackgroundTracingConfigImpl::CategoryPreset preset);
@@ -142,6 +147,8 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
   CONTENT_EXPORT void AbortScenarioForTesting() override;
   CONTENT_EXPORT void SetTraceToUploadForTesting(
       std::unique_ptr<std::string> trace_data) override;
+  void SetConfigTextFilterForTesting(
+      ConfigTextFilterForTesting predicate) override;
 
  private:
   friend class base::NoDestructor<BackgroundTracingManagerImpl>;
@@ -184,6 +191,9 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
 
   // This field contains serialized trace log proto.
   std::string trace_to_upload_;
+
+  // Callback to override the background tracing config for testing.
+  ConfigTextFilterForTesting config_text_filter_for_testing_;
 
   DISALLOW_COPY_AND_ASSIGN(BackgroundTracingManagerImpl);
 };

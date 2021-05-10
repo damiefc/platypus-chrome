@@ -8,10 +8,10 @@
 #include "ash/public/cpp/ash_public_export.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace ash {
-namespace internal {
 
 enum class IconType {
   kAudio,
@@ -41,25 +41,34 @@ enum class IconType {
   kWord,
 };
 
+namespace internal {
+
 ASH_PUBLIC_EXPORT IconType
 GetIconTypeFromString(const std::string& icon_type_string);
 
 ASH_PUBLIC_EXPORT IconType GetIconTypeForPath(const base::FilePath& filepath);
 
-ASH_PUBLIC_EXPORT gfx::ImageSkia GetVectorIconFromIconType(
-    IconType icon,
-    bool is_chip_icon = false);
-
-ASH_PUBLIC_EXPORT int GetChipResourceIdForIconType(IconType icon);
-
 }  // namespace internal
 
-ASH_PUBLIC_EXPORT gfx::ImageSkia GetIconForPath(const base::FilePath& filepath);
+// Returns the file type icon for the specified `filepath`. If `dark_background`
+// is `true`, lighter foreground colors are used to ensure sufficient contrast.
+ASH_PUBLIC_EXPORT gfx::ImageSkia GetIconForPath(const base::FilePath& file_path,
+                                                bool dark_background);
 
+// Returns the file type chip icon for the specified `filepath`.
 ASH_PUBLIC_EXPORT gfx::ImageSkia GetChipIconForPath(
-    const base::FilePath& filepath);
+    const base::FilePath& filepath,
+    bool dark_background);
 
-ASH_PUBLIC_EXPORT gfx::ImageSkia GetIconFromType(const std::string& icon_type);
+// Returns the file type icon for the specified `icon_type`.
+ASH_PUBLIC_EXPORT gfx::ImageSkia GetIconFromType(const std::string& icon_type,
+                                                 bool dark_background);
+
+// Returns the file type icon for the specified `icon_type`. If
+// `dark_background` is `true`, lighter foreground colors are used to ensure
+// sufficient contrast.
+ASH_PUBLIC_EXPORT gfx::ImageSkia GetIconFromType(IconType icon_type,
+                                                 bool dark_background);
 
 }  // namespace ash
 

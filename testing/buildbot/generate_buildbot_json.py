@@ -172,6 +172,25 @@ class JUnitGenerator(BaseGenerator):
     return sorted(tests, key=lambda x: x['test'])
 
 
+class SkylabGenerator(BaseGenerator):
+  def __init__(self, bb_gen):
+    super(SkylabGenerator, self).__init__(bb_gen)
+
+  def generate(self, waterfall, tester_name, tester_config, input_tests):
+    scripts = []
+    for test_name, test_config in sorted(input_tests.iteritems()):
+      for config in test_config:
+        test = self.bb_gen.generate_skylab_test(waterfall, tester_name,
+                                                tester_config, test_name,
+                                                config)
+        if test:
+          scripts.append(test)
+    return scripts
+
+  def sort(self, tests):
+    return sorted(tests, key=lambda x: x['test'])
+
+
 def check_compound_references(other_test_suites=None,
                               sub_suite=None,
                               suite=None,
@@ -314,6 +333,12 @@ class BBJSONGenerator(object):
         metavar='JSON_FILE_PATH',
         help='Outputs results into a json file. Only works with query function.'
     )
+    parser.add_argument('--isolate-map-file',
+                        metavar='PATH',
+                        help='path to additional isolate map files.',
+                        default=[],
+                        action='append',
+                        dest='isolate_map_files')
     parser.add_argument(
         '--infra-config-dir',
         help='Path to the LUCI services configuration directory',
@@ -363,6 +388,9 @@ class BBJSONGenerator(object):
 
   def is_chromeos(self, tester_config):
     return tester_config.get('os_type') == 'chromeos'
+
+  def is_lacros(self, tester_config):
+    return tester_config.get('os_type') == 'lacros'
 
   def is_linux(self, tester_config):
     return tester_config.get('os_type') == 'linux'
@@ -460,6 +488,7 @@ class BBJSONGenerator(object):
     #   --extra-browser-args=arg1 arg2
     arr = self.merge_command_line_args(arr, '--enable-features=', ',')
     arr = self.merge_command_line_args(arr, '--extra-browser-args=', ' ')
+    arr = self.merge_command_line_args(arr, '--test-launcher-filter-file=', ';')
     return arr
 
   def substitute_magic_args(self, test_config):
@@ -550,6 +579,7 @@ class BBJSONGenerator(object):
         args.extend(val)
 
     add_conditional_args('desktop_args', lambda cfg: not self.is_android(cfg))
+    add_conditional_args('lacros_args', self.is_lacros)
     add_conditional_args('linux_args', self.is_linux)
     add_conditional_args('android_args', self.is_android)
     add_conditional_args('chromeos_args', self.is_chromeos)
@@ -580,13 +610,19 @@ class BBJSONGenerator(object):
           tester_config['swarming']['dimension_sets'])
       self.dictionary_merge(generated_test['swarming'],
                             tester_config['swarming'])
-    # Apply any Android-specific Swarming dimensions after the generic ones.
+    # Apply any platform-specific Swarming dimensions after the generic ones.
     if 'android_swarming' in generated_test:
       if self.is_android(tester_config): # pragma: no cover
         self.dictionary_merge(
           generated_test['swarming'],
           generated_test['android_swarming']) # pragma: no cover
       del generated_test['android_swarming'] # pragma: no cover
+    if 'chromeos_swarming' in generated_test:
+      if self.is_chromeos(tester_config):  # pragma: no cover
+        self.dictionary_merge(
+            generated_test['swarming'],
+            generated_test['chromeos_swarming'])  # pragma: no cover
+      del generated_test['chromeos_swarming']  # pragma: no cover
 
   def clean_swarming_dictionary(self, swarming_dict):
     # Clean out redundant entries from a test's "swarming" dictionary.
@@ -672,6 +708,24 @@ class BBJSONGenerator(object):
           'script': '//testing/trigger_scripts/chromeos_device_trigger.py',
         }
 
+  def add_logdog_butler_cipd_package(self, tester_config, result):
+    if not tester_config.get('skip_cipd_packages', False):
+      cipd_packages = result['swarming'].get('cipd_packages', [])
+      already_added = len([
+          package for package in cipd_packages
+          if package.get('cipd_package', "").find('logdog/butler') > 0
+      ]) > 0
+      if not already_added:
+        cipd_packages.append({
+            'cipd_package':
+            'infra/tools/luci/logdog/butler/${platform}',
+            'location':
+            'bin',
+            'revision':
+            'git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c',
+        })
+        result['swarming']['cipd_packages'] = cipd_packages
+
   def add_android_presentation_args(self, tester_config, test_name, result):
     args = result.get('args', [])
     bucket = tester_config.get('results_bucket', 'chromium-result-details')
@@ -688,16 +742,6 @@ class BBJSONGenerator(object):
         'script': '//build/android/pylib/results/presentation/'
           'test_results_presentation.py',
       }
-    if not tester_config.get('skip_cipd_packages', False):
-      cipd_packages = result['swarming'].get('cipd_packages', [])
-      cipd_packages.append(
-        {
-          'cipd_package': 'infra/tools/luci/logdog/butler/${platform}',
-          'location': 'bin',
-          'revision': 'git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c',
-        }
-      )
-      result['swarming']['cipd_packages'] = cipd_packages
     if not tester_config.get('skip_output_links', False):
       result['swarming']['output_links'] = [
         {
@@ -727,10 +771,14 @@ class BBJSONGenerator(object):
 
     self.initialize_args_for_test(
         result, tester_config, additional_arg_keys=['gtest_args'])
-    if self.is_android(tester_config) and tester_config.get('use_swarming',
-                                                            True):
-      self.add_android_presentation_args(tester_config, test_name, result)
-      result['args'] = result.get('args', []) + ['--recover-devices']
+    if self.is_android(tester_config) and tester_config.get(
+        'use_swarming', True):
+      if not test_config.get('use_isolated_scripts_api', False):
+        # TODO(https://crbug.com/1137998) make Android presentation work with
+        # isolated scripts in test_results_presentation.py merge script
+        self.add_android_presentation_args(tester_config, test_name, result)
+        result['args'] = result.get('args', []) + ['--recover-devices']
+      self.add_logdog_butler_cipd_package(tester_config, result)
 
     result = self.update_and_cleanup_test(
         result, test_name, tester_name, tester_config, waterfall)
@@ -740,9 +788,14 @@ class BBJSONGenerator(object):
     if not result.get('merge'):
       # TODO(https://crbug.com/958376): Consider adding the ability to not have
       # this default.
+      if test_config.get('use_isolated_scripts_api', False):
+        merge_script = 'standard_isolated_script_merge'
+      else:
+        merge_script = 'standard_gtest_merge'
+
       result['merge'] = {
-        'script': '//testing/merge_scripts/standard_gtest_merge.py',
-        'args': [],
+          'script': '//testing/merge_scripts/%s.py' % merge_script,
+          'args': [],
       }
     return result
 
@@ -756,8 +809,13 @@ class BBJSONGenerator(object):
     result['name'] = result.get('name', test_name)
     self.initialize_swarming_dictionary_for_test(result, tester_config)
     self.initialize_args_for_test(result, tester_config)
-    if tester_config.get('use_android_presentation', False):
-      self.add_android_presentation_args(tester_config, test_name, result)
+    if self.is_android(tester_config) and tester_config.get(
+        'use_swarming', True):
+      if tester_config.get('use_android_presentation', False):
+        # TODO(https://crbug.com/1137998) make Android presentation work with
+        # isolated scripts in test_results_presentation.py merge script
+        self.add_android_presentation_args(tester_config, test_name, result)
+      self.add_logdog_butler_cipd_package(tester_config, result)
     result = self.update_and_cleanup_test(
         result, test_name, tester_name, tester_config, waterfall)
     self.add_common_test_properties(result, tester_config)
@@ -805,6 +863,21 @@ class BBJSONGenerator(object):
     self.initialize_args_for_test(result, tester_config)
     result = self.update_and_cleanup_test(
         result, test_name, tester_name, tester_config, waterfall)
+    self.substitute_magic_args(result)
+    return result
+
+  def generate_skylab_test(self, waterfall, tester_name, tester_config,
+                           test_name, test_config):
+    if not self.should_run_on_tester(waterfall, tester_name, test_name,
+                                     test_config):
+      return None
+    result = copy.deepcopy(test_config)
+    result.update({
+        'test': test_name,
+    })
+    self.initialize_args_for_test(result, tester_config)
+    result = self.update_and_cleanup_test(result, test_name, tester_name,
+                                          tester_config, waterfall)
     self.substitute_magic_args(result)
     return result
 
@@ -905,6 +978,8 @@ class BBJSONGenerator(object):
             JUnitGenerator(self),
         'scripts':
             ScriptGenerator(self),
+        'skylab_tests':
+            SkylabGenerator(self),
     }
 
   def get_test_type_remapper(self):
@@ -1065,6 +1140,12 @@ class BBJSONGenerator(object):
         basic_swarming_def.update(variant_swarming_def)
         cloned_config['swarming'] = basic_swarming_def
 
+        # Copy all skylab fields defined by the variant.
+        skylab_config = cloned_variant.get('skylab')
+        if skylab_config:
+          for k, v in skylab_config.items():
+            cloned_config[k] = v
+
         # The identifier is used to make the name of the test unique.
         # Generators in the recipe uniquely identify a test by it's name, so we
         # don't want to have the same name for each variant.
@@ -1113,6 +1194,14 @@ class BBJSONGenerator(object):
     self.exceptions = self.load_pyl_file('test_suite_exceptions.pyl')
     self.mixins = self.load_pyl_file('mixins.pyl')
     self.gn_isolate_map = self.load_pyl_file('gn_isolate_map.pyl')
+    for isolate_map in self.args.isolate_map_files:
+      isolate_map = self.load_pyl_file(isolate_map)
+      duplicates = set(isolate_map).intersection(self.gn_isolate_map)
+      if duplicates:
+        raise BBGenErr('Duplicate targets in isolate map files: %s.' %
+                       ', '.join(duplicates))
+      self.gn_isolate_map.update(isolate_map)
+
     self.variants = self.load_pyl_file('variants.pyl')
 
   def resolve_configuration_files(self):
@@ -1343,7 +1432,7 @@ class BBJSONGenerator(object):
       self.write_file(self.pyl_file_path(filename + suffix), jsonstr)
 
   def get_valid_bot_names(self):
-    # Extract bot names from infra/config/luci-milo.cfg.
+    # Extract bot names from infra/config/generated/luci-milo.cfg.
     # NOTE: This reference can cause issues; if a file changes there, the
     # presubmit here won't be run by default. A manually maintained list there
     # tries to run presubmit here when luci-milo.cfg is changed. If any other
@@ -1385,11 +1474,6 @@ class BBJSONGenerator(object):
         'ANGLE GPU Android Release (Nexus 5X)',
         'ANGLE GPU Linux Release (Intel HD 630)',
         'ANGLE GPU Linux Release (NVIDIA)',
-        'ANGLE GPU Mac Release (Intel)',
-        'ANGLE GPU Mac Retina Release (AMD)',
-        'ANGLE GPU Mac Retina Release (NVIDIA)',
-        'ANGLE GPU Win10 x64 Release (Intel HD 630)',
-        'ANGLE GPU Win10 x64 Release (NVIDIA)',
         'Optional Android Release (Nexus 5X)',
         'Optional Linux Release (Intel HD 630)',
         'Optional Linux Release (NVIDIA)',
@@ -1398,7 +1482,6 @@ class BBJSONGenerator(object):
         'Optional Mac Retina Release (NVIDIA)',
         'Optional Win10 x64 Release (Intel HD 630)',
         'Optional Win10 x64 Release (NVIDIA)',
-        'Win7 ANGLE Tryserver (AMD)',
         # chromium.chromiumos
         'linux-lacros-rel',
         # chromium.fyi
@@ -1418,19 +1501,24 @@ class BBJSONGenerator(object):
         'win32-dbg',
         'win-archive-dbg',
         'win32-archive-dbg',
-        # TODO(crbug.com/1033753) Delete these when coverage is enabled by
-        # default on Windows tryjobs.
-        'GPU Win x64 Builder Code Coverage',
-        'Win x64 Builder Code Coverage',
-        'Win10 Tests x64 Code Coverage',
-        'Win10 x64 Release (NVIDIA) Code Coverage',
-        # TODO(crbug.com/1024915) Delete these when coverage is enabled by
-        # default on Mac OS tryjobs.
-        'Mac Builder Code Coverage',
-        'Mac10.13 Tests Code Coverage',
-        'GPU Mac Builder Code Coverage',
-        'Mac Release (Intel) Code Coverage',
-        'Mac Retina Release (AMD) Code Coverage',
+        # New LTC isn't created when LTC becomes LTS, so these builders can go
+        # away
+        "chromeos-arm-generic-ltc",
+        "chromeos-betty-pi-arc-chrome-ltc",
+        "chromeos-eve-chrome-ltc",
+        "chromeos-kevin-chrome-ltc",
+        "linux-chromeos-ltc",
+        "linux64-ltc",
+        # TODO(https://crbug.com/1127088): remove once LTS version has been set
+        "chromeos-arm-generic-lts",
+        "chromeos-betty-pi-arc-chrome-lts",
+        "chromeos-eve-chrome-lts",
+        "chromeos-kevin-chrome-lts",
+        "linux-chromeos-lts",
+        "linux64-lts",
+        # TODO crbug.com/1143924: Remove once experimentation is complete
+        'Linux Builder Robocrop',
+        'Linux Tests Robocrop',
     ]
 
   def get_internal_waterfalls(self):
@@ -1806,7 +1894,8 @@ class BBJSONGenerator(object):
     # by this script already.
     self.resolve_configuration_files()
     ungenerated_files = set()
-    for filename, expected_contents in self.generate_outputs().items():
+    outputs = self.generate_outputs()
+    for filename, expected_contents in outputs.items():
       expected = self.jsonify(expected_contents)
       file_path = filename + '.json'
       current = self.read_file(self.pyl_file_path(file_path))
@@ -1827,6 +1916,31 @@ class BBJSONGenerator(object):
           'The following files have not been properly '
            'autogenerated by generate_buildbot_json.py: ' +
            ', '.join([filename + '.json' for filename in ungenerated_files]))
+
+    for builder_group, builders in outputs.items():
+      for builder, step_types in builders.items():
+        for step_data in step_types.get('gtest_tests', []):
+          step_name = step_data.get('name', step_data['test'])
+          self._check_swarming_config(builder_group, builder, step_name,
+                                      step_data)
+        for step_data in step_types.get('isolated_scripts', []):
+          step_name = step_data.get('name', step_data['isolate_name'])
+          self._check_swarming_config(builder_group, builder, step_name,
+                                      step_data)
+
+  def _check_swarming_config(self, filename, builder, step_name, step_data):
+    # TODO(crbug.com/1203436): Ensure all swarming tests specify os and cpu, not
+    # just mac tests.
+    if ('mac' in builder.lower()
+        and step_data['swarming']['can_use_on_swarming_builders']):
+      dimension_sets = step_data['swarming'].get('dimension_sets')
+      if not dimension_sets:
+        raise BBGenErr('%s: %s / %s : os and cpu must be specified for mac '
+                       'swarmed tests' % (filename, builder, step_name))
+      for s in dimension_sets:
+        if not s.get('os') or not s.get('cpu'):
+          raise BBGenErr('%s: %s / %s : os and cpu must be specified for mac '
+                         'swarmed tests' % (filename, builder, step_name))
 
   def check_consistency(self, verbose=False):
     self.check_input_file_consistency(verbose) # pragma: no cover

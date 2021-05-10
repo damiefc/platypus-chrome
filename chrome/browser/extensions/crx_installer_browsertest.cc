@@ -6,11 +6,13 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -20,6 +22,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/download/download_crx_util.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
@@ -34,7 +37,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/safe_browsing/buildflags.h"
@@ -53,6 +56,7 @@
 #include "extensions/browser/install/sandboxed_unpacker_failure_reason.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_features.h"
@@ -66,10 +70,10 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_switches.h"
+#include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/extensions/extension_assets_manager_chromeos.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/scoped_user_manager.h"
 #endif
 
@@ -78,9 +82,9 @@ class SkBitmap;
 namespace {
 
 const char kAppUrl[] = "http://www.google.com";
-const char kAppTitle[] = "Test title";
-const char kAppDescription[] = "Test description";
-const char kShortcutItemName[] = "shortcut";
+const char16_t kAppTitle[] = u"Test title";
+const char16_t kAppDescription[] = u"Test description";
+const char16_t kShortcutItemName[] = u"shortcut";
 const char kShortcutUrl[] = "http://www.google.com/shortcut";
 const char kShortcutIconUrl[] = "http://www.google.com/shortcut/icon.png";
 
@@ -105,13 +109,13 @@ class MockPromptProxy {
   bool did_succeed() const { return !extension_id_.empty(); }
   const std::string& extension_id() { return extension_id_; }
   bool confirmation_requested() const { return confirmation_requested_; }
-  const base::string16& error() const { return error_; }
+  const std::u16string& error() const { return error_; }
 
   void set_extension_id(const std::string& id) { extension_id_ = id; }
   void set_confirmation_requested(bool requested) {
     confirmation_requested_ = requested;
   }
-  void set_error(const base::string16& error) { error_ = error; }
+  void set_error(const std::u16string& error) { error_ = error; }
 
   std::unique_ptr<ExtensionInstallPrompt> CreatePrompt();
 
@@ -122,7 +126,7 @@ class MockPromptProxy {
   // Data reported back to us by the prompt we created.
   bool confirmation_requested_;
   std::string extension_id_;
-  base::string16 error_;
+  std::u16string error_;
 
   std::unique_ptr<ScopedTestDialogAutoConfirm> auto_confirm;
 
@@ -136,30 +140,31 @@ SkBitmap CreateSquareBitmap(int size) {
   return bitmap;
 }
 
-WebApplicationInfo CreateWebAppInfo(const char* title,
-                                    const char* description,
+WebApplicationInfo CreateWebAppInfo(const char16_t* title,
+                                    const char16_t* description,
                                     const char* start_url,
                                     int size,
                                     bool create_with_shortcuts) {
   WebApplicationInfo web_app_info;
-  web_app_info.title = base::UTF8ToUTF16(title);
-  web_app_info.description = base::UTF8ToUTF16(description);
+  web_app_info.title = title;
+  web_app_info.description = description;
   web_app_info.start_url = GURL(start_url);
   web_app_info.scope = GURL(start_url);
-  web_app_info.icon_bitmaps_any[size] = CreateSquareBitmap(size);
+  web_app_info.icon_bitmaps.any[size] = CreateSquareBitmap(size);
   if (create_with_shortcuts) {
     WebApplicationShortcutsMenuItemInfo shortcut_item;
     WebApplicationShortcutsMenuItemInfo::Icon icon;
-    std::map<SquareSizePx, SkBitmap> shortcut_icon_bitmaps;
-    shortcut_item.name = base::UTF8ToUTF16(kShortcutItemName);
+    IconBitmaps shortcut_icon_bitmaps;
+    shortcut_item.name = kShortcutItemName;
     shortcut_item.url = GURL(kShortcutUrl);
     icon.url = GURL(kShortcutIconUrl);
     icon.square_size_px = size;
-    shortcut_item.shortcut_icon_infos.push_back(std::move(icon));
+    shortcut_item.SetShortcutIconInfosForPurpose(IconPurpose::ANY,
+                                                 {std::move(icon)});
     web_app_info.shortcuts_menu_item_infos.emplace_back(
         std::move(shortcut_item));
-    shortcut_icon_bitmaps[size] = CreateSquareBitmap(size);
-    web_app_info.shortcuts_menu_icons_bitmaps.emplace_back(
+    shortcut_icon_bitmaps.any[size] = CreateSquareBitmap(size);
+    web_app_info.shortcuts_menu_icon_bitmaps.emplace_back(
         std::move(shortcut_icon_bitmaps));
   }
   return web_app_info;
@@ -199,8 +204,7 @@ MockPromptProxy::MockPromptProxy(
 MockPromptProxy::~MockPromptProxy() = default;
 
 std::unique_ptr<ExtensionInstallPrompt> MockPromptProxy::CreatePrompt() {
-  return std::unique_ptr<MockInstallPrompt>(
-      new MockInstallPrompt(web_contents_, this));
+  return std::make_unique<MockInstallPrompt>(web_contents_, this);
 }
 
 std::unique_ptr<MockPromptProxy> CreateMockPromptProxyForBrowserWithConfirmMode(
@@ -225,9 +229,9 @@ class ManagementPolicyMock : public extensions::ManagementPolicy::Provider {
   }
 
   bool UserMayLoad(const Extension* extension,
-                   base::string16* error) const override {
+                   std::u16string* error) const override {
     if (error)
-      *error = base::UTF8ToUTF16("Dummy error message");
+      *error = u"Dummy error message";
     return false;
   }
 };
@@ -309,6 +313,9 @@ class ExtensionCrxInstallerTest : public ExtensionBrowserTest {
     const Extension* extension = GetInstalledExtension(extension_id);
     ASSERT_NE(nullptr, extension);
     ASSERT_EQ(version, extension->VersionString());
+
+    RendererStartupHelperFactory::GetForBrowserContext(browser()->profile())
+        ->OnExtensionLoaded(*extension);
   }
 
   static void InstallerCallback(base::OnceClosure quit_closure,
@@ -453,7 +460,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
       test_data_dir_.AppendASCII("experimental.crx"), 1);
   ASSERT_TRUE(extension);
   EXPECT_TRUE(extension->permissions_data()->HasAPIPermission(
-      APIPermission::kExperimental));
+      mojom::APIPermissionID::kExperimental));
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
@@ -464,7 +471,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
       test_data_dir_.AppendASCII("experimental.crx"), 1);
   ASSERT_TRUE(extension);
   EXPECT_FALSE(extension->permissions_data()->HasAPIPermission(
-      APIPermission::kExperimental));
+      mojom::APIPermissionID::kExperimental));
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTestWithExperimentalApis,
@@ -475,7 +482,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTestWithExperimentalApis,
       test_data_dir_.AppendASCII("experimental.crx"), 1);
   ASSERT_TRUE(extension);
   EXPECT_TRUE(extension->permissions_data()->HasAPIPermission(
-      APIPermission::kExperimental));
+      mojom::APIPermissionID::kExperimental));
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTestWithExperimentalApis,
@@ -618,7 +625,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, AllowOffStore) {
     EXPECT_EQ(kTestData[i], mock_prompt->confirmation_requested()) <<
         kTestData[i];
     if (kTestData[i]) {
-      EXPECT_EQ(base::string16(), mock_prompt->error()) << kTestData[i];
+      EXPECT_EQ(std::u16string(), mock_prompt->error()) << kTestData[i];
     } else {
       EXPECT_EQ(l10n_util::GetStringUTF16(
           IDS_EXTENSION_INSTALL_DISALLOWED_ON_SITE),
@@ -1031,7 +1038,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
             *installation_failure.install_error_detail);
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, KioskOnlyTest) {
   base::ScopedAllowBlockingForTesting allow_io;
   // kiosk_only is allowlisted from non-chromeos.
@@ -1040,8 +1047,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, KioskOnlyTest) {
   EXPECT_FALSE(InstallExtension(crx_path, 0));
   // Simulate ChromeOS kiosk mode. |scoped_user_manager| will take over
   // lifetime of |user_manager|.
-  chromeos::FakeChromeUserManager* fake_user_manager =
-      new chromeos::FakeChromeUserManager();
+  auto* fake_user_manager = new ash::FakeChromeUserManager();
   const AccountId account_id(AccountId::FromUserEmail("example@example.com"));
   fake_user_manager->AddKioskAppUser(account_id);
   fake_user_manager->LoginUser(account_id);
@@ -1061,7 +1067,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, InstallToSharedLocation) {
 
   base::FilePath crx_path = test_data_dir_.AppendASCII("crx_installer/v1.crx");
   const extensions::Extension* extension = InstallExtension(
-      crx_path, 1, extensions::Manifest::EXTERNAL_PREF);
+      crx_path, 1, extensions::mojom::ManifestLocation::kExternalPref);
   base::FilePath extension_path = extension->path();
   EXPECT_TRUE(cache_dir.GetPath().IsParent(extension_path));
   EXPECT_TRUE(base::PathExists(extension_path));

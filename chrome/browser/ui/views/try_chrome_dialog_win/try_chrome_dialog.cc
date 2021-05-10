@@ -4,18 +4,20 @@
 
 #include "chrome/browser/ui/views/try_chrome_dialog_win/try_chrome_dialog.h"
 
+#include <windows.h>
+
 #include <shellapi.h>
 
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -32,6 +34,8 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/display/win/screen_win.h"
@@ -93,8 +97,6 @@ const SkColor kBorderColor = SkColorSetARGB(0x80, 0x80, 0x80, 0x80);
 const SkColor kButtonTextColor = SkColorSetRGB(0xFF, 0xFF, 0xFF);
 const SkColor kButtonAcceptColor = SkColorSetRGB(0x00, 0x78, 0xDA);
 const SkColor kButtonNoThanksColor = SkColorSetARGB(0x33, 0xFF, 0xFF, 0xFF);
-
-enum class ButtonTag { CLOSE_BUTTON, OK_BUTTON, NO_THANKS_BUTTON };
 
 // Experiment specification information needed for layout.
 struct ExperimentVariations {
@@ -170,10 +172,10 @@ enum class TryChromeButtonType { OPEN_CHROME, NO_THANKS };
 // Builds a Win10-styled rectangular button, for this toast displayed outside of
 // the browser.
 std::unique_ptr<views::LabelButton> CreateWin10StyleButton(
-    views::ButtonListener* listener,
-    const base::string16& text,
+    views::Button::PressedCallback callback,
+    const std::u16string& text,
     TryChromeButtonType button_type) {
-  auto button = std::make_unique<views::LabelButton>(listener, text,
+  auto button = std::make_unique<views::LabelButton>(std::move(callback), text,
                                                      CONTEXT_WINDOWS10_NATIVE);
   button->SetHorizontalAlignment(gfx::ALIGN_CENTER);
 
@@ -195,18 +197,21 @@ std::unique_ptr<views::LabelButton> CreateWin10StyleButton(
 // the background of the widget.
 class ClickableView : public views::View {
  public:
+  METADATA_HEADER(ClickableView);
   ClickableView() = default;
+  ClickableView(const ClickableView&) = delete;
+  ClickableView& operator=(const ClickableView&) = delete;
 
   // views::View:
   bool OnMousePressed(const ui::MouseEvent& event) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ClickableView);
 };
 
 bool ClickableView::OnMousePressed(const ui::MouseEvent& event) {
   return true;
 }
+
+BEGIN_METADATA(ClickableView, views::View)
+END_METADATA
 
 }  // namespace
 
@@ -216,6 +221,8 @@ bool ClickableView::OnMousePressed(const ui::MouseEvent& event) {
 class TryChromeDialog::Context {
  public:
   Context();
+  Context(const Context&) = delete;
+  Context& operator=(const Context&) = delete;
 
   // Begins asynchronous initialization of the context (i.e., runs a search for
   // the taskbar icon), running |closure| when done.
@@ -249,6 +256,8 @@ class TryChromeDialog::Context {
   // popup over the notification area or "over" the taskbar in any orientation.
   class DialogCalculator {
    public:
+    DialogCalculator(const DialogCalculator&) = delete;
+    DialogCalculator& operator=(const DialogCalculator&) = delete;
     virtual ~DialogCalculator() {}
 
     // Returns the ToastLocation metric to be reported when this calculator is
@@ -278,8 +287,6 @@ class TryChromeDialog::Context {
    private:
     // The ToastLocation metric to be reported when this calculator is used.
     const installer::ExperimentMetrics::ToastLocation toast_location_;
-
-    DISALLOW_COPY_AND_ASSIGN(DialogCalculator);
   };
 
   // A calculator for positioning the popup over the notification area.
@@ -288,6 +295,9 @@ class TryChromeDialog::Context {
     NotificationAreaCalculator()
         : DialogCalculator(
               installer::ExperimentMetrics::kOverNotificationArea) {}
+    NotificationAreaCalculator(const NotificationAreaCalculator&) = delete;
+    NotificationAreaCalculator& operator=(const NotificationAreaCalculator&) =
+        delete;
 
     // DialogCalculator:
     void AddBorderToContents(views::Widget* popup,
@@ -295,9 +305,6 @@ class TryChromeDialog::Context {
     gfx::Rect ComputeBounds(const Context& context,
                             views::Widget* popup,
                             const gfx::Size& size) override;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(NotificationAreaCalculator);
   };
 
   // A calculator for positioning the popup "over" Chrome's icon in the taskbar,
@@ -311,6 +318,8 @@ class TryChromeDialog::Context {
 
     static std::unique_ptr<TaskbarCalculator> Create(Location location);
 
+    TaskbarCalculator(const TaskbarCalculator&) = delete;
+    TaskbarCalculator& operator=(const TaskbarCalculator&) = delete;
     ~TaskbarCalculator() override { CHECK(!IsInObserverList()); }
 
     // DialogCalculator:
@@ -413,8 +422,6 @@ class TryChromeDialog::Context {
     // The last size, in pixels, for the popup's window for which its region was
     // calculated.
     gfx::Size window_size_;
-
-    DISALLOW_COPY_AND_ASSIGN(TaskbarCalculator);
   };
 
   enum class TaskbarLocation { kUnknown, kTop, kLeft, kBottom, kRight };
@@ -463,8 +470,6 @@ class TryChromeDialog::Context {
   // A dialog calculator to position and draw the popup based on the presence
   // and location of the taskbar icon.
   std::unique_ptr<DialogCalculator> calculator_;
-
-  DISALLOW_COPY_AND_ASSIGN(Context);
 };
 
 // TryChromeDialog::Context::Context -------------------------------------------
@@ -918,8 +923,10 @@ class TryChromeDialog::ModalShowDelegate : public TryChromeDialog::Delegate {
  public:
   // Constructs the updater with a closure to be run after the dialog is closed
   // to break out of the modal run loop.
-  explicit ModalShowDelegate(base::Closure quit_closure)
+  explicit ModalShowDelegate(base::RepeatingClosure quit_closure)
       : quit_closure_(std::move(quit_closure)) {}
+  ModalShowDelegate(const ModalShowDelegate&) = delete;
+  ModalShowDelegate& operator=(const ModalShowDelegate&) = delete;
   ~ModalShowDelegate() override = default;
 
  protected:
@@ -930,13 +937,11 @@ class TryChromeDialog::ModalShowDelegate : public TryChromeDialog::Delegate {
   void InteractionComplete() override;
 
  private:
-  base::Closure quit_closure_;
+  base::RepeatingClosure quit_closure_;
   installer::ExperimentStorage storage_;
 
   // The time at which the toast was shown; used for computing the action delay.
   base::TimeTicks time_shown_;
-
-  DISALLOW_COPY_AND_ASSIGN(ModalShowDelegate);
 };
 
 void TryChromeDialog::ModalShowDelegate::SetToastLocation(
@@ -1014,8 +1019,9 @@ TryChromeDialog::~TryChromeDialog() {
 void TryChromeDialog::ShowDialogAsync() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(my_sequence_checker_);
 
-  endsession_observer_ = std::make_unique<gfx::SingletonHwndObserver>(
-      base::Bind(&TryChromeDialog::OnWindowMessage, base::Unretained(this)));
+  endsession_observer_ =
+      std::make_unique<gfx::SingletonHwndObserver>(base::BindRepeating(
+          &TryChromeDialog::OnWindowMessage, base::Unretained(this)));
 
   context_->Initialize(base::BindOnce(&TryChromeDialog::OnContextInitialized,
                                       base::Unretained(this)));
@@ -1043,7 +1049,7 @@ void TryChromeDialog::OnContextInitialized() {
   const gfx::Size logo_size = logo->GetPreferredSize();
 
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_POPUP);
-  params.activatable = views::Widget::InitParams::ACTIVATABLE_YES;
+  params.activatable = views::Widget::InitParams::Activatable::kYes;
   // An approximate window size. Layout() can adjust.
   params.bounds = gfx::Rect(kToastWidth, 120);
   params.name = "TryChromeDialog";
@@ -1129,11 +1135,13 @@ void TryChromeDialog::OnContextInitialized() {
           ExperimentVariations::CloseStyle::kCloseX ||
       kExperiments[group_].close_style ==
           ExperimentVariations::CloseStyle::kNoThanksButtonAndCloseX) {
-    auto close_button = std::make_unique<views::ImageButton>(this);
+    auto close_button =
+        std::make_unique<views::ImageButton>(base::BindRepeating(
+            &TryChromeDialog::ButtonPressed, base::Unretained(this),
+            installer::ExperimentMetrics::kSelectedClose));
     close_button->SetImage(
         views::Button::STATE_NORMAL,
         gfx::CreateVectorIcon(kInactiveToastCloseIcon, kBodyColor));
-    close_button->set_tag(static_cast<int>(ButtonTag::CLOSE_BUTTON));
     DCHECK_EQ(close_button->GetPreferredSize().width(), kCloseButtonWidth);
     close_button_ = layout->AddView(std::move(close_button), 1, 2);
     close_button_->SetVisible(false);
@@ -1178,9 +1186,11 @@ void TryChromeDialog::OnContextInitialized() {
 
   layout->StartRow(views::GridLayout::kFixedSize, 2);
   auto accept_button = CreateWin10StyleButton(
-      this, l10n_util::GetStringUTF16(IDS_WIN10_TOAST_OPEN_CHROME),
+      base::BindRepeating(
+          &TryChromeDialog::ButtonPressed, base::Unretained(this),
+          installer::ExperimentMetrics::kSelectedOpenChromeAndNoCrash),
+      l10n_util::GetStringUTF16(IDS_WIN10_TOAST_OPEN_CHROME),
       TryChromeButtonType::OPEN_CHROME);
-  accept_button->set_tag(static_cast<int>(ButtonTag::OK_BUTTON));
   buttons->AddChildView(accept_button.release());
 
   if (kExperiments[group_].close_style ==
@@ -1188,9 +1198,11 @@ void TryChromeDialog::OnContextInitialized() {
       kExperiments[group_].close_style ==
           ExperimentVariations::CloseStyle::kNoThanksButtonAndCloseX) {
     auto no_thanks_button = CreateWin10StyleButton(
-        this, l10n_util::GetStringUTF16(IDS_WIN10_TOAST_NO_THANKS),
+        base::BindRepeating(&TryChromeDialog::ButtonPressed,
+                            base::Unretained(this),
+                            installer::ExperimentMetrics::kSelectedNoThanks),
+        l10n_util::GetStringUTF16(IDS_WIN10_TOAST_NO_THANKS),
         TryChromeButtonType::NO_THANKS);
-    no_thanks_button->set_tag(static_cast<int>(ButtonTag::NO_THANKS_BUTTON));
     buttons->AddChildView(std::move(no_thanks_button));
   }
 
@@ -1268,8 +1280,7 @@ void TryChromeDialog::LostMouseHover() {
     close_button_->SetVisible(false);
 }
 
-void TryChromeDialog::ButtonPressed(views::Button* sender,
-                                    const ui::Event& event) {
+void TryChromeDialog::ButtonPressed(installer::ExperimentMetrics::State state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(my_sequence_checker_);
   DCHECK_EQ(result_, NOT_NOW);
 
@@ -1278,23 +1289,9 @@ void TryChromeDialog::ButtonPressed(views::Button* sender,
   if (state_ != installer::ExperimentMetrics::kOtherClose)
     return;
 
-  // Figure out what the subsequent action and experiment state should be based
-  // on which button was pressed.
-  switch (sender->tag()) {
-    case static_cast<int>(ButtonTag::CLOSE_BUTTON):
-      state_ = installer::ExperimentMetrics::kSelectedClose;
-      break;
-    case static_cast<int>(ButtonTag::OK_BUTTON):
-      result_ = kExperiments[group_].result;
-      state_ = installer::ExperimentMetrics::kSelectedOpenChromeAndNoCrash;
-      break;
-    case static_cast<int>(ButtonTag::NO_THANKS_BUTTON):
-      state_ = installer::ExperimentMetrics::kSelectedNoThanks;
-      break;
-    default:
-      NOTREACHED();
-      break;
-  }
+  state_ = state;
+  if (state_ == installer::ExperimentMetrics::kSelectedOpenChromeAndNoCrash)
+    result_ = kExperiments[group_].result;
 
   popup_->Close();
 }

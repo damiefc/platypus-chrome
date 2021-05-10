@@ -6,16 +6,18 @@ package org.chromium.chrome.browser.keyboard_accessory.all_passwords_bottom_shee
 
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.mockito.Mockito.verify;
 
+import static org.chromium.base.test.util.CriteriaHelper.pollUiThread;
 import static org.chromium.chrome.browser.keyboard_accessory.all_passwords_bottom_sheet.AllPasswordsBottomSheetProperties.SHEET_ITEMS;
 import static org.chromium.chrome.browser.keyboard_accessory.all_passwords_bottom_sheet.AllPasswordsBottomSheetProperties.VISIBLE;
-import static org.chromium.content_public.browser.test.util.CriteriaHelper.pollUiThread;
 
 import android.text.method.PasswordTransformationMethod;
 import android.widget.TextView;
 
+import androidx.annotation.StringRes;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.filters.MediumTest;
 
@@ -28,6 +30,7 @@ import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.Callback;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -56,6 +59,7 @@ public class AllPasswordsBottomSheetViewTest {
     private static final Credential BOB =
             new Credential("Bob", "***", "Bob", "android://com.facebook.org", true, "facebook");
     private static final boolean IS_PASSWORD_FIELD = true;
+    private static final String EXAMPLE_ORIGIN = "https://m.example.com/";
 
     @Mock
     private Callback<Integer> mDismissHandler;
@@ -76,7 +80,7 @@ public class AllPasswordsBottomSheetViewTest {
         MockitoAnnotations.initMocks(this);
         mActivityTestRule.startMainActivityOnBlankPage();
         mModel = AllPasswordsBottomSheetProperties.createDefaultModel(
-                mDismissHandler, mSearchQueryCallback);
+                EXAMPLE_ORIGIN, mDismissHandler, mSearchQueryCallback);
         mBottomSheetController = mActivityTestRule.getActivity()
                                          .getRootUiCoordinatorForTesting()
                                          .getBottomSheetController();
@@ -104,6 +108,19 @@ public class AllPasswordsBottomSheetViewTest {
 
     @Test
     @MediumTest
+    public void testShowsWarningWithOriginByDefault() {
+        TestThreadUtils.runOnUiThreadBlocking(() -> mModel.set(VISIBLE, true));
+        pollUiThread(() -> getBottomSheetState() == SheetState.FULL);
+        assertThat(mAllPasswordsBottomSheetView.getContentView().isShown(), is(true));
+        assertEquals(mAllPasswordsBottomSheetView.getWarningText().toString(),
+                String.format(
+                        getString(R.string.all_passwords_bottom_sheet_warning_dialog_message_first),
+                        "m.example.com"));
+    }
+
+    @Test
+    @MediumTest
+    @DisabledTest(message = "https://crbug.com/1157497")
     public void testCredentialsChangedByModel() {
         addDefaultCredentialsToTheModel();
 
@@ -189,6 +206,10 @@ public class AllPasswordsBottomSheetViewTest {
     }
     private ChromeActivity getActivity() {
         return mActivityTestRule.getActivity();
+    }
+
+    private String getString(@StringRes int stringRes) {
+        return mAllPasswordsBottomSheetView.getContentView().getResources().getString(stringRes);
     }
 
     private @SheetState int getBottomSheetState() {

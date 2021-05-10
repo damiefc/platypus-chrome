@@ -7,8 +7,6 @@
 
 #include <stdint.h>
 
-#include <memory>
-
 #include "base/macros.h"
 #include "base/optional.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
@@ -27,15 +25,18 @@ class Size;
 namespace blink {
 
 class KURL;
+class FeatureContext;
 
 // ManifestParser handles the logic of parsing the Web Manifest from a string.
 // It implements:
 // http://w3c.github.io/manifest/#dfn-steps-for-processing-a-manifest
+// Takes a |FeatureContext| to check origin trial statuses with.
 class MODULES_EXPORT ManifestParser {
  public:
   ManifestParser(const String& data,
                  const KURL& manifest_url,
-                 const KURL& document_url);
+                 const KURL& document_url,
+                 const FeatureContext* feature_context);
   ~ManifestParser();
 
   // Parse the Manifest from a string using following:
@@ -114,6 +115,11 @@ class MODULES_EXPORT ManifestParser {
   // Returns the parsed string if any, a null string if the parsing failed.
   String ParseShortName(const JSONObject* object);
 
+  // Parses the 'description' field of the manifest, as defined in:
+  // https://w3c.github.io/manifest/#description-member-0
+  // Returns the parsed string if any, a null string if the parsing failed.
+  String ParseDescription(const JSONObject* object);
+
   // Parses the 'scope' field of the manifest, as defined in:
   // https://w3c.github.io/manifest/#scope-member. Returns the parsed KURL if
   // any, or start URL (falling back to document URL) without filename, path,
@@ -158,7 +164,7 @@ class MODULES_EXPORT ManifestParser {
 
   // Parses the 'sizes' field of an icon, as defined in:
   // https://w3c.github.io/manifest/#dfn-steps-for-processing-a-sizes-member-of-an-image
-  // Returns a vector of WebSize with the successfully parsed sizes, if any.
+  // Returns a vector of gfx::Size with the successfully parsed sizes, if any.
   // An empty vector if the field was not present or empty. "Any" is represented
   // by gfx::Size(0, 0).
   Vector<gfx::Size> ParseIconSizes(const JSONObject* icon);
@@ -175,6 +181,18 @@ class MODULES_EXPORT ManifestParser {
   // Returns a vector of ManifestImageResourcePtr with the successfully parsed
   // icons, if any. An empty vector if the field was not present or empty.
   Vector<mojom::blink::ManifestImageResourcePtr> ParseIcons(
+      const JSONObject* object);
+
+  // Parses the 'screenshots' field of a Manifest, as defined in:
+  // https://w3c.github.io/manifest/#screenshots-member
+  // Returns a vector of ManifestImageResourcePtr with the successfully parsed
+  // screenshots, if any. An empty vector if the field was not present or empty.
+  Vector<mojom::blink::ManifestImageResourcePtr> ParseScreenshots(
+      const JSONObject* object);
+
+  // A helper function for parsing ImageResources under |key| in the manifest.
+  Vector<mojom::blink::ManifestImageResourcePtr> ParseImageResource(
+      const String& key,
       const JSONObject* object);
 
   // Parses the 'name' field of a shortcut, as defined in:
@@ -251,6 +269,25 @@ class MODULES_EXPORT ManifestParser {
   // Returns the parsed Web Share target. The returned Share Target is null if
   // the field didn't exist, parsing failed, or it was empty.
   base::Optional<mojom::blink::ManifestShareTargetPtr> ParseShareTarget(
+      const JSONObject* object);
+
+  // Parses the 'url_handlers' field of a Manifest, as defined in:
+  // https://github.com/WICG/pwa-url-handler/blob/master/explainer.md
+  // Returns the parsed list of UrlHandlers. The returned UrlHandlers are empty
+  // if the field didn't exist, parsing failed, the input list was empty, or if
+  // the blink feature flag is disabled.
+  // This feature is experimental and is only enabled by the blink feature flag:
+  // blink::features::kWebAppEnableUrlHandlers.
+  Vector<mojom::blink::ManifestUrlHandlerPtr> ParseUrlHandlers(
+      const JSONObject* object);
+
+  // Parses a single URL handler entry in 'url_handlers', as defined in:
+  // https://github.com/WICG/pwa-url-handler/blob/master/explainer.md
+  // Returns |base::nullopt| if the UrlHandler was invalid, or a UrlHandler if
+  // parsing succeeded.
+  // This feature is experimental and is only enabled by the blink feature flag:
+  // blink::features::kWebAppEnableUrlHandlers.
+  base::Optional<mojom::blink::ManifestUrlHandlerPtr> ParseUrlHandler(
       const JSONObject* object);
 
   // Parses the 'file_handlers' field of a Manifest, as defined in:
@@ -345,6 +382,11 @@ class MODULES_EXPORT ManifestParser {
   // Returns the parsed string if any, a null string if the parsing failed.
   String ParseGCMSenderID(const JSONObject* object);
 
+  // Parses the 'capture_links' field of the manifest.
+  // This specifies how navigations into the web app's scope should be captured.
+  // https://github.com/WICG/sw-launch/blob/master/declarative_link_capturing.md#proposal
+  mojom::blink::CaptureLinks ParseCaptureLinks(const JSONObject* object);
+
   void AddErrorInfo(const String& error_msg,
                     bool critical = false,
                     int error_line = 0,
@@ -353,6 +395,7 @@ class MODULES_EXPORT ManifestParser {
   const String data_;
   KURL manifest_url_;
   KURL document_url_;
+  const FeatureContext* feature_context_;
 
   bool failed_;
   mojom::blink::ManifestPtr manifest_;

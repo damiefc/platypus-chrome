@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_split.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
 #include "base/task/post_task.h"
@@ -210,7 +209,7 @@ void NetInternalsTest::MessageHandler::GetTestServerURL(
 void NetInternalsTest::MessageHandler::SetUpTestReportURI(
     const base::ListValue* list_value) {
   net_internals_test_->embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&HandleExpectCTReportPreflight));
+      base::BindRepeating(&HandleExpectCTReportPreflight));
   ASSERT_TRUE(net_internals_test_->embedded_test_server()->Start());
   base::Value report_uri_value(
       net_internals_test_->embedded_test_server()->GetURL("/").spec());
@@ -233,7 +232,9 @@ void NetInternalsTest::MessageHandler::DnsLookup(
   new DnsLookupClient(client.InitWithNewPipeAndPassReceiver(),
                       base::BindOnce(&MessageHandler::RunJavascriptCallback,
                                      weak_factory_.GetWeakPtr()));
-  content::BrowserContext::GetDefaultStoragePartition(browser()->profile())
+  browser()
+      ->profile()
+      ->GetDefaultStoragePartition()
       ->GetNetworkContext()
       ->ResolveHost(net::HostPortPair(hostname, 80), network_isolation_key_,
                     std::move(resolve_host_parameters), std::move(client));

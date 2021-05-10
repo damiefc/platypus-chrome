@@ -11,10 +11,7 @@
 #include "gpu/ipc/in_process_command_buffer.h"
 
 namespace gpu {
-class CommandBufferTaskExecutor;
-class ImageFactory;
 class MailboxManager;
-class MemoryTracker;
 class SyncPointClientState;
 struct SyncToken;
 class SharedContextState;
@@ -22,7 +19,7 @@ class SharedImageFactory;
 class SharedImageManager;
 class SingleTaskSequence;
 
-// This is an implementation of the SharedImageInterface to be used on viz
+// This is an implementation of the SharedImageInterface to be used on the viz
 // compositor thread. This class also implements the corresponding parts
 // happening on gpu thread.
 // TODO(weiliangc): Currently this is implemented as backed by
@@ -33,12 +30,8 @@ class GL_IN_PROCESS_CONTEXT_EXPORT SharedImageInterfaceInProcess
   using CommandBufferHelper =
       InProcessCommandBuffer::SharedImageInterfaceHelper;
   SharedImageInterfaceInProcess(
-      CommandBufferTaskExecutor* task_executor,
       SingleTaskSequence* task_sequence,
-      CommandBufferId command_buffer_id,
-      MailboxManager* mailbox_manager,
-      ImageFactory* image_factory,
-      MemoryTracker* memory_tracker,
+      DisplayCompositorMemoryAndTaskControllerOnGpu* display_controller,
       std::unique_ptr<CommandBufferHelper> command_buffer_helper);
   ~SharedImageInterfaceInProcess() override;
 
@@ -78,6 +71,7 @@ class GL_IN_PROCESS_CONTEXT_EXPORT SharedImageInterfaceInProcess
   // the GPU channel is lost).
   Mailbox CreateSharedImage(gfx::GpuMemoryBuffer* gpu_memory_buffer,
                             GpuMemoryBufferManager* gpu_memory_buffer_manager,
+                            gfx::BufferPlane plane,
                             const gfx::ColorSpace& color_space,
                             GrSurfaceOrigin surface_origin,
                             SkAlphaType alpha_type,
@@ -154,9 +148,8 @@ class GL_IN_PROCESS_CONTEXT_EXPORT SharedImageInterfaceInProcess
  private:
   struct SharedImageFactoryInput;
 
-  void SetUpOnGpu(CommandBufferTaskExecutor* task_executor,
-                  ImageFactory* image_factory,
-                  MemoryTracker* memory_tracker);
+  void SetUpOnGpu(
+      DisplayCompositorMemoryAndTaskControllerOnGpu* display_controller);
   void DestroyOnGpu(base::WaitableEvent* completion);
 
   SyncToken MakeSyncToken(uint64_t release_id) {
@@ -192,6 +185,7 @@ class GL_IN_PROCESS_CONTEXT_EXPORT SharedImageInterfaceInProcess
   void CreateGMBSharedImageOnGpuThread(const Mailbox& mailbox,
                                        gfx::GpuMemoryBufferHandle handle,
                                        gfx::BufferFormat format,
+                                       gfx::BufferPlane plane,
                                        const gfx::Size& size,
                                        const gfx::ColorSpace& color_space,
                                        GrSurfaceOrigin surface_origin,
@@ -235,7 +229,6 @@ class GL_IN_PROCESS_CONTEXT_EXPORT SharedImageInterfaceInProcess
   SharedImageManager* shared_image_manager_;
 
   // Accessed on GPU thread.
-  // TODO(weiliangc): Check whether can be removed when !UsesSync().
   MailboxManager* mailbox_manager_;
   // Used to check if context is lost at destruction time.
   // TODO(weiliangc): SharedImageInterface should become active observer of

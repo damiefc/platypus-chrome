@@ -136,7 +136,6 @@ void TestSessionControllerClient::CreatePredefinedUserSessions(int count) {
 void TestSessionControllerClient::AddUserSession(
     const std::string& display_email,
     user_manager::UserType user_type,
-    bool enable_settings,
     bool provide_pref_service,
     bool is_new_profile,
     const std::string& given_name) {
@@ -152,8 +151,6 @@ void TestSessionControllerClient::AddUserSession(
   session.user_info.is_ephemeral = false;
   session.user_info.is_new_profile = is_new_profile;
   session.user_info.given_name = given_name;
-  session.should_enable_settings = enable_settings;
-  session.should_show_notification_tray = true;
   controller_->UpdateUserSession(std::move(session));
 
   if (provide_pref_service && prefs_provider_ &&
@@ -195,8 +192,10 @@ void TestSessionControllerClient::SetUserPrefService(
     std::unique_ptr<PrefService> pref_service) {
   DCHECK(!controller_->GetUserPrefServiceForUser(account_id));
   prefs_provider_->SetUserPrefs(account_id, std::move(pref_service));
-  controller_->OnProfilePrefServiceInitialized(
-      account_id, prefs_provider_->GetUserPrefs(account_id));
+  if (controller_->IsActiveUserSessionStarted()) {
+    controller_->OnProfilePrefServiceInitialized(
+        account_id, prefs_provider_->GetUserPrefs(account_id));
+  }
 }
 
 void TestSessionControllerClient::RequestLockScreen() {
@@ -217,7 +216,9 @@ void TestSessionControllerClient::RequestSignOut() {
   ++request_sign_out_count_;
 }
 
-void TestSessionControllerClient::AttemptRestartChrome() {}
+void TestSessionControllerClient::AttemptRestartChrome() {
+  ++attempt_restart_chrome_count_;
+}
 
 void TestSessionControllerClient::SwitchActiveUser(
     const AccountId& account_id) {
@@ -269,6 +270,8 @@ void TestSessionControllerClient::CycleActiveUser(
 }
 
 void TestSessionControllerClient::ShowMultiProfileLogin() {
+  SetSessionState(session_manager::SessionState::LOGIN_SECONDARY);
+
   views::Widget::InitParams params;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = gfx::Rect(0, 0, 400, 300);

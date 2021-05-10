@@ -5,7 +5,7 @@
 #include <memory>
 
 #include "base/android/jni_android.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/test/mock_callback.h"
 #include "components/media_router/browser/android/media_router_android.h"
 #include "components/media_router/browser/android/media_router_android_bridge.h"
@@ -91,7 +91,7 @@ TEST_F(MediaRouterAndroidTest, DetachRoute) {
 
   EXPECT_NE(nullptr, router_->FindRouteBySource("source"));
 
-  std::unique_ptr<PresentationConnectionStateSubscription> subscription =
+  base::CallbackListSubscription subscription =
       router_->AddPresentationConnectionStateChangedCallback("route",
                                                              callback.Get());
   router_->DetachRoute("route");
@@ -139,7 +139,7 @@ TEST_F(MediaRouterAndroidTest, OnRouteClosed) {
 
   EXPECT_NE(nullptr, router_->FindRouteBySource("source"));
 
-  std::unique_ptr<PresentationConnectionStateSubscription> subscription =
+  base::CallbackListSubscription subscription =
       router_->AddPresentationConnectionStateChangedCallback("route",
                                                              callback.Get());
   router_->OnRouteClosed("route", base::nullopt);
@@ -167,7 +167,7 @@ TEST_F(MediaRouterAndroidTest, OnRouteClosedWithError) {
 
   EXPECT_NE(nullptr, router_->FindRouteBySource("source"));
 
-  std::unique_ptr<PresentationConnectionStateSubscription> subscription =
+  base::CallbackListSubscription subscription =
       router_->AddPresentationConnectionStateChangedCallback("route",
                                                              callback.Get());
   router_->OnRouteClosed("route", "Some failure");

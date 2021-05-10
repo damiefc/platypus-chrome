@@ -5,7 +5,7 @@
 #include "components/mirroring/service/message_dispatcher.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
 #include "base/timer/timer.h"
@@ -96,13 +96,13 @@ void MessageDispatcher::Send(mojom::CastMessagePtr message) {
     DCHECK_EQ(mojom::kWebRtcNamespace, message->message_namespace);
 #endif  // DCHECK_IS_ON()
 
+  // NOTE: getting a message that we are not subscribed to is purposely
+  // not an error--subscribers are allowed to pick and choose message types
+  // to subscribe to.
   const auto callback_iter = callback_map_.find(response->type());
-  if (callback_iter == callback_map_.end()) {
-    error_callback_.Run("No callback subscribed. message=" +
-                        message->json_format_data);
-    return;
+  if (callback_iter != callback_map_.end()) {
+    callback_iter->second.Run(*response);
   }
-  callback_iter->second.Run(*response);
 }
 
 void MessageDispatcher::Subscribe(ResponseType type,

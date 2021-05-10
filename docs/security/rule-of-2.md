@@ -219,6 +219,14 @@ Ultimately this process results in parsing significantly simpler grammars. (PNG
 > language and still have such high performance, that'd be ideal. But that's
 > unlikely to happen soon.)
 
+While less preferable to Mojo, we also similarly trust Protobuf for
+deserializing messages at high privilege from potentially untrustworthy senders.
+For example, Protobufs are sometimes embedded in Mojo IPC messages. It is
+always preferable to use a Mojo message where possible, though sometimes
+external constraints require the use of Protobuf. Note that this only applies to
+Protobuf as a container format; the data contained within a Protobuf must be
+handled according to this rule as well.
+
 ### Safe Languages
 
 Where possible, it's great to use a memory-safe language. Of the currently
@@ -237,6 +245,39 @@ formats can be a great approach. We do a similar thing with the pure-Java
 [JsonSanitizer](https://cs.chromium.org/chromium/src/services/data_decoder/public/cpp/android/java/src/org/chromium/services/data_decoder/JsonSanitizer.java),
 to 'vet' incoming JSON in a memory-safe way before passing the input to the C++
 JSON implementation.
+
+On Android, many system APIs that are exposed via Java are not actually
+implemented in a safe language, and are instead just facades around an unsafe
+implementation. A canonical example of this is the
+[BitmapFactory](https://developer.android.com/reference/android/graphics/BitmapFactory)
+class, which is a Java wrapper [around C++
+Skia](https://cs.android.com/android/platform/superproject/+/master:frameworks/base/libs/hwui/jni/BitmapFactory.cpp;l=586;drc=864d304156d1ef8985ee39c3c1858349b133b365).
+These APIs are therefore not considered memory-safe under the rule.
+
+## Safe Types
+
+As discussed above in [Normalization](#normalization), there are some types that
+are considered "safe," even though they are deserialized from an untrustworthy
+source, at high privilege, and in an unsafe language. These types are
+fundamental for passing data between processes using IPC, tend to have simpler
+grammar or structure, and/or have been audited or fuzzed heavily.
+
+* `GURL` and `url::Origin`
+* `SkBitmap`
+* `SkPixmap`
+* Protocol buffers (see above; this is not a preferred option and should be
+  avoided where possible)
+
+There are also classes in //base that internally hold simple values that
+represent potentially complex data, such as:
+
+* `base::FilePath`
+* `base::Token` and `base::UnguessableToken`
+* `base::Time` and `base::TimeDelta`
+
+The deserialization of these is safe, though it is important to remember that
+the value itself is still untrustworthy (e.g. a malicious path trying to escape
+its parent using `../`).
 
 ## Existing Code That Violates The Rule
 

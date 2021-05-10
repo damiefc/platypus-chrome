@@ -4,7 +4,7 @@
 
 #include "components/signin/internal/identity_manager/diagnostics_provider_impl.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/test/task_environment.h"
 #include "components/signin/public/identity_manager/accounts_cookie_mutator.h"
@@ -18,7 +18,9 @@ namespace {
 
 class DiagnosticsProviderTest : public testing::Test {
  public:
-  DiagnosticsProviderTest() = default;
+  DiagnosticsProviderTest() {
+    identity_test_env()->WaitForRefreshTokensLoaded();
+  }
 
   signin::IdentityTestEnvironment* identity_test_env() {
     return &identity_test_env_;

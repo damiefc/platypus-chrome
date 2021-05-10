@@ -5,8 +5,13 @@
 #ifndef CHROME_BROWSER_CHROMEOS_NET_NETWORK_DIAGNOSTICS_NETWORK_DIAGNOSTICS_UTIL_H_
 #define CHROME_BROWSER_CHROMEOS_NET_NETWORK_DIAGNOSTICS_NETWORK_DIAGNOSTICS_UTIL_H_
 
+#include <array>
+#include <cstdint>
 #include <string>
 #include <vector>
+
+#include "net/traffic_annotation/network_traffic_annotation.h"
+#include "url/gurl.h"
 
 class Profile;
 
@@ -17,6 +22,9 @@ namespace util {
 
 // Generate 204 path.
 extern const char kGenerate204Path[];
+
+// STUN packet header size.
+constexpr int kStunHeaderSize = 20;
 
 // Returns the Gstatic host suffix. Network diagnostic routines attach a random
 // prefix to |kGstaticHostSuffix| to get a complete hostname.
@@ -43,14 +51,59 @@ std::vector<std::string> GetRandomHostsWithScheme(int num_hosts,
                                                   int prefix_length,
                                                   std::string scheme);
 
+// Similar to GetRandomHostsWithFixedHosts, but with a |scheme| prepended to the
+// hosts.
+std::vector<std::string> GetRandomAndFixedHostsWithScheme(int num_random_hosts,
+                                                          int prefix_length,
+                                                          std::string scheme);
+
+// Similar to GetRandomAndFixedHostsWithSchemeAndPort, but with |port|, followed
+// by "/", appended to the hosts. E.g. A host will look like:
+// "https://www.google.com:443/".
+std::vector<std::string> GetRandomAndFixedHostsWithSchemeAndPort(
+    int num_random_hosts,
+    int prefix_length,
+    std::string scheme,
+    int port_number);
+
 // Similar to GetRandomHostsWithScheme, but with the 204 path appended to hosts.
 std::vector<std::string> GetRandomHostsWithSchemeAndGenerate204Path(
     int num_hosts,
     int prefix_length,
     std::string scheme);
 
+// Similar to GetRandomAndFixedHostsWithSchemeAndPort, but with |port_number|
+// and 204 path appended to the hosts. E.g. A host will look like:
+// "https://www.google.com:443/generate_204/".
+std::vector<GURL> GetRandomHostsWithSchemeAndPortAndGenerate204Path(
+    int num_hosts,
+    int prefix_length,
+    std::string scheme,
+    int port_number);
+
 // Returns the profile associated with this account.
 Profile* GetUserProfile();
+
+// Returns a STUN packet with a header defined in RFC 5389.
+const std::array<uint8_t, kStunHeaderSize>& GetStunHeader();
+
+// Returns the traffic annotation tag for STUN traffic.
+net::NetworkTrafficAnnotationTag GetStunNetworkAnnotationTag();
+
+// Returns the ports used to speak to Google's STUN server over UDP.
+std::vector<int> GetUdpPortsForGoogleStunServer();
+
+// Returns the ports used to speak to a custom STUN server over UDP.
+std::vector<int> GetUdpPortsForCustomStunServer();
+
+// Returns the ports used to speak to Google's STUN server over TCP.
+std::vector<int> GetTcpPortsForGoogleStunServer();
+
+// Returns the ports used to speak to a custom STUN server over TCP.
+std::vector<int> GetTcpPortsForCustomStunServer();
+
+// Returns the list of urls related to Google media.
+std::vector<GURL> GetDefaultMediaUrls();
 
 }  // namespace util
 

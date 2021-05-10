@@ -270,6 +270,8 @@ void URLRequestJob::GetConnectionAttempts(ConnectionAttempts* out) const {
   out->clear();
 }
 
+void URLRequestJob::CloseConnectionOnDestruction() {}
+
 namespace {
 
 // Assuming |url| has already been stripped for use as a referrer, if
@@ -383,8 +385,9 @@ GURL URLRequestJob::ComputeReferrerForPolicy(
   return GURL();
 }
 
-int URLRequestJob::NotifyConnected(const TransportInfo& info) {
-  return request_->NotifyConnected(info);
+int URLRequestJob::NotifyConnected(const TransportInfo& info,
+                                   CompletionOnceCallback callback) {
+  return request_->NotifyConnected(info, std::move(callback));
 }
 
 void URLRequestJob::NotifyCertificateRequested(

@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
@@ -47,6 +47,10 @@ web::WebUIIOSDataSource* CreateCrashesUIHTMLSource() {
   source->UseStringsJs();
   source->AddResourcePath(crash_reporter::kCrashesUICrashesJS,
                           IDR_CRASH_CRASHES_JS);
+  source->AddResourcePath(crash_reporter::kCrashesUICrashesCSS,
+                          IDR_CRASH_CRASHES_CSS);
+  source->AddResourcePath(crash_reporter::kCrashesUISadTabSVG,
+                          IDR_CRASH_SADTAB_SVG);
   source->SetDefaultResource(IDR_CRASH_CRASHES_HTML);
   return source;
 }
@@ -109,8 +113,8 @@ void CrashesDOMHandler::HandleRequestCrashes(const base::ListValue* args) {
       UpdateUI();
   } else {
     list_available_ = false;
-    upload_list_->Load(base::Bind(&CrashesDOMHandler::OnUploadListAvailable,
-                                  base::Unretained(this)));
+    upload_list_->Load(base::BindOnce(&CrashesDOMHandler::OnUploadListAvailable,
+                                      base::Unretained(this)));
   }
 }
 
@@ -126,22 +130,22 @@ void CrashesDOMHandler::UpdateUI() {
   base::ListValue crash_list;
   if (crash_reporting_enabled)
     crash_reporter::UploadListToValue(upload_list_.get(), &crash_list);
-  base::Value enabled(crash_reporting_enabled);
-  base::Value dynamic_backend(false);
-  base::Value manual_uploads(false);
-  base::Value version(version_info::GetVersionNumber());
-  base::Value os_string(base::SysInfo::OperatingSystemName() + " " +
-                        base::SysInfo::OperatingSystemVersion());
+
+  base::Value result(base::Value::Type::DICTIONARY);
+  result.SetBoolPath("enabled", crash_reporting_enabled);
+  result.SetBoolPath("dynamicBackend", false);
+  result.SetBoolPath("manualUploads", false);
+  result.SetPath("crashes", std::move(crash_list));
+  result.SetStringPath("version", version_info::GetVersionNumber());
+  result.SetStringPath("os", base::SysInfo::OperatingSystemName() + " " +
+                                 base::SysInfo::OperatingSystemVersion());
+
+  base::Value event_name(crash_reporter::kCrashesUIUpdateCrashList);
 
   std::vector<const base::Value*> args;
-  args.push_back(&enabled);
-  args.push_back(&dynamic_backend);
-  args.push_back(&manual_uploads);
-  args.push_back(&crash_list);
-  args.push_back(&version);
-  args.push_back(&os_string);
-  web_ui()->CallJavascriptFunction(crash_reporter::kCrashesUIUpdateCrashList,
-                                   args);
+  args.push_back(&event_name);
+  args.push_back(&result);
+  web_ui()->CallJavascriptFunction("cr.webUIListenerCallback", args);
 }
 
 }  // namespace

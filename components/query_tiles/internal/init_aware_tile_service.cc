@@ -5,7 +5,7 @@
 #include "components/query_tiles/internal/init_aware_tile_service.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/threading/thread_task_runner_handle.h"
 
 namespace query_tiles {
@@ -124,7 +124,7 @@ void InitAwareTileService::OnTileClicked(const std::string& tile_id) {
 
 void InitAwareTileService::OnQuerySelected(
     const base::Optional<std::string>& parent_tile_id,
-    const base::string16& query_text) {
+    const std::u16string& query_text) {
   if (IsReady()) {
     tile_service_->OnQuerySelected(std::move(parent_tile_id), query_text);
   } else if (!IsFailed()) {

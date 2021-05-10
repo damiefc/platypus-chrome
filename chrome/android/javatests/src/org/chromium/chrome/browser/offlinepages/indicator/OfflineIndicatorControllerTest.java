@@ -18,11 +18,15 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ApplicationState;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.download.DownloadActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.net.connectivitydetector.ConnectivityDetector;
+import org.chromium.chrome.browser.net.connectivitydetector.ConnectivityDetectorDelegateStub;
 import org.chromium.chrome.browser.offlinepages.ClientId;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
@@ -32,15 +36,13 @@ import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.ActivityUtils;
+import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.offlinepages.SavePageResult;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -238,7 +240,7 @@ public class OfflineIndicatorControllerTest {
     public void testDoNotShowOfflineIndicatorOnDownloadsWhenOffline() {
         if (mActivityTestRule.getActivity().isTablet()) return;
 
-        DownloadActivity downloadActivity = ActivityUtils.waitForActivity(
+        DownloadActivity downloadActivity = ActivityTestUtils.waitForActivity(
                 InstrumentationRegistry.getInstrumentation(), DownloadActivity.class,
                 new MenuUtils.MenuActivityTrigger(InstrumentationRegistry.getInstrumentation(),
                         mActivityTestRule.getActivity(), R.id.downloads_menu_id));
@@ -248,6 +250,7 @@ public class OfflineIndicatorControllerTest {
 
         // Offline indicator should not be shown.
         checkOfflineIndicatorVisibility(downloadActivity, false);
+        downloadActivity.finish();
     }
 
     @Test

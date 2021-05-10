@@ -9,7 +9,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -45,11 +45,11 @@ class AudioDeviceListenerMacTest : public testing::Test {
   void CreateDeviceListener() {
     // Force a post task using BindToCurrentLoop() to ensure device listener
     // internals are working correctly.
-    device_listener_.reset(new AudioDeviceListenerMac(
+    device_listener_ = std::make_unique<AudioDeviceListenerMac>(
         BindToCurrentLoop(
             base::BindRepeating(&AudioDeviceListenerMacTest::OnDeviceChange,
                                 base::Unretained(this))),
-        true /* monitor_default_input */, true /* monitor_addition_removal */));
+        true /* monitor_default_input */, true /* monitor_addition_removal */);
   }
 
   void DestroyDeviceListener() { device_listener_.reset(); }

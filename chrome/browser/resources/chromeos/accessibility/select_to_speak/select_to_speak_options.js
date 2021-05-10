@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {PrefsManager} from './prefs_manager.js';
+
 class SelectToSpeakOptionsPage {
   constructor() {
     this.init_();
@@ -43,6 +45,22 @@ class SelectToSpeakOptionsPage {
             elem.setAttribute('aria-hidden', true);
           }
         });
+    this.syncCheckboxControlToPref_('navigationControls', 'navigationControls');
+    // Hide navigation control setting if feature is not enabled
+    const AccessibilityFeature =
+        chrome.accessibilityPrivate.AccessibilityFeature;
+    chrome.accessibilityPrivate.isFeatureEnabled(
+        AccessibilityFeature.SELECT_TO_SPEAK_NAVIGATION_CONTROL, (result) => {
+          const elem = document.getElementById('navigationControlsOption');
+          if (!result) {
+            elem.classList.add('hidden');
+            elem.setAttribute('aria-hidden', true);
+          } else {
+            elem.classList.remove('hidden');
+            elem.setAttribute('aria-hidden', false);
+          }
+        });
+
     this.setUpHighlightListener_();
     this.setUpTtsButtonClickListener_();
     chrome.metricsPrivate.recordUserAction(
@@ -65,7 +83,7 @@ class SelectToSpeakOptionsPage {
         throw new Error('Element has no msgid attribute: ' + elts[i]);
       }
       var translated = chrome.i18n.getMessage('select_to_speak_' + msgid);
-      if (elts[i].tagName == 'INPUT') {
+      if (elts[i].tagName === 'INPUT') {
         elts[i].setAttribute('placeholder', translated);
       } else {
         elts[i].textContent = translated;
@@ -94,16 +112,16 @@ class SelectToSpeakOptionsPage {
         voice.voiceName = voice.voiceName || '';
       });
       voices.sort(function(a, b) {
-        return a.voiceName.localeCompare(b.voiceName);
+        return a.voiceName.localeCompare(b.voiceName || '');
       });
       voices.forEach(function(voice) {
         if (!voice.voiceName) {
           return;
         }
-        if (!voice.eventTypes.includes('start') ||
-            !voice.eventTypes.includes('end') ||
-            !voice.eventTypes.includes('word') ||
-            !voice.eventTypes.includes('cancelled')) {
+        if (!voice.eventTypes.includes(chrome.tts.EventType.START) ||
+            !voice.eventTypes.includes(chrome.tts.EventType.END) ||
+            !voice.eventTypes.includes(chrome.tts.EventType.WORD) ||
+            !voice.eventTypes.includes(chrome.tts.EventType.CANCELLED)) {
           // Required event types for Select-to-Speak.
           return;
         }
@@ -176,7 +194,7 @@ class SelectToSpeakOptionsPage {
         var value = items[pref];
         element.selectedIndex = -1;
         for (var i = 0; i < element.options.length; ++i) {
-          if (element.options[i][valueKey] == value) {
+          if (element.options[i][valueKey] === value) {
             element.selectedIndex = i;
             break;
           }

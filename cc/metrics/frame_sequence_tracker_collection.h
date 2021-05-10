@@ -32,7 +32,7 @@ class UkmManager;
 
 // Map of kCustom tracker results keyed by a sequence id.
 using CustomTrackerResults =
-    base::flat_map<int, FrameSequenceMetrics::ThroughputData>;
+    base::flat_map<int, FrameSequenceMetrics::CustomReportData>;
 
 typedef uint16_t ActiveFrameSequenceTrackers;
 
@@ -105,7 +105,7 @@ class CC_EXPORT FrameSequenceTrackerCollection {
   // Return the type of each active frame tracker, encoded into a 16 bit
   // integer with the bit at each position corresponding to the enum value of
   // each type.
-  ActiveFrameSequenceTrackers FrameSequenceTrackerActiveTypes();
+  ActiveFrameSequenceTrackers FrameSequenceTrackerActiveTypes() const;
 
   FrameSequenceTracker* GetRemovalTrackerForTesting(
       FrameSequenceTrackerType type);
@@ -113,7 +113,7 @@ class CC_EXPORT FrameSequenceTrackerCollection {
   void SetUkmManager(UkmManager* manager);
 
   using NotifyCustomerTrackerResutlsCallback =
-      base::RepeatingCallback<void(CustomTrackerResults)>;
+      base::RepeatingCallback<void(const CustomTrackerResults&)>;
   void set_custom_tracker_results_added_callback(
       NotifyCustomerTrackerResutlsCallback callback) {
     custom_tracker_results_added_callback_ = std::move(callback);
@@ -138,7 +138,7 @@ class CC_EXPORT FrameSequenceTrackerCollection {
   // TakeCustomTrackerResults() below.
   void AddCustomTrackerResult(
       int custom_sequence_id,
-      FrameSequenceMetrics::ThroughputData throughput_data);
+      const FrameSequenceMetrics::CustomReportData& data);
 
   const bool is_single_threaded_;
   // The reporter takes throughput data and connect to UkmManager to report it.

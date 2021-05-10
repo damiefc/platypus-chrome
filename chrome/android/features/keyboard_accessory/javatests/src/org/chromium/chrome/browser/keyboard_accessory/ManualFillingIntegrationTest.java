@@ -39,6 +39,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -53,7 +54,6 @@ import org.chromium.chrome.test.util.InfoBarTestAnimationListener;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
 
@@ -246,8 +246,8 @@ public class ManualFillingIntegrationTest {
         mHelper.waitForKeyboardAccessoryToBeShown();
         whenDisplayed(allOf(isDisplayed(), isKeyboardAccessoryTabLayout()));
 
-        // Clicking the email field hides the accessory again.
-        mHelper.clickEmailField(false);
+        // Clicking a field without completion hides the accessory again.
+        mHelper.clickFieldWithoutCompletion();
         mHelper.waitForKeyboardAccessoryToDisappear();
     }
 
@@ -463,8 +463,8 @@ public class ManualFillingIntegrationTest {
         whenDisplayed(withChild(withId(R.id.keyboard_accessory_sheet)));
         onView(withText(kSnackbarText)).check(matches(isCompletelyDisplayed()));
 
-        // Click into the email field to dismiss the keyboard accessory.
-        mHelper.clickEmailField(false);
+        // Click into a field without completion to dismiss the keyboard accessory.
+        mHelper.clickFieldWithoutCompletion();
         mHelper.waitForKeyboardAccessoryToDisappear();
         onView(withText(kSnackbarText)).check(matches(isCompletelyDisplayed()));
     }

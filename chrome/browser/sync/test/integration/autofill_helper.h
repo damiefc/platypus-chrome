@@ -11,7 +11,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
-#include "base/strings/string16.h"
 #include "chrome/browser/sync/test/integration/multi_client_status_change_checker.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_component.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
@@ -81,7 +80,7 @@ void UpdateProfile(
     int profile,
     const std::string& guid,
     const autofill::AutofillType& type,
-    const base::string16& value,
+    const std::u16string& value,
     autofill::structured_address::VerificationStatus status =
         autofill::structured_address::VerificationStatus::kObserved);
 
@@ -150,8 +149,8 @@ class PersonalDataLoadedObserverMock
   PersonalDataLoadedObserverMock();
   ~PersonalDataLoadedObserverMock() override;
 
-  MOCK_METHOD0(OnPersonalDataChanged, void());
-  MOCK_METHOD0(OnPersonalDataFinishedProfileTasks, void());
+  MOCK_METHOD(void, OnPersonalDataChanged, (), (override));
+  MOCK_METHOD(void, OnPersonalDataFinishedProfileTasks, (), (override));
 };
 
 #endif  // CHROME_BROWSER_SYNC_TEST_INTEGRATION_AUTOFILL_HELPER_H_

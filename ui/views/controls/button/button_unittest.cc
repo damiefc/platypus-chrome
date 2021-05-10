@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -50,7 +49,7 @@
 
 namespace views {
 
-using test::InkDropHostViewTestApi;
+using test::InkDropHostTestApi;
 using test::TestInkDrop;
 
 namespace {
@@ -70,9 +69,11 @@ class TestContextMenuController : public ContextMenuController {
   DISALLOW_COPY_AND_ASSIGN(TestContextMenuController);
 };
 
-class TestButton : public Button, public ButtonListener {
+class TestButton : public Button {
  public:
-  explicit TestButton(bool has_ink_drop_action_on_click) : Button(this) {
+  explicit TestButton(bool has_ink_drop_action_on_click)
+      : Button(base::BindRepeating([](bool* pressed) { *pressed = true; },
+                                   &pressed_)) {
     SetHasInkDropActionOnClick(has_ink_drop_action_on_click);
   }
 
@@ -84,36 +85,14 @@ class TestButton : public Button, public ButtonListener {
     return custom_key_click_action_;
   }
 
-  void ButtonPressed(Button* sender, const ui::Event& event) override {
-    pressed_ = true;
-
-    if (!on_button_pressed_handler_.is_null())
-      on_button_pressed_handler_.Run();
-  }
-
+  // Button:
   void OnClickCanceled(const ui::Event& event) override { canceled_ = true; }
 
-  // Button:
-  void AddInkDropLayer(ui::Layer* ink_drop_layer) override {
-    ++ink_drop_layer_add_count_;
-    Button::AddInkDropLayer(ink_drop_layer);
-  }
-  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override {
-    ++ink_drop_layer_remove_count_;
-    Button::RemoveInkDropLayer(ink_drop_layer);
-  }
-
-  bool pressed() { return pressed_; }
-  bool canceled() { return canceled_; }
-  int ink_drop_layer_add_count() { return ink_drop_layer_add_count_; }
-  int ink_drop_layer_remove_count() { return ink_drop_layer_remove_count_; }
+  bool pressed() const { return pressed_; }
+  bool canceled() const { return canceled_; }
 
   void set_custom_key_click_action(KeyClickAction custom_key_click_action) {
     custom_key_click_action_ = custom_key_click_action;
-  }
-
-  void set_on_button_pressed_handler(const base::RepeatingClosure& callback) {
-    on_button_pressed_handler_ = callback;
   }
 
   void Reset() {
@@ -122,19 +101,13 @@ class TestButton : public Button, public ButtonListener {
   }
 
   // Raised visibility of OnFocus() to public
-  void OnFocus() override { Button::OnFocus(); }
+  using Button::OnFocus;
 
  private:
   bool pressed_ = false;
   bool canceled_ = false;
 
-  int ink_drop_layer_add_count_ = 0;
-  int ink_drop_layer_remove_count_ = 0;
-
   KeyClickAction custom_key_click_action_ = KeyClickAction::kNone;
-
-  // If available, will be triggered when the button is pressed.
-  base::RepeatingClosure on_button_pressed_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(TestButton);
 };
@@ -143,7 +116,7 @@ class TestButtonObserver {
  public:
   explicit TestButtonObserver(Button* button) {
     highlighted_changed_subscription_ =
-        button->AddHighlightedChangedCallback(base::BindRepeating(
+        button->ink_drop()->AddHighlightedChangedCallback(base::BindRepeating(
             [](TestButtonObserver* obs) { obs->highlighted_changed_ = true; },
             base::Unretained(this)));
     state_changed_subscription_ =
@@ -165,32 +138,17 @@ class TestButtonObserver {
   bool highlighted_changed_ = false;
   bool state_changed_ = false;
 
-  PropertyChangedSubscription highlighted_changed_subscription_;
-  PropertyChangedSubscription state_changed_subscription_;
+  base::CallbackListSubscription highlighted_changed_subscription_;
+  base::CallbackListSubscription state_changed_subscription_;
 
   DISALLOW_COPY_AND_ASSIGN(TestButtonObserver);
-};
-
-class TestButtonListener : public ButtonListener {
- public:
-  void ButtonPressed(Button* sender, const ui::Event& event) override {
-    pressed_ = true;
-    sender_ = sender;
-  }
-
-  bool pressed() const { return pressed_; }
-  Button* sender() const { return sender_; }
-
- private:
-  bool pressed_ = false;
-  Button* sender_ = nullptr;
 };
 
 TestInkDrop* AddTestInkDrop(TestButton* button) {
   auto owned_ink_drop = std::make_unique<TestInkDrop>();
   TestInkDrop* ink_drop = owned_ink_drop.get();
-  button->SetInkDropMode(InkDropHostView::InkDropMode::ON);
-  InkDropHostViewTestApi(button).SetInkDrop(std::move(owned_ink_drop));
+  button->ink_drop()->SetMode(views::InkDropHost::InkDropMode::ON);
+  InkDropHostTestApi(button->ink_drop()).SetInkDrop(std::move(owned_ink_drop));
   return ink_drop;
 }
 
@@ -235,7 +193,7 @@ class ButtonTest : public ViewsTestBase {
 
   void CreateButtonWithObserver() {
     button_ = widget()->SetContentsView(std::make_unique<TestButton>(false));
-    button_->SetInkDropMode(InkDropHostView::InkDropMode::ON);
+    button_->ink_drop()->SetMode(views::InkDropHost::InkDropMode::ON);
     button_observer_ = std::make_unique<TestButtonObserver>(button_);
   }
 
@@ -310,7 +268,7 @@ TEST_F(ButtonTest, HoverStateOnVisibilityChange) {
 
 // Disabling cursor events occurs for touch events and the Ash magnifier. There
 // is no touch on desktop Mac. Tracked in http://crbug.com/445520.
-#if !defined(OS_APPLE) || defined(USE_AURA)
+#if !defined(OS_MAC) || defined(USE_AURA)
   aura::test::TestCursorClient cursor_client(GetRootWindow(widget()));
 
   // In Aura views, no new hover effects are invoked if mouse events
@@ -328,7 +286,7 @@ TEST_F(ButtonTest, HoverStateOnVisibilityChange) {
 
   button()->SetVisible(true);
   EXPECT_EQ(Button::STATE_NORMAL, button()->GetState());
-#endif  // !defined(OS_APPLE) || defined(USE_AURA)
+#endif  // !defined(OS_MAC) || defined(USE_AURA)
 }
 
 // Tests that the hover state is preserved during a view hierarchy update of a
@@ -337,7 +295,7 @@ TEST_F(ButtonTest, HoverStatePreservedOnDescendantViewHierarchyChange) {
   event_generator()->MoveMouseTo(button()->GetBoundsInScreen().CenterPoint());
 
   EXPECT_EQ(Button::STATE_HOVERED, button()->GetState());
-  Label* child = new Label(base::string16());
+  Label* child = new Label(std::u16string());
   button()->AddChildView(child);
   delete child;
   EXPECT_EQ(Button::STATE_HOVERED, button()->GetState());
@@ -347,7 +305,7 @@ TEST_F(ButtonTest, HoverStatePreservedOnDescendantViewHierarchyChange) {
 TEST_F(ButtonTest, NotifyAction) {
   gfx::Point center(10, 10);
 
-  // By default the button should notify its listener on mouse release.
+  // By default the button should notify the callback on mouse release.
   button()->OnMousePressed(ui::MouseEvent(
       ui::ET_MOUSE_PRESSED, center, center, ui::EventTimeForNow(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
@@ -360,7 +318,7 @@ TEST_F(ButtonTest, NotifyAction) {
   EXPECT_EQ(Button::STATE_HOVERED, button()->GetState());
   EXPECT_TRUE(button()->pressed());
 
-  // Set the notify action to its listener on mouse press.
+  // Set the notify action to happen on mouse press.
   button()->Reset();
   button()->button_controller()->set_notify_action(
       ButtonController::NotifyAction::kOnPress);
@@ -384,7 +342,7 @@ TEST_F(ButtonTest, NotifyAction) {
 TEST_F(ButtonTest, NotifyActionNoClick) {
   gfx::Point center(10, 10);
 
-  // By default the button should notify its listener on mouse release.
+  // By default the button should notify the callback on mouse release.
   button()->OnMousePressed(ui::MouseEvent(
       ui::ET_MOUSE_PRESSED, center, center, ui::EventTimeForNow(),
       ui::EF_RIGHT_MOUSE_BUTTON, ui::EF_RIGHT_MOUSE_BUTTON));
@@ -395,7 +353,7 @@ TEST_F(ButtonTest, NotifyActionNoClick) {
       ui::EF_RIGHT_MOUSE_BUTTON, ui::EF_RIGHT_MOUSE_BUTTON));
   EXPECT_TRUE(button()->canceled());
 
-  // Set the notify action to its listener on mouse press.
+  // Set the notify action to happen on mouse press.
   button()->Reset();
   button()->button_controller()->set_notify_action(
       ButtonController::NotifyAction::kOnPress);
@@ -414,7 +372,7 @@ TEST_F(ButtonTest, NotifyActionNoClick) {
 }
 
 // No touch on desktop Mac. Tracked in http://crbug.com/445520.
-#if !defined(OS_APPLE) || defined(USE_AURA)
+#if !defined(OS_MAC) || defined(USE_AURA)
 
 namespace {
 
@@ -446,7 +404,7 @@ TEST_F(ButtonTest, GestureEventsSetState) {
 // events will not revert the disabled state back to normal.
 // https://crbug.com/1084241.
 TEST_F(ButtonTest, GestureEventsRespectDisabledState) {
-  button()->set_on_button_pressed_handler(base::BindRepeating(
+  button()->SetCallback(base::BindRepeating(
       [](TestButton* button) { button->SetEnabled(false); }, button()));
 
   EXPECT_EQ(Button::STATE_NORMAL, button()->GetState());
@@ -454,13 +412,13 @@ TEST_F(ButtonTest, GestureEventsRespectDisabledState) {
   EXPECT_EQ(Button::STATE_DISABLED, button()->GetState());
 }
 
-#endif  // !defined(OS_APPLE) || defined(USE_AURA)
+#endif  // !defined(OS_MAC) || defined(USE_AURA)
 
 // Ensure subclasses of Button are correctly recognized as Button.
 TEST_F(ButtonTest, AsButton) {
-  base::string16 text;
+  std::u16string text;
 
-  LabelButton label_button(nullptr, text);
+  LabelButton label_button(Button::PressedCallback(), text);
   EXPECT_TRUE(Button::AsButton(&label_button));
 
   ImageButton image_button;
@@ -472,7 +430,7 @@ TEST_F(ButtonTest, AsButton) {
   RadioButton radio_button(text, 0);
   EXPECT_TRUE(Button::AsButton(&radio_button));
 
-  MenuButton menu_button(nullptr, text);
+  MenuButton menu_button(Button::PressedCallback(), text);
   EXPECT_TRUE(Button::AsButton(&menu_button));
 
   ToggleButton toggle_button;
@@ -754,19 +712,19 @@ TEST_F(ButtonTest, InkDropStaysHiddenWhileDragging) {
 
 // Ensure PressedCallback is dynamically settable.
 TEST_F(ButtonTest, SetCallback) {
-  TestButtonListener listener;
-  button()->set_callback(Button::PressedCallback(&listener, button()));
+  bool pressed = false;
+  button()->SetCallback(
+      base::BindRepeating([](bool* pressed) { *pressed = true; }, &pressed));
 
   const gfx::Point center(10, 10);
   button()->OnMousePressed(ui::MouseEvent(
       ui::ET_MOUSE_PRESSED, center, center, ui::EventTimeForNow(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
-  // Default button controller notifies listener at mouse release.
+  // Default button controller notifies callback at mouse release.
   button()->OnMouseReleased(ui::MouseEvent(
       ui::ET_MOUSE_RELEASED, center, center, ui::EventTimeForNow(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
-  EXPECT_TRUE(listener.pressed());
-  EXPECT_EQ(button(), listener.sender());
+  EXPECT_TRUE(pressed);
 }
 
 // VisibilityTestButton tests to see if an ink drop or a layer has been added to
@@ -777,16 +735,10 @@ class VisibilityTestButton : public TestButton {
   ~VisibilityTestButton() override {
     if (layer())
       ADD_FAILURE();
-  }
-
-  // TestButton:
-  void AddInkDropLayer(ui::Layer* ink_drop_layer) override {
-    ADD_FAILURE();
-    TestButton::AddInkDropLayer(ink_drop_layer);
-  }
-  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override {
-    ADD_FAILURE();
-    TestButton::RemoveInkDropLayer(ink_drop_layer);
+    auto ink_drop_layer_add_failure_callback =
+        base::BindRepeating([](ui::Layer*) { ADD_FAILURE(); });
+    ink_drop()->SetAddLayerCallback(ink_drop_layer_add_failure_callback);
+    ink_drop()->SetRemoveLayerCallback(ink_drop_layer_add_failure_callback);
   }
 };
 
@@ -820,14 +772,13 @@ TEST_F(ButtonTest, NoLayerAddedForWidgetVisibilityChanges) {
 // key-release on other platforms.
 TEST_F(ButtonTest, ActionOnSpace) {
   // Give focus to the button.
-  button()->SetFocusForPlatform();
   button()->RequestFocus();
   EXPECT_TRUE(button()->HasFocus());
 
   ui::KeyEvent space_press(ui::ET_KEY_PRESSED, ui::VKEY_SPACE, ui::EF_NONE);
   EXPECT_TRUE(button()->OnKeyPressed(space_press));
 
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
   EXPECT_EQ(Button::STATE_NORMAL, button()->GetState());
   EXPECT_TRUE(button()->pressed());
 #else
@@ -837,7 +788,7 @@ TEST_F(ButtonTest, ActionOnSpace) {
 
   ui::KeyEvent space_release(ui::ET_KEY_RELEASED, ui::VKEY_SPACE, ui::EF_NONE);
 
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
   EXPECT_FALSE(button()->OnKeyReleased(space_release));
 #else
   EXPECT_TRUE(button()->OnKeyReleased(space_release));
@@ -852,13 +803,12 @@ TEST_F(ButtonTest, ActionOnSpace) {
 // with a dialog, even if a button has focus.
 TEST_F(ButtonTest, ActionOnReturn) {
   // Give focus to the button.
-  button()->SetFocusForPlatform();
   button()->RequestFocus();
   EXPECT_TRUE(button()->HasFocus());
 
   ui::KeyEvent return_press(ui::ET_KEY_PRESSED, ui::VKEY_RETURN, ui::EF_NONE);
 
-#if defined(OS_APPLE)
+#if defined(OS_MAC)
   EXPECT_FALSE(button()->OnKeyPressed(return_press));
   EXPECT_EQ(Button::STATE_NORMAL, button()->GetState());
   EXPECT_FALSE(button()->pressed());
@@ -876,7 +826,6 @@ TEST_F(ButtonTest, ActionOnReturn) {
 // Verify that a subclass may customize the action for a key pressed event.
 TEST_F(ButtonTest, CustomActionOnKeyPressedEvent) {
   // Give focus to the button.
-  button()->SetFocusForPlatform();
   button()->RequestFocus();
   EXPECT_TRUE(button()->HasFocus());
 
@@ -895,22 +844,22 @@ TEST_F(ButtonTest, CustomActionOnKeyPressedEvent) {
 
 // Verifies that button activation highlight state changes trigger property
 // change callbacks.
-TEST_F(ButtonTest, ChangingHighlightStateNotifiesListener) {
+TEST_F(ButtonTest, ChangingHighlightStateNotifiesCallback) {
   CreateButtonWithObserver();
   EXPECT_FALSE(button_observer()->highlighted_changed());
-  EXPECT_FALSE(button()->GetHighlighted());
+  EXPECT_FALSE(button()->ink_drop()->GetHighlighted());
 
   button()->SetHighlighted(/*bubble_visible=*/true);
   EXPECT_TRUE(button_observer()->highlighted_changed());
-  EXPECT_TRUE(button()->GetHighlighted());
+  EXPECT_TRUE(button()->ink_drop()->GetHighlighted());
 
   button_observer()->Reset();
   EXPECT_FALSE(button_observer()->highlighted_changed());
-  EXPECT_TRUE(button()->GetHighlighted());
+  EXPECT_TRUE(button()->ink_drop()->GetHighlighted());
 
   button()->SetHighlighted(/*bubble_visible=*/false);
   EXPECT_TRUE(button_observer()->highlighted_changed());
-  EXPECT_FALSE(button()->GetHighlighted());
+  EXPECT_FALSE(button()->ink_drop()->GetHighlighted());
 }
 
 // Verifies that button state changes trigger property change callbacks.
@@ -955,7 +904,7 @@ TEST_F(ButtonTest, SetStateNotifiesObserver) {
 
 // Verifies setting the tooltip text will call NotifyAccessibilityEvent.
 TEST_F(ButtonTest, SetTooltipTextNotifiesAccessibilityEvent) {
-  base::string16 test_tooltip_text = base::ASCIIToUTF16("Test Tooltip Text");
+  std::u16string test_tooltip_text = u"Test Tooltip Text";
   test::AXEventCounter counter(views::AXEventManager::Get());
   EXPECT_EQ(0, counter.GetCount(ax::mojom::Event::kTextChanged));
   button()->SetTooltipText(test_tooltip_text);

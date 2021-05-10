@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/events/event.h"
 #include "ui/events/event_dispatcher.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -82,13 +83,6 @@ class EventGeneratorDelegate {
   // |hosted_target| into the root window's coordinate system.
   virtual void ConvertPointFromHost(const EventTarget* hosted_target,
                                     gfx::Point* point) const = 0;
-
-  // Determines if the input method should be the first to handle key events
-  // before dispatching to Views. If it does, the given |event| will be
-  // dispatched and processed by the input method from the host of |target|.
-  virtual ui::EventDispatchDetails DispatchKeyEventToIME(EventTarget* target,
-                                                         ui::KeyEvent* event)
-      WARN_UNUSED_RESULT = 0;
 };
 
 // ui::test::EventGenerator is a tool that generates and dispatches events.
@@ -224,7 +218,7 @@ class EventGenerator {
     MoveMouseToInHost(gfx::Point(x, y));
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Generates a mouse move event at the point given in the host
   // coordinates, with a native event with |point_for_natve|.
   void MoveMouseToWithNative(const gfx::Point& point_in_host,

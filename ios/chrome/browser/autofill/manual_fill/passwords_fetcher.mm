@@ -5,8 +5,8 @@
 #import "ios/chrome/browser/autofill/manual_fill/passwords_fetcher.h"
 
 #include "base/stl_util.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_list_sorter.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
@@ -55,6 +55,8 @@ class PasswordStoreObserverBridge
   std::unique_ptr<ios::SavePasswordsConsumer> _savedPasswordsConsumer;
   // The object to observe changes in the Password Store.
   std::unique_ptr<PasswordStoreObserverBridge> _passwordStoreObserver;
+  // URL to fetch logins for. May be empty if no filtering is needed.
+  GURL _URL;
 }
 
 // Delegate to send the fetchted passwords.
@@ -82,15 +84,8 @@ class PasswordStoreObserverBridge
     _savedPasswordsConsumer.reset(new ios::SavePasswordsConsumer(self));
     _passwordStoreObserver.reset(new PasswordStoreObserverBridge(self));
     _passwordStore->AddObserver(_passwordStoreObserver.get());
-
-    if (URL.is_empty()) {
-      _passwordStore->GetAutofillableLogins(_savedPasswordsConsumer.get());
-    } else {
-      password_manager::PasswordStore::FormDigest digest = {
-          autofill::PasswordForm::Scheme::kHtml, std::string(), URL};
-      digest.signon_realm = URL.spec();
-      _passwordStore->GetLogins(digest, _savedPasswordsConsumer.get());
-    }
+    _URL = URL;
+    [self fetchLogins];
   }
   return self;
 }
@@ -99,10 +94,23 @@ class PasswordStoreObserverBridge
   _passwordStore->RemoveObserver(_passwordStoreObserver.get());
 }
 
+#pragma mark - Private methods
+
+- (void)fetchLogins {
+  if (_URL.is_empty()) {
+    _passwordStore->GetAutofillableLogins(_savedPasswordsConsumer.get());
+  } else {
+    password_manager::PasswordStore::FormDigest digest = {
+        password_manager::PasswordForm::Scheme::kHtml, std::string(), _URL};
+    digest.signon_realm = _URL.spec();
+    _passwordStore->GetLogins(digest, _savedPasswordsConsumer.get());
+  }
+}
+
 #pragma mark - SavePasswordsConsumerDelegate
 
 - (void)onGetPasswordStoreResults:
-    (std::vector<std::unique_ptr<autofill::PasswordForm>>)results {
+    (std::vector<std::unique_ptr<password_manager::PasswordForm>>)results {
   // Filter out Android facet IDs and any blocked passwords.
   base::EraseIf(results, [](const auto& form) {
     return form->blocked_by_user ||
@@ -118,7 +126,7 @@ class PasswordStoreObserverBridge
 #pragma mark - PasswordStoreObserver
 
 - (void)loginsDidChange {
-  _passwordStore->GetAutofillableLogins(_savedPasswordsConsumer.get());
+  [self fetchLogins];
 }
 
 @end

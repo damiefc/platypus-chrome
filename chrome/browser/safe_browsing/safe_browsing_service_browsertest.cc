@@ -16,7 +16,7 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -36,18 +36,17 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/thread_test_helper.h"
 #include "base/time/time.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/safe_browsing/client_side_detection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
@@ -55,18 +54,19 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_features.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/embedder_support/switches.h"
 #include "components/error_page/content/browser/net_error_auto_reloader.h"
+#include "components/no_state_prefetch/browser/no_state_prefetch_manager.h"
 #include "components/prefs/pref_service.h"
-#include "components/prerender/browser/prerender_manager.h"
 #include "components/safe_browsing/buildflags.h"
+#include "components/safe_browsing/content/browser/client_side_phishing_model.h"
 #include "components/safe_browsing/core/db/database_manager.h"
 #include "components/safe_browsing/core/db/metadata.pb.h"
 #include "components/safe_browsing/core/db/test_database_manager.h"
@@ -104,9 +104,9 @@
 #include "url/gurl.h"
 #include "url/url_canon.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chromeos/constants/chromeos_switches.h"
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_switches.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #endif
 
 #if !BUILDFLAG(SAFE_BROWSING_DB_LOCAL)
@@ -123,7 +123,7 @@ namespace safe_browsing {
 namespace {
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-const char kBlacklistResource[] = "/blacklisted/script.js";
+const char kBlocklistResource[] = "/blacklisted/script.js";
 const char kMaliciousResource[] = "/malware/script.js";
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 const char kEmptyPage[] = "/empty.html";
@@ -269,10 +269,10 @@ GURL ConstructJsRequestURL(const GURL& base_url, JsRequestType request_type) {
 // Returns the new title.
 std::string JsRequestTestNavigateAndWaitForTitle(Browser* browser,
                                                  const GURL& url) {
-  auto expected_title = base::ASCIIToUTF16("ERROR");
+  std::u16string expected_title = u"ERROR";
   content::TitleWatcher title_watcher(
       browser->tab_strip_model()->GetActiveWebContents(), expected_title);
-  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("NOT BLOCKED"));
+  title_watcher.AlsoWaitForTitle(u"NOT BLOCKED");
 
   ui_test_utils::NavigateToURL(browser, url);
   return base::UTF16ToUTF8(title_watcher.WaitAndGetTitle());
@@ -531,7 +531,7 @@ class V4SafeBrowsingServiceTest : public InProcessBrowserTest {
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     command_line->AppendSwitch(
         chromeos::switches::kIgnoreUserProfileMappingForTests);
 #endif
@@ -551,9 +551,9 @@ class V4SafeBrowsingServiceTest : public InProcessBrowserTest {
     base::FilePath test_data_dir;
     base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
     embedded_test_server()->RegisterRequestHandler(
-        base::Bind(&HandleNeverCompletingRequests));
+        base::BindRepeating(&HandleNeverCompletingRequests));
     embedded_test_server()->RegisterRequestHandler(
-        base::Bind(&HandleWebSocketRequests));
+        base::BindRepeating(&HandleWebSocketRequests));
     embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
     ASSERT_TRUE(embedded_test_server()->Start());
   }
@@ -617,9 +617,9 @@ IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, UnwantedImgIgnored) {
   EXPECT_FALSE(got_hit_report());
 }
 
-// Proceeding through an interstitial should cause it to get whitelisted for
+// Proceeding through an interstitial should cause it to get allowlisted for
 // that user.
-IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, MalwareWithWhitelist) {
+IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, MalwareWithAllowlist) {
   GURL url = embedded_test_server()->GetURL(kEmptyPage);
 
   // After adding the URL to SafeBrowsing database and full hash cache, we
@@ -645,7 +645,7 @@ IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, MalwareWithWhitelist) {
   observer.WaitForNavigationFinished();
   EXPECT_FALSE(ShowingInterstitialPage());
 
-  // Navigate to kEmptyPage again -- should hit the whitelist this time.
+  // Navigate to kEmptyPage again -- should hit the allowlist this time.
   EXPECT_CALL(observer_, OnSafeBrowsingHit(IsUnsafeResourceFor(url))).Times(0);
   ui_test_utils::NavigateToURL(browser(), url);
   EXPECT_FALSE(ShowingInterstitialPage());
@@ -776,8 +776,7 @@ IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest,
   // a site that does not respond.  Should show interstitial and have first page
   // in referrer.
   contents->GetMainFrame()->ExecuteJavaScriptForTests(
-      base::ASCIIToUTF16("navigateAndLoadMalwareImage()"),
-      base::NullCallback());
+      u"navigateAndLoadMalwareImage()", base::NullCallback());
   load_stop_observer.Wait();
 
   EXPECT_TRUE(ShowingInterstitialPage());
@@ -831,8 +830,7 @@ IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest,
 
   // While the top-level navigation is pending, run javascript
   // function in the page which loads the malware image.
-  rfh->ExecuteJavaScriptForTests(base::ASCIIToUTF16("loadMalwareImage()"),
-                                 base::NullCallback());
+  rfh->ExecuteJavaScriptForTests(u"loadMalwareImage()", base::NullCallback());
 
   // Wait for interstitial to show.
   load_stop_observer.Wait();
@@ -862,7 +860,7 @@ IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, SubResourceHitOnFreshTab) {
   content::RenderFrameHost* main_rfh = main_contents->GetMainFrame();
 
   content::WebContentsAddedObserver web_contents_added_observer;
-  main_rfh->ExecuteJavaScriptForTests(base::ASCIIToUTF16("w=window.open();"),
+  main_rfh->ExecuteJavaScriptForTests(u"w=window.open();",
                                       base::NullCallback());
   WebContents* new_tab_contents = web_contents_added_observer.GetWebContents();
   content::RenderFrameHost* new_tab_rfh = new_tab_contents->GetMainFrame();
@@ -876,11 +874,11 @@ IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, SubResourceHitOnFreshTab) {
       .Times(1);
   content::TestNavigationObserver observer(new_tab_contents);
   new_tab_rfh->ExecuteJavaScriptForTests(
-      base::ASCIIToUTF16("var img=new Image();"
-                         "img.src=\"" +
-                         img_url.spec() +
-                         "\";"
-                         "document.body.appendChild(img);"),
+      u"var img=new Image();"
+      u"img.src=\"" +
+          base::ASCIIToUTF16(img_url.spec()) +
+          u"\";"
+          u"document.body.appendChild(img);",
       base::NullCallback());
   // Wait for interstitial to show.
   observer.WaitForNavigationFinished();
@@ -1033,7 +1031,7 @@ class V4SafeBrowsingServiceWithAutoReloadTest
   V4SafeBrowsingServiceWithAutoReloadTest() = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kEnableAutoReload);
+    command_line->AppendSwitch(embedder_support::kEnableAutoReload);
     V4SafeBrowsingServiceTest::SetUpCommandLine(command_line);
   }
 };
@@ -1078,7 +1076,7 @@ IN_PROC_BROWSER_TEST_P(V4SafeBrowsingServiceJsRequestInterstitialTest,
   // Brute force method for waiting for the interstitial to be displayed.
   content::WindowedNotificationObserver load_stop_observer(
       content::NOTIFICATION_ALL,
-      base::Bind(
+      base::BindRepeating(
           [](V4SafeBrowsingServiceTest* self,
              const content::NotificationSource& source,
              const content::NotificationDetails& details) {
@@ -1201,18 +1199,18 @@ IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, CheckDownloadUrlRedirects) {
 // This test is only enabled when GOOGLE_CHROME_BRANDING is true because the
 // store that this test uses is only populated on GOOGLE_CHROME_BRANDING builds.
 IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, CheckResourceUrl) {
-  GURL blacklist_url = embedded_test_server()->GetURL(kBlacklistResource);
+  GURL blocklist_url = embedded_test_server()->GetURL(kBlocklistResource);
   GURL malware_url = embedded_test_server()->GetURL(kMaliciousResource);
-  std::string blacklist_url_hash, malware_url_hash;
+  std::string blocklist_url_hash, malware_url_hash;
 
   scoped_refptr<TestSBClient> client(new TestSBClient);
   {
-    MarkUrlForResourceUnexpired(blacklist_url);
-    blacklist_url_hash = V4ProtocolManagerUtil::GetFullHash(blacklist_url);
+    MarkUrlForResourceUnexpired(blocklist_url);
+    blocklist_url_hash = V4ProtocolManagerUtil::GetFullHash(blocklist_url);
 
-    client->CheckResourceUrl(blacklist_url);
-    EXPECT_EQ(SB_THREAT_TYPE_BLACKLISTED_RESOURCE, client->GetThreatType());
-    EXPECT_EQ(blacklist_url_hash, client->GetThreatHash());
+    client->CheckResourceUrl(blocklist_url);
+    EXPECT_EQ(SB_THREAT_TYPE_BLOCKLISTED_RESOURCE, client->GetThreatType());
+    EXPECT_EQ(blocklist_url_hash, client->GetThreatHash());
   }
   {
     MarkUrlForMalwareUnexpired(malware_url);
@@ -1220,10 +1218,10 @@ IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, CheckResourceUrl) {
     malware_url_hash = V4ProtocolManagerUtil::GetFullHash(malware_url);
 
     // Since we're checking a resource url, we should receive result that it's
-    // a blacklisted resource, not a malware.
+    // a blocklisted resource, not a malware.
     client = new TestSBClient;
     client->CheckResourceUrl(malware_url);
-    EXPECT_EQ(SB_THREAT_TYPE_BLACKLISTED_RESOURCE, client->GetThreatType());
+    EXPECT_EQ(SB_THREAT_TYPE_BLOCKLISTED_RESOURCE, client->GetThreatType());
     EXPECT_EQ(malware_url_hash, client->GetThreatHash());
   }
 
@@ -1231,6 +1229,7 @@ IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, CheckResourceUrl) {
   EXPECT_EQ(SB_THREAT_TYPE_SAFE, client->GetThreatType());
 }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+
 ///////////////////////////////////////////////////////////////////////////////
 // END: These tests use SafeBrowsingService::Client to directly interact with
 // SafeBrowsingService.

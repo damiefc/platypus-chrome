@@ -5,9 +5,6 @@
 #ifndef COMPONENTS_AUTOFILL_ASSISTANT_BROWSER_ACTIONS_CLICK_ACTION_H_
 #define COMPONENTS_AUTOFILL_ASSISTANT_BROWSER_ACTIONS_CLICK_ACTION_H_
 
-#include <string>
-#include <vector>
-
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/autofill_assistant/browser/actions/action.h"
@@ -31,6 +28,7 @@ class ClickAction : public Action {
   void OnClick(ProcessActionCallback callback, const ClientStatus& status);
 
   ClickType click_type_;
+  OptionalStep on_top_;
   base::WeakPtrFactory<ClickAction> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(ClickAction);

@@ -89,8 +89,6 @@ void PassphraseTableViewControllerTest::SetUp() {
       ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
           chrome_browser_state_.get(),
           base::BindRepeating(&CreateNiceMockSyncService)));
-  ON_CALL(*fake_sync_service_, GetRegisteredDataTypes())
-      .WillByDefault(Return(syncer::ModelTypeSet()));
 
   // Set up non-default return values for our sync service mock.
   ON_CALL(*fake_sync_service_->GetMockUserSettings(), IsPassphraseRequired())
@@ -102,7 +100,8 @@ void PassphraseTableViewControllerTest::SetUp() {
       ios::FakeChromeIdentityService::GetInstanceFromChromeProvider();
   identityService->AddIdentities(@[ @"identity1" ]);
   ChromeIdentity* identity =
-      [identityService->GetAllIdentitiesSortedForDisplay() objectAtIndex:0];
+      [identityService->GetAllIdentitiesSortedForDisplay(nullptr)
+          objectAtIndex:0];
   AuthenticationServiceFactory::GetForBrowserState(chrome_browser_state_.get())
       ->SignIn(identity);
 }

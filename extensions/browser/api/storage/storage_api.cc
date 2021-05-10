@@ -12,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/strings/stringprintf.h"
+#include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -20,88 +21,6 @@
 #include "extensions/common/api/storage.h"
 
 namespace extensions {
-
-// SettingsFunction
-
-SettingsFunction::SettingsFunction()
-    : settings_namespace_(settings_namespace::INVALID) {}
-
-SettingsFunction::~SettingsFunction() {}
-
-bool SettingsFunction::ShouldSkipQuotaLimiting() const {
-  // Only apply quota if this is for sync storage.
-  std::string settings_namespace_string;
-  if (!args_->GetString(0, &settings_namespace_string)) {
-    // This should be EXTENSION_FUNCTION_VALIDATE(false) but there is no way
-    // to signify that from this function. It will be caught in Run().
-    return false;
-  }
-  return settings_namespace_string != "sync";
-}
-
-ExtensionFunction::ResponseAction SettingsFunction::Run() {
-  std::string settings_namespace_string;
-  EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &settings_namespace_string));
-  args_->Remove(0, NULL);
-  settings_namespace_ =
-      settings_namespace::FromString(settings_namespace_string);
-  EXTENSION_FUNCTION_VALIDATE(settings_namespace_ !=
-                              settings_namespace::INVALID);
-
-  if (extension()->is_login_screen_extension() &&
-      settings_namespace_ != settings_namespace::MANAGED) {
-    // Login screen extensions are not allowed to use local/sync storage for
-    // security reasons (see crbug.com/978443).
-    return RespondNow(Error(base::StringPrintf(
-        "\"%s\" is not available for login screen extensions",
-        settings_namespace_string.c_str())));
-  }
-
-  StorageFrontend* frontend = StorageFrontend::Get(browser_context());
-  if (!frontend->IsStorageEnabled(settings_namespace_)) {
-    return RespondNow(Error(
-        base::StringPrintf("\"%s\" is not available in this instance of Chrome",
-                           settings_namespace_string.c_str())));
-  }
-
-  observers_ = frontend->GetObservers();
-  frontend->RunWithStorage(
-      extension(),
-      settings_namespace_,
-      base::Bind(&SettingsFunction::AsyncRunWithStorage, this));
-  return RespondLater();
-}
-
-void SettingsFunction::AsyncRunWithStorage(ValueStore* storage) {
-  ResponseValue response = RunWithStorage(storage);
-  content::GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&SettingsFunction::Respond, this, std::move(response)));
-}
-
-ExtensionFunction::ResponseValue SettingsFunction::UseReadResult(
-    ValueStore::ReadResult result) {
-  if (!result.status().ok())
-    return Error(result.status().message);
-
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->Swap(&result.settings());
-  return OneArgument(std::move(dict));
-}
-
-ExtensionFunction::ResponseValue SettingsFunction::UseWriteResult(
-    ValueStore::WriteResult result) {
-  if (!result.status().ok())
-    return Error(result.status().message);
-
-  if (!result.changes().empty()) {
-    observers_->Notify(FROM_HERE, &SettingsObserver::OnSettingsChanged,
-                       extension_id(), settings_namespace_,
-                       ValueStoreChange::ToJson(result.changes()));
-  }
-
-  return NoArguments();
-}
 
 // Concrete settings functions
 
@@ -112,8 +31,8 @@ void AddAllStringValues(const base::ListValue& from,
                         std::vector<std::string>* to) {
   DCHECK(to->empty());
   std::string as_string;
-  for (auto it = from.begin(); it != from.end(); ++it) {
-    if (it->GetAsString(&as_string)) {
+  for (const auto& entry : from.GetList()) {
+    if (entry.GetAsString(&as_string)) {
       to->push_back(as_string);
     }
   }
@@ -149,8 +68,100 @@ void GetModificationQuotaLimitHeuristics(QuotaLimitHeuristics* heuristics) {
 
 }  // namespace
 
+// SettingsFunction
+
+SettingsFunction::SettingsFunction() = default;
+
+SettingsFunction::~SettingsFunction() = default;
+
+bool SettingsFunction::ShouldSkipQuotaLimiting() const {
+  // Only apply quota if this is for sync storage.
+  std::string storage_area_string;
+  if (!args_->GetString(0, &storage_area_string)) {
+    // This should be EXTENSION_FUNCTION_VALIDATE(false) but there is no way
+    // to signify that from this function. It will be caught in Run().
+    return false;
+  }
+  return StorageAreaFromString(storage_area_string) !=
+         StorageAreaNamespace::kSync;
+}
+
+ExtensionFunction::ResponseAction SettingsFunction::Run() {
+  std::string storage_area_string;
+  EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &storage_area_string));
+  args_->Remove(0, nullptr);
+  storage_area_ = StorageAreaFromString(storage_area_string);
+  EXTENSION_FUNCTION_VALIDATE(storage_area_ != StorageAreaNamespace::kInvalid);
+  settings_namespace_ = StorageAreaToSettingsNamespace(storage_area_);
+  // TODO(emiliapaz): Currently we only have sync, local and managed implemented
+  // in this function. This check will change after we introduce `session`.
+  EXTENSION_FUNCTION_VALIDATE(
+      settings_namespace_ == settings_namespace::SYNC ||
+      settings_namespace_ == settings_namespace::LOCAL ||
+      settings_namespace_ == settings_namespace::MANAGED);
+
+  if (extension()->is_login_screen_extension() &&
+      storage_area_ != StorageAreaNamespace::kManaged) {
+    // Login screen extensions are not allowed to use local/sync storage for
+    // security reasons (see crbug.com/978443).
+    return RespondNow(Error(base::StringPrintf(
+        "\"%s\" is not available for login screen extensions",
+        storage_area_string.c_str())));
+  }
+
+  StorageFrontend* frontend = StorageFrontend::Get(browser_context());
+  if (!frontend->IsStorageEnabled(settings_namespace_)) {
+    return RespondNow(Error(
+        base::StringPrintf("\"%s\" is not available in this instance of Chrome",
+                           storage_area_string.c_str())));
+  }
+
+  observers_ = frontend->GetObservers();
+  frontend->RunWithStorage(
+      extension(), settings_namespace_,
+      base::BindOnce(&SettingsFunction::AsyncRunWithStorage, this));
+  return RespondLater();
+}
+
+void SettingsFunction::AsyncRunWithStorage(ValueStore* storage) {
+  ResponseValue response = RunWithStorage(storage);
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(&SettingsFunction::Respond, this, std::move(response)));
+}
+
+ExtensionFunction::ResponseValue SettingsFunction::UseReadResult(
+    ValueStore::ReadResult result) {
+  TRACE_EVENT2("browser", "SettingsFunction::UseReadResult", "extension_id",
+               extension_id(), "namespace", storage_area_);
+  if (!result.status().ok())
+    return Error(result.status().message);
+
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  dict->Swap(&result.settings());
+  return OneArgument(base::Value::FromUniquePtrValue(std::move(dict)));
+}
+
+ExtensionFunction::ResponseValue SettingsFunction::UseWriteResult(
+    ValueStore::WriteResult result) {
+  TRACE_EVENT2("browser", "SettingsFunction::UseWriteResult", "extension_id",
+               extension_id(), "namespace", storage_area_);
+  if (!result.status().ok())
+    return Error(result.status().message);
+
+  if (!result.changes().empty()) {
+    observers_->Notify(FROM_HERE, &SettingsObserver::OnSettingsChanged,
+                       extension_id(), storage_area_,
+                       ValueStoreChange::ToValue(result.PassChanges()));
+  }
+
+  return NoArguments();
+}
+
 ExtensionFunction::ResponseValue StorageStorageAreaGetFunction::RunWithStorage(
     ValueStore* storage) {
+  TRACE_EVENT1("browser", "StorageStorageAreaGetFunction::RunWithStorage",
+               "extension_id", extension_id());
   base::Value* input = NULL;
   if (!args_->Get(0, &input))
     return BadMessage();
@@ -194,6 +205,10 @@ ExtensionFunction::ResponseValue StorageStorageAreaGetFunction::RunWithStorage(
 
 ExtensionFunction::ResponseValue
 StorageStorageAreaGetBytesInUseFunction::RunWithStorage(ValueStore* storage) {
+  TRACE_EVENT1("browser",
+               "StorageStorageAreaGetBytesInUseFunction::RunWithStorage",
+               "extension_id", extension_id());
+
   base::Value* input = NULL;
   if (!args_->Get(0, &input))
     return BadMessage();
@@ -224,12 +239,13 @@ StorageStorageAreaGetBytesInUseFunction::RunWithStorage(ValueStore* storage) {
       return BadMessage();
   }
 
-  return OneArgument(
-      std::make_unique<base::Value>(static_cast<int>(bytes_in_use)));
+  return OneArgument(base::Value(static_cast<int>(bytes_in_use)));
 }
 
 ExtensionFunction::ResponseValue StorageStorageAreaSetFunction::RunWithStorage(
     ValueStore* storage) {
+  TRACE_EVENT1("browser", "StorageStorageAreaSetFunction::RunWithStorage",
+               "extension_id", extension_id());
   base::DictionaryValue* input = NULL;
   if (!args_->GetDictionary(0, &input))
     return BadMessage();
@@ -243,6 +259,8 @@ void StorageStorageAreaSetFunction::GetQuotaLimitHeuristics(
 
 ExtensionFunction::ResponseValue
 StorageStorageAreaRemoveFunction::RunWithStorage(ValueStore* storage) {
+  TRACE_EVENT1("browser", "StorageStorageAreaRemoveFunction::RunWithStorage",
+               "extension_id", extension_id());
   base::Value* input = NULL;
   if (!args_->Get(0, &input))
     return BadMessage();
@@ -273,6 +291,8 @@ void StorageStorageAreaRemoveFunction::GetQuotaLimitHeuristics(
 
 ExtensionFunction::ResponseValue
 StorageStorageAreaClearFunction::RunWithStorage(ValueStore* storage) {
+  TRACE_EVENT1("browser", "StorageStorageAreaClearFunction::RunWithStorage",
+               "extension_id", extension_id());
   return UseWriteResult(storage->Clear());
 }
 

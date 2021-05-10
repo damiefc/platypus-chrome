@@ -13,6 +13,7 @@
 
 #include "base/macros.h"
 #include "base/optional.h"
+#include "base/strings/string_piece.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/net_export.h"
 #include "net/http/http_basic_state.h"
@@ -74,7 +75,8 @@ class NET_EXPORT_PRIVATE WebSocketBasicHandshakeStream final
   void SetPriority(RequestPriority priority) override;
   void PopulateNetErrorDetails(NetErrorDetails* details) override;
   HttpStream* RenewStreamForAuth() override;
-
+  const std::vector<std::string>& GetDnsAliases() const override;
+  base::StringPiece GetAcceptChViaAlps() const override;
 
   // This is called from the top level once correct handshake response headers
   // have been received. It creates an appropriate subclass of WebSocketStream
@@ -101,7 +103,9 @@ class NET_EXPORT_PRIVATE WebSocketBasicHandshakeStream final
   // OK if they are, otherwise returns ERR_INVALID_RESPONSE.
   int ValidateUpgradeResponse(const HttpResponseHeaders* headers);
 
-  void OnFailure(const std::string& message);
+  void OnFailure(const std::string& message,
+                 int net_error,
+                 base::Optional<int> response_code);
 
   HttpStreamParser* parser() const { return state_.parser(); }
 

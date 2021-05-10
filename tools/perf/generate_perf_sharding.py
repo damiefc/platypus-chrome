@@ -15,6 +15,9 @@ import shutil
 import sys
 import tempfile
 import textwrap
+from six.moves import input  # pylint: disable=redefined-builtin
+
+import cross_device_test_config
 
 from core import path_util
 path_util.AddTelemetryToPath()
@@ -116,13 +119,6 @@ def _LoadTimingData(args):
   builder, timing_file_path = args
   data = retrieve_story_timing.FetchAverageStoryTimingData(
       configurations=[builder.name], num_last_days=5)
-  # Running against a reference build doubles our runtime.
-  # Double the expected duration of each story to account
-  # for this. Note that gtest perf tests can't run against
-  # reference builds, so this does not apply to them.
-  if builder.run_reference_build:
-    for story in data:
-      story['duration'] = unicode(float(story['duration']) * 2.0)
   for executable in builder.executables:
     data.append({unicode('duration'): unicode(
                     float(executable.estimated_runtime)),
@@ -136,18 +132,25 @@ def _source_filepath(posix_path):
   return os.path.join(path_util.GetChromiumSrcDir(), *posix_path.split('/'))
 
 
-def _GenerateShardMap(
-    builder, num_of_shards, output_path, debug):
+def GenerateShardMap(builder, num_of_shards, debug=False):
   timing_data = []
   if builder:
     with open(builder.timing_file_path) as f:
       timing_data = json.load(f)
   benchmarks_to_shard = (
       list(builder.benchmark_configs) + list(builder.executables))
+  repeat_config = cross_device_test_config.TARGET_DEVICES.get(builder.name, {})
   sharding_map = sharding_map_generator.generate_sharding_map(
-      benchmarks_to_shard, timing_data,
+      benchmarks_to_shard,
+      timing_data,
       num_shards=num_of_shards,
-      debug=debug)
+      debug=debug,
+      repeat_config=repeat_config)
+  return sharding_map
+
+
+def _GenerateShardMapJson(builder, num_of_shards, output_path, debug):
+  sharding_map = GenerateShardMap(builder, num_of_shards, debug)
   _DumpJson(sharding_map, output_path)
 
 
@@ -165,7 +168,7 @@ def _PromptWarning():
              'false regressions in your CL '
              'description')
   print(textwrap.fill(message, 70), '\n')
-  answer = raw_input("Enter 'y' to continue: ")
+  answer = input("Enter 'y' to continue: ")
   if answer != 'y':
     print('Abort updating shard maps for benchmarks on perf waterfall')
     sys.exit(0)
@@ -229,8 +232,7 @@ def _UpdateShardsForBuilders(args):
   if not args.use_existing_timing_data:
     _UpdateTimingData(builders)
   for b in builders:
-    _GenerateShardMap(
-        b, b.num_shards, b.shards_map_file_path, args.debug)
+    _GenerateShardMapJson(b, b.num_shards, b.shards_map_file_path, args.debug)
     print('Updated sharding map for %s' % repr(b.name))
 
 
@@ -269,7 +271,7 @@ def _ParseBenchmarks(shard_map_path):
   all_benchmarks = set()
   with open(shard_map_path) as f:
     shard_map = json.load(f)
-  for shard, benchmarks_in_shard in shard_map.iteritems():
+  for shard, benchmarks_in_shard in shard_map.items():
     if "extra_infos" in shard:
       continue
     if benchmarks_in_shard.get('benchmarks'):

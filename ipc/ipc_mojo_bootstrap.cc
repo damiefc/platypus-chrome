@@ -570,7 +570,7 @@ class ChannelAssociatedGroupController
       sync_watcher_->AllowWokenUpBySyncWatchOnSameSequence();
     }
 
-    bool SyncWatch(const bool* should_stop) override {
+    bool SyncWatch(const bool& should_stop) override {
       DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
       // It's not legal to make sync calls from the primary endpoint's thread,
@@ -579,8 +579,16 @@ class ChannelAssociatedGroupController
       DCHECK(controller_->proxy_task_runner_->BelongsToCurrentThread());
 
       EnsureSyncWatcherExists();
-      return sync_watcher_->SyncWatch(should_stop);
+      return sync_watcher_->SyncWatch(&should_stop);
     }
+
+    bool SyncWatchExclusive(uint64_t request_id) override {
+      // We don't support exclusive waits on Channel-associated interfaces.
+      NOTREACHED();
+      return false;
+    }
+
+    void RegisterExternalSyncWaiter(uint64_t request_id) override {}
 
    private:
     friend class base::RefCountedThreadSafe<Endpoint>;
@@ -849,7 +857,8 @@ class ChannelAssociatedGroupController
       return control_message_handler_.Accept(message);
 
     mojo::InterfaceId id = message->interface_id();
-    DCHECK(mojo::IsValidInterfaceId(id));
+    if (!mojo::IsValidInterfaceId(id))
+      return false;
 
     base::ReleasableAutoLock locker(&lock_);
     Endpoint* endpoint = FindEndpoint(id);
@@ -901,11 +910,6 @@ class ChannelAssociatedGroupController
       }
       return true;
     }
-
-    // We do not expect to receive sync responses on the primary endpoint
-    // thread. If it's happening, it's a bug.
-    DCHECK(!message->has_flag(mojo::Message::kFlagIsSync) ||
-           !message->has_flag(mojo::Message::kFlagIsResponse));
 
     locker.Release();
     // It's safe to access |client| here without holding a lock, because this

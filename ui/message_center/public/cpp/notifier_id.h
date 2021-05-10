@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "ui/gfx/image/image.h"
 #include "ui/message_center/public/cpp/message_center_public_export.h"
 #include "url/gurl.h"
@@ -26,7 +25,8 @@ enum class NotifierType : int {
   WEB_PAGE = 2,
   SYSTEM_COMPONENT = 3,
   CROSTINI_APPLICATION = 4,
-  kMaxValue = CROSTINI_APPLICATION,
+  PHONE_HUB = 5,
+  kMaxValue = PHONE_HUB,
 };
 
 // A struct that identifies the source of notifications. For example, a web page

@@ -4,7 +4,7 @@
 
 #include "device/vr/android/arcore/arcore_plane_manager.h"
 
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "device/vr/android/arcore/type_converters.h"
 
 namespace device {
@@ -50,7 +50,7 @@ device::internal::ScopedArCoreObject<ArPose*> GetArPoseFromMojomPose(
   return result;
 }
 
-ArCorePlaneManager::ArCorePlaneManager(util::PassKey<ArCoreImpl> pass_key,
+ArCorePlaneManager::ArCorePlaneManager(base::PassKey<ArCoreImpl> pass_key,
                                        ArSession* arcore_session)
     : arcore_session_(arcore_session) {
   DCHECK(arcore_session_);
@@ -292,7 +292,7 @@ base::Optional<gfx::Transform> ArCorePlaneManager::GetMojoFromPlane(
 }
 
 device::internal::ScopedArCoreObject<ArAnchor*>
-ArCorePlaneManager::CreateAnchor(util::PassKey<ArCoreAnchorManager> pass_key,
+ArCorePlaneManager::CreateAnchor(base::PassKey<ArCoreAnchorManager> pass_key,
                                  PlaneId id,
                                  const device::mojom::Pose& pose) const {
   auto it = plane_id_to_plane_info_.find(id);

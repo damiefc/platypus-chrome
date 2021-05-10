@@ -12,18 +12,20 @@ import androidx.test.filters.SmallTest;
 import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
+import org.chromium.base.test.util.Batch;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.OfflineItemSchedule;
 import org.chromium.components.offline_items_collection.PendingState;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 
 import java.util.UUID;
 
@@ -31,16 +33,21 @@ import java.util.UUID;
  * Tests of {@link SystemDownloadNotifier}.
  */
 @RunWith(BaseJUnit4ClassRunner.class)
+@Batch(Batch.PER_CLASS)
 public class SystemDownloadNotifierTest {
-    @Rule
-    public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
+    @ClassRule
+    public static final ChromeBrowserTestRule sBrowserTestRule = new ChromeBrowserTestRule();
 
     private final SystemDownloadNotifier mSystemDownloadNotifier = new SystemDownloadNotifier();
     private MockDownloadNotificationService mMockDownloadNotificationService;
 
+    @BeforeClass
+    public static void beforeClass() {
+        Looper.prepare();
+    }
+
     @Before
     public void setUp() {
-        Looper.prepare();
         mMockDownloadNotificationService = new MockDownloadNotificationService();
         mSystemDownloadNotifier.setDownloadNotificationService(mMockDownloadNotificationService);
         mSystemDownloadNotifier.setHandler(new Handler(Looper.getMainLooper()));

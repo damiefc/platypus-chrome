@@ -8,12 +8,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import java.lang.ref.WeakReference;
+import org.chromium.build.BuildConfig;
+
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
  * UnownedUserDataKey is used in conjunction with a particular {@link UnownedUserData} as the key
@@ -63,7 +64,9 @@ import java.util.Set;
 public final class UnownedUserDataKey<T extends UnownedUserData> {
     @NonNull
     private final Class<T> mClazz;
-    private final Set<WeakReference<UnownedUserDataHost>> mHostAttachments = new HashSet<>();
+    // A Set that uses WeakReference<UnownedUserDataHost> internally.
+    private final Set<UnownedUserDataHost> mWeakHostAttachments =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
     /**
      * Constructs a key to use for attaching to a particular {@link UnownedUserDataHost}.
@@ -93,7 +96,7 @@ public final class UnownedUserDataKey<T extends UnownedUserData> {
         host.set(this, object);
 
         if (!isAttachedToHost(host)) {
-            mHostAttachments.add(new WeakReference<>(host));
+            mWeakHostAttachments.add(host);
         }
     }
 
@@ -108,7 +111,8 @@ public final class UnownedUserDataKey<T extends UnownedUserData> {
      */
     @Nullable
     public final T retrieveDataFromHost(@NonNull UnownedUserDataHost host) {
-        for (UnownedUserDataHost attachedHost : getStrongRefs()) {
+        assertNoDestroyedAttachments();
+        for (UnownedUserDataHost attachedHost : mWeakHostAttachments) {
             if (host.equals(attachedHost)) {
                 return host.get(this);
             }
@@ -123,7 +127,8 @@ public final class UnownedUserDataKey<T extends UnownedUserData> {
      * @param host The host to detach from.
      */
     public final void detachFromHost(@NonNull UnownedUserDataHost host) {
-        for (UnownedUserDataHost attachedHost : getStrongRefs()) {
+        assertNoDestroyedAttachments();
+        for (UnownedUserDataHost attachedHost : new ArrayList<>(mWeakHostAttachments)) {
             if (host.equals(attachedHost)) {
                 removeHostAttachment(attachedHost);
             }
@@ -133,9 +138,12 @@ public final class UnownedUserDataKey<T extends UnownedUserData> {
     /**
      * Detaches the {@link UnownedUserData} from all hosts that it is currently attached to with
      * this key. It is OK to call this for already detached objects.
+     *
+     * @param object The object to detach from all hosts.
      */
     public final void detachFromAllHosts(@NonNull T object) {
-        for (UnownedUserDataHost attachedHost : getStrongRefs()) {
+        assertNoDestroyedAttachments();
+        for (UnownedUserDataHost attachedHost : new ArrayList<>(mWeakHostAttachments)) {
             if (object.equals(attachedHost.get(this))) {
                 removeHostAttachment(attachedHost);
             }
@@ -162,8 +170,9 @@ public final class UnownedUserDataKey<T extends UnownedUserData> {
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     /* package */ int getHostAttachmentCount(@NonNull T object) {
+        assertNoDestroyedAttachments();
         int ret = 0;
-        for (UnownedUserDataHost attachedHost : getStrongRefs()) {
+        for (UnownedUserDataHost attachedHost : mWeakHostAttachments) {
             if (object.equals(attachedHost.get(this))) {
                 ret++;
             }
@@ -173,32 +182,17 @@ public final class UnownedUserDataKey<T extends UnownedUserData> {
 
     private void removeHostAttachment(UnownedUserDataHost host) {
         host.remove(this);
-        for (WeakReference<UnownedUserDataHost> hostWeakReference : mHostAttachments) {
-            if (host.equals(hostWeakReference.get())) {
-                // Modifying mHostAttachments while iterating over it is okay here because we
-                // break out of the loop right away.
-                mHostAttachments.remove(hostWeakReference);
-                return;
-            }
-        }
+        mWeakHostAttachments.remove(host);
     }
 
-    // TODO(https://crbug.com/1131047): Make a //base helper for this.
-    private Collection<UnownedUserDataHost> getStrongRefs() {
-        ArrayList<UnownedUserDataHost> ret = new ArrayList<>();
-        Set<WeakReference<UnownedUserDataHost>> hosts = new HashSet<>(mHostAttachments);
-        for (WeakReference<UnownedUserDataHost> hostWeakReference : hosts) {
-            UnownedUserDataHost hostStrongReference = hostWeakReference.get();
-            if (hostStrongReference == null) {
-                mHostAttachments.remove(hostWeakReference);
-                continue;
+    private void assertNoDestroyedAttachments() {
+        if (BuildConfig.ENABLE_ASSERTS) {
+            for (UnownedUserDataHost attachedHost : mWeakHostAttachments) {
+                if (attachedHost.isDestroyed()) {
+                    assert false : "Host should have been removed already.";
+                    throw new IllegalStateException();
+                }
             }
-            if (hostStrongReference.isDestroyed()) {
-                assert false : "Host should have been removed already.";
-                throw new IllegalStateException();
-            }
-            ret.add(hostStrongReference);
         }
-        return ret;
     }
 }

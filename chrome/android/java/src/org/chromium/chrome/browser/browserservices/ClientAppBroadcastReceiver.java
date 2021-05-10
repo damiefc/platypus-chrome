@@ -9,10 +9,10 @@ import android.content.Context;
 import android.content.Intent;
 
 import org.chromium.base.Log;
-import org.chromium.chrome.browser.ChromeApplication;
-import org.chromium.chrome.browser.ChromeVersionInfo;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.browserservices.permissiondelegation.PermissionUpdater;
 import org.chromium.chrome.browser.metrics.WebApkUma;
+import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.webapk.lib.common.WebApkConstants;
 
@@ -77,8 +77,8 @@ public class ClientAppBroadcastReceiver extends BroadcastReceiver {
     public ClientAppBroadcastReceiver() {
         this(new ClearDataStrategy(), new ClientAppDataRegister(),
                 new BrowserServicesStore(
-                        ChromeApplication.getComponent().resolveSharedPreferencesManager()),
-                ChromeApplication.getComponent().resolveTwaPermissionUpdater());
+                        ChromeApplicationImpl.getComponent().resolveSharedPreferencesManager()),
+                ChromeApplicationImpl.getComponent().resolveTwaPermissionUpdater());
     }
 
     /** Constructor to allow dependency injection in tests. */

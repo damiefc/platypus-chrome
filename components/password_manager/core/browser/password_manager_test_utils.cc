@@ -30,15 +30,15 @@ std::unique_ptr<PasswordForm> PasswordFormFromData(
   if (form_data.action)
     form->action = GURL(form_data.action);
   if (form_data.submit_element)
-    form->submit_element = base::WideToUTF16(form_data.submit_element);
+    form->submit_element = form_data.submit_element;
   if (form_data.username_element)
-    form->username_element = base::WideToUTF16(form_data.username_element);
+    form->username_element = form_data.username_element;
   if (form_data.password_element)
-    form->password_element = base::WideToUTF16(form_data.password_element);
+    form->password_element = form_data.password_element;
   if (form_data.username_value)
-    form->username_value = base::WideToUTF16(form_data.username_value);
+    form->username_value = form_data.username_value;
   if (form_data.password_value)
-    form->password_value = base::WideToUTF16(form_data.password_value);
+    form->password_value = form_data.password_value;
   return form;
 }
 
@@ -120,7 +120,6 @@ MockPasswordStoreObserver::MockPasswordStoreObserver() = default;
 
 MockPasswordStoreObserver::~MockPasswordStoreObserver() = default;
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 MockPasswordReuseDetectorConsumer::MockPasswordReuseDetectorConsumer() =
     default;
 
@@ -157,7 +156,5 @@ void PasswordHashDataMatcher::DescribeNegationTo(::std::ostream* os) const {
     base::Optional<PasswordHashData> expected) {
   return ::testing::MakeMatcher(new PasswordHashDataMatcher(expected));
 }
-
-#endif
 
 }  // namespace password_manager

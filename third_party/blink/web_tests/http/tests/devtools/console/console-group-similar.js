@@ -5,14 +5,13 @@
 (async function() {
   TestRunner.addResult(`Tests that console correctly groups similar messages.\n`);
 
-  await TestRunner.loadModule('console_test_runner');
+  await TestRunner.loadModule('console'); await TestRunner.loadTestModule('console_test_runner');
   await TestRunner.showPanel('console');
 
   // Show all messages, including verbose.
   Console.ConsoleView.instance()._setImmediatelyFilterMessagesForTest();
   Console.ConsoleView.instance()._filter._textFilterUI.setValue("url:script");
-  Console.ConsoleView.instance()._filter._onFilterChanged();
-  Console.ConsoleView.instance()._filter._currentFilter.levelsMask = Console.ConsoleFilter.allLevelsFilterValue();
+  Console.ConsoleView.instance()._filter._messageLevelFiltersSetting.set(Console.ConsoleFilter.allLevelsFilterValue());
 
   for (var i = 0; i < 5; i++) {
     // Groupable messages.

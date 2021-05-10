@@ -18,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/notifications/extension_notification_display_helper.h"
 #include "chrome/browser/extensions/api/notifications/extension_notification_display_helper_factory.h"
@@ -103,33 +104,6 @@ std::string StripScopeFromIdentifier(const std::string& extension_id,
   return scoped_id.substr(index_of_separator);
 }
 
-const gfx::ImageSkia CreateSolidColorImage(int width,
-                                           int height,
-                                           SkColor color) {
-  SkBitmap bitmap;
-  bitmap.allocN32Pixels(width, height);
-  bitmap.eraseColor(color);
-  return gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
-}
-
-// Take the alpha channel of small_image, mask it with the foreground,
-// then add the masked foreground on top of the background
-const gfx::Image GetMaskedSmallImage(const gfx::ImageSkia& small_image) {
-  int width = small_image.width();
-  int height = small_image.height();
-
-  // Background color grey
-  const gfx::ImageSkia background = CreateSolidColorImage(
-      width, height, message_center::kSmallImageMaskBackgroundColor);
-  // Foreground color white
-  const gfx::ImageSkia foreground = CreateSolidColorImage(
-      width, height, message_center::kSmallImageMaskForegroundColor);
-  const gfx::ImageSkia masked_small_image =
-      gfx::ImageSkiaOperations::CreateMaskedImage(foreground, small_image);
-  return gfx::Image(gfx::ImageSkiaOperations::CreateSuperimposedImage(
-      background, masked_small_image));
-}
-
 // Converts the |notification_bitmap| (in RGBA format) to the |*return_image|
 // (which is in ARGB format).
 bool NotificationBitmapToGfxImage(
@@ -184,7 +158,7 @@ bool NotificationBitmapToGfxImage(
 
   // TODO(dewittj): Handle HiDPI images with more than one scale factor
   // representation.
-  gfx::ImageSkia skia(gfx::ImageSkiaRep(bitmap, 1.0f));
+  gfx::ImageSkia skia = gfx::ImageSkia::CreateFromBitmap(bitmap, 1.0f);
   *return_image = gfx::Image(skia);
   return true;
 }
@@ -253,8 +227,8 @@ bool NotificationsApiFunction::CreateNotification(
   message_center::NotificationType type =
       MapApiTemplateTypeToType(options->type);
 
-  const base::string16 title(base::UTF8ToUTF16(*options->title));
-  const base::string16 message(base::UTF8ToUTF16(*options->message));
+  const std::u16string title(base::UTF8ToUTF16(*options->title));
+  const std::u16string message(base::UTF8ToUTF16(*options->message));
   gfx::Image icon;
 
   if (!options->icon_bitmap.get() ||
@@ -274,8 +248,8 @@ bool NotificationsApiFunction::CreateNotification(
       *error = kUnableToDecodeIconError;
       return false;
     }
-    optional_fields.small_image =
-        GetMaskedSmallImage(small_icon_mask.AsImageSkia());
+    optional_fields.small_image = small_icon_mask;
+    optional_fields.small_image_needs_additional_masking = true;
   }
 
   if (options->priority.get())
@@ -429,8 +403,8 @@ bool NotificationsApiFunction::UpdateNotification(
       *error = kUnableToDecodeIconError;
       return false;
     }
-    notification->set_small_image(
-        GetMaskedSmallImage(app_icon_mask.AsImageSkia()));
+    notification->set_small_image(app_icon_mask);
+    notification->set_small_image_needs_additional_masking(true);
   }
 
   if (options->priority)
@@ -543,7 +517,7 @@ ExtensionNotificationDisplayHelper* NotificationsApiFunction::GetDisplayHelper()
 }
 
 Profile* NotificationsApiFunction::GetProfile() const {
-  return details_.GetProfile();
+  return Profile::FromBrowserContext(browser_context());
 }
 
 ExtensionFunction::ResponseAction NotificationsApiFunction::Run() {
@@ -605,8 +579,7 @@ NotificationsCreateFunction::RunNotificationsApi() {
         api::notifications::Create::Results::Create(notification_id), error));
   }
 
-  return RespondNow(
-      OneArgument(std::make_unique<base::Value>(notification_id)));
+  return RespondNow(OneArgument(base::Value(notification_id)));
 }
 
 NotificationsUpdateFunction::NotificationsUpdateFunction() {
@@ -627,7 +600,7 @@ NotificationsUpdateFunction::RunNotificationsApi() {
           CreateScopedIdentifier(extension_->id(), params_->notification_id));
 
   if (!matched_notification) {
-    return RespondNow(OneArgument(std::make_unique<base::Value>(false)));
+    return RespondNow(OneArgument(base::Value(false)));
   }
 
   // Copy the existing notification to get a writable version of it.
@@ -647,7 +620,7 @@ NotificationsUpdateFunction::RunNotificationsApi() {
 
   // No trouble, created the notification, send true to the callback and
   // succeed.
-  return RespondNow(OneArgument(std::make_unique<base::Value>(true)));
+  return RespondNow(OneArgument(base::Value(true)));
 }
 
 NotificationsClearFunction::NotificationsClearFunction() {
@@ -664,7 +637,7 @@ NotificationsClearFunction::RunNotificationsApi() {
   bool cancel_result = GetDisplayHelper()->Close(
       CreateScopedIdentifier(extension_->id(), params_->notification_id));
 
-  return RespondNow(OneArgument(std::make_unique<base::Value>(cancel_result)));
+  return RespondNow(OneArgument(base::Value(cancel_result)));
 }
 
 NotificationsGetAllFunction::NotificationsGetAllFunction() {}
@@ -684,7 +657,8 @@ NotificationsGetAllFunction::RunNotificationsApi() {
                    base::Value(true));
   }
 
-  return RespondNow(OneArgument(std::move(result)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 NotificationsGetPermissionLevelFunction::
@@ -704,8 +678,8 @@ NotificationsGetPermissionLevelFunction::RunNotificationsApi() {
           ? api::notifications::PERMISSION_LEVEL_GRANTED
           : api::notifications::PERMISSION_LEVEL_DENIED;
 
-  return RespondNow(OneArgument(
-      std::make_unique<base::Value>(api::notifications::ToString(result))));
+  return RespondNow(
+      OneArgument(base::Value(api::notifications::ToString(result))));
 }
 
 }  // namespace extensions

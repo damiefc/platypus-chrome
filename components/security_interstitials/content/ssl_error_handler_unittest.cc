@@ -122,9 +122,10 @@ const char kCertWithoutOrganizationOrCommonName[] =
 // Runs |quit_closure| on the UI thread once a URL request has been
 // seen. Returns a request that hangs.
 std::unique_ptr<net::test_server::HttpResponse> WaitForRequest(
-    const base::Closure& quit_closure,
+    base::OnceClosure quit_closure,
     const net::test_server::HttpRequest& request) {
-  content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE, quit_closure);
+  content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE,
+                                               std::move(quit_closure));
   return std::make_unique<net::test_server::HungResponse>();
 }
 
@@ -170,7 +171,7 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
   void SendSuggestedUrlCheckResult(
       const CommonNameMismatchHandler::SuggestedUrlCheckResult& result,
       const GURL& suggested_url) {
-    suggested_url_callback_.Run(result, suggested_url);
+    std::move(suggested_url_callback_).Run(result, suggested_url);
   }
 
   int captive_portal_checked() const { return captive_portal_checked_; }
@@ -259,10 +260,10 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
 
   void CheckSuggestedUrl(
       const GURL& suggested_url,
-      const CommonNameMismatchHandler::CheckUrlCallback& callback) override {
+      CommonNameMismatchHandler::CheckUrlCallback callback) override {
     DCHECK(suggested_url_callback_.is_null());
     suggested_url_checked_ = true;
-    suggested_url_callback_ = callback;
+    suggested_url_callback_ = std::move(callback);
   }
 
   void NavigateToSuggestedURL(const GURL& suggested_url) override {
@@ -326,11 +327,11 @@ class SSLErrorHandlerNameMismatchTest
 #endif
 
     delegate_ = new TestSSLErrorHandlerDelegate(web_contents(), ssl_info_);
-    error_handler_.reset(new TestSSLErrorHandler(
+    error_handler_ = std::make_unique<TestSSLErrorHandler>(
         std::unique_ptr<SSLErrorHandler::Delegate>(delegate_), web_contents(),
         net::MapCertStatusToNetError(ssl_info_.cert_status), ssl_info_,
         /*network_time_tracker=*/nullptr, GURL() /*request_url*/,
-        captive_portal_service_.get()));
+        captive_portal_service_.get());
   }
 
   void TearDown() override {
@@ -602,11 +603,11 @@ class SSLErrorAssistantProtoTest : public content::RenderViewHostTestHarness {
 #endif
 
     delegate_ = new TestSSLErrorHandlerDelegate(web_contents(), ssl_info_);
-    error_handler_.reset(new TestSSLErrorHandler(
+    error_handler_ = std::make_unique<TestSSLErrorHandler>(
         std::unique_ptr<SSLErrorHandler::Delegate>(delegate_), web_contents(),
         net::MapCertStatusToNetError(ssl_info_.cert_status), ssl_info_,
         /*network_time_tracker=*/nullptr, GURL() /*request_url*/,
-        captive_portal_service_.get()));
+        captive_portal_service_.get());
   }
 
   net::SSLInfo ssl_info_;
@@ -652,10 +653,10 @@ class SSLErrorHandlerDateInvalidTest
     shared_url_loader_factory_ = network::SharedURLLoaderFactory::Create(
         std::move(pending_url_loader_factory));
 
-    tracker_.reset(new network_time::NetworkTimeTracker(
+    tracker_ = std::make_unique<network_time::NetworkTimeTracker>(
         std::unique_ptr<base::Clock>(clock_),
         std::unique_ptr<base::TickClock>(tick_clock_), &pref_service_,
-        shared_url_loader_factory_));
+        shared_url_loader_factory_);
     // Do this to be sure that |is_null| returns false.
     clock_->Advance(base::TimeDelta::FromDays(111));
     tick_clock_->Advance(base::TimeDelta::FromDays(222));
@@ -666,11 +667,11 @@ class SSLErrorHandlerDateInvalidTest
     ssl_info_.cert_status = net::CERT_STATUS_DATE_INVALID;
 
     delegate_ = new TestSSLErrorHandlerDelegate(web_contents(), ssl_info_);
-    error_handler_.reset(new TestSSLErrorHandler(
+    error_handler_ = std::make_unique<TestSSLErrorHandler>(
         std::unique_ptr<SSLErrorHandler::Delegate>(delegate_), web_contents(),
         net::MapCertStatusToNetError(ssl_info_.cert_status), ssl_info_,
         tracker_.get(), GURL() /*request_url*/,
-        /*captive_portal_service=*/nullptr));
+        /*captive_portal_service=*/nullptr);
 
     // Fix flakiness in case system time is off and triggers a bad clock
     // interstitial. https://crbug.com/666821#c50
@@ -1109,7 +1110,7 @@ TEST_F(SSLErrorHandlerDateInvalidTest, MAYBE_TimeQueryStarted) {
   // Enable network time queries and handle the error. A bad clock interstitial
   // should be shown.
   test_server()->RegisterRequestHandler(
-      base::Bind(&network_time::GoodTimeResponseHandler));
+      base::BindRepeating(&network_time::GoodTimeResponseHandler));
   EXPECT_TRUE(test_server()->Start());
   tracker()->SetTimeServerURLForTesting(test_server()->GetURL("/"));
   field_trial_test()->SetNetworkQueriesWithVariationsService(
@@ -1173,8 +1174,8 @@ TEST_F(SSLErrorHandlerDateInvalidTest, MAYBE_TimeQueryHangs) {
   // network time cannot be determined before the timer elapses, an SSL
   // interstitial should be shown.
   base::RunLoop wait_for_time_query_loop;
-  test_server()->RegisterRequestHandler(
-      base::Bind(&WaitForRequest, wait_for_time_query_loop.QuitClosure()));
+  test_server()->RegisterRequestHandler(base::BindRepeating(
+      &WaitForRequest, wait_for_time_query_loop.QuitClosure()));
   EXPECT_TRUE(test_server()->Start());
   tracker()->SetTimeServerURLForTesting(test_server()->GetURL("/"));
   field_trial_test()->SetNetworkQueriesWithVariationsService(

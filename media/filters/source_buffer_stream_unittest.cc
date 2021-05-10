@@ -6,11 +6,13 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -75,7 +77,7 @@ class SourceBufferStreamTest : public testing::Test {
 
   template <typename ConfigT>
   void ResetStream(const ConfigT& config) {
-    stream_.reset(new SourceBufferStream(config, &media_log_));
+    stream_ = std::make_unique<SourceBufferStream>(config, &media_log_);
   }
 
   void SetMemoryLimit(size_t buffers_of_data) {

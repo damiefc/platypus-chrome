@@ -31,6 +31,7 @@ import org.chromium.base.test.params.ParameterAnnotations.UseRunnerDelegate;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
@@ -42,7 +43,6 @@ import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.IOException;
@@ -91,7 +91,7 @@ public class StartSurfaceNoTabsTest {
         Intent intent = new Intent(Intent.ACTION_MAIN);
         intent.addCategory(Intent.CATEGORY_LAUNCHER);
         mActivityTestRule.prepareUrlIntent(intent, null);
-        mActivityTestRule.startActivityCompletely(intent);
+        mActivityTestRule.launchActivity(intent);
     }
 
     @Before
@@ -131,41 +131,7 @@ public class StartSurfaceNoTabsTest {
                 .check(matches(withEffectiveVisibility(GONE)));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .check(matches(isDisplayed()));
-        onView(withId(org.chromium.chrome.tab_ui.R.id.trendy_terms_recycler_view))
-                .check(matches(withEffectiveVisibility(GONE)));
-    }
-
-    @Test
-    @MediumTest
-    @Feature({"StartSurface"})
-    // clang-format off
-    @CommandLineFlags.Add({BASE_PARAMS + "/single/exclude_mv_tiles/true" +
-        "/show_last_active_tab_only/true/show_stack_tab_switcher/true" +
-        "/open_ntp_instead_of_start/true"})
-    public void testShow_SingleAsHomepage_V2_NoTabs() {
-        // clang-format on
-        CriteriaHelper.pollUiThread(
-                ()
-                        -> mActivityTestRule.getActivity().getLayoutManager() != null
-                        && mActivityTestRule.getActivity().getLayoutManager().overviewVisible());
-
-        onView(withId(R.id.primary_tasks_surface_view)).check(matches(isDisplayed()));
-        onView(withId(R.id.search_box_text)).check(matches(isDisplayed()));
-        onView(withId(org.chromium.chrome.tab_ui.R.id.mv_tiles_container))
-                .check(matches(withEffectiveVisibility(GONE)));
-        onView(withId(org.chromium.chrome.tab_ui.R.id.tab_switcher_title))
-                .check(matches(withEffectiveVisibility(GONE)));
-        onView(withId(org.chromium.chrome.tab_ui.R.id.carousel_tab_switcher_container))
-                .check(matches(withEffectiveVisibility(GONE)));
-        onView(withId(org.chromium.chrome.tab_ui.R.id.single_tab_view))
-                .check(matches(withEffectiveVisibility(GONE)));
-        onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
-                .check(matches(isDisplayed()));
-        onView(withId(org.chromium.chrome.tab_ui.R.id.trendy_terms_recycler_view))
-                .check(matches(withEffectiveVisibility(GONE)));
-        onView(withId(org.chromium.chrome.tab_ui.R.id.incognito_switch))
-                .check(matches(withEffectiveVisibility(GONE)));
-        onView(withId(org.chromium.chrome.tab_ui.R.id.more_tabs))
+        onView(withId(R.id.start_tab_switcher_button))
                 .check(matches(withEffectiveVisibility(GONE)));
     }
 
@@ -196,7 +162,5 @@ public class StartSurfaceNoTabsTest {
                 .check(matches(withEffectiveVisibility(GONE)));
         onView(withId(org.chromium.chrome.tab_ui.R.id.tasks_surface_body))
                 .check(matches(isDisplayed()));
-        onView(withId(org.chromium.chrome.tab_ui.R.id.trendy_terms_recycler_view))
-                .check(matches(withEffectiveVisibility(GONE)));
     }
 }

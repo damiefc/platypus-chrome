@@ -42,9 +42,9 @@ cr.define('settings', function() {
     SMART_LOCK: 3,
     PHONE_HUB: 4,
     PHONE_HUB_NOTIFICATIONS: 5,
-    PHONE_HUB_NOTIFICATION_BADGE: 6,
-    PHONE_HUB_TASK_CONTINUATION: 7,
-    WIFI_SYNC: 8,
+    PHONE_HUB_TASK_CONTINUATION: 6,
+    WIFI_SYNC: 7,
+    ECHE: 8,
   };
 
   /**
@@ -64,6 +64,17 @@ cr.define('settings', function() {
     UNAVAILABLE_SUITE_DISABLED: 7,
     FURTHER_SETUP_REQUIRED: 8,
     UNAVAILABLE_TOP_LEVEL_FEATURE_DISABLED: 9,
+  };
+
+  /**
+   * Possible states of Phone Hub's notification access. Access can be
+   * prohibited if the user is using a work profile on their phone.
+   * @enum {number}
+   */
+  /* #export */ const PhoneHubNotificationAccessStatus = {
+    PROHIBITED: 0,
+    AVAILABLE_BUT_NOT_GRANTED: 1,
+    ACCESS_GRANTED: 2,
   };
 
   /**
@@ -88,11 +99,10 @@ cr.define('settings', function() {
    *   smartLockState: !settings.MultiDeviceFeatureState,
    *   phoneHubState: !settings.MultiDeviceFeatureState,
    *   phoneHubNotificationsState: !settings.MultiDeviceFeatureState,
-   *   phoneHubNotificationBadgeState: !settings.MultiDeviceFeatureState,
    *   phoneHubTaskContinuationState: !settings.MultiDeviceFeatureState,
    *   wifiSyncState: !settings.MultiDeviceFeatureState,
    *   isAndroidSmsPairingComplete: boolean,
-   *   isNotificationAccessGranted: boolean
+   *   notificationAccessStatus: !settings.PhoneHubNotificationAccessStatus
    * }}
    */
   /* #export */ let MultiDevicePageContentData;
@@ -103,6 +113,7 @@ cr.define('settings', function() {
     MultiDeviceFeature,
     MultiDeviceFeatureState,
     MultiDevicePageContentData,
+    PhoneHubNotificationAccessStatus,
     SmartLockSignInEnabledState
   };
 });

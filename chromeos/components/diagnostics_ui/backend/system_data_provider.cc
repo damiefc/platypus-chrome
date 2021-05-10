@@ -16,6 +16,7 @@
 #include "base/timer/timer.h"
 #include "chromeos/components/diagnostics_ui/backend/cros_healthd_helpers.h"
 #include "chromeos/components/diagnostics_ui/backend/power_manager_client_conversions.h"
+#include "chromeos/components/diagnostics_ui/backend/telemetry_log.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
 #include "chromeos/services/cros_healthd/public/cpp/service_connection.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_probe.mojom.h"
@@ -31,6 +32,8 @@ using ProbeCategories = healthd::ProbeCategoryEnum;
 
 constexpr int kBatteryHealthRefreshIntervalInSeconds = 60;
 constexpr int kChargeStatusRefreshIntervalInSeconds = 15;
+constexpr int kCpuUsageRefreshIntervalInSeconds = 1;
+constexpr int kMemoryUsageRefreshIntervalInSeconds = 10;
 constexpr int kMilliampsInAnAmp = 1000;
 
 void PopulateBoardName(const healthd::SystemInfo& system_info,
@@ -45,6 +48,11 @@ void PopulateBoardName(const healthd::SystemInfo& system_info,
   out_system_info.board_name = product_name.value();
 }
 
+void PopulateMarketingName(const healthd::SystemInfo& system_info,
+                           mojom::SystemInfo& out_system_info) {
+  out_system_info.marketing_name = system_info.marketing_name;
+}
+
 void PopulateCpuInfo(const healthd::CpuInfo& cpu_info,
                      mojom::SystemInfo& out_system_info) {
   const PhysicalCpuInfos& physical_cpus = cpu_info.physical_cpus;
@@ -55,12 +63,26 @@ void PopulateCpuInfo(const healthd::CpuInfo& cpu_info,
   // If there is more than one physical cpu on the device, use the name of the
   // first CPU.
   out_system_info.cpu_model_name = physical_cpus[0]->model_name.value_or("");
+
+  // Calculate `max_clock_speed_khz` as the average of all logical core clock
+  // speeds until we decide the best way to consume the information in the UI.
+  uint32_t total_max_ghz = 0;
+  for (const auto& logical_cpu_ptr : physical_cpus[0]->logical_cpus) {
+    total_max_ghz += logical_cpu_ptr->max_clock_speed_khz;
+  }
+
+  // Integer division.
+  out_system_info.cpu_max_clock_speed_khz =
+      total_max_ghz / physical_cpus[0]->logical_cpus.size();
 }
 
 void PopulateVersionInfo(const healthd::SystemInfo& system_info,
                          mojom::SystemInfo& out_system_info) {
-  out_system_info.version_info =
-      mojom::VersionInfo::New(system_info.os_version->release_milestone);
+  const std::string full_version = system_info.os_version->release_milestone +
+                                   '.' + system_info.os_version->build_number +
+                                   '.' + system_info.os_version->patch_number;
+  out_system_info.version_info = mojom::VersionInfo::New(
+      system_info.os_version->release_milestone, full_version);
 }
 
 void PopulateMemorySize(const healthd::MemoryInfo& memory_info,
@@ -124,15 +146,83 @@ void PopulateBatteryHealth(const healthd::BatteryInfo& battery_info,
       battery_info.charge_full_design * kMilliampsInAnAmp;
   out_battery_health.cycle_count = battery_info.cycle_count;
   out_battery_health.battery_wear_percentage =
-      out_battery_health.charge_full_now_milliamp_hours /
+      100 * out_battery_health.charge_full_now_milliamp_hours /
       out_battery_health.charge_full_design_milliamp_hours;
+}
+
+void PopulateMemoryUsage(const healthd::MemoryInfo& memory_info,
+                         mojom::MemoryUsage& out_memory_usage) {
+  out_memory_usage.total_memory_kib = memory_info.total_memory_kib;
+  out_memory_usage.free_memory_kib = memory_info.free_memory_kib;
+  out_memory_usage.available_memory_kib = memory_info.available_memory_kib;
+}
+
+CpuUsageData CalculateCpuUsage(
+    const std::vector<healthd::LogicalCpuInfoPtr>& logical_cpu_infos) {
+  CpuUsageData new_usage_data;
+
+  DCHECK_GE(logical_cpu_infos.size(), 1u);
+  for (const auto& logical_cpu_ptr : logical_cpu_infos) {
+    new_usage_data += CpuUsageData(logical_cpu_ptr->user_time_user_hz,
+                                   logical_cpu_ptr->system_time_user_hz,
+                                   logical_cpu_ptr->idle_time_user_hz);
+  }
+
+  return new_usage_data;
+}
+
+void PopulateCpuUsagePercentages(const CpuUsageData& new_usage,
+                                 const CpuUsageData& old_usage,
+                                 mojom::CpuUsage& out_cpu_usage) {
+  CpuUsageData delta = new_usage - old_usage;
+
+  const uint64_t total_delta = delta.GetTotalTime();
+  if (total_delta == 0) {
+    return;
+  }
+
+  // Mulitply by 100 to convert to percentages.
+  out_cpu_usage.percent_usage_user = 100 * delta.GetUserTime() / total_delta;
+  out_cpu_usage.percent_usage_system =
+      100 * delta.GetSystemTime() / total_delta;
+  out_cpu_usage.percent_usage_free = 100 * delta.GetIdleTime() / total_delta;
+}
+
+void PopulateAverageCpuTemperature(const healthd::CpuInfo& cpu_info,
+                                   mojom::CpuUsage& out_cpu_usage) {
+  uint32_t cumulative_total = 0;
+  for (const auto& temp_channel_ptr : cpu_info.temperature_channels) {
+    cumulative_total += temp_channel_ptr->temperature_celsius;
+  }
+
+  // Integer divison.
+  out_cpu_usage.average_cpu_temp_celsius =
+      cumulative_total / cpu_info.temperature_channels.size();
+}
+
+void PopulateAverageScaledClockSpeed(const healthd::CpuInfo& cpu_info,
+                                     mojom::CpuUsage& out_cpu_usage) {
+  uint32_t total_scaled_ghz = 0;
+  for (const auto& logical_cpu_ptr : cpu_info.physical_cpus[0]->logical_cpus) {
+    total_scaled_ghz += logical_cpu_ptr->scaling_current_frequency_khz;
+  }
+
+  // Integer division.
+  out_cpu_usage.scaling_current_frequency_khz =
+      total_scaled_ghz / cpu_info.physical_cpus[0]->logical_cpus.size();
 }
 
 }  // namespace
 
-SystemDataProvider::SystemDataProvider() {
+SystemDataProvider::SystemDataProvider()
+    : SystemDataProvider(/*telemetry_log_ptr=*/nullptr) {}
+
+SystemDataProvider::SystemDataProvider(TelemetryLog* telemetry_log_ptr)
+    : telemetry_log_ptr_(telemetry_log_ptr) {
   battery_charge_status_timer_ = std::make_unique<base::RepeatingTimer>();
   battery_health_timer_ = std::make_unique<base::RepeatingTimer>();
+  cpu_usage_timer_ = std::make_unique<base::RepeatingTimer>();
+  memory_usage_timer_ = std::make_unique<base::RepeatingTimer>();
   PowerManagerClient::Get()->AddObserver(this);
 }
 
@@ -147,7 +237,7 @@ void SystemDataProvider::GetSystemInfo(GetSystemInfoCallback callback) {
       {ProbeCategories::kBattery, ProbeCategories::kCpu,
        ProbeCategories::kMemory, ProbeCategories::kSystem},
       base::BindOnce(&SystemDataProvider::OnSystemInfoProbeResponse,
-                     base::Unretained(this), std::move(callback)));
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void SystemDataProvider::GetBatteryInfo(GetBatteryInfoCallback callback) {
@@ -156,7 +246,7 @@ void SystemDataProvider::GetBatteryInfo(GetBatteryInfoCallback callback) {
   probe_service_->ProbeTelemetryInfo(
       {ProbeCategories::kBattery},
       base::BindOnce(&SystemDataProvider::OnBatteryInfoProbeResponse,
-                     base::Unretained(this), std::move(callback)));
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void SystemDataProvider::ObserveBatteryChargeStatus(
@@ -187,6 +277,35 @@ void SystemDataProvider::ObserveBatteryHealth(
   UpdateBatteryHealth();
 }
 
+void SystemDataProvider::ObserveMemoryUsage(
+    mojo::PendingRemote<mojom::MemoryUsageObserver> observer) {
+  memory_usage_observers_.Add(std::move(observer));
+
+  if (!memory_usage_timer_->IsRunning()) {
+    memory_usage_timer_->Start(
+        FROM_HERE,
+        base::TimeDelta::FromSeconds(kMemoryUsageRefreshIntervalInSeconds),
+        base::BindRepeating(&SystemDataProvider::UpdateMemoryUsage,
+                            base::Unretained(this)));
+  }
+  UpdateMemoryUsage();
+}
+
+void SystemDataProvider::ObserveCpuUsage(
+    mojo::PendingRemote<mojom::CpuUsageObserver> observer) {
+  cpu_usage_observers_.Add(std::move(observer));
+  if (!cpu_usage_timer_->IsRunning()) {
+    previous_cpu_usage_data_ = CpuUsageData();
+    cpu_usage_timer_->Start(
+        FROM_HERE,
+        base::TimeDelta::FromSeconds(kCpuUsageRefreshIntervalInSeconds),
+        base::BindRepeating(&SystemDataProvider::UpdateCpuUsage,
+                            base::Unretained(this)));
+  }
+
+  UpdateCpuUsage();
+}
+
 void SystemDataProvider::PowerChanged(
     const power_manager::PowerSupplyProperties& proto) {
   if (battery_charge_status_observers_.empty()) {
@@ -198,7 +317,12 @@ void SystemDataProvider::PowerChanged(
   probe_service_->ProbeTelemetryInfo(
       {ProbeCategories::kBattery},
       base::BindOnce(&SystemDataProvider::OnBatteryChargeStatusUpdated,
-                     base::Unretained(this), proto));
+                     weak_factory_.GetWeakPtr(), proto));
+}
+
+void SystemDataProvider::BindInterface(
+    mojo::PendingReceiver<mojom::SystemDataProvider> pending_receiver) {
+  receiver_.Bind(std::move(pending_receiver));
 }
 
 void SystemDataProvider::SetBatteryChargeStatusTimerForTesting(
@@ -211,10 +335,22 @@ void SystemDataProvider::SetBatteryHealthTimerForTesting(
   battery_health_timer_ = std::move(timer);
 }
 
+void SystemDataProvider::SetMemoryUsageTimerForTesting(
+    std::unique_ptr<base::RepeatingTimer> timer) {
+  memory_usage_timer_ = std::move(timer);
+}
+
+void SystemDataProvider::SetCpuUsageTimerForTesting(
+    std::unique_ptr<base::RepeatingTimer> timer) {
+  cpu_usage_timer_ = std::move(timer);
+}
+
 void SystemDataProvider::OnSystemInfoProbeResponse(
     GetSystemInfoCallback callback,
     healthd::TelemetryInfoPtr info_ptr) {
   mojom::SystemInfoPtr system_info = mojom::SystemInfo::New();
+  system_info->version_info = mojom::VersionInfo::New();
+  system_info->device_capabilities = mojom::DeviceCapabilities::New();
 
   if (info_ptr.is_null()) {
     LOG(ERROR) << "Null response from croshealthd::ProbeTelemetryInfo.";
@@ -226,6 +362,7 @@ void SystemDataProvider::OnSystemInfoProbeResponse(
       diagnostics::GetSystemInfo(*info_ptr);
   if (system_info_ptr) {
     PopulateBoardName(*system_info_ptr, *system_info.get());
+    PopulateMarketingName(*system_info_ptr, *system_info.get());
     PopulateVersionInfo(*system_info_ptr, *system_info.get());
   } else {
     LOG(ERROR)
@@ -251,6 +388,10 @@ void SystemDataProvider::OnSystemInfoProbeResponse(
   }
 
   PopulateDeviceCapabilities(*info_ptr, *system_info.get());
+
+  if (IsLoggingEnabled()) {
+    telemetry_log_ptr_->UpdateSystemInfo(system_info.Clone());
+  }
 
   std::move(callback).Run(std::move(system_info));
 }
@@ -289,7 +430,7 @@ void SystemDataProvider::UpdateBatteryChargeStatus() {
   probe_service_->ProbeTelemetryInfo(
       {ProbeCategories::kBattery},
       base::BindOnce(&SystemDataProvider::OnBatteryChargeStatusUpdated,
-                     base::Unretained(this), properties));
+                     weak_factory_.GetWeakPtr(), properties));
 }
 
 void SystemDataProvider::UpdateBatteryHealth() {
@@ -298,7 +439,25 @@ void SystemDataProvider::UpdateBatteryHealth() {
   probe_service_->ProbeTelemetryInfo(
       {ProbeCategories::kBattery},
       base::BindOnce(&SystemDataProvider::OnBatteryHealthUpdated,
-                     base::Unretained(this)));
+                     weak_factory_.GetWeakPtr()));
+}
+
+void SystemDataProvider::UpdateMemoryUsage() {
+  BindCrosHealthdProbeServiceIfNeccessary();
+
+  probe_service_->ProbeTelemetryInfo(
+      {ProbeCategories::kMemory},
+      base::BindOnce(&SystemDataProvider::OnMemoryUsageUpdated,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void SystemDataProvider::UpdateCpuUsage() {
+  BindCrosHealthdProbeServiceIfNeccessary();
+
+  probe_service_->ProbeTelemetryInfo(
+      {ProbeCategories::kCpu},
+      base::BindOnce(&SystemDataProvider::OnCpuUsageUpdated,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void SystemDataProvider::OnBatteryChargeStatusUpdated(
@@ -359,10 +518,89 @@ void SystemDataProvider::OnBatteryHealthUpdated(
   NotifyBatteryHealthObservers(battery_health);
 }
 
+void SystemDataProvider::OnMemoryUsageUpdated(
+    healthd::TelemetryInfoPtr info_ptr) {
+  mojom::MemoryUsagePtr memory_usage = mojom::MemoryUsage::New();
+
+  if (info_ptr.is_null()) {
+    LOG(ERROR) << "Null response from croshealthd::ProbeTelemetryInfo.";
+    NotifyMemoryUsageObservers(memory_usage);
+    memory_usage_timer_.reset();
+    return;
+  }
+
+  const healthd::MemoryInfo* memory_info = GetMemoryInfo(*info_ptr);
+  if (memory_info == nullptr) {
+    LOG(ERROR) << "No MemoryInfo in response from cros_healthd.";
+    NotifyMemoryUsageObservers(memory_usage);
+    memory_usage_timer_.reset();
+    return;
+  }
+
+  PopulateMemoryUsage(*memory_info, *memory_usage.get());
+  NotifyMemoryUsageObservers(memory_usage);
+}
+
+void SystemDataProvider::OnCpuUsageUpdated(healthd::TelemetryInfoPtr info_ptr) {
+  mojom::CpuUsagePtr cpu_usage = mojom::CpuUsage::New();
+
+  if (info_ptr.is_null()) {
+    LOG(ERROR) << "Null response from croshealthd::ProbeTelemetryInfo.";
+    NotifyCpuUsageObservers(cpu_usage);
+    cpu_usage_timer_.reset();
+    return;
+  }
+
+  const healthd::CpuInfo* cpu_info = GetCpuInfo(*info_ptr);
+  if (cpu_info == nullptr) {
+    LOG(ERROR) << "No CpuInfo in response from cros_healthd.";
+    NotifyCpuUsageObservers(cpu_usage);
+    cpu_usage_timer_.reset();
+    return;
+  }
+
+  ComputeAndPopulateCpuUsage(*cpu_info, *cpu_usage.get());
+  PopulateAverageCpuTemperature(*cpu_info, *cpu_usage.get());
+  PopulateAverageScaledClockSpeed(*cpu_info, *cpu_usage.get());
+
+  NotifyCpuUsageObservers(cpu_usage);
+}
+
+void SystemDataProvider::ComputeAndPopulateCpuUsage(
+    const healthd::CpuInfo& cpu_info,
+    mojom::CpuUsage& out_cpu_usage) {
+  // For simplicity, assume that all devices have just one physical CPU, made
+  // up of one or more virtual CPUs.
+
+  // TODO(baileyberro): Handle devices with multiple physical CPUs.
+  if (cpu_info.physical_cpus.size() > 1) {
+    LOG(ERROR) << "Device has more than one physical CPU";
+  }
+
+  const healthd::PhysicalCpuInfoPtr& physical_cpu_ptr =
+      cpu_info.physical_cpus[0];
+
+  CpuUsageData new_usage_data =
+      CalculateCpuUsage(physical_cpu_ptr->logical_cpus);
+
+  // We use the first usage data we get back as a baseline. On subsequent
+  // fetches, we use the previous cumulative data to calculate a delta.
+  if (previous_cpu_usage_data_.IsInitialized()) {
+    PopulateCpuUsagePercentages(new_usage_data, previous_cpu_usage_data_,
+                                out_cpu_usage);
+  }
+
+  previous_cpu_usage_data_ = new_usage_data;
+}
+
 void SystemDataProvider::NotifyBatteryChargeStatusObservers(
     const mojom::BatteryChargeStatusPtr& battery_charge_status) {
   for (auto& observer : battery_charge_status_observers_) {
     observer->OnBatteryChargeStatusUpdated(battery_charge_status.Clone());
+  }
+  if (IsLoggingEnabled()) {
+    telemetry_log_ptr_->UpdateBatteryChargeStatus(
+        battery_charge_status.Clone());
   }
 }
 
@@ -371,19 +609,47 @@ void SystemDataProvider::NotifyBatteryHealthObservers(
   for (auto& observer : battery_health_observers_) {
     observer->OnBatteryHealthUpdated(battery_health.Clone());
   }
+  if (IsLoggingEnabled()) {
+    telemetry_log_ptr_->UpdateBatteryHealth(battery_health.Clone());
+  }
+}
+
+void SystemDataProvider::NotifyMemoryUsageObservers(
+    const mojom::MemoryUsagePtr& memory_usage) {
+  for (auto& observer : memory_usage_observers_) {
+    observer->OnMemoryUsageUpdated(memory_usage.Clone());
+  }
+  if (IsLoggingEnabled()) {
+    telemetry_log_ptr_->UpdateMemoryUsage(memory_usage.Clone());
+  }
+}
+
+void SystemDataProvider::NotifyCpuUsageObservers(
+    const mojom::CpuUsagePtr& cpu_usage) {
+  for (auto& observer : cpu_usage_observers_) {
+    observer->OnCpuUsageUpdated(cpu_usage.Clone());
+  }
+  if (IsLoggingEnabled()) {
+    telemetry_log_ptr_->UpdateCpuUsage(cpu_usage.Clone());
+  }
 }
 
 void SystemDataProvider::BindCrosHealthdProbeServiceIfNeccessary() {
   if (!probe_service_ || !probe_service_.is_connected()) {
     cros_healthd::ServiceConnection::GetInstance()->GetProbeService(
         probe_service_.BindNewPipeAndPassReceiver());
-    probe_service_.set_disconnect_handler(base::BindOnce(
-        &SystemDataProvider::OnProbeServiceDisconnect, base::Unretained(this)));
+    probe_service_.set_disconnect_handler(
+        base::BindOnce(&SystemDataProvider::OnProbeServiceDisconnect,
+                       weak_factory_.GetWeakPtr()));
   }
 }
 
 void SystemDataProvider::OnProbeServiceDisconnect() {
   probe_service_.reset();
+}
+
+bool SystemDataProvider::IsLoggingEnabled() const {
+  return telemetry_log_ptr_ != nullptr;
 }
 
 }  // namespace diagnostics

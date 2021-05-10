@@ -17,8 +17,8 @@ namespace password_manager {
 
 namespace metrics_util {
 
-using IsUsernameChanged = util::StrongAlias<class IsUsernameChangedTag, bool>;
-using IsPasswordChanged = util::StrongAlias<class IsPasswordChangedTag, bool>;
+using IsUsernameChanged = base::StrongAlias<class IsUsernameChangedTag, bool>;
+using IsPasswordChanged = base::StrongAlias<class IsPasswordChangedTag, bool>;
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -27,7 +27,7 @@ enum UIDisplayDisposition {
   AUTOMATIC_WITH_PASSWORD_PENDING = 0,
   MANUAL_WITH_PASSWORD_PENDING = 1,
   MANUAL_MANAGE_PASSWORDS = 2,
-  MANUAL_BLACKLISTED_OBSOLETE = 3,  // obsolete.
+  MANUAL_BLOCKLISTED_OBSOLETE = 3,  // obsolete.
   AUTOMATIC_GENERATED_PASSWORD_CONFIRMATION = 4,
   AUTOMATIC_CREDENTIAL_REQUEST_OBSOLETE = 5,  // obsolete
   AUTOMATIC_SIGNIN_TOAST = 6,
@@ -52,7 +52,7 @@ enum UIDismissalReason {
   CLICKED_NEVER = 3,
   CLICKED_MANAGE = 4,
   CLICKED_DONE_OBSOLETE = 5,         // obsolete
-  CLICKED_UNBLACKLIST_OBSOLETE = 6,  // obsolete.
+  CLICKED_UNBLOCKLIST_OBSOLETE = 6,  // obsolete.
   CLICKED_OK_OBSOLETE = 7,           // obsolete
   CLICKED_CREDENTIAL_OBSOLETE = 8,   // obsolete.
   AUTO_SIGNIN_TOAST_TIMEOUT = 9,
@@ -224,6 +224,7 @@ enum AccessPasswordInSettingsEvent {
 // numeric values should never be reused. Needs to stay in sync with
 // "PasswordManager.ReauthResult" in enums.xml.
 // Metrics: PasswordManager.ReauthToAccessPasswordInSettings
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.password_manager
 enum class ReauthResult {
   kSuccess = 0,
   kFailure = 1,
@@ -262,7 +263,6 @@ enum class DeleteCorruptedPasswordsResult {
   kMaxValue = kEncryptionUnavailable,
 };
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 enum class GaiaPasswordHashChange {
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
@@ -297,7 +297,6 @@ enum class IsSyncPasswordHashSaved {
   IS_SYNC_PASSWORD_HASH_SAVED_COUNT = 3,
   kMaxValue = IS_SYNC_PASSWORD_HASH_SAVED_COUNT,
 };
-#endif
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -456,7 +455,9 @@ enum class MoveToAccountStoreTrigger {
   kSuccessfulLoginWithProfileStorePassword = 0,
   // The user explicitly asked to move a password listed in Settings.
   kExplicitlyTriggeredInSettings = 1,
-  kMaxValue = kExplicitlyTriggeredInSettings,
+  // The user explicitly asked to move multiple passwords at once in Settings.
+  kExplicitlyTriggeredForMultiplePasswordsInSettings = 2,
+  kMaxValue = kExplicitlyTriggeredForMultiplePasswordsInSettings,
 };
 
 // Used to record metrics for the usage and timing of the GetChangePasswordUrl
@@ -516,15 +517,14 @@ void LogGeneralUIDismissalReason(UIDismissalReason reason);
 
 // Log the |reason| a user dismissed the save password bubble. If
 // |user_state| is set, the |reason| is also logged to a separate
-// user-state-specific histogram. |user_state| must be non-null iff the feature
-// kEnablePasswordsAccountStorage is enabled.
+// user-state-specific histogram.
 void LogSaveUIDismissalReason(
     UIDismissalReason reason,
     base::Optional<PasswordAccountStorageUserState> user_state);
 
 // Log the |reason| a user dismissed the save password prompt after previously
-// having unblacklisted the origin while on the page.
-void LogSaveUIDismissalReasonAfterUnblacklisting(UIDismissalReason reason);
+// having unblocklisted the origin while on the page.
+void LogSaveUIDismissalReasonAfterUnblocklisting(UIDismissalReason reason);
 
 // Log the |reason| a user dismissed the update password bubble.
 void LogUpdateUIDismissalReason(UIDismissalReason reason);
@@ -597,8 +597,22 @@ void LogPasswordAcceptedSaveUpdateSubmissionIndicatorEvent(
 // Log a frame of a submitted password form.
 void LogSubmittedFormFrame(SubmittedFormFrame frame);
 
-// Logs how many account-stored passwords are available right after unlock.
-void LogPasswordsCountFromAccountStoreAfterUnlock(int account_store_passwords);
+// Logs how many account-stored passwords are available for filling in the
+// current password form right after unlock.
+void LogPasswordsCountFromAccountStoreAfterUnlock(
+    int account_store_passwords_count);
+
+// Logs how many account-stored passwords are downloaded right after unlock.
+// This is different from `LogPasswordsCountFromAccountStoreAfterUnlock` since
+// it records all the downloaded passwords not just those available for filling
+// in a specific password form.
+void LogDownloadedPasswordsCountFromAccountStoreAfterUnlock(
+    int account_store_passwords_count);
+
+// Logs how many blocklisted entries are downloaded to the account store right
+// after unlock.
+void LogDownloadedBlocklistedEntriesCountFromAccountStoreAfterUnlock(
+    int blocklist_entries_count);
 
 // Logs the result of a re-auth challenge in the password settings.
 void LogPasswordSettingsReauthResult(ReauthResult result);
@@ -618,7 +632,6 @@ void LogGenerationDialogChoice(
     GenerationDialogChoice choice,
     autofill::password_generation::PasswordGenerationType type);
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 // Log a save gaia password change event.
 void LogGaiaPasswordHashChange(GaiaPasswordHashChange event,
                                bool is_sync_password);
@@ -633,8 +646,6 @@ void LogProtectedPasswordHashCounts(size_t gaia_hash_count,
                                     size_t enterprise_hash_count,
                                     bool does_primary_account_exists,
                                     bool is_signed_in);
-
-#endif
 
 // Log the result of the password edit action.
 void LogPasswordEditResult(IsUsernameChanged password_changed,

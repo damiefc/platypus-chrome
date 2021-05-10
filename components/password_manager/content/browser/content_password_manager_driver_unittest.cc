@@ -29,7 +29,6 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 
 using autofill::ParsingResult;
-using autofill::PasswordForm;
 using autofill::PasswordFormFillData;
 using base::ASCIIToUTF16;
 using testing::_;
@@ -41,7 +40,7 @@ namespace {
 
 class MockLogManager : public autofill::StubLogManager {
  public:
-  MOCK_CONST_METHOD0(IsLoggingActive, bool(void));
+  MOCK_METHOD(bool, IsLoggingActive, (), (const override));
 };
 
 class MockPasswordManagerClient : public StubPasswordManagerClient {
@@ -49,9 +48,12 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   MockPasswordManagerClient() = default;
   ~MockPasswordManagerClient() override = default;
 
-  MOCK_CONST_METHOD0(GetLogManager, const autofill::LogManager*());
+  MOCK_METHOD(const autofill::LogManager*, GetLogManager, (), (const override));
 #if BUILDFLAG(SAFE_BROWSING_DB_LOCAL)
-  MOCK_METHOD2(CheckSafeBrowsingReputation, void(const GURL&, const GURL&));
+  MOCK_METHOD(void,
+              CheckSafeBrowsingReputation,
+              (const GURL&, const GURL&),
+              (override));
 #endif
 
  private:
@@ -77,13 +79,20 @@ class FakePasswordAutofillAgent
   }
 
   // autofill::mojom::PasswordAutofillAgent:
-  MOCK_METHOD1(FillPasswordForm, void(const PasswordFormFillData&));
-  MOCK_METHOD1(InformNoSavedCredentials, void(bool));
-  MOCK_METHOD2(FillIntoFocusedField, void(bool, const base::string16&));
-  MOCK_METHOD1(TouchToFillClosed, void(bool));
-  MOCK_METHOD1(AnnotateFieldsWithParsingResult, void(const ParsingResult&));
-
-  MOCK_METHOD0(BlacklistedFormFound, void());
+  MOCK_METHOD(void,
+              FillPasswordForm,
+              (const PasswordFormFillData&),
+              (override));
+  MOCK_METHOD(void, InformNoSavedCredentials, (bool), (override));
+  MOCK_METHOD(void,
+              FillIntoFocusedField,
+              (bool, const std::u16string&),
+              (override));
+  MOCK_METHOD(void, TouchToFillClosed, (bool), (override));
+  MOCK_METHOD(void,
+              AnnotateFieldsWithParsingResult,
+              (const ParsingResult&),
+              (override));
 
  private:
   void SetLoggingState(bool active) override {
@@ -107,18 +116,20 @@ PasswordFormFillData GetTestPasswordFormFillData() {
   form_on_page.action = GURL("https://foo.com/login");
   form_on_page.signon_realm = "https://foo.com/";
   form_on_page.scheme = PasswordForm::Scheme::kHtml;
+  form_on_page.form_data.host_frame = autofill::LocalFrameToken(
+      base::UnguessableToken::Deserialize(98765, 43210));
 
   // Create an exact match in the database.
   PasswordForm preferred_match = form_on_page;
-  preferred_match.username_element = ASCIIToUTF16("username");
-  preferred_match.username_value = ASCIIToUTF16("test@gmail.com");
-  preferred_match.password_element = ASCIIToUTF16("password");
-  preferred_match.password_value = ASCIIToUTF16("test");
+  preferred_match.username_element = u"username";
+  preferred_match.username_value = u"test@gmail.com";
+  preferred_match.password_element = u"password";
+  preferred_match.password_value = u"test";
 
   std::vector<const PasswordForm*> matches;
   PasswordForm non_preferred_match = preferred_match;
-  non_preferred_match.username_value = ASCIIToUTF16("test1@gmail.com");
-  non_preferred_match.password_value = ASCIIToUTF16("test1");
+  non_preferred_match.username_value = u"test1@gmail.com";
+  non_preferred_match.password_value = u"test1";
   matches.push_back(&non_preferred_match);
 
   return CreatePasswordFormFillData(form_on_page, matches, preferred_match,
@@ -224,16 +235,6 @@ TEST_F(ContentPasswordManagerDriverTest, ClearPasswordsOnAutofill) {
   EXPECT_CALL(fake_agent_, FillPasswordForm(WerePasswordsCleared()));
   driver->FillPasswordForm(fill_data);
   base::RunLoop().RunUntilIdle();
-}
-
-TEST_F(ContentPasswordManagerDriverTest, NotInformAboutBlacklistedForm) {
-  std::unique_ptr<ContentPasswordManagerDriver> driver(
-      new ContentPasswordManagerDriver(main_rfh(), &password_manager_client_,
-                                       &autofill_client_));
-
-  PasswordFormFillData fill_data = GetTestPasswordFormFillData();
-  EXPECT_CALL(fake_agent_, BlacklistedFormFound()).Times(0);
-  driver->FillPasswordForm(fill_data);
 }
 
 INSTANTIATE_TEST_SUITE_P(All,

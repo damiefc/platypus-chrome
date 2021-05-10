@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/hash/md5.h"
 #include "base/location.h"
@@ -46,7 +46,7 @@ void RunOrPostGetMostVisitedURLsCallback(
     task_runner->PostTask(FROM_HERE, base::BindOnce(std::move(callback), urls));
 }
 
-// Checks if the titles stored in |old_list| and |new_list| have changes.
+// Checks if the titles stored in `old_list` and `new_list` have changes.
 bool DoTitlesDiffer(const MostVisitedURLList& old_list,
                     const MostVisitedURLList& new_list) {
   // If the two lists have different sizes, the most visited titles are
@@ -214,7 +214,7 @@ void TopSitesImpl::OnNavigationCommitted(const GURL& url) {
 
 void TopSitesImpl::ShutdownOnUIThread() {
   history_service_ = nullptr;
-  history_service_observer_.RemoveAll();
+  history_service_observation_.Reset();
   // Cancel all requests so that the service doesn't callback to us after we've
   // invoked Shutdown (this could happen if we have a pending request and
   // Shutdown is invoked).
@@ -371,7 +371,7 @@ int TopSitesImpl::num_results_to_request_from_history() const {
 
   const base::DictionaryValue* blocked_urls =
       pref_service_->GetDictionary(kBlockedUrlsPrefsKey);
-  return kTopSitesNumber + (blocked_urls ? blocked_urls->size() : 0);
+  return kTopSitesNumber + (blocked_urls ? blocked_urls->DictSize() : 0);
 }
 
 void TopSitesImpl::MoveStateToLoaded() {
@@ -398,7 +398,7 @@ void TopSitesImpl::MoveStateToLoaded() {
     std::move(callback).Run(urls);
 
   if (history_service_)
-    history_service_observer_.Add(history_service_);
+    history_service_observation_.Observe(history_service_);
 
   NotifyTopSitesLoaded();
 }
@@ -419,7 +419,7 @@ void TopSitesImpl::ScheduleUpdateTimer() {
 void TopSitesImpl::OnGotMostVisitedURLs(MostVisitedURLList sites) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  // Set |top_sites_| directly so that SetTopSites() diffs correctly.
+  // Set `top_sites_` directly so that SetTopSites() diffs correctly.
   top_sites_ = sites;
   SetTopSites(std::move(sites), CALL_LOCATION_FROM_ON_GOT_MOST_VISITED_URLS);
 

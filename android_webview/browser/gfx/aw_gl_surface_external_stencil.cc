@@ -82,6 +82,12 @@ class AwGLSurfaceExternalStencil::BlitContext {
       glDisableVertexAttribArray(i);
     }
 
+    // Note that function is not ANGLE only.
+    if (gl::g_current_gl_driver->fn.glVertexAttribDivisorANGLEFn) {
+      glVertexAttribDivisorANGLE(0, 0);
+      glVertexAttribDivisorANGLE(1, 0);
+    }
+
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
 
@@ -149,7 +155,8 @@ class AwGLSurfaceExternalStencil::FrameBuffer {
   gfx::Size size_;
 };
 
-AwGLSurfaceExternalStencil::AwGLSurfaceExternalStencil() {}
+AwGLSurfaceExternalStencil::AwGLSurfaceExternalStencil(bool is_angle)
+    : AwGLSurface(is_angle) {}
 
 AwGLSurfaceExternalStencil::~AwGLSurfaceExternalStencil() = default;
 
@@ -174,6 +181,10 @@ gfx::SwapResult AwGLSurfaceExternalStencil::SwapBuffers(
   if (stencil_state.stencil_test_enabled) {
     DCHECK(framebuffer_);
     DCHECK(blit_context_);
+
+    // Flush skia renderer rendering. This is working around what appears to be
+    // a driver bug that causes rendering to break.
+    glFlush();
 
     // Restore stencil state.
     glEnable(GL_STENCIL_TEST);
@@ -220,6 +231,8 @@ gfx::SwapResult AwGLSurfaceExternalStencil::SwapBuffers(
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, framebuffer_->texture_id());
+    if (gl::g_current_gl_driver->fn.glBindSamplerFn)
+      glBindSampler(0, 0);
 
     // We need to restore viewport as it might have changed by renderer
     glViewport(0, 0, viewport_.width(), viewport_.height());
@@ -229,6 +242,17 @@ gfx::SwapResult AwGLSurfaceExternalStencil::SwapBuffers(
 
     // Restore color mask in case.
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    // Restore blending.
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glFrontFace(GL_CCW);
+
+    if (gl::g_current_gl_driver->fn.glWindowRectanglesEXTFn)
+      glWindowRectanglesEXT(GL_EXCLUSIVE_EXT, 0, nullptr);
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   }

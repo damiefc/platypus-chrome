@@ -38,10 +38,10 @@
 
 namespace blink {
 
-class LocalFrame;
+class LocalDOMWindow;
 class KURL;
 class ExceptionState;
-class SecurityOrigin;
+class HistoryItem;
 class ScriptState;
 
 // This class corresponds to the History interface.
@@ -50,7 +50,7 @@ class CORE_EXPORT History final : public ScriptWrappable,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  explicit History(LocalFrame*);
+  explicit History(LocalDOMWindow*);
 
   unsigned length(ExceptionState&) const;
   ScriptValue state(ScriptState*, ExceptionState&);
@@ -79,14 +79,6 @@ class CORE_EXPORT History final : public ScriptWrappable,
   void Trace(Visitor*) const override;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(HistoryTest, CanChangeToURL);
-  FRIEND_TEST_ALL_PREFIXES(HistoryTest, CanChangeToURLInFileOrigin);
-  FRIEND_TEST_ALL_PREFIXES(HistoryTest, CanChangeToURLInUniqueOrigin);
-
-  static bool CanChangeToUrl(const KURL&,
-                             const SecurityOrigin*,
-                             const KURL& document_url);
-
   KURL UrlForState(const String& url);
 
   void StateObjectAdded(scoped_refptr<SerializedScriptValue>,
@@ -97,6 +89,7 @@ class CORE_EXPORT History final : public ScriptWrappable,
                         ExceptionState&);
   SerializedScriptValue* StateInternal() const;
   mojom::blink::ScrollRestorationType ScrollRestorationInternal() const;
+  HistoryItem* GetHistoryItem() const;
 
   scoped_refptr<SerializedScriptValue> last_state_object_requested_;
 };

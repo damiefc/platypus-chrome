@@ -41,7 +41,6 @@ class MockCastWebContents : public CastWebContents {
               script_injector,
               (),
               (override));
-  MOCK_METHOD(void, InjectScriptsIntoMainFrame, (), (override));
   MOCK_METHOD(void,
               PostMessageToMainFrame,
               (const std::string&,
@@ -50,7 +49,7 @@ class MockCastWebContents : public CastWebContents {
               (override));
   MOCK_METHOD(void,
               ExecuteJavaScript,
-              (const base::string16&, base::OnceCallback<void(base::Value)>),
+              (const std::u16string&, base::OnceCallback<void(base::Value)>),
               (override));
   MOCK_METHOD(void, AddObserver, (Observer*), (override));
   MOCK_METHOD(void, RemoveObserver, (Observer*), (override));
@@ -64,6 +63,7 @@ class MockCastWebContents : public CastWebContents {
   MOCK_METHOD(bool, can_bind_interfaces, (), (override));
 
   service_manager::BinderRegistry* binder_registry() override;
+  bool TryBindReceiver(mojo::GenericPendingReceiver&) override;
 
  private:
   service_manager::BinderRegistry registry_;

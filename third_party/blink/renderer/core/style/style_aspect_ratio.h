@@ -5,7 +5,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_STYLE_STYLE_ASPECT_RATIO_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_STYLE_STYLE_ASPECT_RATIO_H_
 
+#include "third_party/blink/renderer/platform/geometry/float_size.h"
 #include "third_party/blink/renderer/platform/geometry/int_size.h"
+#include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
 namespace blink {
@@ -25,6 +27,12 @@ class StyleAspectRatio {
   EAspectRatioType GetType() const {
     if (ratio_.Width() == 0 || ratio_.Height() == 0)
       return EAspectRatioType::kAuto;
+    // Since we do calculations on LayoutUnits, also check that our width/height
+    // doesn't convert to zero.
+    if (ratio_.Width() < LayoutUnit::Epsilon() ||
+        ratio_.Height() < LayoutUnit::Epsilon()) {
+      return EAspectRatioType::kAuto;
+    }
     return GetTypeForComputedStyle();
   }
 

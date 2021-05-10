@@ -28,10 +28,9 @@ class OffTheRecordChromeBrowserStateImpl : public ChromeBrowserState {
   PrefProxyConfigTracker* GetProxyConfigTracker() override;
   BrowserStatePolicyConnector* GetPolicyConnector() override;
   PrefService* GetPrefs() override;
-  PrefService* GetOffTheRecordPrefs() override;
   ChromeBrowserStateIOData* GetIOData() override;
   void ClearNetworkingHistorySince(base::Time time,
-                                   const base::Closure& completion) override;
+                                   base::OnceClosure completion) override;
   net::URLRequestContextGetter* CreateRequestContext(
       ProtocolHandlerMap* protocol_handlers) override;
 

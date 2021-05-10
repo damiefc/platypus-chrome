@@ -47,7 +47,9 @@ class Animation;
 class CompositorAnimation;
 class Element;
 class KeyframeEffectModelBase;
+class Node;
 class PaintArtifactCompositor;
+class SVGElement;
 
 class CORE_EXPORT CompositorAnimations {
   STATIC_ONLY(CompositorAnimations);
@@ -167,6 +169,8 @@ class CORE_EXPORT CompositorAnimations {
 
   static bool CheckUsesCompositedScrolling(Node* target);
 
+  static bool CanStartTransformAnimationOnCompositorForSVG(const SVGElement&);
+
  private:
   static FailureReasons CheckCanStartEffectOnCompositor(
       const Timing&,
@@ -179,10 +183,14 @@ class CORE_EXPORT CompositorAnimations {
   static FailureReasons CheckCanStartElementOnCompositor(
       const Element& element,
       const EffectModel& model);
+  static FailureReasons CheckCanStartSVGElementOnCompositor(const SVGElement&);
+  // This doesn't include the reasons returned from the above function.
+  static FailureReasons CheckCanStartTransformAnimationOnCompositorForSVG(
+      const SVGElement&);
 
   friend class AnimationCompositorAnimationsTest;
 };
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_ANIMATION_COMPOSITOR_ANIMATIONS_H_

@@ -79,7 +79,21 @@ enum class CrostiniResult {
   NEVER_FINISHED = 49,
   CONTAINER_SETUP_FAILED = 50,
   START_LXD_FAILED = 51,
-  kMaxValue = START_LXD_FAILED,
+  INSTALL_IMAGE_LOADER_TIMED_OUT = 52,
+  CREATE_DISK_IMAGE_TIMED_OUT = 53,
+  START_TERMINA_VM_TIMED_OUT = 54,
+  START_LXD_TIMED_OUT = 55,
+  CREATE_CONTAINER_TIMED_OUT = 56,
+  SETUP_CONTAINER_TIMED_OUT = 57,
+  START_CONTAINER_TIMED_OUT = 58,
+  FETCH_SSH_KEYS_TIMED_OUT = 59,
+  MOUNT_CONTAINER_TIMED_OUT = 60,
+  UNKNOWN_STATE_TIMED_OUT = 61,
+  NEED_UPDATE = 62,
+  SHARE_PATHS_FAILED = 63,
+  UNREGISTERED_APPLICATION = 64,
+  VSH_CONNECT_FAILED = 65,
+  kMaxValue = VSH_CONNECT_FAILED,
   // When adding a new value, check you've followed the steps in the comment at
   // the top of this enum.
 };
@@ -160,7 +174,6 @@ struct ContainerInfo {
   std::string name;
   std::string username;
   base::FilePath homedir;
-  bool sshfs_mounted = false;
   std::string ipv4_address;
 };
 

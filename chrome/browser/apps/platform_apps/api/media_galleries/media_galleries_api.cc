@@ -17,7 +17,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/lazy_instance.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
@@ -160,15 +159,15 @@ base::ListValue* ConstructFileSystemList(
   const extensions::PermissionsData* permissions_data =
       extension->permissions_data();
   bool has_read_permission = permissions_data->CheckAPIPermissionWithParam(
-      extensions::APIPermission::kMediaGalleries, &read_param);
+      extensions::mojom::APIPermissionID::kMediaGalleries, &read_param);
   MediaGalleriesPermission::CheckParam copy_to_param(
       MediaGalleriesPermission::kCopyToPermission);
   bool has_copy_to_permission = permissions_data->CheckAPIPermissionWithParam(
-      extensions::APIPermission::kMediaGalleries, &copy_to_param);
+      extensions::mojom::APIPermissionID::kMediaGalleries, &copy_to_param);
   MediaGalleriesPermission::CheckParam delete_param(
       MediaGalleriesPermission::kDeletePermission);
   bool has_delete_permission = permissions_data->CheckAPIPermissionWithParam(
-      extensions::APIPermission::kMediaGalleries, &delete_param);
+      extensions::mojom::APIPermissionID::kMediaGalleries, &delete_param);
 
   const int child_id = rfh->GetProcess()->GetID();
   std::unique_ptr<base::ListValue> list(new base::ListValue());
@@ -226,6 +225,8 @@ class SelectDirectoryDialog : public ui::SelectFileDialog::Listener,
     select_file_dialog_ = ui::SelectFileDialog::Create(
         this, std::make_unique<ChromeSelectFilePolicy>(web_contents));
   }
+  SelectDirectoryDialog(const SelectDirectoryDialog&) = delete;
+  SelectDirectoryDialog& operator=(const SelectDirectoryDialog&) = delete;
 
   void Show(const base::FilePath& default_path) {
     AddRef();  // Balanced in the two reachable listener outcomes.
@@ -256,13 +257,11 @@ class SelectDirectoryDialog : public ui::SelectFileDialog::Listener,
 
  private:
   friend class base::RefCounted<SelectDirectoryDialog>;
-  ~SelectDirectoryDialog() override {}
+  ~SelectDirectoryDialog() override = default;
 
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
   WebContents* web_contents_;
   Callback callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(SelectDirectoryDialog);
 };
 
 // Returns a web contents to use as the source for a prompt showing to the user.
@@ -304,7 +303,7 @@ MediaGalleriesEventRouter::MediaGalleriesEventRouter(
   gallery_watch_manager()->AddObserver(profile_, this);
 }
 
-MediaGalleriesEventRouter::~MediaGalleriesEventRouter() {}
+MediaGalleriesEventRouter::~MediaGalleriesEventRouter() = default;
 
 void MediaGalleriesEventRouter::Shutdown() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -477,7 +476,7 @@ void MediaGalleriesGetMediaFileSystemsFunction::ReturnGalleries(
   }
 
   // The custom JS binding will use this list to create DOMFileSystem objects.
-  Respond(OneArgument(std::move(list)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(list))));
 }
 
 void MediaGalleriesGetMediaFileSystemsFunction::ShowDialog() {
@@ -601,7 +600,7 @@ void MediaGalleriesAddUserSelectedFolderFunction::ReturnGalleriesAndId(
   std::unique_ptr<base::DictionaryValue> results(new base::DictionaryValue);
   results->SetWithoutPathExpansion("mediaFileSystems", std::move(list));
   results->SetKey("selectedFileSystemIndex", base::Value(index));
-  Respond(OneArgument(std::move(results)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(results))));
 }
 
 void MediaGalleriesAddUserSelectedFolderFunction::
@@ -682,7 +681,8 @@ void MediaGalleriesGetMetadataFunction::GetMetadata(
     std::unique_ptr<base::DictionaryValue> result_dictionary(
         new base::DictionaryValue);
     result_dictionary->Set(kMetadataKey, metadata.ToValue());
-    Respond(OneArgument(std::move(result_dictionary)));
+    Respond(OneArgument(
+        base::Value::FromUniquePtrValue(std::move(result_dictionary))));
     return;
   }
 
@@ -725,15 +725,16 @@ void MediaGalleriesGetMetadataFunction::OnSafeMediaMetadataParserDone(
                          SerializeMediaMetadata(std::move(metadata)));
 
   if (attached_images->empty()) {
-    Respond(OneArgument(std::move(result_dictionary)));
+    Respond(OneArgument(
+        base::Value::FromUniquePtrValue(std::move(result_dictionary))));
     return;
   }
 
   result_dictionary->Set(kAttachedImagesBlobInfoKey,
                          std::make_unique<base::ListValue>());
   metadata::AttachedImage* first_image = &attached_images->front();
-  content::BrowserContext::CreateMemoryBackedBlob(
-      browser_context(), base::as_bytes(base::make_span(first_image->data)), "",
+  browser_context()->CreateMemoryBackedBlob(
+      base::as_bytes(base::make_span(first_image->data)), "",
       base::BindOnce(&MediaGalleriesGetMetadataFunction::ConstructNextBlob,
                      this, std::move(result_dictionary),
                      std::move(attached_images),
@@ -787,9 +788,8 @@ void MediaGalleriesGetMetadataFunction::ConstructNextBlob(
   if (blob_uuids->size() < attached_images->size()) {
     metadata::AttachedImage* next_image =
         &(*attached_images)[blob_uuids->size()];
-    content::BrowserContext::CreateMemoryBackedBlob(
-        browser_context(), base::as_bytes(base::make_span(next_image->data)),
-        "",
+    browser_context()->CreateMemoryBackedBlob(
+        base::as_bytes(base::make_span(next_image->data)), "",
         base::BindOnce(&MediaGalleriesGetMetadataFunction::ConstructNextBlob,
                        this, std::move(result_dictionary),
                        std::move(attached_images), std::move(blob_uuids)));
@@ -798,7 +798,8 @@ void MediaGalleriesGetMetadataFunction::ConstructNextBlob(
 
   // All Blobs have been constructed. The renderer will take ownership.
   SetTransferredBlobUUIDs(*blob_uuids);
-  Respond(OneArgument(std::move(result_dictionary)));
+  Respond(OneArgument(
+      base::Value::FromUniquePtrValue(std::move(result_dictionary))));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -868,9 +869,10 @@ void MediaGalleriesAddGalleryWatchFunction::HandleResponse(
   }
 
   result.success = error.empty();
-  Respond(error.empty() ? OneArgument(result.ToValue())
-                        : ErrorWithArguments(
-                              AddGalleryWatch::Results::Create(result), error));
+  Respond(error.empty()
+              ? OneArgument(base::Value::FromUniquePtrValue(result.ToValue()))
+              : ErrorWithArguments(AddGalleryWatch::Results::Create(result),
+                                   error));
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -16,7 +16,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 #include "third_party/blink/renderer/core/streams/readable_stream_default_controller_with_script_scope.h"
-#include "third_party/blink/renderer/core/streams/readable_stream_reader.h"
+#include "third_party/blink/renderer/core/streams/readable_stream_generic_reader.h"
 #include "third_party/blink/renderer/core/streams/stream_promise_resolver.h"
 #include "third_party/blink/renderer/core/streams/underlying_source_base.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer/array_buffer_contents.h"
@@ -28,8 +28,6 @@
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_v8_reference.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
-#include "third_party/blink/renderer/platform/heap/visitor.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "v8/include/v8.h"
 
@@ -320,7 +318,7 @@ void IncomingStream::AbortAndReset() {
   state_ = State::kAborted;
 
   if (on_abort_) {
-    // Cause QuicTransport to drop its reference to us.
+    // Cause WebTransport to drop its reference to us.
     std::move(on_abort_).Run();
   }
 

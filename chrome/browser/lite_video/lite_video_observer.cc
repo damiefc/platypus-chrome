@@ -20,7 +20,8 @@
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/optimization_guide/optimization_guide_decider.h"
+#include "chrome/common/previews_resource_loading_hints.mojom.h"
+#include "components/optimization_guide/content/browser/optimization_guide_decider.h"
 #include "components/optimization_guide/proto/lite_video_metadata.pb.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -33,7 +34,6 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/mojom/loader/previews_resource_loading_hints.mojom.h"
 
 namespace {
 
@@ -64,7 +64,8 @@ void LiteVideoObserver::MaybeCreateForWebContents(
 }
 
 LiteVideoObserver::LiteVideoObserver(content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {
+    : content::WebContentsObserver(web_contents),
+      receivers_(web_contents, this) {
   lite_video_decider_ = GetLiteVideoDeciderFromWebContents(web_contents);
   routing_ids_to_notify_ = {};
 }
@@ -183,10 +184,10 @@ void LiteVideoObserver::SendHintToRenderFrameAgentForID(
   if (!render_frame_host)
     return;
 
-  mojo::AssociatedRemote<blink::mojom::PreviewsResourceLoadingHintsReceiver>
+  mojo::AssociatedRemote<previews::mojom::PreviewsResourceLoadingHintsReceiver>
       loading_hints_agent;
 
-  auto hint_ptr = blink::mojom::LiteVideoHint::New();
+  auto hint_ptr = previews::mojom::LiteVideoHint::New();
   hint_ptr->target_downlink_bandwidth_kbps =
       hint.target_downlink_bandwidth_kbps();
   hint_ptr->kilobytes_to_buffer_before_throttle =
@@ -237,7 +238,8 @@ void LiteVideoObserver::MaybeUpdateCoinflipExperimentState(
 }
 
 void LiteVideoObserver::MediaBufferUnderflow(const content::MediaPlayerId& id) {
-  content::RenderFrameHost* render_frame_host = id.render_frame_host;
+  auto* render_frame_host =
+      content::RenderFrameHost::FromID(id.frame_routing_id);
 
   if (!render_frame_host || !render_frame_host->GetProcess())
     return;
@@ -249,7 +251,7 @@ void LiteVideoObserver::MediaBufferUnderflow(const content::MediaPlayerId& id) {
     return;
   }
 
-  mojo::AssociatedRemote<blink::mojom::PreviewsResourceLoadingHintsReceiver>
+  mojo::AssociatedRemote<previews::mojom::PreviewsResourceLoadingHintsReceiver>
       loading_hints_agent;
 
   if (!render_frame_host->GetRemoteAssociatedInterfaces())
@@ -273,6 +275,54 @@ void LiteVideoObserver::MediaBufferUnderflow(const content::MediaPlayerId& id) {
       : lite_video_decider_->DidMediaRebuffer(
             render_frame_host->GetMainFrame()->GetLastCommittedURL(),
             render_frame_host->GetLastCommittedURL(), true);
+}
+
+void LiteVideoObserver::MediaPlayerSeek(const content::MediaPlayerId& id) {
+
+  if (!lite_video::features::DisableLiteVideoOnMediaPlayerSeek())
+    return;
+
+  auto* render_frame_host =
+      content::RenderFrameHost::FromID(id.frame_routing_id);
+  if (!render_frame_host || !render_frame_host->GetProcess())
+    return;
+
+  // Only consider a seek event related to LiteVideos if they were allowed on
+  // current navigation.
+  if (!nav_metrics_ ||
+      nav_metrics_->decision() != lite_video::LiteVideoDecision::kAllowed) {
+    return;
+  }
+
+  mojo::AssociatedRemote<previews::mojom::PreviewsResourceLoadingHintsReceiver>
+      loading_hints_agent;
+
+  if (!render_frame_host->GetRemoteAssociatedInterfaces())
+    return;
+
+  render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
+      &loading_hints_agent);
+
+  LOCAL_HISTOGRAM_BOOLEAN("LiteVideo.MediaPlayerSeek.StopThrottling", true);
+
+  loading_hints_agent->StopThrottlingMediaRequests();
+}
+
+uint64_t LiteVideoObserver::GetAndClearEstimatedDataSavingBytes() {
+  if (current_throttled_video_bytes_ == 0)
+    return 0;
+  // ThrottledVideoBytesDeflatedRatio is essentially
+  //  bytes_saved / throttled_video_bytes. So use that to compute estimated
+  //  bytes saved.
+  uint64_t bytes_saved = static_cast<uint64_t>(
+      current_throttled_video_bytes_ *
+      lite_video::features::GetThrottledVideoBytesDeflatedRatio());
+  current_throttled_video_bytes_ = 0;
+  return bytes_saved;
+}
+
+void LiteVideoObserver::NotifyThrottledDataUse(uint64_t response_bytes) {
+  current_throttled_video_bytes_ += response_bytes;
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(LiteVideoObserver)

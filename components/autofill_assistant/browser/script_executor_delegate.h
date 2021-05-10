@@ -37,6 +37,7 @@ class TriggerContext;
 class WebsiteLoginManager;
 class EventHandler;
 class UserModel;
+class ElementStore;
 
 class ScriptExecutorDelegate {
  public:
@@ -60,6 +61,7 @@ class ScriptExecutorDelegate {
   virtual const GURL& GetScriptURL() = 0;
   virtual Service* GetService() = 0;
   virtual WebController* GetWebController() = 0;
+  virtual ElementStore* GetElementStore() const = 0;
   virtual const TriggerContext* GetTriggerContext() = 0;
   virtual autofill::PersonalDataManager* GetPersonalDataManager() = 0;
   virtual WebsiteLoginManager* GetWebsiteLoginManager() = 0;
@@ -80,7 +82,10 @@ class ScriptExecutorDelegate {
   virtual std::string GetStatusMessage() const = 0;
   virtual void SetBubbleMessage(const std::string& message) = 0;
   virtual std::string GetBubbleMessage() const = 0;
-  virtual void SetDetails(std::unique_ptr<Details> details) = 0;
+  virtual void SetDetails(std::unique_ptr<Details> details,
+                          base::TimeDelta delay) = 0;
+  virtual void AppendDetails(std::unique_ptr<Details> details,
+                             base::TimeDelta delay) = 0;
   virtual void SetInfoBox(const InfoBox& info_box) = 0;
   virtual void ClearInfoBox() = 0;
   virtual void SetCollectUserDataOptions(
@@ -115,6 +120,7 @@ class ScriptExecutorDelegate {
       base::OnceCallback<void(const ClientStatus&)> cancel_callback) = 0;
   virtual UserModel* GetUserModel() = 0;
   virtual EventHandler* GetEventHandler() = 0;
+  virtual void SetShowFeedbackChip(bool show_feedback_chip) = 0;
 
   // Makes no area of the screen touchable.
   void ClearTouchableElementArea() {
@@ -170,8 +176,8 @@ class ScriptExecutorDelegate {
   // Set how the sheet should behave when entering a prompt state.
   virtual void SetExpandSheetForPromptAction(bool expand) = 0;
 
-  // Set the domains whitelist for browse mode.
-  virtual void SetBrowseDomainsWhitelist(std::vector<std::string> domains) = 0;
+  // Set the domains allowlist for browse mode.
+  virtual void SetBrowseDomainsAllowlist(std::vector<std::string> domains) = 0;
 
   // Sets the generic UI to show to the user.
   virtual void SetGenericUi(
@@ -180,12 +186,25 @@ class ScriptExecutorDelegate {
       base::OnceCallback<void(const ClientStatus&)>
           view_inflation_finished_callback) = 0;
 
+  // Sets the persistent generic UI to show to the user.
+  virtual void SetPersistentGenericUi(
+      std::unique_ptr<GenericUserInterfaceProto> generic_ui,
+      base::OnceCallback<void(const ClientStatus&)>
+          view_inflation_finished_callback) = 0;
+
   // Clears the generic UI.
   virtual void ClearGenericUi() = 0;
+
+  // Clears the persistent generic UI.
+  virtual void ClearPersistentGenericUi() = 0;
 
   // Sets whether browse mode should be invisible or not. Must be set before
   // calling |EnterState(BROWSE)| to take effect.
   virtual void SetBrowseModeInvisible(bool invisible) = 0;
+
+  // Whether the slow connection or website warning should be shown. Depends on
+  // the state at the moment of the invocation.
+  virtual bool ShouldShowWarning() = 0;
 
  protected:
   virtual ~ScriptExecutorDelegate() {}

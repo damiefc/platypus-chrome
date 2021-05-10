@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_local_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_property_parser.h"
+#include "third_party/blink/renderer/core/css/parser/css_selector_parser.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
 #include "third_party/blink/renderer/core/css/properties/longhand.h"
@@ -37,9 +38,7 @@ TestStyleSheet::~TestStyleSheet() = default;
 
 TestStyleSheet::TestStyleSheet() {
   document_ = Document::CreateForTest();
-  TextPosition position;
-  style_sheet_ = CSSStyleSheet::CreateInline(*document_, NullURL(), position,
-                                             UTF8Encoding());
+  style_sheet_ = CreateStyleSheet(*document_);
 }
 
 CSSRuleList* TestStyleSheet::CssRules() {
@@ -57,13 +56,17 @@ RuleSet& TestStyleSheet::GetRuleSet() {
 }
 
 void TestStyleSheet::AddCSSRules(const String& css_text, bool is_empty_sheet) {
-  TextPosition position;
   unsigned sheet_length = style_sheet_->length();
-  style_sheet_->Contents()->ParseStringAtPosition(css_text, position);
+  style_sheet_->Contents()->ParseString(css_text);
   if (!is_empty_sheet)
     ASSERT_GT(style_sheet_->length(), sheet_length);
   else
     ASSERT_EQ(style_sheet_->length(), sheet_length);
+}
+
+CSSStyleSheet* CreateStyleSheet(Document& document) {
+  return CSSStyleSheet::CreateInline(
+      document, NullURL(), TextPosition::MinimumPosition(), UTF8Encoding());
 }
 
 PropertyRegistration* CreatePropertyRegistration(const String& name) {
@@ -103,11 +106,12 @@ void RegisterProperty(Document& document,
 }
 
 scoped_refptr<CSSVariableData> CreateVariableData(String s) {
-  auto tokens = CSSTokenizer(s).TokenizeToEOF();
+  CSSTokenizer tokenizer(s);
+  auto tokens = tokenizer.TokenizeToEOF();
   CSSParserTokenRange range(tokens);
   bool is_animation_tainted = false;
   bool needs_variable_resolution = false;
-  return CSSVariableData::Create(range, is_animation_tainted,
+  return CSSVariableData::Create({range, StringView(s)}, is_animation_tainted,
                                  needs_variable_resolution, KURL(),
                                  WTF::TextEncoding());
 }
@@ -140,9 +144,8 @@ const CSSPropertyValueSet* ParseDeclarationBlock(const String& block_text,
 }
 
 StyleRuleBase* ParseRule(Document& document, String text) {
-  TextPosition position;
-  auto* sheet = CSSStyleSheet::CreateInline(document, NullURL(), position,
-                                            UTF8Encoding());
+  auto* sheet = CSSStyleSheet::CreateInline(
+      document, NullURL(), TextPosition::MinimumPosition(), UTF8Encoding());
   const auto* context = MakeGarbageCollected<CSSParserContext>(document);
   return CSSParser::ParseRule(context, sheet->Contents(), text);
 }
@@ -157,6 +160,16 @@ const CSSValue* ParseValue(Document& document, String syntax, String value) {
   CSSParserTokenRange range(tokens);
   return syntax_definition->Parse(range, *context,
                                   /* is_animation_tainted */ false);
+}
+
+CSSSelectorList ParseSelectorList(const String& string) {
+  auto* context = MakeGarbageCollected<CSSParserContext>(
+      kHTMLStandardMode, SecureContextMode::kInsecureContext);
+  auto* sheet = MakeGarbageCollected<StyleSheetContents>(context);
+  CSSTokenizer tokenizer(string);
+  const auto tokens = tokenizer.TokenizeToEOF();
+  CSSParserTokenRange range(tokens);
+  return CSSSelectorParser::ParseSelector(range, context, sheet);
 }
 
 }  // namespace css_test_helpers

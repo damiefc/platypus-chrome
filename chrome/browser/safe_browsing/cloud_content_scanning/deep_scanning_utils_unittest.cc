@@ -4,11 +4,14 @@
 
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 
+#include <limits>
 #include <string>
 #include <tuple>
 
 #include "base/files/file_path.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "chrome/browser/enterprise/connectors/common.h"
+#include "components/crash/core/common/crash_key.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace safe_browsing {
@@ -78,23 +81,22 @@ TEST_P(DeepScanningUtilsUMATest, SuccessfulScanVerdicts) {
   // - A DLP response with SUCCESS
   // - A malware respopnse with MALWARE, UWS, CLEAN
   RecordDeepScanMetrics(access_point(), kDuration, kTotalBytes, result(),
-                        DeepScanningClientResponse());
-  {
-    DlpDeepScanningVerdict dlp_verdict;
-    dlp_verdict.set_status(DlpDeepScanningVerdict::SUCCESS);
-    DeepScanningClientResponse response;
-    *response.mutable_dlp_scan_verdict() = dlp_verdict;
-
-    RecordDeepScanMetrics(access_point(), kDuration, kTotalBytes, result(),
-                          response);
-  }
-  for (const auto verdict :
-       {MalwareDeepScanningVerdict::MALWARE, MalwareDeepScanningVerdict::UWS,
-        MalwareDeepScanningVerdict::CLEAN}) {
-    MalwareDeepScanningVerdict malware_verdict;
-    malware_verdict.set_verdict(verdict);
-    DeepScanningClientResponse response;
-    *response.mutable_malware_scan_verdict() = malware_verdict;
+                        enterprise_connectors::ContentAnalysisResponse());
+  RecordDeepScanMetrics(access_point(), kDuration, kTotalBytes, result(),
+                        SimpleContentAnalysisResponseForTesting(
+                            /*dlp_success*/ true,
+                            /*malware_success*/ base::nullopt));
+  for (const std::string& verdict : {"malware", "uws", "safe"}) {
+    enterprise_connectors::ContentAnalysisResponse response;
+    auto* malware_result = response.add_results();
+    malware_result->set_tag("malware");
+    malware_result->set_status(
+        enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
+    if (verdict != "safe") {
+      auto* rule = malware_result->add_triggered_rules();
+      rule->set_rule_name("malware");
+      rule->set_action(enterprise_connectors::TriggeredRule::BLOCK);
+    }
 
     RecordDeepScanMetrics(access_point(), kDuration, kTotalBytes, result(),
                           response);
@@ -129,12 +131,14 @@ TEST_P(DeepScanningUtilsUMATest, SuccessfulScanVerdicts) {
 
 TEST_P(DeepScanningUtilsUMATest, UnsuccessfulDlpScanVerdicts) {
   // Record metrics for the 2 unsuccessful DLP scan possibilities.
-  for (const auto verdict : {DlpDeepScanningVerdict::FAILURE,
-                             DlpDeepScanningVerdict::STATUS_UNKNOWN}) {
-    DlpDeepScanningVerdict dlp_verdict;
-    dlp_verdict.set_status(verdict);
-    DeepScanningClientResponse response;
-    *response.mutable_dlp_scan_verdict() = dlp_verdict;
+  for (const auto status :
+       {enterprise_connectors::ContentAnalysisResponse::Result::FAILURE,
+        enterprise_connectors::ContentAnalysisResponse::Result::
+            STATUS_UNKNOWN}) {
+    enterprise_connectors::ContentAnalysisResponse response;
+    auto* dlp_result = response.add_results();
+    dlp_result->set_tag("dlp");
+    dlp_result->set_status(status);
 
     RecordDeepScanMetrics(access_point(), kDuration, kTotalBytes, result(),
                           response);
@@ -159,12 +163,14 @@ TEST_P(DeepScanningUtilsUMATest, UnsuccessfulDlpScanVerdicts) {
 
 TEST_P(DeepScanningUtilsUMATest, UnsuccessfulMalwareScanVerdict) {
   // Record metrics for the 2 unsuccessful malware scan possibilities.
-  for (const auto verdict : {MalwareDeepScanningVerdict::VERDICT_UNSPECIFIED,
-                             MalwareDeepScanningVerdict::SCAN_FAILURE}) {
-    MalwareDeepScanningVerdict malware_verdict;
-    malware_verdict.set_verdict(verdict);
-    DeepScanningClientResponse response;
-    *response.mutable_malware_scan_verdict() = malware_verdict;
+  for (const auto status :
+       {enterprise_connectors::ContentAnalysisResponse::Result::FAILURE,
+        enterprise_connectors::ContentAnalysisResponse::Result::
+            STATUS_UNKNOWN}) {
+    enterprise_connectors::ContentAnalysisResponse response;
+    auto* malware_result = response.add_results();
+    malware_result->set_tag("malware");
+    malware_result->set_status(status);
 
     RecordDeepScanMetrics(access_point(), kDuration, kTotalBytes, result(),
                           response);
@@ -221,7 +227,7 @@ TEST_P(DeepScanningUtilsUMATest, CancelledByUser) {
 
 TEST_P(DeepScanningUtilsUMATest, InvalidDuration) {
   RecordDeepScanMetrics(access_point(), kInvalidDuration, kTotalBytes, result(),
-                        DeepScanningClientResponse());
+                        enterprise_connectors::ContentAnalysisResponse());
   EXPECT_EQ(
       0u,
       histograms().GetTotalCountsForPrefix("SafeBrowsing.DeepScan.").size());
@@ -249,6 +255,74 @@ TEST_F(DeepScanningUtilsFileTypeSupportedTest, DLP) {
   for (const base::FilePath::StringType& type : UnsupportedDlpFileTypes()) {
     EXPECT_FALSE(FileTypeSupportedForDlp(FilePath(type)));
   }
+}
+
+class DeepScanningUtilsCrashKeysTest : public testing::Test {
+ public:
+  void SetUp() override {
+    crash_reporter::ResetCrashKeysForTesting();
+    crash_reporter::InitializeCrashKeysForTesting();
+  }
+
+  void TearDown() override { crash_reporter::ResetCrashKeysForTesting(); }
+};
+
+TEST_F(DeepScanningUtilsCrashKeysTest, SmallModifications) {
+  // The key implicitly starts at 0.
+  IncrementCrashKey(ScanningCrashKey::PENDING_FILE_DOWNLOADS, 1);
+  EXPECT_EQ("1",
+            crash_reporter::GetCrashKeyValue("pending-file-download-scans"));
+
+  IncrementCrashKey(ScanningCrashKey::PENDING_FILE_DOWNLOADS, 1);
+  EXPECT_EQ("2",
+            crash_reporter::GetCrashKeyValue("pending-file-download-scans"));
+
+  DecrementCrashKey(ScanningCrashKey::PENDING_FILE_DOWNLOADS, 1);
+  EXPECT_EQ("1",
+            crash_reporter::GetCrashKeyValue("pending-file-download-scans"));
+
+  DecrementCrashKey(ScanningCrashKey::PENDING_FILE_DOWNLOADS, 1);
+  EXPECT_TRUE(
+      crash_reporter::GetCrashKeyValue("pending-file-download-scans").empty());
+}
+
+TEST_F(DeepScanningUtilsCrashKeysTest, LargeModifications) {
+  // The key implicitly starts at 0.
+  IncrementCrashKey(ScanningCrashKey::PENDING_FILE_UPLOADS, 100);
+  EXPECT_EQ("100",
+            crash_reporter::GetCrashKeyValue("pending-file-upload-scans"));
+
+  IncrementCrashKey(ScanningCrashKey::PENDING_FILE_UPLOADS, 100);
+  EXPECT_EQ("200",
+            crash_reporter::GetCrashKeyValue("pending-file-upload-scans"));
+
+  DecrementCrashKey(ScanningCrashKey::PENDING_FILE_UPLOADS, 100);
+  EXPECT_EQ("100",
+            crash_reporter::GetCrashKeyValue("pending-file-upload-scans"));
+
+  DecrementCrashKey(ScanningCrashKey::PENDING_FILE_UPLOADS, 100);
+  EXPECT_TRUE(
+      crash_reporter::GetCrashKeyValue("pending-file-upload-scans").empty());
+}
+
+TEST_F(DeepScanningUtilsCrashKeysTest, InvalidModifications) {
+  // The crash key value cannot be negative.
+  DecrementCrashKey(ScanningCrashKey::PENDING_TEXT_UPLOADS, 1);
+  EXPECT_TRUE(
+      crash_reporter::GetCrashKeyValue("pending-text-upload-scans").empty());
+  DecrementCrashKey(ScanningCrashKey::PENDING_TEXT_UPLOADS, 100);
+  EXPECT_TRUE(
+      crash_reporter::GetCrashKeyValue("pending-text-upload-scans").empty());
+
+  // The crash key value is restricted to 6 digits. If a modification would
+  // exceed it, it is clamped so crashes will indicate that the key was set at a
+  // very high value.
+  IncrementCrashKey(ScanningCrashKey::PENDING_TEXT_UPLOADS, 123456789);
+  EXPECT_EQ("999999",
+            crash_reporter::GetCrashKeyValue("pending-text-upload-scans"));
+  IncrementCrashKey(ScanningCrashKey::PENDING_TEXT_UPLOADS, 123456789);
+  EXPECT_EQ("999999",
+            crash_reporter::GetCrashKeyValue("pending-text-upload-scans"));
 }
 
 }  // namespace safe_browsing

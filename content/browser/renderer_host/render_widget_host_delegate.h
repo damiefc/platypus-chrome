@@ -30,11 +30,8 @@ class WebGestureEvent;
 
 namespace gfx {
 class Point;
+class Rect;
 class Size;
-}
-
-namespace rappor {
-class Sample;
 }
 
 namespace content {
@@ -70,18 +67,11 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // The RenderWidgetHost is going to be deleted.
   virtual void RenderWidgetDeleted(RenderWidgetHostImpl* render_widget_host) {}
 
-  // The RenderWidgetHost got the focus.
-  virtual void RenderWidgetGotFocus(RenderWidgetHostImpl* render_widget_host) {}
-
   // If a main frame navigation is in progress, this will return the zoom level
   // for the pending page. Otherwise, this returns the zoom level for the
   // current page. Note that subframe navigations do not affect the zoom level,
   // which is tracked at the level of the page.
   virtual double GetPendingPageZoomLevel();
-
-  // The RenderWidgetHost lost the focus.
-  virtual void RenderWidgetLostFocus(
-      RenderWidgetHostImpl* render_widget_host) {}
 
   // The RenderWidget was resized.
   virtual void RenderWidgetWasResized(RenderWidgetHostImpl* render_widget_host,
@@ -146,7 +136,7 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Send OS Cut/Copy/Paste actions to the focused frame.
   virtual void ExecuteEditCommand(
       const std::string& command,
-      const base::Optional<base::string16>& value) = 0;
+      const base::Optional<std::u16string>& value) = 0;
   virtual void Undo() = 0;
   virtual void Redo() = 0;
   virtual void Cut() = 0;
@@ -262,23 +252,8 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Returns the TextInputManager tracking text input state.
   virtual TextInputManager* GetTextInputManager();
 
-  // Returns true if this RenderWidgetHost should remain hidden. This is used by
-  // the RenderWidgetHost to ask the delegate if it can be shown in the event of
-  // something other than the WebContents attempting to enable visibility of
-  // this RenderWidgetHost.
-  // TODO(nasko): Move this to RenderViewHostDelegate.
-  virtual bool IsHidden();
-
   // Returns the associated RenderViewHostDelegateView*, if possible.
   virtual RenderViewHostDelegateView* GetDelegateView();
-
-  // Returns the current Flash fullscreen RenderWidgetHostImpl if any. This is
-  // not intended for use with other types of fullscreen, such as HTML
-  // fullscreen, and will return nullptr for those cases.
-  virtual RenderWidgetHostImpl* GetFullscreenRenderWidgetHost() const;
-
-  // Allow the delegate to handle the cursor update. Returns true if handled.
-  virtual bool OnUpdateDragCursor();
 
   // Returns true if the provided RenderWidgetHostImpl matches the current
   // RenderWidgetHost on the main frame, and false otherwise.
@@ -300,11 +275,6 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // the focused WebContents.
   virtual void FocusOwningWebContents(
       RenderWidgetHostImpl* render_widget_host) {}
-
-  // Augment a Rappor sample with eTLD+1 context. The caller is still
-  // responsible for logging the sample to the RapporService. Returns false
-  // if the eTLD+1 is not known for |render_widget_host|.
-  virtual bool AddDomainInfoToRapporSample(rappor::Sample* sample);
 
   // Return this object cast to a WebContents, if it is one. If the object is
   // not a WebContents, returns nullptr.
@@ -337,11 +307,11 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Notify the delegate that the screen orientation has been changed.
   virtual void DidChangeScreenOrientation() {}
 
-  // Returns the FrameTree that this RenderWidgetHost is attached to. If the
-  // RenderWidgetHost is attached to a frame, then its RenderFrameHost will be
-  // in the tree. Otherwise, the RenderWidgetHost is for a popup which was
-  // opened by a frame in the FrameTree.
-  virtual FrameTree* GetFrameTree();
+  // Show the newly created widget with the specified bounds.
+  // The widget is identified by the route_id passed to CreateNewWidget.
+  virtual void ShowCreatedWidget(int process_id,
+                                 int widget_route_id,
+                                 const gfx::Rect& initial_rect_in_dips) {}
 
  protected:
   virtual ~RenderWidgetHostDelegate() {}

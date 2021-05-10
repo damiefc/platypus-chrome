@@ -443,7 +443,7 @@ OverflowClipAxes LayoutTableCell::ComputeOverflowClipAxes() const {
   NOT_DESTROYED();
   if (IsSpanningCollapsedRow() || IsSpanningCollapsedColumn())
     return kOverflowClipBothAxis;
-  return LayoutBox::ComputeOverflowClipAxes();
+  return LayoutBlockFlow::ComputeOverflowClipAxes();
 }
 
 LayoutUnit LayoutTableCell::CellBaselinePosition() const {
@@ -464,7 +464,7 @@ LayoutUnit LayoutTableCell::CellBaselinePosition() const {
 void LayoutTableCell::UpdateStyleWritingModeFromRow(const LayoutObject* row) {
   NOT_DESTROYED();
   DCHECK_NE(StyleRef().GetWritingMode(), row->StyleRef().GetWritingMode());
-  scoped_refptr<ComputedStyle> new_style = ComputedStyle::Clone(StyleRef());
+  ComputedStyle* new_style = ComputedStyle::Clone(StyleRef());
   new_style->SetWritingMode(row->StyleRef().GetWritingMode());
   new_style->UpdateFontOrientation();
   SetModifiedStyleOutsideStyleRecalc(new_style,
@@ -474,8 +474,7 @@ void LayoutTableCell::UpdateStyleWritingModeFromRow(const LayoutObject* row) {
 
   for (LayoutObject* child = FirstChild(); child;
        child = child->NextSibling()) {
-    if (child->IsBox()) {
-      LayoutBox* box_child = ToLayoutBox(child);
+    if (auto* box_child = DynamicTo<LayoutBox>(child)) {
       if (box_child->IsOrthogonalWritingModeRoot())
         box_child->MarkOrthogonalWritingModeRoot();
       else
@@ -652,7 +651,7 @@ CollapsedBorderValue LayoutTableCell::ComputeCollapsedStartBorder() const {
 
   // (6) The end border of the preceding column.
   if (cell_preceding) {
-    LayoutTable::ColAndColGroup col_and_col_group =
+    col_and_col_group =
         table->ColElementAtAbsoluteColumn(AbsoluteColumnIndex() - 1);
     // Only apply the colgroup's border if this cell touches the colgroup edge.
     if (col_and_col_group.colgroup &&
@@ -783,7 +782,7 @@ CollapsedBorderValue LayoutTableCell::ComputeCollapsedEndBorder() const {
 
   // (6) The start border of the next column.
   if (!in_end_column) {
-    LayoutTable::ColAndColGroup col_and_col_group =
+    col_and_col_group =
         table->ColElementAtAbsoluteColumn(AbsoluteColumnIndex() + ColSpan());
     if (col_and_col_group.colgroup &&
         col_and_col_group.adjoins_start_border_of_col_group) {
@@ -1223,10 +1222,9 @@ void LayoutTableCell::ScrollbarsChanged(bool horizontal_scrollbar_changed,
   }
 }
 
-LayoutTableCell* LayoutTableCell::CreateAnonymous(
-    Document* document,
-    scoped_refptr<ComputedStyle> style,
-    LegacyLayout legacy) {
+LayoutTableCell* LayoutTableCell::CreateAnonymous(Document* document,
+                                                  ComputedStyle* style,
+                                                  LegacyLayout legacy) {
   LayoutBlockFlow* layout_object =
       LayoutObjectFactory::CreateTableCell(*document, *style, legacy);
   layout_object->SetDocumentForAnonymous(document);

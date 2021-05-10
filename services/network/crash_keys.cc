@@ -32,12 +32,6 @@ base::debug::CrashKeyString* GetRequestResourceTypeCrashKey() {
   return crash_key;
 }
 
-base::debug::CrashKeyString* GetRequestLoadFlagsCrashKey() {
-  static auto* crash_key = base::debug::AllocateCrashKeyString(
-      "request_load_flags", base::debug::CrashKeySize::Size32);
-  return crash_key;
-}
-
 }  // namespace
 
 base::debug::CrashKeyString* GetRequestInitiatorOriginLockCrashKey() {
@@ -58,9 +52,7 @@ ScopedRequestCrashKeys::ScopedRequestCrashKeys(
       request_initiator_(GetRequestInitiatorCrashKey(),
                          base::OptionalOrNullptr(request.request_initiator)),
       resource_type_(GetRequestResourceTypeCrashKey(),
-                     base::NumberToString(request.resource_type)),
-      load_flags_(GetRequestLoadFlagsCrashKey(),
-                  base::NumberToString(request.load_flags)) {}
+                     base::NumberToString(request.resource_type)) {}
 
 ScopedRequestCrashKeys::~ScopedRequestCrashKeys() = default;
 

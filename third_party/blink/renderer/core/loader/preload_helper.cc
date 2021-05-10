@@ -6,6 +6,7 @@
 
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_prescient_networking.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -26,6 +27,7 @@
 #include "third_party/blink/renderer/core/loader/alternate_signed_exchange_resource_info.h"
 #include "third_party/blink/renderer/core/loader/importance_attribute.h"
 #include "third_party/blink/renderer/core/loader/link_load_parameters.h"
+#include "third_party/blink/renderer/core/loader/modulescript/module_script_creation_params.h"
 #include "third_party/blink/renderer/core/loader/modulescript/module_script_fetch_request.h"
 #include "third_party/blink/renderer/core/loader/resource/css_style_sheet_resource.h"
 #include "third_party/blink/renderer/core/loader/resource/font_resource.h"
@@ -323,6 +325,8 @@ Resource* PreloadHelper::PreloadIfNeeded(
   options.parser_disposition = parser_disposition;
   FetchParameters link_fetch_params(std::move(resource_request), options);
   link_fetch_params.SetCharset(document.Encoding());
+  link_fetch_params.SetRenderBlockingBehavior(
+      RenderBlockingBehavior::kNonBlocking);
 
   if (params.cross_origin != kCrossOriginAttributeNotSet) {
     link_fetch_params.SetCrossOriginAccessControl(
@@ -426,7 +430,8 @@ void PreloadHelper::ModulePreloadIfNeeded(
     }
     return;
   }
-  mojom::RequestContextType context_type = mojom::RequestContextType::SCRIPT;
+  mojom::blink::RequestContextType context_type =
+      mojom::blink::RequestContextType::SCRIPT;
   network::mojom::RequestDestination destination =
       network::mojom::RequestDestination::kScript;
 
@@ -484,11 +489,12 @@ void PreloadHelper::ModulePreloadIfNeeded(
   // metadata is "not-parser-inserted", credentials mode is credentials mode,
   // and referrer policy is referrer policy." [spec text]
   ModuleScriptFetchRequest request(
-      params.href, context_type, destination,
+      params.href, ModuleType::kJavaScript, context_type, destination,
       ScriptFetchOptions(params.nonce, integrity_metadata, params.integrity,
                          kNotParserInserted, credentials_mode,
                          params.referrer_policy,
-                         mojom::FetchImportanceMode::kImportanceAuto),
+                         mojom::blink::FetchImportanceMode::kImportanceAuto,
+                         RenderBlockingBehavior::kNonBlocking),
       Referrer::NoReferrer(), TextPosition::MinimumPosition());
 
   // Step 11. "Fetch a single module script given url, settings object,
@@ -681,7 +687,7 @@ Resource* PreloadHelper::StartPreload(ResourceType type,
       resource = ImageResource::Fetch(params, resource_fetcher);
       break;
     case ResourceType::kScript:
-      params.SetRequestContext(mojom::RequestContextType::SCRIPT);
+      params.SetRequestContext(mojom::blink::RequestContextType::SCRIPT);
       params.SetRequestDestination(network::mojom::RequestDestination::kScript);
       resource = ScriptResource::Fetch(params, resource_fetcher, nullptr,
                                        ScriptResource::kAllowStreaming);
@@ -693,7 +699,7 @@ Resource* PreloadHelper::StartPreload(ResourceType type,
     case ResourceType::kFont:
       resource = FontResource::Fetch(params, resource_fetcher, nullptr);
       document.GetFontPreloadManager().FontPreloadingStarted(
-          ToFontResource(resource));
+          To<FontResource>(resource));
       break;
     case ResourceType::kAudio:
     case ResourceType::kVideo:
@@ -705,11 +711,6 @@ Resource* PreloadHelper::StartPreload(ResourceType type,
       params.MutableResourceRequest().SetUseStreamOnResponse(true);
       params.MutableOptions().data_buffering_policy = kDoNotBufferData;
       resource = RawResource::FetchTextTrack(params, resource_fetcher, nullptr);
-      break;
-    case ResourceType::kImportResource:
-      params.MutableResourceRequest().SetUseStreamOnResponse(true);
-      params.MutableOptions().data_buffering_policy = kDoNotBufferData;
-      resource = RawResource::FetchImport(params, resource_fetcher, nullptr);
       break;
     case ResourceType::kRaw:
       params.MutableResourceRequest().SetUseStreamOnResponse(true);

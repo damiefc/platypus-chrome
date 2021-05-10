@@ -4,7 +4,7 @@
 
 #include "components/autofill/core/browser/autofill_experiments.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
@@ -130,18 +130,18 @@ TEST_F(AutofillExperimentsTest,
 }
 
 TEST_F(AutofillExperimentsTest,
-       IsCardUploadEnabled_SyncServiceUsingSecondaryPassphrase) {
+       IsCardUploadEnabled_SyncServiceUsingExplicitPassphrase) {
   scoped_feature_list_.InitAndEnableFeature(features::kAutofillUpstream);
-  sync_service_.SetIsUsingSecondaryPassphrase(true);
+  sync_service_.SetIsUsingExplicitPassphrase(true);
   EXPECT_FALSE(IsCreditCardUploadEnabled(
       AutofillSyncSigninState::kSignedInAndSyncFeatureEnabled));
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadEnabled",
-      AutofillMetrics::CardUploadEnabledMetric::USING_SECONDARY_SYNC_PASSPHRASE,
+      AutofillMetrics::CardUploadEnabledMetric::USING_EXPLICIT_SYNC_PASSPHRASE,
       1);
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadEnabled.SignedInAndSyncFeatureEnabled",
-      AutofillMetrics::CardUploadEnabledMetric::USING_SECONDARY_SYNC_PASSPHRASE,
+      AutofillMetrics::CardUploadEnabledMetric::USING_EXPLICIT_SYNC_PASSPHRASE,
       1);
 }
 

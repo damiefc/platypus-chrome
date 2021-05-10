@@ -21,9 +21,11 @@ import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.ShortcutHelper;
-import org.chromium.chrome.browser.ShortcutSource;
-import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.browserservices.intents.BitmapHelper;
+import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.browserservices.intents.WebDisplayMode;
 import org.chromium.components.webapk.lib.common.WebApkConstants;
+import org.chromium.components.webapps.ShortcutSource;
 import org.chromium.device.mojom.ScreenOrientationLockType;
 
 import java.io.File;
@@ -184,7 +186,7 @@ public class WebappDataStorage {
         new AsyncTask<Bitmap>() {
             @Override
             protected final Bitmap doInBackground() {
-                return ShortcutHelper.decodeBitmapFromString(
+                return BitmapHelper.decodeBitmapFromString(
                         mPreferences.getString(KEY_SPLASH_ICON, null));
             }
 
@@ -199,7 +201,7 @@ public class WebappDataStorage {
 
     /**
      * Update the splash screen image associated with the web app with the specified data. The image
-     * must have been encoded using {@link ShortcutHelper#encodeBitmapAsString}.
+     * must have been encoded using {@link BitmapHelper#encodeBitmapAsString}.
      * @param splashScreenImage The image which should be shown on the splash screen of the web app.
      */
     public void updateSplashScreenImage(String splashScreenImage) {
@@ -304,7 +306,7 @@ public class WebappDataStorage {
      * Deletes the data for a web app by clearing all the information inside the SharedPreferences
      * file. This does NOT delete the file itself but the file is left empty.
      */
-    void delete() {
+    public void delete() {
         deletePendingUpdateRequestFile();
         mPreferences.edit().clear().apply();
     }
@@ -455,7 +457,7 @@ public class WebappDataStorage {
      * Returns whether to show the user a privacy disclosure (used for TWAs and unbound WebAPKs).
      * This is not cleared until the user explicitly acknowledges it.
      */
-    boolean shouldShowDisclosure() {
+    public boolean shouldShowDisclosure() {
         return mPreferences.getBoolean(KEY_SHOW_DISCLOSURE, false);
     }
 
@@ -464,7 +466,7 @@ public class WebappDataStorage {
      * disclosure on every resume of the Webapp. This should be called when the user has
      * acknowledged the disclosure.
      */
-    void clearShowDisclosure() {
+    public void clearShowDisclosure() {
         mPreferences.edit().putBoolean(KEY_SHOW_DISCLOSURE, false).apply();
     }
 
@@ -473,7 +475,7 @@ public class WebappDataStorage {
      * This is set the first time an app is opened without storage (either right after install or
      * after Chrome's storage is cleared).
      */
-    void setShowDisclosure() {
+    public void setShowDisclosure() {
         mPreferences.edit().putBoolean(KEY_SHOW_DISCLOSURE, true).apply();
     }
 

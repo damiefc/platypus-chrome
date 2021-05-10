@@ -23,23 +23,23 @@ ShellContentClient::ShellContentClient() {}
 
 ShellContentClient::~ShellContentClient() {}
 
-base::string16 ShellContentClient::GetLocalizedString(int message_id) {
+std::u16string ShellContentClient::GetLocalizedString(int message_id) {
   if (switches::IsRunWebTestsSwitchPresent()) {
     switch (message_id) {
       case IDS_FORM_OTHER_DATE_LABEL:
-        return base::ASCIIToUTF16("<<OtherDateLabel>>");
+        return u"<<OtherDateLabel>>";
       case IDS_FORM_OTHER_MONTH_LABEL:
-        return base::ASCIIToUTF16("<<OtherMonthLabel>>");
+        return u"<<OtherMonthLabel>>";
       case IDS_FORM_OTHER_WEEK_LABEL:
-        return base::ASCIIToUTF16("<<OtherWeekLabel>>");
+        return u"<<OtherWeekLabel>>";
       case IDS_FORM_CALENDAR_CLEAR:
-        return base::ASCIIToUTF16("<<CalendarClear>>");
+        return u"<<CalendarClear>>";
       case IDS_FORM_CALENDAR_TODAY:
-        return base::ASCIIToUTF16("<<CalendarToday>>");
+        return u"<<CalendarToday>>";
       case IDS_FORM_THIS_MONTH_LABEL:
-        return base::ASCIIToUTF16("<<ThisMonthLabel>>");
+        return u"<<ThisMonthLabel>>";
       case IDS_FORM_THIS_WEEK_LABEL:
-        return base::ASCIIToUTF16("<<ThisWeekLabel>>");
+        return u"<<ThisWeekLabel>>";
     }
   }
   return l10n_util::GetStringUTF16(message_id);
@@ -65,6 +65,12 @@ gfx::Image& ShellContentClient::GetNativeImageNamed(int resource_id) {
 
 blink::OriginTrialPolicy* ShellContentClient::GetOriginTrialPolicy() {
   return &origin_trial_policy_;
+}
+
+void ShellContentClient::AddAdditionalSchemes(Schemes* schemes) {
+#if defined(OS_ANDROID)
+  schemes->local_schemes.push_back(url::kContentScheme);
+#endif
 }
 
 }  // namespace content

@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/task/post_task.h"
@@ -57,11 +57,13 @@ class Latch : public base::RefCountedThreadSafe<
   friend struct content::BrowserThread::DeleteOnThread<
       content::BrowserThread::UI>;
 
+  Latch(const Latch&) = delete;
+  Latch& operator=(const Latch&) = delete;
+
   ~Latch() { std::move(callback_).Run(); }
 
   base::OnceClosure callback_;
 
-  DISALLOW_COPY_AND_ASSIGN(Latch);
 };
 
 }  // namespace
@@ -109,7 +111,8 @@ bool MaybeRebuildShortcut(const base::CommandLine& command_line) {
 // required by a Chrome upgrade.
 bool ShouldUpgradeShortcutFor(Profile* profile,
                               const extensions::Extension* extension) {
-  if (extension->location() == extensions::Manifest::COMPONENT ||
+  if (extension->location() ==
+          extensions::mojom::ManifestLocation::kComponent ||
       !extensions::ui_util::CanDisplayInAppLauncher(extension, profile)) {
     return false;
   }
@@ -133,7 +136,7 @@ void UpdateShortcutsForAllApps(Profile* profile, base::OnceClosure callback) {
   for (auto& extension_refptr : *candidates) {
     const extensions::Extension* extension = extension_refptr.get();
     if (ShouldUpgradeShortcutFor(profile, extension)) {
-      UpdateAllShortcuts(base::string16(), profile, extension,
+      UpdateAllShortcuts(std::u16string(), profile, extension,
                          latch->NoOpClosure());
     }
   }
@@ -147,28 +150,28 @@ void ShowCreateChromeAppShortcutsDialog(
     gfx::NativeWindow /*parent_window*/,
     Profile* profile,
     const extensions::Extension* app,
-    const base::Callback<void(bool)>& close_callback) {
+    base::OnceCallback<void(bool)> close_callback) {
   // On Mac, the Applications folder is the only option, so don't bother asking
   // the user anything. Just create shortcuts.
   CreateShortcuts(web_app::SHORTCUT_CREATION_BY_USER,
                   web_app::ShortcutLocations(), profile, app,
                   base::DoNothing());
   if (!close_callback.is_null())
-    close_callback.Run(true);
+    std::move(close_callback).Run(true);
 }
 
 void ShowCreateChromeAppShortcutsDialog(
     gfx::NativeWindow /*parent_window*/,
     Profile* profile,
     const std::string& app_id,
-    const base::Callback<void(bool)>& close_callback) {
+    base::OnceCallback<void(bool)> close_callback) {
   // On Mac, the Applications folder is the only option, so don't bother asking
   // the user anything. Just create shortcuts.
   CreateShortcutsForWebApp(web_app::SHORTCUT_CREATION_BY_USER,
                            web_app::ShortcutLocations(), profile, app_id,
                            base::DoNothing());
   if (!close_callback.is_null())
-    close_callback.Run(true);
+    std::move(close_callback).Run(true);
 }
 
 }  // namespace chrome

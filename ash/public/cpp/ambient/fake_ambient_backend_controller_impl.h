@@ -5,9 +5,12 @@
 #ifndef ASH_PUBLIC_CPP_AMBIENT_FAKE_AMBIENT_BACKEND_CONTROLLER_IMPL_H_
 #define ASH_PUBLIC_CPP_AMBIENT_FAKE_AMBIENT_BACKEND_CONTROLLER_IMPL_H_
 
+#include <array>
+
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ash_public_export.h"
 #include "base/callback.h"
+#include "base/optional.h"
 
 namespace ash {
 
@@ -38,13 +41,17 @@ class ASH_PUBLIC_EXPORT FakeAmbientBackendControllerImpl
       int banner_height,
       int num_albums,
       OnSettingsAndAlbumsFetchedCallback callback) override;
-  void SetPhotoRefreshInterval(base::TimeDelta interval) override;
   void FetchWeather(FetchWeatherCallback callback) override;
+  const std::array<const char*, 2>& GetBackupPhotoUrls() const override;
 
   // Simulate to reply the request of FetchSettingsAndAlbums().
   // If |success| is true, will return fake data.
   // If |success| is false, will return null |settings| data.
-  void ReplyFetchSettingsAndAlbums(bool success);
+  // If |settings| contains a value, that will be used as the argument to
+  // the pending callback.
+  void ReplyFetchSettingsAndAlbums(
+      bool success,
+      const base::Optional<AmbientSettings>& settings = base::nullopt);
 
   // Whether there is a pending FetchSettingsAndAlbums() request.
   bool IsFetchSettingsAndAlbumsPending() const;

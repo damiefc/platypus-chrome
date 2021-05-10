@@ -8,10 +8,12 @@
 #include <string>
 
 #include "base/optional.h"
+#include "chrome/browser/ui/webui/nearby_share/nearby_share.mojom.h"
 #include "url/gurl.h"
 
 // Metadata about an ongoing transfer. Wraps transient data like status and
-// progress.
+// progress. This is used to refresh the UI with error messages and show
+// notifications so additions should be explicitly handled on the frontend.
 class TransferMetadata {
  public:
   enum class Status {
@@ -31,12 +33,35 @@ class TransferMetadata {
     kNotEnoughSpace,
     kUnsupportedAttachmentType,
     kExternalProviderLaunched,
-    kMaxValue = kExternalProviderLaunched
+    kDecodeAdvertisementFailed,
+    kMissingTransferUpdateCallback,
+    kMissingShareTarget,
+    kMissingEndpointId,
+    kMissingPayloads,
+    kPairedKeyVerificationFailed,
+    kInvalidIntroductionFrame,
+    kIncompletePayloads,
+    kFailedToCreateShareTarget,
+    kFailedToInitiateOutgoingConnection,
+    kFailedToReadOutgoingConnectionResponse,
+    kUnexpectedDisconnection,
+    kMaxValue = kUnexpectedDisconnection
+  };
+
+  enum class Result {
+    kIndeterminate,
+    kSuccess,
+    kFailure,
+    kMaxValue = kFailure
   };
 
   static bool IsFinalStatus(Status status);
 
+  static Result ToResult(Status status);
+
   static std::string StatusToString(TransferMetadata::Status status);
+
+  static nearby_share::mojom::TransferStatus StatusToMojo(Status status);
 
   TransferMetadata(Status status,
                    float progress,
@@ -61,6 +86,8 @@ class TransferMetadata {
 
   // True if this |TransferMetadata| is the last status for this transfer.
   bool is_final_status() const { return is_final_status_; }
+
+  nearby_share::mojom::TransferMetadataPtr ToMojo() const;
 
  private:
   Status status_;

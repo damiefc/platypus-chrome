@@ -23,7 +23,7 @@ class Profile;
 
 namespace ui {
 class IMEEngineHandlerInterface;
-class InputMethodKeyboardController;
+class VirtualKeyboardController;
 }  // namespace ui
 
 namespace chromeos {
@@ -37,12 +37,11 @@ class ImeKeyboard;
 // InputMethodManager::Get().
 class COMPONENT_EXPORT(UI_BASE_IME_CHROMEOS) InputMethodManager {
  public:
-  enum UISessionState {
-    STATE_LOGIN_SCREEN = 0,
-    STATE_BROWSER_SCREEN,
-    STATE_LOCK_SCREEN,
-    STATE_SECONDARY_LOGIN_SCREEN,
-    STATE_TERMINATING,
+  enum class UIStyle {
+    kLogin,
+    kSecondaryLogin,
+    kLock,
+    kNormal,
   };
 
   enum MenuItemStyle {
@@ -251,6 +250,10 @@ class COMPONENT_EXPORT(UI_BASE_IME_CHROMEOS) InputMethodManager {
     // Returns the URL of the input view of the active input method.
     virtual const GURL& GetInputViewUrl() const = 0;
 
+    // Get the current UI screen type (e.g. login screen, lock screen, etc.).
+    virtual InputMethodManager::UIStyle GetUIStyle() const = 0;
+    virtual void SetUIStyle(InputMethodManager::UIStyle ui_style) = 0;
+
    protected:
     friend base::RefCounted<InputMethodManager::State>;
 
@@ -273,9 +276,6 @@ class COMPONENT_EXPORT(UI_BASE_IME_CHROMEOS) InputMethodManager {
   // Destroy the global instance.
   static COMPONENT_EXPORT(UI_BASE_IME_CHROMEOS) void Shutdown();
 
-  // Get the current UI session state (e.g. login screen, lock screen, etc.).
-  virtual UISessionState GetUISessionState() = 0;
-
   // Adds an observer to receive notifications of input method related
   // changes as desribed in the Observer class above.
   virtual void AddObserver(Observer* observer) = 0;
@@ -286,12 +286,6 @@ class COMPONENT_EXPORT(UI_BASE_IME_CHROMEOS) InputMethodManager {
   virtual void RemoveCandidateWindowObserver(
       CandidateWindowObserver* observer) = 0;
   virtual void RemoveImeMenuObserver(ImeMenuObserver* observer) = 0;
-
-  // Returns all input methods that are supported, including ones not active.
-  // This function never returns NULL. Note that input method extensions are NOT
-  // included in the result.
-  virtual std::unique_ptr<InputMethodDescriptors> GetSupportedInputMethods()
-      const = 0;
 
   // Activates the input method property specified by the |key|.
   virtual void ActivateInputMethodMenuItem(const std::string& key) = 0;
@@ -304,6 +298,12 @@ class COMPONENT_EXPORT(UI_BASE_IME_CHROMEOS) InputMethodManager {
   virtual bool IsISOLevel5ShiftUsedByCurrentInputMethod() const = 0;
 
   virtual bool IsAltGrUsedByCurrentInputMethod() const = 0;
+
+  // Returns true if the current input method uses position based shortcuts.
+  // This is true for most layouts, with the exception of layouts that have
+  // non-standard locations for punctuation such as dvorak. See
+  // crbug.com/1174326 for more information.
+  virtual bool ArePositionalShortcutsUsedByCurrentInputMethod() const = 0;
 
   // Returns an X keyboard object which could be used to change the current XKB
   // layout, change the caps lock status, and set the auto repeat rate/interval.
@@ -360,8 +360,7 @@ class COMPONENT_EXPORT(UI_BASE_IME_CHROMEOS) InputMethodManager {
   virtual void NotifyObserversImeExtraInputStateChange() = 0;
 
   // Gets the implementation of the keyboard controller.
-  virtual ui::InputMethodKeyboardController*
-  GetInputMethodKeyboardController() = 0;
+  virtual ui::VirtualKeyboardController* GetVirtualKeyboardController() = 0;
 
   // Notifies an input method extension is added or removed.
   virtual void NotifyInputMethodExtensionAdded(
@@ -372,5 +371,13 @@ class COMPONENT_EXPORT(UI_BASE_IME_CHROMEOS) InputMethodManager {
 
 }  // namespace input_method
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
+// source migration is finished.
+namespace ash {
+namespace input_method {
+using ::chromeos::input_method::InputMethodManager;
+}
+}  // namespace ash
 
 #endif  // UI_BASE_IME_CHROMEOS_INPUT_METHOD_MANAGER_H_

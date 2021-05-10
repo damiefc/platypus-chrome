@@ -12,7 +12,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
@@ -266,7 +265,7 @@ TEST_F(PasswordGenerationFrameHelperTest, ProcessPasswordRequirements) {
     ++test_counter;
 
     autofill::FormFieldData username;
-    username.name = ASCIIToUTF16("login");
+    username.name = u"login";
     username.form_control_type = "text";
 
     autofill::FormFieldData password;
@@ -285,7 +284,7 @@ TEST_F(PasswordGenerationFrameHelperTest, ProcessPasswordRequirements) {
     autofill::FormData account_creation_form;
     account_creation_form.url = origin;
     account_creation_form.action = origin;
-    account_creation_form.name = ASCIIToUTF16("account_creation_form");
+    account_creation_form.name = u"account_creation_form";
     account_creation_form.fields.push_back(username);
     account_creation_form.fields.push_back(password);
 

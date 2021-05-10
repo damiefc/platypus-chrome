@@ -12,7 +12,6 @@
 #include <unordered_set>
 
 #include "base/gtest_prod_util.h"
-#include "base/strings/string16.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_trigger_scheduler.h"
@@ -56,6 +55,7 @@ class PlatformNotificationServiceImpl
   void DisplayNotification(
       const std::string& notification_id,
       const GURL& origin,
+      const GURL& document_url,
       const blink::PlatformNotificationData& notification_data,
       const blink::NotificationResources& notification_resources) override;
   void DisplayPersistentNotification(
@@ -99,8 +99,7 @@ class PlatformNotificationServiceImpl
   // content_settings::Observer implementation.
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type,
-                               const std::string& resource_identifier) override;
+                               ContentSettingsType content_type) override;
 
   static void DidGetBackgroundSourceId(
       base::OnceClosure recorded_closure,
@@ -116,7 +115,7 @@ class PlatformNotificationServiceImpl
       const blink::NotificationResources& notification_resources) const;
 
   // Returns a display name for an origin, to be used in the context message
-  base::string16 DisplayNameForContextMessage(const GURL& origin) const;
+  std::u16string DisplayNameForContextMessage(const GURL& origin) const;
 
   // Clears |closed_notifications_|. Should only be used for testing purposes.
   void ClearClosedNotificationsForTesting() { closed_notifications_.clear(); }

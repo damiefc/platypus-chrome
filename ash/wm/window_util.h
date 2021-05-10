@@ -88,9 +88,11 @@ ASH_EXPORT bool ShouldExcludeForCycleList(const aura::Window* window);
 ASH_EXPORT bool ShouldExcludeForOverview(const aura::Window* window);
 
 // Removes all windows in |out_window_list| whose transient root is also in
-// |out_window_list|. This is used by overview and window cycler to avoid
-// showing multiple previews for windows linked by transient.
-ASH_EXPORT void RemoveTransientDescendants(
+// |out_window_list|. Also replaces transient descendants with their transient
+// roots, ensuring only one unique instance of each transient root. This is used
+// by overview and window cycler to avoid showing multiple previews for windows
+// linked by transient and creating items using transient descendants.
+ASH_EXPORT void EnsureTransientRoots(
     std::vector<aura::Window*>* out_window_list);
 
 // Minimizes a hides list of |windows| without any animations.
@@ -104,9 +106,6 @@ ASH_EXPORT aura::Window* GetRootWindowAt(const gfx::Point& point_in_screen);
 // Returns the RootWindow that shares the most area with |rect_in_screen| in
 // virtual screen coordinates.
 ASH_EXPORT aura::Window* GetRootWindowMatching(const gfx::Rect& rect_in_screen);
-
-// Returns true if |window| is an ARC app window.
-ASH_EXPORT bool IsArcWindow(const aura::Window* window);
 
 // Returns true if |window| is an ARC PIP window.
 ASH_EXPORT bool IsArcPipWindow(const aura::Window* window);
@@ -140,6 +139,10 @@ WindowTransientDescendantIteratorRange GetVisibleTransientTreeIterator(
 // hidden if |top_inset| is not zero.
 gfx::RectF GetTransformedBounds(aura::Window* transformed_window,
                                 int top_inset);
+
+// If multi profile is on, check if |window| should be shown for the current
+// user.
+bool ShouldShowForCurrentUser(aura::Window* window);
 
 }  // namespace window_util
 }  // namespace ash

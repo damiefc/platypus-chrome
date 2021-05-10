@@ -183,7 +183,8 @@ void ExtensionControlledPrefsTest::EnsureExtensionUninstalled(
       break;
     }
   }
-  prefs()->OnExtensionUninstalled(extension_id, Manifest::INTERNAL, false);
+  prefs()->OnExtensionUninstalled(extension_id,
+                                  mojom::ManifestLocation::kInternal, false);
 }
 
 class ControlledPrefsInstallOneExtension
@@ -273,7 +274,7 @@ class ControlledPrefsUninstallExtension : public ExtensionControlledPrefsTest {
         ContentSettingsPattern::FromString("http://[*.]example.com");
     store->SetExtensionContentSetting(
         extension1()->id(), pattern, pattern, ContentSettingsType::IMAGES,
-        std::string(), CONTENT_SETTING_BLOCK, kExtensionPrefsScopeRegular);
+        CONTENT_SETTING_BLOCK, kExtensionPrefsScopeRegular);
 
     UninstallExtension(extension1()->id());
   }

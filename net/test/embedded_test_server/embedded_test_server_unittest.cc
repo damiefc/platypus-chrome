@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_pump_type.h"
@@ -326,10 +326,6 @@ TEST_P(EmbeddedTestServerTest, ConnectionListenerRead) {
 }
 
 TEST_P(EmbeddedTestServerTest, ConnectionListenerComplete) {
-  if (GetParam() == EmbeddedTestServer::TYPE_HTTP) {
-    // Test is flaky on HTTP. crbug/1073761.
-    return;
-  }
   ASSERT_TRUE(server_->Start());
 
   TestDelegate delegate;

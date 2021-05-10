@@ -9,6 +9,7 @@
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/writable_shared_memory_region.h"
+#include "skia/ext/legacy_display_globals.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/vsync_provider.h"
@@ -48,9 +49,10 @@ void ScenicWindowCanvas::Frame::Initialize(gfx::Size size,
   scenic_memory = std::make_unique<scenic::Memory>(
       scenic, memory_handle.PassPlatformHandle(), buffer_size,
       fuchsia::images::MemoryType::HOST_MEMORY);
+  SkSurfaceProps props = skia::LegacyDisplayGlobals::GetSkSurfaceProps();
   surface = SkSurface::MakeRasterDirect(
       SkImageInfo::MakeN32Premul(size.width(), size.height()),
-      memory_mapping.memory(), bytes_per_row);
+      memory_mapping.memory(), bytes_per_row, &props);
   dirty_region.setRect(gfx::RectToSkIRect(gfx::Rect(size)));
 }
 
@@ -164,10 +166,7 @@ void ScenicWindowCanvas::PresentCanvas(const gfx::Rect& damage) {
   ZX_CHECK(status == ZX_OK, status);
   scenic_surface_->scenic_session()->EnqueueReleaseFence(
       std::move(release_fence_dup));
-  scenic_surface_->scenic_session()->Present2(
-      /*requested_presentation_time=*/0,
-      /*requested_prediction_span=*/0,
-      [](fuchsia::scenic::scheduling::FuturePresentationTimes info) {});
+  scenic_surface_->safe_presenter()->QueuePresent();
 
   // Move to the next buffer.
   current_frame_ = (current_frame_ + 1) % kNumBuffers;

@@ -110,7 +110,7 @@ class LazyLoadFramesParamsTest
 
     SimTest::SetUp();
     WebView().MainFrameWidget()->Resize(
-        WebSize(kViewportWidth, kViewportHeight));
+        gfx::Size(kViewportWidth, kViewportHeight));
 
     Settings& settings = WebView().GetPage()->GetSettings();
 
@@ -210,8 +210,8 @@ class LazyLoadFramesParamsTest
       // This SimRequest needs to be created now if the frame won't actually be
       // lazily loaded. Otherwise, it'll be defined later to ensure that the
       // subframe resource isn't requested until the page is scrolled down.
-      child_frame_resource.reset(
-          new SimRequest("https://crossorigin.com/subframe.html", "text/html"));
+      child_frame_resource = std::make_unique<SimRequest>(
+          "https://crossorigin.com/subframe.html", "text/html");
     }
 
     LoadURL("https://example.com/");
@@ -245,8 +245,8 @@ class LazyLoadFramesParamsTest
         "Blink.LazyLoad.CrossOriginFrames.VisibleAfterBeingDeferred", 0);
 
     if (!child_frame_resource) {
-      child_frame_resource.reset(
-          new SimRequest("https://crossorigin.com/subframe.html", "text/html"));
+      child_frame_resource = std::make_unique<SimRequest>(
+          "https://crossorigin.com/subframe.html", "text/html");
     }
 
     return child_frame_resource;
@@ -1167,7 +1167,7 @@ class LazyLoadFramesTest : public SimTest {
 
     SimTest::SetUp();
     WebView().MainFrameWidget()->Resize(
-        WebSize(kViewportWidth, kViewportHeight));
+        gfx::Size(kViewportWidth, kViewportHeight));
 
     Settings& settings = WebView().GetPage()->GetSettings();
     settings.SetLazyFrameLoadingDistanceThresholdPx4G(

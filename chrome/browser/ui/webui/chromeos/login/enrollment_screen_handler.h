@@ -10,9 +10,9 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "chrome/browser/chromeos/login/enrollment/enrollment_screen_view.h"
-#include "chrome/browser/chromeos/login/enrollment/enterprise_enrollment_helper.h"
-#include "chrome/browser/chromeos/login/screens/error_screen.h"
+#include "chrome/browser/ash/login/enrollment/enrollment_screen_view.h"
+#include "chrome/browser/ash/login/enrollment/enterprise_enrollment_helper.h"
+#include "chrome/browser/ash/login/screens/error_screen.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
@@ -71,9 +71,8 @@ class EnrollmentScreenHandler
   void SetEnrollmentConfig(Controller* controller,
                            const policy::EnrollmentConfig& config) override;
 
-  void SetEnterpriseDomainAndDeviceType(
-      const std::string& domain,
-      const base::string16& device_type) override;
+  void SetEnterpriseDomainInfo(const std::string& manager,
+                               const std::u16string& device_type) override;
   void Show() override;
   void Hide() override;
   void ShowSigninScreen() override;
@@ -89,6 +88,7 @@ class EnrollmentScreenHandler
   void ShowEnrollmentStatus(policy::EnrollmentStatus status) override;
   void ShowOtherError(
       EnterpriseEnrollmentHelper::OtherError error_code) override;
+  void Shutdown() override;
 
   // Implements BaseScreenHandler:
   void Initialize() override;
@@ -151,11 +151,11 @@ class EnrollmentScreenHandler
   void DoShowWithPartition(const std::string& partition_name);
 
   // Returns true if current visible screen is the enrollment sign-in page.
-  bool IsOnEnrollmentScreen() const;
+  bool IsOnEnrollmentScreen();
 
   // Returns true if current visible screen is the error screen over
   // enrollment sign-in page.
-  bool IsEnrollmentScreenHiddenByError() const;
+  bool IsEnrollmentScreenHiddenByError();
 
   // Called after configuration seed was unlocked.
   void OnAdConfigurationUnlocked(std::string unlocked_data);
@@ -181,6 +181,10 @@ class EnrollmentScreenHandler
   // True when signin screen step is shown.
   bool observe_network_failure_ = false;
 
+  // Set true when chrome is being restarted to pick up enrollment changes. The
+  // renderer processes will be destroyed and can no longer be talked to.
+  bool shutdown_ = false;
+
   // Network state informer used to keep signin screen up.
   scoped_refptr<NetworkStateInformer> network_state_informer_;
 
@@ -194,6 +198,8 @@ class EnrollmentScreenHandler
   scoped_refptr<HelpAppLauncher> help_app_;
 
   std::unique_ptr<CookieWaiter> oauth_code_waiter_;
+
+  bool use_fake_login_for_testing_ = false;
 
   base::WeakPtrFactory<EnrollmentScreenHandler> weak_ptr_factory_{this};
 

@@ -7,8 +7,7 @@
 #include <memory>
 
 #include "base/optional.h"
-#include "base/test/bind_test_util.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
@@ -30,7 +29,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
-#include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
+#include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
@@ -53,6 +52,7 @@
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-blink.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-blink.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 
@@ -1007,7 +1007,7 @@ TEST_F(EventHandlerTest, dragEndInNewDrag) {
       WebInputEvent::kNoModifiers, base::TimeTicks::Now());
   mouse_up_event.SetFrameScale(1);
   GetDocument().GetFrame()->GetEventHandler().DragSourceEndedAt(
-      mouse_up_event, kDragOperationNone);
+      mouse_up_event, ui::mojom::blink::DragOperation::kNone);
 
   // This test passes if it doesn't crash.
 }
@@ -1056,13 +1056,30 @@ class TooltipCapturingChromeClient : public EmptyChromeClient {
   TooltipCapturingChromeClient() = default;
 
   void SetToolTip(LocalFrame&, const String& str, TextDirection) override {
-    last_tool_tip_ = str;
+    last_tooltip_text_ = str;
+    // Always reset the bounds to zero as this function doesn't set bounds.
+    last_tooltip_bounds_ = gfx::Rect();
   }
 
-  String& LastToolTip() { return last_tool_tip_; }
+  void UpdateTooltipFromKeyboard(LocalFrame&,
+                                 const String& str,
+                                 TextDirection,
+                                 const gfx::Rect& bounds) override {
+    last_tooltip_text_ = str;
+    last_tooltip_bounds_ = bounds;
+  }
+
+  void ResetTooltip() {
+    last_tooltip_text_ = "";
+    last_tooltip_bounds_ = gfx::Rect();
+  }
+
+  const String& LastToolTipText() { return last_tooltip_text_; }
+  const gfx::Rect& LastToolTipBounds() { return last_tooltip_bounds_; }
 
  private:
-  String last_tool_tip_;
+  String last_tooltip_text_;
+  gfx::Rect last_tooltip_bounds_;
 };
 
 class EventHandlerTooltipTest : public EventHandlerTest {
@@ -1071,13 +1088,14 @@ class EventHandlerTooltipTest : public EventHandlerTest {
 
   void SetUp() override {
     chrome_client_ = MakeGarbageCollected<TooltipCapturingChromeClient>();
-    Page::PageClients clients;
-    FillWithEmptyClients(clients);
-    clients.chrome_client = chrome_client_.Get();
-    SetupPageWithClients(&clients);
+    SetupPageWithClients(chrome_client_);
   }
 
-  String& LastToolTip() { return chrome_client_->LastToolTip(); }
+  const String& LastToolTipText() { return chrome_client_->LastToolTipText(); }
+  const gfx::Rect& LastToolTipBounds() {
+    return chrome_client_->LastToolTipBounds();
+  }
+  void ResetTooltip() { chrome_client_->ResetTooltip(); }
 
  private:
   Persistent<TooltipCapturingChromeClient> chrome_client_;
@@ -1089,7 +1107,7 @@ TEST_F(EventHandlerTooltipTest, mouseLeaveClearsTooltip) {
       "<style>.box { width: 100%; height: 100%; }</style>"
       "<img src='image.png' class='box' title='tooltip'>link</img>");
 
-  EXPECT_EQ(WTF::String(), LastToolTip());
+  EXPECT_EQ(WTF::String(), LastToolTipText());
 
   WebMouseEvent mouse_move_event(
       WebInputEvent::Type::kMouseMove, gfx::PointF(51, 50), gfx::PointF(51, 50),
@@ -1099,7 +1117,7 @@ TEST_F(EventHandlerTooltipTest, mouseLeaveClearsTooltip) {
   GetDocument().GetFrame()->GetEventHandler().HandleMouseMoveEvent(
       mouse_move_event, Vector<WebMouseEvent>(), Vector<WebMouseEvent>());
 
-  EXPECT_EQ("tooltip", LastToolTip());
+  EXPECT_EQ("tooltip", LastToolTipText());
 
   WebMouseEvent mouse_leave_event(
       WebInputEvent::Type::kMouseLeave, gfx::PointF(0, 0), gfx::PointF(0, 0),
@@ -1109,7 +1127,94 @@ TEST_F(EventHandlerTooltipTest, mouseLeaveClearsTooltip) {
   GetDocument().GetFrame()->GetEventHandler().HandleMouseLeaveEvent(
       mouse_leave_event);
 
-  EXPECT_EQ(WTF::String(), LastToolTip());
+  EXPECT_EQ(WTF::String(), LastToolTipText());
+}
+
+// macOS doesn't have keyboard-triggered tooltips.
+#if defined(OS_MAC)
+#define MAYBE_FocusSetFromKeyboardUpdatesTooltip \
+  DISABLED_FocusSetFromKeyboardUpdatesTooltip
+#else
+#define MAYBE_FocusSetFromKeyboardUpdatesTooltip \
+  FocusSetFromKeyboardUpdatesTooltip
+#endif
+TEST_F(EventHandlerTooltipTest, MAYBE_FocusSetFromKeyboardUpdatesTooltip) {
+  SetHtmlInnerHTML(
+      "<button id='b1' title='my tooltip 1'>button 1</button><button id='b2' "
+      "title='my tooltip 2' accessKey='a'>button 2</button>");
+
+  EXPECT_EQ(WTF::String(), LastToolTipText());
+  EXPECT_EQ(gfx::Rect(), LastToolTipBounds());
+
+  // 1. Moving the focus with the tab key should trigger a tooltip update.
+  {
+    WebKeyboardEvent e{WebInputEvent::Type::kRawKeyDown,
+                       WebInputEvent::kNoModifiers,
+                       WebInputEvent::GetStaticTimeStampForTests()};
+    e.dom_code = static_cast<int>(ui::DomCode::TAB);
+    e.dom_key = ui::DomKey::TAB;
+    GetDocument().GetFrame()->GetEventHandler().KeyEvent(e);
+
+    Element* element = GetDocument().getElementById("b1");
+    EXPECT_EQ("my tooltip 1", LastToolTipText());
+    EXPECT_EQ(element->BoundsInViewport(), LastToolTipBounds());
+  }
+
+  ResetTooltip();
+
+  // 2. Moving the focus by pressing the access key on button should trigger a
+  // tooltip update.
+  {
+    WebKeyboardEvent e{WebInputEvent::Type::kRawKeyDown, WebInputEvent::kAltKey,
+                       WebInputEvent::GetStaticTimeStampForTests()};
+    e.unmodified_text[0] = 'a';
+    GetDocument().GetFrame()->GetEventHandler().HandleAccessKey(e);
+
+    Element* element = GetDocument().getElementById("b2");
+    EXPECT_EQ("my tooltip 2", LastToolTipText());
+    EXPECT_EQ(element->BoundsInViewport(), LastToolTipBounds());
+  }
+
+  ResetTooltip();
+
+  // 3. Moving the focus by pressing a directional arrow while spatial
+  // navigation is enabled should trigger a tooltip update.
+  {
+    // TODO(bebeaudr): Implement this once we support updating a tooltip with
+    // spatial navigation.
+  }
+
+  ResetTooltip();
+
+  // 4. Moving the focus to an element with a mouse action shouldn't update the
+  // tooltip.
+  {
+    Element* element = GetDocument().getElementById("b1");
+    gfx::PointF mouse_press_point =
+        gfx::PointF(element->BoundsInViewport().Center());
+    WebMouseEvent mouse_press_event(
+        WebInputEvent::Type::kMouseDown, mouse_press_point, mouse_press_point,
+        WebPointerProperties::Button::kLeft, 1,
+        WebInputEvent::Modifiers::kLeftButtonDown, base::TimeTicks::Now());
+    mouse_press_event.SetFrameScale(1);
+    GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
+        mouse_press_event);
+
+    EXPECT_EQ("", LastToolTipText());
+    EXPECT_EQ(gfx::Rect(), LastToolTipBounds());
+  }
+
+  ResetTooltip();
+
+  // 5. Setting the focus to an element with a script action (FocusType::kNone
+  // means that the focus was set from a script) shouldn't update the tooltip.
+  {
+    Element* element = GetDocument().getElementById("b2");
+    element->focus();
+
+    EXPECT_EQ("", LastToolTipText());
+    EXPECT_EQ(gfx::Rect(), LastToolTipBounds());
+  }
 }
 
 class UnbufferedInputEventsTrackingChromeClient : public EmptyChromeClient {
@@ -1135,10 +1240,7 @@ class EventHandlerLatencyTest : public PageTestBase {
   void SetUp() override {
     chrome_client_ =
         MakeGarbageCollected<UnbufferedInputEventsTrackingChromeClient>();
-    Page::PageClients page_clients;
-    FillWithEmptyClients(page_clients);
-    page_clients.chrome_client = chrome_client_.Get();
-    SetupPageWithClients(&page_clients);
+    SetupPageWithClients(chrome_client_);
   }
 
   void SetHtmlInnerHTML(const char* html_content) {
@@ -1182,7 +1284,7 @@ TEST_F(EventHandlerLatencyTest, NeedsUnbufferedInput) {
 }
 
 TEST_F(EventHandlerSimTest, MouseUpOffScrollbarGeneratesScrollEnd) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1192,7 +1294,7 @@ TEST_F(EventHandlerSimTest, MouseUpOffScrollbarGeneratesScrollEnd) {
   )HTML");
 
   Compositor().BeginFrame();
-  EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 0u);
+  EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 0u);
 
   // PageTestBase sizes the page to 800x600. Click on the scrollbar
   // track, move off, then release the mouse and verify that GestureScrollEnd
@@ -1214,13 +1316,15 @@ TEST_F(EventHandlerSimTest, MouseUpOffScrollbarGeneratesScrollEnd) {
 
   // Mouse down on the scrollbar track should have generated GSB/GSU.
   if (scrollbar_theme_allows_hit_test) {
-    EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 2u);
-    EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents()[0]->Event().GetType(),
-              WebInputEvent::Type::kGestureScrollBegin);
-    EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents()[1]->Event().GetType(),
-              WebInputEvent::Type::kGestureScrollUpdate);
+    EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 2u);
+    EXPECT_EQ(
+        GetWebFrameWidget().GetInjectedScrollEvents()[0]->Event().GetType(),
+        WebInputEvent::Type::kGestureScrollBegin);
+    EXPECT_EQ(
+        GetWebFrameWidget().GetInjectedScrollEvents()[1]->Event().GetType(),
+        WebInputEvent::Type::kGestureScrollUpdate);
   } else {
-    EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 0u);
+    EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 0u);
   }
 
   const gfx::PointF middle_of_page(100, 100);
@@ -1234,9 +1338,9 @@ TEST_F(EventHandlerSimTest, MouseUpOffScrollbarGeneratesScrollEnd) {
 
   // Mouse move should not have generated any gestures.
   if (scrollbar_theme_allows_hit_test) {
-    EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 2u);
+    EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 2u);
   } else {
-    EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 0u);
+    EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 0u);
   }
 
   WebMouseEvent mouse_up(WebInputEvent::Type::kMouseUp, middle_of_page,
@@ -1247,16 +1351,17 @@ TEST_F(EventHandlerSimTest, MouseUpOffScrollbarGeneratesScrollEnd) {
 
   // Mouse up must generate GestureScrollEnd.
   if (scrollbar_theme_allows_hit_test) {
-    EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 3u);
-    EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents()[2]->Event().GetType(),
-              WebInputEvent::Type::kGestureScrollEnd);
+    EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 3u);
+    EXPECT_EQ(
+        GetWebFrameWidget().GetInjectedScrollEvents()[2]->Event().GetType(),
+        WebInputEvent::Type::kGestureScrollEnd);
   } else {
-    EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 0u);
+    EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 0u);
   }
 }
 
 TEST_F(EventHandlerSimTest, MouseUpOnlyOnScrollbar) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1267,7 +1372,7 @@ TEST_F(EventHandlerSimTest, MouseUpOnlyOnScrollbar) {
 
   Compositor().BeginFrame();
 
-  EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 0u);
+  EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 0u);
 
   // Mouse down on the page, the move the mouse to the scrollbar and release.
   // Validate that we don't inject a ScrollEnd (since no ScrollBegin was
@@ -1282,7 +1387,7 @@ TEST_F(EventHandlerSimTest, MouseUpOnlyOnScrollbar) {
   GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(mouse_down);
 
   // Mouse down on the page should not generate scroll gestures.
-  EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 0u);
+  EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 0u);
 
   const gfx::PointF scrollbar_forward_track(795, 560);
   WebMouseEvent mouse_move(WebInputEvent::Type::kMouseMove,
@@ -1294,7 +1399,7 @@ TEST_F(EventHandlerSimTest, MouseUpOnlyOnScrollbar) {
       mouse_move, Vector<WebMouseEvent>(), Vector<WebMouseEvent>());
 
   // Mouse move should not have generated any gestures.
-  EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 0u);
+  EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 0u);
 
   WebMouseEvent mouse_up(WebInputEvent::Type::kMouseUp, scrollbar_forward_track,
                          scrollbar_forward_track,
@@ -1304,11 +1409,11 @@ TEST_F(EventHandlerSimTest, MouseUpOnlyOnScrollbar) {
   GetDocument().GetFrame()->GetEventHandler().HandleMouseReleaseEvent(mouse_up);
 
   // Mouse up should not have generated any gestures.
-  EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 0u);
+  EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 0u);
 }
 
 TEST_F(EventHandlerSimTest, RightClickNoGestures) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1319,7 +1424,7 @@ TEST_F(EventHandlerSimTest, RightClickNoGestures) {
 
   Compositor().BeginFrame();
 
-  EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 0u);
+  EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 0u);
 
   // PageTestBase sizes the page to 800x600. Right click on the scrollbar
   // track, and release the mouse and verify that no gesture events are
@@ -1333,7 +1438,7 @@ TEST_F(EventHandlerSimTest, RightClickNoGestures) {
   mouse_down.SetFrameScale(1);
   GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(mouse_down);
 
-  EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 0u);
+  EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 0u);
 
   WebMouseEvent mouse_up(WebInputEvent::Type::kMouseUp, scrollbar_forward_track,
                          scrollbar_forward_track,
@@ -1342,7 +1447,7 @@ TEST_F(EventHandlerSimTest, RightClickNoGestures) {
   mouse_up.SetFrameScale(1);
   GetDocument().GetFrame()->GetEventHandler().HandleMouseReleaseEvent(mouse_up);
 
-  EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 0u);
+  EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 0u);
 }
 
 // https://crbug.com/976557 tracks the fix for re-enabling this test on Mac.
@@ -1366,7 +1471,7 @@ TEST_F(EventHandlerSimTest, MAYBE_GestureTapWithScrollSnaps) {
   // ScrollingCoordinator is initialized.
   GetDocument().GetSettings()->SetAcceleratedCompositingEnabled(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1392,7 +1497,7 @@ TEST_F(EventHandlerSimTest, MAYBE_GestureTapWithScrollSnaps) {
 
   Compositor().BeginFrame();
 
-  EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 0u);
+  EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 0u);
 
   // Only run this test if scrollbars are hit-testable (they are not on
   // Android).
@@ -1409,10 +1514,10 @@ TEST_F(EventHandlerSimTest, MAYBE_GestureTapWithScrollSnaps) {
 
   TapEventBuilder tap(scrollbar_forward_track, 1);
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(tap);
-  EXPECT_EQ(WebWidgetClient().GetInjectedScrollEvents().size(), 3u);
+  EXPECT_EQ(GetWebFrameWidget().GetInjectedScrollEvents().size(), 3u);
 
   const Vector<std::unique_ptr<blink::WebCoalescedInputEvent>>& data =
-      WebWidgetClient().GetInjectedScrollEvents();
+      GetWebFrameWidget().GetInjectedScrollEvents();
   EXPECT_EQ(data[0]->Event().GetType(),
             WebInputEvent::Type::kGestureScrollBegin);
   EXPECT_EQ(data[1]->Event().GetType(),
@@ -1484,7 +1589,7 @@ TEST_F(EventHandlerTest, MouseLeaveResetsUnknownState) {
 // Test that leaving an iframe sets the mouse position to unknown on that
 // iframe.
 TEST_F(EventHandlerSimTest, MouseLeaveIFrameResets) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
 
   SimRequest main_resource("https://example.com/test.html", "text/html");
   SimRequest frame_resource("https://example.com/frame.html", "text/html");
@@ -1549,7 +1654,7 @@ TEST_F(EventHandlerSimTest, MouseLeaveIFrameResets) {
 // Test that mouse down and move a small distance on a draggable element will
 // not change cursor style.
 TEST_F(EventHandlerSimTest, CursorStyleBeforeStartDragging) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1591,7 +1696,7 @@ TEST_F(EventHandlerSimTest, CursorStyleBeforeStartDragging) {
 
 // Ensure that tap on element in iframe should apply active state.
 TEST_F(EventHandlerSimTest, TapActiveInFrame) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
 
   SimRequest main_resource("https://example.com/test.html", "text/html");
   SimRequest frame_resource("https://example.com/iframe.html", "text/html");
@@ -1656,7 +1761,7 @@ TEST_F(EventHandlerSimTest, TapActiveInFrame) {
 // Test that the hover is updated at the next begin frame after the compositor
 // scroll ends.
 TEST_F(EventHandlerSimTest, TestUpdateHoverAfterCompositorScrollAtBeginFrame) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1723,7 +1828,7 @@ TEST_F(EventHandlerSimTest, TestUpdateHoverAfterCompositorScrollAtBeginFrame) {
 // Test that the hover is updated at the next begin frame after the main thread
 // scroll ends.
 TEST_F(EventHandlerSimTest, TestUpdateHoverAfterMainThreadScrollAtBeginFrame) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1791,7 +1896,7 @@ TEST_F(EventHandlerSimTest, TestUpdateHoverAfterMainThreadScrollAtBeginFrame) {
 // scroll ends in an iframe.
 TEST_F(EventHandlerSimTest,
        TestUpdateHoverAfterMainThreadScrollInIFrameAtBeginFrame) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest main_resource("https://example.com/test.html", "text/html");
   SimRequest frame_resource("https://example.com/iframe.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -1861,7 +1966,7 @@ TEST_F(EventHandlerSimTest,
 // Test that the hover is updated at the next begin frame after the smooth JS
 // scroll ends.
 TEST_F(EventHandlerSimTest, TestUpdateHoverAfterJSScrollAtBeginFrame) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 500));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 500));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1924,7 +2029,7 @@ TEST_F(EventHandlerSimTest, TestUpdateHoverAfterJSScrollAtBeginFrame) {
 // thread scroll snap animation finishes.
 TEST_F(EventHandlerSimTest,
        TestUpdateHoverAfterMainThreadScrollSnapAtBeginFrame) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2006,7 +2111,7 @@ TEST_F(EventHandlerSimTest,
 
 TEST_F(EventHandlerSimTest,
        TestUpdateHoverAfterMainThreadScrollAtSnapPointAtBeginFrame) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2073,7 +2178,7 @@ TEST_F(EventHandlerSimTest,
 }
 
 TEST_F(EventHandlerSimTest, LargeCustomCursorIntersectsViewport) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   SimSubresourceRequest cursor_request("https://example.com/100x100.png",
                                        "image/png");
@@ -2132,7 +2237,7 @@ TEST_F(EventHandlerSimTest, LargeCustomCursorIntersectsViewport) {
 }
 
 TEST_F(EventHandlerSimTest, SmallCustomCursorIntersectsViewport) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   SimSubresourceRequest cursor_request("https://example.com/48x48.png",
                                        "image/png");
@@ -2192,7 +2297,7 @@ TEST_F(EventHandlerSimTest, SmallCustomCursorIntersectsViewport) {
 }
 
 TEST_F(EventHandlerSimTest, NeverExposeKeyboardEvent) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   GetDocument().GetSettings()->SetDontSendKeyEventsToJavascript(true);
@@ -2267,7 +2372,7 @@ TEST_F(EventHandlerSimTest, NeverExposeKeyboardEvent) {
 TEST_F(EventHandlerSimTest, NotExposeKeyboardEvent) {
   GetDocument().GetSettings()->SetDontSendKeyEventsToJavascript(true);
   GetDocument().GetSettings()->SetScrollAnimatorEnabled(false);
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2344,7 +2449,7 @@ TEST_F(EventHandlerSimTest, NotExposeKeyboardEvent) {
 }
 
 TEST_F(EventHandlerSimTest, DoNotScrollWithTouchpadIfOverflowIsHidden) {
-  WebView().MainFrameWidget()->Resize(WebSize(400, 400));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(400, 400));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2405,7 +2510,7 @@ TEST_F(EventHandlerSimTest, DoNotScrollWithTouchpadIfOverflowIsHidden) {
 }
 
 TEST_F(EventHandlerSimTest, GestureScrollUpdateModifiedScrollChain) {
-  WebView().MainFrameWidget()->Resize(WebSize(400, 400));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(400, 400));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2478,7 +2583,7 @@ TEST_F(EventHandlerSimTest, GestureScrollUpdateModifiedScrollChain) {
 }
 
 TEST_F(EventHandlerSimTest, ElementTargetedGestureScroll) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2565,7 +2670,7 @@ TEST_F(EventHandlerSimTest, ElementTargetedGestureScroll) {
 }
 
 TEST_F(EventHandlerSimTest, ElementTargetedGestureScrollIFrame) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request_outer("https://example.com/test-outer.html", "text/html");
   SimRequest request_inner("https://example.com/test-inner.html", "text/html");
   LoadURL("https://example.com/test-outer.html");
@@ -2624,8 +2729,51 @@ TEST_F(EventHandlerSimTest, ElementTargetedGestureScrollIFrame) {
   ASSERT_EQ(scrollable_area->ScrollOffsetInt().Height(), delta_y);
 }
 
+TEST_F(EventHandlerSimTest, ElementTargetedGestureScrollIFrameNoCrash) {
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
+  SimRequest request_outer("https://example.com/test-outer.html", "text/html");
+  SimRequest request_inner("https://example.com/test-inner.html", "text/html");
+  LoadURL("https://example.com/test-outer.html");
+  request_outer.Complete(R"HTML(
+    <!DOCTYPE html>
+    <iframe id="iframe" src="test-inner.html"></iframe>
+    <div style="height:1000px"></div>
+    )HTML");
+
+  request_inner.Complete(R"HTML(
+    <!DOCTYPE html>
+    <div style="height:1000px"></div>
+  )HTML");
+  Compositor().BeginFrame();
+
+  auto* const iframe =
+      To<HTMLFrameElementBase>(GetDocument().getElementById("iframe"));
+  FrameView* child_frame_view =
+      iframe->GetLayoutEmbeddedContent()->ChildFrameView();
+  auto* local_child_frame_view = DynamicTo<LocalFrameView>(child_frame_view);
+  ScrollableArea* scrollable_area = local_child_frame_view->GetScrollableArea();
+
+  iframe->style()->setProperty(GetDocument().GetExecutionContext(), "display",
+                               "none", String(), ASSERT_NO_EXCEPTION);
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kTest);
+
+  // Target the iframe scrollable area and make sure it scrolls when targeted
+  // with gestures.
+  constexpr float delta_y = 100;
+  WebGestureEvent gesture_scroll_begin{
+      WebInputEvent::Type::kGestureScrollBegin, WebInputEvent::kNoModifiers,
+      WebInputEvent::GetStaticTimeStampForTests()};
+  gesture_scroll_begin.SetFrameScale(1);
+  gesture_scroll_begin.data.scroll_begin.delta_x_hint = 0;
+  gesture_scroll_begin.data.scroll_begin.delta_y_hint = -delta_y;
+  gesture_scroll_begin.data.scroll_begin.scrollable_area_element_id =
+      scrollable_area->GetScrollElementId().GetStableId();
+  GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
+      gesture_scroll_begin);
+}
+
 TEST_F(EventHandlerSimTest, ElementTargetedGestureScrollViewport) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   // Set a page scale factor so that the VisualViewport will also scroll.
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -2677,7 +2825,7 @@ TEST_F(EventHandlerSimTest, ElementTargetedGestureScrollViewport) {
 }
 
 TEST_F(EventHandlerSimTest, SelecteTransformedTextWhenCapturing) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2738,7 +2886,7 @@ TEST_F(EventHandlerSimTest, SelecteTransformedTextWhenCapturing) {
 // frame and move to outer frame does not capture mouse to inner frame.
 TEST_F(EventHandlerSimTest, MouseDragWithNoSubframeImplicitCapture) {
   ScopedMouseSubframeNoImplicitCaptureForTest scoped_feature(true);
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
 
   SimRequest main_resource("https://example.com/test.html", "text/html");
   SimRequest frame_resource("https://example.com/frame.html", "text/html");
@@ -2830,7 +2978,7 @@ TEST_F(EventHandlerSimTest,
        MouseDragWithPointerCaptureAndNoSubframeImplicitCapture) {
   ScopedMouseSubframeNoImplicitCaptureForTest scoped_feature(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
 
   SimRequest main_resource("https://example.com/test.html", "text/html");
   SimRequest frame_resource("https://example.com/frame.html", "text/html");
@@ -2920,7 +3068,7 @@ TEST_F(EventHandlerSimTest,
 // Test that mouse right button down and move to an iframe will route the events
 // to iframe correctly.
 TEST_F(EventHandlerSimTest, MouseRightButtonDownMoveToIFrame) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
 
   SimRequest main_resource("https://example.com/test.html", "text/html");
   SimRequest frame_resource("https://example.com/frame.html", "text/html");
@@ -2980,7 +3128,7 @@ TEST_F(EventHandlerSimTest, MouseRightButtonDownMoveToIFrame) {
 
 // Tests that pen dragging on an element and moves will keep the element active.
 TEST_F(EventHandlerSimTest, PenDraggingOnElementActive) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
 
   SimRequest main_resource("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -3028,7 +3176,7 @@ TEST_F(EventHandlerSimTest, PenDraggingOnElementActive) {
 }
 
 TEST_F(EventHandlerSimTest, TestNoCrashOnMouseWheelZeroDelta) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -3072,7 +3220,7 @@ TEST_F(EventHandlerSimTest, TestNoCrashOnMouseWheelZeroDelta) {
 // The mouse wheel events which have the phases of "MayBegin" or "Cancel"
 // should fire wheel events to the DOM.
 TEST_F(EventHandlerSimTest, TestNoWheelEventWithPhaseMayBeginAndCancel) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -3116,7 +3264,7 @@ TEST_F(EventHandlerSimTest, TestNoWheelEventWithPhaseMayBeginAndCancel) {
 // events to the DOM, but for other phases like "Begin", "Change" and
 // "Stationary", there should be wheels evnets fired to the DOM.
 TEST_F(EventHandlerSimTest, TestWheelEventsWithDifferentPhases) {
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(

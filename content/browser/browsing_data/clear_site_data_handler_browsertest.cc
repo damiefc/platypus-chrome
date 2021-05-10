@@ -9,12 +9,11 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
-#include "base/scoped_observer.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/thread_annotations.h"
 #include "build/build_config.h"
@@ -65,7 +64,7 @@ void AddQuery(GURL* url, const std::string& key, const std::string& value) {
 // information to the loaded website's title and C++ will wait until that
 // happens.
 void WaitForTitle(const Shell* shell, const char* expected_title) {
-  base::string16 expected_title_16 = base::ASCIIToUTF16(expected_title);
+  std::u16string expected_title_16 = base::ASCIIToUTF16(expected_title);
   TitleWatcher title_watcher(shell->web_contents(), expected_title_16);
   ASSERT_EQ(expected_title_16, title_watcher.WaitAndGetTitle());
 }
@@ -147,8 +146,8 @@ class ClearSiteDataHandlerBrowserTest : public ContentBrowserTest {
     ASSERT_TRUE(embedded_test_server()->Start());
 
     // Set up HTTPS server.
-    https_server_.reset(new net::EmbeddedTestServer(
-        net::test_server::EmbeddedTestServer::TYPE_HTTPS));
+    https_server_ = std::make_unique<net::EmbeddedTestServer>(
+        net::test_server::EmbeddedTestServer::TYPE_HTTPS);
     https_server_->SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
     https_server_->RegisterRequestHandler(
         base::BindRepeating(&ClearSiteDataHandlerBrowserTest::HandleRequest,
@@ -161,7 +160,7 @@ class ClearSiteDataHandlerBrowserTest : public ContentBrowserTest {
   }
 
   StoragePartition* storage_partition() {
-    return BrowserContext::GetDefaultStoragePartition(browser_context());
+    return browser_context()->GetDefaultStoragePartition();
   }
 
   // Adds a cookie for the |url|. Used in the cookie integration tests.
@@ -225,10 +224,9 @@ class ClearSiteDataHandlerBrowserTest : public ContentBrowserTest {
   }
 
   bool RunScriptAndGetBool(const std::string& script) {
-    bool data;
-    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(shell()->web_contents(),
-                                                     script, &data));
-    return data;
+    return EvalJs(shell()->web_contents(), script,
+                  EXECUTE_SCRIPT_USE_MANUAL_REPLY)
+        .ExtractBool();
   }
 
  private:

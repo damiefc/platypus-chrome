@@ -6,7 +6,9 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <limits>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -252,9 +254,9 @@ WebstoreInstaller::Approval::CreateWithNoInstallPrompt(
   std::unique_ptr<Approval> result(new Approval());
   result->extension_id = extension_id;
   result->profile = profile;
-  result->manifest = std::unique_ptr<Manifest>(new Manifest(
-      Manifest::INVALID_LOCATION,
-      std::unique_ptr<base::DictionaryValue>(parsed_manifest->DeepCopy())));
+  result->manifest =
+      std::make_unique<Manifest>(mojom::ManifestLocation::kInvalidLocation,
+                                 std::move(parsed_manifest), extension_id);
   result->skip_install_dialog = true;
   result->manifest_check_level = strict_manifest_check ?
     MANIFEST_CHECK_LEVEL_STRICT : MANIFEST_CHECK_LEVEL_LOOSE;
@@ -285,7 +287,7 @@ WebstoreInstaller::WebstoreInstaller(Profile* profile,
 
   registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_INSTALL_ERROR,
                  content::Source<CrxInstaller>(nullptr));
-  extension_registry_observer_.Add(ExtensionRegistry::Get(profile));
+  extension_registry_observation_.Observe(ExtensionRegistry::Get(profile));
 }
 
 void WebstoreInstaller::Start() {
@@ -322,7 +324,8 @@ void WebstoreInstaller::Start() {
   InstallVerifier::Get(profile_)->AddProvisional(ids);
 
   std::string name;
-  if (!approval_->manifest->value()->GetString(manifest_keys::kName, &name)) {
+  if (!approval_->manifest->available_values().GetString(manifest_keys::kName,
+                                                         &name)) {
     NOTREACHED();
   }
   extensions::InstallTracker* tracker =
@@ -353,7 +356,7 @@ void WebstoreInstaller::Observe(int type,
     return;
 
   // TODO(rdevlin.cronin): Continue removing std::string errors and
-  // replacing with base::string16. See crbug.com/71980.
+  // replacing with std::u16string. See crbug.com/71980.
   const extensions::CrxInstallError* error =
       content::Details<const extensions::CrxInstallError>(details).ptr();
   const std::string utf8_error = base::UTF16ToUTF8(error->message());
@@ -464,7 +467,8 @@ void WebstoreInstaller::OnDownloadStarted(
     const base::Version version_required(info.minimum_version);
 
     if (version_required.IsValid()) {
-      approval->minimum_version.reset(new base::Version(version_required));
+      approval->minimum_version =
+          std::make_unique<base::Version>(version_required);
     }
     download_item_->SetUserData(kApprovalKey, std::move(approval));
   } else {
@@ -597,11 +601,11 @@ void WebstoreInstaller::StartDownload(const std::string& extension_id,
     ReportFailure(kDownloadDirectoryError, FAILURE_REASON_OTHER);
     return;
   }
-  if (!contents->GetRenderViewHost()) {
+  if (!contents->GetMainFrame()->GetRenderViewHost()) {
     ReportFailure(kDownloadDirectoryError, FAILURE_REASON_OTHER);
     return;
   }
-  if (!contents->GetRenderViewHost()->GetProcess()) {
+  if (!contents->GetMainFrame()->GetRenderViewHost()->GetProcess()) {
     ReportFailure(kDownloadDirectoryError, FAILURE_REASON_OTHER);
     return;
   }
@@ -620,9 +624,7 @@ void WebstoreInstaller::StartDownload(const std::string& extension_id,
   // We will navigate the current tab to this url to start the download. The
   // download system will then pass the crx to the CrxInstaller.
   int render_process_host_id =
-      contents->GetRenderViewHost()->GetProcess()->GetID();
-  int render_view_host_routing_id =
-      contents->GetRenderViewHost()->GetRoutingID();
+      contents->GetMainFrame()->GetRenderViewHost()->GetProcess()->GetID();
 
   content::RenderFrameHost* render_frame_host = contents->GetMainFrame();
   net::NetworkTrafficAnnotationTag traffic_annotation =
@@ -656,8 +658,8 @@ void WebstoreInstaller::StartDownload(const std::string& extension_id,
           }
         })");
   std::unique_ptr<DownloadUrlParameters> params(new DownloadUrlParameters(
-      download_url_, render_process_host_id, render_view_host_routing_id,
-      render_frame_host->GetRoutingID(), traffic_annotation));
+      download_url_, render_process_host_id, render_frame_host->GetRoutingID(),
+      traffic_annotation));
   params->set_file_path(file);
   if (controller.GetVisibleEntry()) {
     content::Referrer referrer = content::Referrer::SanitizeForRequest(

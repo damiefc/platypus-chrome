@@ -9,11 +9,12 @@
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/site_isolation/features.h"
 #include "components/site_isolation/pref_names.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/child_process_security_policy.h"
+#include "content/public/browser/site_instance.h"
 #include "content/public/browser/site_isolation_policy.h"
 
 namespace site_isolation {
@@ -44,6 +45,32 @@ bool SiteIsolationPolicy::IsIsolationForPasswordSitesEnabled() {
   // activates the field trial and assigns the client either to a control or an
   // experiment group - such assignment should be final.
   return base::FeatureList::IsEnabled(features::kSiteIsolationForPasswordSites);
+}
+
+// static
+bool SiteIsolationPolicy::IsIsolationForOAuthSitesEnabled() {
+  // If the user has explicitly enabled site isolation for OAuth sites from the
+  // command line, honor this regardless of policies that may disable site
+  // isolation.
+  if (base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
+          features::kSiteIsolationForOAuthSites.name,
+          base::FeatureList::OVERRIDE_ENABLE_FEATURE)) {
+    return true;
+  }
+
+  // Don't isolate anything when site isolation is turned off by the user or
+  // policy. This includes things like the switches::kDisableSiteIsolation
+  // command-line switch, the corresponding "Disable site isolation" entry in
+  // chrome://flags, enterprise policy controlled via
+  // switches::kDisableSiteIsolationForPolicy, and memory threshold checks in
+  // ShouldDisableSiteIsolationDueToMemoryThreshold().
+  if (!content::SiteIsolationPolicy::AreDynamicIsolatedOriginsEnabled())
+    return false;
+
+  // The feature needs to be checked last, because checking the feature
+  // activates the field trial and assigns the client either to a control or an
+  // experiment group - such assignment should be final.
+  return base::FeatureList::IsEnabled(features::kSiteIsolationForOAuthSites);
 }
 
 // static
@@ -103,6 +130,24 @@ bool SiteIsolationPolicy::ShouldDisableSiteIsolationDueToMemoryThreshold() {
 }
 
 // static
+void SiteIsolationPolicy::PersistIsolatedOrigin(
+    content::BrowserContext* context,
+    const url::Origin& origin,
+    content::ChildProcessSecurityPolicy::IsolatedOriginSource source) {
+  DCHECK(!context->IsOffTheRecord());
+  // TODO(alexmos): Support web-triggered IsolatedOriginSources.
+  DCHECK_EQ(source, content::ChildProcessSecurityPolicy::IsolatedOriginSource::
+                        USER_TRIGGERED);
+
+  ListPrefUpdate update(user_prefs::UserPrefs::Get(context),
+                        site_isolation::prefs::kUserTriggeredIsolatedOrigins);
+  base::ListValue* list = update.Get();
+  base::Value value(origin.Serialize());
+  if (!base::Contains(list->GetList(), value))
+    list->Append(std::move(value));
+}
+
+// static
 void SiteIsolationPolicy::ApplyPersistedIsolatedOrigins(
     content::BrowserContext* browser_context) {
   // If the user turned off password-triggered isolation, don't apply any
@@ -112,9 +157,9 @@ void SiteIsolationPolicy::ApplyPersistedIsolatedOrigins(
     return;
 
   std::vector<url::Origin> origins;
-  for (const auto& value :
-       *user_prefs::UserPrefs::Get(browser_context)
-            ->GetList(prefs::kUserTriggeredIsolatedOrigins)) {
+  for (const auto& value : user_prefs::UserPrefs::Get(browser_context)
+                               ->GetList(prefs::kUserTriggeredIsolatedOrigins)
+                               ->GetList()) {
     origins.push_back(url::Origin::Create(GURL(value.GetString())));
   }
 
@@ -122,12 +167,62 @@ void SiteIsolationPolicy::ApplyPersistedIsolatedOrigins(
     auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
     using IsolatedOriginSource =
         content::ChildProcessSecurityPolicy::IsolatedOriginSource;
-    policy->AddIsolatedOrigins(origins, IsolatedOriginSource::USER_TRIGGERED,
-                               browser_context);
+    policy->AddFutureIsolatedOrigins(
+        origins, IsolatedOriginSource::USER_TRIGGERED, browser_context);
   }
 
   UMA_HISTOGRAM_COUNTS_1000(
       "SiteIsolation.SavedUserTriggeredIsolatedOrigins.Size", origins.size());
+}
+
+// static
+void SiteIsolationPolicy::IsolateStoredOAuthSites(
+    content::BrowserContext* browser_context,
+    const std::vector<url::Origin>& logged_in_sites) {
+  // Only isolate logged-in sites if the corresponding feature is enabled and
+  // other isolation requirements (such as memory threshold) are satisfied.
+  // Note that we don't clear logged-in sites from prefs if site isolation is
+  // disabled so that they can be used if isolation is re-enabled later.
+  if (!IsIsolationForOAuthSitesEnabled())
+    return;
+
+  auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
+  policy->AddFutureIsolatedOrigins(
+      logged_in_sites,
+      content::ChildProcessSecurityPolicy::IsolatedOriginSource::USER_TRIGGERED,
+      browser_context);
+}
+
+// static
+void SiteIsolationPolicy::IsolateNewOAuthURL(
+    content::BrowserContext* browser_context,
+    const GURL& signed_in_url) {
+  if (!IsIsolationForOAuthSitesEnabled())
+    return;
+
+  // OAuth information is currently persisted and restored by other layers. See
+  // login_detection::prefs::SaveSiteToOAuthSignedInList().
+  constexpr bool kShouldPersist = false;
+
+  content::SiteInstance::StartIsolatingSite(
+      browser_context, signed_in_url,
+      content::ChildProcessSecurityPolicy::IsolatedOriginSource::USER_TRIGGERED,
+      kShouldPersist);
+}
+
+// static
+bool SiteIsolationPolicy::ShouldPdfCompositorBeEnabledForOopifs() {
+  // We only create pdf compositor client and use pdf compositor service when
+  // one of the site isolation modes that forces OOPIFs is on. This includes
+  // full site isolation on desktop, password-triggered site isolation on
+  // Android for high-memory devices, and/or isolated origins specified via
+  // command line, enterprise policy, or field trials.
+  //
+  // TODO(weili, thestig): Eventually, we should remove this check and use pdf
+  // compositor service by default for printing.
+  return content::SiteIsolationPolicy::UseDedicatedProcessesForAllSites() ||
+         IsIsolationForPasswordSitesEnabled() ||
+         content::SiteIsolationPolicy::AreIsolatedOriginsEnabled();
 }
 
 }  // namespace site_isolation

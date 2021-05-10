@@ -43,9 +43,15 @@ bool DOMArrayBuffer::Transfer(v8::Isolate* isolate,
                               ArrayBufferContents& result) {
   DOMArrayBuffer* to_transfer = this;
   if (!IsDetachable(isolate)) {
-    to_transfer =
-        DOMArrayBuffer::Create(Content()->Data(), ByteLengthAsSizeT());
+    to_transfer = DOMArrayBuffer::Create(Content()->Data(), ByteLength());
   }
+
+  return to_transfer->TransferDetachable(isolate, result);
+}
+
+bool DOMArrayBuffer::TransferDetachable(v8::Isolate* isolate,
+                                        ArrayBufferContents& result) {
+  DCHECK(IsDetachable(isolate));
 
   if (IsDetached()) {
     result.Detach();
@@ -62,7 +68,7 @@ bool DOMArrayBuffer::Transfer(v8::Isolate* isolate,
 
   Vector<v8::Local<v8::ArrayBuffer>, 4> buffer_handles;
   v8::HandleScope handle_scope(isolate);
-  AccumulateArrayBuffersForAllWorlds(isolate, to_transfer, buffer_handles);
+  AccumulateArrayBuffersForAllWorlds(isolate, this, buffer_handles);
 
   for (const auto& buffer_handle : buffer_handles)
     buffer_handle->Detach();
@@ -93,22 +99,20 @@ DOMArrayBuffer* DOMArrayBuffer::CreateUninitializedOrNull(
   return Create(std::move(contents));
 }
 
-v8::Local<v8::Value> DOMArrayBuffer::Wrap(
-    v8::Isolate* isolate,
-    v8::Local<v8::Object> creation_context) {
-  DCHECK(!DOMDataStore::ContainsWrapper(this, isolate));
+v8::MaybeLocal<v8::Value> DOMArrayBuffer::Wrap(ScriptState* script_state) {
+  DCHECK(!DOMDataStore::ContainsWrapper(this, script_state->GetIsolate()));
 
-  const WrapperTypeInfo* wrapper_type_info = this->GetWrapperTypeInfo();
+  const WrapperTypeInfo* wrapper_type_info = GetWrapperTypeInfo();
 
   v8::Local<v8::ArrayBuffer> wrapper;
   {
-    v8::Context::Scope context_scope(creation_context->CreationContext());
-    wrapper = v8::ArrayBuffer::New(isolate, Content()->BackingStore());
-
-    wrapper->Externalize(Content()->BackingStore());
+    v8::Context::Scope context_scope(script_state->GetContext());
+    wrapper = v8::ArrayBuffer::New(script_state->GetIsolate(),
+                                   Content()->BackingStore());
   }
 
-  return AssociateWithWrapper(isolate, wrapper_type_info, wrapper);
+  return AssociateWithWrapper(script_state->GetIsolate(), wrapper_type_info,
+                              wrapper);
 }
 
 DOMArrayBuffer* DOMArrayBuffer::Create(
@@ -149,8 +153,8 @@ DOMArrayBuffer* DOMArrayBuffer::Create(
 }
 
 DOMArrayBuffer* DOMArrayBuffer::Slice(size_t begin, size_t end) const {
-  begin = std::min(begin, ByteLengthAsSizeT());
-  end = std::min(end, ByteLengthAsSizeT());
+  begin = std::min(begin, ByteLength());
+  end = std::min(end, ByteLength());
   size_t size = begin <= end ? end - begin : 0;
   return Create(static_cast<const char*>(Data()) + begin, size);
 }

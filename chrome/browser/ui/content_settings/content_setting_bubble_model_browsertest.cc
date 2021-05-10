@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/content_settings/chrome_content_settings_utils.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -18,7 +18,6 @@
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 #include "chrome/browser/ui/content_settings/fake_owner.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -132,7 +131,7 @@ IN_PROC_BROWSER_TEST_F(ContentSettingBubbleModelMediaStreamTest,
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
       ->SetContentSettingDefaultScope(url, GURL(),
                                       ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
-                                      std::string(), CONTENT_SETTING_ASK);
+                                      CONTENT_SETTING_ASK);
 
   // The mic & camera bubble content does not include camera PTZ.
   std::unique_ptr<ContentSettingBubbleModel> mic_and_camera_bubble =
@@ -155,7 +154,7 @@ IN_PROC_BROWSER_TEST_F(ContentSettingBubbleModelMediaStreamTest,
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
       ->SetContentSettingDefaultScope(url, GURL(),
                                       ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
-                                      std::string(), CONTENT_SETTING_ALLOW);
+                                      CONTENT_SETTING_ALLOW);
 
   // The mic & camera bubble content includes camera PTZ.
   std::unique_ptr<ContentSettingBubbleModel> mic_and_camera_ptz_bubble =
@@ -181,8 +180,8 @@ class ContentSettingBubbleModelPopupTest : public InProcessBrowserTest {
   static constexpr int kDisallowButtonIndex = 1;
 
   void SetUpInProcessBrowserTestFixture() override {
-    https_server_.reset(
-        new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTPS));
+    https_server_ = std::make_unique<net::EmbeddedTestServer>(
+        net::EmbeddedTestServer::TYPE_HTTPS);
     https_server_->ServeFilesFromSourceDirectory(GetChromeTestDataDir());
     ASSERT_TRUE(https_server_->Start());
   }

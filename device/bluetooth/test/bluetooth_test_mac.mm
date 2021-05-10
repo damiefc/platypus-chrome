@@ -7,6 +7,8 @@
 #import <CoreBluetooth/CoreBluetooth.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/bind.h"
 #import "base/mac/foundation_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -59,27 +61,24 @@ scoped_nsobject<NSDictionary> CreateAdvertisementData(
       }]);
 
   if (name) {
-    [advertisement_data setObject:name forKey:CBAdvertisementDataLocalNameKey];
+    advertisement_data[CBAdvertisementDataLocalNameKey] = name;
   }
 
   if (uuids) {
-    [advertisement_data setObject:uuids
-                           forKey:CBAdvertisementDataServiceUUIDsKey];
+    advertisement_data[CBAdvertisementDataServiceUUIDsKey] = uuids;
   }
 
   if (service_data) {
-    [advertisement_data setObject:service_data
-                           forKey:CBAdvertisementDataServiceDataKey];
+    advertisement_data[CBAdvertisementDataServiceDataKey] = service_data;
   }
 
   if (service_data) {
-    [advertisement_data setObject:manufacturer_data
-                           forKey:CBAdvertisementDataManufacturerDataKey];
+    advertisement_data[CBAdvertisementDataManufacturerDataKey] =
+        manufacturer_data;
   }
 
   if (tx_power) {
-    [advertisement_data setObject:tx_power
-                           forKey:CBAdvertisementDataTxPowerLevelKey];
+    advertisement_data[CBAdvertisementDataTxPowerLevelKey] = tx_power;
   }
 
   return scoped_nsobject<NSDictionary>(advertisement_data,
@@ -123,8 +122,8 @@ void BluetoothTestMac::InitWithoutDefaultAdapter() {
   adapter_mac_ = adapter.get();
   adapter_ = std::move(adapter);
 
-  mock_central_manager_.reset(
-      new ScopedMockCentralManager([[MockCentralManager alloc] init]));
+  mock_central_manager_ = std::make_unique<ScopedMockCentralManager>(
+      [[MockCentralManager alloc] init]);
   [mock_central_manager_->get() setBluetoothTestMac:this];
   [mock_central_manager_->get() setState:CBCentralManagerStateUnsupported];
   adapter_mac_->SetCentralManagerForTesting((id)mock_central_manager_->get());
@@ -137,13 +136,14 @@ void BluetoothTestMac::InitWithFakeAdapter() {
   adapter_mac_ = adapter.get();
   adapter_ = std::move(adapter);
 
-  mock_central_manager_.reset(
-      new ScopedMockCentralManager([[MockCentralManager alloc] init]));
+  mock_central_manager_ = std::make_unique<ScopedMockCentralManager>(
+      [[MockCentralManager alloc] init]);
   mock_central_manager_->get().bluetoothTestMac = this;
   [mock_central_manager_->get() setState:CBCentralManagerStatePoweredOn];
   adapter_mac_->SetCentralManagerForTesting((id)mock_central_manager_->get());
   adapter_mac_->SetPowerStateFunctionForTesting(base::BindRepeating(
       &BluetoothTestMac::SetMockControllerPowerState, base::Unretained(this)));
+  adapter_mac_->SetPresentForTesting(true);
 }
 
 void BluetoothTestMac::ResetEventCounts() {
@@ -344,7 +344,9 @@ void BluetoothTestMac::SimulateGattDisconnectionError(BluetoothDevice* device) {
 
 void BluetoothTestMac::SimulateGattServicesDiscovered(
     BluetoothDevice* device,
-    const std::vector<std::string>& uuids) {
+    const std::vector<std::string>& uuids,
+    const std::vector<std::string>& blocked_uuids) {
+  DCHECK(blocked_uuids.empty()) << "Setting blocked_uuids unsupported.";
   AddServicesToDeviceMac(device, uuids);
   [GetMockCBPeripheral(device) mockDidDiscoverEvents];
 }
@@ -618,7 +620,7 @@ void BluetoothTestMac::SimulateGattDescriptorReadNSStringMac(
 void BluetoothTestMac::SimulateGattDescriptorReadNSNumberMac(
     BluetoothRemoteGattDescriptor* descriptor,
     short value) {
-  NSNumber* number = [NSNumber numberWithShort:value];
+  NSNumber* number = @(value);
   [GetCBMockDescriptor(descriptor) simulateReadWithValue:number error:nil];
 }
 

@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/test/task_environment.h"
 #include "media/audio/audio_io.h"
@@ -100,7 +100,7 @@ class MockStream : public media::AudioInputStream {
 
   double GetMaxVolume() override { return 1; }
 
-  MOCK_METHOD0(Open, bool());
+  MOCK_METHOD0(Open, media::AudioInputStream::OpenOutcome());
   MOCK_METHOD1(Start, void(AudioInputCallback*));
   MOCK_METHOD0(Stop, void());
   MOCK_METHOD0(Close, void());
@@ -200,8 +200,8 @@ class AudioServiceInputStreamTest : public testing::Test {
   base::test::TaskEnvironment scoped_task_env_;
   media::MockAudioManager audio_manager_;
   StreamFactory stream_factory_;
-  mojo::Remote<mojom::StreamFactory> remote_stream_factory_;
-  mojo::Receiver<mojom::StreamFactory> stream_factory_receiver_;
+  mojo::Remote<media::mojom::AudioStreamFactory> remote_stream_factory_;
+  mojo::Receiver<media::mojom::AudioStreamFactory> stream_factory_receiver_;
   StrictMock<MockStreamClient> client_;
   StrictMock<MockStreamObserver> observer_;
   NiceMock<MockLog> log_;
@@ -216,7 +216,8 @@ TEST_F(AudioServiceInputStreamTest, ConstructDestruct) {
          const std::string& device_id) { return stream; },
       &mock_stream));
 
-  EXPECT_CALL(mock_stream, Open()).WillOnce(Return(true));
+  EXPECT_CALL(mock_stream, Open())
+      .WillOnce(Return(MockStream::OpenOutcome::kSuccess));
   EXPECT_CALL(mock_stream, IsMuted()).WillOnce(Return(kNotMuted));
   EXPECT_CALL(log(), OnCreated(_, _));
   EXPECT_CALL(*this, CreatedCallback(kValidStream, kNotMuted));
@@ -239,7 +240,8 @@ TEST_F(AudioServiceInputStreamTest, ConstructDestructNullptrLog) {
          const std::string& device_id) { return stream; },
       &mock_stream));
 
-  EXPECT_CALL(mock_stream, Open()).WillOnce(Return(true));
+  EXPECT_CALL(mock_stream, Open())
+      .WillOnce(Return(MockStream::OpenOutcome::kSuccess));
   EXPECT_CALL(mock_stream, IsMuted()).WillOnce(Return(kNotMuted));
   EXPECT_CALL(*this, CreatedCallback(kValidStream, kNotMuted));
   mojo::Remote<media::mojom::AudioInputStream> remote_stream(
@@ -260,7 +262,8 @@ TEST_F(AudioServiceInputStreamTest, ConstructDestructNullptrObserver) {
          const std::string& device_id) { return stream; },
       &mock_stream));
 
-  EXPECT_CALL(mock_stream, Open()).WillOnce(Return(true));
+  EXPECT_CALL(mock_stream, Open())
+      .WillOnce(Return(MockStream::OpenOutcome::kSuccess));
   EXPECT_CALL(mock_stream, IsMuted()).WillOnce(Return(kNotMuted));
   EXPECT_CALL(log(), OnCreated(_, _));
   EXPECT_CALL(*this, CreatedCallback(kValidStream, kNotMuted));
@@ -283,7 +286,8 @@ TEST_F(AudioServiceInputStreamTest,
          const std::string& device_id) { return stream; },
       &mock_stream));
 
-  EXPECT_CALL(mock_stream, Open()).WillOnce(Return(true));
+  EXPECT_CALL(mock_stream, Open())
+      .WillOnce(Return(MockStream::OpenOutcome::kSuccess));
   EXPECT_CALL(mock_stream, IsMuted()).WillOnce(Return(kNotMuted));
   EXPECT_CALL(log(), OnCreated(_, _));
   EXPECT_CALL(*this, CreatedCallback(kValidStream, kNotMuted));
@@ -306,7 +310,8 @@ TEST_F(AudioServiceInputStreamTest,
          const std::string& device_id) { return stream; },
       &mock_stream));
 
-  EXPECT_CALL(mock_stream, Open()).WillOnce(Return(true));
+  EXPECT_CALL(mock_stream, Open())
+      .WillOnce(Return(MockStream::OpenOutcome::kSuccess));
   EXPECT_CALL(mock_stream, IsMuted()).WillOnce(Return(kNotMuted));
   EXPECT_CALL(log(), OnCreated(_, _));
   EXPECT_CALL(*this, CreatedCallback(kValidStream, kNotMuted));
@@ -329,7 +334,8 @@ TEST_F(AudioServiceInputStreamTest,
          const std::string& device_id) { return stream; },
       &mock_stream));
 
-  EXPECT_CALL(mock_stream, Open()).WillOnce(Return(true));
+  EXPECT_CALL(mock_stream, Open())
+      .WillOnce(Return(MockStream::OpenOutcome::kSuccess));
   EXPECT_CALL(mock_stream, IsMuted()).WillOnce(Return(kNotMuted));
   EXPECT_CALL(log(), OnCreated(_, _));
   EXPECT_CALL(*this, CreatedCallback(kValidStream, kNotMuted));
@@ -353,7 +359,8 @@ TEST_F(AudioServiceInputStreamTest, Record) {
          const std::string& device_id) { return stream; },
       &mock_stream));
 
-  EXPECT_CALL(mock_stream, Open()).WillOnce(Return(true));
+  EXPECT_CALL(mock_stream, Open())
+      .WillOnce(Return(MockStream::OpenOutcome::kSuccess));
   EXPECT_CALL(mock_stream, IsMuted()).WillOnce(Return(kNotMuted));
   EXPECT_CALL(log(), OnCreated(_, _));
   EXPECT_CALL(*this, CreatedCallback(kValidStream, kNotMuted));
@@ -383,7 +390,8 @@ TEST_F(AudioServiceInputStreamTest, SetVolume) {
          const std::string& device_id) { return stream; },
       &mock_stream));
 
-  EXPECT_CALL(mock_stream, Open()).WillOnce(Return(true));
+  EXPECT_CALL(mock_stream, Open())
+      .WillOnce(Return(MockStream::OpenOutcome::kSuccess));
   EXPECT_CALL(mock_stream, IsMuted()).WillOnce(Return(kNotMuted));
   EXPECT_CALL(log(), OnCreated(_, _));
   EXPECT_CALL(*this, CreatedCallback(kValidStream, kNotMuted));
@@ -412,7 +420,8 @@ TEST_F(AudioServiceInputStreamTest, SetNegativeVolume_BadMessage) {
          const std::string& device_id) { return stream; },
       &mock_stream));
 
-  EXPECT_CALL(mock_stream, Open()).WillOnce(Return(true));
+  EXPECT_CALL(mock_stream, Open())
+      .WillOnce(Return(MockStream::OpenOutcome::kSuccess));
   EXPECT_CALL(mock_stream, IsMuted()).WillOnce(Return(kNotMuted));
   EXPECT_CALL(log(), OnCreated(_, _));
   EXPECT_CALL(*this, CreatedCallback(kValidStream, kNotMuted));
@@ -436,7 +445,8 @@ TEST_F(AudioServiceInputStreamTest, SetVolumeGreaterThanOne_BadMessage) {
          const std::string& device_id) { return stream; },
       &mock_stream));
 
-  EXPECT_CALL(mock_stream, Open()).WillOnce(Return(true));
+  EXPECT_CALL(mock_stream, Open())
+      .WillOnce(Return(MockStream::OpenOutcome::kSuccess));
   EXPECT_CALL(mock_stream, IsMuted()).WillOnce(Return(kNotMuted));
   EXPECT_CALL(log(), OnCreated(_, _));
   EXPECT_CALL(*this, CreatedCallback(kValidStream, kNotMuted));
@@ -460,7 +470,8 @@ TEST_F(AudioServiceInputStreamTest, CreateStreamWithAGCEnable_PropagateAGC) {
          const std::string& device_id) { return stream; },
       &mock_stream));
 
-  EXPECT_CALL(mock_stream, Open()).WillOnce(Return(true));
+  EXPECT_CALL(mock_stream, Open())
+      .WillOnce(Return(MockStream::OpenOutcome::kSuccess));
   EXPECT_CALL(mock_stream, IsMuted()).WillOnce(Return(kNotMuted));
   EXPECT_CALL(mock_stream, SetAutomaticGainControl(kDoEnableAGC));
   EXPECT_CALL(log(), OnCreated(_, _));
@@ -485,7 +496,8 @@ TEST_F(AudioServiceInputStreamTest,
          const std::string& device_id) { return stream; },
       &mock_stream));
 
-  EXPECT_CALL(mock_stream, Open()).WillOnce(Return(true));
+  EXPECT_CALL(mock_stream, Open())
+      .WillOnce(Return(MockStream::OpenOutcome::kSuccess));
   EXPECT_CALL(mock_stream, IsMuted()).WillOnce(Return(kMuted));
   EXPECT_CALL(log(), OnCreated(_, _));
   EXPECT_CALL(*this, CreatedCallback(kValidStream, kMuted));

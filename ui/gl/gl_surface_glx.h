@@ -15,9 +15,11 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/x/event.h"
-#include "ui/gfx/x/x11_types.h"
+#include "ui/gfx/x/glx.h"
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_surface.h"
+
+using GLXFBConfig = struct __GLXFBConfigRec*;
 
 namespace gfx {
 class VSyncProvider;
@@ -44,6 +46,7 @@ class GL_EXPORT GLSurfaceGLX : public GLSurface {
   static bool HasGLXExtension(const char* name);
   static bool IsCreateContextSupported();
   static bool IsCreateContextRobustnessSupported();
+  static bool IsRobustnessVideoMemoryPurgeSupported();
   static bool IsCreateContextProfileSupported();
   static bool IsCreateContextES2ProfileSupported();
   static bool IsTextureFromPixmapSupported();
@@ -101,10 +104,10 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX {
   virtual void UnregisterEvents() = 0;
 
   // Forwards Expose event to child window.
-  void ForwardExposeEvent(x11::Event* xevent);
+  void ForwardExposeEvent(const x11::Event& xevent);
 
   // Checks if event is Expose for child window.
-  bool CanHandleEvent(x11::Event* xevent);
+  bool CanHandleEvent(const x11::Event& xevent);
 
   gfx::AcceleratedWidget window() const {
     return static_cast<gfx::AcceleratedWidget>(window_);
@@ -112,7 +115,7 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX {
 
  private:
   // The handle for the drawable to make current or swap.
-  GLXDrawable GetDrawableHandle() const;
+  uint32_t GetDrawableHandle() const;
 
   // Window passed in at creation. Always valid.
   gfx::AcceleratedWidget parent_window_;
@@ -121,7 +124,7 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX {
   x11::Window window_;
 
   // GLXDrawable for the window.
-  GLXWindow glx_window_;
+  x11::Glx::Window glx_window_;
 
   GLXFBConfig config_;
   gfx::Size size_;
@@ -160,7 +163,7 @@ class GL_EXPORT UnmappedNativeViewGLSurfaceGLX : public GLSurfaceGLX {
   x11::Window window_;
 
   // GLXDrawable for the window.
-  GLXWindow glx_window_;
+  x11::Glx::Window glx_window_;
 
   DISALLOW_COPY_AND_ASSIGN(UnmappedNativeViewGLSurfaceGLX);
 };

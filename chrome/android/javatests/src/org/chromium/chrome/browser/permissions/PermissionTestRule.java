@@ -4,18 +4,20 @@
 
 package org.chromium.chrome.browser.permissions;
 
-import android.support.test.InstrumentationRegistry;
+import android.view.View;
+
+import androidx.annotation.IdRes;
 
 import org.hamcrest.Matchers;
 import org.junit.Assert;
-import org.junit.runner.Description;
-import org.junit.runners.model.Statement;
 
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.InfoBarTestAnimationListener;
 import org.chromium.chrome.test.util.InfoBarUtil;
@@ -24,12 +26,8 @@ import org.chromium.components.browser_ui.modaldialog.R;
 import org.chromium.components.browser_ui.modaldialog.TabModalPresenter;
 import org.chromium.components.infobars.InfoBar;
 import org.chromium.components.permissions.PermissionDialogController;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
-import org.chromium.net.test.EmbeddedTestServer;
-import org.chromium.net.test.ServerCertificate;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
 
@@ -50,10 +48,8 @@ import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
  * a persistence toggle is expected, whether it should be explicitly toggled, whether to trigger the
  * JS call with a gesture, and whether an infobar or a dialog is expected.
  */
-public class PermissionTestRule extends ChromeActivityTestRule<ChromeActivity> {
+public class PermissionTestRule extends ChromeTabbedActivityTestRule {
     private InfoBarTestAnimationListener mListener;
-    private EmbeddedTestServer mTestServer;
-    private boolean mUseHttpsServer;
 
     /**
      * Waits till a JavaScript callback which updates the page title is called the specified number
@@ -100,46 +96,21 @@ public class PermissionTestRule extends ChromeActivityTestRule<ChromeActivity> {
         }
     }
 
-    @Override
-    public Statement apply(final Statement base, Description desc) {
-        return super.apply(new Statement() {
-            @Override
-            public void evaluate() throws Throwable {
-                ruleSetUp();
-                base.evaluate();
-                ruleTearDown();
-            }
-        }, desc);
-    }
-
     public PermissionTestRule() {
         this(false);
     }
 
     public PermissionTestRule(boolean useHttpsServer) {
-        super(ChromeActivity.class);
-        mUseHttpsServer = useHttpsServer;
-    }
-
-    private void ruleSetUp() {
-        // TODO(https://crbug.com/867446): Refactor to use EmbeddedTestServerRule.
-        mTestServer = mUseHttpsServer
-                ? EmbeddedTestServer.createAndStartHTTPSServer(
-                        InstrumentationRegistry.getContext(), ServerCertificate.CERT_OK)
-                : EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        getEmbeddedTestServerRule().setServerUsesHttps(useHttpsServer);
     }
 
     /**
      * Starts an activity and listens for info-bars appearing/disappearing.
      */
-    void setUpActivity() throws InterruptedException {
+    public void setUpActivity() throws InterruptedException {
         startMainActivityOnBlankPage();
         mListener = new InfoBarTestAnimationListener();
         getInfoBarContainer().addAnimationListener(mListener);
-    }
-
-    private void ruleTearDown() {
-        mTestServer.stopAndDestroyServer();
     }
 
     public void setUpUrl(final String url) {
@@ -147,15 +118,15 @@ public class PermissionTestRule extends ChromeActivityTestRule<ChromeActivity> {
     }
 
     public String getURL(String url) {
-        return mTestServer.getURL(url);
+        return getTestServer().getURL(url);
     }
 
     public String getOrigin() {
-        return mTestServer.getURL("/");
+        return getTestServer().getURL("/");
     }
 
     public String getURLWithHostName(String hostName, String url) {
-        return mTestServer.getURLWithHostName(hostName, url);
+        return getTestServer().getURLWithHostName(hostName, url);
     }
 
     /**
@@ -299,18 +270,20 @@ public class PermissionTestRule extends ChromeActivityTestRule<ChromeActivity> {
      * Utility functions to support permissions testing in other contexts.
      */
     public static void replyToDialog(boolean allow, ChromeActivity activity) {
-        // Wait a tiny bit before clicking the dialog. Sometimes the click happens too quick and the
-        // dialog is not ready. See crbug.com/1098806 for example flaky tests.
-        try {
-            Thread.sleep(300);
-        } catch (Exception ex) {
-        }
-
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
+        // Wait for button view to appear in view hierarchy. If the browser controls are not visible
+        // then ModalDialogPresenter will first trigger animation for showing browser controls and
+        // only then add modal dialog view into the container.
+        @IdRes
+        int buttonId = allow ? R.id.positive_button : R.id.negative_button;
+        CriteriaHelper.pollUiThread(() -> {
             TabModalPresenter presenter = (TabModalPresenter) activity.getModalDialogManager()
                                                   .getCurrentPresenterForTest();
-            TouchCommon.singleClickView(presenter.getDialogContainerForTest().findViewById(
-                    allow ? R.id.positive_button : R.id.negative_button));
+            View buttonView = presenter.getDialogContainerForTest().findViewById(buttonId);
+            if (buttonView == null) {
+                return false;
+            }
+            TouchCommon.singleClickView(buttonView);
+            return true;
         });
     }
 

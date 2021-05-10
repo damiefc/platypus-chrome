@@ -8,9 +8,13 @@
 #include <cmath>
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/cursor/ozone/bitmap_cursor_factory_ozone.h"
+#include "ui/base/cursor/platform_cursor.h"
+#include "ui/events/devices/device_data_manager.h"
 #include "ui/events/event.h"
 #include "ui/ozone/platform/wayland/host/wayland_cursor.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
@@ -25,6 +29,7 @@ using ::testing::_;
 using ::testing::Mock;
 using ::testing::Ne;
 using ::testing::SaveArg;
+using ::testing::Values;
 
 namespace ui {
 
@@ -39,6 +44,12 @@ class WaylandPointerTest : public WaylandTest {
                               WL_SEAT_CAPABILITY_POINTER);
 
     Sync();
+
+    EXPECT_EQ(1u, DeviceDataManager::GetInstance()->GetMouseDevices().size());
+    // Wayland doesn't expose touchpad devices separately. They are all
+    // WaylandPointers.
+    EXPECT_EQ(0u,
+              DeviceDataManager::GetInstance()->GetTouchpadDevices().size());
 
     pointer_ = server_.seat()->pointer();
     ASSERT_TRUE(pointer_);
@@ -233,7 +244,7 @@ TEST_P(WaylandPointerTest, AxisHorizontal) {
   ASSERT_TRUE(event);
   ASSERT_TRUE(event->IsMouseWheelEvent());
   auto* mouse_wheel_event = event->AsMouseWheelEvent();
-  EXPECT_EQ(gfx::Vector2d(MouseWheelEvent::kWheelDelta, 0),
+  EXPECT_EQ(gfx::Vector2d(-MouseWheelEvent::kWheelDelta, 0),
             mouse_wheel_event->offset());
   EXPECT_EQ(EF_LEFT_MOUSE_BUTTON, mouse_wheel_event->button_flags());
   EXPECT_EQ(0, mouse_wheel_event->changed_button_flags());
@@ -247,13 +258,13 @@ TEST_P(WaylandPointerTest, SetBitmap) {
       SkImageInfo::Make(16, 16, kUnknown_SkColorType, kUnknown_SkAlphaType));
 
   EXPECT_CALL(*pointer_, SetCursor(nullptr, 0, 0));
-  connection_->SetCursorBitmap({}, {});
+  connection_->SetCursorBitmap({}, {}, 1.0);
   connection_->ScheduleFlush();
   Sync();
   Mock::VerifyAndClearExpectations(pointer_);
 
   EXPECT_CALL(*pointer_, SetCursor(Ne(nullptr), 5, 8));
-  connection_->SetCursorBitmap({dummy_cursor}, gfx::Point(5, 8));
+  connection_->SetCursorBitmap({dummy_cursor}, gfx::Point(5, 8), 1.0);
   connection_->ScheduleFlush();
   Sync();
   Mock::VerifyAndClearExpectations(pointer_);
@@ -267,10 +278,8 @@ TEST_P(WaylandPointerTest, SetBitmapOnPointerFocus) {
   dummy_cursor.allocPixels(info, 10 * 4);
 
   BitmapCursorFactoryOzone cursor_factory;
-  PlatformCursor cursor =
-      cursor_factory.CreateImageCursor(dummy_cursor, gfx::Point(5, 8));
-  scoped_refptr<BitmapCursorOzone> bitmap =
-      BitmapCursorFactoryOzone::GetBitmapCursor(cursor);
+  auto cursor = cursor_factory.CreateImageCursor(
+      mojom::CursorType::kCustom, dummy_cursor, gfx::Point(5, 8));
 
   EXPECT_CALL(*pointer_, SetCursor(Ne(nullptr), 5, 8));
   window_->SetCursor(cursor);
@@ -312,12 +321,18 @@ TEST_P(WaylandPointerTest, FlingVertical) {
   // 1st axis event.
   SendAxisEvents(pointer_->resource(), ++time, WL_POINTER_AXIS_SOURCE_FINGER,
                  WL_POINTER_AXIS_VERTICAL_SCROLL, 10);
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
+  Sync();
+
   // 2nd axis event.
   SendAxisEvents(pointer_->resource(), ++time, WL_POINTER_AXIS_SOURCE_FINGER,
                  WL_POINTER_AXIS_VERTICAL_SCROLL, 10);
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
+  Sync();
+
   // axis_stop event which should trigger fling scroll.
   SendAxisStopEvents(pointer_->resource(), ++time);
-
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
   Sync();
 
   // Usual axis events should follow before the fling event.
@@ -333,11 +348,11 @@ TEST_P(WaylandPointerTest, FlingVertical) {
   EXPECT_EQ(ET_SCROLL_FLING_START, scroll_event->type());
   EXPECT_EQ(gfx::PointF(50, 75), scroll_event->location_f());
   EXPECT_EQ(0.0f, scroll_event->x_offset());
+  EXPECT_EQ(0.0f, scroll_event->x_offset_ordinal());
   // Initial vertical velocity depends on the implementation outside of
   // WaylandPointer, but it should be negative value based on the direction of
   // recent two axis events.
   EXPECT_GT(0.0f, scroll_event->y_offset());
-  EXPECT_EQ(0.0f, scroll_event->x_offset_ordinal());
   EXPECT_GT(0.0f, scroll_event->y_offset_ordinal());
 }
 
@@ -360,12 +375,18 @@ TEST_P(WaylandPointerTest, FlingHorizontal) {
   // 1st axis event.
   SendAxisEvents(pointer_->resource(), ++time, WL_POINTER_AXIS_SOURCE_FINGER,
                  WL_POINTER_AXIS_HORIZONTAL_SCROLL, 10);
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
+  Sync();
+
   // 2nd axis event.
   SendAxisEvents(pointer_->resource(), ++time, WL_POINTER_AXIS_SOURCE_FINGER,
                  WL_POINTER_AXIS_HORIZONTAL_SCROLL, 10);
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
+  Sync();
+
   // axis_stop event which should trigger fling scroll.
   SendAxisStopEvents(pointer_->resource(), ++time);
-
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
   Sync();
 
   // Usual axis events should follow before the fling event.
@@ -380,13 +401,13 @@ TEST_P(WaylandPointerTest, FlingHorizontal) {
   auto* scroll_event = event3->AsScrollEvent();
   EXPECT_EQ(ET_SCROLL_FLING_START, scroll_event->type());
   EXPECT_EQ(gfx::PointF(50, 75), scroll_event->location_f());
-  // Initial horizontal velocity depends on the implementation outside of
-  // WaylandPointer, but it should be positive value based on the direction of
-  // recent two axis events.
-  EXPECT_LT(0.0f, scroll_event->x_offset());
   EXPECT_EQ(0.0f, scroll_event->y_offset());
-  EXPECT_LT(0.0f, scroll_event->x_offset_ordinal());
   EXPECT_EQ(0.0f, scroll_event->y_offset_ordinal());
+  // Initial horizontal velocity depends on the implementation outside of
+  // WaylandPointer, but it should be negative value based on the direction of
+  // recent two axis events.
+  EXPECT_GT(0.0f, scroll_event->x_offset());
+  EXPECT_GT(0.0f, scroll_event->x_offset_ordinal());
 }
 
 TEST_P(WaylandPointerTest, FlingCancel) {
@@ -409,16 +430,25 @@ TEST_P(WaylandPointerTest, FlingCancel) {
   // 1st axis event.
   SendAxisEvents(pointer_->resource(), ++time, WL_POINTER_AXIS_SOURCE_FINGER,
                  WL_POINTER_AXIS_VERTICAL_SCROLL, 10);
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
+  Sync();
+
   // 2nd axis event.
   SendAxisEvents(pointer_->resource(), ++time, WL_POINTER_AXIS_SOURCE_FINGER,
                  WL_POINTER_AXIS_VERTICAL_SCROLL, 10);
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
+  Sync();
+
   // 3rd axis event, whose offset is 0, should make the following axis_stop
   // trigger fling cancel.
   SendAxisEvents(pointer_->resource(), ++time, WL_POINTER_AXIS_SOURCE_FINGER,
                  WL_POINTER_AXIS_VERTICAL_SCROLL, 0);
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
+  Sync();
+
   // axis_stop event which should trigger fling cancel.
   SendAxisStopEvents(pointer_->resource(), ++time);
-
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
   Sync();
 
   // Usual axis events should follow before the fling event.
@@ -466,12 +496,18 @@ TEST_P(WaylandPointerTest, FlingDiagonal) {
   // 1st axis event notifies scrolls both in vertical and horizontal.
   SendDiagonalAxisEvents(pointer_->resource(), ++time,
                          WL_POINTER_AXIS_SOURCE_FINGER, 20, 10);
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
+  Sync();
+
   // 2st axis event notifies scrolls both in vertical and horizontal.
   SendDiagonalAxisEvents(pointer_->resource(), ++time,
                          WL_POINTER_AXIS_SOURCE_FINGER, 20, 10);
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
+  Sync();
+
   // axis_stop event which should trigger fling scroll.
   SendAxisStopEvents(pointer_->resource(), ++time);
-
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
   Sync();
 
   // Usual axis events should follow before the fling event.
@@ -490,10 +526,10 @@ TEST_P(WaylandPointerTest, FlingDiagonal) {
   auto* scroll_event = event5->AsScrollEvent();
   EXPECT_EQ(ET_SCROLL_FLING_START, scroll_event->type());
   EXPECT_EQ(gfx::PointF(50, 75), scroll_event->location_f());
-  // Check the offset direction. It should non-zero in both directions.
-  EXPECT_LT(0.0f, scroll_event->x_offset());
+  // Check the offset direction. It should non-zero in both axes.
+  EXPECT_GT(0.0f, scroll_event->x_offset());
   EXPECT_GT(0.0f, scroll_event->y_offset());
-  EXPECT_LT(0.0f, scroll_event->x_offset_ordinal());
+  EXPECT_GT(0.0f, scroll_event->x_offset_ordinal());
   EXPECT_GT(0.0f, scroll_event->y_offset_ordinal());
   // Horizontal offset should be larger than vertical one, given the scroll
   // offset in each direction.
@@ -505,9 +541,11 @@ TEST_P(WaylandPointerTest, FlingDiagonal) {
 
 INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
                          WaylandPointerTest,
-                         ::testing::Values(kXdgShellStable));
+                         Values(wl::ServerConfig{
+                             .shell_version = wl::ShellVersion::kStable}));
 INSTANTIATE_TEST_SUITE_P(XdgVersionV6Test,
                          WaylandPointerTest,
-                         ::testing::Values(kXdgShellV6));
+                         Values(wl::ServerConfig{
+                             .shell_version = wl::ShellVersion::kV6}));
 
 }  // namespace ui

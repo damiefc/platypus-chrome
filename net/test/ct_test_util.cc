@@ -15,7 +15,6 @@
 #include "base/strings/stringprintf.h"
 #include "net/base/hex_utils.h"
 #include "net/cert/ct_serialization.h"
-#include "net/cert/ct_verify_result.h"
 #include "net/cert/merkle_tree_leaf.h"
 #include "net/cert/signed_tree_head.h"
 #include "net/cert/x509_certificate.h"
@@ -163,13 +162,6 @@ const char kSampleSTHTreeHeadSignature[] =
     "6c7a20022100e38464f3c0fd066257b982074f7ac87655e0c8f714768a050b4be9a7b441cb"
     "d3";
 size_t kSampleSTHTreeSize = 21u;
-
-std::string HexDecode(base::StringPiece input) {
-  std::string result;
-  if (!base::HexStringToString(input, &result))
-    result.clear();
-  return result;
-}
 
 }  // namespace
 

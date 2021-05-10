@@ -25,7 +25,6 @@
 
 #include "third_party/blink/public/mojom/script/script_type.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/html_script_element_or_svg_script_element.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/string_or_trusted_script.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -92,6 +91,10 @@ void HTMLScriptElement::ParseAttribute(
     loader_->HandleSourceAttribute(params.new_value);
     LogUpdateAttributeIfIsolatedWorldAndInDocument("script", params);
   } else if (params.name == html_names::kAsyncAttr) {
+    // https://html.spec.whatwg.org/C/#non-blocking
+    // "In addition, whenever a script element whose |non-blocking|
+    // flag is set has an async content attribute added, the element's
+    // |non-blocking| flag must be unset."
     loader_->HandleAsyncAttribute();
   } else if (params.name == html_names::kImportanceAttr &&
              RuntimeEnabledFeatures::PriorityHintsEnabled(
@@ -108,9 +111,10 @@ void HTMLScriptElement::ParseAttribute(
 Node::InsertionNotificationRequest HTMLScriptElement::InsertedInto(
     ContainerNode& insertion_point) {
   if (insertion_point.isConnected() && HasSourceAttribute() &&
-      !ScriptLoader::IsValidScriptTypeAndLanguage(
+      ScriptLoader::GetScriptTypeAtPrepare(
           TypeAttributeValue(), LanguageAttributeValue(),
-          ScriptLoader::kDisallowLegacyTypeInTypeAttribute)) {
+          ScriptLoader::kDisallowLegacyTypeInTypeAttribute) ==
+          ScriptLoader::ScriptTypeAtPrepare::kInvalid) {
     UseCounter::Count(GetDocument(),
                       WebFeature::kScriptElementWithInvalidTypeHasSrc);
   }
@@ -169,6 +173,7 @@ void HTMLScriptElement::setTextContent(
 }
 
 void HTMLScriptElement::setAsync(bool async) {
+  // https://html.spec.whatwg.org/multipage/scripting.html#dom-script-async
   SetBooleanAttribute(html_names::kAsyncAttr, async);
   loader_->HandleAsyncAttribute();
 }
@@ -295,7 +300,7 @@ void HTMLScriptElement::DispatchErrorEvent() {
 
 void HTMLScriptElement::SetScriptElementForBinding(
     HTMLScriptElementOrSVGScriptElement& element) {
-  if (!IsInV1ShadowTree())
+  if (!IsInShadowTree())
     element.SetHTMLScriptElement(this);
 }
 

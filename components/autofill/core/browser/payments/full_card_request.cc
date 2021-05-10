@@ -4,6 +4,8 @@
 
 #include "components/autofill/core/browser/payments/full_card_request.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/notreached.h"
@@ -82,12 +84,12 @@ void FullCardRequest::GetFullCard(
   // |result_delegate_| is already set, then immediately reject the new request
   // through the method parameter |result_delegate_|.
   if (result_delegate_) {
-    result_delegate_->OnFullCardRequestFailed();
+    result_delegate_->OnFullCardRequestFailed(FailureType::GENERIC_FAILURE);
     return;
   }
 
   result_delegate_ = result_delegate;
-  request_.reset(new payments::PaymentsClient::UnmaskRequestDetails);
+  request_ = std::make_unique<payments::PaymentsClient::UnmaskRequestDetails>();
   request_->card = card;
   request_->reason = reason;
   should_unmask_card_ = card.record_type() == CreditCard::MASKED_SERVER_CARD ||
@@ -160,7 +162,7 @@ void FullCardRequest::OnUnmaskPromptAccepted(
 
 void FullCardRequest::OnUnmaskPromptClosed() {
   if (result_delegate_)
-    result_delegate_->OnFullCardRequestFailed();
+    result_delegate_->OnFullCardRequestFailed(FailureType::PROMPT_CLOSED);
 
   Reset();
 }
@@ -216,10 +218,15 @@ void FullCardRequest::OnDidGetRealPan(
 
     // Neither PERMANENT_FAILURE nor NETWORK_ERROR allow retry.
     case AutofillClient::PERMANENT_FAILURE:
-    // Intentional fall through.
+      if (result_delegate_) {
+        result_delegate_->OnFullCardRequestFailed(
+            FailureType::VERIFICATION_DECLINED);
+      }
+      Reset();
+      break;
     case AutofillClient::NETWORK_ERROR: {
       if (result_delegate_)
-        result_delegate_->OnFullCardRequestFailed();
+        result_delegate_->OnFullCardRequestFailed(FailureType::GENERIC_FAILURE);
       Reset();
       break;
     }
@@ -239,7 +246,7 @@ void FullCardRequest::OnDidGetRealPan(
       // to avoid an unwanted registration prompt.
       unmask_response_details_ = response_details;
 
-      const base::string16 cvc =
+      const std::u16string cvc =
           (base::FeatureList::IsEnabled(
                features::kAutofillEnableGoogleIssuedCard) ||
            base::FeatureList::IsEnabled(

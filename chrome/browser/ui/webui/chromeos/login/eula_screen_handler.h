@@ -17,7 +17,6 @@ class DictionaryValue;
 
 namespace chromeos {
 
-class CoreOobeView;
 class EulaScreen;
 class HelpAppLauncher;
 
@@ -34,9 +33,9 @@ class EulaView {
   virtual void Hide() = 0;
   virtual void Bind(EulaScreen* screen) = 0;
   virtual void Unbind() = 0;
-  virtual void OnPasswordFetched(const std::string& tpm_password) = 0;
   virtual void ShowStatsUsageLearnMore() = 0;
   virtual void ShowAdditionalTosDialog() = 0;
+  virtual void ShowSecuritySettingsDialog() = 0;
 };
 
 // WebUI implementation of EulaScreenView. It is used to interact
@@ -45,8 +44,7 @@ class EulaScreenHandler : public EulaView, public BaseScreenHandler {
  public:
   using TView = EulaView;
 
-  EulaScreenHandler(JSCallsContainer* js_calls_container,
-                    CoreOobeView* core_oobe_view);
+  explicit EulaScreenHandler(JSCallsContainer* js_calls_container);
   ~EulaScreenHandler() override;
 
   // EulaView implementation:
@@ -54,9 +52,9 @@ class EulaScreenHandler : public EulaView, public BaseScreenHandler {
   void Hide() override;
   void Bind(EulaScreen* screen) override;
   void Unbind() override;
-  void OnPasswordFetched(const std::string& tpm_password) override;
   void ShowStatsUsageLearnMore() override;
   void ShowAdditionalTosDialog() override;
+  void ShowSecuritySettingsDialog() override;
 
   // BaseScreenHandler implementation:
   void DeclareLocalizedValues(
@@ -69,10 +67,9 @@ class EulaScreenHandler : public EulaView, public BaseScreenHandler {
   std::string GetEulaOnlineUrl();
   std::string GetAdditionalToSUrl();
 
-  void UpdateLocalizedValues(::login::SecureModuleUsed secure_module_used);
+  void UpdateTpmDesc(::login::SecureModuleUsed secure_module_used);
 
   EulaScreen* screen_ = nullptr;
-  CoreOobeView* core_oobe_view_ = nullptr;
 
   // Keeps whether screen should be shown right after initialization.
   bool show_on_init_ = false;

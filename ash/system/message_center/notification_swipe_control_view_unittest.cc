@@ -5,8 +5,8 @@
 #include "ash/system/message_center/notification_swipe_control_view.h"
 
 #include <memory>
+#include <string>
 
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -18,6 +18,7 @@
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/views/message_view.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
+#include "ui/views/test/button_test_api.h"
 #include "url/gurl.h"
 
 namespace {
@@ -71,9 +72,8 @@ class NotificationSwipeControlViewTest : public testing::Test {
         message_center::SettingsButtonHandler::DELEGATE;
     rich_data.should_show_snooze_button = true;
     message_center::Notification notification(
-        message_center::NOTIFICATION_TYPE_SIMPLE, "id",
-        base::UTF8ToUTF16("title"), base::UTF8ToUTF16("id"), gfx::Image(),
-        base::string16(), GURL(),
+        message_center::NOTIFICATION_TYPE_SIMPLE, "id", u"title", u"id",
+        gfx::Image(), std::u16string(), GURL(),
         message_center::NotifierId(message_center::NotifierType::APPLICATION,
                                    "notifier_id"),
         rich_data, nullptr);
@@ -107,16 +107,16 @@ TEST_F(NotificationSwipeControlViewTest, DeleteOnSettingsButtonPressed) {
   swipe_control_view->ShowButtons(
       NotificationSwipeControlView::ButtonPosition::LEFT,
       /*has_settings_button=*/true, /*has_snooze_button=*/true);
-  swipe_control_view->ButtonPressed(swipe_control_view->settings_button_,
-                                    press);
+  views::test::ButtonTestApi(swipe_control_view->settings_button_)
+      .NotifyClick(press);
   EXPECT_TRUE(swipe_control_view);
 
   // Second click deletes |swipe_control_view| in the handler.
   swipe_control_view->ShowButtons(
       NotificationSwipeControlView::ButtonPosition::LEFT,
       /*has_settings_button=*/true, /*has_snooze_button=*/true);
-  swipe_control_view->ButtonPressed(swipe_control_view->settings_button_,
-                                    press);
+  views::test::ButtonTestApi(swipe_control_view->settings_button_)
+      .NotifyClick(press);
   EXPECT_FALSE(swipe_control_view);
 }
 
@@ -137,14 +137,16 @@ TEST_F(NotificationSwipeControlViewTest, DeleteOnSnoozeButtonPressed) {
   swipe_control_view->ShowButtons(
       NotificationSwipeControlView::ButtonPosition::LEFT,
       /*has_settings_button=*/true, /*has_snooze_button=*/true);
-  swipe_control_view->ButtonPressed(swipe_control_view->snooze_button_, press);
+  views::test::ButtonTestApi(swipe_control_view->snooze_button_)
+      .NotifyClick(press);
   EXPECT_TRUE(swipe_control_view);
 
   // Second click deletes |swipe_control_view| in the handler.
   swipe_control_view->ShowButtons(
       NotificationSwipeControlView::ButtonPosition::LEFT,
       /*has_settings_button=*/true, /*has_snooze_button=*/true);
-  swipe_control_view->ButtonPressed(swipe_control_view->snooze_button_, press);
+  views::test::ButtonTestApi(swipe_control_view->snooze_button_)
+      .NotifyClick(press);
   EXPECT_FALSE(swipe_control_view);
 }
 

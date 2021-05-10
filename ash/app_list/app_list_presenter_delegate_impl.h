@@ -12,7 +12,8 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_observer.h"
 #include "base/macros.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_multi_source_observation.h"
+#include "base/scoped_observation.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_handler.h"
@@ -25,7 +26,7 @@ namespace ash {
 class AppListControllerImpl;
 class AppListPresenterImpl;
 class AppListView;
-class AppListViewDelegate;
+enum class AppListViewState;
 
 // Responsible for laying out the app list UI as well as updating the Shelf
 // launch icon as the state of the app list changes. Listens to shell events
@@ -41,18 +42,12 @@ class ASH_EXPORT AppListPresenterDelegateImpl : public AppListPresenterDelegate,
 
   // AppListPresenterDelegate:
   void SetPresenter(AppListPresenterImpl* presenter) override;
-  void Init(AppListView* view, int64_t display_id) override;
-  void ShowForDisplay(int64_t display_id) override;
+  void SetView(AppListView* view) override;
+  void ShowForDisplay(AppListViewState preferred_state,
+                      int64_t display_id) override;
   void OnClosing() override;
   void OnClosed() override;
-  bool IsTabletMode() const override;
-  AppListViewDelegate* GetAppListViewDelegate() override;
-  bool GetOnScreenKeyboardShown() override;
-  aura::Window* GetContainerForWindow(aura::Window* window) override;
-  aura::Window* GetRootWindowForDisplayId(int64_t display_id) override;
-  void OnVisibilityChanged(bool visible, int64_t display_id) override;
-  void OnVisibilityWillChange(bool visible, int64_t display_id) override;
-  bool IsVisible(const base::Optional<int64_t>& display_id) override;
+
   // DisplayObserver overrides:
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;
@@ -86,11 +81,12 @@ class ASH_EXPORT AppListPresenterDelegateImpl : public AppListPresenterDelegate,
   AppListControllerImpl* const controller_ = nullptr;
 
   // An observer that notifies AppListView when the display has changed.
-  ScopedObserver<display::Screen, display::DisplayObserver> display_observer_{
-      this};
+  base::ScopedObservation<display::Screen, display::DisplayObserver>
+      display_observation_{this};
 
   // An observer that notifies AppListView when the shelf state has changed.
-  ScopedObserver<Shelf, ShelfObserver> shelf_observer_{this};
+  base::ScopedMultiSourceObservation<Shelf, ShelfObserver> shelf_observation_{
+      this};
 
   DISALLOW_COPY_AND_ASSIGN(AppListPresenterDelegateImpl);
 };

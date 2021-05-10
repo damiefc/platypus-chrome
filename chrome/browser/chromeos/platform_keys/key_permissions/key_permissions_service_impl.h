@@ -15,38 +15,24 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
-#include "extensions/browser/state_store.h"
-
-class PrefService;
-
-namespace extensions {
-class StateStore;
-}
-
-namespace policy {
-class PolicyService;
-}
 
 namespace chromeos {
 namespace platform_keys {
 
+class KeyPermissionsManager;
 class PlatformKeysService;
 
 // TODO(crbug.com/1130949): Convert KeyPermissionsServiceImpl operations into
 // classes.
 class KeyPermissionsServiceImpl : public KeyPermissionsService {
  public:
-  // |profile_prefs| and |extensions_state_store| must not be null and must
-  // outlive this object.
-  // If |profile_is_managed| is false, |profile_policies| is ignored. Otherwise,
-  // |profile_policies| must not be null and must outlive this object.
   // |profile_is_managed| determines the default usage and permissions for
   // keys without explicitly assigned usage.
-  KeyPermissionsServiceImpl(bool profile_is_managed,
-                            PrefService* profile_prefs,
-                            policy::PolicyService* profile_policies,
-                            extensions::StateStore* extensions_state_store,
-                            PlatformKeysService* platform_keys_service);
+  KeyPermissionsServiceImpl(
+      bool is_regular_user_profile,
+      bool profile_is_managed,
+      PlatformKeysService* platform_keys_service,
+      KeyPermissionsManager* profile_key_permissions_manager);
 
   ~KeyPermissionsServiceImpl() override;
 
@@ -56,13 +42,13 @@ class KeyPermissionsServiceImpl : public KeyPermissionsService {
 
   void CanUserGrantPermissionForKey(
       const std::string& public_key_spki_der,
-      CanUserGrantPermissionForKeyCallback callback) const override;
+      CanUserGrantPermissionForKeyCallback callback) override;
 
   void IsCorporateKey(const std::string& public_key_spki_der,
-                      IsCorporateKeyCallback callback) const override;
+                      IsCorporateKeyCallback callback) override;
 
   void SetCorporateKey(const std::string& public_key_spki_der,
-                       SetCorporateKeyCallback callback) const override;
+                       SetCorporateKeyCallback callback) override;
 
   PlatformKeysService* platform_keys_service() {
     return platform_keys_service_;
@@ -77,30 +63,31 @@ class KeyPermissionsServiceImpl : public KeyPermissionsService {
       const std::string& public_key_spki_der,
       CanUserGrantPermissionForKeyCallback callback,
       const std::vector<TokenId>& key_locations,
-      Status key_locations_retrieval_status) const;
+      Status key_locations_retrieval_status);
   void CanUserGrantPermissionForKeyWithLocationsAndFlag(
       const std::string& public_key_spki_der,
       CanUserGrantPermissionForKeyCallback callback,
       const std::vector<TokenId>& key_locations,
-      Status key_locations_retrieval_status,
-      bool is_corporate_key);
+      base::Optional<bool> corporate_key,
+      Status status);
 
   void IsCorporateKeyWithLocations(const std::string& public_key_spki_der,
                                    IsCorporateKeyCallback callback,
                                    const std::vector<TokenId>& key_locations,
-                                   Status key_locations_retrieval_status) const;
+                                   Status key_locations_retrieval_status);
+  void IsCorporateKeyWithKpmResponse(IsCorporateKeyCallback callback,
+                                     base::Optional<bool> allowed,
+                                     Status status);
 
-  void SetCorporateKeyWithLocations(
-      const std::string& public_key_spki_der,
-      SetCorporateKeyCallback callback,
-      const std::vector<TokenId>& key_locations,
-      Status key_locations_retrieval_status) const;
+  void SetCorporateKeyWithLocations(const std::string& public_key_spki_der,
+                                    SetCorporateKeyCallback callback,
+                                    const std::vector<TokenId>& key_locations,
+                                    Status key_locations_retrieval_status);
 
+  const bool is_regular_user_profile_;
   const bool profile_is_managed_;
-  PrefService* const profile_prefs_;
-  policy::PolicyService* const profile_policies_;
-  extensions::StateStore* const extensions_state_store_;
   PlatformKeysService* const platform_keys_service_;
+  KeyPermissionsManager* const profile_key_permissions_manager_;
   base::WeakPtrFactory<KeyPermissionsServiceImpl> weak_factory_{this};
 };
 

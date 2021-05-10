@@ -38,33 +38,33 @@ class PaymentSheetViewController : public PaymentRequestSheetController,
   void OnGetAllPaymentAppsFinished() override {}
   void OnSelectedInformationChanged() override;
 
+  void ButtonPressed(base::RepeatingClosure closure);
+
  private:
   // PaymentRequestSheetController:
-  std::unique_ptr<views::Button> CreatePrimaryButton() override;
-  base::string16 GetSecondaryButtonLabel() override;
+  std::u16string GetSecondaryButtonLabel() override;
   bool ShouldShowHeaderBackArrow() override;
-  base::string16 GetSheetTitle() override;
+  std::u16string GetSheetTitle() override;
   void FillContentView(views::View* content_view) override;
   std::unique_ptr<views::View> CreateExtraFooterView() override;
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
-  void UpdatePayButtonState(bool enabled);
 
   // These functions create the various sections and rows of the payment sheet.
   // Where applicable, they also populate |accessible_content|, which shouldn't
   // be null, with the screen reader string that represents their contents.
   std::unique_ptr<views::View> CreateShippingSectionContent(
-      base::string16* accessible_content);
+      std::u16string* accessible_content);
   std::unique_ptr<PaymentRequestRowView> CreateShippingRow();
   std::unique_ptr<PaymentRequestRowView> CreatePaymentSheetSummaryRow();
   std::unique_ptr<PaymentRequestRowView> CreatePaymentMethodRow();
   std::unique_ptr<views::View> CreateContactInfoSectionContent(
-      base::string16* accessible_content);
+      std::u16string* accessible_content);
   std::unique_ptr<PaymentRequestRowView> CreateContactInfoRow();
   std::unique_ptr<PaymentRequestRowView> CreateShippingOptionRow();
   std::unique_ptr<views::View> CreateDataSourceRow();
 
-  base::WeakPtrFactory<PaymentSheetViewController> weak_ptr_factory_{this};
+  void AddShippingButtonPressed();
+  void AddPaymentMethodButtonPressed();
+  void AddContactInfoButtonPressed();
 
   DISALLOW_COPY_AND_ASSIGN(PaymentSheetViewController);
 };

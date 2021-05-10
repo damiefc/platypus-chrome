@@ -238,7 +238,9 @@ class FaviconHandler {
   void ScheduleImageDownload(const GURL& image_url,
                              favicon_base::IconType icon_type);
 
-  // Triggered when a download of an image has finished.
+  // Triggered when a download of an image has finished. |bitmaps| and
+  // |original_bitmap_sizes| must contain the same number of elements (i.e. same
+  // vector size).
   void OnDidDownloadFavicon(
       favicon_base::IconType icon_type,
       int id,
@@ -261,7 +263,6 @@ class FaviconHandler {
   // - A mapping is known to exist (reflected by |notification_icon_type_|).
   // - All download attempts returned 404s OR no relevant candidate was
   //   provided (as per |icon_types_|).
-  // - The corresponding feature is enabled (currently behind variations).
   void MaybeDeleteFaviconMappings();
 
   // Notifies |driver_| that FaviconHandler found an icon which matches the

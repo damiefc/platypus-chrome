@@ -33,6 +33,10 @@ constexpr int kDeviceButtonHeight = 56;
 // scrollable.
 constexpr int kMaximumButtons = 5;
 
+// Used to group the device buttons together, which makes moving between them
+// with arrow keys possible.
+constexpr int kDeviceButtonGroup = 0;
+
 }  // namespace
 
 SendTabToSelfBubbleViewImpl::SendTabToSelfBubbleViewImpl(
@@ -40,9 +44,10 @@ SendTabToSelfBubbleViewImpl::SendTabToSelfBubbleViewImpl(
     content::WebContents* web_contents,
     SendTabToSelfBubbleController* controller)
     : LocationBarBubbleDelegateView(anchor_view, web_contents),
-      web_contents_(web_contents),
       controller_(controller) {
   SetButtons(ui::DIALOG_BUTTON_NONE);
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
   DCHECK(controller);
 }
 
@@ -60,7 +65,7 @@ bool SendTabToSelfBubbleViewImpl::ShouldShowCloseButton() const {
   return true;
 }
 
-base::string16 SendTabToSelfBubbleViewImpl::GetWindowTitle() const {
+std::u16string SendTabToSelfBubbleViewImpl::GetWindowTitle() const {
   return controller_->GetWindowTitle();
 }
 
@@ -71,17 +76,6 @@ void SendTabToSelfBubbleViewImpl::WindowClosing() {
   }
 }
 
-void SendTabToSelfBubbleViewImpl::ButtonPressed(views::Button* sender,
-                                                const ui::Event& event) {
-  DevicePressed(sender->tag());
-}
-
-gfx::Size SendTabToSelfBubbleViewImpl::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-      DISTANCE_BUBBLE_PREFERRED_WIDTH);
-  return gfx::Size(width, GetHeightForWidth(width));
-}
-
 void SendTabToSelfBubbleViewImpl::OnPaint(gfx::Canvas* canvas) {
   views::BubbleDialogDelegateView::OnPaint(canvas);
 }
@@ -90,9 +84,19 @@ void SendTabToSelfBubbleViewImpl::Show(DisplayReason reason) {
   ShowForReason(reason);
 }
 
-const std::vector<SendTabToSelfBubbleDeviceButton*>&
-SendTabToSelfBubbleViewImpl::GetDeviceButtonsForTest() {
-  return device_buttons_;
+void SendTabToSelfBubbleViewImpl::DeviceButtonPressed(
+    SendTabToSelfBubbleDeviceButton* device_button) {
+  if (!controller_)
+    return;
+
+  controller_->OnDeviceSelected(device_button->device_name(),
+                                device_button->device_guid());
+  Hide();
+}
+
+const views::View* SendTabToSelfBubbleViewImpl::GetButtonContainerForTesting()
+    const {
+  return scroll_view_->contents();
 }
 
 void SendTabToSelfBubbleViewImpl::Init() {
@@ -112,49 +116,33 @@ void SendTabToSelfBubbleViewImpl::Init() {
 }
 
 void SendTabToSelfBubbleViewImpl::CreateScrollView() {
-  scroll_view_ = new views::ScrollView();
-  AddChildView(scroll_view_);
+  scroll_view_ = AddChildView(std::make_unique<views::ScrollView>());
   scroll_view_->ClipHeightTo(0, kDeviceButtonHeight * kMaximumButtons);
 }
 
 void SendTabToSelfBubbleViewImpl::PopulateScrollView(
     const std::vector<TargetDeviceInfo>& devices) {
-  DCHECK(device_buttons_.empty());
-  auto device_list_view = std::make_unique<views::View>();
+  auto* device_list_view =
+      scroll_view_->SetContents(std::make_unique<views::View>());
   device_list_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
-  int tag = 0;
   for (const auto& device : devices) {
-    auto device_button = std::make_unique<SendTabToSelfBubbleDeviceButton>(
-        this, device,
-        /** button_tag */ tag++);
-    device_buttons_.push_back(device_button.get());
-    device_list_view->AddChildView(std::move(device_button));
+    auto* view = device_list_view->AddChildView(
+        std::make_unique<SendTabToSelfBubbleDeviceButton>(this, device));
+    view->SetGroup(kDeviceButtonGroup);
   }
-  scroll_view_->SetContents(std::move(device_list_view));
+
+  if (!device_list_view->children().empty())
+    SetInitiallyFocusedView(device_list_view->children()[0]);
 
   MaybeSizeToContents();
   Layout();
 }
 
-void SendTabToSelfBubbleViewImpl::DevicePressed(size_t index) {
-  if (!controller_) {
-    return;
-  }
-
-  DCHECK_LT(index, device_buttons_.size());
-
-  SendTabToSelfBubbleDeviceButton* device_button = device_buttons_[index];
-  controller_->OnDeviceSelected(device_button->device_name(),
-                                device_button->device_guid());
-  Hide();
-}
-
 void SendTabToSelfBubbleViewImpl::MaybeSizeToContents() {
   // The widget may be null if this is called while the dialog is opening.
-  if (GetWidget()) {
+  if (GetWidget())
     SizeToContents();
-  }
 }
 
 }  // namespace send_tab_to_self

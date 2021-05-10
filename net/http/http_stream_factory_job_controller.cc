@@ -36,12 +36,12 @@ namespace {
 // Returns parameters associated with the proxy resolution.
 base::Value NetLogHttpStreamJobProxyServerResolved(
     const ProxyServer& proxy_server) {
-  base::DictionaryValue dict;
+  base::Value dict(base::Value::Type::DICTIONARY);
 
-  dict.SetString("proxy_server", proxy_server.is_valid()
-                                     ? proxy_server.ToPacString()
-                                     : std::string());
-  return std::move(dict);
+  dict.SetStringKey("proxy_server", proxy_server.is_valid()
+                                        ? proxy_server.ToPacString()
+                                        : std::string());
+  return dict;
 }
 
 }  // namespace
@@ -51,18 +51,18 @@ base::Value NetLogHttpStreamJobProxyServerResolved(
 const int kMaxDelayTimeForMainJobSecs = 3;
 
 base::Value NetLogJobControllerParams(const GURL& url, bool is_preconnect) {
-  base::DictionaryValue dict;
-  dict.SetString("url", url.possibly_invalid_spec());
-  dict.SetBoolean("is_preconnect", is_preconnect);
-  return std::move(dict);
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetStringKey("url", url.possibly_invalid_spec());
+  dict.SetBoolKey("is_preconnect", is_preconnect);
+  return dict;
 }
 
 base::Value NetLogAltSvcParams(const AlternativeServiceInfo* alt_svc_info,
                                bool is_broken) {
-  base::DictionaryValue dict;
-  dict.SetString("alt_svc", alt_svc_info->ToString());
-  dict.SetBoolean("is_broken", is_broken);
-  return std::move(dict);
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetStringKey("alt_svc", alt_svc_info->ToString());
+  dict.SetBoolKey("is_broken", is_broken);
+  return dict;
 }
 
 HttpStreamFactory::JobController::JobController(
@@ -847,17 +847,20 @@ void HttpStreamFactory::JobController::MaybeReportBrokenAlternativeService() {
     return;
   }
 
-  // Report brokenness if alternative job failed.
-  base::UmaHistogramSparse("Net.AlternateServiceFailed",
-                           -alternative_job_net_error_);
-
   if (alternative_job_net_error_ == ERR_NETWORK_CHANGED ||
-      alternative_job_net_error_ == ERR_INTERNET_DISCONNECTED) {
+      alternative_job_net_error_ == ERR_INTERNET_DISCONNECTED ||
+      (alternative_job_net_error_ == ERR_NAME_NOT_RESOLVED &&
+       request_info_.url.host() ==
+           alternative_service_info_.alternative_service().host)) {
     // No need to mark alternative service as broken.
     // Reset error status for Jobs.
     ResetErrorStatusForJobs();
     return;
   }
+
+  // Report brokenness if alternative job failed.
+  base::UmaHistogramSparse("Net.AlternateServiceFailed",
+                           -alternative_job_net_error_);
 
   HistogramBrokenAlternateProtocolLocation(
       BROKEN_ALTERNATE_PROTOCOL_LOCATION_HTTP_STREAM_FACTORY_JOB_ALT);
@@ -1032,7 +1035,7 @@ HttpStreamFactory::JobController::GetAlternativeServiceInfoInternal(
     ignore_result(ApplyHostMappingRules(original_url, &mapped_origin));
     QuicSessionKey session_key(
         mapped_origin, request_info.privacy_mode, request_info.socket_tag,
-        request_info.network_isolation_key, request_info.disable_secure_dns);
+        request_info.network_isolation_key, request_info.secure_dns_policy);
 
     HostPortPair destination(alternative_service_info.host_port_pair());
     if (session_key.host() != destination.host() &&

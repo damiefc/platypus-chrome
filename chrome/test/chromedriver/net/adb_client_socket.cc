@@ -5,6 +5,7 @@
 #include "chrome/test/chromedriver/net/adb_client_socket.h"
 
 #include <stddef.h>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -500,13 +501,14 @@ void AdbClientSocket::Connect(net::CompletionOnceCallback callback) {
   // on IPv4. So just try IPv4 first, then fall back to IPv6.
   net::IPAddressList list = {net::IPAddress::IPv4Localhost(),
                              net::IPAddress::IPv6Localhost()};
-  net::AddressList ip_list = net::AddressList::CreateFromIPAddressList(
-      list, "localhost");
+  std::vector<std::string> aliases({"localhost"});
+  net::AddressList ip_list =
+      net::AddressList::CreateFromIPAddressList(list, std::move(aliases));
   net::AddressList address_list = net::AddressList::CopyWithPort(
       ip_list, port_);
 
-  socket_.reset(new net::TCPClientSocket(address_list, nullptr, nullptr,
-                                         nullptr, net::NetLogSource()));
+  socket_ = std::make_unique<net::TCPClientSocket>(
+      address_list, nullptr, nullptr, nullptr, net::NetLogSource());
 
   net::CompletionRepeatingCallback copyable_callback =
       base::AdaptCallbackForRepeating(std::move(callback));

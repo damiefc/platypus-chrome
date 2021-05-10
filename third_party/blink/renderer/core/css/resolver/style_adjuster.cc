@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/core/dom/container_node.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
@@ -65,7 +66,6 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/transforms/transform_operations.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "ui/base/ui_base_features.h"
 
 namespace blink {
@@ -105,7 +105,7 @@ TouchAction AdjustTouchActionForElement(TouchAction touch_action,
       element && element == element->GetDocument().documentElement() &&
       element->GetDocument().LocalOwner();
   if ((!is_body_and_viewport && style.ScrollsOverflow()) || is_child_document)
-    return touch_action | TouchAction::kPan;
+    return touch_action | TouchAction::kPan | TouchAction::kInternalPanXScrolls;
   return touch_action;
 }
 
@@ -207,8 +207,9 @@ static bool OverridesTextDecorationColors(const Element* element) {
          (IsA<HTMLFontElement>(element) || IsA<HTMLAnchorElement>(element));
 }
 
-// FIXME: This helper is only needed because pseudoStyleForElement passes a null
-// element to adjustComputedStyle, so we can't just use element->isInTopLayer().
+// FIXME: This helper is only needed because ResolveStyle passes a null
+// element to AdjustComputedStyle for pseudo-element styles, so we can't just
+// use element->isInTopLayer().
 static bool IsInTopLayer(const Element* element, const ComputedStyle& style) {
   return (element && element->IsInTopLayer()) ||
          style.StyleType() == kPseudoIdBackdrop;
@@ -237,17 +238,6 @@ static void AdjustStyleForFirstLetter(ComputedStyle& style) {
 
   // Force inline display (except for floating first-letters).
   style.SetDisplay(style.IsFloating() ? EDisplay::kBlock : EDisplay::kInline);
-
-  // CSS2 says first-letter can't be positioned.
-  style.SetPosition(EPosition::kStatic);
-}
-
-static void AdjustStyleForFirstLine(ComputedStyle& style) {
-  if (style.StyleType() != kPseudoIdFirstLine)
-    return;
-
-  // Force inline display.
-  style.SetDisplay(EDisplay::kInline);
 }
 
 static void AdjustStyleForMarker(ComputedStyle& style,
@@ -262,7 +252,9 @@ static void AdjustStyleForMarker(ComputedStyle& style,
        !parent_style.IsInsideListElement());
 
   if (is_inside) {
-    auto margins = ListMarker::InlineMarginsForInside(style, parent_style);
+    Document& document = parent_element.GetDocument();
+    auto margins =
+        ListMarker::InlineMarginsForInside(document, style, parent_style);
     style.SetMarginStart(Length::Fixed(margins.first));
     style.SetMarginEnd(Length::Fixed(margins.second));
   } else {
@@ -392,17 +384,6 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
     return;
   }
 
-  if (IsA<HTMLSummaryElement>(element)) {
-    // <summary> should be a list item by default, but currently it's a block
-    // and the disclosure symbol is not a ::marker (bug 590014). If an author
-    // specifies 'display: list-item', the <summary> would seem to have two
-    // markers (the real one and the disclosure symbol). To avoid this, compute
-    // to 'display: block'. This adjustment should go away with bug 590014.
-    if (style.Display() == EDisplay::kListItem)
-      style.SetDisplay(EDisplay::kBlock);
-    return;
-  }
-
   if (style.Display() == EDisplay::kContents) {
     // See https://drafts.csswg.org/css-display/#unbox-html
     // Some of these elements are handled with other adjustments above.
@@ -416,7 +397,7 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
   }
 }
 
-void StyleAdjuster::AdjustOverflow(ComputedStyle& style) {
+void StyleAdjuster::AdjustOverflow(ComputedStyle& style, Element* element) {
   DCHECK(style.OverflowX() != EOverflow::kVisible ||
          style.OverflowY() != EOverflow::kVisible);
 
@@ -453,6 +434,11 @@ void StyleAdjuster::AdjustOverflow(ComputedStyle& style) {
     else if (style.OverflowY() == EOverflow::kClip)
       style.SetOverflowY(EOverflow::kHidden);
   }
+  if (element && (style.OverflowX() == EOverflow::kClip ||
+                  style.OverflowY() == EOverflow::kClip)) {
+    UseCounter::Count(element->GetDocument(),
+                      WebFeature::kOverflowClipAlongEitherAxis);
+  }
 }
 
 static void AdjustStyleForDisplay(ComputedStyle& style,
@@ -484,16 +470,10 @@ static void AdjustStyleForDisplay(ComputedStyle& style,
       style.GetWritingMode() != layout_parent_style.GetWritingMode())
     style.SetDisplay(EDisplay::kInlineBlock);
 
-  // Cannot support position: sticky for table columns and column groups because
-  // current code is only doing background painting through columns / column
-  // groups.
-  if ((style.Display() == EDisplay::kTableColumnGroup ||
-       style.Display() == EDisplay::kTableColumn) &&
-      style.GetPosition() == EPosition::kSticky)
-    style.SetPosition(EPosition::kStatic);
-
   // writing-mode does not apply to table row groups, table column groups, table
   // rows, and table columns.
+  // TODO(crbug.com/736072): Borders specified with logical css properties will
+  // not change to reflect new writing mode. ex: border-block-start.
   if (style.Display() == EDisplay::kTableColumn ||
       style.Display() == EDisplay::kTableColumnGroup ||
       style.Display() == EDisplay::kTableFooterGroup ||
@@ -560,6 +540,12 @@ static void AdjustEffectiveTouchAction(ComputedStyle& style,
   if (!is_non_replaced_inline_elements && !is_table_row_or_column &&
       is_layout_object_needed) {
     element_touch_action = style.GetTouchAction();
+    // kInternalPanXScrolls is only for internal usage, GetTouchAction()
+    // doesn't contain this bit. We set this bit when kPanX is set so it can be
+    // cleared for eligible editable areas later on.
+    if ((element_touch_action & TouchAction::kPanX) != TouchAction::kNone) {
+      element_touch_action |= TouchAction::kInternalPanXScrolls;
+    }
   }
 
   if (!element) {
@@ -572,7 +558,7 @@ static void AdjustEffectiveTouchAction(ComputedStyle& style,
   // Apply touch action inherited from parent frame.
   if (is_child_document && element->GetDocument().GetFrame()) {
     inherited_action &=
-        TouchAction::kPan |
+        TouchAction::kPan | TouchAction::kInternalPanXScrolls |
         element->GetDocument().GetFrame()->InheritedEffectiveTouchAction();
   }
 
@@ -589,12 +575,9 @@ static void AdjustEffectiveTouchAction(ComputedStyle& style,
   TouchAction enforced_by_policy = TouchAction::kNone;
   if (element->GetDocument().IsVerticalScrollEnforced())
     enforced_by_policy = TouchAction::kPanY;
-  if (base::FeatureList::IsEnabled(::features::kSwipeToMoveCursor) &&
+  if (::features::IsSwipeToMoveCursorEnabled() &&
       IsEditableElement(element, style)) {
-    EventHandlerRegistry& registry =
-        element->GetDocument().GetFrame()->GetEventHandlerRegistry();
-    registry.DidAddEventHandler(
-        *element, EventHandlerRegistry::kTouchStartOrMoveEventBlocking);
+    element_touch_action &= ~TouchAction::kInternalPanXScrolls;
   }
 
   // Apply the adjusted parent effective touch actions.
@@ -627,6 +610,17 @@ static void AdjustStateForContentVisibility(ComputedStyle& style,
     context = &element->EnsureDisplayLockContext();
   context->SetRequestedState(style.ContentVisibility());
   context->AdjustElementStyle(&style);
+}
+
+void StyleAdjuster::AdjustForForcedColorsMode(ComputedStyle& style) {
+  if (!style.InForcedColorsMode() ||
+      style.ForcedColorAdjust() == EForcedColorAdjust::kNone)
+    return;
+
+  style.SetTextShadow(ComputedStyleInitialValues::InitialTextShadow());
+  style.SetBoxShadow(ComputedStyleInitialValues::InitialBoxShadow());
+  if (!style.HasUrlBackgroundImage())
+    style.ClearBackgroundImage();
 }
 
 void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
@@ -673,9 +667,8 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     }
 
     // We don't adjust the first letter style earlier because we may change the
-    // display setting in adjustStyeForTagName() above.
+    // display setting in AdjustStyleForHTMLElement() above.
     AdjustStyleForFirstLetter(style);
-    AdjustStyleForFirstLine(style);
     AdjustStyleForMarker(style, parent_style, state.GetElement());
 
     AdjustStyleForDisplay(style, layout_parent_style, element,
@@ -713,7 +706,15 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
 
   if (style.OverflowX() != EOverflow::kVisible ||
       style.OverflowY() != EOverflow::kVisible)
-    AdjustOverflow(style);
+    AdjustOverflow(style, element);
+
+  // overflow-clip-margin only applies if 'overflow: clip' is set along both
+  // axis or 'contain: paint'.
+  if (!style.ContainsPaint() && !(style.OverflowX() == EOverflow::kClip &&
+                                  style.OverflowY() == EOverflow::kClip)) {
+    style.SetOverflowClipMargin(
+        ComputedStyleInitialValues::InitialOverflowClipMargin());
+  }
 
   if (StopPropagateTextDecorations(style, element))
     style.ClearAppliedTextDecorations();
@@ -727,6 +728,10 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
   // layers.
   style.AdjustBackgroundLayers();
   style.AdjustMaskLayers();
+
+  // A subset of CSS properties should be forced at computed value time:
+  // https://drafts.csswg.org/css-color-adjust-1/#forced-colors-properties.
+  AdjustForForcedColorsMode(style);
 
   // Let the theme also have a crack at adjusting the style.
   LayoutTheme::GetTheme().AdjustStyle(element, style);

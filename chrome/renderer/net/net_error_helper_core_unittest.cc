@@ -14,11 +14,11 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
@@ -26,7 +26,6 @@
 #include "chrome/renderer/net/available_offline_content_helper.h"
 #include "components/error_page/common/error.h"
 #include "components/error_page/common/net_error_info.h"
-#include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/mock_render_thread.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -60,12 +59,13 @@ error_page::Error ProbeError(error_page::DnsProbeStatus status) {
 }
 
 error_page::Error NetErrorForURL(net::Error net_error, const GURL& url) {
-  return error_page::Error::NetError(url, net_error,
+  return error_page::Error::NetError(url, net_error, 0 /* extended_reason */,
                                      net::ResolveErrorInfo(net::OK), false);
 }
 
 error_page::Error NetError(net::Error net_error) {
   return error_page::Error::NetError(GURL(kFailedUrl), net_error,
+                                     0 /* extended_reason */,
                                      net::ResolveErrorInfo(net::OK), false);
 }
 

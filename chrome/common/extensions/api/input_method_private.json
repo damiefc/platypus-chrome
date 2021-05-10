@@ -143,7 +143,6 @@
           {
             "name": "callback",
             "type": "function",
-            "optional": false,
             "description": "Callback which is called with the config object.",
             "parameters": [
               {
@@ -166,7 +165,6 @@
           {
             "name": "callback",
             "type": "function",
-            "optional": false,
             "description": "Callback which is called with the input method objects.",
             "parameters": [
               {
@@ -193,7 +191,6 @@
           {
             "name": "callback",
             "type": "function",
-            "optional": false,
             "description": "Callback which is called with the current input method.",
             "parameters": [
               {
@@ -212,7 +209,6 @@
           {
             "name": "inputMethodId",
             "type": "string",
-            "optional": false,
             "description": "The input method ID to be set as current input method."
           },
           {
@@ -231,7 +227,6 @@
           {
             "name": "callback",
             "type": "function",
-            "optional": false,
             "description": "Callback which is called once the list of dictionary words are ready.",
             "parameters": [
               {
@@ -253,7 +248,6 @@
           {
             "name": "word",
             "type": "string",
-            "optional": false,
             "description": "A new word to add to the dictionary."
           },
           {
@@ -278,7 +272,6 @@
               {
                 "name": "enabled",
                 "type": "boolean",
-                "optional": false,
                 "description": "The result of whether enabled."
               }
             ]
@@ -446,7 +439,7 @@
       }, {
         "name": "getSurroundingText",
         "type": "function",
-        "description": "Gets the surrounding text of the current selection",
+        "description": "Gets the surrounding text of the current selection. WARNING: This could return a stale cache that doesn't reflect reality, due to async between IMF and TextInputClient.",
         "parameters": [
           {
             "name": "beforeLength",
@@ -599,7 +592,7 @@
                 "type": "integer"
               },
               "end": {
-                "description": "The ending index of the composing range, in bytes.",
+                "description": "The ending index of the composing range, in bytes. The order of the start and end index does not matter.",
                 "type": "integer"
               },
               "segments": {
@@ -636,7 +629,7 @@
       }, {
         "name": "getAutocorrectRange",
         "type": "function",
-        "description": "Get the autocorrected word's bounds.",
+        "description": "Get the autocorrected word's bounds. Returns an empty range if there is no autocorrected word.",
         "parameters": [
           {
             "name": "parameters",
@@ -755,7 +748,35 @@
         "type": "function",
         "description": "Resets the current engine to its initial state. Fires an OnReset event.",
         "parameters": []
-      }
+      },
+      {
+        "name": "onAutocorrect",
+        "type": "function",
+        "description": "Called after a word has been autocorrected to show some UI for autocorrect.",
+        "platforms": ["chromeos"],
+      "parameters": [{
+            "name": "parameters",
+            "type": "object",
+            "properties": {
+                "contextID": {
+                    "description": "ID of the context where the autocorrect occurred.",
+                    "type": "integer"
+                },
+                "typedWord": {
+                    "type": "string",
+                    "description": "Corrected word will be replaced by this when clicking undo"
+                },
+                "correctedWord": {
+                    "type": "string",
+                    "description": "Needed primarily to know the length of the autocorrected text to show the correct length of underline. String content technically redundant; required however, as what IMF knows may be stale due to async."
+                },
+                "startIndex": {
+                    "type": "integer",
+                    "description": "Offset index (in code units) in surroundingInfo (see onSurroundingTextChanged) for the start of the autocorrected text"
+                }
+            }
+        }]
+    }
     ],
     "events": [
       {

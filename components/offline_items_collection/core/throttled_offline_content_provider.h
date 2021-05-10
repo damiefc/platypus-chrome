@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMPONENTS_OFFLINE_ITEMS_COLLETION_CORE_THROTTLED_OFFLINE_CONTENT_PROVIDER_H_
-#define COMPONENTS_OFFLINE_ITEMS_COLLETION_CORE_THROTTLED_OFFLINE_CONTENT_PROVIDER_H_
+#ifndef COMPONENTS_OFFLINE_ITEMS_COLLECTION_CORE_THROTTLED_OFFLINE_CONTENT_PROVIDER_H_
+#define COMPONENTS_OFFLINE_ITEMS_COLLECTION_CORE_THROTTLED_OFFLINE_CONTENT_PROVIDER_H_
 
 #include <map>
 #include <utility>
 
 #include "base/memory/weak_ptr.h"
-#include "base/observer_list.h"
+#include "base/scoped_observation.h"
 #include "components/offline_items_collection/core/offline_content_provider.h"
 
 namespace base {
@@ -55,8 +55,6 @@ class ThrottledOfflineContentProvider
                   RenameCallback callback) override;
   void ChangeSchedule(const ContentId& id,
                       base::Optional<OfflineItemSchedule> schedule) override;
-  void AddObserver(OfflineContentProvider::Observer* observer) override;
-  void RemoveObserver(OfflineContentProvider::Observer* observer) override;
 
   // Visible for testing. Overrides the time at which this throttle last pushed
   // updates to observers.
@@ -68,6 +66,7 @@ class ThrottledOfflineContentProvider
   void OnItemRemoved(const ContentId& id) override;
   void OnItemUpdated(const OfflineItem& item,
                      const base::Optional<UpdateDelta>& update_delta) override;
+  void OnContentProviderGoingDown() override;
 
   void OnGetAllItemsDone(MultipleItemCallback callback,
                          const OfflineItemList& items);
@@ -88,7 +87,9 @@ class ThrottledOfflineContentProvider
   bool update_queued_;
 
   OfflineContentProvider* const wrapped_provider_;
-  base::ObserverList<OfflineContentProvider::Observer>::Unchecked observers_;
+  base::ScopedObservation<OfflineContentProvider,
+                          OfflineContentProvider::Observer>
+      observation_{this};
 
   typedef std::map<ContentId,
                    std::pair<OfflineItem, base::Optional<UpdateDelta>>>
@@ -102,4 +103,4 @@ class ThrottledOfflineContentProvider
 
 }  // namespace offline_items_collection
 
-#endif  // COMPONENTS_OFFLINE_ITEMS_COLLETION_CORE_THROTTLED_OFFLINE_CONTENT_PROVIDER_H_
+#endif  // COMPONENTS_OFFLINE_ITEMS_COLLECTION_CORE_THROTTLED_OFFLINE_CONTENT_PROVIDER_H_

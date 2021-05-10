@@ -7,22 +7,25 @@
 <translation id="1124772482545689468">Utilisateur</translation>
 <translation id="1178581264944972037">Interrompre</translation>
 <translation id="1181037720776840403">Supprimer</translation>
+<translation id="1195941046451948919">Voulez-vous vraiment réinitialiser toutes les autorisations pour ce site Web?</translation>
 <translation id="1201402288615127009">Suivant</translation>
 <translation id="1242008676835033345">Intégré sur <ph name="WEBSITE_URL" /></translation>
 <translation id="1272079795634619415">Arrêter</translation>
 <translation id="1289742167380433257">Pour vous faire économiser les données, Google a optimisé les images de cette page.</translation>
 <translation id="129382876167171263">Les fichiers enregistrés par les sites Web s'affichent ici</translation>
+<translation id="1317194122196776028">Oublier ce site</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" /> : <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">Le site <ph name="SITE_NAME" /> a été ajouté</translation>
 <translation id="1383876407941801731">Rechercher</translation>
 <translation id="1384959399684842514">Téléchargement interrompu</translation>
-<translation id="1431402976894535801">Empêcher les sites de savoir lorsque vous êtes présent</translation>
+<translation id="1415402041810619267">URL tronquée</translation>
 <translation id="1446450296470737166">Autoriser le contrôle des appareils MIDI</translation>
 <translation id="1509960214886564027">Des fonctionnalités sur de nombreux sites risquent de ne pas fonctionner</translation>
 <translation id="1620510694547887537">Caméra</translation>
-<translation id="1647391597548383849">Accès à votre caméra</translation>
+<translation id="1644574205037202324">Historique</translation>
+<translation id="1647582022260550163">Voulez-vous vraiment réinitialiser les autorisations, ainsi que supprimer les témoins et les données de ce site?</translation>
 <translation id="1660204651932907780">Autoriser les sites à faire jouer du son (recommandé)</translation>
-<translation id="1677097821151855053">Les témoins et d'autres données de sites sont utilisés pour se souvenir de vous. Par exemple : pour vous connecter à votre compte ou pour personnaliser les annonces. Pour gérer les témoins pour tous les sites, reportez-vous au menu <ph name="BEGIN_LINK" />Paramètres<ph name="END_LINK" />.</translation>
+<translation id="1677097821151855053">Les témoins et les autres données de sites sont utilisés pour se souvenir de vous. Par exemple : pour vous connecter à votre compte ou pour personnaliser les annonces. Pour gérer les témoins pour tous les sites, reportez-vous au menu <ph name="BEGIN_LINK" />Paramètres<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">Effacer les données du site?</translation>
 <translation id="169515064810179024">Empêcher les sites d'accéder aux capteurs de mouvement</translation>
 <translation id="1717218214683051432">Capteurs de mouvements</translation>
@@ -44,7 +47,6 @@
 <translation id="2146738493024040262">Ouvrir l'application instantanée</translation>
 <translation id="2148716181193084225">Aujourd'hui</translation>
 <translation id="2182457891543959921">Demander avant d'autoriser les sites à créer une carte 3D de votre environnement ou à faire le suivi de la position de l'appareil photo (recommandé)</translation>
-<translation id="2187243482123994665">Présence de l'utilisateur</translation>
 <translation id="2212565012507486665">Autoriser les témoins</translation>
 <translation id="2228071138934252756">Pour autoriser <ph name="APP_NAME" /> à accéder à votre appareil photo, activez aussi celui-ci dans les <ph name="BEGIN_LINK" />paramètres d'Android<ph name="END_LINK" />.</translation>
 <translation id="2241634353105152135">Une fois</translation>
@@ -54,7 +56,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> Mo</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{Autorisations <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> et <ph name="NUM_MORE" /> autre accordées}one{Autorisations <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> et <ph name="NUM_MORE" /> autre accordées}other{Autorisations <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> et <ph name="NUM_MORE" /> autres accordées}}</translation>
 <translation id="2434158240863470628">Téléchargement terminé <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Accès à la position</translation>
 <translation id="2482878487686419369">Notifications</translation>
 <translation id="2490684707762498678">Les notifications sont gérées par <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Aide et commentaires</translation>
@@ -82,17 +83,17 @@
 <translation id="3114012059975132928">Lecteur vidéo</translation>
 <translation id="3115898365077584848">Afficher les renseignements</translation>
 <translation id="3123473560110926937">Annonces bloquées sur certains sites</translation>
-<translation id="3165371858310906303">Demander une autorisation quand un site veut savoir lorsque vous êtes présent</translation>
 <translation id="3198916472715691905">Stockage de données : <ph name="STORAGE_AMOUNT" /></translation>
 <translation id="321187648315454507">Pour autoriser <ph name="APP_NAME" /> à vous envoyer des notifications, vous devez aussi activer celles-ci dans les <ph name="BEGIN_LINK" />paramètres d'Android<ph name="END_LINK" />.</translation>
 <translation id="3227137524299004712">Microphone</translation>
 <translation id="3277252321222022663">Autoriser les sites à accéder aux capteurs (recommandé)</translation>
 <translation id="3295602654194328831">Masquer les renseignements</translation>
+<translation id="3328801116991980348">Information sur le site</translation>
 <translation id="3333961966071413176">Tous les contacts</translation>
 <translation id="3386292677130313581">Demander avant d'autoriser des sites à connaître votre emplacement (recommandé)</translation>
 <translation id="3538390592868664640">Empêcher les sites de créer une carte 3D de votre environnement et de faire le suivi de la position de l'appareil photo</translation>
+<translation id="3551268116566418498">Désactiver mode navig. privée?</translation>
 <translation id="3586500876634962664">Util. de la caméra et du micro</translation>
-<translation id="3587482841069643663">Tous</translation>
 <translation id="358794129225322306">Permet au site de télécharger plusieurs fichiers automatiquement.</translation>
 <translation id="3594780231884063836">Désactiver le son de la vidéo</translation>
 <translation id="3596414637720633074">Bloquer les témoins tiers en navigation privée</translation>
@@ -100,9 +101,11 @@
 <translation id="3744111561329211289">Synchronisation en arrière-plan</translation>
 <translation id="3763247130972274048">Touchez deux fois à gauche ou à droite de la vidéo pour sauter 10 secondes</translation>
 <translation id="381841723434055211">Numéros de téléphone</translation>
+<translation id="3835233591525155343">Votre utilisation de l'appareil</translation>
 <translation id="385051799172605136">Retour</translation>
 <translation id="3859306556332390985">Rechercher vers l'avant</translation>
 <translation id="3955193568934677022">Autoriser les sites à lire le contenu protégé (recommandé)</translation>
+<translation id="3967822245660637423">Téléchargement terminé</translation>
 <translation id="3987993985790029246">Copier lien</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" />/?</translation>
 <translation id="4002066346123236978">Titre</translation>
@@ -116,16 +119,20 @@
 <translation id="429312253194641664">Un site lit du contenu multimédia</translation>
 <translation id="42981349822642051">Développer</translation>
 <translation id="4336434711095810371">Effacer toutes les données</translation>
+<translation id="4402755511846832236">Empêcher les sites de savoir quand vous êtes en train d'utiliser cet appareil</translation>
 <translation id="4433925000917964731">Page en version simplifiée fournie par Google</translation>
 <translation id="4434045419905280838">Fenêt. context. et redirections</translation>
 <translation id="445467742685312942">Autoriser les sites à lire du contenu protégé</translation>
 <translation id="4468959413250150279">Désactivez le son sur un site précis.</translation>
 <translation id="4479647676395637221">Demander avant d'autoriser des sites à utiliser votre caméra (recommandé)</translation>
+<translation id="4505788138578415521">URL développée</translation>
 <translation id="4534723447064627427">Pour autoriser <ph name="APP_NAME" /> à accéder à votre microphone, vous devez aussi activer le microphone dans les <ph name="BEGIN_LINK" />paramètres d'Android<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Détails</translation>
 <translation id="4645575059429386691">Géré par l’un de tes parents</translation>
 <translation id="4670064810192446073">Réalité virtuelle</translation>
+<translation id="4708011789095599544">Voulez-vous vraiment supprimer les témoins et les autres données de ce site Web?</translation>
 <translation id="4751476147751820511">Capteurs de mouvement ou de luminosité</translation>
+<translation id="4836046166855586901">Demander une autorisation lorsqu'un site veut savoir si vous êtes en train d'utiliser cet appareil</translation>
 <translation id="4883854917563148705">Les paramètres gérés ne peuvent pas être réinitialisés</translation>
 <translation id="4887024562049524730">Demander avant d'autoriser les sites à utiliser votre appareil et vos données de réalité virtuelle (recommandé)</translation>
 <translation id="4962975101802056554">Révoquer toutes les autorisations pour l'appareil</translation>
@@ -134,9 +141,11 @@
 <translation id="4996978546172906250">Partager par</translation>
 <translation id="5039804452771397117">Autoriser</translation>
 <translation id="5048398596102334565">Autoriser les sites à accéder à vos capteurs de mouvements (recommandé)</translation>
+<translation id="5050380848339752099">Ce site est sur le point de partager des renseignements avec une application à l'extérieur du mode de navigation privée.</translation>
 <translation id="5063480226653192405">Utilisation</translation>
 <translation id="5100237604440890931">Réduit : cliquer pour développer</translation>
 <translation id="5123685120097942451">Onglet de navigation privée</translation>
+<translation id="5186036860380548585">Option accessible près du haut de l'écran</translation>
 <translation id="5197729504361054390">Les contacts que vous sélectionnez seront partagés avec <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />.</translation>
 <translation id="528192093759286357">Faites glisser du haut vers le bas et appuyez sur le bouton de retour pour quitter le mode plein écran.</translation>
 <translation id="5300589172476337783">Afficher</translation>
@@ -146,7 +155,6 @@
 <translation id="5335288049665977812">Autoriser les sites à exécuter JavaScript (recommandé)</translation>
 <translation id="534295439873310000">Appareils NFC</translation>
 <translation id="5354152178998424783">Cette action effacera <ph name="DATASIZE" /> de données et de témoins qu'ont stockés des sites.</translation>
-<translation id="5384883051496921101">Ce site est sur le point de partager des renseignements avec une application à l'extérieur du mode de navigation privée.</translation>
 <translation id="5391532827096253100">Votre connexion à ce site n'est pas sécurisée. Renseignements sur le site</translation>
 <translation id="5394307150471348411">{DETAIL_COUNT,plural, =1{(+ 1 autre)}one{(+ # autre)}other{(+ # autres)}}</translation>
 <translation id="5403592356182871684">Noms</translation>
@@ -171,6 +179,7 @@
 <translation id="5916664084637901428">Activé</translation>
 <translation id="5922853908706496913">Partage de votre écran en cours…</translation>
 <translation id="5939518447894949180">Recommencer</translation>
+<translation id="5975083100439434680">Zoom arrière</translation>
 <translation id="5976059395673079613"><ph name="PERMISSION" /> : <ph name="WARNING_MESSAGE" /></translation>
 <translation id="6015775454662021376">Gérez l'accès de ce site à votre appareil</translation>
 <translation id="6040143037577758943">Fermer</translation>
@@ -263,6 +272,7 @@
 <translation id="8249310407154411074">Placer en première position</translation>
 <translation id="8261506727792406068">Supprimer</translation>
 <translation id="8300705686683892304">Gérés par une application</translation>
+<translation id="8324158725704657629">Ne plus me demander</translation>
 <translation id="8372893542064058268">Autorisez la synchronisation en arrière-plan pour un site en particulier.</translation>
 <translation id="8376384591331888629">Y compris les témoins tiers sur ce site</translation>
 <translation id="83792324527827022">Un site utilise votre appareil photo et votre microphone</translation>
@@ -273,7 +283,7 @@
 <translation id="8444433999583714703">Pour autoriser <ph name="APP_NAME" /> à accéder à votre position, activez aussi la localisation dans les <ph name="BEGIN_LINK" />paramètres d'Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Révoquer l'autorisation de l'appareil</translation>
 <translation id="8451050538944905715">{NUM_SELECTED,plural, =1{1 témoin en cours d'utilisation}one{# témoin en cours d'utilisation}other{# témoins en cours d'utilisation}}</translation>
-<translation id="8463851957836045671">Le site est rapide</translation>
+<translation id="8487700953926739672">Offert en ligne</translation>
 <translation id="851751545965956758">Empêcher les sites de se connecter à des appareils</translation>
 <translation id="8525306231823319788">Plein écran</translation>
 <translation id="857943718398505171">Autorisée (recommandé)</translation>
@@ -289,18 +299,18 @@
 <translation id="8801436777607969138">Bloquez JavaScript sur un site en particulier.</translation>
 <translation id="8816026460808729765">Empêcher les sites d'accéder aux capteurs</translation>
 <translation id="8847988622838149491">USB</translation>
+<translation id="8903921497873541725">Zoom avant</translation>
 <translation id="8921772741368021346"><ph name="POSITION" /> sur <ph name="DURATION" /></translation>
 <translation id="8926666909099850184">La NFC est désactivée pour cet appareil. Activez-la dans le menu <ph name="BEGIN_LINK" />Paramètres Android<ph name="END_LINK" />.</translation>
-<translation id="8929372349074745002">Ce site s'ouvre et répond rapidement pour la majorité des gens</translation>
 <translation id="8941729603749328384">www.example.com</translation>
-<translation id="894871326938397531">Désactiver mode de nav. privée?</translation>
 <translation id="8958424370300090006">Bloquer les témoins pour un site en particulier.</translation>
 <translation id="8959122750345127698">Navigation inaccessible : <ph name="URL" /></translation>
+<translation id="8986362086234534611">Supprimer</translation>
 <translation id="9019902583201351841">Géré par tes parents</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> et <ph name="NUM_MORE" /> autre}one{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> et <ph name="NUM_MORE" /> autre}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> et <ph name="NUM_MORE" /> autres}}</translation>
 <translation id="913657688200966289">Vous pouvez activer les autorisations pour <ph name="APP_NAME" /> dans les <ph name="BEGIN_LINK" />paramètres d'Android<ph name="END_LINK" />.</translation>
-<translation id="945632385593298557">Accès à votre microphone</translation>
+<translation id="930525582205581608">Oublier ce site?</translation>
 <translation id="965817943346481315">Bloquer si le site diffuse des annonces intrusives ou trompeuses (recommandé)</translation>
 <translation id="967624055006145463">Données stockées</translation>
 </translationbundle>

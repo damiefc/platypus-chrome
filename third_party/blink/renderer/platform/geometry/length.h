@@ -94,7 +94,7 @@ class PLATFORM_EXPORT Length {
     float_value_ = clampTo<float>(v);
   }
 
-  explicit Length(scoped_refptr<CalculationValue>);
+  explicit Length(scoped_refptr<const CalculationValue>);
 
   Length(const Length& length) {
     memcpy(this, &length, sizeof(Length));
@@ -184,12 +184,12 @@ class PLATFORM_EXPORT Length {
 
   PixelsAndPercent GetPixelsAndPercent() const;
 
-  CalculationValue& GetCalculationValue() const;
+  const CalculationValue& GetCalculationValue() const;
 
   // If |this| is calculated, returns the underlying |CalculationValue|. If not,
   // returns a |CalculationValue| constructed from |GetPixelsAndPercent()|. Hits
   // a DCHECK if |this| is not a specified value (e.g., 'auto').
-  scoped_refptr<CalculationValue> AsCalculationValue() const;
+  scoped_refptr<const CalculationValue> AsCalculationValue() const;
 
   Length::Type GetType() const { return static_cast<Length::Type>(type_); }
   bool Quirk() const { return quirk_; }
@@ -225,22 +225,30 @@ class PLATFORM_EXPORT Length {
   }
 
   // For the layout purposes, if this |Length| is a block-axis size, see
-  // |IsIntrinsicOrAuto()|, it is usually a better choice.
+  // |IsAutoOrContentOrIntrinsic()|, it is usually a better choice.
   bool IsAuto() const { return GetType() == kAuto; }
   bool IsFixed() const { return GetType() == kFixed; }
+
   // For the block axis, intrinsic sizes such as `min-content` behave the same
   // as `auto`. https://www.w3.org/TR/css-sizing-3/#valdef-width-min-content
-  bool IsIntrinsicOrAuto() const { return GetType() == kAuto || IsIntrinsic(); }
-  bool IsIntrinsic() const {
+  bool IsContentOrIntrinsic() const {
     return GetType() == kMinContent || GetType() == kMaxContent ||
-           GetType() == kMinIntrinsic || GetType() == kFillAvailable ||
-           GetType() == kFitContent;
+           GetType() == kFitContent || GetType() == kMinIntrinsic;
   }
+  bool IsAutoOrContentOrIntrinsic() const {
+    return GetType() == kAuto || IsContentOrIntrinsic();
+  }
+
+  // NOTE: This shouldn't be use in NG code.
+  bool IsContentOrIntrinsicOrFillAvailable() const {
+    return IsContentOrIntrinsic() || GetType() == kFillAvailable;
+  }
+
   bool IsSpecified() const {
     return GetType() == kFixed || GetType() == kPercent ||
            GetType() == kCalculated;
   }
-  bool IsSpecifiedOrIntrinsic() const { return IsSpecified() || IsIntrinsic(); }
+
   bool IsCalculated() const { return GetType() == kCalculated; }
   bool IsCalculatedEqual(const Length&) const;
   bool IsMinContent() const { return GetType() == kMinContent; }

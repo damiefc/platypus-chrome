@@ -19,7 +19,8 @@ _LINUX_SI_FILE_ALLOWLIST = {
         'InstrProfilingRuntime.cpp',  # Only in coverage builds, not production.
         'atomicops_internals_x86.cc',  # TODO(crbug.com/973551): Remove.
         'debugallocation_shim.cc',  # TODO(crbug.com/973552): Remove.
-        'iostream.cpp',  # TODO(crbug.com/973554): Remove.
+        'iostream.cpp:',  # TODO(crbug.com/973554): Remove.
+        '000101',   # libc++ uses init_priority 101 for iostreams.
         'spinlock.cc',  # TODO(crbug.com/973556): Remove.
     ],
     'nacl_helper_bootstrap': [],
@@ -34,9 +35,9 @@ _CROS_SI_FILE_ALLOWLIST = {
         'InstrProfilingRuntime.cpp',  # Only in coverage builds, not production.
         'atomicops_internals_x86.cc',  # TODO(crbug.com/973551): Remove.
         'debugallocation_shim.cc',  # TODO(crbug.com/973552): Remove.
-        'iostream.cpp',  # TODO(crbug.com/973554): Remove.
+        'iostream.cpp:',  # TODO(crbug.com/973554): Remove.
+        '000101',   # libc++ uses init_priority 101 for iostreams.
         'spinlock.cc',  # TODO(crbug.com/973556): Remove.
-        'int256.cc',  # TODO(crbug.com/537099): Remove.
         'rpc.pb.cc',  # TODO(crbug.com/537099): Remove.
     ],
     'nacl_helper_bootstrap': [],
@@ -49,12 +50,16 @@ _MAC_SI_FILE_ALLOWLIST = [
     'InstrProfilingRuntime.cpp', # Only in coverage builds, not in production.
     'sysinfo.cc', # Only in coverage builds, not in production.
     'iostream.cpp', # Used to setup std::cin/cout/cerr.
+    '000101', # Used to setup std::cin/cout/cerr
 ]
 
-# A static initializer is needed on Mac for libc++ to set up std::cin/cout/cerr
-# before main() runs. Coverage CQ will have a dsym so only iostream.cpp needs
-# to be counted here.
-FALLBACK_EXPECTED_MAC_SI_COUNT = 1
+# Two static initializers are needed on Mac for libc++ to set up
+# std::cin/cout/cerr before main() runs. Only iostream.cpp needs to be counted
+# here.
+FALLBACK_EXPECTED_MAC_SI_COUNT = 2
+
+# For coverage builds, also allow 'IntrProfilingRuntime.cpp'
+COVERAGE_BUILD_FALLBACK_EXPECTED_MAC_SI_COUNT = 3
 
 
 def run_process(command):
@@ -66,7 +71,7 @@ def run_process(command):
   return stdout
 
 
-def main_mac(src_dir):
+def main_mac(src_dir, allow_coverage_initializer = False):
   base_names = ('Chromium', 'Google Chrome')
   ret = 0
   for base_name in base_names:
@@ -123,25 +128,29 @@ def main_mac(src_dir):
               ret = 1
               print 'Found invalid static initializer: {}'.format(line)
           print stdout
-        elif si_count > FALLBACK_EXPECTED_MAC_SI_COUNT:
-          print('Expected <= %d static initializers in %s, but found %d' %
-              (FALLBACK_EXPECTED_MAC_SI_COUNT, chromium_framework_executable,
-               si_count))
-          ret = 1
-          show_mod_init_func = os.path.join(mac_tools_path,
-                                            'show_mod_init_func.py')
-          args = [show_mod_init_func]
-          if os.path.exists(framework_unstripped_name):
-            args.append(framework_unstripped_name)
-          else:
-            print '# Warning: Falling back to potentially stripped output.'
-            args.append(chromium_framework_executable)
+        else:
+          allowed_si_count = FALLBACK_EXPECTED_MAC_SI_COUNT
+          if allow_coverage_initializer:
+            allowed_si_count = COVERAGE_BUILD_FALLBACK_EXPECTED_MAC_SI_COUNT
+          if si_count > allowed_si_count:
+            print('Expected <= %d static initializers in %s, but found %d' %
+                (allowed_si_count, chromium_framework_executable,
+                si_count))
+            ret = 1
+            show_mod_init_func = os.path.join(mac_tools_path,
+                                              'show_mod_init_func.py')
+            args = [show_mod_init_func]
+            if os.path.exists(framework_unstripped_name):
+              args.append(framework_unstripped_name)
+            else:
+              print '# Warning: Falling back to potentially stripped output.'
+              args.append(chromium_framework_executable)
 
-          if os.path.exists(hermetic_xcode_path):
-            args.extend(['--xcode-path', hermetic_xcode_path])
+            if os.path.exists(hermetic_xcode_path):
+              args.extend(['--xcode-path', hermetic_xcode_path])
 
-          stdout = run_process(args)
-          print stdout
+            stdout = run_process(args)
+            print stdout
   return ret
 
 
@@ -193,7 +202,8 @@ def main_run(args):
   os.chdir(build_dir)
 
   if sys.platform.startswith('darwin'):
-    rc = main_mac(src_dir)
+    rc = main_mac(src_dir,
+      allow_coverage_initializer = '--allow-coverage-initializer' in args.args)
   elif sys.platform == 'linux2':
     is_chromeos = 'buildername' in args.properties and \
         'chromeos' in args.properties['buildername']

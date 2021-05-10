@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/passwords_private/password_check_delegate.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate.h"
@@ -29,6 +28,7 @@
 #include "components/password_manager/core/browser/password_account_storage_settings_watcher.h"
 #include "components/password_manager/core/browser/reauth_purpose.h"
 #include "components/password_manager/core/browser/ui/export_progress_status.h"
+#include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 #include "extensions/browser/extension_function.h"
 
 class Profile;
@@ -50,8 +50,8 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   void GetSavedPasswordsList(UiEntriesCallback callback) override;
   void GetPasswordExceptionsList(ExceptionEntriesCallback callback) override;
   bool ChangeSavedPassword(const std::vector<int>& ids,
-                           const base::string16& new_username,
-                           const base::string16& new_password) override;
+                           const std::u16string& new_username,
+                           const std::u16string& new_password) override;
   void RemoveSavedPasswords(const std::vector<int>& ids) override;
   void RemovePasswordExceptions(const std::vector<int>& ids) override;
   void UndoRemoveSavedPasswordOrException() override;
@@ -59,8 +59,8 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
                                 api::passwords_private::PlaintextReason reason,
                                 PlaintextPasswordCallback callback,
                                 content::WebContents* web_contents) override;
-  void MovePasswordToAccount(int id,
-                             content::WebContents* web_contents) override;
+  void MovePasswordsToAccount(const std::vector<int>& ids,
+                              content::WebContents* web_contents) override;
   void ImportPasswords(content::WebContents* web_contents) override;
   void ExportPasswords(base::OnceCallback<void(const std::string&)> accepted,
                        content::WebContents* web_contents) override;
@@ -88,14 +88,16 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   void StartPasswordCheck(StartPasswordCheckCallback callback) override;
   void StopPasswordCheck() override;
   api::passwords_private::PasswordCheckStatus GetPasswordCheckStatus() override;
+  password_manager::InsecureCredentialsManager* GetInsecureCredentialsManager()
+      override;
 
   // PasswordUIView implementation.
   Profile* GetProfile() override;
   void SetPasswordList(
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list)
-      override;
+      const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
+          password_list) override;
   void SetPasswordExceptionList(
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>&
+      const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
           password_exception_list) override;
 
   // KeyedService overrides:
@@ -121,7 +123,7 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
 
   // Executes a given callback by either invoking it immediately if the class
   // has been initialized or by deferring it until initialization has completed.
-  void ExecuteFunction(const base::Closure& callback);
+  void ExecuteFunction(base::OnceClosure callback);
 
   void SendSavedPasswordsList();
   void SendPasswordExceptionsList();
@@ -145,6 +147,9 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
 
   // Used to communicate with the password store.
   std::unique_ptr<PasswordManagerPresenter> password_manager_presenter_;
+
+  // Used to edit passwords and to create |password_check_delegate_|.
+  password_manager::SavedPasswordsPresenter saved_passwords_presenter_;
 
   // Used to control the export and import flows.
   std::unique_ptr<PasswordManagerPorter> password_manager_porter_;
@@ -179,7 +184,7 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   // initialized. Once both SetPasswordList() and SetPasswordExceptionList()
   // have been called, this class is considered initialized and can these
   // callbacks are invoked.
-  std::vector<base::Closure> pre_initialization_callbacks_;
+  std::vector<base::OnceClosure> pre_initialization_callbacks_;
   std::vector<UiEntriesCallback> get_saved_passwords_list_callbacks_;
   std::vector<ExceptionEntriesCallback> get_password_exception_list_callbacks_;
 

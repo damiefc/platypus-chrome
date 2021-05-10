@@ -119,7 +119,8 @@ class GLOzoneEGLScenic : public GLOzoneEGL {
   }
 
  protected:
-  bool LoadGLES2Bindings(gl::GLImplementation implementation) override {
+  bool LoadGLES2Bindings(
+      const gl::GLImplementationParts& implementation) override {
     return LoadDefaultEGLGLES2Bindings(implementation);
   }
 
@@ -183,8 +184,9 @@ ScenicSurfaceFactory::GetAllowedGLImplementations() {
   };
 }
 
-GLOzone* ScenicSurfaceFactory::GetGLOzone(gl::GLImplementation implementation) {
-  switch (implementation) {
+GLOzone* ScenicSurfaceFactory::GetGLOzone(
+    const gl::GLImplementationParts& implementation) {
+  switch (implementation.gl) {
     case gl::kGLImplementationSwiftShaderGL:
     case gl::kGLImplementationEGLGLES2:
     case gl::kGLImplementationEGLANGLE:
@@ -242,12 +244,10 @@ void ScenicSurfaceFactory::CreateNativePixmapAsync(
 
 #if BUILDFLAG(ENABLE_VULKAN)
 std::unique_ptr<gpu::VulkanImplementation>
-ScenicSurfaceFactory::CreateVulkanImplementation(
-    bool allow_protected_memory,
-    bool enforce_protected_memory) {
+ScenicSurfaceFactory::CreateVulkanImplementation(bool use_swiftshader,
+                                                 bool allow_protected_memory) {
   return std::make_unique<ui::VulkanImplementationScenic>(
-      this, &sysmem_buffer_manager_, allow_protected_memory,
-      enforce_protected_memory);
+      this, &sysmem_buffer_manager_, allow_protected_memory);
 }
 #endif
 
@@ -271,7 +271,9 @@ void ScenicSurfaceFactory::RemoveSurface(gfx::AcceleratedWidget widget) {
 ScenicSurface* ScenicSurfaceFactory::GetSurface(gfx::AcceleratedWidget widget) {
   base::AutoLock lock(surface_lock_);
   auto it = surface_map_.find(widget);
-  DCHECK(it != surface_map_.end());
+  if (it == surface_map_.end())
+    return nullptr;
+
   ScenicSurface* surface = it->second;
   surface->AssertBelongsToCurrentThread();
   return surface;

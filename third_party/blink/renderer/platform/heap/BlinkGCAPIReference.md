@@ -19,7 +19,7 @@ Unless otherwise noted, any of the primitives explained on this page require the
 
 ### GarbageCollected
 
-A class that wants the lifetime management of its instances to be managed by Oilpan, it must inherit from `GarbageCollected<T>`.
+A class that wants the lifetime management of its instances to be managed by Oilpan must inherit from `GarbageCollected<T>`.
 
 ```c++
 class YourClass : public GarbageCollected<YourClass> {
@@ -239,7 +239,7 @@ It may take some time for the pointer in a `WeakMember<T>` to become `nullptr` a
 because this rewrite is only done within Blink GC's garbage collection period.
 
 ```c++
-class SomeGarbageCollectedClass : public GarbageCollected<GarbageCollectedSomething> {
+class SomeGarbageCollectedClass : public GarbageCollected<SomeGarbageCollectedClass> {
   ...
 private:
   Member<AnotherGarbageCollectedClass> another_; // OK, retained by Member<T>.

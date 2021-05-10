@@ -4,6 +4,7 @@
 
 #include "remoting/host/me2me_desktop_environment.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/logging.h"
@@ -63,9 +64,6 @@ Me2MeDesktopEnvironment::CreateScreenControls() {
 std::string Me2MeDesktopEnvironment::GetCapabilities() const {
   std::string capabilities;
   capabilities += protocol::kRateLimitResizeRequests;
-
-  capabilities += " ";
-  capabilities += protocol::kWebrtcIceSdpRestartAction;
 
   if (InputInjector::SupportsTouchEvents()) {
     capabilities += " ";
@@ -164,8 +162,8 @@ bool Me2MeDesktopEnvironment::InitializeSecurity(
 #else
     disconnect_window_ = HostWindow::CreateDisconnectWindow();
 #endif
-    disconnect_window_.reset(new HostWindowProxy(
-        caller_task_runner(), ui_task_runner(), std::move(disconnect_window_)));
+    disconnect_window_ = std::make_unique<HostWindowProxy>(
+        caller_task_runner(), ui_task_runner(), std::move(disconnect_window_));
     disconnect_window_->Start(client_session_control);
   }
 

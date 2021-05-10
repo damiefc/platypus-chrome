@@ -36,7 +36,8 @@ using content::WebContents;
 
 FullscreenNotificationObserver::FullscreenNotificationObserver(
     Browser* browser) {
-  observer_.Add(browser->exclusive_access_manager()->fullscreen_controller());
+  observation_.Observe(
+      browser->exclusive_access_manager()->fullscreen_controller());
 }
 
 FullscreenNotificationObserver::~FullscreenNotificationObserver() = default;
@@ -181,10 +182,6 @@ void ExclusiveAccessTest::Reload() {
       browser()->tab_strip_model()->GetActiveWebContents(), 1);
   chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
   observer.Wait();
-}
-
-void ExclusiveAccessTest::SetPrivilegedFullscreen(bool is_privileged) {
-  GetFullscreenController()->SetPrivilegedFullscreenForTesting(is_privileged);
 }
 
 void ExclusiveAccessTest::EnterActiveTabFullscreen() {

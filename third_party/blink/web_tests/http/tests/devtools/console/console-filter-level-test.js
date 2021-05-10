@@ -5,7 +5,7 @@
 (async function() {
   TestRunner.addResult(`Tests that console can filter messages by source.\n`);
 
-  await TestRunner.loadModule('console_test_runner');
+  await TestRunner.loadModule('console'); await TestRunner.loadTestModule('console_test_runner');
   await TestRunner.showPanel('console');
   await TestRunner.addScriptTag('resources/log-source.js');
   await TestRunner.evaluateInPagePromise(`
@@ -34,7 +34,7 @@
     for (var i = 0; i < messages.length; i++) {
       // Ordering is important here, as accessing the element the first time around
       // triggers live location creation and updates which we need to await properly.
-      const element = messages[i].toMessageElement();
+      const element = messages[i].element();
       await TestRunner.waitForPendingLiveLocationUpdates();
       TestRunner.addResult('>' + element.deepTextContent());
     }

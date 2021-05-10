@@ -46,7 +46,7 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       chromeos::settings::mojom::kSecurityAndSignInSubpagePath,
       chromeos::settings::mojom::kFingerprintSubpagePath,
       chromeos::settings::mojom::kManageOtherPeopleSubpagePath,
-      chromeos::settings::mojom::kKerberosSubpagePath,
+      chromeos::settings::mojom::kKerberosAccountsSubpagePath,
 
       // Device section.
       chromeos::settings::mojom::kDeviceSectionPath,
@@ -66,6 +66,7 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       // Search and Assistant section.
       chromeos::settings::mojom::kSearchAndAssistantSectionPath,
       chromeos::settings::mojom::kAssistantSubpagePath,
+      chromeos::settings::mojom::kSearchSubpagePath,
 
       // Apps section.
       chromeos::settings::mojom::kAppsSectionPath,
@@ -83,6 +84,9 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       chromeos::settings::mojom::kCrostiniDevelopAndroidAppsSubpagePath,
       chromeos::settings::mojom::kCrostiniPortForwardingSubpagePath,
 
+      // On Startup section.
+      chromeos::settings::mojom::kOnStartupSectionPath,
+
       // Date and Time section.
       chromeos::settings::mojom::kDateAndTimeSectionPath,
       chromeos::settings::mojom::kTimeZoneSubpagePath,
@@ -92,8 +96,6 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
 
       // Languages and Input section.
       chromeos::settings::mojom::kLanguagesAndInputSectionPath,
-      chromeos::settings::mojom::kLanguagesAndInputDetailsSubpagePath,
-      chromeos::settings::mojom::kManageInputMethodsSubpagePath,
       chromeos::settings::mojom::kSmartInputsSubpagePath,
       chromeos::settings::mojom::kInputMethodOptionsSubpagePath,
       chromeos::settings::mojom::kLanguagesSubpagePath,
@@ -122,6 +124,10 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       chromeos::settings::mojom::kAboutChromeOsSectionPath,
       chromeos::settings::mojom::kAboutChromeOsDetailsSubpagePath,
       chromeos::settings::mojom::kDetailedBuildInfoSubpagePath,
+
+      // Kerberos section.
+      chromeos::settings::mojom::kKerberosSectionPath,
+      chromeos::settings::mojom::kKerberosAccountsV2SubpagePath,
   };
 
   // Sub-pages may have query parameters, e.g. networkDetail?guid=123456.

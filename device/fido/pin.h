@@ -24,6 +24,39 @@
 namespace device {
 namespace pin {
 
+// The reason we are prompting for a new PIN.
+enum class PINEntryReason {
+  // Indicates a new PIN is being set.
+  kSet,
+
+  // The existing PIN must be changed before using this authenticator.
+  kChange,
+
+  // The existing PIN is being collected to prove user verification.
+  kChallenge
+};
+
+// The errors that may prompt asking for a PIN.
+enum class PINEntryError {
+  // No error has occurred.
+  kNoError,
+
+  // Internal UV is locked, so we are falling back to PIN.
+  kInternalUvLocked,
+
+  // The PIN the user entered does not match the authenticator PIN.
+  kWrongPIN,
+
+  // The new PIN the user entered is too short.
+  kTooShort,
+
+  // The new PIN the user entered contains invalid characters.
+  kInvalidCharacters,
+
+  // The new PIN the user entered is the same as the currently set PIN.
+  kSameAsCurrentPIN,
+};
+
 // Permission list flags. See
 // https://drafts.fidoalliance.org/fido-2/stable-links-to-latest/fido-client-to-authenticator-protocol.html#permissions
 enum class Permissions : uint8_t {
@@ -34,10 +67,6 @@ enum class Permissions : uint8_t {
   kLargeBlobWrite = 0x10,
 };
 
-// kProtocolVersion is the version of the PIN protocol that this code
-// implements.
-constexpr int kProtocolVersion = 1;
-
 // Some commands that validate PinUvAuthTokens include this padding to ensure a
 // PinUvAuthParam cannot be reused across different commands.
 constexpr std::array<uint8_t, 32> kPinUvAuthTokenSafetyPadding = {
@@ -45,9 +74,20 @@ constexpr std::array<uint8_t, 32> kPinUvAuthTokenSafetyPadding = {
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
-// IsValid returns true if |pin|, which must be UTF-8, is a syntactically valid
-// PIN.
-COMPONENT_EXPORT(DEVICE_FIDO) bool IsValid(const std::string& pin);
+// Validates |pin|, returning |kNoError| if valid or an appropriate error code
+// otherwise.
+COMPONENT_EXPORT(DEVICE_FIDO)
+PINEntryError ValidatePIN(
+    const std::string& pin,
+    uint32_t min_pin_length = kMinPinLength,
+    base::Optional<std::string> current_pin = base::nullopt);
+
+// Like |ValidatePIN| above but takes a wide string.
+COMPONENT_EXPORT(DEVICE_FIDO)
+PINEntryError ValidatePIN(
+    const std::u16string& pin16,
+    uint32_t min_pin_length = kMinPinLength,
+    base::Optional<std::string> current_pin = base::nullopt);
 
 // kMinBytes is the minimum number of *bytes* of PIN data that a CTAP2 device
 // will accept. Since the PIN is UTF-8 encoded, this could be a single code
@@ -59,16 +99,21 @@ constexpr size_t kMinBytes = 4;
 constexpr size_t kMaxBytes = 63;
 
 // EncodeCOSEPublicKey converts an X9.62 public key to a COSE structure.
+COMPONENT_EXPORT(DEVICE_FIDO)
 cbor::Value::MapValue EncodeCOSEPublicKey(
     base::span<const uint8_t, kP256X962Length> x962);
 
 // PinRetriesRequest asks an authenticator for the number of remaining PIN
 // attempts before the device is locked.
-struct PinRetriesRequest {};
+struct PinRetriesRequest {
+  PINUVAuthProtocol protocol;
+};
 
 // UVRetriesRequest asks an authenticator for the number of internal user
 // verification attempts before the feature is locked.
-struct UvRetriesRequest {};
+struct UvRetriesRequest {
+  PINUVAuthProtocol protocol;
+};
 
 // RetriesResponse reflects an authenticator's response to a |PinRetriesRequest|
 // or a |UvRetriesRequest|.
@@ -93,12 +138,14 @@ struct RetriesResponse {
 
 // KeyAgreementRequest asks an authenticator for an ephemeral ECDH key for
 // encrypting PIN material in future requests.
-struct KeyAgreementRequest {};
+struct KeyAgreementRequest {
+  PINUVAuthProtocol protocol;
+};
 
 // KeyAgreementResponse reflects an authenticator's response to a
 // |KeyAgreementRequest| and is also used as representation of the
 // authenticator's ephemeral key.
-struct KeyAgreementResponse {
+struct COMPONENT_EXPORT(DEVICE_FIDO) KeyAgreementResponse {
   static base::Optional<KeyAgreementResponse> Parse(
       const base::Optional<cbor::Value>& cbor);
   static base::Optional<KeyAgreementResponse> ParseFromCOSE(
@@ -120,12 +167,15 @@ struct KeyAgreementResponse {
 class SetRequest {
  public:
   // IsValid(pin) must be true.
-  SetRequest(const std::string& pin, const KeyAgreementResponse& peer_key);
+  SetRequest(PINUVAuthProtocol protocol,
+             const std::string& pin,
+             const KeyAgreementResponse& peer_key);
 
   friend std::pair<CtapRequestCommand, base::Optional<cbor::Value>>
   AsCTAPRequestValuePair(const SetRequest&);
 
  private:
+  const PINUVAuthProtocol protocol_;
   const KeyAgreementResponse peer_key_;
   uint8_t pin_[kMaxBytes + 1];
 };
@@ -140,7 +190,8 @@ struct EmptyResponse {
 class ChangeRequest {
  public:
   // IsValid(new_pin) must be true.
-  ChangeRequest(const std::string& old_pin,
+  ChangeRequest(PINUVAuthProtocol protocol,
+                const std::string& old_pin,
                 const std::string& new_pin,
                 const KeyAgreementResponse& peer_key);
 
@@ -148,6 +199,7 @@ class ChangeRequest {
   AsCTAPRequestValuePair(const ChangeRequest&);
 
  private:
+  const PINUVAuthProtocol protocol_;
   const KeyAgreementResponse peer_key_;
   uint8_t old_pin_hash_[16];
   uint8_t new_pin_[kMaxBytes + 1];
@@ -170,19 +222,24 @@ class TokenRequest {
 
   // shared_key returns the shared ECDH key that was used to encrypt the PIN.
   // This is needed to decrypt the response.
-  const std::array<uint8_t, 32>& shared_key() const;
+  const std::vector<uint8_t>& shared_key() const;
 
  protected:
   TokenRequest(TokenRequest&&);
-  explicit TokenRequest(const KeyAgreementResponse& peer_key);
+  TokenRequest(PINUVAuthProtocol protocol,
+               const KeyAgreementResponse& peer_key);
   ~TokenRequest();
-  std::array<uint8_t, 32> shared_key_;
+
+  const PINUVAuthProtocol protocol_;
+  std::vector<uint8_t> shared_key_;
   std::array<uint8_t, kP256X962Length> public_key_;
 };
 
 class PinTokenRequest : public TokenRequest {
  public:
-  PinTokenRequest(const std::string& pin, const KeyAgreementResponse& peer_key);
+  PinTokenRequest(PINUVAuthProtocol protocol,
+                  const std::string& pin,
+                  const KeyAgreementResponse& peer_key);
   PinTokenRequest(PinTokenRequest&&);
   PinTokenRequest(const PinTokenRequest&) = delete;
   virtual ~PinTokenRequest();
@@ -196,9 +253,10 @@ class PinTokenRequest : public TokenRequest {
 
 class PinTokenWithPermissionsRequest : public PinTokenRequest {
  public:
-  PinTokenWithPermissionsRequest(const std::string& pin,
+  PinTokenWithPermissionsRequest(PINUVAuthProtocol protocol,
+                                 const std::string& pin,
                                  const KeyAgreementResponse& peer_key,
-                                 const uint8_t permissions,
+                                 base::span<const pin::Permissions> permissions,
                                  const base::Optional<std::string> rp_id);
   PinTokenWithPermissionsRequest(PinTokenWithPermissionsRequest&&);
   PinTokenWithPermissionsRequest(const PinTokenWithPermissionsRequest&) =
@@ -215,8 +273,10 @@ class PinTokenWithPermissionsRequest : public PinTokenRequest {
 
 class UvTokenRequest : public TokenRequest {
  public:
-  UvTokenRequest(const KeyAgreementResponse& peer_key,
-                 base::Optional<std::string> rp_id);
+  UvTokenRequest(PINUVAuthProtocol protocol,
+                 const KeyAgreementResponse& peer_key,
+                 base::Optional<std::string> rp_id,
+                 base::span<const pin::Permissions> permissions);
   UvTokenRequest(UvTokenRequest&&);
   UvTokenRequest(const UvTokenRequest&) = delete;
   virtual ~UvTokenRequest();
@@ -226,11 +286,13 @@ class UvTokenRequest : public TokenRequest {
 
  private:
   base::Optional<std::string> rp_id_;
+  uint8_t permissions_;
 };
 
 class HMACSecretRequest {
  public:
-  HMACSecretRequest(const KeyAgreementResponse& peer_key,
+  HMACSecretRequest(PINUVAuthProtocol protocol,
+                    const KeyAgreementResponse& peer_key,
                     base::span<const uint8_t, 32> salt1,
                     const base::Optional<std::array<uint8_t, 32>>& salt2);
   HMACSecretRequest(const HMACSecretRequest&);
@@ -241,7 +303,8 @@ class HMACSecretRequest {
       base::span<const uint8_t> ciphertext);
 
  private:
-  std::array<uint8_t, 32> shared_key_ = {};
+  const PINUVAuthProtocol protocol_;
+  std::vector<uint8_t> shared_key_;
 
  public:
   const std::array<uint8_t, kP256X962Length> public_key_x962;
@@ -257,21 +320,23 @@ class COMPONENT_EXPORT(DEVICE_FIDO) TokenResponse {
  public:
   ~TokenResponse();
   TokenResponse(const TokenResponse&);
+  TokenResponse& operator=(const TokenResponse&);
 
   static base::Optional<TokenResponse> Parse(
-      std::array<uint8_t, 32> shared_key,
+      PINUVAuthProtocol protocol,
+      base::span<const uint8_t> shared_key,
       const base::Optional<cbor::Value>& cbor);
 
-  // PinAuth returns a pinAuth parameter for a request that will use the given
-  // client-data hash.
-  std::vector<uint8_t> PinAuth(
+  std::pair<PINUVAuthProtocol, std::vector<uint8_t>> PinAuth(
       base::span<const uint8_t> client_data_hash) const;
 
-  const std::vector<uint8_t>& token() const { return token_; }
+  PINUVAuthProtocol protocol() const { return protocol_; }
+  const std::vector<uint8_t>& token_for_testing() const { return token_; }
 
  private:
-  TokenResponse();
+  explicit TokenResponse(PINUVAuthProtocol protocol);
 
+  PINUVAuthProtocol protocol_;
   std::vector<uint8_t> token_;
 };
 

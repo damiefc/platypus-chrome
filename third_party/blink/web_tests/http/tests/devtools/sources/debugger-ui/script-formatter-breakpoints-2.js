@@ -4,7 +4,7 @@
 
 (async function() {
   TestRunner.addResult(`Tests the script formatting is working fine with breakpoints.\n`);
-  await TestRunner.loadModule('sources_test_runner');
+  await TestRunner.loadModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
   await TestRunner.showPanel('sources');
   await TestRunner.addScriptTag('../debugger/resources/unformatted2.js');
 
@@ -40,7 +40,7 @@
 
       function evaluateF2() {
         SourcesTestRunner.waitUntilPaused(pausedInF2);
-        TestRunner.evaluateInPageWithTimeout('f2()');
+        setTimeout(() => TestRunner.evaluateInPageAnonymously('f2()'), 1);
       }
 
       async function pausedInF2(callFrames) {
@@ -49,7 +49,7 @@
             .then(() => SourcesTestRunner.dumpBreakpointSidebarPane('while paused in raw'))
             .then(() => SourcesTestRunner.resumeExecution(next));
         SourcesTestRunner.removeBreakpoint(formattedSourceFrame, 3);
-        await Formatter.sourceFormatter.discardFormattedUISourceCode(panel.visibleView.uiSourceCode());
+        await Formatter.SourceFormatter.instance().discardFormattedUISourceCode(panel.visibleView.uiSourceCode());
       }
     }
   ]);

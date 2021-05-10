@@ -40,7 +40,7 @@ unsigned NGInkOverflow::read_unset_as_none_ = 0;
 NGInkOverflow::~NGInkOverflow() {
   // Because |Type| is kept outside of the instance, callers must call |Reset|
   // before destructing.
-  DCHECK(type_ == kNotSet || type_ == kNone) << type_;
+  DCHECK(type_ == kNotSet || type_ == kNone || type_ == kInvalidated) << type_;
 }
 #endif
 
@@ -49,6 +49,7 @@ NGInkOverflow::NGInkOverflow(Type source_type, const NGInkOverflow& source) {
   new (this) NGInkOverflow();
   switch (source_type) {
     case kNotSet:
+    case kInvalidated:
     case kNone:
       break;
     case kSmallSelf:
@@ -77,6 +78,7 @@ NGInkOverflow::NGInkOverflow(Type source_type, NGInkOverflow&& source) {
   new (this) NGInkOverflow();
   switch (source_type) {
     case kNotSet:
+    case kInvalidated:
     case kNone:
       break;
     case kSmallSelf:
@@ -104,9 +106,10 @@ NGInkOverflow::NGInkOverflow(Type source_type, NGInkOverflow&& source) {
 
 NGInkOverflow::Type NGInkOverflow::Reset(Type type, Type new_type) {
   CheckType(type);
-  DCHECK(new_type == kNotSet || new_type == kNone);
+  DCHECK(new_type == kNotSet || new_type == kNone || new_type == kInvalidated);
   switch (type) {
     case kNotSet:
+    case kInvalidated:
     case kNone:
     case kSmallSelf:
     case kSmallContents:
@@ -132,9 +135,14 @@ PhysicalRect NGInkOverflow::FromOutsets(const PhysicalSize& size) const {
 
 PhysicalRect NGInkOverflow::Self(Type type, const PhysicalSize& size) const {
   CheckType(type);
-  DCHECK_NE(type, kNotSet);
   switch (type) {
     case kNotSet:
+    case kInvalidated:
+#if DCHECK_IS_ON()
+      if (!read_unset_as_none_)
+        NOTREACHED();
+      FALLTHROUGH;
+#endif
     case kNone:
     case kSmallContents:
     case kContents:
@@ -150,11 +158,40 @@ PhysicalRect NGInkOverflow::Self(Type type, const PhysicalSize& size) const {
   return {PhysicalOffset(), size};
 }
 
+PhysicalRect NGInkOverflow::Contents(Type type,
+                                     const PhysicalSize& size) const {
+  CheckType(type);
+  switch (type) {
+    case kNotSet:
+    case kInvalidated:
+#if DCHECK_IS_ON()
+      if (!read_unset_as_none_)
+        NOTREACHED();
+      FALLTHROUGH;
+#endif
+    case kNone:
+    case kSmallSelf:
+    case kSelf:
+      return PhysicalRect();
+    case kSmallContents:
+      return FromOutsets(size);
+    case kContents:
+      DCHECK(single_);
+      return single_->ink_overflow;
+    case kSelfAndContents:
+      DCHECK(container_);
+      return container_->contents_ink_overflow;
+  }
+  NOTREACHED();
+  return PhysicalRect();
+}
+
 PhysicalRect NGInkOverflow::SelfAndContents(Type type,
                                             const PhysicalSize& size) const {
   CheckType(type);
   switch (type) {
     case kNotSet:
+    case kInvalidated:
 #if DCHECK_IS_ON()
       if (!read_unset_as_none_)
         NOTREACHED();
@@ -230,6 +267,7 @@ NGInkOverflow::Type NGInkOverflow::SetSingle(Type type,
       Reset(type);
       FALLTHROUGH;
     case kNotSet:
+    case kInvalidated:
     case kNone:
     case kSmallSelf:
     case kSmallContents:
@@ -282,6 +320,7 @@ NGInkOverflow::Type NGInkOverflow::Set(Type type,
       Reset(type);
       FALLTHROUGH;
     case kNotSet:
+    case kInvalidated:
     case kNone:
     case kSmallSelf:
     case kSmallContents:
@@ -303,7 +342,7 @@ NGInkOverflow::Type NGInkOverflow::SetTextInkOverflow(
     const PhysicalSize& size,
     PhysicalRect* ink_overflow_out) {
   CheckType(type);
-  DCHECK_EQ(type, kNotSet);
+  DCHECK(type == kNotSet || type == kInvalidated);
   base::Optional<PhysicalRect> ink_overflow =
       ComputeTextInkOverflow(text_info, style, size);
   if (!ink_overflow) {
@@ -386,11 +425,15 @@ LayoutRect NGInkOverflow::ComputeTextDecorationOverflow(
     const NGTextFragmentPaintInfo& text_info,
     const ComputedStyle& style,
     const LayoutRect& ink_overflow) {
-  // Use a zero offset because all offsets are applied to the ink overflow
-  // after it has been computed.
+  // TODO(https://crbug.com/1145160): Reduce code duplication between here and
+  // TextPainterBase::PaintDecorations*.
+
+  // Use a zero offset because all offsets
+  // are applied to the ink overflow after it has been computed.
   PhysicalOffset offset;
   TextDecorationInfo decoration_info(offset, offset, ink_overflow.Width(),
-                                     style.GetFontBaseline(), style, nullptr);
+                                     style.GetFontBaseline(), style,
+                                     base::nullopt, nullptr);
   NGTextDecorationOffset decoration_offset(decoration_info.Style(), style,
                                            nullptr);
   const Vector<AppliedTextDecoration>& decorations =
@@ -422,11 +465,15 @@ LayoutRect NGInkOverflow::ComputeTextDecorationOverflow(
     float resolved_thickness = decoration_info.ResolvedThickness();
 
     if (has_underline) {
+      // Don't apply text-underline-offset to overline.
+      Length line_offset =
+          flip_underline_and_overline ? Length() : decoration.UnderlineOffset();
+
       const int paint_underline_offset =
           decoration_offset.ComputeUnderlineOffset(
               underline_position, decoration_info.Style().ComputedFontSize(),
-              decoration_info.FontData()->GetFontMetrics(),
-              decoration.UnderlineOffset(), resolved_thickness);
+              decoration_info.FontData()->GetFontMetrics(), line_offset,
+              resolved_thickness);
       decoration_info.SetPerLineData(
           TextDecoration::kUnderline, paint_underline_offset,
           TextDecorationInfo::DoubleOffsetFromThickness(resolved_thickness), 1);
@@ -434,14 +481,17 @@ LayoutRect NGInkOverflow::ComputeTextDecorationOverflow(
           decoration_info.BoundsForLine(TextDecoration::kUnderline));
     }
     if (has_overline) {
+      // Don't apply text-underline-offset to overline.
+      Length line_offset =
+          flip_underline_and_overline ? decoration.UnderlineOffset() : Length();
+
       FontVerticalPositionType position =
           flip_underline_and_overline ? FontVerticalPositionType::TopOfEmHeight
                                       : FontVerticalPositionType::TextTop;
       const int paint_overline_offset =
           decoration_offset.ComputeUnderlineOffsetForUnder(
-              decoration_info.Style().TextUnderlineOffset(),
-              decoration_info.Style().ComputedFontSize(), resolved_thickness,
-              position);
+              line_offset, decoration_info.Style().ComputedFontSize(),
+              resolved_thickness, position);
       decoration_info.SetPerLineData(
           TextDecoration::kOverline, paint_overline_offset,
           -TextDecorationInfo::DoubleOffsetFromThickness(resolved_thickness),

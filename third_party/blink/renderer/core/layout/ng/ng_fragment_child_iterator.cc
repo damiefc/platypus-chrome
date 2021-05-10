@@ -8,7 +8,6 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_block_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_input_node.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -18,12 +17,11 @@ NGFragmentChildIterator::NGFragmentChildIterator(
     : parent_fragment_(&parent),
       parent_break_token_(parent_break_token),
       is_fragmentation_context_root_(parent.IsFragmentationContextRoot()) {
-  DCHECK(RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
   current_.link_.fragment = nullptr;
   if (parent_break_token)
     child_break_tokens_ = parent_break_token->ChildBreakTokens();
   if (parent.HasItems()) {
-    current_.cursor_.emplace(*parent.Items());
+    current_.cursor_.emplace(parent);
     current_.block_break_token_ = parent_break_token;
     UpdateSelfFromCursor();
   } else {
@@ -34,7 +32,7 @@ NGFragmentChildIterator::NGFragmentChildIterator(
 NGFragmentChildIterator::NGFragmentChildIterator(
     const NGInlineCursor& parent,
     const NGBlockBreakToken* parent_break_token,
-    base::span<const NGBreakToken* const> child_break_tokens)
+    base::span<const Member<const NGBreakToken>> child_break_tokens)
     : parent_break_token_(parent_break_token),
       child_break_tokens_(child_break_tokens) {
   current_.block_break_token_ = parent_break_token;
@@ -64,7 +62,7 @@ bool NGFragmentChildIterator::AdvanceChildFragment() {
   DCHECK(parent_fragment_);
   const auto children = parent_fragment_->Children();
   const NGPhysicalBoxFragment* previous_fragment =
-      To<NGPhysicalBoxFragment>(current_.link_.fragment);
+      To<NGPhysicalBoxFragment>(current_.link_.fragment.Get());
   DCHECK(previous_fragment);
   if (child_fragment_idx_ < children.size())
     child_fragment_idx_++;
@@ -90,8 +88,8 @@ void NGFragmentChildIterator::UpdateSelfFromFragment(
   DCHECK(current_.link_.fragment);
   SkipToBlockBreakToken();
   if (child_break_token_idx_ < child_break_tokens_.size()) {
-    current_.block_break_token_ =
-        To<NGBlockBreakToken>(child_break_tokens_[child_break_token_idx_]);
+    current_.block_break_token_ = To<NGBlockBreakToken>(
+        child_break_tokens_[child_break_token_idx_].Get());
     // TODO(mstensho): Clean up this. What we're trying to do here is to detect
     // whether the incoming break token matches the current fragment or not.
     // Figuring out if a fragment is generated from a given node is currently
@@ -100,8 +98,7 @@ void NGFragmentChildIterator::UpdateSelfFromFragment(
     if (layout_object &&
         layout_object !=
             current_.block_break_token_->InputNode().GetLayoutBox()) {
-      DCHECK(current_.link_.fragment->IsColumnSpanAll() ||
-             current_.block_break_token_->InputNode().IsOutOfFlowPositioned());
+      DCHECK(current_.link_.fragment->IsColumnSpanAll());
       current_.break_token_for_fragmentainer_only_ = true;
     } else {
       current_.break_token_for_fragmentainer_only_ = false;
@@ -118,12 +115,37 @@ void NGFragmentChildIterator::UpdateSelfFromFragment(
           To<NGBlockBreakToken>(previous_fragment->BreakToken());
       current_.break_token_for_fragmentainer_only_ = true;
     } else {
-      // This is a column spanner, or in the case of a fieldset, this could be a
-      // rendered legend. We'll leave |current_block_break_token_| alone here,
-      // as it will be used as in incoming break token when we get to the next
-      // column.
-      DCHECK(previous_fragment->IsRenderedLegend() ||
-             previous_fragment->IsColumnSpanAll());
+      // This is not a fragmentainer. It has to be either a column spanner, a
+      // rendered legend (if the parent fieldset also establishes a multicol
+      // container), or an out-of-flow positioned fragment whose containing
+      // block is the multicol container itself (in which case the OOF doesn't
+      // participate in the fragmentation context established by the multicol
+      // container). We'll leave |current_.block_break_token_| alone here, as it
+      // will be used as an incoming break token when we get to the next column.
+      DCHECK(previous_fragment->IsColumnSpanAll() ||
+             previous_fragment->IsRenderedLegend() ||
+             previous_fragment->IsOutOfFlowPositioned());
+    }
+  } else if (current_.link_.fragment->IsOutOfFlowPositioned() &&
+             !To<NGPhysicalBoxFragment>(current_.link_.fragment.Get())
+                  ->IsFirstForNode()) {
+    // If an out-of-flow positioned element fragments beyond the last existing
+    // fragmentainer in a nested fragmentation context, instead of creating a
+    // new fragmentainer to hold it, we add it to the last existing
+    // fragmentainer at the correct inline offset. Therefore, in order to find
+    // the corrcet incoming break token in such cases, we must look for any
+    // previous fragments inside |children| that were created by the same node.
+    current_.block_break_token_ = nullptr;
+    const auto* layout_object = current_.link_.fragment->GetLayoutObject();
+    DCHECK(layout_object);
+    for (wtf_size_t index = child_fragment_idx_; index > 0; index--) {
+      const auto* child_fragment = children[index - 1].fragment.Get();
+      if (layout_object == child_fragment->GetLayoutObject()) {
+        current_.block_break_token_ = To<NGBlockBreakToken>(
+            To<NGPhysicalBoxFragment>(child_fragment)->BreakToken());
+        current_.break_token_for_fragmentainer_only_ = false;
+        break;
+      }
     }
   } else {
     current_.block_break_token_ = nullptr;
@@ -156,7 +178,7 @@ void NGFragmentChildIterator::UpdateSelfFromCursor() {
     current_.link_.fragment = nullptr;
     return;
   }
-  current_.link_ = {item->BoxFragment(), item->OffsetInContainerBlock()};
+  current_.link_ = {item->BoxFragment(), item->OffsetInContainerFragment()};
 }
 
 void NGFragmentChildIterator::SkipToBoxFragment() {
@@ -169,9 +191,17 @@ void NGFragmentChildIterator::SkipToBoxFragment() {
 
 void NGFragmentChildIterator::SkipToBlockBreakToken() {
   // There may be inline break tokens here. Ignore them.
-  while (child_break_token_idx_ < child_break_tokens_.size() &&
-         !child_break_tokens_[child_break_token_idx_]->IsBlockType())
+  while (child_break_token_idx_ < child_break_tokens_.size()) {
+    const auto* current_break_token = DynamicTo<NGBlockBreakToken>(
+        child_break_tokens_[child_break_token_idx_].Get());
+    // Skip over any out-of-flow positioned break tokens that are the result of
+    // a break before.
+    if (current_break_token &&
+        (!current_break_token->InputNode().IsOutOfFlowPositioned() ||
+         !current_break_token->IsBreakBefore()))
+      return;
     child_break_token_idx_++;
+  }
 }
 
 }  // namespace blink

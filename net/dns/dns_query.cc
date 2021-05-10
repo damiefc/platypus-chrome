@@ -100,7 +100,10 @@ DnsQuery::DnsQuery(uint16_t id,
                    const OptRecordRdata* opt_rdata,
                    PaddingStrategy padding_strategy)
     : qname_size_(qname.size()) {
-  DCHECK(!DNSDomainToString(qname).empty());
+#if DCHECK_IS_ON()
+  base::Optional<std::string> dotted_name = DnsDomainToString(qname);
+  DCHECK(dotted_name && !dotted_name.value().empty());
+#endif  // DCHECK_IS_ON()
 
   size_t buffer_size = kHeaderSize + QuestionSize(qname_size_);
   base::Optional<OptRecordRdata> merged_opt_rdata =
@@ -180,8 +183,9 @@ bool DnsQuery::Parse(size_t valid_bytes) {
   if (header.flags & dns_protocol::kFlagResponse) {
     return false;
   }
-  if (header.qdcount > 1) {
-    VLOG(1) << "Not supporting parsing a DNS query with multiple questions.";
+  if (header.qdcount != 1) {
+    VLOG(1) << "Not supporting parsing a DNS query with multiple (or zero) "
+               "questions.";
     return false;
   }
   std::string qname;
@@ -253,13 +257,18 @@ bool DnsQuery::ReadHeader(base::BigEndianReader* reader,
 bool DnsQuery::ReadName(base::BigEndianReader* reader, std::string* out) {
   DCHECK(out != nullptr);
   out->clear();
-  out->reserve(dns_protocol::kMaxNameLength);
+  out->reserve(dns_protocol::kMaxNameLength + 1);
   uint8_t label_length;
   if (!reader->ReadU8(&label_length)) {
     return false;
   }
-  out->append(reinterpret_cast<char*>(&label_length), 1);
   while (label_length) {
+    if (out->size() + 1 + label_length > dns_protocol::kMaxNameLength) {
+      return false;
+    }
+
+    out->append(reinterpret_cast<char*>(&label_length), 1);
+
     base::StringPiece label;
     if (!reader->ReadPiece(&label, label_length)) {
       return false;
@@ -268,8 +277,9 @@ bool DnsQuery::ReadName(base::BigEndianReader* reader, std::string* out) {
     if (!reader->ReadU8(&label_length)) {
       return false;
     }
-    out->append(reinterpret_cast<char*>(&label_length), 1);
   }
+  DCHECK_LE(out->size(), static_cast<size_t>(dns_protocol::kMaxNameLength));
+  out->append(1, '\0');
   return true;
 }
 

@@ -34,7 +34,9 @@ GL_EXPORT extern const char kANGLEImplementationOpenGLESEGLName[];
 GL_EXPORT extern const char kANGLEImplementationNullName[];
 GL_EXPORT extern const char kANGLEImplementationVulkanName[];
 GL_EXPORT extern const char kANGLEImplementationSwiftShaderName[];
+GL_EXPORT extern const char kANGLEImplementationSwiftShaderForWebGLName[];
 GL_EXPORT extern const char kANGLEImplementationMetalName[];
+GL_EXPORT extern const char kANGLEImplementationNoneName[];
 
 GL_EXPORT extern const char kANGLEImplementationD3D11NULLName[];
 GL_EXPORT extern const char kANGLEImplementationOpenGLNULLName[];
@@ -44,6 +46,10 @@ GL_EXPORT extern const char kANGLEImplementationMetalNULLName[];
 
 GL_EXPORT extern const char kCmdDecoderValidatingName[];
 GL_EXPORT extern const char kCmdDecoderPassthroughName[];
+
+GL_EXPORT extern const char kSwapChainFormatNV12[];
+GL_EXPORT extern const char kSwapChainFormatYUY2[];
+GL_EXPORT extern const char kSwapChainFormatBGRA[];
 
 }  // namespace gl
 
@@ -74,6 +80,7 @@ GL_EXPORT extern const char kDisableDirectCompositionVideoOverlays[];
 GL_EXPORT extern const char kUseAdapterLuid[];
 
 GL_EXPORT extern const char kDirectCompositionForceFullDamageForTesting[];
+GL_EXPORT extern const char kDirectCompositionVideoSwapChainFormat[];
 
 // These flags are used by the test harness code, not passed in by users.
 GL_EXPORT extern const char kDisableGLDrawingForTests[];
@@ -85,17 +92,19 @@ GL_EXPORT extern const int kGLSwitchesCopiedFromGpuProcessHostNumSwitches;
 }  // namespace switches
 
 namespace features {
+
+GL_EXPORT extern const base::Feature kDCompTripleBufferRootSwapChain;
+GL_EXPORT extern const base::Feature kDCompTripleBufferVideoSwapChain;
 GL_EXPORT extern const base::Feature kDirectCompositionForceFullDamage;
 GL_EXPORT extern const base::Feature kDirectCompositionGpuVSync;
 GL_EXPORT extern const base::Feature kDirectCompositionLowLatencyPresentation;
-GL_EXPORT extern const base::Feature kDirectCompositionPreferNV12Overlays;
-GL_EXPORT extern const base::Feature kDirectCompositionPresentationFeedback;
 GL_EXPORT extern const base::Feature kDirectCompositionSoftwareOverlays;
-GL_EXPORT extern const base::Feature kDirectCompositionUnderlays;
-GL_EXPORT extern const base::Feature kDirectCompositionUseNV12DecodeSwapChain;
 GL_EXPORT extern const base::Feature kDefaultANGLEOpenGL;
 GL_EXPORT extern const base::Feature kDefaultANGLEMetal;
-extern const base::Feature kTrackCurrentShaders;
+GL_EXPORT extern const base::Feature kDefaultANGLEVulkan;
+GL_EXPORT extern const base::Feature kTrackCurrentShaders;
+
+GL_EXPORT bool IsDefaultANGLEVulkan();
 
 }  // namespace features
 

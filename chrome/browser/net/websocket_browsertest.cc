@@ -17,7 +17,8 @@
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/login/login_handler.h"
@@ -82,16 +83,46 @@ class WebSocketBrowserTest : public InProcessBrowserTest {
 
   // Prepare the title watcher.
   void SetUpOnMainThread() override {
-    watcher_.reset(new content::TitleWatcher(
-        browser()->tab_strip_model()->GetActiveWebContents(),
-        base::ASCIIToUTF16("PASS")));
-    watcher_->AlsoWaitForTitle(base::ASCIIToUTF16("FAIL"));
+    watcher_ = std::make_unique<content::TitleWatcher>(
+        browser()->tab_strip_model()->GetActiveWebContents(), u"PASS");
+    watcher_->AlsoWaitForTitle(u"FAIL");
   }
 
   void TearDownOnMainThread() override { watcher_.reset(); }
 
   std::string WaitAndGetTitle() {
     return base::UTF16ToUTF8(watcher_->WaitAndGetTitle());
+  }
+
+  // Triggers a WebSocket connection to the given |url| in the context of the
+  // main frame of the active WebContents.
+  void MakeWebSocketConnection(
+      const GURL& url,
+      mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
+          handshake_client) {
+    content::RenderFrameHost* const frame =
+        browser()->tab_strip_model()->GetActiveWebContents()->GetMainFrame();
+    content::RenderProcessHost* const process = frame->GetProcess();
+
+    const std::vector<std::string> requested_protocols;
+    const net::SiteForCookies site_for_cookies;
+    // The actual value of this doesn't actually matter, it just can't be empty,
+    // to avoid a DCHECK.
+    const net::IsolationInfo isolation_info =
+        net::IsolationInfo::CreateForInternalRequest(url::Origin::Create(url));
+    std::vector<network::mojom::HttpHeaderPtr> additional_headers;
+    const url::Origin origin;
+
+    process->GetStoragePartition()->GetNetworkContext()->CreateWebSocket(
+        url, requested_protocols, site_for_cookies, isolation_info,
+        std::move(additional_headers), process->GetID(), origin,
+        network::mojom::kWebSocketOptionNone,
+        net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
+        std::move(handshake_client),
+        process->GetStoragePartition()->CreateURLLoaderNetworkObserverForFrame(
+            process->GetID(), frame->GetRoutingID()),
+        /*auth_handler=*/mojo::NullRemote(),
+        /*header_client=*/mojo::NullRemote());
   }
 
   net::SpawnedTestServer ws_server_;
@@ -166,8 +197,8 @@ class AutoLogin : public content::NotificationObserver {
   bool logged_in() const { return logged_in_; }
 
  private:
-  const base::string16 username_;
-  const base::string16 password_;
+  const std::u16string username_;
+  const std::u16string password_;
   bool logged_in_;
 
   content::NotificationRegistrar registrar_;
@@ -186,7 +217,15 @@ IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, WebSocketSplitSegments) {
   EXPECT_EQ("PASS", WaitAndGetTitle());
 }
 
-IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, SecureWebSocketSplitRecords) {
+// TODO(crbug.com/1176880): Disabled on macOS because the WSS SpawnedTestServer
+// does not support modern TLS on the macOS bots.
+#if defined(OS_MAC)
+#define MAYBE_SecureWebSocketSplitRecords DISABLED_SecureWebSocketSplitRecords
+#else
+#define MAYBE_SecureWebSocketSplitRecords SecureWebSocketSplitRecords
+#endif
+IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest,
+                       MAYBE_SecureWebSocketSplitRecords) {
   // Launch a secure WebSocket server.
   ASSERT_TRUE(wss_server_.Start());
 
@@ -210,11 +249,10 @@ IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, SendCloseFrameWhenTabIsClosed) {
     browser()->tab_strip_model()->AppendWebContents(std::move(new_tab), true);
     ASSERT_EQ(raw_new_tab, browser()->tab_strip_model()->GetWebContentsAt(1));
 
-    content::TitleWatcher connected_title_watcher(
-        raw_new_tab, base::ASCIIToUTF16("CONNECTED"));
-    connected_title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("CLOSED"));
+    content::TitleWatcher connected_title_watcher(raw_new_tab, u"CONNECTED");
+    connected_title_watcher.AlsoWaitForTitle(u"CLOSED");
     NavigateToHTTP("connect_and_be_observed.html");
-    const base::string16 result = connected_title_watcher.WaitAndGetTitle();
+    const std::u16string result = connected_title_watcher.WaitAndGetTitle();
     EXPECT_TRUE(base::EqualsASCII(result, "CONNECTED"));
 
     content::WebContentsDestroyedWatcher destroyed_watcher(raw_new_tab);
@@ -242,7 +280,15 @@ IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, WebSocketBasicAuthInHTTPURL) {
   EXPECT_EQ("PASS", WaitAndGetTitle());
 }
 
-IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, WebSocketBasicAuthInHTTPSURL) {
+// TODO(crbug.com/1176880): Disabled on macOS because the WSS SpawnedTestServer
+// does not support modern TLS on the macOS bots.
+#if defined(OS_MAC)
+#define MAYBE_WebSocketBasicAuthInHTTPSURL DISABLED_WebSocketBasicAuthInHTTPSURL
+#else
+#define MAYBE_WebSocketBasicAuthInHTTPSURL WebSocketBasicAuthInHTTPSURL
+#endif
+IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest,
+                       MAYBE_WebSocketBasicAuthInHTTPSURL) {
   // Launch a basic-auth-protected secure WebSocket server.
   wss_server_.set_websocket_basic_auth(true);
   ASSERT_TRUE(wss_server_.Start());
@@ -318,7 +364,14 @@ IN_PROC_BROWSER_TEST_F(WebSocketBrowserConnectToTest,
 // HTTPS connection limits should not be applied to wss:. This is only tested
 // for secure connections here because the unencrypted case is tested in the
 // Blink layout tests, and browser tests are expensive to run.
-IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, SSLConnectionLimit) {
+// TODO(crbug.com/1176880): Disabled on macOS because the WSS SpawnedTestServer
+// does not support modern TLS on the macOS bots.
+#if defined(OS_MAC)
+#define MAYBE_SSLConnectionLimit DISABLED_SSLConnectionLimit
+#else
+#define MAYBE_SSLConnectionLimit SSLConnectionLimit
+#endif
+IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, MAYBE_SSLConnectionLimit) {
   ASSERT_TRUE(wss_server_.Start());
 
   NavigateToHTTPS("multiple-connections.html");
@@ -327,7 +380,14 @@ IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, SSLConnectionLimit) {
 }
 
 // Regression test for crbug.com/903553005
-IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, WebSocketAppliesHSTS) {
+// TODO(crbug.com/1176880): Disabled on macOS because the WSS SpawnedTestServer
+// does not support modern TLS on the macOS bots.
+#if defined(OS_MAC)
+#define MAYBE_WebSocketAppliesHSTS DISABLED_WebSocketAppliesHSTS
+#else
+#define MAYBE_WebSocketAppliesHSTS WebSocketAppliesHSTS
+#endif
+IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, MAYBE_WebSocketAppliesHSTS) {
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_server.SetSSLConfig(
       net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
@@ -347,11 +407,10 @@ IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, WebSocketAppliesHSTS) {
 
   // Set HSTS on localhost.
   content::TitleWatcher title_watcher(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      base::ASCIIToUTF16("SET"));
+      browser()->tab_strip_model()->GetActiveWebContents(), u"SET");
   ui_test_utils::NavigateToURL(browser(),
                                https_server.GetURL("/websocket/set-hsts.html"));
-  const base::string16 result = title_watcher.WaitAndGetTitle();
+  const std::u16string result = title_watcher.WaitAndGetTitle();
   EXPECT_TRUE(base::EqualsASCII(result, "SET"));
 
   // Verify that it applies to WebSockets.
@@ -411,8 +470,7 @@ class ExpectInvalidUtf8Client : public network::mojom::WebSocketClient {
 
  private:
   void OnDisconnect(uint32_t reason, const std::string& message) {
-    if (reason == network::mojom::WebSocket::kInternalFailure &&
-        message == "Browser sent a text frame containing invalid UTF-8") {
+    if (message == "Browser sent a text frame containing invalid UTF-8") {
       std::move(success_closure_).Run();
     } else {
       ADD_FAILURE() << "Unexpected disconnect: reason=" << reason
@@ -454,6 +512,10 @@ class InvalidUtf8HandshakeClient
   // Implementation of WebSocketHandshakeClient
   void OnOpeningHandshakeStarted(
       network::mojom::WebSocketHandshakeRequestPtr) override {}
+
+  void OnFailure(const std::string& message,
+                 int net_error,
+                 int response_code) override {}
 
   void OnConnectionEstablished(
       mojo::PendingRemote<network::mojom::WebSocket> websocket,
@@ -497,7 +559,6 @@ IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, SendBadUtf8) {
   ASSERT_TRUE(ws_server_.Start());
 
   base::RunLoop run_loop;
-
   bool failed = false;
 
   // This is a repeating closure for convenience so that we can use it in two
@@ -509,36 +570,94 @@ IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, SendBadUtf8) {
 
   auto client = std::make_unique<ExpectInvalidUtf8Client>(
       run_loop.QuitClosure(), fail_closure);
-
-  content::RenderFrameHost* const frame =
-      browser()->tab_strip_model()->GetActiveWebContents()->GetMainFrame();
-  content::RenderProcessHost* const process = frame->GetProcess();
-
-  const GURL url = ws_server_.GetURL("close");
-  const std::vector<std::string> requested_protocols;
-  const net::SiteForCookies site_for_cookies;
-  // The actual value of this doesn't actually matter, it just can't be empty,
-  // to avoid a DCHECK.
-  const net::IsolationInfo isolation_info =
-      net::IsolationInfo::CreateForInternalRequest(url::Origin::Create(url));
-  std::vector<network::mojom::HttpHeaderPtr> additional_headers;
-  const url::Origin origin;
   auto handshake_client = std::make_unique<InvalidUtf8HandshakeClient>(
       std::move(client), fail_closure);
-  mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
-      handshake_client_remote = handshake_client->Bind();
 
-  process->GetStoragePartition()->GetNetworkContext()->CreateWebSocket(
-      url, requested_protocols, site_for_cookies, isolation_info,
-      std::move(additional_headers), process->GetID(), frame->GetRoutingID(),
-      origin, network::mojom::kWebSocketOptionNone,
-      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
-      std::move(handshake_client_remote), mojo::NullRemote(),
-      mojo::NullRemote());
+  MakeWebSocketConnection(ws_server_.GetURL("close"), handshake_client->Bind());
 
   run_loop.Run();
 
   EXPECT_FALSE(failed);
+}
+
+class FailureMonitoringHandshakeClient
+    : public network::mojom::WebSocketHandshakeClient {
+ public:
+  struct Result {
+    bool failure_reported = false;
+    int net_error = -1;
+    int response_code = -1;
+  };
+
+  explicit FailureMonitoringHandshakeClient(base::OnceClosure quit)
+      : quit_(std::move(quit)) {}
+
+  FailureMonitoringHandshakeClient(const FailureMonitoringHandshakeClient&) =
+      delete;
+  FailureMonitoringHandshakeClient& operator=(
+      const FailureMonitoringHandshakeClient&) = delete;
+
+  mojo::PendingRemote<network::mojom::WebSocketHandshakeClient> Bind() {
+    CHECK(quit_);
+    auto pending_remote = handshake_client_receiver_.BindNewPipeAndPassRemote();
+    handshake_client_receiver_.set_disconnect_handler(std::move(quit_));
+    return pending_remote;
+  }
+
+  const Result& result() const { return result_; }
+
+  // Implementation of WebSocketHandshakeClient
+  void OnOpeningHandshakeStarted(
+      network::mojom::WebSocketHandshakeRequestPtr) override {}
+
+  void OnFailure(const std::string& message,
+                 int net_error,
+                 int response_code) override {
+    result_.failure_reported = true;
+    result_.net_error = net_error;
+    result_.response_code = response_code;
+  }
+
+  void OnConnectionEstablished(
+      mojo::PendingRemote<network::mojom::WebSocket> websocket,
+      mojo::PendingReceiver<network::mojom::WebSocketClient> client_receiver,
+      network::mojom::WebSocketHandshakeResponsePtr,
+      mojo::ScopedDataPipeConsumerHandle readable,
+      mojo::ScopedDataPipeProducerHandle writable) override {}
+
+ private:
+  Result result_;
+  base::OnceClosure quit_;
+  mojo::Receiver<network::mojom::WebSocketHandshakeClient>
+      handshake_client_receiver_{this};
+};
+
+IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, FailuresReported) {
+  ASSERT_TRUE(ws_server_.Start());
+
+  {
+    // The OnFailure method should not be called for a successful connection.
+    base::RunLoop run_loop;
+    auto handshake_client = std::make_unique<FailureMonitoringHandshakeClient>(
+        run_loop.QuitClosure());
+    MakeWebSocketConnection(ws_server_.GetURL("echo-with-no-extension"),
+                            handshake_client->Bind());
+    run_loop.Run();
+    EXPECT_FALSE(handshake_client->result().failure_reported);
+  }
+
+  {
+    // If the server returns a 404 status, that should be surfaced via
+    // OnFailure.
+    base::RunLoop run_loop;
+    auto handshake_client = std::make_unique<FailureMonitoringHandshakeClient>(
+        run_loop.QuitClosure());
+    MakeWebSocketConnection(ws_server_.GetURL("nonsensedoesntexist"),
+                            handshake_client->Bind());
+    run_loop.Run();
+    EXPECT_TRUE(handshake_client->result().failure_reported);
+    EXPECT_EQ(404, handshake_client->result().response_code);
+  }
 }
 
 }  // namespace

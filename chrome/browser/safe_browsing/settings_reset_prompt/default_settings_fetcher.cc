@@ -4,11 +4,12 @@
 
 #include "chrome/browser/safe_browsing/settings_reset_prompt/default_settings_fetcher.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/browser_process.h"
@@ -67,8 +68,8 @@ void DefaultSettingsFetcher::Start() {
     config_fetcher_.reset(new BrandcodeConfigFetcher(
         g_browser_process->system_network_context_manager()
             ->GetURLLoaderFactory(),
-        base::Bind(&DefaultSettingsFetcher::OnSettingsFetched,
-                   base::Unretained(this)),
+        base::BindOnce(&DefaultSettingsFetcher::OnSettingsFetched,
+                       base::Unretained(this)),
         GURL(kOmahaUrl), brandcode));
     return;
   }
@@ -91,7 +92,7 @@ void DefaultSettingsFetcher::PostCallbackAndDeleteSelf(
     std::unique_ptr<BrandcodedDefaultSettings> default_settings) {
   // Use default settings if fetching of BrandcodedDefaultSettings failed.
   if (!default_settings)
-    default_settings.reset(new BrandcodedDefaultSettings());
+    default_settings = std::make_unique<BrandcodedDefaultSettings>();
 
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,

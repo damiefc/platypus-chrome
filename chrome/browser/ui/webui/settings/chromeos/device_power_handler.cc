@@ -10,7 +10,7 @@
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/power_utils.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -29,12 +29,12 @@ namespace chromeos {
 namespace settings {
 namespace {
 
-base::string16 GetBatteryTimeText(base::TimeDelta time_left) {
+std::u16string GetBatteryTimeText(base::TimeDelta time_left) {
   int hour = 0;
   int min = 0;
   ash::power_utils::SplitTimeIntoHoursAndMinutes(time_left, &hour, &min);
 
-  base::string16 time_text;
+  std::u16string time_text;
   if (hour == 0 || min == 0) {
     // Display only one unit ("2 hours" or "10 minutes").
     return ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_DURATION,
@@ -162,13 +162,14 @@ void PowerHandler::RegisterMessages() {
 
 void PowerHandler::OnJavascriptAllowed() {
   PowerManagerClient* power_manager_client = PowerManagerClient::Get();
-  power_manager_client_observer_.Add(power_manager_client);
+  power_manager_client_observation_.Observe(power_manager_client);
   power_manager_client->GetSwitchStates(base::BindOnce(
       &PowerHandler::OnGotSwitchStates, weak_ptr_factory_.GetWeakPtr()));
 
   // Observe power management prefs used in the UI.
-  base::Closure callback(base::Bind(&PowerHandler::SendPowerManagementSettings,
-                                    base::Unretained(this), false /* force */));
+  base::RepeatingClosure callback(
+      base::BindRepeating(&PowerHandler::SendPowerManagementSettings,
+                          base::Unretained(this), false /* force */));
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(prefs_);
   pref_change_registrar_->Add(ash::prefs::kPowerAcIdleAction, callback);
@@ -186,7 +187,7 @@ void PowerHandler::OnJavascriptAllowed() {
 }
 
 void PowerHandler::OnJavascriptDisallowed() {
-  power_manager_client_observer_.RemoveAll();
+  power_manager_client_observation_.Reset();
   pref_change_registrar_.reset();
 }
 
@@ -202,7 +203,7 @@ void PowerHandler::PowerManagerRestarted() {
 }
 
 void PowerHandler::LidEventReceived(PowerManagerClient::LidState state,
-                                    const base::TimeTicks& timestamp) {
+                                    base::TimeTicks timestamp) {
   lid_state_ = state;
   SendPowerManagementSettings(false /* force */);
 }
@@ -313,7 +314,7 @@ void PowerHandler::SendBatteryStatus() {
     show_time = ash::power_utils::ShouldDisplayBatteryTime(time_left);
   }
 
-  base::string16 status_text;
+  std::u16string status_text;
   if (show_time) {
     status_text = l10n_util::GetStringFUTF16(
         charging ? IDS_SETTINGS_BATTERY_STATUS_CHARGING

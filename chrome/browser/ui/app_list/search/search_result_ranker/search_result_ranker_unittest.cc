@@ -17,7 +17,6 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -25,6 +24,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/app_list/search/mixer.h"
+#include "chrome/browser/ui/app_list/search/search_controller.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/app_launch_data.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/histogram_util.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/ranking_item_util.h"
@@ -65,7 +65,6 @@ class TestSearchResult : public ChromeSearchResult {
 
   // ChromeSearchResult overrides:
   void Open(int event_flags) override {}
-  void InvokeAction(int action_index, int event_flags) override {}
 
  private:
   static int instantiation_count;
@@ -220,7 +219,7 @@ TEST_F(SearchResultRankerTest, MixedTypesRankersAreDisabledWithFlag) {
 
   for (int i = 0; i < 20; ++i)
     ranker->Train(app_launch_data);
-  ranker->FetchRankings(base::string16());
+  ranker->FetchRankings(std::u16string());
 
   auto results =
       MakeSearchResults({"A", "B", "C", "D"},
@@ -266,7 +265,7 @@ TEST_F(SearchResultRankerTest, AppModelImprovesScores) {
     ranker->Train(app_B);
     ranker->Train(app_A);
   }
-  ranker->FetchRankings(base::string16());
+  ranker->FetchRankings(std::u16string());
 
   auto results =
       MakeSearchResults({"A", "B", "C", "D"},
@@ -298,7 +297,7 @@ TEST_F(SearchResultRankerTest, ZeroStateGroupModelDisabledWithFlag) {
   for (int i = 0; i < 10; ++i) {
     ranker->Train(app_launch_data_a);
   }
-  ranker->FetchRankings(base::string16());
+  ranker->FetchRankings(std::u16string());
 
   // C and D should be ranked first because their group score should be higher.
   auto results =
@@ -329,7 +328,7 @@ TEST_F(SearchResultRankerTest, ZeroStateGroupTrainingImprovesScores) {
   launch.query = "";
   for (int i = 0; i < 10; ++i)
     ranker->Train(launch);
-  ranker->FetchRankings(base::string16());
+  ranker->FetchRankings(std::u16string());
 
   // A and B should be ranked first because their group score should be higher.
   auto results =
@@ -358,11 +357,11 @@ TEST_F(SearchResultRankerTest, ZeroStateColdStart) {
   ranker->InitializeRankers(MakeSearchController());
   Wait();
 
-  ranker->FetchRankings(base::string16());
+  ranker->FetchRankings(std::u16string());
   auto results =
       MakeSearchResults({"Z", "O", "D"},
                         {ResultType::kZeroStateFile, ResultType::kOmnibox,
-                         ResultType::kDriveQuickAccess},
+                         ResultType::kZeroStateDrive},
                         {-0.1f, 0.2f, 0.1f});
   ranker->Rank(&results);
 
@@ -387,7 +386,7 @@ TEST_F(SearchResultRankerTest, ZeroStateAllGroupsPresent) {
       {"A2", "O1", "Z1", "Z2", "A1", "D1"},
       {ResultType::kInstalledApp, ResultType::kOmnibox,
        ResultType::kZeroStateFile, ResultType::kZeroStateFile,
-       ResultType::kInstalledApp, ResultType::kDriveQuickAccess},
+       ResultType::kInstalledApp, ResultType::kZeroStateDrive},
       {8.1f, 0.4f, 0.8f, 0.2f, 8.2f, 0.1f});
 
   ranker->Rank(&results);
@@ -417,15 +416,15 @@ TEST_F(SearchResultRankerTest, ZeroStateMissingGroupAdded) {
   launch.query = "";
   for (int i = 0; i < 10; ++i)
     ranker->Train(launch);
-  ranker->FetchRankings(base::string16());
+  ranker->FetchRankings(std::u16string());
 
   auto results = MakeSearchResults(
       {"A1", "A2", "Z1", "Z2", "Z3", "Z4", "Z5", "D1", "D2"},
       {ResultType::kInstalledApp, ResultType::kInstalledApp,
        ResultType::kZeroStateFile, ResultType::kZeroStateFile,
        ResultType::kZeroStateFile, ResultType::kZeroStateFile,
-       ResultType::kZeroStateFile, ResultType::kDriveQuickAccess,
-       ResultType::kDriveQuickAccess},
+       ResultType::kZeroStateFile, ResultType::kZeroStateDrive,
+       ResultType::kZeroStateDrive},
       {8.2f, 8.1f, 1.0f, 0.95f, 0.9f, 0.85f, 0.8f, 0.3f, 0.7f});
 
   ranker->Rank(&results);
@@ -457,14 +456,14 @@ TEST_F(SearchResultRankerTest, ZeroStateTwoMissingGroupsAdded) {
   launch.query = "";
   for (int i = 0; i < 10; ++i)
     ranker->Train(launch);
-  ranker->FetchRankings(base::string16());
+  ranker->FetchRankings(std::u16string());
 
   auto results =
       MakeSearchResults({"Z1", "Z2", "Z3", "Z4", "Z5", "D1", "O1"},
                         {ResultType::kZeroStateFile, ResultType::kZeroStateFile,
                          ResultType::kZeroStateFile, ResultType::kZeroStateFile,
                          ResultType::kZeroStateFile,
-                         ResultType::kDriveQuickAccess, ResultType::kOmnibox},
+                         ResultType::kZeroStateDrive, ResultType::kOmnibox},
                         {1.0f, 0.95f, 0.9f, 0.85f, 0.8f, 0.75f, 0.7f});
 
   ranker->Rank(&results);
@@ -494,14 +493,14 @@ TEST_F(SearchResultRankerTest, ZeroStateStaleResultIgnored) {
   launch.query = "";
   for (int i = 0; i < 10; ++i)
     ranker->Train(launch);
-  ranker->FetchRankings(base::string16());
+  ranker->FetchRankings(std::u16string());
 
   const auto results = MakeSearchResults(
       {"A1", "A2", "Z1", "Z2", "Z3", "Z4", "Z5", "D1"},
       {ResultType::kInstalledApp, ResultType::kInstalledApp,
        ResultType::kZeroStateFile, ResultType::kZeroStateFile,
        ResultType::kZeroStateFile, ResultType::kZeroStateFile,
-       ResultType::kZeroStateFile, ResultType::kDriveQuickAccess},
+       ResultType::kZeroStateFile, ResultType::kZeroStateDrive},
       {8.2f, 8.1f, 1.0f, 0.95f, 0.9f, 0.85f, 0.8f, 0.7f});
 
   for (int i = 0; i < 3; ++i) {
@@ -546,23 +545,23 @@ TEST_F(SearchResultRankerTest, ZeroStateCacheResetWhenTopResultChanges) {
   launch.query = "";
   for (int i = 0; i < 10; ++i)
     ranker->Train(launch);
-  ranker->FetchRankings(base::string16());
+  ranker->FetchRankings(std::u16string());
 
   const auto results_1 = MakeSearchResults(
       {"A1", "A2", "Z1", "Z2", "Z3", "Z4", "Z5", "D1", "D2"},
       {ResultType::kInstalledApp, ResultType::kInstalledApp,
        ResultType::kZeroStateFile, ResultType::kZeroStateFile,
        ResultType::kZeroStateFile, ResultType::kZeroStateFile,
-       ResultType::kZeroStateFile, ResultType::kDriveQuickAccess,
-       ResultType::kDriveQuickAccess},
+       ResultType::kZeroStateFile, ResultType::kZeroStateDrive,
+       ResultType::kZeroStateDrive},
       {8.2f, 8.1f, 1.0f, 0.95f, 0.9f, 0.85f, 0.8f, 0.7f, 0.1f});
   const auto results_2 = MakeSearchResults(
       {"A1", "A2", "Z1", "Z2", "Z3", "Z4", "Z5", "D2", "D1"},
       {ResultType::kInstalledApp, ResultType::kInstalledApp,
        ResultType::kZeroStateFile, ResultType::kZeroStateFile,
        ResultType::kZeroStateFile, ResultType::kZeroStateFile,
-       ResultType::kZeroStateFile, ResultType::kDriveQuickAccess,
-       ResultType::kDriveQuickAccess},
+       ResultType::kZeroStateFile, ResultType::kZeroStateDrive,
+       ResultType::kZeroStateDrive},
       {8.2f, 8.1f, 1.0f, 0.95f, 0.9f, 0.85f, 0.8f, 0.7f, 0.1f});
 
   for (int i = 0; i < 3; ++i) {
@@ -671,38 +670,6 @@ TEST_F(SearchResultRankerTest, ZeroStateClickedTypeMetrics) {
   histogram_tester_.ExpectBucketCount(
       "Apps.AppList.ZeroStateResults.LaunchedItemType",
       ZeroStateResultType::kDriveQuickAccess, 1);
-}
-
-// Scores received from zero state providers should be logged.
-TEST_F(SearchResultRankerTest, ZeroStateReceivedScoreMetrics) {
-  EnableOneFeature(app_list_features::kEnableZeroStateMixedTypesRanker,
-                   {
-                       {"item_coeff", "1.0"},
-                       {"group_coeff", "1.0"},
-                       {"paired_coeff", "0.0"},
-                       {"default_group_score", "0.1"},
-                   });
-  auto ranker = MakeRanker();
-  ranker->InitializeRankers(MakeSearchController());
-  Wait();
-
-  ranker->FetchRankings(base::string16());
-  auto results =
-      MakeSearchResults({"A", "B", "C"},
-                        {ResultType::kOmnibox, ResultType::kZeroStateFile,
-                         ResultType::kDriveQuickAccess},
-                        {0.15f, 0.255f, 0.359f});
-  ranker->Rank(&results);
-
-  // Scores should scaled to the range 0-100 and logged into the correct bucket.
-  // Zero state file and omnibox scores map the range [0,1] to [0,100], and
-  // Drive scores map the range [-10,10] to [0,100].
-  histogram_tester_.ExpectUniqueSample(
-      "Apps.AppList.ZeroStateResults.ReceivedScore.OmniboxSearch", 15, 1);
-  histogram_tester_.ExpectUniqueSample(
-      "Apps.AppList.ZeroStateResults.ReceivedScore.ZeroStateFile", 25, 1);
-  histogram_tester_.ExpectUniqueSample(
-      "Apps.AppList.ZeroStateResults.ReceivedScore.DriveQuickAccess", 51, 1);
 }
 
 }  // namespace app_list

@@ -1,34 +1,51 @@
-<style include="diagnostics-shared">
+<style include="diagnostics-shared diagnostics-fonts">
+  .remove-stroke {
+    --iron-icon-stroke-color: none;
+  }
 </style>
 
 <diagnostics-card>
-  <div slot="title">
-    <div id="cardTitle">[[i18n('batteryTitle')]]</div>
+  <div id="cardTitle" slot="title" aria-describedby="batteryStatusChipInfo">
+    [[i18n('batteryTitle')]]
   </div>
-  <data-point slot="body" id="currentNow"
-    value="[[batteryChargeStatus_.current_now_milliamps]]">
-  </data-point>
-  <data-point slot="body" id="chargeFullDesign"
-    value="[[batteryHealth_.charge_full_design_milliamp_hours]]">
-  </data-point>
-  <data-point slot="body" id="chargeFullNow"
-    value="[[batteryChargeStatus_.charge_full_now_milliamp_hours]]">
-  </data-point>
-  <data-point slot="body" id="chargeNow"
-    value="[[batteryChargeStatus_.charge_now_milliamp_hours]]">
-  </data-point>
-  <data-point slot="body" id="powerTime"
-    value="[[batteryChargeStatus_.power_time]]">
-  </data-point>
-  <data-point slot="body" id="adapterStatus"
-    value="[[batteryChargeStatus_.power_adapter_status]]">
-  </data-point>
-  <data-point slot="body" id="cycleCount"
-    value="[[batteryHealth_.cycle_count]]">
-  </data-point>
-  <!-- TODO(joonbug): Localize once strings are confirmed -->
-  <percent-bar-chart slot="body" title="Remaining charge"
-    value="[[batteryChargeStatus_.charge_now_milliamp_hours]]"
-    max="[[batteryChargeStatus_.charge_full_now_milliamp_hours]]">
+  <div id="batteryStatusChipInfo" slot="chip" class="diagnostics-chip"
+      aria-hidden="true">
+    [[getDesignedFullCharge_(batteryHealth_.chargeFullDesignMilliampHours)]]
+  </div>
+  <iron-icon slot="icon" icon="[[batteryIcon]]" class$="[[iconClass]]">
+  </iron-icon>
+  <percent-bar-chart slot="left-panel" header="[[powerTimeString_]]"
+    value="[[batteryChargeStatus_.chargeNowMilliampHours]]"
+    max="[[batteryHealth_.chargeFullNowMilliampHours]]">
   </percent-bar-chart>
+  <data-point slot="body" id="batteryHealth"
+    header="[[i18n('batteryHealthLabel')]]"
+    value="[[getBatteryHealth_(batteryHealth_.batteryWearPercentage)]]"
+    tooltip-text="[[i18n('batteryHealthTooltipText')]]"
+    class="data-point-margin-start">
+  </data-point>
+  <div slot="body" class="divider"></div>
+  <data-point slot="body" id="cycleCount" header="[[i18n('cycleCount')]]"
+    value="[[batteryHealth_.cycleCount]]"
+    tooltip-text="[[i18n('cycleCountTooltipText')]]">
+  </data-point>
+  <div slot="body" class="divider"></div>
+  <data-point slot="body" id="currentNow" header="[[i18n('currentNowLabel')]]"
+    value="[[getCurrentNow_(batteryChargeStatus_.currentNowMilliamps)]]"
+    tooltip-text="[[i18n('currentNowTooltipText')]]"
+    class="data-point-margin-end">
+  </data-point>
+
+  <routine-section slot="routines" routines="[[routines_]]"
+    routine-runtime="{{getEstimateRuntimeInMinutes_(routines_)}}"
+    is-test-running="{{isTestRunning}}"
+    is-power-routine="true"
+    run-tests-button-text="[[getRunTestsButtonText_(
+      batteryChargeStatus_.powerAdapterStatus
+    )]]"
+    additional-message="[[getRunTestsAdditionalMessage(
+      batteryChargeStatus_.chargeNowMilliampHours,
+      batteryHealth_.chargeFullNowMilliampHours)]]"
+    learn-more-link-section="battery">
+  </routine-section>
 </diagnostics-card>

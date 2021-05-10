@@ -27,7 +27,9 @@ namespace {
 using ::base::test::RunOnceCallback;
 using ::testing::_;
 using ::testing::Expectation;
+using ::testing::InSequence;
 using ::testing::Invoke;
+using ::testing::Return;
 
 RequiredField CreateRequiredField(const std::string& value_expression,
                                   const std::vector<std::string>& selector) {
@@ -45,14 +47,21 @@ class RequiredFieldsFallbackHandlerTest : public testing::Test {
         .WillByDefault(Invoke([this](BatchElementChecker* checker) {
           checker->Run(&mock_web_controller_);
         }));
-    ON_CALL(mock_action_delegate_, GetElementTag(_, _))
+    test_util::MockFindAnyElement(mock_web_controller_);
+    ON_CALL(mock_action_delegate_, GetWebController)
+        .WillByDefault(Return(&mock_web_controller_));
+    ON_CALL(mock_web_controller_, GetElementTag(_, _))
         .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "INPUT"));
-    ON_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _))
+    ON_CALL(mock_web_controller_, SetValueAttribute(_, _, _))
         .WillByDefault(RunOnceCallback<2>(OkClientStatus()));
-    ON_CALL(mock_action_delegate_, WaitForDocumentToBecomeInteractive(_, _))
-        .WillByDefault(RunOnceCallback<1>(OkClientStatus()));
-    ON_CALL(mock_action_delegate_, ScrollIntoView(_, _))
-        .WillByDefault(RunOnceCallback<1>(OkClientStatus()));
+    ON_CALL(mock_action_delegate_, WaitUntilDocumentIsInReadyState(_, _, _, _))
+        .WillByDefault(RunOnceCallback<3>(OkClientStatus(),
+                                          base::TimeDelta::FromSeconds(0)));
+    ON_CALL(mock_web_controller_, ScrollIntoView(_, _, _))
+        .WillByDefault(RunOnceCallback<2>(OkClientStatus()));
+    ON_CALL(mock_web_controller_, WaitUntilElementIsStable(_, _, _, _))
+        .WillByDefault(RunOnceCallback<3>(OkClientStatus(),
+                                          base::TimeDelta::FromSeconds(0)));
   }
 
  protected:
@@ -66,23 +75,78 @@ TEST_F(RequiredFieldsFallbackHandlerTest,
       /* required_fields = */ {},
       /* fallback_values = */ {}, &mock_action_delegate_);
 
-  base::OnceCallback<void(const ClientStatus&,
-                          const base::Optional<ClientStatus>&)>
-      callback =
-          base::BindOnce([](const ClientStatus& status,
-                            const base::Optional<ClientStatus>& detail_status) {
-            EXPECT_EQ(status.proto_status(), OTHER_ACTION_STATUS);
-            EXPECT_FALSE(detail_status.has_value());
-          });
-
   fallback_handler.CheckAndFallbackRequiredFields(
-      ClientStatus(OTHER_ACTION_STATUS), std::move(callback));
+      ClientStatus(OTHER_ACTION_STATUS),
+      base::BindOnce([](const ClientStatus& status) {
+        EXPECT_EQ(status.proto_status(), OTHER_ACTION_STATUS);
+        EXPECT_FALSE(status.details().has_autofill_error_info());
+      }));
+}
+
+TEST_F(RequiredFieldsFallbackHandlerTest, AutofillFailureGetsForwarded) {
+  // Everything is full, no need to do work. Required fields succeed by
+  // default.
+  ON_CALL(mock_web_controller_, GetFieldValue(_, _))
+      .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "value"));
+
+  std::vector<RequiredField> required_fields = {
+      CreateRequiredField("${51}", {"#card_name"})};
+
+  RequiredFieldsFallbackHandler fallback_handler(required_fields, {},
+                                                 &mock_action_delegate_);
+  fallback_handler.CheckAndFallbackRequiredFields(
+      ClientStatus(OTHER_ACTION_STATUS),
+      base::BindOnce([](const ClientStatus& status) {
+        EXPECT_EQ(status.proto_status(), OTHER_ACTION_STATUS);
+        EXPECT_EQ(
+            status.details().autofill_error_info().autofill_error_status(),
+            OTHER_ACTION_STATUS);
+      }));
+}
+
+TEST_F(RequiredFieldsFallbackHandlerTest,
+       AutofillFailureReturnedOverFallbackError) {
+  // Everything is empty. Required fields fail by default.
+  ON_CALL(mock_web_controller_, GetFieldValue(_, _))
+      .WillByDefault(RunOnceCallback<1>(OkClientStatus(), std::string()));
+
+  std::vector<RequiredField> required_fields = {
+      CreateRequiredField("${51}", {"#card_name"})};
+
+  RequiredFieldsFallbackHandler fallback_handler(required_fields, {},
+                                                 &mock_action_delegate_);
+  fallback_handler.CheckAndFallbackRequiredFields(
+      ClientStatus(OTHER_ACTION_STATUS),
+      base::BindOnce([](const ClientStatus& status) {
+        EXPECT_EQ(status.proto_status(), OTHER_ACTION_STATUS);
+        EXPECT_EQ(
+            status.details().autofill_error_info().autofill_error_status(),
+            OTHER_ACTION_STATUS);
+      }));
 }
 
 TEST_F(RequiredFieldsFallbackHandlerTest,
        AddsMissingOrEmptyFallbackValuesToError) {
-  ON_CALL(mock_web_controller_, OnGetFieldValue(_, _))
-      .WillByDefault(RunOnceCallback<1>(OkClientStatus(), ""));
+  // The checks should only run once (initially). There should not be a
+  // "non-empty" validation because it failed before that.
+  Selector card_name_selector({"#card_name"});
+  Selector card_number_selector({"#card_number"});
+  Selector card_network_selector({"#card_network"});
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(test_util::MockFindElement(
+                                mock_web_controller_, card_name_selector)),
+                            _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), std::string()));
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(test_util::MockFindElement(
+                                mock_web_controller_, card_number_selector)),
+                            _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), std::string()));
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(test_util::MockFindElement(
+                                mock_web_controller_, card_network_selector)),
+                            _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), std::string()));
 
   std::vector<RequiredField> required_fields = {
       CreateRequiredField("${51}", {"#card_name"}),
@@ -95,68 +159,45 @@ TEST_F(RequiredFieldsFallbackHandlerTest,
        "John Doe"},
       {base::NumberToString(
            static_cast<int>(AutofillFormatProto::CREDIT_CARD_NETWORK)),
-       ""}};
+       std::string()}};
 
   RequiredFieldsFallbackHandler fallback_handler(
       required_fields, fallback_values, &mock_action_delegate_);
 
-  base::OnceCallback<void(const ClientStatus&,
-                          const base::Optional<ClientStatus>&)>
-      callback =
-          base::BindOnce([](const ClientStatus& status,
-                            const base::Optional<ClientStatus>& detail_status) {
-            EXPECT_EQ(status.proto_status(), AUTOFILL_INCOMPLETE);
-            ASSERT_TRUE(detail_status.has_value());
-            ASSERT_EQ(detail_status.value().proto_status(),
-                      AUTOFILL_INCOMPLETE);
-            ASSERT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error_size(),
-                      3);
-            EXPECT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error(0)
-                          .value_expression(),
-                      "${52}");
-            EXPECT_TRUE(detail_status.value()
-                            .details()
-                            .autofill_error_info()
-                            .autofill_field_error(0)
-                            .no_fallback_value());
-            EXPECT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error(1)
-                          .value_expression(),
-                      "${-3}");
-            EXPECT_TRUE(detail_status.value()
-                            .details()
-                            .autofill_error_info()
-                            .autofill_field_error(1)
-                            .no_fallback_value());
-            EXPECT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error(2)
-                          .value_expression(),
-                      "${51}");
-            EXPECT_TRUE(detail_status.value()
-                            .details()
-                            .autofill_error_info()
-                            .autofill_field_error(2)
-                            .empty_after_fallback());
-          });
+  base::OnceCallback<void(const ClientStatus&)> callback =
+      base::BindOnce([](const ClientStatus& status) {
+        EXPECT_EQ(status.proto_status(), AUTOFILL_INCOMPLETE);
+        ASSERT_EQ(
+            status.details().autofill_error_info().autofill_field_error_size(),
+            2);
+        EXPECT_EQ(status.details()
+                      .autofill_error_info()
+                      .autofill_field_error(0)
+                      .value_expression(),
+                  "${52}");
+        EXPECT_TRUE(status.details()
+                        .autofill_error_info()
+                        .autofill_field_error(0)
+                        .no_fallback_value());
+        EXPECT_EQ(status.details()
+                      .autofill_error_info()
+                      .autofill_field_error(1)
+                      .value_expression(),
+                  "${-3}");
+        EXPECT_TRUE(status.details()
+                        .autofill_error_info()
+                        .autofill_field_error(1)
+                        .no_fallback_value());
+      });
 
   fallback_handler.CheckAndFallbackRequiredFields(OkClientStatus(),
                                                   std::move(callback));
 }
 
 TEST_F(RequiredFieldsFallbackHandlerTest, AddsFirstFieldFillingError) {
-  ON_CALL(mock_web_controller_, OnGetFieldValue(_, _))
+  ON_CALL(mock_web_controller_, GetFieldValue(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), ""));
-  ON_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _))
+  ON_CALL(mock_web_controller_, SetValueAttribute(_, _, _))
       .WillByDefault(RunOnceCallback<2>(ClientStatus(OTHER_ACTION_STATUS)));
 
   std::vector<RequiredField> required_fields = {
@@ -174,33 +215,23 @@ TEST_F(RequiredFieldsFallbackHandlerTest, AddsFirstFieldFillingError) {
   RequiredFieldsFallbackHandler fallback_handler(
       required_fields, fallback_values, &mock_action_delegate_);
 
-  base::OnceCallback<void(const ClientStatus&,
-                          const base::Optional<ClientStatus>&)>
-      callback =
-          base::BindOnce([](const ClientStatus& status,
-                            const base::Optional<ClientStatus>& detail_status) {
-            EXPECT_EQ(status.proto_status(), AUTOFILL_INCOMPLETE);
-            ASSERT_TRUE(detail_status.has_value());
-            ASSERT_EQ(detail_status.value().proto_status(),
-                      AUTOFILL_INCOMPLETE);
-            ASSERT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error_size(),
-                      1);
-            EXPECT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error(0)
-                          .value_expression(),
-                      "${51}");
-            EXPECT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error(0)
-                          .status(),
-                      OTHER_ACTION_STATUS);
-          });
+  base::OnceCallback<void(const ClientStatus&)> callback =
+      base::BindOnce([](const ClientStatus& status) {
+        EXPECT_EQ(status.proto_status(), AUTOFILL_INCOMPLETE);
+        ASSERT_EQ(
+            status.details().autofill_error_info().autofill_field_error_size(),
+            1);
+        EXPECT_EQ(status.details()
+                      .autofill_error_info()
+                      .autofill_field_error(0)
+                      .value_expression(),
+                  "${51}");
+        EXPECT_EQ(status.details()
+                      .autofill_error_info()
+                      .autofill_field_error(0)
+                      .status(),
+                  OTHER_ACTION_STATUS);
+      });
 
   fallback_handler.CheckAndFallbackRequiredFields(OkClientStatus(),
                                                   std::move(callback));
@@ -208,7 +239,7 @@ TEST_F(RequiredFieldsFallbackHandlerTest, AddsFirstFieldFillingError) {
 
 TEST_F(RequiredFieldsFallbackHandlerTest,
        AddsFirstEmptyFieldAfterFillingToError) {
-  ON_CALL(mock_web_controller_, OnGetFieldValue(_, _))
+  ON_CALL(mock_web_controller_, GetFieldValue(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), ""));
 
   std::vector<RequiredField> required_fields = {
@@ -226,41 +257,31 @@ TEST_F(RequiredFieldsFallbackHandlerTest,
   RequiredFieldsFallbackHandler fallback_handler(
       required_fields, fallback_values, &mock_action_delegate_);
 
-  base::OnceCallback<void(const ClientStatus&,
-                          const base::Optional<ClientStatus>&)>
-      callback =
-          base::BindOnce([](const ClientStatus& status,
-                            const base::Optional<ClientStatus>& detail_status) {
-            EXPECT_EQ(status.proto_status(), AUTOFILL_INCOMPLETE);
-            ASSERT_TRUE(detail_status.has_value());
-            ASSERT_EQ(detail_status.value().proto_status(),
-                      AUTOFILL_INCOMPLETE);
-            ASSERT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error_size(),
-                      1);
-            EXPECT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error(0)
-                          .value_expression(),
-                      "${51}");
-            EXPECT_TRUE(detail_status.value()
-                            .details()
-                            .autofill_error_info()
-                            .autofill_field_error(0)
-                            .empty_after_fallback());
-          });
+  base::OnceCallback<void(const ClientStatus&)> callback =
+      base::BindOnce([](const ClientStatus& status) {
+        EXPECT_EQ(status.proto_status(), AUTOFILL_INCOMPLETE);
+        ASSERT_EQ(
+            status.details().autofill_error_info().autofill_field_error_size(),
+            1);
+        EXPECT_EQ(status.details()
+                      .autofill_error_info()
+                      .autofill_field_error(0)
+                      .value_expression(),
+                  "${51}");
+        EXPECT_TRUE(status.details()
+                        .autofill_error_info()
+                        .autofill_field_error(0)
+                        .empty_after_fallback());
+      });
 
   fallback_handler.CheckAndFallbackRequiredFields(OkClientStatus(),
                                                   std::move(callback));
 }
 
 TEST_F(RequiredFieldsFallbackHandlerTest, DoesNotFallbackIfFieldsAreFilled) {
-  ON_CALL(mock_web_controller_, OnGetFieldValue(_, _))
+  ON_CALL(mock_web_controller_, GetFieldValue(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "value"));
-  EXPECT_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _)).Times(0);
+  EXPECT_CALL(mock_web_controller_, SetValueAttribute(_, _, _)).Times(0);
 
   std::vector<RequiredField> required_fields = {
       CreateRequiredField("${51}", {"#card_name"})};
@@ -268,26 +289,24 @@ TEST_F(RequiredFieldsFallbackHandlerTest, DoesNotFallbackIfFieldsAreFilled) {
   RequiredFieldsFallbackHandler fallback_handler(required_fields, {},
                                                  &mock_action_delegate_);
   fallback_handler.CheckAndFallbackRequiredFields(
-      OkClientStatus(),
-      base::BindOnce([](const ClientStatus& status,
-                        const base::Optional<ClientStatus>& detail_status) {
+      OkClientStatus(), base::BindOnce([](const ClientStatus& status) {
         EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
       }));
 }
 
 TEST_F(RequiredFieldsFallbackHandlerTest, FillsEmptyRequiredField) {
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _))
+  EXPECT_CALL(mock_web_controller_, GetFieldValue(_, _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
   Selector expected_selector({"#card_name"});
   Expectation set_value =
       EXPECT_CALL(
-          mock_action_delegate_,
-          OnSetFieldValue("John Doe",
-                          EqualsElement(test_util::MockFindElement(
-                              mock_action_delegate_, expected_selector)),
-                          _))
+          mock_web_controller_,
+          SetValueAttribute("John Doe",
+                            EqualsElement(test_util::MockFindElement(
+                                mock_action_delegate_, expected_selector)),
+                            _))
           .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _))
+  EXPECT_CALL(mock_web_controller_, GetFieldValue(_, _))
       .After(set_value)
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), "John Doe"));
 
@@ -302,22 +321,20 @@ TEST_F(RequiredFieldsFallbackHandlerTest, FillsEmptyRequiredField) {
   RequiredFieldsFallbackHandler fallback_handler(
       required_fields, fallback_values, &mock_action_delegate_);
   fallback_handler.CheckAndFallbackRequiredFields(
-      OkClientStatus(),
-      base::BindOnce([](const ClientStatus& status,
-                        const base::Optional<ClientStatus>& detail_status) {
+      OkClientStatus(), base::BindOnce([](const ClientStatus& status) {
         EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
       }));
 }
 
 TEST_F(RequiredFieldsFallbackHandlerTest, FallsBackForForcedFilledField) {
-  ON_CALL(mock_web_controller_, OnGetFieldValue(_, _))
+  ON_CALL(mock_web_controller_, GetFieldValue(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "value"));
   Selector expected_selector({"#card_name"});
-  EXPECT_CALL(mock_action_delegate_,
-              OnSetFieldValue("John Doe",
-                              EqualsElement(test_util::MockFindElement(
-                                  mock_action_delegate_, expected_selector)),
-                              _))
+  EXPECT_CALL(mock_web_controller_,
+              SetValueAttribute("John Doe",
+                                EqualsElement(test_util::MockFindElement(
+                                    mock_action_delegate_, expected_selector)),
+                                _))
       .WillOnce(RunOnceCallback<2>(OkClientStatus()));
 
   std::vector<RequiredField> required_fields = {
@@ -332,17 +349,15 @@ TEST_F(RequiredFieldsFallbackHandlerTest, FallsBackForForcedFilledField) {
   RequiredFieldsFallbackHandler fallback_handler(
       required_fields, fallback_values, &mock_action_delegate_);
   fallback_handler.CheckAndFallbackRequiredFields(
-      OkClientStatus(),
-      base::BindOnce([](const ClientStatus& status,
-                        const base::Optional<ClientStatus>& detail_status) {
+      OkClientStatus(), base::BindOnce([](const ClientStatus& status) {
         EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
       }));
 }
 
 TEST_F(RequiredFieldsFallbackHandlerTest, FailsIfForcedFieldDidNotGetFilled) {
-  ON_CALL(mock_web_controller_, OnGetFieldValue(_, _))
+  ON_CALL(mock_web_controller_, GetFieldValue(_, _))
       .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "value"));
-  EXPECT_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _)).Times(0);
+  EXPECT_CALL(mock_web_controller_, SetValueAttribute(_, _, _)).Times(0);
 
   std::vector<RequiredField> required_fields = {
       CreateRequiredField("${51}", {"#card_name"})};
@@ -351,50 +366,40 @@ TEST_F(RequiredFieldsFallbackHandlerTest, FailsIfForcedFieldDidNotGetFilled) {
   RequiredFieldsFallbackHandler fallback_handler(required_fields, {},
                                                  &mock_action_delegate_);
 
-  base::OnceCallback<void(const ClientStatus&,
-                          const base::Optional<ClientStatus>&)>
-      callback =
-          base::BindOnce([](const ClientStatus& status,
-                            const base::Optional<ClientStatus>& detail_status) {
-            EXPECT_EQ(status.proto_status(), AUTOFILL_INCOMPLETE);
-            ASSERT_TRUE(detail_status.has_value());
-            ASSERT_EQ(detail_status.value().proto_status(),
-                      AUTOFILL_INCOMPLETE);
-            ASSERT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error_size(),
-                      1);
-            EXPECT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error(0)
-                          .value_expression(),
-                      "${51}");
-            EXPECT_TRUE(detail_status.value()
-                            .details()
-                            .autofill_error_info()
-                            .autofill_field_error(0)
-                            .no_fallback_value());
-          });
+  base::OnceCallback<void(const ClientStatus&)> callback =
+      base::BindOnce([](const ClientStatus& status) {
+        EXPECT_EQ(status.proto_status(), AUTOFILL_INCOMPLETE);
+        ASSERT_EQ(
+            status.details().autofill_error_info().autofill_field_error_size(),
+            1);
+        EXPECT_EQ(status.details()
+                      .autofill_error_info()
+                      .autofill_field_error(0)
+                      .value_expression(),
+                  "${51}");
+        EXPECT_TRUE(status.details()
+                        .autofill_error_info()
+                        .autofill_field_error(0)
+                        .no_fallback_value());
+      });
 
   fallback_handler.CheckAndFallbackRequiredFields(OkClientStatus(),
                                                   std::move(callback));
 }
 
 TEST_F(RequiredFieldsFallbackHandlerTest, FillsFieldWithPattern) {
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _))
+  EXPECT_CALL(mock_web_controller_, GetFieldValue(_, _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
   Selector expected_selector({"#card_expiry"});
   Expectation set_value =
       EXPECT_CALL(
-          mock_action_delegate_,
-          OnSetFieldValue("08/2050",
-                          EqualsElement(test_util::MockFindElement(
-                              mock_action_delegate_, expected_selector)),
-                          _))
+          mock_web_controller_,
+          SetValueAttribute("08/2050",
+                            EqualsElement(test_util::MockFindElement(
+                                mock_action_delegate_, expected_selector)),
+                            _))
           .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _))
+  EXPECT_CALL(mock_web_controller_, GetFieldValue(_, _))
       .After(set_value)
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
 
@@ -412,19 +417,17 @@ TEST_F(RequiredFieldsFallbackHandlerTest, FillsFieldWithPattern) {
   RequiredFieldsFallbackHandler fallback_handler(
       required_fields, fallback_values, &mock_action_delegate_);
   fallback_handler.CheckAndFallbackRequiredFields(
-      OkClientStatus(),
-      base::BindOnce([](const ClientStatus& status,
-                        const base::Optional<ClientStatus>& detail_status) {
+      OkClientStatus(), base::BindOnce([](const ClientStatus& status) {
         EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
       }));
 }
 
 TEST_F(RequiredFieldsFallbackHandlerTest,
        FailsToFillFieldWithUnknownOrEmptyKey) {
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _))
+  EXPECT_CALL(mock_web_controller_, GetFieldValue(_, _))
       .Times(2)
       .WillRepeatedly(RunOnceCallback<1>(OkClientStatus(), ""));
-  EXPECT_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _)).Times(0);
+  EXPECT_CALL(mock_web_controller_, SetValueAttribute(_, _, _)).Times(0);
 
   std::vector<RequiredField> required_fields = {
       CreateRequiredField("${53}", {"#card_expiry"}),
@@ -438,65 +441,64 @@ TEST_F(RequiredFieldsFallbackHandlerTest,
   RequiredFieldsFallbackHandler fallback_handler(
       required_fields, fallback_values, &mock_action_delegate_);
 
-  base::OnceCallback<void(const ClientStatus&,
-                          const base::Optional<ClientStatus>&)>
-      callback =
-          base::BindOnce([](const ClientStatus& status,
-                            const base::Optional<ClientStatus>& detail_status) {
-            EXPECT_EQ(status.proto_status(), AUTOFILL_INCOMPLETE);
-            ASSERT_TRUE(detail_status.has_value());
-            ASSERT_EQ(detail_status.value().proto_status(),
-                      AUTOFILL_INCOMPLETE);
-            ASSERT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error_size(),
-                      2);
-            EXPECT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error(0)
-                          .value_expression(),
-                      "${53}");
-            EXPECT_TRUE(detail_status.value()
-                            .details()
-                            .autofill_error_info()
-                            .autofill_field_error(0)
-                            .no_fallback_value());
-            EXPECT_EQ(detail_status.value()
-                          .details()
-                          .autofill_error_info()
-                          .autofill_field_error(1)
-                          .value_expression(),
-                      "${-3}");
-            EXPECT_TRUE(detail_status.value()
-                            .details()
-                            .autofill_error_info()
-                            .autofill_field_error(1)
-                            .no_fallback_value());
-          });
+  base::OnceCallback<void(const ClientStatus&)> callback =
+      base::BindOnce([](const ClientStatus& status) {
+        EXPECT_EQ(status.proto_status(), AUTOFILL_INCOMPLETE);
+        ASSERT_EQ(
+            status.details().autofill_error_info().autofill_field_error_size(),
+            2);
+        EXPECT_EQ(status.details()
+                      .autofill_error_info()
+                      .autofill_field_error(0)
+                      .value_expression(),
+                  "${53}");
+        EXPECT_TRUE(status.details()
+                        .autofill_error_info()
+                        .autofill_field_error(0)
+                        .no_fallback_value());
+        EXPECT_EQ(status.details()
+                      .autofill_error_info()
+                      .autofill_field_error(1)
+                      .value_expression(),
+                  "${-3}");
+        EXPECT_TRUE(status.details()
+                        .autofill_error_info()
+                        .autofill_field_error(1)
+                        .no_fallback_value());
+      });
 
   fallback_handler.CheckAndFallbackRequiredFields(OkClientStatus(),
                                                   std::move(callback));
 }
 
 TEST_F(RequiredFieldsFallbackHandlerTest, UsesSelectOptionForDropdowns) {
+  InSequence sequence;
+
   Selector expected_selector({"#year"});
+
+  // First validation fails.
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(test_util::MockFindElement(
+                                mock_web_controller_, expected_selector)),
+                            _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), std::string()));
+
+  // Fill field.
   const ElementFinder::Result& expected_element =
       test_util::MockFindElement(mock_action_delegate_, expected_selector);
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(expected_selector, _))
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
-  EXPECT_CALL(mock_action_delegate_,
+  EXPECT_CALL(mock_web_controller_,
               GetElementTag(EqualsElement(expected_element), _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), "SELECT"));
-  Expectation select_option =
-      EXPECT_CALL(
-          mock_action_delegate_,
-          SelectOption("2050", DropdownSelectStrategy::LABEL_STARTS_WITH,
-                       EqualsElement(expected_element), _))
-          .WillOnce(RunOnceCallback<3>(OkClientStatus()));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(expected_selector, _))
-      .After(select_option)
+  EXPECT_CALL(mock_web_controller_,
+              SelectOption("^2050", false, SelectOptionProto::LABEL, true,
+                           EqualsElement(expected_element), _))
+      .WillOnce(RunOnceCallback<5>(OkClientStatus()));
+
+  // Second validation succeeds.
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(test_util::MockFindElement(
+                                mock_web_controller_, expected_selector)),
+                            _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), "2050"));
 
   std::vector<RequiredField> required_fields = {
@@ -510,19 +512,17 @@ TEST_F(RequiredFieldsFallbackHandlerTest, UsesSelectOptionForDropdowns) {
   RequiredFieldsFallbackHandler fallback_handler(
       required_fields, fallback_values, &mock_action_delegate_);
   fallback_handler.CheckAndFallbackRequiredFields(
-      OkClientStatus(),
-      base::BindOnce([](const ClientStatus& status,
-                        const base::Optional<ClientStatus>& detail_status) {
+      OkClientStatus(), base::BindOnce([](const ClientStatus& status) {
         EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
       }));
 }
 
 TEST_F(RequiredFieldsFallbackHandlerTest, ClicksOnCustomDropdown) {
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _)).Times(0);
-  EXPECT_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _)).Times(0);
+  EXPECT_CALL(mock_web_controller_, GetFieldValue(_, _)).Times(0);
+  EXPECT_CALL(mock_web_controller_, SetValueAttribute(_, _, _)).Times(0);
   Selector expected_main_selector({"#card_expiry"});
   EXPECT_CALL(
-      mock_action_delegate_,
+      mock_web_controller_,
       ClickOrTapElement(ClickType::TAP,
                         EqualsElement(test_util::MockFindElement(
                             mock_action_delegate_, expected_main_selector)),
@@ -530,12 +530,12 @@ TEST_F(RequiredFieldsFallbackHandlerTest, ClicksOnCustomDropdown) {
       .WillOnce(RunOnceCallback<2>(OkClientStatus()));
   Selector expected_option_selector({".option"});
   expected_option_selector.MatchingInnerText("08");
-  expected_option_selector.MustBeVisible();
   EXPECT_CALL(mock_action_delegate_,
               OnShortWaitForElement(expected_option_selector, _))
-      .WillOnce(RunOnceCallback<1>(OkClientStatus()));
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(),
+                                   base::TimeDelta::FromSeconds(0)));
   EXPECT_CALL(
-      mock_action_delegate_,
+      mock_web_controller_,
       ClickOrTapElement(ClickType::TAP,
                         EqualsElement(test_util::MockFindElement(
                             mock_action_delegate_, expected_option_selector)),
@@ -554,20 +554,18 @@ TEST_F(RequiredFieldsFallbackHandlerTest, ClicksOnCustomDropdown) {
   RequiredFieldsFallbackHandler fallback_handler(
       required_fields, fallback_values, &mock_action_delegate_);
   fallback_handler.CheckAndFallbackRequiredFields(
-      OkClientStatus(),
-      base::BindOnce([](const ClientStatus& status,
-                        const base::Optional<ClientStatus>& detail_status) {
+      OkClientStatus(), base::BindOnce([](const ClientStatus& status) {
         EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
       }));
 }
 
 TEST_F(RequiredFieldsFallbackHandlerTest, CustomDropdownClicksStopOnError) {
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(_, _)).Times(0);
-  EXPECT_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _)).Times(0);
+  EXPECT_CALL(mock_web_controller_, GetFieldValue(_, _)).Times(0);
+  EXPECT_CALL(mock_web_controller_, SetValueAttribute(_, _, _)).Times(0);
   Selector expected_main_selector({"#card_expiry"});
   Expectation main_click =
       EXPECT_CALL(
-          mock_action_delegate_,
+          mock_web_controller_,
           ClickOrTapElement(ClickType::TAP,
                             EqualsElement(test_util::MockFindElement(
                                 mock_action_delegate_, expected_main_selector)),
@@ -575,14 +573,14 @@ TEST_F(RequiredFieldsFallbackHandlerTest, CustomDropdownClicksStopOnError) {
           .WillOnce(RunOnceCallback<2>(OkClientStatus()));
   Selector expected_option_selector({".option"});
   expected_option_selector.MatchingInnerText("08");
-  expected_option_selector.MustBeVisible();
   EXPECT_CALL(mock_action_delegate_,
               OnShortWaitForElement(expected_option_selector, _))
-      .WillOnce(RunOnceCallback<1>(ClientStatus(ELEMENT_RESOLUTION_FAILED)));
+      .WillOnce(RunOnceCallback<1>(ClientStatus(ELEMENT_RESOLUTION_FAILED),
+                                   base::TimeDelta::FromSeconds(0)));
   EXPECT_CALL(mock_action_delegate_, FindElement(_, _))
       .Times(0)
       .After(main_click);
-  EXPECT_CALL(mock_action_delegate_, ClickOrTapElement(_, _, _))
+  EXPECT_CALL(mock_web_controller_, ClickOrTapElement(_, _, _))
       .Times(0)
       .After(main_click);
 
@@ -598,59 +596,255 @@ TEST_F(RequiredFieldsFallbackHandlerTest, CustomDropdownClicksStopOnError) {
   RequiredFieldsFallbackHandler fallback_handler(
       required_fields, fallback_values, &mock_action_delegate_);
   fallback_handler.CheckAndFallbackRequiredFields(
-      OkClientStatus(),
-      base::BindOnce([](const ClientStatus& status,
-                        const base::Optional<ClientStatus>& detail_status) {
+      OkClientStatus(), base::BindOnce([](const ClientStatus& status) {
         EXPECT_EQ(status.proto_status(), AUTOFILL_INCOMPLETE);
       }));
 }
 
-TEST_F(RequiredFieldsFallbackHandlerTest, ClearsFilledFields) {
-  Selector full_field_selector({"#full_field"});
-  Selector empty_field_selector({"#empty_field"});
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(full_field_selector, _))
+TEST_F(RequiredFieldsFallbackHandlerTest, ClearsFilledField) {
+  InSequence sequence;
+
+  Selector expected_selector({"#field"});
+
+  // First validation fails
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(test_util::MockFindElement(
+                                mock_web_controller_, expected_selector)),
+                            _))
       .WillOnce(RunOnceCallback<1>(OkClientStatus(), "value"));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(empty_field_selector, _))
-      .Times(0);
 
-  Expectation clear_full_value =
-      EXPECT_CALL(
-          mock_action_delegate_,
-          OnSetFieldValue("",
-                          EqualsElement(test_util::MockFindElement(
-                              mock_action_delegate_, full_field_selector)),
-                          _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(full_field_selector, _))
-      .After(clear_full_value)
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
-  Expectation clear_empty_value =
-      EXPECT_CALL(
-          mock_action_delegate_,
-          OnSetFieldValue("",
-                          EqualsElement(test_util::MockFindElement(
-                              mock_action_delegate_, empty_field_selector)),
-                          _))
-          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
-  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(empty_field_selector, _))
-      .After(clear_empty_value)
-      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
+  // Clears field.
+  EXPECT_CALL(mock_web_controller_,
+              SetValueAttribute(std::string(),
+                                EqualsElement(test_util::MockFindElement(
+                                    mock_action_delegate_, expected_selector)),
+                                _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
 
-  auto non_forced_field = CreateRequiredField("", {"#full_field"});
-  auto forced_field = CreateRequiredField("", {"#empty_field"});
+  // Second validation succeeds.
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(test_util::MockFindElement(
+                                mock_web_controller_, expected_selector)),
+                            _))
+      .WillRepeatedly(RunOnceCallback<1>(OkClientStatus(), std::string()));
+
+  std::vector<RequiredField> required_fields = {
+      CreateRequiredField(std::string(), {"#field"})};
+  std::map<std::string, std::string> fallback_values;
+
+  RequiredFieldsFallbackHandler fallback_handler(
+      required_fields, fallback_values, &mock_action_delegate_);
+  fallback_handler.CheckAndFallbackRequiredFields(
+      OkClientStatus(), base::BindOnce([](const ClientStatus& status) {
+        EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
+      }));
+}
+
+TEST_F(RequiredFieldsFallbackHandlerTest, SkipsForcedFieldCheckOnFirstRun) {
+  InSequence sequence;
+
+  Selector forced_field_selector({"#forced_field"});
+
+  // First validation skips forced fields.
+  EXPECT_CALL(mock_web_controller_, GetFieldValue(_, _)).Times(0);
+
+  // Fills field.
+  EXPECT_CALL(
+      mock_web_controller_,
+      SetValueAttribute("value",
+                        EqualsElement(test_util::MockFindElement(
+                            mock_action_delegate_, forced_field_selector)),
+                        _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+
+  // Second validation checks the field.
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(test_util::MockFindElement(
+                                mock_web_controller_, forced_field_selector)),
+                            _))
+      .WillRepeatedly(RunOnceCallback<1>(OkClientStatus(), "value"));
+
+  auto forced_field = CreateRequiredField("value", {"#forced_field"});
   forced_field.forced = true;
-  std::vector<RequiredField> required_fields = {non_forced_field, forced_field};
+  std::vector<RequiredField> required_fields = {forced_field};
 
   std::map<std::string, std::string> fallback_values;
 
   RequiredFieldsFallbackHandler fallback_handler(
       required_fields, fallback_values, &mock_action_delegate_);
   fallback_handler.CheckAndFallbackRequiredFields(
-      OkClientStatus(),
-      base::BindOnce([](const ClientStatus& status,
-                        const base::Optional<ClientStatus>& detail_status) {
+      OkClientStatus(), base::BindOnce([](const ClientStatus& status) {
         EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
       }));
+}
+
+TEST_F(RequiredFieldsFallbackHandlerTest,
+       EmptyValueDoesNotFailForFieldNotNeedingToBeFilled) {
+  Selector card_name_selector({"#card_name"});
+  Selector card_number_selector({"#card_number"});
+  auto card_name_element =
+      test_util::MockFindElement(mock_web_controller_, card_name_selector, 2);
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(card_name_element), _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), std::string()))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "value"));
+  auto card_number_element =
+      test_util::MockFindElement(mock_web_controller_, card_number_selector, 2);
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(card_number_element), _))
+      .Times(2)
+      .WillRepeatedly(RunOnceCallback<1>(OkClientStatus(), "value"));
+  EXPECT_CALL(mock_web_controller_,
+              SetValueAttribute("John Doe",
+                                EqualsElement(test_util::MockFindElement(
+                                    mock_action_delegate_, card_name_selector)),
+                                _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+
+  std::vector<RequiredField> required_fields = {
+      CreateRequiredField("${51}", {"#card_name"}),
+      CreateRequiredField("${52}", {"#card_number"})};
+
+  std::map<std::string, std::string> fallback_values = {
+      {base::NumberToString(
+           static_cast<int>(autofill::ServerFieldType::CREDIT_CARD_NAME_FULL)),
+       "John Doe"}};
+
+  RequiredFieldsFallbackHandler fallback_handler(
+      required_fields, fallback_values, &mock_action_delegate_);
+
+  base::OnceCallback<void(const ClientStatus&)> callback =
+      base::BindOnce([](const ClientStatus& status) {
+        EXPECT_EQ(status.proto_status(), ACTION_APPLIED);
+        EXPECT_EQ(
+            status.details().autofill_error_info().autofill_field_error_size(),
+            0);
+      });
+
+  fallback_handler.CheckAndFallbackRequiredFields(OkClientStatus(),
+                                                  std::move(callback));
+}
+
+TEST_F(RequiredFieldsFallbackHandlerTest,
+       AddsMissingFallbackValueToDetailsForOptionalFieldsWithoutFailing) {
+  Selector card_name_selector({"#card_name"});
+  Selector card_number_selector({"#card_number"});
+  auto card_name_element =
+      test_util::MockFindElement(mock_web_controller_, card_name_selector, 2);
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(card_name_element), _))
+      .Times(2)
+      .WillRepeatedly(RunOnceCallback<1>(OkClientStatus(), std::string()));
+  EXPECT_CALL(mock_web_controller_, SetValueAttribute(_, _, _)).Times(0);
+  auto card_number_element =
+      test_util::MockFindElement(mock_web_controller_, card_number_selector, 2);
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(card_number_element), _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), std::string()))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "4111111111111111"));
+  EXPECT_CALL(
+      mock_web_controller_,
+      SetValueAttribute("4111111111111111",
+                        EqualsElement(test_util::MockFindElement(
+                            mock_action_delegate_, card_number_selector)),
+                        _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+
+  std::vector<RequiredField> required_fields = {
+      CreateRequiredField("${51}", {"#card_name"}),
+      CreateRequiredField("${52}", {"#card_number"})};
+  required_fields[0].optional = true;
+
+  std::map<std::string, std::string> fallback_values = {
+      {base::NumberToString(
+           static_cast<int>(autofill::ServerFieldType::CREDIT_CARD_NUMBER)),
+       "4111111111111111"}};
+
+  RequiredFieldsFallbackHandler fallback_handler(
+      required_fields, fallback_values, &mock_action_delegate_);
+
+  base::OnceCallback<void(const ClientStatus&)> callback =
+      base::BindOnce([](const ClientStatus& status) {
+        EXPECT_TRUE(status.ok());
+        ASSERT_EQ(
+            status.details().autofill_error_info().autofill_field_error_size(),
+            1);
+        EXPECT_EQ(status.details()
+                      .autofill_error_info()
+                      .autofill_field_error(0)
+                      .value_expression(),
+                  "${51}");
+        EXPECT_TRUE(status.details()
+                        .autofill_error_info()
+                        .autofill_field_error(0)
+                        .no_fallback_value());
+      });
+
+  fallback_handler.CheckAndFallbackRequiredFields(OkClientStatus(),
+                                                  std::move(callback));
+}
+
+TEST_F(RequiredFieldsFallbackHandlerTest,
+       AddsNotFoundElementToDetailsForOptionalFieldsWithoutFailing) {
+  Selector card_name_selector({"#card_name"});
+  Selector card_number_selector({"#card_number"});
+  EXPECT_CALL(mock_web_controller_, OnFindElement(card_name_selector, _))
+      .Times(2)
+      .WillRepeatedly(
+          RunOnceCallback<1>(ClientStatus(ELEMENT_RESOLUTION_FAILED), nullptr));
+  EXPECT_CALL(mock_action_delegate_, FindElement(card_name_selector, _))
+      .WillOnce(
+          RunOnceCallback<1>(ClientStatus(ELEMENT_RESOLUTION_FAILED), nullptr));
+  auto card_number_element =
+      test_util::MockFindElement(mock_web_controller_, card_number_selector, 2);
+  EXPECT_CALL(mock_web_controller_,
+              GetFieldValue(EqualsElement(card_number_element), _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), std::string()))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "4111111111111111"));
+  EXPECT_CALL(
+      mock_web_controller_,
+      SetValueAttribute("4111111111111111",
+                        EqualsElement(test_util::MockFindElement(
+                            mock_action_delegate_, card_number_selector)),
+                        _))
+      .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+
+  std::vector<RequiredField> required_fields = {
+      CreateRequiredField("${51}", {"#card_name"}),
+      CreateRequiredField("${52}", {"#card_number"})};
+  required_fields[0].optional = true;
+
+  std::map<std::string, std::string> fallback_values = {
+      {base::NumberToString(
+           static_cast<int>(autofill::ServerFieldType::CREDIT_CARD_NAME_FULL)),
+       "John Doe"},
+      {base::NumberToString(
+           static_cast<int>(autofill::ServerFieldType::CREDIT_CARD_NUMBER)),
+       "4111111111111111"}};
+
+  RequiredFieldsFallbackHandler fallback_handler(
+      required_fields, fallback_values, &mock_action_delegate_);
+
+  base::OnceCallback<void(const ClientStatus&)> callback =
+      base::BindOnce([](const ClientStatus& status) {
+        EXPECT_TRUE(status.ok());
+        ASSERT_EQ(
+            status.details().autofill_error_info().autofill_field_error_size(),
+            1);
+        EXPECT_EQ(status.details()
+                      .autofill_error_info()
+                      .autofill_field_error(0)
+                      .value_expression(),
+                  "${51}");
+        EXPECT_EQ(status.details()
+                      .autofill_error_info()
+                      .autofill_field_error(0)
+                      .status(),
+                  ELEMENT_RESOLUTION_FAILED);
+      });
+
+  fallback_handler.CheckAndFallbackRequiredFields(OkClientStatus(),
+                                                  std::move(callback));
 }
 
 }  // namespace

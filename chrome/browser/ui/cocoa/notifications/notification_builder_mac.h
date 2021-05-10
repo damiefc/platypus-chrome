@@ -7,19 +7,18 @@
 
 #import <Foundation/Foundation.h>
 
-#include "base/mac/scoped_nsobject.h"
 #import "chrome/browser/ui/cocoa/notifications/notification_builder_base.h"
 
 @class NSUserNotification;
 
 // Provides a marshallable way for storing the information required to construct
-// a NSUSerNotification that is to be displayed on the system.
+// a NSUserNotification that is to be displayed on the system.
 //
 // A quick example:
 //     base::scoped_nsobject<NotificationBuilder> builder(
 //         [[NotificationBuilder alloc] initWithCloseLabel:@"Close"
 //                                            optionsLabel:@"Options"
-//                                           settingsLabel:@"Settings")]);
+//                                           settingsLabel:@"Settings"]);
 //     [builder setTitle:@"Hello"];
 //
 //     // Build a notification out of the data.
@@ -33,12 +32,6 @@
 //     base::scoped_nsobject<NotificationBuilder> finalBuilder(
 //         [[NotificationBuilder alloc] initWithData:notificationData]);
 @interface NotificationBuilder : NotificationBuilderBase
-
-// Initializes a builder with default values for the button labels.
-- (instancetype)initWithCloseLabel:(NSString*)closeLabel
-                      optionsLabel:(NSString*)optionsLabel
-                     settingsLabel:(NSString*)settingsLabel;
-
 
 // Returns a notification ready to be displayed out of the provided
 // |notificationData|.

@@ -79,7 +79,7 @@ BlobReader::BlobReader(const BlobDataHandle* blob_handle)
     if (blob_handle->IsBroken()) {
       net_error_ = ConvertBlobErrorToNetError(blob_handle->GetBlobStatus());
     } else {
-      blob_handle_.reset(new BlobDataHandle(*blob_handle));
+      blob_handle_ = std::make_unique<BlobDataHandle>(*blob_handle);
     }
   }
 }
@@ -337,6 +337,10 @@ BlobReader::Status BlobReader::CalculateSizeImpl(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!total_size_calculated_);
   DCHECK(size_callback_.is_null());
+
+  if (!blob_data_) {
+    return ReportError(net::ERR_UNEXPECTED);
+  }
 
   net_error_ = net::OK;
   total_size_ = 0;
@@ -799,7 +803,7 @@ std::unique_ptr<network::DataPipeToSourceStream> BlobReader::CreateDataPipe(
   options.capacity_num_bytes =
       blink::BlobUtils::GetDataPipeCapacity(max_bytes_to_read);
 
-  MojoResult result = mojo::CreateDataPipe(&options, &producer, &consumer);
+  MojoResult result = mojo::CreateDataPipe(&options, producer, consumer);
 
   if (result != MOJO_RESULT_OK)
     return nullptr;

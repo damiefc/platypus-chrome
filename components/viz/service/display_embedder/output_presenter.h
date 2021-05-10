@@ -8,11 +8,13 @@
 #include <memory>
 #include <vector>
 
+#include "base/callback_helpers.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/overlay_processor_interface.h"
 #include "components/viz/service/display/skia_output_surface.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/service/shared_image_representation.h"
+#include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/gfx/swap_result.h"
 
@@ -52,8 +54,9 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
     void PreGrContextSubmit();
 
     virtual void BeginPresent() = 0;
-    virtual void EndPresent() = 0;
-    virtual int present_count() const = 0;
+    virtual void EndPresent(gfx::GpuFenceHandle release_fence) = 0;
+    virtual int GetPresentCount() const = 0;
+    virtual void OnContextLost() = 0;
 
     base::WeakPtr<Image> GetWeakPtr() { return weak_ptr_factory_.GetWeakPtr(); }
 
@@ -86,6 +89,9 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
       gfx::ColorSpace color_space,
       gfx::Size image_size,
       size_t num_images) = 0;
+  virtual std::unique_ptr<Image> AllocateBackgroundImage(
+      gfx::ColorSpace color_space,
+      gfx::Size image_size);
   virtual void SwapBuffers(SwapCompletionCallback completion_callback,
                            BufferPresentedCallback presentation_callback) = 0;
   virtual void PostSubBuffer(const gfx::Rect& rect,
@@ -102,6 +108,7 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
       gpu::SharedImageRepresentationOverlay::ScopedReadAccess;
   virtual void ScheduleOverlays(SkiaOutputSurface::OverlayList overlays,
                                 std::vector<ScopedOverlayAccess*> accesses) = 0;
+  virtual void ScheduleBackground(Image* image);
 };
 
 }  // namespace viz

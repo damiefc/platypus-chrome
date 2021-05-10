@@ -4,6 +4,8 @@
 
 #include "device/bluetooth/dbus/fake_bluetooth_gatt_characteristic_client.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -11,6 +13,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/chromeos_buildflags.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #include "device/bluetooth/dbus/fake_bluetooth_device_client.h"
 #include "device/bluetooth/dbus/fake_bluetooth_gatt_descriptor_client.h"
@@ -326,7 +329,7 @@ void FakeBluetoothGattCharacteristicClient::PrepareWriteValue(
 
 void FakeBluetoothGattCharacteristicClient::StartNotify(
     const dbus::ObjectPath& object_path,
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     device::BluetoothGattCharacteristic::NotificationType notification_type,
 #endif
     base::OnceClosure callback,
@@ -400,10 +403,11 @@ void FakeBluetoothGattCharacteristicClient::ExposeHeartRateCharacteristics(
   // ==== Heart Rate Measurement Characteristic ====
   heart_rate_measurement_path_ =
       service_path.value() + "/" + kHeartRateMeasurementPathComponent;
-  heart_rate_measurement_properties_.reset(new Properties(base::BindRepeating(
-      &FakeBluetoothGattCharacteristicClient::OnPropertyChanged,
-      weak_ptr_factory_.GetWeakPtr(),
-      dbus::ObjectPath(heart_rate_measurement_path_))));
+  heart_rate_measurement_properties_ =
+      std::make_unique<Properties>(base::BindRepeating(
+          &FakeBluetoothGattCharacteristicClient::OnPropertyChanged,
+          weak_ptr_factory_.GetWeakPtr(),
+          dbus::ObjectPath(heart_rate_measurement_path_)));
   heart_rate_measurement_properties_->uuid.ReplaceValue(
       kHeartRateMeasurementUUID);
   heart_rate_measurement_properties_->service.ReplaceValue(service_path);
@@ -414,10 +418,11 @@ void FakeBluetoothGattCharacteristicClient::ExposeHeartRateCharacteristics(
   // ==== Body Sensor Location Characteristic ====
   body_sensor_location_path_ =
       service_path.value() + "/" + kBodySensorLocationPathComponent;
-  body_sensor_location_properties_.reset(new Properties(base::BindRepeating(
-      &FakeBluetoothGattCharacteristicClient::OnPropertyChanged,
-      weak_ptr_factory_.GetWeakPtr(),
-      dbus::ObjectPath(body_sensor_location_path_))));
+  body_sensor_location_properties_ =
+      std::make_unique<Properties>(base::BindRepeating(
+          &FakeBluetoothGattCharacteristicClient::OnPropertyChanged,
+          weak_ptr_factory_.GetWeakPtr(),
+          dbus::ObjectPath(body_sensor_location_path_)));
   body_sensor_location_properties_->uuid.ReplaceValue(kBodySensorLocationUUID);
   body_sensor_location_properties_->service.ReplaceValue(service_path);
   flags.clear();
@@ -427,10 +432,11 @@ void FakeBluetoothGattCharacteristicClient::ExposeHeartRateCharacteristics(
   // ==== Heart Rate Control Point Characteristic ====
   heart_rate_control_point_path_ =
       service_path.value() + "/" + kHeartRateControlPointPathComponent;
-  heart_rate_control_point_properties_.reset(new Properties(base::BindRepeating(
-      &FakeBluetoothGattCharacteristicClient::OnPropertyChanged,
-      weak_ptr_factory_.GetWeakPtr(),
-      dbus::ObjectPath(heart_rate_control_point_path_))));
+  heart_rate_control_point_properties_ =
+      std::make_unique<Properties>(base::BindRepeating(
+          &FakeBluetoothGattCharacteristicClient::OnPropertyChanged,
+          weak_ptr_factory_.GetWeakPtr(),
+          dbus::ObjectPath(heart_rate_control_point_path_)));
   heart_rate_control_point_properties_->uuid.ReplaceValue(
       kHeartRateControlPointUUID);
   heart_rate_control_point_properties_->service.ReplaceValue(service_path);
@@ -569,7 +575,7 @@ void FakeBluetoothGattCharacteristicClient::DelayedReadValueCallback(
   DCHECK(properties);
 
   properties->value.ReplaceValue(value);
-  std::move(callback).Run(value);
+  std::move(callback).Run(/*error_code=*/base::nullopt, value);
 }
 
 std::vector<uint8_t>

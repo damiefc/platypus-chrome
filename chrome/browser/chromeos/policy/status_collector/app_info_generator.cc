@@ -23,6 +23,7 @@ em::AppInfo::Status ExtractStatus(const apps::mojom::Readiness readiness) {
   switch (readiness) {
     case apps::mojom::Readiness::kReady:
       return em::AppInfo::Status::AppInfo_Status_STATUS_INSTALLED;
+    case apps::mojom::Readiness::kRemoved:
     case apps::mojom::Readiness::kUninstalledByUser:
       return em::AppInfo::Status::AppInfo_Status_STATUS_UNINSTALLED;
     case apps::mojom::Readiness::kDisabledByBlocklist:
@@ -48,11 +49,12 @@ em::AppInfo::AppType ExtractAppType(const apps::mojom::AppType app_type) {
     case apps::mojom::AppType::kExtension:
       return em::AppInfo::AppType::AppInfo_AppType_TYPE_EXTENSION;
     case apps::mojom::AppType::kWeb:
+    case apps::mojom::AppType::kSystemWeb:
       return em::AppInfo::AppType::AppInfo_AppType_TYPE_WEB;
     case apps::mojom::AppType::kBorealis:
       return em::AppInfo::AppType::AppInfo_AppType_TYPE_BOREALIS;
-    case apps::mojom::AppType::kMacNative:
-    case apps::mojom::AppType::kLacros:
+    case apps::mojom::AppType::kMacOs:
+    case apps::mojom::AppType::kStandaloneBrowser:
     case apps::mojom::AppType::kRemote:
     case apps::mojom::AppType::kUnknown:
       return em::AppInfo::AppType::AppInfo_AppType_TYPE_UNKNOWN;

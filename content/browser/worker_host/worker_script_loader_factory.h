@@ -11,6 +11,7 @@
 #include "content/public/browser/service_worker_client_info.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 
@@ -23,7 +24,6 @@ namespace content {
 class AppCacheHost;
 class BrowserContext;
 class ServiceWorkerMainResourceHandle;
-class ResourceContext;
 class WorkerScriptLoader;
 
 // WorkerScriptLoaderFactory creates a WorkerScriptLoader to load the main
@@ -36,10 +36,6 @@ class WorkerScriptLoader;
 class CONTENT_EXPORT WorkerScriptLoaderFactory
     : public network::mojom::URLLoaderFactory {
  public:
-  // Returns the resource context, or nullptr during shutdown. Must be called on
-  // the IO thread.
-  using ResourceContextGetter = base::RepeatingCallback<ResourceContext*(void)>;
-
   // Returns the browser context, or nullptr during shutdown. Must be called on
   // the UI thread.
   using BrowserContextGetter = base::RepeatingCallback<BrowserContext*(void)>;
@@ -54,13 +50,13 @@ class CONTENT_EXPORT WorkerScriptLoaderFactory
       ServiceWorkerMainResourceHandle* service_worker_handle,
       base::WeakPtr<AppCacheHost> appcache_host,
       const BrowserContextGetter& browser_context_getter,
-      scoped_refptr<network::SharedURLLoaderFactory> loader_factory);
+      scoped_refptr<network::SharedURLLoaderFactory> loader_factory,
+      ukm::SourceId worker_source_id);
   ~WorkerScriptLoaderFactory() override;
 
   // network::mojom::URLLoaderFactory:
   void CreateLoaderAndStart(
       mojo::PendingReceiver<network::mojom::URLLoader> receiver,
-      int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& resource_request,
@@ -79,6 +75,7 @@ class CONTENT_EXPORT WorkerScriptLoaderFactory
   base::WeakPtr<AppCacheHost> appcache_host_;
   BrowserContextGetter browser_context_getter_;
   scoped_refptr<network::SharedURLLoaderFactory> loader_factory_;
+  const ukm::SourceId worker_source_id_;
 
   // This is owned by SelfOwnedReceiver associated with the given
   // mojo::PendingReceiver<URLLoader>, and invalidated after receiver completion

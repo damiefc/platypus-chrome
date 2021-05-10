@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -138,7 +138,7 @@ void EngineClient::InitializeReadOnlyCallbacks() {
 }
 
 bool EngineClient::InitializeCleaningCallbacks() {
-  std::unique_ptr<ZipArchiver> archiver = nullptr;
+  std::unique_ptr<ZipArchiver> archiver;
   if (archiver_for_testing_) {
     archiver = std::move(archiver_for_testing_);
   } else {

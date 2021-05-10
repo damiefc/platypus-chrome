@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/task_environment.h"
 #include "remoting/base/oauth_token_getter.h"
@@ -78,7 +78,7 @@ class MockOAuthTokenGetter : public OAuthTokenGetter {
 
 class FakeMessagingClient : public MessagingClient {
  public:
-  std::unique_ptr<MessageCallbackSubscription> RegisterMessageCallback(
+  base::CallbackListSubscription RegisterMessageCallback(
       const MessageCallback& callback) override {
     return callback_list_.Add(callback);
   }

@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "components/vector_icons/vector_icons.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"

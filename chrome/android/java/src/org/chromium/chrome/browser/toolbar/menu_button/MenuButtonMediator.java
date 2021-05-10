@@ -4,22 +4,28 @@
 
 package org.chromium.chrome.browser.toolbar.menu_button;
 
+import android.animation.Animator;
+import android.animation.AnimatorSet;
+import android.app.Activity;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
+import android.view.View;
 
 import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
+import org.chromium.base.MathUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper.MenuButtonState;
-import org.chromium.chrome.browser.omnibox.LocationBar;
-import org.chromium.chrome.browser.toolbar.ThemeColorProvider;
+import org.chromium.chrome.browser.omnibox.OmniboxFocusReason;
+import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator.SetFocusFunction;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonProperties.ShowBadgeProperty;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonProperties.ThemeProperty;
@@ -28,7 +34,10 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuObserver;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuPropertiesDelegate;
+import org.chromium.ui.KeyboardVisibilityDelegate;
+import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.modelutil.PropertyModelAnimatorFactory;
 import org.chromium.ui.util.TokenHolder;
 
 /**
@@ -36,7 +45,6 @@ import org.chromium.ui.util.TokenHolder;
  * changes to the property model that backs the MenuButton view.
  */
 class MenuButtonMediator implements AppMenuObserver {
-    private OneshotSupplier<AppMenuCoordinator> mAppMenuCoordinatorSupplier;
     private Callback<AppMenuCoordinator> mAppMenuCoordinatorSupplierObserver;
     private @Nullable AppMenuPropertiesDelegate mAppMenuPropertiesDelegate;
     private AppMenuButtonHelper mAppMenuButtonHelper;
@@ -47,6 +55,8 @@ class MenuButtonMediator implements AppMenuObserver {
     private final PropertyModel mPropertyModel;
     private final Runnable mRequestRenderRunnable;
     private final ThemeColorProvider mThemeColorProvider;
+    private final Activity mActivity;
+    private final KeyboardVisibilityDelegate mKeyboardDelegate;
     private boolean mShouldShowAppUpdateBadge;
     private Runnable mUpdateStateChangedListener;
     private Supplier<Boolean> mIsActivityFinishingSupplier;
@@ -55,6 +65,9 @@ class MenuButtonMediator implements AppMenuObserver {
     private Supplier<Boolean> mIsInOverviewModeSupplier;
     private boolean mSuppressAppMenuUpdateBadge;
     private Resources mResources;
+    private OneshotSupplier<AppMenuCoordinator> mAppMenuCoordinatorSupplier;
+
+    private final int mUrlFocusTranslationX;
 
     /**
      *  @param appMenuCoordinatorSupplier Supplier for the AppMenuCoordinator, which owns all other
@@ -68,7 +81,7 @@ class MenuButtonMediator implements AppMenuObserver {
      *         a pending update.
      * @param isInOverviewModeSupplier Supplier of overview mode state.
      * @param themeColorProvider Provider of theme color changes.
-     * @param resources Resources object to use to obtain, e.g. localized strings.
+     * @param windowAndroid The WindowAndroid instance.
      * @param shouldShowAppUpdateBadge Whether the "update available" badge should ever be shown.
      * @param isActivityFinishingSupplier Supplier for knowing if the embedding activity is in the
      *         process of finishing or has already been destroyed.
@@ -79,7 +92,8 @@ class MenuButtonMediator implements AppMenuObserver {
             ThemeColorProvider themeColorProvider, Supplier<Boolean> isInOverviewModeSupplier,
             BrowserStateBrowserControlsVisibilityDelegate controlsVisibilityDelegate,
             SetFocusFunction setUrlBarFocusFunction,
-            OneshotSupplier<AppMenuCoordinator> appMenuCoordinatorSupplier, Resources resources) {
+            OneshotSupplier<AppMenuCoordinator> appMenuCoordinatorSupplier,
+            WindowAndroid windowAndroid) {
         mPropertyModel = propertyModel;
         mShouldShowAppUpdateBadge = shouldShowAppUpdateBadge;
         mIsActivityFinishingSupplier = isActivityFinishingSupplier;
@@ -92,8 +106,13 @@ class MenuButtonMediator implements AppMenuObserver {
         mAppMenuCoordinatorSupplierObserver = this::onAppMenuInitialized;
         mAppMenuCoordinatorSupplier = appMenuCoordinatorSupplier;
         mAppMenuCoordinatorSupplier.onAvailable(mAppMenuCoordinatorSupplierObserver);
-        mResources = resources;
+        mActivity = windowAndroid.getActivity().get();
+        mResources = mActivity.getResources();
         mAppMenuButtonHelperSupplier = new ObservableSupplierImpl<>();
+        mKeyboardDelegate = windowAndroid.getKeyboardDelegate();
+
+        mUrlFocusTranslationX =
+                mResources.getDimensionPixelSize(R.dimen.toolbar_url_focus_translation_x);
     }
 
     @Override
@@ -101,7 +120,14 @@ class MenuButtonMediator implements AppMenuObserver {
         if (isVisible) {
             // Defocus here to avoid handling focus in multiple places, e.g., when the
             // forward button is pressed. (see crbug.com/414219)
-            mSetUrlBarFocusFunction.setFocus(false, LocationBar.OmniboxFocusReason.UNFOCUS);
+            mSetUrlBarFocusFunction.setFocus(false, OmniboxFocusReason.UNFOCUS);
+
+            View view = mActivity.getCurrentFocus();
+            if (view != null) {
+                // Dismiss keyboard in case the user was interacting with an input field on a
+                // website.
+                mKeyboardDelegate.hideKeyboard(view);
+            }
 
             if (!mIsInOverviewModeSupplier.get() && isShowingAppMenuUpdateBadge()) {
                 // The app menu badge should be removed the first time the menu is opened.
@@ -268,5 +294,26 @@ class MenuButtonMediator implements AppMenuObserver {
 
     private boolean isUpdateAvailable() {
         return UpdateMenuItemHelper.getInstance().getUiState().buttonState != null;
+    }
+
+    public Animator getUrlFocusingAnimator(boolean isFocusingUrl, boolean isRtl) {
+        float translationX;
+        float alpha;
+        if (isFocusingUrl) {
+            float density = mResources.getDisplayMetrics().density;
+            translationX = MathUtils.flipSignIf(mUrlFocusTranslationX, isRtl) * density;
+            alpha = 0.0f;
+        } else {
+            translationX = 0.0f;
+            alpha = 1.0f;
+        }
+
+        AnimatorSet animatorSet = new AnimatorSet();
+        Animator translationAnimator = PropertyModelAnimatorFactory.ofFloat(
+                mPropertyModel, MenuButtonProperties.TRANSLATION_X, translationX);
+        Animator alphaAnimator = PropertyModelAnimatorFactory.ofFloat(
+                mPropertyModel, MenuButtonProperties.ALPHA, alpha);
+        animatorSet.playTogether(translationAnimator, alphaAnimator);
+        return animatorSet;
     }
 }

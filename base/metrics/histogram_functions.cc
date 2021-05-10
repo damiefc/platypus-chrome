@@ -25,25 +25,34 @@ void UmaHistogramBoolean(const char* name, bool sample) {
 
 void UmaHistogramExactLinear(const std::string& name,
                              int sample,
-                             int value_max) {
+                             int exclusive_max) {
   HistogramBase* histogram =
-      LinearHistogram::FactoryGet(name, 1, value_max, value_max + 1,
+      LinearHistogram::FactoryGet(name, 1, exclusive_max, exclusive_max + 1,
                                   HistogramBase::kUmaTargetedHistogramFlag);
   histogram->Add(sample);
 }
 
-void UmaHistogramExactLinear(const char* name, int sample, int value_max) {
+void UmaHistogramExactLinear(const char* name, int sample, int exclusive_max) {
   HistogramBase* histogram =
-      LinearHistogram::FactoryGet(name, 1, value_max, value_max + 1,
+      LinearHistogram::FactoryGet(name, 1, exclusive_max, exclusive_max + 1,
                                   HistogramBase::kUmaTargetedHistogramFlag);
   histogram->Add(sample);
 }
 
 void UmaHistogramPercentage(const std::string& name, int percent) {
-  UmaHistogramExactLinear(name, percent, 100);
+  UmaHistogramExactLinear(name, percent, 101);
 }
 
 void UmaHistogramPercentage(const char* name, int percent) {
+  UmaHistogramExactLinear(name, percent, 101);
+}
+
+void UmaHistogramPercentageObsoleteDoNotUse(const std::string& name,
+                                            int percent) {
+  UmaHistogramExactLinear(name, percent, 100);
+}
+
+void UmaHistogramPercentageObsoleteDoNotUse(const char* name, int percent) {
   UmaHistogramExactLinear(name, percent, 100);
 }
 

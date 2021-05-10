@@ -7,6 +7,7 @@
 
 #include "base/callback_forward.h"
 #include "base/optional.h"
+#include "chrome/browser/lookalikes/digital_asset_links_cross_validator.h"
 #include "chrome/browser/reputation/reputation_service.h"
 #include "chrome/browser/reputation/safety_tip_ui.h"
 #include "components/security_state/core/security_state.h"
@@ -43,6 +44,9 @@ class ReputationWebContentsObserver
   // Allows tests to register a callback to be called when the next reputation
   // check finishes.
   void RegisterReputationCheckCallbackForTesting(base::OnceClosure callback);
+
+  // Allows tests to register a callback called when the warning closes.
+  void RegisterSafetyTipCloseCallbackForTesting(base::OnceClosure callback);
 
   // Allows tests to see whether a reputation check has already completed since
   // construction or last reset, and selectively register a callback if not.
@@ -84,6 +88,10 @@ class ReputationWebContentsObserver
       ReputationCheckResult result,
       ukm::SourceId navigation_source_id);
 
+  void OnDigitalAssetLinkValidationResult(ReputationCheckResult result,
+                                          ukm::SourceId navigation_source_id,
+                                          bool validation_succeeded);
+
   Profile* profile_;
 
   // Used to cache the last safety tip info (and associated navigation entry ID)
@@ -102,6 +110,10 @@ class ReputationWebContentsObserver
   base::OnceClosure reputation_check_callback_for_testing_;
   // Whether or not heuristics have yet been checked yet.
   bool reputation_check_pending_for_testing_;
+
+  base::OnceClosure safety_tip_close_callback_for_testing_;
+
+  std::unique_ptr<DigitalAssetLinkCrossValidator> digital_asset_link_validator_;
 
   base::WeakPtrFactory<ReputationWebContentsObserver> weak_factory_{this};
   WEB_CONTENTS_USER_DATA_KEY_DECL();

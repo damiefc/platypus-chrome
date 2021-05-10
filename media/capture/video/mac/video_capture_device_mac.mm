@@ -764,6 +764,15 @@ void VideoCaptureDeviceMac::SetPhotoOptions(mojom::PhotoSettingsPtr settings,
   std::move(callback).Run(true);
 }
 
+void VideoCaptureDeviceMac::OnUtilizationReport(
+    int frame_feedback_id,
+    media::VideoCaptureFeedback feedback) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  if (!capture_device_)
+    return;
+  [capture_device_ setScaledResolutions:std::move(feedback.mapped_sizes)];
+}
+
 bool VideoCaptureDeviceMac::Init(VideoCaptureApi capture_api_type) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(state_, kNotInitialized);
@@ -771,8 +780,8 @@ bool VideoCaptureDeviceMac::Init(VideoCaptureApi capture_api_type) {
   if (capture_api_type != VideoCaptureApi::MACOSX_AVFOUNDATION)
     return false;
 
-  capture_device_.reset([[GetVideoCaptureDeviceAVFoundationImplementationClass()
-      alloc] initWithFrameReceiver:this]);
+  capture_device_.reset(
+      [[VideoCaptureDeviceAVFoundation alloc] initWithFrameReceiver:this]);
 
   if (!capture_device_)
     return false;
@@ -803,22 +812,19 @@ void VideoCaptureDeviceMac::ReceiveFrame(const uint8_t* video_frame,
 }
 
 void VideoCaptureDeviceMac::ReceiveExternalGpuMemoryBufferFrame(
-    gfx::GpuMemoryBufferHandle handle,
-    std::unique_ptr<VideoCaptureDevice::Client::Buffer::ScopedAccessPermission>
-        read_access_permission,
-    const VideoCaptureFormat& format,
-    const gfx::ColorSpace color_space,
+    CapturedExternalVideoBuffer frame,
+    std::vector<CapturedExternalVideoBuffer> scaled_frames,
     base::TimeDelta timestamp) {
-  if (capture_format_.frame_size != format.frame_size) {
+  if (capture_format_.frame_size != frame.format.frame_size) {
     ReceiveError(VideoCaptureError::kMacReceivedFrameWithUnexpectedResolution,
                  FROM_HERE,
-                 "Captured resolution " + format.frame_size.ToString() +
+                 "Captured resolution " + frame.format.frame_size.ToString() +
                      ", and expected " + capture_format_.frame_size.ToString());
     return;
   }
-  client_->OnIncomingCapturedExternalBuffer(
-      std::move(handle), std::move(read_access_permission), format, color_space,
-      base::TimeTicks::Now(), timestamp);
+  client_->OnIncomingCapturedExternalBuffer(std::move(frame),
+                                            std::move(scaled_frames),
+                                            base::TimeTicks::Now(), timestamp);
 }
 
 void VideoCaptureDeviceMac::OnPhotoTaken(const uint8_t* image_data,

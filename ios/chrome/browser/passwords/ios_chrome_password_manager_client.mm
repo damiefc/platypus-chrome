@@ -9,10 +9,12 @@
 
 #include "base/bind.h"
 #include "base/no_destructor.h"
+#include "base/strings/sys_string_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/logging/log_router.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/keyed_service/core/service_access_type.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
@@ -30,6 +32,9 @@
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #include "ios/chrome/browser/passwords/ios_password_requirements_service_factory.h"
 #include "ios/chrome/browser/passwords/password_manager_log_router_factory.h"
+#import "ios/chrome/browser/safe_browsing/chrome_password_protection_service.h"
+#import "ios/chrome/browser/safe_browsing/chrome_password_protection_service_factory.h"
+#include "ios/chrome/browser/safe_browsing/features.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
 #include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/system_flags.h"
@@ -44,6 +49,7 @@
 #error "This file requires ARC support."
 #endif
 
+using password_manager::metrics_util::PasswordType;
 using password_manager::PasswordFormManagerForUI;
 using password_manager::PasswordManagerMetricsRecorder;
 using password_manager::PasswordStore;
@@ -62,6 +68,7 @@ IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
     : bridge_(bridge),
       password_feature_manager_(GetPrefs(),
                                 GetSyncService(bridge_.browserState)),
+      password_reuse_detection_manager_(this),
       credentials_filter_(
           this,
           base::BindRepeating(&GetSyncService, bridge_.browserState)),
@@ -74,7 +81,13 @@ IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
   log_manager_ = autofill::LogManager::Create(
       ios::PasswordManagerLogRouterFactory::GetForBrowserState(
           bridge_.browserState),
-      base::Closure());
+      base::RepeatingClosure());
+
+  if (IsPasswordReuseDetectionEnabled()) {
+    web_state_observation_.Observe(bridge_.webState);
+    input_event_observation_.Observe(
+        PasswordProtectionJavaScriptFeature::GetInstance());
+  }
 }
 
 IOSChromePasswordManagerClient::~IOSChromePasswordManagerClient() = default;
@@ -86,7 +99,7 @@ SyncState IOSChromePasswordManagerClient::GetPasswordSyncState() const {
 }
 
 bool IOSChromePasswordManagerClient::PromptUserToChooseCredentials(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
+    std::vector<std::unique_ptr<password_manager::PasswordForm>> local_forms,
     const url::Origin& origin,
     CredentialsCallback callback) {
   NOTIMPLEMENTED();
@@ -96,7 +109,7 @@ bool IOSChromePasswordManagerClient::PromptUserToChooseCredentials(
 bool IOSChromePasswordManagerClient::PromptUserToSaveOrUpdatePassword(
     std::unique_ptr<PasswordFormManagerForUI> form_to_save,
     bool update_password) {
-  if (form_to_save->IsBlacklisted())
+  if (form_to_save->IsBlocklisted())
     return false;
 
   [bridge_ removePasswordInfoBarManualFallback:YES];
@@ -116,7 +129,7 @@ void IOSChromePasswordManagerClient::PromptUserToMovePasswordToAccount(
 }
 
 bool IOSChromePasswordManagerClient::RequiresReauthToFill() {
-  return base::FeatureList::IsEnabled(kEnableAutofillPasswordReauthIOS);
+  return true;
 }
 
 void IOSChromePasswordManagerClient::ShowManualFallbackForSaving(
@@ -136,6 +149,7 @@ void IOSChromePasswordManagerClient::HideManualFallbackForSaving() {
 
 void IOSChromePasswordManagerClient::FocusedInputChanged(
     password_manager::PasswordManagerDriver* driver,
+    autofill::FieldRendererId focused_field_id,
     autofill::mojom::FocusedFieldType focused_field_type) {
   NOTIMPLEMENTED();
 }
@@ -180,7 +194,7 @@ PasswordStore* IOSChromePasswordManagerClient::GetAccountPasswordStore() const {
 }
 
 void IOSChromePasswordManagerClient::NotifyUserAutoSignin(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
+    std::vector<std::unique_ptr<password_manager::PasswordForm>> local_forms,
     const url::Origin& origin) {
   DCHECK(!local_forms.empty());
   helper_.NotifyUserAutoSignin();
@@ -188,7 +202,7 @@ void IOSChromePasswordManagerClient::NotifyUserAutoSignin(
 }
 
 void IOSChromePasswordManagerClient::NotifyUserCouldBeAutoSignedIn(
-    std::unique_ptr<autofill::PasswordForm> form) {
+    std::unique_ptr<password_manager::PasswordForm> form) {
   helper_.NotifyUserCouldBeAutoSignedIn(std::move(form));
 }
 
@@ -205,9 +219,8 @@ void IOSChromePasswordManagerClient::NotifyStorePasswordCalled() {
 
 void IOSChromePasswordManagerClient::NotifyUserCredentialsWereLeaked(
     password_manager::CredentialLeakType leak_type,
-    password_manager::CompromisedSitesCount saved_sites,
     const GURL& origin,
-    const base::string16& username) {
+    const std::u16string& username) {
   [bridge_ showPasswordBreachForLeakType:leak_type URL:origin];
 }
 
@@ -235,10 +248,10 @@ url::Origin IOSChromePasswordManagerClient::GetLastCommittedOrigin() const {
   return url::Origin::Create(bridge_.lastCommittedURL);
 }
 
-std::string IOSChromePasswordManagerClient::GetPageLanguage() const {
+autofill::LanguageCode IOSChromePasswordManagerClient::GetPageLanguage() const {
   // TODO(crbug.com/912597): Add WebState to the IOSChromePasswordManagerClient
   // to be able to get the pages LanguageState from the TranslateManager.
-  return std::string();
+  return autofill::LanguageCode();
 }
 
 const password_manager::CredentialsFilter*
@@ -293,4 +306,71 @@ bool IOSChromePasswordManagerClient::IsNewTabPage() const {
 password_manager::FieldInfoManager*
 IOSChromePasswordManagerClient::GetFieldInfoManager() const {
   return nullptr;
+}
+
+bool IOSChromePasswordManagerClient::IsAutofillAssistantUIVisible() const {
+  return false;
+}
+
+safe_browsing::PasswordProtectionService*
+IOSChromePasswordManagerClient::GetPasswordProtectionService() const {
+  return ChromePasswordProtectionServiceFactory::GetForBrowserState(
+      bridge_.browserState);
+}
+
+void IOSChromePasswordManagerClient::CheckProtectedPasswordEntry(
+    PasswordType password_type,
+    const std::string& username,
+    const std::vector<password_manager::MatchingReusedCredential>&
+        matching_reused_credentials,
+    bool password_field_exists) {
+  safe_browsing::PasswordProtectionService* service =
+      GetPasswordProtectionService();
+  if (service) {
+    auto show_warning_callback = base::BindOnce(
+        &IOSChromePasswordManagerClient::NotifyUserPasswordProtectionWarning,
+        weak_factory_.GetWeakPtr());
+    service->MaybeStartProtectedPasswordEntryRequest(
+        bridge_.webState, bridge_.webState->GetLastCommittedURL(), username,
+        password_type, matching_reused_credentials, password_field_exists,
+        std::move(show_warning_callback));
+  }
+}
+
+void IOSChromePasswordManagerClient::LogPasswordReuseDetectedEvent() {
+  safe_browsing::PasswordProtectionService* service =
+      GetPasswordProtectionService();
+  if (service) {
+    service->MaybeLogPasswordReuseDetectedEvent(bridge_.webState);
+  }
+}
+
+void IOSChromePasswordManagerClient::NotifyUserPasswordProtectionWarning(
+    const std::u16string& warning_text,
+    base::OnceCallback<void(safe_browsing::WarningAction)> callback) {
+  __block auto block_callback = std::move(callback);
+  [bridge_
+      showPasswordProtectionWarning:base::SysUTF16ToNSString(warning_text)
+                         completion:^(safe_browsing::WarningAction action) {
+                           std::move(block_callback).Run(action);
+                         }];
+}
+
+void IOSChromePasswordManagerClient::DidFinishNavigation(
+    web::WebState* web_state,
+    web::NavigationContext* navigation_context) {
+  password_reuse_detection_manager_.DidNavigateMainFrame(GetLastCommittedURL());
+}
+
+void IOSChromePasswordManagerClient::OnKeyPressed(std::string text) {
+  password_reuse_detection_manager_.OnKeyPressedCommitted(
+      base::UTF8ToUTF16(text));
+}
+
+void IOSChromePasswordManagerClient::OnPaste(std::string text) {
+  password_reuse_detection_manager_.OnPaste(base::UTF8ToUTF16(text));
+}
+
+web::WebState* IOSChromePasswordManagerClient::web_state() const {
+  return bridge_.webState;
 }

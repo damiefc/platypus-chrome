@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/guid.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/strings/string16.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
@@ -23,14 +22,13 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_driver.h"
-#include "components/autofill/core/browser/autofill_manager.h"
+#include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/credit_card_form_event_logger.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/payments/webauthn_callback_types.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_clock.h"
-#include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_tick_clock.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -79,21 +77,12 @@ void CreditCardAccessManager::UpdateCreditCardFormEventLogger() {
 
   size_t server_record_type_count = 0;
   size_t local_record_type_count = 0;
-  bool has_server_nickname = false;
   for (CreditCard* credit_card : credit_cards) {
-    // If any masked server card has valid nickname, we will set to true no
-    // matter the flag is enabled or not.
-    if (credit_card->record_type() == CreditCard::MASKED_SERVER_CARD &&
-        credit_card->HasNonEmptyValidNickname()) {
-      has_server_nickname = true;
-    }
-
     if (credit_card->record_type() == CreditCard::LOCAL_CARD)
       local_record_type_count++;
     else
       server_record_type_count++;
   }
-  form_event_logger_->set_has_server_nickname(has_server_nickname);
   form_event_logger_->set_server_record_type_count(server_record_type_count);
   form_event_logger_->set_local_record_type_count(local_record_type_count);
   form_event_logger_->set_is_context_secure(client_->IsContextSecure());
@@ -143,8 +132,8 @@ bool CreditCardAccessManager::DeleteCard(const CreditCard* card) {
 
 bool CreditCardAccessManager::GetDeletionConfirmationText(
     const CreditCard* card,
-    base::string16* title,
-    base::string16* body) {
+    std::u16string* title,
+    std::u16string* body) {
   if (!IsLocalCard(card))
     return false;
 
@@ -269,18 +258,16 @@ void CreditCardAccessManager::FetchCreditCard(
     return;
   }
 
-  if (base::FeatureList::IsEnabled(features::kAutofillCacheServerCardInfo)) {
-    // If card has been previously unmasked, use cached data.
-    std::unordered_map<std::string, CachedServerCardInfo>::iterator it =
-        unmasked_card_cache_.find(card->server_id());
-    if (it != unmasked_card_cache_.end()) {  // key is in cache
-      accessor->OnCreditCardFetched(/*did_succeed=*/true,
-                                    /*CreditCard=*/&it->second.card,
-                                    /*cvc=*/it->second.cvc);
-      base::UmaHistogramCounts1000("Autofill.UsedCachedServerCard",
-                                   ++it->second.cache_uses);
-      return;
-    }
+  // If card has been previously unmasked, use cached data.
+  std::unordered_map<std::string, CachedServerCardInfo>::iterator it =
+      unmasked_card_cache_.find(card->server_id());
+  if (it != unmasked_card_cache_.end()) {  // key is in cache
+    accessor->OnCreditCardFetched(/*did_succeed=*/true,
+                                  /*credit_card=*/&it->second.card,
+                                  /*cvc=*/it->second.cvc);
+    base::UmaHistogramCounts1000("Autofill.UsedCachedServerCard",
+                                 ++it->second.cache_uses);
+    return;
   }
 
   // Latency metrics should only be logged if the user is verifiable and the
@@ -382,7 +369,7 @@ void CreditCardAccessManager::SignalCanFetchUnmaskDetails() {
 }
 
 void CreditCardAccessManager::CacheUnmaskedCardInfo(const CreditCard& card,
-                                                    const base::string16& cvc) {
+                                                    const std::u16string& cvc) {
   DCHECK_EQ(card.record_type(), CreditCard::FULL_SERVER_CARD);
   CachedServerCardInfo card_info = {card, cvc, 0};
   unmasked_card_cache_[card.server_id()] = card_info;
@@ -621,7 +608,7 @@ bool CreditCardAccessManager::UserOptedInToFidoFromSettingsPageOnMobile()
 void CreditCardAccessManager::OnFIDOAuthenticationComplete(
     bool did_succeed,
     const CreditCard* card,
-    const base::string16& cvc) {
+    const std::u16string& cvc) {
 #if !defined(OS_ANDROID)
   // Close the Webauthn verify pending dialog. If FIDO authentication succeeded,
   // card is filled to the form, otherwise fall back to CVC authentication which
@@ -654,7 +641,7 @@ void CreditCardAccessManager::OnFidoAuthorizationComplete(bool did_succeed) {
         unmask_auth_flow_type_);
   }
   unmask_auth_flow_type_ = UnmaskAuthFlowType::kNone;
-  cvc_ = base::string16();
+  cvc_ = std::u16string();
 }
 #endif
 

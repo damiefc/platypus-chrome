@@ -9,8 +9,8 @@ import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
 import {Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BackgroundGraphicsModeRestriction, Policies} from '../native_layer.js';
-
-import {Cdd, CddCapabilities, Destination, DestinationOrigin, DestinationType, RecentDestination, VendorCapability} from './destination.js';
+import {Cdd, CddCapabilities, VendorCapability} from './cdd.js';
+import {Destination, DestinationOrigin, DestinationType, RecentDestination} from './destination.js';
 import {getPrinterTypeForDestination, PrinterType} from './destination_match.js';
 // <if expr="chromeos">
 import {ColorModeRestriction, DuplexModeRestriction, PinModeRestriction} from './destination_policies.js';
@@ -993,7 +993,7 @@ Polymer({
       savedSettings =
           /** @type {SerializedSettings} */ (JSON.parse(savedSettingsStr));
     } catch (e) {
-      console.error('Unable to parse state ' + e);
+      console.warn('Unable to parse state ' + e);
       return;  // use default values rather than updating.
     }
     if (savedSettings.version !== 2) {
@@ -1418,7 +1418,7 @@ Polymer({
       const selectedOption = destination.getSelectedColorOption(
           /** @type {boolean} */ (this.settings.color.value));
       if (!selectedOption) {
-        console.error('Could not find correct color option');
+        console.warn('Could not find correct color option');
       } else {
         cjt.print.color = {type: selectedOption.type};
         if (selectedOption.hasOwnProperty('vendor_id')) {

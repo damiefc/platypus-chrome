@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
@@ -69,7 +70,7 @@ constexpr char kImeWindowMissingPermission[] =
     "Extensions require the \"app.window.ime\" permission to create windows.";
 constexpr char kImeOptionIsNotSupported[] =
     "The \"ime\" option is not supported for platform app.";
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 constexpr char kImeWindowUnsupportedPlatform[] =
     "The \"ime\" option can only be used on ChromeOS.";
 #else
@@ -152,7 +153,7 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
   // TODO(devlin): Investigate if this is still used. If not, kill it dead!
   GURL absolute = GURL(params->url);
   if (absolute.has_scheme()) {
-    if (extension()->location() == Manifest::COMPONENT) {
+    if (extension()->location() == mojom::ManifestLocation::kComponent) {
       url = absolute;
     } else {
       // Show error when url passed isn't local.
@@ -210,12 +211,14 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
           // initialized. Hence, adding a callback for window first navigation
           // completion.
           if (existing_window->DidFinishFirstNavigation())
-            return RespondNow(OneArgument(std::move(result)));
+            return RespondNow(OneArgument(
+                base::Value::FromUniquePtrValue(std::move(result))));
 
-          existing_window->AddOnDidFinishFirstNavigationCallback(
-            base::BindOnce(&AppWindowCreateFunction::
-                           OnAppWindowFinishedFirstNavigationOrClosed,
-                           this, OneArgument(std::move(result))));
+          existing_window->AddOnDidFinishFirstNavigationCallback(base::BindOnce(
+              &AppWindowCreateFunction::
+                  OnAppWindowFinishedFirstNavigationOrClosed,
+              this,
+              OneArgument(base::Value::FromUniquePtrValue(std::move(result)))));
           return RespondLater();
         }
       }
@@ -237,12 +240,12 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
       // Whitelisted IME extensions are allowed to use this API to create IME
       // specific windows to show accented characters or suggestions.
       if (!extension()->permissions_data()->HasAPIPermission(
-              APIPermission::kImeWindowEnabled)) {
+              mojom::APIPermissionID::kImeWindowEnabled)) {
         return RespondNow(
             Error(app_window_constants::kImeWindowMissingPermission));
       }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
       // IME window is only supported on ChromeOS.
       return RespondNow(
           Error(app_window_constants::kImeWindowUnsupportedPlatform));
@@ -256,7 +259,7 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
         return RespondNow(
             Error(app_window_constants::kImeWindowMustBeImeWindow));
       }
-#endif  // OS_CHROMEOS
+#endif  // IS_CHROMEOS_ASH
     } else {
       if (options->ime.get()) {
         return RespondNow(
@@ -266,7 +269,7 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
 
     if (options->alpha_enabled.get()) {
       const char* const kWhitelist[] = {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
         "B58B99751225318C7EB8CF4688B5434661083E07",  // http://crbug.com/410550
         "06BE211D5F014BAB34BC22D9DDA09C63A81D828E",  // http://crbug.com/425539
         "F94EE6AB36D6C6588670B2B01EB65212D9C64E33",
@@ -289,7 +292,7 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
             Error(app_window_constants::kAlphaEnabledWrongChannel));
       }
       if (!extension()->permissions_data()->HasAPIPermission(
-              APIPermission::kAlphaEnabled)) {
+              mojom::APIPermissionID::kAlphaEnabled)) {
         return RespondNow(
             Error(app_window_constants::kAlphaEnabledMissingPermission));
       }
@@ -316,7 +319,7 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
 
       if (create_params.always_on_top &&
           !extension()->permissions_data()->HasAPIPermission(
-              APIPermission::kAlwaysOnTopWindows)) {
+              mojom::APIPermissionID::kAlwaysOnTopWindows)) {
         return RespondNow(Error(app_window_constants::kAlwaysOnTopPermission));
       }
     }
@@ -374,7 +377,7 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
     }
 
     if (!extension()->permissions_data()->HasAPIPermission(
-            APIPermission::kLockScreen)) {
+            mojom::APIPermissionID::kLockScreen)) {
       return RespondNow(Error(
           app_window_constants::kLockScreenActionRequiresLockScreenPermission));
     }
@@ -418,7 +421,8 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
   result->SetInteger("frameId", frame_id);
   result->SetString("id", app_window->window_key());
   app_window->GetSerializedState(result.get());
-  ResponseValue result_arg = OneArgument(std::move(result));
+  ResponseValue result_arg =
+      OneArgument(base::Value::FromUniquePtrValue(std::move(result)));
 
   if (AppWindowRegistry::Get(browser_context())
           ->HadDevToolsAttached(app_window->web_contents())) {

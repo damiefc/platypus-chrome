@@ -6,6 +6,7 @@
 #define UI_VIEWS_VIEW_CLASS_PROPERTIES_H_
 
 #include "ui/base/class_property.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/views/layout/flex_layout_types.h"
 #include "ui/views/views_export.h"
 
@@ -15,7 +16,7 @@ class Insets;
 
 namespace views {
 
-class BubbleDialogDelegate;
+class DialogDelegate;
 class FlexSpecification;
 class HighlightPathGenerator;
 
@@ -42,7 +43,7 @@ VIEWS_EXPORT extern const ui::ClassProperty<gfx::Insets*>* const
 
 // A property to store the bubble dialog anchored to this view, to
 // enable the bubble's contents to be included in the focus order.
-VIEWS_EXPORT extern const ui::ClassProperty<BubbleDialogDelegate*>* const
+VIEWS_EXPORT extern const ui::ClassProperty<DialogDelegate*>* const
     kAnchoredDialogKey;
 
 // A property to store a highlight-path generator. This generator is used to
@@ -58,6 +59,16 @@ VIEWS_EXPORT extern const ui::ClassProperty<FlexSpecification*>* const
 VIEWS_EXPORT extern const ui::ClassProperty<LayoutAlignment*>* const
     kCrossAxisAlignmentKey;
 
+// Property indicating whether a view should be ignored by a layout. Supported
+// by View::DefaultFillLayout.
+// TODO(kylixrd): Revisit using for FillLayout.
+VIEWS_EXPORT extern const ui::ClassProperty<bool>* const
+    kViewIgnoredByLayoutKey;
+
+// Tag for the view associated with ui::ElementTracker.
+VIEWS_EXPORT extern const ui::ClassProperty<ui::ElementIdentifier>* const
+    kElementIdentifierKey;
+
 }  // namespace views
 
 // Declaring the template specialization here to make sure that the
@@ -66,12 +77,12 @@ VIEWS_EXPORT extern const ui::ClassProperty<LayoutAlignment*>* const
 // template instance before its specialization is declared in a
 // translation unit is a C++ error.
 DECLARE_EXPORTED_UI_CLASS_PROPERTY_TYPE(VIEWS_EXPORT, gfx::Insets*)
-DECLARE_EXPORTED_UI_CLASS_PROPERTY_TYPE(VIEWS_EXPORT,
-                                        views::BubbleDialogDelegate*)
+DECLARE_EXPORTED_UI_CLASS_PROPERTY_TYPE(VIEWS_EXPORT, views::DialogDelegate*)
 DECLARE_EXPORTED_UI_CLASS_PROPERTY_TYPE(VIEWS_EXPORT,
                                         views::HighlightPathGenerator*)
 DECLARE_EXPORTED_UI_CLASS_PROPERTY_TYPE(VIEWS_EXPORT, views::FlexSpecification*)
 DECLARE_EXPORTED_UI_CLASS_PROPERTY_TYPE(VIEWS_EXPORT, views::LayoutAlignment*)
+DECLARE_EXPORTED_UI_CLASS_PROPERTY_TYPE(VIEWS_EXPORT, ui::ElementIdentifier)
 DECLARE_EXPORTED_UI_CLASS_PROPERTY_TYPE(VIEWS_EXPORT, bool)
 
 #endif  // UI_VIEWS_VIEW_CLASS_PROPERTIES_H_

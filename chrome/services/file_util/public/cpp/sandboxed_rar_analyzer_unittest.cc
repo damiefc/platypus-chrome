@@ -4,6 +4,7 @@
 
 #include "chrome/services/file_util/public/cpp/sandboxed_rar_analyzer.h"
 
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
@@ -13,7 +14,6 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/safe_browsing/archive_analyzer_results.h"
@@ -55,9 +55,9 @@ class SandboxedRarAnalyzerTest : public testing::Test {
     FileUtilService service(remote.InitWithNewPipeAndPassReceiver());
     base::RunLoop run_loop;
     ResultsGetter results_getter(run_loop.QuitClosure(), results);
-    scoped_refptr<SandboxedRarAnalyzer> analyzer(new SandboxedRarAnalyzer(
-        path, results_getter.GetCallback(), std::move(remote)));
-    analyzer->Start();
+    analyzer_ = base::MakeRefCounted<SandboxedRarAnalyzer>(
+        path, results_getter.GetCallback(), std::move(remote));
+    analyzer_->Start();
     run_loop.Run();
   }
 
@@ -120,7 +120,10 @@ class SandboxedRarAnalyzerTest : public testing::Test {
 
     DISALLOW_COPY_AND_ASSIGN(ResultsGetter);
   };
-
+  // |analzyer_| should be destroyed after task_environment, so that any other
+  // threads with objects holding references to it will be shut down first.
+  // This should make the final reference get released on the main thread.
+  scoped_refptr<SandboxedRarAnalyzer> analyzer_;
   content::BrowserTaskEnvironment task_environment_;
 };
 

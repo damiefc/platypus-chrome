@@ -41,6 +41,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::_;
+using ::testing::Eq;
 using ::testing::Return;
 using ::testing::ReturnRef;
 
@@ -49,11 +50,11 @@ namespace {
 constexpr ukm::SourceId kTestSourceId = 0x1234;
 
 constexpr char kSiteOrigin[] = "http://example.com/login";
-constexpr char kUsername[] = "Admin";
-constexpr char kUsernameExisting[] = "User";
-constexpr char kUsernameNew[] = "User585";
-constexpr char kPassword[] = "AdminPass";
-constexpr char kPasswordEdited[] = "asDfjkl;";
+constexpr char16_t kUsername[] = u"Admin";
+constexpr char16_t kUsernameExisting[] = u"User";
+constexpr char16_t kUsernameNew[] = u"User585";
+constexpr char16_t kPassword[] = u"AdminPass";
+constexpr char16_t kPasswordEdited[] = u"asDfjkl;";
 constexpr char kUIDismissalReasonGeneralMetric[] =
     "PasswordManager.UIDismissalReason";
 constexpr char kUIDismissalReasonSaveMetric[] =
@@ -97,8 +98,8 @@ class SaveUpdateWithAccountStoreBubbleControllerTest : public ::testing::Test {
         profile(), base::BindRepeating(&BuildTestSyncService));
     pending_password_.url = GURL(kSiteOrigin);
     pending_password_.signon_realm = kSiteOrigin;
-    pending_password_.username_value = base::ASCIIToUTF16(kUsername);
-    pending_password_.password_value = base::ASCIIToUTF16(kPassword);
+    pending_password_.username_value = kUsername;
+    pending_password_.password_value = kPassword;
   }
 
   void TearDown() override {
@@ -126,8 +127,10 @@ class SaveUpdateWithAccountStoreBubbleControllerTest : public ::testing::Test {
     return controller_.get();
   }
 
-  autofill::PasswordForm& pending_password() { return pending_password_; }
-  const autofill::PasswordForm& pending_password() const {
+  password_manager::PasswordForm& pending_password() {
+    return pending_password_;
+  }
+  const password_manager::PasswordForm& pending_password() const {
     return pending_password_;
   }
 
@@ -143,7 +146,8 @@ class SaveUpdateWithAccountStoreBubbleControllerTest : public ::testing::Test {
       password_manager::metrics_util::UIDismissalReason dismissal_reason);
 
   static password_manager::InteractionsStats GetTestStats();
-  std::vector<std::unique_ptr<autofill::PasswordForm>> GetCurrentForms() const;
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> GetCurrentForms()
+      const;
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -155,7 +159,7 @@ class SaveUpdateWithAccountStoreBubbleControllerTest : public ::testing::Test {
   testing::NiceMock<password_manager::MockPasswordFeatureManager>
       password_feature_manager_;
   std::unique_ptr<PasswordsModelDelegateMock> mock_delegate_;
-  autofill::PasswordForm pending_password_;
+  password_manager::PasswordForm pending_password_;
 };
 
 void SaveUpdateWithAccountStoreBubbleControllerTest::SetUpWithState(
@@ -166,8 +170,8 @@ void SaveUpdateWithAccountStoreBubbleControllerTest::SetUpWithState(
   EXPECT_CALL(*delegate(), GetState()).WillRepeatedly(Return(state));
   EXPECT_CALL(*delegate(), GetWebContents())
       .WillRepeatedly(Return(test_web_contents_.get()));
-  controller_.reset(new SaveUpdateWithAccountStoreBubbleController(
-      mock_delegate_->AsWeakPtr(), reason));
+  controller_ = std::make_unique<SaveUpdateWithAccountStoreBubbleController>(
+      mock_delegate_->AsWeakPtr(), reason);
   ASSERT_TRUE(testing::Mock::VerifyAndClearExpectations(delegate()));
   EXPECT_CALL(*delegate(), GetWebContents())
       .WillRepeatedly(Return(test_web_contents_.get()));
@@ -180,7 +184,7 @@ void SaveUpdateWithAccountStoreBubbleControllerTest::PretendPasswordWaiting(
   password_manager::InteractionsStats stats = GetTestStats();
   EXPECT_CALL(*delegate(), GetCurrentInteractionStats())
       .WillOnce(Return(&stats));
-  std::vector<std::unique_ptr<autofill::PasswordForm>> forms =
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> forms =
       GetCurrentForms();
   EXPECT_CALL(*delegate(), GetCurrentForms()).WillOnce(ReturnRef(forms));
   SetUpWithState(password_manager::ui::PENDING_PASSWORD_STATE, reason);
@@ -190,11 +194,11 @@ void SaveUpdateWithAccountStoreBubbleControllerTest::
     PretendUpdatePasswordWaiting() {
   EXPECT_CALL(*delegate(), GetPendingPassword())
       .WillOnce(ReturnRef(pending_password()));
-  std::vector<std::unique_ptr<autofill::PasswordForm>> forms =
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> forms =
       GetCurrentForms();
   auto current_form =
-      std::make_unique<autofill::PasswordForm>(pending_password());
-  current_form->password_value = base::ASCIIToUTF16("old_password");
+      std::make_unique<password_manager::PasswordForm>(pending_password());
+  current_form->password_value = u"old_password";
   forms.push_back(std::move(current_form));
   EXPECT_CALL(*delegate(), GetCurrentForms()).WillOnce(ReturnRef(forms));
   SetUpWithState(password_manager::ui::PENDING_PASSWORD_UPDATE_STATE,
@@ -227,25 +231,26 @@ password_manager::InteractionsStats
 SaveUpdateWithAccountStoreBubbleControllerTest::GetTestStats() {
   password_manager::InteractionsStats result;
   result.origin_domain = GURL(kSiteOrigin).GetOrigin();
-  result.username_value = base::ASCIIToUTF16(kUsername);
+  result.username_value = kUsername;
   result.dismissal_count = 5;
   result.update_time = base::Time::FromTimeT(1);
   return result;
 }
 
-std::vector<std::unique_ptr<autofill::PasswordForm>>
+std::vector<std::unique_ptr<password_manager::PasswordForm>>
 SaveUpdateWithAccountStoreBubbleControllerTest::GetCurrentForms() const {
-  autofill::PasswordForm form(pending_password());
-  form.username_value = base::ASCIIToUTF16(kUsernameExisting);
-  form.password_value = base::ASCIIToUTF16("123456");
+  password_manager::PasswordForm form(pending_password());
+  form.username_value = kUsernameExisting;
+  form.password_value = u"123456";
 
-  autofill::PasswordForm preferred_form(pending_password());
-  preferred_form.username_value = base::ASCIIToUTF16("preferred_username");
-  preferred_form.password_value = base::ASCIIToUTF16("654321");
+  password_manager::PasswordForm preferred_form(pending_password());
+  preferred_form.username_value = u"preferred_username";
+  preferred_form.password_value = u"654321";
 
-  std::vector<std::unique_ptr<autofill::PasswordForm>> forms;
-  forms.push_back(std::make_unique<autofill::PasswordForm>(form));
-  forms.push_back(std::make_unique<autofill::PasswordForm>(preferred_form));
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> forms;
+  forms.push_back(std::make_unique<password_manager::PasswordForm>(form));
+  forms.push_back(
+      std::make_unique<password_manager::PasswordForm>(preferred_form));
   return forms;
 }
 
@@ -285,7 +290,8 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
 
 TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest, ClickSaveInLocalStore) {
   ON_CALL(*password_feature_manager(), GetDefaultPasswordStore)
-      .WillByDefault(Return(autofill::PasswordForm::Store::kProfileStore));
+      .WillByDefault(
+          Return(password_manager::PasswordForm::Store::kProfileStore));
   PretendPasswordWaiting();
 
   EXPECT_TRUE(controller()->enable_editing());
@@ -306,7 +312,8 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest, ClickSaveInLocalStore) {
 TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
        ClickSaveInAccountStoreWhileOptedIn) {
   ON_CALL(*password_feature_manager(), GetDefaultPasswordStore)
-      .WillByDefault(Return(autofill::PasswordForm::Store::kAccountStore));
+      .WillByDefault(
+          Return(password_manager::PasswordForm::Store::kAccountStore));
   ON_CALL(*password_feature_manager(), IsOptedInForAccountStorage)
       .WillByDefault(Return(true));
   PretendPasswordWaiting();
@@ -330,7 +337,8 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
 TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
        ClickSaveInAccountStoreWhileNotOptedIn) {
   ON_CALL(*password_feature_manager(), GetDefaultPasswordStore)
-      .WillByDefault(Return(autofill::PasswordForm::Store::kAccountStore));
+      .WillByDefault(
+          Return(password_manager::PasswordForm::Store::kAccountStore));
   ON_CALL(*password_feature_manager(), IsOptedInForAccountStorage)
       .WillByDefault(Return(false));
   PretendPasswordWaiting();
@@ -355,7 +363,8 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
   // This is testing that updating a password should not trigger an account
   // store opt in flow even if the user isn't opted in.
   ON_CALL(*password_feature_manager(), GetDefaultPasswordStore)
-      .WillByDefault(Return(autofill::PasswordForm::Store::kAccountStore));
+      .WillByDefault(
+          Return(password_manager::PasswordForm::Store::kAccountStore));
   ON_CALL(*password_feature_manager(), IsOptedInForAccountStorage)
       .WillByDefault(Return(false));
   PretendUpdatePasswordWaiting();
@@ -379,13 +388,11 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest, ClickSaveInUpdateState) {
   PretendUpdatePasswordWaiting();
 
   // Edit username, now it's a new credential.
-  controller()->OnCredentialEdited(base::ASCIIToUTF16(kUsernameNew),
-                                   base::ASCIIToUTF16(kPasswordEdited));
+  controller()->OnCredentialEdited(kUsernameNew, kPasswordEdited);
   EXPECT_FALSE(controller()->IsCurrentStateUpdate());
 
   EXPECT_CALL(*GetStore(), RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
-  EXPECT_CALL(*delegate(), SavePassword(base::ASCIIToUTF16(kUsernameNew),
-                                        base::ASCIIToUTF16(kPasswordEdited)));
+  EXPECT_CALL(*delegate(), SavePassword(Eq(kUsernameNew), Eq(kPasswordEdited)));
   EXPECT_CALL(*delegate(), NeverSavePassword()).Times(0);
   EXPECT_CALL(*delegate(), OnNopeUpdateClicked()).Times(0);
   controller()->OnSaveClicked();
@@ -424,13 +431,12 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest, ClickUpdateInSaveState) {
   PretendPasswordWaiting();
 
   // Edit username, now it's an existing credential.
-  controller()->OnCredentialEdited(base::ASCIIToUTF16(kUsernameExisting),
-                                   base::ASCIIToUTF16(kPasswordEdited));
+  controller()->OnCredentialEdited(kUsernameExisting, kPasswordEdited);
   EXPECT_TRUE(controller()->IsCurrentStateUpdate());
 
   EXPECT_CALL(*GetStore(), RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
-  EXPECT_CALL(*delegate(), SavePassword(base::ASCIIToUTF16(kUsernameExisting),
-                                        base::ASCIIToUTF16(kPasswordEdited)));
+  EXPECT_CALL(*delegate(),
+              SavePassword(Eq(kUsernameExisting), Eq(kPasswordEdited)));
   EXPECT_CALL(*delegate(), NeverSavePassword()).Times(0);
   EXPECT_CALL(*delegate(), OnNopeUpdateClicked()).Times(0);
   controller()->OnSaveClicked();
@@ -440,16 +446,15 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest, ClickUpdateInSaveState) {
 TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
        GetInitialUsername_MatchedUsername) {
   PretendUpdatePasswordWaiting();
-  EXPECT_EQ(base::UTF8ToUTF16(kUsername),
-            controller()->pending_password().username_value);
+  EXPECT_EQ(kUsername, controller()->pending_password().username_value);
 }
 
 TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest, EditCredential) {
   PretendPasswordWaiting();
   EXPECT_CALL(*GetStore(), RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
 
-  const base::string16 kExpectedUsername = base::UTF8ToUTF16("new_username");
-  const base::string16 kExpectedPassword = base::UTF8ToUTF16("new_password");
+  const std::u16string kExpectedUsername = u"new_username";
+  const std::u16string kExpectedPassword = u"new_password";
 
   controller()->OnCredentialEdited(kExpectedUsername, kExpectedPassword);
   EXPECT_EQ(kExpectedUsername, controller()->pending_password().username_value);
@@ -611,24 +616,21 @@ TEST_P(SaveUpdateWithAccountStoreBubbleControllerPasswordRevealingTest,
       .WillRepeatedly(Return(is_manual_fallback_for_saving));
 
   PretendPasswordWaiting(display_reason);
-  bool reauth_expected = form_has_autofilled_value;
-  if (!reauth_expected) {
+  bool reauth_expected = false;
+  if (display_reason ==
+      PasswordBubbleControllerBase::DisplayReason::kUserAction) {
     reauth_expected =
-        !is_manual_fallback_for_saving &&
-        display_reason ==
-            PasswordBubbleControllerBase::DisplayReason::kUserAction;
+        form_has_autofilled_value || !is_manual_fallback_for_saving;
   }
   EXPECT_EQ(reauth_expected,
             controller()->password_revealing_requires_reauth());
 
-  // delegate()->AuthenticateUser() is called only when reauth is expected.
-  EXPECT_CALL(*delegate(), AuthenticateUser())
-      .Times(reauth_expected)
-      .WillOnce(Return(!does_os_support_user_auth));
-
   if (reauth_expected) {
+    EXPECT_CALL(*delegate(), AuthenticateUser())
+        .WillOnce(Return(!does_os_support_user_auth));
     EXPECT_EQ(controller()->RevealPasswords(), !does_os_support_user_auth);
   } else {
+    EXPECT_CALL(*delegate(), AuthenticateUser()).Times(0);
     EXPECT_TRUE(controller()->RevealPasswords());
   }
 }
@@ -693,10 +695,11 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
        UpdateAccountStoreAffectsTheAccountStore) {
   EXPECT_CALL(*delegate(), GetPendingPassword())
       .WillOnce(ReturnRef(pending_password()));
-  std::vector<std::unique_ptr<autofill::PasswordForm>> forms;
-  auto form = std::make_unique<autofill::PasswordForm>(pending_password());
-  form->password_value = base::ASCIIToUTF16("old_password");
-  form->in_store = autofill::PasswordForm::Store::kAccountStore;
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> forms;
+  auto form =
+      std::make_unique<password_manager::PasswordForm>(pending_password());
+  form->password_value = u"old_password";
+  form->in_store = password_manager::PasswordForm::Store::kAccountStore;
   forms.push_back(std::move(form));
   EXPECT_CALL(*delegate(), GetCurrentForms()).WillOnce(ReturnRef(forms));
   SetUpWithState(password_manager::ui::PENDING_PASSWORD_UPDATE_STATE,
@@ -708,10 +711,11 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
        UpdateProfileStoreDoesnotAffectTheAccountStore) {
   EXPECT_CALL(*delegate(), GetPendingPassword())
       .WillOnce(ReturnRef(pending_password()));
-  std::vector<std::unique_ptr<autofill::PasswordForm>> forms;
-  auto form = std::make_unique<autofill::PasswordForm>(pending_password());
-  form->password_value = base::ASCIIToUTF16("old_password");
-  form->in_store = autofill::PasswordForm::Store::kProfileStore;
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> forms;
+  auto form =
+      std::make_unique<password_manager::PasswordForm>(pending_password());
+  form->password_value = u"old_password";
+  form->in_store = password_manager::PasswordForm::Store::kProfileStore;
   forms.push_back(std::move(form));
   EXPECT_CALL(*delegate(), GetCurrentForms()).WillOnce(ReturnRef(forms));
   SetUpWithState(password_manager::ui::PENDING_PASSWORD_UPDATE_STATE,
@@ -724,17 +728,17 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
   EXPECT_CALL(*delegate(), GetPendingPassword())
       .WillOnce(ReturnRef(pending_password()));
 
-  std::vector<std::unique_ptr<autofill::PasswordForm>> forms;
+  std::vector<std::unique_ptr<password_manager::PasswordForm>> forms;
   auto profile_form =
-      std::make_unique<autofill::PasswordForm>(pending_password());
-  profile_form->password_value = base::ASCIIToUTF16("old_password");
-  profile_form->in_store = autofill::PasswordForm::Store::kProfileStore;
+      std::make_unique<password_manager::PasswordForm>(pending_password());
+  profile_form->password_value = u"old_password";
+  profile_form->in_store = password_manager::PasswordForm::Store::kProfileStore;
   forms.push_back(std::move(profile_form));
 
   auto account_form =
-      std::make_unique<autofill::PasswordForm>(pending_password());
-  account_form->password_value = base::ASCIIToUTF16("old_password");
-  account_form->in_store = autofill::PasswordForm::Store::kAccountStore;
+      std::make_unique<password_manager::PasswordForm>(pending_password());
+  account_form->password_value = u"old_password";
+  account_form->in_store = password_manager::PasswordForm::Store::kAccountStore;
   forms.push_back(std::move(account_form));
 
   EXPECT_CALL(*delegate(), GetCurrentForms()).WillOnce(ReturnRef(forms));
@@ -746,7 +750,8 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
 TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
        SaveInAccountStoreAffectsTheAccountStore) {
   ON_CALL(*password_feature_manager(), GetDefaultPasswordStore)
-      .WillByDefault(Return(autofill::PasswordForm::Store::kAccountStore));
+      .WillByDefault(
+          Return(password_manager::PasswordForm::Store::kAccountStore));
   PretendPasswordWaiting();
   EXPECT_TRUE(controller()->IsCurrentStateAffectingTheAccountStore());
 }
@@ -754,7 +759,8 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
 TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
        SaveInProfileStoreDoesntAffectTheAccountStore) {
   ON_CALL(*password_feature_manager(), GetDefaultPasswordStore)
-      .WillByDefault(Return(autofill::PasswordForm::Store::kProfileStore));
+      .WillByDefault(
+          Return(password_manager::PasswordForm::Store::kProfileStore));
   PretendPasswordWaiting();
   EXPECT_FALSE(controller()->IsCurrentStateAffectingTheAccountStore());
 }

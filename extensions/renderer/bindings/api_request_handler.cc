@@ -57,7 +57,7 @@ APIRequestHandler::ArgumentAdapter::GetArguments(
     std::unique_ptr<content::V8ValueConverter> converter =
         content::V8ValueConverter::Create();
     v8_arguments_.reserve(base_arguments_->GetSize());
-    for (const auto& arg : *base_arguments_)
+    for (const auto& arg : base_arguments_->GetList())
       v8_arguments_.push_back(converter->ToV8Value(&arg, context));
   }
 
@@ -151,6 +151,8 @@ void APIRequestHandler::AsyncResultHandler::DeliverPromiseResult(
   DCHECK_LE(response_args.size(), 1u);
 
   v8::Isolate* isolate = context->GetIsolate();
+  v8::MicrotasksScope microtasks_scope(
+      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
   v8::Local<v8::Promise::Resolver> resolver = promise_resolver_.Get(isolate);
   if (error.empty()) {

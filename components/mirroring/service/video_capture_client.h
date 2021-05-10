@@ -20,7 +20,8 @@
 
 namespace media {
 class VideoFrame;
-struct VideoFrameFeedback;
+class VideoFramePool;
+struct VideoCaptureFeedback;
 }  // namespace media
 
 namespace mirroring {
@@ -48,6 +49,9 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) VideoCaptureClient
 
   void Resume(FrameDeliverCallback deliver_callback);
 
+  // Feedback callback.
+  void ProcessFeedback(const media::VideoCaptureFeedback& feedback);
+
   // Requests to receive a refreshed captured video frame. Do nothing if the
   // capturing device is not started or the capturing is paused.
   void RequestRefreshFrame();
@@ -56,21 +60,19 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) VideoCaptureClient
   void OnStateChanged(media::mojom::VideoCaptureState state) override;
   void OnNewBuffer(int32_t buffer_id,
                    media::mojom::VideoBufferHandlePtr buffer_handle) override;
-  void OnBufferReady(int32_t buffer_id,
-                     media::mojom::VideoFrameInfoPtr info) override;
+  void OnBufferReady(
+      media::mojom::ReadyBufferPtr buffer,
+      std::vector<media::mojom::ReadyBufferPtr> scaled_buffers) override;
   void OnBufferDestroyed(int32_t buffer_id) override;
 
  private:
-  using BufferFinishedCallback =
-      base::OnceCallback<void(media::VideoFrameFeedback)>;
+  using BufferFinishedCallback = base::OnceCallback<void()>;
   // Called by the VideoFrame destructor.
-  static void DidFinishConsumingFrame(const media::VideoFrameFeedback* feedback,
-                                      BufferFinishedCallback callback);
+  static void DidFinishConsumingFrame(BufferFinishedCallback callback);
 
   // Reports the utilization, unmaps the shared memory, and returns the buffer.
   void OnClientBufferFinished(int buffer_id,
-                              base::ReadOnlySharedMemoryMapping mapping,
-                              media::VideoFrameFeedback feedback);
+                              base::ReadOnlySharedMemoryMapping mapping);
 
   const media::VideoCaptureParams params_;
   const mojo::Remote<media::mojom::VideoCaptureHost> video_capture_host_;
@@ -103,6 +105,15 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) VideoCaptureClient
   // time the mapping is done or a larger size is requested.
   // |buffer_id| is the key to this map.
   MappingMap mapped_buffers_;
+
+  // Latest received feedback.
+  media::VideoCaptureFeedback feedback_;
+
+  // Cast Streaming does not support NV12 frames. When NV12 frames are received,
+  // these structures are used to convert them to I420 on the CPU.
+  // https://crbug.com/1206325
+  std::unique_ptr<media::VideoFramePool> nv12_to_i420_pool_;
+  std::vector<uint8_t> nv12_to_i420_tmp_buf_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

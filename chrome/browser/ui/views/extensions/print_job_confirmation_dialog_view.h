@@ -6,9 +6,10 @@
 #define CHROME_BROWSER_UI_VIEWS_EXTENSIONS_PRINT_JOB_CONFIRMATION_DIALOG_VIEW_H_
 
 #include <memory>
+#include <string>
 
 #include "base/callback_forward.h"
-#include "base/strings/string16.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
@@ -19,41 +20,34 @@ class ToolbarActionView;
 // The dialog's view, owned by the views framework.
 class PrintJobConfirmationDialogView : public views::BubbleDialogDelegateView {
  public:
+  METADATA_HEADER(PrintJobConfirmationDialogView);
+
   static void Show(gfx::NativeWindow parent,
                    const std::string& extension_id,
-                   const base::string16& extension_name,
+                   const std::u16string& extension_name,
                    const gfx::ImageSkia& extension_icon,
-                   const base::string16& print_job_title,
-                   const base::string16& printer_name,
+                   const std::u16string& print_job_title,
+                   const std::u16string& printer_name,
                    base::OnceCallback<void(bool)> callback);
 
   PrintJobConfirmationDialogView(ToolbarActionView* anchor_view,
-                                 const base::string16& extension_name,
+                                 const std::u16string& extension_name,
                                  const gfx::ImageSkia& extension_icon,
-                                 const base::string16& print_job_title,
-                                 const base::string16& printer_name,
+                                 const std::u16string& print_job_title,
+                                 const std::u16string& printer_name,
                                  base::OnceCallback<void(bool)> callback);
-
-  ~PrintJobConfirmationDialogView() override;
-
   PrintJobConfirmationDialogView(const PrintJobConfirmationDialogView&) =
       delete;
   PrintJobConfirmationDialogView& operator=(
       const PrintJobConfirmationDialogView&) = delete;
+  ~PrintJobConfirmationDialogView() override;
 
  private:
-  // views::DialogDelegateView:
-  gfx::Size CalculatePreferredSize() const override;
-
   // The name of the extension we are showing the dialog for.
-  const base::string16 extension_name_;
+  const std::u16string extension_name_;
 
   // Callback to call after the dialog is accepted or rejected.
   base::OnceCallback<void(bool)> callback_;
-
-  // TODO(pbos): Find a more direct way of determining if there's a bubble than
-  // checking |anchor_view|.
-  const bool dialog_is_bubble_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_EXTENSIONS_PRINT_JOB_CONFIRMATION_DIALOG_VIEW_H_

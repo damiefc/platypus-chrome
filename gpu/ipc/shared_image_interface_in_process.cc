@@ -16,25 +16,21 @@
 #include "ui/gl/gl_context.h"
 
 namespace gpu {
+
 SharedImageInterfaceInProcess::SharedImageInterfaceInProcess(
-    CommandBufferTaskExecutor* task_executor,
-    SingleTaskSequence* single_task_sequence,
-    CommandBufferId command_buffer_id,
-    MailboxManager* mailbox_manager,
-    ImageFactory* image_factory,
-    MemoryTracker* memory_tracker,
+    SingleTaskSequence* task_sequence,
+    DisplayCompositorMemoryAndTaskControllerOnGpu* display_controller,
     std::unique_ptr<CommandBufferHelper> command_buffer_helper)
-    : task_sequence_(single_task_sequence),
-      command_buffer_id_(command_buffer_id),
+    : task_sequence_(task_sequence),
+      command_buffer_id_(display_controller->NextCommandBufferId()),
       command_buffer_helper_(std::move(command_buffer_helper)),
-      shared_image_manager_(task_executor->shared_image_manager()),
-      mailbox_manager_(mailbox_manager),
-      sync_point_manager_(task_executor->sync_point_manager()) {
+      shared_image_manager_(display_controller->shared_image_manager()),
+      mailbox_manager_(display_controller->mailbox_manager()),
+      sync_point_manager_(display_controller->sync_point_manager()) {
   DETACH_FROM_SEQUENCE(gpu_sequence_checker_);
   task_sequence_->ScheduleTask(
       base::BindOnce(&SharedImageInterfaceInProcess::SetUpOnGpu,
-                     base::Unretained(this), task_executor, image_factory,
-                     memory_tracker),
+                     base::Unretained(this), display_controller),
       {});
 }
 
@@ -49,29 +45,26 @@ SharedImageInterfaceInProcess::~SharedImageInterfaceInProcess() {
       {});
   completion.Wait();
 }
-
 void SharedImageInterfaceInProcess::SetUpOnGpu(
-    CommandBufferTaskExecutor* task_executor,
-    ImageFactory* image_factory,
-    MemoryTracker* memory_tracker) {
+    DisplayCompositorMemoryAndTaskControllerOnGpu* display_controller) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
+  context_state_ = display_controller->shared_context_state();
 
-  context_state_ = task_executor->GetSharedContextState().get();
   create_factory_ = base::BindOnce(
-      [](CommandBufferTaskExecutor* task_executor, ImageFactory* image_factory,
-         MemoryTracker* memory_tracker, MailboxManager* mailbox_manager,
+      [](DisplayCompositorMemoryAndTaskControllerOnGpu* display_controller,
          bool enable_wrapped_sk_image) {
         auto shared_image_factory = std::make_unique<SharedImageFactory>(
-            task_executor->gpu_preferences(),
-            GpuDriverBugWorkarounds(task_executor->gpu_feature_info()
-                                        .enabled_gpu_driver_bug_workarounds),
-            task_executor->gpu_feature_info(),
-            task_executor->GetSharedContextState().get(), mailbox_manager,
-            task_executor->shared_image_manager(), image_factory,
-            memory_tracker, enable_wrapped_sk_image);
+            display_controller->gpu_preferences(),
+            display_controller->gpu_driver_bug_workarounds(),
+            display_controller->gpu_feature_info(),
+            display_controller->shared_context_state(),
+            display_controller->mailbox_manager(),
+            display_controller->shared_image_manager(),
+            display_controller->image_factory(),
+            display_controller->memory_tracker(), enable_wrapped_sk_image);
         return shared_image_factory;
       },
-      task_executor, image_factory, memory_tracker, mailbox_manager_);
+      display_controller);
 
   // Make the SharedImageInterface use the same sequence as the command buffer,
   // it's necessary for WebView because of the blocking behavior.
@@ -122,9 +115,11 @@ void SharedImageInterfaceInProcess::LazyCreateSharedImageFactory() {
     return;
 
   // We need WrappedSkImage to support creating a SharedImage with pixel data
-  // when GL is unavailable. This is used in various unit tests.
+  // when GL is unavailable. This is used in various unit tests. If we don't
+  // have a command buffer helper, that means this class is created for
+  // SkiaRenderer, and we definitely need to turn on enable_wrapped_sk_image.
   const bool enable_wrapped_sk_image =
-      command_buffer_helper_ && command_buffer_helper_->EnableWrappedSkImage();
+      !command_buffer_helper_ || command_buffer_helper_->EnableWrappedSkImage();
   shared_image_factory_ =
       std::move(create_factory_).Run(enable_wrapped_sk_image);
 }
@@ -178,7 +173,6 @@ void SharedImageInterfaceInProcess::CreateSharedImageOnGpuThread(
     command_buffer_helper_->SetError();
     return;
   }
-  mailbox_manager_->PushTextureUpdates(sync_token);
   sync_point_client_state_->ReleaseFenceSync(sync_token.release_count());
 }
 
@@ -233,13 +227,13 @@ void SharedImageInterfaceInProcess::CreateSharedImageWithDataOnGpuThread(
     command_buffer_helper_->SetError();
     return;
   }
-  mailbox_manager_->PushTextureUpdates(sync_token);
   sync_point_client_state_->ReleaseFenceSync(sync_token.release_count());
 }
 
 Mailbox SharedImageInterfaceInProcess::CreateSharedImage(
     gfx::GpuMemoryBuffer* gpu_memory_buffer,
     GpuMemoryBufferManager* gpu_memory_buffer_manager,
+    gfx::BufferPlane plane,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
@@ -251,6 +245,8 @@ Mailbox SharedImageInterfaceInProcess::CreateSharedImage(
   // TODO(piman): DCHECK GMB format support.
   DCHECK(IsImageSizeValidForGpuMemoryBufferFormat(
       gpu_memory_buffer->GetSize(), gpu_memory_buffer->GetFormat()));
+  DCHECK(IsPlaneValidForGpuMemoryBufferFormat(plane,
+                                              gpu_memory_buffer->GetFormat()));
 
   auto mailbox = Mailbox::GenerateForSharedImage();
   gfx::GpuMemoryBufferHandle handle = gpu_memory_buffer->CloneHandle();
@@ -267,7 +263,7 @@ Mailbox SharedImageInterfaceInProcess::CreateSharedImage(
         base::BindOnce(
             &SharedImageInterfaceInProcess::CreateGMBSharedImageOnGpuThread,
             base::Unretained(this), mailbox, std::move(handle),
-            gpu_memory_buffer->GetFormat(), gpu_memory_buffer->GetSize(),
+            gpu_memory_buffer->GetFormat(), plane, gpu_memory_buffer->GetSize(),
             color_space, surface_origin, alpha_type, usage, sync_token),
         {});
   }
@@ -283,6 +279,7 @@ void SharedImageInterfaceInProcess::CreateGMBSharedImageOnGpuThread(
     const Mailbox& mailbox,
     gfx::GpuMemoryBufferHandle handle,
     gfx::BufferFormat format,
+    gfx::BufferPlane plane,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
@@ -298,7 +295,7 @@ void SharedImageInterfaceInProcess::CreateGMBSharedImageOnGpuThread(
   // TODO(piman): add support for SurfaceHandle (for backbuffers for ozone/drm).
   SurfaceHandle surface_handle = kNullSurfaceHandle;
   if (!shared_image_factory_->CreateSharedImage(
-          mailbox, kDisplayCompositorClientId, std::move(handle), format,
+          mailbox, kDisplayCompositorClientId, std::move(handle), format, plane,
           surface_handle, size, color_space, surface_origin, alpha_type,
           usage)) {
     // Signal errors by losing the command buffer.
@@ -306,7 +303,6 @@ void SharedImageInterfaceInProcess::CreateGMBSharedImageOnGpuThread(
     command_buffer_helper_->SetError();
     return;
   }
-  mailbox_manager_->PushTextureUpdates(sync_token);
   sync_point_client_state_->ReleaseFenceSync(sync_token.release_count());
 }
 
@@ -348,7 +344,6 @@ void SharedImageInterfaceInProcess::CreateSharedImageWithAHBOnGpuThread(
     command_buffer_helper_->SetError();
     return;
   }
-  mailbox_manager_->PushTextureUpdates(sync_token);
   sync_point_client_state_->ReleaseFenceSync(sync_token.release_count());
 }
 #endif
@@ -423,7 +418,6 @@ void SharedImageInterfaceInProcess::UpdateSharedImageOnGpuThread(
     command_buffer_helper_->SetError();
     return;
   }
-  mailbox_manager_->PushTextureUpdates(sync_token);
   sync_point_client_state_->ReleaseFenceSync(sync_token.release_count());
 }
 
@@ -458,7 +452,6 @@ void SharedImageInterfaceInProcess::WaitSyncTokenOnGpuThread(
   if (!MakeContextCurrent())
     return;
 
-  mailbox_manager_->PushTextureUpdates(sync_token);
   sync_point_client_state_->ReleaseFenceSync(sync_token.release_count());
 }
 

@@ -5,6 +5,8 @@
 #include "sandbox/policy/switches.h"
 
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
+#include "printing/buildflags/buildflags.h"
 
 #if defined(OS_WIN)
 #include "base/command_line.h"
@@ -27,9 +29,12 @@ const char kNetworkSandbox[] = "network";
 const char kPpapiSandbox[] = "ppapi";
 const char kUtilitySandbox[] = "utility";
 const char kCdmSandbox[] = "cdm";
+#if BUILDFLAG(ENABLE_PRINTING)
+const char kPrintBackendSandbox[] = "print_backend";
+#endif
 const char kPrintCompositorSandbox[] = "print_compositor";
 const char kAudioSandbox[] = "audio";
-const char kSharingServiceSandbox[] = "sharing_service";
+const char kServiceSandbox[] = "service";
 const char kSpeechRecognitionSandbox[] = "speech_recognition";
 const char kVideoCaptureSandbox[] = "video_capture";
 
@@ -41,10 +46,13 @@ const char kIconReaderSandbox[] = "icon_reader";
 const char kMediaFoundationCdmSandbox[] = "mf_cdm";
 #endif  // OS_WIN
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kImeSandbox[] = "ime";
 const char kTtsSandbox[] = "tts";
-#endif  // OS_CHROMEOS
+#if BUILDFLAG(ENABLE_LIBASSISTANT_SANDBOX)
+const char kLibassistantSandbox[] = "libassistant";
+#endif  // BUILDFLAG(ENABLE_LIBASSISTANT_SANDBOX)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Flags owned by the service manager sandbox.
 
@@ -107,6 +115,9 @@ const char kAddXrAppContainerCaps[] = "add-xr-appcontainer-caps";
 // Cause the OS X sandbox write to syslog every time an access to a resource
 // is denied by the sandbox.
 const char kEnableSandboxLogging[] = "enable-sandbox-logging";
+
+// Disables Metal's shader cache, using the GPU sandbox to prevent access to it.
+const char kDisableMetalShaderCache[] = "disable-metal-shader-cache";
 #endif
 
 // Flags spied upon from other layers.
@@ -114,12 +125,12 @@ const char kProcessType[] = "type";
 const char kGpuProcess[] = "gpu-process";
 const char kNaClBrokerProcess[] = "nacl-broker";
 const char kNaClLoaderProcess[] = "nacl-loader";
-const char kPpapiBrokerProcess[] = "ppapi-broker";
 const char kPpapiPluginProcess[] = "ppapi";
 const char kRendererProcess[] = "renderer";
 const char kUtilityProcess[] = "utility";
 const char kCloudPrintServiceProcess[] = "service";
 const char kZygoteProcessType[] = "zygote";
+const char kRelauncherProcessType[] = "relauncher";
 
 }  // namespace switches
 }  // namespace policy

@@ -19,6 +19,8 @@
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-forward.h"
+#include "third_party/blink/public/mojom/page/widget.mojom.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 
 class GURL;
 
@@ -43,12 +45,14 @@ class DownloadItem;
 
 namespace content {
 class BrowserContext;
+class DevToolsAgentHostImpl;
 class FrameTreeNode;
 class NavigationHandle;
 class NavigationRequest;
 class NavigationThrottle;
 class RenderFrameHostImpl;
 class RenderProcessHost;
+class SharedWorkerHost;
 class SignedExchangeEnvelope;
 class WebContents;
 
@@ -62,9 +66,12 @@ class InspectorIssue;
 
 namespace devtools_instrumentation {
 
-void ApplyNetworkRequestOverrides(FrameTreeNode* frame_tree_node,
-                                  mojom::BeginNavigationParams* begin_params,
-                                  bool* report_raw_headers);
+void ApplyNetworkRequestOverrides(
+    FrameTreeNode* frame_tree_node,
+    mojom::BeginNavigationParams* begin_params,
+    bool* report_raw_headers,
+    base::Optional<std::vector<net::SourceStream::SourceType>>*
+        devtools_accepted_stream_types);
 
 // Returns true if devtools want |*override_out| to be used.
 // (A true return and |*override_out| being nullopt means no user agent client
@@ -82,9 +89,18 @@ bool WillCreateURLLoaderFactory(
         loader_factory_receiver,
     network::mojom::URLLoaderFactoryOverridePtr* factory_override);
 
+bool WillCreateURLLoaderFactoryForWorker(
+    DevToolsAgentHostImpl* host,
+    const base::UnguessableToken& worker_token,
+    network::mojom::URLLoaderFactoryOverridePtr* factory_override);
+
 bool WillCreateURLLoaderFactoryForServiceWorker(
     RenderProcessHost* rph,
     int routing_id,
+    network::mojom::URLLoaderFactoryOverridePtr* factory_override);
+
+bool WillCreateURLLoaderFactoryForSharedWorker(
+    SharedWorkerHost* host,
     network::mojom::URLLoaderFactoryOverridePtr* factory_override);
 
 bool WillCreateURLLoaderFactory(
@@ -101,9 +117,12 @@ void OnNavigationResponseReceived(
 void OnNavigationRequestFailed(
     const NavigationRequest& nav_request,
     const network::URLLoaderCompletionStatus& status);
+bool ShouldBypassCSP(const NavigationRequest& nav_request);
 
 void WillBeginDownload(download::DownloadCreateInfo* info,
                        download::DownloadItem* item);
+
+void BackForwardCacheNotUsed(const NavigationRequest* nav_request);
 
 void OnSignedExchangeReceived(
     FrameTreeNode* frame_tree_node,
@@ -131,39 +150,15 @@ void OnSignedExchangeCertificateRequestCompleted(
     const base::UnguessableToken& request_id,
     const network::URLLoaderCompletionStatus& status);
 
-void OnRequestWillBeSentExtraInfo(
-    int process_id,
-    int routing_id,
-    const std::string& devtools_request_id,
-    const net::CookieAccessResultList& request_cookie_list,
-    const std::vector<network::mojom::HttpRawHeaderPairPtr>& request_headers);
-void OnResponseReceivedExtraInfo(
-    int process_id,
-    int routing_id,
-    const std::string& devtools_request_id,
-    const net::CookieAndLineAccessResultList& response_cookie_list,
-    const std::vector<network::mojom::HttpRawHeaderPairPtr>& response_headers,
-    const base::Optional<std::string>& response_headers_text);
-void OnCorsPreflightRequest(int32_t process_id,
-                            int32_t render_frame_id,
-                            const base::UnguessableToken& devtools_request_id,
-                            const network::ResourceRequest& request,
-                            const GURL& signed_exchange_url);
-void OnCorsPreflightResponse(int32_t process_id,
-                             int32_t render_frame_id,
-                             const base::UnguessableToken& devtools_request_id,
-                             const GURL& url,
-                             network::mojom::URLResponseHeadPtr head);
-void OnCorsPreflightRequestCompleted(
-    int32_t process_id,
-    int32_t render_frame_id,
-    const base::UnguessableToken& devtools_request_id,
-    const network::URLLoaderCompletionStatus& status);
-
 std::vector<std::unique_ptr<NavigationThrottle>> CreateNavigationThrottles(
     NavigationHandle* navigation_handle);
 
 bool ShouldWaitForDebuggerInWindowOpen();
+
+void WillStartDragging(FrameTreeNode* main_frame_tree_node,
+                       const blink::mojom::DragDataPtr drag_data,
+                       blink::DragOperationsMask drag_operations_mask,
+                       bool* intercepted);
 
 // Asks any interested agents to handle the given certificate error. Returns
 // |true| if the error was handled, |false| otherwise.
@@ -198,16 +193,26 @@ void CONTENT_EXPORT
 ReportBrowserInitiatedIssue(RenderFrameHostImpl* frame,
                             protocol::Audits::InspectorIssue* issue);
 
+// Produces an inspector issue and sends it to the client with
+// |ReportBrowserInitiatedIssue|.
+// This only support TrustedWebActivityIssue for now.
+void BuildAndReportBrowserInitiatedIssue(
+    RenderFrameHostImpl* frame,
+    blink::mojom::InspectorIssueInfoPtr info);
+
 // Produces a Heavy Ad Issue based on the parameters passed in.
 std::unique_ptr<protocol::Audits::InspectorIssue> GetHeavyAdIssue(
     RenderFrameHostImpl* frame,
     blink::mojom::HeavyAdResolutionStatus resolution,
     blink::mojom::HeavyAdReason reason);
 
-void OnQuicTransportHandshakeFailed(
+void OnWebTransportHandshakeFailed(
     RenderFrameHostImpl* frame_host,
     const GURL& url,
     const base::Optional<net::QuicTransportError>& error);
+
+// Adds a debug error message from a worklet to the devtools console.
+void LogWorkletError(RenderFrameHostImpl* frame_host, const std::string& error);
 
 void ApplyNetworkContextParamsOverrides(
     BrowserContext* browser_context,

@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -25,6 +25,7 @@
 #include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/gcm/gcm_api.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -61,12 +62,13 @@
 #include "extensions/common/verifier_formats.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/login/users/scoped_test_user_manager.h"
-#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/login/users/scoped_test_user_manager.h"
+#include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #endif
 
@@ -84,8 +86,7 @@ void RequestProxyResolvingSocketFactoryOnUIThread(
   if (!service)
     return;
   network::mojom::NetworkContext* network_context =
-      content::BrowserContext::GetDefaultStoragePartition(profile)
-          ->GetNetworkContext();
+      profile->GetDefaultStoragePartition()->GetNetworkContext();
   network_context->CreateProxyResolvingSocketFactory(std::move(receiver));
 }
 
@@ -109,7 +110,7 @@ class Waiter {
 
   // Waits until the asynchronous operation finishes.
   void WaitUntilCompleted() {
-    run_loop_.reset(new base::RunLoop);
+    run_loop_ = std::make_unique<base::RunLoop>();
     run_loop_->Run();
   }
 
@@ -233,7 +234,7 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
     return std::make_unique<gcm::GCMProfileService>(
         profile->GetPrefs(), profile->GetPath(),
         base::BindRepeating(&RequestProxyResolvingSocketFactory, profile),
-        content::BrowserContext::GetDefaultStoragePartition(profile)
+        profile->GetDefaultStoragePartition()
             ->GetURLLoaderFactoryForBrowserProcess(),
         network::TestNetworkConnectionTracker::GetInstance(),
         chrome::GetChannel(),
@@ -256,12 +257,12 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
     // Allow extension update to unpack crx in process.
-    in_process_utility_thread_helper_.reset(
-        new content::InProcessUtilityThreadHelper);
+    in_process_utility_thread_helper_ =
+        std::make_unique<content::InProcessUtilityThreadHelper>();
 
     // This is needed to create extension service under CrOS.
-#if defined(OS_CHROMEOS)
-    test_user_manager_.reset(new chromeos::ScopedTestUserManager());
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    test_user_manager_ = std::make_unique<ash::ScopedTestUserManager>();
     // Creating a DBus thread manager setter has the side effect of
     // creating a DBusThreadManager, which is needed for testing.
     // We don't actually need the setter so we ignore the return value.
@@ -287,18 +288,18 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
                        &ExtensionGCMAppHandlerTest::BuildGCMProfileService));
 
     // Create a fake version of ExtensionGCMAppHandler.
-    gcm_app_handler_.reset(new FakeExtensionGCMAppHandler(profile(), &waiter_));
+    gcm_app_handler_ =
+        std::make_unique<FakeExtensionGCMAppHandler>(profile(), &waiter_);
   }
 
   void TearDown() override {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     test_user_manager_.reset();
 #endif
 
     waiter_.PumpUILoop();
     gcm_app_handler_->Shutdown();
-    auto* partition =
-        content::BrowserContext::GetDefaultStoragePartition(profile());
+    auto* partition = profile()->GetDefaultStoragePartition();
     if (partition)
       partition->WaitForDeletionTasksForTesting();
   }
@@ -311,8 +312,8 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
             .SetPath(temp_dir_.GetPath())
             .SetID("ldnnhddmnhbkjipkidpdiheffobcpfmf")
             .Build();
-    EXPECT_TRUE(
-        extension->permissions_data()->HasAPIPermission(APIPermission::kGcm));
+    EXPECT_TRUE(extension->permissions_data()->HasAPIPermission(
+        mojom::APIPermissionID::kGcm));
 
     return extension;
   }
@@ -345,7 +346,7 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
     extensions::CrxInstaller* installer = NULL;
     content::WindowedNotificationObserver observer(
         extensions::NOTIFICATION_CRX_INSTALLER_DONE,
-        base::Bind(&IsCrxInstallerDone, &installer));
+        base::BindRepeating(&IsCrxInstallerDone, &installer));
     extensions::CRXFileInfo crx_info(path, extensions::GetTestVerifierFormat());
     crx_info.extension_id = extension->id();
     extension_service_->UpdateExtension(crx_info, true, &installer);
@@ -413,9 +414,9 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
   base::ScopedTempDir temp_dir_;
 
   // This is needed to create extension service under CrOS.
-#if defined(OS_CHROMEOS)
-  chromeos::ScopedCrosSettingsTestHelper cros_settings_test_helper_;
-  std::unique_ptr<chromeos::ScopedTestUserManager> test_user_manager_;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  ash::ScopedCrosSettingsTestHelper cros_settings_test_helper_;
+  std::unique_ptr<ash::ScopedTestUserManager> test_user_manager_;
 #endif
 
   Waiter waiter_;

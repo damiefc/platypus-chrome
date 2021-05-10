@@ -18,6 +18,7 @@
 #include "components/download/public/common/download_interrupt_reasons.h"
 #include "components/download/public/common/download_save_info.h"
 #include "components/download/public/common/download_source.h"
+#include "net/base/isolation_info.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/referrer_policy.h"
 #include "services/network/public/cpp/resource_request_body.h"
@@ -81,13 +82,9 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
       const GURL& url,
       const net::NetworkTrafficAnnotationTag& traffic_annotation);
 
-  // The RenderView routing ID must correspond to the RenderView of the
-  // RenderFrame, both of which share the same RenderProcess. This may be a
-  // different RenderView than the WebContents' main RenderView.
   DownloadUrlParameters(
       const GURL& url,
       int render_process_host_id,
-      int render_view_host_routing_id,
       int render_frame_host_routing_id,
       const net::NetworkTrafficAnnotationTag& traffic_annotation);
 
@@ -168,7 +165,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
 
   // Suggested filename for the download. The suggestion can be overridden by
   // either a Content-Disposition response header or a |file_path|.
-  void set_suggested_name(const base::string16& suggested_name) {
+  void set_suggested_name(const std::u16string& suggested_name) {
     save_info_.suggested_name = suggested_name;
   }
 
@@ -255,6 +252,14 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
     require_safety_checks_ = require_safety_checks;
   }
 
+  // Sets whether the download request will use the given isolation_info. If the
+  // isolation info is not set, the download will be treated as a
+  // top-frame navigation with respect to network-isolation-key and
+  // site-for-cookies.
+  void set_isolation_info(const net::IsolationInfo& isolation_info) {
+    isolation_info_ = isolation_info;
+  }
+
   OnStartedCallback& callback() { return callback_; }
   bool content_initiated() const { return content_initiated_; }
   const std::string& last_modified() const { return last_modified_; }
@@ -276,19 +281,13 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   // These will be -1 if the request is not associated with a frame. See
   // the constructors for more.
   int render_process_host_id() const { return render_process_host_id_; }
-  int render_view_host_routing_id() const {
-    return render_view_host_routing_id_;
-  }
   int render_frame_host_routing_id() const {
     return render_frame_host_routing_id_;
   }
 
-  void set_frame_tree_node_id(int id) { frame_tree_node_id_ = id; }
-  int frame_tree_node_id() const { return frame_tree_node_id_; }
-
   const RequestHeadersType& request_headers() const { return request_headers_; }
   const base::FilePath& file_path() const { return save_info_.file_path; }
-  const base::string16& suggested_name() const {
+  const std::u16string& suggested_name() const {
     return save_info_.suggested_name;
   }
   int64_t offset() const { return save_info_.offset; }
@@ -306,6 +305,9 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   bool is_transient() const { return transient_; }
   std::string guid() const { return guid_; }
   bool require_safety_checks() const { return require_safety_checks_; }
+  const base::Optional<net::IsolationInfo>& isolation_info() const {
+    return isolation_info_;
+  }
 
   // STATE CHANGING: All save_info_ sub-objects will be in an indeterminate
   // state following this call.
@@ -338,9 +340,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   base::Optional<url::Origin> initiator_;
   std::string referrer_encoding_;
   int render_process_host_id_;
-  int render_view_host_routing_id_;
   int render_frame_host_routing_id_;
-  int frame_tree_node_id_;
   DownloadSaveInfo save_info_;
   GURL url_;
   bool do_not_prompt_for_login_;
@@ -353,6 +353,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   DownloadSource download_source_;
   UploadProgressCallback upload_callback_;
   bool require_safety_checks_;
+  base::Optional<net::IsolationInfo> isolation_info_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadUrlParameters);
 };

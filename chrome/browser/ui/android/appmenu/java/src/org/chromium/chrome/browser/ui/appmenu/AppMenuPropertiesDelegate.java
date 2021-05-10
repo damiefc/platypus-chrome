@@ -9,6 +9,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 
+import androidx.annotation.IdRes;
 import androidx.annotation.Nullable;
 
 import java.util.List;
@@ -44,12 +45,11 @@ public interface AppMenuPropertiesDelegate {
     void prepareMenu(Menu menu, AppMenuHandler handler);
 
     /**
-     * Gets an optional bundle of extra data associated with the provided MenuItem.
+     * Gets a bundle of (optional) extra data associated with the provided MenuItem.
      *
      * @param item The {@link MenuItem} for which to return the Bundle.
-     * @return A {@link Bundle} for the provided MenuItem containing extra data, or null.
+     * @return A {@link Bundle} for the provided MenuItem containing extra data, if any.
      */
-    @Nullable
     Bundle getBundleForMenuItem(MenuItem item);
 
     /**
@@ -116,4 +116,14 @@ public interface AppMenuPropertiesDelegate {
      *         should show the icon before the text.
      */
     boolean shouldShowIconBeforeItem();
+
+    /**
+     * Called to record that the menu item {@code menuItemId} was highlighted.
+     */
+    void recordHighlightedMenuItemShown(@Nullable @IdRes Integer menuItemId);
+
+    /**
+     * Called to record that user clicked on highlighted menu item {@code menuItemId}.
+     */
+    void recordHighlightedMenuItemClicked(@Nullable @IdRes Integer menuItemId);
 }

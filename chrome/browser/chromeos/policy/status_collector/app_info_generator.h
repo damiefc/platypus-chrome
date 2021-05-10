@@ -93,7 +93,7 @@ class AppInfoGenerator : public apps::InstanceRegistry::Observer,
     ~AppInfoProvider();
 
     ActivityStorage activity_storage;
-    apps::AppServiceProxy& app_service_proxy;
+    apps::AppServiceProxyChromeOs& app_service_proxy;
     web_app::WebAppProvider& web_app_provider;
   };
 
@@ -113,7 +113,7 @@ class AppInfoGenerator : public apps::InstanceRegistry::Observer,
                           aura::Window* window,
                           const base::Time end_time);
 
-  std::unique_ptr<AppInfoProvider> provider_ = nullptr;
+  std::unique_ptr<AppInfoProvider> provider_;
 
   bool should_report_ = false;
 

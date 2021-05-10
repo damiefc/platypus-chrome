@@ -5,12 +5,12 @@
 #ifndef ASH_SEARCH_BOX_SEARCH_BOX_VIEW_BASE_H_
 #define ASH_SEARCH_BOX_SEARCH_BOX_VIEW_BASE_H_
 
+#include <string>
 #include <vector>
 
 #include "ash/search_box/search_box_constants.h"
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "ui/events/types/event_type.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
@@ -51,8 +51,7 @@ enum class ActivationSource {
 // a close icon and a back icon for different functionalities. This class
 // provides common functions for the search box view across Chrome OS.
 class SearchBoxViewBase : public views::WidgetDelegateView,
-                          public views::TextfieldController,
-                          public views::ButtonListener {
+                          public views::TextfieldController {
  public:
   explicit SearchBoxViewBase(SearchBoxViewDelegate* delegate);
   ~SearchBoxViewBase() override;
@@ -96,9 +95,6 @@ class SearchBoxViewBase : public views::WidgetDelegateView,
   // Overridden from views::WidgetDelegate:
   ax::mojom::Role GetAccessibleWindowRole() override;
 
-  // Overridden from views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // Used only in the tests to get the current search icon.
   views::ImageView* get_search_icon_for_test() { return search_icon_; }
 
@@ -118,8 +114,8 @@ class SearchBoxViewBase : public views::WidgetDelegateView,
 
   virtual void ClearSearch();
 
-  // Returns selected view in contents view.
-  virtual views::View* GetSelectedViewInContentsView();
+  // Called when the search box active state changes.
+  virtual void OnSearchBoxActiveChanged(bool active);
 
  protected:
   // Fires query change notification.
@@ -128,16 +124,12 @@ class SearchBoxViewBase : public views::WidgetDelegateView,
   // Nofifies the active status change.
   void NotifyActiveChanged();
 
-  // Sets the search box color.
-  void SetSearchBoxColor(SkColor color);
-  SkColor search_box_color() const { return search_box_color_; }
-
   // Updates the visibility of close button.
   void UpdateButtonsVisisbility();
 
   // Overridden from views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,
-                       const base::string16& new_contents) override;
+                       const std::u16string& new_contents) override;
   bool HandleMouseEvent(views::Textfield* sender,
                         const ui::MouseEvent& mouse_event) override;
   bool HandleGestureEvent(views::Textfield* sender,
@@ -206,10 +198,8 @@ class SearchBoxViewBase : public views::WidgetDelegateView,
   bool show_close_button_when_active_ = false;
   // Whether to show assistant button.
   bool show_assistant_button_ = false;
-  // The current search box color.
-  SkColor search_box_color_ = kDefaultSearchboxColor;
 
-  views::PropertyChangedSubscription enabled_changed_subscription_ =
+  base::CallbackListSubscription enabled_changed_subscription_ =
       AddEnabledChangedCallback(
           base::BindRepeating(&SearchBoxViewBase::OnEnabledChanged,
                               base::Unretained(this)));

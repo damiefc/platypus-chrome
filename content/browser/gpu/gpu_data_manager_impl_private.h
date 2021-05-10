@@ -38,11 +38,12 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   explicit GpuDataManagerImplPrivate(GpuDataManagerImpl* owner);
   virtual ~GpuDataManagerImplPrivate();
 
+  void StartUmaTimer();
   void BlocklistWebGLForTesting();
   gpu::GPUInfo GetGPUInfo() const;
   gpu::GPUInfo GetGPUInfoForHardwareGpu() const;
   bool GpuAccessAllowed(std::string* reason) const;
-  bool GpuProcessStartAllowed() const;
+  bool GpuAccessAllowedForHardwareGpu(std::string* reason) const;
   void RequestDxdiagDx12VulkanGpuInfoIfNeeded(GpuInfoRequest request,
                                               bool delayed);
   bool IsEssentialGpuInfoAvailable() const;
@@ -73,19 +74,20 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   void UpdateVulkanRequestStatus(bool request_continues);
   bool Dx12Requested() const;
   bool VulkanRequested() const;
-  void OnBrowserThreadsStarted();
+  void PostCreateThreads();
   void TerminateInfoCollectionGpuProcess();
 #endif
   void UpdateGpuFeatureInfo(const gpu::GpuFeatureInfo& gpu_feature_info,
                             const base::Optional<gpu::GpuFeatureInfo>&
                                 gpu_feature_info_for_hardware_gpu);
-  void UpdateGpuExtraInfo(const gpu::GpuExtraInfo& process_info);
+  void UpdateGpuExtraInfo(const gfx::GpuExtraInfo& process_info);
 
   gpu::GpuFeatureInfo GetGpuFeatureInfo() const;
   gpu::GpuFeatureInfo GetGpuFeatureInfoForHardwareGpu() const;
-  gpu::GpuExtraInfo GetGpuExtraInfo() const;
+  gfx::GpuExtraInfo GetGpuExtraInfo() const;
 
   bool IsGpuCompositingDisabled() const;
+  bool IsGpuCompositingDisabledForHardwareGpu() const;
 
   void SetGpuCompositingDisabled();
 
@@ -116,10 +118,10 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
                           int render_frame_id,
                           ThreeDAPIType requester);
 
-  bool UpdateActiveGpu(uint32_t vendor_id, uint32_t device_id);
-
   gpu::GpuMode GetGpuMode() const;
   void FallBackToNextGpuMode();
+
+  bool CanFallback() const { return !fallback_modes_.empty(); }
 
   bool IsGpuProcessUsingHardwareGpu() const;
 
@@ -127,6 +129,8 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
 
   void OnDisplayAdded(const display::Display& new_display);
   void OnDisplayRemoved(const display::Display& old_display);
+  void OnDisplayMetricsChanged(const display::Display& display,
+                               uint32_t changed_metrics);
 
  private:
   friend class GpuDataManagerImplPrivateTest;
@@ -220,8 +224,11 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   // pure software (in the viz case).
   gpu::GpuFeatureInfo gpu_feature_info_for_hardware_gpu_;
   gpu::GPUInfo gpu_info_for_hardware_gpu_;
+  bool is_gpu_compositing_disabled_for_hardware_gpu_ = false;
+  bool gpu_access_allowed_for_hardware_gpu_ = true;
+  std::string gpu_access_blocked_reason_for_hardware_gpu_;
 
-  gpu::GpuExtraInfo gpu_extra_info_;
+  gfx::GpuExtraInfo gpu_extra_info_;
 
   const scoped_refptr<GpuDataManagerObserverList> observer_list_;
 

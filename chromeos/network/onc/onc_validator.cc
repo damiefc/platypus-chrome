@@ -10,11 +10,11 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/containers/contains.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -108,7 +108,7 @@ std::unique_ptr<base::Value> Validator::MapValue(
         << "', but type '" << base::Value::GetTypeName(signature.onc_type)
         << "' is required.";
     AddValidationIssue(true /* is_error */, msg.str());
-    return std::unique_ptr<base::Value>();
+    return nullptr;
   }
 
   std::unique_ptr<base::Value> repaired =
@@ -120,7 +120,7 @@ std::unique_ptr<base::Value> Validator::MapValue(
 
 std::unique_ptr<base::DictionaryValue> Validator::MapObject(
     const OncValueSignature& signature,
-    const base::DictionaryValue& onc_object,
+    const base::Value& onc_object,
     bool* error) {
   std::unique_ptr<base::DictionaryValue> repaired(new base::DictionaryValue);
 
@@ -179,7 +179,7 @@ std::unique_ptr<base::DictionaryValue> Validator::MapObject(
 
   DCHECK(!validation_issues_.empty());
   *error = true;
-  return std::unique_ptr<base::DictionaryValue>();
+  return nullptr;
 }
 
 std::unique_ptr<base::Value> Validator::MapField(
@@ -246,7 +246,7 @@ std::unique_ptr<base::Value> Validator::MapEntry(
 }
 
 bool Validator::ValidateObjectDefault(const OncValueSignature& signature,
-                                      const base::DictionaryValue& onc_object,
+                                      const base::Value& onc_object,
                                       base::DictionaryValue* result) {
   bool found_unknown_field = false;
   bool nested_error_occured = false;
@@ -289,7 +289,7 @@ bool Validator::ValidateRecommendedField(
   }
 
   std::unique_ptr<base::ListValue> repaired_recommended(new base::ListValue);
-  for (const auto& entry : *recommended_list) {
+  for (const auto& entry : recommended_list->GetList()) {
     std::string field_name;
     if (!entry.GetAsString(&field_name)) {
       NOTREACHED();  // The types of field values are already verified.
@@ -494,7 +494,7 @@ bool Validator::ListFieldContainsValidValues(
   const base::ListValue* list = NULL;
   if (object.GetListWithoutPathExpansion(field_name, &list)) {
     path_.push_back(field_name);
-    for (const auto& entry : *list) {
+    for (const auto& entry : list->GetList()) {
       std::string value;
       if (!entry.GetAsString(&value)) {
         NOTREACHED();  // The types of field values are already verified.
@@ -604,9 +604,9 @@ bool Validator::CheckGuidIsUniqueAndAddToSet(const base::DictionaryValue& dict,
 }
 
 bool Validator::IsGlobalNetworkConfigInUserImport(
-    const base::DictionaryValue& onc_object) {
+    const base::Value& onc_object) {
   if (onc_source_ == ::onc::ONC_SOURCE_USER_IMPORT &&
-      onc_object.HasKey(::onc::toplevel_config::kGlobalNetworkConfiguration)) {
+      onc_object.FindKey(::onc::toplevel_config::kGlobalNetworkConfiguration)) {
     std::ostringstream msg;
     msg << "Field '" << ::onc::toplevel_config::kGlobalNetworkConfiguration
         << "' is prohibited in ONC user imports";

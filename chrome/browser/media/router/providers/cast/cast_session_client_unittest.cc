@@ -13,7 +13,6 @@
 #include "base/run_loop.h"
 #include "base/test/mock_log.h"
 #include "base/test/values_test_util.h"
-#include "chrome/browser/media/router/data_decoder_util.h"
 #include "chrome/browser/media/router/providers/cast/cast_activity_manager.h"
 #include "chrome/browser/media/router/providers/cast/cast_internal_message_util.h"
 #include "chrome/browser/media/router/providers/cast/cast_session_client_impl.h"
@@ -157,6 +156,39 @@ TEST_F(CastSessionClientImplTest, OnMessageWrongSessionId) {
           "type": "MEDIA_GET_STATUS"
         }
       })"));
+}
+
+TEST_F(CastSessionClientImplTest, NullFieldsAreRemoved) {
+  EXPECT_CALL(activity_, SendMediaRequestToReceiver)
+      .WillOnce([](const auto& message) {
+        // TODO(crbug.com/961081): Use IsCastInternalMessage as argument to
+        // SendMediaRequestToReceiver when bug is fixed.
+        EXPECT_THAT(message, IsCastInternalMessage(R"({
+          "type": "v2_message",
+          "clientId": "theClientId",
+          "sequenceNumber": 123,
+          "message": {
+             "sessionId": "theSessionId",
+             "type": "MEDIA_GET_STATUS",
+             "array": [{"in_array": true}]
+          }
+        })"));
+        return 0;
+      });
+
+  client_->OnMessage(
+      blink::mojom::PresentationConnectionMessage::NewMessage(R"({
+        "type": "v2_message",
+        "clientId": "theClientId",
+        "sequenceNumber": 123,
+        "message": {
+          "sessionId": "theSessionId",
+          "type": "MEDIA_GET_STATUS",
+          "array": [{"in_array": true, "is_null": null}],
+          "dummy": null
+        }
+      })"));
+  RunUntilIdle();
 }
 
 TEST_F(CastSessionClientImplTest, AppMessageFromClient) {

@@ -27,7 +27,13 @@ Polymer({
     currentlyOnChannelText_: String,
 
     /** @private */
+    deviceNameText_: String,
+
+    /** @private */
     showChannelSwitcherDialog_: Boolean,
+
+    /** @private */
+    showEditHostnameDialog_: Boolean,
 
     /** @private */
     canChangeChannel_: Boolean,
@@ -48,6 +54,34 @@ Polymer({
         chromeos.settings.mojom.Setting.kCopyDetailedBuildInfo,
       ]),
     },
+
+    /** @private */
+    shouldHideEolInfo_: {
+      type: Boolean,
+      computed: 'computeShouldHideEolInfo_(eolMessageWithMonthAndYear)',
+    },
+
+    /** @private */
+    isHostnameSettingEnabled_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('isHostnameSettingEnabled');
+      },
+      readOnly: true,
+    },
+
+    /**
+     * Whether the browser/ChromeOS is managed by their organization
+     * through enterprise policies.
+     * @private
+     */
+    isManaged_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('isManaged');
+      },
+      readOnly: true,
+    },
   },
 
   /** @override */
@@ -60,6 +94,10 @@ Polymer({
     });
 
     this.updateChannelInfo_();
+
+    if (this.isHostnameSettingEnabled_) {
+      this.updateDeviceName_();
+    }
   },
 
   /**
@@ -73,6 +111,14 @@ Polymer({
     }
 
     this.attemptDeepLink();
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeShouldHideEolInfo_() {
+    return this.isManaged_ || !this.eolMessageWithMonthAndYear;
   },
 
   /** @private */
@@ -94,6 +140,14 @@ Polymer({
           'aboutCurrentlyOnChannel',
           this.i18n(
               settings.browserChannelToI18nId(info.targetChannel, info.isLts)));
+    });
+  },
+
+  /** @private */
+  updateDeviceName_() {
+    const browserProxy = DeviceNameBrowserProxyImpl.getInstance();
+    browserProxy.getDeviceNameMetadata().then(data => {
+      this.deviceNameText_ = data.deviceName;
     });
   },
 
@@ -129,6 +183,15 @@ Polymer({
   onChangeChannelTap_(e) {
     e.preventDefault();
     this.showChannelSwitcherDialog_ = true;
+  },
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onEditHostnameTap_(e) {
+    e.preventDefault();
+    this.showEditHostnameDialog_ = true;
   },
 
   /**
@@ -177,5 +240,12 @@ Polymer({
     this.showChannelSwitcherDialog_ = false;
     cr.ui.focusWithoutInk(assert(this.$$('cr-button')));
     this.updateChannelInfo_();
+  },
+
+  /** @private */
+  onEditHostnameDialogClosed_() {
+    this.showEditHostnameDialog_ = false;
+    cr.ui.focusWithoutInk(assert(this.$$('cr-button')));
+    // TODO(jhawkins): Verify hostname property updated at this point.
   },
 });

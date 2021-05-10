@@ -6,7 +6,6 @@
 #define CONTENT_BROWSER_ANDROID_WEB_CONTENTS_OBSERVER_PROXY_H_
 
 #include <jni.h>
-#include <memory>
 
 #include "base/android/jni_weak_ref.h"
 #include "base/macros.h"
@@ -14,7 +13,6 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/frame_navigate_params.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -33,6 +31,7 @@ class WebContentsObserverProxy : public WebContentsObserver {
 
  private:
   void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
+  void RenderFrameDeleted(RenderFrameHost* render_frame_host) override;
   void RenderViewReady() override;
   void RenderProcessGone(base::TerminationStatus termination_status) override;
   void DidStartLoading() override;
@@ -42,7 +41,8 @@ class WebContentsObserverProxy : public WebContentsObserver {
                    const GURL& validated_url,
                    int error_code) override;
   void DidChangeVisibleSecurityState() override;
-  void DocumentAvailableInMainFrame() override;
+  void DocumentAvailableInMainFrame(
+      RenderFrameHost* render_frame_host) override;
   void DidFirstVisuallyNonEmptyPaint() override;
   void OnVisibilityChanged(content::Visibility visibility) override;
   void TitleWasSet(NavigationEntry* entry) override;
@@ -62,7 +62,9 @@ class WebContentsObserverProxy : public WebContentsObserver {
   void WebContentsDestroyed() override;
   void DidChangeThemeColor() override;
   void MediaEffectivelyFullscreenChanged(bool is_fullscreen) override;
-  void SetToBaseURLForDataURLIfNeeded(std::string* url);
+  void DidToggleFullscreenModeForTab(bool entered_fullscreen,
+                                     bool will_cause_resize) override;
+  bool SetToBaseURLForDataURLIfNeeded(GURL* url);
   void ViewportFitChanged(blink::mojom::ViewportFit value) override;
   void OnWebContentsFocused(RenderWidgetHost*) override;
   void OnWebContentsLostFocus(RenderWidgetHost*) override;

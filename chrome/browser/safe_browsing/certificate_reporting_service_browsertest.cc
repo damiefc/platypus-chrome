@@ -4,6 +4,8 @@
 
 #include "chrome/browser/safe_browsing/certificate_reporting_service.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -22,7 +24,6 @@
 #include "chrome/browser/ssl/certificate_reporting_test_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
@@ -86,13 +87,13 @@ class CertificateReportingServiceBrowserTest : public InProcessBrowserTest {
             test_helper()->server_public_key(),
             test_helper()->server_public_key_version());
     CertificateReportingServiceFactory::GetInstance()
-        ->SetServiceResetCallbackForTesting(
-            base::Bind(&CertificateReportingServiceObserver::OnServiceReset,
-                       base::Unretained(&service_observer_)));
+        ->SetServiceResetCallbackForTesting(base::BindRepeating(
+            &CertificateReportingServiceObserver::OnServiceReset,
+            base::Unretained(&service_observer_)));
     CertificateReportingServiceFactory::GetInstance()
         ->SetURLLoaderFactoryForTesting(test_helper_);
 
-    event_histogram_tester_.reset(new EventHistogramTester());
+    event_histogram_tester_ = std::make_unique<EventHistogramTester>();
     InProcessBrowserTest::SetUpOnMainThread();
   }
 

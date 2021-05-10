@@ -10,12 +10,10 @@
 #include "base/path_service.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/mock_callback.h"
-#include "base/test/scoped_feature_list.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/search/background/ntp_background_service.h"
 #include "chrome/browser/search/instant_service_observer.h"
 #include "chrome/browser/search/instant_unittest_base.h"
-#include "chrome/browser/search/ntp_features.h"
+#include "chrome/browser/themes/test/theme_service_changed_waiter.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
@@ -26,6 +24,7 @@
 #include "components/ntp_tiles/features.h"
 #include "components/ntp_tiles/ntp_tile.h"
 #include "components/ntp_tiles/section_type.h"
+#include "components/search/ntp_features.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -292,12 +291,11 @@ TEST_F(InstantServiceTest, ChangingSearchProviderClearsNtpThemeAndPref) {
 
 TEST_F(InstantServiceTest, LocalBackgroundImageCopyCreated) {
   ASSERT_FALSE(instant_service_->IsCustomBackgroundSet());
-  const GURL kUrl("chrome-search://local-ntp/background.jpg");
 
   base::FilePath profile_path = profile()->GetPath();
   base::FilePath path(profile_path.AppendASCII("test_file"));
   base::FilePath copy_path(profile_path.AppendASCII(
-      chrome::kChromeSearchLocalNtpBackgroundFilename));
+      chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
 
   base::WriteFile(path, "background_image", 16);
 
@@ -318,7 +316,7 @@ TEST_F(InstantServiceTest,
   ASSERT_FALSE(instant_service_->IsCustomBackgroundSet());
   base::FilePath profile_path = profile()->GetPath();
   base::FilePath path(profile_path.AppendASCII(
-      chrome::kChromeSearchLocalNtpBackgroundFilename));
+      chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
 
   base::WriteFile(path, "background_image", 16);
 
@@ -341,7 +339,7 @@ TEST_F(InstantServiceTest, SettingUrlRemovesLocalBackgroundImageCopy) {
 
   base::FilePath profile_path = profile()->GetPath();
   base::FilePath path(profile_path.AppendASCII(
-      chrome::kChromeSearchLocalNtpBackgroundFilename));
+      chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
 
   base::WriteFile(path, "background_image", 16);
 
@@ -426,14 +424,13 @@ TEST_F(InstantServiceTest, UpdatingPrefUpdatesNtpTheme) {
 
 TEST_F(InstantServiceTest, SetLocalImage) {
   ASSERT_FALSE(instant_service_->IsCustomBackgroundSet());
-  const GURL kUrl("chrome-search://local-ntp/background.jpg?123456789");
 
   sync_preferences::TestingPrefServiceSyncable* pref_service =
       profile()->GetTestingPrefService();
 
   base::FilePath profile_path = profile()->GetPath();
   base::FilePath path(profile_path.AppendASCII(
-      chrome::kChromeSearchLocalNtpBackgroundFilename));
+      chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
   base::WriteFile(path, "background_image", 16);
   base::ThreadPoolInstance::Get()->FlushForTesting();
 
@@ -441,9 +438,10 @@ TEST_F(InstantServiceTest, SetLocalImage) {
   task_environment()->RunUntilIdle();
 
   NtpTheme* theme = instant_service_->GetInitializedNtpTheme();
-  EXPECT_TRUE(base::StartsWith(theme->custom_background_url.spec(),
-                               chrome::kChromeSearchLocalNtpBackgroundUrl,
-                               base::CompareCase::SENSITIVE));
+  EXPECT_TRUE(
+      base::StartsWith(theme->custom_background_url.spec(),
+                       chrome::kChromeUIUntrustedNewTabPageBackgroundUrl,
+                       base::CompareCase::SENSITIVE));
   EXPECT_TRUE(
       pref_service->GetBoolean(prefs::kNtpCustomBackgroundLocalToDevice));
   EXPECT_TRUE(instant_service_->IsCustomBackgroundSet());
@@ -458,7 +456,7 @@ TEST_F(InstantServiceTest, SyncPrefOverridesAndRemovesLocalImage) {
 
   base::FilePath profile_path = profile()->GetPath();
   base::FilePath path(profile_path.AppendASCII(
-      chrome::kChromeSearchLocalNtpBackgroundFilename));
+      chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
   base::WriteFile(path, "background_image", 16);
   base::ThreadPoolInstance::Get()->FlushForTesting();
 
@@ -569,7 +567,7 @@ TEST_F(InstantServiceTest, LocalImageDoesNotHaveAttribution) {
 
   base::FilePath profile_path = profile()->GetPath();
   base::FilePath path(profile_path.AppendASCII(
-      chrome::kChromeSearchLocalNtpBackgroundFilename));
+      chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
   base::WriteFile(path, "background_image", 16);
   base::ThreadPoolInstance::Get()->FlushForTesting();
 
@@ -577,9 +575,10 @@ TEST_F(InstantServiceTest, LocalImageDoesNotHaveAttribution) {
   task_environment()->RunUntilIdle();
 
   theme = instant_service_->GetInitializedNtpTheme();
-  EXPECT_TRUE(base::StartsWith(theme->custom_background_url.spec(),
-                               chrome::kChromeSearchLocalNtpBackgroundUrl,
-                               base::CompareCase::SENSITIVE));
+  EXPECT_TRUE(
+      base::StartsWith(theme->custom_background_url.spec(),
+                       chrome::kChromeUIUntrustedNewTabPageBackgroundUrl,
+                       base::CompareCase::SENSITIVE));
   EXPECT_TRUE(
       pref_service->GetBoolean(prefs::kNtpCustomBackgroundLocalToDevice));
   EXPECT_TRUE(instant_service_->IsCustomBackgroundSet());
@@ -645,7 +644,7 @@ TEST_F(InstantServiceTest, LocalImageDoesNotUpdateCustomBackgroundColor) {
   base::FilePath profile_path = profile()->GetPath();
   base::FilePath path(profile_path.AppendASCII("test_file"));
   base::FilePath copy_path(profile_path.AppendASCII(
-      chrome::kChromeSearchLocalNtpBackgroundFilename));
+      chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
   base::WriteFile(path, "background_image", 16);
 
   ASSERT_FALSE(instant_service_->IsCustomBackgroundSet());
@@ -793,11 +792,9 @@ TEST_F(InstantServiceTest, SetNTPElementsNtpTheme) {
   // Install colors, theme update should trigger SetNTPElementsNtpTheme() and
   // update NTP themed elements info.
   ThemeService* theme_service = ThemeServiceFactory::GetForProfile(profile());
-  content::WindowedNotificationObserver theme_change_observer(
-      chrome::NOTIFICATION_BROWSER_THEME_CHANGED,
-      content::Source<ThemeService>(theme_service));
+  test::ThemeServiceChangedWaiter waiter(theme_service);
   theme_service->BuildAutogeneratedThemeFromColor(SK_ColorRED);
-  theme_change_observer.Wait();
+  waiter.WaitForThemeChanged();
 
   theme = instant_service_->GetInitializedNtpTheme();
   EXPECT_NE(default_text_color, theme->text_color);

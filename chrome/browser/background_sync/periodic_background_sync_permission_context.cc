@@ -14,7 +14,7 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom.h"
 #include "url/origin.h"
 
 #if defined(OS_ANDROID)
@@ -37,7 +37,8 @@ PeriodicBackgroundSyncPermissionContext::
         content::BrowserContext* browser_context)
     : PermissionContextBase(browser_context,
                             ContentSettingsType::PERIODIC_BACKGROUND_SYNC,
-                            blink::mojom::FeaturePolicyFeature::kNotFound) {}
+                            blink::mojom::PermissionsPolicyFeature::kNotFound) {
+}
 
 PeriodicBackgroundSyncPermissionContext::
     ~PeriodicBackgroundSyncPermissionContext() = default;
@@ -109,8 +110,8 @@ PeriodicBackgroundSyncPermissionContext::GetPermissionStatusInternal(
   DCHECK(host_content_settings_map);
 
   auto content_setting = host_content_settings_map->GetContentSetting(
-      requesting_origin, embedding_origin, ContentSettingsType::BACKGROUND_SYNC,
-      /* resource_identifier= */ std::string());
+      requesting_origin, embedding_origin,
+      ContentSettingsType::BACKGROUND_SYNC);
   DCHECK(content_setting == CONTENT_SETTING_BLOCK ||
          content_setting == CONTENT_SETTING_ALLOW);
   return content_setting;
@@ -134,9 +135,10 @@ void PeriodicBackgroundSyncPermissionContext::NotifyPermissionSet(
     const GURL& embedding_origin,
     permissions::BrowserPermissionCallback callback,
     bool persist,
-    ContentSetting content_setting) {
+    ContentSetting content_setting,
+    bool is_one_time) {
   DCHECK(!persist);
   permissions::PermissionContextBase::NotifyPermissionSet(
       id, requesting_origin, embedding_origin, std::move(callback), persist,
-      content_setting);
+      content_setting, is_one_time);
 }

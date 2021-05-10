@@ -4,7 +4,6 @@
 #include "ash/login/ui/bottom_status_indicator.h"
 
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "base/strings/string16.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/image_view.h"
@@ -13,7 +12,7 @@
 namespace ash {
 
 BottomStatusIndicator::BottomStatusIndicator(TappedCallback on_tapped_callback)
-    : LabelButton(this), on_tapped_callback_(std::move(on_tapped_callback)) {
+    : LabelButton(std::move(on_tapped_callback)) {
   label()->SetAutoColorReadabilityEnabled(false);
   label()->SetFontList(
       views::Label::GetDefaultFontList().DeriveWithSizeDelta(1));
@@ -32,13 +31,6 @@ void BottomStatusIndicator::SetIcon(const gfx::VectorIcon& vector_icon,
       views::Button::STATE_NORMAL,
       gfx::CreateVectorIcon(
           vector_icon, AshColorProvider::Get()->GetContentLayerColor(type)));
-}
-
-void BottomStatusIndicator::ButtonPressed(views::Button* sender,
-                                          const ui::Event& event) {
-  DCHECK(sender == this);
-  DCHECK(on_tapped_callback_);
-  on_tapped_callback_.Run();
 }
 
 void BottomStatusIndicator::GetAccessibleNodeData(ui::AXNodeData* node_data) {

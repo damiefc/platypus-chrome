@@ -35,6 +35,13 @@ _EXCLUDED_PATHS = (
     r"tools[\\/]perf[\\/]page_sets[\\/]webrtc_cases.*",
 )
 
+_EXCLUDED_SET_NO_PARENT_PATHS = (
+    # It's for historical reasons that blink isn't a top level directory, where
+    # it would be allowed to have "set noparent" to avoid top level owners
+    # accidentally +1ing changes.
+    'third_party/blink/OWNERS',
+)
+
 
 # Fragment of a regular expression that matches C++ and Objective-C++
 # implementation files.
@@ -51,7 +58,11 @@ _HEADER_EXTENSIONS = r'\.(h|hpp|hxx)$'
 _TEST_CODE_EXCLUDED_PATHS = (
     r'.*[\\/](fake_|test_|mock_).+%s' % _IMPLEMENTATION_EXTENSIONS,
     r'.+_test_(base|support|util)%s' % _IMPLEMENTATION_EXTENSIONS,
-    r'.+_(api|browser|eg|int|perf|pixel|unit|ui)?test(_[a-z]+)?%s' %
+    # Test suite files, like:
+    # foo_browsertest.cc
+    # bar_unittest_mac.cc (suffix)
+    # baz_unittests.cc (plural)
+    r'.+_(api|browser|eg|int|perf|pixel|unit|ui)?test(s)?(_[a-z]+)?%s' %
         _IMPLEMENTATION_EXTENSIONS,
     r'.+_(fuzz|fuzzer)(_[a-z]+)?%s' % _IMPLEMENTATION_EXTENSIONS,
     r'.+profile_sync_service_harness%s' % _IMPLEMENTATION_EXTENSIONS,
@@ -68,6 +79,8 @@ _TEST_CODE_EXCLUDED_PATHS = (
     r'ios[\\/].*_app_interface\.mm$',
     # Views Examples code
     r'ui[\\/]views[\\/]examples[\\/].*',
+    # Chromium Codelab
+    r'codelabs[\\/]*'
 )
 
 _THIRD_PARTY_EXCEPT_BLINK = 'third_party/(?!blink/)'
@@ -124,6 +137,16 @@ _BANNED_JAVA_IMPORTS = (
         'https://crbug.com/1111893.',
       ),
       ()
+    ),
+    (
+      'android.support.test.rule.ActivityTestRule;',
+      (
+        'Do not use ActivityTestRule, use '
+        'org.chromium.base.test.BaseActivityTestRule instead.',
+      ),
+      (
+        'components/cronet/',
+      )
     )
 )
 
@@ -304,135 +327,12 @@ _BANNED_IOS_EGTEST_FUNCTIONS = (
     ),
 )
 
-# Directories that contain deprecated Bind() or Callback types.
-# Find sub-directories from a given directory by running:
-# for i in `find . -maxdepth 1 -type d|sort`; do
-#   echo "-- $i"
-#   (cd $i; git grep -nP 'base::(Bind\(|(Callback<|Closure))'|wc -l)
-# done
-#
-# TODO(crbug.com/714018): Remove (or narrow the scope of) paths from this list
-# when they have been converted to modern callback types (OnceCallback,
-# RepeatingCallback, BindOnce, BindRepeating) in order to enable presubmit
-# checks for them and prevent regressions.
-_NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK = '|'.join((
-  '^base/callback.h',  # Intentional.
-  '^chrome/browser/android/webapps/add_to_homescreen_data_fetcher_unittest.cc',
-  '^chrome/browser/apps/guest_view/',
-  '^chrome/browser/browsing_data/',
-  '^chrome/browser/captive_portal/captive_portal_browsertest.cc',
-  '^chrome/browser/chromeos/',
-  '^chrome/browser/component_updater/',
-  '^chrome/browser/device_identity/chromeos/device_oauth2_token_store_chromeos.cc', # pylint: disable=line-too-long
-  '^chrome/browser/devtools/',
-  '^chrome/browser/download/',
-  '^chrome/browser/extensions/',
-  '^chrome/browser/history/',
-  '^chrome/browser/installable/installable_manager_browsertest.cc',
-  '^chrome/browser/lifetime/',
-  '^chrome/browser/media_galleries/',
-  '^chrome/browser/media/',
-  '^chrome/browser/metrics/',
-  '^chrome/browser/nacl_host/test/gdb_debug_stub_browsertest.cc',
-  '^chrome/browser/nearby_sharing/client/nearby_share_api_call_flow_impl_unittest.cc', # pylint: disable=line-too-long
-  '^chrome/browser/net/',
-  '^chrome/browser/notifications/',
-  '^chrome/browser/ntp_tiles/ntp_tiles_browsertest.cc',
-  '^chrome/browser/offline_pages/',
-  '^chrome/browser/page_load_metrics/observers/data_saver_site_breakdown_metrics_observer_browsertest.cc', # pylint: disable=line-too-long
-  '^chrome/browser/payments/payment_manifest_parser_browsertest.cc',
-  '^chrome/browser/pdf/pdf_extension_test.cc',
-  '^chrome/browser/plugins/',
-  '^chrome/browser/policy/',
-  '^chrome/browser/portal/portal_browsertest.cc',
-  '^chrome/browser/prefs/profile_pref_store_manager_unittest.cc',
-  '^chrome/browser/prerender/',
-  '^chrome/browser/previews/',
-  '^chrome/browser/printing/printing_message_filter.cc',
-  '^chrome/browser/profiles/',
-  '^chrome/browser/profiling_host/profiling_process_host.cc',
-  '^chrome/browser/push_messaging/',
-  '^chrome/browser/recovery/recovery_install_global_error.cc',
-  '^chrome/browser/renderer_context_menu/',
-  '^chrome/browser/renderer_host/pepper/',
-  '^chrome/browser/resource_coordinator/',
-  '^chrome/browser/resources/chromeos/accessibility/',
-  '^chrome/browser/rlz/chrome_rlz_tracker_delegate.cc',
-  '^chrome/browser/safe_browsing/',
-  '^chrome/browser/search_engines/',
-  '^chrome/browser/service_process/',
-  '^chrome/browser/signin/',
-  '^chrome/browser/site_isolation/site_per_process_text_input_browsertest.cc',
-  '^chrome/browser/ssl/',
-  '^chrome/browser/subresource_filter/',
-  '^chrome/browser/supervised_user/',
-  '^chrome/browser/sync_file_system/',
-  '^chrome/browser/sync/',
-  '^chrome/browser/themes/theme_service.cc',
-  '^chrome/browser/thumbnail/cc/',
-  '^chrome/browser/translate/',
-  '^chrome/browser/ui/',
-  '^chrome/browser/web_applications/',
-  '^chrome/browser/win/',
-  '^chrome/services/',
-  '^chrome/test/',
-  '^chrome/tools/',
-  '^chromecast/media/',
-  '^chromeos/attestation/',
-  '^chromeos/components/',
-  '^components/arc/',
-  '^components/cast_channel/',
-  '^components/component_updater/',
-  '^components/content_settings/',
-  '^components/drive/',
-  '^components/nacl/',
-  '^components/navigation_interception/',
-  '^components/ownership/',
-  '^components/policy/',
-  '^components/search_engines/',
-  '^components/security_interstitials/',
-  '^components/signin/',
-  '^components/sync/',
-  '^components/ukm/',
-  '^components/webcrypto/',
-  '^extensions/browser/',
-  '^extensions/renderer/',
-  '^google_apis/drive/',
-  '^ios/chrome/',
-  '^ios/components/',
-  '^ios/net/',
-  '^ios/web/',
-  '^ios/web_view/',
-  '^ipc/',
-  '^media/blink/',
-  '^media/cast/',
-  '^media/cdm/',
-  '^media/filters/',
-  '^media/gpu/',
-  '^media/mojo/',
-  '^net/http/',
-  '^net/url_request/',
-  '^ppapi/proxy/',
-  '^services/',
-  '^third_party/blink/',
-  '^tools/clang/base_bind_rewriters/',  # Intentional.
-  '^tools/gdb/gdb_chrome.py',  # Intentional.
-))
-
 # Format: Sequence of tuples containing:
 # * String pattern or, if starting with a slash, a regular expression.
 # * Sequence of strings to show when the pattern matches.
 # * Error flag. True if a match is a presubmit error, otherwise it's a warning.
 # * Sequence of paths to *not* check (regexps).
 _BANNED_CPP_FUNCTIONS = (
-    (
-      r'/\bNULL\b',
-      (
-       'New code should not use NULL. Use nullptr instead.',
-      ),
-      False,
-      (),
-    ),
     (
       r'/\busing namespace ',
       (
@@ -644,7 +544,8 @@ _BANNED_CPP_FUNCTIONS = (
         're2::RE2 instead (crbug.com/755321)',
       ),
       True,
-      (),
+      # Abseil's benchmarks never linked into chrome.
+      ['third_party/abseil-cpp/.*_benchmark.cc'],
     ),
     (
       r'/\bstd::stoi\b',
@@ -742,10 +643,14 @@ _BANNED_CPP_FUNCTIONS = (
         'std::shared_ptr should not be used. Use scoped_refptr instead.',
       ),
       True,
-      ['^third_party/blink/renderer/core/typed_arrays/array_buffer/' +
+      [
+       # Needed for interop with third-party library.
+       '^third_party/blink/renderer/core/typed_arrays/array_buffer/' +
          'array_buffer_contents\.(cc|h)',
-       # Needed for interop with third-party library
-       'chrome/services/sharing/nearby/',
+       '^gin/array_buffer\.(cc|h)',
+       '^chrome/services/sharing/nearby/',
+       # Fuchsia provides C++ libraries that use std::shared_ptr<>.
+       '.*fuchsia.*test\.(cc|h)',
        _THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
     (
@@ -832,33 +737,6 @@ _BANNED_CPP_FUNCTIONS = (
       ),
       False,
       (),
-    ),
-    (
-      r'/\bbase::Bind\(',
-      (
-          'Please use base::Bind{Once,Repeating} instead',
-          'of base::Bind. (crbug.com/714018)',
-      ),
-      False,
-      (_NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK,),
-    ),
-    (
-      r'/\bbase::Callback[<:]',
-      (
-          'Please use base::{Once,Repeating}Callback instead',
-          'of base::Callback. (crbug.com/714018)',
-      ),
-      False,
-      (_NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK,),
-    ),
-    (
-      r'/\bbase::Closure\b',
-      (
-          'Please use base::{Once,Repeating}Closure instead',
-          'of base::Closure. (crbug.com/714018)',
-      ),
-      False,
-      (_NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK,),
     ),
     (
       r'/\bRunMessageLoop\b',
@@ -949,52 +827,6 @@ _BANNED_CPP_FUNCTIONS = (
         'implicated in a few leaks. ReleaseAndGetAddressOf() is safe but ',
         'operator& is generally recommended. So always use operator& instead. ',
         'See http://crbug.com/914910 for more conversion guidance.'
-      ),
-      True,
-      (),
-    ),
-    (
-      'DEFINE_TYPE_CASTS',
-      (
-        'DEFINE_TYPE_CASTS is deprecated. Instead, use downcast helpers from ',
-        '//third_party/blink/renderer/platform/casting.h.'
-      ),
-      True,
-      (
-        r'^third_party/blink/renderer/.*\.(cc|h)$',
-      ),
-    ),
-    (
-      r'/\bIsHTML.+Element\(\b',
-      (
-        'Function IsHTMLXXXXElement is deprecated. Instead, use downcast ',
-        ' helpers IsA<HTMLXXXXElement> from ',
-        '//third_party/blink/renderer/platform/casting.h.'
-      ),
-      False,
-      (
-        r'^third_party/blink/renderer/.*\.(cc|h)$',
-      ),
-    ),
-    (
-      r'/\bToHTML.+Element(|OrNull)\(\b',
-      (
-        'Function ToHTMLXXXXElement and ToHTMLXXXXElementOrNull are '
-        'deprecated. Instead, use downcast helpers To<HTMLXXXXElement> '
-        'and DynamicTo<HTMLXXXXElement> from ',
-        '//third_party/blink/renderer/platform/casting.h.'
-        'auto* html_xxxx_ele = To<HTMLXXXXElement>(n)'
-        'auto* html_xxxx_ele_or_null = DynamicTo<HTMLXXXXElement>(n)'
-      ),
-      False,
-      (
-        r'^third_party/blink/renderer/.*\.(cc|h)$',
-      ),
-    ),
-    (
-      r'/\bmojo::DataPipe\b',
-      (
-        'mojo::DataPipe is deprecated. Use mojo::CreateDataPipe instead.',
       ),
       True,
       (),
@@ -1106,6 +938,37 @@ _BANNED_CPP_FUNCTIONS = (
       (
         r'^base/trace_event/.*',
         r'^base/tracing/.*',
+      ),
+    ),
+    (
+      r'/\bScopedObserver',
+      (
+          'ScopedObserver is deprecated.',
+          'Please use base::ScopedObservation for observing a single source,',
+          'or base::ScopedMultiSourceObservation for observing multple sources',
+      ),
+      False,
+      (),
+    ),
+    (
+      r'/\bUTF8ToUTF16\("(\\.|[^\\"])*"\)',
+      (
+       'base::UTF8ToUTF16 should not be used with a string literal.',
+       'Consider using a UTF16 string literal (u"...") instead.',
+      ),
+      False,
+      (),
+    ),
+    (
+      'RoInitialize',
+      (
+        'Improper use of [base::win]::RoInitialize() has been implicated in a ',
+        'few COM initialization leaks. Use base::win::ScopedWinrtInitializer ',
+        'instead. See http://crbug.com/1197722 for more information.'
+      ),
+      True,
+      (
+          r'^base[\\/]win[\\/]scoped_winrt_initializer\.cc$'
       ),
     ),
 )
@@ -1316,6 +1179,7 @@ _GENERIC_PYDEPS_FILES = [
     'android_webview/tools/run_cts.pydeps',
     'base/android/jni_generator/jni_generator.pydeps',
     'base/android/jni_generator/jni_registration_generator.pydeps',
+    'build/android/apk_operations.pydeps',
     'build/android/devil_chromium.pydeps',
     'build/android/gyp/aar.pydeps',
     'build/android/gyp/aidl.pydeps',
@@ -1323,6 +1187,8 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/gyp/apkbuilder.pydeps',
     'build/android/gyp/assert_static_initializers.pydeps',
     'build/android/gyp/bytecode_processor.pydeps',
+    'build/android/gyp/bytecode_rewriter.pydeps',
+    'build/android/gyp/check_flag_expectations.pydeps',
     'build/android/gyp/compile_java.pydeps',
     'build/android/gyp/compile_resources.pydeps',
     'build/android/gyp/copy_ex.pydeps',
@@ -1332,6 +1198,7 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/gyp/create_bundle_wrapper_script.pydeps',
     'build/android/gyp/create_java_binary_script.pydeps',
     'build/android/gyp/create_r_java.pydeps',
+    'build/android/gyp/create_r_txt.pydeps',
     'build/android/gyp/create_size_info_files.pydeps',
     'build/android/gyp/create_ui_locale_resources.pydeps',
     'build/android/gyp/desugar.pydeps',
@@ -1347,13 +1214,15 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/gyp/java_cpp_enum.pydeps',
     'build/android/gyp/java_cpp_features.pydeps',
     'build/android/gyp/java_cpp_strings.pydeps',
+    'build/android/gyp/java_google_api_keys.pydeps',
     'build/android/gyp/jetify_jar.pydeps',
     'build/android/gyp/jinja_template.pydeps',
     'build/android/gyp/lint.pydeps',
-    'build/android/gyp/main_dex_list.pydeps',
     'build/android/gyp/merge_manifest.pydeps',
     'build/android/gyp/prepare_resources.pydeps',
+    'build/android/gyp/process_native_prebuilt.pydeps',
     'build/android/gyp/proguard.pydeps',
+    'build/android/gyp/resources_shrinker/shrinker.pydeps',
     'build/android/gyp/turbine.pydeps',
     'build/android/gyp/validate_static_library_dex_references.pydeps',
     'build/android/gyp/write_build_config.pydeps',
@@ -1366,20 +1235,22 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/test_wrapper/logdog_wrapper.pydeps',
     'build/lacros/lacros_resource_sizes.pydeps',
     'build/protoc_java.pydeps',
+    'chrome/android/monochrome/scripts/monochrome_python_tests.pydeps',
     'chrome/test/chromedriver/log_replay/client_replay_unittest.pydeps',
     'chrome/test/chromedriver/test/run_py_tests.pydeps',
+    'chromecast/resource_sizes/chromecast_resource_sizes.pydeps',
     'components/cronet/tools/generate_javadoc.pydeps',
     'components/cronet/tools/jar_src.pydeps',
     'components/module_installer/android/module_desc_java.pydeps',
     'content/public/android/generate_child_service.pydeps',
     'net/tools/testserver/testserver.pydeps',
     'testing/scripts/run_android_wpt.pydeps',
+    'testing/scripts/run_isolated_script_test.pydeps',
     'third_party/android_platform/development/scripts/stack.pydeps',
     'third_party/blink/renderer/bindings/scripts/build_web_idl_database.pydeps',
     'third_party/blink/renderer/bindings/scripts/collect_idl_files.pydeps',
     'third_party/blink/renderer/bindings/scripts/generate_bindings.pydeps',
-    ('third_party/blink/renderer/bindings/scripts/'
-     'generate_high_entropy_list.pydeps'),
+    'third_party/blink/renderer/bindings/scripts/validate_web_idl.pydeps',
     'tools/binary_size/sizes.pydeps',
     'tools/binary_size/supersize.pydeps',
 ]
@@ -1394,11 +1265,13 @@ _KNOWN_ROBOTS = set(
   ) | set('%s@developer.gserviceaccount.com' % s for s in ('3su6n15k.default',)
   ) | set('%s@chops-service-accounts.iam.gserviceaccount.com' % s
           for s in ('bling-autoroll-builder', 'v8-ci-autoroll-builder',
-                    'wpt-autoroller',)
+                    'wpt-autoroller', 'chrome-weblayer-builder')
   ) | set('%s@skia-public.iam.gserviceaccount.com' % s
           for s in ('chromium-autoroll', 'chromium-release-autoroll')
   ) | set('%s@skia-corp.google.com.iam.gserviceaccount.com' % s
-          for s in ('chromium-internal-autoroll',))
+          for s in ('chromium-internal-autoroll',)
+  ) | set('%s@owners-cleanup-prod.google.com.iam.gserviceaccount.com' % s
+          for s in ('swarming-tasks',))
 
 
 def _IsCPlusPlusFile(input_api, file_path):
@@ -1427,6 +1300,42 @@ def _IsJavaFile(input_api, file_path):
 
 def _IsProtoFile(input_api, file_path):
   return input_api.os_path.splitext(file_path)[1] == ".proto"
+
+
+def CheckNoUpstreamDepsOnClank(input_api, output_api):
+  """Prevent additions of dependencies from the upstream repo on //clank."""
+  # clank can depend on clank
+  if input_api.change.RepositoryRoot().endswith('clank'):
+    return []
+  build_file_patterns = [
+    r'(.+/)?BUILD\.gn',
+    r'.+\.gni',
+  ]
+  excluded_files = [
+    r'build[/\\]config[/\\]android[/\\]config\.gni'
+  ]
+  bad_pattern = input_api.re.compile(r'^[^#]*//clank')
+
+  error_message = 'Disallowed import on //clank in an upstream build file:'
+
+  def FilterFile(affected_file):
+    return input_api.FilterSourceFile(
+      affected_file,
+      files_to_check=build_file_patterns,
+      files_to_skip=excluded_files)
+
+  problems = []
+  for f in input_api.AffectedSourceFiles(FilterFile):
+    local_path = f.LocalPath()
+    for line_number, line in f.ChangedContents():
+      if (bad_pattern.search(line)):
+        problems.append(
+          '%s:%d\n    %s' % (local_path, line_number, line.strip()))
+  if problems:
+    return [output_api.PresubmitPromptOrNotify(error_message, problems)]
+  else:
+    return []
+
 
 def CheckNoProductionCodeUsingTestOnlyFunctions(input_api, output_api):
   """Attempts to prevent use of functions intended only for testing in
@@ -1493,7 +1402,7 @@ def CheckNoProductionCodeUsingTestOnlyFunctionsJava(input_api, output_api):
   # Describes an occurrence of "ForTest*" inside a // comment.
   comment_re = input_api.re.compile(r'//.*%s' % name_pattern)
   # Describes @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
-  annotation_re = input_api.re.compile(r'@VisibleForTesting\(otherwise')
+  annotation_re = input_api.re.compile(r'@VisibleForTesting\(')
   # Catch calls.
   inclusion_re = input_api.re.compile(r'(%s)\s*\(' % name_pattern)
   # Ignore definitions. (Comments are ignored separately.)
@@ -1659,111 +1568,9 @@ def CheckDCHECK_IS_ONHasBraces(input_api, output_api):
   return errors
 
 
-def _FindHistogramNameInChunk(histogram_name, chunk):
-  """Tries to find a histogram name or prefix in a line.
-
-  Returns the existence of the histogram name, or None if it needs more chunk
-  to determine."""
-  # A histogram_suffixes tag type has an affected-histogram name as a prefix of
-  # the histogram_name.
-  if '<affected-histogram' in chunk:
-    # If the tag is not completed, needs more chunk to get the name.
-    if not '>' in chunk:
-      return None
-    if not 'name="' in chunk:
-      return False
-    # Retrieve the first portion of the chunk wrapped by double-quotations. We
-    # expect the only attribute is the name.
-    histogram_prefix = chunk.split('"')[1]
-    return histogram_prefix in histogram_name
-  # Typically the whole histogram name should in the line.
-  return histogram_name in chunk
-
-
-def CheckUmaHistogramChangesOnUpload(input_api, output_api):
-  """Check that UMA histogram names in touched lines can still be found in other
-  lines of the patch or in histograms.xml. Note that this check would not catch
-  the reverse: changes in histograms.xml not matched in the code itself."""
-  touched_histograms = []
-  histograms_xml_modifications = []
-  call_pattern_c = r'\bUMA_HISTOGRAM.*\('
-  call_pattern_java = r'\bRecordHistogram\.record[a-zA-Z]+Histogram\('
-  name_pattern = r'"(.*?)"'
-  single_line_c_re = input_api.re.compile(call_pattern_c + name_pattern)
-  single_line_java_re = input_api.re.compile(call_pattern_java + name_pattern)
-  split_line_c_prefix_re = input_api.re.compile(call_pattern_c)
-  split_line_java_prefix_re = input_api.re.compile(call_pattern_java)
-  split_line_suffix_re = input_api.re.compile(r'^\s*' + name_pattern)
-  last_line_matched_prefix = False
-  for f in input_api.AffectedFiles():
-    # If histograms.xml itself is modified, keep the modified lines for later.
-    if f.LocalPath().endswith(('histograms.xml')):
-      histograms_xml_modifications = f.ChangedContents()
-      continue
-    if f.LocalPath().endswith(('cc', 'mm', 'cpp')):
-      single_line_re = single_line_c_re
-      split_line_prefix_re = split_line_c_prefix_re
-    elif f.LocalPath().endswith(('java')):
-      single_line_re = single_line_java_re
-      split_line_prefix_re = split_line_java_prefix_re
-    else:
-      continue
-    for line_num, line in f.ChangedContents():
-      if last_line_matched_prefix:
-        suffix_found = split_line_suffix_re.search(line)
-        if suffix_found :
-          touched_histograms.append([suffix_found.group(1), f, line_num])
-          last_line_matched_prefix = False
-          continue
-      found = single_line_re.search(line)
-      if found:
-        touched_histograms.append([found.group(1), f, line_num])
-        continue
-      last_line_matched_prefix = split_line_prefix_re.search(line)
-
-  # Search for the touched histogram names in the local modifications to
-  # histograms.xml, and, if not found, on the base histograms.xml file.
-  unmatched_histograms = []
-  for histogram_info in touched_histograms:
-    histogram_name_found = False
-    chunk = ''
-    for line_num, line in histograms_xml_modifications:
-      chunk += line
-      histogram_name_found = _FindHistogramNameInChunk(histogram_info[0], chunk)
-      if histogram_name_found is None:
-        continue
-      chunk = ''
-      if histogram_name_found:
-        break
-    if not histogram_name_found:
-      unmatched_histograms.append(histogram_info)
-
-  histograms_xml_path = 'tools/metrics/histograms/histograms.xml'
-  problems = []
-  if unmatched_histograms:
-    with open(histograms_xml_path) as histograms_xml:
-      for histogram_name, f, line_num in unmatched_histograms:
-        histograms_xml.seek(0)
-        histogram_name_found = False
-        chunk = ''
-        for line in histograms_xml:
-          chunk += line
-          histogram_name_found = _FindHistogramNameInChunk(histogram_name,
-                                                           chunk)
-          if histogram_name_found is None:
-            continue
-          chunk = ''
-          if histogram_name_found:
-            break
-        if not histogram_name_found:
-          problems.append(' [%s:%d] %s' %
-                          (f.LocalPath(), line_num, histogram_name))
-
-  if not problems:
-    return []
-  return [output_api.PresubmitPromptWarning('Some UMA_HISTOGRAM lines have '
-    'been modified and the associated histogram name has no match in either '
-    '%s or the modifications of it:' % (histograms_xml_path),  problems)]
+# TODO(crbug/1138055): Reimplement CheckUmaHistogramChangesOnUpload check in a
+# more reliable way. See
+# https://chromium-review.googlesource.com/c/chromium/src/+/2500269
 
 
 def CheckFlakyTestUsage(input_api, output_api):
@@ -1780,35 +1587,6 @@ def CheckFlakyTestUsage(input_api, output_api):
       'android.test.FlakyTest',
       files)]
   return []
-
-
-def CheckNoNewWStrings(input_api, output_api):
-  """Checks to make sure we don't introduce use of wstrings."""
-  problems = []
-  for f in input_api.AffectedFiles():
-    if (not f.LocalPath().endswith(('.cc', '.h')) or
-        f.LocalPath().endswith(('test.cc', '_win.cc', '_win.h')) or
-        '/win/' in f.LocalPath() or
-        'chrome_elf' in f.LocalPath() or
-        'install_static' in f.LocalPath()):
-      continue
-
-    allowWString = False
-    for line_num, line in f.ChangedContents():
-      if 'presubmit: allow wstring' in line:
-        allowWString = True
-      elif not allowWString and 'wstring' in line:
-        problems.append('    %s:%d' % (f.LocalPath(), line_num))
-        allowWString = False
-      else:
-        allowWString = False
-
-  if not problems:
-    return []
-  return [output_api.PresubmitPromptWarning('New code should not use wstrings.'
-      '  If you are calling a cross-platform API that accepts a wstring, '
-      'fix the API.\n' +
-      '\n'.join(problems))]
 
 
 def CheckNoDEPSGIT(input_api, output_api):
@@ -1855,7 +1633,9 @@ def _GetMessageForMatchingType(input_api, affected_file, line_number, line,
   """
   result = []
 
-  if line.endswith(" nocheck"):
+  if input_api.re.search(r"^ *//", line):  # Ignore comments about banned types.
+    return result
+  if line.endswith(" nocheck"):  # A // nocheck comment will bypass this error.
     return result
 
   matched = False
@@ -2186,6 +1966,36 @@ def CheckNoAuraWindowPropertyHInHeaders(input_api, output_api):
   return results
 
 
+def CheckNoInternalHeapIncludes(input_api, output_api):
+  """Makes sure we don't include any headers from
+  third_party/blink/renderer/platform/heap/impl or
+  third_party/blink/renderer/platform/heap/v8_wrapper from files outside of
+  third_party/blink/renderer/platform/heap
+  """
+  impl_pattern = input_api.re.compile(
+    r'^\s*#include\s*"third_party/blink/renderer/platform/heap/impl/.*"')
+  v8_wrapper_pattern = input_api.re.compile(
+    r'^\s*#include\s*"third_party/blink/renderer/platform/heap/v8_wrapper/.*"')
+  file_filter = lambda f: not input_api.re.match(
+    r"^third_party[\\/]blink[\\/]renderer[\\/]platform[\\/]heap[\\/].*",
+    f.LocalPath())
+  errors = []
+
+  for f in input_api.AffectedFiles(file_filter=file_filter):
+    for line_num, line in f.ChangedContents():
+      if impl_pattern.match(line) or v8_wrapper_pattern.match(line):
+        errors.append('    %s:%d' % (f.LocalPath(), line_num))
+
+  results = []
+  if errors:
+    results.append(output_api.PresubmitError(
+      'Do not include files from third_party/blink/renderer/platform/heap/impl'
+      ' or third_party/blink/renderer/platform/heap/v8_wrapper. Use the '
+      'relevant counterparts from third_party/blink/renderer/platform/heap',
+      errors))
+  return results
+
+
 def _CheckForVersionControlConflictsInFile(input_api, f):
   pattern = input_api.re.compile('^(?:<<<<<<<|>>>>>>>) |^=======$')
   errors = []
@@ -2403,6 +2213,18 @@ def CheckAddedDepsHaveTargetApprovals(input_api, output_api):
   target file or directory, to avoid layering violations from being
   introduced. This check verifies that this happens.
   """
+  # We rely on Gerrit's code-owners to check approvals.
+  # input_api.gerrit is always set for Chromium, but other projects
+  # might not use Gerrit.
+  if not input_api.gerrit:
+    return []
+  if (input_api.change.issue and
+      input_api.gerrit.IsOwnersOverrideApproved(input_api.change.issue)):
+    # Skip OWNERS check when Owners-Override label is approved. This is intended
+    # for global owners, trusted bots, and on-call sheriffs. Review is still
+    # required for these changes.
+    return []
+
   virtual_depended_on_files = set()
 
   file_filter = lambda f: not input_api.re.match(
@@ -2434,20 +2256,19 @@ def CheckAddedDepsHaveTargetApprovals(input_api, output_api):
   else:
     output = output_api.PresubmitNotifyResult
 
-  owners_db = input_api.owners_db
   owner_email, reviewers = (
       input_api.canned_checks.GetCodereviewOwnerAndReviewers(
         input_api,
-        owners_db.email_regexp,
+        None,
         approval_needed=input_api.is_committing))
 
   owner_email = owner_email or input_api.change.author_email
 
-  reviewers_plus_owner = set(reviewers)
-  if owner_email:
-    reviewers_plus_owner.add(owner_email)
-  missing_files = owners_db.files_not_covered_by(virtual_depended_on_files,
-                                                 reviewers_plus_owner)
+  approval_status = input_api.owners_client.GetFilesApprovalStatus(
+      virtual_depended_on_files, reviewers.union([owner_email]), [])
+  missing_files = [
+      f for f in virtual_depended_on_files
+      if approval_status[f] != input_api.owners_client.APPROVED]
 
   # We strip the /DEPS part that was added by
   # _FilesToCheckForIncomingDeps to fake a path to a file in a
@@ -2466,7 +2287,8 @@ def CheckAddedDepsHaveTargetApprovals(input_api, output_api):
       output('You need LGTM from owners of depends-on paths in DEPS that were '
              'modified in this CL:\n    %s' %
                  '\n    '.join(sorted(unapproved_dependencies)))]
-    suggested_owners = owners_db.reviewers_for(missing_files, owner_email)
+    suggested_owners = input_api.owners_client.SuggestOwners(
+        missing_files, exclude=[owner_email])
     output_list.append(output(
         'Suggested missing target path OWNERS:\n    %s' %
             '\n    '.join(suggested_owners or [])))
@@ -2501,6 +2323,8 @@ def CheckSpamLogging(input_api, output_api):
                         r"dump_stability_report_main_win.cc$",
                     r"^components[\\/]media_control[\\/]renderer[\\/]"
                         r"media_playback_options\.cc$",
+                    r"^components[\\/]viz[\\/]service[\\/]display[\\/]"
+                        r"overlay_strategy_underlay_cast\.cc$",
                     r"^components[\\/]zucchini[\\/].*",
                     # TODO(peter): Remove exception. https://crbug.com/534537
                     r"^content[\\/]browser[\\/]notifications[\\/]"
@@ -2512,6 +2336,7 @@ def CheckSpamLogging(input_api, output_api):
                     r"^extensions[\\/]renderer[\\/]logging_native_handler\.cc$",
                     r"^fuchsia[\\/]engine[\\/]browser[\\/]frame_impl.cc$",
                     r"^fuchsia[\\/]engine[\\/]context_provider_main.cc$",
+                    r"^fuchsia[\\/]runners[\\/]common[\\/]web_component.cc$",
                     r"^headless[\\/]app[\\/]headless_shell\.cc$",
                     r"^ipc[\\/]ipc_logging\.cc$",
                     r"^native_client_sdk[\\/]",
@@ -2717,7 +2542,13 @@ def CheckUserActionUpdate(input_api, output_api):
     # for actions.xml will do a more complete presubmit check.
     return []
 
-  file_filter = lambda f: f.LocalPath().endswith(('.cc', '.mm'))
+  file_inclusion_pattern = [r'.*\.(cc|mm)$']
+  files_to_skip = (_EXCLUDED_PATHS +
+                   _TEST_CODE_EXCLUDED_PATHS +
+                   input_api.DEFAULT_FILES_TO_SKIP )
+  file_filter = lambda f: input_api.FilterSourceFile(
+      f, files_to_check=file_inclusion_pattern, files_to_skip=files_to_skip)
+
   action_re = r'[^a-zA-Z]UserMetricsAction\("([^"]*)'
   current_actions = None
   for f in input_api.AffectedFiles(file_filter=file_filter):
@@ -3023,6 +2854,11 @@ def _AddOwnersFilesToCheckForFuchsiaSecurityOwners(input_api, to_check):
       '*.fidl',
   ]
 
+  # Don't check for owners files for changes in these directories.
+  exclude_paths = [
+      'third_party/crashpad/*',
+  ]
+
   def AddPatternToCheck(input_file, pattern):
     owners_file = input_api.os_path.join(
         input_api.os_path.dirname(input_file.LocalPath()), 'OWNERS')
@@ -3042,6 +2878,13 @@ def _AddOwnersFilesToCheckForFuchsiaSecurityOwners(input_api, to_check):
   # for. We should only nag patch authors about per-file rules if a file in that
   # directory would match that pattern.
   for f in input_api.AffectedFiles(include_deletes=False):
+    skip = False
+    for exclude in exclude_paths:
+      if input_api.fnmatch.fnmatch(f.LocalPath(), exclude):
+        skip = True
+    if skip:
+      continue
+
     for pattern in file_patterns:
       if input_api.fnmatch.fnmatch(
           input_api.os_path.basename(f.LocalPath()), pattern):
@@ -3146,35 +2989,35 @@ def CheckSecurityChanges(input_api, output_api):
   by the security team.
   """
   files_to_functions = _GetFilesUsingSecurityCriticalFunctions(input_api)
-  if len(files_to_functions):
-    owners_db = input_api.owners_db
-    owner_email, reviewers = (
-        input_api.canned_checks.GetCodereviewOwnerAndReviewers(
-            input_api,
-            owners_db.email_regexp,
-            approval_needed=input_api.is_committing))
+  if not len(files_to_functions):
+    return []
 
-    # Load the OWNERS file for security changes.
-    owners_file = 'ipc/SECURITY_OWNERS'
-    security_owners = owners_db.owners_rooted_at_file(owners_file)
+  owner_email, reviewers = (
+      input_api.canned_checks.GetCodereviewOwnerAndReviewers(
+          input_api,
+          None,
+          approval_needed=input_api.is_committing))
 
-    has_security_owner = any([owner in reviewers for owner in security_owners])
-    if not has_security_owner:
-      msg = 'The following files change calls to security-sensive functions\n' \
-          'that need to be reviewed by {}.\n'.format(owners_file)
-      for path, names in files_to_functions.items():
-        msg += '  {}\n'.format(path)
-        for name in names:
-          msg += '    {}\n'.format(name)
-        msg += '\n'
+  # Load the OWNERS file for security changes.
+  owners_file = 'ipc/SECURITY_OWNERS'
+  security_owners = input_api.owners_client.ListOwners(owners_file)
+  has_security_owner = any([owner in reviewers for owner in security_owners])
+  if has_security_owner:
+    return []
 
-      if input_api.is_committing:
-        output = output_api.PresubmitError
-      else:
-        output = output_api.PresubmitNotifyResult
-      return [output(msg)]
+  msg = 'The following files change calls to security-sensive functions\n' \
+      'that need to be reviewed by {}.\n'.format(owners_file)
+  for path, names in files_to_functions.items():
+    msg += '  {}\n'.format(path)
+    for name in names:
+      msg += '    {}\n'.format(name)
+    msg += '\n'
 
-  return []
+  if input_api.is_committing:
+    output = output_api.PresubmitError
+  else:
+    output = output_api.PresubmitNotifyResult
+  return [output(msg)]
 
 
 def CheckSetNoParent(input_api, output_api):
@@ -3222,12 +3065,15 @@ def CheckSetNoParent(input_api, output_api):
               found_owners_files.add(glob)
 
     # Check that every set noparent line has a corresponding file:// line
-    # listed in build/OWNERS.setnoparent.
-    for set_noparent_line in found_set_noparent_lines:
-      if set_noparent_line in found_owners_files:
-        continue
-      errors.append('  %s:%d' % (f.LocalPath(),
-                                 found_set_noparent_lines[set_noparent_line]))
+    # listed in build/OWNERS.setnoparent. An exception is made for top level
+    # directories since src/OWNERS shouldn't review them.
+    if (f.LocalPath().count('/') != 1 and
+        (not f.LocalPath() in _EXCLUDED_SET_NO_PARENT_PATHS)):
+      for set_noparent_line in found_set_noparent_lines:
+        if set_noparent_line in found_owners_files:
+          continue
+        errors.append('  %s:%d' % (f.LocalPath(),
+                                   found_set_noparent_lines[set_noparent_line]))
 
   results = []
   if errors:
@@ -3640,11 +3486,17 @@ class PydepsChecker(object):
 
   def _ComputeNormalizedPydepsEntries(self, pydeps_path):
     """Returns an interable of paths within the .pydep, relativized to //."""
-    os_path = self._input_api.os_path
-    pydeps_dir = os_path.dirname(pydeps_path)
-    entries = (l.rstrip() for l in self._LoadFile(pydeps_path).splitlines()
-               if not l.startswith('*'))
-    return (os_path.normpath(os_path.join(pydeps_dir, e)) for e in entries)
+    pydeps_data = self._LoadFile(pydeps_path)
+    uses_gn_paths = '--gn-paths' in pydeps_data
+    entries = (l for l in pydeps_data.splitlines() if not l.startswith('#'))
+    if uses_gn_paths:
+      # Paths look like: //foo/bar/baz
+      return (e[2:] for e in entries)
+    else:
+      # Paths look like: path/relative/to/file.pydeps
+      os_path = self._input_api.os_path
+      pydeps_dir = os_path.dirname(pydeps_path)
+      return (os_path.normpath(os_path.join(pydeps_dir, e)) for e in entries)
 
   def _CreateFilesToPydepsMap(self):
     """Returns a map of local_path -> list_of_pydeps."""
@@ -3684,6 +3536,8 @@ class PydepsChecker(object):
     old_pydeps_data = self._LoadFile(pydeps_path).splitlines()
     if old_pydeps_data:
       cmd = old_pydeps_data[1][1:].strip()
+      if '--output' not in cmd:
+        cmd += ' --output ' + pydeps_path
       old_contents = old_pydeps_data[2:]
     else:
       # A default cmd that should work in most cases (as long as pydeps filename
@@ -4070,6 +3924,35 @@ def CheckWATCHLISTS(input_api, output_api):
   return []
 
 
+def CheckGnGlobForward(input_api, output_api):
+  """Checks that forward_variables_from(invoker, "*") follows best practices.
+
+  As documented at //build/docs/writing_gn_templates.md
+  """
+  def gn_files(f):
+    return input_api.FilterSourceFile(f, files_to_check=(r'.+\.gni', ))
+
+  problems = []
+  for f in input_api.AffectedSourceFiles(gn_files):
+    for line_num, line in f.ChangedContents():
+      if 'forward_variables_from(invoker, "*")' in line:
+        problems.append(
+            'Bare forward_variables_from(invoker, "*") in %s:%d' % (
+                f.LocalPath(), line_num))
+
+  if problems:
+    return [output_api.PresubmitPromptWarning(
+        'forward_variables_from("*") without exclusions',
+        items=sorted(problems),
+        long_text=('The variables "visibilty" and "test_only" should be '
+                   'explicitly listed in forward_variables_from(). For more '
+                   'details, see:\n'
+                   'https://chromium.googlesource.com/chromium/src/+/HEAD/'
+                   'build/docs/writing_gn_templates.md'
+                   '#Using-forward_variables_from'))]
+  return []
+
+
 def CheckNewHeaderWithoutGnChangeOnUpload(input_api, output_api):
   """Checks that newly added header files have corresponding GN changes.
   Note that this is only a heuristic. To be precise, run script:
@@ -4152,46 +4035,6 @@ def CheckCorrectProductNameInMessages(input_api, output_api):
           output_api.PresubmitPromptWarning(message, items=problems))
 
   return all_problems
-
-
-def CheckBuildtoolsRevisionsAreInSync(input_api, output_api):
-  # TODO(crbug.com/941824): We need to make sure the entries in
-  # //buildtools/DEPS are kept in sync with the entries in //DEPS
-  # so that users of //buildtools in other projects get the same tooling
-  # Chromium gets. If we ever fix the referenced bug and add 'includedeps'
-  # support to gclient, we can eliminate the duplication and delete
-  # this presubmit check.
-
-  # Update this regexp if new revisions are added to the files.
-  rev_regexp = input_api.re.compile(
-      "'((clang_format|libcxx|libcxxabi|libunwind)_revision|gn_version)':")
-
-  # If a user is changing one revision, they need to change the same
-  # line in both files. This means that any given change should contain
-  # exactly the same list of changed lines that match the regexps. The
-  # replace(' ', '') call allows us to ignore whitespace changes to the
-  # lines. The 'long_text' parameter to the error will contain the
-  # list of changed lines in both files, which should make it easy enough
-  # to spot the error without going overboard in this implementation.
-  revs_changes = {
-      'DEPS': {},
-      'buildtools/DEPS': {},
-  }
-  long_text = ''
-
-  for f in input_api.AffectedFiles(
-      file_filter=lambda f: f.LocalPath() in ('DEPS', 'buildtools/DEPS')):
-    for line_num, line in f.ChangedContents():
-      if rev_regexp.search(line):
-        revs_changes[f.LocalPath()][line.replace(' ', '')] = line
-        long_text += '%s:%d: %s\n' % (f.LocalPath(), line_num, line)
-
-  if set(revs_changes['DEPS']) != set(revs_changes['buildtools/DEPS']):
-    return [output_api.PresubmitError(
-        'Change buildtools revisions in sync in both //DEPS and '
-        '//buildtools/DEPS.', long_text=long_text + '\n')]
-  else:
-    return []
 
 
 def CheckForTooLargeFiles(input_api, output_api):
@@ -4378,6 +4221,26 @@ def CheckAccessibilityRelnotesField(input_api, output_api):
 
   return [output_api.PresubmitNotifyResult(message)]
 
+# string pattern, sequence of strings to show when pattern matches,
+# error flag. True if match is a presubmit error, otherwise it's a warning.
+_NON_INCLUSIVE_TERMS = (
+    (
+        # Note that \b pattern in python re is pretty particular. In this
+        # regexp, 'class WhiteList ...' will match, but 'class FooWhiteList
+        # ...' will not. This may require some tweaking to catch these cases
+        # without triggering a lot of false positives. Leaving it naive and
+        # less matchy for now.
+        r'/\b(?i)((black|white)list|slave)\b',  # nocheck
+        (
+            'Please don\'t use blacklist, whitelist, '  # nocheck
+            'or slave in your',  # nocheck
+            'code and make every effort to use other terms. Using "// nocheck"',
+            '"# nocheck" or "<!-- nocheck -->"',
+            'at the end of the offending line will bypass this PRESUBMIT error',
+            'but avoid using this whenever possible. Reach out to',
+            'community@chromium.org if you have questions'),
+        True),)
+
 def ChecksCommon(input_api, output_api):
   """Checks common to both upload and commit."""
   results = []
@@ -4406,6 +4269,16 @@ def ChecksCommon(input_api, output_api):
   results.extend(
       input_api.canned_checks.CheckOwnersDirMetadataExclusive(
           input_api, output_api))
+  results.extend(
+      input_api.canned_checks.CheckNoNewMetadataInOwners(
+          input_api, output_api))
+  results.extend(input_api.canned_checks.CheckInclusiveLanguage(
+          input_api, output_api,
+          excluded_directories_relative_path = [
+            'infra',
+            'inclusive_language_presubmit_exempt_dirs.txt'
+          ],
+          non_inclusive_terms=_NON_INCLUSIVE_TERMS))
 
   for f in input_api.AffectedFiles():
     path, name = input_api.os_path.split(f.LocalPath())
@@ -4761,6 +4634,73 @@ def CheckForWindowsLineEndings(input_api, output_api):
     return [output_api.PresubmitPromptWarning('Are you sure that you want '
         'these files to contain Windows style line endings?\n' +
         '\n'.join(problems))]
+
+  return []
+
+def CheckForUseOfChromeAppsDeprecations(input_api, output_api):
+  """Check source code for use of Chrome App technologies being
+  deprecated.
+  """
+
+  def _CheckForDeprecatedTech(input_api, output_api,
+    detection_list, files_to_check = None, files_to_skip = None):
+
+    if (files_to_check or files_to_skip):
+      source_file_filter = lambda f: input_api.FilterSourceFile(
+        f, files_to_check=files_to_check,
+        files_to_skip=files_to_skip)
+    else:
+      source_file_filter = None
+
+    problems = []
+
+    for f in input_api.AffectedSourceFiles(source_file_filter):
+      if f.Action() == 'D':
+        continue
+      for _, line in f.ChangedContents():
+        if any( detect in line for detect in detection_list ):
+          problems.append(f.LocalPath())
+
+    return problems
+
+  # to avoid this presubmit script triggering warnings
+  files_to_skip = ['PRESUBMIT.py','PRESUBMIT_test.py']
+
+  problems =[]
+
+  # NMF: any files with extensions .nmf or NMF
+  _NMF_FILES = r'\.(nmf|NMF)$'
+  problems += _CheckForDeprecatedTech(input_api, output_api,
+    detection_list = [''], # any change to the file will trigger warning
+    files_to_check = [ r'.+%s' % _NMF_FILES ])
+
+  # MANIFEST: any manifest.json that in its diff includes "app":
+  _MANIFEST_FILES = r'(manifest\.json)$'
+  problems += _CheckForDeprecatedTech(input_api, output_api,
+    detection_list = ['"app":'],
+    files_to_check = [ r'.*%s' % _MANIFEST_FILES ])
+
+  # NaCl / PNaCl: any file that in its diff contains the strings in the list
+  problems += _CheckForDeprecatedTech(input_api, output_api,
+    detection_list = ['config=nacl','enable-nacl','cpu=pnacl', 'nacl_io'],
+    files_to_skip = files_to_skip + [ r"^native_client_sdk[\\/]"])
+
+  # PPAPI: any C/C++ file that in its diff includes a ppappi library
+  problems += _CheckForDeprecatedTech(input_api, output_api,
+    detection_list = ['#include "ppapi','#include <ppapi'],
+    files_to_check = (
+      r'.+%s' % _HEADER_EXTENSIONS,
+      r'.+%s' % _IMPLEMENTATION_EXTENSIONS ),
+    files_to_skip = [r"^ppapi[\\/]"] )
+
+  if problems:
+    return [output_api.PresubmitPromptWarning('You are adding/modifying code'
+    'related to technologies which will soon be deprecated (Chrome Apps, NaCl,'
+    ' PNaCl, PPAPI). See this blog post for more details:\n'
+    'https://blog.chromium.org/2020/08/changes-to-chrome-app-support-timeline.html\n'
+    'and this documentation for options to replace these technologies:\n'
+    'https://developer.chrome.com/docs/apps/migration/\n'+
+    '\n'.join(problems))]
 
   return []
 
@@ -5196,6 +5136,12 @@ def CheckTranslationExpectations(input_api, output_api,
   if not grd_files:
     grd_files = git_helper.list_grds_in_repository(repo_root)
 
+  # Ignore bogus grd files used only for testing
+  # ui/webui/resoucres/tools/generate_grd.py.
+  ignore_path = input_api.os_path.join(
+      'ui', 'webui', 'resources', 'tools', 'tests')
+  grd_files = filter(lambda p: ignore_path not in p, grd_files)
+
   try:
     translation_helper.get_translatable_grds(repo_root, grd_files,
                                              translation_expectations_path)
@@ -5239,4 +5185,117 @@ def CheckStableMojomChanges(input_api, output_api):
         'One or more [Stable] mojom definitions appears to have been changed '
         'in a way that is not backward-compatible.',
         long_text=error)]
+  return []
+
+def CheckDeprecationOfPreferences(input_api, output_api):
+  """Removing a preference should come with a deprecation."""
+
+  def FilterFile(affected_file):
+    """Accept only .cc files and the like."""
+    file_inclusion_pattern = [r'.+%s' % _IMPLEMENTATION_EXTENSIONS]
+    files_to_skip = (_EXCLUDED_PATHS +
+                     _TEST_CODE_EXCLUDED_PATHS +
+                     input_api.DEFAULT_FILES_TO_SKIP)
+    return input_api.FilterSourceFile(
+      affected_file,
+      files_to_check=file_inclusion_pattern,
+      files_to_skip=files_to_skip)
+
+  def ModifiedLines(affected_file):
+    """Returns a list of tuples (line number, line text) of added and removed
+    lines.
+
+    Deleted lines share the same line number as the previous line.
+
+    This relies on the scm diff output describing each changed code section
+    with a line of the form
+
+    ^@@ <old line num>,<old size> <new line num>,<new size> @@$
+    """
+    line_num = 0
+    modified_lines = []
+    for line in affected_file.GenerateScmDiff().splitlines():
+      # Extract <new line num> of the patch fragment (see format above).
+      m = input_api.re.match(r'^@@ [0-9\,\+\-]+ \+([0-9]+)\,[0-9]+ @@', line)
+      if m:
+        line_num = int(m.groups(1)[0])
+        continue
+      if ((line.startswith('+') and not line.startswith('++')) or
+          (line.startswith('-') and not line.startswith('--'))):
+        modified_lines.append((line_num, line))
+
+      if not line.startswith('-'):
+        line_num += 1
+    return modified_lines
+
+  def FindLineWith(lines, needle):
+    """Returns the line number (i.e. index + 1) in `lines` containing `needle`.
+
+    If 0 or >1 lines contain `needle`, -1 is returned.
+    """
+    matching_line_numbers = [
+        # + 1 for 1-based counting of line numbers.
+        i + 1 for i, line
+        in enumerate(lines)
+        if needle in line]
+    return matching_line_numbers[0] if len(matching_line_numbers) == 1 else -1
+
+  def ModifiedPrefMigration(affected_file):
+    """Returns whether the MigrateObsolete.*Pref functions were modified."""
+    # Determine first and last lines of MigrateObsolete.*Pref functions.
+    new_contents = affected_file.NewContents();
+    range_1 = (
+        FindLineWith(new_contents, 'BEGIN_MIGRATE_OBSOLETE_LOCAL_STATE_PREFS'),
+        FindLineWith(new_contents, 'END_MIGRATE_OBSOLETE_LOCAL_STATE_PREFS'))
+    range_2 = (
+        FindLineWith(new_contents, 'BEGIN_MIGRATE_OBSOLETE_PROFILE_PREFS'),
+        FindLineWith(new_contents, 'END_MIGRATE_OBSOLETE_PROFILE_PREFS'))
+    if (-1 in range_1 + range_2):
+      raise Exception(
+          'Broken .*MIGRATE_OBSOLETE_.*_PREFS markers in browser_prefs.cc.')
+
+    # Check whether any of the modified lines are part of the
+    # MigrateObsolete.*Pref functions.
+    for line_nr, line in ModifiedLines(affected_file):
+      if (range_1[0] <= line_nr <= range_1[1] or
+          range_2[0] <= line_nr <= range_2[1]):
+        return True
+    return False
+
+  register_pref_pattern = input_api.re.compile(r'Register.+Pref')
+  browser_prefs_file_pattern = input_api.re.compile(
+      r'chrome/browser/prefs/browser_prefs.cc')
+
+  changes = input_api.AffectedFiles(include_deletes=True,
+                                    file_filter=FilterFile)
+  potential_problems = []
+  for f in changes:
+    for line in f.GenerateScmDiff().splitlines():
+      # Check deleted lines for pref registrations.
+      if (line.startswith('-') and not line.startswith('--') and
+          register_pref_pattern.search(line)):
+        potential_problems.append('%s: %s' % (f.LocalPath(), line))
+
+    if browser_prefs_file_pattern.search(f.LocalPath()):
+      # If the developer modified the MigrateObsolete.*Prefs() functions, we
+      # assume that they knew that they have to deprecate preferences and don't
+      # warn.
+      try:
+        if ModifiedPrefMigration(f):
+          return []
+      except Exception as e:
+        return [output_api.PresubmitError(str(e))]
+
+  if potential_problems:
+    return [output_api.PresubmitPromptWarning(
+      'Discovered possible removal of preference registrations.\n\n'
+      'Please make sure to properly deprecate preferences by clearing their\n'
+      'value for a couple of milestones before finally removing the code.\n'
+      'Otherwise data may stay in the preferences files forever. See\n'
+      'Migrate*Prefs() in chrome/browser/prefs/browser_prefs.cc and\n'
+      'chrome/browser/prefs/README.md for examples.\n'
+      'This may be a false positive warning (e.g. if you move preference\n'
+      'registrations to a different place).\n',
+      potential_problems
+    )]
   return []

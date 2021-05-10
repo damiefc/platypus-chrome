@@ -4,17 +4,18 @@
 
 #include "chromeos/components/telemetry_extension_ui/test/telemetry_extension_ui_browsertest.h"
 
+#include "ash/constants/ash_switches.h"
 #include "base/base_paths.h"
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/path_service.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "chrome/browser/chromeos/wilco_dtc_supportd/mojo_utils.h"
+#include "chrome/browser/ash/wilco_dtc_supportd/mojo_utils.h"
 #include "chromeos/components/telemetry_extension_ui/url_constants.h"
 #include "chromeos/components/web_applications/test/sandboxed_web_ui_test_base.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/cros_healthd/cros_healthd_client.h"
 #include "chromeos/dbus/cros_healthd/fake_cros_healthd_client.h"
 
@@ -37,6 +38,11 @@ constexpr base::FilePath::CharType kUntrustedTestHandlers[] = FILE_PATH_LITERAL(
     "chromeos/components/telemetry_extension_ui/test/"
     "untrusted_test_handlers.js");
 
+// File containing utils functions for JS unit tests.
+constexpr base::FilePath::CharType kUntrustedTestUtils[] = FILE_PATH_LITERAL(
+    "chromeos/components/telemetry_extension_ui/test/"
+    "untrusted_test_utils.js");
+
 // Test cases that run in the untrusted context.
 constexpr base::FilePath::CharType kUntrustedTestCases[] = FILE_PATH_LITERAL(
     "chromeos/components/telemetry_extension_ui/test/untrusted_browsertest.js");
@@ -49,6 +55,7 @@ TelemetryExtensionUiBrowserTest::TelemetryExtensionUiBrowserTest()
           chromeos::kChromeUIUntrustedTelemetryExtensionURL,
           {base::FilePath(kCr), base::FilePath(kWebUiTestUtil),
            base::FilePath(kUntrustedTestHandlers),
+           base::FilePath(kUntrustedTestUtils),
            base::FilePath(kUntrustedTestCases)}) {}
 
 TelemetryExtensionUiBrowserTest::~TelemetryExtensionUiBrowserTest() = default;
@@ -117,7 +124,7 @@ void TelemetryExtensionUiBrowserTest::SetUpOnMainThread() {
     battery_info->status = "Charging";
     battery_info->manufacture_date = "2020-07-30";
     battery_info->temperature =
-        chromeos::cros_healthd::mojom::UInt64Value::New(7777777777777777);
+        chromeos::cros_healthd::mojom::NullableUint64::New(7777777777777777);
 
     telemetry_info->battery_result =
         chromeos::cros_healthd::mojom::BatteryResult::NewBatteryInfo(
@@ -138,7 +145,7 @@ void TelemetryExtensionUiBrowserTest::SetUpOnMainThread() {
     block_device_info->write_time_seconds_since_last_boot = 6666666666666666;
     block_device_info->io_time_seconds_since_last_boot = 1111111111111;
     block_device_info->discard_time_seconds_since_last_boot =
-        chromeos::cros_healthd::mojom::UInt64Value::New(77777777777777);
+        chromeos::cros_healthd::mojom::NullableUint64::New(77777777777777);
 
     // Need to put some placeholder values, otherwise Mojo will crash, because
     // mandatory union fields cannot be nullptr.
@@ -167,6 +174,8 @@ void TelemetryExtensionUiBrowserTest::SetUpOnMainThread() {
 
     auto system_info = chromeos::cros_healthd::mojom::SystemInfo::New();
     system_info->product_sku_number = "sku-18";
+    system_info->product_serial_number = "5CD9132880";
+    system_info->product_model_name = "XX ModelName 007 XY";
     system_info->os_version = std::move(os_version);
 
     telemetry_info->system_result =
@@ -291,8 +300,6 @@ void TelemetryExtensionUiBrowserTest::SetUpOnMainThread() {
 
   chromeos::cros_healthd::FakeCrosHealthdClient::Get()
       ->SetProbeTelemetryInfoResponseForTesting(telemetry_info);
-
-  ConfigureSystemEventsServiceToEmitEvents();
 
   SandboxedWebUiAppTestBase::SetUpOnMainThread();
 }
@@ -435,16 +442,102 @@ void TelemetryExtensionUiBrowserTest::ConfigureProbeServiceToReturnErrors() {
 }
 
 void TelemetryExtensionUiBrowserTest::
-    ConfigureSystemEventsServiceToEmitEvents() {
-  chromeos::cros_healthd::FakeCrosHealthdClient::Get()
-      ->EmitLidClosedEventForTesting();
-  chromeos::cros_healthd::FakeCrosHealthdClient::Get()
-      ->EmitLidOpenedEventForTesting();
+    EmitBluetoothAdapterAddedEventPeriodically() {
+  RunCallbackPeriodically(base::BindRepeating([] {
+    chromeos::cros_healthd::FakeCrosHealthdClient::Get()
+        ->EmitAdapterAddedEventForTesting();
+  }));
+}
+
+void TelemetryExtensionUiBrowserTest::
+    EmitBluetoothAdapterRemovedEventPeriodically() {
+  RunCallbackPeriodically(base::BindRepeating([] {
+    chromeos::cros_healthd::FakeCrosHealthdClient::Get()
+        ->EmitAdapterRemovedEventForTesting();
+  }));
+}
+
+void TelemetryExtensionUiBrowserTest::
+    EmitBluetoothAdapterPropertyChangedEventPeriodically() {
+  RunCallbackPeriodically(base::BindRepeating([] {
+    chromeos::cros_healthd::FakeCrosHealthdClient::Get()
+        ->EmitAdapterPropertyChangedEventForTesting();
+  }));
+}
+
+void TelemetryExtensionUiBrowserTest::
+    EmitBluetoothDeviceAddedEventPeriodically() {
+  RunCallbackPeriodically(base::BindRepeating([] {
+    chromeos::cros_healthd::FakeCrosHealthdClient::Get()
+        ->EmitDeviceAddedEventForTesting();
+  }));
+}
+
+void TelemetryExtensionUiBrowserTest::
+    EmitBluetoothDeviceRemovedEventPeriodically() {
+  RunCallbackPeriodically(base::BindRepeating([] {
+    chromeos::cros_healthd::FakeCrosHealthdClient::Get()
+        ->EmitDeviceRemovedEventForTesting();
+  }));
+}
+
+void TelemetryExtensionUiBrowserTest::
+    EmitBluetoothDevicePropertyChangedEventPeriodically() {
+  RunCallbackPeriodically(base::BindRepeating([] {
+    chromeos::cros_healthd::FakeCrosHealthdClient::Get()
+        ->EmitDevicePropertyChangedEventForTesting();
+  }));
+}
+
+void TelemetryExtensionUiBrowserTest::EmitLidClosedEventPeriodically() {
+  RunCallbackPeriodically(base::BindRepeating([] {
+    chromeos::cros_healthd::FakeCrosHealthdClient::Get()
+        ->EmitLidClosedEventForTesting();
+  }));
+}
+
+void TelemetryExtensionUiBrowserTest::EmitLidOpenedEventPeriodically() {
+  RunCallbackPeriodically(base::BindRepeating([] {
+    chromeos::cros_healthd::FakeCrosHealthdClient::Get()
+        ->EmitLidOpenedEventForTesting();
+  }));
+}
+
+void TelemetryExtensionUiBrowserTest::EmitAcInsertedEventPeriodically() {
+  RunCallbackPeriodically(base::BindRepeating([] {
+    chromeos::cros_healthd::FakeCrosHealthdClient::Get()
+        ->EmitAcInsertedEventForTesting();
+  }));
+}
+
+void TelemetryExtensionUiBrowserTest::EmitAcRemovedEventPeriodically() {
+  RunCallbackPeriodically(base::BindRepeating([] {
+    chromeos::cros_healthd::FakeCrosHealthdClient::Get()
+        ->EmitAcRemovedEventForTesting();
+  }));
+}
+
+void TelemetryExtensionUiBrowserTest::EmitOsSuspendEventPeriodically() {
+  RunCallbackPeriodically(base::BindRepeating([] {
+    chromeos::cros_healthd::FakeCrosHealthdClient::Get()
+        ->EmitOsSuspendEventForTesting();
+  }));
+}
+
+void TelemetryExtensionUiBrowserTest::EmitOsResumeEventPeriodically() {
+  RunCallbackPeriodically(base::BindRepeating([] {
+    chromeos::cros_healthd::FakeCrosHealthdClient::Get()
+        ->EmitOsResumeEventForTesting();
+  }));
+}
+
+void TelemetryExtensionUiBrowserTest::RunCallbackPeriodically(
+    const base::RepeatingClosure& callback) {
+  callback.Run();
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::BindOnce(&TelemetryExtensionUiBrowserTest::
-                         ConfigureSystemEventsServiceToEmitEvents,
-                     system_events_weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&TelemetryExtensionUiBrowserTest::RunCallbackPeriodically,
+                     system_events_weak_ptr_factory_.GetWeakPtr(), callback),
       base::TimeDelta::FromSeconds(1));
 }

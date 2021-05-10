@@ -5,7 +5,7 @@
 /** @fileoverview Test suite for the WebUI read later. */
 
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
-GEN('#include "chrome/browser/ui/ui_features.h"');
+GEN('#include "components/reading_list/features/reading_list_switches.h"');
 GEN('#include "content/public/test/browser_test.h"');
 
 class ReadLaterBrowserTest extends PolymerTest {
@@ -14,16 +14,9 @@ class ReadLaterBrowserTest extends PolymerTest {
     throw 'this is abstract and should be overriden by subclasses';
   }
 
-  get extraLibraries() {
-    return [
-      '//third_party/mocha/mocha.js',
-      '//chrome/test/data/webui/mocha_adapter.js',
-    ];
-  }
-
   /** @override */
   get featureList() {
-    return {enabled: ['features::kReadLater']};
+    return {enabled: ['reading_list::switches::kReadLater']};
   }
 }
 
@@ -31,7 +24,7 @@ class ReadLaterBrowserTest extends PolymerTest {
 var ReadLaterAppTest = class extends ReadLaterBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://read-later/test_loader.html?module=read_later/read_later_app_test.js';
+    return 'chrome://read-later.top-chrome/test_loader.html?module=read_later/read_later_app_test.js';
   }
 };
 

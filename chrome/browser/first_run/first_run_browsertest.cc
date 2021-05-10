@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <string>
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/numerics/safe_conversions.h"
@@ -57,7 +59,7 @@ IN_PROC_BROWSER_TEST_F(FirstRunBrowserTest, SetShouldShowWelcomePage) {
   EXPECT_FALSE(ShouldShowWelcomePage());
 }
 
-#if !defined(OS_CHROMEOS) && !BUILDFLAG(IS_LACROS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
 namespace {
 
 // A generic test class to be subclassed by test classes testing specific
@@ -103,7 +105,7 @@ class FirstRunMasterPrefsBrowserTestBase : public InProcessBrowserTest {
 #endif
 
   void SetInitialPreferencesForTest(const char text[]) {
-    text_.reset(new std::string(text));
+    text_ = std::make_unique<std::string>(text);
   }
 
  private:
@@ -267,10 +269,8 @@ IN_PROC_BROWSER_TEST_P(FirstRunMasterPrefsWithTrackedPreferences,
   // true.
   const base::Value* default_homepage_is_ntp_value =
       user_prefs->GetDefaultPrefValue(prefs::kHomePageIsNewTabPage);
-  bool default_homepage_is_ntp = false;
-  EXPECT_TRUE(
-      default_homepage_is_ntp_value->GetAsBoolean(&default_homepage_is_ntp));
-  EXPECT_TRUE(default_homepage_is_ntp);
+  ASSERT_TRUE(default_homepage_is_ntp_value->is_bool());
+  EXPECT_TRUE(default_homepage_is_ntp_value->GetBool());
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -419,6 +419,6 @@ INSTANTIATE_TEST_SUITE_P(FirstRunMasterPrefsVariationsSeedTests,
                          FirstRunMasterPrefsVariationsSeedTest,
                          testing::Bool());
 
-#endif  // !defined(OS_CHROMEOS) && !BUILDFLAG(IS_LACROS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 }  // namespace first_run

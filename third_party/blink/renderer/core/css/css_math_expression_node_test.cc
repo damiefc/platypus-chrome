@@ -89,9 +89,9 @@ bool LengthArraysEqual(CSSLengthArray& a, CSSLengthArray& b) {
 }
 
 TEST(CSSCalculationValue, AccumulatePixelsAndPercent) {
-  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+  ComputedStyle* style = ComputedStyle::CreateInitialStyleSingleton();
   style->SetEffectiveZoom(5);
-  CSSToLengthConversionData conversion_data(style.get(), style.get(), nullptr,
+  CSSToLengthConversionData conversion_data(style, style, nullptr,
                                             style->EffectiveZoom());
 
   TestAccumulatePixelsAndPercent(
@@ -158,7 +158,7 @@ TEST(CSSCalculationValue, AccumulatePixelsAndPercent) {
 }
 
 TEST(CSSCalculationValue, RefCount) {
-  scoped_refptr<CalculationValue> calc =
+  scoped_refptr<const CalculationValue> calc =
       CalculationValue::Create(PixelsAndPercent(1, 2), kValueRangeAll);
 
   // FIXME: Test the Length construction without using the ref count value.

@@ -27,6 +27,7 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/transient_window_client.h"
 #include "ui/aura/scoped_window_event_targeting_blocker.h"
@@ -166,11 +167,11 @@ ScopedOverviewTransformWindow::ScopedOverviewTransformWindow(
     event_targeting_blocker_map_[transient] =
         std::make_unique<aura::ScopedWindowEventTargetingBlocker>(transient);
 
-    transient->SetProperty(kIsShowingInOverviewKey, true);
+    transient->SetProperty(chromeos::kIsShowingInOverviewKey, true);
 
     // Add this as |aura::WindowObserver| for observing |kHideInOverviewKey|
     // property changes.
-    window_observer_.Add(transient);
+    window_observations_.AddObservation(transient);
 
     // Hide transient children which have been specified to be hidden in
     // overview mode.
@@ -214,17 +215,22 @@ ScopedOverviewTransformWindow::ScopedOverviewTransformWindow(
 }
 
 ScopedOverviewTransformWindow::~ScopedOverviewTransformWindow() {
+  // Reset clipping in the case RestoreWindow() is not called, such as when
+  // |this| is dragged to another display. This is a no-op if SetClipping() was
+  // called in RestoreWindow().
+  // See crbug.com/1140639.
+  SetClipping({ClippingType::kExit, gfx::SizeF()});
+
   for (auto* transient : GetTransientTreeIterator(window_)) {
-    transient->ClearProperty(kIsShowingInOverviewKey);
+    transient->ClearProperty(chromeos::kIsShowingInOverviewKey);
     DCHECK(event_targeting_blocker_map_.contains(transient));
     event_targeting_blocker_map_.erase(transient);
   }
 
-  if (!IsMinimized())
-    UpdateRoundedCorners(/*show=*/false);
+  UpdateRoundedCorners(/*show=*/false);
   aura::client::GetTransientWindowClient()->RemoveObserver(this);
 
-  window_observer_.RemoveAll();
+  window_observations_.RemoveAllObservations();
 }
 
 // static
@@ -497,12 +503,13 @@ void ScopedOverviewTransformWindow::UpdateWindowDimensionsType() {
 void ScopedOverviewTransformWindow::UpdateRoundedCorners(bool show) {
   // Hide the corners if minimized, OverviewItemView will handle showing the
   // rounded corners on the UI.
-  DCHECK(!IsMinimized());
+  if (IsMinimized())
+    DCHECK(!show);
 
   ui::Layer* layer = window_->layer();
   const float scale = layer->transform().Scale2d().x();
-  const int radius =
-      views::LayoutProvider::Get()->GetCornerRadiusMetric(views::EMPHASIS_LOW);
+  const int radius = views::LayoutProvider::Get()->GetCornerRadiusMetric(
+      views::Emphasis::kLow);
   const gfx::RoundedCornersF radii(show ? (radius / scale) : 0.0f);
   layer->SetRoundedCornerRadius(radii);
   layer->SetIsFastRoundedCorner(true);
@@ -518,7 +525,7 @@ void ScopedOverviewTransformWindow::OnTransientChildWindowAdded(
   event_targeting_blocker_map_[transient_child] =
       std::make_unique<aura::ScopedWindowEventTargetingBlocker>(
           transient_child);
-  transient_child->SetProperty(kIsShowingInOverviewKey, true);
+  transient_child->SetProperty(chromeos::kIsShowingInOverviewKey, true);
 
   // Hide transient children which have been specified to be hidden in
   // overview mode.
@@ -528,7 +535,21 @@ void ScopedOverviewTransformWindow::OnTransientChildWindowAdded(
 
   // Add this as |aura::WindowObserver| for observing |kHideInOverviewKey|
   // property changes.
-  window_observer_.Add(transient_child);
+  window_observations_.AddObservation(transient_child);
+}
+
+void ScopedOverviewTransformWindow::OnTransientChildWindowRemoved(
+    aura::Window* parent,
+    aura::Window* transient_child) {
+  if (parent != window_ && !::wm::HasTransientAncestor(parent, window_))
+    return;
+
+  transient_child->ClearProperty(chromeos::kIsShowingInOverviewKey);
+  DCHECK(event_targeting_blocker_map_.contains(transient_child));
+  event_targeting_blocker_map_.erase(transient_child);
+
+  if (window_observations_.IsObservingSource(transient_child))
+    window_observations_.RemoveObservation(transient_child);
 }
 
 void ScopedOverviewTransformWindow::OnWindowPropertyChanged(
@@ -549,6 +570,40 @@ void ScopedOverviewTransformWindow::OnWindowPropertyChanged(
   }
 }
 
+void ScopedOverviewTransformWindow::OnWindowBoundsChanged(
+    aura::Window* window,
+    const gfx::Rect& old_bounds,
+    const gfx::Rect& new_bounds,
+    ui::PropertyChangeReason reason) {
+  if (window == window_)
+    return;
+
+  // Transient window is repositioned. The new position within the
+  // overview item needs to be recomputed. No need to recompute if the
+  // transient is invisible. It will get placed properly when it reshows on
+  // overview end.
+  if (!window->IsVisible())
+    return;
+
+  overview_item_->SetBounds(overview_item_->target_bounds(),
+                            OVERVIEW_ANIMATION_NONE);
+}
+
+// static
+void ScopedOverviewTransformWindow::SetImmediateCloseForTests(bool immediate) {
+  immediate_close_for_tests = immediate;
+}
+
+void ScopedOverviewTransformWindow::CloseWidget() {
+  // Close all the windows in the transient tree. Note that is only really
+  // necessary for exo windows, as non-exo windows we would only need to close
+  // the tranisent root. We will close all widgets in the tree for both exo and
+  // non-exo anyways to simplify things and Widget::CloseWithReason handles this
+  // nicely.
+  for (auto* transient : GetTransientTreeIterator(window_))
+    window_util::CloseWidgetForWindow(transient);
+}
+
 void ScopedOverviewTransformWindow::AddHiddenTransientWindows(
     const std::vector<aura::Window*>& transient_windows) {
   if (!hidden_transient_children_) {
@@ -558,31 +613,6 @@ void ScopedOverviewTransformWindow::AddHiddenTransientWindows(
     for (auto* window : transient_windows)
       hidden_transient_children_->AddWindow(window);
   }
-}
-
-void ScopedOverviewTransformWindow::OnTransientChildWindowRemoved(
-    aura::Window* parent,
-    aura::Window* transient_child) {
-  if (parent != window_ && !::wm::HasTransientAncestor(parent, window_))
-    return;
-
-  transient_child->ClearProperty(kIsShowingInOverviewKey);
-  DCHECK(event_targeting_blocker_map_.contains(transient_child));
-  event_targeting_blocker_map_.erase(transient_child);
-
-  if (window_observer_.IsObserving(transient_child))
-    window_observer_.Remove(transient_child);
-}
-
-// static
-void ScopedOverviewTransformWindow::SetImmediateCloseForTests(bool immediate) {
-  immediate_close_for_tests = immediate;
-}
-
-void ScopedOverviewTransformWindow::CloseWidget() {
-  aura::Window* parent_window = ::wm::GetTransientRoot(window_);
-  if (parent_window)
-    window_util::CloseWidgetForWindow(parent_window);
 }
 
 }  // namespace ash

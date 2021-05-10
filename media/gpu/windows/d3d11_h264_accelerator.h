@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "gpu/command_buffer/service/texture_manager.h"
+#include "media/base/status_codes.h"
 #include "media/base/video_frame.h"
 #include "media/base/win/mf_helpers.h"
 #include "media/gpu/h264_decoder.h"
@@ -84,7 +85,9 @@ class D3D11H264Accelerator : public H264Decoder::H264Accelerator {
   bool RetrieveBitstreamBuffer();
 
   // Record a failure to DVLOG and |media_log_|.
-  void RecordFailure(const std::string& reason, HRESULT hr = S_OK) const;
+  void RecordFailure(const std::string& reason,
+                     StatusCode code,
+                     HRESULT hr = S_OK) const;
 
   D3D11VideoDecoderClient* client_;
   MediaLog* media_log_ = nullptr;
@@ -119,4 +122,4 @@ class D3D11H264Accelerator : public H264Decoder::H264Accelerator {
 
 }  // namespace media
 
-#endif  // MEDIA_GPU_D3D11_WINDOWS_H264_ACCELERATOR_H_
+#endif  // MEDIA_GPU_WINDOWS_D3D11_H264_ACCELERATOR_H_

@@ -9,7 +9,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate_mock.h"
 #include "chrome/browser/ui/views/passwords/password_bubble_view_test_base.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
@@ -26,8 +26,8 @@ class PasswordSaveUnsyncedCredentialsLocallyViewTest
         .WillByDefault(ReturnRef(unsynced_credentials_));
 
     unsynced_credentials_.resize(1);
-    unsynced_credentials_[0].username_value = ASCIIToUTF16("user");
-    unsynced_credentials_[0].password_value = ASCIIToUTF16("password");
+    unsynced_credentials_[0].username_value = u"user";
+    unsynced_credentials_[0].password_value = u"password";
   }
   ~PasswordSaveUnsyncedCredentialsLocallyViewTest() override = default;
 
@@ -37,7 +37,7 @@ class PasswordSaveUnsyncedCredentialsLocallyViewTest
 
  protected:
   PasswordSaveUnsyncedCredentialsLocallyView* view_;
-  std::vector<autofill::PasswordForm> unsynced_credentials_;
+  std::vector<password_manager::PasswordForm> unsynced_credentials_;
 };
 
 void PasswordSaveUnsyncedCredentialsLocallyViewTest::CreateViewAndShow() {

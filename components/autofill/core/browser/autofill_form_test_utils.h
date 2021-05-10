@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/optional.h"
+#include "base/strings/string_piece.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/form_data.h"
@@ -20,13 +21,16 @@ namespace test {
 namespace {
 
 // Default label assigned to fields.
-constexpr char kLabelText[] = "label";
+constexpr char16_t kLabelText[] = u"label";
 
 // Default name attribute assigned to fields.
-constexpr char kNameText[] = "name";
+constexpr char16_t kNameText[] = u"name";
 
 // Default form url.
-constexpr char kFormUrl[] = "http://www.foo.com/";
+constexpr char kFormUrl[] = "http://example.com/form.html";
+
+// Default form action url.
+constexpr char kFormActionUrl[] = "http://example.com/submit.html";
 
 }  // namespace
 
@@ -37,27 +41,32 @@ template <typename = void>
 struct FieldDataDescription {
   ServerFieldType role = ServerFieldType::EMPTY_TYPE;
   bool is_focusable = true;
-  const char* label = kLabelText;
-  const char* name = kNameText;
-  const char* autocomplete_attribute = nullptr;
-  const char* form_control_type = "text";
+  const base::StringPiece16 label = kLabelText;
+  const base::StringPiece16 name = kNameText;
+  base::Optional<const char16_t*> value;
+  const base::StringPiece autocomplete_attribute;
+  const base::StringPiece form_control_type = "text";
   bool should_autocomplete = true;
+  base::Optional<bool> is_autofilled;
 };
 
 // Attributes provided to the test form.
 template <typename = void>
-struct FormAttributes {
-  const char* description_for_logging = "";
-  std::vector<FieldDataDescription<>> fields = {};
-  const char* form_url = kFormUrl;
-  bool is_formless_checkout = false;
+struct TestFormAttributes {
+  const base::StringPiece description_for_logging;
+  std::vector<FieldDataDescription<>> fields;
+  base::Optional<FormRendererId> unique_renderer_id;
+  const base::StringPiece16 name = u"TestForm";
+  const base::StringPiece url = kFormUrl;
+  const base::StringPiece action = kFormActionUrl;
+  base::Optional<url::Origin> main_frame_origin;
   bool is_form_tag = true;
 };
 
 // Flags determining whether the corresponding check should be run on the test
 // form.
 template <typename = void>
-struct FormFlags {
+struct TestFormFlags {
   // false means the function is not to be called.
   bool determine_heuristic_type = false;
   bool parse_query_response = false;
@@ -71,11 +80,11 @@ struct FormFlags {
   // first value denotes whether the comparison is to be done while second
   // denotes EXPECT_TRUE for true and EXPECT_FALSE for false.
   std::pair<bool, bool> is_complete_credit_card_form = {false, false};
-  // base::nullopt means no checking.
-  base::Optional<int> field_count = base::nullopt;
-  base::Optional<int> autofill_count = base::nullopt;
-  base::Optional<int> section_count = base::nullopt;
-  base::Optional<int> response_field_count = base::nullopt;
+  // The implicit default value `base::nullopt` means no checking.
+  base::Optional<int> field_count;
+  base::Optional<int> autofill_count;
+  base::Optional<int> section_count;
+  base::Optional<int> response_field_count;
 };
 
 // Expected field type values to be verified with the test form.
@@ -90,15 +99,15 @@ struct ExpectedFieldTypeValues {
 // Describes a test case for the parser.
 template <typename = void>
 struct FormStructureTestCase {
-  FormAttributes<> form_attributes;
-  FormFlags<> form_flags;
+  TestFormAttributes<> form_attributes;
+  TestFormFlags<> form_flags;
   ExpectedFieldTypeValues<> expected_field_types;
 };
 
 }  // namespace internal
 
 using FieldDataDescription = internal::FieldDataDescription<>;
-using FormAttributes = internal::FormAttributes<>;
+using TestFormAttributes = internal::TestFormAttributes<>;
 using FormStructureTestCase = internal::FormStructureTestCase<>;
 
 // Describes the |form_data|. Use this in SCOPED_TRACE if other logging
@@ -109,7 +118,7 @@ testing::Message DescribeFormData(const FormData& form_data);
 FormFieldData CreateFieldByRole(ServerFieldType role);
 
 // Creates a FormData to be fed to the parser.
-FormData GetFormData(const FormAttributes& form_attributes);
+FormData GetFormData(const TestFormAttributes& test_form_attributes);
 
 class FormStructureTest : public testing::Test {
  protected:

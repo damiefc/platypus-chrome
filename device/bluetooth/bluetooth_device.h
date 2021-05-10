@@ -22,10 +22,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_export.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service.h"
@@ -253,7 +253,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // Returns the name of the device suitable for displaying, this may
   // be a synthesized string containing the address and localized type name
   // if the device has no obtained name.
-  virtual base::string16 GetNameForDisplay() const;
+  virtual std::u16string GetNameForDisplay() const;
 
   // Returns the type of the device, limited to those we support or are
   // aware of, by decoding the bluetooth class information. The returned
@@ -311,6 +311,13 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // a device stops advertising a service this function will still return
   // its UUID.
   virtual UUIDSet GetUUIDs() const;
+
+#if defined(OS_CHROMEOS)
+  // Indicate whether or not this device is blocked by admin policy. This would
+  // be true if any of its auto-connect service does not exist in the
+  // ServiceAllowList under org.bluez.AdminPolicy1.
+  virtual bool IsBlockedByPolicy() const = 0;
+#endif
 
   // Returns the last advertised Service Data. Returns an empty map if the
   // adapter is not discovering.
@@ -588,7 +595,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   std::vector<BluetoothRemoteGattService*> GetPrimaryServicesByUUID(
       const BluetoothUUID& service_uuid);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   using ExecuteWriteErrorCallback =
       base::OnceCallback<void(device::BluetoothGattService::GattErrorCode)>;
   using AbortWriteErrorCallback =
@@ -604,12 +611,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
 #if defined(OS_CHROMEOS) || defined(OS_LINUX)
   // Set the remaining battery of the device to show in the UI. This value must
   // be between 0 and 100, inclusive.
-  // TODO(http://b/160905785): Battery percentage is populated by
-  // ash::HfpBatteryListener, ash::HidBatteryListener, and
-  // device::BluetoothAdapterBlueZ. When Battery information is entirely
-  // consolidated in BlueZ's Battery API, only device::BluetoothAdapterBlueZ
-  // should have control over this field with the value originating from a
-  // single source, the BlueZ Battery API..
+  // Only device::BluetoothAdapterBlueZ has control over this field with the
+  // value originating from a single source, the BlueZ Battery API.
   void SetBatteryPercentage(base::Optional<uint8_t> battery_percentage);
 
   // Returns the remaining battery for the device.
@@ -670,6 +673,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
     // Service UUIDs functions
     void ReplaceServiceUUIDs(
         const BluetoothDevice::GattServiceMap& gatt_services);
+
+    void ReplaceServiceUUIDs(UUIDList new_service_uuids);
 
     void ClearServiceUUIDs();
 
@@ -776,7 +781,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
  private:
   // Returns a localized string containing the device's bluetooth address and
   // a device type for display when |name_| is empty.
-  base::string16 GetAddressWithLocalizedDeviceTypeName() const;
+  std::u16string GetAddressWithLocalizedDeviceTypeName() const;
 
 #if defined(OS_CHROMEOS) || defined(OS_LINUX)
   // Remaining battery level of the device.

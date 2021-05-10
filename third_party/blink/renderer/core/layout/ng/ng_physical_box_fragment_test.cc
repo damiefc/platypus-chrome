@@ -14,14 +14,15 @@ class NGPhysicalBoxFragmentTest : public NGLayoutTest {
 
   const NGPhysicalBoxFragment& GetBodyFragment() const {
     return *To<LayoutBlockFlow>(GetDocument().body()->GetLayoutObject())
-                ->CurrentFragment();
+                ->GetPhysicalFragment(0);
   }
 
   const NGPhysicalBoxFragment& GetPhysicalBoxFragmentByElementId(
       const char* id) {
     auto* layout_object = To<LayoutBlockFlow>(GetLayoutObjectByElementId(id));
     DCHECK(layout_object);
-    const NGPhysicalBoxFragment* fragment = layout_object->CurrentFragment();
+    const NGPhysicalBoxFragment* fragment =
+        layout_object->GetPhysicalFragment(0);
     DCHECK(fragment);
     return *fragment;
   }
@@ -145,8 +146,7 @@ TEST_F(NGPhysicalBoxFragmentTest, DISABLED_FloatLegacyLayoutRoot) {
 TEST_F(NGPhysicalBoxFragmentTest, DISABLED_InlineBlockLegacyLayoutRoot) {
   SetBodyInnerHTML(
       "<span contenteditable style='display:inline-block'>X</span>foo");
-  const auto* line_box = To<NGPhysicalContainerFragment>(
-      GetBodyFragment().Children().front().get());
+  const auto* line_box = GetBodyFragment().Children().front().get();
   const NGPhysicalFragment* fragment = line_box->Children().front().get();
   ASSERT_TRUE(fragment);
   EXPECT_TRUE(fragment->IsBox());

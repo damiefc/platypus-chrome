@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -63,7 +64,7 @@ constexpr char kTestDataChannelCallbackName[] = "test_channel_name";
 
 // Matches a |protocol::Capabilities| argument against a list of capabilities
 // formatted as a space-separated string.
-MATCHER_P(EqCapabilities, expected_capabilities, "") {
+MATCHER_P(IncludesCapabilities, expected_capabilities, "") {
   if (!arg.has_capabilities())
     return false;
 
@@ -73,9 +74,14 @@ MATCHER_P(EqCapabilities, expected_capabilities, "") {
   std::vector<std::string> words_expected = base::SplitString(
       expected_capabilities, " ", base::KEEP_WHITESPACE,
       base::SPLIT_WANT_NONEMPTY);
-  std::sort(words_args.begin(), words_args.end());
-  std::sort(words_expected.begin(), words_expected.end());
-  return words_args == words_expected;
+
+  for (const auto& word : words_expected) {
+    if (std::find(words_args.begin(), words_args.end(), word) ==
+        words_args.end()) {
+      return false;
+    }
+  }
+  return true;
 }
 
 protocol::MouseEvent MakeMouseMoveEvent(int x, int y) {
@@ -203,8 +209,9 @@ void ClientSessionTest::SetUp() {
   task_runner_ = new AutoThreadTaskRunner(
       task_environment_.GetMainThreadTaskRunner(), run_loop_.QuitClosure());
 
-  desktop_environment_factory_.reset(new FakeDesktopEnvironmentFactory(
-      task_environment_.GetMainThreadTaskRunner()));
+  desktop_environment_factory_ =
+      std::make_unique<FakeDesktopEnvironmentFactory>(
+          task_environment_.GetMainThreadTaskRunner());
   desktop_environment_options_ = DesktopEnvironmentOptions::CreateDefault();
 }
 
@@ -233,10 +240,10 @@ void ClientSessionTest::CreateClientSession(
   connection->set_client_stub(&client_stub_);
   connection_ = connection.get();
 
-  client_session_.reset(new ClientSession(
+  client_session_ = std::make_unique<ClientSession>(
       &session_event_handler_, std::move(connection),
       desktop_environment_factory_.get(), desktop_environment_options_,
-      base::TimeDelta(), nullptr, extensions_));
+      base::TimeDelta(), nullptr, extensions_);
 }
 
 void ClientSessionTest::CreateClientSession() {
@@ -712,7 +719,7 @@ TEST_F(ClientSessionTest, Extensions) {
   extensions_.push_back(&extension3);
 
   // Verify that the ClientSession reports the correct capabilities.
-  EXPECT_CALL(client_stub_, SetCapabilities(EqCapabilities("cap1 cap3")));
+  EXPECT_CALL(client_stub_, SetCapabilities(IncludesCapabilities("cap1 cap3")));
 
   CreateClientSession();
   ConnectClientSession();

@@ -6,7 +6,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
@@ -140,12 +139,11 @@ TEST_P(WebSocketStreamClientUseCookieTest, ClientUseCookie) {
 
   const GURL url(GetParam().url);
   const GURL cookie_url(GetParam().cookie_url);
-  const url::Origin origin =
-      url::Origin::Create(GURL("http://www.example.com"));
+  const url::Origin origin = url::Origin::Create(GURL(GetParam().url));
   const SiteForCookies site_for_cookies = SiteForCookies::FromOrigin(origin);
   const IsolationInfo isolation_info =
-      IsolationInfo::Create(IsolationInfo::RedirectMode::kUpdateNothing, origin,
-                            origin, SiteForCookies::FromOrigin(origin));
+      IsolationInfo::Create(IsolationInfo::RequestType::kOther, origin, origin,
+                            SiteForCookies::FromOrigin(origin));
   const std::string cookie_line(GetParam().cookie_line);
   const std::string cookie_header(AddCRLFIfNotEmpty(GetParam().cookie_header));
 
@@ -180,12 +178,11 @@ TEST_P(WebSocketStreamServerSetCookieTest, ServerSetCookie) {
 
   const GURL url(GetParam().url);
   const GURL cookie_url(GetParam().cookie_url);
-  const url::Origin origin =
-      url::Origin::Create(GURL("http://www.example.com"));
+  const url::Origin origin = url::Origin::Create(GURL(GetParam().url));
   const SiteForCookies site_for_cookies = SiteForCookies::FromOrigin(origin);
   const IsolationInfo isolation_info =
-      IsolationInfo::Create(IsolationInfo::RedirectMode::kUpdateNothing, origin,
-                            origin, SiteForCookies::FromOrigin(origin));
+      IsolationInfo::Create(IsolationInfo::RequestType::kOther, origin, origin,
+                            SiteForCookies::FromOrigin(origin));
   const std::string cookie_line(GetParam().cookie_line);
   const std::string cookie_header(AddCRLFIfNotEmpty(GetParam().cookie_header));
 

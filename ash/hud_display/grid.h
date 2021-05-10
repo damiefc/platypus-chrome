@@ -5,7 +5,8 @@
 #ifndef ASH_HUD_DISPLAY_GRID_H_
 #define ASH_HUD_DISPLAY_GRID_H_
 
-#include "base/strings/string16.h"
+#include <string>
+
 #include "ui/views/controls/label.h"
 #include "ui/views/view.h"
 
@@ -31,14 +32,16 @@ class Grid : public views::View {
   // To draw horizontal ticks, graph data is assumed to have
   // |horizontal_points_number| points horizontally along the full graph width,
   // and ticks will be drawn every |horizontal_ticks_interval| from the right.
+  // |vertical_ticks_interval| must be in between [0,1] (as grid data values).
   Grid(float left,
        float top,
        float right,
        float bottom,
-       const base::string16& x_unit,
-       const base::string16& y_unit,
+       const std::u16string& x_unit,
+       const std::u16string& y_unit,
        int horizontal_points_number,
-       int horizontal_ticks_interval);
+       int horizontal_ticks_interval,
+       float vertical_ticks_interval);
 
   Grid(const Grid&) = delete;
   Grid& operator=(const Grid&) = delete;
@@ -53,6 +56,9 @@ class Grid : public views::View {
   void SetTopLabel(float top);
   void SetBottomLabel(float bottom);
   void SetLeftLabel(float left);
+  void SetVerticalTicsInterval(float interval);
+
+  float top_label() const { return top_; }
 
  private:
   const SkColor color_;
@@ -63,12 +69,13 @@ class Grid : public views::View {
   float right_ = 0;
   float bottom_ = 0;
 
-  base::string16 x_unit_;
-  base::string16 y_unit_;
+  std::u16string x_unit_;
+  std::u16string y_unit_;
 
   // horizontal ticks
   int horizontal_points_number_ = 0;
   int horizontal_ticks_interval_ = 0;
+  float vertical_ticks_interval_ = 0;
 
   // Graph labels
   views::Label* right_top_label_ = nullptr;     // not owned

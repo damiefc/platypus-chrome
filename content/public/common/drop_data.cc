@@ -4,6 +4,7 @@
 
 #include "content/public/common/drop_data.h"
 
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "net/base/filename_util.h"
 #include "net/base/mime_util.h"
@@ -15,7 +16,7 @@ DropData::Metadata::Metadata() {}
 // static
 DropData::Metadata DropData::Metadata::CreateForMimeType(
     const Kind& kind,
-    const base::string16& mime_type) {
+    const std::u16string& mime_type) {
   Metadata metadata;
   metadata.kind = kind;
   metadata.mime_type = mime_type;

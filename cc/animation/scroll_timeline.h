@@ -5,6 +5,7 @@
 #ifndef CC_ANIMATION_SCROLL_TIMELINE_H_
 #define CC_ANIMATION_SCROLL_TIMELINE_H_
 
+#include <vector>
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "cc/animation/animation_export.h"
@@ -121,23 +122,51 @@ inline ScrollTimeline* ToScrollTimeline(AnimationTimeline* timeline) {
   return static_cast<ScrollTimeline*>(timeline);
 }
 
+// https://drafts.csswg.org/scroll-animations-1/#progress-calculation-algorithm
 template <typename T>
 double ComputeProgress(double current_offset, const T& resolved_offsets) {
+  // 1. Let scroll offsets be the result of applying the procedure to resolve
+  // scroll timeline offsets for scrollOffsets.
   DCHECK_GE(resolved_offsets.size(), 2u);
-  DCHECK(current_offset < resolved_offsets[resolved_offsets.size() - 1]);
-  // Look for scroll offset that contains the current offset.
-  unsigned int offset_id;
-  for (offset_id = 1; offset_id < resolved_offsets.size() &&
-                      resolved_offsets[offset_id] <= current_offset;
-       offset_id++) {
+  // When start offset is greater than end offset, current time is calculated
+  // outside of this method.
+  DCHECK_LT(resolved_offsets[0], resolved_offsets[resolved_offsets.size() - 1]);
+  // When animation is in before or after phase, current time is calculated
+  // outside of this method.
+  DCHECK_GE(current_offset, resolved_offsets[0]);
+  DCHECK_LT(current_offset, resolved_offsets[resolved_offsets.size() - 1]);
+  // Traverse scroll offsets from the back to find first interval that
+  // contains the current offset. In case of overlapping offsets, last matching
+  // interval in the list is used to calculate the current time. The rational
+  // for choosing last matching offset is to be consistent with CSS property
+  // overrides.
+
+  // 2. Let offset index correspond to the position of the last offset in scroll
+  // offsets whose value is less than or equal to offset and the value at the
+  // following position greater than offset
+  int offset_index;
+  for (offset_index = resolved_offsets.size() - 2;
+       offset_index > 0 && resolved_offsets[offset_index] > current_offset;
+       offset_index--) {
+    DCHECK_LT(current_offset, resolved_offsets[offset_index + 1]);
   }
-  DCHECK(offset_id < resolved_offsets.size());
-  // Weight of each offset within time range is distributed equally.
-  double offset_distance = 1.0 / (resolved_offsets.size() - 1);
-  // Progress of the current offset within its offset range.
-  double p = (current_offset - resolved_offsets[offset_id - 1]) /
-             (resolved_offsets[offset_id] - resolved_offsets[offset_id - 1]);
-  return (offset_id - 1 + p) * offset_distance;
+  // 3. Let start offset be the offset value at position offset index in
+  // scroll offsets.
+  double start_offset = resolved_offsets[offset_index];
+  // 4. Let end offset be the value of next offset in scroll offsets after
+  // start offset.
+  double end_offset = resolved_offsets[offset_index + 1];
+  // 5. Let size be the number of offsets in scroll offsets.
+  unsigned int size = resolved_offsets.size();
+  // 6. Let offset weight be the result of evaluating 1 / (size - 1).
+  double offset_weight = 1.0 / (size - 1);
+  // 7. Let interval progress be the result of evaluating
+  // (offset - start offset) / (end offset - start offset).
+  double interval_progress =
+      (current_offset - start_offset) / (end_offset - start_offset);
+  // 8. Return the result of evaluating
+  // (offset index + interval progress) × offset weight.
+  return (offset_index + interval_progress) * offset_weight;
 }
 
 }  // namespace cc

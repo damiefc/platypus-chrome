@@ -11,6 +11,7 @@
 #include "base/bits.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/location.h"
+#include "base/stl_util.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/base/audio_parameters.h"
@@ -95,8 +96,8 @@ void FuchsiaAudioCapturerSource::Initialize(const AudioParameters& params,
   // Map the buffer.
   uint64_t addr;
   status = zx::vmar::root_self()->map(
-      /*vmar_offset=*/0, buffer_vmo, /*vmo_offset=*/0, capture_buffer_size_,
-      ZX_VM_PERM_READ, &addr);
+      ZX_VM_PERM_READ, /*vmar_offset=*/0, buffer_vmo, /*vmo_offset=*/0,
+      capture_buffer_size_, &addr);
   if (status != ZX_OK) {
     ZX_DLOG(ERROR, status) << "zx_vmar_map";
     ReportError("Failed to map capture buffer");

@@ -9,23 +9,20 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/optional.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/notifications/notification_platform_bridge.h"
 #include "chrome/browser/notifications/notification_platform_bridge_mac_utils.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/cocoa/notifications/notification_builder_mac.h"
-#include "chrome/browser/ui/cocoa/notifications/notification_constants_mac.h"
 #include "chrome/browser/ui/cocoa/notifications/notification_response_builder_mac.h"
-#include "chrome/test/base/browser_with_test_window_test.h"
+#include "chrome/services/mac_notifications/public/cpp/notification_constants_mac.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/message_center/public/cpp/notification.h"
 
 using message_center::Notification;
 
-class NotificationPlatformBridgeMacUtilsTest
-    : public BrowserWithTestWindowTest {
+class NotificationPlatformBridgeMacUtilsTest : public testing::Test {
  public:
   void SetUp() override {
-    BrowserWithTestWindowTest::SetUp();
     response_ = BuildDefaultNotificationResponse();
   }
 
@@ -34,7 +31,8 @@ class NotificationPlatformBridgeMacUtilsTest
     return [NSMutableDictionary
         dictionaryWithDictionary:
             [NotificationResponseBuilder
-                buildActivatedDictionary:BuildNotification()]];
+                buildActivatedDictionary:BuildNotification()
+                               fromAlert:NO]];
   }
 
   Notification CreateNotification(
@@ -48,8 +46,8 @@ class NotificationPlatformBridgeMacUtilsTest
 
     Notification notification(
         type, "test_id", base::UTF8ToUTF16(title), base::UTF8ToUTF16(subtitle),
-        gfx::Image(), base::UTF8ToUTF16("Notifier's Name"), url,
-        message_center::NotifierId(url), message_center::RichNotificationData(),
+        gfx::Image(), u"Notifier's Name", url, message_center::NotifierId(url),
+        message_center::RichNotificationData(),
         /*delegate=*/nullptr);
 
     if (type == message_center::NOTIFICATION_TYPE_PROGRESS)
@@ -73,18 +71,15 @@ class NotificationPlatformBridgeMacUtilsTest
     [builder setOrigin:@"https://www.moe.com/"];
     [builder setContextMessage:@""];
     [builder setButtons:@"Button1" secondaryButton:@"Button2"];
-    [builder setTag:@"tag1"];
+    [builder setIdentifier:@"identifier"];
     [builder setIcon:[NSImage imageNamed:@"NSApplicationIcon"]];
     [builder setNotificationId:@"notification_id"];
-    [builder
-        setProfileId:base::SysUTF8ToNSString(
-                         NotificationPlatformBridge::GetProfileId(profile()))];
-    [builder setIncognito:profile()->IsOffTheRecord()];
+    [builder setProfileId:@"Default"];
+    [builder setIncognito:false];
     [builder setCreatorPid:@(getpid())];
-    [builder setNotificationType:
-                 [NSNumber numberWithInteger:
-                               static_cast<int>(
-                                   NotificationHandler::Type::WEB_PERSISTENT)]];
+    [builder
+        setNotificationType:@(static_cast<int>(
+                                NotificationHandler::Type::WEB_PERSISTENT))];
     [builder setShowSettingsButton:true];
 
     return [builder buildUserNotification];
@@ -96,8 +91,8 @@ TEST_F(NotificationPlatformBridgeMacUtilsTest, TestCreateNotificationTitle) {
       "Title", "Subtitle", "https://moe.example.com",
       message_center::NOTIFICATION_TYPE_SIMPLE, /*progress=*/0,
       /*contextMessage=*/base::nullopt);
-  base::string16 createdTitle = CreateMacNotificationTitle(notification);
-  EXPECT_EQ(base::UTF8ToUTF16("Title"), createdTitle);
+  std::u16string createdTitle = CreateMacNotificationTitle(notification);
+  EXPECT_EQ(u"Title", createdTitle);
 }
 
 TEST_F(NotificationPlatformBridgeMacUtilsTest,
@@ -106,8 +101,8 @@ TEST_F(NotificationPlatformBridgeMacUtilsTest,
       "Title", "Subtitle", "https://moe.example.com",
       message_center::NOTIFICATION_TYPE_PROGRESS, /*progress=*/50,
       /*contextMessage=*/base::nullopt);
-  base::string16 createdTitle = CreateMacNotificationTitle(notification);
-  EXPECT_EQ(base::UTF8ToUTF16("50% - Title"), createdTitle);
+  std::u16string createdTitle = CreateMacNotificationTitle(notification);
+  EXPECT_EQ(u"50% - Title", createdTitle);
 }
 
 TEST_F(NotificationPlatformBridgeMacUtilsTest,
@@ -116,9 +111,9 @@ TEST_F(NotificationPlatformBridgeMacUtilsTest,
       "Title", "Subtitle", "https://moe.example.com",
       message_center::NOTIFICATION_TYPE_SIMPLE, /*progress=*/0,
       /*contextMessage=*/base::nullopt);
-  base::string16 createdContext = CreateMacNotificationContext(
+  std::u16string createdContext = CreateMacNotificationContext(
       /*isPersistent=*/false, notification, /*requiresAttribution=*/true);
-  EXPECT_EQ(base::UTF8ToUTF16("moe.example.com"), createdContext);
+  EXPECT_EQ(u"moe.example.com", createdContext);
 }
 
 TEST_F(NotificationPlatformBridgeMacUtilsTest,
@@ -127,9 +122,9 @@ TEST_F(NotificationPlatformBridgeMacUtilsTest,
       "Title", "Subtitle", "https://moe.example.com",
       message_center::NOTIFICATION_TYPE_SIMPLE, /*progress=*/0,
       /*contextMessage=*/base::nullopt);
-  base::string16 createdContext = CreateMacNotificationContext(
+  std::u16string createdContext = CreateMacNotificationContext(
       /*isPersistent=*/true, notification, /*requiresAttribution=*/true);
-  EXPECT_EQ(base::UTF8ToUTF16("moe.example.com"), createdContext);
+  EXPECT_EQ(u"moe.example.com", createdContext);
 }
 
 TEST_F(NotificationPlatformBridgeMacUtilsTest,
@@ -139,9 +134,9 @@ TEST_F(NotificationPlatformBridgeMacUtilsTest,
                          message_center::NOTIFICATION_TYPE_SIMPLE,
                          /*progress=*/0,
                          /*contextMessage=*/"moe");
-  base::string16 createdContext = CreateMacNotificationContext(
+  std::u16string createdContext = CreateMacNotificationContext(
       /*isPersistent=*/false, notification, /*requiresAttribution=*/false);
-  EXPECT_EQ(base::UTF8ToUTF16("moe"), createdContext);
+  EXPECT_EQ(u"moe", createdContext);
 }
 
 TEST_F(NotificationPlatformBridgeMacUtilsTest,
@@ -151,16 +146,16 @@ TEST_F(NotificationPlatformBridgeMacUtilsTest,
       "https://thisisareallyreallyreaaalllyyylongorigin.moe.example.com/",
       message_center::NOTIFICATION_TYPE_SIMPLE, /*progress=*/0,
       /*contextMessage=*/base::nullopt);
-  base::string16 createdContext = CreateMacNotificationContext(
+  std::u16string createdContext = CreateMacNotificationContext(
       /*isPersistent=*/false, notification, /*requiresAttribution=*/true);
-  EXPECT_EQ(base::UTF8ToUTF16("example.com"), createdContext);
+  EXPECT_EQ(u"example.com", createdContext);
 
   // Should also work if the eTLD is in the format of '/+.+/'
   notification.set_origin_url(GURL(
       "https://thisisareallyreallyreaaalllyyylongorigin.moe.example.co.uk/"));
   createdContext = CreateMacNotificationContext(
       /*isPersistent=*/false, notification, /*requiresAttribution=*/true);
-  EXPECT_EQ(base::UTF8ToUTF16("example.co.uk"), createdContext);
+  EXPECT_EQ(u"example.co.uk", createdContext);
 }
 
 TEST_F(NotificationPlatformBridgeMacUtilsTest,
@@ -169,14 +164,14 @@ TEST_F(NotificationPlatformBridgeMacUtilsTest,
       "Title", "Subtitle", "https://thisisalongorigin.moe.co.uk",
       message_center::NOTIFICATION_TYPE_SIMPLE, /*progress=*/0,
       /*contextMessage=*/base::nullopt);
-  base::string16 createdContext = CreateMacNotificationContext(
+  std::u16string createdContext = CreateMacNotificationContext(
       /*isPersistent=*/true, notification, /*requiresAttribution=*/true);
-  EXPECT_EQ(base::UTF8ToUTF16("moe.co.uk"), createdContext);
+  EXPECT_EQ(u"moe.co.uk", createdContext);
 
   // For banners this should pass
   createdContext = CreateMacNotificationContext(
       /*isPersistent=*/false, notification, /*requiresAttribution=*/true);
-  EXPECT_EQ(base::UTF8ToUTF16("thisisalongorigin.moe.co.uk"), createdContext);
+  EXPECT_EQ(u"thisisalongorigin.moe.co.uk", createdContext);
 }
 
 TEST_F(NotificationPlatformBridgeMacUtilsTest,
@@ -185,14 +180,14 @@ TEST_F(NotificationPlatformBridgeMacUtilsTest,
       "Title", "Subtitle", "https://thisisareallylongorigin.moe.co.uk",
       message_center::NOTIFICATION_TYPE_SIMPLE, /*progress=*/0,
       /*contextMessage=*/base::nullopt);
-  base::string16 createdContext = CreateMacNotificationContext(
+  std::u16string createdContext = CreateMacNotificationContext(
       /*isPersistent=*/true, notification, /*requiresAttribution=*/true);
-  EXPECT_EQ(base::UTF8ToUTF16("moe.co.uk"), createdContext);
+  EXPECT_EQ(u"moe.co.uk", createdContext);
 
   // It should get the eTLD+1 for banners too
   createdContext = CreateMacNotificationContext(
       /*isPersistent=*/false, notification, /*requiresAttribution=*/true);
-  EXPECT_EQ(base::UTF8ToUTF16("moe.co.uk"), createdContext);
+  EXPECT_EQ(u"moe.co.uk", createdContext);
 }
 
 TEST_F(NotificationPlatformBridgeMacUtilsTest,
@@ -201,14 +196,13 @@ TEST_F(NotificationPlatformBridgeMacUtilsTest,
 }
 
 TEST_F(NotificationPlatformBridgeMacUtilsTest, TestNotificationUnknownType) {
-  [response_ setValue:[NSNumber numberWithInt:210581]
-               forKey:notification_constants::kNotificationType];
+  [response_ setValue:@210581 forKey:notification_constants::kNotificationType];
   EXPECT_FALSE(VerifyMacNotificationData(response_));
 }
 
 TEST_F(NotificationPlatformBridgeMacUtilsTest,
        TestNotificationVerifyUnknownOperation) {
-  [response_ setValue:[NSNumber numberWithInt:40782]
+  [response_ setValue:@40782
                forKey:notification_constants::kNotificationOperation];
   EXPECT_FALSE(VerifyMacNotificationData(response_));
 }
@@ -233,7 +227,7 @@ TEST_F(NotificationPlatformBridgeMacUtilsTest,
 
 TEST_F(NotificationPlatformBridgeMacUtilsTest,
        TestNotificationVerifyInvalidButton) {
-  [response_ setValue:[NSNumber numberWithInt:-5]
+  [response_ setValue:@-5
                forKey:notification_constants::kNotificationButtonIndex];
   EXPECT_FALSE(VerifyMacNotificationData(response_));
 }
@@ -257,4 +251,10 @@ TEST_F(NotificationPlatformBridgeMacUtilsTest, TestNotificationVerifyOrigin) {
   // Empty origin should be fine.
   [response_ setValue:@"" forKey:notification_constants::kNotificationOrigin];
   EXPECT_TRUE(VerifyMacNotificationData(response_));
+}
+
+TEST_F(NotificationPlatformBridgeMacUtilsTest,
+       TestNotificationVerifyMissingIsAlert) {
+  [response_ removeObjectForKey:notification_constants::kNotificationIsAlert];
+  EXPECT_FALSE(VerifyMacNotificationData(response_));
 }

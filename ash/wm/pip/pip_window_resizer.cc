@@ -15,6 +15,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "ui/aura/window.h"
+#include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
@@ -69,7 +70,7 @@ void CollectFreeResizeAreaMetric(const char* metric_name,
   if (root_window_area != 0) {
     const int percentage =
         std::round(float(window_area) / float(root_window_area) * 100.f);
-    base::UmaHistogramPercentage(metric_name, percentage);
+    base::UmaHistogramPercentageObsoleteDoNotUse(metric_name, percentage);
   }
 }
 

@@ -15,13 +15,14 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/scoped_observation.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
@@ -136,11 +137,11 @@ struct StoragePartitionRemovalData {
 };
 
 net::CanonicalCookie CreateCookieWithHost(const url::Origin& origin) {
-  std::unique_ptr<net::CanonicalCookie> cookie(
-      std::make_unique<net::CanonicalCookie>(
+  std::unique_ptr<net::CanonicalCookie> cookie =
+      net::CanonicalCookie::CreateUnsafeCookieForTesting(
           "A", "1", origin.host(), "/", base::Time::Now(), base::Time::Now(),
           base::Time(), false, false, net::CookieSameSite::NO_RESTRICTION,
-          net::COOKIE_PRIORITY_MEDIUM));
+          net::COOKIE_PRIORITY_MEDIUM, false);
   EXPECT_TRUE(cookie);
   return *cookie;
 }
@@ -281,7 +282,11 @@ base::Time AnHourAgo() {
 
 bool FilterMatchesCookie(const CookieDeletionFilterPtr& filter,
                          const net::CanonicalCookie& cookie) {
-  return network::DeletionFilterToInfo(filter.Clone()).Matches(cookie);
+  return network::DeletionFilterToInfo(filter.Clone())
+      .Matches(cookie,
+               net::CookieAccessParams{
+                   net::CookieAccessSemantics::NONLEGACY, false,
+                   net::CookieSamePartyStatus::kNoSamePartyEnforcement});
 }
 
 class TestBrowsingDataRemoverDelegate
@@ -498,7 +503,8 @@ TEST_F(BrowsingDataRemoverImplTest, RemoveCookieForever) {
   // Verify that storage partition was instructed to remove the cookies.
   StoragePartitionRemovalData removal_data = GetStoragePartitionRemovalData();
   EXPECT_EQ(removal_data.remove_mask,
-            StoragePartition::REMOVE_DATA_MASK_COOKIES);
+            StoragePartition::REMOVE_DATA_MASK_COOKIES |
+                StoragePartition::REMOVE_DATA_MASK_INTEREST_GROUPS);
   EXPECT_EQ(removal_data.quota_storage_remove_mask,
             StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL);
   EXPECT_EQ(removal_data.remove_begin, GetBeginTime());
@@ -515,7 +521,8 @@ TEST_F(BrowsingDataRemoverImplTest, RemoveCookieLastHour) {
   // Verify that storage partition was instructed to remove the cookies.
   StoragePartitionRemovalData removal_data = GetStoragePartitionRemovalData();
   EXPECT_EQ(removal_data.remove_mask,
-            StoragePartition::REMOVE_DATA_MASK_COOKIES);
+            StoragePartition::REMOVE_DATA_MASK_COOKIES |
+                StoragePartition::REMOVE_DATA_MASK_INTEREST_GROUPS);
   // Removing with time period other than all time should not clear
   // persistent storage data.
   EXPECT_EQ(removal_data.quota_storage_remove_mask,
@@ -542,7 +549,8 @@ TEST_F(BrowsingDataRemoverImplTest, RemoveCookiesDomainPreserveList) {
   // Verify that storage partition was instructed to remove the cookies.
   StoragePartitionRemovalData removal_data = GetStoragePartitionRemovalData();
   EXPECT_EQ(removal_data.remove_mask,
-            StoragePartition::REMOVE_DATA_MASK_COOKIES);
+            StoragePartition::REMOVE_DATA_MASK_COOKIES |
+                StoragePartition::REMOVE_DATA_MASK_INTEREST_GROUPS);
   // Removing with time period other than all time should not clear
   // persistent storage data.
   EXPECT_EQ(removal_data.quota_storage_remove_mask,
@@ -697,7 +705,8 @@ TEST_F(BrowsingDataRemoverImplTest, RemoveMultipleTypes) {
   // partition was requested to remove cookie.
   StoragePartitionRemovalData removal_data = GetStoragePartitionRemovalData();
   EXPECT_EQ(removal_data.remove_mask,
-            StoragePartition::REMOVE_DATA_MASK_COOKIES);
+            StoragePartition::REMOVE_DATA_MASK_COOKIES |
+                StoragePartition::REMOVE_DATA_MASK_INTEREST_GROUPS);
   EXPECT_EQ(removal_data.quota_storage_remove_mask,
             StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL);
 }
@@ -1353,8 +1362,8 @@ class MultipleTasksObserver {
   class Target : public BrowsingDataRemover::Observer {
    public:
     Target(MultipleTasksObserver* parent, BrowsingDataRemover* remover)
-        : parent_(parent), observer_(this) {
-      observer_.Add(remover);
+        : parent_(parent) {
+      observation_.Observe(remover);
     }
     ~Target() override = default;
 
@@ -1364,8 +1373,8 @@ class MultipleTasksObserver {
 
    private:
     MultipleTasksObserver* parent_;
-    ScopedObserver<BrowsingDataRemover, BrowsingDataRemover::Observer>
-        observer_;
+    base::ScopedObservation<BrowsingDataRemover, BrowsingDataRemover::Observer>
+        observation_{this};
   };
 
   explicit MultipleTasksObserver(BrowsingDataRemover* remover)
@@ -1675,7 +1684,9 @@ TEST_F(BrowsingDataRemoverImplTest, DeferCookieDeletion) {
       StoragePartition::REMOVE_DATA_MASK_CACHE_STORAGE |
       StoragePartition::REMOVE_DATA_MASK_BACKGROUND_FETCH |
       StoragePartition::REMOVE_DATA_MASK_INDEXEDDB;
-
+  uint32_t dom_storage_and_cookie_mask =
+      dom_storage_mask | StoragePartition::REMOVE_DATA_MASK_INTEREST_GROUPS |
+      StoragePartition::REMOVE_DATA_MASK_COOKIES;
   BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
                                 BrowsingDataRemover::DATA_TYPE_COOKIES |
                                     BrowsingDataRemover::DATA_TYPE_DOM_STORAGE,
@@ -1684,8 +1695,7 @@ TEST_F(BrowsingDataRemoverImplTest, DeferCookieDeletion) {
   // Verify storage partition deletion happens once without deferred domains.
   auto removal_list = GetStoragePartitionRemovalDataListAndReset();
   EXPECT_EQ(removal_list.size(), 1u);
-  EXPECT_EQ(removal_list[0].remove_mask,
-            StoragePartition::REMOVE_DATA_MASK_COOKIES | dom_storage_mask);
+  EXPECT_EQ(removal_list[0].remove_mask, dom_storage_and_cookie_mask);
   EXPECT_FALSE(removal_list[0].cookie_deletion_filter->excluding_domains);
   EXPECT_FALSE(removal_list[0].cookie_deletion_filter->including_domains);
 
@@ -1699,8 +1709,7 @@ TEST_F(BrowsingDataRemoverImplTest, DeferCookieDeletion) {
 
   removal_list = GetStoragePartitionRemovalDataListAndReset();
   EXPECT_EQ(removal_list.size(), 2u);
-  EXPECT_EQ(removal_list[0].remove_mask,
-            StoragePartition::REMOVE_DATA_MASK_COOKIES | dom_storage_mask);
+  EXPECT_EQ(removal_list[0].remove_mask, dom_storage_and_cookie_mask);
   EXPECT_EQ(removal_list[1].remove_mask,
             StoragePartition::REMOVE_DATA_MASK_COOKIES);
 

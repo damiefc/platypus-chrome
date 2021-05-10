@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_regexp.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/create_element_flags.h"
+#include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/html/forms/file_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/step_range.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
@@ -112,6 +113,7 @@ class CORE_EXPORT HTMLInputElement
   // its value can be protected from memorization by autofill or keyboards.
   bool HasBeenPasswordField() const;
 
+  bool IsCheckable() const;
   bool checked() const;
   void setChecked(
       bool,
@@ -374,8 +376,9 @@ class CORE_EXPORT HTMLInputElement
   bool IsInteractiveContent() const final;
   bool IsLabelable() const final;
   bool MatchesDefaultPseudoClass() const override;
-
   bool IsTextControl() const final { return IsTextField(); }
+  int scrollWidth() override;
+  int scrollHeight() override;
 
   bool CanTriggerImplicitSubmission() const final { return IsTextField(); }
 
@@ -387,7 +390,7 @@ class CORE_EXPORT HTMLInputElement
 
   bool CanStartSelection() const final;
 
-  void AccessKeyAction(bool send_mouse_events) final;
+  void AccessKeyAction(SimulatedClickCreationScope creation_scope) final;
 
   void ParseAttribute(const AttributeModificationParams&) override;
   bool IsPresentationAttribute(const QualifiedName&) const final;
@@ -445,8 +448,7 @@ class CORE_EXPORT HTMLInputElement
 
   void AddToRadioButtonGroup();
   void RemoveFromRadioButtonGroup();
-  scoped_refptr<ComputedStyle> CustomStyleForLayoutObject() override;
-  void DidRecalcStyle(const StyleRecalcChange) override;
+  ComputedStyle* CustomStyleForLayoutObject(const StyleRecalcContext&) override;
 
   void MaybeReportPiiMetrics();
 

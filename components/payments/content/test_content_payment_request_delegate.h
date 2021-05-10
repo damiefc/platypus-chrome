@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_PAYMENTS_CONTENT_TEST_CONTENT_PAYMENT_REQUEST_DELEGATE_H_
 #define COMPONENTS_PAYMENTS_CONTENT_TEST_CONTENT_PAYMENT_REQUEST_DELEGATE_H_
 
+#include <memory>
+
 #include "components/payments/content/content_payment_request_delegate.h"
 #include "components/payments/content/payment_request_display_manager.h"
 #include "components/payments/core/test_payment_request_delegate.h"
@@ -13,11 +15,18 @@ namespace autofill {
 class PersonalDataManager;
 }  // namespace autofill
 
+namespace base {
+class SingleThreadTaskExecutor;
+}  // namespace base
+
 namespace payments {
+
+class PaymentUIObserver;
 
 class TestContentPaymentRequestDelegate : public ContentPaymentRequestDelegate {
  public:
-  explicit TestContentPaymentRequestDelegate(
+  TestContentPaymentRequestDelegate(
+      std::unique_ptr<base::SingleThreadTaskExecutor> task_executor,
       autofill::PersonalDataManager* pdm);
   ~TestContentPaymentRequestDelegate() override;
 
@@ -58,6 +67,7 @@ class TestContentPaymentRequestDelegate : public ContentPaymentRequestDelegate {
   autofill::TestAddressNormalizer* test_address_normalizer();
   void DelayFullCardRequestCompletion();
   void CompleteFullCardRequest();
+  const PaymentUIObserver* GetPaymentUIObserver() const override;
 
  private:
   TestPaymentRequestDelegate core_delegate_;

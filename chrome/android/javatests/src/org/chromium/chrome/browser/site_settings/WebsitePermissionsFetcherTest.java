@@ -10,15 +10,20 @@ import android.util.Pair;
 
 import androidx.test.filters.SmallTest;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.Callback;
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.chrome.browser.browsing_data.BrowsingDataBridge;
+import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
+import org.chromium.chrome.browser.browsing_data.TimePeriod;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
@@ -45,6 +50,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Tests for WebsitePermissionsFetcher.
@@ -53,6 +59,7 @@ import java.util.concurrent.TimeUnit;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
         WebsitePermissionsFetcherTest.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES,
         WebsitePermissionsFetcherTest.ENABLE_WEB_BLUETOOTH_NEW_PERMISSIONS_BACKEND})
+@Batch(Batch.PER_CLASS)
 public class WebsitePermissionsFetcherTest {
     @Rule
     public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
@@ -273,6 +280,17 @@ public class WebsitePermissionsFetcherTest {
         }
     }
 
+    @After
+    public void tearDown() throws TimeoutException {
+        // Clean up permissions.
+        CallbackHelper helper = new CallbackHelper();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            BrowsingDataBridge.getInstance().clearBrowsingData(helper::notifyCalled,
+                    new int[] {BrowsingDataType.SITE_SETTINGS}, TimePeriod.ALL_TIME);
+        });
+        helper.waitForCallback(0);
+    }
+
     @Test
     @SmallTest
     public void testNullsCanBeHandled() {
@@ -312,18 +330,20 @@ public class WebsitePermissionsFetcherTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Profile profile = Profile.getLastUsedRegularProfile();
             for (String url : PERMISSION_URLS) {
-                WebsitePreferenceBridgeJni.get().setGeolocationSettingForOrigin(
-                        profile, url, url, ContentSettingValues.BLOCK);
-                WebsitePreferenceBridgeJni.get().setMidiSettingForOrigin(
-                        profile, url, url, ContentSettingValues.ALLOW);
-                WebsitePreferenceBridgeJni.get().setProtectedMediaIdentifierSettingForOrigin(
-                        profile, url, url, ContentSettingValues.BLOCK);
-                WebsitePreferenceBridgeJni.get().setNotificationSettingForOrigin(
-                        profile, url, ContentSettingValues.ALLOW);
-                WebsitePreferenceBridgeJni.get().setMicrophoneSettingForOrigin(
-                        profile, url, ContentSettingValues.ALLOW);
-                WebsitePreferenceBridgeJni.get().setCameraSettingForOrigin(
-                        profile, url, ContentSettingValues.BLOCK);
+                WebsitePreferenceBridgeJni.get().setSettingForOrigin(profile,
+                        ContentSettingsType.GEOLOCATION, url, url, ContentSettingValues.BLOCK);
+                WebsitePreferenceBridgeJni.get().setSettingForOrigin(profile,
+                        ContentSettingsType.MIDI_SYSEX, url, url, ContentSettingValues.ALLOW);
+                WebsitePreferenceBridgeJni.get().setSettingForOrigin(profile,
+                        ContentSettingsType.PROTECTED_MEDIA_IDENTIFIER, url, url,
+                        ContentSettingValues.BLOCK);
+                WebsitePreferenceBridgeJni.get().setSettingForOrigin(profile,
+                        ContentSettingsType.NOTIFICATIONS, url, url, ContentSettingValues.ALLOW);
+                WebsitePreferenceBridgeJni.get().setSettingForOrigin(profile,
+                        ContentSettingsType.MEDIASTREAM_MIC, url, url, ContentSettingValues.ALLOW);
+                WebsitePreferenceBridgeJni.get().setSettingForOrigin(profile,
+                        ContentSettingsType.MEDIASTREAM_CAMERA, url, url,
+                        ContentSettingValues.BLOCK);
             }
 
             // This should not time out. See crbug.com/732907.
@@ -473,7 +493,7 @@ public class WebsitePermissionsFetcherTest {
         // If the ContentSettingsType.NUM_TYPES value changes *and* a new value has been exposed on
         // Android, then please update this code block to include a test for your new type.
         // Otherwise, just update count in the assert.
-        Assert.assertEquals(66, ContentSettingsType.NUM_TYPES);
+        Assert.assertEquals(70, ContentSettingsType.NUM_TYPES);
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(ContentSettingsType.COOKIES, googleOrigin,
                         ContentSettingValues.DEFAULT, preferenceSource));
@@ -508,12 +528,11 @@ public class WebsitePermissionsFetcherTest {
                 new LocalStorageInfo(googleOrigin, storageSize, false));
 
         // Add chooser info types.
-        websitePreferenceBridge.addChosenObjectInfo(
-                new ChosenObjectInfo(ContentSettingsType.USB_CHOOSER_DATA, googleOrigin,
-                        SITE_WILDCARD, "Gadget", "Object", false));
+        websitePreferenceBridge.addChosenObjectInfo(new ChosenObjectInfo(
+                ContentSettingsType.USB_CHOOSER_DATA, googleOrigin, "Gadget", "Object", false));
         websitePreferenceBridge.addChosenObjectInfo(
                 new ChosenObjectInfo(ContentSettingsType.BLUETOOTH_CHOOSER_DATA, googleOrigin,
-                        SITE_WILDCARD, "Wireless", "Object", false));
+                        "Wireless", "Object", false));
 
         fetcher.fetchAllPreferences((sites) -> {
             Assert.assertEquals(1, sites.size());
@@ -913,8 +932,8 @@ public class WebsitePermissionsFetcherTest {
                     SiteSettingsCategory.contentSettingsType(type));
             Assert.assertNotEquals(-1, chooserDataType);
 
-            ChosenObjectInfo fakeObjectInfo = new ChosenObjectInfo(chooserDataType, googleOrigin,
-                    SITE_WILDCARD, "Chosen Object", "SerializedObjectData", false);
+            ChosenObjectInfo fakeObjectInfo = new ChosenObjectInfo(
+                    chooserDataType, googleOrigin, "Chosen Object", "SerializedObjectData", false);
             websitePreferenceBridge.addChosenObjectInfo(fakeObjectInfo);
 
             fetcher.fetchPreferencesForCategory(

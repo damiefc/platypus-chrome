@@ -168,7 +168,7 @@ void ExternalProcessImporterClient::OnHomePageImportReady(
 }
 
 void ExternalProcessImporterClient::OnBookmarksImportStart(
-    const base::string16& first_folder_name,
+    const std::u16string& first_folder_name,
     uint32_t total_bookmarks_count) {
   if (cancelled_)
     return;
@@ -212,7 +212,7 @@ void ExternalProcessImporterClient::OnFaviconsImportGroup(
 }
 
 void ExternalProcessImporterClient::OnPasswordFormImportReady(
-    const autofill::PasswordForm& form) {
+    const importer::ImportedPasswordForm& form) {
   if (cancelled_)
     return;
 

@@ -4,7 +4,6 @@
 
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_view_controller.h"
 
-#include "base/feature_list.h"
 #import "base/ios/block_types.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -13,7 +12,6 @@
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_container.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_delegate.h"
 #import "ios/chrome/browser/ui/infobars/infobar_feature.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
@@ -67,6 +65,8 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
 @property(nonatomic, assign) BOOL presentsModal;
 @property(nonatomic, copy) NSString* titleText;
 @property(nonatomic, copy) NSString* subtitleText;
+@property(nonatomic, assign) BOOL useIconBackgroundTint;
+@property(nonatomic, assign) BOOL restrictSubtitleTextToSingleLine;
 
 // The original position of this InfobarVC view in the parent's view coordinate
 // system.
@@ -113,6 +113,8 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
     _metricsRecorder =
         [[InfobarMetricsRecorder alloc] initWithType:infobarType];
     _presentsModal = presentsModal;
+    _useIconBackgroundTint = YES;
+    _restrictSubtitleTextToSingleLine = NO;
   }
   return self;
 }
@@ -146,8 +148,12 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
   // Icon setup.
   UIView* iconContainerView = nil;
   if (self.iconImage) {
-    self.iconImage = [self.iconImage
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    // If the icon image requires a background tint, ignore the original color
+    // information and draw the image as a template image.
+    if (self.useIconBackgroundTint) {
+      self.iconImage = [self.iconImage
+          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    }
     UIImageView* iconImageView =
         [[UIImageView alloc] initWithImage:self.iconImage];
     iconImageView.contentMode = UIViewContentModeScaleAspectFit;
@@ -155,8 +161,10 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
 
     UIView* backgroundIconView =
         [[UIView alloc] initWithFrame:iconImageView.frame];
-    backgroundIconView.backgroundColor = [UIColor colorNamed:kBlueHaloColor];
     backgroundIconView.layer.cornerRadius = kIconCornerRadius;
+    if (self.useIconBackgroundTint) {
+      backgroundIconView.backgroundColor = [UIColor colorNamed:kBlueHaloColor];
+    }
     backgroundIconView.translatesAutoresizingMaskIntoConstraints = NO;
 
     iconContainerView = [[UIView alloc] init];
@@ -199,7 +207,11 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
       [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   self.subTitleLabel.adjustsFontForContentSizeCategory = YES;
   self.subTitleLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
-  self.subTitleLabel.numberOfLines = 0;
+  if (_restrictSubtitleTextToSingleLine) {
+    self.subTitleLabel.numberOfLines = 1;
+  } else {
+    self.subTitleLabel.numberOfLines = 0;
+  }
   // If |self.subTitleText| hasn't been set or is empty, hide the label to keep
   // the title label centered in the Y axis.
   self.subTitleLabel.hidden = !self.subtitleText.length;
@@ -225,9 +237,7 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
                forControlEvents:UIControlEventTouchUpInside];
   self.infobarButton.accessibilityIdentifier =
       kInfobarBannerAcceptButtonIdentifier;
-#if defined(__IPHONE_13_4)
   if (@available(iOS 13.4, *)) {
-    if (base::FeatureList::IsEnabled(kPointerSupport)) {
       self.infobarButton.pointerInteractionEnabled = YES;
       self.infobarButton.pointerStyleProvider =
           ^UIPointerStyle*(UIButton* button, UIPointerEffect* proposedEffect,
@@ -237,9 +247,7 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
                                     cornerRadius:kBannerViewCornerRadius];
         return [UIPointerStyle styleWithEffect:proposedEffect shape:shape];
       };
-    }
   }
-#endif  // defined(__IPHONE_13_4)
 
   UIView* buttonSeparator = [[UIView alloc] init];
   buttonSeparator.translatesAutoresizingMaskIntoConstraints = NO;
@@ -274,15 +282,11 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
   [containerStack addArrangedSubview:self.openModalButton];
   // Hide open modal button if user shouldn't be allowed to open the modal.
   self.openModalButton.hidden = !self.presentsModal;
-#if defined(__IPHONE_13_4)
   if (@available(iOS 13.4, *)) {
-    if (base::FeatureList::IsEnabled(kPointerSupport)) {
       self.openModalButton.pointerInteractionEnabled = YES;
       self.openModalButton.pointerStyleProvider =
           CreateDefaultEffectCirclePointerStyleProvider();
-    }
   }
-#endif  // defined(__IPHONE_13_4)
 
   // Add accept button.
   [containerStack addArrangedSubview:self.infobarButton];
@@ -400,7 +404,7 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
   self.shouldDismissAfterTouchesEnded = YES;
 }
 
-#pragma mark - Getters/Setters
+#pragma mark - Setters
 
 - (void)setTitleText:(NSString*)titleText {
   _titleText = titleText;
@@ -433,6 +437,15 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
   // InfobarContainerCoordinator and not Overlays. Once we migrate to Overlays
   // InfobarBannerContainer shouldn't be necessary.
   DCHECK(!IsInfobarOverlayUIEnabled());
+}
+
+- (void)setUseIconBackgroundTint:(BOOL)useIconBackgroundTint {
+  _useIconBackgroundTint = useIconBackgroundTint;
+}
+
+- (void)setRestrictSubtitleTextToSingleLine:
+    (BOOL)restrictSubtitleTextToSingleLine {
+  _restrictSubtitleTextToSingleLine = restrictSubtitleTextToSingleLine;
 }
 
 #pragma mark - Private Methods

@@ -13,10 +13,8 @@
 #include "base/strings/string_util.h"
 #include "base/time/default_clock.h"
 #include "build/build_config.h"
-#include "chrome/browser/chromeos/arc/arc_util.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/app_list/search/answer_card/answer_card_search_provider.h"
 #include "chrome/browser/ui/app_list/search/app_search_provider.h"
 #include "chrome/browser/ui/app_list/search/arc/arc_app_data_search_provider.h"
 #include "chrome/browser/ui/app_list/search/arc/arc_app_reinstall_search_provider.h"
@@ -24,15 +22,15 @@
 #include "chrome/browser/ui/app_list/search/arc/arc_playstore_search_provider.h"
 #include "chrome/browser/ui/app_list/search/assistant_search_provider.h"
 #include "chrome/browser/ui/app_list/search/assistant_text_search_provider.h"
-#include "chrome/browser/ui/app_list/search/drive_quick_access_provider.h"
-#include "chrome/browser/ui/app_list/search/files/drive_zero_state_provider.h"
-#include "chrome/browser/ui/app_list/search/launcher_search/launcher_search_provider.h"
+#include "chrome/browser/ui/app_list/search/files/drive_search_provider.h"
+#include "chrome/browser/ui/app_list/search/files/file_search_provider.h"
+#include "chrome/browser/ui/app_list/search/files/zero_state_drive_provider.h"
+#include "chrome/browser/ui/app_list/search/files/zero_state_file_provider.h"
+#include "chrome/browser/ui/app_list/search/help_app_provider.h"
 #include "chrome/browser/ui/app_list/search/mixer.h"
 #include "chrome/browser/ui/app_list/search/omnibox_provider.h"
 #include "chrome/browser/ui/app_list/search/os_settings_provider.h"
 #include "chrome/browser/ui/app_list/search/search_controller.h"
-#include "chrome/browser/ui/app_list/search/settings_shortcut/settings_shortcut_provider.h"
-#include "chrome/browser/ui/app_list/search/zero_state_file_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
@@ -57,19 +55,22 @@ constexpr size_t kGenericMaxResults = 10;
 
 // Some app results may be blocklisted (e.g. continue reading) for rendering
 // in some UI, so we need to allow returning more results than actual maximum
-// number of results to be displayed in UI.
-constexpr size_t kMaxAppsGroupResults = 7;
-constexpr size_t kMaxLauncherSearchResults = 4;
+// number of results to be displayed in UI. This also accounts for two results
+// (tile and chip) being created for each app.
+constexpr size_t kMaxAppsGroupResults = 14;
+constexpr size_t kMaxFileSearchResults = 6;
+constexpr size_t kMaxDriveSearchResults = 6;
 // We need twice as many ZeroState and Drive file results as we need
 // duplicates of these results for the suggestion chips.
 constexpr size_t kMaxZeroStateFileResults = 20;
-constexpr size_t kMaxDriveZeroStateResults = 10;
+constexpr size_t kMaxZeroStateDriveResults = 10;
 constexpr size_t kMaxAppReinstallSearchResults = 1;
 // We show up to 6 Play Store results. However, part of Play Store results may
 // be filtered out because they may correspond to already installed Web apps. So
 // we request twice as many Play Store apps as we can show. Note that this still
 // doesn't guarantee that all 6 positions will be filled, as we might in theory
-// filter out more than half of results.
+// filter out more than half of results. Double this again to account for two
+// results (tile and chip) being created for each app.
 // TODO(753947): Consider progressive algorithm of getting Play Store results.
 constexpr size_t kMaxPlayStoreResults = 12;
 
@@ -82,9 +83,6 @@ constexpr size_t kMaxAppShortcutResults = 4;
 constexpr size_t kMaxAssistantChipResults = 1;
 
 constexpr size_t kMaxAssistantTextResults = 1;
-
-// TODO(wutao): Need UX spec.
-constexpr size_t kMaxSettingsShortcutResults = 6;
 
 }  // namespace
 
@@ -101,21 +99,15 @@ std::unique_ptr<SearchController> CreateSearchController(
   controller->InitializeRankers();
 
   size_t apps_group_id = controller->AddGroup(kMaxAppsGroupResults);
-  size_t answer_card_group_id = controller->AddGroup(1);
 
   size_t omnibox_group_id = controller->AddGroup(
-      ash::AppListConfig::instance().max_search_result_list_items());
+      ash::SharedAppListConfig::instance().max_search_result_list_items());
 
   // Add search providers.
   controller->AddProvider(
       apps_group_id, std::make_unique<AppSearchProvider>(
                          profile, list_controller,
                          base::DefaultClock::GetInstance(), model_updater));
-  if (app_list_features::IsAnswerCardEnabled()) {
-    controller->AddProvider(answer_card_group_id,
-                            std::make_unique<AnswerCardSearchProvider>(
-                                profile, model_updater, list_controller));
-  }
 
   controller->AddProvider(omnibox_group_id, std::make_unique<OmniboxProvider>(
                                                 profile, list_controller));
@@ -134,13 +126,15 @@ std::unique_ptr<SearchController> CreateSearchController(
                             std::make_unique<AssistantTextSearchProvider>());
   }
 
-  // LauncherSearchProvider is added only when not in guest
-  // session and running on Chrome OS.
+  // File search providers are added only when not in guest session and running
+  // on Chrome OS.
   if (!profile->IsGuestSession()) {
-    size_t search_api_group_id =
-        controller->AddGroup(kMaxLauncherSearchResults);
-    controller->AddProvider(search_api_group_id,
-                            std::make_unique<LauncherSearchProvider>(profile));
+    size_t local_file_group_id = controller->AddGroup(kMaxFileSearchResults);
+    controller->AddProvider(local_file_group_id,
+                            std::make_unique<FileSearchProvider>(profile));
+    size_t drive_file_group_id = controller->AddGroup(kMaxDriveSearchResults);
+    controller->AddProvider(drive_file_group_id,
+                            std::make_unique<DriveSearchProvider>(profile));
   }
 
   // reinstallation candidates for Arc++ apps.
@@ -167,16 +161,6 @@ std::unique_ptr<SearchController> CreateSearchController(
                                 kMaxAppDataResults, list_controller));
   }
 
-  // TODO(crbug.com/1028447): Remove the settings shortcut provider, superseded
-  // by OsSettingsProvider.
-  if (app_list_features::IsSettingsShortcutSearchEnabled()) {
-    size_t settings_shortcut_group_id =
-        controller->AddGroup(kMaxSettingsShortcutResults);
-    controller->AddProvider(
-        settings_shortcut_group_id,
-        std::make_unique<SettingsShortcutProvider>(profile));
-  }
-
   if (arc::IsArcAllowedForProfile(profile)) {
     size_t app_shortcut_group_id = controller->AddGroup(kMaxAppShortcutResults);
     controller->AddProvider(
@@ -194,13 +178,12 @@ std::unique_ptr<SearchController> CreateSearchController(
     controller->AddProvider(zero_state_files_group_id,
                             std::make_unique<ZeroStateFileProvider>(profile));
     size_t drive_zero_state_group_id =
-        controller->AddGroup(kMaxDriveZeroStateResults);
-    controller->AddProvider(
-        drive_zero_state_group_id,
-        std::make_unique<DriveZeroStateProvider>(
-            profile, controller.get(),
-            content::BrowserContext::GetDefaultStoragePartition(profile)
-                ->GetURLLoaderFactoryForBrowserProcess()));
+        controller->AddGroup(kMaxZeroStateDriveResults);
+    controller->AddProvider(drive_zero_state_group_id,
+                            std::make_unique<ZeroStateDriveProvider>(
+                                profile, controller.get(),
+                                profile->GetDefaultStoragePartition()
+                                    ->GetURLLoaderFactoryForBrowserProcess()));
   }
 
   if (app_list_features::IsLauncherSettingsSearchEnabled()) {
@@ -209,6 +192,10 @@ std::unique_ptr<SearchController> CreateSearchController(
     controller->AddProvider(os_settings_search_group_id,
                             std::make_unique<OsSettingsProvider>(profile));
   }
+
+  size_t help_app_group_id = controller->AddGroup(kGenericMaxResults);
+  controller->AddProvider(help_app_group_id,
+                          std::make_unique<HelpAppProvider>(profile));
 
   return controller;
 }

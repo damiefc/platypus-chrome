@@ -15,8 +15,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/chromeos/drive/drive_integration_service.h"
-#include "chrome/browser/chromeos/drive/file_system_util.h"
+#include "chrome/browser/ash/drive/drive_integration_service.h"
+#include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/filesystem_api_util.h"
@@ -410,6 +410,10 @@ void VolumeToVolumeMetadata(
   if (!volume.source_path().empty()) {
     volume_metadata->source_path =
         std::make_unique<std::string>(volume.source_path().AsUTF8Unsafe());
+  }
+  if (!volume.remote_mount_path().empty()) {
+    volume_metadata->remote_mount_path =
+        std::make_unique<std::string>(volume.remote_mount_path().value());
   }
 
   switch (volume.source()) {

@@ -213,6 +213,9 @@ Layer::~Layer() {
 
   // Destroying the animator may cause observers to use the layer. Destroy the
   // animator first so that the layer is still around.
+#if defined(ADDRESS_SANITIZER)
+  destroyed_ = true;
+#endif
   SetAnimator(nullptr);
   if (compositor_)
     compositor_->SetRootLayer(nullptr);
@@ -229,7 +232,7 @@ Layer::~Layer() {
     content_layer_->ClearClient();
   cc_layer_->RemoveFromParent();
   if (transfer_release_callback_)
-    transfer_release_callback_->Run(gpu::SyncToken(), false);
+    std::move(transfer_release_callback_).Run(gpu::SyncToken(), false);
 
   ResetSubtreeReflectedLayer();
 }
@@ -281,6 +284,9 @@ std::unique_ptr<Layer> Layer::Clone() const {
   clone->SetIsFastRoundedCorner(is_fast_rounded_corner());
   clone->SetName(name_);
 
+  // the |damaged_region_| will be sent to cc later in SendDamagedRects().
+  clone->damaged_region_ = damaged_region_;
+
   return clone;
 }
 
@@ -293,8 +299,7 @@ std::unique_ptr<Layer> Layer::Mirror() {
     // freed up until the original layer releases it.
     mirror->SetTransferableResource(
         transfer_resource_,
-        viz::SingleReleaseCallback::Create(base::BindOnce(
-            [](const gpu::SyncToken& sync_token, bool is_lost) {})),
+        base::BindOnce([](const gpu::SyncToken& sync_token, bool is_lost) {}),
         frame_size_in_dip_);
   }
 
@@ -433,6 +438,9 @@ bool Layer::Contains(const Layer* other) const {
 }
 
 void Layer::SetAnimator(LayerAnimator* animator) {
+#if defined(ADDRESS_SANITIZER)
+  CHECK(!destroyed_ || !animator);
+#endif
   Compositor* compositor = GetCompositor();
 
   if (animator_) {
@@ -454,6 +462,14 @@ LayerAnimator* Layer::GetAnimator() {
   if (!animator_)
     SetAnimator(LayerAnimator::CreateDefaultAnimator());
   return animator_.get();
+}
+
+void Layer::SetSubtreeCaptureId(viz::SubtreeCaptureId subtree_id) {
+  cc_layer_->SetSubtreeCaptureId(subtree_id);
+}
+
+viz::SubtreeCaptureId Layer::GetSubtreeCaptureId() const {
+  return cc_layer_->subtree_capture_id();
 }
 
 void Layer::SetTransform(const gfx::Transform& transform) {
@@ -625,8 +641,8 @@ void Layer::SetLayerFilters() {
   if (layer_inverted_)
     filters.Append(cc::FilterOperation::CreateInvertFilter(1.0));
   if (layer_blur_sigma_) {
-    filters.Append(cc::FilterOperation::CreateBlurFilter(
-        layer_blur_sigma_, SkBlurImageFilter::kClamp_TileMode));
+    filters.Append(cc::FilterOperation::CreateBlurFilter(layer_blur_sigma_,
+                                                         SkTileMode::kClamp));
   }
   // Brightness goes last, because the resulting colors neeed clamping, which
   // cause further color matrix filters to be applied separately. In this order,
@@ -649,8 +665,8 @@ void Layer::SetLayerBackgroundFilters() {
     filters.Append(cc::FilterOperation::CreateZoomFilter(zoom_, zoom_inset_));
 
   if (background_blur_sigma_) {
-    filters.Append(cc::FilterOperation::CreateBlurFilter(
-        background_blur_sigma_, SkBlurImageFilter::kClamp_TileMode));
+    filters.Append(cc::FilterOperation::CreateBlurFilter(background_blur_sigma_,
+                                                         SkTileMode::kClamp));
   }
   cc_layer_->SetBackdropFilters(filters);
 }
@@ -699,9 +715,22 @@ void Layer::SetIsFastRoundedCorner(bool enable) {
     mirror->dest()->SetIsFastRoundedCorner(enable);
 }
 
+bool Layer::GetTargetTransformRelativeTo(const Layer* ancestor,
+                                         gfx::Transform* transform) const {
+  return GetTransformRelativeToImpl(ancestor, /*is_target_transform=*/true,
+                                    transform);
+}
+
+bool Layer::GetTransformRelativeTo(const Layer* ancestor,
+                                   gfx::Transform* transform) const {
+  return GetTransformRelativeToImpl(ancestor, /*is_target_transform=*/false,
+                                    transform);
+}
+
 // static
 void Layer::ConvertPointToLayer(const Layer* source,
                                 const Layer* target,
+                                bool use_target_transform,
                                 gfx::PointF* point) {
   if (source == target)
     return;
@@ -710,25 +739,9 @@ void Layer::ConvertPointToLayer(const Layer* source,
   CHECK_EQ(root_layer, GetRoot(target));
 
   if (source != root_layer)
-    source->ConvertPointForAncestor(root_layer, point);
+    source->ConvertPointForAncestor(root_layer, use_target_transform, point);
   if (target != root_layer)
-    target->ConvertPointFromAncestor(root_layer, point);
-}
-
-bool Layer::GetTargetTransformRelativeTo(const Layer* ancestor,
-                                         gfx::Transform* transform) const {
-  const Layer* p = this;
-  for (; p && p != ancestor; p = p->parent()) {
-    gfx::Transform translation;
-    translation.Translate(static_cast<float>(p->bounds().x()),
-                          static_cast<float>(p->bounds().y()));
-    // Use target transform so that result will be correct once animation is
-    // finished.
-    if (!p->GetTargetTransform().IsIdentity())
-      transform->ConcatTransform(p->GetTargetTransform());
-    transform->ConcatTransform(translation);
-  }
-  return p == ancestor;
+    target->ConvertPointFromAncestor(root_layer, use_target_transform, point);
 }
 
 void Layer::SetFillsBoundsOpaquely(bool fills_bounds_opaquely) {
@@ -778,6 +791,7 @@ bool Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
   new_layer->SetBackgroundColor(cc_layer_->background_color());
   new_layer->SetSafeOpaqueBackgroundColor(
       cc_layer_->SafeOpaqueBackgroundColor());
+  new_layer->SetSubtreeCaptureId(cc_layer_->subtree_capture_id());
   new_layer->SetCacheRenderSurface(cc_layer_->cache_render_surface());
   new_layer->SetTrilinearFiltering(cc_layer_->trilinear_filtering());
   new_layer->SetRoundedCorner(cc_layer_->corner_radii());
@@ -909,10 +923,9 @@ bool Layer::ContainsMirrorForTest(Layer* mirror) const {
   return it != mirrors_.end();
 }
 
-void Layer::SetTransferableResource(
-    const viz::TransferableResource& resource,
-    std::unique_ptr<viz::SingleReleaseCallback> release_callback,
-    gfx::Size texture_size_in_dip) {
+void Layer::SetTransferableResource(const viz::TransferableResource& resource,
+                                    viz::ReleaseCallback release_callback,
+                                    gfx::Size texture_size_in_dip) {
   DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
   DCHECK(!resource.mailbox_holder.mailbox.IsZero());
   DCHECK(release_callback);
@@ -930,7 +943,7 @@ void Layer::SetTransferableResource(
     frame_size_in_dip_ = gfx::Size();
   }
   if (transfer_release_callback_)
-    transfer_release_callback_->Run(gpu::SyncToken(), false);
+    std::move(transfer_release_callback_).Run(gpu::SyncToken(), false);
   transfer_release_callback_ = std::move(release_callback);
   transfer_resource_ = resource;
   SetTextureSize(texture_size_in_dip);
@@ -940,8 +953,7 @@ void Layer::SetTransferableResource(
     // should be able to release the texture resource.
     mirror->dest()->SetTransferableResource(
         transfer_resource_,
-        viz::SingleReleaseCallback::Create(base::BindOnce(
-            [](const gpu::SyncToken& sync_token, bool is_lost) {})),
+        base::BindOnce([](const gpu::SyncToken& sync_token, bool is_lost) {}),
         frame_size_in_dip_);
   }
 }
@@ -1050,8 +1062,7 @@ void Layer::SetShowSolidColorContent() {
 
   transfer_resource_ = viz::TransferableResource();
   if (transfer_release_callback_) {
-    transfer_release_callback_->Run(gpu::SyncToken(), false);
-    transfer_release_callback_.reset();
+    std::move(transfer_release_callback_).Run(gpu::SyncToken(), false);
   }
   RecomputeDrawsContentAndUVRect();
 
@@ -1296,12 +1307,11 @@ void Layer::RequestCopyOfOutput(
   cc_layer_->RequestCopyOfOutput(std::move(request));
 }
 
-gfx::Rect Layer::PaintableRegion() {
+gfx::Rect Layer::PaintableRegion() const {
   return gfx::Rect(size());
 }
 
-scoped_refptr<cc::DisplayItemList> Layer::PaintContentsToDisplayList(
-    ContentLayerClient::PaintingControlSetting painting_control) {
+scoped_refptr<cc::DisplayItemList> Layer::PaintContentsToDisplayList() {
   TRACE_EVENT1("ui", "Layer::PaintContentsToDisplayList", "name", name_);
   gfx::Rect local_bounds(bounds().size());
   gfx::Rect invalidation(
@@ -1322,16 +1332,10 @@ scoped_refptr<cc::DisplayItemList> Layer::PaintContentsToDisplayList(
 
 bool Layer::FillsBoundsCompletely() const { return fills_bounds_completely_; }
 
-size_t Layer::GetApproximateUnsharedMemoryUsage() const {
-  // Most of the "picture memory" is shared with the cc::DisplayItemList, so
-  // there's nothing significant to report here.
-  return 0;
-}
-
 bool Layer::PrepareTransferableResource(
     cc::SharedBitmapIdRegistrar* bitmap_registar,
     viz::TransferableResource* resource,
-    std::unique_ptr<viz::SingleReleaseCallback>* release_callback) {
+    viz::ReleaseCallback* release_callback) {
   if (!transfer_release_callback_)
     return false;
   *resource = transfer_resource_;
@@ -1372,9 +1376,12 @@ void Layer::StackRelativeTo(Layer* child, Layer* other, bool above) {
 }
 
 bool Layer::ConvertPointForAncestor(const Layer* ancestor,
+                                    bool use_target_transform,
                                     gfx::PointF* point) const {
   gfx::Transform transform;
-  bool result = GetTargetTransformRelativeTo(ancestor, &transform);
+  bool result = use_target_transform
+                    ? GetTargetTransformRelativeTo(ancestor, &transform)
+                    : GetTransformRelativeTo(ancestor, &transform);
   auto p = gfx::Point3F(*point);
   transform.TransformPoint(&p);
   *point = p.AsPointF();
@@ -1382,9 +1389,12 @@ bool Layer::ConvertPointForAncestor(const Layer* ancestor,
 }
 
 bool Layer::ConvertPointFromAncestor(const Layer* ancestor,
+                                     bool use_target_transform,
                                      gfx::PointF* point) const {
   gfx::Transform transform;
-  bool result = GetTargetTransformRelativeTo(ancestor, &transform);
+  bool result = use_target_transform
+                    ? GetTargetTransformRelativeTo(ancestor, &transform)
+                    : GetTransformRelativeTo(ancestor, &transform);
   auto p = gfx::Point3F(*point);
   transform.TransformPointReverse(&p);
   *point = p.AsPointF();
@@ -1711,6 +1721,23 @@ void Layer::SetFillsBoundsOpaquelyWithReason(bool fills_bounds_opaquely,
 
   if (delegate_)
     delegate_->OnLayerFillsBoundsOpaquelyChanged(reason);
+}
+
+bool Layer::GetTransformRelativeToImpl(const Layer* ancestor,
+                                       bool is_target_transform,
+                                       gfx::Transform* transform) const {
+  const Layer* p = this;
+  for (; p && p != ancestor; p = p->parent()) {
+    gfx::Transform translation;
+    translation.Translate(static_cast<float>(p->bounds().x()),
+                          static_cast<float>(p->bounds().y()));
+    const gfx::Transform& layer_transform =
+        is_target_transform ? p->GetTargetTransform() : p->transform();
+    if (!layer_transform.IsIdentity())
+      transform->ConcatTransform(layer_transform);
+    transform->ConcatTransform(translation);
+  }
+  return p == ancestor;
 }
 
 }  // namespace ui

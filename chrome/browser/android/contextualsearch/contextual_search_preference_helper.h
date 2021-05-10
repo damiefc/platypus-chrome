@@ -5,8 +5,6 @@
 #ifndef CHROME_BROWSER_ANDROID_CONTEXTUALSEARCH_CONTEXTUAL_SEARCH_PREFERENCE_HELPER_H_
 #define CHROME_BROWSER_ANDROID_CONTEXTUALSEARCH_CONTEXTUAL_SEARCH_PREFERENCE_HELPER_H_
 
-#include <string>
-
 #include "base/android/jni_android.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -14,6 +12,8 @@
 
 // Native portion of a class that helps coordinate user preferences for
 // Contextual Search with Unified Consent.
+// TODO(donnd): Check if this is still needed based on changes to Unified
+// Consent.
 class ContextualSearchPreferenceHelper {
  public:
   ContextualSearchPreferenceHelper(JNIEnv* env, jobject obj);

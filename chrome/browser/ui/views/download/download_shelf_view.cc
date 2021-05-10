@@ -28,6 +28,7 @@
 #include "components/vector_icons/vector_icons.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/tween.h"
@@ -80,7 +81,6 @@ DownloadShelfView::DownloadShelfView(Browser* browser, BrowserView* parent)
       base::BindRepeating(&DownloadShelf::Close, base::Unretained(this))));
   close_button_->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_ACCNAME_CLOSE));
-  close_button_->SetFocusForPlatform();
   close_button_->SizeToPreferredSize();
 
   accessible_alert_ = AddChildView(std::make_unique<views::View>());
@@ -116,6 +116,10 @@ bool DownloadShelfView::IsShowing() const {
 
 bool DownloadShelfView::IsClosing() const {
   return shelf_animation_.IsClosing();
+}
+
+views::View* DownloadShelfView::GetView() {
+  return this;
 }
 
 gfx::Size DownloadShelfView::CalculatePreferredSize() const {
@@ -356,3 +360,6 @@ views::View* DownloadShelfView::GetDefaultFocusableChild() {
   return download_views_.empty() ? static_cast<views::View*>(show_all_view_)
                                  : download_views_.back();
 }
+
+BEGIN_METADATA(DownloadShelfView, views::AccessiblePaneView)
+END_METADATA

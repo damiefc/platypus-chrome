@@ -1,17 +1,23 @@
 include_rules = [
   "+cc/base",
+  "+components/viz/common/resources/resource_format.h",
+  "+mojo/public/cpp/bindings",
   "+third_party/khronos",
   "+third_party/libsync",
   "+third_party/skia",
   "+ui/events",
   "+ui/base/x",
   "+ui/gfx",
+  "+ui/ozone/buildflags.h",
 ]
 
 specific_include_rules = {
 # Allow us to include ANGLE's base platform implementation.
   "angle_platform_impl.cc": [
     "+third_party/angle/include/platform/PlatformMethods.h",
+  ],
+  "delegated_ink_point_renderer_gpu_unittest.cc": [
+    "+ui/base/win/hidden_window.h",
   ],
   "direct_composition_surface_win_unittest.cc": [
     "+ui/base/win/hidden_window.h",
@@ -21,6 +27,9 @@ specific_include_rules = {
     "+third_party/angle/include/EGL/egl.h",
     "+third_party/angle/include/EGL/eglext.h",
   ],
+  "gl_fence_win_unittest.cc": [
+    "+media/base/win/d3d11_mocks.h",
+  ],
   "gl_surface_egl_unittest.cc": [
     "+ui/platform_window",
   ],
@@ -29,5 +38,8 @@ specific_include_rules = {
   ],
   "hdr_metadata_helper_win_unittest.cc": [
     "+media/base/win/d3d11_mocks.h",
+  ],
+  "swap_chain_presenter.cc": [
+    "+media/base/win/mf_helpers.h"
   ],
 }

@@ -15,7 +15,6 @@
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/thread_pool.h"
@@ -23,9 +22,11 @@
 #include "base/timer/hi_res_timer_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/viz/service/main/viz_main_impl.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/content_switches_internal.h"
+#include "content/common/partition_alloc_support.h"
 #include "content/common/skia_utils.h"
 #include "content/gpu/gpu_child_thread.h"
 #include "content/gpu/gpu_process.h"
@@ -46,6 +47,7 @@
 #include "gpu/ipc/service/gpu_init.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 #include "media/gpu/buildflags.h"
+#include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "third_party/angle/src/gpu_info_util/SystemInfo.h"
 #include "ui/base/ui_base_features.h"
@@ -59,8 +61,8 @@
 #include "ui/gl/init/gl_factory.h"
 
 #if defined(OS_WIN)
-#include <windows.h>
 #include <dwmapi.h>
+#include <windows.h>
 #endif
 
 #if defined(OS_ANDROID)
@@ -81,9 +83,7 @@
 #include "ui/base/x/x11_ui_thread.h"                     // nogncheck
 #include "ui/base/x/x11_util.h"                          // nogncheck
 #include "ui/gfx/linux/gpu_memory_buffer_support_x11.h"  // nogncheck
-#include "ui/gfx/x/x11.h"                                // nogncheck
 #include "ui/gfx/x/x11_switches.h"                       // nogncheck
-#include "ui/gfx/x/x11_types.h"                          // nogncheck
 #endif
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
@@ -96,10 +96,8 @@
 #include "base/message_loop/message_pump_mac.h"
 #include "components/metal_util/device_removal.h"
 #include "components/metal_util/test_shader.h"
-#include "content/public/common/content_features.h"
 #include "media/gpu/mac/vt_video_decode_accelerator_mac.h"
 #include "sandbox/mac/seatbelt.h"
-#include "sandbox/policy/mac/sandbox_mac.h"
 #endif
 
 #if BUILDFLAG(USE_VAAPI)
@@ -131,7 +129,7 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
 
  private:
   // SandboxHelper:
-  void PreSandboxStartup() override {
+  void PreSandboxStartup(const gpu::GpuPreferences& gpu_prefs) override {
     // Warm up resources that don't need access to GPUInfo.
     {
       TRACE_EVENT0("gpu", "Warm up rand");
@@ -141,15 +139,20 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
     }
 
 #if BUILDFLAG(USE_VAAPI)
+#if defined(OS_CHROMEOS)
     media::VaapiWrapper::PreSandboxInitialization();
+#else  // For Linux with VA-API support.
+    if (!gpu_prefs.disable_accelerated_video_decode)
+      media::VaapiWrapper::PreSandboxInitialization();
 #endif
+#endif  // BUILDFLAG(USE_VAAPI)
 #if defined(OS_WIN)
     media::DXVAVideoDecodeAccelerator::PreSandboxInitialization();
     media::MediaFoundationVideoEncodeAccelerator::PreSandboxInitialization();
 #endif
 
 #if defined(OS_MAC)
-    if (base::FeatureList::IsEnabled(features::kMacV2GPUSandbox)) {
+    {
       TRACE_EVENT0("gpu", "Initialize VideoToolbox");
       media::InitializeVideoToolbox();
     }
@@ -181,33 +184,6 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
   DISALLOW_COPY_AND_ASSIGN(ContentSandboxHelper);
 };
 
-#if defined(OS_MAC)
-void TestShaderCallback(metal::TestShaderComponent component,
-                        metal::TestShaderResult result,
-                        const base::TimeDelta& callback_time) {
-  switch (result) {
-    case metal::TestShaderResult::kNotAttempted:
-    case metal::TestShaderResult::kFailed:
-      // Don't include data if no Metal device was created (e.g, due to hardware
-      // or macOS version reasons).
-      return;
-    case metal::TestShaderResult::kTimedOut:
-      break;
-    case metal::TestShaderResult::kSucceeded:
-      break;
-  }
-  switch (component) {
-    case metal::TestShaderComponent::kCompile:
-      UMA_HISTOGRAM_MEDIUM_TIMES("Gpu.Metal.TestShaderCompileTime",
-                                 callback_time);
-      break;
-    case metal::TestShaderComponent::kLink:
-      UMA_HISTOGRAM_MEDIUM_TIMES("Gpu.Metal.TestShaderLinkTime", callback_time);
-      break;
-  }
-}
-#endif
-
 }  // namespace
 
 // Main function for starting the Gpu process.
@@ -227,6 +203,13 @@ int GpuMain(const MainFunctionParams& parameters) {
     CHECK(success);
   }
 
+  // Disallow sending sync IPCs from the GPU process, in particular CrGpuMain
+  // and VizCompositorThreads. Incoming sync IPCs can be received out of order
+  // when waiting on response to an outgoing sync IPC. Both viz and gpu
+  // interfaces rely on receiving messages in order so this message reordering
+  // would break things.
+  mojo::SyncCallRestrictions::DisallowSyncCall();
+
   if (gpu_preferences.gpu_startup_dialog)
     WaitForDebugger("Gpu");
 
@@ -237,10 +220,8 @@ int GpuMain(const MainFunctionParams& parameters) {
 
   // Prevent Windows from displaying a modal dialog on failures like not being
   // able to load a DLL.
-  SetErrorMode(
-      SEM_FAILCRITICALERRORS |
-      SEM_NOGPFAULTERRORBOX |
-      SEM_NOOPENFILEERRORBOX);
+  SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX |
+               SEM_NOOPENFILEERRORBOX);
 
   // COM is used by some Windows Media Foundation calls made on this thread and
   // must be MTA so we don't have to worry about pumping messages to handle
@@ -280,8 +261,7 @@ int GpuMain(const MainFunctionParams& parameters) {
     if (!features::IsUsingOzonePlatform()) {
       // We need a UI loop so that we can grab the Expose events. See
       // GLSurfaceGLX and https://crbug.com/326995.
-      ui::SetDefaultX11ErrorHandlers();
-      if (!gfx::GetXDisplay())
+      if (!x11::Connection::Get()->Ready())
         return RESULT_CODE_GPU_DEAD_ON_ARRIVAL;
       main_thread_task_executor =
           std::make_unique<base::SingleThreadTaskExecutor>(
@@ -430,11 +410,6 @@ int GpuMain(const MainFunctionParams& parameters) {
   // process exits, it appears that the browser process is no longer considered
   // to be using the GPU, so it "succeeds" the 'wait'.
   metal::RegisterGracefulExitOnDeviceRemoval();
-
-  // Launch a test metal shader compile to see how long it takes to complete (if
-  // it ever completes).
-  // https://crbug.com/974219
-  metal::TestShader(base::BindOnce(TestShaderCallback));
 #endif
 
 #if defined(OS_ANDROID)
@@ -442,6 +417,9 @@ int GpuMain(const MainFunctionParams& parameters) {
       tracing::GraphicsMemoryDumpProvider::GetInstance(), "AndroidGraphics",
       nullptr);
 #endif
+
+  internal::PartitionAllocSupport::Get()->ReconfigureAfterTaskRunnerInit(
+      switches::kGpuProcess);
 
   base::HighResolutionTimerManager hi_res_timer_manager;
 
@@ -474,6 +452,8 @@ bool StartSandboxLinux(gpu::GpuWatchdogThread* watchdog_thread,
       gpu_info && angle::IsAMD(gpu_info->active_gpu().vendor_id);
   sandbox_options.use_intel_specific_policies =
       gpu_info && angle::IsIntel(gpu_info->active_gpu().vendor_id);
+  sandbox_options.use_nvidia_specific_policies =
+      gpu_info && angle::IsNVIDIA(gpu_info->active_gpu().vendor_id);
   sandbox_options.accelerated_video_decode_enabled =
       !gpu_prefs.disable_accelerated_video_decode;
   sandbox_options.accelerated_video_encode_enabled =

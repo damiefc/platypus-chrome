@@ -10,7 +10,6 @@ import android.content.res.Configuration;
 import android.content.res.TypedArray;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.graphics.drawable.Drawable;
 import android.view.ContextThemeWrapper;
 import android.view.Display;
 import android.view.Menu;
@@ -61,11 +60,6 @@ class AppMenuHandlerImpl
     private Integer mHighlightMenuId;
 
     /**
-     *  Whether the highlighted item should use a circle highlight or not.
-     */
-    private boolean mCircleHighlight;
-
-    /**
      * Constructs an AppMenuHandlerImpl object.
      * @param delegate Delegate used to check the desired AppMenu properties on show.
      * @param appMenuDelegate The AppMenuDelegate to handle menu item selection.
@@ -114,15 +108,14 @@ class AppMenuHandlerImpl
 
     @Override
     public void clearMenuHighlight() {
-        setMenuHighlight(null, false);
+        setMenuHighlight(null);
     }
 
     @Override
-    public void setMenuHighlight(Integer highlightItemId, boolean circleHighlight) {
+    public void setMenuHighlight(Integer highlightItemId) {
         if (mHighlightMenuId == null && highlightItemId == null) return;
         if (mHighlightMenuId != null && mHighlightMenuId.equals(highlightItemId)) return;
         mHighlightMenuId = highlightItemId;
-        mCircleHighlight = circleHighlight;
         boolean highlighting = mHighlightMenuId != null;
         for (AppMenuObserver observer : mObservers) observer.onMenuHighlightChanged(highlighting);
     }
@@ -190,8 +183,6 @@ class AppMenuHandlerImpl
             TypedArray a = wrapper.obtainStyledAttributes(
                     new int[] {android.R.attr.listPreferredItemHeightSmall});
             int itemRowHeight = a.getDimensionPixelSize(0, 0);
-            Drawable itemDivider = a.getDrawable(1);
-            int itemDividerHeight = itemDivider != null ? itemDivider.getIntrinsicHeight() : 0;
             a.recycle();
             mAppMenu = new AppMenu(mMenu, itemRowHeight, this, context.getResources(),
                     mDelegate.shouldShowIconBeforeItem());
@@ -222,7 +213,8 @@ class AppMenuHandlerImpl
         }
         mAppMenu.show(wrapper, anchorView, isByPermanentButton, rotation, appRect, pt.y,
                 footerResourceId, headerResourceId, mDelegate.getGroupDividerId(), mHighlightMenuId,
-                mCircleHighlight, mDelegate.getCustomViewBinders());
+                mDelegate.getCustomViewBinders());
+        if (mHighlightMenuId != null) mDelegate.recordHighlightedMenuItemShown(mHighlightMenuId);
         mAppMenuDragHelper.onShow(startDragging);
         clearMenuHighlight();
         RecordUserAction.record("MobileMenuShow");
@@ -290,7 +282,7 @@ class AppMenuHandlerImpl
     }
 
     @VisibleForTesting
-    void onOptionsItemSelected(MenuItem item) {
+    void onOptionsItemSelected(MenuItem item, boolean highlighted) {
         if (mTestOptionsItemSelectedListener != null) {
             mTestOptionsItemSelectedListener.onResult(item);
             return;
@@ -298,6 +290,7 @@ class AppMenuHandlerImpl
 
         mAppMenuDelegate.onOptionsItemSelected(
                 item.getItemId(), mDelegate.getBundleForMenuItem(item));
+        if (highlighted) mDelegate.recordHighlightedMenuItemClicked(item.getItemId());
     }
 
     /**

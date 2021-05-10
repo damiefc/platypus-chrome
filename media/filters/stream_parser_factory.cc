@@ -14,13 +14,16 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
+#include "media/base/audio_decoder_config.h"
 #include "media/base/media.h"
 #include "media/base/media_switches.h"
 #include "media/base/media_util.h"
 #include "media/base/video_codecs.h"
+#include "media/base/video_decoder_config.h"
 #include "media/formats/mp4/mp4_stream_parser.h"
 #include "media/formats/mpeg/adts_stream_parser.h"
 #include "media/formats/mpeg/mpeg1_audio_stream_parser.h"
+#include "media/formats/webcodecs/webcodecs_encoded_chunk_stream_parser.h"
 #include "media/formats/webm/webm_stream_parser.h"
 #include "media/media_buildflags.h"
 
@@ -43,7 +46,7 @@ typedef bool (*CodecIDValidatorFunction)(const std::string& codecs_id,
 struct CodecInfo {
   enum Type { UNKNOWN, AUDIO, VIDEO };
 
-  // Update tools/metrics/histograms/histograms.xml if new values are added.
+  // Update tools/metrics/histograms/enums.xml if new values are added.
   enum HistogramTag {
     HISTOGRAM_UNKNOWN,
     HISTOGRAM_VP8,
@@ -373,7 +376,7 @@ static StreamParser* BuildMP2TParser(const std::vector<std::string>& codecs,
     }
   }
 
-  return new media::mp2t::Mp2tStreamParser(has_sbr);
+  return new media::mp2t::Mp2tStreamParser(codecs, has_sbr);
 }
 #endif  // ENABLE_MSE_MPEG2TS_STREAM_PARSER
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
@@ -517,6 +520,7 @@ static SupportsType CheckTypeAndCodecs(
   return IsNotSupported;
 }
 
+// static
 SupportsType StreamParserFactory::IsTypeSupported(
     const std::string& type,
     const std::vector<std::string>& codecs) {
@@ -526,6 +530,7 @@ SupportsType StreamParserFactory::IsTypeSupported(
                             nullptr);
 }
 
+// static
 std::unique_ptr<StreamParser> StreamParserFactory::Create(
     const std::string& type,
     const std::vector<std::string>& codecs,
@@ -535,18 +540,19 @@ std::unique_ptr<StreamParser> StreamParserFactory::Create(
   std::vector<CodecInfo::HistogramTag> audio_codecs;
   std::vector<CodecInfo::HistogramTag> video_codecs;
 
-  if (IsSupported == CheckTypeAndCodecs(type, codecs, media_log,
-                                        &factory_function, &audio_codecs,
-                                        &video_codecs)) {
+  // TODO(crbug.com/535738): Relax the requirement for specific codecs (allow
+  // MayBeSupported here), and relocate the logging to the parser configuration
+  // callback. This creation method is called in AddId(), and also in
+  // CanChangeType() and ChangeType(), so potentially overlogs codecs leading to
+  // disproportion versus actually parsed codec configurations from
+  // initialization segments. For this work and also recording when implicit
+  // codec switching occurs (without explicit ChangeType), see
+  // https://crbug.com/535738.
+  SupportsType supportsType = CheckTypeAndCodecs(
+      type, codecs, media_log, &factory_function, &audio_codecs, &video_codecs);
+
+  if (IsSupported == supportsType) {
     // Log the expected codecs.
-    // TODO(wolenetz): Relax the requirement for specific codecs (allow
-    // MayBeSupported here), and relocate the logging to the parser
-    // configuration callback. This creation method is called in AddId(), and
-    // also in CanChangeType() and ChangeType(), so potentially overlogs codecs
-    // leading to disproportion versus actually parsed codec configurations from
-    // initialization segments. For this work and also recording when implicit
-    // codec switching occurs (without explicit ChangeType), see
-    // https://crbug.com/535738.
     for (size_t i = 0; i < audio_codecs.size(); ++i) {
       UMA_HISTOGRAM_ENUMERATION("Media.MSE.AudioCodec", audio_codecs[i],
                                 CodecInfo::HISTOGRAM_MAX + 1);
@@ -567,6 +573,30 @@ std::unique_ptr<StreamParser> StreamParserFactory::Create(
   }
 
   return stream_parser;
+}
+
+// static
+std::unique_ptr<StreamParser> StreamParserFactory::Create(
+    std::unique_ptr<AudioDecoderConfig> audio_config) {
+  DCHECK(audio_config);
+
+  // TODO(crbug.com/1144908): Histogram-log the codec used for buffering
+  // WebCodecs in MSE?
+
+  return std::make_unique<media::WebCodecsEncodedChunkStreamParser>(
+      std::move(audio_config));
+}
+
+// static
+std::unique_ptr<StreamParser> StreamParserFactory::Create(
+    std::unique_ptr<VideoDecoderConfig> video_config) {
+  DCHECK(video_config);
+
+  // TODO(crbug.com/1144908): Histogram-log the codec used for buffering
+  // WebCodecs in MSE?
+
+  return std::make_unique<media::WebCodecsEncodedChunkStreamParser>(
+      std::move(video_config));
 }
 
 }  // namespace media

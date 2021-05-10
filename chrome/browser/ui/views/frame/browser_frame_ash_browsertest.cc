@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/frame/browser_frame_ash.h"
 
+#include "ash/wm/window_state.h"
+#include "ash/wm/wm_event.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -47,7 +49,7 @@ IN_PROC_BROWSER_TEST_P(BrowserTestParam,
   gfx::Rect original_bounds(gfx::Rect(150, 250, 510, 150));
   params.initial_show_state = ui::SHOW_STATE_NORMAL;
   params.initial_bounds = original_bounds;
-  Browser* browser = new Browser(params);
+  Browser* browser = Browser::Create(params);
   browser->window()->Show();
 
   // The bounds passed via |initial_bounds| should be respected regardless of
@@ -59,7 +61,7 @@ IN_PROC_BROWSER_TEST_P(BrowserTestParam,
   // tabbed windows, the position should be auto-managed.
   browser->window()->Close();
   params.initial_bounds = gfx::Rect();
-  browser = new Browser(params);
+  browser = Browser::Create(params);
   browser->window()->Show();
 
   // For tabbed browser window, it will be centered to work area by auto window
@@ -76,6 +78,33 @@ IN_PROC_BROWSER_TEST_P(BrowserTestParam,
 
   EXPECT_EQ(expectation, browser->window()->GetBounds())
       << (is_test_app ? "for app window" : "for tabbed browser window");
+}
+
+using BrowserFrameAshTest = InProcessBrowserTest;
+
+// Tests that the correct bounds are being saved when a snapped window is
+// closed.
+IN_PROC_BROWSER_TEST_F(BrowserFrameAshTest, SnappedWindowSaveBounds) {
+  aura::Window* window = browser()->window()->GetNativeWindow();
+  const gfx::Rect restored_bounds(200, 200);
+  window->SetBounds(restored_bounds);
+
+  // Snap the window to the left.
+  const ash::WMEvent left_snap_event(ash::WM_EVENT_SNAP_LEFT);
+  ash::WindowState::Get(window)->OnWMEvent(&left_snap_event);
+  const gfx::Size snapped_size = window->GetBoundsInScreen().size();
+
+  // Get the params using the same profile.
+  Browser::CreateParams params =
+      Browser::CreateParams(browser()->profile(), /*user_gesture=*/true);
+  browser()->window()->Close();
+
+  // Recreate the browser window. Test that the bounds are the same as the
+  // snapped size (position has been shifted by the ash auto window positioner).
+  Browser* browser = Browser::Create(params);
+  browser->window()->Show();
+  aura::Window* new_window = browser->window()->GetNativeWindow();
+  EXPECT_EQ(snapped_size, new_window->GetBoundsInScreen().size());
 }
 
 INSTANTIATE_TEST_SUITE_P(BrowserTestTabbedOrApp,

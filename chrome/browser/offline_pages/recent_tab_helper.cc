@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
@@ -271,12 +271,14 @@ void RecentTabHelper::DidFinishNavigation(
       << " - Page can not be saved by last_n";
 }
 
-void RecentTabHelper::DocumentAvailableInMainFrame() {
+void RecentTabHelper::DocumentAvailableInMainFrame(
+    content::RenderFrameHost* render_frame_host) {
   EnsureInitialized();
   snapshot_controller_->DocumentAvailableInMainFrame();
 }
 
-void RecentTabHelper::DocumentOnLoadCompletedInMainFrame() {
+void RecentTabHelper::DocumentOnLoadCompletedInMainFrame(
+    content::RenderFrameHost* render_frame_host) {
   EnsureInitialized();
   snapshot_controller_->DocumentOnLoadCompletedInMainFrame();
 }

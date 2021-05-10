@@ -14,7 +14,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/util/type_safety/strong_alias.h"
+#include "base/types/strong_alias.h"
 #include "build/build_config.h"
 #include "components/autofill/content/common/mojom/autofill_agent.mojom.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
@@ -24,11 +24,9 @@
 #include "components/autofill/content/renderer/html_based_username_detector.h"
 #include "components/autofill/core/common/field_data_manager.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
-#include "components/autofill/core/common/renderer_id.h"
+#include "components/autofill/core/common/unique_ids.h"
 #include "content/public/renderer/render_frame_observer.h"
-#include "content/public/renderer/render_view_observer.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
@@ -109,9 +107,9 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
                               public FormTracker::Observer,
                               public mojom::PasswordAutofillAgent {
  public:
-  using UseFallbackData = util::StrongAlias<class UseFallbackDataTag, bool>;
-  using ShowAll = util::StrongAlias<class ShowAllTag, bool>;
-  using GenerationShowing = util::StrongAlias<class GenerationShowingTag, bool>;
+  using UseFallbackData = base::StrongAlias<class UseFallbackDataTag, bool>;
+  using ShowAll = base::StrongAlias<class ShowAllTag, bool>;
+  using GenerationShowing = base::StrongAlias<class GenerationShowingTag, bool>;
 
   PasswordAutofillAgent(content::RenderFrame* render_frame,
                         blink::AssociatedInterfaceRegistry* registry);
@@ -133,7 +131,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void InformNoSavedCredentials(
       bool should_show_popup_without_passwords) override;
   void FillIntoFocusedField(bool is_password,
-                            const base::string16& credential) override;
+                            const std::u16string& credential) override;
   void SetLoggingState(bool active) override;
   void TouchToFillClosed(bool show_virtual_keyboard) override;
   void AnnotateFieldsWithParsingResult(
@@ -163,11 +161,14 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // shown.
   void UpdateStateForTextChange(const blink::WebInputElement& element);
 
+  // Instructs `autofill_agent_` to track the autofilled `element`.
+  void TrackAutofilledElement(const blink::WebFormControlElement& element);
+
   // Fills the username and password fields of this form with the given values.
   // Returns true if the fields were filled, false otherwise.
   bool FillSuggestion(const blink::WebFormControlElement& control_element,
-                      const base::string16& username,
-                      const base::string16& password);
+                      const std::u16string& username,
+                      const std::u16string& password);
 
   // Previews the username and password fields of this form with the given
   // values. Returns true if the fields were previewed, false otherwise.
@@ -221,6 +222,16 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
   std::unique_ptr<FormData> GetFormDataFromUnownedInputElements();
 
+  // Notification that form element was cleared by HTMLFormElement::reset()
+  // method. This can be used as a signal of a successful submission for change
+  // password forms.
+  void InformAboutFormClearing(const blink::WebFormElement& form);
+
+  // Notification that input element was cleared by HTMLInputValue::SetValue()
+  // method by setting an empty value. This can be used as a signal of a
+  // successful submission for change password forms.
+  void InformAboutFieldClearing(const blink::WebInputElement& element);
+
   bool logging_state_active() const { return logging_state_active_; }
 
   // Determine whether the current frame is allowed to access the password
@@ -241,7 +252,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   }
 
  private:
-  using OnPasswordField = util::StrongAlias<class OnPasswordFieldTag, bool>;
+  using OnPasswordField = base::StrongAlias<class OnPasswordFieldTag, bool>;
 
   // Enumeration representing possible Touch To Fill states. This is used to
   // make sure that Touch To Fill will only be shown in response to the first
@@ -297,9 +308,11 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
     explicit FocusStateNotifier(PasswordAutofillAgent* agent);
     ~FocusStateNotifier();
 
-    void FocusedInputChanged(mojom::FocusedFieldType focused_field_type);
+    void FocusedInputChanged(FieldRendererId focused_field_id,
+                             mojom::FocusedFieldType focused_field_type);
 
    private:
+    FieldRendererId focused_field_id_;
     mojom::FocusedFieldType focused_field_type_ =
         mojom::FocusedFieldType::kUnknown;
     PasswordAutofillAgent* agent_ = nullptr;
@@ -307,16 +320,17 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
     DISALLOW_COPY_AND_ASSIGN(FocusStateNotifier);
   };
 
-  // This class keeps track of autofilled password input elements and makes sure
-  // the autofilled password value is not accessible to JavaScript code until
-  // the user interacts with the page.
+  // This class keeps track of autofilled username and password input elements
+  // and ensures that the autofilled values are not accessible to JavaScript
+  // code until the user interacts with the page. This restriction improves
+  // privacy (crbug.com/798492) and reduces attack surface (crbug.com/777272).
   class PasswordValueGatekeeper {
    public:
     PasswordValueGatekeeper();
     ~PasswordValueGatekeeper();
 
-    // Call this for every autofilled password field, so that the gatekeeper
-    // protects the value accordingly.
+    // Call this for every autofilled username and password field, so that
+    // the gatekeeper protects the value accordingly.
     void RegisterElement(blink::WebInputElement* element);
 
     // Call this to notify the gatekeeper that the user interacted with the
@@ -352,7 +366,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // username exists, it should be passed as |user_input|. If there is no
   // username, pass the password field in |user_input|. In the latter case, no
   // username value will be shown in the pop-up.
-  void ShowSuggestionPopup(const base::string16& typed_username,
+  void ShowSuggestionPopup(const std::u16string& typed_username,
                            const blink::WebInputElement& user_input,
                            ShowAll show_all,
                            OnPasswordField show_on_password_field);
@@ -384,12 +398,12 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // Checks that a given input field is valid before filling the given |input|
   // with the given |credential| and marking the field as auto-filled.
   void FillField(blink::WebInputElement* input,
-                 const base::string16& credential);
+                 const std::u16string& credential);
 
   // Uses |FillField| to fill the given |credential| into the |password_input|.
   // Saves the password for its associated form.
   void FillPasswordFieldAndSave(blink::WebInputElement* password_input,
-                                const base::string16& credential);
+                                const std::u16string& credential);
 
   // |form| and |input| are the elements user has just been interacting with
   // before the form save. |form| or |input| can be null but not both at the
@@ -457,13 +471,22 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // Autofills |field| with |value| and updates |gatekeeper_|,
   // |field_data_manager_|, |autofilled_elements_cache_|. |field| should be
   // non-null.
-  void AutofillField(const base::string16& value, blink::WebInputElement field);
+  void AutofillField(const std::u16string& value, blink::WebInputElement field);
 
   void SetLastUpdatedFormAndField(const blink::WebFormElement& form,
                                   const blink::WebFormControlElement& input);
 
   bool CanShowPopupWithoutPasswords(
       const blink::WebInputElement& password_element) const;
+
+  // Returns true if the element is of type 'password' and has either user typed
+  // input or input autofilled on user trigger.
+  bool IsPasswordFieldFilledByUser(
+      const blink::WebFormControlElement& element) const;
+
+  // Extracts and sends the form data of |cleared_form| to PasswordManager.
+  void NotifyPasswordManagerAboutClearedForm(
+      const blink::WebFormElement& cleared_form);
 
   // The logins we have filled so far with their associated info.
   WebInputToPasswordInfoMap web_input_to_password_info_;
@@ -511,7 +534,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   bool checked_safe_browsing_reputation_;
 
   // Records the username typed before suggestions preview.
-  base::string16 username_query_prefix_;
+  std::u16string username_query_prefix_;
 
   // This notifier is used to avoid sending redundant messages to the password
   // manager driver mojo interface.

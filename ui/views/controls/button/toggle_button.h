@@ -21,7 +21,6 @@ class VIEWS_EXPORT ToggleButton : public Button {
   METADATA_HEADER(ToggleButton);
 
   explicit ToggleButton(PressedCallback callback = PressedCallback());
-  explicit ToggleButton(ButtonListener* listener);
   ~ToggleButton() override;
 
   // AnimateIsOn() animates the state change to |is_on|; SetIsOn() doesn't.
@@ -70,11 +69,6 @@ class VIEWS_EXPORT ToggleButton : public Button {
   // Button:
   void NotifyClick(const ui::Event& event) override;
   void PaintButtonContents(gfx::Canvas* canvas) override;
-  void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
-  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
-  std::unique_ptr<InkDrop> CreateInkDrop() override;
-  std::unique_ptr<InkDropRipple> CreateInkDropRipple() const override;
-  SkColor GetInkDropBaseColor() const override;
 
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;

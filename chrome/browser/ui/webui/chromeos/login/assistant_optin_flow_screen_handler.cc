@@ -7,12 +7,12 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
+#include "chrome/browser/ash/login/oobe_screen.h"
+#include "chrome/browser/ash/login/screens/assistant_optin_flow_screen.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/login/oobe_screen.h"
-#include "chrome/browser/chromeos/login/screens/assistant_optin_flow_screen.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/chromeos/assistant_optin/assistant_optin_utils.h"
@@ -55,7 +55,7 @@ AssistantOptInFlowScreenHandler::AssistantOptInFlowScreenHandler(
 }
 
 AssistantOptInFlowScreenHandler::~AssistantOptInFlowScreenHandler() {
-  if (voice_match_enrollment_started_)
+  if (assistant::AssistantSettings::Get() && voice_match_enrollment_started_)
     StopSpeakerIdEnrollment();
   if (ash::AssistantState::Get())
     ash::AssistantState::Get()->RemoveObserver(this);
@@ -74,10 +74,22 @@ void AssistantOptInFlowScreenHandler::DeclareLocalizedValues(
   builder->Add("assistantOptinSkipButton", IDS_ASSISTANT_OPT_IN_SKIP_BUTTON);
   builder->Add("assistantOptinRetryButton", IDS_ASSISTANT_OPT_IN_RETRY_BUTTON);
   builder->Add("assistantUserImage", IDS_ASSISTANT_OOBE_USER_IMAGE);
+  builder->Add("assistantRelatedInfoTitle",
+               IDS_ASSISTANT_RELATED_INFO_SCREEN_TITLE);
+  builder->Add("assistantRelatedInfoMessage",
+               IDS_ASSISTANT_RELATED_INFO_SCREEN_MESSAGE);
+  builder->Add("assistantRelatedInfoReturnedUserTitle",
+               IDS_ASSISTANT_RELATED_INFO_SCREEN_RETURNED_USER_TITLE);
+  builder->Add("assistantRelatedInfoReturnedUserMessage",
+               IDS_ASSISTANT_RELATED_INFO_SCREEN_RETURNED_USER_MESSAGE);
+  builder->Add("assistantScreenContextTitle",
+               IDS_ASSISTANT_SCREEN_CONTEXT_TITLE);
+  builder->Add("assistantScreenContextDesc", IDS_ASSISTANT_SCREEN_CONTEXT_DESC);
   builder->Add("assistantVoiceMatchTitle", IDS_ASSISTANT_VOICE_MATCH_TITLE);
-  builder->Add("assistantVoiceMatchMessage", IDS_ASSISTANT_VOICE_MATCH_MESSAGE);
-  builder->Add("assistantVoiceMatchNoDspMessage",
-               IDS_ASSISTANT_VOICE_MATCH_NO_DSP_MESSAGE);
+  builder->Add("assistantVoiceMatchMessage",
+               chromeos::IsHotwordDspAvailable() && !DeviceHasBattery()
+                   ? IDS_ASSISTANT_VOICE_MATCH_MESSAGE
+                   : IDS_ASSISTANT_VOICE_MATCH_NO_DSP_MESSAGE);
   builder->Add("assistantVoiceMatchRecording",
                IDS_ASSISTANT_VOICE_MATCH_RECORDING);
   builder->Add("assistantVoiceMatchCompleted",
@@ -122,6 +134,9 @@ void AssistantOptInFlowScreenHandler::RegisterMessages() {
       "login.AssistantOptInFlowScreen.ValuePropScreen.userActed",
       &AssistantOptInFlowScreenHandler::HandleValuePropScreenUserAction);
   AddCallback(
+      "login.AssistantOptInFlowScreen.RelatedInfoScreen.userActed",
+      &AssistantOptInFlowScreenHandler::HandleRelatedInfoScreenUserAction);
+  AddCallback(
       "login.AssistantOptInFlowScreen.ThirdPartyScreen.userActed",
       &AssistantOptInFlowScreenHandler::HandleThirdPartyScreenUserAction);
   AddCallback(
@@ -131,6 +146,8 @@ void AssistantOptInFlowScreenHandler::RegisterMessages() {
               &AssistantOptInFlowScreenHandler::HandleGetMoreScreenUserAction);
   AddCallback("login.AssistantOptInFlowScreen.ValuePropScreen.screenShown",
               &AssistantOptInFlowScreenHandler::HandleValuePropScreenShown);
+  AddCallback("login.AssistantOptInFlowScreen.RelatedInfoScreen.screenShown",
+              &AssistantOptInFlowScreenHandler::HandleRelatedInfoScreenShown);
   AddCallback("login.AssistantOptInFlowScreen.ThirdPartyScreen.screenShown",
               &AssistantOptInFlowScreenHandler::HandleThirdPartyScreenShown);
   AddCallback("login.AssistantOptInFlowScreen.VoiceMatchScreen.screenShown",
@@ -147,10 +164,10 @@ void AssistantOptInFlowScreenHandler::RegisterMessages() {
 
 void AssistantOptInFlowScreenHandler::GetAdditionalParameters(
     base::DictionaryValue* dict) {
-  dict->SetBoolean("hotwordDspAvailable", chromeos::IsHotwordDspAvailable());
-  dict->SetBoolean("deviceHasNoBattery", !DeviceHasBattery());
   dict->SetBoolean("voiceMatchDisabled",
                    chromeos::assistant::features::IsVoiceMatchDisabled());
+  dict->SetBoolean("betterAssistantEnabled",
+                   chromeos::assistant::features::IsBetterAssistantEnabled());
   BaseScreenHandler::GetAdditionalParameters(dict);
 }
 
@@ -252,6 +269,14 @@ void AssistantOptInFlowScreenHandler::OnActivityControlOptInResult(
                                     assistant::prefs::ConsentStatus::kUnknown);
     HandleFlowFinished();
   }
+}
+
+void AssistantOptInFlowScreenHandler::OnScreenContextOptInResult(
+    bool opted_in) {
+  RecordAssistantOptInStatus(opted_in ? RELATED_INFO_ACCEPTED
+                                      : RELATED_INFO_SKIPPED);
+  PrefService* prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
+  prefs->SetBoolean(assistant::prefs::kAssistantContextEnabled, opted_in);
 }
 
 void AssistantOptInFlowScreenHandler::OnEmailOptInResult(bool opted_in) {
@@ -466,7 +491,7 @@ void AssistantOptInFlowScreenHandler::OnUpdateSettingsResponse(
     if (ui_result.consent_flow_update_result().update_status() !=
         assistant::ConsentFlowUiUpdateResult::SUCCESS) {
       // TODO(updowndta): Handle consent update failure.
-      LOG(ERROR) << "Consent udpate error.";
+      LOG(ERROR) << "Consent update error.";
     } else if (activity_control_needed_) {
       activity_control_needed_ = false;
       PrefService* prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
@@ -480,7 +505,7 @@ void AssistantOptInFlowScreenHandler::OnUpdateSettingsResponse(
     if (ui_result.email_opt_in_update_result().update_status() !=
         assistant::EmailOptInUpdateResult::SUCCESS) {
       // TODO(updowndta): Handle email optin update failure.
-      LOG(ERROR) << "Email OptIn udpate error.";
+      LOG(ERROR) << "Email OptIn update error.";
     }
     return;
   }
@@ -496,6 +521,17 @@ void AssistantOptInFlowScreenHandler::HandleValuePropScreenUserAction(
     OnActivityControlOptInResult(true);
   } else if (action == kReloadRequested) {
     SendGetSettingsRequest();
+  }
+}
+
+void AssistantOptInFlowScreenHandler::HandleRelatedInfoScreenUserAction(
+    const std::string& action) {
+  if (action == kSkipPressed) {
+    OnScreenContextOptInResult(false);
+    ShowNextScreen();
+  } else if (action == kNextPressed) {
+    OnScreenContextOptInResult(true);
+    ShowNextScreen();
   }
 }
 
@@ -534,6 +570,9 @@ void AssistantOptInFlowScreenHandler::HandleVoiceMatchScreenUserAction(
     assistant::AssistantSettings::Get()->StartSpeakerIdEnrollment(
         flow_type_ == ash::FlowType::kSpeakerIdRetrain,
         weak_factory_.GetWeakPtr());
+  } else if (action == kReloadRequested) {
+    if (voice_match_enrollment_started_)
+      StopSpeakerIdEnrollment();
   }
 }
 
@@ -548,6 +587,10 @@ void AssistantOptInFlowScreenHandler::HandleGetMoreScreenUserAction(
 
 void AssistantOptInFlowScreenHandler::HandleValuePropScreenShown() {
   RecordAssistantOptInStatus(ACTIVITY_CONTROL_SHOWN);
+}
+
+void AssistantOptInFlowScreenHandler::HandleRelatedInfoScreenShown() {
+  RecordAssistantOptInStatus(RELATED_INFO_SHOWN);
 }
 
 void AssistantOptInFlowScreenHandler::HandleThirdPartyScreenShown() {

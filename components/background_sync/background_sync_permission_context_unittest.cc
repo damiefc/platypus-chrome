@@ -39,7 +39,8 @@ class BackgroundSyncPermissionContextTest
 
     const permissions::PermissionRequestID id(
         web_contents()->GetMainFrame()->GetProcess()->GetID(),
-        web_contents()->GetMainFrame()->GetRoutingID(), /* request_id= */ -1);
+        web_contents()->GetMainFrame()->GetRoutingID(),
+        permissions::PermissionRequestID::RequestLocalId());
     permission_context->RequestPermission(
         web_contents(), id, url, /* user_gesture= */ false,
         base::AdaptCallbackForRepeating(base::BindOnce(
@@ -95,7 +96,7 @@ TEST_F(BackgroundSyncPermissionContextTest, TestBlockOrigin) {
       ->GetSettingsMap(browser_context())
       ->SetContentSettingDefaultScope(url1, GURL(),
                                       ContentSettingsType::BACKGROUND_SYNC,
-                                      std::string(), CONTENT_SETTING_BLOCK);
+                                      CONTENT_SETTING_BLOCK);
 
   NavigateAndRequestPermission(url1, &permission_context);
 

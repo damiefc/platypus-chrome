@@ -31,6 +31,7 @@ def CommonChecks(input_api, output_api):
           files_to_skip=[
               r'.*_pb2\.py',
               r'.*list_java_targets\.py',  # crbug.com/1100664
+              r'.*fast_local_dev_server\.py',  # crbug.com/1100664
           ] + build_pys,
           extra_paths_list=[
               J(),
@@ -82,9 +83,12 @@ def CommonChecks(input_api, output_api):
               J('pylib', 'gtest', 'gtest_test_instance_test.py'),
               J('pylib', 'instrumentation',
                 'instrumentation_test_instance_test.py'),
+              J('pylib', 'local', 'device', 'local_device_gtest_run_test.py'),
               J('pylib', 'local', 'device',
                 'local_device_instrumentation_test_run_test.py'),
               J('pylib', 'local', 'device', 'local_device_test_run_test.py'),
+              J('pylib', 'local', 'machine',
+                'local_machine_junit_test_run_test.py'),
               J('pylib', 'output', 'local_output_manager_test.py'),
               J('pylib', 'output', 'noop_output_manager_test.py'),
               J('pylib', 'output', 'remote_output_manager_test.py'),
@@ -101,7 +105,8 @@ def CommonChecks(input_api, output_api):
               J('pylib', 'utils', 'test_filter_test.py'),
               J('.', 'convert_dex_profile_tests.py'),
           ],
-          env=pylib_test_env))
+          env=pylib_test_env,
+          run_on_python2=False))
 
   return input_api.RunTests(tests)
 

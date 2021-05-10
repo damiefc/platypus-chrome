@@ -5,7 +5,8 @@
 #include <memory>
 
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/task/thread_pool.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "chrome/updater/persisted_data.h"
@@ -31,21 +32,6 @@ TEST(PrefsTest, PrefsCommitPendingWrites) {
 
   // Tests writing to storage completes.
   PrefsCommitPendingWrites(pref.get());
-}
-
-#if defined(OS_WIN)
-
-TEST(PrefsTest, AcquireGlobalPrefsLock_LockAgainSameThread) {
-  base::test::TaskEnvironment task_environment(
-      base::test::SingleThreadTaskEnvironment::MainThreadType::UI);
-
-  std::unique_ptr<ScopedPrefsLock> lock =
-      AcquireGlobalPrefsLock(base::TimeDelta::FromSeconds(0));
-  EXPECT_TRUE(lock);
-
-  std::unique_ptr<ScopedPrefsLock> same_thread_lock =
-      AcquireGlobalPrefsLock(base::TimeDelta::FromSeconds(0));
-  EXPECT_TRUE(same_thread_lock);
 }
 
 TEST(PrefsTest, AcquireGlobalPrefsLock_LockThenTryLockInThreadFail) {
@@ -92,7 +78,5 @@ TEST(PrefsTest, AcquireGlobalPrefsLock_TryLockInThreadSuccess) {
   auto lock = AcquireGlobalPrefsLock(base::TimeDelta::FromSeconds(0));
   EXPECT_TRUE(lock);
 }
-
-#endif
 
 }  // namespace updater

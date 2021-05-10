@@ -16,18 +16,16 @@
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/ranges.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/animation_throughput_reporter.h"
-#include "ui/compositor/paint_recorder.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
-#include "ui/gfx/skia_paint_util.h"
 #include "ui/gfx/transform_util.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/focus/focus_search.h"
@@ -107,21 +105,22 @@ int64_t GetDisplayIdForView(const views::View* view) {
 }
 
 void ReportSmoothness(bool tablet_mode, bool launcher_visible, int smoothness) {
-  base::UmaHistogramPercentage(kAnimationSmoothnessHistogram, smoothness);
+  base::UmaHistogramPercentageObsoleteDoNotUse(kAnimationSmoothnessHistogram,
+                                               smoothness);
   if (tablet_mode) {
     if (launcher_visible) {
-      base::UmaHistogramPercentage(
+      base::UmaHistogramPercentageObsoleteDoNotUse(
           kAnimationSmoothnessTabletLauncherVisibleHistogram, smoothness);
     } else {
-      base::UmaHistogramPercentage(
+      base::UmaHistogramPercentageObsoleteDoNotUse(
           kAnimationSmoothnessTabletLauncherHiddenHistogram, smoothness);
     }
   } else {
     if (launcher_visible) {
-      base::UmaHistogramPercentage(
+      base::UmaHistogramPercentageObsoleteDoNotUse(
           kAnimationSmoothnessClamshellLauncherVisibleHistogram, smoothness);
     } else {
-      base::UmaHistogramPercentage(
+      base::UmaHistogramPercentageObsoleteDoNotUse(
           kAnimationSmoothnessClamshellLauncherHiddenHistogram, smoothness);
     }
   }
@@ -189,95 +188,6 @@ class ScrollableShelfView::DragIconDropAnimationDelegate
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// GradientLayerDelegate
-
-class ScrollableShelfView::GradientLayerDelegate : public ui::LayerDelegate {
- public:
-  GradientLayerDelegate() : layer_(ui::LAYER_TEXTURED) {
-    layer_.set_delegate(this);
-    layer_.SetFillsBoundsOpaquely(false);
-  }
-
-  ~GradientLayerDelegate() override { layer_.set_delegate(nullptr); }
-
-  bool IsStartFadeZoneVisible() const {
-    return !start_fade_zone_.zone_rect.IsEmpty();
-  }
-  bool IsEndFadeZoneVisible() const {
-    return !end_fade_zone_.zone_rect.IsEmpty();
-  }
-
-  void set_start_fade_zone(const FadeZone& fade_zone) {
-    start_fade_zone_ = fade_zone;
-  }
-  void set_end_fade_zone(const FadeZone& fade_zone) {
-    end_fade_zone_ = fade_zone;
-  }
-  gfx::Rect start_fade_zone_bounds() const {
-    return start_fade_zone_.zone_rect;
-  }
-  gfx::Rect end_fade_zone_bounds() const { return end_fade_zone_.zone_rect; }
-  ui::Layer* layer() { return &layer_; }
-
- private:
-  // ui::LayerDelegate:
-  void OnPaintLayer(const ui::PaintContext& context) override {
-    const gfx::Size size = layer()->size();
-
-    views::PaintInfo paint_info =
-        views::PaintInfo::CreateRootPaintInfo(context, size);
-    const auto& paint_recording_size = paint_info.paint_recording_size();
-
-    // Pass the scale factor when constructing PaintRecorder so the MaskLayer
-    // size is not incorrectly rounded (see https://crbug.com/921274).
-    ui::PaintRecorder recorder(
-        context, paint_info.paint_recording_size(),
-        static_cast<float>(paint_recording_size.width()) / size.width(),
-        static_cast<float>(paint_recording_size.height()) / size.height(),
-        nullptr);
-
-    recorder.canvas()->DrawColor(SK_ColorBLACK, SkBlendMode::kSrc);
-
-    if (!start_fade_zone_.zone_rect.IsEmpty())
-      DrawFadeZone(start_fade_zone_, recorder.canvas());
-    if (!end_fade_zone_.zone_rect.IsEmpty())
-      DrawFadeZone(end_fade_zone_, recorder.canvas());
-  }
-  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
-                                  float new_device_scale_factor) override {}
-
-  void DrawFadeZone(const FadeZone& fade_zone, gfx::Canvas* canvas) {
-    gfx::Point start_point;
-    gfx::Point end_point;
-    if (fade_zone.is_horizontal) {
-      start_point = gfx::Point(fade_zone.zone_rect.x(), 0);
-      end_point = gfx::Point(fade_zone.zone_rect.right(), 0);
-    } else {
-      start_point = gfx::Point(0, fade_zone.zone_rect.y());
-      end_point = gfx::Point(0, fade_zone.zone_rect.bottom());
-    }
-
-    cc::PaintFlags flags;
-    flags.setBlendMode(SkBlendMode::kSrc);
-    flags.setAntiAlias(false);
-
-    flags.setShader(gfx::CreateGradientShader(
-        start_point, end_point,
-        fade_zone.fade_in ? SK_ColorTRANSPARENT : SK_ColorBLACK,
-        fade_zone.fade_in ? SK_ColorBLACK : SK_ColorTRANSPARENT));
-
-    canvas->DrawRect(fade_zone.zone_rect, flags);
-  }
-
-  ui::Layer layer_;
-
-  FadeZone start_fade_zone_;
-  FadeZone end_fade_zone_;
-
-  DISALLOW_COPY_AND_ASSIGN(GradientLayerDelegate);
-};
-
-////////////////////////////////////////////////////////////////////////////////
 // ScrollableShelfArrowView
 
 class ScrollableShelfView::ScrollableShelfArrowView
@@ -293,7 +203,7 @@ class ScrollableShelfView::ScrollableShelfArrowView
                         shelf,
                         shelf_button_delegate),
         shelf_(shelf) {
-    SetInkDropMode(InkDropMode::OFF);
+    ink_drop()->SetMode(views::InkDropHost::InkDropMode::OFF);
     SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
     SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
@@ -423,7 +333,9 @@ bool ScrollableShelfContainerView::DoesIntersectRect(
   // This view's layer is clipped. So the view should only handle the events
   // within the area after cilp.
 
-  gfx::RectF bounds = gfx::RectF(scrollable_shelf_view_->visible_space());
+  // Note that |rect| is not mirrored under RTL while |visible_space_| has been
+  // mirrored.
+  gfx::RectF bounds(GetMirroredRect(scrollable_shelf_view_->visible_space()));
   views::View::ConvertRectToTarget(scrollable_shelf_view_, this, &bounds);
   return ToEnclosedRect(bounds).Contains(rect);
 }
@@ -554,15 +466,13 @@ void ScrollableShelfView::OnFocusRingActivationChanged(bool activated) {
   if (activated) {
     focus_ring_activated_ = true;
     SetPaneFocusAndFocusDefault();
-    if (Shell::Get()->IsInTabletMode() &&
-        chromeos::switches::ShouldShowShelfHotseat())
-      GetShelf()->shelf_widget()->ForceToShowHotseat();
+    force_show_hotseat_resetter_ =
+        GetShelf()->shelf_widget()->ForceShowHotseatInTabletMode();
   } else {
     // Shows the gradient shader when the focus ring is disabled.
     focus_ring_activated_ = false;
-    if (Shell::Get()->IsInTabletMode() &&
-        chromeos::switches::ShouldShowShelfHotseat())
-      GetShelf()->shelf_widget()->ForceToHideHotseat();
+    if (force_show_hotseat_resetter_)
+      force_show_hotseat_resetter_.RunAndReset();
   }
 
   MaybeUpdateGradientZone();
@@ -603,7 +513,7 @@ views::View* ScrollableShelfView::GetDefaultFocusableChild() {
 }
 
 gfx::Rect ScrollableShelfView::GetHotseatBackgroundBounds() const {
-  return available_space_;
+  return GetMirroredRect(available_space_);
 }
 
 bool ScrollableShelfView::ShouldAdaptToRTL() const {
@@ -1140,7 +1050,6 @@ void ScrollableShelfView::OnShelfButtonAboutToRequestFocusFromTabTraversal(
   // In tablet mode, when the hotseat is not extended but one of the buttons
   // gets focused, it should update the visibility of the hotseat.
   if (Shell::Get()->IsInTabletMode() &&
-      chromeos::switches::ShouldShowShelfHotseat() &&
       !shelf_widget->hotseat_widget()->IsExtended()) {
     shelf_widget->shelf_layout_manager()->UpdateVisibilityState();
   }
@@ -1159,11 +1068,9 @@ void ScrollableShelfView::ButtonPressed(views::Button* sender,
 
 void ScrollableShelfView::HandleAccessibleActionScrollToMakeVisible(
     ShelfButton* button) {
-  if (Shell::Get()->IsInTabletMode() &&
-      chromeos::switches::ShouldShowShelfHotseat()) {
-    // Only in tablet mode with hotseat enabled, may scrollable shelf be hidden.
-    GetShelf()->shelf_widget()->ForceToShowHotseat();
-  }
+  // Scrollable shelf can only be hidden in tablet mode.
+  GetShelf()->hotseat_widget()->set_manually_extended(true);
+  GetShelf()->shelf_widget()->shelf_layout_manager()->UpdateVisibilityState();
 }
 
 std::unique_ptr<ScrollableShelfView::ScopedActiveInkDropCount>
@@ -1247,10 +1154,10 @@ const std::vector<aura::Window*> ScrollableShelfView::GetOpenWindowsForView(
   return shelf_view_->GetOpenWindowsForView(view);
 }
 
-base::string16 ScrollableShelfView::GetTitleForView(
+std::u16string ScrollableShelfView::GetTitleForView(
     const views::View* view) const {
   if (!view || !view->parent())
-    return base::string16();
+    return std::u16string();
 
   if (view->parent() == shelf_view_)
     return shelf_view_->GetTitleForView(view);
@@ -1261,7 +1168,7 @@ base::string16 ScrollableShelfView::GetTitleForView(
   if (view == right_arrow_)
     return l10n_util::GetStringUTF16(IDS_SHELF_NEXT);
 
-  return base::string16();
+  return std::u16string();
 }
 
 views::View* ScrollableShelfView::GetViewForEvent(const ui::Event& event) {
@@ -1506,9 +1413,14 @@ bool ScrollableShelfView::ShouldHandleGestures(const ui::GestureEvent& event) {
     if (!GetShelf()->IsHorizontalAlignment())
       std::swap(main_offset, cross_offset);
 
-    scroll_status_ = std::abs(main_offset) < std::abs(cross_offset)
-                         ? kAcrossMainAxisScroll
-                         : kAlongMainAxisScroll;
+    if (std::abs(main_offset) < std::abs(cross_offset)) {
+      scroll_status_ = kAcrossMainAxisScroll;
+    } else if (layout_strategy_ != kNotShowArrowButtons) {
+      // Note that if the scrollable shelf is not in overflow mode, scroll along
+      // the main axis should not make any UI differences. Do not handle scroll
+      // in this scenario.
+      scroll_status_ = kAlongMainAxisScroll;
+    }
   }
 
   bool should_handle_gestures = scroll_status_ == kAlongMainAxisScroll;
@@ -1654,6 +1566,15 @@ bool ScrollableShelfView::ProcessGestureEvent(const ui::GestureEvent& event) {
 
 void ScrollableShelfView::HandleMouseWheelEvent(ui::MouseWheelEvent* event) {
   // Note that the scrolling from touchpad is propagated as mouse wheel event.
+  // Let the shelf handle mouse wheel events over the empty area of the shelf
+  // view, as these events would be ignored by the scrollable shelf view.
+  gfx::Point location_in_shelf_view = event->location();
+  View::ConvertPointToTarget(this, shelf_view_, &location_in_shelf_view);
+  if (!shelf_view_->LocationInsideVisibleShelfItemBounds(
+          location_in_shelf_view)) {
+    GetShelf()->ProcessMouseWheelEvent(event, false);
+    return;
+  }
 
   if (!ShouldHandleScroll(gfx::Vector2dF(event->x_offset(), event->y_offset()),
                           /*is_gesture_fling=*/false)) {
@@ -1784,10 +1705,10 @@ float ScrollableShelfView::CalculateTargetOffsetAfterScroll(
   return target_offset;
 }
 
-ScrollableShelfView::FadeZone ScrollableShelfView::CalculateStartGradientZone()
-    const {
+GradientLayerDelegate::FadeZone
+ScrollableShelfView::CalculateStartGradientZone() const {
   if (!should_show_start_gradient_zone_)
-    return FadeZone();
+    return GradientLayerDelegate::FadeZone();
 
   gfx::Rect zone_rect;
   bool fade_in = false;
@@ -1821,10 +1742,10 @@ ScrollableShelfView::FadeZone ScrollableShelfView::CalculateStartGradientZone()
   return {zone_rect, fade_in, is_horizontal_alignment};
 }
 
-ScrollableShelfView::FadeZone ScrollableShelfView::CalculateEndGradientZone()
+GradientLayerDelegate::FadeZone ScrollableShelfView::CalculateEndGradientZone()
     const {
   if (!should_show_end_gradient_zone_)
-    return FadeZone();
+    return GradientLayerDelegate::FadeZone();
 
   gfx::Rect zone_rect;
   bool fade_in = false;
@@ -1885,8 +1806,10 @@ void ScrollableShelfView::MaybeUpdateGradientZone() {
   // (2) Fade zone should show and the arrow button's location changes.
   UpdateGradientZoneState();
 
-  const FadeZone target_start_fade_zone = CalculateStartGradientZone();
-  const FadeZone target_end_fade_zone = CalculateEndGradientZone();
+  const GradientLayerDelegate::FadeZone target_start_fade_zone =
+      CalculateStartGradientZone();
+  const GradientLayerDelegate::FadeZone target_end_fade_zone =
+      CalculateEndGradientZone();
 
   const bool should_update_start_fade_zone =
       target_start_fade_zone.zone_rect !=
@@ -1901,8 +1824,9 @@ void ScrollableShelfView::MaybeUpdateGradientZone() {
   PaintGradientZone(CalculateStartGradientZone(), CalculateEndGradientZone());
 }
 
-void ScrollableShelfView::PaintGradientZone(const FadeZone& start_rect,
-                                            const FadeZone& end_rect) {
+void ScrollableShelfView::PaintGradientZone(
+    const GradientLayerDelegate::FadeZone& start_rect,
+    const GradientLayerDelegate::FadeZone& end_rect) {
   gradient_layer_delegate_->set_start_fade_zone(start_rect);
   gradient_layer_delegate_->set_end_fade_zone(end_rect);
   SchedulePaint();
@@ -2108,9 +2032,8 @@ void ScrollableShelfView::UpdateAvailableSpace() {
 
 gfx::Rect ScrollableShelfView::CalculateVisibleSpace(
     LayoutStrategy layout_strategy) const {
-  const bool in_hotseat_tablet = chromeos::switches::ShouldShowShelfHotseat() &&
-                                 Shell::Get()->IsInTabletMode();
-  if (layout_strategy == kNotShowArrowButtons && !in_hotseat_tablet)
+  const bool in_tablet_mode = Shell::Get()->IsInTabletMode();
+  if (layout_strategy == kNotShowArrowButtons && !in_tablet_mode)
     return GetAvailableLocalBounds(/*use_target_bounds=*/false);
 
   const bool should_show_left_arrow =
@@ -2144,15 +2067,14 @@ gfx::Rect ScrollableShelfView::CalculateVisibleSpace(
 
 gfx::Insets ScrollableShelfView::CalculateRipplePaddingInsets() const {
   // Indicates whether it is in tablet mode with hotseat enabled.
-  const bool in_hotseat_tablet = chromeos::switches::ShouldShowShelfHotseat() &&
-                                 Shell::Get()->IsInTabletMode();
+  const bool in_tablet_mode = Shell::Get()->IsInTabletMode();
 
   const int ripple_padding =
       ShelfConfig::Get()->scrollable_shelf_ripple_padding();
   const int before_padding =
-      (in_hotseat_tablet && !ShouldShowLeftArrow()) ? 0 : ripple_padding;
+      (in_tablet_mode && !ShouldShowLeftArrow()) ? 0 : ripple_padding;
   const int after_padding =
-      (in_hotseat_tablet && !ShouldShowRightArrow()) ? 0 : ripple_padding;
+      (in_tablet_mode && !ShouldShowRightArrow()) ? 0 : ripple_padding;
 
   if (ShouldAdaptToRTL())
     return gfx::Insets(0, after_padding, 0, before_padding);
@@ -2172,9 +2094,8 @@ ScrollableShelfView::CalculateShelfContainerRoundedCorners() const {
   const bool is_in_tablet_mode =
       Shell::Get()->tablet_mode_controller() && Shell::Get()->IsInTabletMode();
 
-  if (!chromeos::switches::ShouldShowShelfHotseat() || !is_in_tablet_mode) {
+  if (!is_in_tablet_mode)
     return gfx::RoundedCornersF();
-  }
 
   const bool is_horizontal_alignment = GetShelf()->IsHorizontalAlignment();
   const float radius = (is_horizontal_alignment ? height() : width()) / 2.f;
@@ -2289,7 +2210,8 @@ void ScrollableShelfView::UpdateScrollOffset(float target_offset) {
     const bool has_gradient_zone = layer()->layer_mask_layer();
     const bool should_have_gradient_zone = ShouldApplyMaskLayerGradientZone();
     if (has_gradient_zone && !should_have_gradient_zone) {
-      PaintGradientZone(FadeZone(), FadeZone());
+      PaintGradientZone(GradientLayerDelegate::FadeZone(),
+                        GradientLayerDelegate::FadeZone());
       layer()->SetMaskLayer(nullptr);
     } else if (!has_gradient_zone && should_have_gradient_zone) {
       gradient_layer_delegate_->layer()->SetBounds(layer()->bounds());
@@ -2336,6 +2258,13 @@ bool ScrollableShelfView::ShouldCountActivatedInkDrop(
   // activated accidentally. So ignore the ink drop activity during animation.
   if (during_scroll_animation_)
     return should_count;
+
+  if (first_tappable_app_index_ == -1 || last_tappable_app_index_ == -1) {
+    // Verify that `first_tappable_app_index_` and `last_tappable_app_index_`
+    // may be both illegal. In that case, return early.
+    DCHECK_EQ(first_tappable_app_index_, last_tappable_app_index_);
+    return false;
+  }
 
   // The ink drop needs to be clipped only if |sender| is the app at one of the
   // corners of the shelf. This happens if it is either the first or the last

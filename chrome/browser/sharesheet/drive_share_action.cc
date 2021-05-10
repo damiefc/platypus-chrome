@@ -17,35 +17,32 @@
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/chromeos/strings/grit/ui_chromeos_strings.h"
-#include "ui/gfx/image/image_skia.h"
-#include "ui/gfx/paint_vector_icon.h"
 #include "url/gurl.h"
 
 DriveShareAction::DriveShareAction() = default;
 
 DriveShareAction::~DriveShareAction() = default;
 
-const base::string16 DriveShareAction::GetActionName() {
+const std::u16string DriveShareAction::GetActionName() {
   return l10n_util::GetStringUTF16(IDS_FILE_BROWSER_SHARE_BUTTON_LABEL);
 }
 
-const gfx::ImageSkia DriveShareAction::GetActionIcon() {
-  // TODO(crbug.com/1127750): Update to create the Icon at the
-  // Sharesheet bubble view. Only get the VectorIcon here.
-  return gfx::CreateVectorIcon(kPersonAddIcon, sharesheet::kIconSize,
-                               gfx::kPlaceholderColor);
+const gfx::VectorIcon& DriveShareAction::GetActionIcon() {
+  return kPersonAddIcon;
 }
 
 void DriveShareAction::LaunchAction(
     sharesheet::SharesheetController* controller,
     views::View* root_view,
     apps::mojom::IntentPtr intent) {
+  controller_ = controller;
   DCHECK(intent->drive_share_url.has_value());
-  NavigateParams params(controller->GetProfile(),
+  NavigateParams params(controller_->GetProfile(),
                         intent->drive_share_url.value(),
                         ui::PAGE_TRANSITION_LINK);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   Navigate(&params);
+  controller_->CloseSharesheet();
 }
 
 void DriveShareAction::OnClosing(sharesheet::SharesheetController* controller) {

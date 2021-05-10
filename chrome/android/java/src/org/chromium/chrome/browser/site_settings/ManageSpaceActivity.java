@@ -28,7 +28,6 @@ import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.about_settings.AboutChromeSettings;
 import org.chromium.chrome.browser.init.BrowserParts;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
@@ -38,8 +37,9 @@ import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.searchwidget.SearchWidgetProvider;
-import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
+import org.chromium.chrome.browser.version.ChromeVersionInfo;
+import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.site_settings.AllSiteSettings;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
@@ -138,7 +138,7 @@ public class ManageSpaceActivity extends AppCompatActivity implements View.OnCli
                 ChromePreferenceKeys.SETTINGS_WEBSITE_FAILED_BUILD_VERSION, productVersion);
 
         try {
-            ChromeBrowserInitializer.getInstance().handlePreNativeStartup(parts);
+            ChromeBrowserInitializer.getInstance().handlePreNativeStartupAndLoadLibraries(parts);
             ChromeBrowserInitializer.getInstance().handlePostNativeStartup(true, parts);
         } catch (Exception e) {
             // We don't want to exit, as the user should still be able to clear all browsing data.

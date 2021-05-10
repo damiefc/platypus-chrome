@@ -5,7 +5,9 @@
 #include "services/preferences/tracked/pref_hash_filter.h"
 
 #include <stdint.h>
+
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -33,9 +35,8 @@ void CleanupDeprecatedTrackedPreferences(
   // Add deprecated previously tracked preferences below for them to be cleaned
   // up from both the pref files and the hash store.
   static const char* const kDeprecatedTrackedPreferences[] = {
-      // TODO(a-v-y): Remove in M60+,
-      "default_search_provider.search_url", "default_search_provider.name",
-      "default_search_provider.keyword"};
+      // TODO(pmonette): Remove in 2022+.
+      "module_blacklist_cache_md5_digest"};
 
   for (size_t i = 0; i < base::size(kDeprecatedTrackedPreferences); ++i) {
     const char* key = kDeprecatedTrackedPreferences[i];
@@ -56,7 +57,9 @@ PrefHashFilter::PrefHashFilter(
         tracked_preferences,
     mojo::PendingRemote<prefs::mojom::ResetOnLoadObserver>
         reset_on_load_observer,
-    prefs::mojom::TrackedPreferenceValidationDelegate* delegate,
+    scoped_refptr<base::RefCountedData<
+        mojo::Remote<prefs::mojom::TrackedPreferenceValidationDelegate>>>
+        delegate,
     size_t reporting_ids_count)
     : pref_hash_store_(std::move(pref_hash_store)),
       external_validation_hash_store_pair_(
@@ -64,7 +67,8 @@ PrefHashFilter::PrefHashFilter(
               ? base::make_optional(
                     std::move(external_validation_hash_store_pair))
               : base::nullopt),
-      reset_on_load_observer_(std::move(reset_on_load_observer)) {
+      reset_on_load_observer_(std::move(reset_on_load_observer)),
+      delegate_(std::move(delegate)) {
   DCHECK(pref_hash_store_);
   DCHECK_GE(reporting_ids_count, tracked_preferences.size());
   // Verify that, if |external_validation_hash_store_pair_| is present, both its
@@ -73,6 +77,8 @@ PrefHashFilter::PrefHashFilter(
          (external_validation_hash_store_pair_->first &&
           external_validation_hash_store_pair_->second));
 
+  prefs::mojom::TrackedPreferenceValidationDelegate* delegate_ptr =
+      (delegate_ ? delegate_->data.get() : nullptr);
   for (size_t i = 0; i < tracked_preferences.size(); ++i) {
     const prefs::mojom::TrackedPreferenceMetadata& metadata =
         *tracked_preferences[i];
@@ -80,14 +86,14 @@ PrefHashFilter::PrefHashFilter(
     std::unique_ptr<TrackedPreference> tracked_preference;
     switch (metadata.strategy) {
       case PrefTrackingStrategy::ATOMIC:
-        tracked_preference.reset(new TrackedAtomicPreference(
+        tracked_preference = std::make_unique<TrackedAtomicPreference>(
             metadata.name, metadata.reporting_id, reporting_ids_count,
-            metadata.enforcement_level, metadata.value_type, delegate));
+            metadata.enforcement_level, metadata.value_type, delegate_ptr);
         break;
       case PrefTrackingStrategy::SPLIT:
-        tracked_preference.reset(new TrackedSplitPreference(
+        tracked_preference = std::make_unique<TrackedSplitPreference>(
             metadata.name, metadata.reporting_id, reporting_ids_count,
-            metadata.enforcement_level, metadata.value_type, delegate));
+            metadata.enforcement_level, metadata.value_type, delegate_ptr);
         break;
     }
     DCHECK(tracked_preference);

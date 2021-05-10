@@ -13,6 +13,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -153,11 +154,8 @@ void PurgeExtensionDataFromUnsentLogStore(
         },
         report.entries(), report.mutable_entries());
 
-    std::string reserialized_log_data;
-    report.SerializeToString(&reserialized_log_data);
-    // This allows catching errors with bad UKM serialization we've seen before
-    // that would otherwise only be noticed on the server.
-    DCHECK(UkmService::LogCanBeParsed(reserialized_log_data));
+    std::string reserialized_log_data =
+        UkmService::SerializeReportProtoToString(&report);
 
     // Replace the compressed log in the store by its filtered version.
     const std::string old_compressed_log_data =
@@ -181,11 +179,21 @@ bool UkmService::LogCanBeParsed(const std::string& serialized_data) {
   bool report_parse_successful = report.ParseFromString(serialized_data);
   if (!report_parse_successful)
     return false;
-  // Make sure the reserialzed log from this |report| matches the input
+  // Make sure the reserialized log from this |report| matches the input
   // |serialized_data|.
   std::string reserialized_from_report;
   report.SerializeToString(&reserialized_from_report);
   return reserialized_from_report == serialized_data;
+}
+
+std::string UkmService::SerializeReportProtoToString(Report* report) {
+  std::string serialized_full_log;
+  report->SerializeToString(&serialized_full_log);
+
+  // This allows catching errors with bad UKM serialization we've seen before
+  // that would otherwise only be noticed on the server.
+  DCHECK(UkmService::LogCanBeParsed(serialized_full_log));
+  return serialized_full_log;
 }
 
 UkmService::UkmService(PrefService* pref_service,
@@ -213,8 +221,8 @@ UkmService::UkmService(PrefService* pref_service,
           base::BindRepeating(&metrics::MetricsServiceClient::GetUploadInterval,
                               base::Unretained(client_));
   bool fast_startup_for_testing = client_->ShouldStartUpFastForTesting();
-  scheduler_.reset(new UkmRotationScheduler(
-      rotate_callback, fast_startup_for_testing, get_upload_interval_callback));
+  scheduler_ = std::make_unique<UkmRotationScheduler>(
+      rotate_callback, fast_startup_for_testing, get_upload_interval_callback);
   StoreWhitelistedEntries();
 
   DelegatingUkmRecorder::Get()->AddDelegate(self_ptr_factory_.GetWeakPtr());
@@ -333,6 +341,8 @@ void UkmService::ResetClientState(ResetReason reason) {
   // Note: the session_id has already been cleared by GenerateAndStoreClientId.
   session_id_ = LoadAndIncrementSessionId(pref_service_);
   report_count_ = 0;
+
+  metrics_providers_.OnClientStateCleared();
 }
 
 void UkmService::RegisterMetricsProvider(
@@ -354,8 +364,8 @@ void UkmService::RegisterPrefs(PrefRegistrySimple* registry) {
 void UkmService::StartInitTask() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "UkmService::StartInitTask";
-  metrics_providers_.AsyncInit(base::Bind(&UkmService::FinishedInitTask,
-                                          self_ptr_factory_.GetWeakPtr()));
+  metrics_providers_.AsyncInit(base::BindOnce(&UkmService::FinishedInitTask,
+                                              self_ptr_factory_.GetWeakPtr()));
 }
 
 void UkmService::FinishedInitTask() {
@@ -418,11 +428,8 @@ void UkmService::BuildAndStoreLog() {
 
   AddSyncedUserNoiseBirthYearAndGenderToReport(&report);
 
-  std::string serialized_log;
-  report.SerializeToString(&serialized_log);
-  // This allows catching errors with bad UKM serialization we've seen before
-  // that would otherwise only be noticed on the server.
-  DCHECK(LogCanBeParsed(serialized_log));
+  std::string serialized_log =
+      UkmService::SerializeReportProtoToString(&report);
   reporting_service_.ukm_log_store()->StoreLog(serialized_log, base::nullopt);
 }
 

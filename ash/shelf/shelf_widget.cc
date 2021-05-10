@@ -4,9 +4,9 @@
 
 #include "ash/shelf/shelf_widget.h"
 
+#include <memory>
 #include <utility>
 
-#include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/animation/animation_change_type.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/focus_cycler.h"
@@ -37,7 +37,6 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/work_area_insets.h"
 #include "base/command_line.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_owner.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -74,11 +73,6 @@ views::View* FindFirstOrLastFocusableChild(views::View* root,
       views::FocusSearch::StartingViewPolicy::kSkipStartingView,
       views::FocusSearch::AnchoredDialogPolicy::kCanGoIntoAnchoredDialog,
       &dummy_focus_traversable, &dummy_focus_traversable_view);
-}
-
-bool IsHotseatEnabled() {
-  return Shell::Get()->IsInTabletMode() &&
-         chromeos::switches::ShouldShowShelfHotseat();
 }
 
 // Sets the shelf opacity to 0 when the shelf is done hiding to avoid getting
@@ -139,6 +133,9 @@ class ShelfWidget::DelegateView : public views::WidgetDelegate,
   // views::WidgetDelegate:
   views::Widget* GetWidget() override { return View::GetWidget(); }
   const views::Widget* GetWidget() const override { return View::GetWidget(); }
+
+  // views::View:
+  void OnThemeChanged() override;
 
   bool CanActivate() const override;
   void ReorderChildLayers(ui::Layer* parent_layer) override;
@@ -269,6 +266,13 @@ void ShelfWidget::DelegateView::ShowOpaqueBackground() {
   UpdateBackgroundBlur();
 }
 
+void ShelfWidget::DelegateView::OnThemeChanged() {
+  views::AccessiblePaneView::OnThemeChanged();
+  shelf_widget_->background_animator_.PaintBackground(
+      shelf_widget_->shelf_layout_manager()->GetShelfBackgroundType(),
+      AnimationChangeType::IMMEDIATE);
+}
+
 bool ShelfWidget::DelegateView::CanActivate() const {
   // This widget only contains anything interesting to activate in login/lock
   // screen mode. Only allow activation from the focus cycler, not from mouse
@@ -318,8 +322,7 @@ void ShelfWidget::DelegateView::UpdateOpaqueBackground() {
   const bool tablet_mode = Shell::Get()->IsInTabletMode();
   const bool in_app = ShelfConfig::Get()->is_in_app();
 
-  bool show_opaque_background =
-      !tablet_mode || in_app || !chromeos::switches::ShouldShowShelfHotseat();
+  bool show_opaque_background = !tablet_mode || in_app;
   if (show_opaque_background != opaque_background()->visible())
     opaque_background()->SetVisible(show_opaque_background);
 
@@ -344,7 +347,7 @@ void ShelfWidget::DelegateView::UpdateOpaqueBackground() {
   // or whenever we are "in app".
   if (background_type == ShelfBackgroundType::kMaximized ||
       background_type == ShelfBackgroundType::kInApp ||
-      (tablet_mode && in_app && chromeos::switches::ShouldShowShelfHotseat())) {
+      (tablet_mode && in_app)) {
     opaque_background()->SetRoundedCornerRadius({0, 0, 0, 0});
   } else {
     opaque_background()->SetRoundedCornerRadius({
@@ -369,7 +372,6 @@ void ShelfWidget::DelegateView::UpdateDragHandle() {
   }
 
   if (!Shell::Get()->IsInTabletMode() || !ShelfConfig::Get()->is_in_app() ||
-      !chromeos::switches::ShouldShowShelfHotseat() ||
       hide_background_for_transitions_) {
     drag_handle_->SetVisible(false);
     return;
@@ -487,16 +489,22 @@ bool ShelfWidget::GetHitTestRects(aura::Window* target,
   return true;
 }
 
-void ShelfWidget::ForceToShowHotseat() {
-  if (is_hotseat_forced_to_show_)
-    return;
+base::ScopedClosureRunner ShelfWidget::ForceShowHotseatInTabletMode() {
+  ++force_show_hotseat_count_;
 
-  is_hotseat_forced_to_show_ = true;
-  shelf_layout_manager_->UpdateVisibilityState();
+  if (force_show_hotseat_count_ == 1)
+    shelf_layout_manager_->UpdateVisibilityState();
+
+  return base::ScopedClosureRunner(base::BindOnce(
+      &ShelfWidget::ResetForceShowHotseat, weak_ptr_factory_.GetWeakPtr()));
+}
+
+bool ShelfWidget::IsHotseatForcedShowInTabletMode() const {
+  return force_show_hotseat_count_ > 0;
 }
 
 bool ShelfWidget::SetLoginShelfSwipeHandler(
-    const base::string16& nudge_text,
+    const std::u16string& nudge_text,
     const base::RepeatingClosure& fling_callback,
     base::OnceClosure exit_callback) {
   if (!login_shelf_view_->GetVisible())
@@ -548,14 +556,6 @@ void ShelfWidget::SetLoginShelfButtonOpacity(float target_opacity) {
     login_shelf_view_->SetButtonOpacity(target_opacity);
 }
 
-void ShelfWidget::ForceToHideHotseat() {
-  if (!is_hotseat_forced_to_show_)
-    return;
-
-  is_hotseat_forced_to_show_ = false;
-  shelf_layout_manager_->UpdateVisibilityState();
-}
-
 ShelfWidget::ShelfWidget(Shelf* shelf)
     : shelf_(shelf),
       background_animator_(shelf_, Shell::Get()->wallpaper_controller()),
@@ -566,8 +566,6 @@ ShelfWidget::ShelfWidget(Shelf* shelf)
 }
 
 ShelfWidget::~ShelfWidget() {
-  Shell::Get()->accessibility_controller()->RemoveObserver(this);
-
   // Must call Shutdown() before destruction.
   DCHECK(!status_area_widget());
 }
@@ -608,9 +606,7 @@ void ShelfWidget::Initialize(aura::Window* shelf_container) {
 
   // Sets initial session state to make sure the UI is properly shown.
   OnSessionStateChanged(Shell::Get()->session_controller()->GetSessionState());
-  GetFocusManager()->set_arrow_key_traversal_enabled_for_widget(true);
-
-  Shell::Get()->accessibility_controller()->AddObserver(this);
+  delegate_view_->SetEnableArrowKeyTraversal(true);
 }
 
 void ShelfWidget::Shutdown() {
@@ -646,7 +642,8 @@ int ShelfWidget::GetBackgroundAlphaValue(
 void ShelfWidget::RegisterHotseatWidget(HotseatWidget* hotseat_widget) {
   // Show a context menu for right clicks anywhere on the shelf widget.
   delegate_view_->set_context_menu_controller(hotseat_widget->GetShelfView());
-  hotseat_transition_animator_.reset(new HotseatTransitionAnimator(this));
+  hotseat_transition_animator_ =
+      std::make_unique<HotseatTransitionAnimator>(this);
   hotseat_transition_animator_->AddObserver(delegate_view_);
   shelf_->hotseat_widget()->OnHotseatTransitionAnimatorCreated(
       hotseat_transition_animator());
@@ -654,9 +651,6 @@ void ShelfWidget::RegisterHotseatWidget(HotseatWidget* hotseat_widget) {
 
 void ShelfWidget::OnTabletModeChanged() {
   if (!Shell::Get()->IsInTabletMode()) {
-    // Resets |is_hotseat_forced_to_show| when leaving the tablet mode.
-    is_hotseat_forced_to_show_ = false;
-
     // Disable login shelf gesture controller, if one is set when leacing tablet
     // mode.
     ClearLoginShelfSwipeHandler();
@@ -702,20 +696,9 @@ gfx::Rect ShelfWidget::GetScreenBoundsOfItemIconForWindow(
   if (id.IsNull())
     return gfx::Rect();
 
-  if (chromeos::switches::ShouldShowShelfHotseat()) {
-    return hotseat_widget()
-        ->scrollable_shelf_view()
-        ->GetTargetScreenBoundsOfItemIcon(id);
-  }
-
-  gfx::Rect bounds(
-      hotseat_widget()->GetShelfView()->GetIdealBoundsOfItemIcon(id));
-  gfx::Point screen_origin;
-  views::View::ConvertPointToScreen(hotseat_widget()->GetShelfView(),
-                                    &screen_origin);
-  return gfx::Rect(screen_origin.x() + bounds.x(),
-                   screen_origin.y() + bounds.y(), bounds.width(),
-                   bounds.height());
+  return hotseat_widget()
+      ->scrollable_shelf_view()
+      ->GetTargetScreenBoundsOfItemIcon(id);
 }
 
 gfx::Rect ShelfWidget::GetVisibleShelfBounds() const {
@@ -777,9 +760,11 @@ void ShelfWidget::CalculateTargetBounds() {
       WorkAreaInsets::ForWindow(GetNativeWindow());
 
   if (layout_manager->is_shelf_auto_hidden()) {
+    const display::Display display =
+        display::Screen::GetScreen()->GetDisplayNearestWindow(
+            GetNativeWindow());
     shelf_in_screen_portion =
-        Shell::Get()->app_list_controller()->home_launcher_transition_state() ==
-                AppListControllerImpl::HomeLauncherTransitionState::kMostlyShown
+        Shell::Get()->app_list_controller()->GetTargetVisibility(display.id())
             ? shelf_size
             : ShelfConfig::Get()->hidden_shelf_in_screen_portion();
   } else if (layout_manager->visibility_state() == SHELF_HIDDEN ||
@@ -813,7 +798,7 @@ void ShelfWidget::UpdateLayout(bool animate) {
   hide_animation_observer_.reset();
   const float target_opacity = layout_manager->GetOpacity();
   if (GetLayer()->opacity() != target_opacity) {
-    if (target_opacity == 0) {
+    if (target_opacity == 0 && animate) {
       // On hide, set the opacity after the animation completes.
       hide_animation_observer_ =
           std::make_unique<HideAnimationObserver>(GetLayer());
@@ -871,7 +856,7 @@ void ShelfWidget::UpdateLayout(bool animate) {
 
 void ShelfWidget::UpdateTargetBoundsForGesture(int shelf_position) {
   if (shelf_->IsHorizontalAlignment()) {
-    if (!IsHotseatEnabled())
+    if (!Shell::Get()->IsInTabletMode())
       target_bounds_.set_y(shelf_position);
   } else {
     target_bounds_.set_x(shelf_position);
@@ -1008,10 +993,13 @@ void ShelfWidget::OnScrollEvent(ui::ScrollEvent* event) {
     views::Widget::OnScrollEvent(event);
 }
 
-void ShelfWidget::OnAccessibilityStatusChanged() {
-  is_hotseat_forced_to_show_ =
-      Shell::Get()->accessibility_controller()->spoken_feedback().enabled();
-  shelf_layout_manager_->UpdateVisibilityState();
+void ShelfWidget::ResetForceShowHotseat() {
+  if (force_show_hotseat_count_ == 0)
+    return;
+  --force_show_hotseat_count_;
+
+  if (force_show_hotseat_count_ == 0)
+    shelf_layout_manager_->UpdateVisibilityState();
 }
 
 }  // namespace ash

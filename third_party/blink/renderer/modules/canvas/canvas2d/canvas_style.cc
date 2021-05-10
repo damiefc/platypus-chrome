@@ -31,6 +31,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
+#include "third_party/blink/renderer/core/css/cssom/css_color_value.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
@@ -52,7 +53,7 @@ enum ColorParseResult {
 
 static ColorParseResult ParseColor(Color& parsed_color,
                                    const String& color_string,
-                                   ColorScheme color_scheme) {
+                                   mojom::blink::ColorScheme color_scheme) {
   if (EqualIgnoringASCIICase(color_string, "currentcolor"))
     return kParsedCurrentColor;
   const bool kUseStrictParsing = true;
@@ -72,12 +73,12 @@ static Color CurrentColor(HTMLCanvasElement* canvas) {
   return color;
 }
 
-static ColorScheme ColorScheme(HTMLCanvasElement* canvas) {
+static mojom::blink::ColorScheme ColorScheme(HTMLCanvasElement* canvas) {
   if (canvas && canvas->isConnected()) {
     if (auto* style = canvas->GetComputedStyle())
       return style->UsedColorScheme();
   }
-  return ComputedStyle::InitialStyle().UsedColorScheme();
+  return mojom::blink::ColorScheme::kLight;
 }
 
 bool ParseColorOrCurrentColor(Color& parsed_color,
@@ -91,7 +92,7 @@ bool ParseColorOrCurrentColor(Color& parsed_color,
     case kParsedSystemColor:
       return true;
     case kParsedCurrentColor:
-      parsed_color = canvas ? CurrentColor(canvas) : Color::kBlack;
+      parsed_color = CurrentColor(canvas);
       return true;
     case kParseFailed:
       return false;

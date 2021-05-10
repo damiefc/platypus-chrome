@@ -4,7 +4,10 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/chromecast_build.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/sanitizers/sanitizers.gni")
+import("//chromeos/assistant/assistant.gni")
+import("//printing/buildflags/buildflags.gni")
 import("//testing/test.gni")
 
 component("policy") {
@@ -24,6 +27,8 @@ component("policy") {
   deps = [
     ":sanitizer_buildflags",
     "//base",
+    "//build:chromeos_buildflags",
+    "//printing/buildflags",
     "//sandbox:common",
   ]
   public_deps = []
@@ -47,12 +52,14 @@ component("policy") {
       "linux/bpf_network_policy_linux.h",
       "linux/bpf_ppapi_policy_linux.cc",
       "linux/bpf_ppapi_policy_linux.h",
+      "linux/bpf_print_backend_policy_linux.cc",
+      "linux/bpf_print_backend_policy_linux.h",
       "linux/bpf_print_compositor_policy_linux.cc",
       "linux/bpf_print_compositor_policy_linux.h",
       "linux/bpf_renderer_policy_linux.cc",
       "linux/bpf_renderer_policy_linux.h",
-      "linux/bpf_sharing_service_policy_linux.cc",
-      "linux/bpf_sharing_service_policy_linux.h",
+      "linux/bpf_service_policy_linux.cc",
+      "linux/bpf_service_policy_linux.h",
       "linux/bpf_speech_recognition_policy_linux.cc",
       "linux/bpf_speech_recognition_policy_linux.h",
       "linux/bpf_utility_policy_linux.cc",
@@ -76,13 +83,21 @@ component("policy") {
       "//sandbox/linux:suid_sandbox_client",
     ]
   }
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     sources += [
       "linux/bpf_ime_policy_linux.cc",
       "linux/bpf_ime_policy_linux.h",
       "linux/bpf_tts_policy_linux.cc",
       "linux/bpf_tts_policy_linux.h",
     ]
+    deps += [ "//chromeos/assistant:buildflags" ]
+
+    if (enable_libassistant_sandbox) {
+      sources += [
+        "linux/bpf_libassistant_policy_linux.cc",
+        "linux/bpf_libassistant_policy_linux.h",
+      ]
+    }
   }
   if (is_mac) {
     sources += [
@@ -126,8 +141,9 @@ component("policy") {
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.intl",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.logger",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.mediacodec",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.memorypressure",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.net",
-      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.netstack",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.net.interfaces",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sysmem",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.ui.scenic",
     ]
@@ -155,6 +171,7 @@ source_set("tests") {
     ":policy",
     "//base",
     "//base/test:test_support",
+    "//printing/buildflags",
     "//testing/gtest",
   ]
 

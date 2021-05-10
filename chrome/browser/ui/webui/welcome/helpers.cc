@@ -23,7 +23,6 @@
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -31,6 +30,7 @@
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
+#include "components/search/ntp_features.h"
 
 namespace welcome {
 
@@ -102,11 +102,9 @@ bool CanShowSigninModule(const policy::PolicyMap& policies) {
   if (!browser_signin_value)
     return true;
 
-  int int_browser_signin_value;
-  bool success = browser_signin_value->GetAsInteger(&int_browser_signin_value);
-  DCHECK(success);
-
-  return static_cast<policy::BrowserSigninMode>(int_browser_signin_value) !=
+  DCHECK(browser_signin_value->is_int());
+  return static_cast<policy::BrowserSigninMode>(
+             browser_signin_value->GetInt()) !=
          policy::BrowserSigninMode::kDisabled;
 }
 
@@ -226,9 +224,9 @@ bool HasModulesToShow(Profile* profile) {
   // Modules won't have lasting effect if profile is ephemeral, so we can skip.
   ProfileAttributesStorage& storage =
       g_browser_process->profile_manager()->GetProfileAttributesStorage();
-  ProfileAttributesEntry* entry = nullptr;
-  if (storage.GetProfileAttributesWithPath(profile->GetPath(), &entry) &&
-      entry->IsEphemeral()) {
+  ProfileAttributesEntry* entry =
+      storage.GetProfileAttributesWithPath(profile->GetPath());
+  if (entry && entry->IsEphemeral()) {
     return false;
   }
 

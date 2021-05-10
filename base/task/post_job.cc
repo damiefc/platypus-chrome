@@ -76,12 +76,12 @@ JobHandle& JobHandle::operator=(JobHandle&& other) {
   return *this;
 }
 
-bool JobHandle::IsCompleted() const {
-  return task_source_->IsCompleted();
+bool JobHandle::IsActive() const {
+  return task_source_->IsActive();
 }
 
 void JobHandle::UpdatePriority(TaskPriority new_priority) {
-  task_source_->delegate()->UpdatePriority(task_source_, new_priority);
+  task_source_->delegate()->UpdateJobPriority(task_source_, new_priority);
 }
 
 void JobHandle::NotifyConcurrencyIncrease() {

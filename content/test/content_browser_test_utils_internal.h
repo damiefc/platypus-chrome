@@ -22,21 +22,26 @@
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "content/browser/bad_message.h"
-#include "content/common/frame_messages.h"
+#include "content/browser/renderer_host/back_forward_cache_metrics.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/javascript_dialog_manager.h"
+#include "content/public/browser/navigation_type.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/choosers/popup_menu.mojom.h"
+#include "third_party/blink/public/mojom/page/widget.mojom-test-utils.h"
 #include "url/gurl.h"
 
 namespace content {
 
 class FrameTreeNode;
 class RenderFrameHost;
+class RenderFrameHostImpl;
+class RenderWidgetHostImpl;
 class Shell;
 class SiteInstance;
 class ToRenderFrameHost;
@@ -60,6 +65,40 @@ RenderFrameHost* ConvertToRenderFrameHost(FrameTreeNode* frame_tree_node);
 // --site-per-process) while staying in the same BrowsingInstance.
 WARN_UNUSED_RESULT bool NavigateToURLInSameBrowsingInstance(Shell* window,
                                                             const GURL& url);
+
+// Helper function to checks for a subframe navigation starting  in
+// `start_site_instance` and results in an error page correctly transitions to
+// `end_site_instance` based on whether error page isolation is enabled or not.
+WARN_UNUSED_RESULT bool IsExpectedSubframeErrorTransition(
+    SiteInstance* start_site_instance,
+    SiteInstance* end_site_instance);
+
+// Creates an iframe with id |frame_id| and src set to |url|, and appends it to
+// the main frame's document, waiting until the RenderFrameHostCreated
+// notification is received by the browser. If |wait_for_navigation| is true,
+// will also wait for the first navigation in the iframe to finish. Returns the
+// RenderFrameHost of the iframe.
+RenderFrameHost* CreateSubframe(WebContentsImpl* web_contents,
+                                std::string frame_id,
+                                const GURL& url,
+                                bool wait_for_navigation);
+
+// Returns the frames visited by |RenderFrameHostImpl::ForEachFrame| in the same
+// order.
+std::vector<RenderFrameHostImpl*> CollectAllFrames(
+    RenderFrameHostImpl* starting_rfh);
+std::vector<RenderFrameHostImpl*> CollectAllFramesIncludingSpeculative(
+    RenderFrameHostImpl* starting_rfh);
+
+// Open a new popup passing no URL to window.open, which results in a blank page
+// and no last committed entry. Returns the newly created shell. Also saves the
+// reference to the opened window in the "last_opened_window" variable in JS.
+Shell* OpenBlankWindow(WebContentsImpl* web_contents);
+
+// Pop open a new window that navigates to |url|. Returns the newly created
+// shell. Also saves the reference to the opened window in the
+// "last_opened_window" variable in JS.
+Shell* OpenWindow(WebContentsImpl* web_contents, const GURL& url);
 
 // Creates compact textual representations of the state of the frame tree that
 // is appropriate for use in assertions.
@@ -100,11 +139,27 @@ class FrameTreeVisualizer {
   DISALLOW_COPY_AND_ASSIGN(FrameTreeVisualizer);
 };
 
+// Uses FrameTreeVisualizer to draw a text representation of the FrameTree that
+// is appropriate for use in assertions. If you are going to depict multiple
+// trees in a single test, you might want to construct a longer-lived instance
+// of FrameTreeVisualizer as this will ensure consistent naming of the site
+// instances across all calls.
+std::string DepictFrameTree(FrameTreeNode& root);
+
 // Uses window.open to open a popup from the frame |opener| with the specified
-// |url| and |name|.   Waits for the navigation to |url| to finish and then
-// returns the new popup's Shell.  Note that since this navigation to |url| is
-// renderer-initiated, it won't cause a process swap unless used in
-// --site-per-process mode.
+// |url|, |name| and window |features|. |expect_return_from_window_open| is used
+// to indicate if the caller expects window.open() to return a non-null value.
+// Waits for the navigation to |url| to finish and then returns the new popup's
+// Shell.  Note that since this navigation to |url| is renderer-initiated, it
+// won't cause a process swap unless used in --site-per-process mode.
+Shell* OpenPopup(const ToRenderFrameHost& opener,
+                 const GURL& url,
+                 const std::string& name,
+                 const std::string& features,
+                 bool expect_return_from_window_open);
+
+// Same as above, but with an empty |features| and
+// |expect_return_from_window_open| assumed to be true..
 Shell* OpenPopup(const ToRenderFrameHost& opener,
                  const GURL& url,
                  const std::string& name);
@@ -203,60 +258,46 @@ class RenderProcessHostBadIpcMessageWaiter {
   DISALLOW_COPY_AND_ASSIGN(RenderProcessHostBadIpcMessageWaiter);
 };
 
-class ShowWidgetMessageFilter : public BrowserMessageFilter,
-                                public WebContentsObserver {
+class ShowPopupWidgetWaiter
+    : public blink::mojom::PopupWidgetHostInterceptorForTesting {
  public:
-  explicit ShowWidgetMessageFilter(WebContents* web_contents);
-
-  // This must be called on the UI thread when this filter is not required
-  // anymore.
-  // Background: The ShowWidgetMessageFilter observes the |web_contents| passed
-  // to the constructor. It will remove itself as observer in the destructor,
-  // but as BrowserMessageFilter subclasses (such as this one) are ref-counted
-  // and a reference is potentially held by the IPC channel, it is not obvious
-  // when this class will be destroyed, and this may be well after a
-  // browsertest's body (which has instantiated this and called AddFilter with
-  // it) exits.
-  void Shutdown();
-
-  // BrowserMessageFilter:
-  bool OnMessageReceived(const IPC::Message& message) override;
+  ShowPopupWidgetWaiter(WebContentsImpl* web_contents,
+                        RenderFrameHostImpl* frame_host);
+  ~ShowPopupWidgetWaiter() override;
 
   gfx::Rect last_initial_rect() const { return initial_rect_; }
 
   int last_routing_id() const { return routing_id_; }
 
+  // Waits until a popup request is received.
   void Wait();
 
-  void Reset();
+  // Stops observing new messages.
+  void Stop();
 
  private:
-  ~ShowWidgetMessageFilter() override;
-
-  void OnShowWidget(int route_id, const gfx::Rect& initial_rect);
-
-  // WebContentsObserver:
 #if defined(OS_MAC) || defined(OS_ANDROID)
-  bool ShowPopupMenu(
-      RenderFrameHost* render_frame_host,
-      mojo::PendingRemote<blink::mojom::PopupMenuClient>* popup_client,
-      const gfx::Rect& bounds,
-      int32_t item_height,
-      double font_size,
-      int32_t selected_item,
-      std::vector<blink::mojom::MenuItemPtr>* menu_items,
-      bool right_aligned,
-      bool allow_multiple_selection) override;
+  void ShowPopupMenu(const gfx::Rect& bounds);
 #endif
 
-  void OnShowWidgetOnUI(int route_id, const gfx::Rect& initial_rect);
+  // Callback bound for creating a popup widget.
+  void DidCreatePopupWidget(RenderWidgetHostImpl* render_widget_host);
 
-  std::unique_ptr<base::RunLoop> run_loop_;
+  // blink::mojom::PopupWidgetHostInterceptorForTesting:
+  blink::mojom::PopupWidgetHost* GetForwardingInterface() override;
+  void ShowPopup(const gfx::Rect& initial_rect,
+                 ShowPopupCallback callback) override;
+
+  base::RunLoop run_loop_;
   gfx::Rect initial_rect_;
-  int routing_id_ = MSG_ROUTING_NONE;
-  bool is_shut_down_ = false;
+  int32_t routing_id_ = MSG_ROUTING_NONE;
+  int32_t process_id_ = 0;
+  RenderFrameHostImpl* frame_host_;
+#if defined(OS_MAC) || defined(OS_ANDROID)
+  WebContentsImpl* web_contents_;
+#endif
 
-  DISALLOW_COPY_AND_ASSIGN(ShowWidgetMessageFilter);
+  DISALLOW_COPY_AND_ASSIGN(ShowPopupWidgetWaiter);
 };
 
 // A BrowserMessageFilter that drops a blacklisted message.
@@ -341,8 +382,8 @@ class BeforeUnloadBlockingDelegate : public JavaScriptDialogManager,
   void RunJavaScriptDialog(WebContents* web_contents,
                            RenderFrameHost* render_frame_host,
                            JavaScriptDialogType dialog_type,
-                           const base::string16& message_text,
-                           const base::string16& default_prompt_text,
+                           const std::u16string& message_text,
+                           const std::u16string& default_prompt_text,
                            DialogClosedCallback callback,
                            bool* did_suppress_message) override;
 
@@ -353,7 +394,7 @@ class BeforeUnloadBlockingDelegate : public JavaScriptDialogManager,
 
   bool HandleJavaScriptDialog(WebContents* web_contents,
                               bool accept,
-                              const base::string16* prompt_override) override;
+                              const std::u16string* prompt_override) override;
 
   void CancelDialogs(WebContents* web_contents, bool reset_state) override {}
 
@@ -386,6 +427,194 @@ class DevToolsInspectorLogWatcher : public DevToolsAgentHostClient {
   base::RunLoop run_loop_enable_log_;
   base::RunLoop run_loop_disable_log_;
   std::string last_message_;
+};
+
+// Captures various properties of the NavigationHandle on DidFinishNavigation.
+// By default, captures the next navigation and waits until the navigation
+// completely loads. Can be configured to not wait for load to finish, and also
+// to capture properties for multiple navigations, as we save the values in
+// arrays.
+class FrameNavigateParamsCapturer : public WebContentsObserver {
+ public:
+  // Observes navigation for the specified |node|.
+  explicit FrameNavigateParamsCapturer(FrameTreeNode* node);
+  ~FrameNavigateParamsCapturer() override;
+
+  // Start waiting for |navigations_remaining_| navigations to finish (and for
+  // load to finish if |wait_for_load_| is true).
+  void Wait();
+
+  // Sets the number of navigations to wait for.
+  void set_navigations_remaining(int count) {
+    DCHECK_GE(count, 0);
+    navigations_remaining_ = count;
+  }
+
+  // Sets |wait_for_load_| to determine whether to stop waiting when we receive
+  // DidFinishNavigation or DidStopLoading.
+  void set_wait_for_load(bool wait_for_load) { wait_for_load_ = wait_for_load; }
+
+  // Gets various captured parameters from the last navigation.
+  // Must only be called when we only capture a single navigation.
+  ui::PageTransition transition() const {
+    EXPECT_EQ(1U, transitions_.size());
+    return transitions_[0];
+  }
+  NavigationType navigation_type() const {
+    EXPECT_EQ(1U, navigation_types_.size());
+    return navigation_types_[0];
+  }
+  bool is_same_document() const {
+    EXPECT_EQ(1U, is_same_documents_.size());
+    return is_same_documents_[0];
+  }
+  bool is_renderer_initiated() const {
+    EXPECT_EQ(1U, is_renderer_initiateds_.size());
+    return is_renderer_initiateds_[0];
+  }
+  bool did_replace_entry() const {
+    EXPECT_EQ(1U, did_replace_entries_.size());
+    return did_replace_entries_[0];
+  }
+  bool has_user_gesture() const {
+    EXPECT_EQ(1U, has_user_gestures_.size());
+    return has_user_gestures_[0];
+  }
+  bool is_overriding_user_agent() const {
+    EXPECT_EQ(1U, is_overriding_user_agents_.size());
+    return is_overriding_user_agents_[0];
+  }
+  bool is_error_page() const {
+    EXPECT_EQ(1U, is_error_pages_.size());
+    return is_error_pages_[0];
+  }
+
+  // Gets various captured parameters from all observed navigations.
+  const std::vector<ui::PageTransition>& transitions() { return transitions_; }
+  const std::vector<GURL>& urls() { return urls_; }
+  const std::vector<NavigationType>& navigation_types() {
+    return navigation_types_;
+  }
+  const std::vector<bool>& is_same_documents() { return is_same_documents_; }
+  const std::vector<bool>& did_replace_entries() {
+    return did_replace_entries_;
+  }
+  const std::vector<bool>& has_user_gestures() { return has_user_gestures_; }
+  const std::vector<bool>& is_overriding_user_agents() {
+    return is_overriding_user_agents_;
+  }
+  const std::vector<bool>& is_error_pages() { return is_error_pages_; }
+
+ private:
+  void DidFinishNavigation(NavigationHandle* navigation_handle) override;
+
+  void DidStopLoading() override;
+
+  // The id of the FrameTreeNode whose navigations to observe.
+  int frame_tree_node_id_;
+
+  // How many navigations remain to capture.
+  int navigations_remaining_ = 1;
+
+  // Whether to also wait for the load to complete.
+  bool wait_for_load_ = true;
+
+  // The saved properties of the NavigationHandle, captured on
+  // DidFinishNavigation. When Wait() finishes, these arrays should contain
+  // |navigations_remaining_|, as we always capture them for each navigations.
+  std::vector<ui::PageTransition> transitions_;
+  std::vector<GURL> urls_;
+  std::vector<NavigationType> navigation_types_;
+  std::vector<bool> is_same_documents_;
+  std::vector<bool> did_replace_entries_;
+  std::vector<bool> is_renderer_initiateds_;
+  std::vector<bool> has_user_gestures_;
+  std::vector<bool> is_overriding_user_agents_;
+  std::vector<bool> is_error_pages_;
+
+  base::RunLoop loop_;
+};
+
+// This observer keeps track of the number of created RenderFrameHosts.  Tests
+// can use this to ensure that a certain number of child frames has been
+// created after navigating (defaults to 1), and can also supply a callback to
+// run on every RenderFrameCreated call.
+class RenderFrameHostCreatedObserver : public WebContentsObserver {
+ public:
+  using OnRenderFrameHostCreatedCallback =
+      base::RepeatingCallback<void(RenderFrameHost*)>;
+
+  explicit RenderFrameHostCreatedObserver(WebContents* web_contents);
+
+  RenderFrameHostCreatedObserver(WebContents* web_contents,
+                                 int expected_frame_count);
+
+  RenderFrameHostCreatedObserver(
+      WebContents* web_contents,
+      OnRenderFrameHostCreatedCallback on_rfh_created);
+
+  ~RenderFrameHostCreatedObserver() override;
+
+  RenderFrameHost* Wait();
+
+  RenderFrameHost* last_rfh() { return last_rfh_; }
+
+ private:
+  void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
+
+  // The number of RenderFrameHosts to wait for.
+  int expected_frame_count_ = 1;
+
+  // The number of RenderFrameHosts that have been created.
+  int frames_created_ = 0;
+
+  // The RunLoop used to spin the message loop.
+  base::RunLoop run_loop_;
+
+  // The last RenderFrameHost created.
+  RenderFrameHost* last_rfh_ = nullptr;
+
+  // The callback to call when a RenderFrameCreated call is observed.
+  OnRenderFrameHostCreatedCallback on_rfh_created_;
+};
+
+// The standard DisabledReason used in testing. The functions below use this
+// reason and tests will need to assert that it appears.
+BackForwardCache::DisabledReason RenderFrameHostDisabledForTestingReason();
+// Disable using the standard testing DisabledReason.
+void DisableForRenderFrameHostForTesting(RenderFrameHost* render_frame_host);
+void DisableForRenderFrameHostForTesting(GlobalFrameRoutingId id);
+
+// Changes the WebContents and active entry user agent override from
+// DidStartNavigation().
+class UserAgentInjector : public WebContentsObserver {
+ public:
+  UserAgentInjector(WebContents* web_contents, const std::string& user_agent)
+      : UserAgentInjector(web_contents,
+                          blink::UserAgentOverride::UserAgentOnly(user_agent),
+                          true) {}
+
+  UserAgentInjector(WebContents* web_contents,
+                    const blink::UserAgentOverride& ua_override,
+                    bool is_overriding_user_agent = true)
+      : WebContentsObserver(web_contents),
+        user_agent_override_(ua_override),
+        is_overriding_user_agent_(is_overriding_user_agent) {}
+
+  // WebContentsObserver:
+  void DidStartNavigation(NavigationHandle* navigation_handle) override;
+
+  void set_is_overriding_user_agent(bool is_overriding_user_agent) {
+    is_overriding_user_agent_ = is_overriding_user_agent;
+  }
+
+  void set_user_agent_override(const std::string& user_agent) {
+    user_agent_override_ = blink::UserAgentOverride::UserAgentOnly(user_agent);
+  }
+
+ private:
+  blink::UserAgentOverride user_agent_override_;
+  bool is_overriding_user_agent_ = true;
 };
 
 }  // namespace content

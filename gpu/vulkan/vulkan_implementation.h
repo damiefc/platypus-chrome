@@ -50,9 +50,8 @@ class SysmemBufferCollection {
 // VkSurfaceKHR objects). It also provides helper/utility functions.
 class COMPONENT_EXPORT(VULKAN) VulkanImplementation {
  public:
-  VulkanImplementation(bool use_swiftshader = false,
-                       bool allow_protected_memory = false,
-                       bool enforce_protected_memory = false);
+  explicit VulkanImplementation(bool use_swiftshader = false,
+                                bool allow_protected_memory = false);
 
   virtual ~VulkanImplementation();
 
@@ -144,12 +143,10 @@ class COMPONENT_EXPORT(VULKAN) VulkanImplementation {
 
   bool use_swiftshader() const { return use_swiftshader_; }
   bool allow_protected_memory() const { return allow_protected_memory_; }
-  bool enforce_protected_memory() const { return enforce_protected_memory_; }
 
  private:
   const bool use_swiftshader_;
   const bool allow_protected_memory_;
-  const bool enforce_protected_memory_;
   DISALLOW_COPY_AND_ASSIGN(VulkanImplementation);
 };
 
@@ -157,7 +154,8 @@ COMPONENT_EXPORT(VULKAN)
 std::unique_ptr<VulkanDeviceQueue> CreateVulkanDeviceQueue(
     VulkanImplementation* vulkan_implementation,
     uint32_t option,
-    const GPUInfo* gpu_info = nullptr);
+    const GPUInfo* gpu_info = nullptr,
+    uint32_t heap_memory_limit = 0);
 
 }  // namespace gpu
 

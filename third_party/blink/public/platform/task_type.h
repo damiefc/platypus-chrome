@@ -14,7 +14,8 @@ namespace blink {
 //
 // When a new task type is created:
 // * use kCount value as a new value,
-// * update tools/metrics/histograms/enums.xml,
+// * in tools/metrics/histograms/enums.xml update the
+//   "RendererSchedulerTaskType" enum
 // * update TaskTypes.md
 enum class TaskType : unsigned char {
   ///////////////////////////////////////
@@ -48,6 +49,9 @@ enum class TaskType : unsigned char {
   // This is a part of Networking task source used to annotate tasks which are
   // posted from the loading stack (i.e. WebURLLoader).
   kNetworkingWithURLLoaderAnnotation = 50,
+  // This is a part of Networking task that should not be frozen when a page is
+  // frozen.
+  kNetworkingUnfreezable = 75,
   // This task source is used for control messages between kNetworking tasks.
   kNetworkingControl = 4,
   // This task source is used to queue calls to history.back() and similar APIs.
@@ -160,6 +164,9 @@ enum class TaskType : unsigned char {
   // https://wicg.github.io/web-locks/#web-locks-tasks-source
   kWebLocks = 66,
 
+  // https://w3c.github.io/screen-wake-lock/#dfn-screen-wake-lock-task-source
+  kWakeLock = 76,
+
   ///////////////////////////////////////
   // Not-speced tasks should use one of the following task types
   ///////////////////////////////////////
@@ -248,6 +255,12 @@ enum class TaskType : unsigned char {
   // Tasks that come in on the HighPriorityLocalFrame interface.
   kInternalHighPriorityLocalFrame = 71,
 
+  // Tasks that are should use input priority task queue/runner.
+  kInternalInputBlocking = 77,
+
+  // Tasks related to the WebGPU API
+  kWebGPU = 78,
+
   ///////////////////////////////////////
   // The following task types are only for thread-local queues.
   ///////////////////////////////////////
@@ -268,13 +281,14 @@ enum class TaskType : unsigned char {
   // kMainThreadTaskQueueCleanup = 52,
   kMainThreadTaskQueueMemoryPurge = 62,
   kMainThreadTaskQueueNonWaking = 69,
+  kMainThreadTaskQueueIPCTracking = 74,
   kCompositorThreadTaskQueueDefault = 45,
   kCompositorThreadTaskQueueInput = 49,
   kWorkerThreadTaskQueueDefault = 46,
   kWorkerThreadTaskQueueV8 = 47,
   kWorkerThreadTaskQueueCompositor = 48,
 
-  kCount = 74,
+  kCount = 79,
 };
 
 }  // namespace blink

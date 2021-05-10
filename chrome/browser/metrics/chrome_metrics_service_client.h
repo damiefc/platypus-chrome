@@ -65,6 +65,7 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   std::string GetApplicationLocale() override;
   bool GetBrand(std::string* brand_code) override;
   metrics::SystemProfileProto::Channel GetChannel() override;
+  bool IsExtendedStableChannel() override;
   std::string GetVersionString() override;
   void OnEnvironmentUpdate(std::string* serialized_environment) override;
   void CollectFinalMetricsForLog(base::OnceClosure done_callback) override;
@@ -199,8 +200,7 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
 
   // Subscription for receiving callbacks that a URL was opened from the
   // omnibox.
-  std::unique_ptr<base::CallbackList<void(OmniboxLog*)>::Subscription>
-      omnibox_url_opened_subscription_;
+  base::CallbackListSubscription omnibox_url_opened_subscription_;
 
 #if !defined(OS_ANDROID)
   std::unique_ptr<BrowserActivityWatcher> browser_activity_watcher_;

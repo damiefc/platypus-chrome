@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/app_list/search/files/item_suggest_cache.h"
 
 #include "base/bind.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
 #include "chrome/browser/profiles/profile.h"
@@ -64,15 +65,6 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
 // The scope required for an access token in order to query ItemSuggest.
 constexpr char kDriveScope[] = "https://www.googleapis.com/auth/drive.readonly";
 
-constexpr char kRequestBody[] = R"({
-      'client_info': {
-        'platform_type': 'CHROME_OS',
-        'scenario_type': 'CHROME_OS_ZSS_FILES'
-      },
-      'max_suggestions': 10,
-      'type_detail_fields': 'drive_item.title,justification.display_text'
-    })";
-
 bool IsDisabledByPolicy(const Profile* profile) {
   return profile->GetPrefs()->GetBoolean(drive::prefs::kDisableDrive);
 }
@@ -81,31 +73,7 @@ bool IsDisabledByPolicy(const Profile* profile) {
 // Metrics utilities
 //------------------
 
-// TODO(crbug.com/1034842): Add unit tests for histograms
-
-// Possible outcomes of a call to the ItemSuggest API. These values persist to
-// logs. Entries should not be renumbered and numeric values should never be
-// reused.
-enum class Status {
-  kOk = 0,
-  kDisabledByExperiment = 1,
-  kDisabledByPolicy = 2,
-  kInvalidServerUrl = 3,
-  kNoIdentityManager = 4,
-  kGoogleAuthError = 5,
-  kNetError = 6,
-  kResponseTooLarge = 7,
-  k3xxStatus = 8,
-  k4xxStatus = 9,
-  k5xxStatus = 10,
-  kEmptyResponse = 11,
-  kNoResultsInResponse = 12,
-  kJsonParseFailure = 13,
-  kJsonConversionFailure = 14,
-  kMaxValue = kJsonConversionFailure,
-};
-
-void LogStatus(Status status) {
+void LogStatus(ItemSuggestCache::Status status) {
   UMA_HISTOGRAM_ENUMERATION("Apps.AppList.ItemSuggestCache.Status", status);
 }
 
@@ -185,6 +153,7 @@ const base::Feature ItemSuggestCache::kExperiment{
     "LauncherItemSuggest", base::FEATURE_DISABLED_BY_DEFAULT};
 constexpr base::FeatureParam<bool> ItemSuggestCache::kEnabled;
 constexpr base::FeatureParam<std::string> ItemSuggestCache::kServerUrl;
+constexpr base::FeatureParam<std::string> ItemSuggestCache::kModelName;
 constexpr base::FeatureParam<int> ItemSuggestCache::kMinMinutesBetweenUpdates;
 
 ItemSuggestCache::Result::Result(const std::string& id,
@@ -222,6 +191,29 @@ base::Optional<ItemSuggestCache::Results> ItemSuggestCache::GetResults() {
   // Return a copy because a pointer to |results_| will become invalid whenever
   // the cache is updated.
   return results_;
+}
+
+std::string ItemSuggestCache::GetRequestBody() {
+  // We request that ItemSuggest serve our request via particular model by
+  // specifying the model name in client_tags. This is a non-standard part of
+  // the API, implemented so we can experiment with model backends. The valid
+  // values for the tag are DCHECKed below.
+  static constexpr char kRequestBody[] = R"({
+        'client_info': {
+          'platform_type': 'CHROME_OS',
+          'scenario_type': 'CHROME_OS_ZSS_FILES',
+          'request_type': 'BACKGROUND_REQUEST',
+          'client_tags': {
+            'name': '$1'
+          }
+        },
+        'max_suggestions': 10,
+        'type_detail_fields': 'drive_item.title,justification.display_text'
+      })";
+
+  const std::string& model = kModelName.Get();
+  DCHECK(model == "quick_access" || model == "future_access");
+  return base::ReplaceStringPlaceholders(kRequestBody, {model}, nullptr);
 }
 
 void ItemSuggestCache::UpdateCache() {
@@ -282,7 +274,7 @@ void ItemSuggestCache::OnTokenReceived(GoogleServiceAuthError error,
   // Make a new request.
   url_loader_ = MakeRequestLoader(token_info.token);
   url_loader_->SetRetryOptions(0, network::SimpleURLLoader::RETRY_NEVER);
-  url_loader_->AttachStringForUpload(kRequestBody, "application/json");
+  url_loader_->AttachStringForUpload(GetRequestBody(), "application/json");
 
   // Perform the request.
   url_loader_->DownloadToString(

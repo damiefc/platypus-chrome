@@ -49,15 +49,9 @@
                 </span>
               </span>
             </div>
-            <template is="dom-if" if="[[item.metadata.isLocal]]">
-              <cr-icon-button class="icon-more-vert" id="addressMenu"
-                  on-click="onAddressMenuTap_" title="$i18n{moreActions}">
-              </cr-icon-button>
-            </template>
-            <template is="dom-if" if="[[!item.metadata.isLocal]]">
-              <cr-icon-button class="icon-external"
-                  on-click="onRemoteEditAddressTap_"></cr-icon-button>
-            </template>
+            <cr-icon-button class="icon-more-vert" id="addressMenu"
+                on-click="onAddressMenuTap_" title="$i18n{moreActions}">
+            </cr-icon-button>
           </div>
         </template>
       </div>
@@ -76,4 +70,9 @@
       <settings-address-edit-dialog address="[[activeAddress]]"
           on-close="onAddressDialogClose_">
       </settings-address-edit-dialog>
+    </template>
+    <template is="dom-if" if="[[showAddressRemoveConfirmationDialog_]]" restamp>
+      <settings-address-remove-confirmation-dialog
+          on-close="onAddressRemoveConfirmationDialogClose_">
+      </settings-address-remove-confirmation-dialog>
     </template>

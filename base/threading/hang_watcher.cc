@@ -4,18 +4,20 @@
 
 #include "base/threading/hang_watcher.h"
 
-#include <algorithm>
 #include <atomic>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/flat_map.h"
 #include "base/debug/alias.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
@@ -28,25 +30,86 @@
 
 namespace base {
 
-// static
-constexpr base::Feature kEnableHangWatcher{"EnableHangWatcher",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
-constexpr base::FeatureParam<bool> kHangWatchIOThread{
-    &kEnableHangWatcher, "hang_watch_io_thread", false};
-constexpr base::FeatureParam<bool> kHangWatchUIThread{
-    &kEnableHangWatcher, "hang_watch_ui_thread", false};
-constexpr base::FeatureParam<bool> kHangWatchThreadPool{
-    &kEnableHangWatcher, "hang_watch_threadpool", false};
+namespace {
+// Defines how much logging happens when the HangWatcher monitors the threads.
+// Logging levels are set per thread type through Finch. It's important that
+// the order of the enum members stay the and that their numerical
+// values be in increasing order. The implementation of
+// ThreadTypeLoggingLevelGreaterOrEqual() depends on it.
+enum class LoggingLevel { kNone = 0, kUmaOnly = 1, kUmaAndCrash = 2 };
+}  // namespace
 
-constexpr base::TimeDelta HangWatchScopeEnabled::kDefaultHangWatchTime =
+// static
+const base::Feature HangWatcher::kEnableHangWatcher{
+    "EnableHangWatcher", base::FEATURE_ENABLED_BY_DEFAULT};
+
+constexpr base::FeatureParam<int> kIOThreadLogLevel{
+    &HangWatcher::kEnableHangWatcher, "io_thread_log_level",
+    static_cast<int>(LoggingLevel::kUmaOnly)};
+constexpr base::FeatureParam<int> kUIThreadLogLevel{
+    &HangWatcher::kEnableHangWatcher, "ui_thread_log_level",
+    static_cast<int>(LoggingLevel::kUmaOnly)};
+constexpr base::FeatureParam<int> kThreadPoolLogLevel{
+    &HangWatcher::kEnableHangWatcher, "threadpool_log_level",
+    static_cast<int>(LoggingLevel::kNone)};
+
+// static
+const base::TimeDelta WatchHangsInScope::kDefaultHangWatchTime =
     base::TimeDelta::FromSeconds(10);
 
 namespace {
+
 HangWatcher* g_instance = nullptr;
 std::atomic<bool> g_use_hang_watcher{false};
-std::atomic<bool> g_hang_watch_workers{false};
-std::atomic<bool> g_hang_watch_io_thread{false};
-std::atomic<bool> g_hang_watch_ui_thread{false};
+std::atomic<LoggingLevel> g_threadpool_log_level{LoggingLevel::kNone};
+std::atomic<LoggingLevel> g_io_thread_log_level{LoggingLevel::kNone};
+std::atomic<LoggingLevel> g_ui_thread_log_level{LoggingLevel::kNone};
+
+// Emits the hung thread count histogram. |count| is the number of threads
+// of type |thread_type| that were hung or became hung during the last
+// monitoring window. This function should be invoked for each thread type
+// encountered on each call to Monitor().
+void LogHungThreadCountHistogram(HangWatcher::ThreadType thread_type,
+                                 int count) {
+  // In the case of unique threads like the IO or UI thread a count does
+  // not make sense.
+  const bool any_thread_hung = count >= 1;
+
+  switch (thread_type) {
+    case HangWatcher::ThreadType::kIOThread:
+      UMA_HISTOGRAM_BOOLEAN(
+          "HangWatcher.IsThreadHung.BrowserProcess."
+          "IOThread",
+          any_thread_hung);
+      break;
+    case HangWatcher::ThreadType::kUIThread:
+      UMA_HISTOGRAM_BOOLEAN(
+          "HangWatcher.IsThreadHung.BrowserProcess."
+          "UIThread",
+          any_thread_hung);
+      break;
+    case HangWatcher::ThreadType::kThreadPoolThread:
+      // Not recorded for now.
+      break;
+  }
+}
+
+// Returns true if |thread_type| was configured through Finch to have a logging
+// level that is equal to or exceeds |logging_level|.
+bool ThreadTypeLoggingLevelGreaterOrEqual(HangWatcher::ThreadType thread_type,
+                                          LoggingLevel logging_level) {
+  switch (thread_type) {
+    case HangWatcher::ThreadType::kIOThread:
+      return g_io_thread_log_level.load(std::memory_order_relaxed) >=
+             logging_level;
+    case HangWatcher::ThreadType::kUIThread:
+      return g_ui_thread_log_level.load(std::memory_order_relaxed) >=
+             logging_level;
+    case HangWatcher::ThreadType::kThreadPoolThread:
+      return g_threadpool_log_level.load(std::memory_order_relaxed) >=
+             logging_level;
+  }
+}
 }
 
 constexpr const char* kThreadName = "HangWatcher";
@@ -56,28 +119,30 @@ constexpr const char* kThreadName = "HangWatcher";
 // that can be detected. It instead increases the probability that a call to
 // Monitor() will happen at the right time to catch a hang. This has to be
 // balanced with power/cpu use concerns as busy looping would catch amost all
-// hangs but present unacceptable overhead.
-const base::TimeDelta kMonitoringPeriod = base::TimeDelta::FromSeconds(10);
+// hangs but present unacceptable overhead. NOTE: If this period is ever changed
+// then all metrics that depend on it like
+// HangWatcher.IsThreadHung need to be updated.
+constexpr auto kMonitoringPeriod = base::TimeDelta::FromSeconds(10);
 
-HangWatchScopeEnabled::HangWatchScopeEnabled(TimeDelta timeout) {
+WatchHangsInScope::WatchHangsInScope(TimeDelta timeout) {
   internal::HangWatchState* current_hang_watch_state =
       internal::HangWatchState::GetHangWatchStateForCurrentThread()->Get();
 
   DCHECK(timeout >= base::TimeDelta()) << "Negative timeouts are invalid.";
 
   // TODO(crbug.com/1034046): Remove when all threads using
-  // HangWatchScopeEnabled are monitored. Thread is not monitored, noop.
+  // WatchHangsInScope are monitored. Thread is not monitored, noop.
   if (!current_hang_watch_state)
     return;
 
   DCHECK(current_hang_watch_state)
-      << "HangWatchScopeEnabled can only be used on a thread that "
+      << "WatchHangsInScope can only be used on a thread that "
          "registered for hang watching with HangWatcher::RegisterThread.";
 
 #if DCHECK_IS_ON()
-  previous_hang_watch_scope_enable_ =
-      current_hang_watch_state->GetCurrentHangWatchScopeEnabled();
-  current_hang_watch_state->SetCurrentHangWatchScopeEnabled(this);
+  previous_watch_hangs_in_scope_ =
+      current_hang_watch_state->GetCurrentWatchHangsInScope();
+  current_hang_watch_state->SetCurrentWatchHangsInScope(this);
 #endif
 
   uint64_t old_flags;
@@ -87,26 +152,25 @@ HangWatchScopeEnabled::HangWatchScopeEnabled(TimeDelta timeout) {
 
   const bool hangs_ignored_for_current_scope =
       internal::HangWatchDeadline::IsFlagSet(
-          internal::HangWatchDeadline::Flag::
-              kIgnoreCurrentHangWatchScopeEnabled,
+          internal::HangWatchDeadline::Flag::kIgnoreCurrentWatchHangsInScope,
           old_flags);
 
   const bool has_active_hang_watch_disabled =
       internal::HangWatchDeadline::IsFlagSet(
-          internal::HangWatchDeadline::Flag::kHasActiveHangWatchScopeDisabled,
+          internal::HangWatchDeadline::Flag::kHasActiveIgnoreHangsInScope,
           old_flags);
 
-  // If the current HangWatchScopeEnabled is ignored but there are no active
-  // HangWatchScopeDisabled instances, temporarely reactivate hang watching for
-  // this newly created HangWatchScopeEnabled. On exiting hang watching is
+  // If the current WatchHangsInScope is ignored but there are no active
+  // IgnoreHangsInScope instances, temporarily reactivate hang watching for
+  // this newly created WatchHangsInScope. On exiting hang watching is
   // suspended again to return to the original state.
   if (hangs_ignored_for_current_scope && !has_active_hang_watch_disabled) {
-    current_hang_watch_state->UnsetIgnoreCurrentHangWatchScopeEnabled();
+    current_hang_watch_state->UnsetIgnoreCurrentWatchHangsInScope();
     set_hangs_ignored_on_exit_ = true;
   }
 
   // TODO(crbug.com/1034046): Check whether we are over deadline already for the
-  // previous HangWatchScopeEnabled here by issuing only one TimeTicks::Now()
+  // previous WatchHangsInScope here by issuing only one TimeTicks::Now()
   // and resuing the value.
 
   previous_deadline_ = old_deadline;
@@ -115,14 +179,14 @@ HangWatchScopeEnabled::HangWatchScopeEnabled(TimeDelta timeout) {
   current_hang_watch_state->IncrementNestingLevel();
 }
 
-HangWatchScopeEnabled::~HangWatchScopeEnabled() {
+WatchHangsInScope::~WatchHangsInScope() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   internal::HangWatchState* current_hang_watch_state =
       internal::HangWatchState::GetHangWatchStateForCurrentThread()->Get();
 
   // TODO(crbug.com/1034046): Remove when all threads using
-  // HangWatchScopeEnabled are monitored. Thread is not monitored, noop.
+  // WatchHangsInScope are monitored. Thread is not monitored, noop.
   if (!current_hang_watch_state) {
     return;
   }
@@ -135,67 +199,83 @@ HangWatchScopeEnabled::~HangWatchScopeEnabled() {
 
 #if DCHECK_IS_ON()
   // Verify that no Scope was destructed out of order.
-  DCHECK_EQ(this, current_hang_watch_state->GetCurrentHangWatchScopeEnabled());
-  current_hang_watch_state->SetCurrentHangWatchScopeEnabled(
-      previous_hang_watch_scope_enable_);
+  DCHECK_EQ(this, current_hang_watch_state->GetCurrentWatchHangsInScope());
+  current_hang_watch_state->SetCurrentWatchHangsInScope(
+      previous_watch_hangs_in_scope_);
 #endif
 
-  // If a HangWatchScopeDisabled suspended hang watching during the
-  // lifetime of this or any nested HangWatchScopeEnabled it can now safely be
+  // If a IgnoreHangsInScope suspended hang watching during the
+  // lifetime of this or any nested WatchHangsInScope it can now safely be
   // reactivated by clearing the ignore bit since this is the outer-most scope.
-  // See HangWatchScopeDisabled class comments where this represents the
+  // See IgnoreHangsInScope class comments where this represents the
   // destruction of |scope_1|.
   if (current_hang_watch_state->nesting_level() == 1)
-    current_hang_watch_state->UnsetIgnoreCurrentHangWatchScopeEnabled();
+    current_hang_watch_state->UnsetIgnoreCurrentWatchHangsInScope();
   // Return to ignoring hangs since this was the previous state before hang
-  // watching was temporarily enabled for this HangWatchScopeEnabled only in the
-  // constructor. See HangWatchScopeDisabled class comments where the next line
+  // watching was temporarily enabled for this WatchHangsInScope only in the
+  // constructor. See IgnoreHangsInScope class comments where the next line
   // of code is part of the destruction of |scope_4|.
   else if (set_hangs_ignored_on_exit_)
-    current_hang_watch_state->SetIgnoreCurrentHangWatchScopeEnabled();
+    current_hang_watch_state->SetIgnoreCurrentWatchHangsInScope();
 
   // Reset the deadline to the value it had before entering this
-  // HangWatchScopeEnabled.
+  // WatchHangsInScope.
   current_hang_watch_state->SetDeadline(previous_deadline_);
-  // TODO(crbug.com/1034046): Log when a HangWatchScopeEnabled exits after its
+  // TODO(crbug.com/1034046): Log when a WatchHangsInScope exits after its
   // deadline and that went undetected by the HangWatcher.
 
   current_hang_watch_state->DecrementNestingLevel();
 }
 
-HangWatchScopeDisabled::HangWatchScopeDisabled() {
+IgnoreHangsInScope::IgnoreHangsInScope() {
   internal::HangWatchState* current_hang_watch_state =
       internal::HangWatchState::GetHangWatchStateForCurrentThread()->Get();
-
   if (!current_hang_watch_state) {
+    took_effect_ = false;
     return;
   }
 
-  current_hang_watch_state->SetIgnoreCurrentHangWatchScopeEnabled();
-  current_hang_watch_state->SetHasActiveHangWatchScopeDisabled();
+  uint64_t old_flags;
+  base::TimeTicks old_deadline;
+  std::tie(old_flags, old_deadline) =
+      current_hang_watch_state->GetFlagsAndDeadline();
+
+  // If there already is an active IgnoreHangsInScope.
+  const bool has_active_hang_watch_disabled =
+      internal::HangWatchDeadline::IsFlagSet(
+          internal::HangWatchDeadline::Flag::kHasActiveIgnoreHangsInScope,
+          old_flags);
+
+  if (has_active_hang_watch_disabled) {
+    took_effect_ = false;
+    return;
+  }
+
+  current_hang_watch_state->SetIgnoreCurrentWatchHangsInScope();
+  current_hang_watch_state->SetHasActiveIgnoreHangsInScope();
 }
 
-HangWatchScopeDisabled::~HangWatchScopeDisabled() {
+IgnoreHangsInScope::~IgnoreHangsInScope() {
   internal::HangWatchState* current_hang_watch_state =
       internal::HangWatchState::GetHangWatchStateForCurrentThread()->Get();
 
-  if (!current_hang_watch_state)
+  if (!current_hang_watch_state || !took_effect_)
     return;
 
-  // If this instance outlived all HangWatchScopeEnabled instances watching
+  // If this instance outlived all WatchHangsInScope instances watching
   // needs to be reactivated.
   if (current_hang_watch_state->nesting_level() == 0)
-    current_hang_watch_state->UnsetIgnoreCurrentHangWatchScopeEnabled();
+    current_hang_watch_state->UnsetIgnoreCurrentWatchHangsInScope();
 
-  current_hang_watch_state->UnsetHasActiveHangWatchScopeDisabled();
+  current_hang_watch_state->UnsetHasActiveIgnoreHangsInScope();
 }
 
 // static
 void HangWatcher::InitializeOnMainThread() {
   DCHECK(!g_use_hang_watcher);
-  DCHECK(!g_hang_watch_workers);
-  DCHECK(!g_hang_watch_io_thread);
-  DCHECK(!g_hang_watch_ui_thread);
+  DCHECK(g_io_thread_log_level == LoggingLevel::kNone);
+  DCHECK(g_ui_thread_log_level == LoggingLevel::kNone);
+  DCHECK(g_threadpool_log_level == LoggingLevel::kNone);
 
   g_use_hang_watcher.store(base::FeatureList::IsEnabled(kEnableHangWatcher),
                            std::memory_order_relaxed);
@@ -203,13 +283,23 @@ void HangWatcher::InitializeOnMainThread() {
   // If hang watching is disabled as a whole there is no need to read the
   // params.
   if (g_use_hang_watcher.load(std::memory_order_relaxed)) {
-    g_hang_watch_workers.store(kHangWatchThreadPool.Get(),
-                               std::memory_order_relaxed);
-    g_hang_watch_io_thread.store(kHangWatchIOThread.Get(),
-                                 std::memory_order_relaxed);
-    g_hang_watch_ui_thread.store(kHangWatchUIThread.Get(),
-                                 std::memory_order_relaxed);
+    g_threadpool_log_level.store(
+        static_cast<LoggingLevel>(kThreadPoolLogLevel.Get()),
+        std::memory_order_relaxed);
+    g_io_thread_log_level.store(
+        static_cast<LoggingLevel>(kIOThreadLogLevel.Get()),
+        std::memory_order_relaxed);
+    g_ui_thread_log_level.store(
+        static_cast<LoggingLevel>(kUIThreadLogLevel.Get()),
+        std::memory_order_relaxed);
   }
+}
+
+void HangWatcher::UnitializeOnMainThreadForTesting() {
+  g_use_hang_watcher.store(false, std::memory_order_relaxed);
+  g_threadpool_log_level.store(LoggingLevel::kNone, std::memory_order_relaxed);
+  g_io_thread_log_level.store(LoggingLevel::kNone, std::memory_order_relaxed);
+  g_ui_thread_log_level.store(LoggingLevel::kNone, std::memory_order_relaxed);
 }
 
 // static
@@ -219,22 +309,48 @@ bool HangWatcher::IsEnabled() {
 
 // static
 bool HangWatcher::IsThreadPoolHangWatchingEnabled() {
-  return g_hang_watch_workers.load(std::memory_order_relaxed);
+  return g_threadpool_log_level.load(std::memory_order_relaxed) !=
+         LoggingLevel::kNone;
 }
 
+// static
 bool HangWatcher::IsIOThreadHangWatchingEnabled() {
-  return g_hang_watch_io_thread.load(std::memory_order_relaxed);
+  return g_io_thread_log_level.load(std::memory_order_relaxed) !=
+         LoggingLevel::kNone;
 }
 
+// static
 bool HangWatcher::IsUIThreadHangWatchingEnabled() {
-  return g_hang_watch_ui_thread.load(std::memory_order_relaxed);
+  return g_ui_thread_log_level.load(std::memory_order_relaxed) !=
+         LoggingLevel::kNone;
+}
+
+// static
+bool HangWatcher::IsCrashReportingEnabled() {
+  if (g_ui_thread_log_level.load(std::memory_order_relaxed) ==
+      LoggingLevel::kUmaAndCrash) {
+    return true;
+  }
+  if (g_io_thread_log_level.load(std::memory_order_relaxed) ==
+      LoggingLevel::kUmaAndCrash) {
+    return true;
+  }
+  if (g_threadpool_log_level.load(std::memory_order_relaxed) ==
+      LoggingLevel::kUmaAndCrash) {
+    return true;
+  }
+  return false;
 }
 
 HangWatcher::HangWatcher()
     : monitor_period_(kMonitoringPeriod),
       should_monitor_(WaitableEvent::ResetPolicy::AUTOMATIC),
       thread_(this, kThreadName),
-      tick_clock_(base::DefaultTickClock::GetInstance()) {
+      tick_clock_(base::DefaultTickClock::GetInstance()),
+      memory_pressure_listener_(
+          FROM_HERE,
+          base::BindRepeating(&HangWatcher::OnMemoryPressure,
+                              base::Unretained(this))) {
   // |thread_checker_| should not be bound to the constructing thread.
   DETACH_FROM_THREAD(hang_watcher_thread_checker_);
 
@@ -242,6 +358,49 @@ HangWatcher::HangWatcher()
 
   DCHECK(!g_instance);
   g_instance = this;
+}
+
+#if not defined(OS_NACL)
+debug::ScopedCrashKeyString
+HangWatcher::GetTimeSinceLastCriticalMemoryPressureCrashKey() {
+  DCHECK_CALLED_ON_VALID_THREAD(hang_watcher_thread_checker_);
+
+  // The crash key size is large enough to hold the biggest possible return
+  // value from base::TimeDelta::InSeconds().
+  constexpr debug::CrashKeySize kCrashKeyContentSize =
+      debug::CrashKeySize::Size32;
+  DCHECK_GE(static_cast<uint64_t>(kCrashKeyContentSize),
+            base::NumberToString(std::numeric_limits<int64_t>::max()).size());
+
+  static debug::CrashKeyString* crash_key = AllocateCrashKeyString(
+      "seconds-since-last-memory-pressure", kCrashKeyContentSize);
+
+  const base::TimeTicks last_critical_memory_pressure_time =
+      last_critical_memory_pressure_.load(std::memory_order_relaxed);
+  if (last_critical_memory_pressure_time.is_null()) {
+    constexpr char kNoMemoryPressureMsg[] = "No critical memory pressure";
+    static_assert(
+        base::size(kNoMemoryPressureMsg) <=
+            static_cast<uint64_t>(kCrashKeyContentSize),
+        "The crash key is too small to hold \"No critical memory pressure\".");
+    return debug::ScopedCrashKeyString(crash_key, kNoMemoryPressureMsg);
+  } else {
+    base::TimeDelta time_since_last_critical_memory_pressure =
+        base::TimeTicks::Now() - last_critical_memory_pressure_time;
+    return debug::ScopedCrashKeyString(
+        crash_key, base::NumberToString(
+                       time_since_last_critical_memory_pressure.InSeconds()));
+  }
+}
+#endif
+
+void HangWatcher::OnMemoryPressure(
+    base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
+  if (memory_pressure_level ==
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
+    last_critical_memory_pressure_.store(base::TimeTicks::Now(),
+                                         std::memory_order_relaxed);
+  }
 }
 
 HangWatcher::~HangWatcher() {
@@ -286,10 +445,13 @@ void HangWatcher::Wait() {
     const bool wait_was_normal =
         wait_time <= (monitor_period_ + kWaitDriftTolerance);
 
+    UMA_HISTOGRAM_TIMES("HangWatcher.SleepDrift.BrowserProcess",
+                        wait_time - monitor_period_);
+
     if (!wait_was_normal) {
       // If the time spent waiting was too high it might indicate the machine is
       // very slow or that that it went to sleep. In any case we can't trust the
-      // HangWatchScopeEnableds that are currently live. Update the ignore
+      // WatchHangsInScopes that are currently live. Update the ignore
       // threshold to make sure they don't trigger a hang on subsequent monitors
       // then keep waiting.
 
@@ -297,7 +459,7 @@ void HangWatcher::Wait() {
 
       // Find the latest deadline among the live watch states. They might change
       // atomically while iterating but that's fine because if they do that
-      // means the new HangWatchScopeEnabled was constructed very soon after the
+      // means the new WatchHangsInScope was constructed very soon after the
       // abnormal sleep happened and might be affected by the root cause still.
       // Ignoring it is cautious and harmless.
       base::TimeTicks latest_deadline;
@@ -343,19 +505,28 @@ HangWatcher* HangWatcher::GetInstance() {
 // static
 void HangWatcher::RecordHang() {
   base::debug::DumpWithoutCrashing();
-  // Inhibit code folding.
-  const int line_number = __LINE__;
-  base::debug::Alias(&line_number);
+  NO_CODE_FOLDING();
 }
 
-ScopedClosureRunner HangWatcher::RegisterThread() {
+ScopedClosureRunner HangWatcher::RegisterThreadInternal(
+    ThreadType thread_type) {
   AutoLock auto_lock(watch_state_lock_);
 
   watch_states_.push_back(
-      internal::HangWatchState::CreateHangWatchStateForCurrentThread());
+      internal::HangWatchState::CreateHangWatchStateForCurrentThread(
+          thread_type));
 
   return ScopedClosureRunner(BindOnce(&HangWatcher::UnregisterThread,
                                       Unretained(HangWatcher::GetInstance())));
+}
+
+// static
+ScopedClosureRunner HangWatcher::RegisterThread(ThreadType thread_type) {
+  if (!GetInstance()) {
+    return ScopedClosureRunner();
+  }
+
+  return GetInstance()->RegisterThreadInternal(thread_type);
 }
 
 base::TimeTicks HangWatcher::WatchStateSnapShot::GetHighestDeadline() const {
@@ -367,10 +538,26 @@ base::TimeTicks HangWatcher::WatchStateSnapShot::GetHighestDeadline() const {
 
 HangWatcher::WatchStateSnapShot::WatchStateSnapShot(
     const HangWatchStates& watch_states,
-    base::TimeTicks snapshot_time,
-    base::TimeTicks deadline_ignore_threshold)
-    : snapshot_time_(snapshot_time) {
+    base::TimeTicks deadline_ignore_threshold) {
+  const base::TimeTicks now = base::TimeTicks::Now();
   bool all_threads_marked = true;
+  bool found_deadline_before_ignore_threshold = false;
+
+  // Use an std::array to store the hang counts to avoid allocations. The
+  // numerical values of the HangWatcher::ThreadType enum is used to index into
+  // the array. A |kInvalidHangCount| is used to signify there were no threads
+  // of the type found.
+  constexpr size_t kHangCountArraySize =
+      static_cast<std::size_t>(base::HangWatcher::ThreadType::kMax) + 1;
+  std::array<int, kHangCountArraySize> hung_counts_per_thread_type;
+
+  constexpr int kInvalidHangCount = -1;
+  hung_counts_per_thread_type.fill(kInvalidHangCount);
+
+  // Will be true if any of the hung threads has a logging level high enough,
+  // as defined through finch params, to warant dumping a crash.
+  bool any_hung_thread_has_dumping_enabled = false;
+
   // Copy hung thread information.
   for (const auto& watch_state : watch_states) {
     uint64_t flags;
@@ -378,14 +565,34 @@ HangWatcher::WatchStateSnapShot::WatchStateSnapShot(
     std::tie(flags, deadline) = watch_state->GetFlagsAndDeadline();
 
     if (deadline <= deadline_ignore_threshold) {
-      hung_watch_state_copies_.clear();
-      return;
+      found_deadline_before_ignore_threshold = true;
+    }
+
+    if (internal::HangWatchDeadline::IsFlagSet(
+            internal::HangWatchDeadline::Flag::kIgnoreCurrentWatchHangsInScope,
+            flags)) {
+      continue;
+    }
+
+    // If a thread type is monitored and did not hang it still needs to be
+    // logged as a zero count;
+    const size_t hang_count_index =
+        static_cast<size_t>(watch_state.get()->thread_type());
+    if (hung_counts_per_thread_type[hang_count_index] == kInvalidHangCount) {
+      hung_counts_per_thread_type[hang_count_index] = 0;
     }
 
     // Only copy hung threads.
-    if (deadline <= snapshot_time) {
+    if (deadline <= now) {
+      ++hung_counts_per_thread_type[hang_count_index];
+
+      if (ThreadTypeLoggingLevelGreaterOrEqual(watch_state.get()->thread_type(),
+                                               LoggingLevel::kUmaAndCrash)) {
+        any_hung_thread_has_dumping_enabled = true;
+      }
+
       // Attempt to mark the thread as needing to stay within its current
-      // HangWatchScopeEnabled until capture is complete.
+      // WatchHangsInScope until capture is complete.
       bool thread_marked = watch_state->SetShouldBlockOnHang(flags, deadline);
 
       // If marking some threads already failed the snapshot won't be kept so
@@ -402,21 +609,45 @@ HangWatcher::WatchStateSnapShot::WatchStateSnapShot(
     }
   }
 
-  // If some threads could not be marked for blocking then this snapshot is not
+  // Log the hung thread counts to histograms for each thread type if any thread
+  // of the type were found.
+  for (size_t i = 0; i < kHangCountArraySize; ++i) {
+    const int hang_count = hung_counts_per_thread_type[i];
+    const HangWatcher::ThreadType thread_type =
+        static_cast<HangWatcher::ThreadType>(i);
+    if (hang_count != kInvalidHangCount &&
+        ThreadTypeLoggingLevelGreaterOrEqual(thread_type,
+                                             LoggingLevel::kUmaOnly))
+      LogHungThreadCountHistogram(thread_type, hang_count);
+  }
+
+  // Three cases can invalidate this snapshot and prevent the capture of the
+  // hang.
+  //
+  // 1. Some threads could not be marked for blocking so this snapshot isn't
   // actionable since marked threads could be hung because of unmarked ones.
   // If only the marked threads were captured the information would be
   // incomplete.
-  if (!all_threads_marked) {
+  //
+  // 2. Any of the threads have a deadline before |deadline_ignore_threshold|.
+  // If any thread is ignored it reduces the confidence in the whole state and
+  // it's better to avoid capturing misleading data.
+  //
+  // 3. The hung threads found were all of types that are not configured through
+  // Finch to trigger a crash dump.
+  //
+  if (!all_threads_marked || found_deadline_before_ignore_threshold ||
+      !any_hung_thread_has_dumping_enabled) {
     hung_watch_state_copies_.clear();
     return;
   }
 
   // Sort |hung_watch_state_copies_| by order of decreasing hang severity so the
   // most severe hang is first in the list.
-  std::sort(hung_watch_state_copies_.begin(), hung_watch_state_copies_.end(),
-            [](const WatchStateCopy& lhs, const WatchStateCopy& rhs) {
-              return lhs.deadline < rhs.deadline;
-            });
+  ranges::sort(hung_watch_state_copies_,
+               [](const WatchStateCopy& lhs, const WatchStateCopy& rhs) {
+                 return lhs.deadline < rhs.deadline;
+               });
 }
 
 HangWatcher::WatchStateSnapShot::WatchStateSnapShot(
@@ -455,8 +686,7 @@ bool HangWatcher::WatchStateSnapShot::IsActionable() const {
 
 HangWatcher::WatchStateSnapShot HangWatcher::GrabWatchStateSnapshotForTesting()
     const {
-  WatchStateSnapShot snapshot(watch_states_, base::TimeTicks::Now(),
-                              deadline_ignore_threshold_);
+  WatchStateSnapShot snapshot(watch_states_, deadline_ignore_threshold_);
   return snapshot;
 }
 
@@ -469,48 +699,32 @@ void HangWatcher::Monitor() {
   if (watch_states_.empty())
     return;
 
-  const base::TimeTicks now = base::TimeTicks::Now();
+  WatchStateSnapShot watch_state_snapshot(watch_states_,
+                                          deadline_ignore_threshold_);
 
-  // See if any thread hung. We're holding |watch_state_lock_| so threads
-  // can't register or unregister but their deadline still can change
-  // atomically. This is fine. Detecting a hang is generally best effort and
-  // if a thread resumes from hang in the time it takes to move on to
-  // capturing then its ID will be absent from the crash keys.
-  bool any_thread_hung = std::any_of(
-      watch_states_.cbegin(), watch_states_.cend(),
-      [this, now](const std::unique_ptr<internal::HangWatchState>& state) {
-        uint64_t flags;
-        base::TimeTicks deadline;
-        std::tie(flags, deadline) = state->GetFlagsAndDeadline();
-        return !internal::HangWatchDeadline::IsFlagSet(
-                   internal::HangWatchDeadline::Flag::
-                       kIgnoreCurrentHangWatchScopeEnabled,
-                   flags) &&
-               deadline > deadline_ignore_threshold_ && deadline < now;
-      });
-
-  // If at least a thread is hung we need to capture.
-  if (any_thread_hung)
-    CaptureHang(now);
+  if (watch_state_snapshot.IsActionable()) {
+    DoDumpWithoutCrashing(watch_state_snapshot);
+  }
 }
 
-void HangWatcher::CaptureHang(base::TimeTicks capture_time) {
+void HangWatcher::DoDumpWithoutCrashing(
+    const WatchStateSnapShot& watch_state_snapshot) {
   capture_in_progress_.store(true, std::memory_order_relaxed);
   base::AutoLock scope_lock(capture_lock_);
 
-  WatchStateSnapShot watch_state_snapshot(watch_states_, capture_time,
-                                          deadline_ignore_threshold_);
-  if (!watch_state_snapshot.IsActionable()) {
-    return;
-  }
-
 #if not defined(OS_NACL)
-  std::string list_of_hung_thread_ids =
+  const std::string list_of_hung_thread_ids =
       watch_state_snapshot.PrepareHungThreadListCrashKey();
+
   static debug::CrashKeyString* crash_key = AllocateCrashKeyString(
       "list-of-hung-threads", debug::CrashKeySize::Size256);
-  debug::ScopedCrashKeyString list_of_hung_threads_crash_key_string(
+
+  const debug::ScopedCrashKeyString list_of_hung_threads_crash_key_string(
       crash_key, list_of_hung_thread_ids);
+
+  const debug::ScopedCrashKeyString
+      time_since_last_critical_memory_pressure_crash_key_string =
+          GetTimeSinceLastCriticalMemoryPressureCrashKey();
 #endif
 
   // To avoid capturing more than one hang that blames a subset of the same
@@ -595,12 +809,12 @@ void HangWatcher::UnregisterThread() {
   internal::HangWatchState* current_hang_watch_state =
       internal::HangWatchState::GetHangWatchStateForCurrentThread()->Get();
 
-  auto it =
-      std::find_if(watch_states_.cbegin(), watch_states_.cend(),
-                   [current_hang_watch_state](
-                       const std::unique_ptr<internal::HangWatchState>& state) {
-                     return state.get() == current_hang_watch_state;
-                   });
+  auto it = ranges::find_if(
+      watch_states_,
+      [current_hang_watch_state](
+          const std::unique_ptr<internal::HangWatchState>& state) {
+        return state.get() == current_hang_watch_state;
+      });
 
   // Thread should be registered to get unregistered.
   DCHECK(it != watch_states_.end());
@@ -619,9 +833,9 @@ constexpr uint64_t kMaximumFlag = 0x8000000000000000u;
 constexpr uint64_t kPersistentFlagsAndDeadlineMask =
     kOnlyDeadlineMask |
     static_cast<uint64_t>(
-        HangWatchDeadline::Flag::kIgnoreCurrentHangWatchScopeEnabled) |
+        HangWatchDeadline::Flag::kIgnoreCurrentWatchHangsInScope) |
     static_cast<uint64_t>(
-        HangWatchDeadline::Flag::kHasActiveHangWatchScopeDisabled);
+        HangWatchDeadline::Flag::kHasActiveIgnoreHangsInScope);
 }  // namespace
 
 // Flag binary representation assertions.
@@ -708,20 +922,20 @@ bool HangWatchDeadline::SetShouldBlockOnHang(uint64_t old_flags,
                                      std::memory_order_relaxed);
 }
 
-void HangWatchDeadline::SetHasActiveHangWatchScopeDisabled() {
-  SetPersistentFlag(Flag::kHasActiveHangWatchScopeDisabled);
+void HangWatchDeadline::SetHasActiveIgnoreHangsInScope() {
+  SetPersistentFlag(Flag::kHasActiveIgnoreHangsInScope);
 }
 
-void HangWatchDeadline::UnsetHasActiveHangWatchScopeDisabled() {
-  ClearPersistentFlag(Flag::kHasActiveHangWatchScopeDisabled);
+void HangWatchDeadline::UnsetHasActiveIgnoreHangsInScope() {
+  ClearPersistentFlag(Flag::kHasActiveIgnoreHangsInScope);
 }
 
-void HangWatchDeadline::SetIgnoreCurrentHangWatchScopeEnabled() {
-  SetPersistentFlag(Flag::kIgnoreCurrentHangWatchScopeEnabled);
+void HangWatchDeadline::SetIgnoreCurrentWatchHangsInScope() {
+  SetPersistentFlag(Flag::kIgnoreCurrentWatchHangsInScope);
 }
 
-void HangWatchDeadline::UnsetIgnoreCurrentHangWatchScopeEnabled() {
-  ClearPersistentFlag(Flag::kIgnoreCurrentHangWatchScopeEnabled);
+void HangWatchDeadline::UnsetIgnoreCurrentWatchHangsInScope() {
+  ClearPersistentFlag(Flag::kIgnoreCurrentWatchHangsInScope);
 }
 
 void HangWatchDeadline::SetPersistentFlag(Flag flag) {
@@ -783,7 +997,8 @@ uint64_t HangWatchDeadline::SwitchBitsForTesting() {
   return switched_in_bits;
 }
 
-HangWatchState::HangWatchState() : thread_id_(PlatformThread::CurrentId()) {
+HangWatchState::HangWatchState(HangWatcher::ThreadType thread_type)
+    : thread_id_(PlatformThread::CurrentId()), thread_type_(thread_type) {
   // There should not exist a state object for this thread already.
   DCHECK(!GetHangWatchStateForCurrentThread()->Get());
 
@@ -799,18 +1014,18 @@ HangWatchState::~HangWatchState() {
 
 #if DCHECK_IS_ON()
   // Destroying the HangWatchState should not be done if there are live
-  // HangWatchScopeEnableds.
-  DCHECK(!current_hang_watch_scope_enable_);
+  // WatchHangsInScopes.
+  DCHECK(!current_watch_hangs_in_scope_);
 #endif
 }
 
 // static
 std::unique_ptr<HangWatchState>
-HangWatchState::CreateHangWatchStateForCurrentThread() {
-
+HangWatchState::CreateHangWatchStateForCurrentThread(
+    HangWatcher::ThreadType thread_type) {
   // Allocate a watch state object for this thread.
   std::unique_ptr<HangWatchState> hang_state =
-      std::make_unique<HangWatchState>();
+      std::make_unique<HangWatchState>(thread_type);
 
   // Setting the thread local worked.
   DCHECK_EQ(GetHangWatchStateForCurrentThread()->Get(), hang_state.get());
@@ -836,20 +1051,20 @@ bool HangWatchState::IsOverDeadline() const {
   return TimeTicks::Now() > deadline_.GetDeadline();
 }
 
-void HangWatchState::SetHasActiveHangWatchScopeDisabled() {
-  deadline_.SetHasActiveHangWatchScopeDisabled();
+void HangWatchState::SetHasActiveIgnoreHangsInScope() {
+  deadline_.SetHasActiveIgnoreHangsInScope();
 }
 
-void HangWatchState::UnsetHasActiveHangWatchScopeDisabled() {
-  deadline_.UnsetHasActiveHangWatchScopeDisabled();
+void HangWatchState::UnsetHasActiveIgnoreHangsInScope() {
+  deadline_.UnsetHasActiveIgnoreHangsInScope();
 }
 
-void HangWatchState::SetIgnoreCurrentHangWatchScopeEnabled() {
-  deadline_.SetIgnoreCurrentHangWatchScopeEnabled();
+void HangWatchState::SetIgnoreCurrentWatchHangsInScope() {
+  deadline_.SetIgnoreCurrentWatchHangsInScope();
 }
 
-void HangWatchState::UnsetIgnoreCurrentHangWatchScopeEnabled() {
-  deadline_.UnsetIgnoreCurrentHangWatchScopeEnabled();
+void HangWatchState::UnsetIgnoreCurrentWatchHangsInScope() {
+  deadline_.UnsetIgnoreCurrentWatchHangsInScope();
 }
 
 bool HangWatchState::SetShouldBlockOnHang(uint64_t old_flags,
@@ -862,15 +1077,15 @@ bool HangWatchState::IsFlagSet(HangWatchDeadline::Flag flag) {
 }
 
 #if DCHECK_IS_ON()
-void HangWatchState::SetCurrentHangWatchScopeEnabled(
-    HangWatchScopeEnabled* current_hang_watch_scope_enable) {
+void HangWatchState::SetCurrentWatchHangsInScope(
+    WatchHangsInScope* current_hang_watch_scope_enable) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  current_hang_watch_scope_enable_ = current_hang_watch_scope_enable;
+  current_watch_hangs_in_scope_ = current_hang_watch_scope_enable;
 }
 
-HangWatchScopeEnabled* HangWatchState::GetCurrentHangWatchScopeEnabled() {
+WatchHangsInScope* HangWatchState::GetCurrentWatchHangsInScope() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  return current_hang_watch_scope_enable_;
+  return current_watch_hangs_in_scope_;
 }
 #endif
 

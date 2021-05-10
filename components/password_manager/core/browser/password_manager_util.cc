@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
@@ -40,6 +41,7 @@
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
 
+using autofill::password_generation::PasswordGenerationType;
 using password_manager::PasswordForm;
 
 namespace password_manager_util {
@@ -68,13 +70,13 @@ password_manager::SyncState GetPasswordSyncState(
     const syncer::SyncService* sync_service) {
   if (!sync_service ||
       !sync_service->GetActiveDataTypes().Has(syncer::PASSWORDS)) {
-    return password_manager::NOT_SYNCING;
+    return password_manager::SyncState::kNotSyncing;
   }
 
   if (sync_service->IsSyncFeatureActive()) {
-    return sync_service->GetUserSettings()->IsUsingSecondaryPassphrase()
-               ? password_manager::SYNCING_WITH_CUSTOM_PASSPHRASE
-               : password_manager::SYNCING_NORMAL_ENCRYPTION;
+    return sync_service->GetUserSettings()->IsUsingExplicitPassphrase()
+               ? password_manager::SyncState::kSyncingWithCustomPassphrase
+               : password_manager::SyncState::kSyncingNormalEncryption;
   }
 
   DCHECK(base::FeatureList::IsEnabled(
@@ -82,12 +84,12 @@ password_manager::SyncState GetPasswordSyncState(
   // Account passwords are enabled only for users with normal encryption at
   // the moment. Data types won't become active for non-sync users with custom
   // passphrase.
-  return password_manager::ACCOUNT_PASSWORDS_ACTIVE_NORMAL_ENCRYPTION;
+  return password_manager::SyncState::kAccountPasswordsActiveNormalEncryption;
 }
 
 bool IsSyncingWithNormalEncryption(const syncer::SyncService* sync_service) {
   return GetPasswordSyncState(sync_service) ==
-         password_manager::SYNCING_NORMAL_ENCRYPTION;
+         password_manager::SyncState::kSyncingNormalEncryption;
 }
 
 void TrimUsernameOnlyCredentials(
@@ -145,7 +147,7 @@ void UserTriggeredManualGenerationFromContextMenu(
     password_manager::PasswordManagerClient* password_manager_client) {
   if (!password_manager_client->GetPasswordFeatureManager()
            ->ShouldShowAccountStorageOptIn()) {
-    password_manager_client->GeneratePassword();
+    password_manager_client->GeneratePassword(PasswordGenerationType::kManual);
     LogPasswordGenerationEvent(autofill::password_generation::
                                    PASSWORD_GENERATION_CONTEXT_MENU_PRESSED);
     return;
@@ -159,7 +161,7 @@ void UserTriggeredManualGenerationFromContextMenu(
              password_manager::PasswordManagerClient::ReauthSucceeded
                  succeeded) {
             if (succeeded) {
-              client->GeneratePassword();
+              client->GeneratePassword(PasswordGenerationType::kManual);
               LogPasswordGenerationEvent(
                   autofill::password_generation::
                       PASSWORD_GENERATION_CONTEXT_MENU_PRESSED);
@@ -171,13 +173,13 @@ void UserTriggeredManualGenerationFromContextMenu(
 // TODO(http://crbug.com/890318): Add unitests to check cleaners are correctly
 // created.
 void RemoveUselessCredentials(
+    password_manager::CredentialsCleanerRunner* cleaning_tasks_runner,
     scoped_refptr<password_manager::PasswordStore> store,
     PrefService* prefs,
-    int delay_in_seconds,
+    base::TimeDelta delay,
     base::RepeatingCallback<network::mojom::NetworkContext*()>
         network_context_getter) {
-  auto cleaning_tasks_runner =
-      std::make_unique<password_manager::CredentialsCleanerRunner>();
+  DCHECK(cleaning_tasks_runner);
 
 #if !defined(OS_IOS)
   // Can be null for some unittests.
@@ -195,23 +197,19 @@ void RemoveUselessCredentials(
         FROM_HERE,
         base::BindOnce(
             &password_manager::CredentialsCleanerRunner::StartCleaning,
-            base::Unretained(cleaning_tasks_runner.release())),
-        base::TimeDelta::FromSeconds(delay_in_seconds));
+            cleaning_tasks_runner->GetWeakPtr()),
+        delay);
   }
 }
 
 base::StringPiece GetSignonRealmWithProtocolExcluded(const PasswordForm& form) {
-  base::StringPiece signon_realm_protocol_excluded = form.signon_realm;
+  base::StringPiece signon_realm = form.signon_realm;
 
   // Find the web origin (with protocol excluded) in the signon_realm.
-  const size_t after_protocol =
-      signon_realm_protocol_excluded.find(form.url.host_piece());
-  DCHECK_NE(after_protocol, base::StringPiece::npos);
+  const size_t after_protocol = signon_realm.find(form.url.host_piece());
 
   // Keep the string starting with position |after_protocol|.
-  signon_realm_protocol_excluded =
-      signon_realm_protocol_excluded.substr(after_protocol);
-  return signon_realm_protocol_excluded;
+  return signon_realm.substr(std::min(after_protocol, signon_realm.size()));
 }
 
 void FindBestMatches(
@@ -241,7 +239,7 @@ void FindBestMatches(
   std::sort(non_federated_same_scheme->begin(),
             non_federated_same_scheme->end(), IsBetterMatch);
 
-  std::set<std::pair<PasswordForm::Store, base::string16>> store_usernames;
+  std::set<std::pair<PasswordForm::Store, std::u16string>> store_usernames;
   for (const auto* match : *non_federated_same_scheme) {
     auto store_username =
         std::make_pair(match->in_store, match->username_value);
@@ -258,7 +256,7 @@ void FindBestMatches(
 
 const PasswordForm* FindFormByUsername(
     const std::vector<const PasswordForm*>& forms,
-    const base::string16& username_value) {
+    const std::u16string& username_value) {
   for (const PasswordForm* form : forms) {
     if (form->username_value == username_value)
       return form;
@@ -315,7 +313,7 @@ const PasswordForm* GetMatchForUpdating(
   return credentials.empty() ? nullptr : credentials.front();
 }
 
-PasswordForm MakeNormalizedBlacklistedForm(
+PasswordForm MakeNormalizedBlocklistedForm(
     password_manager::PasswordStore::FormDigest digest) {
   PasswordForm result;
   result.blocked_by_user = true;

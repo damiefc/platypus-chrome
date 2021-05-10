@@ -77,6 +77,9 @@ class MockPaintPreviewRecorder : public mojom::PaintPreviewRecorder {
     EXPECT_EQ(input_params->guid, expected_params_->guid);
     EXPECT_EQ(input_params->clip_rect, expected_params_->clip_rect);
     EXPECT_EQ(input_params->is_main_frame, expected_params_->is_main_frame);
+    if (expected_params_->is_main_frame) {
+      EXPECT_FALSE(input_params->clip_rect_is_hint);
+    }
   }
 
   base::OnceClosure closure_;
@@ -101,6 +104,7 @@ mojom::PaintPreviewCaptureParamsPtr ToMojoParams(
   params_ptr->guid = params.inner.document_guid;
   params_ptr->is_main_frame = params.inner.is_main_frame;
   params_ptr->clip_rect = params.inner.clip_rect;
+  params_ptr->skip_accelerated_content = params.inner.skip_accelerated_content;
   return params_ptr;
 }
 
@@ -165,6 +169,11 @@ TEST_P(PaintPreviewClientRenderViewHostTest, CaptureMainFrameMock) {
   auto* metadata = expected_proto.mutable_metadata();
   metadata->set_url(expected_url.spec());
   metadata->set_version(kPaintPreviewVersion);
+  auto* chromeVersion = metadata->mutable_chrome_version();
+  chromeVersion->set_major(CHROME_VERSION_MAJOR);
+  chromeVersion->set_minor(CHROME_VERSION_MINOR);
+  chromeVersion->set_build(CHROME_VERSION_BUILD);
+  chromeVersion->set_patch(CHROME_VERSION_PATCH);
   PaintPreviewFrameProto* main_frame = expected_proto.mutable_root_frame();
   main_frame->set_is_main_frame(true);
   main_frame->set_scroll_offset_x(5);
@@ -204,7 +213,7 @@ TEST_P(PaintPreviewClientRenderViewHostTest, CaptureMainFrameMock) {
             base::ScopedAllowBlockingForTesting scope;
 #if defined(OS_WIN)
             base::FilePath path = base::FilePath(
-                base::UTF8ToUTF16(result->proto.root_frame().file_path()));
+                base::UTF8ToWide(result->proto.root_frame().file_path()));
 #else
             base::FilePath path =
                 base::FilePath(result->proto.root_frame().file_path());
@@ -282,6 +291,7 @@ TEST_P(PaintPreviewClientRenderViewHostTest, RenderFrameDeletedDuringCapture) {
   PaintPreviewClient::PaintPreviewParams params(GetParam());
   params.root_dir = temp_dir_.GetPath();
   params.inner.is_main_frame = true;
+  params.inner.skip_accelerated_content = true;
 
   content::RenderFrameHost* rfh = main_rfh();
 

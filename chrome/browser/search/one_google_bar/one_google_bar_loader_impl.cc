@@ -14,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_data.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/webui_url_constants.h"
@@ -29,10 +30,15 @@
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "url/gurl.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "components/signin/core/browser/chrome_connected_header_helper.h"
 #include "components/signin/core/browser/signin_header_helper.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/crosapi/mojom/crosapi.mojom.h"
+#include "chromeos/lacros/lacros_chrome_service_impl.h"
 #endif
 
 namespace {
@@ -164,7 +170,7 @@ class OneGoogleBarLoaderImpl::AuthenticatedURLLoader {
 
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   const GURL api_url_;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   const bool account_consistency_mirror_required_;
 #endif
 
@@ -181,7 +187,7 @@ OneGoogleBarLoaderImpl::AuthenticatedURLLoader::AuthenticatedURLLoader(
     LoadDoneCallback callback)
     : url_loader_factory_(url_loader_factory),
       api_url_(std::move(api_url)),
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
       account_consistency_mirror_required_(account_consistency_mirror_required),
 #endif
       callback_(std::move(callback)) {
@@ -191,7 +197,15 @@ void OneGoogleBarLoaderImpl::AuthenticatedURLLoader::SetRequestHeaders(
     network::ResourceRequest* request) const {
   variations::AppendVariationsHeaderUnknownSignedIn(
       api_url_, variations::InIncognito::kNo, request);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  const crosapi::mojom::BrowserInitParams* init_params =
+      chromeos::LacrosChromeServiceImpl::Get()->init_params();
+  if (!init_params->use_new_account_manager)
+    return;
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
   signin::ChromeConnectedHeaderHelper chrome_connected_header_helper(
       account_consistency_mirror_required_
           ? signin::AccountConsistencyMethod::kMirror
@@ -204,18 +218,23 @@ void OneGoogleBarLoaderImpl::AuthenticatedURLLoader::SetRequestHeaders(
     profile_mode = signin::PROFILE_MODE_INCOGNITO_DISABLED |
                    signin::PROFILE_MODE_ADD_ACCOUNT_DISABLED;
   }
+
+  // TODO(crbug.com/1134045): Check whether the child account status should also
+  // be sent in the Mirror request header when loading the local version of
+  // OneGoogleBar.
   std::string chrome_connected_header_value =
       chrome_connected_header_helper.BuildRequestHeader(
           /*is_header_request=*/true, api_url_,
           // Gaia ID is only needed for (drive|docs).google.com.
-          /*gaia_id=*/std::string(), profile_mode,
+          /*gaia_id=*/std::string(),
+          /* is_child_account=*/base::nullopt, profile_mode,
           signin::kChromeMirrorHeaderSource,
           /*force_account_consistency=*/false);
   if (!chrome_connected_header_value.empty()) {
     request->headers.SetHeader(signin::kChromeConnectedHeader,
                                chrome_connected_header_value);
   }
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 }
 
 void OneGoogleBarLoaderImpl::AuthenticatedURLLoader::Start() {

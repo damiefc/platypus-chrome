@@ -10,7 +10,7 @@
 #include "ash/public/cpp/power_utils.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/style/ash_color_provider.h"
+#include "ash/system/power/battery_image_source.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/time_formatting.h"
 #include "base/logging.h"
@@ -23,117 +23,15 @@
 #include "ui/base/l10n/time_format.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
-#include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
-#include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/geometry/rect_conversions.h"
-#include "ui/gfx/geometry/rect_f.h"
-#include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image.h"
-#include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/scoped_canvas.h"
-#include "ui/gfx/skia_util.h"
 
 namespace ash {
 namespace {
 
 static PowerStatus* g_power_status = nullptr;
 
-// The minimum height (in dp) of the charged region of the battery icon when the
-// battery is present and has a charge greater than 0.
-const int kMinVisualChargeLevel = 1;
-
-// The color of the battery's badge (bolt, unreliable, X).
-const SkColor kBatteryBadgeColor = gfx::kGoogleGrey900;
-
-class BatteryImageSource : public gfx::CanvasImageSource {
- public:
-  BatteryImageSource(const PowerStatus::BatteryImageInfo& info,
-                     int height,
-                     SkColor bg_color,
-                     SkColor fg_color)
-      : gfx::CanvasImageSource(gfx::Size(height, height)),
-        info_(info),
-        bg_color_(bg_color),
-        fg_color_(fg_color) {}
-
-  ~BatteryImageSource() override = default;
-
-  // gfx::ImageSkiaSource implementation.
-  void Draw(gfx::Canvas* canvas) override {
-    gfx::ImageSkia icon = CreateVectorIcon(kBatteryIcon, fg_color_);
-
-    // Draw the solid outline of the battery icon.
-    canvas->DrawImageInt(icon, 0, 0);
-
-    canvas->Save();
-
-    const float dsf = canvas->UndoDeviceScaleFactor();
-    // All constants below are expressed relative to a canvas size of 20. The
-    // actual canvas size (i.e. |size()|) may not be 20.
-    const float kAssumedCanvasSize = 20;
-    const float const_scale = dsf * size().height() / kAssumedCanvasSize;
-
-    // |charge_level| is a value between 0 and the visual height of the icon
-    // representing the number of device pixels the battery image should be
-    // shown charged. The exception is when |charge_level| is very low; in this
-    // case, still draw 1dip of charge.
-
-    SkPath path;
-    gfx::RectF fill_rect = gfx::RectF(8, 6, 6, 11);
-    fill_rect.Scale(const_scale);
-    path.addRect(gfx::RectToSkRect(gfx::ToEnclosingRect(fill_rect)));
-    cc::PaintFlags flags;
-
-    SkRect icon_bounds = path.getBounds();
-    float charge_level =
-        std::floor(info_.charge_percent / 100.0 * icon_bounds.height());
-    const float min_charge_level = dsf * kMinVisualChargeLevel;
-    charge_level = base::ClampToRange(charge_level, min_charge_level,
-                                      icon_bounds.height());
-
-    const float charge_y = icon_bounds.bottom() - charge_level;
-    gfx::RectF clip_rect(0, charge_y, size().width() * dsf,
-                         size().height() * dsf);
-    canvas->ClipRect(clip_rect);
-
-    const SkColor alert_color = AshColorProvider::Get()->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kIconColorAlert);
-    const bool use_alert_color =
-        charge_level == min_charge_level && info_.alert_if_low;
-    flags.setColor(use_alert_color ? alert_color : fg_color_);
-    canvas->DrawPath(path, flags);
-
-    canvas->Restore();
-
-    if (info_.badge_outline) {
-      const SkColor outline_color =
-          info_.charge_percent > 50 ? fg_color_ : bg_color_;
-      PaintVectorIcon(canvas, *info_.badge_outline, outline_color);
-    }
-
-    // // Paint the badge over top of the battery, if applicable.
-    if (info_.icon_badge) {
-      const SkColor badge_color =
-          use_alert_color
-              ? alert_color
-              : info_.charge_percent > 50 ? kBatteryBadgeColor : fg_color_;
-
-      PaintVectorIcon(canvas, *info_.icon_badge, badge_color);
-    }
-  }
-
-  bool HasRepresentationAtAllScales() const override { return true; }
-
- private:
-  PowerStatus::BatteryImageInfo info_;
-  SkColor bg_color_;
-  SkColor fg_color_;
-
-  DISALLOW_COPY_AND_ASSIGN(BatteryImageSource);
-};
-
-base::string16 GetBatteryTimeAccessibilityString(int hour, int min) {
+std::u16string GetBatteryTimeAccessibilityString(int hour, int min) {
   DCHECK(hour || min);
   if (hour && !min) {
     return ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_DURATION,
@@ -388,14 +286,14 @@ gfx::ImageSkia PowerStatus::GetBatteryImage(const BatteryImageInfo& info,
   return gfx::ImageSkia(base::WrapUnique(source), source->size());
 }
 
-base::string16 PowerStatus::GetAccessibleNameString(
+std::u16string PowerStatus::GetAccessibleNameString(
     bool full_description) const {
   if (IsBatteryFull()) {
     return l10n_util::GetStringUTF16(
         IDS_ASH_STATUS_TRAY_BATTERY_FULL_CHARGE_ACCESSIBLE);
   }
 
-  base::string16 battery_percentage_accessible = l10n_util::GetStringFUTF16(
+  std::u16string battery_percentage_accessible = l10n_util::GetStringFUTF16(
       IsBatteryCharging()
           ? IDS_ASH_STATUS_TRAY_BATTERY_PERCENT_CHARGING_ACCESSIBLE
           : IDS_ASH_STATUS_TRAY_BATTERY_PERCENT_ACCESSIBLE,
@@ -403,7 +301,7 @@ base::string16 PowerStatus::GetAccessibleNameString(
   if (!full_description)
     return battery_percentage_accessible;
 
-  base::string16 battery_time_accessible = base::string16();
+  std::u16string battery_time_accessible = std::u16string();
   const base::Optional<base::TimeDelta> time =
       IsBatteryCharging() ? GetBatteryTimeToFull() : GetBatteryTimeToEmpty();
 
@@ -417,9 +315,8 @@ base::string16 PowerStatus::GetAccessibleNameString(
              !IsBatteryDischargingOnLinePower()) {
     int hour = 0, min = 0;
     power_utils::SplitTimeIntoHoursAndMinutes(*time, &hour, &min);
-    base::string16 minute =
-        min < 10 ? base::ASCIIToUTF16("0") + base::NumberToString16(min)
-                 : base::NumberToString16(min);
+    std::u16string minute = min < 10 ? u"0" + base::NumberToString16(min)
+                                     : base::NumberToString16(min);
     battery_time_accessible = l10n_util::GetStringFUTF16(
         IsBatteryCharging()
             ? IDS_ASH_STATUS_TRAY_BATTERY_TIME_UNTIL_FULL_ACCESSIBLE
@@ -428,14 +325,13 @@ base::string16 PowerStatus::GetAccessibleNameString(
   }
   return battery_time_accessible.empty()
              ? battery_percentage_accessible
-             : battery_percentage_accessible + base::ASCIIToUTF16(" ") +
-                   battery_time_accessible;
+             : battery_percentage_accessible + u" " + battery_time_accessible;
 }
 
-std::pair<base::string16, base::string16> PowerStatus::GetStatusStrings()
+std::pair<std::u16string, std::u16string> PowerStatus::GetStatusStrings()
     const {
-  base::string16 percentage;
-  base::string16 status;
+  std::u16string percentage;
+  std::u16string status;
   if (IsBatteryFull()) {
     status = l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_BATTERY_FULL);
   } else {
@@ -452,7 +348,7 @@ std::pair<base::string16, base::string16> PowerStatus::GetStatusStrings()
                                                  : GetBatteryTimeToEmpty();
       if (time && power_utils::ShouldDisplayBatteryTime(*time) &&
           !IsBatteryDischargingOnLinePower()) {
-        base::string16 duration;
+        std::u16string duration;
         if (!base::TimeDurationFormat(*time, base::DURATION_WIDTH_NUMERIC,
                                       &duration))
           LOG(ERROR) << "Failed to format duration " << *time;
@@ -468,9 +364,9 @@ std::pair<base::string16, base::string16> PowerStatus::GetStatusStrings()
   return std::make_pair(percentage, status);
 }
 
-base::string16 PowerStatus::GetInlinedStatusString() const {
-  base::string16 percentage_text;
-  base::string16 status_text;
+std::u16string PowerStatus::GetInlinedStatusString() const {
+  std::u16string percentage_text;
+  std::u16string status_text;
   std::tie(percentage_text, status_text) = GetStatusStrings();
 
   if (!percentage_text.empty() && !status_text.empty()) {

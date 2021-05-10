@@ -13,14 +13,14 @@ import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
-import org.chromium.chrome.test.util.ApplicationTestUtils;
+import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
+import org.chromium.chrome.test.util.ChromeApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 
 import java.util.concurrent.TimeoutException;
 
@@ -38,7 +38,7 @@ public class MultiActivityTestRule implements TestRule {
             throws TimeoutException {
         waitForTabCreation(activity);
 
-        ApplicationTestUtils.assertWaitForPageScaleFactorMatch(activity, 0.5f);
+        ChromeApplicationTestUtils.assertWaitForPageScaleFactorMatch(activity, 0.5f);
         final Tab tab = activity.getActivityTab();
         assert tab != null;
 
@@ -50,7 +50,7 @@ public class MultiActivityTestRule implements TestRule {
 
     private void waitForTabCreation(ChromeActivity activity) throws TimeoutException {
         final CallbackHelper newTabCreatorHelper = new CallbackHelper();
-        activity.getTabModelSelector().addObserver(new EmptyTabModelSelectorObserver() {
+        activity.getTabModelSelector().addObserver(new TabModelSelectorObserver() {
             @Override
             public void onNewTabCreated(Tab tab, @TabCreationState int creationState) {
                 newTabCreatorHelper.notifyCalled();
@@ -61,11 +61,11 @@ public class MultiActivityTestRule implements TestRule {
 
     private void ruleSetUp() {
         mContext = InstrumentationRegistry.getTargetContext();
-        ApplicationTestUtils.setUp(mContext);
+        ChromeApplicationTestUtils.setUp(mContext);
     }
 
     private void ruleTearDown() {
-        ApplicationTestUtils.tearDown(mContext);
+        ChromeApplicationTestUtils.tearDown(mContext);
     }
 
     @Override

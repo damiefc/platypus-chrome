@@ -125,8 +125,6 @@ class SmbService : public KeyedService,
       SmbFsShare::MounterCreationCallback callback);
 
  private:
-  friend class SmbServiceTest;
-
   using MountInternalCallback =
       base::OnceCallback<void(SmbMountResult result,
                               const base::FilePath& mount_path)>;

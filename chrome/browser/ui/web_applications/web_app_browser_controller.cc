@@ -4,8 +4,10 @@
 
 #include "chrome/browser/ui/web_applications/web_app_browser_controller.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -20,13 +22,15 @@
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
+#include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/apps/apk_web_app_service.h"
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/apps/apk_web_app_service.h"
 
 namespace {
 constexpr char kRelationship[] = "delegate_permission/common.handle_all_urls";
@@ -39,7 +43,7 @@ WebAppBrowserController::WebAppBrowserController(Browser* browser)
     : AppBrowserController(browser,
                            GetAppIdFromApplicationName(browser->app_name())),
       provider_(*WebAppProvider::Get(browser->profile())) {
-  registrar_observer_.Add(&provider_.registrar());
+  registrar_observation_.Observe(&provider_.registrar());
   PerformDigitalAssetLinkVerification(browser);
 }
 
@@ -58,7 +62,15 @@ bool WebAppBrowserController::IsHostedApp() const {
   return true;
 }
 
-#if defined(OS_CHROMEOS)
+bool WebAppBrowserController::IsWindowControlsOverlayEnabled() const {
+  if (!base::FeatureList::IsEnabled(features::kWebAppWindowControlsOverlay))
+    return false;
+
+  DisplayMode display = registrar().GetAppEffectiveDisplayMode(GetAppId());
+  return display == DisplayMode::kWindowControlsOverlay;
+}
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 bool WebAppBrowserController::ShouldShowCustomTabBar() const {
   if (AppBrowserController::ShouldShowCustomTabBar())
     return true;
@@ -82,7 +94,7 @@ void WebAppBrowserController::OnRelationshipCheckComplete(
   browser()->window()->UpdateCustomTabBarVisibility(should_show_cct,
                                                     false /* animate */);
 }
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 void WebAppBrowserController::OnWebAppUninstalled(const AppId& app_id) {
   if (HasAppId() && app_id == GetAppId())
@@ -90,7 +102,7 @@ void WebAppBrowserController::OnWebAppUninstalled(const AppId& app_id) {
 }
 
 void WebAppBrowserController::OnAppRegistrarDestroyed() {
-  registrar_observer_.RemoveAll();
+  registrar_observation_.Reset();
 }
 
 void WebAppBrowserController::SetReadIconCallbackForTesting(
@@ -103,7 +115,7 @@ gfx::ImageSkia WebAppBrowserController::GetWindowAppIcon() const {
     return *app_icon_;
   app_icon_ = GetFallbackAppIcon();
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon) &&
       apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(
           browser()->profile())) {
@@ -179,7 +191,7 @@ WebAppBrowserController* WebAppBrowserController::AsWebAppBrowserController() {
   return this;
 }
 
-base::string16 WebAppBrowserController::GetTitle() const {
+std::u16string WebAppBrowserController::GetTitle() const {
   // When showing the toolbar, display the name of the app, instead of the
   // current page as the title.
   if (ShouldShowCustomTabBar()) {
@@ -190,25 +202,25 @@ base::string16 WebAppBrowserController::GetTitle() const {
   return AppBrowserController::GetTitle();
 }
 
-base::string16 WebAppBrowserController::GetAppShortName() const {
+std::u16string WebAppBrowserController::GetAppShortName() const {
   return base::UTF8ToUTF16(registrar().GetAppShortName(GetAppId()));
 }
 
-base::string16 WebAppBrowserController::GetFormattedUrlOrigin() const {
+std::u16string WebAppBrowserController::GetFormattedUrlOrigin() const {
   return FormatUrlOrigin(GetAppStartUrl());
 }
 
-bool WebAppBrowserController::CanUninstall() const {
+bool WebAppBrowserController::CanUserUninstall() const {
   return WebAppUiManagerImpl::Get(browser()->profile())
       ->dialog_manager()
-      .CanUninstallWebApp(GetAppId());
+      .CanUserUninstallWebApp(GetAppId());
 }
 
-void WebAppBrowserController::Uninstall() {
+void WebAppBrowserController::Uninstall(
+    webapps::WebappUninstallSource webapp_uninstall_source) {
   WebAppUiManagerImpl::Get(browser()->profile())
       ->dialog_manager()
-      .UninstallWebApp(GetAppId(),
-                       WebAppDialogManager::UninstallSource::kAppMenu,
+      .UninstallWebApp(GetAppId(), webapps::WebappUninstallSource::kAppMenu,
                        browser()->window(), base::DoNothing());
 }
 
@@ -269,7 +281,7 @@ void WebAppBrowserController::OnReadIcon(const SkBitmap& bitmap) {
 
 void WebAppBrowserController::PerformDigitalAssetLinkVerification(
     Browser* browser) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   asset_link_handler_ =
       std::make_unique<digital_asset_links::DigitalAssetLinksHandler>(
           browser->profile()->GetURLLoaderFactory());
@@ -278,8 +290,8 @@ void WebAppBrowserController::PerformDigitalAssetLinkVerification(
   if (!HasAppId())
     return;
 
-  chromeos::ApkWebAppService* apk_web_app_service =
-      chromeos::ApkWebAppService::Get(browser->profile());
+  ash::ApkWebAppService* apk_web_app_service =
+      ash::ApkWebAppService::Get(browser->profile());
   if (!apk_web_app_service || !apk_web_app_service->IsWebOnlyTwa(GetAppId()))
     return;
 

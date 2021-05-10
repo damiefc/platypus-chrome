@@ -39,6 +39,18 @@ NSString* const kOriginDetectedKey = @"OriginDetectedKey";
     // Sizing of the window is handled by UIKit.
     _window = [[ChromeOverlayWindow alloc] init];
     CustomizeUIWindowAppearance(_window);
+
+    // Assign an a11y identifier for using in EGTest.
+    if (@available(iOS 13, *)) {
+      // See comment for [ChromeMatchersAppInterface windowWithNumber:] matcher
+      // for context.
+      _window.accessibilityIdentifier =
+          [NSString stringWithFormat:@"%ld", UIApplication.sharedApplication
+                                                     .connectedScenes.count -
+                                                 1];
+    } else {
+      _window.accessibilityIdentifier = @"0";
+    }
   }
   return _window;
 }
@@ -54,6 +66,9 @@ NSString* const kOriginDetectedKey = @"OriginDetectedKey";
                                                   options:connectionOptions];
   self.sceneState.activationLevel = SceneActivationLevelBackground;
   self.sceneState.connectionOptions = connectionOptions;
+  if (connectionOptions.URLContexts || connectionOptions.shortcutItem) {
+    self.sceneState.startupHadExternalIntent = YES;
+  }
 }
 
 - (WindowActivityOrigin)originFromSession:(UISceneSession*)session
@@ -116,6 +131,7 @@ NSString* const kOriginDetectedKey = @"OriginDetectedKey";
     openURLContexts:(NSSet<UIOpenURLContext*>*)URLContexts
     API_AVAILABLE(ios(13)) {
   DCHECK(!self.sceneState.URLContextsToOpen);
+  self.sceneState.startupHadExternalIntent = YES;
   self.sceneState.URLContextsToOpen = URLContexts;
 }
 

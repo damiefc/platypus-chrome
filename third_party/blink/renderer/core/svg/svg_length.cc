@@ -87,7 +87,7 @@ SVGLength::SVGLength(const CSSPrimitiveValue& value, SVGLengthMode mode)
 
 void SVGLength::Trace(Visitor* visitor) const {
   visitor->Trace(value_);
-  SVGPropertyBase::Trace(visitor);
+  SVGListablePropertyBase::Trace(visitor);
 }
 
 SVGLength* SVGLength::Clone() const {
@@ -177,15 +177,6 @@ float SVGLength::ValueAsPercentage() const {
   }
 
   return value_->GetFloatValue();
-}
-
-float SVGLength::ValueAsPercentage100() const {
-  // LengthTypePercentage is represented with 100% = 100.0. Good for accuracy
-  // but could eventually be changed.
-  if (value_->IsPercentage())
-    return value_->GetFloatValue();
-
-  return value_->GetFloatValue() * 100;
 }
 
 float SVGLength::ScaleByPercentage(float input) const {

@@ -4,9 +4,11 @@
 
 #include "chrome/browser/policy/cloud/user_policy_signin_service_mobile.h"
 
+#include <memory>
+
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
@@ -77,9 +79,8 @@ void UserPolicySigninService::RegisterForPolicyWithAccountId(
 
   // Fire off the registration process. Callback keeps the CloudPolicyClient
   // alive for the length of the registration process.
-  registration_helper_.reset(new CloudPolicyClientRegistrationHelper(
-      policy_client.get(),
-      kCloudPolicyRegistrationType));
+  registration_helper_ = std::make_unique<CloudPolicyClientRegistrationHelper>(
+      policy_client.get(), kCloudPolicyRegistrationType);
 
   // Using a raw pointer to |this| is okay, because we own the
   // |registration_helper_|.
@@ -144,7 +145,7 @@ void UserPolicySigninService::RegisterCloudPolicyService() {
   // If the user signed-out while this task was waiting then Shutdown() would
   // have been called, which would have invalidated this task. Since we're here
   // then the user must still be signed-in.
-  DCHECK(identity_manager()->HasPrimaryAccount());
+  DCHECK(identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
   DCHECK(!policy_manager()->IsClientRegistered());
   DCHECK(policy_manager()->core()->client());
 
@@ -152,11 +153,11 @@ void UserPolicySigninService::RegisterCloudPolicyService() {
   profile_prefs_->SetInt64(prefs::kLastPolicyCheckTime,
                            base::Time::Now().ToInternalValue());
 
-  registration_helper_.reset(new CloudPolicyClientRegistrationHelper(
-      policy_manager()->core()->client(),
-      kCloudPolicyRegistrationType));
+  registration_helper_ = std::make_unique<CloudPolicyClientRegistrationHelper>(
+      policy_manager()->core()->client(), kCloudPolicyRegistrationType);
   registration_helper_->StartRegistration(
-      identity_manager(), identity_manager()->GetPrimaryAccountId(),
+      identity_manager(),
+      identity_manager()->GetPrimaryAccountId(signin::ConsentLevel::kSync),
       base::BindOnce(&UserPolicySigninService::OnRegistrationDone,
                      base::Unretained(this)));
 }

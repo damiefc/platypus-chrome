@@ -5,8 +5,6 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_CHROMEOS_LOGIN_USER_CREATION_SCREEN_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_CHROMEOS_LOGIN_USER_CREATION_SCREEN_HANDLER_H_
 
-#include <string>
-
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 
 namespace chromeos {
@@ -24,7 +22,7 @@ class UserCreationView {
   // Shows the contents of the screen.
   virtual void Show() = 0;
 
-  // Binds |screen| to the view.
+  // Binds `screen` to the view.
   virtual void Bind(UserCreationScreen* screen) = 0;
 
   // Unbinds the screen from the view.

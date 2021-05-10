@@ -31,17 +31,15 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_POINT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_POINT_H_
 
-#include "third_party/blink/renderer/core/svg/properties/svg_property_helper.h"
-#include "third_party/blink/renderer/core/svg/svg_parsing_error.h"
+#include "third_party/blink/renderer/core/svg/properties/svg_listable_property.h"
 #include "third_party/blink/renderer/platform/geometry/float_point.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
-class AffineTransform;
 class SVGPointTearOff;
 
-class SVGPoint final : public SVGPropertyHelper<SVGPoint> {
+class SVGPoint final : public SVGListablePropertyBase {
  public:
   typedef SVGPointTearOff TearOffType;
 
@@ -49,6 +47,7 @@ class SVGPoint final : public SVGPropertyHelper<SVGPoint> {
   explicit SVGPoint(const FloatPoint&);
 
   SVGPoint* Clone() const;
+  SVGPropertyBase* CloneForAnimation(const String&) const override;
 
   const FloatPoint& Value() const { return value_; }
   void SetValue(const FloatPoint& value) { value_ = value; }
@@ -58,10 +57,7 @@ class SVGPoint final : public SVGPropertyHelper<SVGPoint> {
   void SetX(float f) { value_.SetX(f); }
   void SetY(float f) { value_.SetY(f); }
 
-  FloatPoint MatrixTransform(const AffineTransform&) const;
-
   String ValueAsString() const override;
-  SVGParsingError SetValueAsString(const String&);
 
   void Add(const SVGPropertyBase*, const SVGElement*) override;
   void CalculateAnimatedValue(
@@ -76,11 +72,9 @@ class SVGPoint final : public SVGPropertyHelper<SVGPoint> {
                           const SVGElement* context_element) const override;
 
   static AnimatedPropertyType ClassType() { return kAnimatedPoint; }
+  AnimatedPropertyType GetType() const override { return ClassType(); }
 
  private:
-  template <typename CharType>
-  SVGParsingError Parse(const CharType* ptr, const CharType* end);
-
   FloatPoint value_;
 };
 

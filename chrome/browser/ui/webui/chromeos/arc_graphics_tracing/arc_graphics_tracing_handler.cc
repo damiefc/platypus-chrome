@@ -16,21 +16,24 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_iterator.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
-#include "chrome/browser/chromeos/arc/tracing/arc_graphics_jank_detector.h"
-#include "chrome/browser/chromeos/arc/tracing/arc_system_model.h"
-#include "chrome/browser/chromeos/arc/tracing/arc_system_stat_collector.h"
-#include "chrome/browser/chromeos/arc/tracing/arc_tracing_graphics_model.h"
-#include "chrome/browser/chromeos/arc/tracing/arc_tracing_model.h"
+#include "chrome/browser/ash/arc/tracing/arc_graphics_jank_detector.h"
+#include "chrome/browser/ash/arc/tracing/arc_system_model.h"
+#include "chrome/browser/ash/arc/tracing/arc_system_stat_collector.h"
+#include "chrome/browser/ash/arc/tracing/arc_tracing_graphics_model.h"
+#include "chrome/browser/ash/arc/tracing/arc_tracing_model.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/arc/arc_features.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
 #include "components/exo/shell_surface_util.h"
@@ -151,7 +154,7 @@ bool ReadNameFromStatus(pid_t pid, pid_t tid, std::string* out_name) {
     std::vector<base::StringPiece> split_value_str = base::SplitStringPiece(
         value_str, "\t", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
     DCHECK_EQ(2U, split_value_str.size());
-    *out_name = split_value_str[1].as_string();
+    *out_name = std::string(split_value_str[1]);
     return true;
   }
 
@@ -201,6 +204,22 @@ std::pair<base::Value, std::string> BuildGraphicsModel(
     const base::FilePath& model_path) {
   DCHECK(system_stat_collector);
 
+  if (base::FeatureList::IsEnabled(arc::kSaveRawFilesOnTracing)) {
+    const base::FilePath raw_path =
+        model_path.DirName().Append(model_path.BaseName().value() + "_raw");
+    const base::FilePath system_path =
+        model_path.DirName().Append(model_path.BaseName().value() + "_system");
+    if (!base::WriteFile(base::FilePath(raw_path), data.c_str(),
+                         data.length())) {
+      LOG(ERROR) << "Failed to save raw trace model to " << raw_path.value();
+    }
+    const std::string system_raw = system_stat_collector->SerializeToJson();
+    if (!base::WriteFile(base::FilePath(system_path), system_raw.c_str(),
+                         system_raw.length())) {
+      LOG(ERROR) << "Failed to save system model to " << system_path.value();
+    }
+  }
+
   arc::ArcTracingModel common_model;
   const base::TimeTicks time_min_clamped =
       std::max(time_min, time_max - system_stat_collector->max_interval());
@@ -246,8 +265,11 @@ std::pair<base::Value, std::string> BuildGraphicsModel(
 }
 
 std::pair<base::Value, std::string> LoadGraphicsModel(
+    ArcGraphicsTracingMode mode,
     const std::string& json_text) {
   arc::ArcTracingGraphicsModel graphics_model;
+  if (mode != ArcGraphicsTracingMode::kFull)
+    graphics_model.set_skip_structure_validation();
   if (!graphics_model.LoadFromJson(json_text)) {
     UpdateStatistics(Action::kLoadFailed);
     return std::make_pair(base::Value(), "Failed to load tracing model");
@@ -271,14 +293,15 @@ base::trace_event::TraceConfig GetTracingConfig(ArcGraphicsTracingMode mode) {
   switch (mode) {
     case ArcGraphicsTracingMode::kFull: {
       base::trace_event::TraceConfig config(
-          "-*,exo,viz,toplevel,gpu,cc,blink,disabled-by-default-android "
-          "gfx,disabled-by-default-android view",
+          "-*,exo,viz,toplevel,gpu,cc,blink,disabled-by-default-android gfx,"
+          "disabled-by-default-android view",
           base::trace_event::RECORD_CONTINUOUSLY);
       config.EnableSystrace();
       // By default, systracing starts pre-defined set of categories with
       // predefined set of events in each category. Limit events to what we
       // actually analyze in ArcTracingModel.
       config.EnableSystraceEvent("i915:intel_gpu_freq_change");
+      config.EnableSystraceEvent("drm_msm_gpu:msm_gpu_freq_change");
       config.EnableSystraceEvent("power:cpu_idle");
       config.EnableSystraceEvent("sched:sched_wakeup");
       config.EnableSystraceEvent("sched:sched_switch");
@@ -289,6 +312,7 @@ base::trace_event::TraceConfig GetTracingConfig(ArcGraphicsTracingMode mode) {
           "-*,exo,viz,toplevel,gpu", base::trace_event::RECORD_CONTINUOUSLY);
       config.EnableSystrace();
       config.EnableSystraceEvent("i915:intel_gpu_freq_change");
+      config.EnableSystraceEvent("drm_msm_gpu:msm_gpu_freq_change");
       return config;
     }
   }
@@ -370,7 +394,7 @@ void ArcGraphicsTracingHandler::OnWindowActivated(ActivationReason reason,
   jank_detector_ =
       std::make_unique<arc::ArcGraphicsJankDetector>(base::BindRepeating(
           &ArcGraphicsTracingHandler::OnJankDetected, base::Unretained(this)));
-  exo::Surface* const surface = exo::GetShellMainSurface(arc_active_window_);
+  exo::Surface* const surface = exo::GetShellRootSurface(arc_active_window_);
   DCHECK(surface);
   surface->AddSurfaceObserver(this);
 }
@@ -448,7 +472,7 @@ void ArcGraphicsTracingHandler::DiscardActiveArcWindow() {
   if (!arc_active_window_)
     return;
 
-  exo::Surface* const surface = exo::GetShellMainSurface(arc_active_window_);
+  exo::Surface* const surface = exo::GetShellRootSurface(arc_active_window_);
   if (surface)
     surface->RemoveSurfaceObserver(this);
 
@@ -475,8 +499,8 @@ void ArcGraphicsTracingHandler::StartTracing() {
   tracing_active_ = true;
   if (jank_detector_)
     jank_detector_->Reset();
-  system_stat_colletor_ = std::make_unique<arc::ArcSystemStatCollector>();
-  system_stat_colletor_->Start(GetMaxInterval());
+  system_stat_collector_ = std::make_unique<arc::ArcSystemStatCollector>();
+  system_stat_collector_->Start(GetMaxInterval());
 
   // Timestamp and app information would be updated when |OnTracingStarted| is
   // called.
@@ -497,8 +521,8 @@ void ArcGraphicsTracingHandler::StopTracing() {
 
   tracing_time_max_ = TRACE_TIME_TICKS_NOW();
 
-  if (system_stat_colletor_)
-    system_stat_colletor_->Stop();
+  if (system_stat_collector_)
+    system_stat_collector_->Stop();
 
   content::TracingController* const controller =
       content::TracingController::GetInstance();
@@ -534,7 +558,7 @@ void ArcGraphicsTracingHandler::OnTracingStarted() {
   tracing_time_min_ = TRACE_TIME_TICKS_NOW();
   if (mode_ == ArcGraphicsTracingMode::kOverview) {
     stop_tracing_timer_.Start(
-        FROM_HERE, system_stat_colletor_->max_interval(),
+        FROM_HERE, system_stat_collector_->max_interval(),
         base::BindOnce(&ArcGraphicsTracingHandler::StopTracingAndActivate,
                        base::Unretained(this)));
   }
@@ -555,7 +579,7 @@ void ArcGraphicsTracingHandler::OnTracingStopped(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&BuildGraphicsModel, std::move(string_data), mode_,
                      active_task_title_, active_task_icon_png_, timestamp_,
-                     std::move(system_stat_colletor_), tracing_time_min_,
+                     std::move(system_stat_collector_), tracing_time_min_,
                      tracing_time_max_, model_path),
       base::BindOnce(&ArcGraphicsTracingHandler::OnGraphicsModelReady,
                      weak_ptr_factory_.GetWeakPtr()));
@@ -617,7 +641,7 @@ void ArcGraphicsTracingHandler::HandleLoadFromText(
 
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::BindOnce(&LoadGraphicsModel,
+      base::BindOnce(&LoadGraphicsModel, mode_,
                      std::move(args->GetList()[0].GetString())),
       base::BindOnce(&ArcGraphicsTracingHandler::OnGraphicsModelReady,
                      weak_ptr_factory_.GetWeakPtr()));

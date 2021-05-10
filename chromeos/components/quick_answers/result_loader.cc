@@ -3,12 +3,12 @@
 // found in the LICENSE file.
 #include "chromeos/components/quick_answers/result_loader.h"
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/components/quick_answers/search_result_loader.h"
 #include "chromeos/components/quick_answers/translation_result_loader.h"
 #include "chromeos/components/quick_answers/utils/quick_answers_metrics.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 
@@ -66,33 +66,39 @@ void ResultLoader::Fetch(const PreprocessedOutput& preprocessed_output) {
   // Load the resource.
   BuildRequest(preprocessed_output,
                base::BindOnce(&ResultLoader::OnBuildRequestComplete,
-                              weak_factory_.GetWeakPtr()));
+                              weak_factory_.GetWeakPtr(), preprocessed_output));
 }
 
 void ResultLoader::OnBuildRequestComplete(
-    std::unique_ptr<network::ResourceRequest> resource_request) {
+    const PreprocessedOutput& preprocessed_output,
+    std::unique_ptr<network::ResourceRequest> resource_request,
+    const std::string& request_body) {
   loader_ = network::SimpleURLLoader::Create(std::move(resource_request),
                                              kNetworkTrafficAnnotationTag);
+  if (!request_body.empty())
+    loader_->AttachStringForUpload(request_body, "application/json");
 
   fetch_start_time_ = base::TimeTicks::Now();
   loader_->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
       network_loader_factory_,
       base::BindOnce(&ResultLoader::OnSimpleURLLoaderComplete,
-                     weak_factory_.GetWeakPtr()));
+                     weak_factory_.GetWeakPtr(), preprocessed_output));
 }
 
 void ResultLoader::OnSimpleURLLoaderComplete(
+    const PreprocessedOutput& preprocessed_output,
     std::unique_ptr<std::string> response_body) {
   base::TimeDelta duration = base::TimeTicks::Now() - fetch_start_time_;
 
   if (!response_body || loader_->NetError() != net::OK ||
       !loader_->ResponseInfo() || !loader_->ResponseInfo()->headers) {
     RecordLoadingStatus(LoadStatus::kNetworkError, duration);
+    RecordNetworkError(preprocessed_output.intent_info.intent_type);
     delegate_->OnNetworkError();
     return;
   }
 
-  ProcessResponse(std::move(response_body),
+  ProcessResponse(preprocessed_output, std::move(response_body),
                   base::BindOnce(&ResultLoader::OnResultParserComplete,
                                  weak_factory_.GetWeakPtr()));
 }

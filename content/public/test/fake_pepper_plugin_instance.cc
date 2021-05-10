@@ -55,20 +55,8 @@ bool FakePepperPluginInstance::IsFullPagePlugin() {
   return false;
 }
 
-bool FakePepperPluginInstance::FlashSetFullscreen(bool fullscreen,
-                                                  bool delay_report) {
-  return false;
-}
-
 bool FakePepperPluginInstance::IsRectTopmost(const gfx::Rect& rect) {
   return false;
-}
-
-int32_t FakePepperPluginInstance::Navigate(
-    const ppapi::URLRequestInfoData& request,
-    const char* target,
-    bool from_user_action) {
-  return PP_ERROR_FAILED;
 }
 
 int FakePepperPluginInstance::MakePendingFileRefRendererHost(
@@ -79,7 +67,7 @@ int FakePepperPluginInstance::MakePendingFileRefRendererHost(
 void FakePepperPluginInstance::SetEmbedProperty(PP_Var key, PP_Var value) {}
 
 void FakePepperPluginInstance::SetSelectedText(
-    const base::string16& selected_text) {}
+    const std::u16string& selected_text) {}
 
 void FakePepperPluginInstance::SetLinkUnderCursor(const std::string& url) {}
 void FakePepperPluginInstance::SetTextInputType(ui::TextInputType type) {}

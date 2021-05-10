@@ -6,13 +6,13 @@
 
 #include <utility>
 
+#include "ash/components/audio/cras_audio_handler.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/consent_auditor/consent_auditor_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/webui/chromeos/user_image_source.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
 #include "components/arc/arc_prefs.h"
@@ -184,6 +184,9 @@ base::Value GetSettingsUiStrings(const assistant::SettingsUi& settings_ui,
   auto third_party_disclosure_ui = consent_ui.third_party_disclosure_ui();
   base::Value dictionary(base::Value::Type::DICTIONARY);
 
+  dictionary.SetKey("activityControlNeeded",
+                    base::Value(activity_control_needed));
+
   // Add activity control string constants.
   if (activity_control_needed) {
     scoped_refptr<base::RefCountedMemory> image =
@@ -226,10 +229,9 @@ void RecordActivityControlConsent(Profile* profile,
                                   bool opted_in) {
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
   // This function doesn't care about browser sync consent.
-  DCHECK(
-      identity_manager->HasPrimaryAccount(signin::ConsentLevel::kNotRequired));
+  DCHECK(identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin));
   const CoreAccountId account_id =
-      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kNotRequired);
+      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kSignin);
 
   using sync_pb::UserConsentTypes;
   UserConsentTypes::AssistantActivityControlConsent consent;

@@ -18,7 +18,6 @@
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_html_element.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -61,8 +60,9 @@ class RuleFeatureSetTest : public testing::Test {
     RuleFeatureSet::SelectorPreMatch result =
         RuleFeatureSet::SelectorPreMatch::kSelectorNeverMatches;
     for (unsigned i = 0; i < indices.size(); ++i) {
-      RuleData* rule_data = RuleData::MaybeCreate(style_rule, indices[i], 0,
-                                                  kRuleHasNoSpecialState);
+      RuleData* rule_data = RuleData::MaybeCreate(
+          style_rule, indices[i], 0, kRuleHasNoSpecialState,
+          nullptr /* container_query */);
       DCHECK(rule_data);
       if (set.CollectFeaturesFromRuleData(rule_data))
         result = RuleFeatureSet::SelectorPreMatch::kSelectorMayMatch;
@@ -597,22 +597,6 @@ TEST_F(RuleFeatureSetTest, tagName) {
   CollectInvalidationSetsForPseudoClass(invalidation_lists,
                                         CSSSelector::kPseudoValid);
   ExpectTagNameInvalidation("e", invalidation_lists.descendants);
-}
-
-TEST_F(RuleFeatureSetTest, contentPseudo) {
-  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch,
-            CollectFeatures(".a ::content .b"));
-  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch, CollectFeatures(".a .c"));
-
-  InvalidationLists invalidation_lists;
-  CollectInvalidationSetsForClass(invalidation_lists, "a");
-  ExpectClassInvalidation("c", invalidation_lists.descendants);
-
-  EXPECT_EQ(RuleFeatureSet::kSelectorMayMatch, CollectFeatures(".a .b"));
-
-  invalidation_lists.descendants.clear();
-  CollectInvalidationSetsForClass(invalidation_lists, "a");
-  ExpectClassInvalidation("b", "c", invalidation_lists.descendants);
 }
 
 TEST_F(RuleFeatureSetTest, nonMatchingHost) {
@@ -1523,11 +1507,14 @@ RefTestData ref_equal_test_data[] = {
     {".a :is(.b, .c)::slotted(.d)", ".a .b::slotted(.d), .a .c::slotted(.d)"},
     {".a + :is(.b, .c)::slotted(.d)",
      ".a + .b::slotted(.d), .a + .c::slotted(.d)"},
+    {".a::slotted(:is(.b, .c))", ".a::slotted(.b), .a::slotted(.c)"},
     {":is(.a, .b)::cue(i)", ".a::cue(i), .b::cue(i)"},
     {".a :is(.b, .c)::cue(i)", ".a .b::cue(i), .a .c::cue(i)"},
     {".a + :is(.b, .c)::cue(i)", ".a + .b::cue(i), .a + .c::cue(i)"},
+    {".a::cue(:is(.b, .c))", ".a::cue(.b), .a::cue(.c)"},
     {":is(.a, :host + .b, .c) .d", ".a .d, :host + .b .d, .c .d"},
     {":is(.a, :host(.b) .c, .d) div", ".a div, :host(.b) .c div, .d div"},
+    {".a::host(:is(.b, .c))", ".a::host(.b), .a::host(.c)"},
     {".a :is(.b, .c)::part(foo)", ".a .b::part(foo), .a .c::part(foo)"},
     {":is(.a, .b)::part(foo)", ".a::part(foo), .b::part(foo)"},
     {":is(.a, .b) :is(.c, .d)::part(foo)",
@@ -1563,6 +1550,47 @@ RefTestData ref_equal_test_data[] = {
     {":is(.a, *) .b", ".a .b, * .b"},
     {":is(.a + .b, .c) *", ".a + .b *, .c *"},
     {":is(.a + *, .c) *", ".a + * *, .c *"},
+    {".a + .b + .c:is(*)", ".a + .b + .c"},
+    {".a :not(.b)", ".a *, .b"},
+    {".a :not(.b, .c)", ".a *, .b, .c"},
+    {".a :not(.b, .c .d)", ".a *, .b, .c .d"},
+    {".a :not(.b, .c + .d)", ".a *, .b, .c + .d"},
+    {".a + :not(.b, .c + .d)", ".a + *, .b, .c + .d"},
+    {":not(.a .b) .c", ".a .c, .b .c"},
+    {":not(.a .b, .c) + .d", "* + .d, .a .b + .d, .c + .d"},
+    {":not(.a .b, .c .d) :not(.e + .f, .g + .h)",
+     ".a .b *, .c .d *, :not(.e + .f), :not(.g + .h)"},
+    {":not(.a, .b)", ":not(.a), :not(.b)"},
+    {":not(.a .b, .c)", ":not(.a .b), :not(.c)"},
+    {":not(.a :not(.b + .c), :not(div))", ":not(.a :not(.b + .c)), :not(div)"},
+    {":not(:is(.a))", ":not(.a)"},
+    {":not(:is(.a, .b))", ":not(.a), :not(.b)"},
+    {":not(:is(.a .b))", ":not(.a .b)"},
+    {":not(:is(.a .b, .c + .d))", ":not(.a .b, .c + .d)"},
+    {".a :not(:is(.b .c))", ".a :not(.b .c)"},
+    {":not(:is(.a)) .b", ":not(.a) .b"},
+    {":not(:is(.a .b, .c)) :not(:is(.d + .e, .f))",
+     ":not(.a .b, .c) :not(.d + .e, .f)"},
+    // We don't have any special support for nested :not(): it's treated
+    // as a single :not() level in terms of invalidation:
+    {":not(:not(.a))", ":not(.a)"},
+    {":not(:not(:not(.a)))", ":not(.a)"},
+    {".a :not(:is(:not(.b), .c))", ".a :not(.b), .a :not(.c)"},
+    {":not(:is(:not(.a), .b)) .c", ":not(.a) .c, :not(.b) .c"},
+    {".a :is(:hover)", ".a :hover"},
+    {":is(:hover) .a", ":hover .a"},
+    {"button:is(:hover, :focus)", "button:hover, button:focus"},
+    {".a :is(.b, :hover)", ".a .b, .a :hover"},
+    {".a + :is(:hover) + .c", ".a + :hover + .c"},
+    {".a + :is(.b, :hover) + .c", ".a + .b + .c, .a + :hover + .c"},
+    {":is(ol, li)::before", "ol::before, li::before"},
+    {":is(.a + .b, .c)::before", ".a + .b::before, .c::before"},
+    {":is(ol, li)::-internal-input-suggested",
+     "ol::-internal-input-suggested, li::-internal-input-suggested"},
+    {":is([foo], [bar])", "[foo], [bar]"},
+    {".a :is([foo], [bar])", ".a [foo], .a [bar]"},
+    {":is([foo], [bar]) .a", "[foo] .a, [bar] .a"},
+    {":is([a], [b]) :is([c], [d])", "[a] [c], [a] [d], [b] [c], [b] [d]"},
 
     // clang-format on
 };
@@ -1578,7 +1606,6 @@ RefTestData ref_not_equal_test_data[] = {
     {"", ":host"},
     {"", ":host(.a)"},
     {"", ":host-context(.a)"},
-    {"", "::content"},
     {"", "*"},
     {"", ":not(.a)"},
     {".a", ".b"},
@@ -1598,12 +1625,8 @@ RefTestData ref_not_equal_test_data[] = {
     // clang-format on
 };
 
-class RuleFeatureSetRefTest : public RuleFeatureSetTest,
-                              private ScopedCSSPseudoIsForTest,
-                              private ScopedCSSPseudoWhereForTest {
+class RuleFeatureSetRefTest : public RuleFeatureSetTest {
  public:
-  RuleFeatureSetRefTest()
-      : ScopedCSSPseudoIsForTest(true), ScopedCSSPseudoWhereForTest(true) {}
 
   void Run(const RefTestData& data) {
     RuleFeatureSet main_set;

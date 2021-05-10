@@ -90,6 +90,12 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
     /** Resets the state of the InfoBarContainer when the user navigates. */
     private final TabObserver mTabObserver = new EmptyTabObserver() {
         @Override
+        public void onDidStartNavigation(Tab tab, NavigationHandle navigationHandle) {
+            // Make sure Y translation is reset on navigation.
+            if (mInfoBarContainerView != null) mInfoBarContainerView.setTranslationY(0);
+        }
+
+        @Override
         public void onDidFinishNavigation(Tab tab, NavigationHandle navigation) {
             if (navigation.hasCommitted() && navigation.isInMainFrame()) {
                 setHidden(false);
@@ -213,6 +219,15 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
     @Nullable
     public static InfoBarContainer get(Tab tab) {
         return tab.getUserDataHost().getUserData(USER_DATA_KEY);
+    }
+
+    @VisibleForTesting
+    public static void removeInfoBarContainerForTesting(Tab tab) {
+        InfoBarContainer container = get(tab);
+        if (container != null) {
+            tab.getUserDataHost().removeUserData(USER_DATA_KEY);
+            container.destroy();
+        }
     }
 
     private InfoBarContainer(Tab tab) {

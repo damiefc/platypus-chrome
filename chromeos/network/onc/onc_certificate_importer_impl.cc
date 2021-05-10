@@ -11,8 +11,8 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/sequenced_task_runner.h"
@@ -218,7 +218,7 @@ bool CertificateImporterImpl::StoreClientCertificate(
 
   int import_result =
       nssdb->ImportFromPKCS12(private_slot.get(), certificate.pkcs12_data(),
-                              base::string16(), false, &imported_certs);
+                              std::u16string(), false, &imported_certs);
   if (import_result != net::OK) {
     std::string error_string = net::ErrorToString(import_result);
     NET_LOG(ERROR) << "Unable to import client certificate with guid: "

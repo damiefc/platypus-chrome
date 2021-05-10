@@ -5,13 +5,13 @@
 #include "ash/system/accessibility/autoclick_menu_bubble_controller.h"
 
 #include "ash/accessibility/accessibility_controller_impl.h"
-#include "ash/autoclick/autoclick_controller.h"
+#include "ash/accessibility/autoclick/autoclick_controller.h"
 #include "ash/public/cpp/locale_update_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/system/accessibility/autoclick_scroll_bubble_controller.h"
 #include "ash/test/ash_test_base.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
 

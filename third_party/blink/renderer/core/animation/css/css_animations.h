@@ -68,14 +68,14 @@ class CORE_EXPORT CSSAnimations final {
   static bool IsAnimatingFontAffectingProperties(const ElementAnimations*);
   static bool IsAnimatingRevert(const ElementAnimations*);
   static void CalculateAnimationUpdate(CSSAnimationUpdate&,
-                                       const Element* animating_element,
+                                       const Element& animating_element,
                                        Element&,
                                        const ComputedStyle&,
                                        const ComputedStyle* parent_style,
                                        StyleResolver*);
   static void CalculateCompositorAnimationUpdate(
       CSSAnimationUpdate&,
-      const Element* animating_element,
+      const Element& animating_element,
       Element&,
       const ComputedStyle&,
       const ComputedStyle* parent_style,
@@ -95,7 +95,7 @@ class CORE_EXPORT CSSAnimations final {
   enum class PropertyPass { kCustom, kStandard };
   static void CalculateTransitionUpdate(CSSAnimationUpdate&,
                                         PropertyPass,
-                                        Element* animating_element,
+                                        Element& animating_element,
                                         const ComputedStyle&);
 
   static void SnapshotCompositorKeyframes(Element&,
@@ -129,6 +129,8 @@ class CORE_EXPORT CSSAnimations final {
           style_rule_version(new_animation.style_rule_version),
           play_state_list(new_animation.play_state_list) {}
 
+    AnimationTimeline* Timeline() const { return animation->timeline(); }
+
     void Update(UpdatedCSSAnimation update) {
       DCHECK_EQ(update.animation, animation);
       style_rule = update.style_rule;
@@ -155,12 +157,12 @@ class CORE_EXPORT CSSAnimations final {
    public:
     virtual ~RunningTransition() = default;
 
-    void Trace(Visitor* visitor) const { visitor->Trace(animation); }
+    void Trace(Visitor*) const;
 
     Member<Animation> animation;
-    scoped_refptr<const ComputedStyle> from;
-    scoped_refptr<const ComputedStyle> to;
-    scoped_refptr<const ComputedStyle> reversing_adjusted_start_value;
+    Member<const ComputedStyle> from;
+    Member<const ComputedStyle> to;
+    Member<const ComputedStyle> reversing_adjusted_start_value;
     double reversing_shortening_factor;
   };
 
@@ -180,11 +182,11 @@ class CORE_EXPORT CSSAnimations final {
 
    public:
     CSSAnimationUpdate& update;
-    Element* animating_element = nullptr;
+    Element& animating_element;
     const ComputedStyle& old_style;
     const ComputedStyle& style;
-    scoped_refptr<const ComputedStyle> before_change_style;
-    scoped_refptr<const ComputedStyle> cloned_style;
+    const ComputedStyle* before_change_style;
+    const ComputedStyle* cloned_style;
     const TransitionMap* active_transitions;
     HashSet<PropertyHandle>& listed_properties;
     const CSSTransitionData* transition_data;
@@ -207,18 +209,18 @@ class CORE_EXPORT CSSAnimations final {
 
   static void CalculateAnimationActiveInterpolations(
       CSSAnimationUpdate&,
-      const Element* animating_element);
+      const Element& animating_element);
   static void CalculateTransitionActiveInterpolations(
       CSSAnimationUpdate&,
       PropertyPass,
-      const Element* animating_element);
+      const Element& animating_element);
 
   // The before-change style is defined as the computed values of all properties
   // on the element as of the previous style change event, except with any
   // styles derived from declarative animations updated to the current time.
   // https://drafts.csswg.org/css-transitions-1/#before-change-style
-  static scoped_refptr<const ComputedStyle> CalculateBeforeChangeStyle(
-      Element* animating_element,
+  static const ComputedStyle* CalculateBeforeChangeStyle(
+      Element& animating_element,
       const ComputedStyle& base_style);
 
   class AnimationEventDelegate final : public AnimationEffect::EventDelegate {
@@ -307,4 +309,4 @@ struct DowncastTraits<CSSAnimations::TransitionEventDelegate> {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_ANIMATION_CSS_CSS_ANIMATIONS_H_

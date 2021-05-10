@@ -72,12 +72,12 @@ void UseSystemTheme(Profile* profile) {
   GetThemeService(profile)->UseSystemTheme();
 }
 
-// Helper function to let us bind this functionality into a base::Callback.
+// Helper function to let us bind this functionality into a callback.
 bool UsingSystemThemeFunc(ThemeService* theme_service) {
   return theme_service->UsingSystemTheme();
 }
 
-// Helper function to let us bind this functionality into a base::Callback.
+// Helper function to let us bind this functionality into a callback.
 bool UsingDefaultThemeFunc(ThemeService* theme_service) {
   return theme_service->UsingDefaultTheme();
 }
@@ -112,15 +112,15 @@ void ThemePendingInstallChecker::Observe(
 ThemeConditionChecker::ThemeConditionChecker(
     Profile* profile,
     const std::string& debug_message,
-    base::Callback<bool(ThemeService*)> exit_condition)
+    const base::RepeatingCallback<bool(ThemeService*)>& exit_condition)
     : profile_(profile),
       debug_message_(debug_message),
       exit_condition_(exit_condition) {
-  registrar_.Add(this, chrome::NOTIFICATION_BROWSER_THEME_CHANGED,
-                 content::Source<ThemeService>(GetThemeService(profile_)));
+  GetThemeService(profile_)->AddObserver(this);
 }
 
 ThemeConditionChecker::~ThemeConditionChecker() {
+  GetThemeService(profile_)->RemoveObserver(this);
 }
 
 bool ThemeConditionChecker::IsExitConditionSatisfied(std::ostream* os) {
@@ -128,21 +128,18 @@ bool ThemeConditionChecker::IsExitConditionSatisfied(std::ostream* os) {
   return exit_condition_.Run(GetThemeService(profile_));
 }
 
-void ThemeConditionChecker::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  DCHECK_EQ(chrome::NOTIFICATION_BROWSER_THEME_CHANGED, type);
+void ThemeConditionChecker::OnThemeChanged() {
   CheckExitCondition();
 }
 
 SystemThemeChecker::SystemThemeChecker(Profile* profile)
-    : ThemeConditionChecker(profile,
-                            "Waiting until profile is using system theme",
-                            base::Bind(&themes_helper::UsingSystemThemeFunc)) {}
+    : ThemeConditionChecker(
+          profile,
+          "Waiting until profile is using system theme",
+          base::BindRepeating(&themes_helper::UsingSystemThemeFunc)) {}
 
 DefaultThemeChecker::DefaultThemeChecker(Profile* profile)
-    : ThemeConditionChecker(profile,
-                            "Waiting until profile is using default theme",
-                            base::Bind(&themes_helper::UsingDefaultThemeFunc)) {
-}
+    : ThemeConditionChecker(
+          profile,
+          "Waiting until profile is using default theme",
+          base::BindRepeating(&themes_helper::UsingDefaultThemeFunc)) {}

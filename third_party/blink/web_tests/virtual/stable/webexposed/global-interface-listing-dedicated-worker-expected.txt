@@ -42,11 +42,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method match
 [Worker]     method matchAll
 [Worker]     setter onprogress
-[Worker] interface BarcodeDetector
-[Worker]     static method getSupportedFormats
-[Worker]     attribute @@toStringTag
-[Worker]     method constructor
-[Worker]     method detect
 [Worker] interface Blob
 [Worker]     attribute @@toStringTag
 [Worker]     getter size
@@ -478,7 +473,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method requestPermission
 [Worker] interface FileSystemWritableFileStream : WritableStream
 [Worker]     attribute @@toStringTag
-[Worker]     method close
 [Worker]     method constructor
 [Worker]     method seek
 [Worker]     method truncate
@@ -687,6 +681,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method transferFromImageBitmap
 [Worker] interface ImageData
 [Worker]     attribute @@toStringTag
+[Worker]     getter colorSpace
 [Worker]     getter data
 [Worker]     getter height
 [Worker]     getter width
@@ -737,6 +732,12 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method enable
 [Worker]     method getState
 [Worker]     method setHeaderValue
+[Worker] interface NavigatorUAData
+[Worker]     attribute @@toStringTag
+[Worker]     getter brands
+[Worker]     getter mobile
+[Worker]     method constructor
+[Worker]     method getHighEntropyValues
 [Worker] interface NetworkInformation : EventTarget
 [Worker]     attribute @@toStringTag
 [Worker]     getter downlink
@@ -1012,6 +1013,14 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter applicationServerKey
 [Worker]     getter userVisibleOnly
 [Worker]     method constructor
+[Worker] interface ReadableByteStreamController
+[Worker]     attribute @@toStringTag
+[Worker]     getter byobRequest
+[Worker]     getter desiredSize
+[Worker]     method close
+[Worker]     method constructor
+[Worker]     method enqueue
+[Worker]     method error
 [Worker] interface ReadableStream
 [Worker]     attribute @@toStringTag
 [Worker]     getter locked
@@ -1021,6 +1030,26 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method pipeThrough
 [Worker]     method pipeTo
 [Worker]     method tee
+[Worker] interface ReadableStreamBYOBReader
+[Worker]     attribute @@toStringTag
+[Worker]     getter closed
+[Worker]     method cancel
+[Worker]     method constructor
+[Worker]     method read
+[Worker]     method releaseLock
+[Worker] interface ReadableStreamBYOBRequest
+[Worker]     attribute @@toStringTag
+[Worker]     getter view
+[Worker]     method constructor
+[Worker]     method respond
+[Worker]     method respondWithNewView
+[Worker] interface ReadableStreamDefaultController
+[Worker]     attribute @@toStringTag
+[Worker]     getter desiredSize
+[Worker]     method close
+[Worker]     method constructor
+[Worker]     method enqueue
+[Worker]     method error
 [Worker] interface ReadableStreamDefaultReader
 [Worker]     attribute @@toStringTag
 [Worker]     getter closed
@@ -1093,6 +1122,28 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter statusCode
 [Worker]     getter violatedDirective
 [Worker]     method constructor
+[Worker] interface Serial : EventTarget
+[Worker]     attribute @@toStringTag
+[Worker]     getter onconnect
+[Worker]     getter ondisconnect
+[Worker]     method constructor
+[Worker]     method getPorts
+[Worker]     setter onconnect
+[Worker]     setter ondisconnect
+[Worker] interface SerialPort : EventTarget
+[Worker]     attribute @@toStringTag
+[Worker]     getter onconnect
+[Worker]     getter ondisconnect
+[Worker]     getter readable
+[Worker]     getter writable
+[Worker]     method close
+[Worker]     method constructor
+[Worker]     method getInfo
+[Worker]     method getSignals
+[Worker]     method open
+[Worker]     method setSignals
+[Worker]     setter onconnect
+[Worker]     setter ondisconnect
 [Worker] interface ServiceWorkerRegistration : EventTarget
 [Worker]     attribute @@toStringTag
 [Worker]     getter active
@@ -2722,9 +2773,11 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter permissions
 [Worker]     getter platform
 [Worker]     getter product
+[Worker]     getter serial
 [Worker]     getter storage
 [Worker]     getter usb
 [Worker]     getter userAgent
+[Worker]     getter userAgentData
 [Worker]     method constructor
 [Worker] interface WritableStream
 [Worker]     attribute @@toStringTag
@@ -2794,6 +2847,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker] interface XMLHttpRequestUpload : XMLHttpRequestEventTarget
 [Worker]     attribute @@toStringTag
 [Worker]     method constructor
+[Worker] [NAMESPACES]
 [Worker] [GLOBAL OBJECT]
 [Worker]     attribute console
 [Worker]     attribute globalThis

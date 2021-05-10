@@ -4,11 +4,12 @@
 
 #include "remoting/protocol/pseudotcp_adapter.h"
 
+#include <memory>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/containers/circular_deque.h"
 #include "base/location.h"
@@ -302,9 +303,10 @@ class PseudoTcpAdapterTest : public testing::Test {
     host_socket_->Connect(client_socket_);
     client_socket_->Connect(host_socket_);
 
-    host_pseudotcp_.reset(new PseudoTcpAdapter(base::WrapUnique(host_socket_)));
-    client_pseudotcp_.reset(
-        new PseudoTcpAdapter(base::WrapUnique(client_socket_)));
+    host_pseudotcp_ =
+        std::make_unique<PseudoTcpAdapter>(base::WrapUnique(host_socket_));
+    client_pseudotcp_ =
+        std::make_unique<PseudoTcpAdapter>(base::WrapUnique(client_socket_));
   }
 
   FakeSocket* host_socket_;

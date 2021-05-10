@@ -7,16 +7,16 @@
 
 #include <memory>
 
-#include "ash/public/cpp/ash_features.h"
+#include "ash/constants/ash_features.h"
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
-#include "chrome/browser/chromeos/crostini/crostini_manager.h"
-#include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
+#include "chrome/browser/ash/crostini/crostini_manager.h"
+#include "chrome/browser/ash/crostini/crostini_pref_names.h"
+#include "chrome/browser/ash/drive/drivefs_test_support.h"
 #include "chrome/browser/chromeos/crostini/fake_crostini_features.h"
-#include "chrome/browser/chromeos/drive/drivefs_test_support.h"
 #include "chrome/browser/chromeos/extensions/file_manager/event_router.h"
 #include "chrome/browser/chromeos/extensions/file_manager/event_router_factory.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_misc.h"
@@ -30,7 +30,6 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/file_system_provider_capabilities/file_system_provider_capabilities_handler.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/dbus/cros_disks_client.h"
 #include "chromeos/disks/disk.h"
@@ -161,7 +160,7 @@ void AddLocalFileSystem(Profile* profile, base::FilePath root) {
 
   ASSERT_TRUE(
       content::BrowserContext::GetMountPoints(profile)->RegisterFileSystem(
-          kLocalMountPointName, storage::kFileSystemTypeNativeLocal,
+          kLocalMountPointName, storage::kFileSystemTypeLocal,
           storage::FileSystemMountOption(), root));
   file_manager::VolumeManager::Get(profile)->AddVolumeForTesting(
       root, file_manager::VOLUME_TYPE_TESTING, chromeos::DEVICE_TYPE_UNKNOWN,
@@ -355,25 +354,6 @@ class FileManagerPrivateApiTest : public extensions::ExtensionApiTest {
   file_manager::EventRouter* event_router_ = nullptr;
 };
 
-// Parameterize by whether holding space feature is enabled.
-class FileManagerPrivateHoldingSpaceApiTest
-    : public FileManagerPrivateApiTest,
-      public testing::WithParamInterface<bool> {
- public:
-  FileManagerPrivateHoldingSpaceApiTest() {
-    scoped_feature_list_.InitWithFeatureState(
-        ash::features::kTemporaryHoldingSpace, GetParam());
-  }
-  ~FileManagerPrivateHoldingSpaceApiTest() override = default;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-INSTANTIATE_TEST_SUITE_P(HoldingSpaceEnabled,
-                         FileManagerPrivateHoldingSpaceApiTest,
-                         testing::Bool());
-
 IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Mount) {
   using chromeos::file_system_provider::IconSet;
   profile()->GetPrefs()->SetBoolean(drive::prefs::kDisableDrive, true);
@@ -411,7 +391,8 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Mount) {
                           _))
       .Times(1);
 
-  ASSERT_TRUE(RunComponentExtensionTest("file_browser/mount_test"))
+  ASSERT_TRUE(RunExtensionTest({.name = "file_browser/mount_test"},
+                               {.load_as_component = true}))
       << message_;
 }
 
@@ -442,12 +423,13 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, FormatVolume) {
                   FormatFileSystemType::kNtfs, "NEWLABEL3"))
       .Times(1);
 
-  ASSERT_TRUE(RunComponentExtensionTest("file_browser/format_test"));
+  ASSERT_TRUE(RunExtensionTest({.name = "file_browser/format_test"},
+                               {.load_as_component = true}));
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Permissions) {
-  EXPECT_TRUE(
-      RunExtensionTestIgnoreManifestWarnings("file_browser/permissions"));
+  EXPECT_TRUE(RunExtensionTest({.name = "file_browser/permissions"},
+                               {.ignore_manifest_warnings = true}));
   const extensions::Extension* extension = GetSingleLoadedExtension();
   ASSERT_TRUE(extension);
   ASSERT_EQ(1u, extension->install_warnings().size());
@@ -458,7 +440,8 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Permissions) {
 IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, ContentChecksum) {
   AddLocalFileSystem(browser()->profile(), temp_dir_.GetPath());
 
-  ASSERT_TRUE(RunComponentExtensionTest("file_browser/content_checksum_test"));
+  ASSERT_TRUE(RunExtensionTest({.name = "file_browser/content_checksum_test"},
+                               {.load_as_component = true}));
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Recent) {
@@ -481,7 +464,8 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Recent) {
     ASSERT_TRUE(video_file.IsValid());
   }
 
-  ASSERT_TRUE(RunComponentExtensionTest("file_browser/recent_test"));
+  ASSERT_TRUE(RunExtensionTest({.name = "file_browser/recent_test"},
+                               {.load_as_component = true}));
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, MediaMetadata) {
@@ -536,12 +520,13 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, MediaMetadata) {
     ASSERT_TRUE(base::CopyFile(image, test_dir.Append(image.BaseName())));
   }
 
-  ASSERT_TRUE(RunComponentExtensionTest("file_browser/media_metadata"));
+  ASSERT_TRUE(RunExtensionTest({.name = "file_browser/media_metadata"},
+                               {.load_as_component = true}));
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Crostini) {
   crostini::FakeCrostiniFeatures crostini_features;
-  crostini_features.set_ui_allowed(true);
+  crostini_features.set_is_allowed_now(true);
   crostini_features.set_enabled(true);
 
   // Setup CrostiniManager for testing.
@@ -579,12 +564,13 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Crostini) {
   guest_os_share_path->RegisterPersistedPath(crostini::kCrostiniDefaultVmName,
                                              shared2);
 
-  ASSERT_TRUE(RunComponentExtensionTest("file_browser/crostini_test"));
+  ASSERT_TRUE(RunExtensionTest({.name = "file_browser/crostini_test"},
+                               {.load_as_component = true}));
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, CrostiniIncognito) {
   crostini::FakeCrostiniFeatures crostini_features;
-  crostini_features.set_ui_allowed(true);
+  crostini_features.set_is_allowed_now(true);
   crostini_features.set_enabled(true);
 
   // Setup CrostiniManager for testing.
@@ -602,7 +588,8 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, CrostiniIncognito) {
   scoped_refptr<extensions::FileManagerPrivateMountCrostiniFunction> function(
       new extensions::FileManagerPrivateMountCrostiniFunction());
   // Use incognito profile.
-  function->set_browser_context(browser()->profile()->GetPrimaryOTRProfile());
+  function->SetBrowserContextForTesting(
+      browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true));
 
   extensions::api_test_utils::SendResponseHelper response_helper(
       function.get());
@@ -611,7 +598,7 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, CrostiniIncognito) {
   EXPECT_TRUE(response_helper.GetResponse());
 }
 
-IN_PROC_BROWSER_TEST_P(FileManagerPrivateHoldingSpaceApiTest, HoldingSpace) {
+IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, HoldingSpace) {
   const base::FilePath test_dir = temp_dir_.GetPath();
   AddLocalFileSystem(browser()->profile(), test_dir);
 
@@ -628,10 +615,13 @@ IN_PROC_BROWSER_TEST_P(FileManagerPrivateHoldingSpaceApiTest, HoldingSpace) {
     ASSERT_TRUE(video_file.IsValid());
   }
 
-  if (GetParam()) {
-    EXPECT_TRUE(RunComponentExtensionTest("file_browser/holding_space"));
-  } else {
-    EXPECT_TRUE(
-        RunComponentExtensionTest("file_browser/holding_space_disabled"));
-  }
+  EXPECT_TRUE(RunExtensionTest({.name = "file_browser/holding_space"},
+                               {.load_as_component = true}));
+}
+
+IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, GetVolumeRoot) {
+  AddLocalFileSystem(browser()->profile(), temp_dir_.GetPath());
+
+  ASSERT_TRUE(RunExtensionTest({.name = "file_browser/get_volume_root"},
+                               {.load_as_component = true}));
 }

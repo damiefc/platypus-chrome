@@ -22,6 +22,8 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
@@ -36,8 +38,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.ThemeTestUtils;
 import org.chromium.components.browser_ui.styles.ChromeColors;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
 import org.chromium.ui.util.ColorUtils;
@@ -64,7 +64,7 @@ public class StatusBarColorControllerTest {
     public void setUp() {
         mActivityTestRule.startMainActivityOnBlankPage();
         mScrimColor = ApiCompatibilityUtils.getColor(mActivityTestRule.getActivity().getResources(),
-                org.chromium.chrome.R.color.black_alpha_65);
+                org.chromium.chrome.R.color.default_scrim_color);
     }
 
     /**

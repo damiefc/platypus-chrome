@@ -6,9 +6,10 @@
 
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "chrome/browser/ash/guest_os/guest_os_pref_names.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
-#include "chrome/browser/chromeos/guest_os/guest_os_pref_names.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
@@ -39,7 +40,7 @@ const std::string* GetAppNameForWMClass(base::StringPiece wmclass) {
       kWMClassToNname({{"Octave-gui", "GNU Octave"},
                        {"MuseScore2", "MuseScore 2"},
                        {"XnViewMP", "XnView Multi Platform"}});
-  const auto it = kWMClassToNname->find(wmclass.as_string());
+  const auto it = kWMClassToNname->find(std::string(wmclass));
   if (it == kWMClassToNname->end())
     return nullptr;
   return &it->second;
@@ -90,14 +91,14 @@ FindAppIdResult FindAppId(const base::DictionaryValue* prefs,
     if (!value)
       continue;
     if (value->type() == base::Value::Type::STRING) {
-      if (!MatchingString(search_value.as_string(), value->GetString(),
+      if (!MatchingString(std::string(search_value), value->GetString(),
                           ignore_space)) {
         continue;
       }
     } else if (value->type() == base::Value::Type::DICTIONARY) {
       // Look at the unlocalized name to see if that matches.
       value = value->FindKeyOfType("", base::Value::Type::STRING);
-      if (!value || !MatchingString(search_value.as_string(),
+      if (!value || !MatchingString(std::string(search_value),
                                     value->GetString(), ignore_space)) {
         continue;
       }
@@ -170,7 +171,7 @@ std::string GetCrostiniShelfAppId(const Profile* profile,
     return kCrostiniShelfIdPrefix + *window_app_id;
   }
 
-  base::StringPiece suffix(
+  auto suffix = base::MakeStringPiece(
       window_app_id->begin() + strlen(kCrostiniWindowAppIdPrefix),
       window_app_id->end());
 
@@ -232,13 +233,13 @@ bool IsCrostiniShelfAppId(const Profile* profile,
              ->FindKey(shelf_app_id) != nullptr;
 }
 
-base::string16 GetCrostiniShelfTitle(base::StringPiece shelf_app_id) {
+std::u16string GetCrostiniShelfTitle(base::StringPiece shelf_app_id) {
   if (shelf_app_id == kCrostiniInstallerShelfId) {
     return l10n_util::GetStringUTF16(IDS_CROSTINI_INSTALLER_INSTALLING);
   } else if (shelf_app_id == kCrostiniUpgraderShelfId) {
     return l10n_util::GetStringUTF16(IDS_CROSTINI_UPGRADING_LABEL);
   }
-  return base::string16();
+  return std::u16string();
 }
 
 }  // namespace crostini

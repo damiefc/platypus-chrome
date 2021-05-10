@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/build_time.h"
+#include "base/command_line.h"
 #include "base/cpu.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_base.h"
@@ -20,7 +21,6 @@
 #include "base/metrics/histogram_snapshot_manager.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/strings/string_piece.h"
-#include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -33,6 +33,7 @@
 #include "components/metrics/metrics_service_client.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/variations/hashing.h"
 #include "third_party/metrics_proto/histogram_event.pb.h"
 #include "third_party/metrics_proto/system_profile.pb.h"
 #include "third_party/metrics_proto/user_action_event.pb.h"
@@ -76,6 +77,19 @@ static int64_t ToMonotonicSeconds(base::TimeTicks time_ticks) {
 }
 
 }  // namespace
+
+namespace internal {
+
+SystemProfileProto::InstallerPackage ToInstallerPackage(
+    base::StringPiece installer_package_name) {
+  if (installer_package_name.empty())
+    return SystemProfileProto::INSTALLER_PACKAGE_NONE;
+  if (installer_package_name == "com.android.vending")
+    return SystemProfileProto::INSTALLER_PACKAGE_GOOGLE_PLAY_STORE;
+  return SystemProfileProto::INSTALLER_PACKAGE_OTHER;
+}
+
+}  // namespace internal
 
 MetricsLog::IndependentMetricsLoader::IndependentMetricsLoader(
     std::unique_ptr<MetricsLog> log)
@@ -163,30 +177,43 @@ void MetricsLog::RecordUserAction(const std::string& key,
   UserActionEventProto* user_action = uma_proto_.add_user_action_event();
   user_action->set_name_hash(Hash(key));
   user_action->set_time_sec(ToMonotonicSeconds(action_time));
+  base::UmaHistogramBoolean("UMA.UserActionsCount", true);
 }
 
 // static
 void MetricsLog::RecordCoreSystemProfile(MetricsServiceClient* client,
                                          SystemProfileProto* system_profile) {
   RecordCoreSystemProfile(client->GetVersionString(), client->GetChannel(),
+                          client->IsExtendedStableChannel(),
                           client->GetApplicationLocale(),
                           client->GetAppPackageName(), system_profile);
 
   std::string brand_code;
   if (client->GetBrand(&brand_code))
     system_profile->set_brand_code(brand_code);
+
+  // Records 32-bit hashes of the command line keys.
+  const auto command_line_switches =
+      base::CommandLine::ForCurrentProcess()->GetSwitches();
+  for (const auto& command_line_switch : command_line_switches) {
+    system_profile->add_command_line_key_hash(
+        variations::HashName(command_line_switch.first));
+  }
 }
 
 // static
 void MetricsLog::RecordCoreSystemProfile(
     const std::string& version,
     metrics::SystemProfileProto::Channel channel,
+    bool is_extended_stable_channel,
     const std::string& application_locale,
     const std::string& package_name,
     SystemProfileProto* system_profile) {
   system_profile->set_build_timestamp(metrics::MetricsLog::GetBuildTime());
   system_profile->set_app_version(version);
   system_profile->set_channel(channel);
+  if (is_extended_stable_channel)
+    system_profile->set_is_extended_stable_channel(true);
   system_profile->set_application_locale(application_locale);
 
 #if defined(ADDRESS_SANITIZER) || DCHECK_IS_ON()
@@ -196,12 +223,10 @@ void MetricsLog::RecordCoreSystemProfile(
 
   metrics::SystemProfileProto::Hardware* hardware =
       system_profile->mutable_hardware();
-#if !defined(OS_IOS)
-  // On iOS, OperatingSystemArchitecture() returns values like iPad4,4 which is
-  // not the actual CPU architecture. Don't set it until the API is fixed. See
-  // crbug.com/370104 for details.
   hardware->set_cpu_architecture(base::SysInfo::OperatingSystemArchitecture());
-#endif
+  auto app_os_arch = base::SysInfo::ProcessCPUArchitecture();
+  if (!app_os_arch.empty())
+    hardware->set_app_cpu_architecture(app_os_arch);
   hardware->set_system_ram_mb(base::SysInfo::AmountOfPhysicalMemoryMB());
   hardware->set_hardware_class(base::SysInfo::HardwareModelName());
 #if defined(OS_WIN)
@@ -209,11 +234,11 @@ void MetricsLog::RecordCoreSystemProfile(
 #endif
 
   metrics::SystemProfileProto::OS* os = system_profile->mutable_os();
-#if BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
   // The Lacros browser runs on Chrome OS, but reports a special OS name to
   // differentiate itself from the built-in ash browser + window manager binary.
   os->set_name("Lacros");
-#elif defined(OS_CHROMEOS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
   os->set_name("CrOS");
 #else
   os->set_name(base::SysInfo::OperatingSystemName());
@@ -222,19 +247,21 @@ void MetricsLog::RecordCoreSystemProfile(
 
 // On ChromeOS, KernelVersion refers to the Linux kernel version and
 // OperatingSystemVersion refers to the ChromeOS release version.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   os->set_kernel_version(base::SysInfo::KernelVersion());
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // Linux operating system version is copied over into kernel version to be
   // consistent.
   os->set_kernel_version(base::SysInfo::OperatingSystemVersion());
 #endif
 
 #if defined(OS_ANDROID)
-  os->set_build_fingerprint(
-      base::android::BuildInfo::GetInstance()->android_build_fp());
+  const auto* build_info = base::android::BuildInfo::GetInstance();
+  os->set_build_fingerprint(build_info->android_build_fp());
   if (!package_name.empty() && package_name != "com.android.chrome")
     system_profile->set_app_package_name(package_name);
+  system_profile->set_installer_package(
+      internal::ToInstallerPackage(build_info->installer_package_name()));
 #elif defined(OS_IOS)
   os->set_build_number(base::SysInfo::GetIOSBuildNumber());
 #endif

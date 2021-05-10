@@ -10,11 +10,6 @@
 #include "ash/frame/header_view.h"
 #include "ash/frame/wide_frame_view.h"
 #include "ash/public/cpp/ash_switches.h"
-#include "ash/public/cpp/caption_buttons/frame_caption_button_container_view.h"
-#include "ash/public/cpp/default_frame_header.h"
-#include "ash/public/cpp/immersive/immersive_fullscreen_controller.h"
-#include "ash/public/cpp/immersive/immersive_fullscreen_controller_test_api.h"
-#include "ash/public/cpp/window_properties.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -27,6 +22,11 @@
 #include "ash/wm/wm_event.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
+#include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/frame/caption_buttons/frame_caption_button_container_view.h"
+#include "chromeos/ui/frame/default_frame_header.h"
+#include "chromeos/ui/frame/immersive/immersive_fullscreen_controller.h"
+#include "chromeos/ui/frame/immersive/immersive_fullscreen_controller_test_api.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -34,6 +34,7 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/test_accelerator_target.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/compositor/layer.h"
 #include "ui/compositor/test/draw_waiter_for_test.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/rect.h"
@@ -48,6 +49,14 @@
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
+
+using ::chromeos::DefaultFrameHeader;
+using ::chromeos::FrameCaptionButtonContainerView;
+using ::chromeos::ImmersiveFullscreenController;
+using ::chromeos::ImmersiveFullscreenControllerDelegate;
+using ::chromeos::ImmersiveFullscreenControllerTestApi;
+using ::chromeos::kFrameActiveColorKey;
+using ::chromeos::kFrameInactiveColorKey;
 
 // A views::WidgetDelegate which uses a NonClientFrameViewAsh.
 class NonClientFrameViewAshTestWidgetDelegate
@@ -170,7 +179,7 @@ TEST_F(NonClientFrameViewAshTest, ActiveStateOfButtonMatchesWidget) {
   EXPECT_TRUE(widget->IsActive());
   // The paint state doesn't change till the next paint.
   ui::DrawWaiterForTest::WaitForCommit(widget->GetLayer()->GetCompositor());
-  EXPECT_TRUE(test_api.size_button()->paint_as_active());
+  EXPECT_TRUE(test_api.size_button()->GetPaintAsActive());
 
   // Activate a different widget so the original one loses activation.
   std::unique_ptr<views::Widget> widget2 =
@@ -179,7 +188,7 @@ TEST_F(NonClientFrameViewAshTest, ActiveStateOfButtonMatchesWidget) {
   ui::DrawWaiterForTest::WaitForCommit(widget->GetLayer()->GetCompositor());
 
   EXPECT_FALSE(widget->IsActive());
-  EXPECT_FALSE(test_api.size_button()->paint_as_active());
+  EXPECT_FALSE(test_api.size_button()->GetPaintAsActive());
 }
 
 // Verify that NonClientFrameViewAsh returns the correct minimum and maximum
@@ -417,7 +426,7 @@ TEST_F(NonClientFrameViewAshTest, HeaderVisibilityInFullscreen) {
 
 namespace {
 
-class TestButtonModel : public CaptionButtonModel {
+class TestButtonModel : public chromeos::CaptionButtonModel {
  public:
   TestButtonModel() = default;
   ~TestButtonModel() override = default;
@@ -535,19 +544,19 @@ TEST_F(NonClientFrameViewAshTest, FrameVisibility) {
       delegate->non_client_frame_view();
   EXPECT_EQ(client_bounds, widget->client_view()->GetLocalBounds().size());
 
-  non_client_frame_view->SetVisible(false);
+  non_client_frame_view->SetFrameEnabled(false);
   widget->GetRootView()->Layout();
   EXPECT_EQ(gfx::Size(200, 100),
             widget->client_view()->GetLocalBounds().size());
-  EXPECT_FALSE(widget->non_client_view()->frame_view()->GetVisible());
+  EXPECT_FALSE(non_client_frame_view->GetFrameEnabled());
   EXPECT_EQ(
       window_bounds,
       non_client_frame_view->GetClientBoundsForWindowBounds(window_bounds));
 
-  non_client_frame_view->SetVisible(true);
+  non_client_frame_view->SetFrameEnabled(true);
   widget->GetRootView()->Layout();
   EXPECT_EQ(client_bounds, widget->client_view()->GetLocalBounds().size());
-  EXPECT_TRUE(widget->non_client_view()->frame_view()->GetVisible());
+  EXPECT_TRUE(non_client_frame_view->GetFrameEnabled());
   EXPECT_EQ(32, delegate->GetNonClientFrameViewTopBorderHeight());
   EXPECT_EQ(
       gfx::Rect(gfx::Point(10, 42), client_bounds),

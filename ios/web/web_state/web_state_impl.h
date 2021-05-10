@@ -17,12 +17,10 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "base/strings/string16.h"
 #include "base/values.h"
 #import "ios/web/js_messaging/web_frames_manager_impl.h"
 #import "ios/web/navigation/navigation_manager_delegate.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
-#include "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/navigation/web_state_policy_decider.h"
 #import "ios/web/public/ui/java_script_dialog_callback.h"
 #include "ios/web/public/ui/java_script_dialog_type.h"
@@ -46,7 +44,7 @@ struct FaviconURL;
 class NavigationContextImpl;
 class NavigationManager;
 class SessionCertificatePolicyCacheImpl;
-class WebInterstitialImpl;
+class WebFrame;
 class WebUIIOS;
 
 // Implementation of WebState.
@@ -185,6 +183,8 @@ class WebStateImpl : public WebState,
   bool IsWebUsageEnabled() const override;
   void SetWebUsageEnabled(bool enabled) override;
   UIView* GetView() override;
+  void DidCoverWebContent() override;
+  void DidRevealWebContent() override;
   void WasShown() override;
   void WasHidden() override;
   void SetKeepRenderProcessAlive(bool keep_alive) override;
@@ -201,13 +201,13 @@ class WebStateImpl : public WebState,
   CRWSessionStorage* BuildSessionStorage() override;
   CRWJSInjectionReceiver* GetJSInjectionReceiver() const override;
   void LoadData(NSData* data, NSString* mime_type, const GURL& url) override;
-  void ExecuteJavaScript(const base::string16& javascript) override;
-  void ExecuteJavaScript(const base::string16& javascript,
+  void ExecuteJavaScript(const std::u16string& javascript) override;
+  void ExecuteJavaScript(const std::u16string& javascript,
                          JavaScriptResultCallback callback) override;
   void ExecuteUserJavaScript(NSString* javaScript) override;
   const std::string& GetContentsMimeType() const override;
   bool ContentIsHTML() const override;
-  const base::string16& GetTitle() const override;
+  const std::u16string& GetTitle() const override;
   bool IsLoading() const override;
   double GetLoadingProgress() const override;
   bool IsCrashed() const override;
@@ -217,9 +217,7 @@ class WebStateImpl : public WebState,
   const GURL& GetVisibleURL() const override;
   const GURL& GetLastCommittedURL() const override;
   GURL GetCurrentURL(URLVerificationTrustLevel* trust_level) const override;
-  bool IsShowingWebInterstitial() const override;
-  WebInterstitial* GetWebInterstitial() const override;
-  std::unique_ptr<ScriptCommandSubscription> AddScriptCommandCallback(
+  base::CallbackListSubscription AddScriptCommandCallback(
       const ScriptCommandCallback& callback,
       const std::string& command_prefix) override;
   id<CRWWebViewProxy> GetWebViewProxy() const override;
@@ -233,6 +231,8 @@ class WebStateImpl : public WebState,
   void AddObserver(WebStateObserver* observer) override;
   void RemoveObserver(WebStateObserver* observer) override;
   void CloseWebState() override;
+  bool SetSessionStateData(NSData* data) override;
+  NSData* SessionStateData() override;
 
   // Returns the UserAgent that should be used to load the |url| if it is a new
   // navigation. This will be Mobile or Desktop.
@@ -246,9 +246,6 @@ class WebStateImpl : public WebState,
   // will return |user_agent|.
   // GetUserAgentForSessionRestoration() will always return |user_agent|.
   void SetUserAgent(UserAgentType user_agent);
-
-  // Adds |interstitial|'s view to the web controller's content view.
-  void ShowWebInterstitial(WebInterstitialImpl* interstitial);
 
   // Notifies the delegate that the load progress was updated.
   void SendChangeLoadProgress(double progress);
@@ -277,17 +274,14 @@ class WebStateImpl : public WebState,
   // and is unable to respond using cached credentials.
   void OnAuthRequired(NSURLProtectionSpace* protection_space,
                       NSURLCredential* proposed_credential,
-                      const WebStateDelegate::AuthCallback& callback);
+                      WebStateDelegate::AuthCallback callback);
 
   // Cancels all dialogs associated with this web_state.
   void CancelDialogs();
 
   // NavigationManagerDelegate:
-  void ClearTransientContent() override;
   void ClearDialogs() override;
   void RecordPageStateInNavigationItem() override;
-  void OnGoToIndexSameDocumentNavigation(NavigationInitiationType type,
-                                         bool has_user_gesture) override;
   void LoadCurrentItem(NavigationInitiationType type) override;
   void LoadIfNecessary() override;
   void Reload() override;
@@ -373,14 +367,12 @@ class WebStateImpl : public WebState,
 
   std::string mime_type_;
 
-  // Weak pointer to the interstitial page being displayed, if any.
-  WebInterstitialImpl* interstitial_;
-
   // Returned by reference.
-  base::string16 empty_string16_;
+  std::u16string empty_string16_;
 
   // Callbacks associated to command prefixes.
-  std::map<std::string, base::CallbackList<ScriptCommandCallbackSignature>>
+  std::map<std::string,
+           base::RepeatingCallbackList<ScriptCommandCallbackSignature>>
       script_command_callbacks_;
 
   // Whether this WebState has an opener.  See

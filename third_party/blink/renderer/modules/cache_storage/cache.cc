@@ -185,8 +185,6 @@ class Cache::BarrierCallbackForPutResponse final
                                 const ExceptionState& exception_state,
                                 int64_t trace_id)
       : resolver_(MakeGarbageCollected<ScriptPromiseResolver>(script_state)),
-        abort_controller_(
-            cache->CreateAbortController(ExecutionContext::From(script_state))),
         cache_(cache),
         method_name_(method_name),
         request_list_(request_list),
@@ -195,12 +193,19 @@ class Cache::BarrierCallbackForPutResponse final
         interface_name_(exception_state.InterfaceName()),
         trace_id_(trace_id),
         response_list_(request_list_.size()),
-        blob_list_(request_list_.size()) {}
+        blob_list_(request_list_.size()) {
+    if (request_list.size() > 1) {
+      abort_controller_ =
+          cache_->CreateAbortController(ExecutionContext::From(script_state));
+    }
+  }
 
   // Must be called prior to starting the load of any response.
   ScriptPromise Promise() const { return resolver_->Promise(); }
 
-  AbortSignal* Signal() const { return abort_controller_->signal(); }
+  AbortSignal* Signal() const {
+    return abort_controller_ ? abort_controller_->signal() : nullptr;
+  }
 
   void CompletedResponse(int index,
                          Response* response,
@@ -229,19 +234,23 @@ class Cache::BarrierCallbackForPutResponse final
 
   void FailedResponse() {
     ScriptState* state = resolver_->GetScriptState();
-    ScriptState::Scope scope(state);
-    resolver_->Reject(V8ThrowDOMException::CreateOrEmpty(
-        state->GetIsolate(), DOMExceptionCode::kNetworkError,
-        method_name_ + " encountered a network error"));
+    if (state->ContextIsValid()) {
+      ScriptState::Scope scope(state);
+      resolver_->Reject(V8ThrowDOMException::CreateOrEmpty(
+          state->GetIsolate(), DOMExceptionCode::kNetworkError,
+          method_name_ + " encountered a network error"));
+    }
     Stop();
   }
 
   void AbortedResponse() {
     ScriptState* state = resolver_->GetScriptState();
-    ScriptState::Scope scope(state);
-    resolver_->Reject(V8ThrowDOMException::CreateOrEmpty(
-        state->GetIsolate(), DOMExceptionCode::kAbortError,
-        method_name_ + " was aborted"));
+    if (state->ContextIsValid()) {
+      ScriptState::Scope scope(state);
+      resolver_->Reject(V8ThrowDOMException::CreateOrEmpty(
+          state->GetIsolate(), DOMExceptionCode::kAbortError,
+          method_name_ + " was aborted"));
+    }
     Stop();
   }
 
@@ -267,7 +276,8 @@ class Cache::BarrierCallbackForPutResponse final
   void Stop() {
     if (stopped_)
       return;
-    abort_controller_->abort();
+    if (abort_controller_)
+      abort_controller_->abort();
     blob_list_.clear();
     stopped_ = true;
   }
@@ -461,6 +471,8 @@ class Cache::BarrierCallbackForPutComplete final
       return;
     completed_ = true;
     ScriptState* state = resolver_->GetScriptState();
+    if (!state->ContextIsValid())
+      return;
     ScriptState::Scope scope(state);
     resolver_->Reject(
         V8ThrowException::CreateTypeError(state->GetIsolate(), error_message));
@@ -471,6 +483,8 @@ class Cache::BarrierCallbackForPutComplete final
       return;
     completed_ = true;
     ScriptState* state = resolver_->GetScriptState();
+    if (!state->ContextIsValid())
+      return;
     ScriptState::Scope scope(state);
     resolver_->Reject(V8ThrowDOMException::CreateOrEmpty(
         state->GetIsolate(), DOMExceptionCode::kAbortError,
@@ -575,7 +589,7 @@ class Cache::FetchHandler final : public ScriptFunction {
     // If we return our real result and an exception occurs then unhandled
     // promise errors will occur.
     ScriptValue rtn =
-        ScriptPromise::CastUndefined(GetScriptState()).GetScriptValue();
+        ScriptPromise::CastUndefined(GetScriptState()).AsScriptValue();
 
     // If there is no loader, we were created as a reject handler.
     if (!response_loader_) {
@@ -711,7 +725,7 @@ class Cache::CodeCacheHandleCallbackForPut final
     return V8CodeCache::GenerateFullCodeCache(
         script_state_,
         text_decoder->Decode(static_cast<const char*>(array_buffer->Data()),
-                             array_buffer->ByteLengthAsSizeT()),
+                             array_buffer->ByteLength()),
         url_, text_decoder->Encoding(), opaque_mode_);
   }
 
@@ -864,11 +878,11 @@ ScriptPromise Cache::keys(ScriptState* script_state,
 }
 
 Cache::Cache(GlobalFetch::ScopedFetcher* fetcher,
+             CacheStorageBlobClientList* blob_client_list,
              mojo::PendingAssociatedRemote<mojom::blink::CacheStorageCache>
                  cache_pending_remote,
              scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-    : scoped_fetcher_(fetcher),
-      blob_client_list_(MakeGarbageCollected<CacheStorageBlobClientList>()) {
+    : scoped_fetcher_(fetcher), blob_client_list_(blob_client_list) {
   cache_remote_.Bind(std::move(cache_pending_remote), std::move(task_runner));
 }
 
@@ -1071,7 +1085,8 @@ ScriptPromise Cache::AddAllImpl(ScriptState* script_state,
   for (wtf_size_t i = 0; i < request_list.size(); ++i) {
     // Chain the AbortSignal objects together so the requests will abort if
     // the |barrier_callback| encounters an error.
-    request_list[i]->signal()->Follow(barrier_callback->Signal());
+    if (barrier_callback->Signal())
+      request_list[i]->signal()->Follow(barrier_callback->Signal());
 
     RequestInfo info;
     info.SetRequest(request_list[i]);
@@ -1197,7 +1212,8 @@ void Cache::PutImpl(ScriptPromiseResolver* resolver,
     BytesConsumer* consumer =
         MakeGarbageCollected<BlobBytesConsumer>(context, blob_list[i]);
     BodyStreamBuffer* buffer =
-        BodyStreamBuffer::Create(script_state, consumer, /*signal=*/nullptr);
+        BodyStreamBuffer::Create(script_state, consumer, /*signal=*/nullptr,
+                                 /*cached_metadata_handler=*/nullptr);
     FetchDataLoader* loader = FetchDataLoader::CreateLoaderAsArrayBuffer();
     buffer->StartLoading(loader,
                          MakeGarbageCollected<CodeCacheHandleCallbackForPut>(

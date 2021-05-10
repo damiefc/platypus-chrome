@@ -32,6 +32,7 @@
 #include "printing/metafile_skia.h"
 #include "printing/print_settings.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_skia.h"
 
 namespace extensions {
 
@@ -71,7 +72,7 @@ bool IsUserConfirmationRequired(content::BrowserContext* browser_context,
           ->GetPrefs()
           ->GetList(prefs::kPrintingAPIExtensionsAllowlist);
   base::Value value(extension_id);
-  return list->Find(value) == list->end();
+  return list->Find(value) == list->GetList().end();
 }
 
 }  // namespace

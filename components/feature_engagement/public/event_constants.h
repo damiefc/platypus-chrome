@@ -17,8 +17,8 @@ namespace events {
 // The user has explicitly opened a new tab via an entry point from inside of
 // Chrome.
 extern const char kNewTabOpened[];
-#endif  // defined(OS_WIN) || defined(OS_APPLE) ||
-        // defined(OS_LINUX) || defined(OS_CHROMEOS)
+#endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
+        // defined(OS_CHROMEOS)
 
 // Desktop
 #if defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
@@ -27,6 +27,15 @@ extern const char kNewTabOpened[];
 extern const char kSixthTabOpened[];
 // The user made a new tab group.
 extern const char kTabGroupCreated[];
+
+// A tab was closed when there are eight or more tabs in the browser.
+extern const char kClosedTabWithEightOrMore[];
+// A tab was added to reading list.
+extern const char kReadingListItemAdded[];
+// Reading list was opened.
+extern const char kReadingListMenuOpened[];
+// Bookmark star button was clicked opening the menu.
+extern const char kBookmarkStarMenuOpened[];
 
 // All conditions for reopen closed tab IPH were met. Since this IPH needs to
 // track user events (opening/closing tabs, focusing the omnibox, etc) on the
@@ -54,6 +63,9 @@ extern const char kWebUITabStripClosed[];
 // The WebUI tab strip was opened by the user.
 extern const char kWebUITabStripOpened[];
 
+// The PWA was installed by the user.
+extern const char kDesktopPwaInstalled[];
+
 #endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
 
@@ -79,6 +91,12 @@ extern const char kBottomToolbarOpened[];
 // The Discover feed has loaded content in the NTP.
 extern const char kDiscoverFeedLoaded[];
 #endif  // defined(OS_IOS)
+
+// Android.
+#if defined(OS_ANDROID)
+// The user has explicitly used the Install menu item under the App Menu.
+extern const char kPwaInstallMenuSelected[];
+#endif  // defined(OS_ANDROID)
 
 }  // namespace events
 

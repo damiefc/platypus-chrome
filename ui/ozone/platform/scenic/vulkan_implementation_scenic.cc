@@ -10,7 +10,7 @@
 #include <vulkan/vulkan.h>
 #include <memory>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/macros.h"
@@ -36,11 +36,8 @@ namespace ui {
 VulkanImplementationScenic::VulkanImplementationScenic(
     ScenicSurfaceFactory* scenic_surface_factory,
     SysmemBufferManager* sysmem_buffer_manager,
-    bool allow_protected_memory,
-    bool enforce_protected_memory)
-    : VulkanImplementation(false /* use_swiftshader */,
-                           allow_protected_memory,
-                           enforce_protected_memory),
+    bool allow_protected_memory)
+    : VulkanImplementation(false /* use_swiftshader */, allow_protected_memory),
       scenic_surface_factory_(scenic_surface_factory),
       sysmem_buffer_manager_(sysmem_buffer_manager) {}
 
@@ -110,9 +107,8 @@ VulkanImplementationScenic::CreateViewSurface(gfx::AcceleratedWidget window) {
     LOG(FATAL) << "vkCreateImagePipeSurfaceFUCHSIA failed: " << result;
   }
 
-  return std::make_unique<gpu::VulkanSurface>(
-      vulkan_instance_.vk_instance(), window, surface,
-      enforce_protected_memory() /* use_protected_memory */);
+  return std::make_unique<gpu::VulkanSurface>(vulkan_instance_.vk_instance(),
+                                              window, surface);
 }
 
 bool VulkanImplementationScenic::GetPhysicalDevicePresentationSupport(
@@ -129,6 +125,7 @@ VulkanImplementationScenic::GetRequiredDeviceExtensions() {
       VK_FUCHSIA_EXTERNAL_MEMORY_EXTENSION_NAME,
       VK_FUCHSIA_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
       VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,
+      VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
       VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
       VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
       VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
@@ -186,7 +183,7 @@ VkSemaphore VulkanImplementationScenic::ImportSemaphoreHandle(
   import.semaphore = semaphore;
   import.handleType =
       VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_TEMP_ZIRCON_EVENT_BIT_FUCHSIA;
-  import.handle = event.get();
+  import.zirconHandle = event.get();
 
   result = vkImportSemaphoreZirconHandleFUCHSIA(vk_device, &import);
   if (result != VK_SUCCESS) {
@@ -278,6 +275,8 @@ VulkanImplementationScenic::CreateImageFromGpuMemoryHandle(
     return nullptr;
   }
 
+  image->set_native_pixmap(collection->CreateNativePixmap(
+      gmb_handle.native_pixmap_handle.buffer_index));
   return image;
 }
 
@@ -304,14 +303,10 @@ VulkanImplementationScenic::RegisterSysmemBufferCollection(
     gfx::Size size,
     size_t min_buffer_count,
     bool register_with_image_pipe) {
-  // SCANOUT images must be protected in protected mode.
-  bool force_protected =
-      usage == gfx::BufferUsage::SCANOUT && enforce_protected_memory();
-
   fuchsia::images::ImagePipe2Ptr image_pipe = nullptr;
   auto buffer_collection = sysmem_buffer_manager_->ImportSysmemBufferCollection(
       device, id, std::move(token), size, format, usage, min_buffer_count,
-      force_protected, register_with_image_pipe);
+      register_with_image_pipe);
   if (!buffer_collection)
     return nullptr;
 

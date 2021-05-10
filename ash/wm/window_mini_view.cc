@@ -7,13 +7,15 @@
 #include <memory>
 #include <utility>
 
-#include "ash/public/cpp/window_properties.h"
+#include "ash/style/ash_color_provider.h"
 #include "ash/wm/window_preview_view.h"
 #include "ash/wm/wm_highlight_item_border.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -25,20 +27,16 @@
 namespace ash {
 namespace {
 
-// Foreground label color.
-constexpr SkColor kLabelColor = SK_ColorWHITE;
-
 // The font delta of the window title.
 constexpr int kLabelFontDelta = 2;
 
 // Values of the backdrop.
 constexpr int kBackdropBorderRoundingDp = 4;
-constexpr SkColor kBackdropColor = SkColorSetA(SK_ColorWHITE, 0x24);
 
-base::string16 GetWindowTitle(aura::Window* window) {
+std::u16string GetWindowTitle(aura::Window* window) {
   aura::Window* transient_root = wm::GetTransientRoot(window);
-  const base::string16* overview_title =
-      transient_root->GetProperty(kWindowOverviewTitleKey);
+  const std::u16string* overview_title =
+      transient_root->GetProperty(chromeos::kWindowOverviewTitleKey);
   return (overview_title && !overview_title->empty())
              ? *overview_title
              : transient_root->GetTitle();
@@ -60,7 +58,8 @@ void WindowMiniView::SetBackdropVisibility(bool visible) {
     backdrop_view_->SetPaintToLayer(ui::LAYER_SOLID_COLOR);
     ui::Layer* layer = backdrop_view_->layer();
     layer->SetFillsBoundsOpaquely(false);
-    layer->SetColor(kBackdropColor);
+    layer->SetColor(AshColorProvider::Get()->GetControlsLayerColor(
+        AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive));
     layer->SetRoundedCornerRadius(
         gfx::RoundedCornersF(kBackdropBorderRoundingDp));
     layer->SetIsFastRoundedCorner(true);
@@ -99,8 +98,8 @@ void WindowMiniView::UpdatePreviewRoundedCorners(bool show) {
   ui::Layer* layer = preview_view()->layer();
   DCHECK(layer);
   const float scale = layer->transform().Scale2d().x();
-  const float rounding =
-      views::LayoutProvider::Get()->GetCornerRadiusMetric(views::EMPHASIS_LOW);
+  const float rounding = views::LayoutProvider::Get()->GetCornerRadiusMetric(
+      views::Emphasis::kLow);
   const gfx::RoundedCornersF radii(show ? rounding / scale : 0.0f);
   layer->SetRoundedCornerRadius(radii);
   layer->SetIsFastRoundedCorner(true);
@@ -122,17 +121,12 @@ gfx::Size WindowMiniView::GetPreviewViewSize() const {
   return preview_view_->GetPreferredSize();
 }
 
-gfx::ImageSkia WindowMiniView::ModifyIcon(gfx::ImageSkia* image) const {
-  return gfx::ImageSkiaOperations::CreateResizedImage(
-      *image, skia::ImageOperations::RESIZE_BEST, kIconSize);
-}
-
 WindowMiniView::WindowMiniView(aura::Window* source_window)
     : source_window_(source_window) {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
-  window_observer_.Add(source_window);
+  window_observation_.Observe(source_window);
 
   header_view_ = AddChildView(std::make_unique<views::View>());
   header_view_->SetPaintToLayer();
@@ -146,7 +140,6 @@ WindowMiniView::WindowMiniView(aura::Window* source_window)
       std::make_unique<views::Label>(GetWindowTitle(source_window_)));
   title_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   title_label_->SetAutoColorReadabilityEnabled(false);
-  title_label_->SetEnabledColor(kLabelColor);
   title_label_->SetSubpixelRenderingEnabled(false);
   title_label_->SetFontList(gfx::FontList().Derive(
       kLabelFontDelta, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
@@ -172,7 +165,8 @@ void WindowMiniView::UpdateIconView() {
         header_view_->AddChildViewAt(std::make_unique<views::ImageView>(), 0);
   }
 
-  icon_view_->SetImage(ModifyIcon(icon));
+  icon_view_->SetImage(gfx::ImageSkiaOperations::CreateResizedImage(
+      *icon, skia::ImageOperations::RESIZE_BEST, kIconSize));
 }
 
 gfx::Rect WindowMiniView::GetContentAreaBounds() const {
@@ -200,6 +194,12 @@ void WindowMiniView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->SetName(wm::GetTransientRoot(source_window_)->GetTitle());
 }
 
+void WindowMiniView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  title_label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary));
+}
+
 void WindowMiniView::OnWindowPropertyChanged(aura::Window* window,
                                              const void* key,
                                              intptr_t old) {
@@ -215,7 +215,7 @@ void WindowMiniView::OnWindowDestroying(aura::Window* window) {
   if (window != source_window_)
     return;
 
-  window_observer_.RemoveAll();
+  window_observation_.Reset();
   source_window_ = nullptr;
   SetShowPreview(false);
 }

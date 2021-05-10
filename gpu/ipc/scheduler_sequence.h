@@ -18,6 +18,7 @@
 
 namespace viz {
 class Display;
+class DisplayCompositorMemoryAndTaskController;
 class ScopedAllowGpuAccessForDisplayResourceProvider;
 class OutputSurfaceProviderImpl;
 class OverlayProcessorAndroid;
@@ -36,6 +37,7 @@ class GL_IN_PROCESS_CONTEXT_EXPORT ScopedAllowScheduleGpuTask {
   // Only add more friend declarations for classes that Android WebView is
   // guaranteed to be able to support. Talk to boliu@ if in doubt.
   friend class viz::Display;
+  friend class viz::DisplayCompositorMemoryAndTaskController;
   friend class viz::ScopedAllowGpuAccessForDisplayResourceProvider;
   friend class viz::OutputSurfaceProviderImpl;
   // Overlay is not supported for WebView. However the initialization and
@@ -68,10 +70,14 @@ class GL_IN_PROCESS_CONTEXT_EXPORT SchedulerSequence
   // SingleTaskSequence implementation.
   SequenceId GetSequenceId() override;
   bool ShouldYield() override;
-  void ScheduleTask(base::OnceClosure task,
-                    std::vector<SyncToken> sync_token_fences) override;
-  void ScheduleOrRetainTask(base::OnceClosure task,
-                            std::vector<SyncToken> sync_token_fences) override;
+  void ScheduleTask(
+      base::OnceClosure task,
+      std::vector<SyncToken> sync_token_fences,
+      ReportingCallback report_callback = ReportingCallback()) override;
+  void ScheduleOrRetainTask(
+      base::OnceClosure task,
+      std::vector<SyncToken> sync_token_fences,
+      ReportingCallback report_callback = ReportingCallback()) override;
   void ContinueTask(base::OnceClosure task) override;
 
  private:

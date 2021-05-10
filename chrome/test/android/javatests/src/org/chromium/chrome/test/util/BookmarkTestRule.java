@@ -12,6 +12,7 @@ import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
+import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
@@ -48,7 +49,7 @@ public class BookmarkTestRule implements TestRule {
         if (chromeActivity.isTablet()) {
             showBookmarkManagerInternal(chromeActivity);
         } else {
-            mBookmarkActivity = ActivityUtils.waitForActivity(
+            mBookmarkActivity = ActivityTestUtils.waitForActivity(
                     InstrumentationRegistry.getInstrumentation(), BookmarkActivity.class,
                     () -> showBookmarkManagerInternal(chromeActivity));
         }
@@ -65,7 +66,7 @@ public class BookmarkTestRule implements TestRule {
 
     private void showBookmarkManagerInternal(ChromeActivity chromeActivity) {
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> BookmarkUtils.showBookmarkManager(chromeActivity));
+                () -> BookmarkUtils.showBookmarkManager(chromeActivity, /*isIncognito=*/false));
     }
 
     /**

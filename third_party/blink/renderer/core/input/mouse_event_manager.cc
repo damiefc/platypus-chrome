@@ -42,11 +42,12 @@
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/pointer_lock_controller.h"
+#include "third_party/blink/renderer/core/page/scrolling/text_fragment_anchor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
 #include "third_party/blink/renderer/platform/geometry/float_quad.h"
-#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-blink.h"
 
 namespace blink {
 
@@ -371,8 +372,6 @@ WebInputEventResult MouseEventManager::DispatchMouseClickIfNeeded(
   const bool should_dispatch_click_event =
       click_count_ > 0 && !context_menu_event && mouse_down_element_ &&
       mouse_release_target &&
-      mouse_release_target->CanParticipateInFlatTree() &&
-      mouse_down_element_->CanParticipateInFlatTree() &&
       mouse_down_element_->isConnected();
   if (!should_dispatch_click_event)
     return WebInputEventResult::kNotHandled;
@@ -384,11 +383,6 @@ WebInputEventResult MouseEventManager::DispatchMouseClickIfNeeded(
     old_click_target_node = click_target_node;
   } else if (mouse_down_element_->GetDocument() ==
              mouse_release_target->GetDocument()) {
-    // Updates distribution because a 'mouseup' event listener can make the
-    // tree dirty at dispatchMouseEvent() invocation above.
-    // Unless distribution is updated, commonAncestor would hit ASSERT.
-    mouse_down_element_->UpdateDistributionForFlatTreeTraversal();
-    mouse_release_target->UpdateDistributionForFlatTreeTraversal();
     click_target_node = mouse_release_target->CommonAncestor(
         *mouse_down_element_, event_handling_util::ParentForClickEvent);
 
@@ -403,19 +397,14 @@ WebInputEventResult MouseEventManager::DispatchMouseClickIfNeeded(
   UMA_HISTOGRAM_BOOLEAN("Event.ClickTargetChangedDueToInteractiveElement",
                         click_target_node != old_click_target_node);
 
-  DEFINE_STATIC_LOCAL(BooleanHistogram, histogram,
-                      ("Event.ClickNotFiredDueToDomManipulation"));
+  const bool click_element_still_in_flat_tree =
+      (click_element_ && click_element_->isConnected());
+  UMA_HISTOGRAM_BOOLEAN("Event.ClickNotFiredDueToDomManipulation",
+                        !click_element_still_in_flat_tree);
+  DCHECK_EQ(click_element_ == mouse_down_element_,
+            click_element_still_in_flat_tree);
 
-  if (click_element_ && click_element_->CanParticipateInFlatTree() &&
-      click_element_->isConnected()) {
-    DCHECK(click_element_ == mouse_down_element_);
-    histogram.Count(false);
-  } else {
-    histogram.Count(true);
-  }
-
-  if ((click_element_ && click_element_->CanParticipateInFlatTree() &&
-       click_element_->isConnected()) ||
+  if (click_element_still_in_flat_tree ||
       RuntimeEnabledFeatures::ClickRetargettingEnabled()) {
     return DispatchMouseEvent(
         click_target_node,
@@ -700,11 +689,8 @@ WebInputEventResult MouseEventManager::HandleMousePressEvent(
 
   mouse_down_ = event.Event();
 
-  if (RuntimeEnabledFeatures::TextFragmentIdentifiersEnabled(
-          frame_->DomWindow())) {
-    if (frame_->View())
-      frame_->View()->DismissFragmentAnchor();
-  }
+  if (frame_->View() && TextFragmentAnchor::ShouldDismissOnScrollOrClick())
+    frame_->View()->DismissFragmentAnchor();
 
   if (frame_->GetDocument()->IsSVGDocument() &&
       frame_->GetDocument()->AccessSVGExtensions().ZoomAndPanEnabled()) {
@@ -722,6 +708,12 @@ WebInputEventResult MouseEventManager::HandleMousePressEvent(
   // because we don't want to do it until we know we didn't hit a widget.
   if (single_click)
     FocusDocumentView();
+
+  // |SelectionController| calls |PositionForPoint()| which requires
+  // |kPrePaintClean|. |FocusDocumentView| above is the last possible
+  // modifications before we call |SelectionController|.
+  if (LocalFrameView* frame_view = frame_->View())
+    frame_view->UpdateLifecycleToPrePaintClean(DocumentUpdateReason::kInput);
 
   Node* inner_node = event.InnerNode();
 
@@ -752,6 +744,12 @@ WebInputEventResult MouseEventManager::HandleMouseReleaseEvent(
   AutoscrollController* controller = scroll_manager_->GetAutoscrollController();
   if (controller && controller->SelectionAutoscrollInProgress())
     scroll_manager_->StopAutoscroll();
+
+  // |SelectionController| calls |PositionForPoint()| which requires
+  // |kPrePaintClean|. |FocusDocumentView| above is the last possible
+  // modifications before we call |SelectionController|.
+  if (LocalFrameView* frame_view = frame_->View())
+    frame_view->UpdateLifecycleToPrePaintClean(DocumentUpdateReason::kInput);
 
   return frame_->GetEventHandler()
                  .GetSelectionController()
@@ -862,6 +860,11 @@ WebInputEventResult MouseEventManager::HandleMouseDraggedEvent(
     if (!layout_object || !IsListBox(layout_object))
       return WebInputEventResult::kNotHandled;
   }
+
+  // |SelectionController| calls |PositionForPoint()| which requires
+  // |kPrePaintClean|.
+  if (LocalFrameView* frame_view = frame_->View())
+    frame_view->UpdateLifecycleToPrePaintClean(DocumentUpdateReason::kInput);
 
   mouse_down_may_start_drag_ = false;
 
@@ -1102,8 +1105,9 @@ void MouseEventManager::ClearDragDataTransfer() {
   }
 }
 
-void MouseEventManager::DragSourceEndedAt(const WebMouseEvent& event,
-                                          DragOperation operation) {
+void MouseEventManager::DragSourceEndedAt(
+    const WebMouseEvent& event,
+    ui::mojom::blink::DragOperation operation) {
   if (GetDragState().drag_src_) {
     GetDragState().drag_data_transfer_->SetDestinationOperation(operation);
     // The return value is ignored because dragend is not cancelable.

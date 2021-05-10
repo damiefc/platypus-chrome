@@ -82,6 +82,9 @@ export class DragManagerDelegate {
    * @param {number} index
    */
   placeTabGroupElement(element, index) {}
+
+  /** @return {boolean} */
+  shouldPreventDrag() {}
 }
 
 /** @typedef {!DragManagerDelegate|!HTMLElement} */
@@ -107,6 +110,9 @@ class DragSession {
      * @private {boolean}
      */
     this.hasMoved_ = false;
+
+    /** @private {!Object<{x: number, y: number}>} */
+    this.lastPoint_ = {x: 0, y: 0};
 
     /** @const {number} */
     this.srcIndex = srcIndex;
@@ -221,7 +227,8 @@ class DragSession {
     return dstIndex;
   }
 
-  cancel() {
+  /** @param {!DragEvent} event */
+  cancel(event) {
     if (this.isDraggingPlaceholder()) {
       this.element_.remove();
       return;
@@ -234,6 +241,15 @@ class DragSession {
       this.delegate_.placeTabElement(
           /** @type {!TabElement} */ (this.element_), this.srcIndex,
           this.element_.tab.pinned, this.srcGroup);
+    }
+
+    if (this.element_.isDraggedOut() &&
+        event.dataTransfer.dropEffect === 'move') {
+      // The element was dragged out of the current tab strip and was dropped
+      // into a new window. In this case, do not mark the element as no longer
+      // being dragged out. The element needs to be kept hidden, and will be
+      // automatically removed from the DOM with the next tab-removed event.
+      return;
     }
 
     this.element_.setDragging(false);
@@ -266,7 +282,8 @@ class DragSession {
 
   /** @param {!DragEvent} event */
   finish(event) {
-    if (this.isDraggingPlaceholderTab_()) {
+    const wasDraggingPlaceholder = this.isDraggingPlaceholderTab_();
+    if (wasDraggingPlaceholder) {
       const id = Number(event.dataTransfer.getData(getTabIdDataType()));
       this.element_.tab = Object.assign({}, this.element_.tab, {id});
     } else if (this.isDraggingPlaceholderGroup_()) {
@@ -290,13 +307,6 @@ class DragSession {
 
     this.element_.setDragging(false);
     this.element_.setDraggedOut(false);
-
-    if (isTabElement(this.element_) && !this.hasMoved_) {
-      // If the user was dragging a tab and the tab has not ever been moved,
-      // show a context menu instead.
-      this.tabStripEmbedderProxy_.showTabContextMenu(
-          this.element_.tab.id, event.clientX, event.clientY);
-    }
   }
 
   /**
@@ -314,6 +324,7 @@ class DragSession {
 
   /** @param {!DragEvent} event */
   start(event) {
+    this.lastPoint_ = {x: event.clientX, y: event.clientY};
     event.dataTransfer.effectAllowed = 'move';
     const draggedItemRect = event.composedPath()[0].getBoundingClientRect();
     this.element_.setDragging(true);
@@ -368,6 +379,8 @@ class DragSession {
 
   /** @param {!DragEvent} event */
   update(event) {
+    this.lastPoint_ = {x: event.clientX, y: event.clientY};
+
     if (event.type === 'dragleave') {
       this.element_.setDraggedOut(true);
       this.hasMoved_ = true;
@@ -481,6 +494,9 @@ export class DragManager {
 
     /** @private {!TabsApiProxy} */
     this.tabsProxy_ = TabsApiProxyImpl.getInstance();
+
+    /** @private {!TabStripEmbedderProxy} */
+    this.tabStripEmbedderProxy_ = TabStripEmbedderProxyImpl.getInstance();
   }
 
   /**
@@ -489,7 +505,7 @@ export class DragManager {
    */
   onDragLeave_(event) {
     if (this.dragSession_ && this.dragSession_.isDraggingPlaceholder()) {
-      this.dragSession_.cancel();
+      this.dragSession_.cancel(event);
       this.dragSession_ = null;
       return;
     }
@@ -517,6 +533,17 @@ export class DragManager {
       return;
     }
 
+    // If we are dragging a tab element ensure its touch pressed state is reset
+    // to avoid any associated css effects making it onto the drag image.
+    if (isTabElement(draggedItem)) {
+      /** @private {!TabElement} */ (draggedItem).setTouchPressed(false);
+    }
+
+    if (this.delegate_.shouldPreventDrag()) {
+      event.preventDefault();
+      return;
+    }
+
     this.dragSession_ = DragSession.createFromElement(
         this.delegate_,
         /** @type {!TabElement|!TabGroupElement} */ (draggedItem));
@@ -529,7 +556,7 @@ export class DragManager {
       return;
     }
 
-    this.dragSession_.cancel();
+    this.dragSession_.cancel(event);
     this.dragSession_ = null;
   }
 

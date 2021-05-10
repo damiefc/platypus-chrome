@@ -31,34 +31,36 @@
 #include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/child/child_process.h"
+#include "content/common/android/sync_compositor_statics.h"
 #include "content/common/content_constants_internal.h"
-#include "content/common/frame_messages.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/gpu_stream_constants.h"
-#include "content/public/common/service_names.mojom.h"
+#include "content/public/common/url_utils.h"
 #include "content/public/common/webplugininfo.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_frame.h"
-#include "content/renderer/loader/child_url_loader_factory_bundle.h"
-#include "content/renderer/loader/resource_dispatcher.h"
-#include "content/renderer/loader/web_url_loader_impl.h"
 #include "content/renderer/media/audio_decoder.h"
+#include "content/renderer/media/batching_media_log.h"
+#include "content/renderer/media/inspector_media_event_handler.h"
+#include "content/renderer/media/render_media_event_handler.h"
 #include "content/renderer/media/renderer_webaudiodevice_impl.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/storage_util.h"
+#include "content/renderer/v8_value_converter_impl.h"
+#include "content/renderer/variations_render_thread_observer.h"
 #include "content/renderer/webgraphicscontext3d_provider_impl.h"
 #include "content/renderer/worker/dedicated_worker_host_factory_client.h"
 #include "content/renderer/worker/worker_thread_registry.h"
 #include "device/gamepad/public/cpp/gamepads.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "media/audio/audio_output_device.h"
 #include "media/base/media_permission.h"
 #include "media/base/media_switches.h"
-#include "media/blink/webcontentdecryptionmodule_impl.h"
 #include "media/filters/stream_parser_factory.h"
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "media/webrtc/webrtc_switches.h"
@@ -73,6 +75,7 @@
 #include "storage/common/database/database_identifier.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
+#include "third_party/blink/public/common/security/protocol_handler_security_level.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
 #include "third_party/blink/public/platform/blame_context.h"
@@ -87,9 +90,11 @@
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_loader_factory.h"
 #include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/platform/web_v8_value_converter.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/modules/media/audio/web_audio_device_factory.h"
 #include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_media_inspector.h"
 #include "third_party/sqlite/sqlite3.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gl/buildflags.h"
@@ -113,7 +118,6 @@ using blink::Platform;
 using blink::WebAudioDevice;
 using blink::WebAudioLatencyHint;
 using blink::WebMediaStreamTrack;
-using blink::WebSize;
 using blink::WebString;
 using blink::WebURL;
 using blink::WebVector;
@@ -142,8 +146,6 @@ gpu::ContextType ToGpuContextType(blink::Platform::ContextType type) {
       return gpu::CONTEXT_TYPE_WEBGL1;
     case blink::Platform::kWebGL2ContextType:
       return gpu::CONTEXT_TYPE_WEBGL2;
-    case blink::Platform::kWebGL2ComputeContextType:
-      return gpu::CONTEXT_TYPE_WEBGL2_COMPUTE;
     case blink::Platform::kGLES2ContextType:
       return gpu::CONTEXT_TYPE_OPENGLES2;
     case blink::Platform::kGLES3ContextType:
@@ -184,7 +186,7 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
 #if defined(OS_MAC)
     sandbox_support_ = std::make_unique<WebSandboxSupportMac>();
 #else
-    sandbox_support_.reset(new WebSandboxSupportLinux(font_loader_));
+    sandbox_support_ = std::make_unique<WebSandboxSupportLinux>(font_loader_);
 #endif
   } else {
     DVLOG(1) << "Disabling sandbox support for testing.";
@@ -215,30 +217,47 @@ std::unique_ptr<blink::WebURLLoaderFactory>
 RendererBlinkPlatformImpl::WrapURLLoaderFactory(
     blink::CrossVariantMojoRemote<network::mojom::URLLoaderFactoryInterfaceBase>
         url_loader_factory) {
-  return std::make_unique<WebURLLoaderFactoryImpl>(
-      RenderThreadImpl::current()->resource_dispatcher()->GetWeakPtr(),
+  std::vector<std::string> cors_exempt_header_list =
+      RenderThreadImpl::current()->cors_exempt_header_list();
+  blink::WebVector<blink::WebString> web_cors_exempt_header_list(
+      cors_exempt_header_list.size());
+  std::transform(cors_exempt_header_list.begin(), cors_exempt_header_list.end(),
+                 web_cors_exempt_header_list.begin(), [](const std::string& h) {
+                   return blink::WebString::FromLatin1(h);
+                 });
+  return std::make_unique<blink::WebURLLoaderFactory>(
       base::MakeRefCounted<network::WrapperSharedURLLoaderFactory>(
           mojo::PendingRemote<network::mojom::URLLoaderFactory>(
-              std::move(url_loader_factory))));
+              std::move(url_loader_factory))),
+      web_cors_exempt_header_list,
+      /*terminate_sync_load_event=*/nullptr);
 }
 
 std::unique_ptr<blink::WebURLLoaderFactory>
 RendererBlinkPlatformImpl::WrapSharedURLLoaderFactory(
     scoped_refptr<network::SharedURLLoaderFactory> factory) {
-  return std::make_unique<WebURLLoaderFactoryImpl>(
-      RenderThreadImpl::current()->resource_dispatcher()->GetWeakPtr(),
-      std::move(factory));
+  std::vector<std::string> cors_exempt_header_list =
+      RenderThreadImpl::current()->cors_exempt_header_list();
+  blink::WebVector<blink::WebString> web_cors_exempt_header_list(
+      cors_exempt_header_list.size());
+  std::transform(cors_exempt_header_list.begin(), cors_exempt_header_list.end(),
+                 web_cors_exempt_header_list.begin(), [](const std::string& h) {
+                   return blink::WebString::FromLatin1(h);
+                 });
+  return std::make_unique<blink::WebURLLoaderFactory>(
+      std::move(factory), web_cors_exempt_header_list,
+      /*terminate_sync_load_event=*/nullptr);
 }
 
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 void RendererBlinkPlatformImpl::SetDisplayThreadPriority(
     base::PlatformThreadId thread_id) {
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   if (RenderThreadImpl* render_thread = RenderThreadImpl::current()) {
     render_thread->render_message_filter()->SetThreadPriority(
         thread_id, base::ThreadPriority::DISPLAY);
   }
-#endif
 }
+#endif
 
 blink::BlameContext* RendererBlinkPlatformImpl::GetTopLevelBlameContext() {
   return &top_level_blame_context_;
@@ -304,6 +323,9 @@ void RendererBlinkPlatformImpl::CacheMetadata(
     base::Time response_time,
     const uint8_t* data,
     size_t size) {
+  // The browser-side GeneratedCodeCache ignores writes over 2GB.
+  if (size > std::numeric_limits<int32_t>::max())
+    return;
   // Let the browser know we generated cacheable metadata for this resource.
   // The browser may cache it and return it on subsequent responses to speed
   // the processing of this resource.
@@ -332,14 +354,27 @@ void RendererBlinkPlatformImpl::ClearCodeCacheEntry(
   GetCodeCacheHost().ClearCodeCacheEntry(cache_type, url);
 }
 
-void RendererBlinkPlatformImpl::PopulateURLResponse(
-    const WebURL& url,
-    const network::mojom::URLResponseHead& head,
-    blink::WebURLResponse* response,
-    bool report_security_info,
-    int request_id) {
-  WebURLLoaderImpl::PopulateURLResponse(url, head, response,
-                                        report_security_info, request_id);
+bool RendererBlinkPlatformImpl::IsRedirectSafe(const GURL& from_url,
+                                               const GURL& to_url) {
+  return IsSafeRedirectTarget(from_url, to_url) &&
+         (!GetContentClient()->renderer() ||  // null in unit tests.
+          GetContentClient()->renderer()->IsSafeRedirectTarget(to_url));
+}
+
+blink::WebResourceRequestSenderDelegate*
+RendererBlinkPlatformImpl::GetResourceRequestSenderDelegate() {
+  auto* render_thread = RenderThreadImpl::current();
+
+  // RenderThreadImpl is null in some tests.
+  if (!render_thread)
+    return nullptr;
+  return render_thread->GetResourceRequestSenderDelegate();
+}
+
+void RendererBlinkPlatformImpl::AppendVariationsThrottles(
+    const url::Origin& top_origin,
+    std::vector<std::unique_ptr<blink::URLLoaderThrottle>>* throttles) {
+  VariationsRenderThreadObserver::AppendThrottleIfNeeded(top_origin, throttles);
 }
 
 void RendererBlinkPlatformImpl::CacheMetadataInCacheStorage(
@@ -410,7 +445,7 @@ void RendererBlinkPlatformImpl::SetIsLockedToSite() {
   is_locked_to_site_ = true;
 }
 
-bool RendererBlinkPlatformImpl::IsGpuCompositingDisabled() {
+bool RendererBlinkPlatformImpl::IsGpuCompositingDisabled() const {
   DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   RenderThreadImpl* thread = RenderThreadImpl::current();
   // |thread| can be NULL in tests.
@@ -418,8 +453,20 @@ bool RendererBlinkPlatformImpl::IsGpuCompositingDisabled() {
 }
 
 #if defined(OS_ANDROID)
-bool RendererBlinkPlatformImpl::IsSynchronousCompositingEnabled() {
+bool RendererBlinkPlatformImpl::
+    IsSynchronousCompositingEnabledForAndroidWebView() {
   return GetContentClient()->UsingSynchronousCompositing();
+}
+
+bool RendererBlinkPlatformImpl::
+    IsZeroCopySynchronousSwDrawEnabledForAndroidWebView() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kSingleProcess);
+}
+
+SkCanvas*
+RendererBlinkPlatformImpl::SynchronousCompositorGetSkCanvasForAndroidWebView() {
+  return content::SynchronousCompositorGetSkCanvas();
 }
 #endif
 
@@ -500,9 +547,20 @@ RendererBlinkPlatformImpl::NewAudioCapturerSource(
       web_frame->GetLocalFrameToken(), params);
 }
 
-viz::RasterContextProvider*
+scoped_refptr<viz::RasterContextProvider>
 RendererBlinkPlatformImpl::SharedMainThreadContextProvider() {
-  return RenderThreadImpl::current()->SharedMainThreadContextProvider().get();
+  return RenderThreadImpl::current()->SharedMainThreadContextProvider();
+}
+
+scoped_refptr<viz::RasterContextProvider>
+RendererBlinkPlatformImpl::SharedCompositorWorkerContextProvider() {
+  return RenderThreadImpl::current()->SharedCompositorWorkerContextProvider(
+      /*try_gpu_rasterization=*/true);
+}
+
+scoped_refptr<gpu::GpuChannelHost>
+RendererBlinkPlatformImpl::EstablishGpuChannelSync() {
+  return RenderThreadImpl::current()->EstablishGpuChannelSync();
 }
 
 bool RendererBlinkPlatformImpl::RTCSmoothnessAlgorithmEnabled() {
@@ -566,16 +624,6 @@ bool RendererBlinkPlatformImpl::IsWebRtcEncryptionEnabled() {
 bool RendererBlinkPlatformImpl::IsWebRtcStunOriginEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kEnableWebRtcStunOrigin);
-}
-
-base::Optional<blink::WebString>
-RendererBlinkPlatformImpl::WebRtcStunProbeTrialParameter() {
-  const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-  if (!cmd_line->HasSwitch(switches::kWebRtcStunProbeTrialParameter))
-    return base::nullopt;
-
-  return blink::WebString::FromASCII(
-      cmd_line->GetSwitchValueASCII(switches::kWebRtcStunProbeTrialParameter));
 }
 
 media::MediaPermission* RendererBlinkPlatformImpl::GetWebRTCMediaPermission(
@@ -682,8 +730,9 @@ RendererBlinkPlatformImpl::GetVideoCaptureImplManager() {
 
 //------------------------------------------------------------------------------
 
-static void Collect3DContextInformation(blink::Platform::GraphicsInfo* gl_info,
-                                        const gpu::GPUInfo& gpu_info) {
+void RendererBlinkPlatformImpl::Collect3DContextInformation(
+    blink::Platform::GraphicsInfo* gl_info,
+    const gpu::GPUInfo& gpu_info) const {
   DCHECK(gl_info);
   const gpu::GPUInfo::GPUDevice& active_gpu = gpu_info.active_gpu();
   gl_info->vendor_id = active_gpu.vendor_id;
@@ -696,6 +745,8 @@ static void Collect3DContextInformation(blink::Platform::GraphicsInfo* gl_info,
   gl_info->sandboxed = gpu_info.sandboxed;
   gl_info->amd_switchable = gpu_info.amd_switchable;
   gl_info->optimus = gpu_info.optimus;
+  gl_info->using_gpu_compositing = !IsGpuCompositingDisabled();
+  gl_info->using_passthrough_command_decoder = gpu_info.passthrough_cmd_decoder;
 }
 
 std::unique_ptr<blink::WebGraphicsContext3DProvider>
@@ -877,6 +928,11 @@ bool RendererBlinkPlatformImpl::AllowScriptExtensionForServiceWorker(
       script_origin);
 }
 
+blink::ProtocolHandlerSecurityLevel
+RendererBlinkPlatformImpl::GetProtocolHandlerSecurityLevel() {
+  return GetContentClient()->renderer()->GetProtocolHandlerSecurityLevel();
+}
+
 bool RendererBlinkPlatformImpl::IsExcludedHeaderForServiceWorkerFetchEvent(
     const blink::WebString& header_name) {
   return GetContentClient()
@@ -895,6 +951,27 @@ void RendererBlinkPlatformImpl::RecordMetricsForBackgroundedRendererPurge() {
 }
 
 //------------------------------------------------------------------------------
+
+// The returned BatchingMediaLog can be used on any thread, but must be
+// destroyed on |owner_task_runner|. The aggregated MediaLogRecords will be
+// sent back to the Browser via Mojo objects bound to |owner_task_runner|.
+std::unique_ptr<media::MediaLog> RendererBlinkPlatformImpl::GetMediaLog(
+    blink::MediaInspectorContext* inspector_context,
+    scoped_refptr<base::SingleThreadTaskRunner> owner_task_runner) {
+  std::vector<std::unique_ptr<BatchingMediaLog::EventHandler>> handlers;
+
+  // For chrome://media-internals.
+  handlers.push_back(std::make_unique<RenderMediaEventHandler>());
+
+  // For devtools' media tab.
+  handlers.push_back(
+      std::make_unique<InspectorMediaEventHandler>(inspector_context));
+
+  return std::make_unique<BatchingMediaLog>(owner_task_runner,
+                                            std::move(handlers));
+}
+
+//------------------------------------------------------------------------------
 media::GpuVideoAcceleratorFactories*
 RendererBlinkPlatformImpl::GetGpuFactories() {
   auto* render_thread = RenderThreadImpl::current();
@@ -902,6 +979,21 @@ RendererBlinkPlatformImpl::GetGpuFactories() {
     return nullptr;
 
   return render_thread->GetGpuFactories();
+}
+
+scoped_refptr<base::SingleThreadTaskRunner>
+RendererBlinkPlatformImpl::MediaThreadTaskRunner() {
+  auto* render_thread = RenderThreadImpl::current();
+  if (!render_thread)
+    return nullptr;
+
+  return render_thread->GetMediaThreadTaskRunner();
+}
+
+media::DecoderFactory* RendererBlinkPlatformImpl::GetMediaDecoderFactory() {
+  auto* render_thread = RenderThreadImpl::current();
+  DCHECK(!!render_thread);
+  return render_thread->GetMediaDecoderFactory();
 }
 
 void RendererBlinkPlatformImpl::SetRenderingColorSpace(
@@ -913,6 +1005,27 @@ void RendererBlinkPlatformImpl::SetRenderingColorSpace(
   render_thread->SetRenderingColorSpace(color_space);
 }
 
+gfx::ColorSpace RendererBlinkPlatformImpl::GetRenderingColorSpace() const {
+  auto* render_thread = RenderThreadImpl::current();
+  if (!render_thread)
+    return {};
+
+  return render_thread->GetRenderingColorSpace();
+}
+
+//------------------------------------------------------------------------------
+
+void RendererBlinkPlatformImpl::SetActiveURL(const blink::WebURL& url,
+                                             const blink::WebString& top_url) {
+  GetContentClient()->SetActiveURL(url, top_url.Utf8());
+}
+
+//------------------------------------------------------------------------------
+
+SkBitmap* RendererBlinkPlatformImpl::GetSadPageBitmap() {
+  return GetContentClient()->renderer()->GetSadWebViewBitmap();
+}
+
 //------------------------------------------------------------------------------
 
 blink::mojom::CodeCacheHost& RendererBlinkPlatformImpl::GetCodeCacheHost() {
@@ -922,6 +1035,11 @@ blink::mojom::CodeCacheHost& RendererBlinkPlatformImpl::GetCodeCacheHost() {
         base::ThreadPool::CreateSequencedTaskRunner({}));
   }
   return *code_cache_host_;
+}
+
+std::unique_ptr<blink::WebV8ValueConverter>
+RendererBlinkPlatformImpl::CreateWebV8ValueConverter() {
+  return std::make_unique<V8ValueConverterImpl>();
 }
 
 }  // namespace content

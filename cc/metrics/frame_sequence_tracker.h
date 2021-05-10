@@ -156,7 +156,8 @@ class CC_EXPORT FrameSequenceTracker {
 
   void UpdateTrackedFrameData(TrackedFrameData* frame_data,
                               uint64_t source_id,
-                              uint64_t sequence_number);
+                              uint64_t sequence_number,
+                              uint64_t throttled_frame_count);
 
   bool ShouldIgnoreBeginFrameSource(uint64_t source_id) const;
 
@@ -249,7 +250,6 @@ class CC_EXPORT FrameSequenceTracker {
   // True when an impl-impl is not ended. A tracker is ready for termination
   // only when the last impl-frame is ended (ReportFrameEnd).
   bool is_inside_frame_ = false;
-
 
 #if DCHECK_IS_ON()
   // This stringstream represents a sequence of frame reporting activities on

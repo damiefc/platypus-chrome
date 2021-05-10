@@ -16,10 +16,13 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import static org.chromium.base.test.util.CriteriaHelper.pollUiThread;
 import static org.chromium.chrome.browser.password_check.PasswordCheckProperties.CompromisedCredentialProperties.COMPROMISED_CREDENTIAL;
 import static org.chromium.chrome.browser.password_check.PasswordCheckProperties.CompromisedCredentialProperties.CREDENTIAL_HANDLER;
 import static org.chromium.chrome.browser.password_check.PasswordCheckProperties.CompromisedCredentialProperties.HAS_MANUAL_CHANGE_BUTTON;
@@ -45,7 +48,6 @@ import static org.chromium.chrome.browser.password_check.PasswordCheckUIStatus.E
 import static org.chromium.chrome.browser.password_check.PasswordCheckUIStatus.IDLE;
 import static org.chromium.chrome.browser.password_check.PasswordCheckUIStatus.RUNNING;
 import static org.chromium.chrome.browser.password_manager.settings.ReauthenticationManager.VALID_REAUTHENTICATION_TIME_INTERVAL_MILLIS;
-import static org.chromium.content_public.browser.test.util.CriteriaHelper.pollUiThread;
 import static org.chromium.content_public.browser.test.util.TestThreadUtils.runOnUiThreadBlocking;
 
 import android.content.ClipboardManager;
@@ -77,6 +79,8 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -87,8 +91,6 @@ import org.chromium.chrome.browser.password_manager.settings.ReauthenticationMan
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -150,11 +152,13 @@ public class PasswordCheckViewTest {
     @Before
     public void setUp() throws InterruptedException {
         MockitoAnnotations.initMocks(this);
-        PasswordCheckComponentUiFactory.setCreationStrategy(fragmentView -> {
-            mPasswordCheckView = (PasswordCheckFragmentView) fragmentView;
-            mPasswordCheckView.setComponentDelegate(mComponentUi);
-            return mComponentUi;
-        });
+        PasswordCheckComponentUiFactory.setCreationStrategy(
+                (fragmentView, helpAndFeedbackLauncher, settingsLauncher, customTabIntentHelper,
+                        trustedIntentHelper) -> {
+                    mPasswordCheckView = (PasswordCheckFragmentView) fragmentView;
+                    mPasswordCheckView.setComponentDelegate(mComponentUi);
+                    return mComponentUi;
+                });
         setUpUiLaunchedFromSettings();
         runOnUiThreadBlocking(() -> {
             PasswordCheckCoordinator.setUpModelChangeProcessors(mModel, mPasswordCheckView);
@@ -269,6 +273,24 @@ public class PasswordCheckViewTest {
     @MediumTest
     public void testStatusNotDisplaysRestartAction() {
         runOnUiThreadBlocking(() -> { mModel.get(ITEMS).add(buildHeader(RUNNING)); });
+        waitForListViewToHaveLength(1);
+        assertThat(getActionButton().getVisibility(), is(View.GONE));
+        assertFalse(getActionButton().isClickable());
+    }
+
+    @Test
+    @MediumTest
+    public void testStatusDisplaysRestartForOffline() {
+        runOnUiThreadBlocking(() -> { mModel.get(ITEMS).add(buildHeader(ERROR_OFFLINE)); });
+        waitForListViewToHaveLength(1);
+        assertThat(getActionButton().getVisibility(), is(View.VISIBLE));
+        assertTrue(getActionButton().isClickable());
+    }
+
+    @Test
+    @MediumTest
+    public void testStatusDoesNotDisplayRestartForNoPasswords() {
+        runOnUiThreadBlocking(() -> { mModel.get(ITEMS).add(buildHeader(ERROR_NO_PASSWORDS)); });
         waitForListViewToHaveLength(1);
         assertThat(getActionButton().getVisibility(), is(View.GONE));
         assertFalse(getActionButton().isClickable());
@@ -566,7 +588,7 @@ public class PasswordCheckViewTest {
                         not(is(mPasswordCheckView.getActivity().getWindow().getDecorView()))))
                 .perform(click());
 
-        verify(mMockHandler).onEdit(eq(ANA));
+        verify(mMockHandler).onEdit(eq(ANA), eq(mPasswordCheckView.getContext()));
     }
 
     @Test
@@ -617,7 +639,7 @@ public class PasswordCheckViewTest {
         mModel.set(DELETION_ORIGIN, ANA.getDisplayOrigin());
         runOnUiThreadBlocking(() -> mModel.set(DELETION_CONFIRMATION_HANDLER, fakeHandler));
 
-        onView(withText(R.string.password_check_delete_credential_dialog_confirm))
+        onView(withText(R.string.password_entry_edit_delete_credential_dialog_confirm))
                 .inRoot(withDecorView(
                         not(is(mPasswordCheckView.getActivity().getWindow().getDecorView()))))
                 .perform(click());
@@ -703,6 +725,14 @@ public class PasswordCheckViewTest {
         mTestRule.getFragment().onResume();
 
         CriteriaHelper.pollInstrumentationThread(() -> recordedDismiss.get() == 1);
+    }
+
+    @Test
+    @SmallTest
+    public void testHelpHandlerCalled() {
+        when(mComponentUi.handleHelp(any())).thenReturn(true);
+        onView(withId(R.id.menu_id_targeted_help)).perform(click());
+        verify(mComponentUi).handleHelp(any());
     }
 
     private MVCListAdapter.ListItem buildHeader(@PasswordCheckUIStatus int status,

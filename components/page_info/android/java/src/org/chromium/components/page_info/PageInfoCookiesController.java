@@ -7,7 +7,7 @@ package org.chromium.components.page_info;
 import android.view.View;
 import android.view.ViewGroup;
 
-import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.FragmentManager;
 
 import org.chromium.components.browser_ui.site_settings.SingleWebsiteSettings;
 import org.chromium.components.browser_ui.site_settings.SiteDataCleaner;
@@ -28,12 +28,12 @@ import java.util.Collection;
  */
 public class PageInfoCookiesController
         implements PageInfoSubpageController, CookieControlsObserver {
-    private PageInfoMainController mMainController;
-    private PageInfoRowView mRowView;
+    private final PageInfoMainController mMainController;
+    private final PageInfoRowView mRowView;
+    private final PageInfoControllerDelegate mDelegate;
+    private final String mFullUrl;
+    private final String mTitle;
     private CookieControlsBridge mBridge;
-    private PageInfoControllerDelegate mDelegate;
-    private String mFullUrl;
-    private String mTitle;
     private PageInfoCookiesPreference mSubPage;
 
     private int mAllowedCookies;
@@ -49,11 +49,13 @@ public class PageInfoCookiesController
         mDelegate = delegate;
         mFullUrl = fullUrl;
         mTitle = mRowView.getContext().getResources().getString(R.string.cookies_title);
+        mBridge = mDelegate.createCookieControlsBridge(this);
 
         PageInfoRowView.ViewParams rowParams = new PageInfoRowView.ViewParams();
         rowParams.visible = delegate.isSiteSettingsAvailable();
         rowParams.title = mTitle;
         rowParams.iconResId = R.drawable.permission_cookie;
+        rowParams.decreaseIconSize = true;
         rowParams.clickCallback = this::launchSubpage;
         mRowView.setParams(rowParams);
     }
@@ -71,18 +73,22 @@ public class PageInfoCookiesController
     @Override
     public View createViewForSubpage(ViewGroup parent) {
         assert mSubPage == null;
+
+        FragmentManager fragmentManager = mDelegate.getFragmentManager();
+        // If the activity is getting destroyed or saved, it is not allowed to modify fragments.
+        if (fragmentManager.isStateSaved()) return null;
+
         mSubPage = new PageInfoCookiesPreference();
-        AppCompatActivity host = (AppCompatActivity) mRowView.getContext();
-        host.getSupportFragmentManager().beginTransaction().add(mSubPage, null).commitNow();
+        mSubPage.setSiteSettingsDelegate(mDelegate.getSiteSettingsDelegate());
+        fragmentManager.beginTransaction().add(mSubPage, null).commitNow();
 
         PageInfoCookiesPreference.PageInfoCookiesViewParams params =
                 new PageInfoCookiesPreference.PageInfoCookiesViewParams();
         params.thirdPartyCookieBlockingEnabled = mDelegate.cookieControlsShown();
         params.onCheckedChangedCallback = this::onCheckedChangedCallback;
-        params.onClearCallback = this::clearData;
+        params.onClearCallback = this::onClearCookiesClicked;
         params.onCookieSettingsLinkClicked = mDelegate::showCookieSettings;
-        params.disableCookieDeletion = WebsitePreferenceBridge.isCookieDeletionDisabled(
-                mMainController.getBrowserContext(), mFullUrl);
+        params.disableCookieDeletion = isDeletionDisabled();
         mSubPage.setParams(params);
         mSubPage.setCookiesCount(mAllowedCookies, mBlockedCookies);
         mSubPage.setCookieBlockingStatus(mStatus, mIsEnforced);
@@ -101,18 +107,29 @@ public class PageInfoCookiesController
 
         mWebsite = SingleWebsiteSettings.mergePermissionAndStorageInfoForTopLevelOrigin(
                 address, result);
-        mSubPage.setStorageUsage(mWebsite.getTotalUsage());
+        if (mSubPage != null) {
+            mSubPage.setStorageUsage(mWebsite.getTotalUsage());
+        }
     }
 
     private void onCheckedChangedCallback(boolean state) {
-        mMainController.recordAction(state ? PageInfoAction.PAGE_INFO_COOKIES_BLOCKED_FOR_SITE
-                                           : PageInfoAction.PAGE_INFO_COOKIES_ALLOWED_FOR_SITE);
-        mBridge.setThirdPartyCookieBlockingEnabledForSite(state);
+        if (mBridge != null) {
+            mMainController.recordAction(state ? PageInfoAction.PAGE_INFO_COOKIES_BLOCKED_FOR_SITE
+                                               : PageInfoAction.PAGE_INFO_COOKIES_ALLOWED_FOR_SITE);
+            mBridge.setThirdPartyCookieBlockingEnabledForSite(state);
+        }
     }
 
-    private void clearData() {
+    private void onClearCookiesClicked() {
         mMainController.recordAction(PageInfoAction.PAGE_INFO_COOKIES_CLEARED);
+        clearData();
+    }
+
+    @Override
+    public void clearData() {
+        if (isDeletionDisabled()) return;
         if (mWebsite == null) return;
+
         new SiteDataCleaner().clearData(
                 mMainController.getBrowserContext(), mWebsite, mMainController::exitSubpage);
     }
@@ -120,9 +137,12 @@ public class PageInfoCookiesController
     @Override
     public void onSubpageRemoved() {
         assert mSubPage != null;
-        AppCompatActivity host = (AppCompatActivity) mRowView.getContext();
-        host.getSupportFragmentManager().beginTransaction().remove(mSubPage).commitNow();
+        FragmentManager fragmentManager = mDelegate.getFragmentManager();
+        PageInfoCookiesPreference subPage = mSubPage;
         mSubPage = null;
+        // If the activity is getting destroyed or saved, it is not allowed to modify fragments.
+        if (fragmentManager == null || fragmentManager.isStateSaved()) return;
+        fragmentManager.beginTransaction().remove(subPage).commitNow();
     }
 
     @Override
@@ -150,7 +170,18 @@ public class PageInfoCookiesController
         }
     }
 
-    public void setCookieControlsBridge(CookieControlsBridge cookieBridge) {
-        mBridge = cookieBridge;
+    private boolean isDeletionDisabled() {
+        return WebsitePreferenceBridge.isCookieDeletionDisabled(mMainController.getBrowserContext(), mFullUrl);
+    }
+
+    void onUiClosing() {
+        if (mBridge != null) {
+            mBridge.onUiClosing();
+        }
+    }
+
+    void destroy() {
+        mBridge.destroy();
+        mBridge = null;
     }
 }

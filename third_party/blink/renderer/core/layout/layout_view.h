@@ -23,11 +23,14 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_VIEW_H_
 
 #include <memory>
+
+#include "base/dcheck_is_on.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/hit_test_cache.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
+#include "third_party/blink/renderer/core/layout/layout_quote.h"
 #include "third_party/blink/renderer/core/layout/layout_state.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/platform/graphics/overlay_scrollbar_clip_behavior.h"
@@ -62,6 +65,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
  public:
   explicit LayoutView(Document*);
   ~LayoutView() override;
+  void Trace(Visitor*) const override;
 
   void WillBeDestroyed() override;
 
@@ -94,7 +98,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
 
   bool IsOfType(LayoutObjectType type) const override {
     NOT_DESTROYED();
-    return type == kLayoutObjectLayoutView || LayoutBlockFlow::IsOfType(type);
+    return type == kLayoutObjectView || LayoutBlockFlow::IsOfType(type);
   }
 
   PaintLayerType LayerTypeRequired() const override {
@@ -164,8 +168,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   PhysicalOffset OffsetForFixedPosition() const;
   PhysicalOffset PixelSnappedOffsetForFixedPosition() const;
 
-  void InvalidatePaintForViewAndCompositedLayers();
-
   void Paint(const PaintInfo&) const override;
   void PaintBoxDecorationBackground(
       const PaintInfo&,
@@ -230,7 +232,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   }
 
   PaintLayerCompositor* Compositor();
-  bool UsesCompositing() const;
 
   PhysicalRect DocumentRect() const;
 
@@ -248,11 +249,12 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   // FIXME: This is a work around because the current implementation of counters
   // requires walking the entire tree repeatedly and most pages don't actually
   // use either feature so we shouldn't take the performance hit when not
-  // needed. Long term we should rewrite the counter and quotes code.
+  // needed. Long term we should rewrite the counter code.
+  // TODO(xiaochengh): Or do we keep it as is?
   void AddLayoutCounter() {
     NOT_DESTROYED();
     layout_counter_count_++;
-    SetNeedsCounterUpdate();
+    SetNeedsMarkerOrCounterUpdate();
   }
   void RemoveLayoutCounter() {
     NOT_DESTROYED();
@@ -263,11 +265,30 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
     NOT_DESTROYED();
     return layout_counter_count_;
   }
-  void SetNeedsCounterUpdate() {
+  void AddLayoutListItem() {
     NOT_DESTROYED();
-    needs_counter_update_ = true;
+    layout_list_item_count_++;
+    // No need to traverse and update markers at this point. We need it only
+    // when @counter-style rules are changed.
   }
-  void UpdateCounters();
+  void RemoveLayoutListItem() {
+    NOT_DESTROYED();
+    DCHECK_GT(layout_list_item_count_, 0u);
+    layout_list_item_count_--;
+  }
+  bool HasLayoutListItems() {
+    NOT_DESTROYED();
+    return layout_list_item_count_;
+  }
+  void SetNeedsMarkerOrCounterUpdate() {
+    NOT_DESTROYED();
+    needs_marker_counter_update_ = true;
+  }
+
+  // Update generated markers and counters after style and layout tree update.
+  // container - The container for container queries, otherwise nullptr.
+  void UpdateMarkersAndCountersAfterStyleChange(
+      LayoutObject* container = nullptr);
 
   bool BackgroundIsKnownToBeOpaqueInRect(
       const PhysicalRect& local_rect) const override;
@@ -291,24 +312,16 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   // Invalidates paint for the entire view, including composited descendants,
   // but not including child frames.
   // It is very likely you do not want to call this method.
-  void SetShouldDoFullPaintInvalidationForViewAndAllDescendants();
+  void InvalidatePaintForViewAndDescendants();
 
   bool ShouldPlaceBlockDirectionScrollbarOnLogicalLeft() const override;
 
   PhysicalRect DebugRect() const override;
 
   // Returns the coordinates of find-in-page scrollbar tickmarks.  These come
-  // from DocumentMarkerController, unless overridden by OverrideTickmarks().
+  // from DocumentMarkerController.
   Vector<IntRect> GetTickmarks() const;
   bool HasTickmarks() const;
-
-  // Sets the coordinates of find-in-page scrollbar tickmarks, bypassing
-  // DocumentMarkerController.  This is used by the PDF plugin.
-  void OverrideTickmarks(const Vector<IntRect>&);
-
-  // Issues a paint invalidation on the layout viewport's vertical scrollbar
-  // (which is responsible for painting the tickmarks).
-  void InvalidatePaintForTickmarks();
 
   RecalcLayoutOverflowResult RecalcLayoutOverflow() final;
 
@@ -345,9 +358,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
                           MapCoordinatesFlags) const override;
 
  private:
-  const LayoutObject* PushMappingToContainer(
-      const LayoutBoxModelObject* ancestor_to_stop_at,
-      LayoutGeometryMap&) const override;
   bool CanHaveChildren() const override;
 
   void UpdateBlockLayout(bool relayout_children) override;
@@ -369,7 +379,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
 
   bool UpdateLogicalWidthAndColumnWidth() override;
 
-  UntracedMember<LocalFrameView> frame_view_;
+  Member<LocalFrameView> frame_view_;
 
   // The page logical height.
   // This is only used during printing to split the content into pages.
@@ -384,24 +394,23 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
 
   std::unique_ptr<ViewFragmentationContext> fragmentation_context_;
   std::unique_ptr<NamedPagesMapper> named_pages_mapper_;
-  std::unique_ptr<PaintLayerCompositor> compositor_;
+  Member<PaintLayerCompositor> compositor_;
   scoped_refptr<IntervalArena> interval_arena_;
 
-  LayoutQuote* layout_quote_head_;
-  unsigned layout_counter_count_;
-  bool needs_counter_update_ = false;
+  Member<LayoutQuote> layout_quote_head_;
+  unsigned layout_counter_count_ = 0;
+  unsigned layout_list_item_count_ = 0;
+  bool needs_marker_counter_update_ = false;
 
   unsigned hit_test_count_;
   unsigned hit_test_cache_hits_;
-  Persistent<HitTestCache> hit_test_cache_;
+  Member<HitTestCache> hit_test_cache_;
 
   // FrameViewAutoSizeInfo controls scrollbar appearance manually rather than
   // relying on layout. These members are used to override the ScrollbarModes
   // calculated from style. kScrollbarAuto disables the override.
   mojom::blink::ScrollbarMode autosize_h_scrollbar_mode_;
   mojom::blink::ScrollbarMode autosize_v_scrollbar_mode_;
-
-  Vector<IntRect> tickmarks_override_;
 
   mutable PhysicalRect previous_background_rect_;
 };

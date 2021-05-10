@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "base/test/values_test_util.h"
+#include "chrome/browser/media/router/discovery/dial/dial_app_discovery_service.h"
 #include "chrome/browser/media/router/discovery/dial/dial_media_sink_service.h"
 #include "chrome/browser/media/router/discovery/dial/dial_url_fetcher.h"
 #include "chrome/browser/media/router/discovery/mdns/cast_media_sink_service.h"
@@ -50,7 +51,7 @@ class MockCastMediaSinkService : public CastMediaSinkService {
   MOCK_METHOD2(Start,
                void(const OnSinksDiscoveredCallback&, MediaSinkServiceBase*));
   MOCK_METHOD0(OnUserGesture, void());
-  MOCK_METHOD1(BindLogger, void(mojo::PendingRemote<mojom::Logger>));
+  MOCK_METHOD1(BindLogger, void(LoggerImpl*));
   MOCK_METHOD0(StartMdnsDiscovery, void());
 };
 
@@ -59,7 +60,7 @@ class MockCastAppDiscoveryService : public CastAppDiscoveryService {
   MockCastAppDiscoveryService();
   ~MockCastAppDiscoveryService() override;
 
-  Subscription StartObservingMediaSinks(
+  base::CallbackListSubscription StartObservingMediaSinks(
       const CastMediaSource& source,
       const SinkQueryCallback& callback) override;
   scoped_refptr<base::SequencedTaskRunner> task_runner() override;
@@ -99,7 +100,8 @@ class TestDialURLFetcher : public DialURLFetcher {
   void Start(const GURL& url,
              const std::string& method,
              const base::Optional<std::string>& post_data,
-             int max_retries) override;
+             int max_retries,
+             bool set_origin_header) override;
   MOCK_METHOD4(DoStart,
                void(const GURL&,
                     const std::string&,
@@ -113,7 +115,8 @@ class TestDialURLFetcher : public DialURLFetcher {
 
 class TestDialActivityManager : public DialActivityManager {
  public:
-  explicit TestDialActivityManager(network::TestURLLoaderFactory* factory);
+  TestDialActivityManager(DialAppDiscoveryService* app_discovery_service,
+                          network::TestURLLoaderFactory* factory);
   ~TestDialActivityManager() override;
 
   std::unique_ptr<DialURLFetcher> CreateFetcher(

@@ -18,6 +18,8 @@
 #include "base/macros.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
+#include "printing/buildflags/buildflags.h"
 #include "sandbox/linux/bpf_dsl/bpf_dsl.h"
 #include "sandbox/linux/bpf_dsl/trap_registry.h"
 #include "sandbox/policy/sandbox_type.h"
@@ -42,9 +44,10 @@
 #include "sandbox/policy/linux/bpf_gpu_policy_linux.h"
 #include "sandbox/policy/linux/bpf_network_policy_linux.h"
 #include "sandbox/policy/linux/bpf_ppapi_policy_linux.h"
+#include "sandbox/policy/linux/bpf_print_backend_policy_linux.h"
 #include "sandbox/policy/linux/bpf_print_compositor_policy_linux.h"
 #include "sandbox/policy/linux/bpf_renderer_policy_linux.h"
-#include "sandbox/policy/linux/bpf_sharing_service_policy_linux.h"
+#include "sandbox/policy/linux/bpf_service_policy_linux.h"
 #include "sandbox/policy/linux/bpf_speech_recognition_policy_linux.h"
 #include "sandbox/policy/linux/bpf_utility_policy_linux.h"
 
@@ -52,10 +55,16 @@
 #include "sandbox/policy/chromecast_sandbox_allowlist_buildflags.h"
 #endif  // !defined(OS_NACL_NONSFI)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "sandbox/policy/features.h"
 #include "sandbox/policy/linux/bpf_ime_policy_linux.h"
 #include "sandbox/policy/linux/bpf_tts_policy_linux.h"
-#endif  // defined(OS_CHROMEOS)
+
+#include "chromeos/assistant/buildflags.h"
+#if BUILDFLAG(ENABLE_LIBASSISTANT_SANDBOX)
+#include "sandbox/policy/linux/bpf_libassistant_policy_linux.h"
+#endif  // BUILDFLAG(ENABLE_LIBASSISTANT_SANDBOX)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 using sandbox::bpf_dsl::Allow;
 using sandbox::bpf_dsl::ResultExpr;
@@ -82,7 +91,7 @@ namespace {
 // in its dependencies. Make sure to not link things that are not needed.
 #if !defined(IN_NACL_HELPER)
 inline bool IsChromeOS() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   return true;
 #else
   return false;
@@ -173,20 +182,28 @@ std::unique_ptr<BPFBasePolicy> SandboxSeccompBPF::PolicyForSandboxType(
       return std::make_unique<CdmProcessPolicy>();
     case SandboxType::kPrintCompositor:
       return std::make_unique<PrintCompositorProcessPolicy>();
+#if BUILDFLAG(ENABLE_PRINTING)
+    case SandboxType::kPrintBackend:
+      return std::make_unique<PrintBackendProcessPolicy>();
+#endif
     case SandboxType::kNetwork:
       return std::make_unique<NetworkProcessPolicy>();
     case SandboxType::kAudio:
       return std::make_unique<AudioProcessPolicy>();
-    case SandboxType::kSharingService:
-      return std::make_unique<SharingServiceProcessPolicy>();
+    case SandboxType::kService:
+      return std::make_unique<ServiceProcessPolicy>();
     case SandboxType::kSpeechRecognition:
       return std::make_unique<SpeechRecognitionProcessPolicy>();
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     case SandboxType::kIme:
       return std::make_unique<ImeProcessPolicy>();
     case SandboxType::kTts:
       return std::make_unique<TtsProcessPolicy>();
-#endif  // defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_LIBASSISTANT_SANDBOX)
+    case SandboxType::kLibassistant:
+      return std::make_unique<LibassistantProcessPolicy>();
+#endif  // BUILDFLAG(ENABLE_LIBASSISTANT_SANDBOX)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     case SandboxType::kZygoteIntermediateSandbox:
     case SandboxType::kNoSandbox:
     case SandboxType::kVideoCapture:
@@ -227,14 +244,20 @@ void SandboxSeccompBPF::RunSandboxSanityChecks(
       CHECK_EQ(EPERM, errno);
 #endif  // !defined(NDEBUG)
     } break;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     case SandboxType::kIme:
     case SandboxType::kTts:
-#endif  // defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_LIBASSISTANT_SANDBOX)
+    case SandboxType::kLibassistant:
+#endif  // BUILDFLAG(ENABLE_LIBASSISTANT_SANDBOX)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     case SandboxType::kAudio:
-    case SandboxType::kSharingService:
+    case SandboxType::kService:
     case SandboxType::kSpeechRecognition:
     case SandboxType::kNetwork:
+#if BUILDFLAG(ENABLE_PRINTING)
+    case SandboxType::kPrintBackend:
+#endif
     case SandboxType::kUtility:
     case SandboxType::kNoSandbox:
     case SandboxType::kVideoCapture:
@@ -259,7 +282,14 @@ bool SandboxSeccompBPF::StartSandboxWithExternalPolicy(
     // doing so does not stop the sandbox.
     SandboxBPF sandbox(std::move(policy));
     sandbox.SetProcFd(std::move(proc_fd));
-    CHECK(sandbox.StartSandbox(seccomp_level));
+    bool enable_ibpb = true;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    enable_ibpb =
+        base::FeatureList::IsEnabled(
+            features::kForceSpectreVariant2Mitigation) ||
+        base::FeatureList::IsEnabled(features::kSpectreVariant2Mitigation);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+    CHECK(sandbox.StartSandbox(seccomp_level, enable_ibpb));
     return true;
   }
 #endif  // BUILDFLAG(USE_SECCOMP_BPF)

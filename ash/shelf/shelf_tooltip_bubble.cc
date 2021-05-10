@@ -4,6 +4,7 @@
 
 #include "ash/shelf/shelf_tooltip_bubble.h"
 
+#include "ash/style/ash_color_provider.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/wm/collision_detection/collision_detection_utils.h"
 #include "ui/aura/window.h"
@@ -24,43 +25,31 @@ constexpr int kTooltipMaxWidth = 250;
 constexpr int kTooltipTopBottomMargin = 4;
 constexpr int kTooltipLeftRightMargin = 8;
 
-// The offset for the tooltip bubble - making sure that the bubble is spaced
-// with a fixed gap. The gap is accounted for by the transparent arrow in the
-// bubble and an additional 1px padding for the shelf item views.
-constexpr int kArrowTopBottomOffset = 1;
-constexpr int kArrowLeftRightOffset = 1;
-
-// Padding used to position the tooltip relative to the shelf.
-constexpr int kTooltipPaddingHorizontalBottom = 6;
-
 }  // namespace
 
 ShelfTooltipBubble::ShelfTooltipBubble(views::View* anchor,
                                        ShelfAlignment alignment,
                                        SkColor background_color,
-                                       const base::string16& text)
+                                       const std::u16string& text)
     : ShelfBubble(anchor, alignment, background_color) {
   set_margins(gfx::Insets(kTooltipTopBottomMargin, kTooltipLeftRightMargin));
   set_close_on_deactivate(false);
   SetCanActivate(false);
   set_accept_events(false);
-  set_shadow(views::BubbleBorder::NO_ASSETS);
+  set_shadow(views::BubbleBorder::NO_SHADOW);
   SetLayoutManager(std::make_unique<views::FillLayout>());
   views::Label* label = new views::Label(text);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  const SkColor tooltip_background = SkColorSetA(gfx::kGoogleGrey900, 0xE6);
-  const SkColor tooltip_text = SkColorSetA(gfx::kGoogleGrey200, 0xFF);
+  // TODO (https://crbug.com/1146125) Enable inverted tooltip colors.
+  const SkColor tooltip_background = AshColorProvider::Get()->GetBaseLayerColor(
+      AshColorProvider::BaseLayerType::kTransparent80);
+  const SkColor tooltip_text = AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary);
+
   set_color(tooltip_background);
   label->SetEnabledColor(tooltip_text);
   label->SetBackgroundColor(tooltip_background);
   AddChildView(label);
-
-  gfx::Insets insets(kArrowTopBottomOffset, kArrowLeftRightOffset);
-  // Adjust the anchor location for asymmetrical borders of shelf item.
-  if (anchor->border())
-    insets += anchor->border()->GetInsets();
-  insets += gfx::Insets(-kTooltipPaddingHorizontalBottom);
-  set_anchor_view_insets(insets);
 
   CreateBubble();
   CollisionDetectionUtils::IgnoreWindowForCollisionDetection(

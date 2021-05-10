@@ -34,14 +34,18 @@ class TestTabStripModelDelegate : public TabStripModelDelegate {
   void WillAddWebContents(content::WebContents* contents) override;
   int GetDragActions() const override;
   bool CanDuplicateContentsAt(int index) override;
+  bool IsTabStripEditable() override;
   void DuplicateContentsAt(int index) override;
   void MoveToExistingWindow(const std::vector<int>& indices,
                             int browser_index) override;
-  std::vector<base::string16> GetExistingWindowsForMoveMenu() const override;
+  std::vector<std::u16string> GetExistingWindowsForMoveMenu() override;
   bool CanMoveTabsToWindow(const std::vector<int>& indices) override;
   void MoveTabsToNewWindow(const std::vector<int>& indices) override;
   void MoveGroupToNewWindow(const tab_groups::TabGroupId& group) override;
-  void CreateHistoricalTab(content::WebContents* contents) override;
+  base::Optional<SessionID> CreateHistoricalTab(
+      content::WebContents* contents) override;
+  void CreateHistoricalGroup(const tab_groups::TabGroupId& group) override;
+  void GroupCloseStopped(const tab_groups::TabGroupId& group) override;
   bool ShouldRunUnloadListenerBeforeClosing(
       content::WebContents* contents) override;
   bool RunUnloadListenerBeforeClosing(content::WebContents* contents) override;

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {LanguagesBrowserProxyImpl, LanguagesMetricsProxyImpl, LanguagesPageInteraction} from 'chrome://settings/lazy_load.js';
 import {CrSettingsPrefs} from 'chrome://settings/settings.js';
@@ -9,11 +10,12 @@ import {CrSettingsPrefs} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
 import {fakeDataBind} from '../test_util.m.js';
 
-import {getFakeLanguagePrefs} from './fake_language_settings_private.m.js';
-import {FakeSettingsPrivate} from './fake_settings_private.m.js';
-import {TestLanguagesBrowserProxy} from './test_languages_browser_proxy.m.js';
+import {getFakeLanguagePrefs} from './fake_language_settings_private.js';
+import {FakeSettingsPrivate} from './fake_settings_private.js';
+import {TestLanguagesBrowserProxy} from './test_languages_browser_proxy.js';
 import {TestLanguagesMetricsProxy} from './test_languages_metrics_proxy.js';
 
+// TODO(crbug/1109431): Remove this test once migration is complete.
 suite('LanguagesPageMetricsChromeOS', function() {
   /** @type {!LanguageHelper} */
   let languageHelper;
@@ -49,6 +51,8 @@ suite('LanguagesPageMetricsChromeOS', function() {
 
       languagesPage = /** @type {!SettingsLanguagesPageElement} */ (
           document.createElement('settings-languages-page'));
+      /** @suppress {visibility} Temporary while removal is completed. */
+      languagesPage.isChromeOSLanguagesSettingsUpdate_ = false;
 
       // Prefs would normally be data-bound to settings-languages-page.
       languagesPage.prefs = settingsPrefs.prefs;
@@ -61,7 +65,7 @@ suite('LanguagesPageMetricsChromeOS', function() {
   });
 
   test('records when adding languages', async () => {
-    languagesPage.$$('#addLanguages').click();
+    languagesPage.$$('settings-languages-subpage').$$('#addLanguages').click();
     flush();
 
     await languagesMetricsProxy.whenCalled('recordAddLanguages');
@@ -77,8 +81,11 @@ suite('LanguagesPageMetricsChromeOS', function() {
   });
 
   test('records when disabling translate.enable toggle', async () => {
-    languagesPage.setPrefValue('translate.enabled', true);
-    languagesPage.$$('#offerTranslateOtherLanguages').click();
+    languagesPage.$$('settings-languages-subpage')
+        .setPrefValue('translate.enabled', true);
+    languagesPage.$$('settings-languages-subpage')
+        .$$('#offerTranslateOtherLanguages')
+        .click();
     flush();
 
     assertFalse(
@@ -86,8 +93,11 @@ suite('LanguagesPageMetricsChromeOS', function() {
   });
 
   test('records when enabling translate.enable toggle', async () => {
-    languagesPage.setPrefValue('translate.enabled', false);
-    languagesPage.$$('#offerTranslateOtherLanguages').click();
+    languagesPage.$$('settings-languages-subpage')
+        .setPrefValue('translate.enabled', false);
+    languagesPage.$$('settings-languages-subpage')
+        .$$('#offerTranslateOtherLanguages')
+        .click();
     flush();
 
     assertTrue(await languagesMetricsProxy.whenCalled('recordToggleTranslate'));
@@ -122,13 +132,16 @@ suite('LanguagesPageMetricsChromeOS', function() {
     const languagesCollapse = languagesPage.$$('#languagesCollapse');
     languagesCollapse.opened = true;
 
-    const menuButtons = languagesCollapse.querySelectorAll(
-        '.list-item cr-icon-button.icon-more-vert');
+    const menuButtons =
+        languagesPage.$$('settings-languages-subpage')
+            .$$('#languagesSection')
+            .querySelectorAll('.list-item cr-icon-button.icon-more-vert');
 
     // Chooses the second language to switch system language,
     // as first language is the default language.
     menuButtons[1].click();
-    const actionMenu = languagesPage.$$('#menu').get();
+    const actionMenu =
+        languagesPage.$$('settings-languages-subpage').$$('#menu').get();
     assertTrue(actionMenu.open);
     const menuItems = actionMenu.querySelectorAll('.dropdown-item');
     for (const item of menuItems) {
@@ -145,7 +158,8 @@ suite('LanguagesPageMetricsChromeOS', function() {
     actionMenu.close();
 
     // Chooses restart button after switching system language.
-    const restartButton = languagesPage.$$('#restartButton');
+    const restartButton =
+        languagesPage.$$('settings-languages-subpage').$$('#restartButton');
     assertTrue(!!restartButton);
     restartButton.click();
 
@@ -158,13 +172,16 @@ suite('LanguagesPageMetricsChromeOS', function() {
     const languagesCollapse = languagesPage.$$('#languagesCollapse');
     languagesCollapse.opened = true;
 
-    const menuButtons = languagesCollapse.querySelectorAll(
-        '.list-item cr-icon-button.icon-more-vert');
+    const menuButtons =
+        languagesPage.$$('settings-languages-subpage')
+            .$$('#languagesSection')
+            .querySelectorAll('.list-item cr-icon-button.icon-more-vert');
 
     // Chooses the second language to change translate checkbox
     // as first language is the language used for translation.
     menuButtons[1].click();
-    const actionMenu = languagesPage.$$('#menu').get();
+    const actionMenu =
+        languagesPage.$$('settings-languages-subpage').$$('#menu').get();
     assertTrue(actionMenu.open);
     const menuItems = actionMenu.querySelectorAll('.dropdown-item');
     for (const item of menuItems) {

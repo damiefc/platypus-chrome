@@ -5,10 +5,11 @@
 #ifndef COMPONENTS_EXO_TEXT_INPUT_H_
 #define COMPONENTS_EXO_TEXT_INPUT_H_
 
+#include <string>
+
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
 #include "base/macros.h"
 #include "base/optional.h"
-#include "base/strings/string_piece.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/base/ime/text_input_mode.h"
@@ -25,9 +26,6 @@ class KeyboardUIController;
 
 namespace exo {
 class Surface;
-
-size_t OffsetFromUTF8Offset(const base::StringPiece& text, uint32_t offset);
-size_t OffsetFromUTF16Offset(const base::StringPiece16& text, uint32_t offset);
 
 // This class bridges the ChromeOS input method and a text-input context.
 class TextInput : public ui::TextInputClient,
@@ -51,7 +49,7 @@ class TextInput : public ui::TextInputClient,
     virtual void SetCompositionText(const ui::CompositionText& composition) = 0;
 
     // Commit |text| to the current text input session.
-    virtual void Commit(const base::string16& text) = 0;
+    virtual void Commit(const std::u16string& text) = 0;
 
     // Set the cursor position. The range should be in bytes offset.
     virtual void SetCursor(const gfx::Range& selection) = 0;
@@ -89,8 +87,11 @@ class TextInput : public ui::TextInputClient,
   // during the text input session.
   void Resync();
 
+  // Resets the current input method state.
+  void Reset();
+
   // Sets the surrounding text in the app.
-  void SetSurroundingText(const base::string16& text,
+  void SetSurroundingText(const std::u16string& text,
                           uint32_t cursor_pos,
                           uint32_t anchor);
 
@@ -109,7 +110,8 @@ class TextInput : public ui::TextInputClient,
   void SetCompositionText(const ui::CompositionText& composition) override;
   uint32_t ConfirmCompositionText(bool keep_selection) override;
   void ClearCompositionText() override;
-  void InsertText(const base::string16& text) override;
+  void InsertText(const std::u16string& text,
+                  InsertTextCursorBehavior cursor_behavior) override;
   void InsertChar(const ui::KeyEvent& event) override;
   ui::TextInputType GetTextInputType() const override;
   ui::TextInputMode GetTextInputMode() const override;
@@ -117,6 +119,7 @@ class TextInput : public ui::TextInputClient,
   int GetTextInputFlags() const override;
   bool CanComposeInline() const override;
   gfx::Rect GetCaretBounds() const override;
+  gfx::Rect GetSelectionBoundingBox() const override;
   bool GetCompositionCharacterBounds(uint32_t index,
                                      gfx::Rect* rect) const override;
   bool HasCompositionText() const override;
@@ -127,7 +130,7 @@ class TextInput : public ui::TextInputClient,
   bool SetEditableSelectionRange(const gfx::Range& range) override;
   bool DeleteRange(const gfx::Range& range) override;
   bool GetTextFromRange(const gfx::Range& range,
-                        base::string16* text) const override;
+                        std::u16string* text) const override;
   void OnInputMethodChanged() override;
   bool ChangeTextDirectionAndLayoutAlignment(
       base::i18n::TextDirection direction) override;
@@ -142,9 +145,12 @@ class TextInput : public ui::TextInputClient,
       const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) override;
   gfx::Range GetAutocorrectRange() const override;
   gfx::Rect GetAutocorrectCharacterBounds() const override;
-  bool SetAutocorrectRange(const base::string16& autocorrect_text,
-                           const gfx::Range& range) override;
-  void ClearAutocorrectRange() override;
+  bool SetAutocorrectRange(const gfx::Range& range) override;
+  base::Optional<ui::GrammarFragment> GetGrammarFragment(
+      const gfx::Range& range) override;
+  bool ClearGrammarFragments(const gfx::Range& range) override;
+  bool AddGrammarFragments(
+      const std::vector<ui::GrammarFragment>& fragments) override;
 
   // ash::KeyboardControllerObserver:
   void OnKeyboardVisibilityChanged(bool is_visible) override;
@@ -165,7 +171,7 @@ class TextInput : public ui::TextInputClient,
   int flags_ = ui::TEXT_INPUT_FLAG_NONE;
   bool should_do_learning_ = true;
   ui::CompositionText composition_;
-  base::string16 surrounding_text_;
+  std::u16string surrounding_text_;
   base::Optional<gfx::Range> cursor_pos_;
   base::i18n::TextDirection direction_ = base::i18n::UNKNOWN_DIRECTION;
 
@@ -174,4 +180,4 @@ class TextInput : public ui::TextInputClient,
 
 }  // namespace exo
 
-#endif  // COMPONENTS_EXO_KEYBOARD_H_
+#endif  // COMPONENTS_EXO_TEXT_INPUT_H_

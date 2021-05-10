@@ -60,6 +60,10 @@ LocalCardMigrationBubbleViews::LocalCardMigrationBubbleViews(
   SetAcceptCallback(
       base::BindOnce(&LocalCardMigrationBubbleViews::OnDialogAccepted,
                      base::Unretained(this)));
+
+  SetShowCloseButton(true);
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
 }
 
 void LocalCardMigrationBubbleViews::Show(DisplayReason reason) {
@@ -89,13 +93,6 @@ void LocalCardMigrationBubbleViews::OnDialogCancelled() {
   // TODO(https://crbug.com/1046793): Maybe delete this.
   if (controller_)
     controller_->OnCancelButtonClicked();
-}
-
-gfx::Size LocalCardMigrationBubbleViews::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
 }
 
 void LocalCardMigrationBubbleViews::AddedToWidget() {
@@ -139,14 +136,10 @@ void LocalCardMigrationBubbleViews::AddedToWidget() {
   GetBubbleFrameView()->SetTitleView(std::move(title_container));
 }
 
-bool LocalCardMigrationBubbleViews::ShouldShowCloseButton() const {
-  return true;
-}
-
-base::string16 LocalCardMigrationBubbleViews::GetWindowTitle() const {
+std::u16string LocalCardMigrationBubbleViews::GetWindowTitle() const {
   return controller_ ? l10n_util::GetStringUTF16(
                            IDS_AUTOFILL_LOCAL_CARD_MIGRATION_BUBBLE_TITLE)
-                     : base::string16();
+                     : std::u16string();
 }
 
 void LocalCardMigrationBubbleViews::WindowClosing() {

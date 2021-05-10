@@ -8,18 +8,15 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "base/files/file.h"
-#include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
-#include "base/values.h"
 #include "chrome/browser/chromeos/file_system_provider/extension_provider.h"
 #include "chrome/browser/chromeos/file_system_provider/observer.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_info.h"
@@ -146,7 +143,7 @@ class Service : public KeyedService,
                         const Watcher& watcher,
                         storage::WatcherManager::ChangeType change_type,
                         const ProvidedFileSystemObserver::Changes& changes,
-                        const base::Closure& callback) override;
+                        base::OnceClosure callback) override;
   void OnWatcherTagUpdated(const ProvidedFileSystemInfo& file_system_info,
                            const Watcher& watcher) override;
   void OnWatcherListChanged(const ProvidedFileSystemInfo& file_system_info,

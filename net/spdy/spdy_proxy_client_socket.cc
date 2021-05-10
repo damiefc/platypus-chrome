@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/location.h"
@@ -384,7 +383,7 @@ int SpdyProxyClientSocket::DoSendRequest() {
                        NetLogEventType::HTTP_TRANSACTION_SEND_TUNNEL_HEADERS,
                        request_line, &request_.extra_headers);
 
-  spdy::SpdyHeaderBlock headers;
+  spdy::Http2HeaderBlock headers;
   CreateSpdyHeadersFromHttpRequest(request_, request_.extra_headers, &headers);
 
   return spdy_stream_->SendRequestHeaders(std::move(headers),
@@ -431,8 +430,7 @@ int SpdyProxyClientSocket::DoReadReplyComplete(int result) {
 
     case 407:  // Proxy Authentication Required
       next_state_ = STATE_OPEN;
-      if (!SanitizeProxyAuth(&response_))
-        return ERR_TUNNEL_CONNECTION_FAILED;
+      SanitizeProxyAuth(response_);
       return HandleProxyAuthChallenge(auth_.get(), &response_, net_log_);
 
     default:
@@ -451,9 +449,12 @@ void SpdyProxyClientSocket::OnHeadersSent() {
   OnIOComplete(OK);
 }
 
+void SpdyProxyClientSocket::OnEarlyHintsReceived(
+    const spdy::Http2HeaderBlock& headers) {}
+
 void SpdyProxyClientSocket::OnHeadersReceived(
-    const spdy::SpdyHeaderBlock& response_headers,
-    const spdy::SpdyHeaderBlock* pushed_request_headers) {
+    const spdy::Http2HeaderBlock& response_headers,
+    const spdy::Http2HeaderBlock* pushed_request_headers) {
   // If we've already received the reply, existing headers are too late.
   // TODO(mbelshe): figure out a way to make HEADERS frames useful after the
   //                initial response.
@@ -508,7 +509,7 @@ void SpdyProxyClientSocket::OnDataSent()  {
                                 std::move(write_callback_), rv));
 }
 
-void SpdyProxyClientSocket::OnTrailers(const spdy::SpdyHeaderBlock& trailers) {
+void SpdyProxyClientSocket::OnTrailers(const spdy::Http2HeaderBlock& trailers) {
   // |spdy_stream_| is of type SPDY_BIDIRECTIONAL_STREAM, so trailers are
   // combined with response headers and this method will not be calld.
   NOTREACHED();

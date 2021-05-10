@@ -7,6 +7,7 @@
 
 #include <fuchsia/ui/gfx/cpp/fidl.h>
 #include <fuchsia/ui/input/cpp/fidl.h>
+#include <fuchsia/ui/input3/cpp/fidl.h>
 #include <lib/ui/scenic/cpp/resources.h>
 #include <lib/ui/scenic/cpp/session.h>
 #include <lib/ui/scenic/cpp/view_ref_pair.h>
@@ -16,22 +17,24 @@
 
 #include "base/component_export.h"
 #include "base/macros.h"
+#include "ui/base/ime/fuchsia/keyboard_client.h"
 #include "ui/events/fuchsia/input_event_dispatcher.h"
-#include "ui/events/fuchsia/input_event_dispatcher_delegate.h"
+#include "ui/events/fuchsia/input_event_sink.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/ozone/platform/scenic/safe_presenter.h"
 #include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_delegate.h"
+#include "ui/platform_window/platform_window_init_properties.h"
 
 namespace ui {
 
 class ScenicWindowManager;
 
-class COMPONENT_EXPORT(OZONE) ScenicWindow
-    : public PlatformWindow,
-      public InputEventDispatcherDelegate {
+class COMPONENT_EXPORT(OZONE) ScenicWindow : public PlatformWindow,
+                                             public InputEventSink {
  public:
   // Both |window_manager| and |delegate| must outlive the ScenicWindow.
   // |view_token| is passed to Scenic to attach the view to the view tree.
@@ -39,9 +42,15 @@ class COMPONENT_EXPORT(OZONE) ScenicWindow
   // identify it when calling out to other services (e.g. the SemanticsManager).
   ScenicWindow(ScenicWindowManager* window_manager,
                PlatformWindowDelegate* delegate,
-               fuchsia::ui::views::ViewToken view_token,
-               scenic::ViewRefPair view_ref_pair);
+               PlatformWindowInitProperties properties);
   ~ScenicWindow() override;
+
+  // Converts Scenic's rect-based representation of insets to gfx::Insets.
+  // Returns zero-width insets if |inset_from_min| and |inset_from_max| are
+  // uninitialized (indicating that no insets were provided from Scenic).
+  static gfx::Insets ConvertInsets(
+      float device_pixel_ratio,
+      const fuchsia::ui::gfx::ViewProperties& view_properties);
 
   scenic::Session* scenic_session() { return &scenic_session_; }
 
@@ -49,10 +58,13 @@ class COMPONENT_EXPORT(OZONE) ScenicWindow
   // causing its contents to be displayed in this window.
   void AttachSurfaceView(fuchsia::ui::views::ViewHolderToken token);
 
+  // Returns a ViewRef associated with this window.
+  fuchsia::ui::views::ViewRef CloneViewRef();
+
   // PlatformWindow implementation.
-  gfx::Rect GetBounds() override;
+  gfx::Rect GetBounds() const override;
   void SetBounds(const gfx::Rect& bounds) override;
-  void SetTitle(const base::string16& title) override;
+  void SetTitle(const std::u16string& title) override;
   void Show(bool inactive) override;
   void Hide() override;
   void Close() override;
@@ -70,7 +82,7 @@ class COMPONENT_EXPORT(OZONE) ScenicWindow
   void Deactivate() override;
   void SetUseNativeFrame(bool use_native_frame) override;
   bool ShouldUseNativeFrame() const override;
-  void SetCursor(PlatformCursor cursor) override;
+  void SetCursor(scoped_refptr<PlatformCursor> cursor) override;
   void MoveCursorTo(const gfx::Point& location) override;
   void ConfineCursorToBounds(const gfx::Rect& bounds) override;
   void SetRestoredBoundsInPixels(const gfx::Rect& bounds) override;
@@ -92,7 +104,7 @@ class COMPONENT_EXPORT(OZONE) ScenicWindow
   // Called from OnScenicEvents() to handle input events.
   void OnInputEvent(const fuchsia::ui::input::InputEvent& event);
 
-  // InputEventDispatcher::Delegate interface.
+  // InputEventSink implementation.
   void DispatchEvent(ui::Event* event) override;
 
   void UpdateSize();
@@ -104,8 +116,19 @@ class COMPONENT_EXPORT(OZONE) ScenicWindow
   // Dispatches Scenic input events as Chrome ui::Events.
   InputEventDispatcher event_dispatcher_;
 
+  fuchsia::ui::input3::KeyboardPtr keyboard_service_;
+  std::unique_ptr<KeyboardClient> keyboard_client_;
+
   // Scenic session used for all drawing operations in this View.
   scenic::Session scenic_session_;
+
+  // Used for safely queueing Present() operations on |scenic_session_|.
+  SafePresenter safe_presenter_;
+
+  // Handle to a kernel object which identifies this window's View
+  // across the system. ViewRef consumers can access the handle by
+  // calling CloneViewRef().
+  fuchsia::ui::views::ViewRef view_ref_;
 
   // The view resource in |scenic_session_|.
   scenic::View view_;
@@ -128,8 +151,15 @@ class COMPONENT_EXPORT(OZONE) ScenicWindow
   // Current view size in DIPs.
   gfx::SizeF size_dips_;
 
-  // Current view size in device pixels.
-  gfx::Size size_pixels_;
+  // Current view size in device pixels. The size is set to
+  // |PlatformWindowInitProperties.bounds.size()| value until Show() is called
+  // for the first time. After that the size is set to the size of the
+  // corresponding Scenic view.
+  gfx::Rect bounds_;
+
+  base::Optional<fuchsia::ui::gfx::ViewProperties> view_properties_;
+
+  bool visible_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ScenicWindow);
 };

@@ -7,6 +7,9 @@
 
 #include <string>
 
+#include "base/optional.h"
+#include "components/autofill/core/common/language_code.h"
+
 namespace autofill {
 
 // A bit-field used for matching specific parts of a field in question.
@@ -44,24 +47,20 @@ constexpr int MATCH_DEFAULT = MATCH_ATTRIBUTES_DEFAULT | MATCH_INPUTS_DEFAULT;
 // to recognize incorrect matches.
 struct MatchingPattern {
   MatchingPattern();
-  MatchingPattern(const MatchingPattern& mp);
-  MatchingPattern& operator=(const MatchingPattern& mp);
+  MatchingPattern(const MatchingPattern&);
+  MatchingPattern& operator=(const MatchingPattern&);
+  MatchingPattern(MatchingPattern&&);
+  MatchingPattern& operator=(MatchingPattern&&);
   ~MatchingPattern();
 
-  std::string pattern_identifier;
-  std::string positive_pattern;
-  float positive_score = 1.1f;
-  std::string negative_pattern;
-  int match_field_attributes;
-  int match_field_input_types;
-  std::string language;
+  LanguageCode language;
+  std::u16string positive_pattern;
+  std::u16string negative_pattern;
+  float positive_score = 1.1;
+  uint8_t match_field_attributes;
+  uint16_t match_field_input_types;
 };
-
-// Use these functions instead of storing "non standats type" constants that
-// bots might complaining over.
-MatchingPattern GetCompanyPatternEn();
-MatchingPattern GetCompanyPatternDe();
 
 }  // namespace autofill
 
-#endif  // COMPONENTS_AUTOFILL_CORE_BROWSER_DATA_MODEL_AUTOFILL_PARSING_UTILS_H_
+#endif  // COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_PARSING_AUTOFILL_PARSING_UTILS_H_

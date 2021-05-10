@@ -14,10 +14,7 @@
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/ash_public_export.h"
 #include "base/callback_forward.h"
-#include "base/strings/string16.h"
-#include "components/sync/model/string_ordinal.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "services/content/public/mojom/navigable_contents_factory.mojom.h"
 #include "ui/base/models/simple_menu_model.h"
 
 namespace ash {
@@ -44,7 +41,7 @@ class ASH_PUBLIC_EXPORT AppListClient {
   // Interfaces on searching:
   // Triggers a search query.
   // |trimmed_query|: the trimmed input texts from the search text field.
-  virtual void StartSearch(const base::string16& trimmed_query) = 0;
+  virtual void StartSearch(const std::u16string& trimmed_query) = 0;
   // Opens a search result and logs to metrics when its view is clicked or
   // pressed.
   // |result_id|: the id of the search result the user wants to open.
@@ -65,8 +62,7 @@ class ASH_PUBLIC_EXPORT AppListClient {
   // |action_index| corresponds to the index of an action on the search result,
   // for example, installing. They are stored in SearchResult::actions_.
   virtual void InvokeSearchResultAction(const std::string& result_id,
-                                        int action_index,
-                                        int event_flags) = 0;
+                                        int action_index) = 0;
   // Returns the context menu model for the search result with |result_id|, or
   // an empty array if there is currently no menu for the result.
   using GetSearchResultContextMenuModelCallback =
@@ -122,18 +118,11 @@ class ASH_PUBLIC_EXPORT AppListClient {
   virtual void OnSearchResultVisibilityChanged(const std::string& id,
                                                bool visibility) = 0;
 
-  // Acquires a NavigableContentsFactory (indirectly) from the Content Service
-  // to allow the app list to display embedded web contents. Currently used only
-  // for answer card search results.
-  virtual void GetNavigableContentsFactory(
-      mojo::PendingReceiver<content::mojom::NavigableContentsFactory>
-          receiver) = 0;
-
   // TODO(crbug.com/1076270): This method exists for chrome-side logging of UI
   // actions, and can be folded into the AppListNotifier once it is
   // complete.
   virtual void NotifySearchResultsForLogging(
-      const base::string16& trimmed_query,
+      const std::u16string& trimmed_query,
       const SearchResultIdWithPositionIndices& results,
       int position_index) = 0;
 

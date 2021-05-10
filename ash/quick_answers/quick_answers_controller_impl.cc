@@ -4,17 +4,16 @@
 
 #include "ash/quick_answers/quick_answers_controller_impl.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/quick_answers/quick_answers_ui_controller.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "chromeos/components/quick_answers/quick_answers_consents.h"
-#include "chromeos/constants/chromeos_features.h"
+#include "chromeos/components/quick_answers/quick_answers_notice.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
-// TODO(yanxiao):Add a unit test for QuickAnswersControllerImpl.
 namespace {
 using chromeos::quick_answers::Context;
 using chromeos::quick_answers::IntentType;
@@ -28,10 +27,7 @@ constexpr char kAssistantRelatedInfoUrl[] =
 constexpr char kDogfoodUrl[] =
     "https://goto.google.com/quick-answers-dogfood-bugs";
 
-// TODO:(yanxiao) move the string to grd source file.
-constexpr char kNoResult[] = "See result in Assistant";
-
-base::string16 IntentTypeToString(IntentType intent_type) {
+std::u16string IntentTypeToString(IntentType intent_type) {
   switch (intent_type) {
     case IntentType::kUnit:
       return l10n_util::GetStringUTF16(
@@ -42,7 +38,7 @@ base::string16 IntentTypeToString(IntentType intent_type) {
       return l10n_util::GetStringUTF16(
           IDS_ASH_QUICK_ANSWERS_TRANSLATION_INTENT);
     case IntentType::kUnknown:
-      return base::string16();
+      return std::u16string();
   }
 }
 
@@ -65,8 +61,8 @@ QuickAnswersControllerImpl::~QuickAnswersControllerImpl() = default;
 void QuickAnswersControllerImpl::SetClient(
     std::unique_ptr<QuickAnswersClient> client) {
   quick_answers_client_ = std::move(client);
-  consent_controller_ =
-      std::make_unique<chromeos::quick_answers::QuickAnswersConsent>(
+  notice_controller_ =
+      std::make_unique<chromeos::quick_answers::QuickAnswersNotice>(
           Shell::Get()->session_controller()->GetPrimaryUserPrefService());
 }
 
@@ -90,7 +86,7 @@ void QuickAnswersControllerImpl::MaybeShowQuickAnswers(
   quick_answer_.reset();
 
   QuickAnswersRequest request = BuildRequest();
-  if (chromeos::features::IsQuickAnswersTextAnnotatorEnabled()) {
+  if (chromeos::features::ShouldUseQuickAnswersTextAnnotator()) {
     // Send the request for preprocessing. Only shows quick answers view if the
     // predicted intent is not |kUnknown| at |OnRequestPreprocessFinish|.
     quick_answers_client_->SendRequestForPreprocessing(request);
@@ -101,8 +97,8 @@ void QuickAnswersControllerImpl::MaybeShowQuickAnswers(
 
 void QuickAnswersControllerImpl::HandleQuickAnswerRequest(
     const chromeos::quick_answers::QuickAnswersRequest& request) {
-  if (ShouldShowUserConsent()) {
-    ShowUserConsent(
+  if (ShouldShowUserNotice()) {
+    ShowUserNotice(
         IntentTypeToString(request.preprocessed_output.intent_info.intent_type),
         base::UTF8ToUTF16(request.preprocessed_output.intent_info.intent_text));
   } else {
@@ -119,16 +115,24 @@ void QuickAnswersControllerImpl::HandleQuickAnswerRequest(
 
 void QuickAnswersControllerImpl::DismissQuickAnswers(bool is_active) {
   visibility_ = QuickAnswersVisibility::kClosed;
-  MaybeDismissQuickAnswersConsent();
+  MaybeDismissQuickAnswersNotice();
   bool closed = quick_answers_ui_controller_->CloseQuickAnswersView();
-  quick_answers_client_->OnQuickAnswersDismissed(
-      quick_answer_ ? quick_answer_->result_type : ResultType::kNoResult,
-      is_active && closed);
+  // |quick_answer_| could be null before we receive the result from the server.
+  // Do not send the signal since the quick answer is dismissed before ready.
+  if (quick_answer_) {
+    quick_answers_client_->OnQuickAnswersDismissed(quick_answer_->result_type,
+                                                   is_active && closed);
+  }
 }
 
 chromeos::quick_answers::QuickAnswersDelegate*
 QuickAnswersControllerImpl::GetQuickAnswersDelegate() {
   return this;
+}
+
+QuickAnswersVisibility QuickAnswersControllerImpl::GetVisibilityForTesting()
+    const {
+  return visibility_;
 }
 
 void QuickAnswersControllerImpl::OnQuickAnswerReceived(
@@ -149,7 +153,7 @@ void QuickAnswersControllerImpl::OnQuickAnswerReceived(
         std::make_unique<chromeos::quick_answers::QuickAnswerText>(title_));
     quick_answer_with_no_result.first_answer_row.push_back(
         std::make_unique<chromeos::quick_answers::QuickAnswerResultText>(
-            kNoResult));
+            l10n_util::GetStringUTF8(IDS_ASH_QUICK_ANSWERS_VIEW_NO_RESULT)));
     quick_answers_ui_controller_->RenderQuickAnswersViewWithResult(
         anchor_bounds_, quick_answer_with_no_result);
     // Fallback query to title if no result is available.
@@ -174,7 +178,7 @@ void QuickAnswersControllerImpl::OnNetworkError() {
 
 void QuickAnswersControllerImpl::OnRequestPreprocessFinished(
     const QuickAnswersRequest& processed_request) {
-  if (!chromeos::features::IsQuickAnswersTextAnnotatorEnabled()) {
+  if (!chromeos::features::ShouldUseQuickAnswersTextAnnotator()) {
     // Ignore preprocessing result if text annotator is not enabled.
     return;
   }
@@ -197,7 +201,7 @@ void QuickAnswersControllerImpl::OnRequestPreprocessFinished(
 
 void QuickAnswersControllerImpl::OnRetryQuickAnswersRequest() {
   QuickAnswersRequest request = BuildRequest();
-  if (chromeos::features::IsQuickAnswersTextAnnotatorEnabled()) {
+  if (chromeos::features::ShouldUseQuickAnswersTextAnnotator()) {
     quick_answers_client_->SendRequestForPreprocessing(request);
   } else {
     quick_answers_client_->SendRequest(request);
@@ -211,8 +215,6 @@ void QuickAnswersControllerImpl::OnQuickAnswerClick() {
 
 void QuickAnswersControllerImpl::UpdateQuickAnswersAnchorBounds(
     const gfx::Rect& anchor_bounds) {
-  if (visibility_ != QuickAnswersVisibility::kVisible)
-    return;
   anchor_bounds_ = anchor_bounds;
   quick_answers_ui_controller_->UpdateQuickAnswersBounds(anchor_bounds);
 }
@@ -221,19 +223,20 @@ void QuickAnswersControllerImpl::SetPendingShowQuickAnswers() {
   visibility_ = QuickAnswersVisibility::kPending;
 }
 
-void QuickAnswersControllerImpl::OnUserConsentGranted() {
-  quick_answers_ui_controller_->CloseUserConsentView();
-  consent_controller_->AcceptConsent(
-      chromeos::quick_answers::ConsentInteractionType::kAccept);
+void QuickAnswersControllerImpl::OnUserNoticeAccepted() {
+  quick_answers_ui_controller_->CloseUserNoticeView();
+  notice_controller_->AcceptNotice(
+      chromeos::quick_answers::NoticeInteractionType::kAccept);
 
-  // Display Quick-Answer for the cached query when user consents.
+  // Display Quick-Answer for the cached query when user dismisses the
+  // notice.
   MaybeShowQuickAnswers(anchor_bounds_, title_, context_);
 }
 
-void QuickAnswersControllerImpl::OnConsentSettingsRequestedByUser() {
-  quick_answers_ui_controller_->CloseUserConsentView();
-  consent_controller_->AcceptConsent(
-      chromeos::quick_answers::ConsentInteractionType::kManageSettings);
+void QuickAnswersControllerImpl::OnNoticeSettingsRequestedByUser() {
+  quick_answers_ui_controller_->CloseUserNoticeView();
+  notice_controller_->AcceptNotice(
+      chromeos::quick_answers::NoticeInteractionType::kManageSettings);
   NewWindowDelegate::GetInstance()->NewTabWithUrl(
       GURL(kAssistantRelatedInfoUrl), /*from_user_interaction=*/true);
 }
@@ -243,24 +246,24 @@ void QuickAnswersControllerImpl::OpenQuickAnswersDogfoodLink() {
       GURL(kDogfoodUrl), /*from_user_interaction=*/true);
 }
 
-void QuickAnswersControllerImpl::MaybeDismissQuickAnswersConsent() {
-  if (quick_answers_ui_controller_->is_showing_user_consent_view())
-    consent_controller_->DismissConsent();
-  quick_answers_ui_controller_->CloseUserConsentView();
+void QuickAnswersControllerImpl::MaybeDismissQuickAnswersNotice() {
+  if (quick_answers_ui_controller_->is_showing_user_notice_view())
+    notice_controller_->DismissNotice();
+  quick_answers_ui_controller_->CloseUserNoticeView();
 }
 
-bool QuickAnswersControllerImpl::ShouldShowUserConsent() const {
-  return consent_controller_->ShouldShowConsent();
+bool QuickAnswersControllerImpl::ShouldShowUserNotice() const {
+  return notice_controller_->ShouldShowNotice();
 }
 
-void QuickAnswersControllerImpl::ShowUserConsent(
-    const base::string16& intent_type,
-    const base::string16& intent_text) {
-  // Show user-consent notice informing user about the feature if required.
-  if (!quick_answers_ui_controller_->is_showing_user_consent_view()) {
-    quick_answers_ui_controller_->CreateUserConsentView(
+void QuickAnswersControllerImpl::ShowUserNotice(
+    const std::u16string& intent_type,
+    const std::u16string& intent_text) {
+  // Show notice informing user about the feature if required.
+  if (!quick_answers_ui_controller_->is_showing_user_notice_view()) {
+    quick_answers_ui_controller_->CreateUserNoticeView(
         anchor_bounds_, intent_type, intent_text);
-    consent_controller_->StartConsent();
+    notice_controller_->StartNotice();
   }
 }
 

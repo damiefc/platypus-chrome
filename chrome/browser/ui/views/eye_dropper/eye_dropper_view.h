@@ -9,11 +9,11 @@
 
 #include "base/optional.h"
 #include "base/time/time.h"
-#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "content/public/browser/eye_dropper.h"
 #include "content/public/browser/eye_dropper_listener.h"
 #include "content/public/browser/render_frame_host.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -23,6 +23,7 @@
 class EyeDropperView : public content::EyeDropper,
                        public views::WidgetDelegateView {
  public:
+  METADATA_HEADER(EyeDropperView);
   EyeDropperView(content::RenderFrameHost* frame,
                  content::EyeDropperListener* listener);
   EyeDropperView(const EyeDropperView&) = delete;
@@ -60,6 +61,8 @@ class EyeDropperView : public content::EyeDropper,
   void UpdatePosition();
 
   void MoveViewToFront();
+
+  void CaptureInputIfNeeded();
 
   void HideCursor();
   void ShowCursor();

@@ -22,16 +22,27 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histograms>
 
 <histogram name="Login.ArcBugReportBackupTime" units="ms"
-    expires_after="2021-01-31">
+    expires_after="2021-10-30">
   <owner>mhasank@google.com</owner>
   <owner>arc-core@google.com</owner>
   <summary>
-    Tracks the time to backup ARC bug report when starting ARC fails.
+    Tracks the time to back up ARC bug reports when starting ARC fails. This is
+    emitted when we upgrade the ARC container from mini to full.
+  </summary>
+</histogram>
+
+<histogram name="Login.ArcContinueBootImpulseTime" units="ms"
+    expires_after="2021-10-30">
+  <owner>mhasank@google.com</owner>
+  <owner>arc-core@google.com</owner>
+  <summary>
+    Tracks the time to execute arc-boot-continue impulse. This is emitted when
+    we upgrade the ARC container from mini to full.
   </summary>
 </histogram>
 
 <histogram name="Login.BrowserShutdownTime" units="ms"
-    expires_after="2021-03-15">
+    expires_after="2021-10-10">
   <owner>xiyuan@chromium.org</owner>
   <summary>
     Tracks the browser process shutdown time from when SIGTERM is sent to the
@@ -66,7 +77,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Login.FailureReason" enum="LoginFailureReason"
-    expires_after="2021-02-07">
+    expires_after="2021-10-17">
   <owner>achuith@chromium.org</owner>
   <summary>Chrome OS login failure reason.</summary>
 </histogram>
@@ -81,7 +92,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Login.MountNamespaceCreationSuccess" enum="Boolean"
-    expires_after="2021-01-31">
+    expires_after="2021-10-10">
   <owner>betuls@chromium.org</owner>
   <owner>jorgelo@chromium.org</owner>
   <owner>chromeos-security-core@google.com</owner>
@@ -106,23 +117,47 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Login.OfflineFailure.IsKnownUser" enum="LoginIsKnownUser"
-    expires_after="2021-02-07">
-  <owner>glevin@chromium.org</owner>
+    expires_after="2020-10-14">
+  <obsolete>
+    Removed in M88.
+  </obsolete>
+  <owner>rsorokin@chromium.org</owner>
+  <owner>cros-oac@google.com</owner>
   <summary>
     On offline login failure, records whether it is for an existing user.
   </summary>
 </histogram>
 
+<histogram name="Login.OfflineLoginWithHiddenUserPods"
+    enum="ChromeOSHiddenUserPodsOfflineLogin" expires_after="M95">
+  <owner>mslus@chromium.org</owner>
+  <owner>chromeos-commercial-identity@google.com</owner>
+  <summary>
+    Records offline login attempts with user pods hidden on the login screen.
+  </summary>
+</histogram>
+
 <histogram name="Login.OfflineSuccess.Attempts" units="units"
-    expires_after="2021-02-28">
-  <owner>glevin@chromium.org</owner>
+    expires_after="2021-09-19">
+  <owner>rsorokin@chromium.org</owner>
+  <owner>cros-oac@google.com</owner>
   <summary>
     On offline login success, records number of attempts, including success.
   </summary>
 </histogram>
 
+<histogram name="Login.PageLoad.DetectionType" enum="LoginDetectionType"
+    expires_after="2021-11-30">
+  <owner>rajendrant@chromium.org</owner>
+  <owner>mcrouse@chromium.org</owner>
+  <summary>
+    Type of login detected for a page load based on different heuristics.
+    Recorded once per page load.
+  </summary>
+</histogram>
+
 <histogram name="Login.PasswordChanged.ReauthReason" enum="LoginReauthReasons"
-    expires_after="2021-03-15">
+    expires_after="2021-09-19">
   <owner>rsorokin@chromium.org</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
@@ -132,7 +167,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Login.PasswordChangeFlow" enum="LoginPasswordChangeFlow"
-    expires_after="2021-01-31">
+    expires_after="2021-10-10">
   <owner>xiyuan@chromium.org</owner>
   <owner>omrilio@chromium.org</owner>
   <summary>
@@ -141,12 +176,24 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Login.PasswordNotChanged.ReauthReason"
-    enum="LoginReauthReasons" expires_after="2021-03-15">
+    enum="LoginReauthReasons" expires_after="2021-09-19">
   <owner>rsorokin@chromium.org</owner>
   <owner>cros-oac@google.com</owner>
   <summary>
     Tracks the reason why a user was sent through the GAIA re-auth flow which
     did not cause the local password change.
+  </summary>
+</histogram>
+
+<histogram name="Login.PasswordStoreSites.InitializedBeforeQuery"
+    enum="Boolean" expires_after="2021-11-30">
+  <owner>rajendrant@chromium.org</owner>
+  <owner>mcrouse@chromium.org</owner>
+  <summary>
+    Records whether the passworded sites list is initialized when the query for
+    sites happens. This is used to measure how many queries happened before the
+    list got populated the first time. Recorded on every query to the password
+    store.
   </summary>
 </histogram>
 
@@ -157,7 +204,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Login.PromptToCompleteLoginTime" units="ms"
-    expires_after="2021-03-07">
+    expires_after="2021-09-12">
   <owner>rsorokin@chromium.org</owner>
   <owner>achuith@chromium.org</owner>
   <owner>cros-oac@google.com</owner>
@@ -167,7 +214,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Login.PromptToLoginTime" units="ms" expires_after="2021-03-15">
+<histogram name="Login.PromptToLoginTime" units="ms" expires_after="2021-09-19">
   <owner>elijahtaylor@google.com</owner>
   <owner>yusukes@chromium.org</owner>
   <owner>rsorokin@chromium.org</owner>
@@ -179,7 +226,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Login.SessionExitType" enum="LoginSessionExitType"
-    expires_after="2021-02-14">
+    expires_after="2021-10-24">
   <owner>iby@chromium.org</owner>
   <summary>
     Tracks whether a ChromeOS user was logged out because Chrome repeatedly
@@ -194,14 +241,28 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Login.SuccessReason" enum="LoginSuccessReason"
-    expires_after="2021-02-14">
+    expires_after="2021-10-25">
   <owner>achuith@chromium.org</owner>
   <summary>Chrome OS login success reason.</summary>
 </histogram>
 
+<histogram name="Login.SwitchToFeatureFlagMappingStatus"
+    enum="LoginFeatureFlagMappingStatus" expires_after="2021-11-30">
+  <owner>mnissler@chromium.org</owner>
+  <owner>xiyuan@chromium.org</owner>
+  <summary>
+    Tracks whether switches were mapped to feature flags in session_manager for
+    compatibility. session_manager does this and emits UMA samples when
+    encountering old device settings files that still contain feature
+    configuration in command line switch representation. This data will inform
+    the decision when to remove this compatibility code.
+  </summary>
+</histogram>
+
 <histogram name="Login.TokenCheckResponseTime" units="ms"
-    expires_after="2020-11-01">
-  <owner>glevin@chromium.org</owner>
+    expires_after="2021-10-10">
+  <owner>rsorokin@chromium.org</owner>
+  <owner>cros-oac@google.com</owner>
   <summary>
     Time between sending a request to, and receiving a reply from, GAIA token
     endpoint to validate TokenInfo.
@@ -221,7 +282,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Login.UsersActive28Days" units="users"
-    expires_after="2021-02-28">
+    expires_after="2021-09-05">
   <owner>alemate@chromium.org</owner>
   <owner>achuith@chromium.org</owner>
   <summary>
@@ -231,7 +292,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Login.UsersActiveDaily" units="users"
-    expires_after="2021-02-28">
+    expires_after="2021-09-05">
   <owner>alemate@chromium.org</owner>
   <owner>achuith@chromium.org</owner>
   <summary>
@@ -241,7 +302,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Login.UsersActiveWeekly" units="users"
-    expires_after="2021-01-31">
+    expires_after="2021-10-10">
   <owner>alemate@chromium.org</owner>
   <owner>achuith@chromium.org</owner>
   <summary>
@@ -262,7 +323,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Login.UserType" enum="LoginUserType"
-    expires_after="2021-02-07">
+    expires_after="2021-10-17">
   <owner>cmasone@chromium.org</owner>
   <summary>
     Chrome OS histogram that keeps track of the way a user logs in and whether

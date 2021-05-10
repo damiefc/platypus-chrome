@@ -9,15 +9,16 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/contains.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -38,7 +39,6 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/navigation_policy.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
@@ -56,9 +56,9 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chromeos/constants/chromeos_switches.h"
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_switches.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #endif
 
 namespace extensions {
@@ -309,7 +309,7 @@ class ProcessManagerBrowserTest : public ExtensionBrowserTest {
 class DefaultProfileExtensionBrowserTest : public ExtensionBrowserTest {
  protected:
   DefaultProfileExtensionBrowserTest() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     // We want signin profile on ChromeOS, not logged in user profile.
     set_chromeos_user_ = false;
 #endif
@@ -318,7 +318,7 @@ class DefaultProfileExtensionBrowserTest : public ExtensionBrowserTest {
  private:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionBrowserTest::SetUpCommandLine(command_line);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     command_line->AppendSwitch(chromeos::switches::kLoginManager);
     command_line->AppendSwitch(chromeos::switches::kForceLoginManagerInTests);
 #endif
@@ -337,8 +337,8 @@ IN_PROC_BROWSER_TEST_F(DefaultProfileExtensionBrowserTest, NoExtensionHosts) {
   // Explicitly get the original and off-the-record-profiles, since on CrOS,
   // the signin profile (profile()) is the off-the-record version.
   Profile* original = profile()->GetOriginalProfile();
-  Profile* otr = original->GetPrimaryOTRProfile();
-#if defined(OS_CHROMEOS)
+  Profile* otr = original->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   EXPECT_EQ(profile(), otr);
   EXPECT_TRUE(chromeos::ProfileHelper::IsSigninProfile(original));
 #endif
@@ -427,7 +427,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
       content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
       content::NotificationService::AllSources());
   // Open popup in the first extension.
-  test_util->Press(0);
+  test_util->Press(popup->id());
   frame_observer.Wait();
   ASSERT_TRUE(test_util->HasPopup());
 
@@ -717,18 +717,18 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   const auto activity =
       std::make_pair(Activity::NETWORK, base::NumberToString(kRequestId));
 
-  pm->OnNetworkRequestStarted(frame_host, kRequestId);
+  pm->NetworkRequestStarted(frame_host, kRequestId);
   EXPECT_EQ(baseline_keepalive + 1, pm->GetLazyKeepaliveCount(extension.get()));
   EXPECT_EQ(1u,
             pm->GetLazyKeepaliveActivities(extension.get()).count(activity));
-  pm->OnNetworkRequestDone(frame_host, kRequestId);
+  pm->NetworkRequestDone(frame_host, kRequestId);
   EXPECT_EQ(baseline_keepalive, pm->GetLazyKeepaliveCount(extension.get()));
   EXPECT_EQ(0u,
             pm->GetLazyKeepaliveActivities(extension.get()).count(activity));
 
   // Simulate only a request completion for this ID and ensure it doesn't result
   // in keepalive decrement.
-  pm->OnNetworkRequestDone(frame_host, 2);
+  pm->NetworkRequestDone(frame_host, 2);
   EXPECT_EQ(baseline_keepalive, pm->GetLazyKeepaliveCount(extension.get()));
   EXPECT_EQ(baseline_activities_count,
             pm->GetLazyKeepaliveActivities(extension.get()).size());
@@ -1183,7 +1183,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
             .AppendASCII("simple");
   const Extension* app = LoadAndLaunchApp(dir);
   EXPECT_TRUE(app->permissions_data()->HasAPIPermission(
-      extensions::APIPermission::kWebView));
+      extensions::mojom::APIPermissionID::kWebView));
 
   auto app_windows = AppWindowRegistry::Get(browser()->profile())
                          ->GetAppWindowsForApp(app->id());
@@ -1424,7 +1424,9 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Navigate to the "extension 1" page with two iframes.
-  NavigateToURL(extension1->url().Resolve("two_iframes.html"));
+  auto url = extension1->url().Resolve("two_iframes.html");
+  NavigateToURL(url);
+  auto initiator_origin = base::Optional<url::Origin>(url::Origin::Create(url));
 
   ProcessManager* pm = ProcessManager::Get(profile());
   content::WebContents* tab =
@@ -1435,7 +1437,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   // should work.
   GURL extension2_empty = extension2->url().Resolve("/empty.html");
   EXPECT_TRUE(WebAccessibleResourcesInfo::IsResourceWebAccessible(
-      extension2, extension2_empty.path()));
+      extension2, extension2_empty.path(), initiator_origin));
   {
     content::RenderFrameDeletedObserver frame_deleted_observer(
         ChildFrameAt(main_frame, 0));
@@ -1452,7 +1454,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   // able to navigate to extension2's manifest.json.
   GURL extension2_manifest = extension2->url().Resolve("/manifest.json");
   EXPECT_FALSE(WebAccessibleResourcesInfo::IsResourceWebAccessible(
-      extension2, extension2_manifest.path()));
+      extension2, extension2_manifest.path(), initiator_origin));
   {
     content::TestNavigationObserver nav_observer(tab, 1);
     EXPECT_TRUE(ExecuteScript(
@@ -1646,7 +1648,11 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   {
     content::RenderFrameHost* subframe = ChildFrameAt(main_frame, 0);
     EXPECT_EQ(subframe->GetProcess(), main_frame->GetProcess());
-    EXPECT_EQ(subframe->GetSiteInstance(), main_frame->GetSiteInstance());
+    if (content::AreStrictSiteInstancesEnabled()) {
+      EXPECT_NE(subframe->GetSiteInstance(), main_frame->GetSiteInstance());
+    } else {
+      EXPECT_EQ(subframe->GetSiteInstance(), main_frame->GetSiteInstance());
+    }
   }
 }
 
@@ -1759,7 +1765,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest, HostedAppAlerts) {
   EXPECT_EQ(extension, pm->GetExtensionForWebContents(tab));
   javascript_dialogs::AppModalDialogManager* js_dialog_manager =
       javascript_dialogs::AppModalDialogManager::GetInstance();
-  base::string16 hosted_app_title = base::ASCIIToUTF16("hosted_app");
+  std::u16string hosted_app_title = u"hosted_app";
   EXPECT_EQ(hosted_app_title, js_dialog_manager->GetTitle(
                                   tab, tab->GetLastCommittedURL().GetOrigin()));
 

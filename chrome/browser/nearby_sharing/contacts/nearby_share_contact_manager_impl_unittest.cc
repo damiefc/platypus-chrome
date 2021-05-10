@@ -2,21 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <memory>
+#include <random>
 #include <set>
 #include <string>
 
+#include "base/containers/contains.h"
+#include "base/containers/flat_set.h"
 #include "base/no_destructor.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/nearby_sharing/client/fake_nearby_share_client.h"
+#include "chrome/browser/nearby_sharing/common/fake_nearby_share_profile_info_provider.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
 #include "chrome/browser/nearby_sharing/contacts/fake_nearby_share_contact_downloader.h"
 #include "chrome/browser/nearby_sharing/contacts/nearby_share_contact_downloader.h"
 #include "chrome/browser/nearby_sharing/contacts/nearby_share_contact_downloader_impl.h"
 #include "chrome/browser/nearby_sharing/contacts/nearby_share_contact_manager.h"
 #include "chrome/browser/nearby_sharing/contacts/nearby_share_contact_manager_impl.h"
+#include "chrome/browser/nearby_sharing/contacts/nearby_share_contacts_sorter.h"
 #include "chrome/browser/nearby_sharing/local_device_data/fake_nearby_share_local_device_data_manager.h"
 #include "chrome/browser/nearby_sharing/proto/rpc_resources.pb.h"
 #include "chrome/browser/nearby_sharing/scheduling/fake_nearby_share_scheduler.h"
@@ -30,12 +35,16 @@
 
 namespace {
 
+const uint32_t kTestNumUnreachableContactsFilteredOut = 123;
 const char kTestContactIdPrefix[] = "id_";
 const char kTestContactEmailPrefix[] = "email_";
 const char kTestContactPhonePrefix[] = "phone_";
 const char kTestDefaultDeviceName[] = "Josh's Chromebook";
+const char kTestProfileUserName[] = "test@google.com";
+const char* kTestPersonNames[] = {"BBB BBB", "CCC CCC", "AAA AAA"};
 
 // From nearby_share_contact_manager_impl.cc.
+constexpr base::TimeDelta kContactUploadPeriod = base::TimeDelta::FromHours(24);
 constexpr base::TimeDelta kContactDownloadPeriod =
     base::TimeDelta::FromHours(12);
 constexpr base::TimeDelta kContactDownloadRpcTimeout =
@@ -65,8 +74,9 @@ std::vector<nearbyshare::proto::ContactRecord> TestContactRecordList(
   for (size_t i = 0; i < num_contacts; ++i) {
     nearbyshare::proto::ContactRecord contact;
     contact.set_id(GetTestContactId(i));
-    contact.set_image_url("https://google.com");
-    contact.set_person_name("John Doe");
+    contact.set_image_url("https://www.google.com/");
+    contact.set_person_name(kTestPersonNames[i % 3]);
+    contact.set_is_reachable(true);
     // only one of these fields should be set...
     switch ((i % 3)) {
       case 0:
@@ -85,8 +95,10 @@ std::vector<nearbyshare::proto::ContactRecord> TestContactRecordList(
 }
 
 // Converts a list of ContactRecord protos, along with the allowlist, into a
-// list of Contact protos. From nearby_share_contact_manager_impl.cc.
-std::vector<nearbyshare::proto::Contact> ContactRecordsToContacts(
+// list of Contact protos. To enable self-sharing across devices, we expect the
+// local device to include itself in the contact list as an allowed contact.
+// Partially from nearby_share_contact_manager_impl.cc.
+std::vector<nearbyshare::proto::Contact> BuildContactListToUpload(
     const std::set<std::string>& allowed_contact_ids,
     const std::vector<nearbyshare::proto::ContactRecord>& contact_records) {
   std::vector<nearbyshare::proto::Contact> contacts;
@@ -99,7 +111,65 @@ std::vector<nearbyshare::proto::Contact> ContactRecordsToContacts(
       contacts.push_back(contact);
     }
   }
+
+  // Add self to list of contacts.
+  nearbyshare::proto::Contact contact;
+  contact.mutable_identifier()->set_account_name(kTestProfileUserName);
+  contact.set_is_selected(true);
+  contacts.push_back(contact);
+
   return contacts;
+}
+
+std::vector<nearbyshare::proto::ContactRecord> MojoContactsToProto(
+    const std::vector<nearby_share::mojom::ContactRecordPtr>& mojo_contacts) {
+  std::vector<nearbyshare::proto::ContactRecord> proto_contacts;
+  proto_contacts.reserve(mojo_contacts.size());
+  for (const nearby_share::mojom::ContactRecordPtr& mojo_contact :
+       mojo_contacts) {
+    nearbyshare::proto::ContactRecord proto_contact;
+    proto_contact.set_id(mojo_contact->id);
+    proto_contact.set_person_name(mojo_contact->person_name);
+    proto_contact.set_image_url(mojo_contact->image_url.spec());
+    proto_contact.set_is_reachable(true);
+    for (const auto& identifier : mojo_contact->identifiers) {
+      auto* proto_identifier = proto_contact.add_identifiers();
+      switch (identifier->which()) {
+        case nearby_share::mojom::ContactIdentifier::Tag::kAccountName:
+          proto_identifier->set_account_name(identifier->get_account_name());
+          break;
+        case nearby_share::mojom::ContactIdentifier::Tag::kObfuscatedGaia:
+          proto_identifier->set_obfuscated_gaia(
+              identifier->get_obfuscated_gaia());
+          break;
+        case nearby_share::mojom::ContactIdentifier::Tag::kPhoneNumber:
+          proto_identifier->set_phone_number(identifier->get_phone_number());
+          break;
+      }
+    }
+    proto_contacts.push_back(proto_contact);
+  }
+  return proto_contacts;
+}
+
+void VerifyDownloadNotificationContacts(
+    const std::set<std::string>& expected_allowed_contact_ids,
+    const std::vector<nearbyshare::proto::ContactRecord>&
+        expected_unordered_contacts,
+    const std::set<std::string>& notification_allowed_contact_ids,
+    const std::vector<nearbyshare::proto::ContactRecord>&
+        notification_contacts) {
+  EXPECT_EQ(expected_allowed_contact_ids, notification_allowed_contact_ids);
+  EXPECT_EQ(expected_unordered_contacts.size(), notification_contacts.size());
+
+  // Verify that observers receive contacts in sorted order.
+  std::vector<nearbyshare::proto::ContactRecord> expected_ordered_contacts =
+      expected_unordered_contacts;
+  SortNearbyShareContactRecords(&expected_ordered_contacts);
+  for (size_t i = 0; i < expected_ordered_contacts.size(); ++i) {
+    EXPECT_EQ(expected_ordered_contacts[i].SerializeAsString(),
+              notification_contacts[i].SerializeAsString());
+  }
 }
 
 class TestDownloadContactsObserver
@@ -107,9 +177,12 @@ class TestDownloadContactsObserver
  public:
   void OnContactsDownloaded(
       const std::vector<std::string>& allowed_contacts,
-      std::vector<nearby_share::mojom::ContactRecordPtr> contacts) override {
+      std::vector<nearby_share::mojom::ContactRecordPtr> contacts,
+      uint32_t num_unreachable_contacts_filtered_out) override {
     allowed_contacts_ = allowed_contacts;
     contacts_ = std::move(contacts);
+    num_unreachable_contacts_filtered_out_ =
+        num_unreachable_contacts_filtered_out;
     on_contacts_downloaded_called_ = true;
   }
 
@@ -119,6 +192,7 @@ class TestDownloadContactsObserver
 
   std::vector<std::string> allowed_contacts_;
   std::vector<nearby_share::mojom::ContactRecordPtr> contacts_;
+  uint32_t num_unreachable_contacts_filtered_out_;
   bool on_contacts_downloaded_called_ = false;
   bool on_contacts_download_failed_called_ = false;
   mojo::Receiver<nearby_share::mojom::DownloadContactsObserver> receiver_{this};
@@ -137,6 +211,7 @@ class NearbyShareContactManagerImplTest
   struct ContactsDownloadedNotification {
     std::set<std::string> allowed_contact_ids;
     std::vector<nearbyshare::proto::ContactRecord> contacts;
+    uint32_t num_unreachable_contacts_filtered_out;
   };
   struct ContactsUploadedNotification {
     bool did_contacts_change_since_last_upload;
@@ -152,9 +227,11 @@ class NearbyShareContactManagerImplTest
     NearbyShareSchedulerFactory::SetFactoryForTesting(&scheduler_factory_);
     NearbyShareContactDownloaderImpl::Factory::SetFactoryForTesting(
         &downloader_factory_);
+    profile_info_provider_.set_profile_user_name(kTestProfileUserName);
 
     manager_ = NearbyShareContactManagerImpl::Factory::Create(
-        &pref_service_, &http_client_factory_, &local_device_data_manager_);
+        &pref_service_, &http_client_factory_, &local_device_data_manager_,
+        &profile_info_provider_);
     manager_awaiter_ =
         std::make_unique<nearby_share::mojom::ContactManagerAsyncWaiter>(
             manager_.get());
@@ -189,7 +266,7 @@ class NearbyShareContactManagerImplTest
       const std::vector<nearbyshare::proto::ContactRecord>& contacts,
       const std::set<std::string>& expected_allowed_contact_ids,
       bool expect_upload) {
-    TriggerScheduler();
+    TriggerDownloadScheduler();
 
     size_t num_handled_results =
         download_and_upload_scheduler()->handled_results().size();
@@ -198,17 +275,12 @@ class NearbyShareContactManagerImplTest
     size_t num_upload_contacts_calls =
         local_device_data_manager_.upload_contacts_calls().size();
 
-    latest_downloader()->Succeed(contacts);
+    latest_downloader()->Succeed(contacts,
+                                 kTestNumUnreachableContactsFilteredOut);
 
     VerifyDownloadNotificationSent(
         /*initial_num_notifications=*/num_download_notifications,
         expected_allowed_contact_ids, contacts);
-
-    // Verify the mojo observer was called.
-    mojo_observer_.receiver_.FlushForTesting();
-    EXPECT_TRUE(mojo_observer_.on_contacts_downloaded_called_);
-    EXPECT_FALSE(mojo_observer_.on_contacts_download_failed_called_);
-    VerifyMojoContacts(contacts, mojo_observer_.contacts_);
 
     // Verify that contacts start uploading if the needed.
     EXPECT_EQ(num_upload_contacts_calls + (expect_upload ? 1 : 0),
@@ -224,7 +296,7 @@ class NearbyShareContactManagerImplTest
   }
 
   void FailDownload() {
-    TriggerScheduler();
+    TriggerDownloadScheduler();
 
     // Fail download and verify that the result is sent to the scheduler.
     size_t num_handled_results =
@@ -240,21 +312,33 @@ class NearbyShareContactManagerImplTest
     EXPECT_TRUE(mojo_observer_.on_contacts_download_failed_called_);
   }
 
+  void MakePeriodicUploadRequest() {
+    periodic_upload_scheduler()->InvokeRequestCallback();
+    periodic_upload_scheduler()->SetIsWaitingForResult(true);
+  }
+
   void FinishUpload(
       bool success,
       const std::vector<nearbyshare::proto::Contact>& expected_contacts) {
     FakeNearbyShareLocalDeviceDataManager::UploadContactsCall& call =
         local_device_data_manager_.upload_contacts_calls().back();
+
+    // Ordering doesn't matter. Otherwise, because of internal sorting,
+    // comparison would be difficult.
     ASSERT_EQ(expected_contacts.size(), call.contacts.size());
+    base::flat_set<std::string> expected_contacts_set;
+    base::flat_set<std::string> call_contacts_set;
     for (size_t i = 0; i < expected_contacts.size(); ++i) {
-      EXPECT_EQ(expected_contacts[i].SerializeAsString(),
-                call.contacts[i].SerializeAsString());
+      expected_contacts_set.insert(expected_contacts[i].SerializeAsString());
+      call_contacts_set.insert(call.contacts[i].SerializeAsString());
     }
 
     // Invoke upload callback from local device data manager.
     size_t num_upload_notifications = contacts_uploaded_notifications_.size();
-    size_t num_handled_results =
+    size_t num_download_and_upload_handled_results =
         download_and_upload_scheduler()->handled_results().size();
+    size_t num_periodic_upload_handeled_results =
+        periodic_upload_scheduler()->handled_results().size();
     std::move(call.callback).Run(success);
 
     // Verify upload notification was sent on success.
@@ -262,13 +346,24 @@ class NearbyShareContactManagerImplTest
               contacts_uploaded_notifications_.size());
     if (success) {
       // We only expect uploads to occur if contacts have changed since the last
-      // upload.
+      // upload or is a periodic upload was requested.
       EXPECT_TRUE(contacts_uploaded_notifications_.back()
-                      .did_contacts_change_since_last_upload);
+                      .did_contacts_change_since_last_upload ||
+                  periodic_upload_scheduler()->IsWaitingForResult());
+
+      if (periodic_upload_scheduler()->IsWaitingForResult()) {
+        EXPECT_EQ(num_periodic_upload_handeled_results + 1,
+                  periodic_upload_scheduler()->handled_results().size());
+        EXPECT_TRUE(periodic_upload_scheduler()->handled_results().back());
+        periodic_upload_scheduler()->SetIsWaitingForResult(false);
+      } else {
+        EXPECT_EQ(num_periodic_upload_handeled_results,
+                  periodic_upload_scheduler()->handled_results().size());
+      }
     }
 
     // Verify that result is sent to download/upload scheduler.
-    EXPECT_EQ(num_handled_results + 1,
+    EXPECT_EQ(num_download_and_upload_handled_results + 1,
               download_and_upload_scheduler()->handled_results().size());
     EXPECT_EQ(success,
               download_and_upload_scheduler()->handled_results().back());
@@ -293,7 +388,8 @@ class NearbyShareContactManagerImplTest
   // NearbyShareContactManager::Observer:
   void OnContactsDownloaded(
       const std::set<std::string>& allowed_contact_ids,
-      const std::vector<nearbyshare::proto::ContactRecord>& contacts) override {
+      const std::vector<nearbyshare::proto::ContactRecord>& contacts,
+      uint32_t num_unreachable_contacts_filtered_out) override {
     ContactsDownloadedNotification notification;
     notification.allowed_contact_ids = allowed_contact_ids;
     notification.contacts = contacts;
@@ -310,14 +406,20 @@ class NearbyShareContactManagerImplTest
     return downloader_factory_.instances().back();
   }
 
+  FakeNearbyShareScheduler* periodic_upload_scheduler() {
+    return scheduler_factory_.pref_name_to_periodic_instance()
+        .at(prefs::kNearbySharingSchedulerPeriodicContactUploadPrefName)
+        .fake_scheduler;
+  }
+
   FakeNearbyShareScheduler* download_and_upload_scheduler() {
     return scheduler_factory_.pref_name_to_periodic_instance()
         .at(prefs::kNearbySharingSchedulerContactDownloadAndUploadPrefName)
         .fake_scheduler;
   }
 
+  // Verify scheduler input parameters.
   void VerifySchedulerInitialization() {
-    // Verify scheduler input parameters.
     FakeNearbyShareSchedulerFactory::PeriodicInstance
         download_and_upload_scheduler_instance =
             scheduler_factory_.pref_name_to_periodic_instance().at(
@@ -329,9 +431,20 @@ class NearbyShareContactManagerImplTest
     EXPECT_TRUE(download_and_upload_scheduler_instance.require_connectivity);
     EXPECT_EQ(&pref_service_,
               download_and_upload_scheduler_instance.pref_service);
+
+    FakeNearbyShareSchedulerFactory::PeriodicInstance
+        periodic_upload_scheduler_instance =
+            scheduler_factory_.pref_name_to_periodic_instance().at(
+                prefs::kNearbySharingSchedulerPeriodicContactUploadPrefName);
+    EXPECT_TRUE(periodic_upload_scheduler_instance.fake_scheduler);
+    EXPECT_EQ(kContactUploadPeriod,
+              periodic_upload_scheduler_instance.request_period);
+    EXPECT_FALSE(periodic_upload_scheduler_instance.retry_failures);
+    EXPECT_TRUE(periodic_upload_scheduler_instance.require_connectivity);
+    EXPECT_EQ(&pref_service_, periodic_upload_scheduler_instance.pref_service);
   }
 
-  void TriggerScheduler() {
+  void TriggerDownloadScheduler() {
     // Fire scheduler and verify downloader creation.
     size_t num_downloaders = downloader_factory_.instances().size();
     download_and_upload_scheduler()->InvokeRequestCallback();
@@ -346,59 +459,26 @@ class NearbyShareContactManagerImplTest
   void VerifyDownloadNotificationSent(
       size_t initial_num_notifications,
       const std::set<std::string>& expected_allowed_contact_ids,
-      const std::vector<nearbyshare::proto::ContactRecord>& contacts) {
+      const std::vector<nearbyshare::proto::ContactRecord>&
+          expected_unordered_contacts) {
     EXPECT_EQ(initial_num_notifications + 1,
               contacts_downloaded_notifications_.size());
-    EXPECT_EQ(expected_allowed_contact_ids,
-              contacts_downloaded_notifications_.back().allowed_contact_ids);
-    EXPECT_EQ(contacts.size(),
-              contacts_downloaded_notifications_.back().contacts.size());
-    for (size_t i = 0; i < contacts.size(); ++i) {
-      EXPECT_EQ(contacts[i].SerializeAsString(),
-                contacts_downloaded_notifications_.back()
-                    .contacts[i]
-                    .SerializeAsString());
-    }
-  }
 
-  void VerifyMojoContacts(
-      const std::vector<nearbyshare::proto::ContactRecord>& proto_list,
-      const std::vector<nearby_share::mojom::ContactRecordPtr>& mojo_list) {
-    ASSERT_EQ(proto_list.size(), mojo_list.size());
-    int i = 0;
-    for (auto& proto_contact : proto_list) {
-      auto& mojo_contact = mojo_list.at(i++);
-      EXPECT_EQ(proto_contact.id(), mojo_contact->id);
-      EXPECT_EQ(proto_contact.person_name(), mojo_contact->person_name);
-      EXPECT_EQ(GURL(proto_contact.image_url()), mojo_contact->image_url);
-      ASSERT_EQ((size_t)proto_contact.identifiers().size(),
-                mojo_contact->identifiers.size());
-      int j = 0;
-      for (auto& proto_identifier : proto_contact.identifiers()) {
-        auto& mojo_identifier = mojo_contact->identifiers.at(j++);
-        switch (proto_identifier.identifier_case()) {
-          case nearbyshare::proto::Contact_Identifier::IdentifierCase::
-              kAccountName:
-            EXPECT_EQ(proto_identifier.account_name(),
-                      mojo_identifier->get_account_name());
-            break;
-          case nearbyshare::proto::Contact_Identifier::IdentifierCase::
-              kObfuscatedGaia:
-            EXPECT_EQ(proto_identifier.obfuscated_gaia(),
-                      mojo_identifier->get_obfuscated_gaia());
-            break;
-          case nearbyshare::proto::Contact_Identifier::IdentifierCase::
-              kPhoneNumber:
-            EXPECT_EQ(proto_identifier.phone_number(),
-                      mojo_identifier->get_phone_number());
-            break;
-          case nearbyshare::proto::Contact_Identifier::IdentifierCase::
-              IDENTIFIER_NOT_SET:
-            NOTREACHED();
-            break;
-        }
-      }
-    }
+    // Verify notification sent to regular (not mojo) observers.
+    VerifyDownloadNotificationContacts(
+        expected_allowed_contact_ids, expected_unordered_contacts,
+        contacts_downloaded_notifications_.back().allowed_contact_ids,
+        contacts_downloaded_notifications_.back().contacts);
+
+    // Verify notification sent to mojo observers.
+    mojo_observer_.receiver_.FlushForTesting();
+    EXPECT_TRUE(mojo_observer_.on_contacts_downloaded_called_);
+    EXPECT_FALSE(mojo_observer_.on_contacts_download_failed_called_);
+    VerifyDownloadNotificationContacts(
+        expected_allowed_contact_ids, expected_unordered_contacts,
+        std::set<std::string>(mojo_observer_.allowed_contacts_.begin(),
+                              mojo_observer_.allowed_contacts_.end()),
+        MojoContactsToProto(mojo_observer_.contacts_));
   }
 
   TestDownloadContactsObserver mojo_observer_;
@@ -409,6 +489,7 @@ class NearbyShareContactManagerImplTest
   sync_preferences::TestingPrefServiceSyncable pref_service_;
   FakeNearbyShareClientFactory http_client_factory_;
   FakeNearbyShareLocalDeviceDataManager local_device_data_manager_;
+  FakeNearbyShareProfileInfoProvider profile_info_provider_;
   FakeNearbyShareSchedulerFactory scheduler_factory_;
   FakeNearbyShareContactDownloader::Factory downloader_factory_;
   std::unique_ptr<NearbyShareContactManager> manager_;
@@ -432,9 +513,9 @@ TEST_F(NearbyShareContactManagerImplTest, SetAllowlist) {
                      /*expect_allowlist_changed=*/false);
 }
 
-TEST_F(NearbyShareContactManagerImplTest, DownloadContacts_WithUpload) {
+TEST_F(NearbyShareContactManagerImplTest, DownloadContacts_WithFirstUpload) {
   std::vector<nearbyshare::proto::ContactRecord> contact_records =
-      TestContactRecordList(/*num_contacts=*/3u);
+      TestContactRecordList(/*num_contacts=*/4u);
   std::set<std::string> allowlist = TestContactIds(/*num_contacts=*/2u);
   SetAllowedContacts(allowlist, /*expect_allowlist_changed=*/true);
 
@@ -442,8 +523,9 @@ TEST_F(NearbyShareContactManagerImplTest, DownloadContacts_WithUpload) {
   // requested, which succeeds.
   DownloadContacts();
   SucceedDownload(contact_records, allowlist, /*expect_upload=*/true);
-  FinishUpload(/*success=*/true, /*expected_contacts=*/ContactRecordsToContacts(
-                   allowlist, contact_records));
+  FinishUpload(/*success=*/true,
+               /*expected_contacts=*/BuildContactListToUpload(allowlist,
+                                                              contact_records));
 
   // When contacts are downloaded again, we decect that contacts have not
   // changed, so no upload should be made
@@ -462,16 +544,18 @@ TEST_F(NearbyShareContactManagerImplTest,
   // requested, which succeeds.
   DownloadContacts();
   SucceedDownload(contact_records, allowlist, /*expect_upload=*/true);
-  FinishUpload(/*success=*/true, /*expected_contacts=*/ContactRecordsToContacts(
-                   allowlist, contact_records));
+  FinishUpload(/*success=*/true,
+               /*expected_contacts=*/BuildContactListToUpload(allowlist,
+                                                              contact_records));
 
   // When contacts are downloaded again, we decect that contacts have changed
   // since the last upload.
   contact_records = TestContactRecordList(/*num_contacts=*/4u);
   DownloadContacts();
   SucceedDownload(contact_records, allowlist, /*expect_upload=*/true);
-  FinishUpload(/*success=*/true, /*expected_contacts=*/ContactRecordsToContacts(
-                   allowlist, contact_records));
+  FinishUpload(/*success=*/true,
+               /*expected_contacts=*/BuildContactListToUpload(allowlist,
+                                                              contact_records));
 }
 
 TEST_F(NearbyShareContactManagerImplTest,
@@ -485,8 +569,9 @@ TEST_F(NearbyShareContactManagerImplTest,
   // requested, which succeeds.
   DownloadContacts();
   SucceedDownload(contact_records, allowlist, /*expect_upload=*/true);
-  FinishUpload(/*success=*/true, /*expected_contacts=*/ContactRecordsToContacts(
-                   allowlist, contact_records));
+  FinishUpload(/*success=*/true,
+               /*expected_contacts=*/BuildContactListToUpload(allowlist,
+                                                              contact_records));
 
   // When contacts are downloaded again, we decect that the allowlist has
   // changed since the last upload.
@@ -494,8 +579,35 @@ TEST_F(NearbyShareContactManagerImplTest,
   SetAllowedContacts(allowlist, /*expect_allowlist_changed=*/true);
   DownloadContacts();
   SucceedDownload(contact_records, allowlist, /*expect_upload=*/true);
-  FinishUpload(/*success=*/true, /*expected_contacts=*/ContactRecordsToContacts(
+  FinishUpload(/*success=*/true,
+               /*expected_contacts=*/BuildContactListToUpload(allowlist,
+                                                              contact_records));
+}
+
+TEST_F(NearbyShareContactManagerImplTest,
+       DownloadContacts_PeriodicUploadRequest) {
+  std::vector<nearbyshare::proto::ContactRecord> contact_records =
+      TestContactRecordList(/*num_contacts=*/3u);
+  std::set<std::string> allowlist = TestContactIds(/*num_contacts=*/2u);
+  SetAllowedContacts(allowlist, /*expect_allowlist_changed=*/true);
+
+  // Because contacts have never been uploaded, a subsequent upload is
+  // requested, which succeeds.
+  DownloadContacts();
+  SucceedDownload(contact_records, allowlist, /*expect_upload=*/true);
+  FinishUpload(/*success=*/true, /*expected_contacts=*/BuildContactListToUpload(
                    allowlist, contact_records));
+
+  // Because device records on the server will be removed after a few days if
+  // the device does not contact the server, we ensure that contacts are
+  // uploaded periodically. Make that request now. Contacts will be uploaded
+  // after the next contact download. It will not force a download now, however.
+  MakePeriodicUploadRequest();
+
+  // When contacts are downloaded again, we decect that contacts have not
+  // changed. However, we expect an upload because a periodic request was made.
+  DownloadContacts();
+  SucceedDownload(contact_records, allowlist, /*expect_upload=*/true);
 }
 
 TEST_F(NearbyShareContactManagerImplTest, DownloadContacts_FailDownload) {
@@ -513,8 +625,9 @@ TEST_F(NearbyShareContactManagerImplTest, DownloadContacts_RetryFailedUpload) {
   // requested, which succeeds.
   DownloadContacts();
   SucceedDownload(contact_records, allowlist, /*expect_upload=*/true);
-  FinishUpload(/*success=*/true, /*expected_contacts=*/ContactRecordsToContacts(
-                   allowlist, contact_records));
+  FinishUpload(/*success=*/true,
+               /*expected_contacts=*/BuildContactListToUpload(allowlist,
+                                                              contact_records));
 
   // When contacts are downloaded again, we decect that contacts have changed
   // since the last upload. Fail this upload.
@@ -522,7 +635,7 @@ TEST_F(NearbyShareContactManagerImplTest, DownloadContacts_RetryFailedUpload) {
   DownloadContacts();
   SucceedDownload(contact_records, allowlist, /*expect_upload=*/true);
   FinishUpload(/*success=*/false,
-               /*expected_contacts=*/ContactRecordsToContacts(allowlist,
+               /*expected_contacts=*/BuildContactListToUpload(allowlist,
                                                               contact_records));
 
   // When contacts are downloaded again, we should continue to indicate that
@@ -532,7 +645,7 @@ TEST_F(NearbyShareContactManagerImplTest, DownloadContacts_RetryFailedUpload) {
   DownloadContacts();
   SucceedDownload(contact_records, allowlist, /*expect_upload=*/true);
   FinishUpload(/*success=*/true,
-               /*expected_contacts=*/ContactRecordsToContacts(allowlist,
+               /*expected_contacts=*/BuildContactListToUpload(allowlist,
                                                               contact_records));
 }
 
@@ -541,17 +654,42 @@ TEST_F(NearbyShareContactManagerImplTest, ContactUploadHash) {
                                prefs::kNearbySharingContactUploadHashPrefName));
 
   std::vector<nearbyshare::proto::ContactRecord> contact_records =
-      TestContactRecordList(/*num_contacts=*/3u);
+      TestContactRecordList(/*num_contacts=*/10u);
   std::set<std::string> allowlist = TestContactIds(/*num_contacts=*/2u);
   SetAllowedContacts(allowlist, /*expect_allowlist_changed=*/true);
   DownloadContacts();
   SucceedDownload(contact_records, allowlist, /*expect_upload=*/true);
-  FinishUpload(/*success=*/true, /*expected_contacts=*/ContactRecordsToContacts(
-                   allowlist, contact_records));
+  FinishUpload(/*success=*/true,
+               /*expected_contacts=*/BuildContactListToUpload(allowlist,
+                                                              contact_records));
 
   // Hardcode expected contact upload hash to ensure that hashed value is
-  // consistent across process starts.
-  EXPECT_EQ("DB408F2F01561308A97E9B6A1DB28536BEE33283D3E5B3842EFADAD4034E79DE",
-            pref_service()->GetString(
-                prefs::kNearbySharingContactUploadHashPrefName));
+  // consistent across process starts. If this test starts to fail, check one of
+  // the following:
+  //   1. Did the test data change? No worries; just update this hash value.
+  //   2. Did the hashing function change? As long as the function is stable
+  //      across (most) process starts, then everything is okay; just update
+  //      this hash value. A changed hash value will result in an extra server
+  //      call, so as long as the value is stable for the most part, it's okay.
+  const char kExpectedHash[] =
+      "2355E1D4DF5B40CE03373D1EE590FE28D2A47B8B6F6EC4567CB770668A2DFC07";
+  EXPECT_EQ(kExpectedHash, pref_service()->GetString(
+                               prefs::kNearbySharingContactUploadHashPrefName));
+
+  // Try a few different permutations of contacts to ensure that the hash is
+  // invariant under ordering.
+  auto rng = std::default_random_engine{};
+  for (size_t i = 0; i < 10u; ++i) {
+    DownloadContacts();
+
+    // We do not expect an upload because the contacts did not change in any way
+    // other than ordering.
+    std::vector<nearbyshare::proto::ContactRecord> shuffled_contacts =
+        contact_records;
+    std::shuffle(shuffled_contacts.begin(), shuffled_contacts.end(), rng);
+    SucceedDownload(shuffled_contacts, allowlist, /*expect_upload=*/false);
+    EXPECT_EQ(kExpectedHash,
+              pref_service()->GetString(
+                  prefs::kNearbySharingContactUploadHashPrefName));
+  }
 }

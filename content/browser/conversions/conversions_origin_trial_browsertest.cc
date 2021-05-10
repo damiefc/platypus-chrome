@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "base/strings/strcat.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "content/browser/conversions/conversion_manager_impl.h"
 #include "content/browser/conversions/storable_impression.h"
@@ -86,6 +86,17 @@ IN_PROC_BROWSER_TEST_F(ConversionsOriginTrialBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(ConversionsOriginTrialBrowserTest,
+                       OriginTrialDisabled_FeatureNotDetected) {
+  // Navigate to a page without an OT token.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), GURL("https://example.test/page_with_impression_creator.html")));
+
+  EXPECT_EQ(false, EvalJs(shell(),
+                          "document.featurePolicy.features().includes('"
+                          "conversion-measurement')"));
+}
+
+IN_PROC_BROWSER_TEST_F(ConversionsOriginTrialBrowserTest,
                        OriginTrialEnabled_ImpressionRegistered) {
   EXPECT_TRUE(NavigateToURL(
       shell(), GURL("https://example.test/impression_with_origin_trial.html")));
@@ -102,8 +113,7 @@ IN_PROC_BROWSER_TEST_F(ConversionsOriginTrialBrowserTest,
 
   ConversionManagerImpl* conversion_manager =
       static_cast<StoragePartitionImpl*>(
-          BrowserContext::GetDefaultStoragePartition(
-              web_contents()->GetBrowserContext()))
+          web_contents()->GetBrowserContext()->GetDefaultStoragePartition())
           ->GetConversionManager();
 
   base::RunLoop run_loop;

@@ -13,6 +13,7 @@
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 
 class GURL;
 
@@ -20,9 +21,19 @@ namespace base {
 class CommandLine;
 }
 
+namespace blink {
+class AssociatedInterfaceRegistry;
+}
+
 namespace content {
 class BrowserContext;
 }
+
+namespace service_manager {
+template <typename...>
+class BinderRegistryWithArgs;
+using BinderRegistry = BinderRegistryWithArgs<>;
+}  // namespace service_manager
 
 namespace extensions {
 class Extension;
@@ -59,7 +70,12 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
       int plugin_process_id) override;
   void GetAdditionalAllowedSchemesForFileSystem(
       std::vector<std::string>* additional_schemes) override;
-  content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
+  std::unique_ptr<content::DevToolsManagerDelegate>
+  CreateDevToolsManagerDelegate() override;
+  void ExposeInterfacesToRenderer(
+      service_manager::BinderRegistry* registry,
+      blink::AssociatedInterfaceRegistry* associated_registry,
+      content::RenderProcessHost* render_process_host) override;
   std::vector<std::unique_ptr<content::NavigationThrottle>>
   CreateThrottlesForNavigation(
       content::NavigationHandle* navigation_handle) override;
@@ -67,8 +83,7 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
       content::NavigationHandle* navigation_handle) override;
   void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
-      base::UkmSourceId ukm_source_id,
-      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
+      ukm::SourceIdObj ukm_source_id,
       NonNetworkURLLoaderFactoryMap* factories) override;
   void RegisterNonNetworkWorkerMainResourceURLLoaderFactories(
       content::BrowserContext* browser_context,
@@ -79,7 +94,6 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
   void RegisterNonNetworkSubresourceURLLoaderFactories(
       int render_process_id,
       int render_frame_id,
-      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
       NonNetworkURLLoaderFactoryMap* factories) override;
   bool WillCreateURLLoaderFactory(
       content::BrowserContext* browser_context,
@@ -88,7 +102,7 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
       URLLoaderFactoryType type,
       const url::Origin& request_initiator,
       base::Optional<int64_t> navigation_id,
-      base::UkmSourceId ukm_source_id,
+      ukm::SourceIdObj ukm_source_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
@@ -99,6 +113,7 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
       const GURL& url,
       content::WebContents::OnceGetter web_contents_getter,
       int child_id,
+      int frame_tree_node_id,
       content::NavigationUIData* navigation_data,
       bool is_main_frame,
       ui::PageTransition page_transition,

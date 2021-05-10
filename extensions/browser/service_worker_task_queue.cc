@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/utf_string_conversions.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -17,12 +18,15 @@
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_error.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_util.h"
+#include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/service_worker_task_queue_factory.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 
 using content::BrowserContext;
@@ -85,59 +89,6 @@ ServiceWorkerTaskQueue::TestObserver::~TestObserver() {}
 // static
 ServiceWorkerTaskQueue* ServiceWorkerTaskQueue::Get(BrowserContext* context) {
   return ServiceWorkerTaskQueueFactory::GetForBrowserContext(context);
-}
-
-// static
-void ServiceWorkerTaskQueue::DidStartWorkerForScopeOnCoreThread(
-    const SequencedContextId& context_id,
-    base::Time start_time,
-    base::WeakPtr<ServiceWorkerTaskQueue> task_queue,
-    int64_t version_id,
-    int process_id,
-    int thread_id) {
-  DCHECK_CURRENTLY_ON(content::ServiceWorkerContext::GetCoreThreadId());
-  if (content::ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
-    if (task_queue) {
-      task_queue->DidStartWorkerForScope(context_id, start_time, version_id,
-                                         process_id, thread_id);
-    }
-  } else {
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(&ServiceWorkerTaskQueue::DidStartWorkerForScope,
-                       task_queue, context_id, start_time, version_id,
-                       process_id, thread_id));
-  }
-}
-
-// static
-void ServiceWorkerTaskQueue::DidStartWorkerFailOnCoreThread(
-    const SequencedContextId& context_id,
-    base::WeakPtr<ServiceWorkerTaskQueue> task_queue) {
-  DCHECK_CURRENTLY_ON(content::ServiceWorkerContext::GetCoreThreadId());
-  if (content::ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
-    if (task_queue)
-      task_queue->DidStartWorkerFail(context_id);
-  } else {
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(&ServiceWorkerTaskQueue::DidStartWorkerFail,
-                                  task_queue, context_id));
-  }
-}
-
-// static
-void ServiceWorkerTaskQueue::StartServiceWorkerOnCoreThreadToRunTasks(
-    base::WeakPtr<ServiceWorkerTaskQueue> task_queue_weak,
-    const SequencedContextId& context_id,
-    content::ServiceWorkerContext* service_worker_context) {
-  DCHECK_CURRENTLY_ON(content::ServiceWorkerContext::GetCoreThreadId());
-  service_worker_context->StartWorkerForScope(
-      context_id.first.service_worker_scope(),
-      base::BindOnce(
-          &ServiceWorkerTaskQueue::DidStartWorkerForScopeOnCoreThread,
-          context_id, base::Time::Now(), task_queue_weak),
-      base::BindOnce(&ServiceWorkerTaskQueue::DidStartWorkerFailOnCoreThread,
-                     context_id, task_queue_weak));
 }
 
 // The current worker related state of an activated extension.
@@ -223,7 +174,8 @@ void ServiceWorkerTaskQueue::DidStartWorkerForScope(
 }
 
 void ServiceWorkerTaskQueue::DidStartWorkerFail(
-    const SequencedContextId& context_id) {
+    const SequencedContextId& context_id,
+    blink::ServiceWorkerStatusCode status_code) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!IsCurrentSequence(context_id.first.extension_id(), context_id.second)) {
     // This can happen is when the registration got unregistered right before we
@@ -239,7 +191,8 @@ void ServiceWorkerTaskQueue::DidStartWorkerFail(
   DCHECK(worker_state);
   if (g_test_observer) {
     g_test_observer->DidStartWorkerFail(context_id.first.extension_id(),
-                                        worker_state->pending_tasks_.size());
+                                        worker_state->pending_tasks_.size(),
+                                        status_code);
   }
   worker_state->pending_tasks_.clear();
   // TODO(https://crbug/1062936): Needs more thought: extension would be in
@@ -402,6 +355,9 @@ void ServiceWorkerTaskQueue::ActivateExtension(const Extension* extension) {
   GURL script_url = extension->GetResourceURL(
       BackgroundInfo::GetBackgroundServiceWorkerScript(extension));
   blink::mojom::ServiceWorkerRegistrationOptions option;
+  if (BackgroundInfo::GetBackgroundServiceWorkerType(extension) ==
+      BackgroundServiceWorkerType::kModule)
+    option.type = blink::mojom::ScriptType::kModule;
   option.scope = extension->url();
   util::GetStoragePartitionForExtensionId(extension->id(), browser_context_)
       ->GetServiceWorkerContext()
@@ -460,22 +416,18 @@ void ServiceWorkerTaskQueue::RunTasksAfterStartWorker(
   content::ServiceWorkerContext* service_worker_context =
       partition->GetServiceWorkerContext();
 
-  if (content::ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
-    StartServiceWorkerOnCoreThreadToRunTasks(
-        weak_factory_.GetWeakPtr(), context_id, service_worker_context);
-  } else {
-    content::ServiceWorkerContext::RunTask(
-        content::GetIOThreadTaskRunner({}), FROM_HERE, service_worker_context,
-        base::BindOnce(
-            &ServiceWorkerTaskQueue::StartServiceWorkerOnCoreThreadToRunTasks,
-            weak_factory_.GetWeakPtr(), context_id, service_worker_context));
-  }
+  service_worker_context->StartWorkerForScope(
+      context_id.first.service_worker_scope(),
+      base::BindOnce(&ServiceWorkerTaskQueue::DidStartWorkerForScope,
+                     weak_factory_.GetWeakPtr(), context_id, base::Time::Now()),
+      base::BindOnce(&ServiceWorkerTaskQueue::DidStartWorkerFail,
+                     weak_factory_.GetWeakPtr(), context_id));
 }
 
 void ServiceWorkerTaskQueue::DidRegisterServiceWorker(
     const SequencedContextId& context_id,
     base::Time start_time,
-    bool success) {
+    blink::ServiceWorkerStatusCode status_code) {
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context_);
   const ExtensionId& extension_id = context_id.first.extension_id();
   DCHECK(registry);
@@ -489,12 +441,19 @@ void ServiceWorkerTaskQueue::DidRegisterServiceWorker(
 
   WorkerState* worker_state = GetWorkerState(context_id);
   DCHECK(worker_state);
+  const bool success = status_code == blink::ServiceWorkerStatusCode::kOk;
   UMA_HISTOGRAM_BOOLEAN("Extensions.ServiceWorkerBackground.RegistrationStatus",
                         success);
 
   if (!success) {
-    // TODO(lazyboy): Handle failure case thoroughly.
-    DCHECK(false) << "Failed to register Service Worker";
+    auto error = std::make_unique<ManifestError>(
+        extension_id, u"Service worker registration failed",
+        base::UTF8ToUTF16(manifest_keys::kBackground),
+        base::UTF8ToUTF16(
+            BackgroundInfo::GetBackgroundServiceWorkerScript(extension)));
+
+    ExtensionsBrowserClient::Get()->ReportError(browser_context_,
+                                                std::move(error));
     return;
   }
   UMA_HISTOGRAM_TIMES("Extensions.ServiceWorkerBackground.RegistrationTime",

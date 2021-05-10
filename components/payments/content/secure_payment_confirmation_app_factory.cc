@@ -5,14 +5,15 @@
 #include "components/payments/content/secure_payment_confirmation_app_factory.h"
 
 #include <stdint.h>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/check.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
-#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/payments/internal_authenticator.h"
@@ -71,13 +72,13 @@ void SecurePaymentConfirmationAppFactory::
     OnIsUserVerifyingPlatformAuthenticatorAvailable(
         base::WeakPtr<PaymentAppFactory::Delegate> delegate,
         mojom::SecurePaymentConfirmationRequestPtr request,
-        std::unique_ptr<autofill::InternalAuthenticator> authenticator,
         bool is_available) {
-  if (!delegate)
+  if (!delegate || !delegate->GetWebContents())
     return;
 
-  if (!is_available && !base::FeatureList::IsEnabled(
-                           features::kSecurePaymentConfirmationDebug)) {
+  if (!authenticator_ ||
+      (!is_available && !base::FeatureList::IsEnabled(
+                            features::kSecurePaymentConfirmationDebug))) {
     delegate->OnDoneCreatingPaymentApps();
     return;
   }
@@ -97,15 +98,20 @@ void SecurePaymentConfirmationAppFactory::
   WebDataServiceBase::Handle handle =
       web_data_service->GetSecurePaymentConfirmationInstruments(
           std::move(request->credential_ids), this);
-  requests_[handle] = std::make_unique<Request>(delegate, std::move(request),
-                                                std::move(authenticator));
+  requests_[handle] =
+      std::make_unique<Request>(delegate, web_data_service, std::move(request),
+                                std::move(authenticator_));
 }
 
 SecurePaymentConfirmationAppFactory::SecurePaymentConfirmationAppFactory()
     : PaymentAppFactory(PaymentApp::Type::INTERNAL) {}
 
-SecurePaymentConfirmationAppFactory::~SecurePaymentConfirmationAppFactory() =
-    default;
+SecurePaymentConfirmationAppFactory::~SecurePaymentConfirmationAppFactory() {
+  std::for_each(requests_.begin(), requests_.end(), [&](const auto& pair) {
+    if (pair.second->web_data_service)
+      pair.second->web_data_service->CancelRequest(pair.first);
+  });
+}
 
 void SecurePaymentConfirmationAppFactory::Create(
     base::WeakPtr<Delegate> delegate) {
@@ -128,16 +134,16 @@ void SecurePaymentConfirmationAppFactory::Create(
         return;
       }
 
-      std::unique_ptr<autofill::InternalAuthenticator> authenticator =
-          delegate->CreateInternalAuthenticator();
-      auto* authenticator_ptr = authenticator.get();
+      // Observe the web contents to ensure the authenticator outlives it.
+      Observe(delegate->GetWebContents());
 
-      authenticator_ptr->IsUserVerifyingPlatformAuthenticatorAvailable(
+      authenticator_ = delegate->CreateInternalAuthenticator();
+
+      authenticator_->IsUserVerifyingPlatformAuthenticatorAvailable(
           base::BindOnce(&SecurePaymentConfirmationAppFactory::
                              OnIsUserVerifyingPlatformAuthenticatorAvailable,
                          weak_ptr_factory_.GetWeakPtr(), delegate,
-                         method_data->secure_payment_confirmation.Clone(),
-                         std::move(authenticator)));
+                         method_data->secure_payment_confirmation.Clone()));
       return;
     }
   }
@@ -145,13 +151,24 @@ void SecurePaymentConfirmationAppFactory::Create(
   delegate->OnDoneCreatingPaymentApps();
 }
 
+void SecurePaymentConfirmationAppFactory::RenderFrameDeleted(
+    content::RenderFrameHost* render_frame_host) {
+  if (authenticator_ &&
+      authenticator_->GetRenderFrameHost() == render_frame_host) {
+    authenticator_.reset();
+  }
+}
+
 struct SecurePaymentConfirmationAppFactory::Request
     : public content::WebContentsObserver {
-  Request(base::WeakPtr<PaymentAppFactory::Delegate> delegate,
-          mojom::SecurePaymentConfirmationRequestPtr mojo_request,
-          std::unique_ptr<autofill::InternalAuthenticator> authenticator)
+  Request(
+      base::WeakPtr<PaymentAppFactory::Delegate> delegate,
+      scoped_refptr<payments::PaymentManifestWebDataService> web_data_service,
+      mojom::SecurePaymentConfirmationRequestPtr mojo_request,
+      std::unique_ptr<autofill::InternalAuthenticator> authenticator)
       : content::WebContentsObserver(delegate->GetWebContents()),
         delegate(delegate),
+        web_data_service(web_data_service),
         mojo_request(std::move(mojo_request)),
         authenticator(std::move(authenticator)) {}
 
@@ -160,7 +177,17 @@ struct SecurePaymentConfirmationAppFactory::Request
   Request(const Request& other) = delete;
   Request& operator=(const Request& other) = delete;
 
+  // WebContentsObserver:
+  void RenderFrameDeleted(
+      content::RenderFrameHost* render_frame_host) override {
+    if (authenticator &&
+        authenticator->GetRenderFrameHost() == render_frame_host) {
+      authenticator.reset();
+    }
+  }
+
   base::WeakPtr<PaymentAppFactory::Delegate> delegate;
+  scoped_refptr<payments::PaymentManifestWebDataService> web_data_service;
   mojom::SecurePaymentConfirmationRequestPtr mojo_request;
   std::unique_ptr<autofill::InternalAuthenticator> authenticator;
 };
@@ -201,7 +228,7 @@ void SecurePaymentConfirmationAppFactory::OnWebDataServiceRequestDone(
   auto* instrument_ptr = instrument.get();
   // Decode the icon in a sandboxed process off the main thread.
   data_decoder::DecodeImageIsolated(
-      instrument_ptr->icon, data_decoder::mojom::ImageCodec::DEFAULT,
+      instrument_ptr->icon, data_decoder::mojom::ImageCodec::kDefault,
       /*shrink_to_fit=*/false, data_decoder::kDefaultMaxSizeInBytes,
       /*desired_image_frame_size=*/gfx::Size(),
       base::BindOnce(&SecurePaymentConfirmationAppFactory::OnAppIconDecoded,
@@ -214,8 +241,10 @@ void SecurePaymentConfirmationAppFactory::OnAppIconDecoded(
     std::unique_ptr<Request> request,
     const SkBitmap& decoded_icon) {
   DCHECK(request);
-  if (!request->delegate || !request->web_contents() ||
-      !request->delegate->GetSpec() ||
+  if (!request->delegate || !request->web_contents())
+    return;
+
+  if (!request->delegate->GetSpec() || !request->authenticator ||
       request->authenticator->GetRenderFrameHost() !=
           request->web_contents()->GetMainFrame()) {
     request->delegate->OnDoneCreatingPaymentApps();
@@ -231,7 +260,7 @@ void SecurePaymentConfirmationAppFactory::OnAppIconDecoded(
           std::move(icon), instrument->label,
           std::move(instrument->credential_id),
           url::Origin::Create(request->delegate->GetTopOrigin()),
-          request->delegate->GetSpec()->details().total->amount,
+          request->delegate->GetSpec()->AsWeakPtr(),
           std::move(request->mojo_request), std::move(request->authenticator)));
 
   request->delegate->OnDoneCreatingPaymentApps();

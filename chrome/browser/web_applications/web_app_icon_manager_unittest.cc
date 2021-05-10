@@ -9,14 +9,16 @@
 #include <string>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_enumerator.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/strings/stringprintf.h"
+#include "base/test/bind.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/test/test_file_utils.h"
 #include "chrome/browser/web_applications/test/test_web_app_database_factory.h"
 #include "chrome/browser/web_applications/test/test_web_app_registry_controller.h"
@@ -26,7 +28,6 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/testing_profile.h"
 #include "extensions/common/constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -91,15 +92,21 @@ class WebAppIconManagerTest : public WebAppTest {
   }
 
   void WriteShortcutsMenuIcons(const AppId& app_id,
-                               const std::vector<int>& sizes_px,
-                               const std::vector<SkColor>& colors) {
-    DCHECK_EQ(sizes_px.size(), colors.size());
-    ShortcutsMenuIconsBitmaps shortcuts_menu_icons;
-    for (size_t i = 0; i < sizes_px.size(); i++) {
-      std::map<SquareSizePx, SkBitmap> shortcuts_menu_icon_map;
-      std::vector<SquareSizePx> icon_sizes;
-      shortcuts_menu_icon_map.emplace(sizes_px[i],
-                                      CreateSquareIcon(sizes_px[i], colors[i]));
+                               const std::vector<int>& sizes_any,
+                               const std::vector<SkColor>& colors_any,
+                               const std::vector<int>& sizes_maskable,
+                               const std::vector<SkColor>& colors_maskable) {
+    DCHECK_EQ(sizes_any.size(), sizes_maskable.size());
+    DCHECK_EQ(sizes_any.size(), colors_any.size());
+    DCHECK_EQ(sizes_maskable.size(), colors_maskable.size());
+    ShortcutsMenuIconBitmaps shortcuts_menu_icons;
+    for (size_t i = 0; i < sizes_any.size(); i++) {
+      IconBitmaps shortcuts_menu_icon_map;
+      shortcuts_menu_icon_map.any.emplace(
+          sizes_any[i], CreateSquareIcon(sizes_any[i], colors_any[i]));
+      shortcuts_menu_icon_map.maskable.emplace(
+          sizes_maskable[i],
+          CreateSquareIcon(sizes_maskable[i], colors_maskable[i]));
       shortcuts_menu_icons.push_back(std::move(shortcuts_menu_icon_map));
     }
     base::RunLoop run_loop;
@@ -112,12 +119,12 @@ class WebAppIconManagerTest : public WebAppTest {
     run_loop.Run();
   }
 
-  ShortcutsMenuIconsBitmaps ReadAllShortcutsMenuIcons(const AppId& app_id) {
-    ShortcutsMenuIconsBitmaps result;
+  ShortcutsMenuIconBitmaps ReadAllShortcutsMenuIcons(const AppId& app_id) {
+    ShortcutsMenuIconBitmaps result;
     base::RunLoop run_loop;
     icon_manager().ReadAllShortcutsMenuIcons(
         app_id, base::BindLambdaForTesting(
-                    [&](ShortcutsMenuIconsBitmaps shortcuts_menu_icons_map) {
+                    [&](ShortcutsMenuIconBitmaps shortcuts_menu_icons_map) {
                       result = std::move(shortcuts_menu_icons_map);
                       run_loop.Quit();
                     }));
@@ -125,13 +132,43 @@ class WebAppIconManagerTest : public WebAppTest {
     return result;
   }
 
-  std::vector<std::vector<SquareSizePx>>
-  CreateDownloadedShortcutsMenuIconsSizes(std::vector<SquareSizePx> sizes_px) {
-    std::vector<std::vector<SquareSizePx>>
-        downloaded_shortcuts_menu_icons_sizes;
+  std::vector<IconSizes> CreateDownloadedShortcutsMenuIconsSizes(
+      std::vector<SquareSizePx> sizes_px) {
+    std::vector<IconSizes> downloaded_shortcuts_menu_icons_sizes;
     for (const auto& size : sizes_px) {
-      std::vector<SquareSizePx> icon_sizes;
-      icon_sizes.push_back(size);
+      IconSizes icon_sizes;
+      {
+        std::vector<SquareSizePx> shortcuts_menu_icon_sizes_any;
+        shortcuts_menu_icon_sizes_any.push_back(size);
+        icon_sizes.SetSizesForPurpose(IconPurpose::ANY,
+                                      std::move(shortcuts_menu_icon_sizes_any));
+      }
+      downloaded_shortcuts_menu_icons_sizes.push_back(std::move(icon_sizes));
+    }
+    return downloaded_shortcuts_menu_icons_sizes;
+  }
+
+  std::vector<IconSizes> CreateDownloadedShortcutsMenuIconsSizes(
+      std::vector<SquareSizePx> sizes_any,
+      std::vector<SquareSizePx> sizes_maskable) {
+    DCHECK_EQ(sizes_any.size(), sizes_maskable.size());
+
+    std::vector<IconSizes> downloaded_shortcuts_menu_icons_sizes;
+    for (size_t index = 0; index < sizes_any.size(); ++index) {
+      IconSizes icon_sizes;
+      {
+        std::vector<SquareSizePx> shortcuts_menu_icon_sizes_any;
+        shortcuts_menu_icon_sizes_any.push_back(sizes_any[index]);
+        icon_sizes.SetSizesForPurpose(IconPurpose::ANY,
+                                      std::move(shortcuts_menu_icon_sizes_any));
+      }
+      {
+        std::vector<SquareSizePx> shortcuts_menu_icon_sizes_maskable;
+        shortcuts_menu_icon_sizes_maskable.push_back(sizes_maskable[index]);
+        icon_sizes.SetSizesForPurpose(
+            IconPurpose::MASKABLE,
+            std::move(shortcuts_menu_icon_sizes_maskable));
+      }
       downloaded_shortcuts_menu_icons_sizes.push_back(std::move(icon_sizes));
     }
     return downloaded_shortcuts_menu_icons_sizes;
@@ -569,11 +606,11 @@ TEST_F(WebAppIconManagerTest, ReadShortcutsMenuIconsFailed) {
   controller().RegisterApp(std::move(web_app));
 
   // Request shortcuts menu icons which don't exist on disk.
-  ShortcutsMenuIconsBitmaps shortcuts_menu_icons_map =
+  ShortcutsMenuIconBitmaps shortcuts_menu_icons_map =
       ReadAllShortcutsMenuIcons(app_id);
   EXPECT_EQ(sizes_px.size(), shortcuts_menu_icons_map.size());
   for (const auto& icon_map : shortcuts_menu_icons_map) {
-    EXPECT_EQ(0u, icon_map.size());
+    EXPECT_TRUE(icon_map.empty());
   }
 }
 
@@ -581,30 +618,50 @@ TEST_F(WebAppIconManagerTest, WriteAndReadAllShortcutsMenuIcons) {
   auto web_app = CreateWebApp();
   const AppId app_id = web_app->app_id();
 
-  const std::vector<int> sizes_px = {icon_size::k64, icon_size::k128,
-                                     icon_size::k256};
-  const std::vector<SkColor> colors = {SK_ColorRED, SK_ColorWHITE,
-                                       SK_ColorBLUE};
+  const std::vector<int> sizes_any = {icon_size::k64, icon_size::k128,
+                                      icon_size::k256};
+  const std::vector<SkColor> colors_any = {SK_ColorRED, SK_ColorWHITE,
+                                           SK_ColorBLUE};
+  const std::vector<int> sizes_maskable = {icon_size::k64, icon_size::k96,
+                                           icon_size::k128};
+  const std::vector<SkColor> colors_maskable = {SK_ColorCYAN, SK_ColorMAGENTA,
+                                                SK_ColorYELLOW};
 
-  WriteShortcutsMenuIcons(app_id, sizes_px, colors);
+  WriteShortcutsMenuIcons(app_id, sizes_any, colors_any, sizes_maskable,
+                          colors_maskable);
 
   web_app->SetDownloadedShortcutsMenuIconsSizes(
-      CreateDownloadedShortcutsMenuIconsSizes(sizes_px));
+      CreateDownloadedShortcutsMenuIconsSizes(sizes_any, sizes_maskable));
 
   controller().RegisterApp(std::move(web_app));
 
-  ShortcutsMenuIconsBitmaps shortcuts_menu_icons_map =
+  ShortcutsMenuIconBitmaps shortcuts_menu_icons_map =
       ReadAllShortcutsMenuIcons(app_id);
   EXPECT_EQ(3u, shortcuts_menu_icons_map.size());
-  EXPECT_EQ(sizes_px[0], shortcuts_menu_icons_map[0].begin()->first);
-  EXPECT_EQ(colors[0],
-            shortcuts_menu_icons_map[0].begin()->second.getColor(0, 0));
-  EXPECT_EQ(sizes_px[1], shortcuts_menu_icons_map[1].begin()->first);
-  EXPECT_EQ(colors[1],
-            shortcuts_menu_icons_map[1].begin()->second.getColor(0, 0));
-  EXPECT_EQ(sizes_px[2], shortcuts_menu_icons_map[2].begin()->first);
-  EXPECT_EQ(colors[2],
-            shortcuts_menu_icons_map[2].begin()->second.getColor(0, 0));
+  EXPECT_EQ(sizes_any[0], shortcuts_menu_icons_map[0].any.begin()->first);
+  EXPECT_EQ(colors_any[0],
+            shortcuts_menu_icons_map[0].any.begin()->second.getColor(0, 0));
+  EXPECT_EQ(sizes_maskable[0],
+            shortcuts_menu_icons_map[0].maskable.begin()->first);
+  EXPECT_EQ(
+      colors_maskable[0],
+      shortcuts_menu_icons_map[0].maskable.begin()->second.getColor(0, 0));
+  EXPECT_EQ(sizes_any[1], shortcuts_menu_icons_map[1].any.begin()->first);
+  EXPECT_EQ(colors_any[1],
+            shortcuts_menu_icons_map[1].any.begin()->second.getColor(0, 0));
+  EXPECT_EQ(sizes_maskable[1],
+            shortcuts_menu_icons_map[1].maskable.begin()->first);
+  EXPECT_EQ(
+      colors_maskable[1],
+      shortcuts_menu_icons_map[1].maskable.begin()->second.getColor(0, 0));
+  EXPECT_EQ(sizes_any[2], shortcuts_menu_icons_map[2].any.begin()->first);
+  EXPECT_EQ(colors_any[2],
+            shortcuts_menu_icons_map[2].any.begin()->second.getColor(0, 0));
+  EXPECT_EQ(sizes_maskable[2],
+            shortcuts_menu_icons_map[2].maskable.begin()->first);
+  EXPECT_EQ(
+      colors_maskable[2],
+      shortcuts_menu_icons_map[2].maskable.begin()->second.getColor(0, 0));
 }
 
 TEST_F(WebAppIconManagerTest, WriteShortcutsMenuIconsEmptyMap) {
@@ -616,7 +673,7 @@ TEST_F(WebAppIconManagerTest, WriteShortcutsMenuIconsEmptyMap) {
 
   controller().RegisterApp(std::move(web_app));
 
-  ShortcutsMenuIconsBitmaps shortcuts_menu_icons;
+  ShortcutsMenuIconBitmaps shortcuts_menu_icons;
   base::RunLoop run_loop;
   icon_manager().WriteShortcutsMenuIconsData(
       app_id, std::move(shortcuts_menu_icons),
@@ -627,7 +684,7 @@ TEST_F(WebAppIconManagerTest, WriteShortcutsMenuIconsEmptyMap) {
   run_loop.Run();
 
   // Make sure that nothing was written to disk.
-  ShortcutsMenuIconsBitmaps shortcuts_menu_icons_map =
+  ShortcutsMenuIconBitmaps shortcuts_menu_icons_map =
       ReadAllShortcutsMenuIcons(app_id);
   EXPECT_EQ(0u, shortcuts_menu_icons_map.size());
 }
@@ -1117,6 +1174,38 @@ TEST_F(WebAppIconManagerTest, CacheExistingAppFavicon) {
   EXPECT_FALSE(bitmap.empty());
   EXPECT_EQ(gfx::kFaviconSize, bitmap.width());
   EXPECT_EQ(gfx::kFaviconSize, bitmap.height());
+  EXPECT_EQ(SK_ColorGREEN, bitmap.getColor(0, 0));
+}
+
+TEST_F(WebAppIconManagerTest, CacheAppFaviconWithResize) {
+  auto web_app = CreateWebApp();
+  const AppId app_id = web_app->app_id();
+
+  // App does not declare an icon of gfx::kFaviconSize, forcing a resize.
+  const std::vector<int> sizes_px{8, icon_size::k48, icon_size::k64};
+  ASSERT_FALSE(base::Contains(sizes_px, gfx::kFaviconSize));
+  const std::vector<SkColor> colors{SK_ColorBLACK, SK_ColorGREEN, SK_ColorRED};
+  WriteIcons(app_id, {IconPurpose::ANY}, sizes_px, colors);
+
+  web_app->SetDownloadedIconSizes(IconPurpose::ANY, sizes_px);
+
+  controller().RegisterApp(std::move(web_app));
+
+  base::RunLoop run_loop;
+  icon_manager().SetFaviconReadCallbackForTesting(
+      base::BindLambdaForTesting([&](const AppId& cached_app_id) {
+        EXPECT_EQ(cached_app_id, app_id);
+        run_loop.Quit();
+      }));
+
+  icon_manager().Start();
+  run_loop.Run();
+
+  SkBitmap bitmap = icon_manager().GetFavicon(app_id);
+  EXPECT_FALSE(bitmap.empty());
+  EXPECT_EQ(gfx::kFaviconSize, bitmap.width());
+  EXPECT_EQ(gfx::kFaviconSize, bitmap.height());
+  // Correct size wasn't available so larger icon should be used.
   EXPECT_EQ(SK_ColorGREEN, bitmap.getColor(0, 0));
 }
 

@@ -4,6 +4,7 @@
 
 package org.chromium.android_webview.test;
 
+import static org.chromium.android_webview.test.AwActivityTestRule.SCALED_WAIT_TIMEOUT_MS;
 import static org.chromium.android_webview.test.AwActivityTestRule.WAIT_TIMEOUT_MS;
 
 import android.annotation.SuppressLint;
@@ -25,13 +26,13 @@ import org.chromium.android_webview.AwContentsClient;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.JSUtils;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHistory;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
-import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer.OnEvaluateJavaScriptResultHelper;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer.OnPageStartedHelper;
@@ -116,12 +117,14 @@ public class AwContentsClientShouldOverrideUrlLoadingTest {
 
     private String getHtmlForPageWithJsAssignLinkTo(String url) {
         return makeHtmlPageFrom("",
-                "<img onclick=\"location.href='" + url + "'\" class=\"big\" id=\"link\" />");
+                "<img onclick=\"location.href='" + url
+                        + "'\" class=\"big\" id=\"link\" /><p>Text</p>");
     }
 
     private String getHtmlForPageWithJsReplaceLinkTo(String url) {
         return makeHtmlPageFrom("",
-                "<img onclick=\"location.replace('" + url + "');\" class=\"big\" id=\"link\" />");
+                "<img onclick=\"location.replace('" + url
+                        + "');\" class=\"big\" id=\"link\" /><p>Text</p>");
     }
 
     private String getHtmlForPageWithMetaRefreshRedirectTo(String url) {
@@ -862,7 +865,7 @@ public class AwContentsClientShouldOverrideUrlLoadingTest {
         NavigationHistory navHistory = mAwContents.getNavigationHistory();
         Assert.assertEquals(2, navHistory.getEntryCount());
         Assert.assertEquals(1, navHistory.getCurrentEntryIndex());
-        Assert.assertEquals(linkUrl, navHistory.getEntryAtIndex(1).getUrl());
+        Assert.assertEquals(linkUrl, navHistory.getEntryAtIndex(1).getUrl().getSpec());
 
         pageFinishedCount = onPageFinishedHelper.getCallCount();
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> mAwContents.goBack());
@@ -873,7 +876,7 @@ public class AwContentsClientShouldOverrideUrlLoadingTest {
         navHistory = mAwContents.getNavigationHistory();
         Assert.assertEquals(2, navHistory.getEntryCount());
         Assert.assertEquals(0, navHistory.getCurrentEntryIndex());
-        Assert.assertEquals(firstUrl, navHistory.getEntryAtIndex(0).getUrl());
+        Assert.assertEquals(firstUrl, navHistory.getEntryAtIndex(0).getUrl().getSpec());
     }
 
     @Test
@@ -1124,7 +1127,7 @@ public class AwContentsClientShouldOverrideUrlLoadingTest {
 
         public void waitForLatch() {
             try {
-                Assert.assertTrue(mLatch.await(WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+                Assert.assertTrue(mLatch.await(SCALED_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
@@ -1146,7 +1149,7 @@ public class AwContentsClientShouldOverrideUrlLoadingTest {
         mActivityTestRule.loadUrlAsync(mAwContents, fromUrl);
         client.waitForLatch();
         // Wait for an arbitrary amount of time to ensure onReceivedError is never called.
-        Thread.sleep(WAIT_TIMEOUT_MS / 3);
+        Thread.sleep(SCALED_WAIT_TIMEOUT_MS / 3);
     }
 
     private void verifyShouldOverrideUrlLoadingInPopup(String popupPath) throws Throwable {

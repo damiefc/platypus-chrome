@@ -8,11 +8,10 @@
 #include <map>
 #include <memory>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/web_applications/components/app_shortcut_manager.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
-#include "chrome/common/web_application_info.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 class Profile;
@@ -20,6 +19,7 @@ class Profile;
 namespace web_app {
 
 class FileHandlerManager;
+class ProtocolHandlerManager;
 class WebApp;
 class WebAppIconManager;
 class WebAppRegistrar;
@@ -29,7 +29,10 @@ class WebAppShortcutManager : public AppShortcutManager {
  public:
   WebAppShortcutManager(Profile* profile,
                         WebAppIconManager* icon_manager,
-                        FileHandlerManager* file_handler_manager);
+                        FileHandlerManager* file_handler_manager,
+                        ProtocolHandlerManager* protocol_handler_manager);
+  WebAppShortcutManager(const WebAppShortcutManager&) = delete;
+  WebAppShortcutManager& operator=(const WebAppShortcutManager&) = delete;
   ~WebAppShortcutManager() override;
 
   // AppShortcutManager:
@@ -48,10 +51,9 @@ class WebAppShortcutManager : public AppShortcutManager {
 
   WebAppIconManager* icon_manager_;
   FileHandlerManager* file_handler_manager_;
+  ProtocolHandlerManager* protocol_handler_manager_;
 
   base::WeakPtrFactory<WebAppShortcutManager> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(WebAppShortcutManager);
 };
 
 }  // namespace web_app

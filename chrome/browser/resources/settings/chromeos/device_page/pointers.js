@@ -27,19 +27,38 @@ Polymer({
 
     hasTouchpad: Boolean,
 
-    /**
-     * Interim property for use until we have a separate subsection for pointing
-     * sticks. (See crbug.com/1114828)
-     * @private
-     */
-    showMouseSection_: {
+    swapPrimaryOptions: {
+      readOnly: true,
+      type: Array,
+      value() {
+        return [
+          {
+            value: false,
+            name: loadTimeData.getString('primaryMouseButtonLeft')
+          },
+          {
+            value: true,
+            name: loadTimeData.getString('primaryMouseButtonRight')
+          },
+        ];
+      },
+    },
+
+    showHeadings_: {
       type: Boolean,
-      computed: 'computeShowMouseSection_(hasMouse, hasPointingStick)',
+      computed: 'computeShowHeadings_(hasMouse, hasPointingStick, hasTouchpad)',
+    },
+
+    subsectionClass_: {
+      type: String,
+      computed: 'computeSubsectionClass_(hasMouse, hasPointingStick, ' +
+          'hasTouchpad)',
     },
 
     /**
      * TODO(michaelpg): settings-slider should optionally take a min and max so
      * we don't have to generate a simple range of natural numbers ourselves.
+     * These values match the TouchpadSensitivity enum in enums.xml.
      * @type {!Array<number>}
      * @private
      */
@@ -84,6 +103,9 @@ Polymer({
         chromeos.settings.mojom.Setting.kTouchpadAcceleration,
         chromeos.settings.mojom.Setting.kTouchpadScrollAcceleration,
         chromeos.settings.mojom.Setting.kTouchpadSpeed,
+        chromeos.settings.mojom.Setting.kPointingStickAcceleration,
+        chromeos.settings.mojom.Setting.kPointingStickSpeed,
+        chromeos.settings.mojom.Setting.kPointingStickSwapPrimaryButtons,
         chromeos.settings.mojom.Setting.kMouseSwapPrimaryButtons,
         chromeos.settings.mojom.Setting.kMouseReverseScrolling,
         chromeos.settings.mojom.Setting.kMouseAcceleration,
@@ -94,16 +116,34 @@ Polymer({
   },
 
   /**
+   * Headings should only be visible if more than one subsection is present.
    * @param {boolean} hasMouse
    * @param {boolean} hasPointingStick
+   * @param {boolean} hasTouchpad
+   * @return {boolean}
+   * @private
    */
-  computeShowMouseSection_(hasMouse, hasPointingStick) {
-    return hasMouse || hasPointingStick;
+  computeShowHeadings_(hasMouse, hasPointingStick, hasTouchpad) {
+    const sectionVisibilities = [hasMouse, hasPointingStick, hasTouchpad];
+    // Count the number of true values in sectionVisibilities.
+    const numVisibleSections = sectionVisibilities.filter(x => x).length;
+    return numVisibleSections > 1;
   },
 
-  // Used to correctly identify when the mouse button has been released.
-  // crbug.com/686949.
-  receivedMouseSwapButtonsDown_: false,
+  /**
+   * Mouse, pointing stick, and touchpad sections are only subsections if more
+   * than one is present.
+   * @param {boolean} hasMouse
+   * @param {boolean} hasPointingStick
+   * @param {boolean} hasTouchpad
+   * @return {string}
+   * @private
+   */
+  computeSubsectionClass_(hasMouse, hasPointingStick, hasTouchpad) {
+    const subsections =
+        this.computeShowHeadings_(hasMouse, hasPointingStick, hasTouchpad);
+    return subsections ? 'subsection' : '';
+  },
 
   /**
    * @param {!settings.Route} route
@@ -119,37 +159,6 @@ Polymer({
   },
 
   /**
-   * Mouse and touchpad sections are only subsections if they are both present.
-   * @param {boolean} showMouseSection
-   * @param {boolean} hasTouchpad
-   * @return {string}
-   * @private
-   */
-  getSubsectionClass_(showMouseSection, hasTouchpad) {
-    return showMouseSection && hasTouchpad ? 'subsection' : '';
-  },
-
-  /** @private */
-  onMouseSwapButtonsDown_() {
-    this.receivedMouseSwapButtonsDown_ = true;
-  },
-
-  /** @private */
-  onMouseSwapButtonsUp_() {
-    this.receivedMouseSwapButtonsDown_ = false;
-    /** @type {!SettingsToggleButtonElement} */ (this.$.mouseSwapButton)
-        .sendPrefChange();
-  },
-
-  /** @private */
-  onMouseSwapButtonsChange_() {
-    if (!this.receivedMouseSwapButtonsDown_) {
-      /** @type {!SettingsToggleButtonElement} */ (this.$.mouseSwapButton)
-          .sendPrefChange();
-    }
-  },
-
-  /**
    * @param {!Event} event
    * @private
    */
@@ -158,7 +167,7 @@ Polymer({
       return;
     }
 
-    if (event.path[0].tagName == 'A') {
+    if (event.path[0].tagName === 'A') {
       // Do not toggle reverse scrolling if the contained link is clicked.
       event.stopPropagation();
     }

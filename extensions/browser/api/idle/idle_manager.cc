@@ -7,15 +7,19 @@
 #include <utility>
 
 #include "base/stl_util.h"
+#include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/api/idle/idle_api_constants.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/common/api/idle.h"
 #include "extensions/common/extension.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/dbus/power/power_policy_controller.h"
-#endif
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/lacros/lacros_chrome_service_impl.h"
+#include "chromeos/lacros/system_idle_cache.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 namespace keys = extensions::idle_api_constants;
 namespace idle = extensions::api::idle;
@@ -129,7 +133,7 @@ IdleManager::~IdleManager() {
 }
 
 void IdleManager::Init() {
-  extension_registry_observer_.Add(ExtensionRegistry::Get(context_));
+  extension_registry_observation_.Observe(ExtensionRegistry::Get(context_));
   event_delegate_->RegisterObserver(this);
 }
 
@@ -179,10 +183,14 @@ void IdleManager::SetThreshold(const std::string& extension_id, int threshold) {
 
 base::TimeDelta IdleManager::GetAutoLockDelay() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   return chromeos::PowerPolicyController::Get()
       ->GetMaxPolicyAutoScreenLockDelay();
-#endif
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  return chromeos::LacrosChromeServiceImpl::Get()
+      ->system_idle_cache()
+      ->auto_lock_delay();
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   return base::TimeDelta();
 }
 

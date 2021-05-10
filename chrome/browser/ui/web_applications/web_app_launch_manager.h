@@ -5,8 +5,9 @@
 #ifndef CHROME_BROWSER_UI_WEB_APPLICATIONS_WEB_APP_LAUNCH_MANAGER_H_
 #define CHROME_BROWSER_UI_WEB_APPLICATIONS_WEB_APP_LAUNCH_MANAGER_H_
 
-#include "base/macros.h"
+#include "base/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 
 class Browser;
@@ -35,39 +36,52 @@ class WebAppProvider;
 // Web applications have type AppType::kWeb in the app registry.
 class WebAppLaunchManager {
  public:
+  using OpenApplicationCallback = base::RepeatingCallback<content::WebContents*(
+      apps::AppLaunchParams&& params)>;
+
   explicit WebAppLaunchManager(Profile* profile);
-  ~WebAppLaunchManager();
+  WebAppLaunchManager(const WebAppLaunchManager&) = delete;
+  WebAppLaunchManager& operator=(const WebAppLaunchManager&) = delete;
+  virtual ~WebAppLaunchManager();
 
   // apps::LaunchManager:
-  content::WebContents* OpenApplication(const apps::AppLaunchParams& params);
+  content::WebContents* OpenApplication(apps::AppLaunchParams&& params);
 
+  // |browser| may be nullptr if the navigation fails.
   void LaunchApplication(
       const std::string& app_id,
       const base::CommandLine& command_line,
       const base::FilePath& current_directory,
+      const base::Optional<GURL>& url_handler_launch_url,
+      const base::Optional<GURL>& protocol_handler_launch_url,
       base::OnceCallback<void(Browser* browser,
                               apps::mojom::LaunchContainer container)>
           callback);
 
+  static void SetOpenApplicationCallbackForTesting(
+      OpenApplicationCallback callback);
+
  private:
-  void LaunchWebApplication(
-      apps::AppLaunchParams params,
+  virtual void LaunchWebApplication(
+      apps::AppLaunchParams&& params,
       base::OnceCallback<void(Browser* browser,
                               apps::mojom::LaunchContainer container)>
           callback);
+
+  static OpenApplicationCallback& GetOpenApplicationCallback();
 
   Profile* const profile_;
   WebAppProvider* const provider_;
 
   base::WeakPtrFactory<WebAppLaunchManager> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(WebAppLaunchManager);
 };
 
 Browser* CreateWebApplicationWindow(Profile* profile,
                                     const std::string& app_id,
                                     WindowOpenDisposition disposition,
-                                    bool can_resize = true);
+                                    int32_t restore_id,
+                                    bool can_resize = true,
+                                    bool can_maximize = true);
 
 content::WebContents* NavigateWebApplicationWindow(
     Browser* browser,

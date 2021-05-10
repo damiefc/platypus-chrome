@@ -14,6 +14,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/metadata/view_factory.h"
 #include "ui/views/style/typography.h"
 
 namespace views {
@@ -34,7 +35,7 @@ class VIEWS_EXPORT Link : public Label {
   // accepted; see below.
   using ClickedCallback = base::RepeatingCallback<void(const ui::Event& event)>;
 
-  explicit Link(const base::string16& title = base::string16(),
+  explicit Link(const std::u16string& title = std::u16string(),
                 int text_context = style::CONTEXT_LABEL,
                 int text_style = style::STYLE_LINK);
   ~Link() override;
@@ -42,14 +43,14 @@ class VIEWS_EXPORT Link : public Label {
   // Allow providing callbacks that expect either zero or one args, since many
   // callers don't care about the argument and can avoid adapter functions this
   // way.
-  void set_callback(base::RepeatingClosure callback) {
+  void SetCallback(base::RepeatingClosure callback) {
     // Adapt this closure to a ClickedCallback by discarding the extra arg.
     callback_ =
         base::BindRepeating([](base::RepeatingClosure closure,
                                const ui::Event& event) { closure.Run(); },
                             std::move(callback));
   }
-  void set_callback(ClickedCallback callback) {
+  void SetCallback(ClickedCallback callback) {
     callback_ = std::move(callback);
   }
 
@@ -60,6 +61,8 @@ class VIEWS_EXPORT Link : public Label {
   // Label:
   gfx::NativeCursor GetCursor(const ui::MouseEvent& event) override;
   bool GetCanProcessEventsWithinSubtree() const override;
+  void OnMouseEntered(const ui::MouseEvent& event) override;
+  void OnMouseExited(const ui::MouseEvent& event) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
@@ -71,7 +74,7 @@ class VIEWS_EXPORT Link : public Label {
   void OnFocus() override;
   void OnBlur() override;
   void SetFontList(const gfx::FontList& font_list) override;
-  void SetText(const base::string16& text) override;
+  void SetText(const std::u16string& text) override;
   void OnThemeChanged() override;
   void SetEnabledColor(SkColor color) override;
   bool IsSelectionSupported() const override;
@@ -93,7 +96,7 @@ class VIEWS_EXPORT Link : public Label {
   // The color when the link is neither pressed nor disabled.
   base::Optional<SkColor> requested_enabled_color_;
 
-  PropertyChangedSubscription enabled_changed_subscription_;
+  base::CallbackListSubscription enabled_changed_subscription_;
 
   // Whether the link text should use underline style regardless of enabled or
   // focused state.
@@ -102,6 +105,11 @@ class VIEWS_EXPORT Link : public Label {
   DISALLOW_COPY_AND_ASSIGN(Link);
 };
 
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, Link, Label)
+END_VIEW_BUILDER
+
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, Link)
 
 #endif  // UI_VIEWS_CONTROLS_LINK_H_

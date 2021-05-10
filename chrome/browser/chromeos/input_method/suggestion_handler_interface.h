@@ -6,7 +6,6 @@
 #define CHROME_BROWSER_CHROMEOS_INPUT_METHOD_SUGGESTION_HANDLER_INTERFACE_H_
 
 #include <string>
-#include "base/strings/string16.h"
 
 namespace ui {
 namespace ime {
@@ -39,11 +38,6 @@ class SuggestionHandlerInterface {
   virtual void OnSuggestionsChanged(
       const std::vector<std::string>& suggestions) = 0;
 
-  virtual bool ShowMultipleSuggestions(
-      int context_id,
-      const std::vector<base::string16>& candidates,
-      std::string* error) = 0;
-
   // Highlights or unhighlights a given assistive button based on the given
   // parameters. No-op if context_id doesn't match or engine is not active.
   virtual bool SetButtonHighlighted(
@@ -56,7 +50,7 @@ class SuggestionHandlerInterface {
   virtual void ClickButton(const ui::ime::AssistiveWindowButton& button) = 0;
 
   virtual bool AcceptSuggestionCandidate(int context_id,
-                                         const base::string16& candidate,
+                                         const std::u16string& candidate,
                                          std::string* error) = 0;
 
   // Shows/Hides given assistive window. No-op if context_id doesn't match or

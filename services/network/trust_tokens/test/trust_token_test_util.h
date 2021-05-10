@@ -8,13 +8,11 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
 #include "base/component_export.h"
 #include "base/containers/flat_map.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_piece.h"
 #include "base/test/task_environment.h"
-#include "base/values.h"
 #include "net/log/net_log.h"
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_util.h"
@@ -248,9 +246,9 @@ const TrustTokenTestParameters kSigningTrustTokenTestParameters[]{
 //
 // Example:
 //   WrapKeyCommitmentForIssuers({{
-//      "https://issuer.com", R"( {"srrkey": "abcd"} )"
+//      "https://issuer.com", R"( {"batchsize": 5} )"
 //      }})
-//   =  R"( { "https://issuer.com": { "srrkey": "abcd" } } )"
+//   =  R"( { "https://issuer.com": { "batchsize": 5 } } )"
 std::string WrapKeyCommitmentsForIssuers(
     base::flat_map<url::Origin, base::StringPiece> issuers_and_commitments);
 

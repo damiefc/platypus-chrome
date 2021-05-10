@@ -7,7 +7,7 @@ import("//third_party/closure_compiler/compile_js.gni")
 js_type_check("closure_compile") {
   is_polymer3 = true
   closure_flags = default_closure_args + [
-                    "browser_resolver_prefix_replacements=\"chrome://read-later/=../../chrome/browser/resources/read_later/\"",
+                    "browser_resolver_prefix_replacements=\"chrome://read-later.top-chrome/=../../chrome/browser/resources/read_later/\"",
                     "js_module_root=../../chrome/test/data/webui/",
                     "js_module_root=./gen/chrome/test/data/webui/",
                   ]
@@ -22,6 +22,7 @@ js_library("read_later_app_test") {
     ":test_read_later_api_proxy",
     "..:chai_assert",
     "//chrome/browser/resources/read_later:app",
+    "//third_party/polymer/v3_0/components-chromium/iron-test-helpers:mock-interactions",
   ]
   externs_list = [ "$externs_path/mocha-2.5.js" ]
 }

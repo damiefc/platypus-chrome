@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -134,7 +134,7 @@ class GlRendererTest : public testing::Test {
 };
 
 void GlRendererTest::SetUp() {
-  renderer_.reset(new GlRenderer());
+  renderer_ = std::make_unique<GlRenderer>();
   renderer_->SetDelegate(delegate_.GetWeakPtr());
 }
 

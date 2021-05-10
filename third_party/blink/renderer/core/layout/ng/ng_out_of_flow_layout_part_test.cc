@@ -20,18 +20,17 @@ class NGOutOfFlowLayoutPartTest
  protected:
   NGOutOfFlowLayoutPartTest() : ScopedLayoutNGBlockFragmentationForTest(true) {}
 
-  scoped_refptr<const NGPhysicalBoxFragment> RunBlockLayoutAlgorithm(
-      Element* element) {
-    NGBlockNode container(ToLayoutBox(element->GetLayoutObject()));
+  const NGPhysicalBoxFragment* RunBlockLayoutAlgorithm(Element* element) {
+    NGBlockNode container(element->GetLayoutBox());
     NGConstraintSpace space = ConstructBlockLayoutTestConstraintSpace(
-        WritingMode::kHorizontalTb, TextDirection::kLtr,
+        {WritingMode::kHorizontalTb, TextDirection::kLtr},
         LogicalSize(LayoutUnit(1000), kIndefiniteSize));
     return NGBaseLayoutAlgorithmTest::RunBlockLayoutAlgorithm(container, space);
   }
 
   String DumpFragmentTree(Element* element) {
-    auto fragment = RunBlockLayoutAlgorithm(element);
-    return DumpFragmentTree(fragment.get());
+    auto* fragment = RunBlockLayoutAlgorithm(element);
+    return DumpFragmentTree(fragment);
   }
 
   String DumpFragmentTree(const blink::NGPhysicalBoxFragment* fragment) {
@@ -88,8 +87,7 @@ TEST_F(NGOutOfFlowLayoutPartTest, FixedInsideAbs) {
   // Test whether the oof fragments have been collected at NG->Legacy boundary.
   Element* rel = GetDocument().getElementById("rel");
   auto* block_flow = To<LayoutBlockFlow>(rel->GetLayoutObject());
-  scoped_refptr<const NGLayoutResult> result =
-      block_flow->GetCachedLayoutResult();
+  const NGLayoutResult* result = block_flow->GetCachedLayoutResult();
   EXPECT_TRUE(result);
   EXPECT_EQ(result->PhysicalFragment().OutOfFlowPositionedDescendants().size(),
             2u);
@@ -569,10 +567,8 @@ TEST_F(NGOutOfFlowLayoutPartTest, ChildBreakAfterAvoid) {
 
 // Tests that a positioned element with a negative top property moves the OOF
 // node to the previous fragmentainer and spans 3 columns.
-// TODO(bebeaudr): Figure out why this is crashing. https://crbug.com/1117625.
-TEST_F(
-    NGOutOfFlowLayoutPartTest,
-    DISABLED_PositionedFragmentationWithNegativeTopPropertyAndNewEmptyColumn) {
+TEST_F(NGOutOfFlowLayoutPartTest,
+       PositionedFragmentationWithNegativeTopPropertyAndNewEmptyColumn) {
   SetBodyInnerHTML(
       R"HTML(
       <style>
@@ -588,7 +584,7 @@ TEST_F(
       </style>
       <div id="container">
         <div id="multicol">
-          <div class="rel" style="height: 60px; width: 32px;"></div>
+          <div style="height: 60px; width: 32px;"></div>
           <div class="rel">
             <div class="abs"></div>
           </div>
@@ -605,17 +601,15 @@ TEST_F(
         offset:0,20 size:5x20
       offset:508,0 size:492x40
         offset:0,0 size:32x20
-        offset:0,20 size:30x0
         offset:0,0 size:5x40
+        offset:0,20 size:30x0
       offset:1016,0 size:492x40
         offset:0,0 size:5x20
 )DUMP";
   EXPECT_EQ(expectation, dump);
 }
 
-// TODO(bebeaudr): Enable when http://crbug.com/1115584 is fixed.
-TEST_F(NGOutOfFlowLayoutPartTest,
-       DISABLED_PositionedFragmentationWithBottomProperty) {
+TEST_F(NGOutOfFlowLayoutPartTest, PositionedFragmentationWithBottomProperty) {
   SetBodyInnerHTML(
       R"HTML(
       <style>
@@ -730,7 +724,7 @@ TEST_F(NGOutOfFlowLayoutPartTest, PositionedFragmentationAndColumnSpanners) {
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x40
     offset:0,0 size:1000x40
-      offset:0,0 size:492x1
+      offset:0,0 size:492x0
         offset:0,0 size:30x0
       offset:0,0 size:1000x0
       offset:0,0 size:492x30
@@ -779,7 +773,7 @@ TEST_F(NGOutOfFlowLayoutPartTest, PositionedFragmentationWithNestedSpanner) {
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x40
     offset:0,0 size:1000x40
-      offset:0,0 size:492x1
+      offset:0,0 size:492x0
         offset:0,0 size:30x0
       offset:0,0 size:1000x0
       offset:0,0 size:492x40
@@ -826,7 +820,7 @@ TEST_F(NGOutOfFlowLayoutPartTest, PositionedFragmentationWithNestedSpanners) {
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x40
     offset:0,0 size:1000x40
-      offset:0,0 size:492x1
+      offset:0,0 size:492x0
       offset:0,0 size:1000x0
       offset:0,0 size:492x10
         offset:0,0 size:30x10
@@ -846,11 +840,9 @@ TEST_F(NGOutOfFlowLayoutPartTest, PositionedFragmentationWithNestedSpanners) {
   EXPECT_EQ(expectation, dump);
 }
 
-// Tests that column spanners are used as the containing block for abspos
-// elements nested inside of a spanner.
-// TODO(almaher): Abspos elements nested in a spanner are never getting laid
-// out.
-TEST_F(NGOutOfFlowLayoutPartTest, DISABLED_AbsposInSpanner) {
+// Tests that abspos elements bubble up to their containing block when nested
+// inside of a spanner.
+TEST_F(NGOutOfFlowLayoutPartTest, AbsposInSpanner) {
   SetBodyInnerHTML(
       R"HTML(
       <style>
@@ -858,17 +850,22 @@ TEST_F(NGOutOfFlowLayoutPartTest, DISABLED_AbsposInSpanner) {
           column-count:2; column-fill:auto; column-gap:16px; height:40px;
         }
         .rel {
-          position: relative; width:30px;
+          position: relative;
         }
         .abs {
-          position:absolute; width:5px; height:50px;
+          position:absolute; width:5px; height:50px; top:5px;
         }
       </style>
       <div id="container">
-        <div id="multicol">
-          <div class="rel">
-            <div style="column-span:all;">
-              <div class="abs"></div>
+        <div class="rel" style="width:50px;">
+          <div id="multicol">
+            <div class="rel" style="width:30px;">
+              <div style="width:10px; height:30px;"></div>
+              <div>
+                <div style="column-span:all;">
+                  <div class="abs"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -878,13 +875,71 @@ TEST_F(NGOutOfFlowLayoutPartTest, DISABLED_AbsposInSpanner) {
 
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x40
-    offset:0,0 size:1000x40
-      offset:0,0 size:492x1
-        offset:0,0 size:30x0
-      offset:0,0 size:1000x0
-        offset:0,0 size:5x50
-      offset:0,0 size:492x40
-        offset:0,0 size:30x0
+    offset:0,0 size:50x40
+      offset:0,0 size:50x40
+        offset:0,0 size:17x15
+          offset:0,0 size:30x15
+            offset:0,0 size:10x15
+        offset:33,0 size:17x15
+          offset:0,0 size:30x15
+            offset:0,0 size:10x15
+            offset:0,15 size:30x0
+        offset:0,15 size:50x0
+        offset:0,15 size:17x25
+          offset:0,0 size:30x0
+            offset:0,0 size:30x0
+      offset:0,5 size:5x50
+)DUMP";
+  EXPECT_EQ(expectation, dump);
+}
+
+// Tests that abspos elements bubble up to their containing block when nested
+// inside of a spanner and get the correct static position.
+TEST_F(NGOutOfFlowLayoutPartTest, AbsposInSpannerStaticPos) {
+  SetBodyInnerHTML(
+      R"HTML(
+      <style>
+        #multicol {
+          column-count:2; column-fill:auto; column-gap:16px; height:40px;
+        }
+        .rel {
+          position: relative;
+        }
+        .abs {
+          position:absolute; width:5px; height:50px;
+        }
+      </style>
+      <div id="container">
+        <div class="rel" style="width:50px;">
+          <div id="multicol">
+            <div class="rel" style="width:30px;">
+              <div style="width:10px; height:30px;"></div>
+              <div style="column-span:all; margin-top:5px;">
+                <div style="width:20px; height:5px;"></div>
+                <div class="abs"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      )HTML");
+  String dump = DumpFragmentTree(GetElementById("container"));
+
+  String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
+  offset:unplaced size:1000x40
+    offset:0,0 size:50x40
+      offset:0,0 size:50x40
+        offset:0,0 size:17x15
+          offset:0,0 size:30x15
+            offset:0,0 size:10x15
+        offset:33,0 size:17x15
+          offset:0,0 size:30x15
+            offset:0,0 size:10x15
+        offset:0,20 size:50x5
+          offset:0,0 size:20x5
+        offset:0,25 size:17x15
+          offset:0,0 size:30x0
+      offset:0,25 size:5x50
 )DUMP";
   EXPECT_EQ(expectation, dump);
 }
@@ -1071,17 +1126,17 @@ TEST_F(NGOutOfFlowLayoutPartTest,
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x0
     offset:0,0 size:1000x0
-      offset:0,0 size:492x1
+      offset:0,0 size:492x0
         offset:0,0 size:30x0
         offset:0,0 size:5x1
       offset:0,0 size:1000x0
       offset:0,0 size:1000x0
       offset:0,0 size:1000x0
-      offset:0,0 size:492x1
+      offset:0,0 size:492x0
         offset:0,0 size:5x1
-      offset:508,0 size:492x1
+      offset:508,0 size:492x0
         offset:0,0 size:5x1
-      offset:1016,0 size:492x1
+      offset:1016,0 size:492x0
         offset:0,0 size:5x1
 )DUMP";
   EXPECT_EQ(expectation, dump);
@@ -1120,7 +1175,7 @@ TEST_F(NGOutOfFlowLayoutPartTest, AbsposFragWithSpannerAndNewEmptyColumns) {
   String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
   offset:unplaced size:1000x40
     offset:0,0 size:1000x40
-      offset:0,0 size:492x1
+      offset:0,0 size:492x0
         offset:0,0 size:30x0
       offset:0,0 size:1000x0
       offset:0,0 size:1000x0
@@ -1247,5 +1302,202 @@ TEST_F(NGOutOfFlowLayoutPartTest,
   EXPECT_EQ(expectation, dump);
 }
 
+// Fragmented OOF element inside a nested multi-column.
+TEST_F(NGOutOfFlowLayoutPartTest, SimpleAbsposNestedFragmentation) {
+  SetBodyInnerHTML(
+      R"HTML(
+      <style>
+        .multicol {
+          columns:2; column-fill:auto; column-gap:0px;
+        }
+        .rel {
+          position: relative; width:55px; height:80px;
+        }
+        .abs {
+          position:absolute; top:0px; width:5px; height:80px;
+        }
+      </style>
+      <div id="container">
+        <div class="multicol" id="outer" style="height:100px;">
+          <div style="height:40px; width:40px;"></div>
+          <div class="multicol" id="inner">
+            <div class="rel">
+              <div class="abs"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      )HTML");
+  String dump = DumpFragmentTree(GetElementById("container"));
+
+  String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
+  offset:unplaced size:1000x100
+    offset:0,0 size:1000x100
+      offset:0,0 size:500x100
+        offset:0,0 size:40x40
+        offset:0,40 size:500x60
+          offset:0,0 size:250x60
+            offset:0,0 size:55x60
+            offset:0,0 size:5x60
+          offset:250,0 size:250x60
+            offset:0,0 size:55x20
+            offset:0,0 size:5x20
+)DUMP";
+  EXPECT_EQ(expectation, dump);
+}
+
+// Fragmented OOF element inside a nested multi-column with new columns.
+TEST_F(NGOutOfFlowLayoutPartTest, AbsposNestedFragmentationNewColumns) {
+  SetBodyInnerHTML(
+      R"HTML(
+      <style>
+        .multicol {
+          columns:2; column-fill:auto; column-gap:0px;
+        }
+        #inner {
+          column-gap:16px; height:40px; padding:10px;
+        }
+        .rel {
+          position: relative; width:55px; height:20px;
+        }
+        .abs {
+          position:absolute; top:0px; width:5px; height:40px;
+        }
+      </style>
+      <div id="container">
+        <div class="multicol" id="outer" style="height:100px;">
+          <div style="height:40px; width:40px;"></div>
+          <div class="multicol" id="inner">
+            <div class="rel">
+              <div class="abs"></div>
+            </div>
+            <div style="column-span:all;"></div>
+            <div style="column-span:all;"></div>
+            <div style="column-span:all;"></div>
+          </div>
+        </div>
+      </div>
+      )HTML");
+  String dump = DumpFragmentTree(GetElementById("container"));
+
+  String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
+  offset:unplaced size:1000x100
+    offset:0,0 size:1000x100
+      offset:0,0 size:500x100
+        offset:0,0 size:40x40
+        offset:0,40 size:500x60
+          offset:10,10 size:232x10
+            offset:0,0 size:55x10
+            offset:0,0 size:5x10
+          offset:258,10 size:232x10
+            offset:0,0 size:55x10
+            offset:0,0 size:5x10
+            offset:248,0 size:5x10
+            offset:496,0 size:5x10
+          offset:10,20 size:480x0
+          offset:10,20 size:480x0
+          offset:10,20 size:480x0
+)DUMP";
+  EXPECT_EQ(expectation, dump);
+}
+
+// Fragmented OOF element inside a nested multi-column starting at a
+// fragmentainer index beyond the last existing fragmentainer.
+TEST_F(NGOutOfFlowLayoutPartTest, AbsposNestedFragmentationNewEmptyColumns) {
+  SetBodyInnerHTML(
+      R"HTML(
+      <style>
+        .multicol {
+          columns:2; column-fill:auto; column-gap:0px;
+        }
+        .rel {
+          position: relative; width:55px; height:80px;
+        }
+        .abs {
+          position:absolute; top:120px; width:5px; height:120px;
+        }
+      </style>
+      <div id="container">
+        <div class="multicol" id="outer" style="height:100px;">
+          <div style="height:40px; width:40px;"></div>
+          <div class="multicol" id="inner" style="column-gap:16px;">
+            <div class="rel">
+              <div class="abs"></div>
+            </div>
+            <div style="column-span:all;"></div>
+            <div style="column-span:all;"></div>
+            <div style="column-span:all;"></div>
+          </div>
+        </div>
+      </div>
+      )HTML");
+  String dump = DumpFragmentTree(GetElementById("container"));
+
+  String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
+  offset:unplaced size:1000x100
+    offset:0,0 size:1000x100
+      offset:0,0 size:500x100
+        offset:0,0 size:40x40
+        offset:0,40 size:500x40
+          offset:0,0 size:242x40
+            offset:0,0 size:55x40
+          offset:258,0 size:242x40
+            offset:0,0 size:55x40
+            offset:516,0 size:5x40
+            offset:774,0 size:5x40
+            offset:1032,0 size:5x40
+          offset:0,40 size:500x0
+          offset:0,40 size:500x0
+          offset:0,40 size:500x0
+)DUMP";
+  EXPECT_EQ(expectation, dump);
+}
+
+// Fragmented OOF with `height: auto` and positioned with the bottom property.
+TEST_F(NGOutOfFlowLayoutPartTest,
+       PositionedFragmentationWithBottomPropertyAndHeightAuto) {
+  SetBodyInnerHTML(
+      R"HTML(
+      <style>
+        #multicol {
+          column-count:2; column-fill:auto; column-gap:16px; height:40px;
+        }
+        .rel {
+          position:relative; height:60px; width:32px;
+        }
+        .abs {
+          position:absolute; bottom:0; width:5px; height:auto;
+        }
+      </style>
+      <div id="container">
+        <div id="multicol">
+          <div class="rel">
+            <div class="abs">
+              <div style="width: 2px; height: 10px"></div>
+              <div style="width: 3px; height: 20px"></div>
+              <div style="width: 4px; height: 10px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      )HTML");
+  String dump = DumpFragmentTree(GetElementById("container"));
+
+  String expectation = R"DUMP(.:: LayoutNG Physical Fragment Tree ::.
+  offset:unplaced size:1000x40
+    offset:0,0 size:1000x40
+      offset:0,0 size:492x40
+        offset:0,0 size:32x40
+        offset:0,20 size:5x20
+          offset:0,0 size:2x10
+          offset:0,10 size:3x10
+      offset:508,0 size:492x40
+        offset:0,0 size:32x20
+        offset:0,0 size:5x20
+          offset:0,0 size:3x10
+          offset:0,10 size:4x10
+)DUMP";
+  EXPECT_EQ(expectation, dump);
+}
 }  // namespace
 }  // namespace blink

@@ -59,9 +59,9 @@ using GetAllKeysCallback =
     base::OnceCallback<void(std::vector<std::string> public_key_spki_der_list,
                             Status status)>;
 
-using ImportCertificateCallback = base::Callback<void(Status status)>;
+using ImportCertificateCallback = base::OnceCallback<void(Status status)>;
 
-using RemoveCertificateCallback = base::Callback<void(Status status)>;
+using RemoveCertificateCallback = base::OnceCallback<void(Status status)>;
 
 using RemoveKeyCallback = base::OnceCallback<void(Status status)>;
 
@@ -156,11 +156,12 @@ class PlatformKeysService : public KeyedService {
                                   SignCallback callback) = 0;
 
   // Applies PKCS1 padding and afterwards signs the data with the private key
-  // matching |public_key_spki_der|. |data| is not digested. If the key is not
-  // found in that |token_id| (or in none of the available tokens if |token_id|
-  // is not specified), the operation aborts. The size of |data| (number of
-  // octets) must be smaller than k - 11, where k is the key size in octets.
-  // |callback| will be invoked with the signature or an error status.
+  // matching |public_key_spki_der|. |data| is not digested, PKCS1 DigestInfo is
+  // not prepended. If the key is not found in that |token_id| (or in none of
+  // the available tokens if |token_id| is not specified), the operation aborts.
+  // The size of |data| (number of octets) must be smaller than k - 11, where k
+  // is the key size in octets. |callback| will be invoked with the signature or
+  // an error status.
   virtual void SignRSAPKCS1Raw(base::Optional<TokenId> token_id,
                                const std::string& data,
                                const std::string& public_key_spki_der,
@@ -192,10 +193,11 @@ class PlatformKeysService : public KeyedService {
   virtual void GetCertificates(TokenId token_id,
                                const GetCertificatesCallback callback) = 0;
 
-  // Returns the list of all keys available from the given |token_id| as a list
-  // of der-encoded SubjectPublicKeyInfo strings. |callback| will be invoked on
-  // the UI thread with the list of available public keys, possibly with an
-  // error status.
+  // Returns the list of all public keys available from the given |token_id|
+  // that have corresponding private keys on the same token as a list of
+  // DER-encoded SubjectPublicKeyInfo strings. |callback| will be invoked on the
+  // UI thread with the list of available public keys, possibly with an error
+  // status.
   virtual void GetAllKeys(TokenId token_id, GetAllKeysCallback callback) = 0;
 
   // Imports |certificate| to the given token if the certified key is already
@@ -390,5 +392,15 @@ class PlatformKeysServiceImpl final : public PlatformKeysService {
 
 }  // namespace platform_keys
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove when
+// //chrome/browser/chromeos/platform_keys moved to ash
+namespace ash {
+namespace platform_keys {
+using ::chromeos::platform_keys::GetCertificatesCallback;
+using ::chromeos::platform_keys::PlatformKeysService;
+using ::chromeos::platform_keys::PlatformKeysServiceObserver;
+}  // namespace platform_keys
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_CHROMEOS_PLATFORM_KEYS_PLATFORM_KEYS_SERVICE_H_

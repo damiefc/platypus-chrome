@@ -14,8 +14,8 @@
 #include "third_party/blink/renderer/platform/peerconnection/rtc_video_encoder.h"
 #include "third_party/webrtc/api/video_codecs/sdp_video_format.h"
 #include "third_party/webrtc/api/video_codecs/video_encoder.h"
-#include "third_party/webrtc/common_video/h264/profile_level_id.h"
 #include "third_party/webrtc/media/base/codec.h"
+#include "third_party/webrtc/media/base/h264_profile_level_id.h"
 #include "third_party/webrtc/media/base/vp9_profile.h"
 
 namespace blink {
@@ -139,12 +139,6 @@ base::Optional<webrtc::SdpVideoFormat> VEAToWebRTCFormat(
   return base::nullopt;
 }  // namespace
 
-bool IsSameFormat(const webrtc::SdpVideoFormat& format1,
-                  const webrtc::SdpVideoFormat& format2) {
-  return cricket::IsSameCodec(format1.name, format2.parameters, format2.name,
-                              format2.parameters);
-}
-
 struct SupportedFormats {
   bool unknown = true;
   std::vector<media::VideoCodecProfile> profiles;
@@ -169,8 +163,6 @@ SupportedFormats GetSupportedFormatsInternal(
     }
   }
 
-  cricket::AddH264ConstrainedBaselineProfileToSupportedFormats(
-      &supported_formats.sdp_formats);
   return supported_formats;
 }
 
@@ -193,19 +185,31 @@ bool IsConstrainedH264(const webrtc::SdpVideoFormat& format) {
 
 RTCVideoEncoderFactory::RTCVideoEncoderFactory(
     media::GpuVideoAcceleratorFactories* gpu_factories)
-    : gpu_factories_(gpu_factories) {}
+    : gpu_factories_(gpu_factories), gpu_codec_support_waiter_(gpu_factories) {}
 
 RTCVideoEncoderFactory::~RTCVideoEncoderFactory() {}
+
+void RTCVideoEncoderFactory::CheckAndWaitEncoderSupportStatusIfNeeded() const {
+  if (!gpu_codec_support_waiter_.IsEncoderSupportKnown()) {
+    DLOG(WARNING) << "Encoder support is unknown. Timeout "
+                  << gpu_codec_support_waiter_.wait_timeout_ms()
+                         .value_or(base::TimeDelta())
+                         .InMilliseconds()
+                  << "ms. Encoders might not be available.";
+  }
+}
 
 std::unique_ptr<webrtc::VideoEncoder>
 RTCVideoEncoderFactory::CreateVideoEncoder(
     const webrtc::SdpVideoFormat& format) {
+  CheckAndWaitEncoderSupportStatusIfNeeded();
+
   std::unique_ptr<webrtc::VideoEncoder> encoder;
   bool is_constrained_h264 = IsConstrainedH264(format);
   auto supported_formats = GetSupportedFormatsInternal(gpu_factories_);
   if (!supported_formats.unknown) {
     for (size_t i = 0; i < supported_formats.sdp_formats.size(); ++i) {
-      if (IsSameFormat(format, supported_formats.sdp_formats[i])) {
+      if (format.IsSameCodec(supported_formats.sdp_formats[i])) {
         encoder = std::make_unique<RTCVideoEncoder>(
             supported_formats.profiles[i], is_constrained_h264, gpu_factories_);
         break;
@@ -218,11 +222,14 @@ RTCVideoEncoderFactory::CreateVideoEncoder(
                                                   gpu_factories_);
     }
   }
+
   return encoder;
 }
 
 std::vector<webrtc::SdpVideoFormat>
 RTCVideoEncoderFactory::GetSupportedFormats() const {
+  CheckAndWaitEncoderSupportStatusIfNeeded();
+
   return GetSupportedFormatsInternal(gpu_factories_).sdp_formats;
 }
 

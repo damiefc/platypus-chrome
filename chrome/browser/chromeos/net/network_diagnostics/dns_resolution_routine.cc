@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/optional.h"
 #include "base/values.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/session_manager/core/session_manager.h"
 #include "content/public/browser/storage_partition.h"
@@ -44,8 +44,7 @@ DnsResolutionRoutine::DnsResolutionRoutine() {
   profile_ = GetUserProfile();
   DCHECK(profile_);
   network_context_ =
-      content::BrowserContext::GetDefaultStoragePartition(profile_)
-          ->GetNetworkContext();
+      profile_->GetDefaultStoragePartition()->GetNetworkContext();
   DCHECK(network_context_);
   set_verdict(mojom::RoutineVerdict::kNotRun);
 }

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "components/page_load_metrics/browser/observers/back_forward_cache_page_load_metrics_observer.h"
+#include "base/metrics/histogram_functions.h"
 
 #include "components/page_load_metrics/browser/observers/core/uma_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
@@ -12,6 +13,12 @@ namespace internal {
 
 const char kHistogramFirstPaintAfterBackForwardCacheRestore[] =
     "PageLoad.PaintTiming.NavigationToFirstPaint.AfterBackForwardCacheRestore";
+const char kHistogramFirstRequestAnimationFrameAfterBackForwardCacheRestore[] =
+    "PageLoad.PaintTiming.NavigationToFirstPaint.BFCachePolyfillFirst";
+const char kHistogramSecondRequestAnimationFrameAfterBackForwardCacheRestore[] =
+    "PageLoad.PaintTiming.NavigationToFirstPaint.BFCachePolyfillSecond";
+const char kHistogramThirdRequestAnimationFrameAfterBackForwardCacheRestore[] =
+    "PageLoad.PaintTiming.NavigationToFirstPaint.BFCachePolyfillThird";
 const char kHistogramFirstInputDelayAfterBackForwardCacheRestore[] =
     "PageLoad.InteractiveTiming.FirstInputDelay.AfterBackForwardCacheRestore";
 extern const char
@@ -65,6 +72,16 @@ void BackForwardCachePageLoadMetricsObserver::OnRestoreFromBackForwardCache(
   in_back_forward_cache_ = false;
   back_forward_cache_navigation_ids_.push_back(
       navigation_handle->GetNavigationId());
+
+  // HistoryNavigation is a singular event, and we share the same instance as
+  // long as we use the same source ID.
+  ukm::builders::HistoryNavigation builder(
+      GetUkmSourceIdForBackForwardCacheRestore(
+          back_forward_cache_navigation_ids_.size() - 1));
+  bool amp_flag = GetDelegate().GetMainFrameMetadata().behavior_flags &
+                  blink::kLoadingBehaviorAmpDocumentLoaded;
+  builder.SetBackForwardCache_IsAmpPage(amp_flag);
+  builder.Record(ukm::UkmRecorder::Get());
 }
 
 void BackForwardCachePageLoadMetricsObserver::
@@ -80,6 +97,8 @@ void BackForwardCachePageLoadMetricsObserver::
         internal::kHistogramFirstPaintAfterBackForwardCacheRestore,
         first_paint);
 
+    // HistoryNavigation is a singular event, and we share the same instance as
+    // long as we use the same source ID.
     ukm::builders::HistoryNavigation builder(
         GetUkmSourceIdForBackForwardCacheRestore(index));
     builder.SetNavigationToFirstPaintAfterBackForwardCacheRestore(
@@ -98,6 +117,40 @@ void BackForwardCachePageLoadMetricsObserver::
 }
 
 void BackForwardCachePageLoadMetricsObserver::
+    OnRequestAnimationFramesAfterBackForwardCacheRestoreInPage(
+        const page_load_metrics::mojom::BackForwardCacheTiming& timing,
+        size_t index) {
+  auto request_animation_frames =
+      timing.request_animation_frames_after_back_forward_cache_restore;
+  DCHECK_EQ(request_animation_frames.size(), 3u);
+
+  PAGE_LOAD_HISTOGRAM(
+      internal::
+          kHistogramFirstRequestAnimationFrameAfterBackForwardCacheRestore,
+      request_animation_frames[0]);
+  PAGE_LOAD_HISTOGRAM(
+      internal::
+          kHistogramSecondRequestAnimationFrameAfterBackForwardCacheRestore,
+      request_animation_frames[1]);
+  PAGE_LOAD_HISTOGRAM(
+      internal::
+          kHistogramThirdRequestAnimationFrameAfterBackForwardCacheRestore,
+      request_animation_frames[2]);
+
+  // HistoryNavigation is a singular event, and we share the same instance as
+  // long as we use the same source ID.
+  ukm::builders::HistoryNavigation builder(
+      GetUkmSourceIdForBackForwardCacheRestore(index));
+  builder.SetFirstRequestAnimationFrameAfterBackForwardCacheRestore(
+      request_animation_frames[0].InMilliseconds());
+  builder.SetSecondRequestAnimationFrameAfterBackForwardCacheRestore(
+      request_animation_frames[1].InMilliseconds());
+  builder.SetThirdRequestAnimationFrameAfterBackForwardCacheRestore(
+      request_animation_frames[2].InMilliseconds());
+  builder.Record(ukm::UkmRecorder::Get());
+}
+
+void BackForwardCachePageLoadMetricsObserver::
     OnFirstInputAfterBackForwardCacheRestoreInPage(
         const page_load_metrics::mojom::BackForwardCacheTiming& timing,
         size_t index) {
@@ -112,6 +165,8 @@ void BackForwardCachePageLoadMetricsObserver::
         *first_input_delay, base::TimeDelta::FromMilliseconds(1),
         base::TimeDelta::FromSeconds(60), 50);
 
+    // HistoryNavigation is a singular event, and we share the same instance as
+    // long as we use the same source ID.
     ukm::builders::HistoryNavigation builder(
         GetUkmSourceIdForBackForwardCacheRestore(index));
     builder.SetFirstInputDelayAfterBackForwardCacheRestore(
@@ -178,10 +233,53 @@ void BackForwardCachePageLoadMetricsObserver::
       internal::kHistogramCumulativeShiftScoreAfterBackForwardCacheRestore,
       page_load_metrics::LayoutShiftUmaValue(layout_shift_score));
 
+  // HistoryNavigation is a singular event, and we share the same instance as
+  // long as we use the same source ID.
   ukm::builders::HistoryNavigation builder(
       GetLastUkmSourceIdForBackForwardCacheRestore());
   builder.SetCumulativeShiftScoreAfterBackForwardCacheRestore(
       page_load_metrics::LayoutShiftUkmValue(layout_shift_score));
+  page_load_metrics::NormalizedCLSData normalized_cls_data =
+      GetDelegate().GetNormalizedCLSData(
+          page_load_metrics::PageLoadMetricsObserverDelegate::BfcacheStrategy::
+              RESET);
+  if (!normalized_cls_data.data_tainted) {
+    builder
+        .SetAverageCumulativeShiftScoreAfterBackForwardCacheRestore_SessionWindow_Gap5000ms(
+            page_load_metrics::LayoutShiftUkmValue(
+                normalized_cls_data
+                    .session_windows_gap5000ms_maxMax_average_cls))
+        .SetMaxCumulativeShiftScoreAfterBackForwardCacheRestore_SessionWindow_Gap1000ms(
+            page_load_metrics::LayoutShiftUkmValue(
+                normalized_cls_data.session_windows_gap1000ms_maxMax_max_cls))
+        .SetMaxCumulativeShiftScoreAfterBackForwardCacheRestore_SessionWindow_Gap1000ms_Max5000ms(
+            page_load_metrics::LayoutShiftUkmValue(
+                normalized_cls_data
+                    .session_windows_gap1000ms_max5000ms_max_cls))
+        .SetMaxCumulativeShiftScoreAfterBackForwardCacheRestore_SlidingWindow_Duration1000ms(
+            page_load_metrics::LayoutShiftUkmValue(
+                normalized_cls_data.sliding_windows_duration1000ms_max_cls))
+        .SetMaxCumulativeShiftScoreAfterBackForwardCacheRestore_SlidingWindow_Duration300ms(
+            page_load_metrics::LayoutShiftUkmValue(
+                normalized_cls_data.sliding_windows_duration300ms_max_cls))
+        .SetMaxCumulativeShiftScoreAfterBackForwardCacheRestore_SessionWindowByInputs_Gap1000ms_Max5000ms(
+            page_load_metrics::LayoutShiftUkmValue(
+                normalized_cls_data
+                    .session_windows_by_inputs_gap1000ms_max5000ms_max_cls));
+    base::UmaHistogramCounts100(
+        "PageLoad.LayoutInstability.MaxCumulativeShiftScore."
+        "AfterBackForwardCacheRestore.SessionWindow.Gap1000ms.Max5000ms",
+        page_load_metrics::LayoutShiftUmaValue(
+            normalized_cls_data.session_windows_gap1000ms_max5000ms_max_cls));
+    base::UmaHistogramCounts100(
+        "PageLoad.LayoutInstability.MaxCumulativeShiftScore."
+        "AfterBackForwardCacheRestore.SessionWindowByInputs.Gap1000ms."
+        "Max5000ms",
+        page_load_metrics::LayoutShiftUmaValue(
+            normalized_cls_data
+                .session_windows_by_inputs_gap1000ms_max5000ms_max_cls));
+  }
+
   builder.Record(ukm::UkmRecorder::Get());
 
   last_main_frame_layout_shift_score_ =

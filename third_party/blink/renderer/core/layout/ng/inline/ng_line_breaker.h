@@ -18,8 +18,10 @@
 namespace blink {
 
 class Hyphenation;
+class NGBlockBreakToken;
 class NGInlineBreakToken;
 class NGInlineItem;
+class NGLineInfo;
 
 // The line breaker needs to know which mode its in to properly handle floats.
 enum class NGLineBreakerMode { kContent, kMinContent, kMaxContent };
@@ -44,27 +46,21 @@ class CORE_EXPORT NGLineBreaker {
 
   const NGInlineItemsData& ItemsData() const { return items_data_; }
 
+  // True if the last line has `box-decoration-break: clone`, which affected the
+  // size.
+  bool HasClonedBoxDecorations() const { return has_cloned_box_decorations_; }
+
   // Compute the next line break point and produces NGInlineItemResults for
   // the line.
-  inline void NextLine(NGLineInfo* line_info) {
-    NextLine(kIndefiniteSize, line_info);
-  }
-
-  // During the min/max size calculation we need a special percentage
-  // resolution block-size to pass to children/pass to children.
-  // TODO(layout-dev): Split into two methods (NextLine/NextLineForMinMax) or,
-  // better yet, subclass or templetize the line-breaker for Min/Max computation
-  // if we can do that without incurring a performance penalty
-  void NextLine(LayoutUnit percentage_resolution_block_size_for_min_max,
-                NGLineInfo*);
+  void NextLine(NGLineInfo*);
 
   bool IsFinished() const { return item_index_ >= Items().size(); }
 
   // Create an NGInlineBreakToken for the last line returned by NextLine().
-  scoped_refptr<NGInlineBreakToken> CreateBreakToken(const NGLineInfo&) const;
+  const NGInlineBreakToken* CreateBreakToken(const NGLineInfo&) const;
 
-  void PropagateBreakToken(scoped_refptr<const NGBlockBreakToken>);
-  Vector<scoped_refptr<const NGBlockBreakToken>>& PropagatedBreakTokens() {
+  void PropagateBreakToken(const NGBlockBreakToken*);
+  HeapVector<Member<const NGBlockBreakToken>>& PropagatedBreakTokens() {
     return propagated_break_tokens_;
   }
 
@@ -73,7 +69,7 @@ class CORE_EXPORT NGLineBreaker {
   // this when computing both |kMinContent| and |kMaxContent|.
   using MaxSizeCache = Vector<LayoutUnit, 64>;
   void SetIntrinsicSizeOutputs(MaxSizeCache* max_size_cache,
-                               bool* depends_on_percentage_block_size_out);
+                               bool* depends_on_block_constraints_out);
 
   // Compute NGInlineItemResult for an open tag item.
   // Returns true if this item has edge and may have non-zero inline size.
@@ -97,7 +93,7 @@ class CORE_EXPORT NGLineBreaker {
 
  private:
   const String& Text() const { return text_content_; }
-  const Vector<NGInlineItem>& Items() const { return items_data_.items; }
+  const HeapVector<NGInlineItem>& Items() const { return items_data_.items; }
 
   String TextContentForLineBreak() const;
 
@@ -106,8 +102,7 @@ class CORE_EXPORT NGLineBreaker {
                               NGLineInfo*);
   NGInlineItemResult* AddItem(const NGInlineItem&, NGLineInfo*);
 
-  void BreakLine(LayoutUnit percentage_resolution_block_size_for_min_max,
-                 NGLineInfo*);
+  void BreakLine(NGLineInfo*);
   void PrepareNextLine(NGLineInfo*);
 
   void ComputeLineLocation(NGLineInfo*) const;
@@ -129,11 +124,10 @@ class CORE_EXPORT NGLineBreaker {
     kContinue,
   };
 
-  inline void HandleText(const NGInlineItem& item, NGLineInfo* line_info) {
-    DCHECK(item.TextShapeResult());
-    HandleText(item, *item.TextShapeResult(), line_info);
-  }
   void HandleText(const NGInlineItem& item, const ShapeResult&, NGLineInfo*);
+  // Split |item| by glyphs, and add them to |line_info|.
+  // This is for SVG <text>.
+  void SplitTextByGlyphs(const NGInlineItem& item, NGLineInfo* line_info);
   enum BreakResult { kSuccess, kOverflow };
   BreakResult BreakText(NGInlineItemResult*,
                         const NGInlineItem&,
@@ -157,10 +151,9 @@ class CORE_EXPORT NGLineBreaker {
                                        unsigned start,
                                        unsigned end);
 
-  void HandleTrailingSpacesIfNeeded(NGLineInfo*);
   void HandleTrailingSpaces(const NGInlineItem&, NGLineInfo*);
   void HandleTrailingSpaces(const NGInlineItem&,
-                            const ShapeResult&,
+                            const ShapeResult*,
                             NGLineInfo*);
   void RemoveTrailingCollapsibleSpace(NGLineInfo*);
   LayoutUnit TrailingCollapsibleSpaceWidth(NGLineInfo*);
@@ -170,7 +163,6 @@ class CORE_EXPORT NGLineBreaker {
   void HandleBidiControlItem(const NGInlineItem&, NGLineInfo*);
   void HandleAtomicInline(
       const NGInlineItem&,
-      LayoutUnit percentage_resolution_block_size_for_min_max,
       NGLineInfo*);
   bool ShouldForceCanBreakAfter(const NGInlineItemResult& item_result) const;
   void HandleFloat(const NGInlineItem&,
@@ -184,11 +176,7 @@ class CORE_EXPORT NGLineBreaker {
   void HandleOverflow(NGLineInfo*);
   void RewindOverflow(unsigned new_end, NGLineInfo*);
   void Rewind(unsigned new_end, NGLineInfo*);
-  void ResetRewindLoopDetector() {
-#if DCHECK_IS_ON()
-    last_rewind_from_item_index_ = last_rewind_to_item_index_ = 0;
-#endif
-  }
+  void ResetRewindLoopDetector() { last_rewind_.reset(); }
 
   const ComputedStyle& ComputeCurrentStyle(unsigned item_result_index,
                                            NGLineInfo*) const;
@@ -199,6 +187,7 @@ class CORE_EXPORT NGLineBreaker {
   void MoveToNextOf(const NGInlineItemResult&);
 
   void ComputeBaseDirection();
+  void RecalcClonedBoxDecorations();
 
   LayoutUnit AvailableWidth() const {
     DCHECK_EQ(available_width_, ComputeAvailableWidth());
@@ -214,6 +203,20 @@ class CORE_EXPORT NGLineBreaker {
   LayoutUnit ComputeAvailableWidth() const;
 
   void ClearNeedsLayout(const NGInlineItem& item);
+
+  // True if the current line is hyphenated.
+  bool HasHyphen() const { return hyphen_index_.has_value(); }
+  LayoutUnit AddHyphen(NGInlineItemResults* item_results,
+                       wtf_size_t index,
+                       NGInlineItemResult* item_result,
+                       const NGInlineItem& item);
+  LayoutUnit AddHyphen(NGInlineItemResults* item_results, wtf_size_t index);
+  LayoutUnit AddHyphen(NGInlineItemResults* item_results,
+                       NGInlineItemResult* item_result,
+                       const NGInlineItem& item);
+  LayoutUnit RemoveHyphen(NGInlineItemResults* item_results);
+  void RestoreLastHyphen(NGInlineItemResults* item_results);
+  void FinalizeHyphen(NGInlineItemResults* item_results);
 
   // Represents the current offset of the input.
   LineBreakState state_;
@@ -234,6 +237,9 @@ class CORE_EXPORT NGLineBreaker {
 
   NGLineBreakerMode mode_;
 
+  // True if node_ is an SVG <text>.
+  const bool is_svg_text_;
+
   // True if this line is the "first formatted line".
   // https://www.w3.org/TR/CSS22/selector.html#first-formatted-line
   bool is_first_formatted_line_ = false;
@@ -253,11 +259,6 @@ class CORE_EXPORT NGLineBreaker {
 
   // True when breaking at soft hyphens (U+00AD) is allowed.
   bool enable_soft_hyphen_ = true;
-
-  // True in quirks mode or limited-quirks mode, which require line-height
-  // quirks.
-  // https://quirks.spec.whatwg.org/#the-line-height-calculation-quirk
-  bool in_line_height_quirks_mode_ = false;
 
   // True when the line we are breaking has a list marker.
   bool has_list_marker_ = false;
@@ -282,14 +283,17 @@ class CORE_EXPORT NGLineBreaker {
 
   const NGConstraintSpace& constraint_space_;
   NGExclusionSpace* exclusion_space_;
-  scoped_refptr<const NGInlineBreakToken> break_token_;
-  scoped_refptr<const ComputedStyle> current_style_;
+  const NGInlineBreakToken* break_token_;
+  const ComputedStyle* current_style_ = nullptr;
 
   LazyLineBreakIterator break_iterator_;
   HarfBuzzShaper shaper_;
   ShapeResultSpacing<String> spacing_;
   bool previous_line_had_forced_break_ = false;
   const Hyphenation* hyphenation_ = nullptr;
+
+  base::Optional<wtf_size_t> hyphen_index_;
+  bool has_any_hyphens_ = false;
 
   // Cache the result of |ComputeTrailingCollapsibleSpace| to avoid shaping
   // multiple times.
@@ -307,7 +311,7 @@ class CORE_EXPORT NGLineBreaker {
   // Cache for computing |MinMaxSize|. See |MaxSizeCache|.
   MaxSizeCache* max_size_cache_ = nullptr;
 
-  bool* depends_on_percentage_block_size_out_ = nullptr;
+  bool* depends_on_block_constraints_out_ = nullptr;
 
   // Keep the last item |HandleTextForFastMinContent()| has handled. This is
   // used to fallback the last word to |HandleText()|.
@@ -318,13 +322,20 @@ class CORE_EXPORT NGLineBreaker {
   // if 'unicode-bidi: plaintext'.
   TextDirection base_direction_;
 
-  Vector<scoped_refptr<const NGBlockBreakToken>> propagated_break_tokens_;
+  HeapVector<Member<const NGBlockBreakToken>> propagated_break_tokens_;
 
-#if DCHECK_IS_ON()
+  // Fields for `box-decoration-break: clone`.
+  unsigned cloned_box_decorations_count_ = 0;
+  LayoutUnit cloned_box_decorations_initial_size_;
+  LayoutUnit cloned_box_decorations_end_size_;
+  bool has_cloned_box_decorations_ = false;
+
   // These fields are to detect rewind-loop.
-  unsigned last_rewind_from_item_index_ = 0;
-  unsigned last_rewind_to_item_index_ = 0;
-#endif
+  struct RewindIndex {
+    wtf_size_t from_item_index;
+    wtf_size_t to_index;
+  };
+  base::Optional<RewindIndex> last_rewind_;
 };
 
 }  // namespace blink

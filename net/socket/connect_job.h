@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
@@ -21,6 +22,7 @@
 #include "net/base/privacy_mode.h"
 #include "net/base/request_priority.h"
 #include "net/dns/public/resolve_error_info.h"
+#include "net/dns/public/secure_dns_policy.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/connection_attempts.h"
 #include "net/socket/socket_tag.h"
@@ -189,7 +191,7 @@ class NET_EXPORT_PRIVATE ConnectJob {
       RequestPriority request_priority,
       SocketTag socket_tag,
       const NetworkIsolationKey& network_isolation_key,
-      bool disable_secure_dns,
+      SecureDnsPolicy secure_dns_policy,
       const CommonConnectJobParams* common_connect_job_params,
       ConnectJob::Delegate* delegate);
 
@@ -284,7 +286,8 @@ class NET_EXPORT_PRIVATE ConnectJob {
     return common_connect_job_params_;
   }
 
-  void SetSocket(std::unique_ptr<StreamSocket> socket);
+  void SetSocket(std::unique_ptr<StreamSocket> socket,
+                 base::Optional<std::vector<std::string>> dns_aliases);
   void NotifyDelegateOfCompletion(int rv);
   void NotifyDelegateOfProxyAuth(const HttpResponseInfo& response,
                                  HttpAuthController* auth_controller,

@@ -11,7 +11,6 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/sequenced_task_runner.h"
-#include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
@@ -58,7 +57,8 @@ void BrowserPolicyConnectorIOS::Init(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
   std::unique_ptr<policy::DeviceManagementService::Configuration> configuration(
       new policy::DeviceManagementServiceConfigurationIOS(
-          GetDeviceManagementUrl(), GetRealtimeReportingUrl()));
+          GetDeviceManagementUrl(), GetRealtimeReportingUrl(),
+          GetEncryptedReportingUrl()));
   std::unique_ptr<policy::DeviceManagementService> device_management_service(
       new policy::DeviceManagementService(std::move(configuration)));
   device_management_service->ScheduleInitialization(

@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -52,21 +52,20 @@ void IncognitoMenuView::BuildMenu() {
   int incognito_window_count =
       BrowserList::GetOffTheRecordBrowsersActiveForProfile(
           browser()->profile());
-  // TODO(crbug.com/1105763): Add asset colors to native theme and update icon
-  // temporary color placeholder to align with the design deck colors.
-  ui::ThemedVectorIcon header_art_icon(&kIncognitoMenuArtIcon,
-                                       ui::NativeTheme::kColorId_MenuIconColor);
+
+  ui::ThemedVectorIcon header_art_icon(
+      &kIncognitoMenuArtIcon, ui::NativeTheme::kColorId_AvatarHeaderArt);
   SetProfileIdentityInfo(
-      /*profile_name=*/base::string16(),
+      /*profile_name=*/std::u16string(),
       /*background_color=*/SK_ColorTRANSPARENT,
       /*edit_button=*/base::nullopt,
       ui::ImageModel::FromVectorIcon(
-          kIncognitoProfileIcon, ui::NativeTheme::kColorId_BubbleForeground),
+          kIncognitoProfileIcon, ui::NativeTheme::kColorId_AvatarIconIncognito),
       l10n_util::GetStringUTF16(IDS_INCOGNITO_PROFILE_MENU_TITLE),
       incognito_window_count > 1
           ? l10n_util::GetPluralStringFUTF16(IDS_INCOGNITO_WINDOW_COUNT_MESSAGE,
                                              incognito_window_count)
-          : base::string16(),
+          : std::u16string(),
       header_art_icon);
 
 #if defined(OS_WIN)
@@ -94,7 +93,7 @@ void IncognitoMenuView::BuildMenu() {
       new_menu_design ? vector_icons::kCloseIcon : kCloseAllIcon);
 }
 
-base::string16 IncognitoMenuView::GetAccessibleWindowTitle() const {
+std::u16string IncognitoMenuView::GetAccessibleWindowTitle() const {
   return l10n_util::GetPluralStringFUTF16(
       IDS_INCOGNITO_BUBBLE_ACCESSIBLE_TITLE,
       BrowserList::GetOffTheRecordBrowsersActiveForProfile(

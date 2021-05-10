@@ -18,7 +18,9 @@
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/test/view_metadata_test_utils.h"
 #include "ui/views/test/views_test_base.h"
+#include "ui/views/view.h"
 
 namespace message_center {
 
@@ -27,6 +29,9 @@ class NotificationHeaderViewTest : public views::ViewsTestBase {
   NotificationHeaderViewTest()
       : views::ViewsTestBase(
             base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+  NotificationHeaderViewTest(const NotificationHeaderViewTest&) = delete;
+  NotificationHeaderViewTest& operator=(const NotificationHeaderViewTest&) =
+      delete;
   ~NotificationHeaderViewTest() override = default;
 
   // ViewsTestBase:
@@ -41,7 +46,8 @@ class NotificationHeaderViewTest : public views::ViewsTestBase {
     views::View* container =
         widget_.SetContentsView(std::make_unique<views::View>());
 
-    notification_header_view_ = new NotificationHeaderView(nullptr);
+    notification_header_view_ =
+        new NotificationHeaderView(views::Button::PressedCallback());
     container->AddChildView(notification_header_view_);
 
     widget_.Show();
@@ -75,8 +81,6 @@ class NotificationHeaderViewTest : public views::ViewsTestBase {
 
  private:
   views::Widget widget_;
-
-  DISALLOW_COPY_AND_ASSIGN(NotificationHeaderViewTest);
 };
 
 TEST_F(NotificationHeaderViewTest, UpdatesTimestampOverTime) {
@@ -130,7 +134,7 @@ TEST_F(NotificationHeaderViewTest, AllowsHidingOfAppIcon) {
 
 TEST_F(NotificationHeaderViewTest, SetProgress) {
   int progress = 50;
-  base::string16 expected_summary_text = l10n_util::GetStringFUTF16Int(
+  std::u16string expected_summary_text = l10n_util::GetStringFUTF16Int(
       IDS_MESSAGE_CENTER_NOTIFICATION_PROGRESS_PERCENTAGE, progress);
 
   notification_header_view_->SetProgress(progress);
@@ -142,7 +146,7 @@ TEST_F(NotificationHeaderViewTest, SetProgress) {
 
 TEST_F(NotificationHeaderViewTest, SetOverflowIndicator) {
   int count = 10;
-  base::string16 expected_summary_text = l10n_util::GetStringFUTF16Int(
+  std::u16string expected_summary_text = l10n_util::GetStringFUTF16Int(
       IDS_MESSAGE_CENTER_LIST_NOTIFICATION_HEADER_OVERFLOW_INDICATOR, count);
 
   notification_header_view_->SetOverflowIndicator(count);
@@ -153,7 +157,7 @@ TEST_F(NotificationHeaderViewTest, SetOverflowIndicator) {
 }
 
 TEST_F(NotificationHeaderViewTest, SetSummaryText) {
-  base::string16 expected_summary_text = base::ASCIIToUTF16("summary");
+  std::u16string expected_summary_text = u"summary";
 
   notification_header_view_->SetSummaryText(expected_summary_text);
 
@@ -176,12 +180,12 @@ TEST_F(NotificationHeaderViewTest, TimestampHiddenWithProgress) {
   EXPECT_TRUE(timestamp_view->GetVisible());
 
   // Make sure we show the timestamp view with summary text.
-  notification_header_view_->SetSummaryText(base::ASCIIToUTF16("summary"));
+  notification_header_view_->SetSummaryText(u"summary");
   EXPECT_TRUE(timestamp_view->GetVisible());
 }
 
 TEST_F(NotificationHeaderViewTest, ColorContrastEnforcement) {
-  notification_header_view_->SetSummaryText(base::ASCIIToUTF16("summary"));
+  notification_header_view_->SetSummaryText(u"summary");
   auto* summary_text = notification_header_view_->summary_text_for_testing();
   notification_header_view_->ClearAppIcon();
   notification_header_view_->SetExpandButtonEnabled(true);
@@ -205,4 +209,14 @@ TEST_F(NotificationHeaderViewTest, ColorContrastEnforcement) {
   EXPECT_TRUE(MatchesAppIconColor(expected_color));
   EXPECT_TRUE(MatchesExpandIconColor(expected_color));
 }
+
+TEST_F(NotificationHeaderViewTest, DefaultFocusBehavior) {
+  EXPECT_EQ(views::View::FocusBehavior::ACCESSIBLE_ONLY,
+            notification_header_view_->GetFocusBehavior());
+}
+
+TEST_F(NotificationHeaderViewTest, MetadataTest) {
+  views::test::TestViewMetadata(notification_header_view_);
+}
+
 }  // namespace message_center

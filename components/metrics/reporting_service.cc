@@ -6,6 +6,8 @@
 
 #include "components/metrics/reporting_service.h"
 
+#include <memory>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -49,8 +51,8 @@ void ReportingService::Initialize() {
   base::RepeatingClosure send_next_log_callback = base::BindRepeating(
       &ReportingService::SendNextLog, self_ptr_factory_.GetWeakPtr());
   bool fast_startup_for_testing = client_->ShouldStartUpFastForTesting();
-  upload_scheduler_.reset(new MetricsUploadScheduler(send_next_log_callback,
-                                                     fast_startup_for_testing));
+  upload_scheduler_ = std::make_unique<MetricsUploadScheduler>(
+      send_next_log_callback, fast_startup_for_testing);
 }
 
 void ReportingService::Start() {
@@ -181,9 +183,11 @@ void ReportingService::OnLogUploadComplete(int response_code,
   if (log_store()->has_staged_log()) {
     // Provide boolean for error recovery (allow us to ignore response_code).
     bool discard_log = false;
-    const size_t log_size = log_store()->staged_log().length();
+    const std::string& staged_log = log_store()->staged_log();
+    const size_t log_size = staged_log.length();
     if (upload_succeeded) {
-      LogSuccess(log_size);
+      LogSuccessLogSize(log_size);
+      LogSuccessMetadata(staged_log);
     } else if (log_size > max_retransmit_size_) {
       LogLargeRejection(log_size);
       discard_log = true;

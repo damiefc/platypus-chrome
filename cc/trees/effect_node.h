@@ -6,11 +6,14 @@
 #define CC_TREES_EFFECT_NODE_H_
 
 #include "cc/cc_export.h"
+#include "cc/document_transition/document_transition_shared_element_id.h"
 #include "cc/paint/element_id.h"
 #include "cc/paint/filter_operations.h"
+#include "components/viz/common/surfaces/subtree_capture_id.h"
 #include "third_party/skia/include/core/SkBlendMode.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size_f.h"
+#include "ui/gfx/mask_filter_info.h"
 #include "ui/gfx/rrect_f.h"
 
 namespace base {
@@ -43,6 +46,8 @@ enum class RenderSurfaceReason : uint8_t {
   kCache,
   kCopyRequest,
   kMirrored,
+  kSubtreeIsBeingCaptured,
+  kDocumentTransitionParticipant,
   // This must be the last value because it's used in tracing code to know the
   // number of reasons.
   kTest,
@@ -80,13 +85,16 @@ struct CC_EXPORT EffectNode {
   // image.
   ElementId backdrop_mask_element_id;
 
-  // Bounds of rounded corner rrect in the space of the transform node
-  // associated with this effect node.
-  gfx::RRectF rounded_corner_bounds;
+  // The mask filter information applied to this effect node. The coordinates of
+  // in the mask info is in the space of the transform node associated with this
+  // effect node.
+  gfx::MaskFilterInfo mask_filter_info;
 
   SkBlendMode blend_mode;
 
   gfx::Vector2dF surface_contents_scale;
+
+  viz::SubtreeCaptureId subtree_capture_id;
 
   bool cache_render_surface : 1;
   bool has_copy_request : 1;
@@ -152,6 +160,10 @@ struct CC_EXPORT EffectNode {
   int target_id;
   int closest_ancestor_with_cached_render_surface_id;
   int closest_ancestor_with_copy_request_id;
+  int closest_ancestor_being_captured_id;
+
+  // Represents a shared element id for the document transition API.
+  DocumentTransitionSharedElementId document_transition_shared_element_id;
 
   bool HasRenderSurface() const {
     return render_surface_reason != RenderSurfaceReason::kNone;

@@ -5,7 +5,7 @@
 #include "chrome/browser/feedback/system_logs/log_sources/chrome_internal_log_source.h"
 
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -36,8 +36,10 @@ using ChromeInternalLogSourceTest = BrowserWithTestWindowTest;
 
 TEST_F(ChromeInternalLogSourceTest, VersionTagContainsActualVersion) {
   auto response = GetChromeInternalLogs();
-  EXPECT_PRED_FORMAT2(testing::IsSubstring, chrome::GetVersionString(),
-                      response->at("CHROME VERSION"));
+  EXPECT_PRED_FORMAT2(
+      testing::IsSubstring,
+      chrome::GetVersionString(chrome::WithExtendedStable(true)),
+      response->at("CHROME VERSION"));
 }
 
 #if defined(OS_MAC)

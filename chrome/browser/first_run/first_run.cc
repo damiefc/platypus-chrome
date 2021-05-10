@@ -151,7 +151,7 @@ void ImportFromFile(Profile* profile,
 
   const base::FilePath::StringType& import_bookmarks_path_str =
 #if defined(OS_WIN)
-      base::UTF8ToUTF16(import_bookmarks_path);
+      base::UTF8ToWide(import_bookmarks_path);
 #else
       import_bookmarks_path;
 #endif
@@ -262,17 +262,17 @@ void SetupInitialPrefsFromInstallPrefs(
 
   bool value = false;
   if (install_prefs.GetBool(
-          installer::master_preferences::kMakeChromeDefaultForUser,
-          &value) && value) {
+          installer::initial_preferences::kMakeChromeDefaultForUser, &value) &&
+      value) {
     out_prefs->make_chrome_default_for_user = true;
   }
 
   install_prefs.GetString(
-      installer::master_preferences::kDistroImportBookmarksFromFilePref,
+      installer::initial_preferences::kDistroImportBookmarksFromFilePref,
       &out_prefs->import_bookmarks_path);
 
   install_prefs.GetString(
-      installer::master_preferences::kDistroSuppressDefaultBrowserPromptPref,
+      installer::initial_preferences::kDistroSuppressDefaultBrowserPromptPref,
       &out_prefs->suppress_default_browser_prompt_for_version);
 }
 
@@ -412,12 +412,12 @@ ProcessInitialPreferencesResult ProcessInitialPreferences(
       return EULA_EXIT_NOW;
 
     std::unique_ptr<base::DictionaryValue> initial_dictionary =
-        initial_prefs->master_dictionary().CreateDeepCopy();
+        initial_prefs->initial_dictionary().CreateDeepCopy();
     // The distribution dictionary (and any prefs below it) are never registered
     // for use in Chrome's PrefService. Strip them from the initial dictionary
     // before mapping it to prefs.
     initial_dictionary->RemoveWithoutPathExpansion(
-        installer::master_preferences::kDistroDict, nullptr);
+        installer::initial_preferences::kDistroDict, nullptr);
 
     if (!chrome_prefs::InitializePrefsFromMasterPrefs(
             profiles::GetDefaultProfileDir(user_data_dir),

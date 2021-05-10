@@ -30,15 +30,16 @@
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/udev_linux/scoped_udev.h"
 #include "device/udev_linux/udev_watcher.h"
 #include "services/device/hid/hid_connection_linux.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "base/system/sys_info.h"
 #include "chromeos/dbus/permission_broker/permission_broker_client.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace device {
 
@@ -171,12 +172,28 @@ const char* GetPhysicalDeviceId(udev_device* hidraw_device) {
   return hid_sysfs_path;
 }
 
+// Convert from a Linux |bus_id| (defined in linux/input.h) to a
+// mojom::HidBusType.
+mojom::HidBusType BusTypeFromLinuxBusId(uint16_t bus_id) {
+  switch (bus_id) {
+    case BUS_USB:
+      return mojom::HidBusType::kHIDBusTypeUSB;
+    case BUS_BLUETOOTH:
+      return mojom::HidBusType::kHIDBusTypeBluetooth;
+    default:
+      break;
+  }
+  return mojom::HidBusType::kHIDBusTypeUnknown;
+}
+
 }  // namespace
 
 struct HidServiceLinux::ConnectParams {
   ConnectParams(scoped_refptr<HidDeviceInfo> device_info,
+                bool allow_protected_reports,
                 ConnectCallback callback)
       : device_info(std::move(device_info)),
+        allow_protected_reports(allow_protected_reports),
         callback(std::move(callback)),
         task_runner(base::SequencedTaskRunnerHandle::Get()),
         blocking_task_runner(
@@ -184,6 +201,7 @@ struct HidServiceLinux::ConnectParams {
   ~ConnectParams() {}
 
   scoped_refptr<HidDeviceInfo> device_info;
+  bool allow_protected_reports;
   ConnectCallback callback;
   scoped_refptr<base::SequencedTaskRunner> task_runner;
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner;
@@ -247,6 +265,12 @@ class HidServiceLinux::BlockingTaskRunnerHelper : public UdevWatcher::Observer {
       return;
 
     uint32_t int_property = 0;
+    if (!HexStringToUInt(base::StringPiece(parts[0]), &int_property) ||
+        int_property > std::numeric_limits<uint16_t>::max()) {
+      return;
+    }
+    auto bus_type = BusTypeFromLinuxBusId(int_property);
+
     if (!HexStringToUInt(base::StringPiece(parts[1]), &int_property) ||
         int_property > std::numeric_limits<uint16_t>::max()) {
       return;
@@ -287,9 +311,7 @@ class HidServiceLinux::BlockingTaskRunnerHelper : public UdevWatcher::Observer {
 
     auto device_info = base::MakeRefCounted<HidDeviceInfo>(
         platform_device_id, physical_device_id, vendor_id, product_id,
-        product_name, serial_number,
-        // TODO(reillyg): Detect Bluetooth. crbug.com/443335
-        mojom::HidBusType::kHIDBusTypeUSB,
+        product_name, serial_number, bus_type,
         std::vector<uint8_t>(report_descriptor_str.begin(),
                              report_descriptor_str.end()),
         device_node);
@@ -343,6 +365,7 @@ base::WeakPtr<HidService> HidServiceLinux::GetWeakPtr() {
 }
 
 void HidServiceLinux::Connect(const std::string& device_guid,
+                              bool allow_protected_reports,
                               ConnectCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -354,7 +377,7 @@ void HidServiceLinux::Connect(const std::string& device_guid,
   }
   scoped_refptr<HidDeviceInfo> device_info = map_entry->second;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Adapt |callback| to a repeating callback because the implementation below
   // requires separate callbacks for success and error. Only one will be called.
   auto copyable_callback = base::AdaptCallbackForRepeating(std::move(callback));
@@ -362,21 +385,22 @@ void HidServiceLinux::Connect(const std::string& device_guid,
       device_info->device_node(),
       base::BindOnce(
           &HidServiceLinux::OnPathOpenComplete,
-          std::make_unique<ConnectParams>(device_info, copyable_callback)),
+          std::make_unique<ConnectParams>(device_info, allow_protected_reports,
+                                          copyable_callback)),
       base::BindOnce(&HidServiceLinux::OnPathOpenError,
                      device_info->device_node(), copyable_callback));
 #else
-  auto params =
-      std::make_unique<ConnectParams>(device_info, std::move(callback));
+  auto params = std::make_unique<ConnectParams>(
+      device_info, allow_protected_reports, std::move(callback));
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner =
       params->blocking_task_runner;
   blocking_task_runner->PostTask(
       FROM_HERE, base::BindOnce(&HidServiceLinux::OpenOnBlockingThread,
                                 std::move(params)));
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 // static
 void HidServiceLinux::OnPathOpenComplete(std::unique_ptr<ConnectParams> params,
@@ -433,14 +457,14 @@ void HidServiceLinux::OpenOnBlockingThread(
                                                   std::move(params)));
 }
 
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // static
 void HidServiceLinux::FinishOpen(std::unique_ptr<ConnectParams> params) {
   DCHECK(params->fd.is_valid());
 
   if (!base::SetNonBlocking(params->fd.get())) {
-    HID_PLOG(ERROR) << "Failed to set the non-blocking flag on the device fd";
+    HID_PLOG(DEBUG) << "Failed to set the non-blocking flag on the device fd";
     std::move(params->callback).Run(nullptr);
     return;
   }
@@ -448,7 +472,8 @@ void HidServiceLinux::FinishOpen(std::unique_ptr<ConnectParams> params) {
   std::move(params->callback)
       .Run(base::MakeRefCounted<HidConnectionLinux>(
           std::move(params->device_info), std::move(params->fd),
-          std::move(params->blocking_task_runner)));
+          std::move(params->blocking_task_runner),
+          params->allow_protected_reports));
 }
 
 }  // namespace device

@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"  // For firstPositionInOrBeforeNode
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
+#include "third_party/blink/renderer/core/editing/ime/edit_context.h"
 #include "third_party/blink/renderer/core/editing/ime/input_method_controller.h"
 #include "third_party/blink/renderer/core/frame/frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -140,9 +141,11 @@ class FocusNavigation : public GarbageCollected<FocusNavigation> {
     // the slot node have assigned nodes.
 
     Element* owner = nullptr;
+    HTMLSlotElement* parent_slot =
+        DynamicTo<HTMLSlotElement>(node.parentNode());
     if (node.AssignedSlot())
       owner = node.AssignedSlot();
-    else if (IsA<HTMLSlotElement>(node.parentNode()))
+    else if (parent_slot && parent_slot->SupportsAssignment())
       owner = node.ParentOrShadowHostElement();
     else if (&node == node.ContainingTreeScope().RootNode())
       owner = TreeOwner(&node);
@@ -310,9 +313,6 @@ ScopedFocusNavigation ScopedFocusNavigation::OwnedByIFrame(
     const HTMLFrameOwnerElement& frame,
     FocusController::OwnerMap& owner_map) {
   DCHECK(frame.ContentFrame());
-  To<LocalFrame>(frame.ContentFrame())
-      ->GetDocument()
-      ->UpdateDistributionForLegacyDistributedNodes();
   return ScopedFocusNavigation(
       *To<LocalFrame>(frame.ContentFrame())->GetDocument(), nullptr, owner_map);
 }
@@ -427,7 +427,7 @@ inline bool IsShadowHostWithoutCustomFocusLogic(const Element& element) {
 
 inline bool IsNonKeyboardFocusableShadowHost(const Element& element) {
   return IsShadowHostWithoutCustomFocusLogic(element) &&
-         !(element.ShadowRootIfV1()
+         !(element.GetShadowRoot()
                ? (element.IsFocusable() || element.DelegatesFocus())
                : element.IsKeyboardFocusable());
 }
@@ -438,14 +438,18 @@ inline bool IsKeyboardFocusableShadowHost(const Element& element) {
 }
 
 inline bool IsNonFocusableFocusScopeOwner(Element& element) {
-  return IsNonKeyboardFocusableShadowHost(element) ||
-         IsA<HTMLSlotElement>(element);
+  if (IsNonKeyboardFocusableShadowHost(element))
+    return true;
+
+  HTMLSlotElement* slot = DynamicTo<HTMLSlotElement>(&element);
+  return slot && slot->SupportsAssignment();
 }
 
 inline int AdjustedTabIndex(Element& element) {
   if (IsNonKeyboardFocusableShadowHost(element))
     return 0;
-  if (element.DelegatesFocus() || IsA<HTMLSlotElement>(element)) {
+  HTMLSlotElement* slot = DynamicTo<HTMLSlotElement>(&element);
+  if (element.DelegatesFocus() || (slot && slot->SupportsAssignment())) {
     // We can't use Element::tabIndex(), which returns -1 for invalid or
     // missing values.
     return element.GetIntegralAttribute(html_names::kTabindexAttr, 0);
@@ -918,6 +922,7 @@ void FocusController::FocusHasChanged() {
   }
 
   NotifyFocusChangedObservers();
+  page_->GetPageScheduler()->OnFocusChanged(focused);
 }
 
 void FocusController::SetFocused(bool focused) {
@@ -1023,7 +1028,6 @@ bool FocusController::AdvanceFocusInDocumentOrder(
   TRACE_EVENT0("input", "FocusController::AdvanceFocusInDocumentOrder");
   DCHECK(frame);
   Document* document = frame->GetDocument();
-  document->UpdateDistributionForLegacyDistributedNodes();
   OwnerMap owner_map;
 
   Element* current = start;
@@ -1314,6 +1318,18 @@ bool FocusController::SetFocusedElement(Element* element,
         new_document->SetFocusedElement(element, params);
     if (!successfully_focused)
       return false;
+
+    // EditContext's activation is synced with the associated element being
+    // focused or not. If an element loses focus, its associated EditContext
+    // is deactivated. If getting focus, the EditContext is activated.
+    if (old_focused_element) {
+      if (auto* old_editContext = old_focused_element->editContext())
+        old_editContext->blur();
+    }
+    if (element) {
+      if (auto* editContext = element->editContext())
+        editContext->focus();
+    }
   }
 
   return true;

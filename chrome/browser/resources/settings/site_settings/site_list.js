@@ -15,7 +15,7 @@ import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
-import '../settings_shared_css.m.js';
+import '../settings_shared_css.js';
 import './add_site_dialog.js';
 import './edit_exception_dialog.js';
 import './site_list_entry.js';
@@ -58,6 +58,14 @@ Polymer({
     },
 
     categoryHeader: String,
+
+    /** @private */
+    enableContentSettingsRedesign_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('enableContentSettingsRedesign');
+      }
+    },
 
     /**
      * The site serving as the model for the currently open action menu.
@@ -152,16 +160,6 @@ Polymer({
     tooltipText_: String,
 
     searchFilter: String,
-
-    /**
-     * Boolean which keeps a track if any of the list has discarded content
-     * setting patterns.
-     */
-    hasDiscardedExceptions: {
-      type: Boolean,
-      computed: 'computeHasDiscardedExceptions_(sites.*)',
-      notify: true,
-    }
   },
 
   // <if expr="chromeos">
@@ -324,12 +322,12 @@ Polymer({
       this.$.tooltip.hide();
       target.removeEventListener('mouseleave', hide);
       target.removeEventListener('blur', hide);
-      target.removeEventListener('tap', hide);
+      target.removeEventListener('click', hide);
       this.$.tooltip.removeEventListener('mouseenter', hide);
     };
     target.addEventListener('mouseleave', hide);
     target.addEventListener('blur', hide);
-    target.addEventListener('tap', hide);
+    target.addEventListener('click', hide);
     this.$.tooltip.addEventListener('mouseenter', hide);
     this.$.tooltip.show();
   },
@@ -530,12 +528,10 @@ Polymer({
   },
 
   /**
-   * Iterates through the sites list and returns true if one of those sites is
-   * a discarded content setting pattern.
-   * @return {boolean}
+   * @return {string}
    * @private
    */
-  computeHasDiscardedExceptions_() {
-    return this.sites.some(exception => exception.isDiscarded);
-  },
+  getCssClass_() {
+    return this.enableContentSettingsRedesign_ ? 'secondary' : '';
+  }
 });

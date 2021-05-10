@@ -6,13 +6,14 @@
 
 #include "base/strings/abseil_string_conversions.h"
 #include "net/base/url_util.h"
+#include "net/third_party/quiche/src/quic/platform/api/quic_flags.h"
 #include "url/gurl.h"
 #include "url/url_canon.h"
 
 namespace quic {
 
 // static
-bool QuicHostnameUtilsImpl::IsValidSNI(quiche::QuicheStringPiece sni) {
+bool QuicHostnameUtilsImpl::IsValidSNI(absl::string_view sni) {
   // TODO(rtenneti): Support RFC2396 hostname.
   // NOTE: Microsoft does NOT enforce this spec, so if we throw away hostnames
   // based on the above spec, we may be losing some hostnames that windows
@@ -23,12 +24,13 @@ bool QuicHostnameUtilsImpl::IsValidSNI(quiche::QuicheStringPiece sni) {
       net::CanonicalizeHost(base::StringViewToStringPiece(sni), &host_info));
   return !host_info.IsIPAddress() &&
          net::IsCanonicalizedHostCompliant(canonicalized_host) &&
-         sni.find_last_of('.') != std::string::npos;
+         (GetQuicReloadableFlag(quic_and_tls_allow_sni_without_dots) ||
+          sni.find_last_of('.') != std::string::npos);
 }
 
 // static
 std::string QuicHostnameUtilsImpl::NormalizeHostname(
-    quiche::QuicheStringPiece hostname) {
+    absl::string_view hostname) {
   url::CanonHostInfo host_info;
   std::string host(net::CanonicalizeHost(
       base::StringPiece(hostname.data(), hostname.size()), &host_info));

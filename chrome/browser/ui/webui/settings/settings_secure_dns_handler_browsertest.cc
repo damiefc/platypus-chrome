@@ -9,7 +9,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/dns_probe_test_util.h"
 #include "chrome/browser/net/secure_dns_config.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/country_codes/country_codes.h"
@@ -113,6 +112,8 @@ class SecureDnsHandlerTest : public InProcessBrowserTest {
   void SetUpInProcessBrowserTestFixture() override {
     // Initialize user policy.
     ON_CALL(provider_, IsInitializationComplete(_)).WillByDefault(Return(true));
+    ON_CALL(provider_, IsFirstPolicyLoadComplete(_))
+        .WillByDefault(Return(true));
     policy::BrowserPolicyConnector::SetPolicyProviderForTesting(&provider_);
   }
 
@@ -184,7 +185,7 @@ class SecureDnsHandlerTest : public InProcessBrowserTest {
 
   std::unique_ptr<TestSecureDnsHandler> handler_;
   content::TestWebUI web_ui_;
-  policy::MockConfigurationPolicyProvider provider_;
+  testing::NiceMock<policy::MockConfigurationPolicyProvider> provider_;
 
  private:
 #if defined(OS_WIN)

@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "build/chromeos_buildflags.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/test/fake_central.h"
 #include "device/bluetooth/test/fake_remote_gatt_service.h"
@@ -40,6 +41,10 @@ class FakePeripheral : public device::BluetoothDevice {
   // Updates the peripheral's UUIDs that are returned by
   // BluetoothDevice::GetUUIDs().
   void SetServiceUUIDs(UUIDSet service_uuids);
+
+  // Updates the peripheral's Manufacturer Data that are returned by
+  // BluetoothDevice::GetManufacturerData().
+  void SetManufacturerData(ManufacturerDataMap manufacturer_data);
 
   // If |code| is kHCISuccess calls a pending success callback for
   // CreateGattConnection. Otherwise calls a pending error callback
@@ -80,12 +85,15 @@ class FakePeripheral : public device::BluetoothDevice {
   uint16_t GetDeviceID() const override;
   uint16_t GetAppearance() const override;
   base::Optional<std::string> GetName() const override;
-  base::string16 GetNameForDisplay() const override;
+  std::u16string GetNameForDisplay() const override;
   bool IsPaired() const override;
   bool IsConnected() const override;
   bool IsGattConnected() const override;
   bool IsConnectable() const override;
   bool IsConnecting() const override;
+#if defined(OS_CHROMEOS)
+  bool IsBlockedByPolicy() const override;
+#endif
   bool ExpectingPinCode() const override;
   bool ExpectingPasskey() const override;
   bool ExpectingConfirmation() const override;
@@ -117,7 +125,7 @@ class FakePeripheral : public device::BluetoothDevice {
       ConnectErrorCallback error_callback,
       base::Optional<device::BluetoothUUID> service_uuid) override;
   bool IsGattServicesDiscoveryComplete() const override;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   void ExecuteWrite(base::OnceClosure callback,
                     ExecuteWriteErrorCallback error_callback) override;
   void AbortWrite(base::OnceClosure callback,

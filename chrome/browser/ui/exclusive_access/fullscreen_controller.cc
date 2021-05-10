@@ -31,6 +31,8 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/extension.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
 
 #if !defined(OS_MAC)
@@ -129,10 +131,22 @@ void FullscreenController::EnterFullscreenModeForTab(
     return;
   }
 
-  if (web_contents !=
-          exclusive_access_manager()->context()->GetActiveWebContents() ||
-      IsWindowFullscreenForTabOrPending()) {
-      return;
+  auto* screen = display::Screen::GetScreen();
+  bool requesting_another_screen = false;
+  auto display = screen->GetDisplayNearestView(web_contents->GetNativeView());
+  requesting_another_screen =
+      display_id != display.id() && display_id != display::kInvalidDisplayId;
+  if ((web_contents !=
+           exclusive_access_manager()->context()->GetActiveWebContents() ||
+       IsWindowFullscreenForTabOrPending()) &&
+      !requesting_another_screen) {
+    // TODO(enne): this early out (and other early outs in this function)
+    // could cause requestFullscreen promises to hang.  If we are in this
+    // function, the renderer expects a visual property update to call
+    // blink::FullscreenController::DidEnterFullscreen to resolve promises.
+    // This needs to be refactored to send more explicit/nuanced feedback
+    // to the renderer, rather than just silently dropping these requests.
+    return;
   }
 
   SetTabWithExclusiveAccess(web_contents);
@@ -144,10 +158,10 @@ void FullscreenController::EnterFullscreenModeForTab(
   // UI style.
   exclusive_access_context->UpdateUIForTabFullscreen();
 
-  if (!exclusive_access_context->IsFullscreen()) {
+  if (!exclusive_access_context->IsFullscreen() || requesting_another_screen) {
     // Normal -> Tab Fullscreen.
     state_prior_to_tab_fullscreen_ = STATE_NORMAL;
-    ToggleFullscreenModeInternal(TAB, requesting_frame, display_id);
+    EnterFullscreenModeInternal(TAB, requesting_frame, display_id);
     return;
   }
 
@@ -239,10 +253,6 @@ void FullscreenController::OnTabDetachedFromView(WebContents* old_contents) {
     return;
   }
 
-  content::RenderWidgetHostView* const current_fs_view =
-      old_contents->GetFullscreenRenderWidgetHostView();
-  if (current_fs_view)
-    current_fs_view->SetSize(old_contents->GetPreferredSize());
   old_contents->Resize(gfx::Rect(old_contents->GetPreferredSize()));
 }
 
@@ -342,22 +352,6 @@ void FullscreenController::ToggleFullscreenModeInternal(
       exclusive_access_manager()->context();
   bool enter_fullscreen = !exclusive_access_context->IsFullscreen();
 
-  // In kiosk mode, we always want to be fullscreen. When the browser first
-  // starts we're not yet fullscreen, so let the initial toggle go through.
-  if (chrome::IsRunningInAppMode() && exclusive_access_context->IsFullscreen())
-    return;
-
-#if !defined(OS_MAC)
-  // Do not enter fullscreen mode if disallowed by pref. This prevents the user
-  // from manually entering fullscreen mode and also disables kiosk mode on
-  // desktop platforms.
-  if (enter_fullscreen &&
-      !exclusive_access_context->GetProfile()->GetPrefs()->GetBoolean(
-          prefs::kFullscreenAllowed)) {
-    return;
-  }
-#endif
-
   if (enter_fullscreen)
     EnterFullscreenModeInternal(option, requesting_frame, display_id);
   else
@@ -368,6 +362,19 @@ void FullscreenController::EnterFullscreenModeInternal(
     FullscreenInternalOption option,
     content::RenderFrameHost* requesting_frame,
     int64_t display_id) {
+#if !defined(OS_MAC)
+  // Do not enter fullscreen mode if disallowed by pref. This prevents the user
+  // from manually entering fullscreen mode and also disables kiosk mode on
+  // desktop platforms.
+  if (!exclusive_access_manager()
+           ->context()
+           ->GetProfile()
+           ->GetPrefs()
+           ->GetBoolean(prefs::kFullscreenAllowed)) {
+    return;
+  }
+#endif
+
   toggled_into_fullscreen_ = true;
   GURL url;
   if (option == TAB) {
@@ -411,6 +418,10 @@ void FullscreenController::EnterFullscreenModeInternal(
 }
 
 void FullscreenController::ExitFullscreenModeInternal() {
+  // In kiosk mode, we always want to be fullscreen.
+  if (chrome::IsRunningInAppMode())
+    return;
+
   RecordExitingUMA();
   toggled_into_fullscreen_ = false;
 #if defined(OS_MAC)
@@ -424,18 +435,6 @@ void FullscreenController::ExitFullscreenModeInternal() {
 
   exclusive_access_manager()->UpdateExclusiveAccessExitBubbleContent(
       ExclusiveAccessBubbleHideCallback());
-}
-
-bool FullscreenController::IsPrivilegedFullscreenForTab() const {
-  const bool embedded_widget_present =
-      exclusive_access_tab() &&
-      exclusive_access_tab()->GetFullscreenRenderWidgetHostView();
-  return embedded_widget_present || is_privileged_fullscreen_for_testing_;
-}
-
-void FullscreenController::SetPrivilegedFullscreenForTesting(
-    bool is_privileged) {
-  is_privileged_fullscreen_for_testing_ = is_privileged;
 }
 
 bool FullscreenController::MaybeToggleFullscreenWithinTab(

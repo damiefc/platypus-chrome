@@ -11,9 +11,9 @@
 #include "chrome/browser/lookalikes/lookalike_url_blocking_page.h"
 #include "chrome/browser/lookalikes/lookalike_url_navigation_throttle.h"
 #include "chrome/browser/lookalikes/lookalike_url_service.h"
-#include "chrome/browser/reputation/safety_tips_config.h"
 #include "chrome/common/chrome_features.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
+#include "components/reputation/core/safety_tips_config.h"
 #include "components/security_state/core/features.h"
 #include "components/url_formatter/spoof_checks/top_domains/top_domain_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
@@ -23,12 +23,12 @@ namespace {
 const base::FeatureParam<bool> kEnableLookalikeTopSites{
     &security_state::features::kSafetyTipUI, "topsites", true};
 const base::FeatureParam<bool> kEnableLookalikeEditDistance{
-    &security_state::features::kSafetyTipUI, "editdistance", true};
+    &security_state::features::kSafetyTipUI, "editdistance", false};
 const base::FeatureParam<bool> kEnableLookalikeEditDistanceSiteEngagement{
     &security_state::features::kSafetyTipUI, "editdistance_siteengagement",
     true};
 const base::FeatureParam<bool> kEnableLookalikeTargetEmbedding{
-    &security_state::features::kSafetyTipUI, "targetembedding", true};
+    &security_state::features::kSafetyTipUI, "targetembedding", false};
 
 // Binary search through |words| to find |needle|.
 bool SortedWordListContains(const std::string& needle,
@@ -59,10 +59,10 @@ bool ShouldTriggerSafetyTipFromLookalike(
     return false;
   }
 
-  auto* config = GetSafetyTipsRemoteConfigProto();
+  auto* config = reputation::GetSafetyTipsRemoteConfigProto();
   const LookalikeTargetAllowlistChecker in_target_allowlist =
-      base::BindRepeating(&IsTargetHostAllowlistedBySafetyTipsComponent,
-                          config);
+      base::BindRepeating(
+          &reputation::IsTargetHostAllowlistedBySafetyTipsComponent, config);
   if (!GetMatchingDomain(navigated_domain, engaged_sites, in_target_allowlist,
                          &matched_domain, &match_type)) {
     return false;
@@ -73,20 +73,40 @@ bool ShouldTriggerSafetyTipFromLookalike(
     return false;
   }
 
-  *safe_url = GURL(std::string(url::kHttpScheme) +
-                   url::kStandardSchemeSeparator + matched_domain);
+  // Use https: scheme for top domain matches. Otherwise, use the lookalike
+  // URL's scheme.
+  // TODO(crbug.com/1190309): If the match is against an engaged site, this
+  // should use the scheme of the engaged site instead.
+  const std::string scheme =
+      (match_type == LookalikeUrlMatchType::kEditDistance ||
+       match_type == LookalikeUrlMatchType::kSkeletonMatchTop500 ||
+       match_type == LookalikeUrlMatchType::kSkeletonMatchTop5k)
+          ? url::kHttpsScheme
+          : url.scheme();
+  *safe_url = GURL(scheme + url::kStandardSchemeSeparator + matched_domain);
+  // Safety Tips can be enabled by several features, with slightly different
+  // behavior for different experiments. The
+  // |kSafetyTipUIForSimplifiedDomainDisplay| feature enables specific lookalike
+  // Safety Tips and doesn't have parameters like the main |kSafetyTipUI|
+  // feature does.
+  bool is_safety_tip_for_simplified_domains_enabled =
+      base::FeatureList::IsEnabled(
+          security_state::features::kSafetyTipUIForSimplifiedDomainDisplay);
   switch (match_type) {
     case LookalikeUrlMatchType::kEditDistance:
-      return kEnableLookalikeEditDistance.Get();
+      return is_safety_tip_for_simplified_domains_enabled ||
+             kEnableLookalikeEditDistance.Get();
     case LookalikeUrlMatchType::kEditDistanceSiteEngagement:
-      return kEnableLookalikeEditDistanceSiteEngagement.Get();
+      return is_safety_tip_for_simplified_domains_enabled ||
+             kEnableLookalikeEditDistanceSiteEngagement.Get();
     case LookalikeUrlMatchType::kTargetEmbedding:
       // Target Embedding should block URL Navigation.
       return false;
     case LookalikeUrlMatchType::kTargetEmbeddingForSafetyTips:
       return kEnableLookalikeTargetEmbedding.Get();
     case LookalikeUrlMatchType::kSkeletonMatchTop5k:
-      return kEnableLookalikeTopSites.Get();
+      return is_safety_tip_for_simplified_domains_enabled ||
+             kEnableLookalikeTopSites.Get();
     case LookalikeUrlMatchType::kFailedSpoofChecks:
       // For now, no safety tip is shown for domain names that fail spoof checks
       // and don't have a suggested URL.
@@ -131,6 +151,8 @@ bool HostnameContainsKeyword(const GURL& url,
     return false;
   }
 
+  // TODO(jdeblasio): This should use GetETLDPlusOne() from Lookalike Utils to
+  // benefit from de-facto-private registries.
   size_t registry_length = net::registry_controlled_domains::GetRegistryLength(
       url, net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
       net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES);

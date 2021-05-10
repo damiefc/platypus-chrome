@@ -5,7 +5,7 @@
 #include "content/web_test/renderer/test_websocket_handshake_throttle_provider.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -80,7 +80,7 @@ class TestWebSocketHandshakeThrottle
 
 }  // namespace
 
-std::unique_ptr<content::WebSocketHandshakeThrottleProvider>
+std::unique_ptr<blink::WebSocketHandshakeThrottleProvider>
 TestWebSocketHandshakeThrottleProvider::Clone(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   return std::make_unique<TestWebSocketHandshakeThrottleProvider>();

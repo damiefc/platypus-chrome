@@ -8,12 +8,8 @@
 #include "base/system/sys_info.h"
 #include "content/child/webthemeengine_impl_conversions.h"
 #include "skia/ext/platform_canvas.h"
-#include "third_party/blink/public/platform/web_rect.h"
-#include "third_party/blink/public/platform/web_size.h"
 #include "ui/native_theme/native_theme.h"
 
-using blink::ColorScheme;
-using blink::WebRect;
 using blink::WebThemeEngine;
 
 namespace content {
@@ -55,6 +51,7 @@ static void GetNativeThemeExtraParams(
       native_theme_extra_params->button.is_focused = false;
       native_theme_extra_params->button.background_color =
           extra_params->button.background_color;
+      native_theme_extra_params->button.zoom = extra_params->button.zoom;
       break;
     case WebThemeEngine::kPartTextField:
       native_theme_extra_params->text_field.is_text_area =
@@ -63,6 +60,10 @@ static void GetNativeThemeExtraParams(
           extra_params->text_field.is_listbox;
       native_theme_extra_params->text_field.background_color =
           extra_params->text_field.background_color;
+      native_theme_extra_params->text_field.has_border =
+          extra_params->text_field.has_border;
+      native_theme_extra_params->text_field.zoom =
+          extra_params->text_field.zoom;
       break;
     case WebThemeEngine::kPartMenuList:
       native_theme_extra_params->menu_list.has_border =
@@ -79,6 +80,7 @@ static void GetNativeThemeExtraParams(
           extra_params->menu_list.arrow_color;
       native_theme_extra_params->menu_list.background_color =
           extra_params->menu_list.background_color;
+      native_theme_extra_params->menu_list.zoom = extra_params->menu_list.zoom;
       break;
     case WebThemeEngine::kPartSliderTrack:
       native_theme_extra_params->slider.thumb_x = extra_params->slider.thumb_x;
@@ -109,6 +111,8 @@ static void GetNativeThemeExtraParams(
           extra_params->progress_bar.value_rect_width;
       native_theme_extra_params->progress_bar.value_rect_height =
           extra_params->progress_bar.value_rect_height;
+      native_theme_extra_params->progress_bar.zoom =
+          extra_params->progress_bar.zoom;
       break;
     default:
       break;  // Parts that have no extra params get here.
@@ -117,7 +121,7 @@ static void GetNativeThemeExtraParams(
 
 WebThemeEngineAndroid::~WebThemeEngineAndroid() = default;
 
-blink::WebSize WebThemeEngineAndroid::GetSize(WebThemeEngine::Part part) {
+gfx::Size WebThemeEngineAndroid::GetSize(WebThemeEngine::Part part) {
   switch (part) {
     case WebThemeEngine::kPartScrollbarHorizontalThumb:
     case WebThemeEngine::kPartScrollbarVerticalThumb: {
@@ -157,26 +161,27 @@ void WebThemeEngineAndroid::Paint(
     cc::PaintCanvas* canvas,
     WebThemeEngine::Part part,
     WebThemeEngine::State state,
-    const blink::WebRect& rect,
+    const gfx::Rect& rect,
     const WebThemeEngine::ExtraParams* extra_params,
-    blink::ColorScheme color_scheme) {
+    blink::mojom::ColorScheme color_scheme,
+    const base::Optional<SkColor>& accent_color) {
   ui::NativeTheme::ExtraParams native_theme_extra_params;
   GetNativeThemeExtraParams(
       part, state, extra_params, &native_theme_extra_params);
   ui::NativeTheme::GetInstanceForWeb()->Paint(
-      canvas, NativeThemePart(part), NativeThemeState(state), gfx::Rect(rect),
-      native_theme_extra_params, NativeColorScheme(color_scheme));
+      canvas, NativeThemePart(part), NativeThemeState(state), rect,
+      native_theme_extra_params, NativeColorScheme(color_scheme), accent_color);
 }
 
 blink::ForcedColors WebThemeEngineAndroid::GetForcedColors() const {
-  return ui::NativeTheme::GetInstanceForWeb()->UsesHighContrastColors()
+  return ui::NativeTheme::GetInstanceForWeb()->InForcedColorsMode()
              ? blink::ForcedColors::kActive
              : blink::ForcedColors::kNone;
 }
 
 void WebThemeEngineAndroid::SetForcedColors(
     const blink::ForcedColors forced_colors) {
-  ui::NativeTheme::GetInstanceForWeb()->set_high_contrast(
+  ui::NativeTheme::GetInstanceForWeb()->set_forced_colors(
       forced_colors == blink::ForcedColors::kActive);
 }
 }  // namespace content

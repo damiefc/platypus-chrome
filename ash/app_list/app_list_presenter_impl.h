@@ -9,12 +9,13 @@
 
 #include <memory>
 
-#include "ash/app_list/app_list_export.h"
 #include "ash/app_list/app_list_metrics.h"
 #include "ash/app_list/app_list_presenter_delegate.h"
 #include "ash/app_list/views/app_list_view.h"
+#include "ash/ash_export.h"
 #include "ash/public/cpp/pagination/pagination_model_observer.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -26,26 +27,37 @@
 #include "ui/views/widget/widget_observer.h"
 
 namespace ash {
+class AppListControllerImpl;
 class AppListView;
 enum class AppListViewState;
 
 // Manages app list UI. Creates AppListView and schedules showing/hiding
 // animation. While the UI is visible, it monitors things such as app list
 // activation state to auto dismiss the UI.
-class APP_LIST_EXPORT AppListPresenterImpl
+class ASH_EXPORT AppListPresenterImpl
     : public PaginationModelObserver,
       public aura::client::FocusChangeObserver,
       public ui::ImplicitAnimationObserver,
       public views::WidgetObserver {
  public:
+  static constexpr std::array<int, 7> kIdsOfContainersThatWontHideAppList = {
+      kShellWindowId_AppListContainer,
+      kShellWindowId_HomeScreenContainer,
+      kShellWindowId_MenuContainer,
+      kShellWindowId_PowerMenuContainer,
+      kShellWindowId_SettingBubbleContainer,
+      kShellWindowId_ShelfBubbleContainer,
+      kShellWindowId_ShelfContainer};
+
   // Callback which fills out the passed settings object. Used by
   // UpdateYPositionAndOpacityForHomeLauncher so different callers can do
   // similar animations with different settings.
   using UpdateHomeLauncherAnimationSettingsCallback =
       base::RepeatingCallback<void(ui::ScopedLayerAnimationSettings* settings)>;
 
-  explicit AppListPresenterImpl(
-      std::unique_ptr<AppListPresenterDelegate> delegate);
+  // |controller| must outlive |this|.
+  AppListPresenterImpl(AppListControllerImpl* controller,
+                       std::unique_ptr<AppListPresenterDelegate> delegate);
   ~AppListPresenterImpl() override;
 
   // Returns app list window or nullptr if it is not visible.
@@ -58,7 +70,9 @@ class APP_LIST_EXPORT AppListPresenterImpl
   // Show the app list window on the display with the given id. If
   // |event_time_stamp| is not 0, it means |Show()| was triggered by one of the
   // AppListShowSources: kSearchKey, kShelfButton, or kSwipeFromShelf.
-  void Show(int64_t display_id, base::TimeTicks event_time_stamp);
+  void Show(AppListViewState preferred_state,
+            int64_t display_id,
+            base::TimeTicks event_time_stamp);
 
   // Hide the open app list window. This may leave the view open but hidden.
   // If |event_time_stamp| is not 0, it means |Dismiss()| was triggered by
@@ -100,20 +114,8 @@ class APP_LIST_EXPORT AppListPresenterImpl
   void EndDragFromShelf(AppListViewState app_list_state);
 
   // Passes a MouseWheelEvent from the shelf to the AppListView.
-  void ProcessMouseWheelOffset(const gfx::Vector2d& scroll_offset_vector);
-
-  // Updates the y position and opacity of the full screen app list. The changes
-  // are slightly different than UpdateYPositionAndOpacity. If |callback| is non
-  // null the this will animate using the animation settings in |callback|.
-  // |transition| - The tablet mode animation type. Used to report animation
-  // metrics if the home launcher change is animated. Should be set only if
-  // |callback| is non-null. If not set, the animation smoothness metrics will
-  // not be reported.
-  void UpdateYPositionAndOpacityForHomeLauncher(
-      float y_position_in_screen,
-      float opacity,
-      base::Optional<TabletModeAnimationTransition> transition,
-      UpdateHomeLauncherAnimationSettingsCallback callback);
+  void ProcessMouseWheelOffset(const gfx::Point& location,
+                               const gfx::Vector2d& scroll_offset_vector);
 
   // Scales the home launcher view maintaining the view center point, and
   // updates its opacity. If |callback| is non-null, the update should be
@@ -134,9 +136,6 @@ class APP_LIST_EXPORT AppListPresenterImpl
 
   // Returns current visibility of the Assistant page.
   bool IsShowingEmbeddedAssistantUI() const;
-
-  // Show/hide the expand arrow view button.
-  void SetExpandArrowViewVisibility(bool show);
 
   // Called when tablet mode starts and ends.
   void OnTabletModeChanged(bool started);
@@ -175,6 +174,9 @@ class APP_LIST_EXPORT AppListPresenterImpl
   // to the screen.
   void RequestPresentationTime(int64_t display_id,
                                base::TimeTicks event_time_stamp);
+
+  // Owns |this|.
+  AppListControllerImpl* const controller_;
 
   // Responsible for laying out the app list UI.
   std::unique_ptr<AppListPresenterDelegate> delegate_;

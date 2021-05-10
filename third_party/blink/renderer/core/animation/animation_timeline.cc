@@ -40,7 +40,19 @@ bool CompareAnimations(const Member<Animation>& left,
       Animation::CompareAnimationsOrdering::kPointerOrder);
 }
 
-base::Optional<double> AnimationTimeline::currentTime() {
+void AnimationTimeline::currentTime(CSSNumberish& currentTime) {
+  base::Optional<base::TimeDelta> result = CurrentPhaseAndTime().time;
+  currentTime = result ? CSSNumberish::FromDouble(result->InMillisecondsF())
+                       : CSSNumberish();
+}
+
+base::Optional<AnimationTimeDelta> AnimationTimeline::CurrentTime() {
+  base::Optional<base::TimeDelta> result = CurrentPhaseAndTime().time;
+  return result ? base::make_optional(AnimationTimeDelta(result.value()))
+                : base::nullopt;
+}
+
+base::Optional<double> AnimationTimeline::CurrentTimeMilliseconds() {
   base::Optional<base::TimeDelta> result = CurrentPhaseAndTime().time;
   return result ? base::make_optional(result->InMillisecondsF())
                 : base::nullopt;
@@ -49,6 +61,10 @@ base::Optional<double> AnimationTimeline::currentTime() {
 base::Optional<double> AnimationTimeline::CurrentTimeSeconds() {
   base::Optional<base::TimeDelta> result = CurrentPhaseAndTime().time;
   return result ? base::make_optional(result->InSecondsF()) : base::nullopt;
+}
+
+void AnimationTimeline::duration(CSSNumberish& duration) {
+  duration = CSSNumberish();
 }
 
 String AnimationTimeline::phase() {

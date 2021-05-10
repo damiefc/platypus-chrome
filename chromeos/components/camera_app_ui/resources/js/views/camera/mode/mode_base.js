@@ -2,7 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {assertInstanceof} from '../../../chrome_util.js';
+import * as error from '../../../error.js';
+// eslint-disable-next-line no-unused-vars
+import {DeviceOperator} from '../../../mojo/device_operator.js';
 import {
+  CanceledError,
+  ErrorLevel,
+  ErrorType,
   Facing,      // eslint-disable-line no-unused-vars
   Resolution,  // eslint-disable-line no-unused-vars
 } from '../../../type.js';
@@ -66,7 +73,16 @@ export class ModeBase {
    */
   async stopCapture() {
     this.stop_();
-    return await this.capture_;
+    try {
+      await this.capture_;
+    } catch (e) {
+      if (e instanceof CanceledError) {
+        return;
+      }
+      error.reportError(
+          ErrorType.STOP_CAPTURE_FAILURE, ErrorLevel.ERROR,
+          assertInstanceof(e, Error));
+    }
   }
 
   /**
@@ -76,10 +92,18 @@ export class ModeBase {
   async addMetadataObserver() {}
 
   /**
-   * Remove the observer that saves metadata.
+   * Removes the observer that saves metadata.
    * @return {!Promise} Promise for the operation.
    */
   async removeMetadataObserver() {}
+
+  /**
+   * Clears everything when mode is not needed anymore.
+   * @return {!Promise}
+   */
+  async clear() {
+    await this.stopCapture();
+  }
 
   /**
    * Initiates video/photo capture operation under this mode.
@@ -94,4 +118,92 @@ export class ModeBase {
    * @protected
    */
   stop_() {}
+}
+
+/**
+ * @abstract
+ */
+export class ModeFactory {
+  /**
+   * @public
+   */
+  constructor() {
+    /**
+     * Preview stream.
+     * @type {?MediaStream}
+     * @protected
+     */
+    this.stream_ = null;
+
+    /**
+     * Camera facing of current mode.
+     * @type {!Facing}
+     * @protected
+     */
+    this.facing_ = Facing.UNKNOWN;
+
+    /**
+     * Capture resolution.
+     * @type {?Resolution}
+     * @protected
+     */
+    this.captureResolution_ = null;
+  }
+
+  /**
+   * @return {!MediaStream}
+   * @protected
+   */
+  get previewStream_() {
+    return assertInstanceof(this.stream_, MediaStream);
+  }
+
+  /**
+   * @param {!Facing} facing
+   */
+  setFacing(facing) {
+    this.facing_ = facing;
+  }
+
+  /**
+   * @param {!MediaStream} stream
+   */
+  setPreviewStream(stream) {
+    this.stream_ = stream;
+  }
+
+  /**
+   * Makes video capture device prepared for capturing in this mode.
+   * @param {!MediaStreamConstraints} constraints Constraints for preview
+   *     stream.
+   * @param {?Resolution} resolution Capture resolution
+   * @return {!Promise}
+   * @abstract
+   */
+  prepareDevice(constraints, resolution) {}
+
+  /**
+   * @return {!ModeBase}
+   * @abstract
+   */
+  produce_() {}
+
+  /**
+   * Produces the mode capture object.
+   * @return {!ModeBase}
+   */
+  produce() {
+    const mode = this.produce_();
+    this.clear();
+    return mode;
+  }
+
+  /**
+   * Clears all unused material.
+   */
+  clear() {
+    this.stream_ = null;
+    this.facing_ = Facing.UNKNOWN;
+    this.captureResolution_ = null;
+  }
 }

@@ -38,6 +38,7 @@ import org.chromium.base.UserData;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.blink.mojom.EventType;
 import org.chromium.blink.mojom.FocusType;
 import org.chromium.blink_public.web.WebInputEventModifier;
@@ -141,9 +142,13 @@ public class ImeAdapterImpl
     private int mLastCompositionStart;
     private int mLastCompositionEnd;
     private boolean mRestartInputOnNextStateUpdate;
+    private boolean mLogNextStateUpdate;
 
     // True if ImeAdapter is connected to render process.
     private boolean mIsConnected;
+
+    // Returns true if the overlaycontent flag is set in the JS, else false.
+    private boolean mKeyboardOverlayContent;
 
     /**
      * {@ResultReceiver} passed in InputMethodManager#showSoftInput}. We need this to scroll to the
@@ -260,6 +265,19 @@ public class ImeAdapterImpl
     @Override
     public void addEventObserver(ImeEventObserver eventObserver) {
         mEventObservers.add(eventObserver);
+    }
+
+    /**
+     * Returns true if the overlaycontent flag is set in the JS, else false.
+     * This determines whether to fire geometrychange event to JS and also not
+     * resize the visual/layout viewports in response to keyboard visibility
+     * changes.
+     *
+     * @return Whether overlaycontent flag is set or not.
+     */
+    @Override
+    public boolean shouldVirtualKeyboardOverlayContent() {
+        return mKeyboardOverlayContent;
     }
 
     private void createInputConnectionFactory() {
@@ -433,7 +451,8 @@ public class ImeAdapterImpl
     private void updateState(int textInputType, int textInputFlags, int textInputMode,
             int textInputAction, boolean showIfNeeded, boolean alwaysHide, String text,
             int selectionStart, int selectionEnd, int compositionStart, int compositionEnd,
-            boolean replyToRequest, int lastVkVisibilityRequest, int vkPolicy) {
+            boolean replyToRequest, int lastVkVisibilityRequest, int vkPolicy,
+            boolean keyboardOverlayContent) {
         TraceEvent.begin("ImeAdapter.updateState");
         try {
             if (DEBUG_LOGS) {
@@ -449,6 +468,7 @@ public class ImeAdapterImpl
                 mRestartInputOnNextStateUpdate = false;
             }
 
+            mKeyboardOverlayContent = keyboardOverlayContent;
             mTextInputFlags = textInputFlags;
             if (mTextInputMode != textInputMode) {
                 mTextInputMode = textInputMode;
@@ -520,6 +540,11 @@ public class ImeAdapterImpl
                 mInputConnection.updateStateOnUiThread(text, selectionStart, selectionEnd,
                         compositionStart, compositionEnd, singleLine, replyToRequest);
             }
+
+            if (mLogNextStateUpdate) {
+                logNodeEditableType(editable);
+            }
+
         } finally {
             TraceEvent.end("ImeAdapter.updateState");
         }
@@ -966,6 +991,27 @@ public class ImeAdapterImpl
 
         if (mTextInputType != TextInputType.NONE && mInputConnection != null && isEditable) {
             mRestartInputOnNextStateUpdate = true;
+        }
+        mLogNextStateUpdate = true;
+    }
+
+    private void logNodeEditableType(boolean isEditable) {
+        mLogNextStateUpdate = false;
+        if (!isEditable) {
+            RecordHistogram.recordEnumeratedHistogram("Android.Input.EditableContentTypes",
+                    /* sample=Not editable */ 0, /* max= */ 3);
+        } else if (mTextInputType == TextInputType.CONTENT_EDITABLE) {
+            RecordHistogram.recordEnumeratedHistogram("Android.Input.EditableContentTypes",
+                    /* sample=Content editable */ 1, /* max= */ 3);
+        } else if (mTextInputType == TextInputType.TEXT_AREA) {
+            RecordHistogram.recordEnumeratedHistogram(
+                    "Android.Input.EditableContentTypes", /* sample=Text area */ 2, /* max= */ 3);
+        } else if (mTextInputType == TextInputType.TEXT || mTextInputType == TextInputType.PASSWORD
+                || mTextInputType == TextInputType.SEARCH || mTextInputType == TextInputType.NUMBER
+                || mTextInputType == TextInputType.TELEPHONE
+                || mTextInputType == TextInputType.URL) {
+            RecordHistogram.recordEnumeratedHistogram(
+                    "Android.Input.EditableContentTypes", /* sample=Input */ 3, /* max= */ 3);
         }
     }
 

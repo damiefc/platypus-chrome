@@ -58,8 +58,11 @@ bool ElementBasedOffsetsEqual(ScrollTimelineElementBasedOffset* o1,
     return true;
   if (!o1 || !o2)
     return false;
-  return (o1->edge() == o2->edge()) && (o1->target() == o2->target()) &&
-         (o1->threshold() == o2->threshold());
+  // TODO(crbug.com/1070871): Use targetOr(nullptr) after migration is done.
+  Element* target_or_null1 = o1->hasTarget() ? o1->target() : nullptr;
+  Element* target_or_null2 = o2->hasTarget() ? o2->target() : nullptr;
+  return target_or_null1 == target_or_null2 && o1->edge() == o2->edge() &&
+         o1->threshold() == o2->threshold();
 }
 
 CSSKeywordValue* GetCSSKeywordValue(const ScrollTimelineOffsetValue& offset) {
@@ -129,15 +132,8 @@ base::Optional<double> ScrollTimelineOffset::ResolveOffset(
 
     return resolved;
   } else if (element_based_offset_) {
-    // We assume that the root is the target's ancestor in layout tree. Under
-    // this assumption |target.LocalToAncestorRect()| returns the targets's
-    // position relative to the root's border box, while ignoring scroll offset.
-    //
-    // TODO(majidvp): We need to validate this assumption and deal with cases
-    // where it is not true. See the spec discussion here:
-    // https://github.com/w3c/csswg-drafts/issues/4337#issuecomment-610989843
-
-    DCHECK(element_based_offset_->hasTarget());
+    if (!element_based_offset_->hasTarget())
+      return base::nullopt;
     Element* target = element_based_offset_->target();
     const LayoutBox* target_box = target->GetLayoutBox();
 

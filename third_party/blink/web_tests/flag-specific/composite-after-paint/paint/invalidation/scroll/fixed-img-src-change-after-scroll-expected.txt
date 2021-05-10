@@ -8,14 +8,15 @@
       "transform": 1
     },
     {
+      "name": "LayoutImage (positioned) IMG id='img'",
+      "bounds": [100, 100],
+      "contentsOpaqueForText": true,
+      "transform": 2
+    },
+    {
       "name": "VerticalScrollbar",
       "position": [785, 0],
       "bounds": [15, 600]
-    },
-    {
-      "name": "LayoutImage (positioned) IMG id='img'",
-      "bounds": [100, 100],
-      "transform": 2
     }
   ],
   "transforms": [

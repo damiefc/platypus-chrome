@@ -13,6 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/browser/renderer_host/pepper/content_browser_pepper_host_factory.h"
 #include "content/browser/renderer_host/pepper/pepper_socket_utils.h"
 #include "content/public/browser/browser_context.h"
@@ -21,6 +22,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/socket_permission_request.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -42,10 +44,11 @@
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/proxy/tcp_socket_resource_constants.h"
 #include "ppapi/shared_impl/private/net_address_private_impl.h"
+#include "ppapi/shared_impl/private/ppb_x509_util_shared.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/network/firewall_hole.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 using ppapi::NetAddressPrivateImpl;
 using ppapi::TCPSocketState;
@@ -84,17 +87,17 @@ PepperTCPSocketMessageFilter::PepperTCPSocketMessageFilter(
       pending_accept_(false),
       pending_read_size_(0),
       pending_read_pp_error_(PP_OK_COMPLETIONPENDING),
-      pending_read_on_unthrottle_(false),
       pending_write_bytes_written_(0),
       pending_write_pp_error_(PP_OK_COMPLETIONPENDING),
       is_potentially_secure_plugin_context_(
           host->IsPotentiallySecurePluginContext(instance)) {
   DCHECK(host);
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
+                          ? content::BrowserThread::UI
+                          : content::BrowserThread::IO);
 
   ++g_num_tcp_filter_instances;
   host_->AddInstanceObserver(instance_, this);
-  is_throttled_ = host_->IsThrottled(instance_);
   if (!host->GetRenderFrameIDsForInstance(instance, &render_process_id_,
                                           &render_frame_id_)) {
     NOTREACHED();
@@ -107,7 +110,9 @@ void PepperTCPSocketMessageFilter::SetConnectedSocket(
         socket_observer_receiver,
     mojo::ScopedDataPipeConsumerHandle receive_stream,
     mojo::ScopedDataPipeProducerHandle send_stream) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
+                          ? content::BrowserThread::UI
+                          : content::BrowserThread::IO);
   // This method grabs a reference to |this|, and releases a reference on the UI
   // thread, so something should be holding on to a reference on the current
   // thread to prevent the object from being deleted before this method returns.
@@ -122,15 +127,17 @@ void PepperTCPSocketMessageFilter::SetConnectedSocket(
 }
 
 PepperTCPSocketMessageFilter::~PepperTCPSocketMessageFilter() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
+                          ? content::BrowserThread::UI
+                          : content::BrowserThread::IO);
   if (host_)
     host_->RemoveInstanceObserver(instance_, this);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Close the firewall hole on UI thread if there is one.
   if (firewall_hole_) {
     GetUIThreadTaskRunner({})->DeleteSoon(FROM_HERE, std::move(firewall_hole_));
   }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   --g_num_tcp_filter_instances;
 }
 
@@ -219,30 +226,12 @@ int32_t PepperTCPSocketMessageFilter::OnResourceMessageReceived(
   return PP_ERROR_FAILED;
 }
 
-void PepperTCPSocketMessageFilter::OnThrottleStateChanged(bool is_throttled) {
-  GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &PepperTCPSocketMessageFilter::ThrottleStateChangedOnUIThread, this,
-          is_throttled));
-}
-
 void PepperTCPSocketMessageFilter::OnHostDestroyed() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
+                          ? content::BrowserThread::UI
+                          : content::BrowserThread::IO);
   host_->RemoveInstanceObserver(instance_, this);
   host_ = nullptr;
-}
-
-void PepperTCPSocketMessageFilter::ThrottleStateChangedOnUIThread(
-    bool is_throttled) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  is_throttled_ = is_throttled;
-
-  if (pending_read_on_unthrottle_ && !is_throttled) {
-    pending_read_on_unthrottle_ = false;
-    TryRead();
-  }
 }
 
 void PepperTCPSocketMessageFilter::OnComplete(
@@ -285,8 +274,7 @@ void PepperTCPSocketMessageFilter::OnReadError(int net_error) {
   // Complete pending read with the error message if there's a pending read, and
   // the read data pipe has already been closed. If the pipe is still open, need
   // to wait until all data has been read before can start failing reads.
-  if (pending_read_context_.is_valid() && !receive_stream_ &&
-      !pending_read_on_unthrottle_) {
+  if (pending_read_context_.is_valid() && !receive_stream_) {
     TryRead();
   }
 }
@@ -746,12 +734,6 @@ void PepperTCPSocketMessageFilter::TryRead() {
   DCHECK(state_.IsConnected());
   DCHECK(pending_read_context_.is_valid());
   DCHECK_GT(pending_read_size_, 0u);
-  DCHECK(!pending_read_on_unthrottle_);
-
-  if (is_throttled_) {
-    pending_read_on_unthrottle_ = true;
-    return;
-  }
 
   // This loop's body will generally run only once, unless there's a read error,
   // in which case, it will start over, to re-apply the initial logic.
@@ -1065,12 +1047,12 @@ void PepperTCPSocketMessageFilter::OnListenCompleted(
 
   DCHECK(state_.IsPending(TCPSocketState::LISTEN));
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (pp_result == PP_OK) {
     OpenFirewallHole(context);
     return;
   }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   SendListenReply(context, pp_result);
   state_.CompletePendingTransition(pp_result == PP_OK);
@@ -1122,7 +1104,10 @@ void PepperTCPSocketMessageFilter::OnAcceptCompleted(
   // already.
   DCHECK(success);
 
-  GetIOThreadTaskRunner({})->PostTask(
+  auto task_runner = base::FeatureList::IsEnabled(features::kProcessHostOnUI)
+                         ? content::GetUIThreadTaskRunner({})
+                         : content::GetIOThreadTaskRunner({});
+  task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(&PepperTCPSocketMessageFilter::OnAcceptCompletedOnIOThread,
                      this, context, std::move(connected_socket),
@@ -1140,7 +1125,17 @@ void PepperTCPSocketMessageFilter::OnAcceptCompletedOnIOThread(
     mojo::ScopedDataPipeProducerHandle send_stream,
     PP_NetAddress_Private pp_local_addr,
     PP_NetAddress_Private pp_remote_addr) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(features::kProcessHostOnUI)
+                          ? content::BrowserThread::UI
+                          : content::BrowserThread::IO);
+
+  if (!host_->IsValidInstance(instance_)) {
+    // The instance has been removed while Accept was in progress. This object
+    // should be destroyed and cleaned up after we release the reference we're
+    // holding as a part of this function running so we just return without
+    // doing anything.
+    return;
+  }
 
   // |factory_| is guaranteed to be non-NULL here. Only those instances created
   // in CONNECTED state have a NULL |factory_|, while getting here requires
@@ -1208,7 +1203,7 @@ void PepperTCPSocketMessageFilter::SetStreams(
           base::Unretained(this)));
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void PepperTCPSocketMessageFilter::OpenFirewallHole(
     const ppapi::host::ReplyMessageContext& context) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -1229,7 +1224,7 @@ void PepperTCPSocketMessageFilter::OnFirewallHoleOpened(
   SendListenReply(context, PP_OK);
   state_.CompletePendingTransition(true);
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 void PepperTCPSocketMessageFilter::SendBindReply(
     const ppapi::host::ReplyMessageContext& context,
@@ -1277,8 +1272,8 @@ void PepperTCPSocketMessageFilter::SendSSLHandshakeReply(
   if (pp_result == PP_OK) {
     DCHECK(ssl_info);
     if (ssl_info->cert.get()) {
-      pepper_socket_utils::GetCertificateFields(*ssl_info->cert,
-                                                &certificate_fields);
+      ppapi::PPB_X509Util_Shared::GetCertificateFields(*ssl_info->cert,
+                                                       &certificate_fields);
     }
   }
   SendReply(reply_context,
@@ -1353,10 +1348,10 @@ void PepperTCPSocketMessageFilter::Close() {
   weak_ptr_factory_.InvalidateWeakPtrs();
   state_.DoTransition(TCPSocketState::CLOSE, true);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Close the firewall hole, it is no longer needed.
   firewall_hole_.reset();
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // Make sure there are no further callbacks from Mojo, which could end up in a
   // double free (Add ref on the UI thread, while a deletion is pending on the

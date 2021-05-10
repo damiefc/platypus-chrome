@@ -11,6 +11,7 @@ import android.util.Size;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
+import org.chromium.base.supplier.Supplier;
 
 /**
  * Handles scaling of the top level frame for the paint preview player.
@@ -26,17 +27,22 @@ public class PlayerFrameScaleController {
     private final Matrix mBitmapScaleMatrix;
     /** Interface for calling shared methods on the mediator. */
     private final PlayerFrameMediatorDelegate mMediatorDelegate;
+    private Supplier<Boolean> mIsAccessibilityEnabled;
     private final Callback<Boolean> mOnScaleListener;
+    private boolean mAcceptUserInput;
 
     PlayerFrameScaleController(Matrix bitmapScaleMatrix,
             PlayerFrameMediatorDelegate mediatorDelegate,
+            @Nullable Supplier<Boolean> isAccessibilityEnabled,
             @Nullable Callback<Boolean> onScaleListener) {
         mUncommittedScaleFactor = 0f;
         mViewport = mediatorDelegate.getViewport();
         mContentSize = mediatorDelegate.getContentSize();
         mBitmapScaleMatrix = bitmapScaleMatrix;
         mMediatorDelegate = mediatorDelegate;
+        mIsAccessibilityEnabled = isAccessibilityEnabled;
         mOnScaleListener = onScaleListener;
+        mAcceptUserInput = true;
     }
 
     /**
@@ -70,6 +76,10 @@ public class PlayerFrameScaleController {
      * to improve quality.
      */
     boolean scaleBy(float scaleFactor, float focalPointX, float focalPointY) {
+        if (!mAcceptUserInput) return false;
+
+        if (mIsAccessibilityEnabled != null && mIsAccessibilityEnabled.get()) return false;
+
         // This is filtered to only apply to the top level view upstream.
         if (mUncommittedScaleFactor == 0f) {
             mUncommittedScaleFactor = mViewport.getScale();
@@ -162,5 +172,12 @@ public class PlayerFrameScaleController {
         mUncommittedScaleFactor = 0f;
         if (mOnScaleListener != null) mOnScaleListener.onResult(true);
         return true;
+    }
+
+    /**
+     * Enables/disables processing input events for scaling.
+     */
+    public void setAcceptUserInput(boolean acceptUserInput) {
+        mAcceptUserInput = acceptUserInput;
     }
 }

@@ -5,11 +5,13 @@
 #include "content/browser/bluetooth/web_bluetooth_service_impl.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/macros.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "content/browser/bluetooth/bluetooth_adapter_factory_wrapper.h"
-#include "content/public/browser/web_contents_delegate.h"
+#include "content/public/browser/bluetooth_delegate.h"
+#include "content/public/common/content_client.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
@@ -19,6 +21,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/bluetooth/web_bluetooth.mojom.h"
 
+using testing::Mock;
 using testing::Return;
 
 namespace content {
@@ -73,15 +76,19 @@ class FakeBluetoothAdapter : public device::MockBluetoothAdapter {
   ~FakeBluetoothAdapter() override = default;
 };
 
-class FakeWebContentsDelegate : public content::WebContentsDelegate {
+class TestBluetoothDelegate : public BluetoothDelegate {
  public:
-  FakeWebContentsDelegate() = default;
-  ~FakeWebContentsDelegate() override = default;
+  TestBluetoothDelegate() = default;
+  ~TestBluetoothDelegate() override = default;
+  TestBluetoothDelegate(const TestBluetoothDelegate&) = delete;
+  TestBluetoothDelegate& operator=(const TestBluetoothDelegate&) = delete;
 
-  // Move-only class.
-  FakeWebContentsDelegate(const FakeWebContentsDelegate&) = delete;
-  FakeWebContentsDelegate& operator=(const FakeWebContentsDelegate&) = delete;
-
+  // BluetoothDelegate:
+  std::unique_ptr<BluetoothChooser> RunBluetoothChooser(
+      RenderFrameHost* frame,
+      const BluetoothChooser::EventHandler& event_handler) override {
+    return nullptr;
+  }
   std::unique_ptr<BluetoothScanningPrompt> ShowBluetoothScanningPrompt(
       RenderFrameHost* frame,
       const BluetoothScanningPrompt::EventHandler& event_handler) override {
@@ -89,6 +96,51 @@ class FakeWebContentsDelegate : public content::WebContentsDelegate {
         std::make_unique<FakeBluetoothScanningPrompt>(std::move(event_handler));
     prompt_ = prompt.get();
     return std::move(prompt);
+  }
+  blink::WebBluetoothDeviceId GetWebBluetoothDeviceId(
+      RenderFrameHost* frame,
+      const std::string& device_address) override {
+    return blink::WebBluetoothDeviceId();
+  }
+  std::string GetDeviceAddress(RenderFrameHost* frame,
+                               const blink::WebBluetoothDeviceId&) override {
+    return std::string();
+  }
+  blink::WebBluetoothDeviceId AddScannedDevice(
+      RenderFrameHost* frame,
+      const std::string& device_address) override {
+    return blink::WebBluetoothDeviceId();
+  }
+  blink::WebBluetoothDeviceId GrantServiceAccessPermission(
+      RenderFrameHost* frame,
+      const device::BluetoothDevice* device,
+      const blink::mojom::WebBluetoothRequestDeviceOptions* options) override {
+    return blink::WebBluetoothDeviceId();
+  }
+  bool HasDevicePermission(
+      RenderFrameHost* frame,
+      const blink::WebBluetoothDeviceId& device_id) override {
+    return false;
+  }
+  bool IsAllowedToAccessService(RenderFrameHost* frame,
+                                const blink::WebBluetoothDeviceId& device_id,
+                                const device::BluetoothUUID& service) override {
+    return false;
+  }
+  bool IsAllowedToAccessAtLeastOneService(
+      RenderFrameHost* frame,
+      const blink::WebBluetoothDeviceId& device_id) override {
+    return false;
+  }
+  bool IsAllowedToAccessManufacturerData(
+      RenderFrameHost* frame,
+      const blink::WebBluetoothDeviceId& device_id,
+      const uint16_t manufacturer_code) override {
+    return false;
+  }
+  std::vector<blink::mojom::WebBluetoothDevicePtr> GetPermittedDevices(
+      RenderFrameHost* frame) override {
+    return {};
   }
 
   void RunBluetoothScanningPromptEventCallback(
@@ -101,8 +153,31 @@ class FakeWebContentsDelegate : public content::WebContentsDelegate {
     prompt_->RunPromptEventCallback(event);
   }
 
+  void AddFramePermissionObserver(FramePermissionObserver* observer) override {}
+  void RemoveFramePermissionObserver(
+      FramePermissionObserver* observer) override {}
+
  private:
   FakeBluetoothScanningPrompt* prompt_ = nullptr;
+};
+
+class TestContentBrowserClient : public ContentBrowserClient {
+ public:
+  TestContentBrowserClient() = default;
+  ~TestContentBrowserClient() override = default;
+  TestContentBrowserClient(const TestContentBrowserClient&) = delete;
+  TestContentBrowserClient& operator=(const TestContentBrowserClient&) = delete;
+
+  TestBluetoothDelegate* bluetooth_delegate() { return &bluetooth_delegate_; }
+
+ protected:
+  // ChromeContentBrowserClient:
+  BluetoothDelegate* GetBluetoothDelegate() override {
+    return &bluetooth_delegate_;
+  }
+
+ private:
+  TestBluetoothDelegate bluetooth_delegate_;
 };
 
 class FakeWebBluetoothAdvertisementClientImpl
@@ -155,13 +230,15 @@ class WebBluetoothServiceImplTest : public RenderViewHostImplTestHarness {
     RenderViewHostImplTestHarness::SetUp();
 
     // Set up an adapter.
-    scoped_refptr<FakeBluetoothAdapter> adapter(new FakeBluetoothAdapter());
-    EXPECT_CALL(*adapter, IsPresent()).WillRepeatedly(Return(true));
+    adapter_ = new FakeBluetoothAdapter();
+    EXPECT_CALL(*adapter_, IsPresent()).WillRepeatedly(Return(true));
     BluetoothAdapterFactoryWrapper::Get().SetBluetoothAdapterForTesting(
-        adapter);
+        adapter_);
+
+    // Hook up the test bluetooth delegate.
+    old_browser_client_ = SetBrowserClientForTesting(&browser_client_);
 
     contents()->GetMainFrame()->InitializeRenderFrameIfNeeded();
-    contents()->SetDelegate(&delegate_);
 
     // Simulate a frame connected to a bluetooth service.
     service_ =
@@ -169,7 +246,9 @@ class WebBluetoothServiceImplTest : public RenderViewHostImplTestHarness {
   }
 
   void TearDown() override {
+    adapter_.reset();
     service_ = nullptr;
+    SetBrowserClientForTesting(old_browser_client_);
     RenderViewHostImplTestHarness::TearDown();
   }
 
@@ -180,20 +259,22 @@ class WebBluetoothServiceImplTest : public RenderViewHostImplTestHarness {
     base::Optional<std::vector<device::BluetoothUUID>> services;
     services.emplace();
     services->push_back(device::BluetoothUUID(kBatteryServiceUUIDString));
-    return blink::mojom::WebBluetoothLeScanFilter::New(services, name,
-                                                       name_prefix);
+    return blink::mojom::WebBluetoothLeScanFilter::New(
+        services, name, name_prefix, /*manufacturer_data=*/base::nullopt);
   }
 
   blink::mojom::WebBluetoothResult RequestScanningStartAndSimulatePromptEvent(
       const blink::mojom::WebBluetoothLeScanFilter& filter,
       FakeWebBluetoothAdvertisementClientImpl* client_impl,
-      content::BluetoothScanningPrompt::Event event) {
+      BluetoothScanningPrompt::Event event) {
     mojo::PendingAssociatedRemote<blink::mojom::WebBluetoothAdvertisementClient>
         client;
     client_impl->BindReceiver(client.InitWithNewEndpointAndPassReceiver());
     auto options = blink::mojom::WebBluetoothRequestLEScanOptions::New();
     options->filters.emplace();
-    auto filter_ptr = blink::mojom::WebBluetoothLeScanFilter::New(filter);
+    auto filter_ptr = blink::mojom::WebBluetoothLeScanFilter::New(
+        filter.services, filter.name, filter.name_prefix,
+        /*manufacturer_data=*/base::nullopt);
     options->filters->push_back(std::move(filter_ptr));
 
     // Use two RunLoops to guarantee the order of operations for this test.
@@ -214,18 +295,21 @@ class WebBluetoothServiceImplTest : public RenderViewHostImplTestHarness {
     // Post a task to simulate a prompt event during a call to
     // RequestScanningStart().
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindLambdaForTesting([&callback_loop, &event,
-                                               &request_loop, this]() {
-          delegate_.RunBluetoothScanningPromptEventCallback(event);
-          callback_loop.Run();
-          request_loop.Quit();
-        }));
+        FROM_HERE, base::BindLambdaForTesting(
+                       [&callback_loop, &event, &request_loop, this]() {
+                         browser_client_.bluetooth_delegate()
+                             ->RunBluetoothScanningPromptEventCallback(event);
+                         callback_loop.Run();
+                         request_loop.Quit();
+                       }));
     request_loop.Run();
     return result;
   }
 
+  scoped_refptr<FakeBluetoothAdapter> adapter_;
   WebBluetoothServiceImpl* service_;
-  FakeWebContentsDelegate delegate_;
+  TestContentBrowserClient browser_client_;
+  ContentBrowserClient* old_browser_client_ = nullptr;
 };
 
 TEST_F(WebBluetoothServiceImplTest, ClearStateDuringRequestDevice) {
@@ -252,8 +336,7 @@ TEST_F(WebBluetoothServiceImplTest, PermissionAllowed) {
   FakeWebBluetoothAdvertisementClientImpl client_impl;
   blink::mojom::WebBluetoothResult result =
       RequestScanningStartAndSimulatePromptEvent(
-          *filter, &client_impl,
-          content::BluetoothScanningPrompt::Event::kAllow);
+          *filter, &client_impl, BluetoothScanningPrompt::Event::kAllow);
   EXPECT_EQ(result, blink::mojom::WebBluetoothResult::SUCCESS);
   // |filters| should be allowed.
   EXPECT_TRUE(service_->AreScanFiltersAllowed(filters));
@@ -270,8 +353,7 @@ TEST_F(WebBluetoothServiceImplTest, ClearStateDuringRequestScanningStart) {
 
   auto options = blink::mojom::WebBluetoothRequestLEScanOptions::New();
   options->filters.emplace();
-  auto filter_ptr = blink::mojom::WebBluetoothLeScanFilter::New(*filter);
-  options->filters->push_back(std::move(filter_ptr));
+  options->filters->push_back(std::move(filter));
 
   // Use two RunLoops to guarantee the order of operations for this test.
   // |callback_loop| guarantees that RequestScanningStartCallback has finished
@@ -312,8 +394,7 @@ TEST_F(WebBluetoothServiceImplTest, PermissionPromptCanceled) {
   FakeWebBluetoothAdvertisementClientImpl client_impl;
   blink::mojom::WebBluetoothResult result =
       RequestScanningStartAndSimulatePromptEvent(
-          *filter, &client_impl,
-          content::BluetoothScanningPrompt::Event::kCanceled);
+          *filter, &client_impl, BluetoothScanningPrompt::Event::kCanceled);
 
   EXPECT_EQ(blink::mojom::WebBluetoothResult::PROMPT_CANCELED, result);
   // |filters| should still not be allowed.
@@ -329,12 +410,11 @@ TEST_F(WebBluetoothServiceImplTest,
   FakeWebBluetoothAdvertisementClientImpl client_impl;
   blink::mojom::WebBluetoothResult result =
       RequestScanningStartAndSimulatePromptEvent(
-          *filter, &client_impl,
-          content::BluetoothScanningPrompt::Event::kAllow);
+          *filter, &client_impl, BluetoothScanningPrompt::Event::kAllow);
   EXPECT_EQ(result, blink::mojom::WebBluetoothResult::SUCCESS);
   EXPECT_TRUE(service_->AreScanFiltersAllowed(filters));
 
-  contents()->SetVisibilityAndNotifyObservers(content::Visibility::HIDDEN);
+  contents()->SetVisibilityAndNotifyObservers(Visibility::HIDDEN);
 
   // The previously granted Bluetooth scanning permission should be revoked.
   EXPECT_FALSE(service_->AreScanFiltersAllowed(filters));
@@ -348,10 +428,10 @@ TEST_F(WebBluetoothServiceImplTest,
   filters->push_back(filter.Clone());
   FakeWebBluetoothAdvertisementClientImpl client_impl;
   RequestScanningStartAndSimulatePromptEvent(
-      *filter, &client_impl, content::BluetoothScanningPrompt::Event::kAllow);
+      *filter, &client_impl, BluetoothScanningPrompt::Event::kAllow);
   EXPECT_TRUE(service_->AreScanFiltersAllowed(filters));
 
-  contents()->SetVisibilityAndNotifyObservers(content::Visibility::OCCLUDED);
+  contents()->SetVisibilityAndNotifyObservers(Visibility::OCCLUDED);
 
   // The previously granted Bluetooth scanning permission should be revoked.
   EXPECT_FALSE(service_->AreScanFiltersAllowed(filters));
@@ -365,7 +445,7 @@ TEST_F(WebBluetoothServiceImplTest,
   filters->push_back(filter.Clone());
   FakeWebBluetoothAdvertisementClientImpl client_impl;
   RequestScanningStartAndSimulatePromptEvent(
-      *filter, &client_impl, content::BluetoothScanningPrompt::Event::kAllow);
+      *filter, &client_impl, BluetoothScanningPrompt::Event::kAllow);
   EXPECT_TRUE(service_->AreScanFiltersAllowed(filters));
 
   main_test_rfh()->GetRenderWidgetHost()->LostFocus();
@@ -384,8 +464,7 @@ TEST_F(WebBluetoothServiceImplTest,
   FakeWebBluetoothAdvertisementClientImpl client_impl_1;
   blink::mojom::WebBluetoothResult result_1 =
       RequestScanningStartAndSimulatePromptEvent(
-          *filter_1, &client_impl_1,
-          content::BluetoothScanningPrompt::Event::kAllow);
+          *filter_1, &client_impl_1, BluetoothScanningPrompt::Event::kAllow);
   EXPECT_EQ(result_1, blink::mojom::WebBluetoothResult::SUCCESS);
   EXPECT_TRUE(service_->AreScanFiltersAllowed(filters_1));
   EXPECT_FALSE(client_impl_1.on_connection_error_called());
@@ -398,8 +477,7 @@ TEST_F(WebBluetoothServiceImplTest,
   FakeWebBluetoothAdvertisementClientImpl client_impl_2;
   blink::mojom::WebBluetoothResult result_2 =
       RequestScanningStartAndSimulatePromptEvent(
-          *filter_2, &client_impl_2,
-          content::BluetoothScanningPrompt::Event::kAllow);
+          *filter_2, &client_impl_2, BluetoothScanningPrompt::Event::kAllow);
   EXPECT_EQ(result_2, blink::mojom::WebBluetoothResult::SUCCESS);
   EXPECT_TRUE(service_->AreScanFiltersAllowed(filters_2));
   EXPECT_FALSE(client_impl_2.on_connection_error_called());
@@ -412,8 +490,7 @@ TEST_F(WebBluetoothServiceImplTest,
   FakeWebBluetoothAdvertisementClientImpl client_impl_3;
   blink::mojom::WebBluetoothResult result_3 =
       RequestScanningStartAndSimulatePromptEvent(
-          *filter_3, &client_impl_3,
-          content::BluetoothScanningPrompt::Event::kBlock);
+          *filter_3, &client_impl_3, BluetoothScanningPrompt::Event::kBlock);
   EXPECT_EQ(blink::mojom::WebBluetoothResult::SCANNING_BLOCKED, result_3);
   EXPECT_FALSE(service_->AreScanFiltersAllowed(filters_3));
 
@@ -427,6 +504,36 @@ TEST_F(WebBluetoothServiceImplTest,
   EXPECT_TRUE(client_impl_1.on_connection_error_called());
   EXPECT_TRUE(client_impl_2.on_connection_error_called());
   EXPECT_TRUE(client_impl_3.on_connection_error_called());
+}
+
+TEST_F(WebBluetoothServiceImplTest,
+       ReadCharacteristicValueErrorWithValueIgnored) {
+  // The contract for calls accepting a
+  // BluetoothRemoteGattCharacteristic::ValueCallback callback argument is that
+  // when an error occurs, value must be ignored. This test verifies that
+  // WebBluetoothServiceImpl::OnCharacteristicReadValue honors that contract
+  // and will not pass a value to it's callback
+  // (a RemoteCharacteristicReadValueCallback instance) when an error occurs
+  // with a non-empty value array.
+  const std::vector<uint8_t> read_error_value = {1, 2, 3};
+  bool callback_called = false;
+  service_->OnCharacteristicReadValue(
+      base::BindLambdaForTesting(
+          [&callback_called](
+              blink::mojom::WebBluetoothResult result,
+              const base::Optional<std::vector<uint8_t>>& value) {
+            callback_called = true;
+            EXPECT_EQ(
+                blink::mojom::WebBluetoothResult::GATT_OPERATION_IN_PROGRESS,
+                result);
+            EXPECT_FALSE(value.has_value());
+          }),
+      device::BluetoothGattService::GATT_ERROR_IN_PROGRESS, read_error_value);
+  EXPECT_TRUE(callback_called);
+
+  // This test doesn't invoke any methods of the mock adapter. Allow it to be
+  // leaked without producing errors.
+  Mock::AllowLeak(adapter_.get());
 }
 
 }  // namespace content

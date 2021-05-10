@@ -11,6 +11,7 @@
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "components/viz/common/quads/aggregated_render_pass.h"
+#include "ui/gfx/animation/keyframe/animation_curve.h"
 
 namespace gfx {
 struct PresentationFeedback;
@@ -18,6 +19,7 @@ struct PresentationFeedback;
 
 namespace viz {
 class CompositorFrame;
+class DisplayCompositorMemoryAndTaskController;
 class OutputSurface;
 class SkiaOutputSurface;
 }
@@ -116,7 +118,6 @@ class TestHooks : public AnimationDelegate {
   virtual void DidCommit() {}
   virtual void DidCommitAndDrawFrame() {}
   virtual void DidReceiveCompositorFrameAck() {}
-  virtual void ScheduleComposite() {}
   virtual void DidActivateSyncTree() {}
   virtual void NotifyThroughputTrackerResults(CustomTrackerResults results) {}
 
@@ -130,19 +131,22 @@ class TestHooks : public AnimationDelegate {
   void NotifyAnimationAborted(base::TimeTicks monotonic_time,
                               int target_property,
                               int group) override {}
-  void NotifyAnimationTakeover(base::TimeTicks monotonic_time,
-                               int target_property,
-                               base::TimeTicks animation_start_time,
-                               std::unique_ptr<AnimationCurve> curve) override {
-  }
+  void NotifyAnimationTakeover(
+      base::TimeTicks monotonic_time,
+      int target_property,
+      base::TimeTicks animation_start_time,
+      std::unique_ptr<gfx::AnimationCurve> curve) override {}
   void NotifyLocalTimeUpdated(
       base::Optional<base::TimeDelta> local_time) override {}
 
   // OutputSurface indirections to the LayerTreeTest, that can be further
   // overridden.
   virtual void RequestNewLayerTreeFrameSink() = 0;
+  virtual std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+  CreateDisplayControllerOnThread() = 0;
   virtual std::unique_ptr<viz::SkiaOutputSurface>
-  CreateDisplaySkiaOutputSurfaceOnThread() = 0;
+  CreateDisplaySkiaOutputSurfaceOnThread(
+      viz::DisplayCompositorMemoryAndTaskController*) = 0;
   virtual std::unique_ptr<viz::OutputSurface>
   CreateDisplayOutputSurfaceOnThread(
       scoped_refptr<viz::ContextProvider> compositor_context_provider) = 0;

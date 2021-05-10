@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/payments/content/developer_console_logger.h"
+#include "components/payments/content/initialization_task.h"
 #include "components/payments/content/payment_handler_host.h"
 #include "components/payments/content/payment_request_display_manager.h"
 #include "components/payments/content/payment_request_spec.h"
@@ -43,7 +44,8 @@ class PaymentRequestWebContentsManager;
 class PaymentRequest : public mojom::PaymentRequest,
                        public PaymentHandlerHost::Delegate,
                        public PaymentRequestSpec::Observer,
-                       public PaymentRequestState::Delegate {
+                       public PaymentRequestState::Delegate,
+                       public InitializationTask::Observer {
  public:
   class ObserverForTest {
    public:
@@ -63,7 +65,6 @@ class PaymentRequest : public mojom::PaymentRequest,
   };
 
   PaymentRequest(content::RenderFrameHost* render_frame_host,
-                 content::WebContents* web_contents,
                  std::unique_ptr<ContentPaymentRequestDelegate> delegate,
                  PaymentRequestWebContentsManager* manager,
                  PaymentRequestDisplayManager* display_manager,
@@ -104,8 +105,8 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   // Called when the user explicitly cancelled the flow. Will send a message
   // to the renderer which will indirectly destroy this object (through
-  // OnConnectionTerminated).
-  void UserCancelled();
+  // TerminateConnection).
+  void OnUserCancelled();
 
   // Called when the main frame attached to this PaymentRequest is navigating to
   // another document, but before the PaymentRequest is destroyed.
@@ -121,7 +122,7 @@ class PaymentRequest : public mojom::PaymentRequest,
   // closure (e.g. there was an error on the renderer side, or payment was
   // successful), this method is called. It is responsible for cleaning up,
   // such as possibly closing the dialog.
-  void OnConnectionTerminated();
+  void TerminateConnection();
 
   // Called when the user clicks on the "Pay" button.
   void Pay();
@@ -134,9 +135,9 @@ class PaymentRequest : public mojom::PaymentRequest,
   // Called when the payment handler requests to open a payment handler window.
   void OnPaymentHandlerOpenWindowCalled();
 
-  content::WebContents* web_contents() { return web_contents_; }
+  content::WebContents* web_contents();
 
-  const content::GlobalFrameRoutingId& initiator_frame_routing_id() {
+  const content::GlobalFrameRoutingId& initiator_frame_routing_id() const {
     return initiator_frame_routing_id_;
   }
 
@@ -154,6 +155,9 @@ class PaymentRequest : public mojom::PaymentRequest,
   base::WeakPtr<PaymentRequest> GetWeakPtr();
 
  private:
+  // InitializationTask::Observer.
+  void OnInitialized(InitializationTask* initialization_task) override;
+
   // Returns true after init() has been called and the mojo connection has been
   // established. If the mojo connection gets later disconnected, this will
   // returns false.
@@ -200,7 +204,12 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   void OnAbortResult(bool aborted);
 
-  content::WebContents* web_contents_;
+  // Show an error message in the UI (if available) and abort payment.
+  void ShowErrorMessageAndAbortPayment();
+
+  // Get the payment method category from the selected app.
+  JourneyLogger::PaymentMethodCategory GetSelectedMethodCategory() const;
+
   const content::GlobalFrameRoutingId initiator_frame_routing_id_;
   DeveloperConsoleLogger log_;
   std::unique_ptr<ContentPaymentRequestDelegate> delegate_;

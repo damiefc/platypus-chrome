@@ -11,7 +11,7 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -149,8 +149,8 @@ void PaymentAppProviderImpl::InvokePaymentApp(
   }
 
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
-      BrowserContext::GetDefaultStoragePartition(
-          payment_request_web_contents_->GetBrowserContext()));
+      payment_request_web_contents_->GetBrowserContext()
+          ->GetDefaultStoragePartition());
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context =
       partition->GetServiceWorkerContext();
 
@@ -183,7 +183,7 @@ void PaymentAppProviderImpl::InstallAndInvokePaymentApp(
         base::BindOnce(
             std::move(callback),
             PaymentAppProviderUtil::CreateBlankPaymentHandlerResponse(
-                PaymentEventResponseType::PAYMENT_EVENT_BROWSER_ERROR)));
+                PaymentEventResponseType::PAYMENT_HANDLER_INSTALL_FAILED)));
     return;
   }
 
@@ -215,8 +215,8 @@ void PaymentAppProviderImpl::UpdatePaymentAppIcon(
     const SupportedDelegations& supported_delegations,
     PaymentAppProvider::UpdatePaymentAppIconCallback callback) {
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
-      BrowserContext::GetDefaultStoragePartition(
-          payment_request_web_contents_->GetBrowserContext()));
+      payment_request_web_contents_->GetBrowserContext()
+          ->GetDefaultStoragePartition());
   scoped_refptr<PaymentAppContextImpl> payment_app_context =
       partition->GetPaymentAppContext();
 
@@ -256,8 +256,8 @@ void PaymentAppProviderImpl::CanMakePayment(
   }
 
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
-      BrowserContext::GetDefaultStoragePartition(
-          payment_request_web_contents_->GetBrowserContext()));
+      payment_request_web_contents_->GetBrowserContext()
+          ->GetDefaultStoragePartition());
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context =
       partition->GetServiceWorkerContext();
 
@@ -288,8 +288,8 @@ void PaymentAppProviderImpl::AbortPayment(int64_t registration_id,
   }
 
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
-      BrowserContext::GetDefaultStoragePartition(
-          payment_request_web_contents_->GetBrowserContext()));
+      payment_request_web_contents_->GetBrowserContext()
+          ->GetDefaultStoragePartition());
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context =
       partition->GetServiceWorkerContext();
 
@@ -317,9 +317,6 @@ void PaymentAppProviderImpl::SetOpenedWindow(
 void PaymentAppProviderImpl::CloseOpenedWindow() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  // TODO(crbug.com/1099270): Fix cases where the web contents has already been
-  // destroyed without calling this function, e.g. when the bottom sheet UI is
-  // closed.
   if (payment_handler_window_ && payment_handler_window_->web_contents()) {
     payment_handler_window_->web_contents()->Close();
   }
@@ -342,9 +339,10 @@ scoped_refptr<DevToolsBackgroundServicesContextImpl>
 PaymentAppProviderImpl::GetDevTools(const url::Origin& sw_origin) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(payment_request_web_contents_);
-  auto* storage_partition = BrowserContext::GetStoragePartitionForSite(
-      payment_request_web_contents_->GetBrowserContext(), sw_origin.GetURL(),
-      /*can_create=*/true);
+  auto* storage_partition =
+      payment_request_web_contents_->GetBrowserContext()
+          ->GetStoragePartitionForUrl(sw_origin.GetURL(),
+                                      /*can_create=*/true);
   if (!storage_partition)
     return nullptr;
 
@@ -364,8 +362,8 @@ void PaymentAppProviderImpl::StartServiceWorkerForDispatch(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
-      BrowserContext::GetDefaultStoragePartition(
-          payment_request_web_contents_->GetBrowserContext()));
+      payment_request_web_contents_->GetBrowserContext()
+          ->GetDefaultStoragePartition());
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context =
       partition->GetServiceWorkerContext();
 
@@ -393,7 +391,7 @@ void PaymentAppProviderImpl::OnInstallPaymentApp(
   } else {
     std::move(callback).Run(
         PaymentAppProviderUtil::CreateBlankPaymentHandlerResponse(
-            PaymentEventResponseType::PAYMENT_EVENT_BROWSER_ERROR));
+            PaymentEventResponseType::PAYMENT_HANDLER_INSTALL_FAILED));
   }
 }
 

@@ -35,6 +35,9 @@ void RenderFrameMetadataProviderImpl::Bind(
   render_frame_metadata_observer_client_receiver_.Bind(
       std::move(client_receiver), task_runner_);
 
+  // Reset on disconnect so that pending state will be correctly stored and
+  // later forwarded in the case of a renderer crash.
+  render_frame_metadata_observer_remote_.reset_on_disconnect();
 #if defined(OS_ANDROID)
   if (pending_report_all_root_scrolls_.has_value()) {
     ReportAllRootScrolls(*pending_report_all_root_scrolls_);
@@ -77,13 +80,15 @@ RenderFrameMetadataProviderImpl::LastRenderFrameMetadata() {
 
 void RenderFrameMetadataProviderImpl::
     OnRenderFrameMetadataChangedAfterActivation(
-        cc::RenderFrameMetadata metadata) {
+        cc::RenderFrameMetadata metadata,
+        base::TimeTicks activation_time) {
   last_render_frame_metadata_ = std::move(metadata);
   for (Observer& observer : observers_)
-    observer.OnRenderFrameMetadataChangedAfterActivation();
+    observer.OnRenderFrameMetadataChangedAfterActivation(activation_time);
 }
 
-void RenderFrameMetadataProviderImpl::OnFrameTokenFrameSubmissionForTesting() {
+void RenderFrameMetadataProviderImpl::OnFrameTokenFrameSubmissionForTesting(
+    base::TimeTicks activation_time) {
   for (Observer& observer : observers_)
     observer.OnRenderFrameSubmission();
 }

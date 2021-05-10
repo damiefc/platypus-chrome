@@ -5,29 +5,34 @@
 #include "ash/ambient/ui/media_string_view.h"
 
 #include <memory>
+#include <string>
 
 #include "ash/ambient/ambient_constants.h"
+#include "ash/ambient/ui/ambient_view_ids.h"
 #include "ash/ambient/util/ambient_util.h"
-#include "ash/assistant/ui/assistant_view_ids.h"
 #include "ash/public/cpp/ash_pref_names.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "components/prefs/pref_service.h"
+#include "services/media_session/public/cpp/media_session_service.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
-#include "services/media_session/public/mojom/media_session_service.mojom.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/gfx/font.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/skia_paint_util.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/transform.h"
 #include "ui/views/border.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/flex_layout.h"
@@ -41,7 +46,7 @@ namespace {
 // zones.
 class FadeoutLayerDelegate : public ui::LayerDelegate {
  public:
-  explicit FadeoutLayerDelegate() : layer_(ui::LAYER_TEXTURED) {
+  FadeoutLayerDelegate() : layer_(ui::LAYER_TEXTURED) {
     layer_.set_delegate(this);
     layer_.SetFillsBoundsOpaquely(false);
   }
@@ -95,8 +100,9 @@ class FadeoutLayerDelegate : public ui::LayerDelegate {
 };
 
 // Typography.
-constexpr char kMiddleDotSeparator[] = " \u00B7 ";
-constexpr char kPreceedingEighthNoteSymbol[] = "\u266A ";
+constexpr char kMiddleDotSeparator[] = " \u2022 ";
+
+constexpr int kMusicNoteIconSizeDip = 20;
 
 // Returns true if we should show media string for ambient mode on lock-screen
 // based on user pref. We should keep the same user policy here as the
@@ -113,19 +119,11 @@ bool ShouldShowOnLockScreen() {
 }  // namespace
 
 MediaStringView::MediaStringView() {
-  SetID(AssistantViewID::kAmbientMediaStringView);
+  SetID(AmbientViewID::kAmbientMediaStringView);
   InitLayout();
 }
 
 MediaStringView::~MediaStringView() = default;
-
-const char* MediaStringView::GetClassName() const {
-  return "MediaStringView";
-}
-
-void MediaStringView::VisibilityChanged(View* starting_from, bool is_visible) {
-  media_text_->layer()->GetAnimator()->StopAnimating();
-}
 
 void MediaStringView::OnViewBoundsChanged(views::View* observed_view) {
   UpdateMaskLayer();
@@ -157,8 +155,8 @@ void MediaStringView::MediaSessionMetadataChanged(
   media_session::MediaMetadata session_metadata =
       metadata.value_or(media_session::MediaMetadata());
 
-  base::string16 media_string;
-  base::string16 middle_dot = base::UTF8ToUTF16(kMiddleDotSeparator);
+  std::u16string media_string;
+  std::u16string middle_dot = base::UTF8ToUTF16(kMiddleDotSeparator);
   if (!session_metadata.title.empty() && !session_metadata.artist.empty()) {
     media_string =
         session_metadata.title + middle_dot + session_metadata.artist;
@@ -169,7 +167,7 @@ void MediaStringView::MediaSessionMetadataChanged(
   }
 
   // Reset text and stop any ongoing animation.
-  media_text_->SetText(base::string16());
+  media_text_->SetText(std::u16string());
   media_text_->layer()->GetAnimator()->StopAnimating();
 
   media_text_->SetText(media_string);
@@ -198,14 +196,21 @@ void MediaStringView::InitLayout() {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
+  constexpr int kChildSpacingDip = 8;
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal));
   layout->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kStart);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
+  layout->set_between_child_spacing(kChildSpacingDip);
 
-  icon_ = AddChildView(std::make_unique<views::Label>(
-      base::UTF8ToUTF16(kPreceedingEighthNoteSymbol)));
+  icon_ = AddChildView(std::make_unique<views::ImageView>());
+  icon_->SetPreferredSize(
+      gfx::Size(kMusicNoteIconSizeDip, kMusicNoteIconSizeDip));
+  icon_->SetImage(gfx::CreateVectorIcon(
+      kMusicNoteIcon, kMusicNoteIconSizeDip,
+      ambient::util::GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kIconColorPrimary)));
 
   media_text_container_ = AddChildView(std::make_unique<views::View>());
   media_text_container_->SetPaintToLayer();
@@ -216,7 +221,7 @@ void MediaStringView::InitLayout() {
   text_layout->SetOrientation(views::LayoutOrientation::kHorizontal);
   text_layout->SetMainAxisAlignment(views::LayoutAlignment::kStart);
   text_layout->SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
-  observed_view_.Add(media_text_container_);
+  observed_view_.Observe(media_text_container_);
 
   media_text_ =
       media_text_container_->AddChildView(std::make_unique<views::Label>());
@@ -224,25 +229,34 @@ void MediaStringView::InitLayout() {
   media_text_->layer()->SetFillsBoundsOpaquely(false);
 
   // Defines the appearance.
-  constexpr SkColor kTextColor = SK_ColorWHITE;
   constexpr int kDefaultFontSizeDip = 64;
   constexpr int kMediaStringFontSizeDip = 18;
-  for (auto* view : {icon_, media_text_}) {
-    view->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_TO_HEAD);
-    view->SetVerticalAlignment(gfx::VerticalAlignment::ALIGN_BOTTOM);
-    view->SetAutoColorReadabilityEnabled(false);
-    view->SetEnabledColor(kTextColor);
-    view->SetFontList(ambient::util::GetDefaultFontlist().DeriveWithSizeDelta(
-        kMediaStringFontSizeDip - kDefaultFontSizeDip));
-    view->SetShadows(ambient::util::GetTextShadowValues());
-    view->SetElideBehavior(gfx::ElideBehavior::NO_ELIDE);
-  }
+  media_text_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_TO_HEAD);
+  media_text_->SetVerticalAlignment(gfx::VerticalAlignment::ALIGN_MIDDLE);
+  media_text_->SetAutoColorReadabilityEnabled(false);
+  media_text_->SetEnabledColor(ambient::util::GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary));
+  media_text_->SetFontList(
+      ambient::util::GetDefaultFontlist()
+          .DeriveWithSizeDelta(kMediaStringFontSizeDip - kDefaultFontSizeDip)
+          .DeriveWithWeight(gfx::Font::Weight::MEDIUM));
+  media_text_->SetElideBehavior(gfx::ElideBehavior::NO_ELIDE);
+
+  auto shadow_values = ambient::util::GetTextShadowValues();
+  media_text_->SetShadows(shadow_values);
+  gfx::Insets shadow_insets = gfx::ShadowValue::GetMargin(shadow_values);
+  // Compensate the shadow insets to put the text middle align with the icon.
+  media_text_->SetBorder(views::CreateEmptyBorder(
+      /*top=*/-shadow_insets.bottom(),
+      /*left=*/0,
+      /*bottom=*/-shadow_insets.top(),
+      /*right=*/0));
 
   BindMediaControllerObserver();
 }
 
 void MediaStringView::BindMediaControllerObserver() {
-  media_session::mojom::MediaSessionService* service =
+  media_session::MediaSessionService* service =
       Shell::Get()->shell_delegate()->GetMediaSessionService();
   // Service might be unavailable under some test environments.
   if (!service)
@@ -328,5 +342,8 @@ void MediaStringView::StartScrolling(bool is_initial) {
     text_layer->SetTransform(transform);
   }
 }
+
+BEGIN_METADATA(MediaStringView, views::View)
+END_METADATA
 
 }  // namespace ash

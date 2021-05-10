@@ -7,6 +7,7 @@
 #include <tuple>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
@@ -21,10 +22,12 @@
 #include "base/test/task_environment.h"
 #include "base/timer/mock_timer.h"
 #include "chromeos/components/multidevice/remote_device_test_util.h"
-#include "chromeos/constants/chromeos_features.h"
+#include "chromeos/components/multidevice/secure_message_delegate.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/network/network_handler_test_helper.h"
 #include "chromeos/services/device_sync/cryptauth_device_manager_impl.h"
 #include "chromeos/services/device_sync/cryptauth_device_registry_impl.h"
+#include "chromeos/services/device_sync/cryptauth_enroller.h"
 #include "chromeos/services/device_sync/cryptauth_enrollment_manager_impl.h"
 #include "chromeos/services/device_sync/cryptauth_feature_type.h"
 #include "chromeos/services/device_sync/cryptauth_gcm_manager_impl.h"
@@ -594,10 +597,10 @@ class FakeRemoteDeviceProviderFactory
               device_manager);
     EXPECT_EQ(fake_cryptauth_v2_device_manager_factory_->instance(),
               v2_device_manager);
-    EXPECT_EQ(identity_manager_
-                  ->GetPrimaryAccountInfo(signin::ConsentLevel::kNotRequired)
-                  .email,
-              user_email);
+    EXPECT_EQ(
+        identity_manager_->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin)
+            .email,
+        user_email);
     if (base::FeatureList::IsEnabled(features::kCryptAuthV2Enrollment)) {
       EXPECT_EQ(fake_cryptauth_v2_enrollment_manager_factory_->instance()
                     ->GetUserPrivateKey(),
@@ -742,7 +745,7 @@ class DeviceSyncServiceTest
     scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
 
     DBusThreadManager::Initialize();
-    NetworkHandler::Initialize();
+    network_handler_test_helper_ = std::make_unique<NetworkHandlerTestHelper>();
     base::RunLoop().RunUntilIdle();
 
     fake_gcm_driver_ = std::make_unique<gcm::FakeGCMDriver>();
@@ -872,7 +875,7 @@ class DeviceSyncServiceTest
     SoftwareFeatureManagerImpl::Factory::SetFactoryForTesting(nullptr);
     DeviceSyncImpl::Factory::SetCustomFactory(nullptr);
 
-    NetworkHandler::Shutdown();
+    network_handler_test_helper_.reset();
     DBusThreadManager::Shutdown();
   }
 
@@ -1575,6 +1578,7 @@ class DeviceSyncServiceTest
   const std::vector<cryptauth::ExternalDeviceInfo> test_device_infos_;
   const std::vector<cryptauth::IneligibleDevice> test_ineligible_devices_;
 
+  std::unique_ptr<NetworkHandlerTestHelper> network_handler_test_helper_;
   std::unique_ptr<TestingPrefServiceSimple> test_pref_service_;
   base::MockOneShotTimer* mock_timer_;
   std::unique_ptr<base::SimpleTestClock> simple_test_clock_;

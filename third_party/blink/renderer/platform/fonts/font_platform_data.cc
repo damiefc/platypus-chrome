@@ -200,9 +200,9 @@ SkFontID FontPlatformData::UniqueID() const {
 }
 
 String FontPlatformData::FontFamilyName() const {
-  DCHECK(this->Typeface());
+  DCHECK(Typeface());
   SkTypeface::LocalizedStrings* font_family_iterator =
-      this->Typeface()->createFamilyNameIterator();
+      Typeface()->createFamilyNameIterator();
   SkTypeface::LocalizedString localized_string;
   while (font_family_iterator->next(&localized_string) &&
          !localized_string.fString.size()) {
@@ -283,7 +283,7 @@ WebFontRenderStyle FontPlatformData::QuerySystemRenderStyle(
 
 void FontPlatformData::SetupSkFont(SkFont* font,
                                    float device_scale_factor,
-                                   const Font*) const {
+                                   const FontDescription*) const {
   style_.ApplyToSkFont(font, device_scale_factor);
 
   const float ts = text_size_ >= 0 ? text_size_ : 12;
@@ -336,6 +336,15 @@ IdentifiableToken FontPlatformData::ComputeTypefaceDigest() const {
   }
 
   return builder.GetToken();  // hasher.GetHash();
+}
+
+String FontPlatformData::GetPostScriptName() const {
+  if (!typeface_)
+    return String();
+
+  SkString postscript_name;
+  bool success = typeface_->getPostScriptName(&postscript_name);
+  return success ? postscript_name.c_str() : String();
 }
 
 }  // namespace blink

@@ -12,18 +12,17 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/chromeos/printing/bulk_printers_calculator_factory.h"
 #include "chrome/browser/chromeos/printing/printers_sync_bridge.h"
 #include "chrome/browser/chromeos/printing/synced_printers_manager_factory.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/sync/model/fake_model_type_change_processor.h"
 #include "components/sync/model/model_type_store.h"
-#include "components/sync/model/model_type_store_test_util.h"
+#include "components/sync/test/model/model_type_store_test_util.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -60,9 +59,8 @@ constexpr char kColorLaserJson[] = R"json({
 // Helper class to record observed events.
 class LoggingObserver : public EnterprisePrintersProvider::Observer {
  public:
-  explicit LoggingObserver(EnterprisePrintersProvider* source)
-      : observer_(this) {
-    observer_.Add(source);
+  explicit LoggingObserver(EnterprisePrintersProvider* source) {
+    observation_.Observe(source);
   }
 
   void OnPrintersChanged(bool complete,
@@ -76,9 +74,9 @@ class LoggingObserver : public EnterprisePrintersProvider::Observer {
  private:
   bool complete_ = false;
   std::vector<Printer> printers_;
-  ScopedObserver<EnterprisePrintersProvider,
-                 EnterprisePrintersProvider::Observer>
-      observer_;
+  base::ScopedObservation<EnterprisePrintersProvider,
+                          EnterprisePrintersProvider::Observer>
+      observation_{this};
 };
 
 class EnterprisePrintersProviderTest : public testing::Test {

@@ -5,7 +5,7 @@
 #include "storage/browser/blob/blob_memory_controller.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
@@ -170,7 +170,7 @@ class BlobMemoryControllerTest : public base::test::WithFeatureOverride,
 
   scoped_refptr<TestSimpleTaskRunner> file_runner_ = new TestSimpleTaskRunner();
 
-  base::test::SingleThreadTaskEnvironment task_environment_;
+  base::test::TaskEnvironment task_environment_;
 };
 
 TEST_P(BlobMemoryControllerTest, Strategy) {

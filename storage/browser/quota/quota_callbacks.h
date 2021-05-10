@@ -14,9 +14,8 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/contains.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
-#include "storage/browser/quota/quota_client.h"
 #include "third_party/blink/public/mojom/quota/quota_types.mojom-forward.h"
 
 namespace url {
@@ -119,4 +118,4 @@ class CallbackQueueMap {
 
 }  // namespace storage
 
-#endif  // STORAGE_QUOTA_QUOTA_TYPES_H_
+#endif  // STORAGE_BROWSER_QUOTA_QUOTA_CALLBACKS_H_

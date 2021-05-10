@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef UI_EVENTS_GESTURE_DETECTION_GESTURE_EVENT_DETAILS_H_
-#define UI_EVENTS_GESTURE_DETECTION_GESTURE_EVENT_DETAILS_H_
+#ifndef UI_EVENTS_GESTURE_EVENT_DETAILS_H_
+#define UI_EVENTS_GESTURE_EVENT_DETAILS_H_
 
 #include <string.h>
 
@@ -39,13 +39,12 @@ struct EVENTS_BASE_EXPORT GestureEventDetails {
     device_type_ = device_type;
   }
 
-  bool is_source_touch_event_set_non_blocking() const {
-    return is_source_touch_event_set_non_blocking_;
+  bool is_source_touch_event_set_blocking() const {
+    return is_source_touch_event_set_blocking_;
   }
-  void set_is_source_touch_event_set_non_blocking(
-      bool is_source_touch_event_set_non_blocking) {
-    is_source_touch_event_set_non_blocking_ =
-        is_source_touch_event_set_non_blocking;
+  void set_is_source_touch_event_set_blocking(
+      bool is_source_touch_event_set_blocking) {
+    is_source_touch_event_set_blocking_ = is_source_touch_event_set_blocking;
   }
 
   EventPointerType primary_pointer_type() const {
@@ -224,7 +223,7 @@ struct EVENTS_BASE_EXPORT GestureEventDetails {
 
   GestureDeviceType device_type_;
 
-  bool is_source_touch_event_set_non_blocking_ = false;
+  bool is_source_touch_event_set_blocking_ = false;
 
   // The pointer type for the first touch point in the gesture.
   EventPointerType primary_pointer_type_ = EventPointerType::kUnknown;
@@ -238,4 +237,4 @@ struct EVENTS_BASE_EXPORT GestureEventDetails {
 
 }  // namespace ui
 
-#endif  // UI_EVENTS_GESTURE_DETECTION_GESTURE_EVENT_DETAILS_H_
+#endif  // UI_EVENTS_GESTURE_EVENT_DETAILS_H_

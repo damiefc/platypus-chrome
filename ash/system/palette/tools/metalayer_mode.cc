@@ -9,11 +9,13 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_provider.h"
 #include "ash/system/palette/palette_ids.h"
 #include "ash/system/palette/palette_utils.h"
 #include "ash/system/toast/toast_manager_impl.h"
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/system/tray/tray_popup_utils.h"
 #include "base/bind.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event.h"
@@ -90,7 +92,7 @@ const gfx::VectorIcon& MetalayerMode::GetPaletteIcon() const {
 }
 
 views::View* MetalayerMode::CreateView() {
-  views::View* view = CreateDefaultView(base::string16());
+  views::View* view = CreateDefaultView(std::u16string());
   UpdateView();
   return view;
 }
@@ -137,7 +139,7 @@ void MetalayerMode::OnTouchEvent(ui::TouchEvent* event) {
     ToastData toast(
         kToastId,
         l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_METALAYER_TOAST_LOADING),
-        kToastDurationMs, base::Optional<base::string16>());
+        kToastDurationMs, base::Optional<std::u16string>());
     Shell::Get()->toast_manager()->Show(toast);
   } else {
     delegate()->RecordPaletteOptionsUsage(
@@ -211,24 +213,30 @@ void MetalayerMode::UpdateView() {
   if (!highlight_view_)
     return;
 
-  const base::string16 text = l10n_util::GetStringUTF16(
+  const std::u16string text = l10n_util::GetStringUTF16(
       loading() ? IDS_ASH_STYLUS_TOOLS_METALAYER_MODE_LOADING
                 : IDS_ASH_STYLUS_TOOLS_METALAYER_MODE);
   highlight_view_->text_label()->SetText(text);
   highlight_view_->SetAccessibleName(text);
 
   highlight_view_->SetEnabled(selectable());
+  const bool enabled = highlight_view_->GetEnabled();
+  auto* color_provider = AshColorProvider::Get();
+  auto label_color = color_provider->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary);
+  if (!enabled)
+    label_color = AshColorProvider::GetDisabledColor(label_color);
+  highlight_view_->text_label()->SetEnabledColor(label_color);
+  TrayPopupUtils::SetLabelFontList(
+      highlight_view_->text_label(),
+      TrayPopupUtils::FontStyle::kDetailedViewLabel);
 
-  TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::DETAILED_VIEW_LABEL,
-                           true /* use_unified_theme */);
-  style.set_color_style(highlight_view_->GetEnabled()
-                            ? TrayPopupItemStyle::ColorStyle::ACTIVE
-                            : TrayPopupItemStyle::ColorStyle::DISABLED);
-
-  style.SetupLabel(highlight_view_->text_label());
-
+  auto icon_color = color_provider->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kIconColorPrimary);
+  if (!enabled)
+    icon_color = AshColorProvider::GetDisabledColor(icon_color);
   highlight_view_->left_icon()->SetImage(
-      CreateVectorIcon(GetPaletteIcon(), kMenuIconSize, style.GetIconColor()));
+      CreateVectorIcon(GetPaletteIcon(), kMenuIconSize, icon_color));
 }
 
 void MetalayerMode::OnMetalayerSessionComplete() {

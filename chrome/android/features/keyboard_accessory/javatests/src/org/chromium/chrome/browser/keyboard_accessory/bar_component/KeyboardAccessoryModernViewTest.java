@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.keyboard_accessory.bar_component;
 
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.longClick;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
 import static androidx.test.espresso.matcher.ViewMatchers.isRoot;
@@ -52,6 +53,9 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.Callback;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -70,9 +74,6 @@ import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.feature_engagement.TriggerState;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
-import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.DeferredViewStubInflationProvider;
@@ -225,6 +226,26 @@ public class KeyboardAccessoryModernViewTest {
 
     @Test
     @MediumTest
+    public void testAddsLongClickableAutofillSuggestions() {
+        AtomicReference<Boolean> clickRecorded = new AtomicReference<>();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mModel.set(VISIBLE, true);
+            mModel.get(BAR_ITEMS).set(new BarItem[] {
+                    new AutofillBarItem(
+                            new AutofillSuggestion("Johnathan", "Smith", "", DropdownItem.NO_ICON,
+                                    false, 1, false, false, false),
+                            new Action("Unused", AUTOFILL_SUGGESTION,
+                                    result -> {}, result -> clickRecorded.set(true))),
+                    createTabs()});
+        });
+
+        onViewWaiting(withText("Johnathan")).perform(longClick());
+
+        assertTrue(clickRecorded.get());
+    }
+
+    @Test
+    @MediumTest
     public void testUpdatesKeyPaddingAfterRotation() throws InterruptedException {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mModel.set(VISIBLE, true);
@@ -358,6 +379,33 @@ public class KeyboardAccessoryModernViewTest {
         waitForHelpBubble(withText(R.string.iph_keyboard_accessory_swipe_for_more))
                 .perform(click());
         assertThat(tracker.wasDismissed(), is(true));
+    }
+
+    @Test
+    @MediumTest
+    public void testDismissesPaymentOfferEducationBubbleOnFilling() {
+        String itemTag = "Cashback linked";
+        AutofillBarItem itemWithIPH = new AutofillBarItem(
+                new AutofillSuggestion("Johnathan", "Smith", itemTag, R.drawable.ic_offer_tag,
+                        false, 70000, false, false, false),
+                new KeyboardAccessoryData.Action("", AUTOFILL_SUGGESTION, unused -> {}));
+        itemWithIPH.setFeatureForIPH(FeatureConstants.KEYBOARD_ACCESSORY_PAYMENT_OFFER_FEATURE);
+
+        TestTracker tracker = new TestTracker();
+        TrackerFactory.setTrackerForTests(tracker);
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mModel.set(VISIBLE, true);
+            mModel.get(BAR_ITEMS).set(new BarItem[] {itemWithIPH, createTabs()});
+        });
+
+        onViewWaiting(withText("Johnathan"));
+        waitForHelpBubble(withText(itemTag));
+        onView(withText("Johnathan")).perform(click());
+
+        assertThat(tracker.wasDismissed(), is(true));
+        assertThat(tracker.getLastEmittedEvent(),
+                is(EventConstants.KEYBOARD_ACCESSORY_PAYMENT_AUTOFILLED));
     }
 
     @Test

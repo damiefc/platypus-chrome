@@ -1,8 +1,8 @@
 {
   "schema": "pedal_concepts_runtime",
-  "schema_version": 1,
-  "data_version": 15497154,
-  "tokenize_characters": " -",
+  "schema_version": 3,
+  "data_version": 15831389,
+  "tokenize_each_character": false,
   "dictionary": [
     "chrome",
     "google",
@@ -64,11 +64,11 @@
     "کوکی‌ها",
     "گذرواژه‌",
     "گذرواژه‌ها",
-    "یک"
+    "یک",
+    "一時的踏板placeholder"
   ],
   "pedals": [
     {
-      "name": "CLEAR_BROWSING_DATA",
       "id": 1,
       "groups": [
         {
@@ -100,15 +100,11 @@
               56
             ],
             [
-              45,
-              56
-            ],
-            [
-              45,
-              56
-            ],
-            [
               33,
+              56
+            ],
+            [
+              45,
               56
             ],
             [
@@ -131,9 +127,6 @@
               3
             ],
             [
-              3
-            ],
-            [
               29
             ],
             [
@@ -141,10 +134,11 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "MANAGE_PASSWORDS",
       "id": 2,
       "groups": [
         {
@@ -172,15 +166,15 @@
               56
             ],
             [
-              44,
-              56
-            ],
-            [
               35,
               56
             ],
             [
               38,
+              56
+            ],
+            [
+              44,
               56
             ],
             [
@@ -215,10 +209,11 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "UPDATE_CREDIT_CARD",
       "id": 3,
       "groups": [
         {
@@ -273,11 +268,6 @@
               4
             ],
             [
-              3,
-              52,
-              4
-            ],
-            [
               55,
               4
             ],
@@ -294,10 +284,6 @@
               52
             ],
             [
-              3,
-              52
-            ],
-            [
               47
             ],
             [
@@ -308,10 +294,11 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "LAUNCH_INCOGNITO",
       "id": 4,
       "groups": [
         {
@@ -364,6 +351,10 @@
               40
             ],
             [
+              11,
+              40
+            ],
+            [
               17,
               40
             ],
@@ -373,14 +364,10 @@
             ],
             [
               11,
-              40
-            ],
-            [
-              17,
               19
             ],
             [
-              11,
+              17,
               19
             ],
             [
@@ -388,10 +375,11 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "TRANSLATE",
       "id": 5,
       "groups": [
         {
@@ -415,12 +403,12 @@
           "single": true,
           "synonyms": [
             [
-              15,
-              28
-            ],
-            [
               14,
               56
+            ],
+            [
+              15,
+              28
             ]
           ]
         },
@@ -440,10 +428,11 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     },
     {
-      "name": "UPDATE_CHROME",
       "id": 6,
       "groups": [
         {
@@ -480,7 +469,9 @@
             ]
           ]
         }
-      ]
+      ],
+      "omnibox_ui_strings": null,
+      "url": ""
     }
   ],
   "ignore_group": {
@@ -514,13 +505,7 @@
         23
       ],
       [
-        23
-      ],
-      [
         12
-      ],
-      [
-        60
       ]
     ]
   },

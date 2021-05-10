@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "ui/views/window/dialog_delegate.h"
 
@@ -22,16 +21,15 @@ namespace views {
 class MessageBoxView;
 }
 
-// An external protocol dialog for ChromeOS. Unlike other platforms,
-// ChromeOS does not support launching external program, therefore,
-// this dialog simply says it is not supported.
-class ExternalProtocolDialog : public views::DialogDelegate {
+// The external protocol dialog for Chrome OS shown when there are no handlers.
+class ExternalProtocolNoHandlersDialog : public views::DialogDelegate {
  public:
-  ExternalProtocolDialog(content::WebContents* web_contents, const GURL& url);
-  ~ExternalProtocolDialog() override;
+  ExternalProtocolNoHandlersDialog(content::WebContents* web_contents,
+                                   const GURL& url);
+  ~ExternalProtocolNoHandlersDialog() override;
 
   // views::DialogDelegate:
-  base::string16 GetWindowTitle() const override;
+  std::u16string GetWindowTitle() const override;
   views::View* GetContentsView() override;
   const views::Widget* GetWidget() const override;
   views::Widget* GetWidget() override;
@@ -46,7 +44,7 @@ class ExternalProtocolDialog : public views::DialogDelegate {
   // The scheme of the url.
   std::string scheme_;
 
-  DISALLOW_COPY_AND_ASSIGN(ExternalProtocolDialog);
+  DISALLOW_COPY_AND_ASSIGN(ExternalProtocolNoHandlersDialog);
 };
 
 #endif  // CHROME_BROWSER_CHROMEOS_EXTERNAL_PROTOCOL_DIALOG_H_

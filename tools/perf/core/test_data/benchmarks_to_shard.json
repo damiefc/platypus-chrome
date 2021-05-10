@@ -49,6 +49,13 @@
   {
     "repeat": 1,
     "stories": [
+      "sanitizer.html"
+    ],
+    "name": "blink_perf.sanitizer-api"
+  },
+  {
+    "repeat": 1,
+    "stories": [
       "AttributeDescendantSelector.html",
       "CSSPropertySetterGetter.html",
       "CSSPropertySetterGetterMethods.html",
@@ -92,6 +99,7 @@
       "delete-in-password-field.html",
       "div-editable.html",
       "inner_html_with_selection.html",
+      "insert-text-with-dir-auto.html",
       "long-sibling-list.html",
       "modify-element-classname.html",
       "modify-element-id.html",
@@ -99,6 +107,7 @@
       "move-down-with-hidden-elements.html",
       "move-up-with-hidden-elements.html",
       "remove_child_with_selection.html",
+      "replace-text-with-dir-auto.html",
       "select-multiple-add.html",
       "select-single-add.html",
       "select-single-remove.html",
@@ -237,6 +246,7 @@
     "stories": [
       "css-parser-yui.html",
       "declarative-shadow-dom.html",
+      "declarative-shadow-dom-cloning.html",
       "html-parser-threaded.html",
       "html-parser.html",
       "html5-full-render.html",
@@ -276,15 +286,6 @@
       "shadow-style-share-with-distribution.html",
       "shadow-style-share.html",
       "style-sheet-insert.html",
-      "v0-changing-classname-with-shadow-dom.html",
-      "v0-changing-classname-without-shadow-dom.html",
-      "v0-changing-select-with-shadow-dom.html",
-      "v0-changing-select-without-shadow-dom.html",
-      "v0-content-reprojection.html",
-      "v0-large-distribution-without-layout.html",
-      "v0-multiple-insertion-points.html",
-      "v0-shadow-reprojection.html",
-      "v0-small-distribution-with-layout.html",
       "v1-distribution-disconnected-and-reconnected.html",
       "v1-distribution.html",
       "v1-host-child-append.html",

@@ -150,9 +150,9 @@ void GpuDataManagerImpl::AppendGpuCommandLine(base::CommandLine* command_line,
   private_->AppendGpuCommandLine(command_line, kind);
 }
 
-bool GpuDataManagerImpl::GpuProcessStartAllowed() const {
+void GpuDataManagerImpl::StartUmaTimer() {
   base::AutoLock auto_lock(lock_);
-  return private_->GpuProcessStartAllowed();
+  private_->StartUmaTimer();
 }
 
 void GpuDataManagerImpl::UpdateGpuInfo(
@@ -220,9 +220,9 @@ bool GpuDataManagerImpl::VulkanRequested() const {
   return private_->VulkanRequested();
 }
 
-void GpuDataManagerImpl::OnBrowserThreadsStarted() {
+void GpuDataManagerImpl::PostCreateThreads() {
   base::AutoLock auto_lock(lock_);
-  private_->OnBrowserThreadsStarted();
+  private_->PostCreateThreads();
 }
 
 void GpuDataManagerImpl::TerminateInfoCollectionGpuProcess() {
@@ -241,7 +241,7 @@ void GpuDataManagerImpl::UpdateGpuFeatureInfo(
 }
 
 void GpuDataManagerImpl::UpdateGpuExtraInfo(
-    const gpu::GpuExtraInfo& gpu_extra_info) {
+    const gfx::GpuExtraInfo& gpu_extra_info) {
   base::AutoLock auto_lock(lock_);
   private_->UpdateGpuExtraInfo(gpu_extra_info);
 }
@@ -262,7 +262,17 @@ gpu::GpuFeatureInfo GpuDataManagerImpl::GetGpuFeatureInfoForHardwareGpu()
   return private_->GetGpuFeatureInfoForHardwareGpu();
 }
 
-gpu::GpuExtraInfo GpuDataManagerImpl::GetGpuExtraInfo() const {
+bool GpuDataManagerImpl::GpuAccessAllowedForHardwareGpu(std::string* reason) {
+  base::AutoLock auto_lock(lock_);
+  return private_->GpuAccessAllowedForHardwareGpu(reason);
+}
+
+bool GpuDataManagerImpl::IsGpuCompositingDisabledForHardwareGpu() const {
+  base::AutoLock auto_lock(lock_);
+  return private_->IsGpuCompositingDisabledForHardwareGpu();
+}
+
+gfx::GpuExtraInfo GpuDataManagerImpl::GetGpuExtraInfo() const {
   base::AutoLock auto_lock(lock_);
   return private_->GetGpuExtraInfo();
 }
@@ -328,12 +338,6 @@ void GpuDataManagerImpl::DisableDomainBlockingFor3DAPIsForTesting() {
   private_->DisableDomainBlockingFor3DAPIsForTesting();
 }
 
-bool GpuDataManagerImpl::UpdateActiveGpu(uint32_t vendor_id,
-                                         uint32_t device_id) {
-  base::AutoLock auto_lock(lock_);
-  return private_->UpdateActiveGpu(vendor_id, device_id);
-}
-
 gpu::GpuMode GpuDataManagerImpl::GetGpuMode() const {
   base::AutoLock auto_lock(lock_);
   return private_->GetGpuMode();
@@ -342,6 +346,11 @@ gpu::GpuMode GpuDataManagerImpl::GetGpuMode() const {
 void GpuDataManagerImpl::FallBackToNextGpuMode() {
   base::AutoLock auto_lock(lock_);
   private_->FallBackToNextGpuMode();
+}
+
+bool GpuDataManagerImpl::CanFallback() const {
+  base::AutoLock auto_lock(lock_);
+  return private_->CanFallback();
 }
 
 bool GpuDataManagerImpl::IsGpuProcessUsingHardwareGpu() const {
@@ -362,6 +371,13 @@ void GpuDataManagerImpl::OnDisplayAdded(const display::Display& new_display) {
 void GpuDataManagerImpl::OnDisplayRemoved(const display::Display& old_display) {
   base::AutoLock auto_lock(lock_);
   private_->OnDisplayRemoved(old_display);
+}
+
+void GpuDataManagerImpl::OnDisplayMetricsChanged(
+    const display::Display& display,
+    uint32_t changed_metrics) {
+  base::AutoLock auto_lock(lock_);
+  private_->OnDisplayMetricsChanged(display, changed_metrics);
 }
 
 // static

@@ -12,16 +12,17 @@ import 'chrome://resources/cr_elements/cr_toast/cr_toast.m.js';
 import 'chrome://resources/cr_elements/hidden_style_css.m.js';
 import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 import 'chrome://resources/mojo/mojo/public/mojom/base/text_direction.mojom-lite.js';
-import './strings.m.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {isMac} from 'chrome://resources/js/cr.m.js';
 import {FocusOutlineManager} from 'chrome://resources/js/cr/ui/focus_outline_manager.m.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {Debouncer, html, microTask, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {hasKeyModifiers} from 'chrome://resources/js/util.m.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {BrowserProxy} from './browser_proxy.js';
+import {I18nBehavior, loadTimeData} from './i18n_setup.js';
+import {NewTabPageProxy} from './new_tab_page_proxy.js';
+import {WindowProxy} from './window_proxy.js';
 
 /**
  * @enum {number}
@@ -66,7 +67,31 @@ function getHitIndex(rects, x, y) {
       r => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
 }
 
-class MostVisitedElement extends PolymerElement {
+
+/**
+ * Returns null if URL is not valid.
+ * @param {string} urlString
+ * @return {URL}
+ * @private
+ */
+function normalizeUrl(urlString) {
+  try {
+    const url = new URL(
+        urlString.includes('://') ? urlString : `https://${urlString}/`);
+    if (['http:', 'https:'].includes(url.protocol)) {
+      return url;
+    }
+  } catch (e) {
+  }
+  return null;
+}
+
+/**
+ * @polymer
+ * @extends {PolymerElement}
+ */
+class MostVisitedElement extends mixinBehaviors
+([I18nBehavior], PolymerElement) {
   static get is() {
     return 'ntp-most-visited';
   }
@@ -96,8 +121,7 @@ class MostVisitedElement extends PolymerElement {
       /** @private */
       columnCount_: {
         type: Number,
-        computed: `computeColumnCount_(tiles_, screenWidth_, maxTiles_,
-            visible_)`,
+        computed: `computeColumnCount_(tiles_, screenWidth_, maxTiles_)`,
       },
 
       /** @private */
@@ -127,6 +151,26 @@ class MostVisitedElement extends PolymerElement {
       /** @private */
       dialogTitle_: String,
 
+      /** @private */
+      dialogSaveDisabled_: {
+        type: Boolean,
+        computed: `computeDialogSaveDisabled_(dialogTitle_, dialogTileUrl_,
+            dialogShortcutAlreadyExists_)`,
+      },
+
+      /** @private */
+      dialogShortcutAlreadyExists_: {
+        type: Boolean,
+        computed: 'computeDialogShortcutAlreadyExists_(tiles_, dialogTileUrl_)',
+      },
+
+      /** @private */
+      dialogTileUrlError_: {
+        type: String,
+        computed: `computeDialogTileUrlError_(dialogTileUrl_,
+            dialogShortcutAlreadyExists_)`,
+      },
+
       /**
        * Used to hide hover style and cr-icon-button of tiles while the tiles
        * are being reordered.
@@ -141,14 +185,21 @@ class MostVisitedElement extends PolymerElement {
       /** @private */
       maxTiles_: {
         type: Number,
-        computed: 'computeMaxTiles_(visible_, customLinksEnabled_)',
+        computed: 'computeMaxTiles_(customLinksEnabled_)',
+      },
+
+      /** @private */
+      maxVisibleTiles_: {
+        type: Number,
+        computed: 'computeMaxVisibleTiles_(columnCount_, rowCount_)',
       },
 
       /** @private */
       showAdd_: {
         type: Boolean,
         value: false,
-        computed: 'computeShowAdd_(tiles_, columnCount_, customLinksEnabled_)',
+        computed:
+            'computeShowAdd_(tiles_, maxVisibleTiles_, customLinksEnabled_)',
       },
 
       /** @private */
@@ -182,7 +233,7 @@ class MostVisitedElement extends PolymerElement {
     super();
     /** @private {boolean} */
     this.adding_ = false;
-    const {callbackRouter, handler} = BrowserProxy.getInstance();
+    const {callbackRouter, handler} = NewTabPageProxy.getInstance();
     /** @private {!newTabPage.mojom.PageCallbackRouter} */
     this.callbackRouter_ = callbackRouter;
     /** @private {newTabPage.mojom.PageHandlerRemote} */
@@ -215,7 +266,7 @@ class MostVisitedElement extends PolymerElement {
           performance.measure('most-visited-mojo', 'most-visited-mojo-start');
           this.visible_ = info.visible;
           this.customLinksEnabled_ = info.customLinksEnabled;
-          this.tiles_ = info.tiles.slice(0, 10);
+          this.tiles_ = info.tiles.slice(0, assert(this.maxTiles_));
         });
     performance.mark('most-visited-mojo-start');
     this.eventTracker_.add(document, 'visibilitychange', () => {
@@ -249,12 +300,13 @@ class MostVisitedElement extends PolymerElement {
 
     /** @private {!Function} */
     this.boundOnWidthChange_ = this.updateScreenWidth_.bind(this);
-    const {matchMedia} = BrowserProxy.getInstance();
     /** @private {!MediaQueryList} */
-    this.mediaListenerWideWidth_ = matchMedia('(min-width: 672px)');
+    this.mediaListenerWideWidth_ =
+        WindowProxy.getInstance().matchMedia('(min-width: 672px)');
     this.mediaListenerWideWidth_.addListener(this.boundOnWidthChange_);
     /** @private {!MediaQueryList} */
-    this.mediaListenerMediumWidth_ = matchMedia('(min-width: 560px)');
+    this.mediaListenerMediumWidth_ =
+        WindowProxy.getInstance().matchMedia('(min-width: 560px)');
     this.mediaListenerMediumWidth_.addListener(this.boundOnWidthChange_);
     this.updateScreenWidth_();
     /** @private {!function(Event)} */
@@ -279,10 +331,6 @@ class MostVisitedElement extends PolymerElement {
    * @private
    */
   computeColumnCount_() {
-    if (!this.visible_) {
-      return 0;
-    }
-
     let maxColumns = 3;
     if (this.screenWidth_ === ScreenWidth.WIDE) {
       maxColumns = 5;
@@ -318,7 +366,15 @@ class MostVisitedElement extends PolymerElement {
    * @private
    */
   computeMaxTiles_() {
-    return !this.visible_ ? 0 : (this.customLinksEnabled_ ? 10 : 8);
+    return this.customLinksEnabled_ ? 10 : 8;
+  }
+
+  /**
+   * @return {number}
+   * @private
+   */
+  computeMaxVisibleTiles_() {
+    return this.columnCount_ * this.rowCount_;
   }
 
   /**
@@ -327,7 +383,45 @@ class MostVisitedElement extends PolymerElement {
    */
   computeShowAdd_() {
     return this.customLinksEnabled_ && this.tiles_ &&
-        this.tiles_.length < this.columnCount_ * 2;
+        this.tiles_.length < this.maxVisibleTiles_;
+  }
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeDialogSaveDisabled_() {
+    return !this.dialogTileUrl_.trim() ||
+        normalizeUrl(this.dialogTileUrl_) === null ||
+        this.dialogShortcutAlreadyExists_;
+  }
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeDialogShortcutAlreadyExists_() {
+    const dialogTileHref = (normalizeUrl(this.dialogTileUrl_) || {}).href;
+    if (!dialogTileHref) {
+      return false;
+    }
+    return (this.tiles_ || []).some(({url: {url}}, index) => {
+      if (index === this.actionMenuTargetIndex_) {
+        return false;
+      }
+      const otherUrl = normalizeUrl(url);
+      return otherUrl && otherUrl.href === dialogTileHref;
+    });
+  }
+
+  /**
+   * @return {string}
+   * @private
+   */
+  computeDialogTileUrlError_() {
+    return loadTimeData.getString(
+        this.dialogShortcutAlreadyExists_ ? 'shortcutAlreadyExists' :
+                                            'invalidUrl');
   }
 
   /**
@@ -346,6 +440,10 @@ class MostVisitedElement extends PolymerElement {
    * @private
    */
   dragEnd_(x, y) {
+    if (!this.customLinksEnabled_) {
+      this.reordering_ = false;
+      return;
+    }
     this.dragOffset_ = null;
     const dragElement = this.shadowRoot.querySelector('.tile.dragging');
     if (!dragElement) {
@@ -498,7 +596,7 @@ class MostVisitedElement extends PolymerElement {
    * @private
    */
   isHidden_(index) {
-    return index >= this.columnCount_ * 2;
+    return index >= this.maxVisibleTiles_;
   }
 
   /** @private */
@@ -516,7 +614,7 @@ class MostVisitedElement extends PolymerElement {
    * @private
    */
   onAddShortcutKeyDown_(e) {
-    if (e.altKey || e.shiftKey || e.metaKey || e.ctrlKey) {
+    if (hasKeyModifiers(e)) {
       return;
     }
 
@@ -537,10 +635,20 @@ class MostVisitedElement extends PolymerElement {
 
   /** @private */
   onDialogClose_() {
+    this.dialogTileUrl_ = '';
     if (this.adding_) {
       this.$.addShortcut.focus();
     }
     this.adding_ = false;
+  }
+
+  /** @private */
+  onDialogTileUrlBlur_() {
+    if (this.dialogTileUrl_.length > 0 &&
+        (normalizeUrl(this.dialogTileUrl_) === null ||
+         this.dialogShortcutAlreadyExists_)) {
+      this.dialogTileUrlInvalid_ = true;
+    }
   }
 
   /** @private */
@@ -560,8 +668,7 @@ class MostVisitedElement extends PolymerElement {
     const modifier = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
     if (modifier && e.key === 'z') {
       e.preventDefault();
-      this.pageHandler_.undoMostVisitedTileAction();
-      this.$.toast.hide();
+      this.onUndoClick_();
     }
   }
 
@@ -570,6 +677,9 @@ class MostVisitedElement extends PolymerElement {
    * @private
    */
   onDragStart_(e) {
+    if (!this.customLinksEnabled_) {
+      return;
+    }
     // |dataTransfer| is null in tests.
     if (e.dataTransfer) {
       // Remove the ghost image that appears when dragging.
@@ -613,6 +723,9 @@ class MostVisitedElement extends PolymerElement {
 
   /** @private */
   onRestoreDefaultsClick_() {
+    if (!this.$.toast.open || !this.showToastButtons_) {
+      return;
+    }
     this.$.toast.hide();
     this.pageHandler_.restoreMostVisitedDefaults();
   }
@@ -626,36 +739,21 @@ class MostVisitedElement extends PolymerElement {
 
   /** @private */
   async onSave_() {
-    let newUrl;
-    try {
-      newUrl = new URL(
-          this.dialogTileUrl_.includes('://') ?
-              this.dialogTileUrl_ :
-              `https://${this.dialogTileUrl_}/`);
-      if (!['http:', 'https:'].includes(newUrl.protocol)) {
-        throw new Error();
-      }
-    } catch (e) {
-      this.dialogTileUrlInvalid_ = true;
-      return;
-    }
-
-    this.dialogTileUrlInvalid_ = false;
-
+    const newUrl = {url: normalizeUrl(this.dialogTileUrl_).href};
     this.$.dialog.close();
     let newTitle = this.dialogTileTitle_.trim();
     if (newTitle.length === 0) {
       newTitle = this.dialogTileUrl_;
     }
     if (this.adding_) {
-      const {success} = await this.pageHandler_.addMostVisitedTile(
-          {url: newUrl.href}, newTitle);
+      const {success} =
+          await this.pageHandler_.addMostVisitedTile(newUrl, newTitle);
       this.toast_(success ? 'linkAddedMsg' : 'linkCantCreate', success);
     } else {
       const {url, title} = this.tiles_[this.actionMenuTargetIndex_];
-      if (url.url !== newUrl.href || title !== newTitle) {
+      if (url.url !== newUrl.url || title !== newTitle) {
         const {success} = await this.pageHandler_.updateMostVisitedTile(
-            url, {url: newUrl.href}, newTitle);
+            url, newUrl, newTitle);
         this.toast_(success ? 'linkEditedMsg' : 'linkCantEdit', success);
       }
       this.actionMenuTargetIndex_ = -1;
@@ -688,9 +786,19 @@ class MostVisitedElement extends PolymerElement {
    * @private
    */
   onTileClick_(e) {
+    if (e.defaultPrevented) {
+      // Ignore previousely handled events.
+      return;
+    }
+
+    if (loadTimeData.getBoolean('handleMostVisitedNavigationExplicitly')) {
+      e.preventDefault();  // Prevents default browser action (navigation).
+    }
+
     this.pageHandler_.onMostVisitedTileNavigation(
         this.$.tiles.itemForElement(e.target),
-        this.$.tiles.indexForElement(e.target));
+        this.$.tiles.indexForElement(e.target), e.button || 0, e.altKey,
+        e.ctrlKey, e.metaKey, e.shiftKey);
   }
 
   /**
@@ -698,7 +806,7 @@ class MostVisitedElement extends PolymerElement {
    * @private
    */
   onTileKeyDown_(e) {
-    if (e.altKey || e.shiftKey || e.metaKey || e.ctrlKey) {
+    if (hasKeyModifiers(e)) {
       return;
     }
 
@@ -720,6 +828,9 @@ class MostVisitedElement extends PolymerElement {
 
   /** @private */
   onUndoClick_() {
+    if (!this.$.toast.open || !this.showToastButtons_) {
+      return;
+    }
     this.$.toast.hide();
     this.pageHandler_.undoMostVisitedTileAction();
   }
@@ -729,7 +840,7 @@ class MostVisitedElement extends PolymerElement {
    * @private
    */
   onTouchStart_(e) {
-    if (this.reordering_) {
+    if (this.reordering_ || !this.customLinksEnabled_) {
       return;
     }
     const tileElement = /** @type {HTMLElement} */ (e.composedPath().find(
@@ -737,18 +848,18 @@ class MostVisitedElement extends PolymerElement {
     if (!tileElement) {
       return;
     }
-    const {pageX, pageY} = e.changedTouches[0];
-    this.dragStart_(tileElement, pageX, pageY);
+    const {clientX, clientY} = e.changedTouches[0];
+    this.dragStart_(tileElement, clientX, clientY);
     const touchMove = e => {
-      const {pageX, pageY} = e.changedTouches[0];
-      this.dragOver_(pageX, pageY);
+      const {clientX, clientY} = e.changedTouches[0];
+      this.dragOver_(clientX, clientY);
     };
     const touchEnd = e => {
       this.ownerDocument.removeEventListener('touchmove', touchMove);
       tileElement.removeEventListener('touchend', touchEnd);
       tileElement.removeEventListener('touchcancel', touchEnd);
-      const {pageX, pageY} = e.changedTouches[0];
-      this.dragEnd_(pageX, pageY);
+      const {clientX, clientY} = e.changedTouches[0];
+      this.dragEnd_(clientX, clientY);
       this.reordering_ = false;
     };
     this.ownerDocument.addEventListener('touchmove', touchMove);
@@ -789,9 +900,13 @@ class MostVisitedElement extends PolymerElement {
    * @private
    */
   async tileRemove_(index) {
-    const {title, url} = this.tiles_[index];
+    const {url, isQueryTile} = this.tiles_[index];
     this.pageHandler_.deleteMostVisitedTile(url);
-    this.toast_('linkRemovedMsg', /* showButtons= */ true);
+    // Do not show the toast buttons when a query tile is removed unless it is a
+    // custom link. Removal is not reversible for non custom link query tiles.
+    this.toast_(
+        'linkRemovedMsg',
+        /* showButtons= */ this.customLinksEnabled_ || !isQueryTile);
     this.tileFocus_(index);
   }
 
@@ -810,7 +925,8 @@ class MostVisitedElement extends PolymerElement {
   onTilesRendered_() {
     performance.measure('most-visited-rendered');
     this.pageHandler_.onMostVisitedTilesRendered(
-        this.tiles_, BrowserProxy.getInstance().now());
+        this.tiles_.slice(0, assert(this.maxVisibleTiles_)),
+        WindowProxy.getInstance().now());
   }
 }
 

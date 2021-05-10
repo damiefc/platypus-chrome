@@ -25,10 +25,8 @@ sk_sp<SkImage> CreateImage(int width, int height) {
   return SkImage::MakeFromBitmap(bitmap);
 }
 
-SkMatrix CreateMatrix(const SkSize& scale) {
-  SkMatrix matrix;
-  matrix.setScale(scale.width(), scale.height());
-  return matrix;
+SkM44 CreateMatrix(const SkSize& scale) {
+  return SkM44::Scale(scale.width(), scale.height());
 }
 
 class SoftwareImageDecodeCachePerfTest : public testing::Test {
@@ -62,7 +60,7 @@ class SoftwareImageDecodeCachePerfTest : public testing::Test {
                   .set_image(CreateImage(rect.width(), rect.height()),
                              PaintImage::GetNextContentId())
                   .TakePaintImage(),
-              subrect, quality,
+              false, subrect, quality,
               CreateMatrix(SkSize::Make(scale.first, scale.second)), 0u,
               gfx::ColorSpace());
         }

@@ -5,6 +5,7 @@
 #include "ash/system/media/unified_media_controls_container.h"
 
 #include "ash/system/tray/tray_constants.h"
+#include "ui/compositor/layer.h"
 #include "ui/views/border.h"
 
 namespace ash {
@@ -22,8 +23,15 @@ UnifiedMediaControlsContainer::UnifiedMediaControlsContainer()
 void UnifiedMediaControlsContainer::SetShouldShowMediaControls(
     bool should_show) {
   should_show_media_controls_ = should_show;
-  SetVisible(expanded_amount_ > 0 && should_show_media_controls_);
+}
+
+bool UnifiedMediaControlsContainer::MaybeShowMediaControls() {
+  if (expanded_amount_ == 0 || !should_show_media_controls_ || GetVisible())
+    return false;
+
+  SetVisible(true);
   InvalidateLayout();
+  return true;
 }
 
 void UnifiedMediaControlsContainer::SetExpandedAmount(double expanded_amount) {

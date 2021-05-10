@@ -7,6 +7,8 @@
 
 #include <memory>
 
+#include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
@@ -24,17 +26,10 @@ namespace blink {
 class CanvasContextCreationAttributesCore;
 class CanvasResourceProvider;
 class ImageBitmap;
-#if defined(SUPPORT_WEBGL2_COMPUTE_CONTEXT)
 class
-    OffscreenCanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrWebGL2ComputeRenderingContextOrImageBitmapRenderingContext;
-typedef OffscreenCanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrWebGL2ComputeRenderingContextOrImageBitmapRenderingContext
+    OffscreenCanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContextOrGPUCanvasContext;
+typedef OffscreenCanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContextOrGPUCanvasContext
     OffscreenRenderingContext;
-#else
-class
-    OffscreenCanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContext;
-typedef OffscreenCanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContext
-    OffscreenRenderingContext;
-#endif
 
 class CORE_EXPORT OffscreenCanvas final
     : public EventTargetWithInlineData,
@@ -66,6 +61,10 @@ class CORE_EXPORT OffscreenCanvas final
 
   // API Methods
   ImageBitmap* transferToImageBitmap(ScriptState*, ExceptionState&);
+
+  ScriptPromise convertToBlob(ScriptState* script_state,
+                              const ImageEncodeOptions* options,
+                              ExceptionState& exception_state);
 
   const IntSize& Size() const override { return size_; }
   void SetSize(const IntSize&);
@@ -101,10 +100,6 @@ class CORE_EXPORT OffscreenCanvas final
   uint32_t ClientId() const { return client_id_; }
   uint32_t SinkId() const { return sink_id_; }
 
-  void SetFilterQuality(const SkFilterQuality& quality) {
-    filter_quality_ = quality;
-  }
-
   void AllowHighPerformancePowerPreference() {
     allow_high_performance_power_preference_ = true;
   }
@@ -124,13 +119,13 @@ class CORE_EXPORT OffscreenCanvas final
               const SkIRect& damage_rect) override;
   bool ShouldAccelerate2dContext() const override;
   CanvasResourceDispatcher* GetOrCreateResourceDispatcher() override;
+  UkmParameters GetUkmParameters() override;
 
   // Partial CanvasResourceHost implementation
   void NotifyGpuContextLost() override {}
   void SetNeedsCompositingUpdate() override {}
   // TODO(fserb): Merge this with HTMLCanvasElement::UpdateMemoryUsage
   void UpdateMemoryUsage() override;
-  SkFilterQuality FilterQuality() const override { return filter_quality_; }
 
   // EventTarget implementation
   const AtomicString& InterfaceName() const final {
@@ -232,6 +227,9 @@ class CORE_EXPORT OffscreenCanvas final
   static ContextFactoryVector& RenderingContextFactories();
   static CanvasRenderingContextFactory* GetRenderingContextFactory(int);
 
+  void RecordIdentifiabilityMetric(const blink::IdentifiableSurface& surface,
+                                   const IdentifiableToken& token) const;
+
   Member<CanvasRenderingContext> context_;
   WeakMember<ExecutionContext> execution_context_;
 
@@ -249,8 +247,6 @@ class CORE_EXPORT OffscreenCanvas final
   bool needs_matrix_clip_restore_ = false;
   bool needs_push_frame_ = false;
   bool inside_worker_raf_ = false;
-
-  SkFilterQuality filter_quality_ = kLow_SkFilterQuality;
 
   // An offscreen canvas should only prefer the high-performance GPU if it is
   // initialized by transferring control from an HTML canvas that is not

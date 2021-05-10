@@ -9,6 +9,7 @@
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/locale_settings.h"
 #include "components/vector_icons/vector_icons.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
@@ -33,8 +34,8 @@ ToolbarActionsBarBubbleViews::ToolbarActionsBarBubbleViews(
                                       views::BubbleBorder::TOP_RIGHT),
       delegate_(std::move(delegate)),
       anchored_to_action_(anchored_to_action) {
-  base::string16 ok_text = delegate_->GetActionButtonText();
-  base::string16 cancel_text = delegate_->GetDismissButtonText();
+  std::u16string ok_text = delegate_->GetActionButtonText();
+  std::u16string cancel_text = delegate_->GetDismissButtonText();
 
   int buttons = ui::DIALOG_BUTTON_NONE;
   if (!ok_text.empty())
@@ -66,7 +67,7 @@ ToolbarActionsBarBubbleViews::ToolbarActionsBarBubbleViews(
 
 ToolbarActionsBarBubbleViews::~ToolbarActionsBarBubbleViews() {}
 
-std::string ToolbarActionsBarBubbleViews::GetAnchorActionId() {
+std::string ToolbarActionsBarBubbleViews::GetAnchorActionId() const {
   return delegate_->GetAnchorActionId();
 }
 
@@ -87,12 +88,13 @@ ToolbarActionsBarBubbleViews::CreateExtraInfoView() {
   }
 
   std::unique_ptr<views::View> extra_view;
-  const base::string16& text = extra_view_info->text;
+  const std::u16string& text = extra_view_info->text;
   if (!text.empty()) {
     if (extra_view_info->is_learn_more) {
       auto image_button = views::CreateVectorImageButtonWithNativeTheme(
-          this, vector_icons::kHelpOutlineIcon);
-      image_button->SetFocusForPlatform();
+          base::BindRepeating(&ToolbarActionsBarBubbleViews::ButtonPressed,
+                              base::Unretained(this)),
+          vector_icons::kHelpOutlineIcon);
       image_button->SetTooltipText(text);
       learn_more_button_ = image_button.get();
       extra_view = std::move(image_button);
@@ -114,6 +116,15 @@ ToolbarActionsBarBubbleViews::CreateExtraInfoView() {
   return icon ? std::move(icon) : std::move(extra_view);
 }
 
+void ToolbarActionsBarBubbleViews::ButtonPressed() {
+  NotifyDelegateOfClose(ToolbarActionsBarBubbleDelegate::CLOSE_LEARN_MORE);
+  // Note that the Widget may or may not already be closed at this point,
+  // depending on delegate_->ShouldCloseOnDeactivate(). Widget::Close() protects
+  // against multiple calls (so long as they are not nested), and Widget
+  // destruction is asynchronous, so it is safe to call Close() again.
+  GetWidget()->Close();
+}
+
 void ToolbarActionsBarBubbleViews::NotifyDelegateOfClose(
     ToolbarActionsBarBubbleDelegate::CloseAction action) {
   if (delegate_notified_of_close_)
@@ -122,7 +133,7 @@ void ToolbarActionsBarBubbleViews::NotifyDelegateOfClose(
   delegate_->OnBubbleClosed(action);
 }
 
-base::string16 ToolbarActionsBarBubbleViews::GetWindowTitle() const {
+std::u16string ToolbarActionsBarBubbleViews::GetWindowTitle() const {
   return delegate_->GetHeadingText();
 }
 
@@ -146,8 +157,8 @@ void ToolbarActionsBarBubbleViews::RemovedFromWidget() {
 }
 
 void ToolbarActionsBarBubbleViews::Init() {
-  base::string16 body_text_string = delegate_->GetBodyText(anchored_to_action_);
-  base::string16 item_list = delegate_->GetItemListText();
+  std::u16string body_text_string = delegate_->GetBodyText(anchored_to_action_);
+  std::u16string item_list = delegate_->GetItemListText();
   if (body_text_string.empty() && item_list.empty())
     return;
 
@@ -156,9 +167,9 @@ void ToolbarActionsBarBubbleViews::Init() {
       views::BoxLayout::Orientation::kVertical, gfx::Insets(),
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL)));
 
-  int width = provider->GetDistanceMetric(
-                  ChromeDistanceMetric::DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-              margins().width();
+  int width =
+      provider->GetDistanceMetric(views::DISTANCE_BUBBLE_PREFERRED_WIDTH) -
+      margins().width();
 
   if (!body_text_string.empty()) {
     body_text_ = new views::Label(body_text_string);
@@ -181,16 +192,6 @@ void ToolbarActionsBarBubbleViews::Init() {
   }
 }
 
-void ToolbarActionsBarBubbleViews::ButtonPressed(views::Button* sender,
-                                                 const ui::Event& event) {
-  NotifyDelegateOfClose(ToolbarActionsBarBubbleDelegate::CLOSE_LEARN_MORE);
-  // Note that the Widget may or may not already be closed at this point,
-  // depending on delegate_->ShouldCloseOnDeactivate(). Widget::Close() protects
-  // against multiple calls (so long as they are not nested), and Widget
-  // destruction is asynchronous, so it is safe to call Close() again.
-  GetWidget()->Close();
-}
-
 void ToolbarActionsBarBubbleViews::OnWidgetVisibilityChanged(
     views::Widget* widget,
     bool visible) {
@@ -209,6 +210,10 @@ void ToolbarActionsBarBubbleViews::OnWidgetVisibilityChanged(
   // ToolbarActionsBarBubbleDelegate. The ToolbarActionsBarBubbleDelegate is
   // an ExtensionMessageBubbleBridge, which owns the
   // ExtensionMessageBubbleController.
-  delegate_->OnBubbleShown(base::BindRepeating(&views::Widget::Close,
-                                               base::Unretained(GetWidget())));
+  delegate_->OnBubbleShown(
+      base::BindOnce(&views::Widget::Close, base::Unretained(GetWidget())));
 }
+
+BEGIN_METADATA(ToolbarActionsBarBubbleViews, views::BubbleDialogDelegateView)
+ADD_READONLY_PROPERTY_METADATA(std::string, AnchorActionId)
+END_METADATA

@@ -9,8 +9,8 @@
 #include "base/run_loop.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
-#include "chrome/browser/chromeos/arc/arc_util.h"
-#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
+#include "chrome/browser/ash/arc/arc_util.h"
+#include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_icon.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
@@ -25,7 +25,6 @@
 #include "components/arc/test/connection_holder_util.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "content/public/test/browser_test.h"
-#include "ui/display/types/display_constants.h"
 
 class AppDialogViewBrowserTest : public DialogBrowserTest {
  public:
@@ -71,7 +70,20 @@ class AppDialogViewBrowserTest : public DialogBrowserTest {
 
   const std::string& app_id() const { return app_id_; }
 
-  apps::AppServiceProxy* app_service_proxy() { return app_service_proxy_; }
+  apps::AppServiceProxyChromeOs* app_service_proxy() {
+    return app_service_proxy_;
+  }
+
+  bool IsAppPaused() {
+    app_service_proxy()->FlushMojoCallsForTesting();
+
+    bool is_app_paused = false;
+    app_service_proxy()->AppRegistryCache().ForOneApp(
+        app_id(), [&is_app_paused](const apps::AppUpdate& update) {
+          is_app_paused = (update.Paused() == apps::mojom::OptionalBool::kTrue);
+        });
+    return is_app_paused;
+  }
 
   void ShowUi(const std::string& name) override {
     arc::mojom::AppInfo app;
@@ -98,9 +110,9 @@ class AppDialogViewBrowserTest : public DialogBrowserTest {
       app_instance_->SendRefreshAppList(
           std::vector<arc::mojom::AppInfo>(1, app));
       app_service_proxy_->FlushMojoCallsForTesting();
-      app_service_proxy_->Launch(app_id_, ui::EventFlags::EF_NONE,
-                                 apps::mojom::LaunchSource::kFromChromeInternal,
-                                 display::kInvalidDisplayId);
+      app_service_proxy_->Launch(
+          app_id_, ui::EventFlags::EF_NONE,
+          apps::mojom::LaunchSource::kFromChromeInternal);
     } else {
       std::map<std::string, apps::PauseData> pause_data;
       pause_data[app_id_].hours = 3;
@@ -126,13 +138,16 @@ class AppDialogViewBrowserTest : public DialogBrowserTest {
 
       EXPECT_TRUE(state_is_set);
     } else {
-      ActiveView(name)->AcceptDialog();
+      if (name == "pause_close")
+        ActiveView(name)->Close();
+      else
+        ActiveView(name)->AcceptDialog();
     }
   }
 
  private:
   std::string app_id_;
-  apps::AppServiceProxy* app_service_proxy_ = nullptr;
+  apps::AppServiceProxyChromeOs* app_service_proxy_ = nullptr;
   ArcAppListPrefs* arc_app_list_pref_ = nullptr;
   std::unique_ptr<arc::FakeAppInstance> app_instance_;
 };
@@ -143,14 +158,10 @@ IN_PROC_BROWSER_TEST_F(AppDialogViewBrowserTest, InvokeUi_block) {
 
 IN_PROC_BROWSER_TEST_F(AppDialogViewBrowserTest, InvokeUi_pause) {
   ShowAndVerifyUi();
+  EXPECT_TRUE(IsAppPaused());
+}
 
-  app_service_proxy()->FlushMojoCallsForTesting();
-
-  bool state_is_set = false;
-  app_service_proxy()->AppRegistryCache().ForOneApp(
-      app_id(), [&state_is_set](const apps::AppUpdate& update) {
-        state_is_set = (update.Paused() == apps::mojom::OptionalBool::kTrue);
-      });
-
-  EXPECT_TRUE(state_is_set);
+IN_PROC_BROWSER_TEST_F(AppDialogViewBrowserTest, InvokeUi_pause_close) {
+  ShowAndVerifyUi();
+  EXPECT_TRUE(IsAppPaused());
 }

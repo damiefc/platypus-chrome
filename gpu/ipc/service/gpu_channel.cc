@@ -43,6 +43,7 @@
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/ipc/common/command_buffer_id.h"
+#include "gpu/ipc/common/gpu_channel.mojom.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "gpu/ipc/service/gles2_command_buffer_stub.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
@@ -53,6 +54,7 @@
 #include "gpu/ipc/service/webgpu_command_buffer_stub.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/message_filter.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_image_shared_memory.h"
 #include "ui/gl/gl_surface.h"
@@ -84,10 +86,11 @@ struct GpuChannelMessage {
 // - posts control and out of order messages to the main thread
 // - forwards other messages to the scheduler
 class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
-    : public IPC::MessageFilter {
+    : public IPC::MessageFilter,
+      public mojom::GpuChannel {
  public:
   GpuChannelMessageFilter(
-      GpuChannel* gpu_channel,
+      gpu::GpuChannel* gpu_channel,
       Scheduler* scheduler,
       ImageDecodeAcceleratorWorker* image_decode_accelerator_worker,
       scoped_refptr<base::SingleThreadTaskRunner> main_task_runner);
@@ -111,6 +114,11 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
   void AddChannelFilter(scoped_refptr<IPC::MessageFilter> filter);
   void RemoveChannelFilter(scoped_refptr<IPC::MessageFilter> filter);
 
+  void BindGpuChannel(
+      mojo::PendingAssociatedReceiver<mojom::GpuChannel> receiver) {
+    receiver_.Bind(std::move(receiver));
+  }
+
   ImageDecodeAcceleratorStub* image_decode_accelerator_stub() const {
     return image_decode_accelerator_stub_.get();
   }
@@ -124,11 +132,18 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
 
   bool MessageErrorHandler(const IPC::Message& message, const char* error_msg);
 
+  // mojom::GpuChannel:
+  void CrashForTesting() override;
+  void TerminateForTesting() override;
+  void Flush(FlushCallback callback) override;
+  void ScheduleImageDecode(mojom::ScheduleImageDecodeParamsPtr params,
+                           uint64_t decode_release_count) override;
+
   IPC::Channel* ipc_channel_ = nullptr;
   base::ProcessId peer_pid_ = base::kNullProcessId;
   std::vector<scoped_refptr<IPC::MessageFilter>> channel_filters_;
 
-  GpuChannel* gpu_channel_ = nullptr;
+  gpu::GpuChannel* gpu_channel_ = nullptr;
   // Map of route id to scheduler sequence id.
   base::flat_map<int32_t, SequenceId> route_sequences_;
   mutable base::Lock gpu_channel_lock_;
@@ -141,11 +156,13 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
 
   bool allow_process_kill_for_testing_ = false;
 
+  mojo::AssociatedReceiver<mojom::GpuChannel> receiver_{this};
+
   DISALLOW_COPY_AND_ASSIGN(GpuChannelMessageFilter);
 };
 
 GpuChannelMessageFilter::GpuChannelMessageFilter(
-    GpuChannel* gpu_channel,
+    gpu::GpuChannel* gpu_channel,
     Scheduler* scheduler,
     ImageDecodeAcceleratorWorker* image_decode_accelerator_worker,
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner)
@@ -258,25 +275,6 @@ bool GpuChannelMessageFilter::OnMessageReceived(const IPC::Message& message) {
     case GpuChannelMsg_CreateSharedImage::ID:
     case GpuChannelMsg_DestroySharedImage::ID:
       return MessageErrorHandler(message, "Invalid message");
-    case GpuChannelMsg_CrashForTesting::ID:
-      // Handle this message early, on the IO thread, in case the main
-      // thread is hung. This is the purpose of this message: generating
-      // minidumps on the bots, which are symbolized later by the test
-      // harness. Only pay attention to this message if Telemetry's GPU
-      // benchmarking extension was enabled via the command line, which
-      // exposes privileged APIs to JavaScript.
-      if (allow_process_kill_for_testing_) {
-        gl::Crash();
-      }
-      // Won't be reached if the extension is enabled.
-      return MessageErrorHandler(message, "Crashes for testing are disabled");
-    case GpuChannelMsg_TerminateForTesting::ID:
-      if (allow_process_kill_for_testing_) {
-        base::Process::TerminateCurrentProcessImmediately(0);
-        return true;
-      }
-      return MessageErrorHandler(message,
-                                 "Process termination for testing is disabled");
     default:
       break;
   }
@@ -300,13 +298,6 @@ bool GpuChannelMessageFilter::OnMessageReceived(const IPC::Message& message) {
   if (message.type() == GpuChannelMsg_FlushDeferredMessages::ID)
     return HandleFlushMessage(message);
 
-  if (message.routing_id() ==
-      static_cast<int32_t>(GpuChannelReservedRoutes::kImageDecodeAccelerator)) {
-    if (!image_decode_accelerator_stub_->OnMessageReceived(message))
-      return MessageErrorHandler(message, "Invalid image decode request");
-    return true;
-  }
-
   bool handle_out_of_order =
       message.routing_id() == MSG_ROUTING_CONTROL ||
       message.type() == GpuCommandBufferMsg_WaitForTokenInRange::ID ||
@@ -316,7 +307,7 @@ bool GpuChannelMessageFilter::OnMessageReceived(const IPC::Message& message) {
     // It's OK to post task that may never run even for sync messages, because
     // if the channel is destroyed, the client Send will fail.
     main_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&GpuChannel::HandleOutOfOrderMessage,
+        FROM_HERE, base::BindOnce(&gpu::GpuChannel::HandleOutOfOrderMessage,
                                   gpu_channel_->AsWeakPtr(), message));
     return true;
   }
@@ -328,7 +319,7 @@ bool GpuChannelMessageFilter::OnMessageReceived(const IPC::Message& message) {
 
   scheduler_->ScheduleTask(
       Scheduler::Task(sequence_id,
-                      base::BindOnce(&GpuChannel::HandleMessage,
+                      base::BindOnce(&gpu::GpuChannel::HandleMessage,
                                      gpu_channel_->AsWeakPtr(), message),
                       std::vector<SyncToken>()));
   return true;
@@ -361,11 +352,11 @@ bool GpuChannelMessageFilter::HandleFlushMessage(const IPC::Message& message) {
       DLOG(ERROR) << "Invalid route id in flush list";
       continue;
     }
-    tasks.emplace_back(
-        it->second /* sequence_id */,
-        base::BindOnce(&GpuChannel::HandleMessage, gpu_channel_->AsWeakPtr(),
-                       std::move(deferred_message.message)),
-        std::move(deferred_message.sync_token_fences));
+    tasks.emplace_back(it->second /* sequence_id */,
+                       base::BindOnce(&gpu::GpuChannel::HandleMessage,
+                                      gpu_channel_->AsWeakPtr(),
+                                      std::move(deferred_message.message)),
+                       std::move(deferred_message.sync_token_fences));
   }
   scheduler_->ScheduleTasks(std::move(tasks));
   return true;
@@ -380,6 +371,35 @@ bool GpuChannelMessageFilter::MessageErrorHandler(const IPC::Message& message,
     ipc_channel_->Send(reply);
   }
   return true;
+}
+
+void GpuChannelMessageFilter::CrashForTesting() {
+  if (allow_process_kill_for_testing_) {
+    gl::Crash();
+    return;
+  }
+
+  receiver_.ReportBadMessage("CrashForTesting is a test-only API");
+}
+
+void GpuChannelMessageFilter::TerminateForTesting() {
+  if (allow_process_kill_for_testing_) {
+    base::Process::TerminateCurrentProcessImmediately(0);
+    return;
+  }
+
+  receiver_.ReportBadMessage("TerminateForTesting is a test-only API");
+}
+
+void GpuChannelMessageFilter::Flush(FlushCallback callback) {
+  std::move(callback).Run();
+}
+
+void GpuChannelMessageFilter::ScheduleImageDecode(
+    mojom::ScheduleImageDecodeParamsPtr params,
+    uint64_t decode_release_count) {
+  image_decode_accelerator_stub_->ScheduleImageDecode(std::move(params),
+                                                      decode_release_count);
 }
 
 GpuChannel::GpuChannel(
@@ -454,10 +474,13 @@ std::unique_ptr<GpuChannel> GpuChannel::Create(
 
 void GpuChannel::Init(IPC::ChannelHandle channel_handle,
                       base::WaitableEvent* shutdown_event) {
-  sync_channel_ = IPC::SyncChannel::Create(
-      channel_handle, IPC::Channel::MODE_SERVER, this, io_task_runner_.get(),
-      task_runner_.get(), false, shutdown_event);
+  sync_channel_ = IPC::SyncChannel::Create(this, io_task_runner_.get(),
+                                           task_runner_.get(), shutdown_event);
   sync_channel_->AddFilter(filter_.get());
+  sync_channel_->AddAssociatedInterfaceForIOThread(
+      base::BindRepeating(&GpuChannelMessageFilter::BindGpuChannel, filter_));
+  sync_channel_->Init(channel_handle, IPC::Channel::MODE_SERVER,
+                      /*create_pipe_now=*/false);
   channel_ = sync_channel_.get();
 }
 
@@ -599,6 +622,10 @@ void GpuChannel::HandleMessage(const IPC::Message& msg) {
 void GpuChannel::HandleMessageForTesting(const IPC::Message& msg) {
   // Message filter gets message first on IO thread.
   filter_->OnMessageReceived(msg);
+}
+
+mojom::GpuChannel& GpuChannel::GetGpuChannelForTesting() {
+  return *filter_;
 }
 
 ImageDecodeAcceleratorStub* GpuChannel::GetImageDecodeAcceleratorStub() const {
@@ -836,8 +863,9 @@ uint64_t GpuChannel::GetMemoryUsage() const {
   unique_memory_trackers.reserve(stubs_.size());
   uint64_t size = 0;
   for (const auto& kv : stubs_) {
-    MemoryTracker* tracker = kv.second->GetMemoryTracker();
-    if (!unique_memory_trackers.insert(tracker).second) {
+    size += kv.second->GetMemoryTracker()->GetSize();
+    MemoryTracker* tracker = kv.second->GetContextGroupMemoryTracker();
+    if (!tracker || !unique_memory_trackers.insert(tracker).second) {
       // We already counted that tracker.
       continue;
     }
@@ -852,9 +880,12 @@ scoped_refptr<gl::GLImage> GpuChannel::CreateImageForGpuMemoryBuffer(
     gfx::GpuMemoryBufferHandle handle,
     const gfx::Size& size,
     gfx::BufferFormat format,
+    gfx::BufferPlane plane,
     SurfaceHandle surface_handle) {
   switch (handle.type) {
     case gfx::SHARED_MEMORY_BUFFER: {
+      if (plane != gfx::BufferPlane::DEFAULT)
+        return nullptr;
       if (!base::IsValueInRangeForNumericType<size_t>(handle.stride))
         return nullptr;
       auto image = base::MakeRefCounted<gl::GLImageSharedMemory>(size);
@@ -873,7 +904,7 @@ scoped_refptr<gl::GLImage> GpuChannel::CreateImageForGpuMemoryBuffer(
       return manager->gpu_memory_buffer_factory()
           ->AsImageFactory()
           ->CreateImageForGpuMemoryBuffer(std::move(handle), size, format,
-                                          client_id_, surface_handle);
+                                          plane, client_id_, surface_handle);
     }
   }
 }

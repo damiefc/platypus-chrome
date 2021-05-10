@@ -17,6 +17,7 @@
 #include "chromeos/dbus/shill/shill_service_client.h"
 #include "chromeos/network/network_cert_loader.h"
 #include "chromeos/network/network_state_handler.h"
+#include "chromeos/network/system_token_cert_db_storage.h"
 #include "crypto/scoped_nss_types.h"
 #include "crypto/scoped_test_nss_db.h"
 #include "net/cert/nss_cert_database_chromeos.h"
@@ -72,6 +73,7 @@ class NetworkCertMigratorTest : public testing::Test {
     service_test_->ClearServices();
     task_environment_.RunUntilIdle();
 
+    SystemTokenCertDbStorage::Initialize();
     NetworkCertLoader::Initialize();
   }
 
@@ -80,6 +82,7 @@ class NetworkCertMigratorTest : public testing::Test {
     network_cert_migrator_.reset();
     network_state_handler_.reset();
     NetworkCertLoader::Shutdown();
+    SystemTokenCertDbStorage::Shutdown();
     shill_clients::Shutdown();
   }
 
@@ -111,11 +114,8 @@ class NetworkCertMigratorTest : public testing::Test {
                   const std::string& type,
                   const std::string& state) {
     service_test_->AddService(network_id /* service_path */,
-                              network_id /* guid */,
-                              network_id /* name */,
-                              type,
-                              state,
-                              true /* add_to_visible */);
+                              network_id /* guid */, network_id /* name */,
+                              type, state, true /* add_to_visible */);
 
     // Ensure that the service appears as 'configured', i.e. is associated to a
     // Shill profile.
@@ -130,7 +130,7 @@ class NetworkCertMigratorTest : public testing::Test {
   void SetupNetworkWithEapCertId(ShillProfile shill_profile,
                                  bool wifi,
                                  const std::string& cert_id) {
-    std::string type = wifi ? shill::kTypeWifi: shill::kTypeEthernetEap;
+    std::string type = wifi ? shill::kTypeWifi : shill::kTypeEthernetEap;
     std::string name = wifi ? kWifiStub : kEthernetEapStub;
     AddService(shill_profile, name, type, shill::kStateOnline);
     service_test_->SetServiceProperty(name, shill::kEapCertIdProperty,
@@ -148,10 +148,11 @@ class NetworkCertMigratorTest : public testing::Test {
     cert_id->clear();
 
     std::string name = wifi ? kWifiStub : kEthernetEapStub;
-    const base::DictionaryValue* properties =
-        service_test_->GetServiceProperties(name);
-    properties->GetStringWithoutPathExpansion(shill::kEapCertIdProperty,
-                                              cert_id);
+    const base::Value* properties = service_test_->GetServiceProperties(name);
+    const std::string* value =
+        properties->FindStringKey(shill::kEapCertIdProperty);
+    if (value)
+      *cert_id = *value;
   }
 
   void SetupVpnWithCertId(ShillProfile shill_profile,
@@ -173,8 +174,8 @@ class NetworkCertMigratorTest : public testing::Test {
       provider.SetKey(shill::kL2tpIpsecClientCertIdProperty,
                       base::Value(pkcs11_id));
     }
-    service_test_->SetServiceProperty(
-        kVPNStub, shill::kProviderProperty, provider);
+    service_test_->SetServiceProperty(kVPNStub, shill::kProviderProperty,
+                                      provider);
   }
 
   void GetVpnCertId(bool open_vpn,
@@ -183,22 +184,26 @@ class NetworkCertMigratorTest : public testing::Test {
     slot_id->clear();
     pkcs11_id->clear();
 
-    const base::DictionaryValue* properties =
+    const base::Value* properties =
         service_test_->GetServiceProperties(kVPNStub);
     ASSERT_TRUE(properties);
-    const base::DictionaryValue* provider = nullptr;
-    properties->GetDictionaryWithoutPathExpansion(shill::kProviderProperty,
-                                                  &provider);
+    const base::Value* provider = properties->FindKey(shill::kProviderProperty);
     if (!provider)
       return;
     if (open_vpn) {
-      provider->GetStringWithoutPathExpansion(
-          shill::kOpenVPNClientCertIdProperty, pkcs11_id);
+      const std::string* pkcs11_id_value =
+          provider->FindStringKey(shill::kOpenVPNClientCertIdProperty);
+      if (pkcs11_id_value)
+        *pkcs11_id = *pkcs11_id_value;
     } else {
-      provider->GetStringWithoutPathExpansion(
-          shill::kL2tpIpsecClientCertSlotProperty, slot_id);
-      provider->GetStringWithoutPathExpansion(
-          shill::kL2tpIpsecClientCertIdProperty, pkcs11_id);
+      const std::string* slot_value =
+          provider->FindStringKey(shill::kL2tpIpsecClientCertSlotProperty);
+      if (slot_value)
+        *slot_id = *slot_value;
+      const std::string* pkcs11_id_value =
+          provider->FindStringKey(shill::kL2tpIpsecClientCertIdProperty);
+      if (pkcs11_id_value)
+        *pkcs11_id = *pkcs11_id_value;
     }
   }
 
@@ -225,7 +230,8 @@ class NetworkCertMigratorTest : public testing::Test {
 TEST_F(NetworkCertMigratorTest, DeferUserNetworkMigrationToUserCertDbLoad) {
   SetupNetworkWithEapCertId(ShillProfile::USER, true /* wifi */, "123:12345");
   // Load the system NSSDB only first
-  NetworkCertLoader::Get()->SetSystemNSSDB(test_system_nsscertdb_.get());
+  NetworkCertLoader::Get()->SetSystemNssDbForTesting(
+      test_system_nsscertdb_.get());
 
   SetupNetworkHandlers();
   task_environment_.RunUntilIdle();
@@ -252,7 +258,8 @@ TEST_F(NetworkCertMigratorTest, DeferUserNetworkMigrationToUserCertDbLoad) {
 TEST_F(NetworkCertMigratorTest, RunSharedNetworkMigrationOnFirstCertDbLoad) {
   SetupNetworkWithEapCertId(ShillProfile::SHARED, true /* wifi */, "123:12345");
   // Load the system NSSDB only first
-  NetworkCertLoader::Get()->SetSystemNSSDB(test_system_nsscertdb_.get());
+  NetworkCertLoader::Get()->SetSystemNssDbForTesting(
+      test_system_nsscertdb_.get());
 
   SetupNetworkHandlers();
   task_environment_.RunUntilIdle();

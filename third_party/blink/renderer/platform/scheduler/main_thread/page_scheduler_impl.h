@@ -25,11 +25,11 @@
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 
 namespace base {
 namespace trace_event {
 class BlameContext;
-class TracedValue;
 }  // namespace trace_event
 }  // namespace base
 
@@ -63,7 +63,7 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   void SetPageVisible(bool page_visible) override;
   void SetPageFrozen(bool) override;
   void SetPageBackForwardCached(bool) override;
-  bool IsStoredInBackForwardCache() { return is_stored_in_back_forward_cache_; }
+  void OnFocusChanged(bool focused) override;
   void SetKeepActive(bool) override;
   bool IsMainFrameLocal() const override;
   void SetIsMainFrameLocal(bool is_local) override;
@@ -71,6 +71,10 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   base::TimeTicks GetStoredInBackForwardCacheTimestamp() {
     return stored_in_back_forward_cache_timestamp_;
   }
+  bool IsInBackForwardCache() const override {
+    return is_stored_in_back_forward_cache_;
+  }
+  bool has_ipc_detection_enabled() { return has_ipc_detection_enabled_; }
 
   std::unique_ptr<FrameScheduler> CreateFrameScheduler(
       FrameScheduler::Delegate* delegate,
@@ -101,7 +105,6 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
 
   bool IsPageVisible() const;
   bool IsFrozen() const;
-  bool OptedOutFromAllThrottling() const;
   bool OptedOutFromAggressiveThrottling() const;
   // Returns whether CPU time is throttled for the page. Note: This is
   // independent from wake up rate throttling.
@@ -115,7 +118,7 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   bool IsOrdinary() const;
 
   MainThreadSchedulerImpl* GetMainThreadScheduler() const;
-  AgentGroupSchedulerImpl& GetAgentGroupScheduler();
+  AgentGroupSchedulerImpl& GetAgentGroupScheduler() override;
 
   void Unregister(FrameSchedulerImpl*);
   void OnNavigation();
@@ -123,6 +126,8 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   void OnThrottlingStatusUpdated();
 
   void OnTraceLogEnabled();
+
+  bool IsPageFocused() const;
 
   // Virtual for testing.
   virtual bool IsWaitingForMainFrameContentfulPaint() const;
@@ -134,6 +139,9 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   PageLifecycleState GetPageLifecycleState() const;
 
   void SetUpIPCTaskDetection();
+  // This flag tracks whether or not IPC tasks are tracked if they are posted to
+  // frames or pages that are stored in the back-forward cache
+  bool has_ipc_detection_enabled_ = false;
 
   // Generally UKMs are associated with the main frame of a page, but the
   // implementation allows to request a recorder from any local frame with
@@ -143,7 +151,7 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   // frame it not a local one.
   FrameSchedulerImpl* SelectFrameForUkmAttribution();
 
-  void AsValueInto(base::trace_event::TracedValue* state) const;
+  void WriteIntoTrace(perfetto::TracedValue context) const;
 
   base::WeakPtr<PageSchedulerImpl> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -304,7 +312,6 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   AudioState audio_state_;
   bool is_frozen_;
   bool reported_background_throttling_since_navigation_;
-  bool opted_out_from_all_throttling_;
   bool opted_out_from_aggressive_throttling_;
   bool nested_runloop_;
   bool is_main_frame_local_;
@@ -312,6 +319,7 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   bool are_wake_ups_intensively_throttled_;
   bool keep_active_;
   bool had_recent_title_or_favicon_update_;
+  bool focused_;
   CPUTimeBudgetPool* cpu_time_budget_pool_ = nullptr;
 
   // Wake up budget pools for each throttling scenario:

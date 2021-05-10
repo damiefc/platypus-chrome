@@ -26,7 +26,7 @@ void ProxyPolicyProvider::SetDelegate(ConfigurationPolicyProvider* delegate) {
     delegate_->AddObserver(this);
     OnUpdatePolicy(delegate_);
   } else {
-    UpdatePolicy(std::unique_ptr<PolicyBundle>(new PolicyBundle()));
+    UpdatePolicy(std::make_unique<PolicyBundle>());
   }
 }
 
@@ -52,6 +52,10 @@ void ProxyPolicyProvider::RefreshPolicies() {
     bundle->CopyFrom(policies());
     UpdatePolicy(std::move(bundle));
   }
+}
+
+bool ProxyPolicyProvider::IsFirstPolicyLoadComplete(PolicyDomain domain) const {
+  return delegate_ && delegate_->IsInitializationComplete(domain);
 }
 
 void ProxyPolicyProvider::OnUpdatePolicy(

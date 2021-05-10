@@ -11,8 +11,9 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/sequenced_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
@@ -20,9 +21,9 @@
 #include "components/sync/base/time.h"
 #include "components/sync/model/data_type_activation_request.h"
 #include "components/sync/model/entity_change.h"
+#include "components/sync/model/in_memory_metadata_change_list.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/mutable_data_batch.h"
-#include "components/sync/model_impl/in_memory_metadata_change_list.h"
 #include "components/sync/protocol/model_type_state.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync_sessions/sync_sessions_client.h"

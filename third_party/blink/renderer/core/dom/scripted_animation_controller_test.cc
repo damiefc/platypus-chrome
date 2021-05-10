@@ -155,8 +155,7 @@ TEST_F(ScriptedAnimationControllerTest, EnqueueTaskAndEvent) {
 
 namespace {
 
-class RunTaskCallback final
-    : public FrameRequestCallbackCollection::FrameCallback {
+class RunTaskCallback final : public FrameCallback {
  public:
   RunTaskCallback(base::RepeatingClosure task) : task_(std::move(task)) {}
   void Invoke(double) override { task_.Run(); }
@@ -209,6 +208,25 @@ TEST_F(ScriptedAnimationControllerTest, TestHasCallback) {
   // clear it.
   Controller().ServiceScriptedAnimations(base::TimeTicks());
   EXPECT_FALSE(Controller().HasFrameCallback());
+}
+
+TEST_F(ScriptedAnimationControllerTest, TestIsInRequestAnimationFrame) {
+  EXPECT_FALSE(Controller().GetExecutionContext()->IsInRequestAnimationFrame());
+
+  bool ran_callback = false;
+  Controller().RegisterFrameCallback(
+      MakeGarbageCollected<RunTaskCallback>(base::BindRepeating(
+          [](ScriptedAnimationController* controller, bool* ran_callback) {
+            EXPECT_TRUE(
+                controller->GetExecutionContext()->IsInRequestAnimationFrame());
+            *ran_callback = true;
+          },
+          WrapPersistent(&Controller()), WTF::Unretained(&ran_callback))));
+
+  Controller().ServiceScriptedAnimations(base::TimeTicks());
+  EXPECT_TRUE(ran_callback);
+
+  EXPECT_FALSE(Controller().GetExecutionContext()->IsInRequestAnimationFrame());
 }
 
 }  // namespace blink

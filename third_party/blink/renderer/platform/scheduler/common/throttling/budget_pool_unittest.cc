@@ -31,10 +31,10 @@ class BudgetPoolTest : public testing::Test {
   void SetUp() override {
     clock_.Advance(base::TimeDelta::FromMicroseconds(5000));
     null_task_runner_ = base::MakeRefCounted<base::NullTaskRunner>();
-    scheduler_.reset(new MainThreadSchedulerImpl(
+    scheduler_ = std::make_unique<MainThreadSchedulerImpl>(
         base::sequence_manager::SequenceManagerForTest::Create(
             nullptr, null_task_runner_, &clock_),
-        base::nullopt));
+        base::nullopt);
     task_queue_throttler_ = scheduler_->task_queue_throttler();
     start_time_ = clock_.NowTicks();
   }
@@ -129,7 +129,7 @@ TEST_F(BudgetPoolTest, WakeUpBudgetPool) {
       task_queue_throttler_->CreateWakeUpBudgetPool("test");
 
   scoped_refptr<base::sequence_manager::TaskQueue> queue =
-      scheduler_->NewThrottleableTaskQueueForTest(nullptr);
+      scheduler_->NewTaskQueueForTest();
 
   pool->SetWakeUpInterval(base::TimeTicks(), base::TimeDelta::FromSeconds(10));
   pool->SetWakeUpDuration(base::TimeDelta::FromMilliseconds(10));

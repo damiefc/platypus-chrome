@@ -203,6 +203,7 @@ class AX_EXPORT AXPlatformNodeAuraLinux : public AXPlatformNodeBase {
   void OnCheckedStateChanged();
   void OnEnabledChanged();
   void OnExpandedStateChanged(bool is_expanded);
+  void OnShowingStateChanged(bool is_showing);
   void OnFocused();
   void OnWindowActivated();
   void OnWindowDeactivated();
@@ -218,10 +219,12 @@ class AX_EXPORT AXPlatformNodeAuraLinux : public AXPlatformNodeBase {
   void OnDescriptionChanged();
   void OnSortDirectionChanged();
   void OnInvalidStatusChanged();
+  void OnAriaCurrentChanged();
   void OnDocumentTitleChanged();
   void OnSubtreeCreated();
   void OnSubtreeWillBeDeleted();
   void OnParentChanged();
+  void OnReadonlyChanged();
   void OnWindowVisibilityChanged();
   void OnScrolledToAnchor();
   void OnAlertShown();
@@ -309,10 +312,6 @@ class AX_EXPORT AXPlatformNodeAuraLinux : public AXPlatformNodeBase {
                           PlatformAttributeList* attributes) override;
 
  private:
-  using AXPositionInstance = AXNodePosition::AXPositionInstance;
-  using AXPositionInstanceType = typename AXPositionInstance::element_type;
-  using AXNodeRange = AXRange<AXPositionInstanceType>;
-
   // This is static to ensure that we aren't trying to access the rest of the
   // accessibility tree during node initialization.
   static ImplementedAtkInterfaces GetGTypeInterfaceMask(const AXNodeData& data);

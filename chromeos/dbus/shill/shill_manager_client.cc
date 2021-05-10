@@ -45,16 +45,17 @@ class ShillManagerClientImpl : public ShillManagerClient {
     helper_->RemovePropertyChangedObserver(observer);
   }
 
-  void GetProperties(DictionaryValueCallback callback) override {
+  void GetProperties(DBusMethodCallback<base::Value> callback) override {
     dbus::MethodCall method_call(shill::kFlimflamManagerInterface,
                                  shill::kGetPropertiesFunction);
-    helper_->CallDictionaryValueMethod(&method_call, std::move(callback));
+    helper_->CallValueMethod(&method_call, std::move(callback));
   }
 
-  void GetNetworksForGeolocation(DictionaryValueCallback callback) override {
+  void GetNetworksForGeolocation(
+      DBusMethodCallback<base::Value> callback) override {
     dbus::MethodCall method_call(shill::kFlimflamManagerInterface,
                                  shill::kGetNetworksForGeolocation);
-    helper_->CallDictionaryValueMethod(&method_call, std::move(callback));
+    helper_->CallValueMethod(&method_call, std::move(callback));
   }
 
   void SetProperty(const std::string& name,
@@ -116,37 +117,37 @@ class ShillManagerClientImpl : public ShillManagerClient {
                                              std::move(error_callback));
   }
 
-  void ConfigureService(const base::DictionaryValue& properties,
+  void ConfigureService(const base::Value& properties,
                         ObjectPathCallback callback,
                         ErrorCallback error_callback) override {
     dbus::MethodCall method_call(shill::kFlimflamManagerInterface,
                                  shill::kConfigureServiceFunction);
     dbus::MessageWriter writer(&method_call);
-    ShillClientHelper::AppendServicePropertiesDictionary(&writer, properties);
+    ShillClientHelper::AppendServiceProperties(&writer, properties);
     helper_->CallObjectPathMethodWithErrorCallback(
         &method_call, std::move(callback), std::move(error_callback));
   }
 
   void ConfigureServiceForProfile(const dbus::ObjectPath& profile_path,
-                                  const base::DictionaryValue& properties,
+                                  const base::Value& properties,
                                   ObjectPathCallback callback,
                                   ErrorCallback error_callback) override {
     dbus::MethodCall method_call(shill::kFlimflamManagerInterface,
                                  shill::kConfigureServiceForProfileFunction);
     dbus::MessageWriter writer(&method_call);
     writer.AppendObjectPath(dbus::ObjectPath(profile_path));
-    ShillClientHelper::AppendServicePropertiesDictionary(&writer, properties);
+    ShillClientHelper::AppendServiceProperties(&writer, properties);
     helper_->CallObjectPathMethodWithErrorCallback(
         &method_call, std::move(callback), std::move(error_callback));
   }
 
-  void GetService(const base::DictionaryValue& properties,
+  void GetService(const base::Value& properties,
                   ObjectPathCallback callback,
                   ErrorCallback error_callback) override {
     dbus::MethodCall method_call(shill::kFlimflamManagerInterface,
                                  shill::kGetServiceFunction);
     dbus::MessageWriter writer(&method_call);
-    ShillClientHelper::AppendServicePropertiesDictionary(&writer, properties);
+    ShillClientHelper::AppendServiceProperties(&writer, properties);
     helper_->CallObjectPathMethodWithErrorCallback(
         &method_call, std::move(callback), std::move(error_callback));
   }
@@ -164,7 +165,7 @@ class ShillManagerClientImpl : public ShillManagerClient {
   void Init(dbus::Bus* bus) {
     proxy_ = bus->GetObjectProxy(shill::kFlimflamServiceName,
                                  dbus::ObjectPath(shill::kFlimflamServicePath));
-    helper_.reset(new ShillClientHelper(proxy_));
+    helper_ = std::make_unique<ShillClientHelper>(proxy_);
     helper_->MonitorPropertyChanged(shill::kFlimflamManagerInterface);
   }
 

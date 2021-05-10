@@ -10,7 +10,6 @@
 #include "base/memory/ptr_util.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
-#include "ios/chrome/browser/infobars/confirm_infobar_controller.h"
 #include "ios/chrome/browser/infobars/infobar_ios.h"
 #include "ios/chrome/browser/infobars/infobar_utils.h"
 #include "ios/chrome/browser/signin/authentication_service.h"
@@ -131,9 +130,9 @@ TEST_F(ReSignInInfoBarDelegateTest, TestMessages) {
   std::unique_ptr<ReSignInInfoBarDelegate> delegate(
       new ReSignInInfoBarDelegate(chrome_browser_state_.get(), nil));
   EXPECT_EQ(ConfirmInfoBarDelegate::BUTTON_OK, delegate->GetButtons());
-  base::string16 message_text = delegate->GetMessageText();
+  std::u16string message_text = delegate->GetMessageText();
   EXPECT_GT(message_text.length(), 0U);
-  base::string16 button_label =
+  std::u16string button_label =
       delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK);
   EXPECT_GT(button_label.length(), 0U);
 }

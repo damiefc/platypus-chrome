@@ -22,6 +22,7 @@
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
+#include "ui/gfx/rendering_pipeline.h"
 
 namespace perfetto {
 namespace protos {
@@ -41,6 +42,7 @@ struct FrameTimingDetails;
 namespace cc {
 struct BeginMainFrameMetrics;
 class CompositorTimingHistory;
+class CompositorFrameReportingController;
 
 enum class FrameSkippedReason {
   kRecoverLatency,
@@ -97,7 +99,11 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
             const SchedulerSettings& scheduler_settings,
             int layer_tree_host_id,
             base::SingleThreadTaskRunner* task_runner,
-            std::unique_ptr<CompositorTimingHistory> compositor_timing_history);
+            std::unique_ptr<CompositorTimingHistory> compositor_timing_history,
+            gfx::RenderingPipeline* main_thread_pipeline,
+            gfx::RenderingPipeline* compositor_thread_pipeline,
+            CompositorFrameReportingController*
+                compositor_frame_reporting_controller);
   Scheduler(const Scheduler&) = delete;
   ~Scheduler() override;
 
@@ -175,7 +181,8 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
   // Drawing should result in submitting a CompositorFrame to the
   // LayerTreeFrameSink and then calling this.
   void DidSubmitCompositorFrame(uint32_t frame_token,
-                                EventMetricsSet events_metrics);
+                                EventMetricsSet events_metrics,
+                                bool has_missing_content);
   // The LayerTreeFrameSink acks when it is ready for a new frame which
   // should result in this getting called to unblock the next draw.
   void DidReceiveCompositorFrameAck();
@@ -280,6 +287,10 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
 
   std::unique_ptr<CompositorTimingHistory> compositor_timing_history_;
 
+  // Owned by LayerTreeHostImpl and is destroyed when LayerTreeHostImpl is
+  // destroyed.
+  CompositorFrameReportingController* compositor_frame_reporting_controller_;
+
   // What the latest deadline was, and when it was scheduled.
   base::TimeTicks deadline_;
   base::TimeTicks deadline_scheduled_at_;
@@ -322,9 +333,19 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
 
   bool stopped_ = false;
 
+  bool needs_finish_frame_for_synchronous_compositor_ = false;
+
   // Keeps track of the begin frame interval from the last BeginFrameArgs to
   // arrive so that |client_| can be informed about changes.
   base::TimeDelta last_frame_interval_;
+
+  gfx::RenderingPipeline* const main_thread_pipeline_;
+  base::Optional<gfx::RenderingPipeline::ScopedPipelineActive>
+      main_thread_pipeline_active_;
+
+  gfx::RenderingPipeline* const compositor_thread_pipeline_;
+  base::Optional<gfx::RenderingPipeline::ScopedPipelineActive>
+      compositor_thread_pipeline_active_;
 
  private:
   // Posts the deadline task if needed by checking
@@ -369,6 +390,7 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
 
   void BeginImplFrameWithDeadline(const viz::BeginFrameArgs& args);
   void BeginImplFrameSynchronous(const viz::BeginFrameArgs& args);
+  void FinishImplFrameSynchronous();
   void BeginImplFrame(const viz::BeginFrameArgs& args, base::TimeTicks now);
   void FinishImplFrame();
   void SendDidNotProduceFrame(const viz::BeginFrameArgs& args,
