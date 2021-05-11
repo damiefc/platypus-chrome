@@ -274,7 +274,19 @@ void AccessibilityTreeFormatterWin::RecursiveBuildTree(
     base::Value* dict,
     LONG root_x,
     LONG root_y) const {
+  ui::AXPlatformNode* platform_node =
+      ui::AXPlatformNode::FromNativeViewAccessible(node.Get());
+  DCHECK(platform_node);
+
+  ui::AXPlatformNodeDelegate* delegate = platform_node->GetDelegate();
+  DCHECK(delegate);
+
+  if (!ShouldDumpNode(*delegate))
+    return;
+
   AddProperties(node, dict, root_x, root_y);
+  if (!ShouldDumpChildren(*delegate))
+    return;
 
   base::Value child_list(base::Value::Type::LIST);
   for (const ui::MSAAChild& msaa_child : ui::MSAAChildren(node)) {
@@ -845,10 +857,9 @@ std::string AccessibilityTreeFormatterWin::ProcessTreeForOutput(
         value->GetAsList(&list_value);
         std::unique_ptr<base::ListValue> filtered_list(new base::ListValue());
 
-        for (base::ListValue::const_iterator it = list_value->begin();
-             it != list_value->end(); ++it) {
+        for (const auto& entry : list_value->GetList()) {
           std::string string_value;
-          if (it->GetAsString(&string_value))
+          if (entry.GetAsString(&string_value))
             if (WriteAttribute(false, string_value, &line))
               filtered_list->AppendString(string_value);
         }

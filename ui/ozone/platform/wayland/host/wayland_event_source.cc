@@ -187,11 +187,7 @@ void WaylandEventSource::OnPointerMotionEvent(const gfx::PointF& location) {
   DispatchEvent(&event);
 }
 
-void WaylandEventSource::OnPointerAxisEvent(const gfx::Vector2d& offset) {
-  int flags = pointer_flags_ | keyboard_modifiers_;
-  MouseWheelEvent event(offset, pointer_location_, pointer_location_,
-                        EventTimeForNow(), flags, 0);
-  DispatchEvent(&event);
+void WaylandEventSource::OnPointerAxisEvent(const gfx::Vector2dF& offset) {
   current_pointer_frame_.dx += offset.x();
   current_pointer_frame_.dy += offset.y();
 }
@@ -209,6 +205,8 @@ void WaylandEventSource::OnPointerFrameEvent() {
   current_pointer_frame_.dt = now - last_pointer_frame_time_;
   last_pointer_frame_time_ = now;
 
+  int flags = pointer_flags_ | keyboard_modifiers_;
+
   // Dispatch Fling event if pointer.axis_stop is notified and the recent
   // pointer.axis events meets the criteria to start fling scroll.
   if (current_pointer_frame_.dx == 0 && current_pointer_frame_.dy == 0 &&
@@ -218,16 +216,29 @@ void WaylandEventSource::OnPointerFrameEvent() {
     float vy = initial_velocity.y();
     ScrollEvent event(
         vx == 0 && vy == 0 ? ET_SCROLL_FLING_CANCEL : ET_SCROLL_FLING_START,
-        pointer_location_, pointer_location_, now,
-        pointer_flags_ | keyboard_modifiers_, vx, vy, vx, vy,
+        pointer_location_, pointer_location_, now, flags, vx, vy, vx, vy,
         kGestureScrollFingerCount);
     DispatchEvent(&event);
     recent_pointer_frames_.clear();
   } else {
+    if (current_pointer_frame_.axis_source == WL_POINTER_AXIS_SOURCE_WHEEL) {
+      MouseWheelEvent event(
+          gfx::Vector2d(current_pointer_frame_.dx, current_pointer_frame_.dy),
+          pointer_location_, pointer_location_, EventTimeForNow(), flags, 0);
+      DispatchEvent(&event);
+    } else {
+      ScrollEvent event(ET_SCROLL, pointer_location_, pointer_location_,
+                        EventTimeForNow(), flags, current_pointer_frame_.dx,
+                        current_pointer_frame_.dy, current_pointer_frame_.dx,
+                        current_pointer_frame_.dy, kGestureScrollFingerCount);
+      DispatchEvent(&event);
+    }
+
     if (recent_pointer_frames_.size() + 1 > kRecentPointerFrameMaxSize)
       recent_pointer_frames_.pop_back();
     recent_pointer_frames_.push_front(current_pointer_frame_);
   }
+
   // Reset |current_pointer_frame_|.
   current_pointer_frame_.dx = 0;
   current_pointer_frame_.dy = 0;

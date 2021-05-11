@@ -210,6 +210,7 @@ TEST_P(WaylandPointerTest, AxisVertical) {
   // Wayland servers typically send a value of 10 per mouse wheel click.
   wl_pointer_send_axis(pointer_->resource(), 1003,
                        WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_int(20));
+  wl_pointer_send_frame(pointer_->resource());
 
   Sync();
 
@@ -238,6 +239,7 @@ TEST_P(WaylandPointerTest, AxisHorizontal) {
   wl_pointer_send_axis(pointer_->resource(), 1003,
                        WL_POINTER_AXIS_HORIZONTAL_SCROLL,
                        wl_fixed_from_int(10));
+  wl_pointer_send_frame(pointer_->resource());
 
   Sync();
 
@@ -337,9 +339,9 @@ TEST_P(WaylandPointerTest, FlingVertical) {
 
   // Usual axis events should follow before the fling event.
   ASSERT_TRUE(event1);
-  ASSERT_TRUE(event1->IsMouseWheelEvent());
+  ASSERT_TRUE(event1->IsScrollEvent());
   ASSERT_TRUE(event2);
-  ASSERT_TRUE(event2->IsMouseWheelEvent());
+  ASSERT_TRUE(event2->IsScrollEvent());
 
   // The third dispatched event should be FLING_START.
   ASSERT_TRUE(event3);
@@ -391,9 +393,9 @@ TEST_P(WaylandPointerTest, FlingHorizontal) {
 
   // Usual axis events should follow before the fling event.
   ASSERT_TRUE(event1);
-  ASSERT_TRUE(event1->IsMouseWheelEvent());
+  ASSERT_TRUE(event1->IsScrollEvent());
   ASSERT_TRUE(event2);
-  ASSERT_TRUE(event2->IsMouseWheelEvent());
+  ASSERT_TRUE(event2->IsScrollEvent());
 
   // The third dispatched event should be FLING_START.
   ASSERT_TRUE(event3);
@@ -453,15 +455,16 @@ TEST_P(WaylandPointerTest, FlingCancel) {
 
   // Usual axis events should follow before the fling event.
   ASSERT_TRUE(event1);
-  ASSERT_TRUE(event1->IsMouseWheelEvent());
+  ASSERT_TRUE(event1->IsScrollEvent());
   ASSERT_TRUE(event2);
-  ASSERT_TRUE(event2->IsMouseWheelEvent());
+  ASSERT_TRUE(event2->IsScrollEvent());
 
   // The 3rd axis event's offset is 0.
   ASSERT_TRUE(event3);
-  ASSERT_TRUE(event3->IsMouseWheelEvent());
-  auto* mouse_wheel_event = event3->AsMouseWheelEvent();
-  EXPECT_EQ(gfx::Vector2d(0, 0), mouse_wheel_event->offset());
+  ASSERT_TRUE(event3->IsScrollEvent());
+  auto* scroll_event0 = event3->AsScrollEvent();
+  EXPECT_EQ(gfx::Vector2dF(0., 0.), gfx::Vector2dF(scroll_event0->x_offset(),
+                                                   scroll_event0->y_offset()));
 
   // The 4th event should be FLING_CANCEL.
   ASSERT_TRUE(event4);
@@ -485,14 +488,12 @@ TEST_P(WaylandPointerTest, FlingDiagonal) {
 
   Sync();
 
-  std::unique_ptr<Event> event1, event2, event3, event4, event5;
+  std::unique_ptr<Event> event1, event2, event3;
   EXPECT_CALL(delegate_, DispatchEvent(_))
-      .Times(5)
+      .Times(3)
       .WillOnce(CloneEvent(&event1))
       .WillOnce(CloneEvent(&event2))
-      .WillOnce(CloneEvent(&event3))
-      .WillOnce(CloneEvent(&event4))
-      .WillOnce(CloneEvent(&event5));
+      .WillOnce(CloneEvent(&event3));
   // 1st axis event notifies scrolls both in vertical and horizontal.
   SendDiagonalAxisEvents(pointer_->resource(), ++time,
                          WL_POINTER_AXIS_SOURCE_FINGER, 20, 10);
@@ -512,18 +513,14 @@ TEST_P(WaylandPointerTest, FlingDiagonal) {
 
   // Usual axis events should follow before the fling event.
   ASSERT_TRUE(event1);
-  ASSERT_TRUE(event1->IsMouseWheelEvent());
+  ASSERT_TRUE(event1->IsScrollEvent());
   ASSERT_TRUE(event2);
-  ASSERT_TRUE(event2->IsMouseWheelEvent());
-  ASSERT_TRUE(event3);
-  ASSERT_TRUE(event3->IsMouseWheelEvent());
-  ASSERT_TRUE(event4);
-  ASSERT_TRUE(event4->IsMouseWheelEvent());
+  ASSERT_TRUE(event2->IsScrollEvent());
 
   // The third dispatched event should be FLING_START.
-  ASSERT_TRUE(event5);
-  ASSERT_TRUE(event5->IsScrollEvent());
-  auto* scroll_event = event5->AsScrollEvent();
+  ASSERT_TRUE(event3);
+  ASSERT_TRUE(event3->IsScrollEvent());
+  auto* scroll_event = event3->AsScrollEvent();
   EXPECT_EQ(ET_SCROLL_FLING_START, scroll_event->type());
   EXPECT_EQ(gfx::PointF(50, 75), scroll_event->location_f());
   // Check the offset direction. It should non-zero in both axes.

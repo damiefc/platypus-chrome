@@ -37,6 +37,8 @@ extern const base::Feature kExtensionsSidePanel;
 // The extension id of the extension hosted in the left aligned side panel.
 extern const base::FeatureParam<std::string> kExtensionsSidePanelId;
 
+extern const base::Feature kForceSignInReauth;
+
 extern const base::Feature kNewProfilePicker;
 
 extern const base::Feature kNewTabstripAnimation;
@@ -127,8 +129,6 @@ extern const base::Feature kToolbarUseHardwareBitmapDraw;
 // Whether to label the update menu item as "Relaunch to update Chrome", rather
 // than "Update Google Chrome".
 extern const base::Feature kUseRelaunchToUpdateString;
-
-extern const base::Feature kWebFooterExperiment;
 
 extern const base::Feature kWebUIBubblePerProfilePersistence;
 

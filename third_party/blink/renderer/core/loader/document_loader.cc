@@ -38,6 +38,7 @@
 #include "build/chromeos_buildflags.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
+#include "third_party/blink/public/common/client_hints/client_hints.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
@@ -1685,6 +1686,13 @@ void DocumentLoader::StartLoadingResponse() {
 }
 
 void DocumentLoader::DidInstallNewDocument(Document* document) {
+  // This was called already during `InitializeWindow`, but it could be that we
+  // didn't have a Document then (which happens when `InitializeWindow` reuses
+  // the window and calls `LocalDOMWindow::ClearForReuse()`). This is
+  // idempotent, so it is safe to do it again (in fact, it will be called again
+  // also when parsing origin trials delivered in meta tags).
+  frame_->DomWindow()->GetOriginTrialContext()->InitializePendingFeatures();
+
   frame_->DomWindow()->BindContentSecurityPolicy();
 
   if (history_item_ && IsBackForwardLoadType(load_type_))
@@ -2520,6 +2528,13 @@ void DocumentLoader::RecordUseCountersForCommit() {
   // header 'Require-Document-Policy'.
   if (!frame_policy_.required_document_policy.empty())
     CountUse(WebFeature::kRequiredDocumentPolicy);
+
+  FrameClientHintsPreferencesContext hints_context(frame_);
+  for (size_t i = 0; i < kClientHintsMappingsCount; ++i) {
+    auto type = static_cast<network::mojom::WebClientHintsType>(i);
+    if (client_hints_preferences_.ShouldSend(type))
+      hints_context.CountClientHints(type);
+  }
 }
 
 void DocumentLoader::RecordConsoleMessagesForCommit() {
@@ -2544,8 +2559,9 @@ void DocumentLoader::RecordConsoleMessagesForCommit() {
 
 void DocumentLoader::ApplyClientHintsConfig(
     const WebVector<network::mojom::WebClientHintsType>& enabled_client_hints) {
-  for (auto ch : enabled_client_hints)
+  for (auto ch : enabled_client_hints) {
     client_hints_preferences_.SetShouldSend(ch);
+  }
 }
 
 void DocumentLoader::InitializePrefetchedSignedExchangeManager() {

@@ -1621,9 +1621,6 @@ extern const char kAndroidDetailedLanguageSettingsDescription[];
 extern const char kAndroidLayoutChangeTabReparentingName[];
 extern const char kAndroidLayoutChangeTabReparentingDescription[];
 
-extern const char kAndroidManagedByMenuItemName[];
-extern const char kAndroidManagedByMenuItemDescription[];
-
 extern const char kAndroidPartnerCustomizationPhenotypeName[];
 extern const char kAndroidPartnerCustomizationPhenotypeDescription[];
 
@@ -1644,9 +1641,6 @@ extern const char kAutofillAccessoryViewDescription[];
 
 extern const char kAutofillAssistantDirectActionsName[];
 extern const char kAutofillAssistantDirectActionsDescription[];
-
-extern const char kAutofillAssistantProactiveHelpName[];
-extern const char kAutofillAssistantProactiveHelpDescription[];
 
 extern const char kAutofillUseMobileLabelDisambiguationName[];
 extern const char kAutofillUseMobileLabelDisambiguationDescription[];
@@ -2638,9 +2632,6 @@ extern const char kFrameThrottleFps20[];
 extern const char kFrameThrottleFps25[];
 extern const char kFrameThrottleFps30[];
 
-extern const char kFsNosymfollowName[];
-extern const char kFsNosymfollowDescription[];
-
 extern const char kFullRestoreName[];
 extern const char kFullRestoreDescription[];
 
@@ -2694,6 +2685,7 @@ extern const char kLacrosPrimaryDescription[];
 
 extern const char kLacrosStabilityName[];
 extern const char kLacrosStabilityDescription[];
+extern const char kLacrosStabilityLeastStableDescription[];
 extern const char kLacrosStabilityLessStableDescription[];
 extern const char kLacrosStabilityMoreStableDescription[];
 
@@ -2953,6 +2945,9 @@ extern const char kDirectManipulationStylusDescription[];
 
 extern const char kWebuiFeedbackName[];
 extern const char kWebuiFeedbackDescription[];
+
+extern const char kSettingsLandingPageRedesignName[];
+extern const char kSettingsLandingPageRedesignDescription[];
 
 #endif  // defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)

@@ -470,6 +470,9 @@ def _CheckForMissingSymbols(r8_path, dex_files, classpath, warnings_as_errors,
         'libcore.io',
         'sun.misc.Unsafe',
 
+        # Found in: com/facebook/fbui/textlayoutbuilder/StaticLayoutHelper
+        'android.text.StaticLayout.<init>',
+
         # Explicictly guarded by try (NoClassDefFoundError) in Flogger's
         # PlatformProvider.
         'com.google.common.flogger.backend.google.GooglePlatform',

@@ -123,11 +123,6 @@
     "expiry_milestone": 93
   },
   {
-    "name": "android-managed-by-menu-item",
-    "owners": [ "gangwu@google.com", "twellington" ],
-    "expiry_milestone": 90
-  },
-  {
     "name": "android-multiple-display",
     "owners": [ "lazzzis@google.com", "twellington" ],
     "expiry_milestone": 87
@@ -309,11 +304,6 @@
     "name": "autofill-always-return-cloud-tokenized-card",
     "owners": [ "aneeshali@google.com", "annelim@google.com", "jsaul@google.com" ],
     "expiry_milestone": 94
-  },
-  {
-    "name": "autofill-assistant-proactive-help",
-    "owners": [ "//components/autofill_assistant/OWNERS" ],
-    "expiry_milestone": 91
   },
   {
     "name": "autofill-auto-trigger-manual-fallback-for-cards",
@@ -1111,7 +1101,7 @@
       "chrome-apps-platform-rationalization@google.com",
       "quickoffice-chrome-eng@google.com"
     ],
-    "expiry_milestone": 88
+    "expiry_milestone": 95
   },
   {
     "name": "disable-threaded-scrolling",
@@ -1834,11 +1824,6 @@
     "name": "enable-fre-ui-module-ios",
     "owners": [ "tinazwang", "gambard" ],
     "expiry_milestone": 99
-  },
-  {
-    "name": "enable-fs-nosymfollow",
-    "owners": [ "mortonm@chromium.org" ],
-    "expiry_milestone": 76
   },
   {
     "name": "enable-ftp",
@@ -4564,7 +4549,7 @@
   {
     "name": "restrict-gamepad-access",
     "owners": [ "//device/gamepad/OWNERS", "jameshollyer@chromium.org" ],
-    "expiry_milestone": 89
+    "expiry_milestone": 96
   },
   {
     "name": "run-video-capture-service-in-browser",
@@ -4577,12 +4562,12 @@
       "bdea",
       "chrome-safebrowsing-core@google.com"
     ],
-    "expiry_milestone": 91
+    "expiry_milestone": 93
   },
   {
     "name": "safe-browsing-enhanced-protection-promo-android",
     "owners": [ "bdea", "chrome-safebrowsing-core@google.com" ],
-    "expiry_milestone": 90
+    "expiry_milestone": 93
   },
   {
     "name": "safety-check-chrome-cleaner-child",
@@ -4741,6 +4726,11 @@
     // This is required by test teams to verify functionality on devices which
     // have no access to commandline flags.
     "expiry_milestone": -1
+  },
+  {
+    "name": "settings-landing-page-redesign",
+    "owners": [ "dpapad@chromium.org", "johntlee@chromium.org" ],
+    "expiry_milestone": 95
   },
   {
     "name": "settings-refresh",

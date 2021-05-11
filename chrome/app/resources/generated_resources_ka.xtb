@@ -62,6 +62,7 @@
 <translation id="1066613507389053689">საჭიროა Chrome OS-ის განახლება</translation>
 <translation id="1067048845568873861">შექმნის თარიღი</translation>
 <translation id="1067922213147265141">Google-ის სხვა სერვისები</translation>
+<translation id="1069355737714877171">ამოიშალოს eSIM პროფილი სახელად <ph name="PROFILE_NAME" /></translation>
 <translation id="1070377999570795893">თქვენს კომპიუტერში არსებულმა სხვა პროგრამამ დაამატა გაფართოება, რომელსაც Chrome-ის მუშაობის შეცვლა შეუძლია.
 
 <ph name="EXTENSION_NAME" /></translation>
@@ -355,6 +356,7 @@
 <translation id="138784436342154190">გსურთ ნაგულისხმევი გაშვების გვერდის აღდგენა?</translation>
 <translation id="1388253969141979417">თქვენი მიკროფონის გამოყენება დაშვებულია</translation>
 <translation id="1388728792929436380">განახლებების დასრულების შემდეგ <ph name="DEVICE_TYPE" /> გადაიტვირთება.</translation>
+<translation id="138900021244932468">პროფილების აღმოჩენა ვერ მოხერხდა. ახალი ქსელის დასაყენებლად დაასკანირეთ QR კოდი მოწყობილობის კამერის მეშვეობით, ან შეიყვანეთ თქვენი ოპერატორის მიერ მოწოდებული აქტივაციის კოდი.</translation>
 <translation id="139013308650923562">დაშვებულია თქვენს მოწყობილობაზე დაინსტალირებული შრიფტების გამოყენება</translation>
 <translation id="1390548061267426325">ჩვეულებრივი ჩანართის სახით გახსნა</translation>
 <translation id="1393283411312835250">მზე და ღრუბლები</translation>
@@ -511,6 +513,7 @@
 <translation id="1545775234664667895">დაინსტალირებული თემა „<ph name="THEME_NAME" />“</translation>
 <translation id="1546280085599573572">ამ გაფართოებამ თქვენ მიერ მთავარი გვერდის ღილაკზე დაწკაპუნებისას ნაჩვენები გვერდი შეცვალა.</translation>
 <translation id="1546452108651444655"><ph name="CHILD_NAME" /> ითხოვს ნებართვას, რომ დააინსტალიროს <ph name="EXTENSION_TYPE" />, რომელსაც შეუძლია:</translation>
+<translation id="1547808936554660006">მესმის, რომ დაინსტალირებული eSIM პროფილები არ ამოიშლება Powerwash-ით</translation>
 <translation id="1549275686094429035">ARC ჩართულია</translation>
 <translation id="1549788673239553762"><ph name="APP_NAME" />-ს <ph name="VOLUME_NAME" />-ზე წვდომა სურს. მას თქვენი ფაილების შეცვლა ან წაშლა შეუძლია.</translation>
 <translation id="1552301827267621511">გაფართოებამ „<ph name="EXTENSION_NAME" />“ შეცვალა ძიების პროვაიდერი <ph name="SEARCH_PROVIDER_DOMAIN" />-ით</translation>
@@ -547,6 +550,7 @@
 <translation id="1588438908519853928">ნორმალური</translation>
 <translation id="158849752021629804">საჭიროა სახლის ქსელი</translation>
 <translation id="1588870296199743671">გახსენით ბმულები-ის მეშვეობით…</translation>
+<translation id="1588919647604819635">მარჯვნივ დააწკაპუნეთ ბარათზე</translation>
 <translation id="1589055389569595240">მართლწერისა და გრამატიკის ჩვენება</translation>
 <translation id="1591679663873027990">მიეცით Parallels Desktop-ს თქვენს USB მოწყობილობებზე წვდომის ნებართვა. USB მოწყობილობის ამოღების შემდეგ Parallels Desktop მას არ დაიმახსოვრებს.</translation>
 <translation id="1592074621872221573"><ph name="MANAGER" />-მა გათიშა ADB გამართვა, რაც <ph name="DEVICE_TYPE" />-ის გადაყენებას გამოიწვევს. გადატვირთვამდე შექმენით თქვენი ფაილების სარეზერვო ასლები.</translation>
@@ -982,7 +986,9 @@
 
 ამ ანგარიშის პარამეტრების მართვა შეგიძლიათ თქვენს მოწყობილობაზე Family Link აპის ინსტალაციით.  ინსტრუქცია ელფოსტით გამოგიგზავნეთ.</translation>
 <translation id="2040460856718599782">უი! რაღაც არასწორად წავიდა თქვენი ავტორიზაციის დროს. გთხოვთ, გადაამოწმოთ თქვენი შესვლის მონაცემები და ხელახლა სცადოთ.</translation>
+<translation id="2042279886444479655">აქტიური პროფილები</translation>
 <translation id="2044014337866019681">სესიის განსაბლოკად დარწმუნდით, რომ <ph name="ACCOUNT" />-ის დადასტურებას ცდილობთ.</translation>
+<translation id="2044023416777079300">მოდემი ამოცნობილი არ არის</translation>
 <translation id="204497730941176055">Microsoft-ის სერტიფიკატის შაბლონის სახელი</translation>
 <translation id="2045117674524495717">კლავიატურის მალსახმობების დამხმარე ხელსაწყო</translation>
 <translation id="2045969484888636535">ქუქის დაბლოკვის გაგრძელება</translation>
@@ -1319,6 +1325,7 @@
 <translation id="2395616325548404795">თქვენი <ph name="DEVICE_TYPE" /> წარმატებით დარეგისტრირდა კორპორატიული მართვისთვის, თუმცა მისი საინვენტარო და მდებარეობის ინფორმაცია ვერ გაიგზავნა. გთხოვთ, ხელით შეიყვანოთ ეს ინფორმაცია ამ მოწყობილობის ადმინისტრატორის კონსოლიდან.</translation>
 <translation id="2396387085693598316">თქვენმა ადმინისტრატორმა დაბლოკა „<ph name="EXTENSION_NAME" />“</translation>
 <translation id="2396783860772170191">შეიყვანეთ 4-ციფრიანი PIN-კოდი (0000-9999)</translation>
+<translation id="2398546389094871088">თქვენს მოწყობილობაზე Powerwash-ის გამოყენება არ ამოშლის თქვენს eSIM პროფილებს. გადადით <ph name="LINK_BEGIN" />მობილურის პარამეტრებზე<ph name="LINK_END" />, რათა ხელით ამოშალოთ ეს პროფილები.</translation>
 <translation id="2399699884460174994">შეტყობინებები ჩართულია</translation>
 <translation id="2399939490305346086">უსაფრთხოების გასაღების სისტემაში შესვლის მონაცემები</translation>
 <translation id="2400664245143453337">საჭიროა გადაუდებელი განახლება</translation>
@@ -1735,6 +1742,7 @@
 <translation id="2844809857160214557">ბეჭდვის დავალებების ნახვა და მართვა</translation>
 <translation id="2845382757467349449">ყოველთვის გამოჩნდეს სანიშნეების ზოლი</translation>
 <translation id="284805635805850872">გსურთ საზიანო პროგრამული უზრუნველყოფის ამოშლა?</translation>
+<translation id="2849035674501872372">ზევით აიხედეთ</translation>
 <translation id="284970761985428403"><ph name="ASCII_NAME" /> (<ph name="UNICODE_NAME" />)</translation>
 <translation id="284975061945174219">გასუფთავება ვერ მოხერხდა</translation>
 <translation id="2849936225196189499">კრიტიკული</translation>
@@ -2046,6 +2054,7 @@
 <translation id="3189187154924005138">დიდი კურსორი</translation>
 <translation id="3190558889382726167">პაროლი შენახულია</translation>
 <translation id="3192947282887913208">აუდიო ფაილები</translation>
+<translation id="3197453258332670132">მარჯვენა ღილაკზე დაწკაპუნების ან ხანგრძლივად დაჭერის შემთხვევაში მონიშნულ ტექსთან დაკავშირებული ინფორმაციის ჩვენება</translation>
 <translation id="3199127022143353223">სერვერები</translation>
 <translation id="3201422919974259695">აქ გამოჩნდება ხელმისაწვდომი USB-მოწყობილობები.</translation>
 <translation id="3202131003361292969">მდებარეობა</translation>
@@ -2067,6 +2076,7 @@
 <translation id="3223531857777746191">გადაყენების ღილაკი</translation>
 <translation id="3225084153129302039">ნაგულისხმევი იასამნისფერი ავატარი</translation>
 <translation id="3225319735946384299">კოდის ხელმოწერა</translation>
+<translation id="3226487301970807183">მარცხნივი სწორების გვერდითა პანელზე გადართვა</translation>
 <translation id="3227137524299004712">მიკროფონი</translation>
 <translation id="3233271424239923319">Linux აპებისა და ფაილების სარეზერვო კოპირება</translation>
 <translation id="3238192140106069382">დაკავშირება და დადასტურება</translation>
@@ -2336,6 +2346,7 @@
 <translation id="3515983984924808886">გადაყენების დასასრულებლად ხელახლა შეეხეთ უსაფრთხოების გასაღებს. უსაფრთხოების გასაღებზე შენახული მთელი ინფორმაცია (მისი PIN-კოდის ჩათვლით) წაიშლება.</translation>
 <translation id="3518985090088779359">მიღება და გაგრძელება</translation>
 <translation id="3519564332031442870">Print Backend Service</translation>
+<translation id="3519938335881974273">გვერდის შენახვა როგორც…</translation>
 <translation id="3521606918211282604">დისკის ზომის შეცვლა</translation>
 <translation id="3522088408596898827">დისკის მეხსიერება კრიტიკულად არასაკმარისია. გაათავისუფლეთ სივრცე და ცადეთ ხელახლა.</translation>
 <translation id="3524965460886318643">აქტივობის ექსპორტი</translation>
@@ -2359,6 +2370,7 @@
 <translation id="3550593477037018652">ფიჭური ქსელის გათიშვა</translation>
 <translation id="3550915441744863158">Chrome ავტომატურად განახლდება, ასე რომ თქვენ ყოველთვის გაქვთ უახლესი ვერსია</translation>
 <translation id="3551320343578183772">ჩანართის დახურვა</translation>
+<translation id="3552097563855472344"><ph name="NETWORK_NAME" /> — <ph name="SPAN_START" /><ph name="CARRIER_NAME" /><ph name="SPAN_END" /></translation>
 <translation id="3552780134252864554">გასუფთავდება გასვლისას</translation>
 <translation id="3554493885489666172">თქვენს მოწყობილობას მართავს <ph name="PROFILE_NAME" />. ადმინისტრატორებს შეუძლიათ ამ მოწყობილობაზე არსებული ნებისმიერი პროფილის მონაცემებზე წვდომა.</translation>
 <translation id="3555812735919707620">გაფართოების წაშლა</translation>
@@ -2411,6 +2423,7 @@
 <translation id="3604713164406837697">ფონის შეცვლა</translation>
 <translation id="3605780360466892872">ღილაკის დაჭერა</translation>
 <translation id="3608576286259426129">მომხმარებლის გამოსახულების გადახედვა</translation>
+<translation id="3609277884604412258">სწრაფი ძიება</translation>
 <translation id="3610369246614755442">სამაგრის ვენტილატორი საჭიროებს ტექნიკურ მომსახურებას</translation>
 <translation id="361106536627977100">ფლეშ მონაცემები</translation>
 <translation id="3611655097742243705">სხვა აპების საპოვნელად ეწვიეთ Play Store-ს</translation>
@@ -2805,6 +2818,7 @@
 <translation id="398477389655464998">გამოყოფილთან ბმულის კოპირება</translation>
 <translation id="3987544746655539083">ამ საიტისთვის თქვენს მდებარეობაზე წვდომის კვლავ დაბლოკვა</translation>
 <translation id="3987938432087324095">ვერ გავიგე.</translation>
+<translation id="3987993985790029246">ბმულის კოპირება</translation>
 <translation id="3988996860813292272">აირჩიეთ დროის სარტყელი</translation>
 <translation id="399179161741278232">იმპორტირებული</translation>
 <translation id="3994374631886003300"><ph name="DEVICE_TYPE" />-ის განსაბლოკად მოაახლოვეთ და განბლოკეთ თქვენი ტელეფონი.</translation>
@@ -3353,6 +3367,7 @@
 <translation id="4636682061478263818">Drive-ის ფაილები</translation>
 <translation id="4636930964841734540">ინფორმაცია</translation>
 <translation id="4637083375689622795">სხვა ქმედებები, <ph name="EMAIL" /></translation>
+<translation id="4637189644956543313">კამერის ხელახლა გამოყენება</translation>
 <translation id="4637252186848840278">{COUNT,plural, =1{ტექსტი}other{# ტექსტი}}</translation>
 <translation id="4638930039313743000">ADB გამართვის ჩართვა</translation>
 <translation id="4641539339823703554">Chrome-მა ვერ დააყენა სისტემის დრო. შეამოწმეთ დრო ქვემოთ და გაასწორეთ, თუ საჭიროა.</translation>
@@ -4081,6 +4096,7 @@
 <translation id="5486261815000869482">დაადასტურეთ პაროლი</translation>
 <translation id="5486275809415469523"><ph name="APP_NAME" /> უზიარებს ეკრანს <ph name="TAB_NAME" />-ს.</translation>
 <translation id="5486561344817861625">ბრაუზერის გადატვირთვის სიმულაცია</translation>
+<translation id="5487460042548760727">პროფილის გადარქმევა „<ph name="PROFILE_NAME" />“-ზე</translation>
 <translation id="5487521232677179737">მონაცემების წაშლა</translation>
 <translation id="5488093641312826914">„<ph name="COPIED_ITEM_NAME" />“ დაკოპირდა</translation>
 <translation id="5488508217173274228">დაშიფვრის ვარიანტების სინქრონიზაცია</translation>
@@ -4102,6 +4118,7 @@
 <translation id="5499313591153584299">ეს ფაილი შეიძლება მავნე იყოს თქვენი კომპიუტერისთვის.</translation>
 <translation id="5499453227627332024">ხელმისაწვდომია თქვენი Linux კონტეინერის ვერსიის განახლება. ვერსიის მოგვიანების განახლება შეგიძლიათ პარამეტრების აპიდან.</translation>
 <translation id="5500709606820808700">უსაფრთხოების შემოწმება შესრულდა დღეს</translation>
+<translation id="5501322521654567960">მარცხნივი სწორების გვერდითა პანელი</translation>
 <translation id="5501809658163361512">{COUNT,plural, =1{<ph name="ATTACHMENTS" /> <ph name="DEVICE_NAME" />-დან ვერ მიიღეთ}other{<ph name="ATTACHMENTS" /> <ph name="DEVICE_NAME" />-დან ვერ მიიღეთ}}</translation>
 <translation id="5502500733115278303">იმპორტირებულია Firefox-იდან</translation>
 <translation id="5502915260472117187">ბავშვი</translation>
@@ -4822,6 +4839,7 @@
 <translation id="6308937455967653460">ბმულ&amp;ის შენახვა, როგორც…</translation>
 <translation id="6309443618838462258">შეყვანის ეს მეთოდი არ არის დაშვებული თქვენი ადმინისტრატორის მიერ</translation>
 <translation id="6309510305002439352">მიკროფონი გამორთულია</translation>
+<translation id="6310141306111263820">eSIM პროფილის ინსტალაცია ვერ მოხერხდა. დახმარებისთვის მიმართეთ თქვენს ოპერატორს.</translation>
 <translation id="6311220991371174222">Chrome-ის გაშვება ვერ მოხერხდა, რადგან თქვენი პროფილის გახსნისას შეფერხება წარმოიქმნა. ცადეთ Chrome-ის ხელახლა გაშვება.</translation>
 <translation id="6312403991423642364">ქსელის უცნობი შეცდომა</translation>
 <translation id="6312567056350025599">{NUM_DAYS,plural, =1{უსაფრთხოების შემოწმება შესრულდა 1 დღის წინ}other{უსაფრთხოების შემოწმება შესრულდა {NUM_DAYS} დღის წინ}}</translation>
@@ -5312,6 +5330,7 @@
 <translation id="6856348640027512653">ვირტუალური რეალობის მოწყობილობებისა თუ მონაცემების გამოყენება დაუშვებელია</translation>
 <translation id="6856459657722366306">ქსელი <ph name="NETWORK_INDEX" /> / <ph name="NETWORK_COUNT" />-დან, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, <ph name="CONNECTION_STATUS" />, სიგნალის სიძლიერე: <ph name="SIGNAL_STRENGTH" />%, დეტალები</translation>
 <translation id="6856623341093082836">თქვენი სენსორული ეკრანის დაყენება და სიზუსტის დარეგულირება</translation>
+<translation id="6857145580237920905">ამოშალეთ eSIM პროფილები Powerwash-ის გამოყენებამდე</translation>
 <translation id="6857699260879628349">კონფიგურაციის ინფორმაციის მიღება</translation>
 <translation id="6857725247182211756"><ph name="SECONDS" /> წმ</translation>
 <translation id="6860097299815761905">პროქსის პარამეტრები…</translation>
@@ -5756,6 +5775,7 @@
 <translation id="7361297102842600584">დააწკაპუნეთ მარჯვენა ღილაკით, რათა გაუშვათ <ph name="PLUGIN_NAME" /></translation>
 <translation id="7362387053578559123">საიტებს შეუძლია Bluetooth მოწყობილობებთან დაკავშირების თხოვნა</translation>
 <translation id="7364591875953874521">წვდომის მოთხოვნები</translation>
+<translation id="7364745943115323529">ტრანსლირება…</translation>
 <translation id="7364796246159120393">აირჩიეთ ფაილი</translation>
 <translation id="7365076891350562061">მონიტორის ზომა</translation>
 <translation id="7366316827772164604">სკანირდება ახლომდებარე მოწყობილობები...</translation>
@@ -5958,6 +5978,7 @@
 <translation id="7582582252461552277">ეს ქსელი იყოს უპირატესი</translation>
 <translation id="7582844466922312471">მობილური მონაცემები</translation>
 <translation id="7583948862126372804">რაოდენობა</translation>
+<translation id="7586051298768394542">მეტყველების ფაილების ჩამოტვირთვა ვერ მოხერხდა. კარნახი გააგრძელებს მუშაობას თქვენი ხმის Google-ისთვის გაგზავნის მეშვეობით.</translation>
 <translation id="7586498138629385861">Chrome გააგრძელებს მუშაობას, სანამ Chrome პროგრამები გახსნილი იქნება.</translation>
 <translation id="7589461650300748890">ფრთხილად!</translation>
 <translation id="7593653750169415785">ავტომატურად დაიბლოკა, რადგან რამდენჯერმე უარყავით შეტყობინებები</translation>
@@ -6545,6 +6566,7 @@
 <translation id="8191230140820435481">მართეთ თქვენი პროგრამები, გაფართოებები, და თემები</translation>
 <translation id="8195027750202970175">ზომა დისკზე</translation>
 <translation id="8198323535106903877">ეს <ph name="NUMBER_OF_APPS" /> აპი დაინსტალირდება თქვენთვის</translation>
+<translation id="8198456017687137612">მიმდინარეობს ჩანართის ტრანსლირება</translation>
 <translation id="8199300056570174101">ქსელის (სერვისი) და მოწყობილობის მახასიათებლები</translation>
 <translation id="8200772114523450471">გაგრძელება</translation>
 <translation id="8201717382574620700">აირჩიეთ ალბომები თემაზე <ph name="TOPIC_SOURCE" /></translation>
@@ -6800,7 +6822,6 @@
 <translation id="8498395510292172881">კითხვის გაგრძელება Chrome-ში</translation>
 <translation id="8499083585497694743">მიკროფონის დადუმების მოხსნა</translation>
 <translation id="8502536196501630039">Google Play-ში არსებული აპების გამოსაყენებლად, პირველ რიგში, საჭიროა თქვენი აპის აღდგენა. ზოგიერთი მონაცემი შეიძლებოდა დაკარგულიყო.</translation>
-<translation id="850314194061055138">კამერის ხელახლა გამოყენება</translation>
 <translation id="8503813439785031346">მომხმარებლის სახელი</translation>
 <translation id="8507227974644337342">ეკრანის გარჩევადობა</translation>
 <translation id="850875081535031620">საზიანო პროგრამული უზრუნველყოფა არ მოიძებნა</translation>
@@ -7129,6 +7150,7 @@
 <translation id="8847523528195140327">სისტემიდან გამოსვლა თავსახურის დახურვისას</translation>
 <translation id="8847988622838149491">USB</translation>
 <translation id="8849001918648564819">დამალული</translation>
+<translation id="8849219423513870962">აღარ ამოიშალოს eSIM პროფილი სახელად <ph name="PROFILE_NAME" /></translation>
 <translation id="8850251000316748990">მეტის ნახვა…</translation>
 <translation id="885246833287407341">API ფუნქციების არგუმენტები</translation>
 <translation id="8853586775156634952">ეს ბარათი შეინახება მხოლოდ ამ მოწყობილობაზე</translation>

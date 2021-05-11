@@ -64,7 +64,6 @@
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/events/current_input_event.h"
-#include "third_party/blink/renderer/core/events/pointer_event_factory.h"
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
 #include "third_party/blink/renderer/core/events/wheel_event.h"
 #include "third_party/blink/renderer/core/exported/web_dev_tools_agent_impl.h"
@@ -781,7 +780,6 @@ void WebFrameWidgetImpl::MouseContextMenu(const WebMouseEvent& event) {
   WebMouseEvent transformed_event =
       TransformWebMouseEvent(LocalRootImpl()->GetFrameView(), event);
   transformed_event.menu_source_type = kMenuSourceMouse;
-  transformed_event.id = PointerEventFactory::kMouseId;
 
   // Find the right target frame. See issue 1186900.
   HitTestResult result = HitTestResultForRootFramePos(
@@ -1490,19 +1488,9 @@ void WebFrameWidgetImpl::ApplyVisualPropertiesSizing(
 
   SetWindowSegments(visual_properties.root_widget_window_segments);
 
-  const bool screen_infos_changed =
-      widget_base_->screen_infos() != visual_properties.screen_infos;
-
   widget_base_->UpdateSurfaceAndScreenInfo(
       visual_properties.local_surface_id.value_or(viz::LocalSurfaceId()),
       new_compositor_viewport_pixel_rect, visual_properties.screen_infos);
-
-  if (screen_infos_changed) {
-    LocalFrame* frame = LocalRootImpl()->GetFrame();
-    CoreInitializer::GetInstance().NotifyScreensChanged(
-        *frame, visual_properties.screen_infos);
-    // TODO(crbug.com/1182855): Propagate info and events to remote frames.
-  }
 
   // Store this even when auto-resizing, it is the size of the full viewport
   // used for clipping, and this value is propagated down the Widget
@@ -1922,17 +1910,13 @@ void WebFrameWidgetImpl::ResetMeaningfulLayoutStateForMainFrame() {
 
 void WebFrameWidgetImpl::InitializeCompositing(
     scheduler::WebAgentGroupScheduler& agent_group_scheduler,
-    cc::TaskGraphRunner* task_graph_runner,
     const ScreenInfos& screen_infos,
-    const cc::LayerTreeSettings* settings,
-    gfx::RenderingPipeline* main_thread_pipeline,
-    gfx::RenderingPipeline* compositor_thread_pipeline) {
+    const cc::LayerTreeSettings* settings) {
   DCHECK(View()->does_composite());
   DCHECK(!non_composited_client_);  // Assure only one initialize is called.
   widget_base_->InitializeCompositing(
-      agent_group_scheduler, task_graph_runner, is_for_child_local_root_,
-      screen_infos, settings, input_handler_weak_ptr_factory_.GetWeakPtr(),
-      main_thread_pipeline, compositor_thread_pipeline);
+      agent_group_scheduler, is_for_child_local_root_, screen_infos, settings,
+      input_handler_weak_ptr_factory_.GetWeakPtr());
 
   LocalFrameView* frame_view;
   if (is_for_child_local_root_) {
@@ -3833,7 +3817,19 @@ void WebFrameWidgetImpl::DidUpdateSurfaceAndScreen(
     View()->CancelPagePopup();
   }
 
+  // Update Screens interface data before firing any events. The API is designed
+  // to offer synchronous access to the most up-to-date cached screen
+  // information when a change event is fired.  It is not required but it
+  // is convenient to have all ScreenAdvanced objects be up to date when any
+  // window.screen events are fired as well.
+  LocalFrame* frame = LocalRootImpl()->GetFrame();
+  CoreInitializer::GetInstance().DidUpdateScreens(*frame,
+                                                  widget_base_->screen_infos());
+  // TODO(crbug.com/1182855): Propagate info and events to remote frames.
+
   if (previous_original_screen_info != original_screen_info) {
+    // TODO(enne): http://crbug.com/1202981 only send this event when properties
+    // on Screen (vs anything in ScreenInfo) change.
     local_root_->GetFrame()->DomWindow()->screen()->DispatchEvent(
         *Event::Create(event_type_names::kChange));
 

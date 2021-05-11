@@ -2555,7 +2555,7 @@
     'machines': {
       'DevTools Linux (chromium)': {
         'mixins': [
-          'linux-xenial',
+          'linux-bionic',
         ],
         'additional_compile_targets': ['blink_tests'],
         'test_suites': {
@@ -4572,7 +4572,7 @@
         'os_type': 'mac',
         'browser_config': 'release',
         'mixins': [
-          'mac_arm64_apple_dtk_experimental',
+          'mac_arm64_apple_dtk_gpu_experimental',
         ],
         'test_suites': {
           'gtest_tests': 'gpu_fyi_mac_release_gtests',
@@ -6206,7 +6206,7 @@
     'machines': {
       'DevTools Linux': {
         'mixins': [
-          'linux-xenial',
+          'linux-bionic',
         ],
         'additional_compile_targets': ['blink_tests'],
         'test_suites': {
@@ -6633,7 +6633,7 @@
     'machines': {
       'devtools_frontend_linux_blink_light_rel': {
         'mixins': [
-          'linux-xenial',
+          'linux-bionic',
         ],
         'test_suites': {
           'gtest_tests': 'devtools_browser_tests',
@@ -6642,7 +6642,7 @@
       },
       'devtools_frontend_linux_blink_rel': {
         'mixins': [
-          'linux-xenial',
+          'linux-bionic',
         ],
         'test_suites': {
           'isolated_scripts': 'devtools_webkit_isolated_scripts',

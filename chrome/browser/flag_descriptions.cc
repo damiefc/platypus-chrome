@@ -2799,11 +2799,6 @@ const char kAndroidLayoutChangeTabReparentingDescription[] =
     "the UI layout updates to the proper one and the current tabs are "
     "reparented instead of reloaded.";
 
-const char kAndroidManagedByMenuItemName[] = "Managed by menu item";
-const char kAndroidManagedByMenuItemDescription[] =
-    "whether policies have been applied to this browser at the profile or "
-    "machine level.";
-
 const char kAndroidSurfaceControlName[] = "Android SurfaceControl";
 const char kAndroidSurfaceControlDescription[] =
     " Enables SurfaceControl to manage the buffer queue for the "
@@ -2836,11 +2831,6 @@ const char kAutofillAssistantDirectActionsName[] =
     "Autofill Assistant direct actions";
 const char kAutofillAssistantDirectActionsDescription[] =
     "When enabled, expose direct actions from the Autofill Assistant.";
-
-const char kAutofillAssistantProactiveHelpName[] =
-    "Autofill Assistant proactive help";
-const char kAutofillAssistantProactiveHelpDescription[] =
-    "When enabled, allows the Autofill Assistant to proactively trigger.";
 
 const char kAutofillUseMobileLabelDisambiguationName[] =
     "Autofill Uses Mobile Label Disambiguation";
@@ -4540,13 +4530,6 @@ const char kFrameThrottleFps20[] = "20 fps";
 const char kFrameThrottleFps25[] = "25 fps";
 const char kFrameThrottleFps30[] = "30 fps";
 
-const char kFsNosymfollowName[] =
-    "Prevent symlink traversal on user-supplied filesystems.";
-const char kFsNosymfollowDescription[] =
-    "Causes user-supplied filesystems to be mounted with the 'nosymfollow'"
-    " option, so the chromuimos LSM denies symlink traversal on the"
-    " filesystem.";
-
 const char kFullRestoreName[] = "Full restore";
 const char kFullRestoreDescription[] = "Chrome OS full restore";
 
@@ -4631,10 +4614,9 @@ const char kLacrosPrimaryDescription[] =
 const char kLacrosStabilityName[] = "Lacros stability";
 const char kLacrosStabilityDescription[] = "Frequency of Lacros updates.";
 
-const char kLacrosStabilityLessStableDescription[] =
-    "More frequent updates / less stable";
-const char kLacrosStabilityMoreStableDescription[] =
-    "Less frequent updates / more stable";
+const char kLacrosStabilityLeastStableDescription[] = "Daily updates";
+const char kLacrosStabilityLessStableDescription[] = "Weekly updates";
+const char kLacrosStabilityMoreStableDescription[] = "Monthly updates";
 
 const char kLacrosSupportName[] = "Lacros support";
 const char kLacrosSupportDescription[] =
@@ -5066,6 +5048,12 @@ const char kWebuiFeedbackName[] = "WebUI Feedback";
 const char kWebuiFeedbackDescription[] =
     "If enabled, Chrome will show the Feedback WebUI, as opposed to Chrome "
     "App Feedback UI, when clicking on \"Report an issue...\"";
+
+const char kSettingsLandingPageRedesignName[] =
+    "Settings Landing Page Redesign";
+const char kSettingsLandingPageRedesignDescription[] =
+    "Changes the layout of the chrome://settings page to only show one section "
+    "at a time.";
 
 #endif  // defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)

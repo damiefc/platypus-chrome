@@ -112,6 +112,7 @@ executable("cast_runner_exe") {
     ":common",
     "//base",
     "//fuchsia/base",
+    "//third_party/fuchsia-sdk/sdk/pkg/sys_inspect_cpp",
   ]
 
   data_deps = [ ":cast_runner_core" ]
@@ -160,7 +161,7 @@ test("cast_runner_unittests") {
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
-    "//fuchsia/base:test_support",
+    "//fuchsia/base/test:test_support",
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
@@ -178,7 +179,7 @@ test("cast_runner_integration_tests") {
     "//base/test:test_support",
     "//components/cast/message_port",
     "//fuchsia/base:run_all_integration_tests",
-    "//fuchsia/base:test_support",
+    "//fuchsia/base/test:test_support",
     "//net:test_support",
     "//testing/gtest",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.camera3",
@@ -221,7 +222,7 @@ test("cast_runner_browsertests") {
     "//content/public/browser",
     "//content/test:test_support",
     "//fuchsia/base",
-    "//fuchsia/base:test_support",
+    "//fuchsia/base/test:test_support",
     "//fuchsia/engine:browsertest_core",
     "//testing/gmock",
     "//testing/gtest",
@@ -241,6 +242,7 @@ executable("web_runner_exe") {
     ":common",
     "//base",
     "//fuchsia/base",
+    "//third_party/fuchsia-sdk/sdk/pkg/sys_inspect_cpp",
   ]
   visibility = [ ":*" ]
 }

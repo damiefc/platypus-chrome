@@ -38,6 +38,11 @@ const base::Feature kExtensionsSidePanel{"ExtensionsSidePanel",
 const base::FeatureParam<std::string> kExtensionsSidePanelId{
     &kExtensionsSidePanel, "ExtensionsSidePanelId", ""};
 
+// Enables the reauth flow for authenticated profiles with invalid credentials
+// when the force sign-in policy is enabled.
+const base::Feature kForceSignInReauth{"ForceSignInReauth",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the new profile picker.
 // https:://crbug.com/1063856
 const base::Feature kNewProfilePicker{"NewProfilePicker",
@@ -175,11 +180,6 @@ const base::Feature kToolbarUseHardwareBitmapDraw{
 
 const base::Feature kUseRelaunchToUpdateString{
     "UseRelaunchToUpdateString", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables a web-based separator that's only used for performance testing. See
-// https://crbug.com/993502.
-const base::Feature kWebFooterExperiment{"WebFooterExperiment",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 // This enables enables persistence of a WebContents in a 1-to-1 association
 // with the current Profile for WebUI bubbles. See https://crbug.com/1177048.

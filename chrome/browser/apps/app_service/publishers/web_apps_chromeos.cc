@@ -25,8 +25,8 @@
 #include "chrome/browser/apps/app_service/web_apps_utils.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/arc/arc_web_contents_data.h"
-#include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/badging/badge_manager_factory.h"
+#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/extensions/gfx_utils.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -178,6 +178,8 @@ void WebAppsChromeOs::Uninstall(const std::string& app_id,
     return;
   }
 
+  auto origin = url::Origin::Create(web_app->start_url());
+
   DCHECK(provider());
   DCHECK(provider()->install_finalizer().CanUserUninstallWebApp(app_id));
   webapps::WebappUninstallSource webapp_uninstall_source =
@@ -198,7 +200,6 @@ void WebAppsChromeOs::Uninstall(const std::string& app_id,
   constexpr bool kClearCache = true;
   constexpr bool kAvoidClosingConnections = false;
 
-  auto origin = url::Origin::Create(web_app->start_url());
   content::ClearSiteData(base::BindRepeating(
                              [](content::BrowserContext* browser_context) {
                                return browser_context;
