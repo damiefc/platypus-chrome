@@ -850,9 +850,6 @@ extern const char kInheritNativeThemeFromParentWidgetDescription[];
 extern const char kInProductHelpDemoModeChoiceName[];
 extern const char kInProductHelpDemoModeChoiceDescription[];
 
-extern const char kInsertKeyToggleModeName[];
-extern const char kInsertKeyToggleModeDescription[];
-
 extern const char kInstalledAppsInCbdName[];
 extern const char kInstalledAppsInCbdDescription[];
 
@@ -1823,6 +1820,9 @@ extern const char kMessagesForAndroidSafetyTipDescription[];
 extern const char kMessagesForAndroidSaveCardName[];
 extern const char kMessagesForAndroidSaveCardDescription[];
 
+extern const char kMessagesForAndroidUpdatePasswordName[];
+extern const char kMessagesForAndroidUpdatePasswordDescription[];
+
 extern const char kOfflineIndicatorChoiceName[];
 extern const char kOfflineIndicatorChoiceDescription[];
 
@@ -2747,9 +2747,6 @@ extern const char kNearbySharingDeviceContactsDescription[];
 
 extern const char kNearbySharingWebRtcName[];
 extern const char kNearbySharingWebRtcDescription[];
-
-extern const char kPhoneHubName[];
-extern const char kPhoneHubDescription[];
 
 extern const char kReduceDisplayNotificationsName[];
 extern const char kReduceDisplayNotificationsDescription[];

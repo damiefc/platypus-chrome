@@ -3469,6 +3469,16 @@ Unknown properties are collapsed to zero. -->
   <int value="2" label="In Splitview"/>
 </enum>
 
+<enum name="ArcAnr">
+  <summary>Defines ARC ANR types.</summary>
+  <int value="0" label="Unknown">ANR type cannot be determined.</int>
+  <int value="1" label="Input">ANR while handling input event dispatching.</int>
+  <int value="2" label="Service">ANR in service.</int>
+  <int value="3" label="Broadcast">ANR handling broadcast.</int>
+  <int value="4" label="ContentProvider">ANR from ContentProvider.</int>
+  <int value="5" label="AppRequested">ANR requested explicitly by app.</int>
+</enum>
+
 <enum name="ArcAuthAccountCheckStatus">
   <int value="0" label="Account is up to date"/>
   <int value="1" label="New account"/>
@@ -32411,6 +32421,8 @@ Called by update_use_counter_feature_enum.py.-->
   <int value="3900" label="ComputePressureObserver_Observe"/>
   <int value="3901" label="ComputePressureObserver_Stop"/>
   <int value="3902" label="WebAppWindowControlsOverlay"/>
+  <int value="3903" label="PaymentRequestShowWithoutGestureOrToken"/>
+  <int value="3904" label="V8Navigator_UpdateAdInterestGroups_Method"/>
 </enum>
 
 <enum name="FeaturePolicyAllowlistType">
@@ -46357,6 +46369,7 @@ from previous Chrome versions.
   <int value="-417633330" label="MessagesForAndroidInfrastructure:enabled"/>
   <int value="-416660617" label="EnforceTLS13Downgrade:disabled"/>
   <int value="-415186532" label="AndroidSiteSettingsUIRefresh:enabled"/>
+  <int value="-413562235" label="MessagesForAndroidUpdatePassword:disabled"/>
   <int value="-412736561" label="EnableZeroStateMixedTypesRanker:enabled"/>
   <int value="-412645531" label="AutofillTokenPrefixMatching:enabled"/>
   <int value="-410852857" label="ImprovedA2HS:disabled"/>
@@ -46612,6 +46625,7 @@ from previous Chrome versions.
       label="EnableEphemeralGuestProfilesOnDesktop:disabled"/>
   <int value="-176524053"
       label="VmCameraMicIndicatorsAndNotifications:disabled"/>
+  <int value="-175696105" label="MessagesForAndroidUpdatePassword:enabled"/>
   <int value="-175666252" label="Portals:disabled"/>
   <int value="-174829803" label="TabOutlinesInLowContrastThemes:enabled"/>
   <int value="-174706795"
@@ -75441,6 +75455,9 @@ https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.1.pdf
 </enum>
 
 <enum name="SuggestAppsDialogCloseReason">
+  <obsolete>
+    Removed in M90. Files.app no longer displays CWS dialog.
+  </obsolete>
   <int value="0" label="Unknown error"/>
   <int value="1" label="Item installed"/>
   <int value="2" label="User cancelled"/>
@@ -75448,18 +75465,27 @@ https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.1.pdf
 </enum>
 
 <enum name="SuggestAppsDialogInstall">
+  <obsolete>
+    Removed in M90. Files.app no longer displays CWS dialog.
+  </obsolete>
   <int value="0" label="Install succeeded"/>
   <int value="1" label="Install cancelled"/>
   <int value="2" label="Install failed"/>
 </enum>
 
 <enum name="SuggestAppsDialogLoad">
+  <obsolete>
+    Removed in M90. Files.app no longer displays CWS dialog.
+  </obsolete>
   <int value="0" label="Load succeeded"/>
   <int value="1" label="Load cancelled"/>
   <int value="2" label="Load failed"/>
 </enum>
 
 <enum name="SuggestedAppListAppLaunched">
+  <obsolete>
+    Removed in M90. Files.app no longer displays CWS dialog.
+  </obsolete>
   <int value="0" label="Not a suggested app"/>
   <int value="1" label="Suggested app"/>
 </enum>
