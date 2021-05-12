@@ -12,6 +12,7 @@
 #include "base/android/jni_android.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/containers/queue.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -407,6 +408,7 @@ void ArCoreGl::CreateSession(mojom::VRDisplayInfoPtr display_info,
       presentation_receiver_.BindNewPipeAndPassRemote();
   submit_frame_sink->transport_options = std::move(transport_options);
 
+  DCHECK_EQ(display_info->views.size(), static_cast<size_t>(1));
   display_info_ = std::move(display_info);
 
   ArCoreGlCreateSessionResult result(
@@ -580,7 +582,8 @@ void ArCoreGl::RecalculateUvsAndProjection() {
            << " left=" << field_of_view->left_degrees
            << " right=" << field_of_view->right_degrees;
 
-  display_info_->left_eye->field_of_view = std::move(field_of_view);
+  DCHECK_EQ(display_info_->views.size(), static_cast<size_t>(1));
+  display_info_->views[0]->field_of_view = std::move(field_of_view);
   display_info_changed_ = true;
 }
 
@@ -731,7 +734,7 @@ void ArCoreGl::GetFrameData(
   }
 
   if (display_info_changed_) {
-    frame_data->left_eye = display_info_->left_eye.Clone();
+    frame_data->views.emplace_back(display_info_->views[0].Clone());
     display_info_changed_ = false;
   }
 

@@ -16,8 +16,8 @@
 #include "base/task/thread_pool.h"
 #include "chrome/browser/ash/crostini/crostini_features.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
-#include "chrome/browser/chromeos/crostini/crostini_simple_types.h"
-#include "chrome/browser/chromeos/crostini/crostini_types.mojom.h"
+#include "chrome/browser/ash/crostini/crostini_simple_types.h"
+#include "chrome/browser/ash/crostini/crostini_types.mojom.h"
 #include "chromeos/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -25,7 +25,7 @@
 
 namespace {
 chromeos::ConciergeClient* GetConciergeClient() {
-  return chromeos::ConciergeClient::Get();
+  return chromeos::DBusThreadManager::Get()->GetConciergeClient();
 }
 
 std::string FormatBytes(const int64_t value) {

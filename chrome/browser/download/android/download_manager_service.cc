@@ -238,7 +238,7 @@ void DownloadManagerService::OnProfileAdded(
 
 void DownloadManagerService::OnProfileAdded(Profile* profile) {
   InitializeForProfile(profile->GetProfileKey());
-  observed_profiles_.Add(profile);
+  observed_profiles_.AddObservation(profile);
   for (Profile* otr : profile->GetAllOffTheRecordProfiles())
     InitializeForProfile(otr->GetProfileKey());
 }
@@ -730,8 +730,7 @@ content::DownloadManager* DownloadManagerService::GetDownloadManager(
       IsReducedModeProfileKey(profile_key)
           ? ProfileManager::GetActiveUserProfile()
           : ProfileManager::GetProfileFromProfileKey(profile_key);
-  content::DownloadManager* manager =
-      content::BrowserContext::GetDownloadManager(profile);
+  content::DownloadManager* manager = profile->GetDownloadManager();
   ResetCoordinatorIfNeeded(profile_key);
   return manager;
 }

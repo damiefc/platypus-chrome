@@ -294,6 +294,8 @@ class DownloadOpenObserver : public download::DownloadItem::Observer {
   DISALLOW_COPY_AND_ASSIGN(DownloadOpenObserver);
 };
 
+}  // namespace
+
 class DownloadExtensionTest : public ExtensionApiTest {
  public:
   DownloadExtensionTest()
@@ -459,11 +461,13 @@ class DownloadExtensionTest : public ExtensionApiTest {
   }
 
   DownloadManager* GetOnRecordManager() {
-    return BrowserContext::GetDownloadManager(browser()->profile());
+    return browser()->profile()->GetDownloadManager();
   }
   DownloadManager* GetOffRecordManager() {
-    return BrowserContext::GetDownloadManager(
-        browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true));
+    return browser()
+        ->profile()
+        ->GetPrimaryOTRProfile(/*create_if_needed=*/true)
+        ->GetDownloadManager();
   }
   DownloadManager* GetCurrentManager() {
     return (current_browser_ == incognito_browser_) ?
@@ -682,6 +686,8 @@ class DownloadExtensionTest : public ExtensionApiTest {
 
   DISALLOW_COPY_AND_ASSIGN(DownloadExtensionTest);
 };
+
+namespace {
 
 class MockIconExtractorImpl : public DownloadFileIconExtractor {
  public:

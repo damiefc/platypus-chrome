@@ -10,12 +10,11 @@
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
-#include "chrome/browser/chromeos/crostini/crostini_simple_types.h"
-#include "chrome/browser/chromeos/crostini/crostini_test_helper.h"
-#include "chrome/browser/chromeos/crostini/crostini_util.h"
+#include "chrome/browser/ash/crostini/crostini_simple_types.h"
+#include "chrome/browser/ash/crostini/crostini_test_helper.h"
+#include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/cicerone/fake_cicerone_client.h"
-#include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_chunneld_client.h"
 #include "chromeos/dbus/fake_concierge_client.h"
@@ -30,9 +29,6 @@ class GuestOsStabilityMonitorTest : public testing::Test {
  public:
   GuestOsStabilityMonitorTest() : task_env_() {
     chromeos::DBusThreadManager::Initialize();
-    chromeos::ConciergeClient::InitializeFake(
-        reinterpret_cast<chromeos::FakeCiceroneClient*>(
-            chromeos::DBusThreadManager::Get()->GetCiceroneClient()));
     chromeos::SeneschalClient::InitializeFake();
 
     // CrostiniManager will create a GuestOsStabilityMonitor for us.
@@ -56,7 +52,6 @@ class GuestOsStabilityMonitorTest : public testing::Test {
     crostini_manager_.reset();
     profile_.reset();
     chromeos::SeneschalClient::Shutdown();
-    chromeos::ConciergeClient::Shutdown();
     chromeos::DBusThreadManager::Shutdown();
   }
 
@@ -72,7 +67,8 @@ class GuestOsStabilityMonitorTest : public testing::Test {
   }
 
   void SendVmStoppedSignal() {
-    auto* concierge_client = chromeos::FakeConciergeClient::Get();
+    auto* concierge_client = static_cast<chromeos::FakeConciergeClient*>(
+        chromeos::DBusThreadManager::Get()->GetConciergeClient());
 
     vm_tools::concierge::VmStoppedSignal signal;
     signal.set_name("termina");
@@ -89,7 +85,8 @@ class GuestOsStabilityMonitorTest : public testing::Test {
 };
 
 TEST_F(GuestOsStabilityMonitorTest, ConciergeFailure) {
-  auto* concierge_client = chromeos::FakeConciergeClient::Get();
+  auto* concierge_client = static_cast<chromeos::FakeConciergeClient*>(
+      chromeos::DBusThreadManager::Get()->GetConciergeClient());
 
   concierge_client->NotifyConciergeStopped();
   histogram_tester_.ExpectUniqueSample(crostini::kCrostiniStabilityHistogram,

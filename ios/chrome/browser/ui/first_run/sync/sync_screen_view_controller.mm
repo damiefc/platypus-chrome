@@ -13,6 +13,7 @@
 #endif
 
 @implementation SyncScreenViewController
+
 @dynamic delegate;
 
 - (void)viewDidLoad {
@@ -26,16 +27,25 @@
 
   self.bannerImage = [UIImage imageNamed:@"sync_screen_banner"];
   self.isTallBanner = NO;
+  self.scrollToEndMandatory = YES;
 
   // Add sync screen-specific content and its constraints.
   UILabel* label = [[UILabel alloc] init];
   label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   label.numberOfLines = 0;
   label.textColor = [UIColor colorNamed:kTextSecondaryColor];
-  label.text = l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SYNC_SCREEN_CONTENT);
+
   label.textAlignment = NSTextAlignmentCenter;
   label.translatesAutoresizingMaskIntoConstraints = NO;
   label.adjustsFontForContentSizeCategory = YES;
+
+  if (self.unifiedButtonStyle) {
+    label.text = l10n_util::GetNSString(
+        IDS_IOS_FIRST_RUN_SYNC_SCREEN_CONTENT_MINOR_MODE);
+  } else {
+    label.text = l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SYNC_SCREEN_CONTENT);
+  }
+
   [self.specificContentView addSubview:label];
 
   [NSLayoutConstraint activateConstraints:@[
@@ -46,6 +56,8 @@
         constraintEqualToAnchor:self.specificContentView.centerXAnchor],
     [label.widthAnchor
         constraintLessThanOrEqualToAnchor:self.specificContentView.widthAnchor],
+    [label.bottomAnchor
+        constraintEqualToAnchor:self.specificContentView.bottomAnchor],
   ]];
 
   [super viewDidLoad];

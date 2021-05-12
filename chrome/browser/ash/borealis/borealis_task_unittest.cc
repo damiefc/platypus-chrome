@@ -12,7 +12,6 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/cicerone/fake_cicerone_client.h"
-#include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/dlcservice/fake_dlcservice_client.h"
 #include "chromeos/dbus/fake_concierge_client.h"
@@ -49,11 +48,9 @@ class BorealisTasksTest : public testing::Test {
  protected:
   void SetUp() override {
     chromeos::DBusThreadManager::Initialize();
-    chromeos::ConciergeClient::InitializeFake(
-        static_cast<chromeos::FakeCiceroneClient*>(
-            chromeos::DBusThreadManager::Get()->GetCiceroneClient()));
     chromeos::SeneschalClient::InitializeFake();
-    fake_concierge_client_ = chromeos::FakeConciergeClient::Get();
+    fake_concierge_client_ = static_cast<chromeos::FakeConciergeClient*>(
+        chromeos::DBusThreadManager::Get()->GetConciergeClient());
     fake_cicerone_client_ = static_cast<chromeos::FakeCiceroneClient*>(
         chromeos::DBusThreadManager::Get()->GetCiceroneClient());
     CreateProfile();
@@ -71,16 +68,15 @@ class BorealisTasksTest : public testing::Test {
 
     chromeos::DlcserviceClient::Shutdown();
     chromeos::SeneschalClient::Shutdown();
-    chromeos::ConciergeClient::Shutdown();
     chromeos::DBusThreadManager::Shutdown();
   }
 
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<BorealisContext> context_;
   content::BrowserTaskEnvironment task_environment_;
-  // Owned by chromeos::DBusThreadManager
   chromeos::FakeConciergeClient* fake_concierge_client_;
   chromeos::FakeCiceroneClient* fake_cicerone_client_;
+  // Owned by chromeos::DBusThreadManager
   chromeos::FakeDlcserviceClient* fake_dlcservice_client_;
 
  private:

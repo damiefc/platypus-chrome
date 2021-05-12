@@ -75,7 +75,7 @@ void OnSetArcVmCpuRestriction(
 }
 
 void SetArcVmCpuRestriction(CpuRestrictionState cpu_restriction_state) {
-  auto* client = chromeos::ConciergeClient::Get();
+  auto* client = chromeos::DBusThreadManager::Get()->GetConciergeClient();
   if (!client) {
     LOG(ERROR) << "ConciergeClient is not available";
     return;
@@ -381,8 +381,6 @@ int32_t GetLcdDensityForDeviceScaleFactor(float device_scale_factor) {
   if (std::abs(device_scale_factor - 1.6f) < kEpsilon)
     return 213;  // TVDPI
   if (std::abs(device_scale_factor - display::kDsf_1_777) < kEpsilon)
-    return 240;  // HDPI
-  if (std::abs(device_scale_factor - display::kDsf_1_8) < kEpsilon)
     return 240;  // HDPI
   if (std::abs(device_scale_factor - display::kDsf_2_666) < kEpsilon)
     return 320;  // XHDPI

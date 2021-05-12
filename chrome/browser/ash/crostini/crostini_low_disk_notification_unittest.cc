@@ -10,8 +10,8 @@
 
 #include "base/bind.h"
 #include "base/time/time.h"
+#include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
-#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/grit/generated_resources.h"
@@ -19,7 +19,6 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/dbus/cicerone/fake_cicerone_client.h"
-#include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/seneschal/seneschal_client.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -39,9 +38,6 @@ class CrostiniLowDiskNotificationTest : public BrowserWithTestWindowTest {
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
     chromeos::DBusThreadManager::Initialize();
-    chromeos::ConciergeClient::InitializeFake(
-        reinterpret_cast<chromeos::FakeCiceroneClient*>(
-            chromeos::DBusThreadManager::Get()->GetCiceroneClient()));
     chromeos::SeneschalClient::InitializeFake();
 
     GetCrosSettingsHelper()->ReplaceDeviceSettingsProviderWithStub();
@@ -71,7 +67,6 @@ class CrostiniLowDiskNotificationTest : public BrowserWithTestWindowTest {
   void TearDown() override {
     low_disk_notification_.reset();
     chromeos::SeneschalClient::Shutdown();
-    chromeos::ConciergeClient::Shutdown();
     chromeos::DBusThreadManager::Shutdown();
     BrowserWithTestWindowTest::TearDown();
   }

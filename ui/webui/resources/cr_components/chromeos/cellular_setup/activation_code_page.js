@@ -81,10 +81,6 @@ Polymer({
       value: UiElement,
     },
 
-    showNoProfilesMessage: {
-      type: Boolean,
-    },
-
     /**
      * @type {!PageState}
      * @private
@@ -119,6 +115,17 @@ Polymer({
       type: Boolean,
       value: false,
       reflectToAttribute: true,
+    },
+
+    /**
+     * A11y string used to announce the current status of qr code camera
+     * detection. Used when device web cam is turned on and ready to scan,
+     * and also used after scan has been completed.
+     * @private
+     */
+    qrCodeCameraA11yString_: {
+      type: String,
+      value: '',
     }
   },
 
@@ -426,6 +433,7 @@ Polymer({
 
   /** @private */
   onStateChanged_() {
+    this.qrCodeCameraA11yString_ = '';
     if (this.state_ !== PageState.MANUAL_ENTRY_INSTALL_FAILURE &&
         this.state_ !== PageState.SCANNING_INSTALL_FAILURE) {
       this.showError = false;
@@ -440,12 +448,14 @@ Polymer({
 
     if (this.state_ === PageState.SCANNING_USER_FACING ||
         this.state_ === PageState.SCANNING_ENVIRONMENT_FACING) {
+      this.qrCodeCameraA11yString_ = this.i18n('qrCodeA11YCameraOn');
       this.expanded_ = true;
       return;
     }
 
     // Focus on the next button after scanning is successful.
     if (this.state_ === PageState.SCANNING_SUCCESS) {
+      this.qrCodeCameraA11yString_ = this.i18n('qrCodeA11YCameraScanSuccess');
       this.fire('focus-default-button');
     }
 
@@ -526,8 +536,7 @@ Polymer({
     if (!this.isScanningAvailable_()) {
       return this.i18n('scanQRCodeEnterActivationCode');
     }
-    return this.showNoProfilesMessage ? this.i18n('scanQRCodeNoProfiles') :
-                                        this.i18n('scanQRCode');
+    return this.i18n('scanQRCode');
   },
 
   /**
@@ -538,12 +547,4 @@ Polymer({
   shouldActivationCodeInputBeInvalid_(state) {
     return state === PageState.MANUAL_ENTRY_INSTALL_FAILURE;
   },
-
-  /**
-   * @return {string}
-   * @private
-   */
-  getUseCameraAgainClass_() {
-    return this.showBusy ? 'hidden' : 'blue-icon';
-  }
 });

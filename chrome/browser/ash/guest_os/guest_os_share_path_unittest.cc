@@ -13,9 +13,9 @@
 #include "chrome/browser/ash/arc/test/test_arc_session_manager.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
+#include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/ash/guest_os/guest_os_pref_names.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/file_manager/fake_disk_mount_manager.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
@@ -28,7 +28,6 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/cicerone/fake_cicerone_client.h"
-#include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/dlcservice/dlcservice_client.h"
 #include "chromeos/dbus/fake_concierge_client.h"
@@ -216,18 +215,14 @@ class GuestOsSharePathTest : public testing::Test {
             TestingBrowserProcess::GetGlobal())),
         browser_part_(g_browser_process->platform_part()) {
     chromeos::DBusThreadManager::Initialize();
-    chromeos::ConciergeClient::InitializeFake(
-        reinterpret_cast<chromeos::FakeCiceroneClient*>(
-            chromeos::DBusThreadManager::Get()->GetCiceroneClient()));
     chromeos::SeneschalClient::InitializeFake();
-
-    fake_concierge_client_ = chromeos::FakeConciergeClient::Get();
+    fake_concierge_client_ = static_cast<chromeos::FakeConciergeClient*>(
+        chromeos::DBusThreadManager::Get()->GetConciergeClient());
     fake_seneschal_client_ = chromeos::FakeSeneschalClient::Get();
   }
 
   ~GuestOsSharePathTest() override {
     chromeos::SeneschalClient::Shutdown();
-    chromeos::ConciergeClient::Shutdown();
     chromeos::DBusThreadManager::Shutdown();
   }
 
@@ -325,7 +320,6 @@ class GuestOsSharePathTest : public testing::Test {
   base::FilePath drivefs_;
   std::unique_ptr<file_manager::Volume> volume_downloads_;
 
-  // Owned by chromeos::DBusThreadManager
   chromeos::FakeSeneschalClient* fake_seneschal_client_;
   chromeos::FakeConciergeClient* fake_concierge_client_;
 
