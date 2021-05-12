@@ -177,7 +177,7 @@ vars = {
   # luci-go CIPD package version.
   # Make sure the revision is uploaded by infra-packagers builder.
   # https://ci.chromium.org/p/infra-internal/g/infra-packagers/console
-  'luci_go': 'git_revision:fcca3d8357156931686ff9aa624ef7fad1cf18cc',
+  'luci_go': 'git_revision:22941e58727355110b7ccdba2f9c9df2e0042835',
 
   # This can be overridden, e.g. with custom_vars, to build clang from HEAD
   # instead of downloading the prebuilt pinned revision.
@@ -280,7 +280,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': 'a29a63714fcd3a0dc7c9e036809debe04ccdb437',
+  'catapult_revision': '891959fd8bd3af3c45688d2ba0a9a305eec71b9e',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -288,7 +288,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling devtools-frontend
   # and whatever else without interference from each other.
-  'devtools_frontend_revision': '7781f0c1b74bab68666543ac3036648bac5f387c',
+  'devtools_frontend_revision': '33b3951b925bbf8623b93e31b9c05c77f91bda72',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libprotobuf-mutator
   # and whatever else without interference from each other.
@@ -328,7 +328,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling feed
   # and whatever else without interference from each other.
-  'dawn_revision': 'f0fdfa0d61dfa9486914fd278985d2de880be51a',
+  'dawn_revision': '88d3afe19c6190daae86a9c6033b66d15c53f8b8',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling feed
   # and whatever else without interference from each other.
@@ -1349,7 +1349,7 @@ deps = {
   },
 
   'src/third_party/perfetto':
-    Var('android_git') + '/platform/external/perfetto.git' + '@' + '1bdfcba48fd0b60a548e2acd6650e2efc5e7adb8',
+    Var('android_git') + '/platform/external/perfetto.git' + '@' + '4570ec1effa5ac6d2825a6f0cc1cf6d7b443bd53',
 
   'src/third_party/perl': {
       'url': Var('chromium_git') + '/chromium/deps/perl.git' + '@' + '6f3e5028eb65d0b4c5fdd792106ac4c84eee1eb3',
