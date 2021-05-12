@@ -81,6 +81,8 @@
       'linux-official': 'official_optimize_goma',
       'mac-archive-rel': 'release_bot_mac_strip_minimal_symbols',
       'mac-archive-dbg': 'debug_bot',
+      'mac-arm64-archive-rel': 'release_bot_mac_strip_minimal_symbols_arm64',
+      'mac-arm64-archive-dbg': 'debug_bot_arm64',
       'mac-official': 'official_optimize_goma',
       'win32-official': 'x86_official_optimize_goma',
       'win32-archive-rel': 'release_bot_x86_minimal_symbols_enable_archive_compression',
@@ -120,7 +122,6 @@
 
       'android-marshmallow-x86-rel': 'android_release_bot_minimal_symbols_x86_fastbuild_resource_allowlisting_webview_google',
       'android-marshmallow-x86-rel-non-cq': 'android_release_bot_minimal_symbols_x86_fastbuild_resource_allowlisting_webview_google',
-      'android-marshmallow-x86-rel-rts': 'android_release_bot_minimal_symbols_x86_fastbuild_resource_allowlisting_webview_google',
       'android-nougat-arm64-rel': 'android_release_bot_minimal_symbols_arm64_fastbuild_webview_google',
       # TODO(crbug/1182468) Remove android coverage bots after coverage is
       # running on CQ.
@@ -549,7 +550,6 @@
     },
 
     'chromium.memory': {
-      'Android CFI': 'android_cfi_full_cfi_diag_thin_lto_release_static_dcheck_always_on_goma',
       'Linux ASan LSan Builder': 'asan_lsan_release_trybot',
       'Linux CFI': 'cfi_full_cfi_icall_cfi_diag_thin_lto_release_static_dcheck_always_on_goma',
       'Linux Chromium OS ASan LSan Builder': 'asan_lsan_chromeos_release_trybot',
@@ -812,6 +812,7 @@
       'android-marshmallow-arm64-rel-dual-coverage': 'gpu_tests_android_release_trybot_arm64_resource_allowlisting_fastbuild_java_coverage',
       'android-marshmallow-x86-rel': 'android_release_trybot_x86_fastbuild_resource_allowlisting_webview_google',
       'android-marshmallow-x86-rel-non-cq': 'android_release_trybot_x86_fastbuild_resource_allowlisting_webview_google',
+      'android-marshmallow-x86-rel-rts': 'android_release_trybot_x86_fastbuild_resource_allowlisting_webview_google',
       'android-nougat-arm64-rel': 'android_release_trybot_arm64_fastbuild_webview_google',
       'android-oreo-arm64-cts-networkservice-dbg': 'android_debug_trybot_arm64',
       # TODO(crbug/1182468) Remove android coverage bots after coverage is
@@ -2005,6 +2006,10 @@
       'debug_bot',
     ],
 
+    'debug_bot_arm64': [
+      'debug_bot', 'arm64',
+    ],
+
     'debug_bot_blink': [
       'debug_bot_blink',
     ],
@@ -2648,6 +2653,10 @@
 
     'release_bot_mac_strip_minimal_symbols': [
       'release_bot', 'mac_strip', 'minimal_symbols',
+    ],
+
+    'release_bot_mac_strip_minimal_symbols_arm64': [
+      'release_bot', 'mac_strip', 'minimal_symbols', 'arm64',
     ],
 
     'release_bot_mac_strip_minimal_symbols_deterministic': [

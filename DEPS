@@ -280,7 +280,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '891959fd8bd3af3c45688d2ba0a9a305eec71b9e',
+  'catapult_revision': '52e67e75f6c2d0315d510a54a52ed29abe3d57f7',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -328,11 +328,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling feed
   # and whatever else without interference from each other.
-  'dawn_revision': '88d3afe19c6190daae86a9c6033b66d15c53f8b8',
+  'dawn_revision': '044b18899071edf9309e3800292bcac00f043cf0',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling feed
   # and whatever else without interference from each other.
-  'quiche_revision': 'f2ae1b2a1129474e30e300aa26a761f52f41a4aa',
+  'quiche_revision': '15093ba5655b9fb7dd487c8ad3bcc25e47feaf5b',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ios_webkit
   # and whatever else without interference from each other.
@@ -1600,7 +1600,7 @@ deps = {
       'packages': [
         {
           'package': 'skia/tools/goldctl/windows-amd64',
-          'version': 'yly_On5ZPKkWdYxhaHVbefc9eYRVryGFBdsdtq5PCZMC',
+          'version': 'wL8AoIO8IDH7dKheA0iZneF9sE3DamLh6bBzj6I782oC',
         },
       ],
       'dep_type': 'cipd',
