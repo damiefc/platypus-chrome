@@ -98,7 +98,7 @@
 <translation id="1820259098641718022">Añadida a Lista de lectura</translation>
 <translation id="1870148520156231997">Mostrar contraseña</translation>
 <translation id="1872096359983322073">Linterna</translation>
-<translation id="1894205589103145703">Ha ocurrido un error durante el inicio de sesión.</translation>
+<translation id="1894205589103145703">No se ha podido iniciar la sesión.</translation>
 <translation id="1911619930368729126">Subir a Google Drive</translation>
 <translation id="1923342640370224680">Última hora</translation>
 <translation id="1941314575388338491">Toca dos veces para copiar.</translation>
@@ -109,6 +109,7 @@
 <translation id="1974060860693918893">Configuración avanzada</translation>
 <translation id="1989112275319619282">Examinar</translation>
 <translation id="2015722694326466240">Debes establecer primero un bloqueo de pantalla en tu dispositivo para poder ver las contraseñas.</translation>
+<translation id="2022352537516230970">Diseñado para tu iPhone</translation>
 <translation id="2073572773299281212">Activo hace <ph name="DAYS" /> días</translation>
 <translation id="2074131957428911366">Siempre puedes seleccionar qué contenido quieres sincronizar en los <ph name="BEGIN_LINK" />ajustes<ph name="END_LINK" />.</translation>
 <translation id="2079545284768500474">Deshacer</translation>
@@ -188,6 +189,7 @@ Los sitios no pueden usar cookies para ver tu actividad de navegación en otros 
 <translation id="2871695793448672541">Contraseña oculta</translation>
 <translation id="2876369937070532032">Envía a Google las URL de algunas de las páginas que visitas cuando tu seguridad corre peligro</translation>
 <translation id="288655811176831528">Cerrar pestaña</translation>
+<translation id="2893180576842394309">Es posible que Google utilice tu historial para personalizar la Búsqueda y otros servicios de Google</translation>
 <translation id="2898963176829412617">Nueva carpeta…</translation>
 <translation id="2916171785467530738">Autocompletar búsquedas y URLs</translation>
 <translation id="291754862089661335">Coloca el código QR o de barras en este marco</translation>
@@ -313,6 +315,7 @@ Sigue los pasos que se indican a continuación:</translation>
 <translation id="4172051516777682613">Mostrar siempre</translation>
 <translation id="418156467088430727">Ver versión sin conexión en una nueva pestaña</translation>
 <translation id="4181841719683918333">Idiomas</translation>
+<translation id="4184011057600693970">Diseñado para tu iPad</translation>
 <translation id="424315890655130736">Introduce tu frase de contraseña</translation>
 <translation id="4263576668337963058">Mostrar las acciones de página disponibles</translation>
 <translation id="4267380167363222949">Siguiente pestaña</translation>
@@ -491,6 +494,7 @@ Handoff también debe estar habilitado en la sección General de Configuración,
 <translation id="605721222689873409">AA</translation>
 <translation id="6059830886158432458">Controla tus noticias y tu actividad aquí</translation>
 <translation id="6066301408025741299">Toca para cancelar.</translation>
+<translation id="60829778314739003">Aceptar y continuar</translation>
 <translation id="6108923351542677676">Configuración en curso…</translation>
 <translation id="6119050551270742952">Sitio actual en modo incógnito</translation>
 <translation id="6122191549521593678">Online</translation>
@@ -586,6 +590,7 @@ Mientras estás en modo de incógnito, los sitios no pueden usar tus cookies par
 <translation id="6801927553864092214">Para navegar en privado, abre una pestaña de incógnito</translation>
 <translation id="6807889908376551050">Mostrar todo...</translation>
 <translation id="681368974849482173">Elemento creado</translation>
+<translation id="6830804042318138535">Ver más</translation>
 <translation id="6831043979455480757">Traducir</translation>
 <translation id="6851516051005285358">Solicitar sitio para ordenadores</translation>
 <translation id="6858855187367714033">Escaneado</translation>
@@ -628,11 +633,13 @@ Mientras estás en modo de incógnito, los sitios no pueden usar tus cookies par
 <translation id="7203585745079012652">Decir las respuestas</translation>
 <translation id="7207383424303353046">Novedad: Abre sitios en Chrome automáticamente configurándolo como tu aplicación de navegador predeterminada. <ph name="BEGIN_LINK" />Abrir Configuración<ph name="END_LINK" /></translation>
 <translation id="721597782417389033">Nombre de la tarjeta no válido</translation>
+<translation id="722454870747268814">Nueva pestaña de incógnito</translation>
 <translation id="7265758999917665941">Jamás para este sitio web</translation>
 <translation id="7272437679830969316">No se puede verificar tu identidad. No se ha copiado la contraseña.</translation>
 <translation id="7291368939935408496">Preparando contraseñas...</translation>
 <translation id="7293171162284876153">Para iniciar la sincronización, activa "Sincronizar tus datos de Chrome".</translation>
 <translation id="7313347584264171202">Aquí verás tus pestañas de incógnito</translation>
+<translation id="7319242366286515846">Si continúas, confirmas que aceptas los <ph name="BEGIN_LINK" />Términos del Servicio<ph name="END_LINK" />.</translation>
 <translation id="7336264872878993241"><ph name="PERCENT" />% descargado</translation>
 <translation id="7340958967809483333">Opciones de Discover</translation>
 <translation id="7346909386216857016">Entendido</translation>
@@ -779,6 +786,7 @@ Los sitios pueden usar cookies para ver tu actividad de navegación en otros sit
 <translation id="8820817407110198400">Marcadores</translation>
 <translation id="8840513115188359703">No se cerrará la sesión en tu cuenta de Google.</translation>
 <translation id="8870413625673593573">Cerrado recientemente</translation>
+<translation id="8876882697946675716">Mantén tus dispositivos sincronizados</translation>
 <translation id="8881801611828450202">Buscar esta imagen en <ph name="SEARCH_ENGINE" /></translation>
 <translation id="8909135823018751308">Compartir…</translation>
 <translation id="8917490105272468696">Sí, acepto</translation>

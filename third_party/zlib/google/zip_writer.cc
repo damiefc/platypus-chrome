@@ -12,9 +12,25 @@
 namespace zip {
 namespace internal {
 
+bool ZipWriter::ShouldContinue() {
+  if (progress_callback_) {
+    const base::TimeTicks now = base::TimeTicks::Now();
+    if (next_progress_report_time_ <= now) {
+      next_progress_report_time_ = now + progress_period_;
+      if (!progress_callback_.Run(progress_)) {
+        LOG(ERROR) << "Cancelling ZIP creation";
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 bool ZipWriter::AddFileContent(const base::FilePath& path, base::File file) {
   char buf[zip::internal::kZipBufSize];
-  while (true) {
+
+  while (ShouldContinue()) {
     const int num_bytes =
         file.ReadAtCurrentPos(buf, zip::internal::kZipBufSize);
 
@@ -30,7 +46,11 @@ bool ZipWriter::AddFileContent(const base::FilePath& path, base::File file) {
       DLOG(ERROR) << "Cannot write data from file '" << path << "' to ZIP";
       return false;
     }
+
+    progress_.bytes += num_bytes;
   }
+
+  return false;
 }
 
 bool ZipWriter::OpenNewFileEntry(const base::FilePath& path,
@@ -58,17 +78,16 @@ bool ZipWriter::AddFileEntry(const base::FilePath& path, base::File file) {
   if (!OpenNewFileEntry(path, /*is_directory=*/false, file_info.last_modified))
     return false;
 
-  bool success = AddFileContent(path, std::move(file));
-  if (!CloseNewFileEntry())
-    return false;
-
-  return success;
+  const bool success = AddFileContent(path, std::move(file));
+  progress_.files++;
+  return CloseNewFileEntry() && success;
 }
 
 bool ZipWriter::AddDirectoryEntry(const base::FilePath& path,
                                   base::Time last_modified) {
+  progress_.directories++;
   return OpenNewFileEntry(path, /*is_directory=*/true, last_modified) &&
-         CloseNewFileEntry();
+         CloseNewFileEntry() && ShouldContinue();
 }
 
 #if defined(OS_POSIX)
@@ -80,10 +99,12 @@ std::unique_ptr<ZipWriter> ZipWriter::CreateWithFd(
   DCHECK(zip_file_fd != base::kInvalidPlatformFile);
   zipFile zip_file =
       internal::OpenFdForZipping(zip_file_fd, APPEND_STATUS_CREATE);
+
   if (!zip_file) {
-    DLOG(ERROR) << "Couldn't create ZIP file for FD " << zip_file_fd;
+    DLOG(ERROR) << "Cannot create ZIP file for FD " << zip_file_fd;
     return nullptr;
   }
+
   return std::unique_ptr<ZipWriter>(
       new ZipWriter(zip_file, root_dir, file_accessor));
 }
@@ -97,10 +118,12 @@ std::unique_ptr<ZipWriter> ZipWriter::Create(
   DCHECK(!zip_file_path.empty());
   zipFile zip_file = internal::OpenForZipping(zip_file_path.AsUTF8Unsafe(),
                                               APPEND_STATUS_CREATE);
+
   if (!zip_file) {
-    DLOG(ERROR) << "Couldn't create ZIP file at path " << zip_file_path;
+    DLOG(ERROR) << "Cannot create ZIP file '" << zip_file_path << "'";
     return nullptr;
   }
+
   return std::unique_ptr<ZipWriter>(
       new ZipWriter(zip_file, root_dir, file_accessor));
 }
@@ -110,7 +133,10 @@ ZipWriter::ZipWriter(zipFile zip_file,
                      FileAccessor* file_accessor)
     : zip_file_(zip_file), root_dir_(root_dir), file_accessor_(file_accessor) {}
 
-ZipWriter::~ZipWriter() {}
+ZipWriter::~ZipWriter() {
+  if (zip_file_)
+    zipClose(zip_file_, nullptr);
+}
 
 bool ZipWriter::WriteEntries(Paths paths) {
   return AddEntries(paths) && Close();
@@ -119,6 +145,14 @@ bool ZipWriter::WriteEntries(Paths paths) {
 bool ZipWriter::Close() {
   const bool success = zipClose(zip_file_, nullptr) == ZIP_OK;
   zip_file_ = nullptr;
+
+  // Call the progress callback one last time with the final progress status.
+  //
+  // We don't care about the callback return value (cancellation request), since
+  // we're done anyway.
+  if (progress_callback_)
+    progress_callback_.Run(progress_);
+
   return success;
 }
 

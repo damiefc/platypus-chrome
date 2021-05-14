@@ -346,7 +346,7 @@ CHAR_LIMIT guidelines:
         Preload pages for faster browsing and searching
       </message>
       <message name="IDS_PRELOAD_PAGES_SUMMARY" desc="Summary for a checkbox in Settings that controls pages preloading and informs the user about the data shared by this feature.">
-        Uses cookies to remember your preferences, even if you don't visit those pages
+        Preloads pages that Chrome thinks you might visit. To do this, Chrome may use cookies, if you allow cookies, and may encrypt and send pages through Google to hide your identity from sites.
       </message>
       <message name="IDS_NAVIGATION_ERROR_SUGGESTIONS_TITLE" desc="Title for a checkbox in Settings that controls pages suggestions on navigation errors and informs the user about the data shared by this feature.">
         Show suggestions for similar pages when a page can't be found
@@ -2799,7 +2799,7 @@ Data from your Incognito session will only be cleared from Chrome when you <ph n
         Activity
       </message>
       <message name="IDS_FEED_MANAGE_ACTIVITY_DESCRIPTION" desc="Content description to manage my activity from the feed header overflow menu.">
-        Control your Google accounts data
+        Control your Google Account data
       </message>
       <message name="IDS_FEED_MANAGE_INTERESTS" desc="Menu item to manage settings from the feed header overflow menu.">
         Interests
@@ -2821,6 +2821,9 @@ Data from your Incognito session will only be cleared from Chrome when you <ph n
       </message>
       <message name="IDS_FOLLOW_MANAGE_FOLLOWING" desc="Header for Following Management activity.">
         Following
+      </message>
+      <message name="IDS_FOLLOW_MANAGE_UPDATES_UNAVAILABLE" desc="Label this web feed source as unavailable so the user will not expect updates from it.">
+        Updates Unavailable
       </message>
       <message name="IDS_NTP_TURN_OFF_FEED" desc="Content description to turn off the feed from the feed header overflow menu.">
         Turn off

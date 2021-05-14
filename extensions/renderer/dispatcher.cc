@@ -953,7 +953,6 @@ void Dispatcher::ActivateExtension(const std::string& extension_id) {
   // add support for extension opt-in into cross-origin isolation.
   if (extension->is_extension()) {
     blink::WebV8Features::EnableSharedArrayBuffer();
-    blink::WebV8Features::EnableWasmThreads();
   }
 
   active_extension_ids_.insert(extension_id);
@@ -1095,10 +1094,9 @@ void Dispatcher::UpdateTabSpecificPermissions(const std::string& extension_id,
 
 void Dispatcher::UpdateUserScripts(
     base::ReadOnlySharedMemoryRegion shared_memory,
-    mojom::HostIDPtr host_id,
-    bool allowlisted_only) {
+    mojom::HostIDPtr host_id) {
   user_script_set_manager_->OnUpdateUserScripts(std::move(shared_memory),
-                                                *host_id, allowlisted_only);
+                                                *host_id);
 }
 
 void Dispatcher::ClearTabSpecificPermissions(

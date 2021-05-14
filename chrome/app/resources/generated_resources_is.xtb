@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="is">
+<translation id="1001033507375626788">Þessu neti er deilt með þér</translation>
 <translation id="1001307489511021749">Forritin þín, stillingarnar og aðrar sérstillingar verða samstillt í öllum Chrome OS tækjum þar sem Google reikningurinn þinn er skráður inn.</translation>
 <translation id="1003088604756913841">Opna tengil í <ph name="APP" /> í nýjum glugga</translation>
 <translation id="100323615638474026">USB-tæki (<ph name="VENDOR_ID" />:<ph name="PRODUCT_ID" />)</translation>
@@ -359,7 +360,6 @@
 <translation id="138784436342154190">Endurheimta sjálfgefnar ræsisíðu?</translation>
 <translation id="1388253969141979417">Mega nota hljóðnemann</translation>
 <translation id="1388728792929436380"><ph name="DEVICE_TYPE" /> mun endurræsast að uppfærslum loknum.</translation>
-<translation id="138900021244932468">Engir prófílar fundust. Til að setja upp nýtt netkerfi skaltu skanna QR-kóðann með myndavél tækisins eða slá inn virkjunarkóða frá símafyrirtækinu þínu.</translation>
 <translation id="139013308650923562">Mega nota leturgerðir sem eru uppsettar í tækinu þínu</translation>
 <translation id="1390548061267426325">Opna sem venjulegan flipa</translation>
 <translation id="1393283411312835250">Sól og ský</translation>
@@ -962,6 +962,7 @@
 <translation id="1992924914582925289">Fjarlægja úr tæki</translation>
 <translation id="1994173015038366702">Slóð vefsvæðis</translation>
 <translation id="1995916364271252349">Stjórnar því hvaða upplýsingar vefsvæði geta notað og sýnt (staðsetning, myndavél, sprettigluggar og fleira)</translation>
+<translation id="1997437640397887843">Kveikt er á myndavél tækisins. Settu QR-kóða eSiM fyrir framan myndavélina.</translation>
 <translation id="1997616988432401742">Vottorðin þín</translation>
 <translation id="1999115740519098545">Við ræsingu</translation>
 <translation id="2000419248597011803">Sendir sum fótspor og sumar leitir úr veffangastikunni og leitarreitnum í sjálfgefnu leitarvélina þína</translation>
@@ -1017,6 +1018,7 @@ Annars skaltu skrá þig út núna svo breytingarnar á þessum reikningi taki g
 <translation id="2055585478631012616">Þú verður skráð(ur) út af þessum vefsvæðum, þar á meðal í opnum flipum</translation>
 <translation id="205560151218727633">Lógó Google hjálpara</translation>
 <translation id="2058456167109518507">Tæki fannst</translation>
+<translation id="2058581283817163201">Staðfesta með þessum síma</translation>
 <translation id="2059913712424898428">Tímabelti</translation>
 <translation id="2060375639911876205">Fjarlægja eSIM-prófíl</translation>
 <translation id="2062354623176996748">Vafraðu án þess að vista vafraferilinn með því að nota huliðsglugga</translation>
@@ -2616,6 +2618,7 @@ Annars skaltu skrá þig út núna svo breytingarnar á þessum reikningi taki g
 <translation id="3785308913036335955">Sýna flýtileiðir í forrit</translation>
 <translation id="3785727820640310185">Vistuð aðgangsorð fyrir þetta vefsvæði</translation>
 <translation id="3788301286821743879">Ekki var hægt að ræsa sjálfsalaforritið.</translation>
+<translation id="3788331399335602504">þessar skrár</translation>
 <translation id="3788401245189148511">Þetta kann að:</translation>
 <translation id="3789841737615482174">Setja upp</translation>
 <translation id="379082410132524484">Kortið þitt er útrunnið</translation>
@@ -3191,6 +3194,7 @@ Annars skaltu skrá þig út núna svo breytingarnar á þessum reikningi taki g
 <translation id="4438043733494739848">Gegnsætt</translation>
 <translation id="4438639467177774583"><ph name="USERNAME" /> <ph name="MASKED_PASSWORD" /> verður vistað á Google reikningnum þínum, <ph name="ACCOUNT" /></translation>
 <translation id="4439427728133035643">Netkerfi <ph name="NETWORK_INDEX" /> af <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SIGNAL_STRENGTH" />% sendistyrkur, tengjast</translation>
+<translation id="4440097423000553826"><ph name="WEBSITE" /> sendi tilkynningu í símann þinn. Staðfestu að um þig sé að ræða með því að ýta á tilkynninguna „<ph name="NOTIFICATIONTITLE" />“ og fylgja skrefunum.</translation>
 <translation id="4441124369922430666">Viltu ræsa þetta forrit sjálfkrafa þegar kveikt er á vélinni?</translation>
 <translation id="4441147046941420429">Til að halda áfram skaltu fjarlægja öryggislykilinn úr tækinu, setja hann svo aftur inn og snerta hann</translation>
 <translation id="444134486829715816">Stækka...</translation>
@@ -3493,6 +3497,7 @@ Annars skaltu skrá þig út núna svo breytingarnar á þessum reikningi taki g
 <translation id="4773112038801431077">Uppfæra Linux</translation>
 <translation id="477647109558161443">Búa til flýtileið</translation>
 <translation id="4776917500594043016">Aðgangsorð fyrir <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="4777458362738635055">Aðrir notendur tækisins geta notað þetta netkerfi</translation>
 <translation id="4777825441726637019">Play Store</translation>
 <translation id="4777943778632837590">Stilla nafnaþjóna netkerfis</translation>
 <translation id="4778644898150334464">Nota annað aðgangsorð</translation>
@@ -4328,6 +4333,7 @@ Annars skaltu skrá þig út núna svo breytingarnar á þessum reikningi taki g
 <translation id="5712153969432126546">Stundum birta vefsvæði PDF-skjöl, t.d. fylgiskjöl, samninga og eyðublöð</translation>
 <translation id="5715711091495208045">Miðlari viðbótar: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">Sjálfgefnar leitarvélar</translation>
+<translation id="5719637365829998022">QR-kóði var skannaður inn.</translation>
 <translation id="5719854774000914513">Vefsvæði geta beðið um að tengjast HID-tækjum</translation>
 <translation id="572155275267014074">Android stillingar</translation>
 <translation id="5722086096420375088">Grænn og hvítur</translation>
@@ -4539,6 +4545,7 @@ Annars skaltu skrá þig út núna svo breytingarnar á þessum reikningi taki g
 <translation id="5955721306465922729">Vefsvæði vill opna þetta forrit.</translation>
 <translation id="5955809630138889698">Þetta tæki er hugsanlega aðeins gjaldgengt fyrir prufustillingu á netinu. Hafðu samband við þjónustufulltrúa til að fá frekari upplýsingar.</translation>
 <translation id="5956585768868398362">Er þetta leitarsíðan sem þú bjóst við?</translation>
+<translation id="5957918771633727933">Engir eSIM-prófílar í boði. Sækja nýjan <ph name="BEGIN_LINK" />prófíl.<ph name="END_LINK" /></translation>
 <translation id="5957987129450536192">Ýttu á táknið fyrir textaupplestur rétt hjá prófílmyndinni þinni og veldu svo það sem þú vilt heyra.</translation>
 <translation id="5959471481388474538">Netið er ekki tiltækt</translation>
 <translation id="595959584676692139">Endurhladdu síðuna til að nota þessa viðbót</translation>
@@ -5929,6 +5936,7 @@ Annars skaltu skrá þig út núna svo breytingarnar á þessum reikningi taki g
 <translation id="7506541170099744506"><ph name="DEVICE_TYPE" /> var skráð í umsjón fyrirtækis.</translation>
 <translation id="7507207699631365376">Sjá <ph name="BEGIN_LINK" />persónuverndarstefnu<ph name="END_LINK" /> þjónustuveitu</translation>
 <translation id="7507930499305566459">Vottorð stöðusvarveitu</translation>
+<translation id="7509246181739783082">Staðfestu hver þú ert</translation>
 <translation id="7513029293694390567">Skrá þig sjálfkrafa inn á vefsvæði með vistuðum skilríkjum. Ef slökkt er á þessu biðjum við þig um staðfestingu í hvert sinn sem þú skráir þig inn á vefsvæði.</translation>
 <translation id="7514239104543605883">Afrita í tæki</translation>
 <translation id="7514365320538308">Sækja</translation>
@@ -6043,6 +6051,7 @@ Annars skaltu skrá þig út núna svo breytingarnar á þessum reikningi taki g
 <translation id="7638605456503525968">Raðtengi</translation>
 <translation id="7639914187072011620">Ekki tókst að sækja framsendingarslóð SAML hjá þjóninum</translation>
 <translation id="764017888128728"><ph name="PASSWORD_MANAGER_BRAND" /> skráir þig sjálfkrafa inn á vefsvæði með þeim aðgangsorðum sem þú hefur vistað.</translation>
+<translation id="7641513591566880111">Nýtt prófílheiti</translation>
 <translation id="7642778300616172920">Fela viðkvæmt efni</translation>
 <translation id="7643842463591647490">{0,plural, =1{# opinn gluggi}one{# opinn gluggi}other{# opnir gluggar}}</translation>
 <translation id="7643932971554933646">Viltu leyfa svæði að skoða skrár?</translation>
@@ -6203,6 +6212,7 @@ Annars skaltu skrá þig út núna svo breytingarnar á þessum reikningi taki g
 <translation id="7800518121066352902">Snúa rangsælis</translation>
 <translation id="780301667611848630">Nei, takk</translation>
 <translation id="7804072833593604762">Flipa lokað</translation>
+<translation id="7805759469263222011">Skannaðu QR-kóðann með myndavél tækisins eða sláðu inn virkjunarkóða frá símafyrirtækinu þínu</translation>
 <translation id="7805768142964895445">Staða</translation>
 <translation id="7807067443225230855">Leit og aðstoðarmaður</translation>
 <translation id="7807711621188256451">Veita <ph name="HOST" /> alltaf aðgang að myndavélinni</translation>
@@ -6460,7 +6470,6 @@ Geymdu lykilskrána á öruggum stað. Þú þarft hana til að búa til nýjar 
 <translation id="8061091456562007989">Breyta til baka</translation>
 <translation id="8061991877177392872">Þú virðist þegar hafa sett upp Voice Match fyrir Hjálparann í öðru tæki. Þessar eldri upptökur voru notaðar til að búa til raddlíkan í tækinu.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{1 blaðsíða}one{{COUNT} blaðsíða}other{{COUNT} blaðsíður}}</translation>
-<translation id="8062879968880283306">Skannaðu QR-kóða með myndavél tækisins eða sláðu inn virkjunarkóða frá símafyrirtækinu þínu.</translation>
 <translation id="8063235345342641131">Sjálfgefin græn notandamynd</translation>
 <translation id="8063535366119089408">Skoða skrá</translation>
 <translation id="8064279191081105977">Hópur <ph name="GROUP_NAME" /> - <ph name="GROUP_CONTENTS" /> - <ph name="COLLAPSED_STATE" /></translation>
@@ -6682,6 +6691,7 @@ Geymdu lykilskrána á öruggum stað. Þú þarft hana til að búa til nýjar 
 <translation id="8300849813060516376">OTASP mistókst</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{Heimilisfang}one{# heimilisfang}other{# heimilisföng}}</translation>
 <translation id="8304383784961451596">Þú hefur ekki leyfi til að nota þetta tæki. Hafðu samband við kerfisstjórann til að fá innskráningarheimild eða skráðu þig inn með Google reikningi sem Family Link hefur umsjón með.</translation>
+<translation id="8308016398665340540">Þú deilir þessu neti með öðrum notendum þessa tækis.</translation>
 <translation id="8308179586020895837">Spyrja hvort <ph name="HOST" /> vill fá aðgang að myndavélinni</translation>
 <translation id="830868413617744215">Beta</translation>
 <translation id="8309458809024885768">Vottorð er þegar til</translation>
@@ -6881,7 +6891,6 @@ Geymdu lykilskrána á öruggum stað. Þú þarft hana til að búa til nýjar 
 <translation id="8551588720239073785">Dagsetningar- og tímastillingar</translation>
 <translation id="8553342806078037065">Stjórna öðrum notendum</translation>
 <translation id="8554899698005018844">Ekkert tungumál</translation>
-<translation id="8555195867496021627">Engir eSIM-prófílar í boði. Sæktu nýjan prófíl <ph name="BEGIN_LINK" />hér.<ph name="END_LINK" /></translation>
 <translation id="8557022314818157177">Haltu áfram að ýta á öryggislykilinn þinn þangað til fingrafarið greinist</translation>
 <translation id="8557930019681227453">Upplýsingaskrá</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{Opna allt í &amp;nýjum glugga}=1{Opna í &amp;nýjum glugga}one{Opna allt ({COUNT}) í &amp;nýjum glugga}other{Opna allt ({COUNT}) í &amp;nýjum glugga}}</translation>
@@ -7061,7 +7070,6 @@ Geymdu lykilskrána á öruggum stað. Þú þarft hana til að búa til nýjar 
 <translation id="8743164338060742337">Netkerfi <ph name="NETWORK_INDEX" /> af <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /> sendistyrkur <ph name="SIGNAL_STRENGTH" />%, stjórnað af kerfisstjóra, tengjast</translation>
 <translation id="8746654918629346731">Þú hefur þegar beðið um „<ph name="EXTENSION_NAME" />“</translation>
 <translation id="874689135111202667">{0,plural, =1{Viltu hlaða einni skrá inn á þetta vefsvæði?}one{Viltu hlaða # skrá inn á þetta vefsvæði?}other{Viltu hlaða # skrám inn á þetta vefsvæði?}}</translation>
-<translation id="8749556627204742888">Þú deilir þessu neti með öðrum notendum þessa tækis.</translation>
 <translation id="8749805710397399240">Ekki var hægt að senda út skjáinn þinn. Athugaðu heimild fyrir skjáupptöku í kerfisstillingum.</translation>
 <translation id="8749863574775030885">Aðgangur að USB-tækjum frá óþekktum framleiðanda</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> vill tengjast við raðtengi</translation>
@@ -7124,7 +7132,6 @@ Geymdu lykilskrána á öruggum stað. Þú þarft hana til að búa til nýjar 
 <translation id="8808744862003883508">Þessi síða sýnir allar uppsettar viðbætur í Chrome.</translation>
 <translation id="8809147117840417135">Ljósgrænblár</translation>
 <translation id="8811862054141704416">Aðgangur að hljóðnema í Crostini</translation>
-<translation id="8812552797690463522">Þessu neti er deilt með þér.</translation>
 <translation id="8812593354822910461">Hreinsa einnig vefskoðunargögn (<ph name="URL" />), sem skráir þig út af <ph name="DOMAIN" />. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">Minna mig á seinna</translation>
 <translation id="8813698869395535039">Ekki hægt að skrá inn á <ph name="USERNAME" /></translation>
@@ -7336,7 +7343,6 @@ Geymdu lykilskrána á öruggum stað. Þú þarft hana til að búa til nýjar 
 <translation id="9021662811137657072">Vírus fannst</translation>
 <translation id="902236149563113779">Vefsvæði rekja yfirleitt stöðu myndavélarinnar þinnar fyrir AR-eiginleika eins og leiki og leiðarlýsingu í rauntíma</translation>
 <translation id="9022847679183471841"><ph name="AVATAR_NAME" /> er þegar að nota þennan reikning í þessari tölvu.</translation>
-<translation id="9023009238991294202">Aðrir notendur tækisins geta notað þetta netkerfi.</translation>
 <translation id="9023015617655685412">Setja þennan flipa í bókamerki...</translation>
 <translation id="9023909777842748145">Þótt slökkt sé á þessum eiginleika hefur það ekki áhrif á getu tækisins til að senda mikilvægar upplýsingar fyrir nauðsynlega þjónustu á borð við kerfisuppfærslur og öryggisþjónustu.</translation>
 <translation id="9024127637873500333">&amp;Opna í nýjum flipa</translation>

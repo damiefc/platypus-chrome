@@ -11,16 +11,16 @@
 #include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
+#include "chrome/browser/ash/file_system_provider/icon_set.h"
 #include "chrome/browser/ash/file_system_provider/operations/test_util.h"
-#include "chrome/browser/chromeos/file_system_provider/icon_set.h"
-#include "chrome/browser/chromeos/file_system_provider/provided_file_system_interface.h"
+#include "chrome/browser/ash/file_system_provider/provided_file_system_interface.h"
 #include "chrome/common/extensions/api/file_system_provider.h"
 #include "chrome/common/extensions/api/file_system_provider_capabilities/file_system_provider_capabilities_handler.h"
 #include "chrome/common/extensions/api/file_system_provider_internal.h"
 #include "extensions/browser/event_router.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace chromeos {
+namespace ash {
 namespace file_system_provider {
 namespace operations {
 namespace {
@@ -130,4 +130,4 @@ TEST_F(FileSystemProviderOperationsConfigureTest, OnError) {
 
 }  // namespace operations
 }  // namespace file_system_provider
-}  // namespace chromeos
+}  // namespace ash

@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fr-CA">
+<translation id="1001033507375626788">Ce réseau est partagé avec vous</translation>
 <translation id="1001307489511021749">Vos applications, vos paramètres et d'autres personnalisations seront synchronisés sur tous les appareils Chrome OS sur lesquels vous êtes connecté avec votre compte Google.</translation>
 <translation id="1003088604756913841">Ouvrir le lien dans une nouvelle fenêtre <ph name="APP" /></translation>
 <translation id="100323615638474026">Appareil USB (<ph name="VENDOR_ID" />:<ph name="PRODUCT_ID" />)</translation>
@@ -357,7 +358,6 @@
 <translation id="138784436342154190">Restaurer la page de démarrage par défaut?</translation>
 <translation id="1388253969141979417">Autorisés à utiliser votre microphone</translation>
 <translation id="1388728792929436380">L'appareil <ph name="DEVICE_TYPE" /> redémarrera lorsque l'installation des mises à jour sera terminée.</translation>
-<translation id="138900021244932468">Aucun profil n'a été trouvé. Pour configurer un nouveau réseau, numérisez le code QR à l'aide de l'appareil photo de votre appareil ou entrez le code d'activation fourni par votre fournisseur de services.</translation>
 <translation id="139013308650923562">Autorisés à utiliser les polices installées sur votre appareil</translation>
 <translation id="1390548061267426325">Ouvrir dans un onglet ordinaire</translation>
 <translation id="1393283411312835250">Soleil et nuages</translation>
@@ -949,6 +949,7 @@ Les signets, l'historique et les mots de passe enregistrés ne seront pas touch�
 <translation id="1992924914582925289">Retirer de l'appareil</translation>
 <translation id="1994173015038366702">URL du site</translation>
 <translation id="1995916364271252349">Gère les données que les sites peuvent utiliser et afficher (position, appareil photo, fenêtres contextuelles et plus)</translation>
+<translation id="1997437640397887843">L'appareil photo est activé. Veuillez placer le code QR de votre carte eSIM devant l'appareil photo.</translation>
 <translation id="1997616988432401742">Vos certificats</translation>
 <translation id="1999115740519098545">Au démarrage</translation>
 <translation id="2000419248597011803">Envoie des témoins et des recherches à partir de la barre d'adresse et du champ de recherche à votre moteur de recherche par défaut</translation>
@@ -1004,6 +1005,7 @@ Vous pouvez gérer les paramètres de ce compte en installant l'application Fami
 <translation id="2055585478631012616">Vous serez déconnecté de ces sites, y compris dans les onglets ouverts</translation>
 <translation id="205560151218727633">Logo de l'Assistant Google</translation>
 <translation id="2058456167109518507">Appareil détecté</translation>
+<translation id="2058581283817163201">Vérifier avec ce téléphone</translation>
 <translation id="2059913712424898428">Fuseau horaire</translation>
 <translation id="2060375639911876205">Retirer le profil de la carte eSIM</translation>
 <translation id="2062354623176996748">Utilisez le Web sans enregistrer votre historique de navigation avec une fenêtre de navigation privée</translation>
@@ -2602,6 +2604,7 @@ et sur Ctrl+Alt+diminuer la luminosité pour effectuer un zoom arrière.</transl
 <translation id="3785308913036335955">Afficher le raccourci des applications</translation>
 <translation id="3785727820640310185">Mots de passe enregistrés pour ce site</translation>
 <translation id="3788301286821743879">Impossible de lancer l'application de kiosque.</translation>
+<translation id="3788331399335602504">ces fichiers</translation>
 <translation id="3788401245189148511">Elle pourrait :</translation>
 <translation id="3789841737615482174">Installer</translation>
 <translation id="379082410132524484">Votre carte est expirée</translation>
@@ -3177,6 +3180,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="4438043733494739848">Transparent</translation>
 <translation id="4438639467177774583">Le mot de passe <ph name="MASKED_PASSWORD" /> de <ph name="USERNAME" /> sera enregistré dans votre compte Google, <ph name="ACCOUNT" /></translation>
 <translation id="4439427728133035643">Réseau <ph name="NETWORK_INDEX" /> sur <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, force du signal : <ph name="SIGNAL_STRENGTH" /> %, connexion</translation>
+<translation id="4440097423000553826"><ph name="WEBSITE" /> a envoyé une notification sur votre téléphone. Pour confirmer votre identité, touchez la notification « <ph name="NOTIFICATIONTITLE" /> », puis suivez les étapes indiquées.</translation>
 <translation id="4441124369922430666">Voulez-vous lancer automatiquement cette application au démarrage de l'ordinateur?</translation>
 <translation id="4441147046941420429">Pour continuer, retirez votre clé de sécurité de votre appareil, puis réinsérez-la et touchez-la</translation>
 <translation id="444134486829715816">Développer...</translation>
@@ -3478,6 +3482,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="4773112038801431077">Mettre à niveau Linux</translation>
 <translation id="477647109558161443">Créer un raccourci sur le bureau</translation>
 <translation id="4776917500594043016">Mot de passe pour <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="4777458362738635055">Les autres utilisateurs de cet appareil peuvent utiliser ce réseau</translation>
 <translation id="4777825441726637019">Play Store</translation>
 <translation id="4777943778632837590">Configurer les serveurs de noms de réseau</translation>
 <translation id="4778644898150334464">Utiliser un autre mot de passe</translation>
@@ -4312,6 +4317,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="5712153969432126546">Les sites publient parfois des fichiers en format PDF, comme des documents, des contrats et des formulaires</translation>
 <translation id="5715711091495208045">Gestionnaire de plugiciels : <ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">Moteurs de recherche par défaut</translation>
+<translation id="5719637365829998022">Le code QR a été numérisé.</translation>
 <translation id="5719854774000914513">Les sites peuvent demander à se connecter à des appareils HID</translation>
 <translation id="572155275267014074">Paramètres Android</translation>
 <translation id="5722086096420375088">Vert et blanc</translation>
@@ -4523,6 +4529,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="5955721306465922729">Un site Web souhaite ouvrir cette application.</translation>
 <translation id="5955809630138889698">Cet appareil peut uniquement être admissible au mode démo en ligne. Veuillez communiquer avec votre représentant de l'assistance pour obtenir plus de détails.</translation>
 <translation id="5956585768868398362">Est-ce bien la page de recherche à laquelle vous vous attendiez?</translation>
+<translation id="5957918771633727933">Aucun profil eSIM n'est proposé. Téléchargez un nouveau <ph name="BEGIN_LINK" />profil<ph name="END_LINK" />.</translation>
 <translation id="5957987129450536192">Appuyez sur l'icône Sélectionner pour énoncer à côté de votre image de profil, puis sélectionnez ce que vous voulez entendre.</translation>
 <translation id="5959471481388474538">Le réseau n'est pas accessible</translation>
 <translation id="595959584676692139">Recharger la page pour utiliser cette extension</translation>
@@ -5913,6 +5920,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="7506541170099744506">Votre <ph name="DEVICE_TYPE" /> est bien enregistré pour la gestion d'entreprise.</translation>
 <translation id="7507207699631365376">Consulter la <ph name="BEGIN_LINK" />politique de confidentialité<ph name="END_LINK" /> de ce fournisseur</translation>
 <translation id="7507930499305566459">Certificat du répondeur d'état</translation>
+<translation id="7509246181739783082">Vérifier votre identité</translation>
 <translation id="7513029293694390567">Connexion automatique à des sites Web à l'aide d'authentifiants enregistrés. Si cette fonctionnalité est désactivée, une confirmation vous est demandée avant chaque connexion à un site Web.</translation>
 <translation id="7514239104543605883">Copier vers votre appareil</translation>
 <translation id="7514365320538308">Télécharger</translation>
@@ -6027,6 +6035,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="7638605456503525968">Ports série</translation>
 <translation id="7639914187072011620">Échec de la récupération de l'URL de redirection SAML auprès du serveur</translation>
 <translation id="764017888128728"><ph name="PASSWORD_MANAGER_BRAND" /> vous connecte automatiquement à des sites admissibles avec les mots de passe que vous avez enregistrés.</translation>
+<translation id="7641513591566880111">Nouveau nom du profil</translation>
 <translation id="7642778300616172920">Masquer le contenu sensible</translation>
 <translation id="7643842463591647490">{0,plural, =1{# fenêtre ouverte}one{# fenêtre ouverte}other{# fenêtres ouvertes}}</translation>
 <translation id="7643932971554933646">Autoriser le site à afficher les fichiers?</translation>
@@ -6187,6 +6196,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="7800518121066352902">Rotation dans le sens c&amp;ontraire des aiguilles d'une montre</translation>
 <translation id="780301667611848630">Non merci</translation>
 <translation id="7804072833593604762">Onglet fermé</translation>
+<translation id="7805759469263222011">Numérisez un code QR à l'aide de l'appareil photo ou entrez le code d'activation que vous a donné votre fournisseur de services</translation>
 <translation id="7805768142964895445">État</translation>
 <translation id="7807067443225230855">Recherche et Assistant Google</translation>
 <translation id="7807711621188256451">Toujours autoriser <ph name="HOST" /> à accéder à votre caméra</translation>
@@ -6444,7 +6454,6 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="8061091456562007989">Rétablir</translation>
 <translation id="8061991877177392872">On dirait que vous avez déjà configuré Voice Match avec votre Assistant sur un autre appareil. Ces enregistrements précédents ont été utilisés pour créer un modèle vocal sur cet appareil.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{1 feuille de papier}one{{COUNT} feuille de papier}other{{COUNT} feuilles de papier}}</translation>
-<translation id="8062879968880283306">Numérisez le code QR à l'aide de l'appareil photo de votre appareil ou entrez le code d'activation fourni par votre fournisseur de services.</translation>
 <translation id="8063235345342641131">Avatar vert par défaut</translation>
 <translation id="8063535366119089408">Afficher le fichier</translation>
 <translation id="8064279191081105977">Groupe <ph name="GROUP_NAME" /> : <ph name="GROUP_CONTENTS" /> – <ph name="COLLAPSED_STATE" /></translation>
@@ -6666,6 +6675,7 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="8300849813060516376">Échec de l'opération OTASP</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{Adresse}one{# adresse}other{# adresses}}</translation>
 <translation id="8304383784961451596">Vous n'êtes pas autorisé à utiliser cet appareil. Veuillez communiquer avec l'administrateur pour obtenir l'autorisation de vous y connecter, ou bien connectez-vous à l'aide d'un compte Google supervisé par Family Link.</translation>
+<translation id="8308016398665340540">Vous partagez ce réseau avec d'autres utilisateurs de cet appareil</translation>
 <translation id="8308179586020895837">Demander mon autorisation si <ph name="HOST" /> veut accéder à la caméra</translation>
 <translation id="830868413617744215">Bêta</translation>
 <translation id="8309458809024885768">Ce certificat existe déjà</translation>
@@ -7044,7 +7054,6 @@ Appuyez sur un commutateur attribué pour retirer l'attribution.</translation>
 <translation id="8743164338060742337">Réseau <ph name="NETWORK_INDEX" /> sur <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, puissance du signal de <ph name="NETWORK_PROVIDER_NAME" /> : <ph name="SIGNAL_STRENGTH" /> %, géré par votre administrateur, connexion</translation>
 <translation id="8746654918629346731">Vous avez déjà demandé « <ph name="EXTENSION_NAME" /> »</translation>
 <translation id="874689135111202667">{0,plural, =1{Téléverser un fichier sur ce site?}one{Téléverser # fichier sur ce site?}other{Téléverser # fichiers sur ce site?}}</translation>
-<translation id="8749556627204742888">Vous partagez ce réseau avec d'autres utilisateurs de cet appareil.</translation>
 <translation id="8749805710397399240">Impossible de diffuser votre écran. Vérifiez l'autorisation Enregistrement de l'écran dans les Préférences Système.</translation>
 <translation id="8749863574775030885">Accéder aux appareils USB d’un fournisseur inconnu</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> veut se connecter à un port de série</translation>
@@ -7107,7 +7116,6 @@ Appuyez sur un commutateur attribué pour retirer l'attribution.</translation>
 <translation id="8808744862003883508">Vous pouvez voir dans cette page toutes les extensions installées dans Chrome.</translation>
 <translation id="8809147117840417135">Turquoise clair</translation>
 <translation id="8811862054141704416">Accès au microphone pour Crostini</translation>
-<translation id="8812552797690463522">Ce réseau est partagé avec vous.</translation>
 <translation id="8812593354822910461">Aussi effacer les données de navigation (<ph name="URL" />), ce qui vous déconnectera de <ph name="DOMAIN" />. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">Me le rappeler plus tard</translation>
 <translation id="8813698869395535039">Impossible de connecter <ph name="USERNAME" /></translation>
@@ -7319,7 +7327,6 @@ Appuyez sur un commutateur attribué pour retirer l'attribution.</translation>
 <translation id="9021662811137657072">Virus détecté!</translation>
 <translation id="902236149563113779">Les sites suivent généralement la position de votre caméra pour offrir des fonctionnalités de réalité augmentée, comme des jeux ou des indications en mode affichage tête haute</translation>
 <translation id="9022847679183471841">Ce compte est déjà utilisé sur cet ordinateur par <ph name="AVATAR_NAME" />.</translation>
-<translation id="9023009238991294202">Les autres utilisateurs de cet appareil peuvent utiliser ce réseau.</translation>
 <translation id="9023015617655685412">Ajouter cet onglet aux favoris</translation>
 <translation id="9023909777842748145">La désactivation de cette fonctionnalité n'empêche pas votre appareil d'envoyer les données nécessaires aux services essentiels, comme les mises à jour du système et la sécurité.</translation>
 <translation id="9024127637873500333">&amp;Ouvrir dans un nouvel onglet</translation>

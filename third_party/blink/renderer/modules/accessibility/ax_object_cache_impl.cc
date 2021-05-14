@@ -495,12 +495,15 @@ bool IsNodeRelevantForAccessibility(const Node* node,
 bool AXObjectCacheImpl::use_ax_menu_list_ = false;
 
 // static
-AXObjectCache* AXObjectCacheImpl::Create(Document& document) {
-  return MakeGarbageCollected<AXObjectCacheImpl>(document);
+AXObjectCache* AXObjectCacheImpl::Create(Document& document,
+                                         const ui::AXMode& ax_mode) {
+  return MakeGarbageCollected<AXObjectCacheImpl>(document, ax_mode);
 }
 
-AXObjectCacheImpl::AXObjectCacheImpl(Document& document)
+AXObjectCacheImpl::AXObjectCacheImpl(Document& document,
+                                     const ui::AXMode& ax_mode)
     : document_(document),
+      ax_mode_(ax_mode),
       modification_count_(0),
       validation_message_axid_(0),
       active_aria_modal_dialog_(nullptr),
@@ -596,9 +599,16 @@ AXObject* AXObjectCacheImpl::GetOrCreateFocusedObjectFromNode(Node* node) {
   return obj;
 }
 
-
 AXObject* AXObjectCacheImpl::FocusedObject() {
   return GetOrCreateFocusedObjectFromNode(FocusedElement());
+}
+
+const ui::AXMode& AXObjectCacheImpl::GetAXMode() {
+  return ax_mode_;
+}
+
+void AXObjectCacheImpl::SetAXMode(const ui::AXMode& ax_mode) {
+  ax_mode_ = ax_mode;
 }
 
 AXObject* AXObjectCacheImpl::Get(const LayoutObject* layout_object) {
@@ -2048,7 +2058,10 @@ void AXObjectCacheImpl::ProcessInvalidatedObjects(Document& document) {
     if (new_object) {
       // Any owned objects need to reset their parent_ to point to the
       // new object.
-      relation_cache_->UpdateAriaOwnsWithCleanLayout(new_object, true);
+      if (AXObject::HasARIAOwns(DynamicTo<Element>(node)) &&
+          AXRelationCache::IsValidOwner(new_object)) {
+        relation_cache_->UpdateAriaOwnsWithCleanLayout(new_object, true);
+      }
     } else {
       // Failed to create, so remove object completely.
       RemoveAXID(current);
@@ -2116,7 +2129,12 @@ void AXObjectCacheImpl::ProcessInvalidatedObjects(Document& document) {
       if (new_object &&
           new_object->ShouldUseLayoutObjectTraversalForChildren() !=
               did_use_layout_object_traversal) {
-        // TODO(accessibility) Need test for this.
+        // TODO(accessibility) Add test or remove code.
+        SANITIZER_CHECK(false)
+            << "This should no longer be possible, an object only uses layout "
+               "object traversal if it is the descendant of a pseudo element, "
+               "and that never changes: "
+            << new_object->ToString(true, true);
         DCHECK(!HashTraits<AXID>::IsDeletedValue(ax_id));
         pending_children_changed_ids.insert(ax_id);
       }
@@ -3506,7 +3524,6 @@ void AXObjectCacheImpl::RequestAOMEventListenerPermission() {
 void AXObjectCacheImpl::Trace(Visitor* visitor) const {
   visitor->Trace(document_);
   visitor->Trace(accessible_node_mapping_);
-  visitor->Trace(layout_object_mapping_);
   visitor->Trace(node_object_mapping_);
   visitor->Trace(active_aria_modal_dialog_);
 

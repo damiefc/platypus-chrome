@@ -130,6 +130,7 @@ const gfx::VectorIcon& GetVectorIconForMediaAction(MediaSessionAction action) {
     case MediaSessionAction::kToggleMicrophone:
     case MediaSessionAction::kToggleCamera:
     case MediaSessionAction::kHangUp:
+    case MediaSessionAction::kRaise:
       NOTREACHED();
       break;
   }
@@ -158,7 +159,7 @@ class MediaActionButton : public views::ImageButton {
     ink_drop()->SetMode(views::InkDropHost::InkDropMode::ON);
     SetHasInkDropActionOnClick(true);
     ink_drop()->SetCreateHighlightCallback(base::BindRepeating(
-        [](InkDropHostView* host) {
+        [](Button* host) {
           return std::make_unique<views::InkDropHighlight>(
               gfx::SizeF(host->size()), host->ink_drop()->GetBaseColor());
         },

@@ -97,10 +97,12 @@ std::pair<std::u16string, std::u16string>
 SaveAddressProfilePromptController::GetDiffFromOldToNewProfile() {
   DCHECK(original_profile_);
   base::flat_map<ServerFieldType, std::pair<std::u16string, std::u16string>>
-      differences =
-          AutofillProfileComparator::GetSettingsVisibleProfileDifferenceMap(
-              original_profile_.value(), profile_,
-              g_browser_process->GetApplicationLocale());
+      differences = AutofillProfileComparator::GetProfileDifferenceMap(
+          original_profile_.value(), profile_,
+          autofill::ServerFieldTypeSet(
+              std::begin(kVisibleTypesForProfileDifferences),
+              std::end(kVisibleTypesForProfileDifferences)),
+          g_browser_process->GetApplicationLocale());
   std::vector<std::u16string> old_values;
   std::vector<std::u16string> new_values;
   for (auto type : kVisibleTypesForProfileDifferences) {
@@ -130,9 +132,7 @@ void SaveAddressProfilePromptController::OnUserAccepted(
     const base::android::JavaParamRef<jobject>& obj) {
   had_user_interaction_ = true;
   RunSaveAddressProfileCallback(
-      was_profile_edited
-          ? AutofillClient::SaveAddressProfileOfferUserDecision::kEdited
-          : AutofillClient::SaveAddressProfileOfferUserDecision::kAccepted);
+      AutofillClient::SaveAddressProfileOfferUserDecision::kAccepted);
 }
 
 void SaveAddressProfilePromptController::OnUserDeclined(
@@ -147,12 +147,13 @@ void SaveAddressProfilePromptController::OnUserEdited(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
     const base::android::JavaParamRef<jobject>& jprofile) {
-  was_profile_edited = true;
+  had_user_interaction_ = true;
   AutofillProfile edited_profile;
   PersonalDataManagerAndroid::PopulateNativeProfileFromJava(jprofile, env,
                                                             &edited_profile);
   profile_ = edited_profile;
-  prompt_view_->RefreshContent();
+  RunSaveAddressProfileCallback(
+      AutofillClient::SaveAddressProfileOfferUserDecision::kEdited);
 }
 
 void SaveAddressProfilePromptController::OnPromptDismissed(

@@ -163,12 +163,6 @@ const char kEnableSignedExchangePrefetchCacheForNavigationsDescription[] =
     "a blob and the verification process of the signed exchange is skipped for "
     "the succeeding navigation.";
 
-const char kAudioWorkletRealtimeThreadName[] =
-    "Use realtime priority thread for Audio Worklet";
-const char kAudioWorkletRealtimeThreadDescription[] =
-    "Run Audio Worklet operation on a realtime priority thread for better "
-    "audio stream stability.";
-
 const char kUpdatedCellularActivationUiName[] =
     "Updated Cellular Activation UI";
 const char kUpdatedCellularActivationUiDescription[] =
@@ -714,6 +708,12 @@ const char kEnableDataReductionProxyServerExperimentDescription[] =
     "Enable a different approach to saving data by configuring the back end "
     "server";
 
+const char kDesktopPWAsPrefixAppNameInWindowTitleName[] =
+    "Desktop PWAs prefix window title with app name.";
+const char kDesktopPWAsPrefixAppNameInWindowTitleDescription[] =
+    "Prefix the window title of installed PWAs with the name of the PWA. On "
+    "ChromeOS this is visible only in the window/activity switcher.";
+
 const char kDesktopPWAsAppIconShortcutsMenuName[] =
     "Desktop PWAs app icon shortcuts menu";
 const char kDesktopPWAsAppIconShortcutsMenuDescription[] =
@@ -1171,10 +1171,6 @@ const char kEnableWasmSimdName[] = "WebAssembly SIMD support.";
 const char kEnableWasmSimdDescription[] =
     "Enables support for the WebAssembly SIMD proposal.";
 
-const char kEnableWasmThreadsName[] = "WebAssembly threads support";
-const char kEnableWasmThreadsDescription[] =
-    "Enables support for the WebAssembly Threads proposal.";
-
 const char kEnableWasmTieringName[] = "WebAssembly tiering";
 const char kEnableWasmTieringDescription[] =
     "Enables tiered compilation of WebAssembly (will tier up to TurboFan if "
@@ -1481,6 +1477,12 @@ const char kLensCameraAssistedSearchName[] =
 const char kLensCameraAssistedSearchDescription[] =
     "Enable an entry point to Google Lens to allow users to search what they "
     "see using their mobile camera.";
+
+const char kLinkDoctorDeprecationAndroidName[] =
+    "Link Doctor Deprecation on Android";
+const char kLinkDoctorDeprecationAndroidDescription[] =
+    "Removes the setting for retrieving suggestions on navigation errors since "
+    "this feature is deprecated.";
 
 const char kLiteVideoName[] = "Enable LiteVideos";
 const char kLiteVideoDescription[] =
@@ -2245,10 +2247,6 @@ const char kSharingPreferVapidName[] =
     "Prefer sending Sharing message via VAPID";
 const char kSharingPreferVapidDescription[] =
     "Prefer sending Sharing message via FCM WebPush authenticated using VAPID.";
-
-const char kSharingQRCodeGeneratorName[] = "Enable sharing page via QR Code";
-const char kSharingQRCodeGeneratorDescription[] =
-    "Enables right-click UI to share the page's URL via a generated QR Code.";
 
 const char kSharingSendViaSyncName[] =
     "Enable sending Sharing message via Sync";
@@ -3180,12 +3178,6 @@ const char kOfflinePagesLivePageSharingDescription[] =
     "Enables to share current loaded page as offline page by saving as MHTML "
     "first.";
 
-const char kOffliningRecentPagesName[] =
-    "Enable offlining of recently visited pages";
-const char kOffliningRecentPagesDescription[] =
-    "Enable storing recently visited pages locally for offline use. Requires "
-    "Offline Pages to be enabled.";
-
 const char kAndroidPartnerCustomizationPhenotypeName[] =
     "Use homepage and bookmarks from partner customization";
 const char kAndroidPartnerCustomizationPhenotypeDescription[] =
@@ -3483,11 +3475,6 @@ const char kInlineUpdateFlowDescription[] =
     "Store when an update is available, the user is presented with an inline "
     "flow where they do not have to leave Chrome until the update is ready "
     "to install.";
-
-const char kAndroidDarkSearchName[] = "Show darkened search pages on Android";
-const char kAndroidDarkSearchDescription[] =
-    "If enabled, users will see a darkened search page if Chrome is in "
-    "nightmode as well.";
 
 const char kSwipeToMoveCursorName[] = "Swipe to move cursor";
 const char kSwipeToMoveCursorDescription[] =
@@ -4278,6 +4265,11 @@ const char kEnableHeuristicStylusPalmRejectionDescription[] =
     "Enable additional heuristic palm rejection logic when interacting with "
     "stylus usage. Not intended for all devices.";
 
+const char kEnableInputInDiagnosticsAppName[] =
+    "Enable input device cards in the Diagnostics App";
+const char kEnableInputInDiagnosticsAppDescription[] =
+    "Enable input device cards in the Diagnostics App";
+
 const char kEnableInputNoiseCancellationUiName[] =
     "Enable Input Noise Cancellation UI.";
 const char kEnableInputNoiseCancellationUiDescription[] =
@@ -4461,10 +4453,6 @@ const char kFilesAppCopyImageName[] = "Enable Copy Images from Files App";
 const char kFilesAppCopyImageDescription[] =
     "Enables the Files App to copy images selected to the system clipboard";
 
-const char kFilesNGName[] = "Enable Files App. NG.";
-const char kFilesNGDescription[] =
-    "Enable the next generation UI style of the file manager.";
-
 const char kFilesSinglePartitionFormatName[] =
     "Enable Partitioning of Removable Disks.";
 const char kFilesSinglePartitionFormatDescription[] =
@@ -4576,12 +4564,6 @@ const char kIntentHandlingSharingDescription[] =
 const char kIntentPickerPWAPersistenceName[] = "Intent picker PWA Persistence";
 const char kIntentPickerPWAPersistenceDescription[] =
     "Allow user to always open with PWA in intent picker.";
-
-const char kInteractiveWindowCycleList[] =
-    "Enable Alt-Tab interactivity improvements.";
-const char kInteractiveWindowCycleListDescription[] =
-    "Adds mouse behavior, three-finger touchpad swipe, left/right "
-    "arrow navigation, and space/enter confirmation to Alt-Tab.";
 
 const char kKeyboardBasedDisplayArrangementInSettingsName[] =
     "Keyboard-based Display Arrangement in Settings";
@@ -4969,11 +4951,6 @@ const char kInstallableInkDropDescription[] =
     "InstallableInkDrop is part of an InkDrop refactoring effort. This enables "
     "the pilot implementation where available.";
 
-const char kTextfieldFocusOnTapUpName[] = "Focus UI text fields on touch-up";
-const char kTextfieldFocusOnTapUpDescription[] =
-    "When enabled, Views-based text fields take focus on touch-up instead of "
-    "touch-down. This includes the Omnibox.";
-
 #endif  // defined(TOOLKIT_VIEWS)
 
 // Random platform combinations -----------------------------------------------
@@ -4986,36 +4963,6 @@ const char kEnableOopPrintDriversName[] =
 const char kEnableOopPrintDriversDescription[] =
     "Enables printing interactions with the operating system to be performed "
     "out-of-process.";
-
-const char kRemoteCopyReceiverName[] =
-    "Enables the remote copy feature to receive messages";
-const char kRemoteCopyReceiverDescription[] =
-    "Enables the remote copy feature to handle messages by writing content to "
-    "the clipboard and showing a notification to the user.";
-
-const char kRemoteCopyImageNotificationName[] =
-    "Enables image notifications for the remote copy feature";
-const char kRemoteCopyImageNotificationDescription[] =
-    "Enables image notifications to be shown for the remote copy feature "
-    "when receiving a message.";
-
-const char kRemoteCopyPersistentNotificationName[] =
-    "Enables persistent notifications for the remote copy feature";
-const char kRemoteCopyPersistentNotificationDescription[] =
-    "Enables persistent notifications to be shown for the remote copy feature "
-    "when receiving a message.";
-
-const char kRemoteCopyProgressNotificationName[] =
-    "Enables progress notifications for the remote copy feature";
-const char kRemoteCopyProgressNotificationDescription[] =
-    "Enables progress notifications to be shown for the remote copy feature "
-    "when receiving a message.";
-
-#endif  // defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) ||
-        // defined(OS_CHROMEOS)
-
-#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
-    defined(OS_CHROMEOS)
 
 const char kDirectManipulationStylusName[] = "Direct Manipulation Stylus";
 const char kDirectManipulationStylusDescription[] =

@@ -1361,6 +1361,7 @@ component("base") {
     "//build:branding_buildflags",
     "//build:chromecast_buildflags",
     "//build:chromeos_buildflags",
+    "//build/config/compiler:compiler_buildflags",
     "//third_party/modp_b64",
   ]
 
@@ -3727,7 +3728,6 @@ if (enable_nocompile_tests) {
       "metrics/field_trial_params_unittest.nc",
       "metrics/histogram_unittest.nc",
       "observer_list_unittest.nc",
-      "optional_unittest.nc",
       "sequence_checker_unittest.nc",
       "task/task_traits_extension_unittest.nc",
       "task/task_traits_unittest.nc",

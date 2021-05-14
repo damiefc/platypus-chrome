@@ -743,8 +743,6 @@ IN_PROC_BROWSER_TEST_F(PredictionManagerModelDownloadingBrowserTest,
       "OptimizationGuide.PredictionModelDownloadManager.DownloadStatus", 1);
 
   histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.PredictionManager.PredictionModelPathExists", true, 1);
-  histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.PredictionModelDownloadManager.DownloadStatus",
       PredictionModelDownloadStatus::kFailedCrxVerification, 1);
   // An unverified file should not notify us that it's ready.

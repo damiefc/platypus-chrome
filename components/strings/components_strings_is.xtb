@@ -509,6 +509,7 @@ og röng skilríki til baka. Þetta getur gerst þegar tölvuþrjótur reynir a�
 <translation id="2850739647070081192">Invite (umslag)</translation>
 <translation id="2856444702002559011">Tölvuþrjótar gætu verið að reyna að stela upplýsingum þínum frá <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (til dæmis aðgangsorðum, skilaboðum eða kreditkortum). <ph name="BEGIN_LEARN_MORE_LINK" />Frekari upplýsingar<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2859806420264540918">Þetta vefsvæði sýnir ágengar eða villandi auglýsingar.</translation>
+<translation id="287596039013813457">Vinalegt</translation>
 <translation id="2876489322757410363">Slekkur á huliðsstillingu til að greiða með öðru forriti. Halda áfram?</translation>
 <translation id="2878197950673342043">Veggspjaldabrot</translation>
 <translation id="2878424575911748999">A1</translation>
@@ -606,6 +607,7 @@ og röng skilríki til baka. Þetta getur gerst þegar tölvuþrjótur reynir a�
 <translation id="3229041911291329567">Upplýsingar um útgáfu tækisins þíns og vafrans</translation>
 <translation id="323107829343500871">Sláðu inn CVC-númerið fyrir <ph name="CREDIT_CARD" /></translation>
 <translation id="3234666976984236645">Greina alltaf mikilvægt efni á þessu vefsvæði</translation>
+<translation id="3249845759089040423">Mergjað</translation>
 <translation id="3252266817569339921">Franskt</translation>
 <translation id="3266793032086590337">Gildi (skörun)</translation>
 <translation id="3268451620468152448">Opna flipa</translation>
@@ -662,6 +664,7 @@ og röng skilríki til baka. Þetta getur gerst þegar tölvuþrjótur reynir a�
 <translation id="3428151540071562330">Eitt eða fleiri af URI sniðmátum netþjóns DnsOverHttpsTemplates eru ógild og verða ekki notuð.</translation>
 <translation id="3431636764301398940">Vista kortið á þessu tæki</translation>
 <translation id="3432601291244612633">Loka síðu</translation>
+<translation id="3435738964857648380">Öryggi</translation>
 <translation id="3435896845095436175">Kveikja</translation>
 <translation id="3438829137925142401">Nota aðgangsorð sem eru vistuð á Google reikningnum þínum</translation>
 <translation id="3443726618221119081">Juuro-Ku-Kai</translation>
@@ -982,6 +985,7 @@ og röng skilríki til baka. Þetta getur gerst þegar tölvuþrjótur reynir a�
 <translation id="4594403342090139922">Aft&amp;urkalla eyðingu</translation>
 <translation id="4597348597567598915">Stærð 8</translation>
 <translation id="4600854749408232102">C6/C5 (umslag)</translation>
+<translation id="4606870351894164739">Áhrifamikið</translation>
 <translation id="4628948037717959914">Mynd</translation>
 <translation id="4631649115723685955">Fjárvildarkerfi tengt</translation>
 <translation id="4636930964841734540">Upplýsingar</translation>
@@ -1045,6 +1049,8 @@ og röng skilríki til baka. Þetta getur gerst þegar tölvuþrjótur reynir a�
 <translation id="4813512666221746211">Netvilla</translation>
 <translation id="4816492930507672669">Laga að síðu</translation>
 <translation id="4819347708020428563">Breyta textaskýringum í sjálfgefnu sniði?</translation>
+<translation id="4825507807291741242">Kraftmikið</translation>
+<translation id="4838327282952368871">Draumkennt</translation>
 <translation id="484462545196658690">Sjálfvirkt</translation>
 <translation id="4850886885716139402">Yfirlit</translation>
 <translation id="485316830061041779">Þýskt</translation>
@@ -1203,6 +1209,7 @@ og röng skilríki til baka. Þetta getur gerst þegar tölvuþrjótur reynir a�
 <translation id="5398772614898833570">Lokað á auglýsingar</translation>
 <translation id="5400836586163650660">Grár</translation>
 <translation id="540969355065856584">Þessi þjónn gat ekki sannað að hann væri <ph name="DOMAIN" />; öryggisvottorð hans er ekki gilt eins og er. Þetta kann að orsakast af vanstillingu eða þá að tölvuþrjótur er að reyna að komast inn í tenginguna þína.</translation>
+<translation id="541143247543991491">Ský (fyrir allt kerfið)</translation>
 <translation id="541416427766103491">Staflari 4</translation>
 <translation id="5421136146218899937">Hreinsa vafragögn...</translation>
 <translation id="5426179911063097041"><ph name="SITE" /> vill senda þér tilkynningar</translation>
@@ -1710,6 +1717,7 @@ og röng skilríki til baka. Þetta getur gerst þegar tölvuþrjótur reynir a�
     &lt;li&gt;Farðu í &lt;a href="https://support.google.com/chrome/answer/6098869"&gt;hjálparmiðstöð Chrome&lt;/a&gt; til að fá upplýsingar um hvernig hugbúnaður er fjarlægður varanlega af tölvunni
     &lt;/ol&gt;</translation>
 <translation id="741007362987735528">Wide-Format</translation>
+<translation id="7410471291937727359">Fagurt</translation>
 <translation id="7416351320495623771">Stjórna aðgangsorðum…</translation>
 <translation id="7419106976560586862">Slóð prófíls</translation>
 <translation id="7437289804838430631">Bæta við samskiptaupplýsingum</translation>
@@ -2133,6 +2141,7 @@ og röng skilríki til baka. Þetta getur gerst þegar tölvuþrjótur reynir a�
 <translation id="9020542370529661692">Þessi síða var þýdd yfir á <ph name="TARGET_LANGUAGE" /></translation>
 <translation id="9020742383383852663">A8</translation>
 <translation id="9025348182339809926">(ógilt)</translation>
+<translation id="9030265603405983977">Svarthvítt</translation>
 <translation id="9035022520814077154">Öryggisvilla</translation>
 <translation id="9038649477754266430">Notaðu ágiskunarþjónustu til að flýta fyrir hleðslu á síðum</translation>
 <translation id="9039213469156557790">Aukinheldur inniheldur þessi síða önnir tilföng sem ekki er hægt að treysta. Þessi tilföng kunna að vera skoðuð af öðrum á meðan þau eru í umferð, og tölvuþrjótur gæti breytt þeim til þess að reyna að breyta hegðun síðunnar.</translation>
@@ -2156,6 +2165,7 @@ og röng skilríki til baka. Þetta getur gerst þegar tölvuþrjótur reynir a�
 <translation id="91108059142052966">Reglur stjórnenda útiloka skjádeilingu með <ph name="APPLICATION_TITLE" /> þegar trúnaðarefni er sýnilegt</translation>
 <translation id="9114524666733003316">Staðfestir kort...</translation>
 <translation id="9114581008513152754">Þessi vafri er ekki í umsjón fyrirtækis eða annarrar stofnunar. Hægt er að hafa umsjón með aðgerðum í þessu tæki utan Chrome. <ph name="BEGIN_LINK" />Frekari upplýsingar<ph name="END_LINK" /></translation>
+<translation id="9117930699067497412">Ferskt</translation>
 <translation id="9119042192571987207">Sent</translation>
 <translation id="9128016270925453879">Reglum var hlaðið</translation>
 <translation id="9128870381267983090">Tengjast neti</translation>

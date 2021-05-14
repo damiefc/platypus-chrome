@@ -667,6 +667,7 @@ void AddImportDataStrings(content::WebUIDataSource* html_source) {
 void AddLanguagesStrings(content::WebUIDataSource* html_source,
                          Profile* profile) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
+    {"languagesPageTitle", IDS_SETTINGS_LANGUAGES_PAGE_TITLE},
     {"languagesListTitle", IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_TITLE},
     {"searchLanguages", IDS_SETTINGS_LANGUAGE_SEARCH},
     {"languagesExpandA11yLabel",
@@ -681,9 +682,11 @@ void AddLanguagesStrings(content::WebUIDataSource* html_source,
     {"addLanguagesDialogTitle", IDS_SETTINGS_LANGUAGES_MANAGE_LANGUAGES_TITLE},
     {"allLanguages", IDS_SETTINGS_LANGUAGES_ALL_LANGUAGES},
     {"enabledLanguages", IDS_SETTINGS_LANGUAGES_ENABLED_LANGUAGES},
+#if defined(OS_WIN)
     {"isDisplayedInThisLanguage",
      IDS_SETTINGS_LANGUAGES_IS_DISPLAYED_IN_THIS_LANGUAGE},
     {"displayInThisLanguage", IDS_SETTINGS_LANGUAGES_DISPLAY_IN_THIS_LANGUAGE},
+#endif
     {"offerToTranslateInThisLanguage",
      IDS_SETTINGS_LANGUAGES_OFFER_TO_TRANSLATE_IN_THIS_LANGUAGE},
     {"offerToEnableTranslate",
@@ -729,20 +732,6 @@ void AddLanguagesStrings(content::WebUIDataSource* html_source,
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Only the Chrome OS help article explains how language order affects website
-  // language.
-  html_source->AddString(
-      "languagesLearnMoreURL",
-      base::ASCIIToUTF16(chrome::kLanguageSettingsLearnMoreUrl));
-  html_source->AddString(
-      "languagesPageTitle",
-      l10n_util::GetStringUTF16(IDS_SETTINGS_LANGUAGES_PAGE_TITLE));
-#else
-  html_source->AddString(
-      "languagesPageTitle",
-      l10n_util::GetStringUTF16(IDS_SETTINGS_LANGUAGES_PAGE_TITLE));
-#endif
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
   const user_manager::User* user =
@@ -1622,14 +1611,14 @@ void AddSearchEnginesStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_SEARCH_ENGINES_REMOVE_FROM_LIST},
       {"searchEnginesManageExtension",
        IDS_SETTINGS_SEARCH_ENGINES_MANAGE_EXTENSION},
-      {"searchEnginesTriggerOptions",
-       IDS_SETTINGS_SEARCH_ENGINES_TRIGGER_OPTIONS},
-      {"searchEnginesTriggerDescription",
-       IDS_SETTINGS_SEARCH_ENGINES_TRIGGER_DESCRIPTION},
-      {"searchEnginesTriggerSpaceEnabled",
-       IDS_SETTINGS_SEARCH_ENGINES_TRIGGER_SPACE_ENABLED},
-      {"searchEnginesTriggerSpaceDisabled",
-       IDS_SETTINGS_SEARCH_ENGINES_TRIGGER_SPACE_DISABLED},
+      {"searchEnginesKeyboardShortcutsTitle",
+       IDS_SETTINGS_SEARCH_ENGINES_KEYBOARD_SHORTCUTS_TITLE},
+      {"searchEnginesKeyboardShortcutsDescription",
+       IDS_SETTINGS_SEARCH_ENGINES_KEYBOARD_SHORTCUTS_DESCRIPTION},
+      {"searchEnginesKeyboardShortcutsSpaceOrTab",
+       IDS_SETTINGS_SEARCH_ENGINES_KEYBOARD_SHORTCUTS_SPACE_OR_TAB},
+      {"searchEnginesKeyboardShortcutsTab",
+       IDS_SETTINGS_SEARCH_ENGINES_KEYBOARD_SHORTCUTS_TAB},
 
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);

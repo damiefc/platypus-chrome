@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-HK">
+<translation id="1001033507375626788">已與您共用此網絡</translation>
 <translation id="1001307489511021749">您的應用程式、設定和其他自訂設定將會同步至所有您使用 Google 帳戶登入的 Chrome 作業系統裝置。</translation>
 <translation id="1003088604756913841">在 <ph name="APP" />的新視窗中開啟連結</translation>
 <translation id="100323615638474026">USB 裝置 (<ph name="VENDOR_ID" />：<ph name="PRODUCT_ID" />)</translation>
@@ -358,7 +359,6 @@
 <translation id="138784436342154190">要將起始網頁還原至預設值嗎？</translation>
 <translation id="1388253969141979417">已允許使用麥克風</translation>
 <translation id="1388728792929436380"><ph name="DEVICE_TYPE" /> 將在更新完成時重新啟動。</translation>
-<translation id="138900021244932468">找不到任何設定檔。如要設定新網絡，請使用裝置相機掃瞄 QR 碼，或輸入流動網絡供應商提供的啟動碼。</translation>
 <translation id="139013308650923562">可以使用裝置上安裝的字型</translation>
 <translation id="1390548061267426325">在一般分頁中開啟</translation>
 <translation id="1393283411312835250">太陽和雲</translation>
@@ -960,6 +960,7 @@
 <translation id="1992924914582925289">從裝置中移除</translation>
 <translation id="1994173015038366702">網站網址</translation>
 <translation id="1995916364271252349">控制網站可使用和顯示的資料 (位置、攝錄機和彈出式視窗等等)</translation>
+<translation id="1997437640397887843">開咗裝置相機。請將相機鏡頭對準 eSIM 卡嘅 QR 碼。</translation>
 <translation id="1997616988432401742">您的憑證</translation>
 <translation id="1999115740519098545">起始螢幕</translation>
 <translation id="2000419248597011803">將部分 Cookie，以及網址列和搜尋框中的搜尋內容傳送至預設搜尋引擎</translation>
@@ -1015,6 +1016,7 @@
 <translation id="2055585478631012616">您將會從這些網站 (包括已開啟的分頁) 登出</translation>
 <translation id="205560151218727633">「Google 助理」標誌</translation>
 <translation id="2058456167109518507">偵測到的裝置</translation>
+<translation id="2058581283817163201">透過此手機驗證</translation>
 <translation id="2059913712424898428">時區</translation>
 <translation id="2060375639911876205">移除 eSIM 卡設定檔</translation>
 <translation id="2062354623176996748">如果您使用無痕式視窗瀏覽網頁，系統便不會保留您的瀏覽記錄</translation>
@@ -2614,6 +2616,7 @@
 <translation id="3785308913036335955">顯示應用程式捷徑</translation>
 <translation id="3785727820640310185">已儲存此網站的密碼</translation>
 <translation id="3788301286821743879">無法啟動 Kiosk 應用程式。</translation>
+<translation id="3788331399335602504">這些檔案</translation>
 <translation id="3788401245189148511">要求存取下列權限：</translation>
 <translation id="3789841737615482174">安裝</translation>
 <translation id="379082410132524484">您的付款卡已過期</translation>
@@ -3189,6 +3192,7 @@
 <translation id="4438043733494739848">透明</translation>
 <translation id="4438639467177774583"><ph name="USERNAME" /> 的密碼 <ph name="MASKED_PASSWORD" /> 將儲存至您的 Google 帳戶 <ph name="ACCOUNT" /></translation>
 <translation id="4439427728133035643">第 <ph name="NETWORK_INDEX" /> 個網絡，一共有 <ph name="NETWORK_COUNT" /> 個網絡，<ph name="NETWORK_NAME" />，訊號強度係 <ph name="SIGNAL_STRENGTH" />%，連接</translation>
+<translation id="4440097423000553826"><ph name="WEBSITE" /> 已傳送通知到您的手機。如要確認您的身份，請輕按「<ph name="NOTIFICATIONTITLE" />」通知，然後按步驟操作。</translation>
 <translation id="4441124369922430666">您要在裝置開機時自動啟動這個應用程式嗎？</translation>
 <translation id="4441147046941420429">如要繼續，請從裝置上移除安全密鑰，然後重新插入並輕觸密鑰</translation>
 <translation id="444134486829715816">展開…</translation>
@@ -3491,6 +3495,7 @@
 <translation id="4773112038801431077">升級 Linux</translation>
 <translation id="477647109558161443">建立桌面捷徑</translation>
 <translation id="4776917500594043016"><ph name="USER_EMAIL_ADDRESS" /> 的密碼</translation>
+<translation id="4777458362738635055">此裝置的其他使用者可使用此網絡</translation>
 <translation id="4777825441726637019">Play 商店</translation>
 <translation id="4777943778632837590">設定網絡域名伺服器</translation>
 <translation id="4778644898150334464">使用其他密碼</translation>
@@ -4326,6 +4331,7 @@
 <translation id="5712153969432126546">網站有時會發佈文件、合約和表格等 PDF</translation>
 <translation id="5715711091495208045">外掛程式代理組件：<ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">預設搜尋引擎</translation>
+<translation id="5719637365829998022">掃瞄咗 QR 碼。</translation>
 <translation id="5719854774000914513">網站可要求連接 USB 裝置</translation>
 <translation id="572155275267014074">Android 設定</translation>
 <translation id="5722086096420375088">綠色和白色</translation>
@@ -4537,6 +4543,7 @@
 <translation id="5955721306465922729">有網站想開啟此應用程式。</translation>
 <translation id="5955809630138889698">此裝置可能只可使用網上示範模式。詳情請與您的支援代表聯絡。</translation>
 <translation id="5956585768868398362">這是您想要的搜尋頁面嗎？</translation>
+<translation id="5957918771633727933">沒有可用的 eSIM 卡設定檔。請下載新的<ph name="BEGIN_LINK" />設定檔。<ph name="END_LINK" /></translation>
 <translation id="5957987129450536192">輕按個人檔案相片附近的「選取以朗讀」圖示，然後選取您想聽到的內容。</translation>
 <translation id="5959471481388474538">網絡無法使用</translation>
 <translation id="595959584676692139">重新載入網頁即可使用此擴充程式</translation>
@@ -5927,6 +5934,7 @@
 <translation id="7506541170099744506">您的 <ph name="DEVICE_TYPE" /> 已成功註冊企業管理服務。</translation>
 <translation id="7507207699631365376">查看此供應商的<ph name="BEGIN_LINK" />私隱權政策<ph name="END_LINK" /></translation>
 <translation id="7507930499305566459">狀態回應程式憑證</translation>
+<translation id="7509246181739783082">驗證您的身分</translation>
 <translation id="7513029293694390567">使用已儲存的憑證自動登入網站。如停用此功能，系統會在您每次登入網站前，要求您確認登入憑證。</translation>
 <translation id="7514239104543605883">複製至您的裝置</translation>
 <translation id="7514365320538308">下載</translation>
@@ -6041,6 +6049,7 @@
 <translation id="7638605456503525968">序列連接埠</translation>
 <translation id="7639914187072011620">無法由伺服器擷取 SAML 重新導向網址</translation>
 <translation id="764017888128728"><ph name="PASSWORD_MANAGER_BRAND" /> 會使用您已儲存的密碼，自動登入符合資格的網站。</translation>
+<translation id="7641513591566880111">新的設定檔名稱</translation>
 <translation id="7642778300616172920">隱藏敏感內容</translation>
 <translation id="7643842463591647490">{0,plural, =1{# 個開啟的視窗}other{# 個開啟的視窗}}</translation>
 <translation id="7643932971554933646">要讓網站查看檔案嗎？</translation>
@@ -6201,6 +6210,7 @@
 <translation id="7800518121066352902">逆時針旋轉(&amp;O)</translation>
 <translation id="780301667611848630">不用了，謝謝</translation>
 <translation id="7804072833593604762">閂咗分頁</translation>
+<translation id="7805759469263222011">請使用裝置相機掃瞄 QR 碼，或輸入流動網絡供應商提供的啟動碼</translation>
 <translation id="7805768142964895445">狀態</translation>
 <translation id="7807067443225230855">搜尋和助理功能</translation>
 <translation id="7807711621188256451">永遠允許 <ph name="HOST" /> 存取您的相機</translation>
@@ -6459,7 +6469,6 @@
 <translation id="8061091456562007989">還原設定</translation>
 <translation id="8061991877177392872">您似乎已在另一部裝置上透過「Google 助理」設定了 Voice Match 功能。系統已使用先前的錄音在此裝置上建立語音模型。</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{1 張紙}other{{COUNT} 張紙}}</translation>
-<translation id="8062879968880283306">請使用裝置相機掃瞄 QR 碼，或輸入流動網絡供應商提供的啟動碼。</translation>
 <translation id="8063235345342641131">預設綠色圖片</translation>
 <translation id="8063535366119089408">查看檔案</translation>
 <translation id="8064279191081105977">群組 <ph name="GROUP_NAME" /> - <ph name="GROUP_CONTENTS" /> - <ph name="COLLAPSED_STATE" /></translation>
@@ -6680,6 +6689,7 @@
 <translation id="8300849813060516376">OTASP 失敗</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{地址}other{# 個地址}}</translation>
 <translation id="8304383784961451596">您無權使用此裝置。請與管理員聯絡，要求對方授予登入權限，或使用 Family Link 監管的 Google 帳戶登入。</translation>
+<translation id="8308016398665340540">您正在與此裝置的其他使用者共用此網絡</translation>
 <translation id="8308179586020895837">當 <ph name="HOST" /> 要求存取相機時詢問我。</translation>
 <translation id="830868413617744215">測試版</translation>
 <translation id="8309458809024885768">憑證已存在</translation>
@@ -6879,7 +6889,6 @@
 <translation id="8551588720239073785">日期和時間設定</translation>
 <translation id="8553342806078037065">管理其他使用者</translation>
 <translation id="8554899698005018844">未選取語言</translation>
-<translation id="8555195867496021627">沒有可用的 eSIM 卡設定檔。請<ph name="BEGIN_LINK" />在這裡<ph name="END_LINK" />下載新的設定檔。</translation>
 <translation id="8557022314818157177">請持續輕觸安全密鑰，直至指紋擷取完成</translation>
 <translation id="8557930019681227453">資訊清單</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{在新視窗中開啟所有書籤(&amp;N)}=1{在新視窗中開啟書籤(&amp;N)}other{在新視窗中開啟全部 {COUNT} 個書籤(&amp;N)}}</translation>
@@ -7058,7 +7067,6 @@
 <translation id="8743164338060742337">第 <ph name="NETWORK_INDEX" /> 個網絡，一共有 <ph name="NETWORK_COUNT" /> 個網絡，<ph name="NETWORK_NAME" />，<ph name="NETWORK_PROVIDER_NAME" /> 嘅訊號強度係 <ph name="SIGNAL_STRENGTH" />%，由管理員管理，連接</translation>
 <translation id="8746654918629346731">您已要求安裝「<ph name="EXTENSION_NAME" />」</translation>
 <translation id="874689135111202667">{0,plural, =1{要將一個檔案上載至此網站嗎？}other{要將 # 個檔案上載至此網站嗎？}}</translation>
-<translation id="8749556627204742888">您正在與此裝置的其他使用者共用此網絡。</translation>
 <translation id="8749805710397399240">無法投放螢幕。請檢查「系統偏好設定」中的「螢幕錄影」權限。</translation>
 <translation id="8749863574775030885">存取來自未知供應商的 USB 裝置</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> 要求與序列連接埠連線</translation>
@@ -7120,7 +7128,6 @@
 <translation id="8808744862003883508">此頁面顯示所有在 Chrome 安裝的擴充程式。</translation>
 <translation id="8809147117840417135">淺藍綠色</translation>
 <translation id="8811862054141704416">Crostini 的麥克風存取權</translation>
-<translation id="8812552797690463522">此網絡已經與你共用。</translation>
 <translation id="8812593354822910461">一併清除瀏覽資料 (<ph name="URL" />) 會將您登出 <ph name="DOMAIN" />。<ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">稍後提醒我</translation>
 <translation id="8813698869395535039">無法登入 <ph name="USERNAME" /></translation>
@@ -7332,7 +7339,6 @@
 <translation id="9021662811137657072">系統偵測到病毒</translation>
 <translation id="902236149563113779">網站通常會追蹤攝錄機位置以提供 AR 功能，例如遊戲或注意方向</translation>
 <translation id="9022847679183471841"><ph name="AVATAR_NAME" />目前已在這部電腦上使用這個帳戶。</translation>
-<translation id="9023009238991294202">此裝置的其他使用者可使用此網絡。</translation>
 <translation id="9023015617655685412">將此分頁加入書籤…</translation>
 <translation id="9023909777842748145">即使關閉此功能，您的裝置仍然可以傳送基本服務 (例如系統更新與安全性) 所需的資料。</translation>
 <translation id="9024127637873500333">在新分頁中開啟(&amp;O)</translation>

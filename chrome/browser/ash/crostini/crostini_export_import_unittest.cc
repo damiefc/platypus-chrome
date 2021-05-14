@@ -15,8 +15,9 @@
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/dbus/cicerone/cicerone_client.h"
 #include "chromeos/dbus/cicerone/fake_cicerone_client.h"
-#include "chromeos/dbus/concierge_client.h"
+#include "chromeos/dbus/concierge/concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/seneschal/fake_seneschal_client.h"
 #include "chromeos/dbus/seneschal/seneschal_client.h"
@@ -122,18 +123,17 @@ class CrostiniExportImportTest : public testing::Test {
   CrostiniExportImportTest()
       : container_id_(kCrostiniDefaultVmName, kCrostiniDefaultContainerName) {
     chromeos::DBusThreadManager::Initialize();
-    chromeos::ConciergeClient::InitializeFake(
-        reinterpret_cast<chromeos::FakeCiceroneClient*>(
-            chromeos::DBusThreadManager::Get()->GetCiceroneClient()));
+    chromeos::CiceroneClient::InitializeFake();
+    chromeos::ConciergeClient::InitializeFake();
     chromeos::SeneschalClient::InitializeFake();
     fake_seneschal_client_ = chromeos::FakeSeneschalClient::Get();
-    fake_cicerone_client_ = reinterpret_cast<chromeos::FakeCiceroneClient*>(
-        chromeos::DBusThreadManager::Get()->GetCiceroneClient());
+    fake_cicerone_client_ = chromeos::FakeCiceroneClient::Get();
   }
 
   ~CrostiniExportImportTest() override {
     chromeos::SeneschalClient::Shutdown();
     chromeos::ConciergeClient::Shutdown();
+    chromeos::CiceroneClient::Shutdown();
     chromeos::DBusThreadManager::Shutdown();
   }
 

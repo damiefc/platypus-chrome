@@ -17,8 +17,13 @@
 #include "chrome/browser/web_applications/components/app_registrar_observer.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chromeos/crosapi/mojom/app_service.mojom.h"
+#include "components/content_settings/core/browser/content_settings_observer.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 
+class ContentSettingsPattern;
 class Profile;
 
 namespace web_app {
@@ -31,21 +36,29 @@ namespace apps {
 
 // This WebAppsPublisherHost observes AppRegistrar on Lacros, and calls
 // WebAppsCrosapi to inform the Ash browser of the current set of web apps.
-class WebAppsPublisherHost : public web_app::AppRegistrarObserver {
+class WebAppsPublisherHost : public crosapi::mojom::AppController,
+                             public web_app::AppRegistrarObserver,
+                             content_settings::Observer {
  public:
   explicit WebAppsPublisherHost(Profile* profile);
   WebAppsPublisherHost(const WebAppsPublisherHost&) = delete;
   WebAppsPublisherHost& operator=(const WebAppsPublisherHost&) = delete;
   ~WebAppsPublisherHost() override;
 
+  void Init();
+
   web_app::WebAppRegistrar& registrar() const;
 
-  crosapi::mojom::AppPublisher* GetPublisher() const;
-
-  static void SetPublisherForTesting(crosapi::mojom::AppPublisher* publisher);
+  void SetPublisherForTesting(crosapi::mojom::AppPublisher* publisher);
 
  private:
   void OnReady();
+
+  // crosapi::mojom::AppController:
+  void Uninstall(const std::string& app_id,
+                 apps::mojom::UninstallSource uninstall_source,
+                 bool clear_site_data,
+                 bool report_abuse) override;
 
   // web_app::AppRegistrarObserver:
   void OnWebAppInstalled(const web_app::AppId& app_id) override;
@@ -59,9 +72,10 @@ class WebAppsPublisherHost : public web_app::AppRegistrarObserver {
       const std::string& app_id,
       const base::Time& last_launch_time) override;
 
-  // TODO(crbug.com/1194709): inherit from content_settings::Observer and
-  // override:
-  // - OnContentSettingChanged
+  // content_settings::Observer:
+  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
+                               const ContentSettingsPattern& secondary_pattern,
+                               ContentSettingsType content_type) override;
 
   // TODO(crbug.com/1194709): Add more overrides, guided by WebAppsChromeOs.
 
@@ -70,15 +84,19 @@ class WebAppsPublisherHost : public web_app::AppRegistrarObserver {
                               apps::mojom::Readiness readiness);
   void Publish(apps::mojom::AppPtr app);
 
-  static crosapi::mojom::AppPublisher* publisher_for_testing_;
-
   Profile* const profile_;
   web_app::WebAppProvider* const provider_;
+  crosapi::mojom::AppPublisher* remote_publisher_ = nullptr;
 
   apps_util::IncrementingIconKeyFactory icon_key_factory_;
 
+  mojo::Receiver<crosapi::mojom::AppController> receiver_{this};
+
   base::ScopedObservation<web_app::AppRegistrar, web_app::AppRegistrarObserver>
       registrar_observation_{this};
+
+  base::ScopedObservation<HostContentSettingsMap, content_settings::Observer>
+      content_settings_observation_{this};
 
   base::WeakPtrFactory<WebAppsPublisherHost> weak_ptr_factory_{this};
 };

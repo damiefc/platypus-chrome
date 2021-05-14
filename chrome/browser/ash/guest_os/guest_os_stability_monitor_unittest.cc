@@ -14,11 +14,12 @@
 #include "chrome/browser/ash/crostini/crostini_test_helper.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/dbus/cicerone/cicerone_client.h"
 #include "chromeos/dbus/cicerone/fake_cicerone_client.h"
-#include "chromeos/dbus/concierge_client.h"
+#include "chromeos/dbus/concierge/concierge_client.h"
+#include "chromeos/dbus/concierge/fake_concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_chunneld_client.h"
-#include "chromeos/dbus/fake_concierge_client.h"
 #include "chromeos/dbus/seneschal/fake_seneschal_client.h"
 #include "chromeos/dbus/seneschal/seneschal_client.h"
 #include "content/public/test/browser_task_environment.h"
@@ -30,9 +31,8 @@ class GuestOsStabilityMonitorTest : public testing::Test {
  public:
   GuestOsStabilityMonitorTest() : task_env_() {
     chromeos::DBusThreadManager::Initialize();
-    chromeos::ConciergeClient::InitializeFake(
-        reinterpret_cast<chromeos::FakeCiceroneClient*>(
-            chromeos::DBusThreadManager::Get()->GetCiceroneClient()));
+    chromeos::CiceroneClient::InitializeFake();
+    chromeos::ConciergeClient::InitializeFake();
     chromeos::SeneschalClient::InitializeFake();
 
     // CrostiniManager will create a GuestOsStabilityMonitor for us.
@@ -57,6 +57,7 @@ class GuestOsStabilityMonitorTest : public testing::Test {
     profile_.reset();
     chromeos::SeneschalClient::Shutdown();
     chromeos::ConciergeClient::Shutdown();
+    chromeos::CiceroneClient::Shutdown();
     chromeos::DBusThreadManager::Shutdown();
   }
 
@@ -101,8 +102,7 @@ TEST_F(GuestOsStabilityMonitorTest, ConciergeFailure) {
 }
 
 TEST_F(GuestOsStabilityMonitorTest, CiceroneFailure) {
-  auto* cicerone_client = static_cast<chromeos::FakeCiceroneClient*>(
-      chromeos::DBusThreadManager::Get()->GetCiceroneClient());
+  auto* cicerone_client = chromeos::FakeCiceroneClient::Get();
 
   cicerone_client->NotifyCiceroneStopped();
   histogram_tester_.ExpectUniqueSample(crostini::kCrostiniStabilityHistogram,

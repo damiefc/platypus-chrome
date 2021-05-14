@@ -294,7 +294,7 @@ class BASE_EXPORT Value {
   Value* FindKeyOfType(StringPiece key, Type type);
   const Value* FindKeyOfType(StringPiece key, Type type) const;
 
-  // These are convenience forms of `FindKey`. They return `base`:nullopt| if
+  // These are convenience forms of `FindKey`. They return base::nullopt if
   // the value is not found or doesn't have the type specified in the
   // function's name.
   base::Optional<bool> FindBoolKey(StringPiece key) const;
@@ -635,12 +635,9 @@ class BASE_EXPORT Value {
 
 // DictionaryValue provides a key-value dictionary with (optional) "path"
 // parsing for recursive access; see the comment at the top of the file. Keys
-// are `std`:string|s and should be UTF-8 encoded.
+// are std::string's and should be UTF-8 encoded.
 class BASE_EXPORT DictionaryValue : public Value {
  public:
-  using const_iterator = LegacyDictStorage::const_iterator;
-  using iterator = LegacyDictStorage::iterator;
-
   // Returns `value` if it is a dictionary, nullptr otherwise.
   static std::unique_ptr<DictionaryValue> From(std::unique_ptr<Value> value);
 
@@ -657,6 +654,7 @@ class BASE_EXPORT DictionaryValue : public Value {
   size_t size() const { return dict().size(); }
 
   // Returns whether the dictionary is empty.
+  // DEPRECATED, use `Value::DictEmpty()` instead.
   bool empty() const { return dict().empty(); }
 
   // Clears any current contents of this dictionary.
@@ -816,25 +814,16 @@ class BASE_EXPORT DictionaryValue : public Value {
     Iterator(const Iterator& other);
     ~Iterator();
 
-    bool IsAtEnd() const { return it_ == target_.end(); }
+    bool IsAtEnd() const { return it_ == target_.DictItems().end(); }
     void Advance() { ++it_; }
 
     const std::string& key() const { return it_->first; }
-    const Value& value() const { return *it_->second; }
+    const Value& value() const { return it_->second; }
 
    private:
     const DictionaryValue& target_;
-    LegacyDictStorage::const_iterator it_;
+    detail::const_dict_iterator it_;
   };
-
-  // Iteration.
-  // DEPRECATED, use `Value::DictItems()` instead.
-  iterator begin() { return dict().begin(); }
-  iterator end() { return dict().end(); }
-
-  // DEPRECATED, use `Value::DictItems()` instead.
-  const_iterator begin() const { return dict().begin(); }
-  const_iterator end() const { return dict().end(); }
 
   // DEPRECATED, use `Value::Clone()` instead.
   // TODO(crbug.com/646113): Delete this and migrate callsites.
@@ -963,15 +952,16 @@ class BASE_EXPORT ListValue : public Value {
   void Swap(ListValue* other);
 
   // Iteration.
-  // DEPRECATED, use `GetList()::begin()` instead.
-  iterator begin() { return GetList().begin(); }
-  // DEPRECATED, use `GetList()::end()` instead.
-  iterator end() { return GetList().end(); }
-
-  // DEPRECATED, use `GetList()::begin()` instead.
-  const_iterator begin() const { return GetList().begin(); }
-  // DEPRECATED, use `GetList()::end()` instead.
-  const_iterator end() const { return GetList().end(); }
+  //
+  // ListValue no longer supports iteration. Instead, use GetList() to get the
+  // underlying list:
+  //
+  // for (const auto& entry : list_value.GetList()) {
+  //   ...
+  //
+  // for (auto it = list_value.GetList().begin();
+  //      it != list_value.GetList().end(); ++it) {
+  //   ...
 
   // DEPRECATED, use `Value::Clone()` instead.
   // TODO(crbug.com/646113): Delete this and migrate callsites.

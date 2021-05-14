@@ -79,7 +79,8 @@ struct LegacyDOMSnapshotAgent::VectorStringHashTraits
   }
 
   static void ConstructDeletedValue(Vector<String>& vec, bool) {
-    new (NotNull, &vec) Vector<String>(WTF::kHashTableDeletedValue);
+    new (NotNullTag::kNotNull, &vec)
+        Vector<String>(WTF::kHashTableDeletedValue);
   }
 
   static bool IsDeletedValue(const Vector<String>& vec) {
@@ -146,7 +147,7 @@ Response LegacyDOMSnapshotAgent::GetSnapshot(
   *computed_styles = std::move(computed_styles_);
   computed_styles_map_.reset();
   css_property_filter_.reset();
-  paint_order_map_ = nullptr;
+  paint_order_map_.reset();
   return Response::Success();
 }
 

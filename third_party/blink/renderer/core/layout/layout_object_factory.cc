@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
+#include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_button.h"
 #include "third_party/blink/renderer/core/layout/layout_deprecated_flexible_box.h"
@@ -92,9 +93,9 @@ inline BaseType* CreateObject(Node& node,
     force_legacy = legacy == LegacyLayout::kForce;
 
     if (!force_legacy)
-      return MakeGarbageCollected<NGType>(element);
+      return new NGType(element);
   }
-  BaseType* new_object = MakeGarbageCollected<LegacyType>(element);
+  BaseType* new_object = new LegacyType(element);
   if (force_legacy)
     new_object->SetForceLegacyLayout();
   return new_object;
@@ -302,9 +303,9 @@ LayoutText* LayoutObjectFactory::CreateText(Node* node,
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
     force_legacy = legacy == LegacyLayout::kForce;
     if (!force_legacy)
-      return MakeGarbageCollected<LayoutNGText>(node, str);
+      return new LayoutNGText(node, str);
   }
-  LayoutText* layout_text = MakeGarbageCollected<LayoutText>(node, str);
+  LayoutText* layout_text = new LayoutText(node, str);
   if (force_legacy)
     layout_text->SetForceLegacyLayout();
   return layout_text;
@@ -319,13 +320,11 @@ LayoutTextFragment* LayoutObjectFactory::CreateTextFragment(
   bool force_legacy = false;
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
     force_legacy = legacy == LegacyLayout::kForce;
-    if (!force_legacy) {
-      return MakeGarbageCollected<LayoutNGTextFragment>(node, str, start_offset,
-                                                        length);
-    }
+    if (!force_legacy)
+      return new LayoutNGTextFragment(node, str, start_offset, length);
   }
   LayoutTextFragment* layout_text_fragment =
-      MakeGarbageCollected<LayoutTextFragment>(node, str, start_offset, length);
+      new LayoutTextFragment(node, str, start_offset, length);
   if (force_legacy)
     layout_text_fragment->SetForceLegacyLayout();
   return layout_text_fragment;
@@ -362,7 +361,7 @@ LayoutObject* LayoutObjectFactory::CreateSVGText(Node& node,
 LayoutBox* LayoutObjectFactory::CreateAnonymousTableWithParent(
     const LayoutObject& parent,
     bool child_forces_legacy) {
-  ComputedStyle* new_style =
+  scoped_refptr<ComputedStyle> new_style =
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(),
           parent.IsLayoutInline() ? EDisplay::kInlineTable : EDisplay::kTable);
@@ -379,7 +378,7 @@ LayoutBox* LayoutObjectFactory::CreateAnonymousTableWithParent(
 
 LayoutBox* LayoutObjectFactory::CreateAnonymousTableSectionWithParent(
     const LayoutObject& parent) {
-  ComputedStyle* new_style =
+  scoped_refptr<ComputedStyle> new_style =
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(), EDisplay::kTableRowGroup);
   LegacyLayout legacy =
@@ -394,7 +393,7 @@ LayoutBox* LayoutObjectFactory::CreateAnonymousTableSectionWithParent(
 
 LayoutBox* LayoutObjectFactory::CreateAnonymousTableRowWithParent(
     const LayoutObject& parent) {
-  ComputedStyle* new_style =
+  scoped_refptr<ComputedStyle> new_style =
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(), EDisplay::kTableRow);
   LegacyLayout legacy =
@@ -407,7 +406,7 @@ LayoutBox* LayoutObjectFactory::CreateAnonymousTableRowWithParent(
 
 LayoutBlockFlow* LayoutObjectFactory::CreateAnonymousTableCellWithParent(
     const LayoutObject& parent) {
-  ComputedStyle* new_style =
+  scoped_refptr<ComputedStyle> new_style =
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(), EDisplay::kTableCell);
   LegacyLayout legacy =

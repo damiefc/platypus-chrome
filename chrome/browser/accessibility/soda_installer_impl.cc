@@ -66,6 +66,8 @@ void speech::SodaInstaller::RegisterLocalStatePrefs(
   registry->RegisterTimePref(prefs::kSodaScheduledDeletionTime, base::Time());
   registry->RegisterFilePathPref(prefs::kSodaBinaryPath, base::FilePath());
 
+  SodaInstaller::RegisterRegisteredLanguagePackPref(registry);
+
   // Register language pack config path preferences.
   for (const speech::SodaLanguagePackComponentConfig& config :
        speech::kLanguageComponentConfigs) {
@@ -76,7 +78,7 @@ void speech::SodaInstaller::RegisterLocalStatePrefs(
 SodaInstallerImpl::SodaInstallerImpl() = default;
 
 SodaInstallerImpl::~SodaInstallerImpl() {
-  component_updater_observer_.RemoveAll();
+  component_updater_observation_.Reset();
 }
 
 base::FilePath SodaInstallerImpl::GetSodaBinaryPath() const {
@@ -98,23 +100,26 @@ void SodaInstallerImpl::InstallSoda(PrefService* global_prefs) {
       base::BindOnce(&component_updater::SodaComponentInstallerPolicy::
                          UpdateSodaComponentOnDemand));
 
-  if (!component_updater_observer_.IsObserving(
+  if (!component_updater_observation_.IsObservingSource(
           g_browser_process->component_updater())) {
-    component_updater_observer_.Add(g_browser_process->component_updater());
+    component_updater_observation_.Observe(
+        g_browser_process->component_updater());
   }
 }
 
 void SodaInstallerImpl::InstallLanguage(const std::string& language,
                                         PrefService* global_prefs) {
   language_installed_ = false;
+  SodaInstaller::RegisterLanguage(language, global_prefs);
   component_updater::RegisterSodaLanguageComponent(
       g_browser_process->component_updater(), language, global_prefs,
       base::BindOnce(&SodaInstallerImpl::OnSodaLanguagePackInstalled,
                      weak_factory_.GetWeakPtr()));
 
-  if (!component_updater_observer_.IsObserving(
+  if (!component_updater_observation_.IsObservingSource(
           g_browser_process->component_updater())) {
-    component_updater_observer_.Add(g_browser_process->component_updater());
+    component_updater_observation_.Observe(
+        g_browser_process->component_updater());
   }
 }
 
@@ -132,6 +137,7 @@ bool SodaInstallerImpl::IsLanguageInstalled(
 }
 
 void SodaInstallerImpl::UninstallSoda(PrefService* global_prefs) {
+  SodaInstaller::UnregisterLanguages(global_prefs);
   base::DeletePathRecursively(speech::GetSodaDirectory());
   base::DeletePathRecursively(speech::GetSodaLanguagePacksDirectory());
   global_prefs->SetTime(prefs::kSodaScheduledDeletionTime, base::Time());
@@ -196,7 +202,7 @@ void SodaInstallerImpl::OnEvent(Events event, const std::string& id) {
 void SodaInstallerImpl::OnSodaBinaryInstalled() {
   soda_binary_installed_ = true;
   if (language_installed_) {
-    component_updater_observer_.RemoveAll();
+    component_updater_observation_.Reset();
     NotifyOnSodaInstalled();
   }
 }
@@ -207,7 +213,7 @@ void SodaInstallerImpl::OnSodaLanguagePackInstalled(
   NotifyOnSodaLanguagePackInstalled(language_code);
 
   if (soda_binary_installed_) {
-    component_updater_observer_.RemoveAll();
+    component_updater_observation_.Reset();
     NotifyOnSodaInstalled();
   }
 }

@@ -244,6 +244,7 @@ interface AppHistory : EventTarget
 interface AppHistoryEntry : EventTarget
     attribute @@toStringTag
     getter id
+    getter index
     getter key
     getter sameDocument
     getter url
@@ -307,6 +308,13 @@ interface AudioContext : BaseAudioContext
     method getOutputTimestamp
     method resume
     method suspend
+interface AudioData
+    attribute @@toStringTag
+    getter buffer
+    getter timestamp
+    method clone
+    method close
+    method constructor
 interface AudioDecoder
     static method isConfigSupported
     attribute @@toStringTag
@@ -333,13 +341,6 @@ interface AudioEncoder
     method encode
     method flush
     method reset
-interface AudioFrame
-    attribute @@toStringTag
-    getter buffer
-    getter timestamp
-    method clone
-    method close
-    method constructor
 interface AudioListener
     attribute @@toStringTag
     getter forwardX
@@ -2806,9 +2807,12 @@ interface HTMLAllCollection
     method namedItem
 interface HTMLAnchorElement : HTMLElement
     attribute @@toStringTag
+    getter attributionDestination
+    getter attributionExpiry
+    getter attributionReportTo
+    getter attributionSourceEventId
     getter attributionSourcePriority
     getter charset
-    getter conversionDestination
     getter coords
     getter download
     getter hash
@@ -2817,8 +2821,6 @@ interface HTMLAnchorElement : HTMLElement
     getter href
     getter hrefTranslate
     getter hreflang
-    getter impressionData
-    getter impressionExpiry
     getter name
     getter origin
     getter password
@@ -2830,7 +2832,6 @@ interface HTMLAnchorElement : HTMLElement
     getter registerAttributionSource
     getter rel
     getter relList
-    getter reportingOrigin
     getter rev
     getter search
     getter shape
@@ -2840,9 +2841,12 @@ interface HTMLAnchorElement : HTMLElement
     getter username
     method constructor
     method toString
+    setter attributionDestination
+    setter attributionExpiry
+    setter attributionReportTo
+    setter attributionSourceEventId
     setter attributionSourcePriority
     setter charset
-    setter conversionDestination
     setter coords
     setter download
     setter hash
@@ -2851,8 +2855,6 @@ interface HTMLAnchorElement : HTMLElement
     setter href
     setter hrefTranslate
     setter hreflang
-    setter impressionData
-    setter impressionExpiry
     setter name
     setter password
     setter pathname
@@ -2863,7 +2865,6 @@ interface HTMLAnchorElement : HTMLElement
     setter registerAttributionSource
     setter rel
     setter relList
-    setter reportingOrigin
     setter rev
     setter search
     setter shape

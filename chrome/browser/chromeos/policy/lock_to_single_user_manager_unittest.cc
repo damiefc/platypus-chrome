@@ -14,9 +14,10 @@
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
-#include "chromeos/dbus/concierge_client.h"
+#include "chromeos/dbus/cicerone/cicerone_client.h"
+#include "chromeos/dbus/concierge/concierge_client.h"
+#include "chromeos/dbus/concierge/fake_concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/fake_concierge_client.h"
 #include "chromeos/dbus/seneschal/seneschal_client.h"
 #include "chromeos/dbus/userdataauth/fake_cryptohome_misc_client.h"
 #include "chromeos/login/session/session_termination_manager.h"
@@ -36,11 +37,12 @@ class LockToSingleUserManagerTest : public BrowserWithTestWindowTest {
   ~LockToSingleUserManagerTest() override = default;
 
   void SetUp() override {
-    // This setter will initialize DBusThreadManager.
-    // This is required before ArcSessionManager's constructor calls
-    // DBusThreadManager::Get().
-    chromeos::DBusThreadManager::GetSetterForTesting();
-    chromeos::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
+    // This is required before Concierge tests start calling
+    // DBusThreadManager::Get() for GetAnomalyDetectorClient.
+    chromeos::DBusThreadManager::Initialize();
+
+    chromeos::CiceroneClient::InitializeFake();
+    chromeos::ConciergeClient::InitializeFake();
     chromeos::SeneschalClient::InitializeFake();
 
     arc::SetArcAvailableCommandLineForTesting(
@@ -78,6 +80,7 @@ class LockToSingleUserManagerTest : public BrowserWithTestWindowTest {
     chromeos::CryptohomeMiscClient::Shutdown();
     chromeos::SeneschalClient::Shutdown();
     chromeos::ConciergeClient::Shutdown();
+    chromeos::CiceroneClient::Shutdown();
     chromeos::DBusThreadManager::Shutdown();
   }
 

@@ -11,6 +11,7 @@
 
 #include "base/memory/singleton.h"
 #include "chrome/browser/policy/messaging_layer/upload/upload_client.h"
+#include "chrome/browser/policy/messaging_layer/util/get_cloud_policy_client.h"
 #include "components/reporting/client/report_queue_configuration.h"
 #include "components/reporting/client/report_queue_provider.h"
 #include "components/reporting/proto/record.pb.h"
@@ -32,9 +33,6 @@ class ReportingClient : public ReportQueueProvider {
 
   using CreateReportQueueCallback =
       base::OnceCallback<void(CreateReportQueueResponse)>;
-
-  using GetCloudPolicyClientCallback = base::RepeatingCallback<void(
-      base::OnceCallback<void(StatusOr<policy::CloudPolicyClient*>)>)>;
 
   class ClientInitializingContext
       : public ReportQueueProvider::InitializingContext {
@@ -102,8 +100,7 @@ class ReportingClient : public ReportQueueProvider {
     ~TestEnvironment();
 
    private:
-    ReportingClient::GetCloudPolicyClientCallback
-        saved_build_cloud_policy_client_cb_;
+    GetCloudPolicyClientCallback saved_build_cloud_policy_client_cb_;
   };
 
   ~ReportingClient() override;
@@ -171,6 +168,8 @@ class ReportingClient : public ReportQueueProvider {
   std::string verification_key_;
   GetCloudPolicyClientCallback build_cloud_policy_client_cb_;
 
+  // The three member variables below are protected by
+  // uploaders_queue_task_runner_.
   // TODO(chromium:1078512) Passing around a raw pointer is unsafe. Wrap
   // CloudPolicyClient and guard access.
   policy::CloudPolicyClient* cloud_policy_client_ = nullptr;
@@ -182,6 +181,7 @@ class ReportingClient : public ReportQueueProvider {
   // case it is added to the queue and executed only once upload_client_ is set.
   std::queue<AsyncStartUploaderRequest> async_start_uploaders_queue_;
   scoped_refptr<base::SequencedTaskRunner> uploaders_queue_task_runner_;
+  SEQUENCE_CHECKER(uploaders_queue_sequence_checker_);
 };
 }  // namespace reporting
 

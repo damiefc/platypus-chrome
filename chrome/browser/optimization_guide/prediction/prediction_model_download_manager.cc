@@ -9,6 +9,7 @@
 #include "base/guid.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -16,6 +17,7 @@
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/optimization_guide/prediction/prediction_model_download_observer.h"
+#include "chrome/common/chrome_paths.h"
 #include "components/crx_file/crx_verifier.h"
 #include "components/download/public/background_service/download_service.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
@@ -96,10 +98,8 @@ void RecordPredictionModelDownloadStatus(PredictionModelDownloadStatus status) {
 
 PredictionModelDownloadManager::PredictionModelDownloadManager(
     download::DownloadService* download_service,
-    const base::FilePath& models_dir,
     scoped_refptr<base::SequencedTaskRunner> background_task_runner)
     : download_service_(download_service),
-      models_dir_(models_dir),
       is_available_for_downloads_(true),
       api_key_(features::GetOptimizationGuideServiceAPIKey()),
       background_task_runner_(background_task_runner) {}
@@ -134,7 +134,7 @@ void PredictionModelDownloadManager::StartDownload(const GURL& download_url) {
   download_params.scheduling_params.network_requirements =
       download::SchedulingParams::NetworkRequirements::NONE;
 
-  download_service_->StartDownload(download_params);
+  download_service_->StartDownload(std::move(download_params));
 }
 
 void PredictionModelDownloadManager::CancelAllPendingDownloads() {
@@ -332,9 +332,21 @@ PredictionModelDownloadManager::ProcessUnzippedContents(
     return base::nullopt;
   }
 
+  if (!models_dir_) {
+    models_dir_ = base::FilePath();
+    if (!base::PathService::Get(
+            chrome::DIR_OPTIMIZATION_GUIDE_PREDICTION_MODELS,
+            &(*models_dir_))) {
+      RecordPredictionModelDownloadStatus(
+          PredictionModelDownloadStatus::kModelDirectoryDoesNotExist);
+      models_dir_ = base::nullopt;
+      return base::nullopt;
+    }
+  }
+
   // Move model file away from temp directory.
   base::FilePath temp_model_path = unzipped_dir_path.Append(kModelFileName);
-  base::FilePath model_path = GetFilePathForModelInfo(models_dir_, model_info);
+  base::FilePath model_path = GetFilePathForModelInfo(*models_dir_, model_info);
 
   proto::PredictionModel model;
   *model.mutable_model_info() = model_info;
@@ -352,7 +364,6 @@ PredictionModelDownloadManager::ProcessUnzippedContents(
   UMA_HISTOGRAM_ENUMERATION(
       "OptimizationGuide.PredictionModelDownloadManager.ReplaceFileError",
       -file_error, -base::File::FILE_ERROR_MAX);
-
   if (base::Move(temp_model_path, model_path)) {
     RecordPredictionModelDownloadStatus(
         PredictionModelDownloadStatus::kSuccess);

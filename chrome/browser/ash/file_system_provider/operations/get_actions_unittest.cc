@@ -15,9 +15,9 @@
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/values.h"
+#include "chrome/browser/ash/file_system_provider/icon_set.h"
 #include "chrome/browser/ash/file_system_provider/operations/get_metadata.h"
 #include "chrome/browser/ash/file_system_provider/operations/test_util.h"
-#include "chrome/browser/chromeos/file_system_provider/icon_set.h"
 #include "chrome/common/extensions/api/file_system_provider.h"
 #include "chrome/common/extensions/api/file_system_provider_capabilities/file_system_provider_capabilities_handler.h"
 #include "chrome/common/extensions/api/file_system_provider_internal.h"
@@ -25,7 +25,7 @@
 #include "storage/browser/file_system/async_file_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace chromeos {
+namespace ash {
 namespace file_system_provider {
 namespace operations {
 namespace {
@@ -243,4 +243,4 @@ TEST_F(FileSystemProviderOperationsGetActionsTest, OnError) {
 
 }  // namespace operations
 }  // namespace file_system_provider
-}  // namespace chromeos
+}  // namespace ash

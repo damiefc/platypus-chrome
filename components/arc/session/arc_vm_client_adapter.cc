@@ -46,7 +46,7 @@
 #include "base/timer/elapsed_timer.h"
 #include "chromeos/components/sensors/buildflags.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
-#include "chromeos/dbus/concierge_client.h"
+#include "chromeos/dbus/concierge/concierge_client.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon/debug_daemon_client.h"
@@ -444,7 +444,7 @@ bool SendUpgradePropsToArcVmBootNotificationServer(
   if (!fd.is_valid())
     return false;
 
-  if (!base::WriteFileDescriptor(fd.get(), props.c_str(), props.size())) {
+  if (!base::WriteFileDescriptor(fd.get(), props)) {
     PLOG(ERROR) << "Unable to write props to "
                 << kArcVmBootNotificationServerSocketPath;
     return false;

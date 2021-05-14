@@ -15,6 +15,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
@@ -1354,20 +1355,12 @@ void WebContentsImpl::OnScreensChange(bool is_multi_screen_changed) {
   OPTIONAL_TRACE_EVENT1("content", "WebContentsImpl::OnScreensChange",
                         "is_multi_screen_changed", is_multi_screen_changed);
   // Allow fullscreen requests shortly after user-generated screens changes.
-  // TODO(crbug.com/1169291): Mac should not activate this on local process
-  // display::Screen signals, but via RenderWidgetHostViewMac screen updates.
   transient_allow_fullscreen_.Activate();
-
-  // Mac display info may originate from a remote process hosting the NSWindow;
-  // this local process display::Screen signal should not trigger updates.
-  // TODO(crbug.com/1169291): Unify screen info plumbing, caching, etc.
-#if !defined(OS_MAC)
   // Send |is_multi_screen_changed| events to all visible frames, but limit
   // other events to frames with the Window Placement permission. This obviates
   // the most pressing need for sites to poll isMultiScreen(), which is exposed
   // without explicit permission, while also protecting privacy.
   // TODO(crbug.com/1109989): Postpone events; refine utility/privacy balance.
-  // TODO(crbug.com/1205676): Remove this deprecated window.screenschange code.
   for (FrameTreeNode* node : frame_tree_.Nodes()) {
     RenderFrameHostImpl* rfh = node->current_frame_host();
     if ((is_multi_screen_changed &&
@@ -1385,7 +1378,6 @@ void WebContentsImpl::OnScreensChange(bool is_multi_screen_changed) {
           GetRenderViewHost()->GetWidget()->GetView()) {
     view->UpdateScreenInfo(view->GetNativeView());
   }
-#endif  // !OS_MAC
 }
 
 void WebContentsImpl::OnScreenOrientationChange() {
@@ -1418,16 +1410,11 @@ void WebContentsImpl::SetAccessibilityMode(ui::AXMode mode) {
     return;
 
   accessibility_mode_ = mode;
-
-  for (FrameTreeNode* node : frame_tree_.Nodes()) {
-    node->current_frame_host()->UpdateAccessibilityMode();
-    // Also update accessibility mode on the speculative RenderFrameHost for
-    // this FrameTreeNode, if one exists.
-    RenderFrameHostImpl* speculative_frame_host =
-        node->render_manager()->speculative_frame_host();
-    if (speculative_frame_host)
-      speculative_frame_host->UpdateAccessibilityMode();
-  }
+  // Update state for all frames in this tree and inner trees. Should also
+  // include speculative frame hosts.
+  GetMainFrame()->ForEachRenderFrameHostIncludingSpeculative(
+      base::BindRepeating(
+          [](RenderFrameHostImpl* rfhi) { rfhi->UpdateAccessibilityMode(); }));
 }
 
 void WebContentsImpl::AddAccessibilityMode(ui::AXMode mode) {
@@ -1702,10 +1689,13 @@ void WebContentsImpl::EnableWebContentsOnlyAccessibilityMode() {
   desired_mode |= ui::kAXModeWebContentsOnly;
   AddAccessibilityMode(desired_mode);
 
+  // Accessibility mode updates include speculative RFH's as well as any inner
+  // trees. Iterate across these as we do for SetAccessibilityMode (which is
+  // called indirectly above via AddAccessibilityMode).
   if (need_reset) {
-    for (RenderFrameHost* rfh : GetAllFrames()) {
-      static_cast<RenderFrameHostImpl*>(rfh)->AccessibilityReset();
-    }
+    GetMainFrame()->ForEachRenderFrameHostIncludingSpeculative(
+        base::BindRepeating(
+            [](RenderFrameHostImpl* rfhi) { rfhi->AccessibilityReset(); }));
   }
 }
 
@@ -2209,7 +2199,7 @@ void WebContentsImpl::AttachInnerWebContents(
   DCHECK(!inner_web_contents_impl->node_.outer_web_contents());
   auto* render_frame_host_impl =
       static_cast<RenderFrameHostImpl*>(render_frame_host);
-  DCHECK_EQ(&frame_tree_, render_frame_host_impl->frame_tree());
+  DCHECK_EQ(this, render_frame_host_impl->delegate()->GetAsWebContents());
 
   // Mark |render_frame_host_impl| as outer delegate frame.
   render_frame_host_impl->SetIsOuterDelegateFrame(true);
@@ -6800,7 +6790,7 @@ void WebContentsImpl::FocusOuterAttachmentFrameChain() {
 
   FrameTreeNode* outer_node =
       FrameTreeNode::GloballyFindByID(GetOuterDelegateFrameTreeNodeId());
-  outer_contents->frame_tree_.SetFocusedFrame(outer_node, nullptr);
+  outer_node->frame_tree()->SetFocusedFrame(outer_node, nullptr);
 
   // For a browser initiated focus change, let embedding renderer know of the
   // change. Otherwise, if the currently focused element is just across a

@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
@@ -99,8 +100,7 @@ class BrowsingDataRemoverImplBrowserTest : public ContentBrowserTest {
 
   void RemoveAndWait(uint64_t remove_mask) {
     content::BrowsingDataRemover* remover =
-        content::BrowserContext::GetBrowsingDataRemover(
-            shell()->web_contents()->GetBrowserContext());
+        shell()->web_contents()->GetBrowserContext()->GetBrowsingDataRemover();
     content::BrowsingDataRemoverCompletionObserver completion_observer(remover);
     remover->RemoveAndReply(
         base::Time(), base::Time::Max(), remove_mask,
@@ -113,8 +113,7 @@ class BrowsingDataRemoverImplBrowserTest : public ContentBrowserTest {
       uint64_t remove_mask,
       std::unique_ptr<BrowsingDataFilterBuilder> filter) {
     content::BrowsingDataRemover* remover =
-        content::BrowserContext::GetBrowsingDataRemover(
-            shell()->web_contents()->GetBrowserContext());
+        shell()->web_contents()->GetBrowserContext()->GetBrowsingDataRemover();
     content::BrowsingDataRemoverCompletionObserver completion_observer(remover);
     remover->RemoveWithFilterAndReply(
         base::Time(), base::Time::Max(), remove_mask,

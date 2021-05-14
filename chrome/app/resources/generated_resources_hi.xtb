@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hi">
+<translation id="1001033507375626788">यह नेटवर्क आपके साथ शेयर किया गया है</translation>
 <translation id="1001307489511021749">आपके ऐप्लिकेशन, सेटिंग, और पसंद के मुताबिक बनाई गई दूसरी चीज़ें, उन सभी Chrome OS डिवाइस में सिंक हो जाएंगी जिनमें आपने Google खाते से साइन इन किया है.</translation>
 <translation id="1003088604756913841">नई <ph name="APP" /> विंडो में लिंक खोलें</translation>
 <translation id="100323615638474026">यूएसबी डिवाइस (<ph name="VENDOR_ID" />:<ph name="PRODUCT_ID" />)</translation>
@@ -62,7 +63,7 @@
 <translation id="1066613507389053689">Chrome OS को अपडेट करना ज़रूरी है</translation>
 <translation id="1067048845568873861">निर्मित</translation>
 <translation id="1067922213147265141">Google की दूसरी सेवाएंं</translation>
-<translation id="1069355737714877171"><ph name="PROFILE_NAME" /> नाम के ई-सिम प्रोफ़ाइल को हटाएं</translation>
+<translation id="1069355737714877171"><ph name="PROFILE_NAME" /> नाम की ई-सिम प्रोफ़ाइल को हटाएं</translation>
 <translation id="1070377999570795893">आपके कंप्‍यूटर पर किसी अन्‍य प्रोग्राम ने ऐसा एक्‍सटेंशन जोड़ा है जो Chrome के काम करने के तरीके को बदल सकता है.
 
 <ph name="EXTENSION_NAME" /></translation>
@@ -359,7 +360,6 @@
 <translation id="138784436342154190">डिफ़ॉल्ट स्टार्टअप पेज को बहाल करना चाहते हैं?</translation>
 <translation id="1388253969141979417">आपका माइक्रोफ़ोन इस्तेमाल करने की अनुमति है</translation>
 <translation id="1388728792929436380">अपडेट पूरा होने पर <ph name="DEVICE_TYPE" /> रीस्टार्ट होगा.</translation>
-<translation id="138900021244932468">कोई भी प्रोफ़ाइल नहीं मिली. नया नेटवर्क सेट अप करने के लिए, अपने डिवाइस के कैमरे से क्यूआर कोड को स्कैन करें या मोबाइल नेटवर्क सेवा देने वाली कंपनी से मिला ऐक्टिवेशन कोड डालें.</translation>
 <translation id="139013308650923562">साइटों को आपके डिवाइस पर इंस्टॉल किए गए फ़ॉन्ट इस्तेमाल करने की अनुमति है</translation>
 <translation id="1390548061267426325">नियमित टैब के रूप में खोलें</translation>
 <translation id="1393283411312835250">सूरज और बादल</translation>
@@ -962,6 +962,7 @@
 <translation id="1992924914582925289">डिवाइस से हटाएं</translation>
 <translation id="1994173015038366702">साइट URL</translation>
 <translation id="1995916364271252349">इस सेटिंग की मदद से, आप यह तय कर सकते हैं कि साइटें आपकी किस जानकारी का इस्तेमाल कर सकती हैं और कौनसी जानकारी दिखा सकती हैं. जैसे, जगह की जानकारी, कैमरा, पॉप-अप, और दूसरी जानकारी</translation>
+<translation id="1997437640397887843">डिवाइस का कैमरा चालू है. अपने ई-सिम क्यूआर कोड को कैमरे के सामने लाएं.</translation>
 <translation id="1997616988432401742">आपके प्रमाणपत्र</translation>
 <translation id="1999115740519098545">शुरुआत करने पर</translation>
 <translation id="2000419248597011803">'पता बार' और 'खोज बॉक्स' की कुछ कुकी और खोजों को आपके डिफ़ॉल्ट खोज इंजन पर भेजा जाता है</translation>
@@ -999,7 +1000,7 @@
 
 आप अपने डिवाइस पर Family Link ऐप्लिकेशन इंस्टॉल करके इस खाते की सेटिंग प्रबंधित कर सकते हैं.  हमने आपको ईमेल से निर्देश भेज दिए हैं.</translation>
 <translation id="2040460856718599782">ओह!  आपको प्रमाणित करने की कोशिश करते समय कुछ गड़बड़ी हो गई. कृपया अपने साइन इन क्रेडेंशियल दोबारा जाँचें और फिर से कोशिश करें.</translation>
-<translation id="2042279886444479655">चालू प्रोफ़ाइलें</translation>
+<translation id="2042279886444479655">ऐक्टिव प्रोफ़ाइलें</translation>
 <translation id="2044014337866019681">पक्का करें कि आप सत्र को अनलॉक करने के लिए, <ph name="ACCOUNT" /> की पुष्टि कर रहे हैं.</translation>
 <translation id="2044023416777079300">मॉडम रजिस्टर नहीं किया गया है</translation>
 <translation id="204497730941176055">माइक्रोसॉफ्ट प्रमाणपत्र टेम्पलेट नाम</translation>
@@ -1017,6 +1018,7 @@
 <translation id="2055585478631012616">आपको इन साइटों और खुले हुए टैब से साइन आउट कर दिया जाएगा</translation>
 <translation id="205560151218727633">Google Assistant लोगो</translation>
 <translation id="2058456167109518507">डिवाइस की पहचान हुई</translation>
+<translation id="2058581283817163201">इस फ़ोन की मदद से पुष्टि करें</translation>
 <translation id="2059913712424898428">समय क्षेत्र</translation>
 <translation id="2060375639911876205">eSIM प्रोफ़ाइल हटाएं</translation>
 <translation id="2062354623176996748">गुप्त विंडो की मदद से, अपना ब्राउज़िंग इतिहास सेव किए बिना वेब को इस्तेमाल करें</translation>
@@ -2616,6 +2618,7 @@
 <translation id="3785308913036335955">ऐप्स  शॉर्टकट दिखाएं</translation>
 <translation id="3785727820640310185">इस साइट के लिए सेव किए गए पासवर्ड</translation>
 <translation id="3788301286821743879">कीऑस्क ऐप्लिकेशन को लॉन्च नहीं किया जा सका.</translation>
+<translation id="3788331399335602504">ये फ़ाइलें</translation>
 <translation id="3788401245189148511">यह निम्न कर सकता है:</translation>
 <translation id="3789841737615482174">इंस्‍टॉल करें</translation>
 <translation id="379082410132524484">आपके कार्ड की समय-सीमा खत्म हो गई है</translation>
@@ -3190,6 +3193,7 @@
 <translation id="4438043733494739848">पारदर्शी</translation>
 <translation id="4438639467177774583"><ph name="USERNAME" /> <ph name="MASKED_PASSWORD" /> को आपके Google खाते <ph name="ACCOUNT" /> में सेव किया जाएगा</translation>
 <translation id="4439427728133035643"><ph name="NETWORK_COUNT" /> में से <ph name="NETWORK_INDEX" /> नेटवर्क, <ph name="NETWORK_NAME" />, सिग्नल क्षमता <ph name="SIGNAL_STRENGTH" />%, कनेक्ट करें</translation>
+<translation id="4440097423000553826"><ph name="WEBSITE" /> ने आपके फ़ोन पर कोई सूचना भेजी है. आप ही साइन इन कर रहे हैं, इस बात की पुष्टि करने के लिए, “<ph name="NOTIFICATIONTITLE" />” पर टैप करें और यह तरीका अपनाएं.</translation>
 <translation id="4441124369922430666">क्या आप चाहते हैं कि मशीन चालू होने पर यह ऐप्लिकेशन अपने आप शुरू हो जाए?</translation>
 <translation id="4441147046941420429">जारी रखने के लिए, अपनी सुरक्षा कुंजी को अपने डिवाइस से हटाएं. इसके बाद, उसे दाेबारा डालें और छुएं.</translation>
 <translation id="444134486829715816">पूरा खोलें...</translation>
@@ -3492,6 +3496,7 @@
 <translation id="4773112038801431077">Linux को अपग्रेड करें</translation>
 <translation id="477647109558161443">एक डेस्कटॉप शॉर्टकट बनाएं</translation>
 <translation id="4776917500594043016"><ph name="USER_EMAIL_ADDRESS" /> के लिए पासवर्ड</translation>
+<translation id="4777458362738635055">इस डिवाइस के अन्य उपयोगकर्ता यह नेटवर्क इस्तेमाल कर सकते हैं</translation>
 <translation id="4777825441726637019">Play स्टोर</translation>
 <translation id="4777943778632837590">नेटवर्क के नाम सर्वर कॉन्फ़िगर करें</translation>
 <translation id="4778644898150334464">कोई और पासवर्ड इस्तेमाल करें</translation>
@@ -4327,6 +4332,7 @@
 <translation id="5712153969432126546">कभी-कभी साइटें, पीडीएफ़ प्रकाशित करती हैं. जैसे, दस्तावेज़, कॉन्ट्रैक्ट, और फ़ॉर्म</translation>
 <translation id="5715711091495208045">प्‍लग इन ब्रोकर: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">डिफ़ॉल्ट सर्च इंजन</translation>
+<translation id="5719637365829998022">क्यूआर कोड स्कैन किया गया.</translation>
 <translation id="5719854774000914513">साइटें, एचआईडी डिवाइसों से कनेक्ट करने की अनुमति मांग सकती हैं</translation>
 <translation id="572155275267014074">Android सेटिंग</translation>
 <translation id="5722086096420375088">हरा और सफ़ेद</translation>
@@ -4538,6 +4544,7 @@
 <translation id="5955721306465922729">एक वेबसाइट इस ऐप्लिकेशन को खोलना चाहती है.</translation>
 <translation id="5955809630138889698">शायद इस डिवाइस पर सिर्फ़ ऑनलाइन डेमो मोड ही चलाया जा सकता है. कृपया ज़्यादा जानकारी के लिए अपने सहायता प्रतिनिधि से संपर्क करें.</translation>
 <translation id="5956585768868398362">क्या यह वही सर्च पेज है जिसे आप देखना चाह रहे थे?</translation>
+<translation id="5957918771633727933">कोई भी ई-सिम प्रोफ़ाइल उपलब्ध नहीं है. नई <ph name="BEGIN_LINK" />प्रोफ़ाइल<ph name="END_LINK" /> डाउनलोड करें.</translation>
 <translation id="5957987129450536192">अपनी प्रोफ़ाइल इमेज के पास वाले 'चुनें और सुनें' आइकॉन पर टैप करें, फिर आप जो सुनना चाहते हैं उसे चुनें.</translation>
 <translation id="5959471481388474538">नेटवर्क उपलब्ध नहीं</translation>
 <translation id="595959584676692139">इस एक्सटेंशन का इस्तेमाल करने के लिए पेज को फिर से लोड करें</translation>
@@ -5928,6 +5935,7 @@
 <translation id="7506541170099744506">आपका <ph name="DEVICE_TYPE" /> एंटरप्राइज़ प्रबंधन के लिए सफलतापूर्वक नामांकित हो गया है.</translation>
 <translation id="7507207699631365376">इस सेवा देने वाले की <ph name="BEGIN_LINK" />निजता नीति<ph name="END_LINK" /> देखें</translation>
 <translation id="7507930499305566459">स्थिति प्रतिसादी प्रमाणपत्र</translation>
+<translation id="7509246181739783082">अपनी पहचान की पुष्टि करें</translation>
 <translation id="7513029293694390567">स्टोर किए गए क्रेडेंशियल के ज़रिए वेबसाइट में अपने आप साइन इन करें. बंद होने पर, आपसे किसी वेबसाइट में साइन इन करने से पहले हर बार पुष्टि करने के लिए कहा जाएगा.</translation>
 <translation id="7514239104543605883">अपने डिवाइस में कॉपी करें</translation>
 <translation id="7514365320538308">डाउनलोड करें</translation>
@@ -6042,6 +6050,7 @@
 <translation id="7638605456503525968">सीरियल पोर्ट</translation>
 <translation id="7639914187072011620">एसएएमएल के दूसरे वेबलिंक को सर्वर से फ़ेच नहीं किया जा सका</translation>
 <translation id="764017888128728"><ph name="PASSWORD_MANAGER_BRAND" />   सहेजे गए पासवर्ड से आपको योग्य साइट में अपने आप प्रवेश करा देता है.</translation>
+<translation id="7641513591566880111">नई प्रोफ़ाइल का नाम</translation>
 <translation id="7642778300616172920">संवेदनशील सामग्री छिपाएं</translation>
 <translation id="7643842463591647490">{0,plural, =1{# खुली विंडो}one{# खुली विंडो}other{# खुली विंडो}}</translation>
 <translation id="7643932971554933646">साइट को फ़ाइलें देखने की अनुमति देना चाहते हैं?</translation>
@@ -6201,6 +6210,7 @@
 <translation id="7800518121066352902">घड़ी की &amp;विपरीत दिशा में घुमाएं</translation>
 <translation id="780301667611848630">नहीं, रहने दें</translation>
 <translation id="7804072833593604762">टैब बंद है</translation>
+<translation id="7805759469263222011">अपने डिवाइस का कैमरा इस्तेमाल करके क्यूआर कोड स्कैन करें या मोबाइल और इंटरनेट सेवा देने वाली कंपनी से मिला ऐक्टिवेशन कोड डालें</translation>
 <translation id="7805768142964895445">स्थिति</translation>
 <translation id="7807067443225230855">सर्च और Assistant</translation>
 <translation id="7807711621188256451"><ph name="HOST" /> को हमेशा अपने कैमरे को एक्सेस करने की अनुमति दें</translation>
@@ -6459,7 +6469,6 @@
 <translation id="8061091456562007989">पहले जैसा कर दें</translation>
 <translation id="8061991877177392872">ऐसा लगता है कि आपने पहले ही किसी दूसरे डिवाइस पर, Assistant के साथ वॉइस मैच की सुविधा को सेट अप कर लिया है. इस डिवाइस पर आवाज़ का नमूना बनाने के लिए, इन पुरानी रिकॉर्डिंग का इस्तेमाल किया गया है.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{काग़ज़ की 1 शीट}one{काग़ज़ की {COUNT} शीट}other{काग़ज़ की {COUNT} शीट}}</translation>
-<translation id="8062879968880283306">अपने डिवाइस के कैमरे से क्यूआर कोड को स्कैन करें या मोबाइल और इंटरनेट सेवा देने वाली कंपनी से मिला ऐक्टिवेशन कोड डालें.</translation>
 <translation id="8063235345342641131">डिफ़ॉल्ट हरा अवतार</translation>
 <translation id="8063535366119089408">फ़ाइल देखें</translation>
 <translation id="8064279191081105977"><ph name="GROUP_NAME" /> ग्रुप - <ph name="GROUP_CONTENTS" /> - <ph name="COLLAPSED_STATE" /></translation>
@@ -6681,6 +6690,7 @@
 <translation id="8300849813060516376">OTASP विफल</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{पता}one{# पता}other{# पते}}</translation>
 <translation id="8304383784961451596">आपको इस डिवाइस का इस्तेमाल करने की अनुमति नहीं है. साइन-इन की अनुमति के लिए, ए़डमिन से संपर्क करें या किसी ऐसे Google खाते से साइन इन करें जिसे Family Link की मदद से प्रबंधित किया जाता है.</translation>
+<translation id="8308016398665340540">आप इस डिवाइस के अन्य उपयोगकर्ताओं के साथ यह नेटवर्क शेयर कर रहे हैं</translation>
 <translation id="8308179586020895837">अगर <ph name="HOST" /> आपका कैमरा और माइक्रोफ़ोन एक्सेस करना चाहे, तो इसके लिए पूछें</translation>
 <translation id="830868413617744215">बीटा</translation>
 <translation id="8309458809024885768">प्रमाणपत्र पहले से मौजूद है</translation>
@@ -6880,7 +6890,6 @@
 <translation id="8551588720239073785">तारीख और समय की सेटिंग</translation>
 <translation id="8553342806078037065">अन्य लोगों को प्रबंधित करें</translation>
 <translation id="8554899698005018844">कोई भाषा नहीं</translation>
-<translation id="8555195867496021627">कोई भी ई-सिम प्रोफ़ाइल उपलब्ध नहीं है. नई प्रोफ़ाइल <ph name="BEGIN_LINK" />यहां<ph name="END_LINK" /> से डाउनलोड करें.</translation>
 <translation id="8557022314818157177">अपनी सुरक्षा कुंजी को तब तक छूते रहें, जब तक फ़िंगरप्रिंट कैप्चर न हाे जाए</translation>
 <translation id="8557930019681227453">मेनिफ़ेस्ट</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{सभी यूआरएल को &amp;नई विंडो में खोलें}=1{यूआरएल को &amp;नई विंडो में खोलें}one{दिया गया ({COUNT}) यूआरएल &amp;नई विंडो में खोलें}other{सभी ({COUNT}) यूआरएल को &amp;नई विंडो में खोलें}}</translation>
@@ -7060,7 +7069,6 @@
 <translation id="8743164338060742337"><ph name="NETWORK_COUNT" /> में से नेटवर्क <ph name="NETWORK_INDEX" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, सिग्नल की क्षमता <ph name="SIGNAL_STRENGTH" />%, आपका एडमिन प्रबंधित करता है, कनेक्ट करें</translation>
 <translation id="8746654918629346731">आपने "<ph name="EXTENSION_NAME" />" का अनुरोध किया हुआ है</translation>
 <translation id="874689135111202667">{0,plural, =1{इस साइट पर एक फ़ाइल अपलोड करें?}one{इस साइट पर # फ़ाइलें अपलोड करें?}other{इस साइट पर # फ़ाइलें अपलोड करें?}}</translation>
-<translation id="8749556627204742888">आप इस डिवाइस के दूसरे उपयोगकर्ताओं के साथ यह नेटवर्क शेयर कर रहे हैं.</translation>
 <translation id="8749805710397399240">आपकी स्क्रीन को कास्ट नहीं किया जा सकता. सिस्टम की प्राथमिकताओं में स्क्रीन रिकॉर्ड करने की अनुमति की जांच करें.</translation>
 <translation id="8749863574775030885">ऐसा वेंडर जिसकी जानकारी नहीं है, उसके USB डिवाइस को ऐक्‍सेस करें</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> सीरियल पोर्ट से कनेक्ट करना चाहता है</translation>
@@ -7123,7 +7131,6 @@
 <translation id="8808744862003883508">इस पेज पर, Chrome में इंस्टॉल किए गए सभी एक्सटेंशन दिखेंगे.</translation>
 <translation id="8809147117840417135">हल्का नीला-हरा</translation>
 <translation id="8811862054141704416">Crostini में माइक्रोफ़ोन का ऐक्सेस</translation>
-<translation id="8812552797690463522">यह नेटवर्क आपके साथ शेयर किया गया है.</translation>
 <translation id="8812593354822910461">ब्राउज़िंग डेटा (<ph name="URL" />) भी मिटाएं, इससे आप <ph name="DOMAIN" /> से साइन आउट हो जाएंगे. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">मुझे बाद में याद दिलाएं</translation>
 <translation id="8813698869395535039"><ph name="USERNAME" /> में साइन इन नहीं किया जा सकता</translation>
@@ -7168,7 +7175,7 @@
 <translation id="8847523528195140327">कवर बंद होने पर साइन आउट करें</translation>
 <translation id="8847988622838149491">यूएसबी</translation>
 <translation id="8849001918648564819">छिपा हुआ</translation>
-<translation id="8849219423513870962"><ph name="PROFILE_NAME" /> नाम के ई-सिम प्रोफ़ाइल को हटाने की प्रक्रिया रद्द करें</translation>
+<translation id="8849219423513870962"><ph name="PROFILE_NAME" /> नाम की ई-सिम प्रोफ़ाइल को हटाने की प्रक्रिया रद्द करें</translation>
 <translation id="8850251000316748990">ज़्यादा देखें...</translation>
 <translation id="885246833287407341">एपीआई फ़ंक्शन के तर्क</translation>
 <translation id="8853586775156634952">इस कार्ड को सिर्फ़ इस डिवाइस पर सेव किया जाएगा</translation>
@@ -7335,7 +7342,6 @@
 <translation id="9021662811137657072">वायरस का पता चला</translation>
 <translation id="902236149563113779">आम तौर पर, साइटें आपके कैमरे की स्थिति को ट्रैक करती हैं. गेम या चेतावनी वाले दिशा-निर्देशों जैसी एआर (ऑगमेंटेड रिएलिटी) सुविधाओं के लिए ऐसा किया जाता है</translation>
 <translation id="9022847679183471841">यह खाता इस कंप्यूटर पर <ph name="AVATAR_NAME" /> के नाम से पहले से उपयोग किया जा रहा है.</translation>
-<translation id="9023009238991294202">इस डिवाइस के दूसरे उपयोगकर्ता इस नेटवर्क का उपयोग कर सकते हैं.</translation>
 <translation id="9023015617655685412">इस टैब को बुकमार्क करें...</translation>
 <translation id="9023909777842748145">इस सुविधा को बंद करने के बाद भी आपका डिवाइस, सिस्टम अपडेट और सुरक्षा जैसी ज़रूरी सेवाएं पाने के लिए जानकारी भेज सकेगा.</translation>
 <translation id="9024127637873500333">नए टैब में &amp;खोलें</translation>

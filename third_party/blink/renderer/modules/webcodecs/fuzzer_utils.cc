@@ -10,10 +10,11 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_audio_data_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_decoder_config.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_audio_frame_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_encoded_audio_chunk_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_encoded_video_chunk_init.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_union_cssimagevalue_htmlcanvaselement_htmlimageelement_htmlvideoelement_imagebitmap_offscreencanvas_svgimageelement_videoframe.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_decoder_config.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_decoder_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_encoder_config.h"
@@ -188,15 +189,19 @@ VideoFrame* MakeVideoFrame(ScriptState* script_state,
   video_frame_init->setTimestamp(proto.timestamp());
   video_frame_init->setDuration(proto.duration());
 
+#if defined(USE_BLINK_V8_BINDING_NEW_IDL_UNION)
+  auto* source = MakeGarbageCollected<V8CanvasImageSource>(image_bitmap);
+#else   // defined(USE_BLINK_V8_BINDING_NEW_IDL_UNION)
   CanvasImageSourceUnion source;
   source.SetImageBitmap(image_bitmap);
+#endif  // defined(USE_BLINK_V8_BINDING_NEW_IDL_UNION)
 
   return VideoFrame::Create(script_state, source, video_frame_init,
                             IGNORE_EXCEPTION_FOR_TESTING);
 }
 
-AudioFrame* MakeAudioFrame(ScriptState* script_state,
-                           const wc_fuzzer::AudioFrameInit& proto) {
+AudioData* MakeAudioData(ScriptState* script_state,
+                         const wc_fuzzer::AudioDataInit& proto) {
   if (proto.channels().size() > media::limits::kMaxChannels)
     return nullptr;
 
@@ -215,11 +220,11 @@ AudioFrame* MakeAudioFrame(ScriptState* script_state,
     memcpy(bus->Channel(i)->MutableData(), data, size);
   }
 
-  auto* init = AudioFrameInit::Create();
+  auto* init = AudioDataInit::Create();
   init->setTimestamp(proto.timestamp());
   init->setBuffer(AudioBuffer::CreateFromAudioBus(bus.get()));
 
-  return AudioFrame::Create(init, IGNORE_EXCEPTION_FOR_TESTING);
+  return AudioData::Create(init, IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 }  // namespace blink

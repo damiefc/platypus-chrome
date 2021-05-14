@@ -10,9 +10,9 @@
 #include "base/files/file.h"
 #include "base/macros.h"
 #include "chrome/browser/ash/file_system_provider/operations/operation.h"
-#include "chrome/browser/chromeos/file_system_provider/provided_file_system_info.h"
-#include "chrome/browser/chromeos/file_system_provider/provided_file_system_interface.h"
-#include "chrome/browser/chromeos/file_system_provider/request_value.h"
+#include "chrome/browser/ash/file_system_provider/provided_file_system_info.h"
+#include "chrome/browser/ash/file_system_provider/provided_file_system_interface.h"
+#include "chrome/browser/ash/file_system_provider/request_value.h"
 #include "storage/browser/file_system/async_file_util.h"
 
 namespace base {
@@ -23,7 +23,7 @@ namespace extensions {
 class EventRouter;
 }  // namespace extensions
 
-namespace chromeos {
+namespace ash {
 namespace file_system_provider {
 namespace operations {
 
@@ -55,6 +55,6 @@ class CreateFile : public Operation {
 
 }  // namespace operations
 }  // namespace file_system_provider
-}  // namespace chromeos
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_ASH_FILE_SYSTEM_PROVIDER_OPERATIONS_CREATE_FILE_H_

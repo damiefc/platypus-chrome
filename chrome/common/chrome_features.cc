@@ -46,11 +46,6 @@ const base::Feature kAllowDisableMouseAcceleration{
 const base::Feature kAlwaysReinstallSystemWebApps{
     "ReinstallSystemWebApps", base::FEATURE_DISABLED_BY_DEFAULT};
 
-#if defined(OS_ANDROID)
-const base::Feature kAndroidDarkSearch{"AndroidDarkSearch",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // defined(OS_ANDROID)
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // Controls whether web apps can be installed via APKs on Chrome OS.
 const base::Feature kApkWebAppInstalls{"ApkWebAppInstalls",
@@ -238,7 +233,7 @@ const base::Feature kPreinstalledWebAppInstallation{
 // Updates the default set of pinned apps in the Chrome OS shelf for new
 // profiles.
 const base::Feature kDefaultPinnedAppsUpdate2021Q2{
-    "DefaultPinnedAppsUpdate2021Q2", base::FEATURE_DISABLED_BY_DEFAULT};
+    "DefaultPinnedAppsUpdate2021Q2", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Enable using tab sharing infobars for desktop capture.
@@ -611,6 +606,12 @@ const base::Feature kKernelnextVMs{"KernelnextVMs",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
+#if defined(OS_ANDROID)
+COMPONENT_EXPORT(CHROME_FEATURES)
+const base::Feature kLinkDoctorDeprecationAndroid{
+    "LinkDoctorDeprecationAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_ANDROID)
+
 // Enables LiteVideos, a data-saving optimization that throttles media requests
 // to reduce the bitrate of adaptive media streams. Only for Lite mode users
 // (formerly DataSaver).
@@ -761,8 +762,14 @@ const base::Feature kPredictivePrefetchingAllowedOnAllConnectionTypes{
     "PredictivePrefetchingAllowedOnAllConnectionTypes",
     base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kPrefixWebAppWindowsWithAppName{
-    "PrefixWebAppWindowsWithAppName", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kPrefixWebAppWindowsWithAppName {
+  "PrefixWebAppWindowsWithAppName",
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 // Allows Chrome to do preconnect when prerender fails.
 const base::Feature kPrerenderFallbackToPreconnect{

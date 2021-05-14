@@ -3234,13 +3234,15 @@ Unknown properties are collapsed to zero. -->
   <int value="34" label="LaCrOS"/>
   <int value="35" label="Remote App"/>
   <int value="36" label="Borealis App"/>
-  <int value="37" label="Help App"/>
+  <int value="37" label="Help App (default or help)"/>
   <int value="38" label="Omnibox, Search Suggest Entity"/>
   <int value="39" label="Omnibox, Navsuggest"/>
   <int value="40" label="Omnibox Rich Entity, Answer"/>
   <int value="41" label="Omnibox Rich Entity, Image Entity"/>
   <int value="42" label="Local file search"/>
   <int value="43" label="Drive file search"/>
+  <int value="44" label="Help App (Updates page)"/>
+  <int value="45" label="Help App (Discover page)"/>
 </enum>
 
 <enum name="AppListSearchResultDisplayType">
@@ -9353,6 +9355,11 @@ Called by update_bad_message_reasons.py.-->
 <enum name="BooleanStartedCompleted">
   <int value="0" label="Started"/>
   <int value="1" label="Completed"/>
+</enum>
+
+<enum name="BooleanStored">
+  <int value="0" label="Not Stored"/>
+  <int value="1" label="Stored"/>
 </enum>
 
 <enum name="BooleanStreamed">
@@ -32472,6 +32479,7 @@ Called by update_use_counter_feature_enum.py.-->
   <int value="3907" label="V8Screens_Oncurrentscreenchange_AttributeGetter"/>
   <int value="3908" label="V8Screens_Oncurrentscreenchange_AttributeSetter"/>
   <int value="3909" label="RTCOfferAnswerOptionsVoiceActivityDetection"/>
+  <int value="3910" label="MultiColAndListItem"/>
 </enum>
 
 <enum name="FeaturePolicyAllowlistType">
@@ -32564,7 +32572,7 @@ Called by update_permissions_policy_enum.py.-->
   <int value="70" label="StorageAccessAPI"/>
   <int value="71" label="ClientHintUAFullVersion"/>
   <int value="72" label="TrustTokenRedemption"/>
-  <int value="73" label="ConversionMeasurement"/>
+  <int value="73" label="AttributionReporting"/>
   <int value="74" label="ClientHintUAPlatformVersion"/>
   <int value="75" label="CrossOriginIsolated"/>
   <int value="76" label="ClipboardRead"/>
@@ -32810,6 +32818,7 @@ Called by update_permissions_policy_enum.py.-->
   <int value="26" label="Opened native back-of-card pulldown menu. (iOS Only)"/>
   <int value="27" label="Closed native back-of-card pulldown menu. (iOS Only)"/>
   <int value="28" label="Tapped manage reactions"/>
+  <int value="29" label="Tapped on share for an article"/>
 </enum>
 
 <enum name="FeedUserCommandType">
@@ -43644,6 +43653,12 @@ Called by update_gpu_driver_bug_workaround_entries.py.-->
   <int value="12" label="BlockList"/>
 </enum>
 
+<enum name="LinkGenerationSharedStatus">
+  <int value="0" label="Generation succeeded, shared text"/>
+  <int value="1" label="Generation succeeded, shared link"/>
+  <int value="2" label="Generation failed (shared text)"/>
+</enum>
+
 <enum name="LinkMonitorFailureType">
   <int value="0" label="Local MAC Address Not Found"/>
   <int value="1" label="Client Startup Failure"/>
@@ -45847,6 +45862,7 @@ from previous Chrome versions.
   <int value="-950384924" label="OmniboxDisableInstantExtendedLimit:enabled"/>
   <int value="-949178861" label="enable-new-avatar-menu"/>
   <int value="-948930847" label="EnableOopPrintDrivers:enabled"/>
+  <int value="-948256052" label="EnableInputInDiagnosticsApp:enabled"/>
   <int value="-946366838" label="MetricsSettingsAndroid:enabled"/>
   <int value="-945806012" label="DownloadsUi:enabled"/>
   <int value="-943304570" label="PaintHolding:enabled"/>
@@ -46990,6 +47006,7 @@ from previous Chrome versions.
   <int value="75237697" label="ash-enable-new-overview-ui"/>
   <int value="75747474" label="disable-webview-signin-flow"/>
   <int value="77886794" label="AllowRepeatedUpdates:enabled"/>
+  <int value="77946316" label="PrefixWebAppWindowsWithAppName:disabled"/>
   <int value="78998551" label="disable-hosted-app-shim-creation"/>
   <int value="79094339" label="VrLaunchIntents:enabled"/>
   <int value="79503461" label="disable-account-consistency"/>
@@ -48115,6 +48132,7 @@ from previous Chrome versions.
   <int value="1079032226" label="ParallelDownloading:enabled"/>
   <int value="1081546525" label="ash-enable-docked-windows"/>
   <int value="1082054180" label="PersistentWindowBounds:disabled"/>
+  <int value="1082840061" label="LinkDoctorDeprecationAndroid:disabled"/>
   <int value="1083020187" label="FractionalScrollOffsets:enabled"/>
   <int value="1083201516" label="PersistentWindowBounds:enabled"/>
   <int value="1084365949" label="ReleaseNotesNotification:disabled"/>
@@ -48581,6 +48599,7 @@ from previous Chrome versions.
   <int value="1461581256" label="MovablePartialScreenshot:enabled"/>
   <int value="1463230871" label="ArcEnableUsap:enabled"/>
   <int value="1464028544" label="WinUseHybridSpellChecker:disabled"/>
+  <int value="1464053185" label="EnableInputInDiagnosticsApp:disabled"/>
   <int value="1464610065" label="TabbedAppOverflowMenuRegroup:disabled"/>
   <int value="1465624446" label="disable-zero-copy"/>
   <int value="1466380480" label="enable-device-discovery-notifications"/>
@@ -48883,6 +48902,7 @@ from previous Chrome versions.
   <int value="1736698988" label="FsNosymfollow:disabled"/>
   <int value="1738520473" label="SystemTrayMicGainSetting:disabled"/>
   <int value="1739456903" label="PWAFullCodeCache:enabled"/>
+  <int value="1739782037" label="LinkDoctorDeprecationAndroid:enabled"/>
   <int value="1741855651"
       label="OmniboxTabSwitchSuggestionsDedicatedRow:disabled"/>
   <int value="1742398600"
@@ -48929,6 +48949,7 @@ from previous Chrome versions.
   <int value="1786386775" label="TranslateCompactUI:disabled"/>
   <int value="1786692012"
       label="AssistantEnableMediaSessionIntegration:disabled"/>
+  <int value="1787572807" label="PrefixWebAppWindowsWithAppName:enabled"/>
   <int value="1789517771" label="MacV2Sandbox:enabled"/>
   <int value="1789793147" label="HTTPSServerPreviewsUsingURLLoader:disabled"/>
   <int value="1789795039"
@@ -51112,6 +51133,11 @@ Called by update_use_counter_css.py.-->
   <int value="3" label="Low and High confidence."/>
 </enum>
 
+<enum name="MBOSupport">
+  <int value="0" label="Unsupported"/>
+  <int value="1" label="Supported"/>
+</enum>
+
 <enum name="MdnsResponderServiceError">
   <int value="0" label="Fail to start manager"/>
   <int value="1" label="Fail to create responder"/>
@@ -51762,6 +51788,7 @@ Called by update_use_counter_css.py.-->
   <int value="16" label="Toggle microphone"/>
   <int value="17" label="Toggle camera"/>
   <int value="18" label="Hang up"/>
+  <int value="19" label="Raise"/>
 </enum>
 
 <enum name="MediaSinkType">
@@ -56756,6 +56783,18 @@ Called by update_net_trust_anchors.py.-->
   <int value="8" label="The visibility of shortcuts was changed."/>
 </enum>
 
+<enum name="NTPElement">
+  <int value="0" label="Other Element"/>
+  <int value="1" label="Background"/>
+  <int value="2" label="OneGoogleBar"/>
+  <int value="3" label="Logo / Doodle"/>
+  <int value="4" label="Realbox"/>
+  <int value="5" label="Most Visited Tiles"/>
+  <int value="6" label="Middle Slot Promo"/>
+  <int value="7" label="Module"/>
+  <int value="8" label="Customize Dialog / Button"/>
+</enum>
+
 <enum name="NtpFollowAction">
   <int value="0" label="PAGE_TRANSITION_LINK"/>
   <int value="1" label="PAGE_TRANSITION_TYPED"/>
@@ -58560,6 +58599,10 @@ Called by update_net_trust_anchors.py.-->
   <int value="10" label="Failed to verify download publisher">
     The download was a valid CRX file but came from a publisher that is
     untrusted.
+  </int>
+  <int value="11" label="Model directory does not exist">
+    The directory used to store models does not exist so the model could not be
+    stored for use.
   </int>
 </enum>
 

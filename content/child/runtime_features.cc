@@ -293,6 +293,7 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
      features::kSecurePaymentConfirmationDebug},
     {wf::EnableSendBeaconThrowForBlobWithNonSimpleType,
      features::kSendBeaconThrowForBlobWithNonSimpleType},
+    {wf::EnableSharedArrayBuffer, features::kSharedArrayBuffer},
     {wf::EnableSharedArrayBufferOnDesktop,
      features::kSharedArrayBufferOnDesktop},
     {wf::EnableSharedAutofill, autofill::features::kAutofillAcrossIframes},
@@ -348,8 +349,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            features::kAllowContentInitiatedDataUrlNavigations},
           {"AndroidDownloadableFontsMatching",
            features::kAndroidDownloadableFontsMatching},
-          {"AudioWorkletRealtimeThread",
-           blink::features::kAudioWorkletRealtimeThread},
           {"BlockCredentialedSubresources",
            features::kBlockCredentialedSubresources},
           {"COLRV1Fonts", blink::features::kCOLRV1Fonts},
@@ -543,10 +542,6 @@ void SetCustomizedRuntimeFeaturesFromCombinedArgs(
           blink::features::kDecodeLossyWebPImagesToYUV)) {
     WebRuntimeFeatures::EnableDecodeLossyWebPImagesToYUV(true);
   }
-
-  WebRuntimeFeatures::EnableSharedArrayBuffer(
-      base::FeatureList::IsEnabled(features::kSharedArrayBuffer) ||
-      base::FeatureList::IsEnabled(features::kWebAssemblyThreads));
 
   // These checks are custom wrappers around base::FeatureList::IsEnabled
   // They're moved here to distinguish them from actual base checks

@@ -225,6 +225,7 @@
 <translation id="5669267381087807207">Aktivləşir</translation>
 <translation id="5670702108860320605">BSSID</translation>
 <translation id="5691511426247308406">Ailə</translation>
+<translation id="5752751666635965375">Öz oyununuzu yaradın</translation>
 <translation id="5760715441271661976">Portal Vəziyyəti</translation>
 <translation id="5797428682393400134">UĞURLU OLDU</translation>
 <translation id="5832805196449965646">Şəxs əlavə edin</translation>
@@ -297,6 +298,7 @@
 <translation id="7216409898977639127">Mobil provayder</translation>
 <translation id="7271040990581020067">Skaner hazırda istifadə olunur. Sonra cəhd edin.</translation>
 <translation id="7274587244503383581"><ph name="PRINTED_PAGES_NUMBER" />/<ph name="TOTAL_PAGES_NUMBER" /></translation>
+<translation id="7302860742311162920">ICCID</translation>
 <translation id="7343649194310845056">Şəbəkə Cihazları</translation>
 <translation id="7359657277149375382">Fayl növü</translation>
 <translation id="7375053625150546623">EAP</translation>
@@ -345,6 +347,7 @@
 <translation id="8372477600026034341">Əlavə hostlar</translation>
 <translation id="8395584934117017006">Bu <ph name="DEVICE_TYPE" /> müəssisə tərəfindən idarə edilir</translation>
 <translation id="8398927464629426868">Cihazın hazırda şarj və ya deşarj olma sürəti</translation>
+<translation id="8422748173858722634">IMEI</translation>
 <translation id="8461329675984532579">Əsas səhifə provayder adı</translation>
 <translation id="8475690821716466388">WiFi şəbəkəsi zəif protokol WEP PSK ilə qorunur</translation>
 <translation id="8477551185774834963">DNS gecikməsi icazə verilən həddən azca yuxarıdır</translation>

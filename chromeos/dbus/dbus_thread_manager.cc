@@ -20,8 +20,6 @@
 #include "chromeos/dbus/arc/arc_obb_mounter_client.h"
 #include "chromeos/dbus/cec_service_client.h"
 #include "chromeos/dbus/chunneld_client.h"
-#include "chromeos/dbus/cicerone/cicerone_client.h"
-#include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
 #include "chromeos/dbus/cros_disks_client.h"
 #include "chromeos/dbus/dbus_client.h"
@@ -146,10 +144,6 @@ CecServiceClient* DBusThreadManager::GetCecServiceClient() {
 
 ChunneldClient* DBusThreadManager::GetChunneldClient() {
   return clients_browser_ ? clients_browser_->chunneld_client_.get() : nullptr;
-}
-
-CiceroneClient* DBusThreadManager::GetCiceroneClient() {
-  return clients_browser_ ? clients_browser_->cicerone_client_.get() : nullptr;
 }
 
 CrosDisksClient* DBusThreadManager::GetCrosDisksClient() {
@@ -346,12 +340,6 @@ DBusThreadManagerSetter::~DBusThreadManagerSetter() = default;
 void DBusThreadManagerSetter::SetChunneldClient(
     std::unique_ptr<ChunneldClient> client) {
   DBusThreadManager::Get()->clients_browser_->chunneld_client_ =
-      std::move(client);
-}
-
-void DBusThreadManagerSetter::SetCiceroneClient(
-    std::unique_ptr<CiceroneClient> client) {
-  DBusThreadManager::Get()->clients_browser_->cicerone_client_ =
       std::move(client);
 }
 

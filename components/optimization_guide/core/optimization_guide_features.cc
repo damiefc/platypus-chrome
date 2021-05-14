@@ -37,7 +37,7 @@ const base::Feature kRemoteOptimizationGuideFetching{
 
 const base::Feature kRemoteOptimizationGuideFetchingAnonymousDataConsent{
     "OptimizationHintsFetchingAnonymousDataConsent",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables performance info in the context menu and fetching from a remote
 // Optimization Guide Service.
@@ -385,6 +385,12 @@ bool ShouldWriteContentAnnotationsToHistoryService() {
 
 bool LoadModelFileForEachExecution() {
   return base::FeatureList::IsEnabled(kLoadModelFileForEachExecution);
+}
+
+base::TimeDelta GetOnloadDelayForHintsFetching() {
+  return base::TimeDelta::FromMilliseconds(GetFieldTrialParamByFeatureAsInt(
+      kRemoteOptimizationGuideFetching, "onload_delay_for_hints_fetching_ms",
+      0));
 }
 
 }  // namespace features

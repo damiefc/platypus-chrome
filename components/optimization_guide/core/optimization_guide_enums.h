@@ -150,9 +150,11 @@ enum class PredictionModelDownloadStatus {
   kFailedModelInfoInvalid = 9,
   // The CRX file was a valid CRX file but did not come from a valid publisher.
   kFailedCrxInvalidPublisher = 10,
+  // The model directory for storing model files does not exist.
+  kModelDirectoryDoesNotExist = 11,
 
   // Add new values above this line.
-  kMaxValue = kFailedCrxInvalidPublisher,
+  kMaxValue = kModelDirectoryDoesNotExist,
 };
 
 // The state of the model file needed for execution.

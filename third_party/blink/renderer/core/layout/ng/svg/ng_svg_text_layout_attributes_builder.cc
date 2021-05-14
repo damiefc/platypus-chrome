@@ -200,7 +200,7 @@ NGSVGTextLayoutAttributesBuilder::NGSVGTextLayoutAttributesBuilder(
 // [1]: https://svgwg.org/svg2-draft/text.html#TextLayoutAlgorithm
 void NGSVGTextLayoutAttributesBuilder::Build(
     const String& ifc_text_content,
-    const HeapVector<NGInlineItem>& items) {
+    const Vector<NGInlineItem>& items) {
   LayoutAttributesStack attr_stack;
   unsigned addressable_index = 0;
   bool in_text_path = false;
@@ -254,7 +254,6 @@ void NGSVGTextLayoutAttributesBuilder::Build(
       // of result[index + j] to true. Else set the flag to false.
       if (first_char_in_text_path) {
         data.anchored_chunk = true;
-        first_char_in_text_path = false;
       } else {
         data.anchored_chunk = attr_stack.ShouldStartAnchoredChunk(horizontal);
       }
@@ -266,6 +265,13 @@ void NGSVGTextLayoutAttributesBuilder::Build(
       // false, unset resolve_x[index].
       if (in_text_path && !horizontal)
         data.x = SVGCharacterData::EmptyValue();
+      // Not in the specification; Set X/Y of the first character in a
+      // <textPath> to 0 in order to:
+      //   - Reset dx/dy in AdjustPositionsDxDy().
+      //   - Anchor at 0 in ApplyAnchoring().
+      // https://github.com/w3c/svgwg/issues/274
+      if (first_char_in_text_path && !data.HasX())
+        data.x = 0.0f;
 
       // 1.6.1.4. If i < length of y, then set resolve_y[index + j] to y[i].
       data.y = attr_stack.Y();
@@ -274,6 +280,15 @@ void NGSVGTextLayoutAttributesBuilder::Build(
       // true, unset resolve_y[index].
       if (in_text_path && horizontal)
         data.y = SVGCharacterData::EmptyValue();
+      // Not in the specification; Set X/Y of the first character in a
+      // <textPath> to 0 in order to:
+      //   - Reset dx/dy in AdjustPositionsDxDy().
+      //   - Anchor at 0 in ApplyAnchoring().
+      // https://github.com/w3c/svgwg/issues/274
+      if (first_char_in_text_path && !data.HasY())
+        data.y = 0.0f;
+
+      first_char_in_text_path = false;
 
       // 1.6.1.6. If i < length of dx, then set resolve_dx[index + j] to dx[i].
       data.dx = attr_stack.Dx();
@@ -304,8 +319,7 @@ NGSVGTextLayoutAttributesBuilder::CharacterDataList() {
   return std::move(resolved_);
 }
 
-HeapVector<SVGTextPathRange>
-NGSVGTextLayoutAttributesBuilder::TextPathRangeList() {
+Vector<SVGTextPathRange> NGSVGTextLayoutAttributesBuilder::TextPathRangeList() {
   return std::move(text_path_range_list_);
 }
 

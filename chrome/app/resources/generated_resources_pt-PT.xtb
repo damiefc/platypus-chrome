@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-PT">
+<translation id="1001033507375626788">Esta rede é partilhada consigo</translation>
 <translation id="1001307489511021749">As suas apps, definições e outras personalizações serão sincronizadas em todos os dispositivos Chrome OS com sessão iniciada na sua Conta Google.</translation>
 <translation id="1003088604756913841">Abrir link numa nova janela da aplicação <ph name="APP" /></translation>
 <translation id="100323615638474026">Dispositivo USB (<ph name="VENDOR_ID" />:<ph name="PRODUCT_ID" />)</translation>
@@ -356,7 +357,6 @@
 <translation id="138784436342154190">Pretende restaurar a página inicial predefinida?</translation>
 <translation id="1388253969141979417">Com autorização para utilizar o seu microfone</translation>
 <translation id="1388728792929436380">O <ph name="DEVICE_TYPE" /> irá reiniciar quando as atualizações estiverem concluídas.</translation>
-<translation id="138900021244932468">Não foi encontrado qualquer perfil. Para configurar uma nova rede, leia o código QR com a câmara do dispositivo ou introduza o código de ativação fornecido pelo seu operador.</translation>
 <translation id="139013308650923562">Com autorização para utilizar tipos de letra instalados no dispositivo</translation>
 <translation id="1390548061267426325">Abrir como Separador Normal</translation>
 <translation id="1393283411312835250">Sol e nuvens</translation>
@@ -949,6 +949,7 @@
 <translation id="1992924914582925289">Remover do dispositivo</translation>
 <translation id="1994173015038366702">URL do site</translation>
 <translation id="1995916364271252349">Controla as informações que os sites podem utilizar e apresentar (localização, câmara, pop-ups e muito mais).</translation>
+<translation id="1997437640397887843">A câmara do dispositivo foi ativada. Coloque o código QR do seu eSIM à frente da câmara.</translation>
 <translation id="1997616988432401742">Os seus certificados</translation>
 <translation id="1999115740519098545">No arranque</translation>
 <translation id="2000419248597011803">Envia alguns cookies e pesquisas da barra de endereço e da caixa de pesquisa para o motor de pesquisa predefinido.</translation>
@@ -1004,6 +1005,7 @@ Pode gerir as definições desta conta ao instalar a aplicação Family Link no 
 <translation id="2055585478631012616">A sua sessão nestes sites será terminada, incluindo em separadores abertos.</translation>
 <translation id="205560151218727633">Logótipo do Assistente Google</translation>
 <translation id="2058456167109518507">Dispositivo detetado</translation>
+<translation id="2058581283817163201">Valide com este telemóvel</translation>
 <translation id="2059913712424898428">Fuso horário</translation>
 <translation id="2060375639911876205">Remover perfil do eSIM</translation>
 <translation id="2062354623176996748">Navegue na Web sem guardar o seu histórico de navegação com uma janela de navegação anónima</translation>
@@ -2601,6 +2603,7 @@ Pretende pará-lo?</translation>
 <translation id="3785308913036335955">Mostrar Atalho das Apps</translation>
 <translation id="3785727820640310185">Palavras-passe guardadas para este site</translation>
 <translation id="3788301286821743879">Não foi possível iniciar a app de quiosque.</translation>
+<translation id="3788331399335602504">estes ficheiros</translation>
 <translation id="3788401245189148511">Esta poderia:</translation>
 <translation id="3789841737615482174">Instalar</translation>
 <translation id="379082410132524484">O seu cartão de crédito expirou</translation>
@@ -3176,6 +3179,7 @@ Pretende pará-lo?</translation>
 <translation id="4438043733494739848">Transparente</translation>
 <translation id="4438639467177774583">A palavra-passe <ph name="MASKED_PASSWORD" /> de <ph name="USERNAME" /> irá ser guardada na sua Conta Google <ph name="ACCOUNT" />.</translation>
 <translation id="4439427728133035643">Rede <ph name="NETWORK_INDEX" /> de <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, intensidade do sinal: <ph name="SIGNAL_STRENGTH" />%, ligar</translation>
+<translation id="4440097423000553826"><ph name="WEBSITE" /> enviou uma notificação para o seu telemóvel. Para confirmar a sua identidade, toque na notificação "<ph name="NOTIFICATIONTITLE" />" e siga os passos.</translation>
 <translation id="4441124369922430666">Pretende iniciar automaticamente esta aplicação quando o computador é ligado?</translation>
 <translation id="4441147046941420429">Para continuar, remova a sua chave de segurança do dispositivo e, em seguida, reinsira-a e toque na mesma.</translation>
 <translation id="444134486829715816">Expandir...</translation>
@@ -3477,6 +3481,7 @@ Pretende pará-lo?</translation>
 <translation id="4773112038801431077">Atualize o Linux</translation>
 <translation id="477647109558161443">Criar um atalho no ambiente de trabalho</translation>
 <translation id="4776917500594043016">Palavra-passe para <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="4777458362738635055">Outros utilizadores deste dispositivo podem utilizar esta rede</translation>
 <translation id="4777825441726637019">Play Store</translation>
 <translation id="4777943778632837590">Configurar servidores de nomes da rede</translation>
 <translation id="4778644898150334464">Utilize outra palavra-passe</translation>
@@ -4313,6 +4318,7 @@ Certifique-se de que não revela informações confidenciais.</translation>
 <translation id="5712153969432126546">Por vezes, os sites publicam PDFs, como documentos, contratos e formulários</translation>
 <translation id="5715711091495208045">Mediador de plug-ins: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">Motores de pesquisa predefinidos</translation>
+<translation id="5719637365829998022">O código QR foi digitalizado.</translation>
 <translation id="5719854774000914513">Os sites podem solicitar a ligação a dispositivos HID</translation>
 <translation id="572155275267014074">Definições do Android</translation>
 <translation id="5722086096420375088">Verde e branco</translation>
@@ -4524,6 +4530,7 @@ Certifique-se de que não revela informações confidenciais.</translation>
 <translation id="5955721306465922729">Um Website pretende abrir esta aplicação.</translation>
 <translation id="5955809630138889698">Este dispositivo pode ser apenas elegível para o modo de demonstração online. Contacte o representante do apoio técnico para obter mais detalhes.</translation>
 <translation id="5956585768868398362">É esta a página de pesquisa de que estava à espera?</translation>
+<translation id="5957918771633727933">Não existem perfis eSIM disponíveis. Transfira um novo <ph name="BEGIN_LINK" />perfil<ph name="END_LINK" />.</translation>
 <translation id="5957987129450536192">Toque no ícone Selecionar para falar junto à sua imagem do perfil e, em seguida, selecione o que pretende ouvir.</translation>
 <translation id="5959471481388474538">Rede não disponível</translation>
 <translation id="595959584676692139">Atualizar a página para utilizar esta extensão</translation>
@@ -5914,6 +5921,7 @@ Certifique-se de que não revela informações confidenciais.</translation>
 <translation id="7506541170099744506">O seu <ph name="DEVICE_TYPE" /> foi inscrito com êxito para gestão empresarial.</translation>
 <translation id="7507207699631365376">Veja a <ph name="BEGIN_LINK" />política de privacidade<ph name="END_LINK" /> deste fornecedor.</translation>
 <translation id="7507930499305566459">Certificado do dispositivo de resposta do estado</translation>
+<translation id="7509246181739783082">Valide a sua identidade</translation>
 <translation id="7513029293694390567">Inicie sessão automaticamente nos Sites com as credenciais armazenadas. Se esta funcionalidade estiver desativada, é-lhe pedida sempre uma confirmação antes de iniciar sessão num Website.</translation>
 <translation id="7514239104543605883">Copiar para o dispositivo</translation>
 <translation id="7514365320538308">Transferir</translation>
@@ -6028,6 +6036,7 @@ Certifique-se de que não revela informações confidenciais.</translation>
 <translation id="7638605456503525968">Portas de série</translation>
 <translation id="7639914187072011620">Falha ao obter o URL de redirecionamento SAML do servidor</translation>
 <translation id="764017888128728">O <ph name="PASSWORD_MANAGER_BRAND" /> inicia automaticamente sessão em sites elegíveis com as palavras-passe que guardou.</translation>
+<translation id="7641513591566880111">Novo nome de perfil</translation>
 <translation id="7642778300616172920">Ocultar conteúdo sensível</translation>
 <translation id="7643842463591647490">{0,plural, =1{# janela aberta}other{# janelas abertas}}</translation>
 <translation id="7643932971554933646">Permite que o site veja ficheiros?</translation>
@@ -6188,6 +6197,7 @@ Certifique-se de que não revela informações confidenciais.</translation>
 <translation id="7800518121066352902">Rodar para a &amp;Esquerda</translation>
 <translation id="780301667611848630">Não, obrigado</translation>
 <translation id="7804072833593604762">Separador fechado</translation>
+<translation id="7805759469263222011">Leia um código QR com a câmara do dispositivo ou introduza o código de ativação fornecido pelo seu operador</translation>
 <translation id="7805768142964895445">Estado</translation>
 <translation id="7807067443225230855">Pesquisa e Assistente</translation>
 <translation id="7807711621188256451">Permitir sempre que <ph name="HOST" /> aceda à sua câmara</translation>
@@ -6446,7 +6456,6 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8061091456562007989">Repor</translation>
 <translation id="8061991877177392872">Já configurou o Voice Match com o Assistente noutro dispositivo. Estas gravações anteriores foram utilizadas para criar um modelo de voz neste dispositivo.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{1 folha de papel}other{{COUNT} folhas de papel}}</translation>
-<translation id="8062879968880283306">Leia o código QR com a câmara do dispositivo ou introduza o código de ativação fornecido pelo seu operador.</translation>
 <translation id="8063235345342641131">Avatar verde predefinido</translation>
 <translation id="8063535366119089408">Ver ficheiro</translation>
 <translation id="8064279191081105977">Grupo <ph name="GROUP_NAME" /> – <ph name="GROUP_CONTENTS" /> – <ph name="COLLAPSED_STATE" /></translation>
@@ -6667,6 +6676,7 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8300849813060516376">O OTASP falhou</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{Endereço}other{# endereços}}</translation>
 <translation id="8304383784961451596">Não tem autorização para utilizar este dispositivo. Contacte o administrador para obter autorização de início de sessão ou inicie sessão com uma Conta Google supervisionada pelo Family Link.</translation>
+<translation id="8308016398665340540">Está a partilhar esta rede com outros utilizadores deste dispositivo</translation>
 <translation id="8308179586020895837">Perguntar se <ph name="HOST" /> pretende aceder à sua câmara</translation>
 <translation id="830868413617744215">Beta</translation>
 <translation id="8309458809024885768">O certificado já existe</translation>
@@ -6866,7 +6876,6 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8551588720239073785">Definições de data e hora</translation>
 <translation id="8553342806078037065">Gerir outras pessoas</translation>
 <translation id="8554899698005018844">Nenhum idioma</translation>
-<translation id="8555195867496021627">Não existem perfis eSIM disponíveis. Transfira um novo perfil <ph name="BEGIN_LINK" />aqui<ph name="END_LINK" />.</translation>
 <translation id="8557022314818157177">Continue a tocar na chave de segurança até que a sua impressão digital seja capturada.</translation>
 <translation id="8557930019681227453">Manifesto</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{Abrir todos numa &amp;nova janela}=1{Abrir numa &amp;nova Janela}other{Abrir todos ({COUNT}) numa &amp;nova janela}}</translation>
@@ -7046,7 +7055,6 @@ Prima um comutador atribuído para remover a atribuição.</translation>
 <translation id="8743164338060742337">Rede <ph name="NETWORK_INDEX" /> de <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, intensidade do sinal: <ph name="SIGNAL_STRENGTH" />%, gerida pelo administrador, ligar</translation>
 <translation id="8746654918629346731">Já solicitou a extensão "<ph name="EXTENSION_NAME" />"</translation>
 <translation id="874689135111202667">{0,plural, =1{Pretender carregar um ficheiro para este site?}other{Pretende carregar # ficheiros para este site?}}</translation>
-<translation id="8749556627204742888">Está a partilhar esta rede com outros utilizadores deste dispositivo.</translation>
 <translation id="8749805710397399240">Não é possível transmitir o seu ecrã. Verifique a autorização Gravação de ecrã nas Preferências do sistema.</translation>
 <translation id="8749863574775030885">Aceder a dispositivos USB de um fornecedor desconhecido</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> pretende estabelecer ligação a uma porta de série</translation>
@@ -7108,7 +7116,6 @@ Prima um comutador atribuído para remover a atribuição.</translation>
 <translation id="8808744862003883508">Nesta página, pode ver todas as extensões instaladas no Chrome.</translation>
 <translation id="8809147117840417135">Azul esverdeado claro</translation>
 <translation id="8811862054141704416">Acesso ao microfone do Crostini</translation>
-<translation id="8812552797690463522">Esta rede é partilhada consigo.</translation>
 <translation id="8812593354822910461">Limpar também os dados de navegação (<ph name="URL" />), o que terminará a sua sessão em <ph name="DOMAIN" />. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">Lembrar-me mais tarde</translation>
 <translation id="8813698869395535039">Não é possível iniciar sessão na conta <ph name="USERNAME" /></translation>
@@ -7320,7 +7327,6 @@ Prima um comutador atribuído para remover a atribuição.</translation>
 <translation id="9021662811137657072">Vírus detetado</translation>
 <translation id="902236149563113779">Normalmente, os sites monitorizam a posição da câmara para funcionalidades de realidade aumentada, como jogos ou direções de avisos.</translation>
 <translation id="9022847679183471841">Esta conta já está a ser utilizada neste computador por <ph name="AVATAR_NAME" />.</translation>
-<translation id="9023009238991294202">Outros utilizadores deste dispositivo podem utilizar esta rede.</translation>
 <translation id="9023015617655685412">Adicionar este separador aos marcadores…</translation>
 <translation id="9023909777842748145">A desativação desta funcionalidade não afeta a capacidade de o dispositivo enviar as informações necessárias para serviços essenciais, como atualizações do sistema e segurança.</translation>
 <translation id="9024127637873500333">&amp;Abrir num novo separador</translation>

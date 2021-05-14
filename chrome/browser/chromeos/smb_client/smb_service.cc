@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -16,11 +17,11 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/unguessable_token.h"
+#include "chrome/browser/ash/file_system_provider/mount_path_util.h"
+#include "chrome/browser/ash/file_system_provider/provided_file_system_info.h"
 #include "chrome/browser/ash/kerberos/kerberos_credentials_manager.h"
 #include "chrome/browser/ash/kerberos/kerberos_credentials_manager_factory.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/file_system_provider/mount_path_util.h"
-#include "chrome/browser/chromeos/file_system_provider/provided_file_system_info.h"
 #include "chrome/browser/chromeos/smb_client/discovery/mdns_host_locator.h"
 #include "chrome/browser/chromeos/smb_client/discovery/netbios_client.h"
 #include "chrome/browser/chromeos/smb_client/discovery/netbios_host_locator.h"
@@ -121,16 +122,16 @@ void RecordAuthenticationMethod(AuthMethod method) {
 base::ScopedFD MakeFdWithContents(const std::string& contents) {
   const size_t content_size = contents.size();
 
-  base::ScopedFD read_fd, write_fd;
+  base::ScopedFD read_fd;
+  base::ScopedFD write_fd;
   if (!base::CreatePipe(&read_fd, &write_fd, true /* non_blocking */)) {
     LOG(ERROR) << "Unable to create pipe";
     return {};
   }
   bool success =
-      base::WriteFileDescriptor(write_fd.get(),
-                                reinterpret_cast<const char*>(&content_size),
-                                sizeof(content_size)) &&
-      base::WriteFileDescriptor(write_fd.get(), contents.data(), content_size);
+      base::WriteFileDescriptor(
+          write_fd.get(), base::as_bytes(base::make_span(&content_size, 1))) &&
+      base::WriteFileDescriptor(write_fd.get(), contents);
   if (!success) {
     PLOG(ERROR) << "Unable to write contents to pipe";
     return {};

@@ -1314,7 +1314,7 @@ bool SetTextAutosizingMultiplier(Document* document, float multiplier) {
   for (LayoutObject* layout_object = document->GetLayoutView(); layout_object;
        layout_object = layout_object->NextInPreOrder()) {
     if (layout_object->Style()) {
-      ComputedStyle* modified_style =
+      scoped_refptr<ComputedStyle> modified_style =
           ComputedStyle::Clone(layout_object->StyleRef());
       modified_style->SetTextAutosizingMultiplier(multiplier);
       EXPECT_EQ(multiplier, modified_style->TextAutosizingMultiplier());
@@ -4351,7 +4351,10 @@ TEST_F(WebFrameTest, ClearFocusedNodeTest) {
 class ChangedSelectionCounter : public frame_test_helpers::TestWebFrameClient {
  public:
   ChangedSelectionCounter() : call_count_(0) {}
-  void DidChangeSelection(bool isSelectionEmpty) override { ++call_count_; }
+  void DidChangeSelection(bool isSelectionEmpty,
+                          blink::SyncCondition force_sync) override {
+    ++call_count_;
+  }
   int Count() const { return call_count_; }
   void Reset() { call_count_ = 0; }
 

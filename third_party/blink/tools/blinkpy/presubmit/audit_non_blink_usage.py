@@ -28,6 +28,9 @@ _CONFIG = [
             'gfx::ICCProfile',
             'gfx::RadToDeg',
 
+            # absl optional constructs.
+            'absl::in_place',
+
             # //base constructs that are allowed everywhere
             'base::AdoptRef',
             'base::ApplyMetadataToPastSamples',
@@ -106,6 +109,7 @@ _CONFIG = [
 
             # //base/callback_helpers.h.
             'base::DoNothing',
+            'base::SplitOnceCallback',
 
             # //base/callback.h is allowed, but you need to use WTF::Bind or
             # WTF::BindRepeating to create callbacks in Blink.
@@ -383,6 +387,9 @@ _CONFIG = [
             # Standalone utility libraries that only depend on //base
             'skia::.+',
             'url::.+',
+
+            # Power scheduling instrumentation, which only depends on //base
+            "power_scheduler::.+",
 
             # Nested namespaces under the blink namespace
             'bindings::.+',

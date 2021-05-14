@@ -17,10 +17,10 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
-#include "chrome/browser/chromeos/file_system_provider/fake_extension_provider.h"
-#include "chrome/browser/chromeos/file_system_provider/fake_provided_file_system.h"
-#include "chrome/browser/chromeos/file_system_provider/service.h"
-#include "chrome/browser/chromeos/file_system_provider/service_factory.h"
+#include "chrome/browser/ash/file_system_provider/fake_extension_provider.h"
+#include "chrome/browser/ash/file_system_provider/fake_provided_file_system.h"
+#include "chrome/browser/ash/file_system_provider/service.h"
+#include "chrome/browser/ash/file_system_provider/service_factory.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -34,7 +34,7 @@
 #include "storage/browser/test/test_file_system_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace chromeos {
+namespace ash {
 namespace file_system_provider {
 namespace {
 
@@ -241,4 +241,4 @@ TEST_F(FileSystemProviderFileStreamWriter, Write_Append) {
 }
 
 }  // namespace file_system_provider
-}  // namespace chromeos
+}  // namespace ash

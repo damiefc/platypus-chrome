@@ -290,6 +290,7 @@
 #include "chrome/browser/ash/borealis/borealis_prefs.h"
 #include "chrome/browser/ash/child_accounts/secondary_account_consent_logger.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
+#include "chrome/browser/ash/file_system_provider/registry.h"
 #include "chrome/browser/ash/guest_os/guest_os_pref_names.h"
 #include "chrome/browser/ash/lock_screen_apps/state_controller.h"
 #include "chrome/browser/ash/login/demo_mode/demo_mode_detector.h"
@@ -315,7 +316,6 @@
 #include "chrome/browser/ash/settings/device_settings_cache.h"
 #include "chrome/browser/ash/system/automatic_reboot_manager.h"
 #include "chrome/browser/ash/system/input_device_settings.h"
-#include "chrome/browser/chromeos/file_system_provider/registry.h"
 #include "chrome/browser/chromeos/first_run/first_run.h"
 #include "chrome/browser/chromeos/full_restore/full_restore_prefs.h"
 #include "chrome/browser/chromeos/net/network_throttling_observer.h"
@@ -811,7 +811,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   ash::device_settings_cache::RegisterPrefs(registry);
   ash::EasyUnlockService::RegisterPrefs(registry);
   chromeos::echo_offer::RegisterPrefs(registry);
-  chromeos::EnableAdbSideloadingScreen::RegisterPrefs(registry);
+  ash::EnableAdbSideloadingScreen::RegisterPrefs(registry);
   chromeos::EnableDebuggingScreenHandler::RegisterPrefs(registry);
   chromeos::FastTransitionObserver::RegisterPrefs(registry);
   chromeos::HIDDetectionScreenHandler::RegisterPrefs(registry);
@@ -832,7 +832,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   chromeos::power::auto_screen_brightness::MetricsReporter::
       RegisterLocalStatePrefs(registry);
   chromeos::Preferences::RegisterPrefs(registry);
-  chromeos::ResetScreen::RegisterPrefs(registry);
+  ash::ResetScreen::RegisterPrefs(registry);
   chromeos::SchedulerConfigurationManager::RegisterLocalStatePrefs(registry);
   ash::ServicesCustomizationDocument::RegisterPrefs(registry);
   chromeos::SigninScreenHandler::RegisterPrefs(registry);

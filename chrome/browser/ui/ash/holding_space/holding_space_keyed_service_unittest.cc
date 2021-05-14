@@ -614,6 +614,134 @@ TEST_F(HoldingSpaceKeyedServiceTest, UpdatePersistentStorage) {
   }
 }
 
+// Verifies that only finalized holding space items are persisted and that,
+// once finalized, previously in progress holding space items are persisted at
+// the appropriate index.
+TEST_F(HoldingSpaceKeyedServiceTest, PersistenceOfInProgressItems) {
+  // Create a file system mount point.
+  std::unique_ptr<ScopedTestMountPoint> downloads_mount =
+      ScopedTestMountPoint::CreateAndMountDownloads(GetProfile());
+  ASSERT_TRUE(downloads_mount->IsValid());
+
+  // Cache the holding space model.
+  HoldingSpaceKeyedService* const holding_space_service =
+      HoldingSpaceKeyedServiceFactory::GetInstance()->GetService(GetProfile());
+  HoldingSpaceModel* const holding_space_model =
+      HoldingSpaceController::Get()->model();
+  EXPECT_EQ(holding_space_model, holding_space_service->model_for_testing());
+
+  // Initially, both the model and persistent storage should be empty.
+  EXPECT_EQ(holding_space_model->items().size(), 0u);
+  EXPECT_EQ(GetProfile()
+                ->GetPrefs()
+                ->GetList(HoldingSpacePersistenceDelegate::kPersistencePath)
+                ->GetList()
+                .size(),
+            0u);
+
+  // Add a finalized item to holding space. Because the item is finalized, it
+  // should immediately be added to persistent storage.
+  base::FilePath file_path = downloads_mount->CreateArbitraryFile();
+  auto finalized_holding_space_item = HoldingSpaceItem::CreateFileBackedItem(
+      HoldingSpaceItem::Type::kDownload, file_path,
+      GetFileSystemUrl(GetProfile(), file_path),
+      base::BindOnce(&holding_space_util::ResolveImage,
+                     holding_space_service->thumbnail_loader_for_testing()));
+  auto* finalized_holding_space_item_ptr = finalized_holding_space_item.get();
+  holding_space_model->AddItem(std::move(finalized_holding_space_item));
+
+  base::ListValue persisted_holding_space_items;
+  persisted_holding_space_items.Append(
+      finalized_holding_space_item_ptr->Serialize());
+
+  EXPECT_EQ(*GetProfile()->GetPrefs()->GetList(
+                HoldingSpacePersistenceDelegate::kPersistencePath),
+            persisted_holding_space_items);
+
+  // Add an in-progress item to holding space. Because the item is in progress,
+  // it should *not* be added to persistent storage.
+  file_path = downloads_mount->CreateArbitraryFile();
+  auto in_progress_holding_space_item = HoldingSpaceItem::CreateFileBackedItem(
+      HoldingSpaceItem::Type::kDownload, file_path,
+      GetFileSystemUrl(GetProfile(), file_path), /*progress=*/0.5f,
+      base::BindOnce(&holding_space_util::ResolveImage,
+                     holding_space_service->thumbnail_loader_for_testing()));
+  auto* in_progress_holding_space_item_ptr =
+      in_progress_holding_space_item.get();
+  holding_space_model->AddItem(std::move(in_progress_holding_space_item));
+
+  EXPECT_EQ(*GetProfile()->GetPrefs()->GetList(
+                HoldingSpacePersistenceDelegate::kPersistencePath),
+            persisted_holding_space_items);
+
+  // Add another finalized item to holding space. Because the item is finalized,
+  // it should immediately be added to persistent storage.
+  file_path = downloads_mount->CreateArbitraryFile();
+  finalized_holding_space_item = HoldingSpaceItem::CreateFileBackedItem(
+      HoldingSpaceItem::Type::kDownload, file_path,
+      GetFileSystemUrl(GetProfile(), file_path),
+      base::BindOnce(&holding_space_util::ResolveImage,
+                     holding_space_service->thumbnail_loader_for_testing()));
+  finalized_holding_space_item_ptr = finalized_holding_space_item.get();
+  holding_space_model->AddItem(std::move(finalized_holding_space_item));
+
+  persisted_holding_space_items.Append(
+      finalized_holding_space_item_ptr->Serialize());
+
+  EXPECT_EQ(*GetProfile()->GetPrefs()->GetList(
+                HoldingSpacePersistenceDelegate::kPersistencePath),
+            persisted_holding_space_items);
+
+  // Update the file path for a finalized item. Because the item is finalized,
+  // it should be updated immediately in persistent storage.
+  file_path = downloads_mount->CreateArbitraryFile();
+  holding_space_model->UpdateBackingFileForItem(
+      finalized_holding_space_item_ptr->id(), file_path,
+      GetFileSystemUrl(GetProfile(), file_path));
+
+  ASSERT_EQ(persisted_holding_space_items.GetList().size(), 2u);
+  persisted_holding_space_items.GetList()[1u] =
+      finalized_holding_space_item_ptr->Serialize();
+
+  EXPECT_EQ(*GetProfile()->GetPrefs()->GetList(
+                HoldingSpacePersistenceDelegate::kPersistencePath),
+            persisted_holding_space_items);
+
+  // Update the file path for the in-progress item. Because the item is still in
+  // progress, it should not be added/updated to/in persistent storage.
+  file_path = downloads_mount->CreateArbitraryFile();
+  holding_space_model->UpdateBackingFileForItem(
+      in_progress_holding_space_item_ptr->id(), file_path,
+      GetFileSystemUrl(GetProfile(), file_path));
+
+  EXPECT_EQ(*GetProfile()->GetPrefs()->GetList(
+                HoldingSpacePersistenceDelegate::kPersistencePath),
+            persisted_holding_space_items);
+
+  // Update the progress for the in-progress item. Because the item is still in
+  // progress it should not be added/updated to/in persistent storage.
+  holding_space_model->UpdateProgressForItem(
+      in_progress_holding_space_item_ptr->id(), 0.75f);
+
+  EXPECT_EQ(*GetProfile()->GetPrefs()->GetList(
+                HoldingSpacePersistenceDelegate::kPersistencePath),
+            persisted_holding_space_items);
+
+  // Mark the in-progress item as finalized. Because the item is finalized, it
+  // should be added to persistent storage at the appropriate index.
+  holding_space_model->UpdateProgressForItem(
+      in_progress_holding_space_item_ptr->id(), 1.f);
+
+  ASSERT_EQ(persisted_holding_space_items.GetList().size(), 2u);
+  persisted_holding_space_items.Insert(
+      1u, base::Value::ToUniquePtrValue(
+              in_progress_holding_space_item_ptr->Serialize()));
+
+  EXPECT_EQ(*GetProfile()->GetPrefs()->GetList(
+                HoldingSpacePersistenceDelegate::kPersistencePath),
+            persisted_holding_space_items);
+}
+
 // Verifies that when a file backing a holding space item is moved, the holding
 // space item is updated in place and persistence storage is updated.
 TEST_F(HoldingSpaceKeyedServiceTest, UpdatePersistentStorageAfterMove) {
@@ -732,11 +860,12 @@ TEST_F(HoldingSpaceKeyedServiceTest, UpdatePersistentStorageAfterMove) {
   }
 }
 
+// TODO(crbug.com/1170667): Fix flakes and re-enable.
 // Tests that holding space item's image representation gets updated when the
 // backing file is changed using move operation. Furthermore, verifies that
 // conflicts caused by moving a holding space item file to another path present
 // in the holding space get resolved.
-TEST_F(HoldingSpaceKeyedServiceTest, UpdateItemsOverwrittenByMove) {
+TEST_F(HoldingSpaceKeyedServiceTest, DISABLED_UpdateItemsOverwrittenByMove) {
   // Create a file system mount point.
   std::unique_ptr<ScopedTestMountPoint> downloads_mount =
       ScopedTestMountPoint::CreateAndMountDownloads(GetProfile());
@@ -1616,7 +1745,8 @@ class HoldingSpaceKeyedServiceAddItemTest
                      profile, file_path))});
         break;
       case HoldingSpaceItem::Type::kPrintedPdf:
-        holding_space_service->AddPrintedPdf(file_path);
+        holding_space_service->AddPrintedPdf(file_path,
+                                             /*from_incognito_profile=*/false);
         break;
       case HoldingSpaceItem::Type::kScreenRecording:
         holding_space_service->AddScreenRecording(file_path);
@@ -1816,9 +1946,11 @@ TEST_F(HoldingSpaceKeyedServiceNearbySharingTest, AddNearbyShareItem) {
   EXPECT_EQ(u"File 2.png", item_2->text());
 }
 
-// Base class for tests of print-to-PDF integration.
+// Base class for tests of print-to-PDF integration. Parameterized by whether
+// tests should use an incognito browser.
 class HoldingSpaceKeyedServicePrintToPdfIntegrationTest
-    : public HoldingSpaceKeyedServiceTest {
+    : public HoldingSpaceKeyedServiceTest,
+      public testing::WithParamInterface<bool> {
  public:
   // Starts a job to print an empty PDF to the specified `file_path`.
   // NOTE: This method will not return until the print job completes.
@@ -1836,22 +1968,49 @@ class HoldingSpaceKeyedServicePrintToPdfIntegrationTest
     run_loop.Run();
   }
 
+  // Returns true if the test should use an incognito browser, false otherwise.
+  bool UseIncognitoBrowser() const { return GetParam(); }
+
  private:
   // HoldingSpaceKeyedServiceTest:
   void SetUp() override {
     HoldingSpaceKeyedServiceTest::SetUp();
 
     // Create the PDF printer handler.
+    Browser* browser = GetBrowserForPdfPrinterHandler();
     pdf_printer_handler_ = std::make_unique<printing::PdfPrinterHandler>(
-        profile(), browser()->tab_strip_model()->GetActiveWebContents(),
+        browser->profile(), browser->tab_strip_model()->GetActiveWebContents(),
         /*sticky_settings=*/nullptr);
   }
 
+  void TearDown() override {
+    incognito_browser_.reset();
+    HoldingSpaceKeyedServiceTest::TearDown();
+  }
+
+  Browser* GetBrowserForPdfPrinterHandler() {
+    if (!UseIncognitoBrowser())
+      return browser();
+    if (!incognito_browser_) {
+      incognito_browser_ =
+          CreateBrowserWithTestWindowForParams(Browser::CreateParams(
+              profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true),
+              /*user_gesture=*/true));
+    }
+    return incognito_browser_.get();
+  }
+
   std::unique_ptr<printing::PdfPrinterHandler> pdf_printer_handler_;
+  std::unique_ptr<Browser> incognito_browser_;
 };
 
-// Verifies that print-to-PDF adds an associated item to holding space.
-TEST_F(HoldingSpaceKeyedServicePrintToPdfIntegrationTest, AddPrintedPdfItem) {
+INSTANTIATE_TEST_SUITE_P(All,
+                         HoldingSpaceKeyedServicePrintToPdfIntegrationTest,
+                         testing::Bool());
+
+// Verifies that print-to-PDF adds an associated item to holding space unless
+// the print job was from an incognito profile.
+TEST_P(HoldingSpaceKeyedServicePrintToPdfIntegrationTest, AddPrintedPdfItem) {
   // Create a file system mount point.
   std::unique_ptr<ScopedTestMountPoint> mount_point =
       ScopedTestMountPoint::CreateAndMountDownloads(GetProfile());
@@ -1870,7 +2029,14 @@ TEST_F(HoldingSpaceKeyedServicePrintToPdfIntegrationTest, AddPrintedPdfItem) {
   base::FilePath file_path = mount_point->GetRootPath().Append("foo.pdf");
   StartPrintToPdfAndWaitForSave(u"job_title", file_path);
 
-  // Verify that the holding space is now populated with the expected item.
+  // If the print job was from an incognito profile, no item should have been
+  // added to holding space.
+  if (UseIncognitoBrowser()) {
+    ASSERT_EQ(model->items().size(), 0u);
+    return;
+  }
+
+  // Otherwise, verify that holding space is populated with the expected item.
   ASSERT_EQ(model->items().size(), 1u);
   EXPECT_EQ(model->items()[0]->type(), HoldingSpaceItem::Type::kPrintedPdf);
   EXPECT_EQ(model->items()[0]->file_path(), file_path);

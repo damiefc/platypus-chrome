@@ -331,7 +331,7 @@ void MockChromeCleanerProcess::Options::SetReportedResults(
       // Defined as an optional object in which an empty registry keys vector is
       // present.
       registry_keys_ =
-          base::Optional<std::vector<std::wstring>>(base::in_place);
+          base::Optional<std::vector<std::wstring>>(absl::in_place);
       break;
 
     case ItemsReporting::kReported:
@@ -388,7 +388,7 @@ int MockChromeCleanerProcess::Run() {
 
   base::Thread::Options thread_options(base::MessagePumpType::IO, 0);
   base::Thread io_thread("IPCThread");
-  EXPECT_TRUE(io_thread.StartWithOptions(thread_options));
+  EXPECT_TRUE(io_thread.StartWithOptions(std::move(thread_options)));
   if (::testing::Test::HasFailure())
     return kInternalTestFailureExitCode;
 

@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
+<translation id="1001033507375626788">Nätverket delas med dig</translation>
 <translation id="1001307489511021749">Appar, inställningar och andra anpassningar synkroniseras på alla Chrome OS-enheter där du är inloggad på ditt Google-konto.</translation>
 <translation id="1003088604756913841">Öppna länken i ett nytt fönster i <ph name="APP" /></translation>
 <translation id="100323615638474026">USB-enhet (<ph name="VENDOR_ID" />:<ph name="PRODUCT_ID" />)</translation>
@@ -358,7 +359,6 @@
 <translation id="138784436342154190">Vill du återställa standardinställningen för startfliken?</translation>
 <translation id="1388253969141979417">Får använda mikrofonen</translation>
 <translation id="1388728792929436380"><ph name="DEVICE_TYPE" /> startas om när uppdateringarna har slutförts.</translation>
-<translation id="138900021244932468">Inga profiler hittades. Skanna QR-koden med enhetens kamera eller ange aktiveringskoden du fick från operatören om du vill konfigurera ett nytt nätverk.</translation>
 <translation id="139013308650923562">Har tillåtelse att använda teckensnitt som har installerats på enheten</translation>
 <translation id="1390548061267426325">Öppna som en vanlig flik</translation>
 <translation id="1393283411312835250">Sol och moln</translation>
@@ -961,6 +961,7 @@
 <translation id="1992924914582925289">Ta bort från enheten</translation>
 <translation id="1994173015038366702">Webbadress</translation>
 <translation id="1995916364271252349">Styr vilken information webbplatser kan använda och visa (plats, kamera, popup-fönster med mera)</translation>
+<translation id="1997437640397887843">Enhetens kamera är aktiverad. Placera QR-koden för ditt eSIM framför kameran.</translation>
 <translation id="1997616988432401742">Dina certifikat</translation>
 <translation id="1999115740519098545">Vid start</translation>
 <translation id="2000419248597011803">Skickar vissa cookies och sökningar från adressfältet och sökrutan till standardsökmotorn</translation>
@@ -1016,6 +1017,7 @@ Du kan hantera inställningarna för det här kontot genom att installera Family
 <translation id="2055585478631012616">Du loggas ut från webbplatserna i fråga, även på öppna flikar</translation>
 <translation id="205560151218727633">Logotyp för Google Assistent</translation>
 <translation id="2058456167109518507">En enhet har upptäckts</translation>
+<translation id="2058581283817163201">Verifiera med den här telefonen</translation>
 <translation id="2059913712424898428">Tidszon</translation>
 <translation id="2060375639911876205">Ta bort eSIM-profilen</translation>
 <translation id="2062354623176996748">Surfa utan att någon webbhistorik sparas med ett inkognitofönster</translation>
@@ -2616,6 +2618,7 @@ och Ctrl + Alt + Minska ljusstyrka för att zooma ut.</translation>
 <translation id="3785308913036335955">Visa genväg för appar</translation>
 <translation id="3785727820640310185">Sparade lösenord för den här webbplatsen</translation>
 <translation id="3788301286821743879">Det gick inte att starta kioskappen.</translation>
+<translation id="3788331399335602504">de här filerna</translation>
 <translation id="3788401245189148511">Appen eller tillägget skulle kunna:</translation>
 <translation id="3789841737615482174">Installera</translation>
 <translation id="379082410132524484">Kortets giltighetstid har löpt ut</translation>
@@ -3191,6 +3194,7 @@ och Ctrl + Alt + Minska ljusstyrka för att zooma ut.</translation>
 <translation id="4438043733494739848">Genomskinlig</translation>
 <translation id="4438639467177774583"><ph name="USERNAME" /> <ph name="MASKED_PASSWORD" /> sparas i ditt Google-konto, <ph name="ACCOUNT" /></translation>
 <translation id="4439427728133035643">Nätverk <ph name="NETWORK_INDEX" /> av <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, signalstyrka <ph name="SIGNAL_STRENGTH" /> %, anslut</translation>
+<translation id="4440097423000553826"><ph name="WEBSITE" /> har skickat en avisering till din telefon. Bekräfta din identitet genom att trycka på <ph name="NOTIFICATIONTITLE" /> och följa anvisningarna.</translation>
 <translation id="4441124369922430666">Vill du starta denna app automatiskt när maskinen slås på?</translation>
 <translation id="4441147046941420429">Fortsätt genom att ta bort säkerhetsnyckeln från enheten, sätta i den igen och trycka på den</translation>
 <translation id="444134486829715816">Expandera..</translation>
@@ -3493,6 +3497,7 @@ och Ctrl + Alt + Minska ljusstyrka för att zooma ut.</translation>
 <translation id="4773112038801431077">Uppgradera Linux</translation>
 <translation id="477647109558161443">Skapa en skrivbordsgenväg</translation>
 <translation id="4776917500594043016">Lösenord för <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="4777458362738635055">Andra användare på enheten kan använda det här nätverket</translation>
 <translation id="4777825441726637019">Play Butik</translation>
 <translation id="4777943778632837590">Konfigurera nätverkets namnservrar</translation>
 <translation id="4778644898150334464">Använd ett annat lösenord</translation>
@@ -4328,6 +4333,7 @@ och Ctrl + Alt + Minska ljusstyrka för att zooma ut.</translation>
 <translation id="5712153969432126546">Ibland publicerar webbplatser PDF-filer, som dokument, avtal och formulär</translation>
 <translation id="5715711091495208045">Agent för pluginprogram: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">Standardsökmotorer</translation>
+<translation id="5719637365829998022">QR-koden har skannats.</translation>
 <translation id="5719854774000914513">Webbplatser får begära tillstånd att ansluta till HID-enheter</translation>
 <translation id="572155275267014074">Android-inställningar</translation>
 <translation id="5722086096420375088">Grön och vit</translation>
@@ -4539,6 +4545,7 @@ och Ctrl + Alt + Minska ljusstyrka för att zooma ut.</translation>
 <translation id="5955721306465922729">En webbplats vill öppna den här appen.</translation>
 <translation id="5955809630138889698">Demoläget kanske bara kan användas online på den här enheten. Kontakta supporten om du vill veta mer.</translation>
 <translation id="5956585768868398362">Är det här den söksida du väntade dig?</translation>
+<translation id="5957918771633727933">Det finns inga tillgängliga eSIM-profiler. Ladda ned en ny <ph name="BEGIN_LINK" />profil.<ph name="END_LINK" /></translation>
 <translation id="5957987129450536192">Tryck på textuppläsningsikonen nära profilbilden och markera sedan det som du vill få uppläst.</translation>
 <translation id="5959471481388474538">Nätverket är inte tillgängligt</translation>
 <translation id="595959584676692139">Läs in sidan igen om du vill använda det här tillägget</translation>
@@ -5929,6 +5936,7 @@ och Ctrl + Alt + Minska ljusstyrka för att zooma ut.</translation>
 <translation id="7506541170099744506"><ph name="DEVICE_TYPE" /> har registrerats för företagshantering.</translation>
 <translation id="7507207699631365376">Läs leverantörens <ph name="BEGIN_LINK" />sekretesspolicy<ph name="END_LINK" /></translation>
 <translation id="7507930499305566459">Status för svarscertifikat</translation>
+<translation id="7509246181739783082">Verifiera din identitet</translation>
 <translation id="7513029293694390567">Logga in automatiskt på webbplatser med hjälp av lagrade inloggningsuppgifter. När funktionen är inaktiverad måste du bekräfta inloggningen varje gång du besöker en webbplats.</translation>
 <translation id="7514239104543605883">Kopiera till din enhet</translation>
 <translation id="7514365320538308">Ladda ned</translation>
@@ -6043,6 +6051,7 @@ och Ctrl + Alt + Minska ljusstyrka för att zooma ut.</translation>
 <translation id="7638605456503525968">Serieportar</translation>
 <translation id="7639914187072011620">Det gick inte att hämta SAML-omdirigeringsadressen från servern</translation>
 <translation id="764017888128728"><ph name="PASSWORD_MANAGER_BRAND" /> loggar automatiskt in på godkända webbplatser med de lösenord du sparat.</translation>
+<translation id="7641513591566880111">Nytt profilnamn</translation>
 <translation id="7642778300616172920">Dölj känsligt innehåll</translation>
 <translation id="7643842463591647490">{0,plural, =1{# öppet fönster}other{# öppna fönster}}</translation>
 <translation id="7643932971554933646">Vill du ge webbplatsen läsbehörighet till filer?</translation>
@@ -6203,6 +6212,7 @@ och Ctrl + Alt + Minska ljusstyrka för att zooma ut.</translation>
 <translation id="7800518121066352902">Rotera m&amp;oturs</translation>
 <translation id="780301667611848630">Nej tack</translation>
 <translation id="7804072833593604762">Fliken har stängts</translation>
+<translation id="7805759469263222011">Skanna QR-koden med enhetens kamera eller ange aktiveringskoden du fick från operatören.</translation>
 <translation id="7805768142964895445">Status</translation>
 <translation id="7807067443225230855">Sök och Assistent</translation>
 <translation id="7807711621188256451">Låt alltid <ph name="HOST" /> använda din kamera</translation>
@@ -6461,7 +6471,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8061091456562007989">Ändra tillbaka</translation>
 <translation id="8061991877177392872">Du verkar redan ha konfigurerat Voice Match med assistenten på en annan enhet. En röstmodell har skapats på den här enheten utifrån de tidigare inspelningarna.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{1 pappersark}other{{COUNT} pappersark}}</translation>
-<translation id="8062879968880283306">Skanna QR-koden med enhetens kamera eller ange aktiveringskoden du fick från operatören.</translation>
 <translation id="8063235345342641131">Grön standardavatar</translation>
 <translation id="8063535366119089408">Visa fil</translation>
 <translation id="8064279191081105977">Grupp <ph name="GROUP_NAME" /> – <ph name="GROUP_CONTENTS" /> – <ph name="COLLAPSED_STATE" /></translation>
@@ -6683,6 +6692,7 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8300849813060516376">Det gick inte att etablera tjänsten over-the-air.</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{Adress}other{# adresser}}</translation>
 <translation id="8304383784961451596">Du har inte behörighet att använda den här enheten. Kontakta administratören om du vill ha behörighet att logga in, eller logga in med ett Google-konto som kontrolleras av Family Link.</translation>
+<translation id="8308016398665340540">Du delar det här nätverket med andra användare på enheten</translation>
 <translation id="8308179586020895837">Fråga om <ph name="HOST" /> vill använda din kamera</translation>
 <translation id="830868413617744215">Beta</translation>
 <translation id="8309458809024885768">Certifikatet finns redan</translation>
@@ -6882,7 +6892,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8551588720239073785">Inställningar för datum och tid</translation>
 <translation id="8553342806078037065">Hantera andra personer</translation>
 <translation id="8554899698005018844">Inget språk</translation>
-<translation id="8555195867496021627">Det finns inga tillgängliga eSIM-profiler. Ladda ned en ny profil <ph name="BEGIN_LINK" />här<ph name="END_LINK" />.</translation>
 <translation id="8557022314818157177">Fortsätt att trycka på säkerhetsnyckeln tills fingeravtrycket registreras</translation>
 <translation id="8557930019681227453">Manifest</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{Öppna alla i ett &amp;nytt fönster}=1{Öppna i &amp;nytt fönster}other{Öppna alla ({COUNT}) i ett &amp;nytt fönster}}</translation>
@@ -7062,7 +7071,6 @@ Tryck på en tilldelad brytare för att ta bort tilldelningen.</translation>
 <translation id="8743164338060742337">Nätverk <ph name="NETWORK_INDEX" /> av <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /> signalstyrka <ph name="SIGNAL_STRENGTH" /> %, hanteras av administratören, anslut</translation>
 <translation id="8746654918629346731">Du har redan begärt <ph name="EXTENSION_NAME" /></translation>
 <translation id="874689135111202667">{0,plural, =1{Vill du ladda upp en fil på webbplatsen?}other{Vill du ladda upp # filer på webbplatsen?}}</translation>
-<translation id="8749556627204742888">Du delar det här nätverket med andra användare på enheten.</translation>
 <translation id="8749805710397399240">Det gick inte att casta skärmen. Kontrollera behörigheten för skärminspelning i systeminställningarna.</translation>
 <translation id="8749863574775030885">Komma åt USB-enheter från en okänd leverantör</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> vill ansluta till en serieport</translation>
@@ -7124,7 +7132,6 @@ Tryck på en tilldelad brytare för att ta bort tilldelningen.</translation>
 <translation id="8808744862003883508">På den här sidan visas alla tillägg som har installerats i Chrome.</translation>
 <translation id="8809147117840417135">Ljust blågrön</translation>
 <translation id="8811862054141704416">Mikrofonåtkomst i Crostini</translation>
-<translation id="8812552797690463522">Nätverket delas med dig.</translation>
 <translation id="8812593354822910461">Rensa även webbinformation (<ph name="URL" />), vilket kan innebära att du loggas ut från <ph name="DOMAIN" />. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">Påminn mig senare</translation>
 <translation id="8813698869395535039">Det gick inte att logga in på <ph name="USERNAME" /></translation>
@@ -7336,7 +7343,6 @@ Tryck på en tilldelad brytare för att ta bort tilldelningen.</translation>
 <translation id="9021662811137657072">Ett virus har upptäckts</translation>
 <translation id="902236149563113779">Att registrera kamerans position brukar kunna behövas för AR-funktioner på webbplatsen, som spel eller vägbeskrivningar</translation>
 <translation id="9022847679183471841">Kontot används redan på den här datorn av <ph name="AVATAR_NAME" />.</translation>
-<translation id="9023009238991294202">Andra användare på enheten kan använda det här nätverket</translation>
 <translation id="9023015617655685412">Bokmärk den här fliken …</translation>
 <translation id="9023909777842748145">Enheten kan fortfarande skicka den information som behövs för viktiga tjänster, som systemuppdateringar och säkerhet, även om du inaktiverar funktionen.</translation>
 <translation id="9024127637873500333">&amp;Öppna i ny flik</translation>

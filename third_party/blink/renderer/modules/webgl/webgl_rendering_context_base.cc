@@ -45,6 +45,7 @@
 #include "third_party/blink/public/mojom/gpu/gpu.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_htmlcanvaselement_offscreencanvas.h"
 #include "third_party/blink/renderer/bindings/modules/v8/html_canvas_element_or_offscreen_canvas.h"
 #include "third_party/blink/renderer/bindings/modules/v8/webgl_any.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -1018,6 +1019,14 @@ WebGLRenderingContextBase::WebGLRenderingContextBase(
   context_provider->ContextGL()->GetIntegerv(GL_MAX_VIEWPORT_DIMS,
                                              max_viewport_dims_);
   InitializeWebGLContextLimits(context_provider.get());
+
+  // TODO(https://crbug.com/1208480): Move color space to being a read-write
+  // attribute instead of a context creation attribute.
+  if (RuntimeEnabledFeatures::CanvasColorManagementEnabled()) {
+    color_params_ = CanvasColorParams(requested_attributes.color_space,
+                                      requested_attributes.pixel_format,
+                                      requested_attributes.alpha);
+  }
 
   scoped_refptr<DrawingBuffer> buffer =
       CreateDrawingBuffer(std::move(context_provider), graphics_info);
@@ -5287,7 +5296,11 @@ void WebGLRenderingContextBase::TexImageHelperImageData(
   if (isContextLost())
     return;
   DCHECK(pixels);
+#if defined(USE_BLINK_V8_BINDING_NEW_IDL_UNION)
+  DCHECK(pixels->data());
+#else   // defined(USE_BLINK_V8_BINDING_NEW_IDL_UNION)
   DCHECK(!pixels->data().IsNull());
+#endif  // defined(USE_BLINK_V8_BINDING_NEW_IDL_UNION)
   if (pixels->IsBufferBaseDetached()) {
     SynthesizeGLError(GL_INVALID_VALUE, func_name,
                       "The source data has been detached.");
@@ -8895,6 +8908,17 @@ void WebGLRenderingContextBase::RestoreUnpackParameters() {
     ContextGL()->PixelStorei(GL_UNPACK_ALIGNMENT, unpack_alignment_);
 }
 
+#if defined(USE_BLINK_V8_BINDING_NEW_IDL_UNION)
+V8UnionHTMLCanvasElementOrOffscreenCanvas*
+WebGLRenderingContextBase::getHTMLOrOffscreenCanvas() const {
+  if (canvas()) {
+    return MakeGarbageCollected<V8UnionHTMLCanvasElementOrOffscreenCanvas>(
+        static_cast<HTMLCanvasElement*>(Host()));
+  }
+  return MakeGarbageCollected<V8UnionHTMLCanvasElementOrOffscreenCanvas>(
+      static_cast<OffscreenCanvas*>(Host()));
+}
+#else   // defined(USE_BLINK_V8_BINDING_NEW_IDL_UNION)
 void WebGLRenderingContextBase::getHTMLOrOffscreenCanvas(
     HTMLCanvasElementOrOffscreenCanvas& result) const {
   if (canvas()) {
@@ -8903,6 +8927,7 @@ void WebGLRenderingContextBase::getHTMLOrOffscreenCanvas(
     result.SetOffscreenCanvas(static_cast<OffscreenCanvas*>(Host()));
   }
 }
+#endif  // defined(USE_BLINK_V8_BINDING_NEW_IDL_UNION)
 
 void WebGLRenderingContextBase::addProgramCompletionQuery(WebGLProgram* program,
                                                           GLuint query) {

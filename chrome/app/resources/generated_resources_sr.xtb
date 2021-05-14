@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sr">
+<translation id="1001033507375626788">Ова мрежа се дели са вама</translation>
 <translation id="1001307489511021749">Апликације, подешавања и друга прилагођавања ће се синхронизовати на свим Chrome ОС уређајима на којима сте пријављени помоћу Google налога.</translation>
 <translation id="1003088604756913841">Отвори линк у новом <ph name="APP" /> прозору</translation>
 <translation id="100323615638474026">USB уређај (<ph name="VENDOR_ID" />: <ph name="PRODUCT_ID" />)</translation>
@@ -358,7 +359,6 @@
 <translation id="138784436342154190">Желите да вратите подразумевану полазну страницу?</translation>
 <translation id="1388253969141979417">Дозвољено им је коришћење микрофона</translation>
 <translation id="1388728792929436380"><ph name="DEVICE_TYPE" /> ће се рестартовати када се ажурирања заврше.</translation>
-<translation id="138900021244932468">Није откривен ниједан профил. Да бисте подесили нову мрежу, скенирајте QR кôд помоћу камере уређаја или унесите активациони кôд који сте добили од мобилног оператера.</translation>
 <translation id="139013308650923562">Имају дозволу да користе фонтове инсталиране на уређају</translation>
 <translation id="1390548061267426325">Отвори као уобичајену картицу</translation>
 <translation id="1393283411312835250">Сунце и облаци</translation>
@@ -948,6 +948,7 @@
 <translation id="1992924914582925289">Уклони са уређаја</translation>
 <translation id="1994173015038366702">URL сајта</translation>
 <translation id="1995916364271252349">Контролише које информације сајтови могу да користе и приказују (локација, камера, искачући прозори и друго)</translation>
+<translation id="1997437640397887843">Камера уређаја је укључена. Поставите eSIM QR кôд испред камере.</translation>
 <translation id="1997616988432401742">Ваши сертификати</translation>
 <translation id="1999115740519098545">При покретању</translation>
 <translation id="2000419248597011803">Подразумеваном претраживачу шаље неке колачиће и претраге из траке за адресу и оквира за претрагу</translation>
@@ -1003,6 +1004,7 @@
 <translation id="2055585478631012616">Одјавићете се са ових сајтова, укључујући и оне на отвореним картицама</translation>
 <translation id="205560151218727633">Логотип Google помоћника</translation>
 <translation id="2058456167109518507">Откривен је уређај</translation>
+<translation id="2058581283817163201">Потврдите помоћу овог телефона</translation>
 <translation id="2059913712424898428">Временска зона</translation>
 <translation id="2060375639911876205">Уклоните eSIM профил</translation>
 <translation id="2062354623176996748">Прегледајте веб без чувања историје прегледања у прозору без архивирања</translation>
@@ -2600,6 +2602,7 @@
 <translation id="3785308913036335955">Прикажи пречицу за апликације</translation>
 <translation id="3785727820640310185">Сачуване лозинке за овај сајт</translation>
 <translation id="3788301286821743879">Покретање киоск апликације није успело.</translation>
+<translation id="3788331399335602504">ови фајлови</translation>
 <translation id="3788401245189148511">Могли би да:</translation>
 <translation id="3789841737615482174">Инсталирај</translation>
 <translation id="379082410132524484">Картица је истекла</translation>
@@ -3175,6 +3178,7 @@
 <translation id="4438043733494739848">Прозирно</translation>
 <translation id="4438639467177774583">Лозинка <ph name="MASKED_PASSWORD" /> корисника <ph name="USERNAME" /> ће бити сачувана на Google налог, <ph name="ACCOUNT" /></translation>
 <translation id="4439427728133035643"><ph name="NETWORK_INDEX" />. мрежа од <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, јачина сигнала <ph name="SIGNAL_STRENGTH" />%, повежи</translation>
+<translation id="4440097423000553826">Сајт <ph name="WEBSITE" /> вам је послао обавештење на телефон. Да бисте потврдили да сте то ви, додирните обавештење <ph name="NOTIFICATIONTITLE" /> и пратите кораке.</translation>
 <translation id="4441124369922430666">Желите ли да се ова апликација покреће аутоматски када укључите уређај?</translation>
 <translation id="4441147046941420429">Да бисте наставили, уклоните безбедносни кључ са уређаја, па га поново уметните и додирните</translation>
 <translation id="444134486829715816">Прошири...</translation>
@@ -3476,6 +3480,7 @@
 <translation id="4773112038801431077">Надоградите Linux</translation>
 <translation id="477647109558161443">Направи пречицу на радној површини</translation>
 <translation id="4776917500594043016">Лозинка за <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="4777458362738635055">Други корисници овог уређаја могу да користе ову мрежу</translation>
 <translation id="4777825441726637019">Play продавница</translation>
 <translation id="4777943778632837590">Конфигуриши називе сервера мреже</translation>
 <translation id="4778644898150334464">Користите другу лозинку</translation>
@@ -4312,6 +4317,7 @@
 <translation id="5712153969432126546">Сајтови понекад објављују PDF-ове, попут докумената, уговора и образаца</translation>
 <translation id="5715711091495208045">Посредник додатне компоненте: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">Подразумевани претраживачи</translation>
+<translation id="5719637365829998022">QR кôд је скениран.</translation>
 <translation id="5719854774000914513">Сајтови могу да траже да се повезују са HID уређајима</translation>
 <translation id="572155275267014074">Android подешавања</translation>
 <translation id="5722086096420375088">Зелена и бела</translation>
@@ -4523,6 +4529,7 @@
 <translation id="5955721306465922729">Веб-сајт жели да отвори ову апликацију.</translation>
 <translation id="5955809630138889698">Овај уређај можда испуњава услове само за онлајн режим демонстрације. Више детаља потражите од представника подршке.</translation>
 <translation id="5956585768868398362">Је ли ово страница претраге коју сте очекивали?</translation>
+<translation id="5957918771633727933">Нема доступних eSIM профила. Преузмите нови <ph name="BEGIN_LINK" />профил<ph name="END_LINK" />.</translation>
 <translation id="5957987129450536192">Додирните икону Изаберите за говор поред слике профила, па изаберите оно што желите да чујете.</translation>
 <translation id="5959471481388474538">Мрежа није доступна</translation>
 <translation id="595959584676692139">Поново учитајте ову страницу да бисте користили овај додатак</translation>
@@ -5910,6 +5917,7 @@
 <translation id="7506541170099744506"><ph name="DEVICE_TYPE" /> је регистрован за управљање предузећем.</translation>
 <translation id="7507207699631365376">Погледајте <ph name="BEGIN_LINK" />политику приватности<ph name="END_LINK" /> овог добављача</translation>
 <translation id="7507930499305566459">Сертификат за одзивник статуса</translation>
+<translation id="7509246181739783082">Верификујте идентитет</translation>
 <translation id="7513029293694390567">Аутоматски се пријављујте на веб-сајтове помоћу сачуваних акредитива. Када је ова функција онемогућена, тражићемо потврду пре сваког пријављивања на веб-сајт.</translation>
 <translation id="7514239104543605883">Копирајте на свој уређај</translation>
 <translation id="7514365320538308">Преузми</translation>
@@ -6024,6 +6032,7 @@
 <translation id="7638605456503525968">Серијски портови</translation>
 <translation id="7639914187072011620">Преузимање SAML URL-а за преусмеравање са сервера није успело</translation>
 <translation id="764017888128728"><ph name="PASSWORD_MANAGER_BRAND" /> вас аутоматски пријављује на сајтове који испуњавају услове помоћу лозинки које сте сачували.</translation>
+<translation id="7641513591566880111">Нов назив профила</translation>
 <translation id="7642778300616172920">Сакриј осетљив садржај</translation>
 <translation id="7643842463591647490">{0,plural, =1{# отворен прозор}one{# отворен прозор}few{# отворена прозора}other{# отворених прозора}}</translation>
 <translation id="7643932971554933646">Желите ли да дозволите да сајт прегледа датотеке?</translation>
@@ -6184,6 +6193,7 @@
 <translation id="7800518121066352902">Окрећи у с&amp;меру супротном од кретања казаљке на сату</translation>
 <translation id="780301667611848630">Не, хвала</translation>
 <translation id="7804072833593604762">Картица је затворена</translation>
+<translation id="7805759469263222011">Скенирајте QR кôд помоћу камере уређаја или унесите активациони кôд који сте добили од мобилног оператера</translation>
 <translation id="7805768142964895445">Статус</translation>
 <translation id="7807067443225230855">Претрага и Помоћник</translation>
 <translation id="7807711621188256451">Увек дозволи да <ph name="HOST" /> приступа камери</translation>
@@ -6442,7 +6452,6 @@
 <translation id="8061091456562007989">Поништи измене</translation>
 <translation id="8061991877177392872">Изгледа да сте већ подесили Voice Match са Помоћником на другом уређају. Ови претходни снимци су коришћени за прављење гласовног модела на овом уређају.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{1 лист папира}one{{COUNT} лист папира}few{{COUNT} листа папира}other{{COUNT} листова папира}}</translation>
-<translation id="8062879968880283306">Скенирајте QR кôд помоћу камере уређаја или унесите активациони кôд који сте добили од мобилног оператера.</translation>
 <translation id="8063235345342641131">Подразумевани зелени аватар</translation>
 <translation id="8063535366119089408">Прикажи датотеку</translation>
 <translation id="8064279191081105977">Група <ph name="GROUP_NAME" /> – <ph name="GROUP_CONTENTS" /> – <ph name="COLLAPSED_STATE" /></translation>
@@ -6664,6 +6673,7 @@
 <translation id="8300849813060516376">OTASP није успео</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{Адреса}one{# адреса}few{# адресе}other{# адреса}}</translation>
 <translation id="8304383784961451596">Немате овлашћење за коришћење овог уређаја. Затражите дозволу за пријављивање од администратора или се пријавите помоћу Google налога под Family Link надзором.</translation>
+<translation id="8308016398665340540">Делите ову мрежу са осталим корисницима на овом уређају</translation>
 <translation id="8308179586020895837">Питај ме ако <ph name="HOST" /> жели да приступи камери</translation>
 <translation id="830868413617744215">Beta</translation>
 <translation id="8309458809024885768">Сертификат већ постоји</translation>
@@ -6863,7 +6873,6 @@
 <translation id="8551588720239073785">Подешавања датума и времена</translation>
 <translation id="8553342806078037065">Управљање другим људима</translation>
 <translation id="8554899698005018844">Без језика</translation>
-<translation id="8555195867496021627">Нема доступних eSIM профила. Преузмите нови профил <ph name="BEGIN_LINK" />овде.<ph name="END_LINK" /></translation>
 <translation id="8557022314818157177">Наставите да додирујете безбедносни кључ док не снимимо отисак прста</translation>
 <translation id="8557930019681227453">Манифест</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{Отвори све у &amp;новом прозору}=1{Отвори у &amp;новом прозору}one{Отвори све ({COUNT}) у &amp;новом прозору}few{Отвори све ({COUNT}) у &amp;новом прозору}other{Отвори све ({COUNT}) у &amp;новом прозору}}</translation>
@@ -7043,7 +7052,6 @@
 <translation id="8743164338060742337"><ph name="NETWORK_INDEX" />. мрежа од <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, јачина сигнала <ph name="SIGNAL_STRENGTH" />%, управља администратор, повежите</translation>
 <translation id="8746654918629346731">Већ сте тражили „<ph name="EXTENSION_NAME" />“</translation>
 <translation id="874689135111202667">{0,plural, =1{Желите ли да отпремите једну датотеку на овај сајт?}one{Желите ли да отпремите # датотеку на овај сајт?}few{Желите ли да отпремите # датотеке на овај сајт?}other{Желите ли да отпремите # датотека на овај сајт?}}</translation>
-<translation id="8749556627204742888">Делите ову мрежу са осталим корисницима на овом уређају.</translation>
 <translation id="8749805710397399240">Пребацивање екрана није успело. Проверите дозволу за снимање екрана у Подешавањима система.</translation>
 <translation id="8749863574775030885">Приступ USB уређајима непознатог продавца</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> жели да се повеже са серијским портом</translation>
@@ -7107,7 +7115,6 @@
 <translation id="8808744862003883508">На овој страници можете да видите све додатке инсталиране у Chrome-у.</translation>
 <translation id="8809147117840417135">Светлотиркизна</translation>
 <translation id="8811862054141704416">Приступ микрофону за Crostini</translation>
-<translation id="8812552797690463522">Ова мрежа се дели са вама.</translation>
 <translation id="8812593354822910461">Обриши и податке прегледања (<ph name="URL" />). Ово ће вас одјавити са <ph name="DOMAIN" />. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">Подсети ме касније</translation>
 <translation id="8813698869395535039">Пријављивање на <ph name="USERNAME" /> није успело</translation>
@@ -7319,7 +7326,6 @@
 <translation id="9021662811137657072">Откривен је вирус</translation>
 <translation id="902236149563113779">Сајтови обично прате положај камере за потребе функција проширене реалности, попут игара или путања</translation>
 <translation id="9022847679183471841"><ph name="AVATAR_NAME" /> већ користи овај налог на овом рачунару.</translation>
-<translation id="9023009238991294202">Други корисници овог уређаја могу да користе ову мрежу.</translation>
 <translation id="9023015617655685412">Обележи ову картицу...</translation>
 <translation id="9023909777842748145">Искључивање ове функције не утиче на могућност уређаја да шаље информације потребне за основне услуге, на пример, ажурирања система и безбедност.</translation>
 <translation id="9024127637873500333">&amp;Отвори на новој картици</translation>

@@ -69,6 +69,8 @@ import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
+import org.chromium.ui.modelutil.PropertyKey;
+import org.chromium.ui.modelutil.PropertyListModel;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 
@@ -535,6 +537,11 @@ public class FeedSurfaceMediator
         }
         mCurrentStream = stream;
         mCurrentStream.addOnContentChangedListener(mStreamContentChangedListener);
+
+        if (FeedFeatures.isAutoScrollToTopEnabled() && mRestoreScrollState == null) {
+            mRestoreScrollState = getScrollStateForAutoScrollToTop();
+        }
+
         mCurrentStream.bind(mCoordinator.getRecyclerView(), mCoordinator.getContentManager(),
                 mRestoreScrollState, mCoordinator.getSurfaceScope(),
                 mCoordinator.getHybridListRenderer());
@@ -668,6 +675,12 @@ public class FeedSurfaceMediator
         mPrefChangeRegistrar.removeObserver(Pref.ARTICLES_LIST_VISIBLE);
         TemplateUrlServiceFactory.get().removeObserver(this);
         mSigninManager.getIdentityManager().removeObserver(this);
+
+        PropertyListModel<PropertyModel, PropertyKey> headerList =
+                mSectionHeaderModel.get(SectionHeaderListProperties.SECTION_HEADERS_KEY);
+        if (headerList.size() > 0) {
+            headerList.removeRange(0, headerList.size());
+        }
     }
 
     /**
@@ -1007,6 +1020,12 @@ public class FeedSurfaceMediator
         StartSurfaceConfiguration.recordHistogram(FEED_CONTENT_FIRST_LOADED_TIME_MS_UMA,
                 mContentFirstAvailableTimeMs - mActivityCreationTimeMs, mIsInstantStart);
         return true;
+    }
+
+    private ScrollState getScrollStateForAutoScrollToTop() {
+        ScrollState state = new ScrollState();
+        state.position = 1;
+        return state;
     }
 
     // Detects animation finishes in RecyclerView.

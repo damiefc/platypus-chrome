@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ms">
+<translation id="1001033507375626788">Rangkaian ini dikongsi dengan anda</translation>
 <translation id="1001307489511021749">Apl, tetapan dan penyesuaian anda yang lain akan disegerakkan pada semua peranti OS Chrome yang dilog masuk dengan Akaun Google anda.</translation>
 <translation id="1003088604756913841">Buka Pautan dalam Tetingkap <ph name="APP" /> baharu</translation>
 <translation id="100323615638474026">Peranti USB (<ph name="VENDOR_ID" />:<ph name="PRODUCT_ID" />)</translation>
@@ -358,7 +359,6 @@
 <translation id="138784436342154190">Pulihkan halaman permulaan lalai?</translation>
 <translation id="1388253969141979417">Dibenarkan untuk menggunakan mikrofon anda</translation>
 <translation id="1388728792929436380"><ph name="DEVICE_TYPE" /> akan dimulakan semula apabila kemaskinian selesai.</translation>
-<translation id="138900021244932468">Tiada profil dijumpai. Untuk menyediakan rangkaian baharu, imbas kod QR menggunakan kamera peranti atau masukkan kod pengaktifan yang disediakan oleh pembawa anda.</translation>
 <translation id="139013308650923562">Dibenarkan untuk menggunakan fon yang dipasang pada peranti anda</translation>
 <translation id="1390548061267426325">Buka sebagai Tab Biasa</translation>
 <translation id="1393283411312835250">Matahari dan awan</translation>
@@ -961,6 +961,7 @@
 <translation id="1992924914582925289">Alih keluar daripada peranti</translation>
 <translation id="1994173015038366702">URL tapak</translation>
 <translation id="1995916364271252349">Mengawal jenis maklumat yang boleh digunakan dan ditunjukkan oleh tapak (lokasi, kamera, tetingkap timbul dan pelbagai lagi)</translation>
+<translation id="1997437640397887843">Kamera peranti telah dihidupkan. Sila letakkan kod QR eSIM anda di hadapan kamera.</translation>
 <translation id="1997616988432401742">Sijil anda</translation>
 <translation id="1999115740519098545">Pada permulaan</translation>
 <translation id="2000419248597011803">Menghantar beberapa kuki dan carian daripada bar alamat dan kotak carian ke enjin carian lalai anda</translation>
@@ -1016,6 +1017,7 @@ Anda boleh mengurus tetapan akaun ini dengan memasang apl Family Link pada peran
 <translation id="2055585478631012616">Anda akan dilog keluar daripada tapak ini, termasuk dalam tab yang terbuka</translation>
 <translation id="205560151218727633">Logo Google Assistant</translation>
 <translation id="2058456167109518507">Peranti dikesan</translation>
+<translation id="2058581283817163201">Sahkan menggunakan telefon ini</translation>
 <translation id="2059913712424898428">Zon waktu</translation>
 <translation id="2060375639911876205">Alih keluar profil eSIM</translation>
 <translation id="2062354623176996748">Gunakan web tanpa menyimpan sejarah penyemakan imbas anda menggunakan tetingkap Inkognito</translation>
@@ -2616,6 +2618,7 @@ dan Ctrl+Alt+Kurangkan kecerahan untuk zum keluar.</translation>
 <translation id="3785308913036335955">Paparkan Pintasan Apl</translation>
 <translation id="3785727820640310185">Kata laluan disimpan untuk tapak ini</translation>
 <translation id="3788301286821743879">Aplikasi kios tidak dapat dilancarkan.</translation>
+<translation id="3788331399335602504">fail ini</translation>
 <translation id="3788401245189148511">Item boleh:</translation>
 <translation id="3789841737615482174">Pasang</translation>
 <translation id="379082410132524484">Kad anda telah tamat tempoh</translation>
@@ -3191,6 +3194,7 @@ dan Ctrl+Alt+Kurangkan kecerahan untuk zum keluar.</translation>
 <translation id="4438043733494739848">Lutsinar</translation>
 <translation id="4438639467177774583"><ph name="USERNAME" /> <ph name="MASKED_PASSWORD" /> akan disimpan pada Akaun Google anda, <ph name="ACCOUNT" /></translation>
 <translation id="4439427728133035643">Rangkaian <ph name="NETWORK_INDEX" /> daripada <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Kekuatan Isyarat <ph name="SIGNAL_STRENGTH" />%, Sambung</translation>
+<translation id="4440097423000553826"><ph name="WEBSITE" /> telah menghantar pemberitahuan ke telefon anda. Untuk mengesahkan itu anda, ketik pemberitahuan “<ph name="NOTIFICATIONTITLE" />” dan ikut langkah yang diberikan.</translation>
 <translation id="4441124369922430666">Adakah anda ingin mulakan apl ini secara automatik apabila mesin ini dihidupkan?</translation>
 <translation id="4441147046941420429">Untuk meneruskan, alih keluar kunci keselamatan daripada peranti anda, kemudian masukkan semula dan sentuh kunci itu.</translation>
 <translation id="444134486829715816">Kembangkan...</translation>
@@ -3493,6 +3497,7 @@ dan Ctrl+Alt+Kurangkan kecerahan untuk zum keluar.</translation>
 <translation id="4773112038801431077">Tingkatkan Linux</translation>
 <translation id="477647109558161443">Buat pintasan desktop</translation>
 <translation id="4776917500594043016">Kata laluan untuk <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="4777458362738635055">Pengguna lain peranti ini boleh menggunakan rangkaian ini</translation>
 <translation id="4777825441726637019">Gedung Play</translation>
 <translation id="4777943778632837590">Konfigurasikan pelayan nama rangkaian</translation>
 <translation id="4778644898150334464">Gunakan kata laluan lain</translation>
@@ -4328,6 +4333,7 @@ dan Ctrl+Alt+Kurangkan kecerahan untuk zum keluar.</translation>
 <translation id="5712153969432126546">Kadangkala laman menerbitkan PDF, seperti dokumen, kontrak dan borang</translation>
 <translation id="5715711091495208045">Broker Pemalam: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">Enjin carian lalai</translation>
+<translation id="5719637365829998022">Kod QR telah diimbas.</translation>
 <translation id="5719854774000914513">Tapak boleh meminta untuk menyambung kepada peranti HID</translation>
 <translation id="572155275267014074">Tetapan Android</translation>
 <translation id="5722086096420375088">Hijau dan putih</translation>
@@ -4539,6 +4545,7 @@ dan Ctrl+Alt+Kurangkan kecerahan untuk zum keluar.</translation>
 <translation id="5955721306465922729">Satu tapak web ingin membuka aplikasi ini.</translation>
 <translation id="5955809630138889698">Peranti ini mungkin layak untuk mod tunjuk cara dalam talian sahaja. Sila hubungi wakil sokongan anda untuk mendapatkan butiran lanjut.</translation>
 <translation id="5956585768868398362">Adakah ini halaman carian yang anda jangkakan?</translation>
+<translation id="5957918771633727933">Tiada profil eSIM tersedia. Muat turun <ph name="BEGIN_LINK" />profil<ph name="END_LINK" /> baharu.</translation>
 <translation id="5957987129450536192">Ketik ikon Pilih untuk Cakap berdekatan imej profil anda, kemudian pilih apa yang hendak anda dengar.</translation>
 <translation id="5959471481388474538">Rangkaian tak tersedia</translation>
 <translation id="595959584676692139">Muat semula halaman untuk menggunakan sambungan ini</translation>
@@ -5929,6 +5936,7 @@ dan Ctrl+Alt+Kurangkan kecerahan untuk zum keluar.</translation>
 <translation id="7506541170099744506"><ph name="DEVICE_TYPE" /> anda berjaya didaftarkan untuk pengurusan perusahaan.</translation>
 <translation id="7507207699631365376">Lihat <ph name="BEGIN_LINK" />dasar privasi<ph name="END_LINK" /> penyedia ini</translation>
 <translation id="7507930499305566459">Status Pembalas Sijil</translation>
+<translation id="7509246181739783082">Sahkan identiti anda</translation>
 <translation id="7513029293694390567">Log masuk secara automatik ke tapak web menggunakan bukti kelayakan yang disimpan. Jika dilumpuhkan, anda akan diminta memberikan pengesahan setiap kali sebelum mengelog masuk ke tapak web.</translation>
 <translation id="7514239104543605883">Salin ke peranti anda</translation>
 <translation id="7514365320538308">Muat Turun</translation>
@@ -6043,6 +6051,7 @@ dan Ctrl+Alt+Kurangkan kecerahan untuk zum keluar.</translation>
 <translation id="7638605456503525968">Port siri</translation>
 <translation id="7639914187072011620">Gagal mengambil URL ubah hala SAML daripada pelayan</translation>
 <translation id="764017888128728"><ph name="PASSWORD_MANAGER_BRAND" /> melog masuk anda secara automatik ke tapak web yang layak menggunakan kata laluan yang disimpan.</translation>
+<translation id="7641513591566880111">Nama profil baharu</translation>
 <translation id="7642778300616172920">Sembunyikan kandungan sensitif</translation>
 <translation id="7643842463591647490">{0,plural, =1{# tetingkap terbuka}other{# tetingkap terbuka}}</translation>
 <translation id="7643932971554933646">Benarkan tapak membaca fail?</translation>
@@ -6203,6 +6212,7 @@ dan Ctrl+Alt+Kurangkan kecerahan untuk zum keluar.</translation>
 <translation id="7800518121066352902">Putar M&amp;elawan Arah Jam</translation>
 <translation id="780301667611848630">Tidak, terima kasih</translation>
 <translation id="7804072833593604762">Tab Ditutup</translation>
+<translation id="7805759469263222011">Imbas kod QR menggunakan kamera peranti atau masukkan kod pengaktifan yang disediakan oleh pembawa anda</translation>
 <translation id="7805768142964895445">Status</translation>
 <translation id="7807067443225230855">Carian dan Pembantu</translation>
 <translation id="7807711621188256451">Sentiasa benarkan <ph name="HOST" /> mengakses kamera anda</translation>
@@ -6461,7 +6471,6 @@ Simpan fail kunci anda di tempat selamat. Anda akan memerlukannya untuk mencipta
 <translation id="8061091456562007989">Tukar kepada asal</translation>
 <translation id="8061991877177392872">Nampaknya anda telah pun menyediakan Voice Match dengan Assistant pada peranti lain. Rakaman terdahulu ini telah digunakan untuk membuat model suara pada peranti ini.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{1 helai kertas}other{{COUNT} helai kertas}}</translation>
-<translation id="8062879968880283306">Imbas kod QR menggunakan kamera peranti atau masukkan kod pengaktifan yang disediakan oleh pembawa anda.</translation>
 <translation id="8063235345342641131">Avatar hijau lalai</translation>
 <translation id="8063535366119089408">Lihat fail</translation>
 <translation id="8064279191081105977">Kumpulan <ph name="GROUP_NAME" /> - <ph name="GROUP_CONTENTS" /> - <ph name="COLLAPSED_STATE" /></translation>
@@ -6683,6 +6692,7 @@ Simpan fail kunci anda di tempat selamat. Anda akan memerlukannya untuk mencipta
 <translation id="8300849813060516376">OTASP gagal</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{Alamat}other{# alamat}}</translation>
 <translation id="8304383784961451596">Anda tidak akan dibenarkan untuk menggunakan peranti ini. Sila hubungi pentadbir untuk mendapatkan kebenaran log masuk atau log masuk menggunakan akaun Google yang diawasi oleh Family Link.</translation>
+<translation id="8308016398665340540">Anda berkongsi rangkaian ini dengan pengguna lain bagi peranti ini</translation>
 <translation id="8308179586020895837">Tanya jika <ph name="HOST" /> mahu mengakses kamera anda</translation>
 <translation id="830868413617744215">Beta</translation>
 <translation id="8309458809024885768">Sijil sudah wujud</translation>
@@ -6883,7 +6893,6 @@ perubahan ini berlaku, anda mungkin tidak mahukannya.</translation>
 <translation id="8551588720239073785">Tetapan tarikh dan masa</translation>
 <translation id="8553342806078037065">Urus orang lain</translation>
 <translation id="8554899698005018844">Tiada bahasa</translation>
-<translation id="8555195867496021627">Tiada profil eSIM tersedia. Muat turun profil baharu <ph name="BEGIN_LINK" />di sini.<ph name="END_LINK" /></translation>
 <translation id="8557022314818157177">Teruskan menyentuh kunci keselamatan anda sehingga cap jari anda disimpan</translation>
 <translation id="8557930019681227453">Manifes</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{Buka Semua dalam Tetingkap &amp;Baharu}=1{Buka dalam &amp;Tetingkap Baharu}other{Buka Semua ({COUNT}) dalam Tetingkap &amp;Baharu}}</translation>
@@ -7063,7 +7072,6 @@ Tekan suis yang telah ditetapkan untuk membatalkan penetapan.</translation>
 <translation id="8743164338060742337">Rangkaian <ph name="NETWORK_INDEX" /> daripada <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, Kekuatan Isyarat <ph name="SIGNAL_STRENGTH" />%, Diurus oleh Pentadbir anda, Sambung</translation>
 <translation id="8746654918629346731">Anda sudah meminta "<ph name="EXTENSION_NAME" />"</translation>
 <translation id="874689135111202667">{0,plural, =1{Muat naik satu fail ke tapak ini?}other{Muat naik # fail ke tapak ini?}}</translation>
-<translation id="8749556627204742888">Anda berkongsi rangkaian ini dengan pengguna lain bagi peranti ini.</translation>
 <translation id="8749805710397399240">Tidak dapat menghantar skrin anda. Semak kebenaran Perakam Skrin dalam Pilihan Sistem.</translation>
 <translation id="8749863574775030885">Akses peranti USB daripada vendor yang tidak diketahui</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> mahu menyambung ke port siri</translation>
@@ -7125,7 +7133,6 @@ Tekan suis yang telah ditetapkan untuk membatalkan penetapan.</translation>
 <translation id="8808744862003883508">Pada halaman ini, anda dapat melihat semua sambungan yang dipasang pada Chrome.</translation>
 <translation id="8809147117840417135">Hijau kebiruan cerah</translation>
 <translation id="8811862054141704416">Akses mikrofon Crostini</translation>
-<translation id="8812552797690463522">Rangkaian ini dikongsi dengan anda.</translation>
 <translation id="8812593354822910461">Kosongkan data semakan imbas (<ph name="URL" />) juga, yang akan melog anda keluar daripada <ph name="DOMAIN" />. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">Ingatkan saya kemudian</translation>
 <translation id="8813698869395535039">Tidak dapat mengelog masuk ke <ph name="USERNAME" /></translation>
@@ -7337,7 +7344,6 @@ Tekan suis yang telah ditetapkan untuk membatalkan penetapan.</translation>
 <translation id="9021662811137657072">Virus dikesan</translation>
 <translation id="902236149563113779">Tapak biasanya menjejak kedudukan kamera anda untuk ciri AR, seperti permainan atau arah pandu</translation>
 <translation id="9022847679183471841">Akaun ini telah digunakan pada komputer ini oleh <ph name="AVATAR_NAME" /></translation>
-<translation id="9023009238991294202">Pengguna lain peranti ini boleh menggunakan rangkaian ini.</translation>
 <translation id="9023015617655685412">Tanda tab ini...</translation>
 <translation id="9023909777842748145">Tindakan mematikan ciri ini tidak menjejaskan keupayaan peranti anda menghantar maklumat yang diperlukan untuk perkhidmatan penting seperti kemas kini sistem dan keselamatan.</translation>
 <translation id="9024127637873500333">&amp;Buka dalam Tab Baharu</translation>

@@ -28,11 +28,12 @@ import org.chromium.url.GURL;
  * Handles the Link To Text action in the Sharing Hub.
  */
 public class LinkToTextCoordinator extends EmptyTabObserver {
-    @IntDef({LinkGeneration.TEXT, LinkGeneration.LINK, LinkGeneration.FAILURE})
+    @IntDef({LinkGeneration.TEXT, LinkGeneration.LINK, LinkGeneration.FAILURE, LinkGeneration.MAX})
     public @interface LinkGeneration {
         int TEXT = 0;
         int LINK = 1;
         int FAILURE = 2;
+        int MAX = 3;
     }
 
     private static final String SHARE_TEXT_TEMPLATE = "\"%s\"\n";
@@ -45,13 +46,13 @@ public class LinkToTextCoordinator extends EmptyTabObserver {
     private final Tab mTab;
     private final ChromeShareExtras mChromeShareExtras;
     private final long mShareStartTime;
-    private final ShareParams mShareTextParams;
     private final long mRequestSelectorStartTime;
 
     private ShareParams mShareLinkParams;
     private TextFragmentReceiver mProducer;
     private boolean mCancelRequest;
     private String mSelectedText;
+    private ShareParams mShareTextParams;
 
     public LinkToTextCoordinator(Context context, Tab tab,
             ChromeOptionShareCallback chromeOptionShareCallback, String visibleUrl,
@@ -185,6 +186,10 @@ public class LinkToTextCoordinator extends EmptyTabObserver {
                     @Override
                     public void call(String[] matches) {
                         mSelectedText = String.join(",", matches);
+                        mShareTextParams =
+                                new ShareParams.Builder(mTab.getWindowAndroid(), /*title=*/"", "")
+                                        .setText(mSelectedText)
+                                        .build();
                         onSelectorReady(mVisibleUrl);
                     }
                 });

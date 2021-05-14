@@ -273,6 +273,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram
+    name="OptimizationGuide.HintsManager.PageNavigationHintsReturnedBeforeDataFlushed"
+    units="BooleanStored" expires_after="M94">
+  <owner>sophiechang@chromium.org</owner>
+  <owner>mcrouse@chromium.org</owner>
+  <summary>
+    Records whether a page navigation hints fetch returned before navigation
+    data used to record additional page load metrics is flushed. Recorded only
+    for navigations that have a hints fetch initiated for it.
+  </summary>
+</histogram>
+
+<histogram
     name="OptimizationGuide.HintsManager.RaceNavigationFetchAttemptStatus"
     enum="OptimizationGuideRaceNavigationFetchAttemptStatus"
     expires_after="2021-10-31">
@@ -337,6 +349,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="OptimizationGuide.ModelExecutor.RunCount.{OptimizationTarget}"
     units="count" expires_after="M94">
+  <obsolete>
+    Removed 2021-May.
+  </obsolete>
   <owner>robertogden@chromium.org</owner>
   <owner>chrome-intelligence-core@google.com</owner>
   <summary>
@@ -563,17 +578,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Records whether the model type changed from model proto to model file, or
     vice versa when the in-memory model for an optimization target has been
     loaded.
-  </summary>
-</histogram>
-
-<histogram name="OptimizationGuide.PredictionManager.PredictionModelPathExists"
-    units="BooleanExists" expires_after="M94">
-  <owner>mcrouse@chromium.org</owner>
-  <owner>sophiechang@chromium.org</owner>
-  <summary>
-    Records whether the path/directory where models are to be stored exists and
-    can be used to ultimately store models. Recorded when the model store is
-    initialized.
   </summary>
 </histogram>
 

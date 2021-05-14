@@ -189,21 +189,6 @@
             ]
         }
     ],
-    "AndroidDarkSearch": [
-        {
-            "platforms": [
-                "android"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "AndroidDarkSearch"
-                    ]
-                }
-            ]
-        }
-    ],
     "AndroidDynamicWideColorGamut": [
         {
             "platforms": [
@@ -5463,21 +5448,6 @@
             ]
         }
     ],
-    "OptimizationHintsMSBB": [
-        {
-            "platforms": [
-                "android"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled_20210421",
-                    "enable_features": [
-                        "OptimizationHintsFetchingAnonymousDataConsent"
-                    ]
-                }
-            ]
-        }
-    ],
     "OptimizedRealtimeThreadingMac": [
         {
             "platforms": [
@@ -6786,7 +6756,7 @@
             ]
         }
     ],
-    "SafeBrowsingVisualCsdModel": [
+    "SafeBrowsingVisualCsdModelVariation9": [
         {
             "platforms": [
                 "chromeos",
@@ -6797,9 +6767,9 @@
             ],
             "experiments": [
                 {
-                    "name": "Enabled_20210208",
+                    "name": "Enabled",
                     "params": {
-                        "ModelNum": "8"
+                        "ModelNum": "9"
                     },
                     "enable_features": [
                         "ClientSideDetectionModel"

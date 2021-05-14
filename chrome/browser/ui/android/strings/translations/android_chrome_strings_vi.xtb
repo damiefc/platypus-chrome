@@ -41,10 +41,9 @@
 <translation id="124678866338384709">Đóng thẻ hiện tại</translation>
 <translation id="1258753120186372309">Hình tượng trưng của Google: <ph name="DOODLE_DESCRIPTION" /></translation>
 <translation id="1266864766717917324">Không thể chia sẻ <ph name="CONTENT_TYPE" /></translation>
-<translation id="1276279242344007853">Quản lý các trang web mà bạn đang theo dõi</translation>
 <translation id="1283039547216852943">Nhấn để mở rộng</translation>
 <translation id="1285310382777185058">Thay đổi ngôn ngữ</translation>
-<translation id="1291207594882862231">Xóa lịch sử, cookie, dữ liệu trang web, bộ nhớ đệm…</translation>
+<translation id="1291207594882862231">Xóa dữ liệu duyệt web, cookie, dữ liệu trang web, bộ nhớ đệm…</translation>
 <translation id="129553762522093515">Các thẻ đã đóng gần đây</translation>
 <translation id="1298077576058087471">Tiết kiệm tới 60% dữ liệu, đọc tin tức hôm nay</translation>
 <translation id="1303339473099049190">Không tìm thấy mật khẩu đó. Hãy kiểm tra chính tả rồi thử lại.</translation>
@@ -296,6 +295,7 @@ Chạm và giữ từ bất kỳ để tìm kiếm. Để điều chỉnh nội 
 <translation id="2904414404539560095">Danh sách các thiết bị mà bạn có thể chia sẻ một thẻ đã mở trên toàn màn hình.</translation>
 <translation id="2905036901251765993">Để chia sẻ với những người ở gần, hãy cho phép họ quét mã QR này</translation>
 <translation id="2909615210195135082">Nền tảng thông báo của Google</translation>
+<translation id="2912296070571964914">Quản lý các chủ đề mà bạn quan tâm</translation>
 <translation id="2923908459366352541">Tên không hợp lệ</translation>
 <translation id="2932150158123903946">Bộ nhớ Google <ph name="APP_NAME" /></translation>
 <translation id="2932222164150889403">Bàn phím của bạn sẽ không thay đổi</translation>
@@ -340,6 +340,8 @@ Chạm và giữ từ bất kỳ để tìm kiếm. Để điều chỉnh nội 
 <translation id="3254409185687681395">Đánh dấu trang này</translation>
 <translation id="3259831549858767975">Thu nhỏ mọi nội dung trên trang</translation>
 <translation id="3264124641674805320">Cách tải nội dung xuống để dùng sau</translation>
+<translation id="3264259168916048410">Máy tính của bạn muốn sử dụng thiết bị này để đăng nhập vào một trang web</translation>
+<translation id="3265534588625245297">Quản lý các trang web mà bạn theo dõi</translation>
 <translation id="3269093882174072735">Tải hình ảnh</translation>
 <translation id="3269956123044984603">Để có các thẻ từ các thiết bị khác của bạn, hãy bật “Tự động đồng bộ hóa dữ liệu” trong cài đặt tài khoản Android.</translation>
 <translation id="3282568296779691940">Đăng nhập vào Chrome</translation>
@@ -498,6 +500,7 @@ Hộp cát về quyền riêng tư vẫn đang trong giai đoạn phát triển 
 <translation id="4351244548802238354">Đóng hộp thoại</translation>
 <translation id="4378154925671717803">Điện thoại</translation>
 <translation id="4384468725000734951">Sử dụng Sogou để tìm kiếm</translation>
+<translation id="4402611456429872546"><ph name="LANG" /> – Đang tải xuống…</translation>
 <translation id="4404568932422911380">Không có dấu trang nào</translation>
 <translation id="4405224443901389797">Chuyển tới...</translation>
 <translation id="4411535500181276704">Chế độ thu gọn</translation>
@@ -550,7 +553,6 @@ Tài khoản Google của bạn có thể có các dạng lịch sử duyệt we
 <translation id="4697543623252708062">Bạn sẽ sớm thấy các tin bài của <ph name="SITE_NAME" /> khi mở một thẻ mới. Bạn có thể kiểm soát các trang web mà mình theo dõi trong phần Quản lý lượt theo dõi.</translation>
 <translation id="4699172675775169585">Tệp và hình ảnh được lưu trong bộ nhớ đệm</translation>
 <translation id="4714588616299687897">Tiết kiệm tới 60% dữ liệu</translation>
-<translation id="4716066120200945007">ĐANG THEO DÕI</translation>
 <translation id="4719927025381752090">Đề xuất dịch</translation>
 <translation id="4720023427747327413">Mở trong <ph name="PRODUCT_NAME" /></translation>
 <translation id="4720982865791209136">Hãy giúp cải tiến Chrome. <ph name="BEGIN_LINK" />Tham gia khảo sát<ph name="END_LINK" /></translation>
@@ -585,6 +587,7 @@ Tài khoản Google của bạn có thể có các dạng lịch sử duyệt we
 <translation id="488187801263602086">Đổi tên tệp</translation>
 <translation id="4882831918239250449">Kiểm soát cách Google sử dụng lịch sử duyệt web của bạn để cá nhân hóa dịch vụ Tìm kiếm, quảng cáo và các dịch vụ khác</translation>
 <translation id="4885273946141277891">Số phiên bản Chrome không được hỗ trợ.</translation>
+<translation id="4905269543817054577">Nhật ký duyệt web không được lưu khi ở chế độ Ẩn danh</translation>
 <translation id="4908869848243824489">Tính năng Khám phá của Google</translation>
 <translation id="4910889077668685004">Ứng dụng thanh toán</translation>
 <translation id="4913161338056004800">Đặt lại thống kê</translation>
@@ -752,7 +755,6 @@ Tài khoản Google của bạn có thể có các dạng lịch sử duyệt we
 <translation id="5939518447894949180">Đặt lại</translation>
 <translation id="5942872142862698679">Sử dụng Google để tìm kiếm</translation>
 <translation id="5951119116059277034">Đang xem trang hiển thị công khai</translation>
-<translation id="5951615825629292797">Ngôn ngữ đã sẵn sàng, hãy khởi động lại <ph name="APP_NAME" /></translation>
 <translation id="5952764234151283551">Gửi cho Google URL của trang bạn đang cố truy cập</translation>
 <translation id="5956665950594638604">Mở Trung tâm trợ giúp Chrome trong thẻ mới</translation>
 <translation id="5957442310066583693">Để xem các trang web hàng đầu của bạn, hãy nhấn vào nút Trang chủ</translation>
@@ -954,6 +956,7 @@ Dữ liệu của phiên Ẩn danh sẽ chỉ bị xóa khỏi Chrome khi bạn 
 <translation id="7191430249889272776">Thẻ được mở dưới nền.</translation>
 <translation id="7233236755231902816">Để duyệt web bằng ngôn ngữ của bạn, hãy tải phiên bản Chrome mới nhất</translation>
 <translation id="7248069434667874558">Hãy đảm bảo <ph name="TARGET_DEVICE_NAME" /> đã bật tính năng đồng bộ hóa trên Chrome</translation>
+<translation id="7252076891734325316">Để điện thoại của bạn gần máy tính</translation>
 <translation id="7274013316676448362">Trang web bị chặn</translation>
 <translation id="7286572596625053347">Thay đổi <ph name="LANGUAGE" />?</translation>
 <translation id="7290209999329137901">Không đổi tên được</translation>
@@ -1020,6 +1023,7 @@ Dữ liệu của phiên Ẩn danh sẽ chỉ bị xóa khỏi Chrome khi bạn 
 <translation id="7630202231528827509">URL của nhà cung cấp</translation>
 <translation id="7638584964844754484">Cụm mật khẩu không chính xác</translation>
 <translation id="7641339528570811325">Xóa dữ liệu duyệt web…</translation>
+<translation id="764170292089748542">Chrome sẽ không lưu nhật ký duyệt web khi bạn chọn duyệt web ở chế độ riêng tư. Bạn vẫn có thể dùng dấu trang để truy cập vào các trang web yêu thích.</translation>
 <translation id="7646772052135772216">Tính năng đồng bộ hóa mật khẩu hiện không hoạt động</translation>
 <translation id="7658239707568436148">Hủy</translation>
 <translation id="7665369617277396874">Thêm tài khoản</translation>
@@ -1045,6 +1049,7 @@ Dữ liệu của phiên Ẩn danh sẽ chỉ bị xóa khỏi Chrome khi bạn 
 <translation id="7810647596859435254">Mở bằng…</translation>
 <translation id="7815484226266492798">Ảnh chụp toàn bộ màn hình</translation>
 <translation id="7821588508402923572">Mức tiết kiệm dữ liệu sẽ hiển thị tại đây</translation>
+<translation id="78270725016672455">Máy tính của bạn muốn đăng ký thiết bị này để đăng nhập vào một trang web</translation>
 <translation id="7844171778363018843">Bạn chưa chọn dữ liệu nào để đồng bộ hóa</translation>
 <translation id="7846296061357476882">Các dịch vụ của Google</translation>
 <translation id="784934925303690534">Phạm vi thời gian</translation>
@@ -1131,7 +1136,6 @@ Dữ liệu của phiên Ẩn danh sẽ chỉ bị xóa khỏi Chrome khi bạn 
 <translation id="834313815369870491">Không bao giờ dịch các trang web</translation>
 <translation id="8349013245300336738">Sắp xếp theo lượng dữ liệu đã dùng</translation>
 <translation id="835847953965672673">Đã khôi phục <ph name="NUMBER_OF_DOWNLOADS" /> tệp đã tải xuống</translation>
-<translation id="8362134094656482681">Quản lý các chủ đề mà bạn quan tâm</translation>
 <translation id="8364299278605033898">Xem các trang web phổ biến</translation>
 <translation id="8368027906805972958">Thiết bị không xác định hoặc không được hỗ trợ (<ph name="DEVICE_ID" />)</translation>
 <translation id="8372925856448695381"><ph name="LANG" /> đã sẵn sàng.</translation>
@@ -1142,6 +1146,7 @@ Dữ liệu của phiên Ẩn danh sẽ chỉ bị xóa khỏi Chrome khi bạn 
 <translation id="8427875596167638501">Thẻ xem trước đang mở trên nửa màn hình</translation>
 <translation id="8428213095426709021">Cài đặt</translation>
 <translation id="8438566539970814960">Cải thiện tính năng tìm kiếm và duyệt web</translation>
+<translation id="8439974325294139057"><ph name="LANG" /> - Ngôn ngữ đã sẵn sàng, hãy khởi động lại <ph name="APP_NAME" />.</translation>
 <translation id="8442258441309440798">Không có tin bài nào</translation>
 <translation id="8443209985646068659">Chrome không thể cập nhật</translation>
 <translation id="8445448999790540984">Không xuất được mật khẩu</translation>
@@ -1214,6 +1219,7 @@ Dữ liệu của phiên Ẩn danh sẽ chỉ bị xóa khỏi Chrome khi bạn 
 <translation id="8937267401510745927">Để giúp bạn hoàn thành những việc cần làm, Google sẽ nhận URL và nội dung của các trang web mà bạn sử dụng Trợ lý, cũng như thông tin bạn gửi qua Trợ lý. Thông tin này có thể được lưu trữ trong Tài khoản Google của bạn. Bạn có thể tắt Trợ lý trong phần cài đặt của Chrome.</translation>
 <translation id="8937772741022875483">Bạn có muốn xóa hoạt động của mình trên Chrome khỏi Digital Wellbeing không?</translation>
 <translation id="8942627711005830162">Mở trong cửa sổ khác</translation>
+<translation id="8945143127965743188"><ph name="LANG" /> – Không thể tải ngôn ngữ này xuống. Hãy thử lại sau.</translation>
 <translation id="8951232171465285730">Chrome đã tiết kiệm <ph name="MEGABYTES" /> MB cho bạn</translation>
 <translation id="8965591936373831584">đang chờ xử lý</translation>
 <translation id="8970887620466824814">Đã xảy ra lỗi.</translation>

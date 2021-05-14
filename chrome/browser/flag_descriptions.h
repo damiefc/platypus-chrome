@@ -124,9 +124,6 @@ extern const char kEnableSignedExchangeSubresourcePrefetchDescription[];
 extern const char kEnableSignedExchangePrefetchCacheForNavigationsName[];
 extern const char kEnableSignedExchangePrefetchCacheForNavigationsDescription[];
 
-extern const char kAudioWorkletRealtimeThreadName[];
-extern const char kAudioWorkletRealtimeThreadDescription[];
-
 extern const char kUpdatedCellularActivationUiName[];
 extern const char kUpdatedCellularActivationUiDescription[];
 
@@ -453,6 +450,9 @@ extern const char kDesktopPWAsAttentionBadgingCrOSApiOverridesNotifications[];
 extern const char kDesktopPWAsAttentionBadgingCrOSApiOnly[];
 extern const char kDesktopPWAsAttentionBadgingCrOSNotificationsOnly[];
 
+extern const char kDesktopPWAsPrefixAppNameInWindowTitleName[];
+extern const char kDesktopPWAsPrefixAppNameInWindowTitleDescription[];
+
 extern const char kDesktopPWAsRemoveStatusBarName[];
 extern const char kDesktopPWAsRemoveStatusBarDescription[];
 
@@ -684,9 +684,6 @@ extern const char kEnableWasmLazyCompilationDescription[];
 extern const char kEnableWasmSimdName[];
 extern const char kEnableWasmSimdDescription[];
 
-extern const char kEnableWasmThreadsName[];
-extern const char kEnableWasmThreadsDescription[];
-
 extern const char kEnableWasmTieringName[];
 extern const char kEnableWasmTieringDescription[];
 
@@ -867,6 +864,9 @@ extern const char kLegacyTLSEnforcedDescription[];
 
 extern const char kLensCameraAssistedSearchName[];
 extern const char kLensCameraAssistedSearchDescription[];
+
+extern const char kLinkDoctorDeprecationAndroidName[];
+extern const char kLinkDoctorDeprecationAndroidDescription[];
 
 extern const char kLiteVideoName[];
 extern const char kLiteVideoDescription[];
@@ -1298,9 +1298,6 @@ extern const char kSharingPeerConnectionSenderDescription[];
 
 extern const char kSharingPreferVapidName[];
 extern const char kSharingPreferVapidDescription[];
-
-extern const char kSharingQRCodeGeneratorName[];
-extern const char kSharingQRCodeGeneratorDescription[];
 
 extern const char kSharingSendViaSyncName[];
 extern const char kSharingSendViaSyncDescription[];
@@ -1847,9 +1844,6 @@ extern const char kOfflinePagesPrefetchingDescription[];
 extern const char kOfflinePagesLivePageSharingName[];
 extern const char kOfflinePagesLivePageSharingDescription[];
 
-extern const char kOffliningRecentPagesName[];
-extern const char kOffliningRecentPagesDescription[];
-
 extern const char kPageInfoDiscoverabilityName[];
 extern const char kPageInfoDiscoverabilityDescription[];
 
@@ -2002,9 +1996,6 @@ extern const char kPrefetchNotificationSchedulingIntegrationDescription[];
 
 extern const char kInlineUpdateFlowName[];
 extern const char kInlineUpdateFlowDescription[];
-
-extern const char kAndroidDarkSearchName[];
-extern const char kAndroidDarkSearchDescription[];
 
 extern const char kSwipeToMoveCursorName[];
 extern const char kSwipeToMoveCursorDescription[];
@@ -2472,6 +2463,9 @@ extern const char kEnableGoogleAssistantAecDescription[];
 extern const char kEnableHeuristicStylusPalmRejectionName[];
 extern const char kEnableHeuristicStylusPalmRejectionDescription[];
 
+extern const char kEnableInputInDiagnosticsAppName[];
+extern const char kEnableInputInDiagnosticsAppDescription[];
+
 extern const char kEnableInputNoiseCancellationUiName[];
 extern const char kEnableInputNoiseCancellationUiDescription[];
 
@@ -2589,9 +2583,6 @@ extern const char kMagnifierContinuousMouseFollowingModeSettingDescription[];
 extern const char kFilesAppCopyImageName[];
 extern const char kFilesAppCopyImageDescription[];
 
-extern const char kFilesNGName[];
-extern const char kFilesNGDescription[];
-
 extern const char kFilesSinglePartitionFormatName[];
 extern const char kFilesSinglePartitionFormatDescription[];
 
@@ -2664,9 +2655,6 @@ extern const char kIntentHandlingSharingDescription[];
 
 extern const char kIntentPickerPWAPersistenceName[];
 extern const char kIntentPickerPWAPersistenceDescription[];
-
-extern const char kInteractiveWindowCycleList[];
-extern const char kInteractiveWindowCycleListDescription[];
 
 extern const char kKeyboardBasedDisplayArrangementInSettingsName[];
 extern const char kKeyboardBasedDisplayArrangementInSettingsDescription[];
@@ -2903,9 +2891,6 @@ extern const char kEnableMDRoundedCornersOnDialogsDescription[];
 extern const char kInstallableInkDropName[];
 extern const char kInstallableInkDropDescription[];
 
-extern const char kTextfieldFocusOnTapUpName[];
-extern const char kTextfieldFocusOnTapUpDescription[];
-
 #endif  // defined(TOOLKIT_VIEWS)
 
 // Random platform combinations -----------------------------------------------
@@ -2915,18 +2900,6 @@ extern const char kTextfieldFocusOnTapUpDescription[];
 
 extern const char kEnableOopPrintDriversName[];
 extern const char kEnableOopPrintDriversDescription[];
-
-extern const char kRemoteCopyReceiverName[];
-extern const char kRemoteCopyReceiverDescription[];
-
-extern const char kRemoteCopyImageNotificationName[];
-extern const char kRemoteCopyImageNotificationDescription[];
-
-extern const char kRemoteCopyPersistentNotificationName[];
-extern const char kRemoteCopyPersistentNotificationDescription[];
-
-extern const char kRemoteCopyProgressNotificationName[];
-extern const char kRemoteCopyProgressNotificationDescription[];
 
 extern const char kDirectManipulationStylusName[];
 extern const char kDirectManipulationStylusDescription[];

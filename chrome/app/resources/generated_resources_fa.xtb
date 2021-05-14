@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fa">
+<translation id="1001033507375626788">این شبکه با شما به‌اشتراک گذاشته شده است</translation>
 <translation id="1001307489511021749">‏برنامه‌ها، تنظیمات، و دیگر موارد سفارشی‌سازی در همه دستگاه‌های «سیستم‌عامل Chrome» که در آن‌ها با «حساب Google» خود به سیستم وارد شده‌اید همگام‌سازی خواهند شد.</translation>
 <translation id="1003088604756913841">باز کردن پیوند در پنجره جدید <ph name="APP" /></translation>
 <translation id="100323615638474026">‏دستگاه USB (<ph name="VENDOR_ID" />:<ph name="PRODUCT_ID" />)</translation>
@@ -359,7 +360,6 @@
 <translation id="138784436342154190">صفحه شروع پیش‌فرض بازیابی شود؟</translation>
 <translation id="1388253969141979417">اجازه دارد از میکروفون استفاده کند</translation>
 <translation id="1388728792929436380">وقتی به‌روزرسانی‌ها تمام شد، <ph name="DEVICE_TYPE" /> بازراه‌اندازی می‌شود.</translation>
-<translation id="138900021244932468">هیچ نمایه‌ای کاوش نشد. برای راه‌اندازی شبکه جدید، رمزینه پاسخ‌سریع را بااستفاده از دوربین دستگاه اسکن کنید یا کد فعال‌سازی ارائه‌شده توسط شرکت مخابراتی‌تان را وارد کنید.</translation>
 <translation id="139013308650923562">اجازه دارد از قلم‌های نصب‌شده در دستگاه استفاده کند</translation>
 <translation id="1390548061267426325">بازکردن به‌عنوان برگه عادی</translation>
 <translation id="1393283411312835250">آفتاب و ابر</translation>
@@ -958,6 +958,7 @@
 <translation id="1992924914582925289">حذف از دستگاه</translation>
 <translation id="1994173015038366702">نشانی وب سایت</translation>
 <translation id="1995916364271252349">کنترل می‌کند سایت‌ها می‌توانند از چه اطلاعاتی استفاده کنند و چه اطلاعاتی را نشان دهند (مکان، دوربین، بالاپرها، و موارد دیگر)</translation>
+<translation id="1997437640397887843">دوربین دستگاه روشن شده است. لطفاً رمزینه پاسخ‌سریع سیم‌کارت داخلی را مقابل دوربین قرار دهید.</translation>
 <translation id="1997616988432401742">گواهی‌نامه‌های شما</translation>
 <translation id="1999115740519098545">هنگام شروع به کار</translation>
 <translation id="2000419248597011803">برخی کوکی‌ها و جستجوها را از نوار نشانی و جعبه جستجو به موتور جستجوی پیش‌فرض ارسال می‌کند</translation>
@@ -1013,6 +1014,7 @@
 <translation id="2055585478631012616">از سیستم این سایت‌ها (ازجمله در برگه‌های باز) خارج خواهید شد</translation>
 <translation id="205560151218727633">‏نشان‌واره «دستیار Google»</translation>
 <translation id="2058456167109518507">دستگاه شناسایی شد</translation>
+<translation id="2058581283817163201">تأیید کردن با این تلفن</translation>
 <translation id="2059913712424898428">منطقه زمانی</translation>
 <translation id="2060375639911876205">برداشتن نمایه سیم‌کارت داخلی</translation>
 <translation id="2062354623176996748">با «پنجره ناشناس»، بدون ذخیره کردن سابقه مرور از وب استفاده کنید</translation>
@@ -2613,6 +2615,7 @@
 <translation id="3785308913036335955">نمایش میان‌بر «برنامه‌ها»</translation>
 <translation id="3785727820640310185">گذرواژه‌های ذخیره‌شده برای این سایت</translation>
 <translation id="3788301286821743879">برنامه «کیوسک» راه‌اندازی نشد.</translation>
+<translation id="3788331399335602504">این فایل‌ها</translation>
 <translation id="3788401245189148511">این می‌توانست:</translation>
 <translation id="3789841737615482174">نصب</translation>
 <translation id="379082410132524484">کارتتان منقضی شده است</translation>
@@ -3188,6 +3191,7 @@
 <translation id="4438043733494739848">شفاف</translation>
 <translation id="4438639467177774583">‏<ph name="MASKED_PASSWORD" /> متعلق به <ph name="USERNAME" /> در «حساب Google» شما (<ph name="ACCOUNT" />) ذخیره خواهد شد</translation>
 <translation id="4439427728133035643">شبکه <ph name="NETWORK_INDEX" /> از <ph name="NETWORK_COUNT" />، <ph name="NETWORK_NAME" />، قدرت سیگنال <ph name="SIGNAL_STRENGTH" />٪، اتصال</translation>
+<translation id="4440097423000553826"><ph name="WEBSITE" /> اعلانی به تلفنتان ارسال کرد. برای تأیید هویتتان، روی اعلان «<ph name="NOTIFICATIONTITLE" />» ضربه بزنید و این مراحل را دنبال کنید.</translation>
 <translation id="4441124369922430666">آیا می‌خواهید با روشن شدن دستگاه، این برنامه به‌طور خودکار شروع شود؟</translation>
 <translation id="4441147046941420429">برای ادامه کار، کلید امنیتی‌تان را از دستگاه جدا کنید و سپس آن را دوباره وارد کنید و لمس کنید</translation>
 <translation id="444134486829715816">گسترده کردن...</translation>
@@ -3490,6 +3494,7 @@
 <translation id="4773112038801431077">‏ارتقای Linux</translation>
 <translation id="477647109558161443">ایجاد میان‌بر میزکار</translation>
 <translation id="4776917500594043016">گذرواژه <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="4777458362738635055">دیگر کاربران این دستگاه می‌توانند از این شبکه استفاده کنند</translation>
 <translation id="4777825441726637019">‏فروشگاه Play</translation>
 <translation id="4777943778632837590">پیکربندی سرورهای نام شبکه</translation>
 <translation id="4778644898150334464">استفاده از دیگر گذرواژه‌ها</translation>
@@ -4325,6 +4330,7 @@
 <translation id="5712153969432126546">‏سایت‌ها گاهی‌اوقات فایل‌های PDF (ازجمله سند، قرارداد، و فرم) منتشر می‌کنند</translation>
 <translation id="5715711091495208045">واسطه افزایه:‌ <ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">موتورهای جستجوی پیش‌فرض</translation>
+<translation id="5719637365829998022">رمزینه پاسخ‌سریع اسکن شده است.</translation>
 <translation id="5719854774000914513">‏سایت‌ها می‌توانند برای اتصال به دستگاه‌های HID درخواست دهند</translation>
 <translation id="572155275267014074">‏تنظیمات Android</translation>
 <translation id="5722086096420375088">سبز و سفید</translation>
@@ -4536,6 +4542,7 @@
 <translation id="5955721306465922729">وب‌سایتی می‌خواهد این برنامه را باز کند.</translation>
 <translation id="5955809630138889698">این دستگاه ممکن است فقط برای حالت نمایشی آنلاین واجد شرایط باشد. برای جزئیات بیشتر، لطفاً با نماینده پشتیبانی‌تان تماس بگیرید.</translation>
 <translation id="5956585768868398362">آیا این همان صفحه جستجویی است که انتظار داشتید؟</translation>
+<translation id="5957918771633727933">نمایه سیم‌کارت داخلی دردسترس نیست. <ph name="BEGIN_LINK" />نمایه<ph name="END_LINK" /> جدیدی بارگیری کنید.</translation>
 <translation id="5957987129450536192">در کنار تصویر نمایه‌تان روی نماد «انتخاب برای شنیدن» ضربه بزنید، سپس آنچه را می‌خواهید بشنوید انتخاب کنید.</translation>
 <translation id="5959471481388474538">شبکه در دسترس نیست</translation>
 <translation id="595959584676692139">برای استفاده از این افزونه، صفحه را تازه‌سازی کنید</translation>
@@ -5926,6 +5933,7 @@
 <translation id="7506541170099744506"><ph name="DEVICE_TYPE" /> شما باموفقیت برای مدیریت شرکت ثبت شد.</translation>
 <translation id="7507207699631365376">به <ph name="BEGIN_LINK" />خط‌مشی رازداری<ph name="END_LINK" /> این ارائه‌دهنده بروید</translation>
 <translation id="7507930499305566459">گواهی وضعیت پاسخگو</translation>
+<translation id="7509246181739783082">هویتتان را به‌تأیید برسانید</translation>
 <translation id="7513029293694390567">با استفاده از اعتبارنامه‌های ذخیره‌شده، به‌طور خودکار به سیستم وب‌سایت‌ها وارد شوید. اگر این قابلیت غیرفعال باشد، هر بار قبل از وارد شدن به وب‌سایت از شما برای تأیید اطلاعات درخواست می‌شود.</translation>
 <translation id="7514239104543605883">کپی در دستگاه</translation>
 <translation id="7514365320538308">بارگیری</translation>
@@ -6040,6 +6048,7 @@
 <translation id="7638605456503525968">درگاه‌های سریال</translation>
 <translation id="7639914187072011620">‏نشانی وب هدایت SAML از سرور واکشی نشد</translation>
 <translation id="764017888128728"><ph name="PASSWORD_MANAGER_BRAND" /> شما را به‌صورت خودکار در سایت‌های واجد شرایط با گذرواژه‌هایی که ذخیره کرده‌اید ثبت ورود می‌کند.</translation>
+<translation id="7641513591566880111">نام نمایه جدید</translation>
 <translation id="7642778300616172920">پنهان کردن محتوای حساس</translation>
 <translation id="7643842463591647490">{0,plural, =1{# پنجره باز}one{# پنجره باز}other{# پنجره باز}}</translation>
 <translation id="7643932971554933646">به سایت اجازه می‌دهید فایل‌ها را ببیند؟</translation>
@@ -6199,6 +6208,7 @@
 <translation id="7800518121066352902">چرخاندن خلاف جهت ع&amp;قربه‌های ساعت</translation>
 <translation id="780301667611848630">نه متشکرم</translation>
 <translation id="7804072833593604762">برگه بسته شد</translation>
+<translation id="7805759469263222011">رمزینه پاسخ‌سریع را بااستفاده از دوربین دستگاه اسکن کنید یا کد فعال‌سازی ارائه‌شده توسط شرکت مخابراتی‌تان را وارد کنید</translation>
 <translation id="7805768142964895445">وضعیت</translation>
 <translation id="7807067443225230855">جستجو و دستیار</translation>
 <translation id="7807711621188256451">دسترسی <ph name="HOST" /> به دوربین شما همیشه مجاز باشد</translation>
@@ -6458,7 +6468,6 @@
 <translation id="8061091456562007989">تغییر را لغو کنید</translation>
 <translation id="8061991877177392872">‏به‌نظر می‌رسد ازقبل Voice Match را با «دستیار» در دستگاه دیگری راه‌اندازی کرده‌اید. از این قطعه‌های قبلاً ضبط‌شده می‌توان برای ایجاد مدل صوتی در این دستگاه استفاده کرد.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{۱ برگ کاغذ}one{{COUNT} برگ کاغذ}other{{COUNT} برگ کاغذ}}</translation>
-<translation id="8062879968880283306">رمزینه پاسخ‌سریع را بااستفاده از دوربین اسکن کنید یا کد فعال‌سازی ارائه‌شده توسط شرکت مخابراتی خود را وارد کنید.</translation>
 <translation id="8063235345342641131">چهره‌نمای پیش‌فرض سبز</translation>
 <translation id="8063535366119089408">مشاهده فایل</translation>
 <translation id="8064279191081105977">گروه <ph name="GROUP_NAME" /> - <ph name="GROUP_CONTENTS" /> - <ph name="COLLAPSED_STATE" /></translation>
@@ -6680,6 +6689,7 @@
 <translation id="8300849813060516376">‏OTASP انجام نشد</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{نشانی}one{# نشانی}other{# نشانی}}</translation>
 <translation id="8304383784961451596">‏اجازه ندارید از این دستگاه استفاده کنید. لطفاً برای دریافت اجازه ورود به سیستم با سرپرست تماس بگیرید یا با حساب Google تحت‌نظارت Family Link به سیستم وارد شوید.</translation>
+<translation id="8308016398665340540">شما و دیگر کاربران این دستگاه از این شبکه به‌طور مشترک استفاده می‌کنید</translation>
 <translation id="8308179586020895837">اگر <ph name="HOST" /> می‌خواهد به دوربین شما دسترسی داشته باشد از من سوال شود</translation>
 <translation id="830868413617744215">بتا</translation>
 <translation id="8309458809024885768">گواهی درحال‌حاضر وجود دارد</translation>
@@ -6879,7 +6889,6 @@
 <translation id="8551588720239073785">تنظیمات تاریخ و ساعت</translation>
 <translation id="8553342806078037065">مدیریت افراد دیگر</translation>
 <translation id="8554899698005018844">زبانی موجود نیست</translation>
-<translation id="8555195867496021627">نمایه سیم‌کارت داخلی دردسترس نیست. نمایه جدیدی در <ph name="BEGIN_LINK" />اینجا<ph name="END_LINK" /> بارگیری کنید.</translation>
 <translation id="8557022314818157177">کلید امنیتی را تازمانی‌که اثرانگشت ثبت شود، لمس کنید</translation>
 <translation id="8557930019681227453">مانیفست</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{باز کردن همه در پنجره جدید}=1{باز کردن در پنجره جدید}one{باز کردن همه ({COUNT}) در پنجره جدید}other{باز کردن همه ({COUNT}) در پنجره جدید}}</translation>
@@ -7059,7 +7068,6 @@
 <translation id="8743164338060742337">شبکه <ph name="NETWORK_INDEX" /> از <ph name="NETWORK_COUNT" />، <ph name="NETWORK_NAME" />، <ph name="NETWORK_PROVIDER_NAME" />، قدرت سیگنال <ph name="SIGNAL_STRENGTH" />٪، تحت‌مدیریت سرپرست، اتصال</translation>
 <translation id="8746654918629346731">قبلاً «<ph name="EXTENSION_NAME" />» را درخواست کرده‌اید</translation>
 <translation id="874689135111202667">{0,plural, =1{یک فایل در این سایت بارگذاری شود؟}one{# فایل در این سایت بارگذاری شود؟}other{# فایل در این سایت بارگذاری شود؟}}</translation>
-<translation id="8749556627204742888">درحال اشتراک‌گذاری این شبکه با دیگر کاربران این دستگاه هستید.</translation>
 <translation id="8749805710397399240">نمی‌توانید محتوای صفحه‌تان را ارسال کنید. اجازه «ضبط صفحه» را در «اولویت‌های سیستم» بررسی کنید.</translation>
 <translation id="8749863574775030885">‏دسترسی به دستگاه‌های USB از ارائه‌دهنده ناشناس</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> می‌خواهد به درگاه سریالی متصل شود</translation>
@@ -7122,7 +7130,6 @@
 <translation id="8808744862003883508">‏در این صفحه می‌توانید همه افزونه‌های نصب‌شده در Chrome را ببینید.</translation>
 <translation id="8809147117840417135">سبز دودی روشن</translation>
 <translation id="8811862054141704416">‏دسترسی به میکروفون Crostini</translation>
-<translation id="8812552797690463522">این شبکه با شما به‌اشتراک گذاشته شده است.</translation>
 <translation id="8812593354822910461">داده‌های محصول مرور (<ph name="URL" />) را نیز پاک می‌کند که این کار شما را از سیستم <ph name="DOMAIN" /> خارج خواهد کرد. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">بعداً به من یادآوری شود</translation>
 <translation id="8813698869395535039">ورود به سیستم <ph name="USERNAME" /> امکان‌پذیر نیست</translation>
@@ -7334,7 +7341,6 @@
 <translation id="9021662811137657072">ویروس شناسایی شد</translation>
 <translation id="902236149563113779">‏سایت‌ها معمولاً موقعیت دوربین را برای ارائه ویژگی‌های AR، مانند مسیر هشدارهای اولیه یا بازی‌ها، ردیابی می‌کنند</translation>
 <translation id="9022847679183471841">این حساب درحال‌حاضر در این رایانه توسط <ph name="AVATAR_NAME" /> درحال استفاده است.</translation>
-<translation id="9023009238991294202">سایر کاربران این دستگاه می‌توانند از این شبکه استفاده کنند.</translation>
 <translation id="9023015617655685412">نشانک‌گذاری این برگه…</translation>
 <translation id="9023909777842748145">خاموش کردن این ویژگی بر توانایی دستگاه برای ارسال اطلاعات موردنیاز سرویس‌های ضروری (مانند امنیت و به‌روزرسانی‌های سیستم) تأثیر نمی‌گذارد.</translation>
 <translation id="9024127637873500333">باز کردن در &amp;برگه جدید</translation>

@@ -283,6 +283,7 @@ component("core") {
     "//build:chromeos_buildflags",
     "//components/paint_preview/common",
     "//components/performance_manager/public/mojom:mojom_blink",
+    "//components/power_scheduler",
     "//components/shared_highlighting/core/common",
     "//gpu/config",
     "//mojo/public/cpp/bindings:bindings",
@@ -1199,6 +1200,7 @@ fuzzer_test("text_resource_decoder_fuzzer") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "accessibility/ax_context_test.cc",
     "app_history/app_history_test.cc",
     "clipboard/clipboard_utilities_test.cc",
     "content_capture/content_capture_test.cc",
@@ -1331,6 +1333,7 @@ source_set("unit_tests") {
     "layout/layout_block_test.cc",
     "layout/layout_box_model_object_test.cc",
     "layout/layout_box_test.cc",
+    "layout/layout_embedded_content_test.cc",
     "layout/layout_flexible_box_test.cc",
     "layout/layout_grid_test.cc",
     "layout/layout_image_test.cc",
@@ -1405,6 +1408,7 @@ source_set("unit_tests") {
     "layout/ng/ng_physical_box_fragment_test.cc",
     "layout/ng/ng_physical_fragment_test.cc",
     "layout/ng/ng_relative_utils_test.cc",
+    "layout/ng/svg/ng_svg_text_layout_algorithm_test.cc",
     "layout/ng/table/ng_table_layout_algorithm_helpers_test.cc",
     "layout/overflow_model_test.cc",
     "layout/paint_containment_test.cc",

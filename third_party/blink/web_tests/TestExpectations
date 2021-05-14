@@ -2490,6 +2490,10 @@ crbug.com/958381 [ Mac ] external/wpt/css/CSS2/tables/table-anonymous-objects-20
 crbug.com/958381 [ Mac ] external/wpt/css/CSS2/tables/table-anonymous-objects-206.xht [ Failure ]
 
 # ====== New tests from wpt-importer added here ======
+crbug.com/1209223 external/wpt/css/css-images/image-set/webkit-image-set.tentative.html [ Failure ]
+crbug.com/1209223 external/wpt/html/rendering/replaced-elements/attributes-for-embedded-content-and-images/canvas-aspect-ratio.html [ Failure ]
+crbug.com/1209223 external/wpt/html/syntax/xmldecl/xmldecl-2.html [ Failure ]
+crbug.com/626703 [ Mac ] editing/pasteboard/drag-selected-image-to-contenteditable.html [ Failure ]
 crbug.com/626703 [ Mac10.15 ] external/wpt/webrtc-encoded-transform/idlharness.https.window.html [ Failure Crash ]
 crbug.com/626703 [ Mac11.0 ] external/wpt/webrtc-encoded-transform/idlharness.https.window.html [ Failure Crash ]
 crbug.com/626703 [ Mac11.0 ] external/wpt/websockets/Create-valid-url-binaryType-blob.any.worker.html?wpt_flags=h2 [ Timeout ]
@@ -4133,7 +4137,6 @@ crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/layout-algori
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/layout-algorithm/grid-minimum-contribution-baseline-shim-vertical-rl.html [ Failure ]
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/layout-algorithm/grid-minimum-contribution-baseline-shim.html [ Failure ]
 crbug.com/1045599 virtual/layout-ng-grid/fast/css-grid-layout/percent-padding-margin-resolution-grid-item-update.html [ Failure ]
-crbug.com/1045599 virtual/layout-ng-grid/fast/css-grid-layout/flex-content-sized-columns-resize.html [ Failure ]
 
 ### Tests *expected* to be failing with LayoutNGGrid enabled:
 crbug.com/1108097 virtual/layout-ng-grid/external/wpt/css/css-grid/grid-model/grid-areas-overflowing-grid-container-004.html [ Failure ]
@@ -4757,7 +4760,6 @@ crbug.com/757165 [ Win ] fast/spatial-navigation/snav-tiny-table-traversal.html 
 crbug.com/757165 [ Win ] fast/spatial-navigation/snav-two-elements-one-line.html [ Pass Failure Timeout Crash ]
 crbug.com/757165 [ Win ] fast/spatial-navigation/snav-unit-overflow-and-scroll-in-direction.html [ Pass Failure Timeout Crash ]
 crbug.com/757165 [ Win ] fast/spatial-navigation/snav-z-index.html [ Pass Failure Timeout Crash ]
-crbug.com/757165 [ Win ] http/tests/devtools/console/console-filter-test.js [ Skip ]
 crbug.com/757165 [ Win ] http/tests/devtools/console/console-links-in-errors-with-trace.js [ Skip ]
 crbug.com/757165 [ Win ] http/tests/devtools/sources/ui-source-code-metadata.js [ Skip ]
 crbug.com/757165 [ Win ] http/tests/misc/client-hints-accept-meta-preloader.html [ Skip ]
@@ -5304,7 +5306,6 @@ crbug.com/919789 fast/autoresize/basic.html [ Pass Timeout ]
 crbug.com/919789 fast/dom/viewport/resize-event-fired-window-resized.html [ Pass Timeout ]
 crbug.com/919789 fast/dom/Window/window-resize-contents.html [ Pass Timeout ]
 crbug.com/919789 fast/events/resize-events-count.html [ Pass Timeout ]
-crbug.com/919789 fast/css-grid-layout/flex-content-sized-columns-resize-expected.html [ Pass Timeout ]
 crbug.com/919789 virtual/text-antialias/line-break-between-text-nodes-with-inline-blocks.html [ Pass Timeout ]
 crbug.com/919789 media/controls/overflow-menu-hide-on-resize.html [ Pass Timeout ]
 crbug.com/919789 [ Linux ] paint/invalidation/resize-iframe-text.html [ Pass Timeout ]
@@ -6843,7 +6844,8 @@ crbug.com/1205669 [ Mac10.13 ] virtual/threaded/external/wpt/animation-worklet/i
 # Sheriff 2021-05-07
 crbug.com/1206734 [ Mac10.13 ] external/wpt/websockets/Send-binary-blob.any.worker.html?wpt_flags=h2 [ Timeout ]
 
-crbug.com/1206108 external/wpt/pointerevents/pointerevent_click_is_a_pointerevent_multiple_clicks.html [ Pass Failure ]
+### external/wpt/pointerevents/
+crbug.com/1206108 external/wpt/pointerevents/pointerevent_click_is_a_pointerevent_multiple_clicks.html?touch [ Failure Pass ]
 
 # Some plzServiceWorker and plzDedicatedWorker singled out from generic sheriff rounds above
 crbug.com/1207843 virtual/plz-service-worker/external/wpt/service-workers/service-worker/xhr-content-length.https.window.html [ Pass Failure Crash ]
@@ -6860,5 +6862,22 @@ crbug.com/1207709 [ Mac10.13 ] external/wpt/resource-timing/document-domain-no-i
 crbug.com/1207709 [ Mac10.13 ] virtual/plz-dedicated-worker/external/wpt/resource-timing/document-domain-no-impact-opener.html [ Pass Failure ]
 crbug.com/1207709 [ Mac10.13 ] external/wpt/pointerevents/pointerevent_contextmenu_is_a_pointerevent.html?touch [ Pass Failure ]
 
+# Will be passed when compositing-after-paint is used by default 2021-05-13
+crbug.com/1208213 external/wpt/css/css-transforms/add-child-in-empty-layer.html [ Failure ]
+
+# Required for DevTools roll
+crbug.com/1208357 http/tests/devtools/console/console-bad-stacktrace.js [ Skip ]
+crbug.com/1208357 http/tests/devtools/console/console-filter-test.js [ Skip ]
+crbug.com/1208357 http/tests/devtools/console/console-group-similar.js [ Skip ]
+crbug.com/1208357 http/tests/devtools/console/console-links-on-messages-before-inspection.js [ Skip ]
+crbug.com/1208357 http/tests/devtools/console/console-preserve-log.js [ Skip ]
+crbug.com/1208357 http/tests/devtools/console/console-revoke-error-in-worker.js [ Skip ]
+crbug.com/1208357 http/tests/devtools/console/console-timestamp.js [ Skip ]
+crbug.com/1208357 http/tests/devtools/sources/debugger-ui/monitor-console-command.js [ Skip ]
+
 # Sheriff 2021-05-12
 crbug.com/1095540 [ Linux Debug ] virtual/compositor-threaded-percent-based-scrolling/fast/scrolling/resize-corner-tracking-touch.html [ Pass Failure ]
+
+# Sheriff 2021-05-13
+crbug.com/1208774 [ Mac ] external/wpt/webcodecs/videoDecoder-codec-specific.any.html?h264_annexb [ Pass Failure ]
+crbug.com/1208774 [ Mac ] external/wpt/webcodecs/videoDecoder-codec-specific.any.worker.html?h264_annexb [ Pass Failure ]

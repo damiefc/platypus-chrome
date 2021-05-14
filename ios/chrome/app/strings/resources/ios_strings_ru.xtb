@@ -109,6 +109,7 @@
 <translation id="1974060860693918893">Дополнительные</translation>
 <translation id="1989112275319619282">Выбрать</translation>
 <translation id="2015722694326466240">Чтобы просматривать пароли, настройте на устройстве код доступа.</translation>
+<translation id="2022352537516230970">Создан специально для iPhone</translation>
 <translation id="2073572773299281212">Последние действия: <ph name="DAYS" /> дн. назад</translation>
 <translation id="2074131957428911366">Вы всегда можете выбрать, что синхронизировать, в <ph name="BEGIN_LINK" />настройках<ph name="END_LINK" />.</translation>
 <translation id="2079545284768500474">Отмена</translation>
@@ -188,6 +189,7 @@
 <translation id="2871695793448672541">Скрытый пароль</translation>
 <translation id="2876369937070532032">При угрозе безопасности отправлять в Google URL некоторых страниц, которые вы открываете</translation>
 <translation id="288655811176831528">Закрыть вкладку</translation>
+<translation id="2893180576842394309">Google может использовать вашу историю, чтобы персонализировать Поиск и другие сервисы.</translation>
 <translation id="2898963176829412617">Новая папка</translation>
 <translation id="2916171785467530738">Включить автозаполнение для поисковых запросов и URL</translation>
 <translation id="291754862089661335">Поместите QR-код или штрихкод в эту рамку</translation>
@@ -313,6 +315,7 @@
 <translation id="4172051516777682613">Показывать всегда</translation>
 <translation id="418156467088430727">Открыть офлайн-версию в новой вкладке</translation>
 <translation id="4181841719683918333">Языки</translation>
+<translation id="4184011057600693970">Создан специально для iPad</translation>
 <translation id="424315890655130736">Введите кодовую фразу</translation>
 <translation id="4263576668337963058">Показать доступные действия со страницей</translation>
 <translation id="4267380167363222949">Следующая вкладка</translation>
@@ -491,6 +494,7 @@
 <translation id="605721222689873409">ГГ</translation>
 <translation id="6059830886158432458">Управление рекомендациями</translation>
 <translation id="6066301408025741299">Нажмите, чтобы отменить загрузку</translation>
+<translation id="60829778314739003">Принять и продолжить</translation>
 <translation id="6108923351542677676">Настройка…</translation>
 <translation id="6119050551270742952">Открыто в режиме инкогнито</translation>
 <translation id="6122191549521593678">Онлайн</translation>
@@ -586,6 +590,7 @@
 <translation id="6801927553864092214">Чтобы посмотреть сайт анонимно, откройте вкладку в режиме инкогнито.</translation>
 <translation id="6807889908376551050">Показать все…</translation>
 <translation id="681368974849482173">Сохранено</translation>
+<translation id="6830804042318138535">Узнать больше</translation>
 <translation id="6831043979455480757">Перевести</translation>
 <translation id="6851516051005285358">Версия для ПК</translation>
 <translation id="6858855187367714033">Просканировано</translation>
@@ -628,11 +633,13 @@
 <translation id="7203585745079012652">Озвучивать результаты поиска</translation>
 <translation id="7207383424303353046">Новинка! Чтобы автоматически открывать сайты в Chrome, сделайте его браузером по умолчанию. <ph name="BEGIN_LINK" />Перейти в настройки<ph name="END_LINK" /></translation>
 <translation id="721597782417389033">Недопустимое название карты</translation>
+<translation id="722454870747268814">Новая вкладка инкогнито</translation>
 <translation id="7265758999917665941">Никогда для этого сайта</translation>
 <translation id="7272437679830969316">Не удалось пройти проверку. Пароль не скопирован.</translation>
 <translation id="7291368939935408496">Подготовка паролей…</translation>
 <translation id="7293171162284876153">Чтобы начать ее, нажмите "Синхронизировать данные Chrome".</translation>
 <translation id="7313347584264171202">Здесь вы найдете свои вкладки инкогнито</translation>
+<translation id="7319242366286515846">Продолжая, вы принимаете <ph name="BEGIN_LINK" />Условия использования<ph name="END_LINK" />.</translation>
 <translation id="7336264872878993241">Скачивается: <ph name="PERCENT" />%</translation>
 <translation id="7340958967809483333">Параметры рекомендаций</translation>
 <translation id="7346909386216857016">ОК</translation>
@@ -779,6 +786,7 @@
 <translation id="8820817407110198400">Закладки</translation>
 <translation id="8840513115188359703">Вы останетесь в аккаунте Google.</translation>
 <translation id="8870413625673593573">Недавно закрытые</translation>
+<translation id="8876882697946675716">Синхронизируйте устройства</translation>
 <translation id="8881801611828450202">Найти это изображение в <ph name="SEARCH_ENGINE" /></translation>
 <translation id="8909135823018751308">Поделиться...</translation>
 <translation id="8917490105272468696">Включить функцию</translation>

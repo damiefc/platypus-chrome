@@ -46,7 +46,8 @@ TEST_F(NGFlexLayoutAlgorithmTest, ReplacedAspectRatioPrecision) {
       LogicalSize(LayoutUnit(100), kIndefiniteSize));
   NGBlockNode box(GetDocument().body()->GetLayoutBox());
 
-  const NGPhysicalBoxFragment* fragment = RunBlockLayoutAlgorithm(box, space);
+  scoped_refptr<const NGPhysicalBoxFragment> fragment =
+      RunBlockLayoutAlgorithm(box, space);
   EXPECT_EQ(PhysicalSize(84, 22), fragment->Size());
   ASSERT_EQ(1u, fragment->Children().size());
   fragment = To<NGPhysicalBoxFragment>(fragment->Children()[0].get());
@@ -140,6 +141,13 @@ TEST_F(NGFlexLayoutAlgorithmTest, DevtoolsBaseline) {
   EXPECT_EQ(devtools.lines[1].items.size(), 2u);
   EXPECT_EQ(devtools.lines[1].items[0].baseline,
             devtools.lines[1].items[1].baseline);
+}
+
+TEST_F(NGFlexLayoutAlgorithmTest, DevtoolsOneImageItemCrash) {
+  DevtoolsFlexInfo devtools = LayoutForDevtools(R"HTML(
+    <div style="display: flex;" id=flexbox><img></div>
+  )HTML");
+  EXPECT_EQ(devtools.lines.size(), 1u);
 }
 
 }  // namespace

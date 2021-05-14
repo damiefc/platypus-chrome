@@ -616,6 +616,15 @@ base::Value SerializeChromeUserPopulation(
   population_dict.SetKey("is_incognito",
                          base::Value(population.is_incognito()));
 
+  population_dict.SetKey("user_agent", base::Value(population.user_agent()));
+
+  population_dict.SetKey("number_of_profiles",
+                         base::Value(population.number_of_profiles()));
+  population_dict.SetKey("number_of_loaded_profiles",
+                         base::Value(population.number_of_loaded_profiles()));
+  population_dict.SetKey("number_of_open_profiles",
+                         base::Value(population.number_of_open_profiles()));
+
   return std::move(population_dict);
 }
 
@@ -872,6 +881,17 @@ std::string SerializeClientPhishingRequest(
   }
   dict.SetList("vision_match", std::move(vision_matches));
   dict.SetKey("scoped_oauth_token", base::Value(cprat.token));
+
+  if (cpr.has_tflite_model_version())
+    dict.SetInteger("tflite_model_version", cpr.tflite_model_version());
+  dict.SetBoolean("is_tflite_match", cpr.is_tflite_match());
+  auto tflite_scores = std::make_unique<base::ListValue>();
+  for (const auto& score : cpr.tflite_model_scores()) {
+    auto score_value = std::make_unique<base::DictionaryValue>();
+    score_value->SetStringKey("label", score.label());
+    score_value->SetDoubleKey("lvalue", score.value());
+  }
+  dict.SetList("tflite_model_scores", std::move(tflite_scores));
 
   base::Value* request_tree = &dict;
   std::string request_serialized;

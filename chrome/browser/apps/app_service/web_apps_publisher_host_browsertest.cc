@@ -4,6 +4,7 @@
 
 #include "chrome/browser/apps/app_service/web_apps_publisher_host.h"
 
+#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <vector>
@@ -14,7 +15,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/values.h"
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
@@ -27,9 +30,13 @@
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/chrome_features.h"
 #include "chromeos/crosapi/mojom/app_service.mojom.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/test/browser_test.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "url/gurl.h"
 
 namespace apps {
 
@@ -81,10 +88,11 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, PublishApps) {
   web_app::InstallWebAppFromManifest(
       browser(),
       embedded_test_server()->GetURL("/web_share_target/charts.html"));
-  MockAppPublisher mock_app_publisher;
-  WebAppsPublisherHost::SetPublisherForTesting(&mock_app_publisher);
 
+  MockAppPublisher mock_app_publisher;
   WebAppsPublisherHost web_apps_publisher_host(profile());
+  web_apps_publisher_host.SetPublisherForTesting(&mock_app_publisher);
+  web_apps_publisher_host.Init();
   mock_app_publisher.Wait();
   EXPECT_EQ(mock_app_publisher.get_deltas().size(), 2U);
 
@@ -92,8 +100,8 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, PublishApps) {
       browser(),
       embedded_test_server()->GetURL("/banners/manifest_test_page.html"));
   mock_app_publisher.Wait();
-  // We may receive more than one delta for the new app.
-  EXPECT_GE(mock_app_publisher.get_deltas().size(), 3U);
+
+  EXPECT_EQ(mock_app_publisher.get_deltas().size(), 3U);
   EXPECT_EQ(mock_app_publisher.get_deltas().back()->app_id, app_id);
   EXPECT_EQ(mock_app_publisher.get_deltas().back()->readiness,
             apps::mojom::Readiness::kReady);
@@ -118,12 +126,13 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, PublishApps) {
 
 IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, LaunchTime) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  MockAppPublisher mock_app_publisher;
-  WebAppsPublisherHost::SetPublisherForTesting(&mock_app_publisher);
-
   web_app::AppId app_id = web_app::InstallWebAppFromManifest(
       browser(), embedded_test_server()->GetURL("/web_apps/basic.html"));
+
+  MockAppPublisher mock_app_publisher;
   WebAppsPublisherHost web_apps_publisher_host(profile());
+  web_apps_publisher_host.SetPublisherForTesting(&mock_app_publisher);
+  web_apps_publisher_host.Init();
   mock_app_publisher.Wait();
   ASSERT_TRUE(
       mock_app_publisher.get_deltas().back()->last_launch_time.has_value());
@@ -145,9 +154,9 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, ManifestUpdate) {
       embedded_test_server()->GetURL("app.site.com", "/simple.html");
 
   MockAppPublisher mock_app_publisher;
-  WebAppsPublisherHost::SetPublisherForTesting(&mock_app_publisher);
-
   WebAppsPublisherHost web_apps_publisher_host(profile());
+  web_apps_publisher_host.SetPublisherForTesting(&mock_app_publisher);
+  web_apps_publisher_host.Init();
 
   web_app::AppId app_id;
   {
@@ -192,9 +201,6 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, LocallyInstalledState) {
   const GURL app_url =
       embedded_test_server()->GetURL("app.site.com", "/simple.html");
 
-  MockAppPublisher mock_app_publisher;
-  WebAppsPublisherHost::SetPublisherForTesting(&mock_app_publisher);
-
   web_app::AppId app_id;
   {
     const std::u16string description = u"Web App";
@@ -212,7 +218,10 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, LocallyInstalledState) {
                                    /*is_locally_installed=*/false);
   }
 
+  MockAppPublisher mock_app_publisher;
   WebAppsPublisherHost web_apps_publisher_host(profile());
+  web_apps_publisher_host.SetPublisherForTesting(&mock_app_publisher);
+  web_apps_publisher_host.Init();
   mock_app_publisher.Wait();
   EXPECT_EQ(mock_app_publisher.get_deltas().back()->icon_key->icon_effects,
             static_cast<IconEffects>(IconEffects::kRoundCorners |
@@ -227,6 +236,54 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, LocallyInstalledState) {
   mock_app_publisher.Wait();
   EXPECT_EQ(mock_app_publisher.get_deltas().back()->icon_key->icon_effects,
             IconEffects::kRoundCorners | IconEffects::kCrOsStandardMask);
+}
+
+IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, ContentSettings) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL app_url = embedded_test_server()->GetURL("/web_apps/basic.html");
+  web_app::AppId app_id =
+      web_app::InstallWebAppFromManifest(browser(), app_url);
+
+  // Install an additional app from a different host.
+  {
+    auto web_app_info = std::make_unique<WebApplicationInfo>();
+    web_app_info->start_url = GURL("https://example.com:8080/");
+    web_app_info->scope = web_app_info->start_url;
+    web_app_info->title = u"Unrelated Web App";
+    InstallWebApp(std::move(web_app_info));
+  }
+
+  MockAppPublisher mock_app_publisher;
+  WebAppsPublisherHost web_apps_publisher_host(profile());
+  web_apps_publisher_host.SetPublisherForTesting(&mock_app_publisher);
+  web_apps_publisher_host.Init();
+  mock_app_publisher.Wait();
+  EXPECT_EQ(mock_app_publisher.get_deltas().size(), 2U);
+
+  HostContentSettingsMap* content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(profile());
+  content_settings_map->SetContentSettingDefaultScope(
+      app_url, app_url, ContentSettingsType::MEDIASTREAM_CAMERA,
+      CONTENT_SETTING_ALLOW);
+  mock_app_publisher.Wait();
+  EXPECT_EQ(mock_app_publisher.get_deltas().size(), 3U);
+  EXPECT_EQ(mock_app_publisher.get_deltas().back()->app_type,
+            apps::mojom::AppType::kWeb);
+  EXPECT_EQ(mock_app_publisher.get_deltas().back()->app_id, app_id);
+
+  const std::vector<apps::mojom::PermissionPtr>& permissions =
+      mock_app_publisher.get_deltas().back()->permissions;
+  auto camera_permission = std::find_if(
+      permissions.begin(), permissions.end(),
+      [](const apps::mojom::PermissionPtr& permission) {
+        return permission->permission_id ==
+               static_cast<uint32_t>(ContentSettingsType::MEDIASTREAM_CAMERA);
+      });
+  ASSERT_TRUE(camera_permission != permissions.end());
+  EXPECT_EQ((*camera_permission)->value_type,
+            apps::mojom::PermissionValueType::kTriState);
+  EXPECT_EQ((*camera_permission)->value,
+            static_cast<uint32_t>(apps::mojom::TriState::kAllow));
 }
 
 }  // namespace apps

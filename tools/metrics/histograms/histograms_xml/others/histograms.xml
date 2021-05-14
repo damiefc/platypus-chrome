@@ -8445,6 +8445,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="LanguageUsage.UI.Android.OverrideLanguage"
+    enum="CLD3LanguageCode" expires_after="2021-12-01">
+  <owner>perrier@chromium.org</owner>
+  <owner>chrome-language@google.com</owner>
+  <summary>
+    The ISO-639 language code for the Android override language. If no override
+    is set the empty string is recorded.
+
+    Reported once per application start on Android.
+  </summary>
+</histogram>
+
 <histogram name="Launch.FlagsAtStartup" enum="LoginCustomFlags"
     expires_after="never">
 <!-- expires-never: monitors use of all flags. -->
@@ -14047,6 +14059,16 @@ should be kept until we remove incident reporting. -->
   <summary>Win32 APIs that error out during setup.</summary>
 </histogram>
 
+<histogram name="SharedHighlights.AndroidShareSheet.SharedState"
+    enum="LinkGenerationSharedStatus" expires_after="2021-11-12">
+  <owner>sebsg@chromium.org</owner>
+  <owner>chrome-shared-highlighting@google.com</owner>
+  <summary>
+    Records the status of the link generation when a user shares content using
+    the feature on Android.
+  </summary>
+</histogram>
+
 <histogram name="SharedHighlights.AsyncTask.Iterations" units="iterations"
     expires_after="2021-12-31">
   <owner>gayane@chromium.org</owner>
@@ -17600,15 +17622,21 @@ regressions. -->
   </summary>
 </histogram>
 
-<histogram name="VoiceInteraction.AudioPermissionEvent"
+<histogram name="VoiceInteraction.AudioPermissionEvent{Timing}"
     enum="AudioPermissionState" expires_after="2021-08-22">
   <owner>basiaz@google.com</owner>
   <owner>chrome-language@google.com</owner>
   <summary>
     Android: The events related to granting or denying audio permission for
-    system level transcription (as opposite to Assistant). Will be logged each
-    time non-Assistant voice recognition is triggered with a mic button click.
+    system level transcription (as opposite to Assistant). Will be logged
+    {Timing}.
   </summary>
+  <token key="Timing">
+    <variant name=""
+        summary="each time non-Assistant voice recognition is triggered with
+                 a mic button press"/>
+    <variant name=".SessionStart" summary="on browser session start"/>
+  </token>
 </histogram>
 
 <histogram name="VoiceInteraction.DismissedEventSource"

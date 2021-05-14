@@ -1533,11 +1533,11 @@ TEST(ValuesTest, DictionaryDeletion) {
   std::string key = "test";
   DictionaryValue dict;
   dict.Set(key, std::make_unique<Value>());
-  EXPECT_FALSE(dict.empty());
+  EXPECT_FALSE(dict.DictEmpty());
   EXPECT_FALSE(dict.DictEmpty());
   EXPECT_EQ(1U, dict.DictSize());
   dict.DictClear();
-  EXPECT_TRUE(dict.empty());
+  EXPECT_TRUE(dict.DictEmpty());
   EXPECT_TRUE(dict.DictEmpty());
   EXPECT_EQ(0U, dict.DictSize());
 }
@@ -1697,7 +1697,7 @@ TEST(ValuesTest, DictionaryRemovePath) {
   EXPECT_TRUE(dict.RemovePath("a.long.key.path", &removed_item));
   ASSERT_TRUE(removed_item);
   EXPECT_TRUE(removed_item->is_bool());
-  EXPECT_TRUE(dict.empty());
+  EXPECT_TRUE(dict.DictEmpty());
 }
 
 TEST(ValuesTest, DeepCopy) {
@@ -2044,7 +2044,7 @@ TEST(ValuesTest, RemoveEmptyChildren) {
   root->SetWithoutPathExpansion("a.b.c.d.e",
                                 std::make_unique<DictionaryValue>());
   root = root->DeepCopyWithoutEmptyChildren();
-  EXPECT_TRUE(root->empty());
+  EXPECT_TRUE(root->DictEmpty());
 
   // Make sure we don't prune too much.
   root->SetBoolKey("bool", true);
@@ -2106,9 +2106,10 @@ TEST(ValuesTest, RemoveEmptyChildren) {
     root = root->DeepCopyWithoutEmptyChildren();
     EXPECT_EQ(3U, root->DictSize());
 
-    ListValue *inner_value, *inner_value2;
+    ListValue* inner_value;
     EXPECT_TRUE(root->GetList("list_with_empty_children", &inner_value));
     EXPECT_EQ(1U, inner_value->GetSize());  // Dictionary was pruned.
+    ListValue* inner_value2;
     EXPECT_TRUE(inner_value->GetList(0, &inner_value2));
     EXPECT_EQ(1U, inner_value2->GetSize());
   }
@@ -2247,17 +2248,17 @@ TEST(ValuesTest, MutatingCopiedPairsInDictItemsMutatesUnderlyingValues) {
 
 TEST(ValuesTest, StdDictionaryIterator) {
   DictionaryValue dict;
-  for (auto it = dict.begin(); it != dict.end(); ++it) {
+  for (auto it = dict.DictItems().begin(); it != dict.DictItems().end(); ++it) {
     ADD_FAILURE();
   }
 
   Value value1("value1");
   dict.SetKey("key1", value1.Clone());
   bool seen1 = false;
-  for (const auto& it : dict) {
+  for (const auto& it : dict.DictItems()) {
     EXPECT_FALSE(seen1);
     EXPECT_EQ("key1", it.first);
-    EXPECT_EQ(value1, *it.second);
+    EXPECT_EQ(value1, it.second);
     seen1 = true;
   }
   EXPECT_TRUE(seen1);
@@ -2265,14 +2266,14 @@ TEST(ValuesTest, StdDictionaryIterator) {
   Value value2("value2");
   dict.SetKey("key2", value2.Clone());
   bool seen2 = seen1 = false;
-  for (const auto& it : dict) {
+  for (const auto& it : dict.DictItems()) {
     if (it.first == "key1") {
       EXPECT_FALSE(seen1);
-      EXPECT_EQ(value1, *it.second);
+      EXPECT_EQ(value1, it.second);
       seen1 = true;
     } else if (it.first == "key2") {
       EXPECT_FALSE(seen2);
-      EXPECT_EQ(value2, *it.second);
+      EXPECT_EQ(value2, it.second);
       seen2 = true;
     } else {
       ADD_FAILURE();

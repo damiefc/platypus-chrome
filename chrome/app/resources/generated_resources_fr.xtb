@@ -357,7 +357,6 @@
 <translation id="138784436342154190">Restaurer la page de démarrage par défaut ?</translation>
 <translation id="1388253969141979417">Autorisé à utiliser votre micro</translation>
 <translation id="1388728792929436380">Ce <ph name="DEVICE_TYPE" /> va redémarrer lorsque les mises à jour seront installées.</translation>
-<translation id="138900021244932468">Aucun profil n'a été trouvé. Pour configurer un nouveau réseau, scannez le code QR à l'aide de l'appareil photo ou saisissez le code d'activation fourni par votre opérateur.</translation>
 <translation id="139013308650923562">Autorisés à utiliser les polices installées sur votre appareil</translation>
 <translation id="1390548061267426325">Ouvrir dans un onglet standard</translation>
 <translation id="1393283411312835250">Soleil et nuages</translation>
@@ -514,6 +513,7 @@
 <translation id="1545775234664667895">Thème "<ph name="THEME_NAME" />" installé</translation>
 <translation id="1546280085599573572">Cette extension a modifié la page affichée lorsque vous cliquez sur le bouton Accueil.</translation>
 <translation id="1546452108651444655"><ph name="CHILD_NAME" /> souhaite installer une <ph name="EXTENSION_TYPE" /> qui peut :</translation>
+<translation id="1547808936554660006">Je comprends que les profils eSIM installés ne seront pas supprimés par Powerwash</translation>
 <translation id="1549275686094429035">ARC activé</translation>
 <translation id="1549788673239553762">"<ph name="APP_NAME" />" souhaite accéder à "<ph name="VOLUME_NAME" />". L'application peut modifier ou supprimer vos fichiers.</translation>
 <translation id="1552301827267621511">L'extension "<ph name="EXTENSION_NAME" />" a remplacé le moteur de recherche par <ph name="SEARCH_PROVIDER_DOMAIN" /></translation>
@@ -550,6 +550,7 @@
 <translation id="1588438908519853928">Standard</translation>
 <translation id="158849752021629804">Réseau domestique requis</translation>
 <translation id="1588870296199743671">Ouvrir le lien avec...</translation>
+<translation id="1588919647604819635">Effectuer un clic droit sur la fiche</translation>
 <translation id="1589055389569595240">Afficher l'orthographe et la grammaire</translation>
 <translation id="1591679663873027990">Autorisez Parallels Desktop à accéder aux périphériques USB. Dès qu’un périphérique est déconnecté, il est effacé de la mémoire de Parallels Desktop.</translation>
 <translation id="1592074621872221573"><ph name="MANAGER" /> a désactivé le débogage ADB, ce qui va réinitialiser votre <ph name="DEVICE_TYPE" />. Sauvegardez vos fichiers avant le redémarrage.</translation>
@@ -985,6 +986,7 @@ Sinon, déconnectez-vous maintenant pour que les modifications apportées à ce 
 
 Vous pouvez gérer les paramètres de ce compte en installant l'application Family Link sur votre appareil.  Nous vous avons envoyé des instructions par e-mail.</translation>
 <translation id="2040460856718599782">Petit problème… Une erreur s'est produite lors de la tentative d'authentification. Veuillez vérifier vos identifiants de connexion, puis réessayer.</translation>
+<translation id="2042279886444479655">Profils actifs</translation>
 <translation id="2044014337866019681">Pour déverrouiller la session, vérifiez que vous êtes bien en train de valider <ph name="ACCOUNT" />.</translation>
 <translation id="2044023416777079300">Modem non enregistré</translation>
 <translation id="204497730941176055">Nom du modèle de certificat Microsoft</translation>
@@ -1323,6 +1325,7 @@ Vous pouvez gérer les paramètres de ce compte en installant l'application Fami
 <translation id="2395616325548404795">Votre <ph name="DEVICE_TYPE" /> a bien été enregistré pour bénéficier de la gestion d'entreprise, mais l'envoi d'informations concernant ses éléments et sa position a échoué. Veuillez saisir ces informations manuellement depuis la console d'administration de cet appareil.</translation>
 <translation id="2396387085693598316">Votre administrateur a bloqué <ph name="EXTENSION_NAME" /></translation>
 <translation id="2396783860772170191">Saisissez un code à quatre chiffres (entre 0000 et 9999)</translation>
+<translation id="2398546389094871088">Utiliser Powerwash ne supprimera pas vos profils eSIM. Accédez à <ph name="LINK_BEGIN" />Paramètres du mobile<ph name="LINK_END" /> pour supprimer manuellement ces profils.</translation>
 <translation id="2399699884460174994">Notifications activées</translation>
 <translation id="2399939490305346086">Données de connexion sur la clé de sécurité</translation>
 <translation id="2400664245143453337">Mise à jour immédiate requise</translation>
@@ -1740,6 +1743,7 @@ et Ctrl+Alt+Diminuer la luminosité pour faire un zoom arrière.</translation>
 <translation id="2844809857160214557">Afficher et gérer les tâches d'impression</translation>
 <translation id="2845382757467349449">Toujours afficher la barre de favoris</translation>
 <translation id="284805635805850872">Supprimer le logiciel malveillant ?</translation>
+<translation id="2849035674501872372">Rechercher</translation>
 <translation id="284970761985428403"><ph name="ASCII_NAME" /> (<ph name="UNICODE_NAME" />)</translation>
 <translation id="284975061945174219">Échec du nettoyage</translation>
 <translation id="2849936225196189499">Essentielle</translation>
@@ -2051,6 +2055,7 @@ et Ctrl+Alt+Diminuer la luminosité pour faire un zoom arrière.</translation>
 <translation id="3189187154924005138">Grand curseur</translation>
 <translation id="3190558889382726167">Mot de passe enregistré</translation>
 <translation id="3192947282887913208">Fichiers audio</translation>
+<translation id="3197453258332670132">Affichez des infos liées au texte sélectionné avec un clic droit ou un appui de manière prolongée</translation>
 <translation id="3199127022143353223">Serveurs</translation>
 <translation id="3201422919974259695">Les périphériques USB disponibles s'afficheront ici.</translation>
 <translation id="3202131003361292969">Chemin d'accès</translation>
@@ -2072,6 +2077,7 @@ et Ctrl+Alt+Diminuer la luminosité pour faire un zoom arrière.</translation>
 <translation id="3223531857777746191">Bouton de réinitialisation</translation>
 <translation id="3225084153129302039">Avatar violet par défaut</translation>
 <translation id="3225319735946384299">Signature du code</translation>
+<translation id="3226487301970807183">Activer/désactiver le panneau latéral aligné à gauche</translation>
 <translation id="3227137524299004712">Micro</translation>
 <translation id="3233271424239923319">Sauvegarder des applications et fichiers Linux</translation>
 <translation id="3238192140106069382">Connexion et validation…</translation>
@@ -2341,6 +2347,7 @@ et Ctrl+Alt+Diminuer la luminosité pour faire un zoom arrière.</translation>
 <translation id="3515983984924808886">Appuyez à nouveau sur votre clé de sécurité pour confirmer la réinitialisation. Cette opération effacera toutes les informations stockées sur la clé de sécurité, y compris son code.</translation>
 <translation id="3518985090088779359">Accepter et continuer</translation>
 <translation id="3519564332031442870">Service d'impression backend</translation>
+<translation id="3519938335881974273">Enregistrer la page sous…</translation>
 <translation id="3521606918211282604">Modifier la taille du disque</translation>
 <translation id="3522088408596898827">Le disque est presque saturé. Veuillez libérer de l'espace et réessayer.</translation>
 <translation id="3524965460886318643">Exporter les activités</translation>
@@ -2364,6 +2371,7 @@ et Ctrl+Alt+Diminuer la luminosité pour faire un zoom arrière.</translation>
 <translation id="3550593477037018652">Se déconnecter du réseau mobile</translation>
 <translation id="3550915441744863158">Chrome se met à jour automatiquement afin que vous disposiez toujours de la version la plus récente.</translation>
 <translation id="3551320343578183772">Fermer l'onglet</translation>
+<translation id="3552097563855472344"><ph name="NETWORK_NAME" /> - <ph name="SPAN_START" /><ph name="CARRIER_NAME" /><ph name="SPAN_END" /></translation>
 <translation id="3552780134252864554">Effacé en fin de session</translation>
 <translation id="3554493885489666172">Votre appareil est géré par <ph name="PROFILE_NAME" />. Les administrateurs ont accès aux données de tous les profils de cet appareil.</translation>
 <translation id="3555812735919707620">Supprimer l'extension</translation>
@@ -2416,6 +2424,7 @@ et Ctrl+Alt+Diminuer la luminosité pour faire un zoom arrière.</translation>
 <translation id="3604713164406837697">Changer de fond d'écran</translation>
 <translation id="3605780360466892872">Businessman</translation>
 <translation id="3608576286259426129">Aperçu de l'image de l'utilisateur</translation>
+<translation id="3609277884604412258">Recherche rapide</translation>
 <translation id="3610369246614755442">Le ventilateur de la station doit être réparé</translation>
 <translation id="361106536627977100">Données Flash</translation>
 <translation id="3611655097742243705">Accédez au Play Store pour trouver des applis</translation>
@@ -3359,6 +3368,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" /> ?</translation>
 <translation id="4636682061478263818">Fichiers Drive</translation>
 <translation id="4636930964841734540">Infos</translation>
 <translation id="4637083375689622795">Autres actions, <ph name="EMAIL" /></translation>
+<translation id="4637189644956543313">Réutiliser l'appareil photo</translation>
 <translation id="4637252186848840278">{COUNT,plural, =1{SMS}one{# SMS}other{# SMS}}</translation>
 <translation id="4638930039313743000">Activer le débogage ADB</translation>
 <translation id="4641539339823703554">Impossible de définir l'heure du système. Veuillez vérifier l'heure ci-dessous et la corriger si nécessaire.</translation>
@@ -4109,6 +4119,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" /> ?</translation>
 <translation id="5499313591153584299">Ce fichier peut être néfaste pour votre ordinateur.</translation>
 <translation id="5499453227627332024">Une mise à niveau est disponible pour le conteneur Linux. Sachez que vous pouvez également effectuer cette mise à niveau plus tard depuis l'application "Paramètres".</translation>
 <translation id="5500709606820808700">Contrôle de sécurité effectué aujourd'hui</translation>
+<translation id="5501322521654567960">Panneau latéral aligné à gauche</translation>
 <translation id="5501809658163361512">{COUNT,plural, =1{Échec de la réception de <ph name="ATTACHMENTS" /> de l'appareil "<ph name="DEVICE_NAME" />"}one{Échec de la réception de <ph name="ATTACHMENTS" /> de l'appareil "<ph name="DEVICE_NAME" />"}other{Échec de la réception de <ph name="ATTACHMENTS" /> de l'appareil "<ph name="DEVICE_NAME" />"}}</translation>
 <translation id="5502500733115278303">Importés depuis Firefox</translation>
 <translation id="5502915260472117187">Un enfant</translation>
@@ -5321,6 +5332,7 @@ Assurez-vous de ne pas dévoiler d'informations sensibles.</translation>
 <translation id="6856348640027512653">Non autorisés à utiliser des données ni des appareils de réalité virtuelle</translation>
 <translation id="6856459657722366306">Réseau <ph name="NETWORK_INDEX" /> sur <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, <ph name="CONNECTION_STATUS" />, force du signal : <ph name="SIGNAL_STRENGTH" /> %, détails</translation>
 <translation id="6856623341093082836">Configurer votre écran tactile et régler sa précision</translation>
+<translation id="6857145580237920905">Supprimer les profils eSIM avant Powerwash</translation>
 <translation id="6857699260879628349">Accéder aux informations de configuration</translation>
 <translation id="6857725247182211756"><ph name="SECONDS" /> s</translation>
 <translation id="6860097299815761905">Paramètres du proxy...</translation>
@@ -5902,6 +5914,7 @@ Assurez-vous de ne pas dévoiler d'informations sensibles.</translation>
 <translation id="7506541170099744506">Votre <ph name="DEVICE_TYPE" /> a bien été enregistré pour bénéficier de la gestion d'entreprise.</translation>
 <translation id="7507207699631365376">Afficher les <ph name="BEGIN_LINK" />Règles de confidentialité<ph name="END_LINK" /> de ce fournisseur</translation>
 <translation id="7507930499305566459">Certificat du répondeur d'état</translation>
+<translation id="7509246181739783082">Valider votre identité</translation>
 <translation id="7513029293694390567">Permet de se connecter automatiquement aux sites Web à l'aide des identifiants enregistrés. Si cette fonctionnalité est désactivée, vous êtes invité à confirmer chaque connexion à un site Web.</translation>
 <translation id="7514239104543605883">Copier sur votre appareil</translation>
 <translation id="7514365320538308">Télécharger</translation>
@@ -6434,7 +6447,6 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="8061091456562007989">Rétablir les anciens paramètres</translation>
 <translation id="8061991877177392872">Apparemment, vous avez déjà configuré Voice Match avec l'Assistant sur un autre appareil. Ces enregistrements précédents ont été utilisés pour créer une empreinte vocale sur cet appareil.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{1 feuille de papier}one{{COUNT} feuille de papier}other{{COUNT} feuilles de papier}}</translation>
-<translation id="8062879968880283306">Scannez le code QR à l'aide de l'appareil photo ou saisissez le code d'activation fourni par votre opérateur.</translation>
 <translation id="8063235345342641131">Avatar vert par défaut</translation>
 <translation id="8063535366119089408">Afficher le fichier</translation>
 <translation id="8064279191081105977">Groupe <ph name="GROUP_NAME" /> - <ph name="GROUP_CONTENTS" /> - <ph name="COLLAPSED_STATE" /></translation>
@@ -6855,7 +6867,6 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="8551588720239073785">Paramètres de date et d'heure</translation>
 <translation id="8553342806078037065">Gérer d'autres utilisateurs</translation>
 <translation id="8554899698005018844">Aucune langue</translation>
-<translation id="8555195867496021627">Aucun profil eSIM disponible. Téléchargez un nouveau profil <ph name="BEGIN_LINK" />ici<ph name="END_LINK" />.</translation>
 <translation id="8557022314818157177">Appuyez sur le lecteur d'empreinte digitale de la clé de sécurité jusqu'à ce que votre empreinte soit enregistrée</translation>
 <translation id="8557930019681227453">Manifeste</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{Tout ouvrir dans une &amp;nouvelle fenêtre}=1{Ouvrir dans une &amp;nouvelle fenêtre}one{Tout ouvrir ({COUNT}) dans une &amp;nouvelle fenêtre}other{Tout ouvrir ({COUNT}) dans une &amp;nouvelle fenêtre}}</translation>
@@ -7035,7 +7046,6 @@ Appuyez sur un contacteur associé à l'action pour supprimer l'association.</tr
 <translation id="8743164338060742337">Réseau <ph name="NETWORK_INDEX" /> sur <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, force du signal : <ph name="SIGNAL_STRENGTH" /> %, géré par votre administrateur, connexion</translation>
 <translation id="8746654918629346731">Vous avez déjà fait une demande pour "<ph name="EXTENSION_NAME" />"</translation>
 <translation id="874689135111202667">{0,plural, =1{Importer un fichier sur ce site ?}one{Importer # fichier sur ce site ?}other{Importer # fichiers sur ce site ?}}</translation>
-<translation id="8749556627204742888">Vous partagez ce réseau avec d'autres utilisateurs de cet appareil.</translation>
 <translation id="8749805710397399240">Impossible de caster votre écran. Vérifiez l'autorisation "Enregistreur d'écran" dans les préférences système.</translation>
 <translation id="8749863574775030885">Accéder à des appareils USB d'un fournisseur inconnu</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> tente de se connecter à un port de série</translation>
@@ -7098,7 +7108,6 @@ Appuyez sur un contacteur associé à l'action pour supprimer l'association.</tr
 <translation id="8808744862003883508">Sur cette page, vous pouvez consulter toutes les extensions installées dans Chrome.</translation>
 <translation id="8809147117840417135">Turquoise clair</translation>
 <translation id="8811862054141704416">Accès au micro sur Crostini</translation>
-<translation id="8812552797690463522">Ce réseau est partagé avec vous.</translation>
 <translation id="8812593354822910461">Effacer également les données de navigation (<ph name="URL" />), ce qui vous déconnectera de <ph name="DOMAIN" />. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">Plus tard</translation>
 <translation id="8813698869395535039">Impossible de se connecter au compte <ph name="USERNAME" /></translation>
@@ -7310,7 +7319,6 @@ Appuyez sur un contacteur associé à l'action pour supprimer l'association.</tr
 <translation id="9021662811137657072">Virus détecté.</translation>
 <translation id="902236149563113779">Les sites suivent généralement la position de votre caméra pour offrir des fonctionnalités de réalité augmentée, comme des jeux ou des indications d'itinéraire</translation>
 <translation id="9022847679183471841">Ce compte est déjà utilisé sur cet ordinateur par <ph name="AVATAR_NAME" />.</translation>
-<translation id="9023009238991294202">Les autres utilisateurs de cet appareil peuvent employer ce réseau.</translation>
 <translation id="9023015617655685412">Ajouter cet onglet aux favoris…</translation>
 <translation id="9023909777842748145">Sachez que la désactivation de cette fonctionnalité n'empêche pas votre appareil d'envoyer les informations nécessaires pour bénéficier de services essentiels tels que les mises à jour du système et la sécurité.</translation>
 <translation id="9024127637873500333">&amp;Ouvrir dans un nouvel onglet</translation>

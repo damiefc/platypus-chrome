@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="bs">
+<translation id="1001033507375626788">Ova mreža se dijeli s vama</translation>
 <translation id="1001307489511021749">Vaše aplikacije, postavke i druga prilagođavanja će se sinhronizirati na svim Chrome OS uređajima na kojima ste prijavljeni putem svog Google računa.</translation>
 <translation id="1003088604756913841">Otvori link u novom prozoru aplikacije <ph name="APP" /></translation>
 <translation id="100323615638474026">USB uređaj (<ph name="VENDOR_ID" />:<ph name="PRODUCT_ID" />)</translation>
@@ -360,7 +361,6 @@ Domena <ph name="DOMAIN" /> zahtijeva da pametna kartica ostane umetnuta.}}</tra
 <translation id="138784436342154190">Vratiti zadanu stranicu za pokretanje?</translation>
 <translation id="1388253969141979417">Dozvoljeno je korištenje vašeg mikrofona</translation>
 <translation id="1388728792929436380"><ph name="DEVICE_TYPE" /> će se ponovo pokrenuti kada se završe ažuriranja.</translation>
-<translation id="138900021244932468">Nijedan profil nije otkriven. Da postavite novu mrežu, skenirajte QR kôd pomoću kamere uređaja ili unesite kôd za aktivaciju koji pruža vaš mobilni operater.</translation>
 <translation id="139013308650923562">Dozvoljeno je koristiti fontove instalirane na uređaju</translation>
 <translation id="1390548061267426325">Otvori kao običnu karticu</translation>
 <translation id="1393283411312835250">Sunce i oblaci</translation>
@@ -960,6 +960,7 @@ da li    proksi server funkcionira. Ako smatrate da ne trebate koristiti
 <translation id="1992924914582925289">Ukloni s uređaja</translation>
 <translation id="1994173015038366702">URL web lokacije</translation>
 <translation id="1995916364271252349">Kontrolira koje informacije web lokacije mogu koristiti i prikazivati (lokacija, kamera, skočni prozori i drugo)</translation>
+<translation id="1997437640397887843">Kamera uređaja se uključila. Postavite QR kôd eSIM-a ispred kamere.</translation>
 <translation id="1997616988432401742">Vaše potvrde</translation>
 <translation id="1999115740519098545">Prilikom pokretanja</translation>
 <translation id="2000419248597011803">Šalje neke kolačiće i pretraživanja s trake za adresu i iz okvira za pretraživanje vašem zadanom pretraživaču</translation>
@@ -1015,6 +1016,7 @@ Postavkama ovog računa možete upravljati instaliranjem aplikacije Family Link 
 <translation id="2055585478631012616">Odjavit ćete se s ovih web lokacija, uključujući otvorene kartice</translation>
 <translation id="205560151218727633">Logotip Google asistenta</translation>
 <translation id="2058456167109518507">Otkriven je uređaj</translation>
+<translation id="2058581283817163201">Potvrdite ovim telefonom</translation>
 <translation id="2059913712424898428">Vremenska zona</translation>
 <translation id="2060375639911876205">Ukloni eSIM profil</translation>
 <translation id="2062354623176996748">Pomoću anonimnog prozora koristite internet bez pohranjivanja historije pregledanja</translation>
@@ -2614,6 +2616,7 @@ Domena <ph name="DOMAIN" /> zahtijeva da pametna kartica ostane umetnuta.</trans
 <translation id="3785308913036335955">Prikaži prečice aplikacije</translation>
 <translation id="3785727820640310185">Sačuvane lozinke za ovu web lokaciju</translation>
 <translation id="3788301286821743879">Pokretanje aplikacije za kiosk nije uspjelo.</translation>
+<translation id="3788331399335602504">ove fajlove</translation>
 <translation id="3788401245189148511">Ekstenzija ili aplikacija bi mogla:</translation>
 <translation id="3789841737615482174">Instaliraj</translation>
 <translation id="379082410132524484">Vaša kartica je istekla</translation>
@@ -3189,6 +3192,7 @@ Domena <ph name="DOMAIN" /> zahtijeva da pametna kartica ostane umetnuta.</trans
 <translation id="4438043733494739848">Providno</translation>
 <translation id="4438639467177774583"><ph name="USERNAME" /> <ph name="MASKED_PASSWORD" /> će se sačuvati na vaš Google račun, <ph name="ACCOUNT" /></translation>
 <translation id="4439427728133035643">Mreža <ph name="NETWORK_INDEX" /> od <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, jačina signala <ph name="SIGNAL_STRENGTH" />%, poveži</translation>
+<translation id="4440097423000553826">Web lokacija <ph name="WEBSITE" /> je poslala obavještenje na vaš telefon. Da potvrdite identitet, dodirnite obavještenje "<ph name="NOTIFICATIONTITLE" />" i pratite korake.</translation>
 <translation id="4441124369922430666">Želite li automatski pokrenuti ovu aplikaciju prilikom uključivanja uređaja?</translation>
 <translation id="4441147046941420429">Da nastavite, uklonite sigurnosni ključ iz uređaja, a zatim ga ponovo umetnite i dodirnite</translation>
 <translation id="444134486829715816">Proširi...</translation>
@@ -3491,6 +3495,7 @@ Domena <ph name="DOMAIN" /> zahtijeva da pametna kartica ostane umetnuta.</trans
 <translation id="4773112038801431077">Nadogradite Linux</translation>
 <translation id="477647109558161443">Kreiraj prečicu na radnoj površini</translation>
 <translation id="4776917500594043016">Lozinka za račun <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="4777458362738635055">Drugi korisnici ovog uređaja mogu koristiti ovu mrežu</translation>
 <translation id="4777825441726637019">Trgovina Play</translation>
 <translation id="4777943778632837590">Konfiguriraj servere mrežnih naziva</translation>
 <translation id="4778644898150334464">Koristite drugu lozinku</translation>
@@ -4326,6 +4331,7 @@ Domena <ph name="DOMAIN" /> zahtijeva da pametna kartica ostane umetnuta.</trans
 <translation id="5712153969432126546">Web lokacije ponekad objavljuju PDF-ove, kao što su dokumenti, ugovori i obrasci</translation>
 <translation id="5715711091495208045">Posrednik dodatka: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">Zadani pretraživači</translation>
+<translation id="5719637365829998022">QR kôd je skeniran.</translation>
 <translation id="5719854774000914513">Web lokacije mogu tražiti da se povežu s HID uređajima</translation>
 <translation id="572155275267014074">Postavke Androida</translation>
 <translation id="5722086096420375088">Zelena i bijela</translation>
@@ -4537,6 +4543,7 @@ Domena <ph name="DOMAIN" /> zahtijeva da pametna kartica ostane umetnuta.</trans
 <translation id="5955721306465922729">Web lokacija želi otvoriti ovu aplikaciju.</translation>
 <translation id="5955809630138889698">Moguće je da ovaj uređaj ispunjava uslove isključivo za online način rada za demonstraciju. Obratite se predstavniku podrške za više detalja.</translation>
 <translation id="5956585768868398362">Je li ovo stranica za pretraživanje koju ste očekivali?</translation>
+<translation id="5957918771633727933">Nije dostupan nijedan eSIM profil. Preuzmite novi <ph name="BEGIN_LINK" />profil.<ph name="END_LINK" /></translation>
 <translation id="5957987129450536192">Dodirnite ikonu Odaberite za govor u blizini slike profila, a zatim odaberite ono što želite čuti.</translation>
 <translation id="5959471481388474538">Mreža nije dostupna</translation>
 <translation id="595959584676692139">Ponovno učitajte stranicu da koristite ekstenziju</translation>
@@ -5927,6 +5934,7 @@ Domena <ph name="DOMAIN" /> zahtijeva da pametna kartica ostane umetnuta.</trans
 <translation id="7506541170099744506">Vaš uređaj <ph name="DEVICE_TYPE" /> je uspješno prijavljen za upravljanje koje vrši preduzeće.</translation>
 <translation id="7507207699631365376">Pogledajte <ph name="BEGIN_LINK" />pravila privatnosti<ph name="END_LINK" /> pružaoca usluga</translation>
 <translation id="7507930499305566459">Potvrda automatskog odgovora statusa</translation>
+<translation id="7509246181739783082">Potvrdite identitet</translation>
 <translation id="7513029293694390567">Automatsko prijavljivanje na web lokacije korištenjem pohranjenih akreditiva. Ako onemogućite, od vas će se tražiti potvrda prilikom svake prijave na web lokaciju.</translation>
 <translation id="7514239104543605883">Kopirajte na svoj uređaj</translation>
 <translation id="7514365320538308">Preuzmi</translation>
@@ -6041,6 +6049,7 @@ Domena <ph name="DOMAIN" /> zahtijeva da pametna kartica ostane umetnuta.</trans
 <translation id="7638605456503525968">Serijski priključci</translation>
 <translation id="7639914187072011620">Dohvatanje URL-a za preusmjeravanje SAML-a sa servera nije uspjelo</translation>
 <translation id="764017888128728"><ph name="PASSWORD_MANAGER_BRAND" /> vas automatski prijavljuje na odgovarajuće web lokacije pomoću sačuvanih lozinki.</translation>
+<translation id="7641513591566880111">Naziv novog profila</translation>
 <translation id="7642778300616172920">Sakrij osjetljivi sadržaj</translation>
 <translation id="7643842463591647490">{0,plural, =1{# otvoreni prozor}one{# otvoreni prozor}few{# otvorena prozora}other{# otvorenih prozora}}</translation>
 <translation id="7643932971554933646">Dopustiti web lokaciji da pregleda fajlove?</translation>
@@ -6201,6 +6210,7 @@ Domena <ph name="DOMAIN" /> zahtijeva da pametna kartica ostane umetnuta.</trans
 <translation id="7800518121066352902">Rotiraj u smjeru suprotnom od kazaljke na satu</translation>
 <translation id="780301667611848630">Ne, hvala</translation>
 <translation id="7804072833593604762">Kartica je zatvorena</translation>
+<translation id="7805759469263222011">Skenirajte QR kôd pomoću kamere uređaja ili unesite kôd za aktivaciju koji pruža vaš mobilni operater</translation>
 <translation id="7805768142964895445">Status</translation>
 <translation id="7807067443225230855">Pretraživanje i Asistent</translation>
 <translation id="7807711621188256451">Uvijek dozvolite web lokaciji <ph name="HOST" /> da pristupa vašoj kameri</translation>
@@ -6459,7 +6469,6 @@ Fajl ključa: <ph name="KEY_FILE" />
 <translation id="8061091456562007989">Promijeni na prethodno</translation>
 <translation id="8061991877177392872">Izgleda da ste već postavili Voice Match s Asistentom na drugom uređaju. Ti prethodni snimci su korišteni za izradu modela glasa na ovom uređaju.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{1 list papira}one{{COUNT} list papira}few{{COUNT} lista papira}other{{COUNT} listova papira}}</translation>
-<translation id="8062879968880283306">Skenirajte QR kôd kamerom uređaja ili unesite kôd za aktivaciju koji pruža vaš mobilni operater.</translation>
 <translation id="8063235345342641131">Zadani zeleni avatar</translation>
 <translation id="8063535366119089408">Pregledaj fajl</translation>
 <translation id="8064279191081105977">Grupa <ph name="GROUP_NAME" /> – <ph name="GROUP_CONTENTS" /> – <ph name="COLLAPSED_STATE" /></translation>
@@ -6681,6 +6690,7 @@ Fajl ključa: <ph name="KEY_FILE" />
 <translation id="8300849813060516376">Greška na OTASP-u</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{Adresa}one{# adresa}few{# adrese}other{# adresa}}</translation>
 <translation id="8304383784961451596">Nemate odobrenje za korištenje ovog uređaja. Kontaktirajte administratora zbog odobrenja za prijavu ili se prijavite s Google računom kojeg nadzire Family Link.</translation>
+<translation id="8308016398665340540">Ovu mrežu dijelite s drugim korisnicima ovog uređaja</translation>
 <translation id="8308179586020895837">Pitaj ako <ph name="HOST" /> želi pristupiti kameri</translation>
 <translation id="830868413617744215">Beta</translation>
 <translation id="8309458809024885768">Potvrda već postoji</translation>
@@ -6880,7 +6890,6 @@ Fajl ključa: <ph name="KEY_FILE" />
 <translation id="8551588720239073785">Postavke datuma i vremena</translation>
 <translation id="8553342806078037065">Upravljaj drugim osobama</translation>
 <translation id="8554899698005018844">Nema jezika</translation>
-<translation id="8555195867496021627">Nije dostupan nijedan eSIM profil. Preuzmite novi profil <ph name="BEGIN_LINK" />ovdje.<ph name="END_LINK" /></translation>
 <translation id="8557022314818157177">Nastavite dodirivati sigurnosni ključ dok se otisak prsta ne snimi</translation>
 <translation id="8557930019681227453">Deklaracija</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{Otvori sve u &amp;novom prozoru}=1{Otvori u &amp;novom prozoru}one{Otvori sve ({COUNT}) u &amp;novom prozoru}few{Otvori sve ({COUNT}) u &amp;novom prozoru}other{Otvori sve ({COUNT}) u &amp;novom prozoru}}</translation>
@@ -7060,7 +7069,6 @@ Pritisnite dodijeljeni prekidač za pristup da uklonite dodjeljivanje.</translat
 <translation id="8743164338060742337">Mreža <ph name="NETWORK_INDEX" /> od <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /> jačina signala <ph name="SIGNAL_STRENGTH" />%, upravlja vaš administrator, poveži</translation>
 <translation id="8746654918629346731">Već ste zatražili ekstenziju "<ph name="EXTENSION_NAME" />"</translation>
 <translation id="874689135111202667">{0,plural, =1{Otpremiti 1 fajl na ovu web lokaciju?}one{Otpremiti # fajl na ovu web lokaciju?}few{Otpremiti # fajla na ovu web lokaciju?}other{Otpremiti # fajlova na ovu web lokaciju?}}</translation>
-<translation id="8749556627204742888">Ovu mrežu dijelite s drugim korisnicima ovog uređaja.</translation>
 <translation id="8749805710397399240">Nije moguće emitirati vaš ekran. Provjerite odobrenje za Snimač ekrana u Postavkama sistema.</translation>
 <translation id="8749863574775030885">Pristupi USB uređajima od nepoznatog dobavljača</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> se želi povezati na serijski priključak</translation>
@@ -7124,7 +7132,6 @@ Domena <ph name="DOMAIN" /> zahtijeva da pametna kartica ostane umetnuta.}}</tra
 <translation id="8808744862003883508">Na ovoj stranici možete vidjeti sve ekstenzije koje su instalirane na Chromeu.</translation>
 <translation id="8809147117840417135">Svijetlotirkizna</translation>
 <translation id="8811862054141704416">Pristup mikrofonu na Crostiniju</translation>
-<translation id="8812552797690463522">Ova mreža se dijeli s vama.</translation>
 <translation id="8812593354822910461">Također obrišite podatke pregledanja (<ph name="URL" />), što vas može odjaviti s domene <ph name="DOMAIN" />. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">Podsjeti me kasnije</translation>
 <translation id="8813698869395535039">Nije se moguće prijaviti na <ph name="USERNAME" /></translation>
@@ -7336,7 +7343,6 @@ Domena <ph name="DOMAIN" /> zahtijeva da pametna kartica ostane umetnuta.}}</tra
 <translation id="9021662811137657072">Otkriven je virus</translation>
 <translation id="902236149563113779">Web lokacije obično prate položaj kamere radi funkcija AR-a, kao što su igre ili smjernice u visini očiju</translation>
 <translation id="9022847679183471841"><ph name="AVATAR_NAME" /> već koristi ovaj račun na ovom računaru.</translation>
-<translation id="9023009238991294202">Drugi korisnici ovog uređaja mogu upotrebljavati ovu mrežu.</translation>
 <translation id="9023015617655685412">Označi ovu karticu…</translation>
 <translation id="9023909777842748145">Ako isključite ovu funkciju, uređaj će i dalje moći slati informacije potrebne za osnovne usluge kao što su ažuriranja sistema i sigurnost.</translation>
 <translation id="9024127637873500333">&amp;Otvaranje u novoj kartici</translation>

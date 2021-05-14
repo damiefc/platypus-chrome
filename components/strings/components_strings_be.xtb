@@ -174,6 +174,7 @@
 <translation id="1532118530259321453">Інфармацыя ад старонкі</translation>
 <translation id="153384715582417236">Пакуль што ўсё!</translation>
 <translation id="1536390784834419204">Перакласці старонку</translation>
+<translation id="1539840569003678498">Справаздача адпраўлена:</translation>
 <translation id="154408704832528245">Выбраць адрас дастаўкі</translation>
 <translation id="1549470594296187301">Каб карыстацца гэтай функцыяй, трэба ўключыць JavaScript.</translation>
 <translation id="155039086686388498">Engineering-D</translation>
@@ -216,6 +217,7 @@
 <translation id="1682696192498422849">Спачатку кароткі край</translation>
 <translation id="168693727862418163">Не ўдалося пацвердзіць адпаведнасць значэння палітыкі схеме, таму яно будзе ігнаравацца.</translation>
 <translation id="168841957122794586">У сертыфіката сервера слабы крыптаграфічны ключ.</translation>
+<translation id="1696290444144917273">Паглядзець рэквізіты віртуальнай карткі</translation>
 <translation id="1697532407822776718">Усё гатова!</translation>
 <translation id="1703835215927279855">Letter</translation>
 <translation id="1706954506755087368">{1,plural, =1{Серверу не ўдалося даказаць, што гэта дамен <ph name="DOMAIN" />. Здаецца, яго сертыфікат бяспекі пачынае дзейнічаць з заўтрашняга дня. Прычынай могуць быць няправільныя налады або зламыснік, які спрабуе перахапіць падключэнне.}one{Серверу не ўдалося даказаць, што гэта дамен <ph name="DOMAIN" />. Здаецца, яго сертыфікат бяспекі пачынае дзейнічаць праз # дзень. Прычынай могуць быць няправільныя налады або зламыснік, які спрабуе перахапіць падключэнне.}few{Серверу не ўдалося даказаць, што гэта дамен <ph name="DOMAIN" />. Здаецца, яго сертыфікат бяспекі пачынае дзейнічаць праз # дні. Прычынай могуць быць няправільныя налады або зламыснік, які спрабуе перахапіць падключэнне.}many{Серверу не ўдалося даказаць, што гэта дамен <ph name="DOMAIN" />. Здаецца, яго сертыфікат бяспекі пачынае дзейнічаць праз # дзён. Прычынай могуць быць няправільныя налады або зламыснік, які спрабуе перахапіць падключэнне.}other{Серверу не ўдалося даказаць, што гэта дамен <ph name="DOMAIN" />. Здаецца, яго сертыфікат бяспекі пачынае дзейнічаць праз # дня. Прычынай могуць быць няправільныя налады або зламыснік, які спрабуе перахапіць падключэнне.}}</translation>
@@ -227,6 +229,7 @@
 <translation id="1717494416764505390">Паштовая скрынка 3</translation>
 <translation id="1718029547804390981">Занадта вялікі дакумент для анатацый</translation>
 <translation id="1721424275792716183">* Абавязковае поле</translation>
+<translation id="1727613060316725209">Сертыфікат з’яўляецца сапраўдным</translation>
 <translation id="1727741090716970331">Дадайце нумар дзеючай карткі</translation>
 <translation id="1728677426644403582">Вы праглядаеце крыніцу вэб-старонкі</translation>
 <translation id="173080396488393970">Карткі гэтага тыпу не падтрымліваюцца</translation>
@@ -505,6 +508,7 @@
 <translation id="2850739647070081192">Invite (канверт)</translation>
 <translation id="2856444702002559011">Зламыснікі могуць спрабаваць украсці вашы даныя з сайта <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (напрыклад, паролі, паведамленні або даныя крэдытных картак). <ph name="BEGIN_LEARN_MORE_LINK" />Даведацца больш<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2859806420264540918">Гэты сайт паказвае назойлівую рэкламу або рэкламу, якая ўводзіць у зман.</translation>
+<translation id="287596039013813457">Таварыскі</translation>
 <translation id="2876489322757410363">Адбудзецца выхад з рэжыму інкогніта для плацяжу праз знешнюю праграму. Працягнуць?</translation>
 <translation id="2878197950673342043">Плакатны згіб</translation>
 <translation id="2878424575911748999">A1</translation>
@@ -602,6 +606,7 @@
 <translation id="3229041911291329567">Звесткі пра версію прылады і браўзера</translation>
 <translation id="323107829343500871">Увядзіце CVC-код карткі <ph name="CREDIT_CARD" /></translation>
 <translation id="3234666976984236645">Заўсёды выяўляць важнае змесціва на гэтым сайце</translation>
+<translation id="3249845759089040423">Стыльны</translation>
 <translation id="3252266817569339921">Французская</translation>
 <translation id="3266793032086590337">Значэнне (канфліктуючае)</translation>
 <translation id="3268451620468152448">Адкрытыя ўкладкі</translation>
@@ -658,6 +663,7 @@
 <translation id="3428151540071562330">Адзін або некалькі URI шаблонаў сервераў з палітыкі DnsOverHttpsTemplates няправільныя і выкарыстоўвацца не будуць.</translation>
 <translation id="3431636764301398940">Захаваць гэту картку на гэту прыладу</translation>
 <translation id="3432601291244612633">Закрыць старонку</translation>
+<translation id="3435738964857648380">Бяспека</translation>
 <translation id="3435896845095436175">Уключыць</translation>
 <translation id="3438829137925142401">Выкарыстаць паролі, захаваныя ва Уліковым запісе Google</translation>
 <translation id="3443726618221119081">Juuro-Ku-Kai</translation>
@@ -700,6 +706,7 @@
 <translation id="3586931643579894722">Схаваць падрабязнасці</translation>
 <translation id="3587738293690942763">Сярэдні</translation>
 <translation id="3590643883886679995">Пасля выхаду з рэжыму інкогніта даныя для ўваходу будуць захоўвацца на гэтай прыладзе.</translation>
+<translation id="359126217934908072">Месяц/год:</translation>
 <translation id="3592413004129370115">Italian (канверт)</translation>
 <translation id="3600246354004376029"><ph name="TITLE" />, <ph name="DOMAIN" />, <ph name="TIME" /></translation>
 <translation id="3603507503523709">Праграма заблакіравана адміністратарам</translation>
@@ -755,6 +762,7 @@
 <translation id="3781428340399460090">Ярка-ружовы</translation>
 <translation id="3783418713923659662">Mastercard</translation>
 <translation id="3784372983762739446">Прылады Bluetooth</translation>
+<translation id="3787675388804467730">Нумар віртуальнай карткі</translation>
 <translation id="3787705759683870569">Тэрмін дзеяння: <ph name="EXPIRATION_MONTH" />/<ph name="EXPIRATION_YEAR" /></translation>
 <translation id="3789155188480882154">Памер 16</translation>
 <translation id="3789841737615482174">Усталяваць</translation>
@@ -975,6 +983,7 @@
 <translation id="4594403342090139922">&amp;Адрабіць выдаленне</translation>
 <translation id="4597348597567598915">Памер 8</translation>
 <translation id="4600854749408232102">C6/C5 (канверт)</translation>
+<translation id="4606870351894164739">Уражальны</translation>
 <translation id="4628948037717959914">Фота</translation>
 <translation id="4631649115723685955">З вяртаннем грошай</translation>
 <translation id="4636930964841734540">Інфармацыя</translation>
@@ -1038,6 +1047,8 @@
 <translation id="4813512666221746211">Памылка сеткі</translation>
 <translation id="4816492930507672669">Дапасаваць да памераў старонкі</translation>
 <translation id="4819347708020428563">Збіраецеся змяняць анатацыі ў стандартным выглядзе?</translation>
+<translation id="4825507807291741242">Моцны</translation>
+<translation id="4838327282952368871">Летуценны</translation>
 <translation id="484462545196658690">Аўтаматычна</translation>
 <translation id="4850886885716139402">Праглядзець</translation>
 <translation id="485316830061041779">Нямецкая</translation>
@@ -1196,6 +1207,7 @@
 <translation id="5398772614898833570">Рэклама заблакіравана</translation>
 <translation id="5400836586163650660">Шэры</translation>
 <translation id="540969355065856584">Серверу не ўдалося даказаць, што гэта <ph name="DOMAIN" />; сертыфікат бяспекі гэтага сайта не распазнаецца як сапраўдны. Прычынай могуць быць няправільныя налады або зламыснік, які спрабуе перахапіць падключэнне.</translation>
+<translation id="541143247543991491">Воблака (у маштабе сістэмы)</translation>
 <translation id="541416427766103491">Укладчык 4</translation>
 <translation id="5421136146218899937">Выдаліць гісторыю праглядаў...</translation>
 <translation id="5426179911063097041"><ph name="SITE" /> запытвае дазвол адпраўляць вам апавяшчэнні</translation>
@@ -1421,6 +1433,7 @@
 <translation id="6289939620939689042">Колер старонкі</translation>
 <translation id="6290238015253830360">Рэкамендаваныя вам артыкулы з'явяцца тут</translation>
 <translation id="6293309776179964942">JIS B5</translation>
+<translation id="6295618774959045776">CVC:</translation>
 <translation id="6302269476990306341">Памочнік Google у Chrome спыняецца</translation>
 <translation id="6305205051461490394">Сайт <ph name="URL" /> недаступны.</translation>
 <translation id="6312113039770857350">Вэб-старонка недаступная</translation>
@@ -1553,6 +1566,7 @@
 <translation id="6886577214605505410"><ph name="LOCATION_TITLE" /> <ph name="SHORT_URL" /></translation>
 <translation id="6888584790432772780">Chrome спрасціў гэту старонку для больш зручнага чытання. Ён атрымаў зыходную старонку па небяспечным падключэнні.</translation>
 <translation id="6891596781022320156">Узровень палітыкі не падтрымліваецца.</translation>
+<translation id="6895143722905299846">Віртуальны нумар:</translation>
 <translation id="6895330447102777224">Картка пацверджана</translation>
 <translation id="6897140037006041989">Агент карыстальніка</translation>
 <translation id="6898699227549475383">Арганізацыя (А)</translation>
@@ -1591,6 +1605,7 @@
 <translation id="7014741021609395734">Маштаб</translation>
 <translation id="7016992613359344582">Плацяжы могуць быць аднаразовыя або рэгулярныя, і іх можа быць цяжка заўважыць.</translation>
 <translation id="7029809446516969842">Паролі</translation>
+<translation id="7030436163253143341">Сертыфікат несапраўдны</translation>
 <translation id="7031646650991750659">Якія праграмы Google Play вы ўсталявалі.</translation>
 <translation id="7050187094878475250">Вы спрабавалі трапіць звярнуцца да дамена <ph name="DOMAIN" />, але сервер выдаў сертыфікат, чый тэрмін дзеяння занадта доўгі, каб быць надзейным.</translation>
 <translation id="705310974202322020">{NUM_CARDS,plural, =1{Гэта картка не можа быць зараз захавана}one{Гэтыя карткі не могуць быць зараз захаваны}few{Гэтыя карткі не могуць быць зараз захаваны}many{Гэтыя карткі не могуць быць зараз захаваны}other{Гэтыя карткі не могуць быць зараз захаваны}}</translation>
@@ -1701,6 +1716,7 @@
       &lt;li&gt;Каб даведацца, як назаўжды выдаліць гэта праграмнае забеспячэнне з вашага камп'ютара, наведайце старонку &lt;a href="https://support.google.com/chrome/answer/6098869"&gt;Даведачны цэнтр Chrome&lt;/a&gt;.
       &lt;/ol&gt;</translation>
 <translation id="741007362987735528">Шырокі фармат</translation>
+<translation id="7410471291937727359">Мілы</translation>
 <translation id="7416351320495623771">Кіраваць паролямі…</translation>
 <translation id="7419106976560586862">Шлях да профілю</translation>
 <translation id="7437289804838430631">Дадаць кантактную інфармацыю</translation>
@@ -2124,6 +2140,7 @@
 <translation id="9020542370529661692">Гэта старонка была перакладзена на наступную мову: <ph name="TARGET_LANGUAGE" /></translation>
 <translation id="9020742383383852663">A8</translation>
 <translation id="9025348182339809926">(Несапраўдны)</translation>
+<translation id="9030265603405983977">Манахромны</translation>
 <translation id="9035022520814077154">Памылка бяспекі</translation>
 <translation id="9038649477754266430">Выкарыстоўваць сэрвіс прагназавання для больш хуткай загрузкі старонак</translation>
 <translation id="9039213469156557790">Акрамя таго, на гэтай старонцы ёсць іншыя рэсурсы, якія не з'яўляюцца бяспечнымі: яны могуць быць прагледжаны іншымі падчас перадачы, а таксама могуць быць мадыфікаваны зламыснікам з мэтай змяніць паводзіны старонкі.</translation>
@@ -2147,6 +2164,7 @@
 <translation id="91108059142052966">Згодна з палітыкай, зададзенай адміністратарам, <ph name="APPLICATION_TITLE" /> не можа выкарыстоўвацца для абагульвання экрана, калі на ім паказваецца прыватнае змесціва.</translation>
 <translation id="9114524666733003316">Пацвярджаюцца даныя карткі...</translation>
 <translation id="9114581008513152754">Гэты браўзер не знаходзіцца пад кіраваннем кампаніі або іншай арганізацыі. Аднак сама прылада можа знаходзіцца пад знешнім кіраваннем. <ph name="BEGIN_LINK" />Даведацца больш<ph name="END_LINK" /></translation>
+<translation id="9117930699067497412">Свежы</translation>
 <translation id="9119042192571987207">Запампавана</translation>
 <translation id="9128016270925453879">Палітыкі загружаны</translation>
 <translation id="9128870381267983090">Падключыцеся да сеткі</translation>

@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="id">
+<translation id="1001033507375626788">Jaringan ini dibagikan kepada Anda</translation>
 <translation id="1001307489511021749">Aplikasi, setelan, dan penyesuaian Anda yang lain akan disinkronkan di semua perangkat Chrome OS yang login dengan Akun Google Anda.</translation>
 <translation id="1003088604756913841">Buka Link di Jendela <ph name="APP" /> baru</translation>
 <translation id="100323615638474026">Perangkat USB (<ph name="VENDOR_ID" />:<ph name="PRODUCT_ID" />)</translation>
@@ -358,7 +359,6 @@
 <translation id="138784436342154190">Pulihkan halaman awal default?</translation>
 <translation id="1388253969141979417">Diizinkan menggunakan mikrofon Anda</translation>
 <translation id="1388728792929436380"><ph name="DEVICE_TYPE" /> akan dimulai ulang saat update selesai.</translation>
-<translation id="138900021244932468">Profil tidak ditemukan. Untuk menyiapkan jaringan baru, pindai kode QR menggunakan kamera perangkat atau masukkan kode aktivasi yang diberikan oleh operator Anda.</translation>
 <translation id="139013308650923562">Diizinkan menggunakan font yang diinstal di perangkat Anda</translation>
 <translation id="1390548061267426325">Buka sebagai Tab Biasa</translation>
 <translation id="1393283411312835250">Matahari dan awan</translation>
@@ -961,6 +961,7 @@
 <translation id="1992924914582925289">Hapus dari perangkat</translation>
 <translation id="1994173015038366702">URL situs</translation>
 <translation id="1995916364271252349">Mengontrol informasi apa saja yang dapat digunakan dan ditampilkan situs (lokasi, kamera, pop-up, dan lainnya)</translation>
+<translation id="1997437640397887843">Kamera perangkat telah diaktifkan. Letakkan kode QR eSIM Anda di depan kamera.</translation>
 <translation id="1997616988432401742">Sertifikat Anda</translation>
 <translation id="1999115740519098545">Saat memulai</translation>
 <translation id="2000419248597011803">Mengirimkan beberapa cookie dan penelusuran dari kolom URL dan kotak penelusuran ke mesin telusur default</translation>
@@ -1016,6 +1017,7 @@ Anda dapat mengelola setelan akun ini dengan menginstal aplikasi Family Link di 
 <translation id="2055585478631012616">Anda akan logout dari semua situs tersebut, termasuk di tab yang terbuka</translation>
 <translation id="205560151218727633">Logo Asisten Google</translation>
 <translation id="2058456167109518507">Perangkat terdeteksi</translation>
+<translation id="2058581283817163201">Verifikasi dengan ponsel ini</translation>
 <translation id="2059913712424898428">Zona waktu</translation>
 <translation id="2060375639911876205">Hapus profil eSIM</translation>
 <translation id="2062354623176996748">Gunakan web tanpa menyimpan histori penjelajahan dengan jendela Samaran</translation>
@@ -2616,6 +2618,7 @@ dan Ctrl+Alt+Kurangi kecerahan untuk memperkecil.</translation>
 <translation id="3785308913036335955">Tampilkan Pintasan Aplikasi</translation>
 <translation id="3785727820640310185">Sandi yang tersimpan untuk situs ini</translation>
 <translation id="3788301286821743879">Aplikasi kios tidak dapat diluncurkan.</translation>
+<translation id="3788331399335602504">file berikut</translation>
 <translation id="3788401245189148511">Aplikasi/ekstensi dapat:</translation>
 <translation id="3789841737615482174">Instal</translation>
 <translation id="379082410132524484">Kartu Anda telah habis masa berlakunya</translation>
@@ -3191,6 +3194,7 @@ dan Ctrl+Alt+Kurangi kecerahan untuk memperkecil.</translation>
 <translation id="4438043733494739848">Transparan</translation>
 <translation id="4438639467177774583"><ph name="MASKED_PASSWORD" /> <ph name="USERNAME" /> akan disimpan ke Akun Google Anda, <ph name="ACCOUNT" /></translation>
 <translation id="4439427728133035643">Jaringan <ph name="NETWORK_INDEX" /> dari <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Kekuatan Sinyal <ph name="SIGNAL_STRENGTH" />%, Sambungkan</translation>
+<translation id="4440097423000553826"><ph name="WEBSITE" /> mengirim notifikasi ke ponsel Anda. Untuk mengonfirmasi bahwa ini benar-benar Anda, ketuk notifikasi “<ph name="NOTIFICATIONTITLE" />” dan ikuti langkah-langkahnya.</translation>
 <translation id="4441124369922430666">Ingin memulai aplikasi ini secara otomatis saat komputer diaktifkan?</translation>
 <translation id="4441147046941420429">Untuk melanjutkan, hapus kunci keamanan Anda dari perangkat, lalu masukkan kembali dan sentuh tombol</translation>
 <translation id="444134486829715816">Luaskan...</translation>
@@ -3493,6 +3497,7 @@ dan Ctrl+Alt+Kurangi kecerahan untuk memperkecil.</translation>
 <translation id="4773112038801431077">Upgrade Linux</translation>
 <translation id="477647109558161443">Buat pintasan desktop</translation>
 <translation id="4776917500594043016">Sandi untuk <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="4777458362738635055">Pengguna lain di perangkat ini dapat menggunakan jaringan ini</translation>
 <translation id="4777825441726637019">Play Store</translation>
 <translation id="4777943778632837590">Konfigurasikan server nama jaringan</translation>
 <translation id="4778644898150334464">Gunakan sandi lain</translation>
@@ -4328,6 +4333,7 @@ dan Ctrl+Alt+Kurangi kecerahan untuk memperkecil.</translation>
 <translation id="5712153969432126546">Situs terkadang memublikasikan PDF, seperti dokumen, kontrak, dan formulir</translation>
 <translation id="5715711091495208045">Pialang Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">Mesin telusur default</translation>
+<translation id="5719637365829998022">Kode QR sudah dipindai.</translation>
 <translation id="5719854774000914513">Situs dapat meminta untuk terhubung ke perangkat HID</translation>
 <translation id="572155275267014074">Setelan Android</translation>
 <translation id="5722086096420375088">Hijau dan putih</translation>
@@ -4539,6 +4545,7 @@ dan Ctrl+Alt+Kurangi kecerahan untuk memperkecil.</translation>
 <translation id="5955721306465922729">Sebuah situs ingin membuka aplikasi ini.</translation>
 <translation id="5955809630138889698">Perangkat ini mungkin hanya memenuhi syarat untuk mode demo online. Hubungi perwakilan dukungan Anda untuk detail selengkapnya.</translation>
 <translation id="5956585768868398362">Apakah ini halaman penelusuran yang Anda harapkan?</translation>
+<translation id="5957918771633727933">Tidak ada profil eSIM yang tersedia. Download <ph name="BEGIN_LINK" />profile<ph name="END_LINK" /> baru.</translation>
 <translation id="5957987129450536192">Ketuk ikon Klik untuk Diucapkan dekat gambar profil, lalu pilih teks yang ingin Anda dengar.</translation>
 <translation id="5959471481388474538">Jaringan tidak tersedia</translation>
 <translation id="595959584676692139">Muat ulang halaman untuk menggunakan ekstensi ini</translation>
@@ -5929,6 +5936,7 @@ dan Ctrl+Alt+Kurangi kecerahan untuk memperkecil.</translation>
 <translation id="7506541170099744506"><ph name="DEVICE_TYPE" /> berhasil didaftarkan untuk pengelolaan perusahaan.</translation>
 <translation id="7507207699631365376">Lihat <ph name="BEGIN_LINK" />kebijakan privasi<ph name="END_LINK" /> penyedia ini</translation>
 <translation id="7507930499305566459">Sertifikat Penanggap Status</translation>
+<translation id="7509246181739783082">Verifikasi identitas Anda</translation>
 <translation id="7513029293694390567">Otomatis login ke situs menggunakan kredensial yang tersimpan. Jika dinonaktifkan, Anda akan dimintai konfirmasi setiap kali login ke situs.</translation>
 <translation id="7514239104543605883">Salin ke perangkat Anda</translation>
 <translation id="7514365320538308">Download</translation>
@@ -6043,6 +6051,7 @@ dan Ctrl+Alt+Kurangi kecerahan untuk memperkecil.</translation>
 <translation id="7638605456503525968">Port serial</translation>
 <translation id="7639914187072011620">Gagal mengambil URL alihan SAML dari server</translation>
 <translation id="764017888128728"><ph name="PASSWORD_MANAGER_BRAND" /> otomatis memasukkan Anda ke situs yang memenuhi syarat menggunakan sandi tersimpan.</translation>
+<translation id="7641513591566880111">Nama profil baru</translation>
 <translation id="7642778300616172920">Sembunyikan konten sensitif</translation>
 <translation id="7643842463591647490">{0,plural, =1{# jendela dibuka}other{# jendela dibuka}}</translation>
 <translation id="7643932971554933646">Izinkan situs melihat file?</translation>
@@ -6203,6 +6212,7 @@ dan Ctrl+Alt+Kurangi kecerahan untuk memperkecil.</translation>
 <translation id="7800518121066352902">Putar &amp;Berlawanan Arah Jarum Jam</translation>
 <translation id="780301667611848630">Lain kali</translation>
 <translation id="7804072833593604762">Tab Ditutup</translation>
+<translation id="7805759469263222011">Pindai kode QR menggunakan kamera perangkat Anda atau masukkan kode aktivasi yang diberikan oleh operator Anda</translation>
 <translation id="7805768142964895445">Status</translation>
 <translation id="7807067443225230855">Penelusuran dan Asisten</translation>
 <translation id="7807711621188256451">Selalu izinkan <ph name="HOST" /> mengakses kamera Anda</translation>
@@ -6461,7 +6471,6 @@ Simpan file kunci Anda di tempat yang aman. Anda akan membutuhkannya untuk membu
 <translation id="8061091456562007989">Kembalikan</translation>
 <translation id="8061991877177392872">Sepertinya Anda sudah menyiapkan Voice Match dengan Asisten Anda di perangkat lain. Rekaman sebelumnya tersebut digunakan untuk membuat model suara di perangkat ini.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{1 lembar kertas}other{{COUNT} lembar kertas}}</translation>
-<translation id="8062879968880283306">Pindai kode QR menggunakan kamera perangkat atau masukkan kode aktivasi yang diberikan oleh operator layanan Anda.</translation>
 <translation id="8063235345342641131">Avatar hijau default</translation>
 <translation id="8063535366119089408">Lihat file</translation>
 <translation id="8064279191081105977">Grup <ph name="GROUP_NAME" /> - <ph name="GROUP_CONTENTS" /> - <ph name="COLLAPSED_STATE" /></translation>
@@ -6683,6 +6692,7 @@ Simpan file kunci Anda di tempat yang aman. Anda akan membutuhkannya untuk membu
 <translation id="8300849813060516376">OTASP gagal</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{Alamat}other{# alamat}}</translation>
 <translation id="8304383784961451596">Anda tidak diizinkan menggunakan perangkat ini. Hubungi administrator untuk mendapatkan izin login atau login dengan Akun Google yang diawasi oleh Family Link.</translation>
+<translation id="8308016398665340540">Anda membagikan jaringan ini kepada pengguna lain di perangkat ini</translation>
 <translation id="8308179586020895837">Tanyakan jika <ph name="HOST" /> ingin mengakses kamera Anda</translation>
 <translation id="830868413617744215">Beta</translation>
 <translation id="8309458809024885768">Sertifikat sudah ada</translation>
@@ -6882,7 +6892,6 @@ Simpan file kunci Anda di tempat yang aman. Anda akan membutuhkannya untuk membu
 <translation id="8551588720239073785">Setelan tanggal dan waktu</translation>
 <translation id="8553342806078037065">Kelola orang lain</translation>
 <translation id="8554899698005018844">Tidak ada bahasa</translation>
-<translation id="8555195867496021627">Tidak ada profil eSIM yang tersedia. Download profil baru <ph name="BEGIN_LINK" />di sini<ph name="END_LINK" />.</translation>
 <translation id="8557022314818157177">Terus sentuh kunci keamanan Anda hingga sidik jari terekam</translation>
 <translation id="8557930019681227453">Manifes</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{Buka Semua di &amp;Jendela Baru}=1{Buka di &amp;Jendela Baru}other{Buka Semua ({COUNT}) di &amp;Jendela Baru}}</translation>
@@ -7062,7 +7071,6 @@ Tekan kunci tombol akses yang telah ditetapkan untuk menghapus penetapan.</trans
 <translation id="8743164338060742337">Jaringan <ph name="NETWORK_INDEX" /> dari <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, Kekuatan Sinyal <ph name="SIGNAL_STRENGTH" />%, Dikelola oleh Administrator Anda, Sambungkan</translation>
 <translation id="8746654918629346731">Anda telah meminta "<ph name="EXTENSION_NAME" />"</translation>
 <translation id="874689135111202667">{0,plural, =1{Upload 1 file ke situs ini?}other{Upload # file ke situs ini?}}</translation>
-<translation id="8749556627204742888">Anda membagikan jaringan ini kepada pengguna lain perangkat ini.</translation>
 <translation id="8749805710397399240">Tidak dapat mentransmisikan layar Anda. Periksa izin Perekaman Layar di Preferensi Sistem.</translation>
 <translation id="8749863574775030885">Akses perangkat USB dari vendor tak dikenal</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> ingin terhubung ke port serial</translation>
@@ -7124,7 +7132,6 @@ Tekan kunci tombol akses yang telah ditetapkan untuk menghapus penetapan.</trans
 <translation id="8808744862003883508">Pada halaman ini, Anda dapat melihat semua ekstensi yang diinstal di Chrome.</translation>
 <translation id="8809147117840417135">Hijau kebiruan terang</translation>
 <translation id="8811862054141704416">Akses mikrofon Crostini</translation>
-<translation id="8812552797690463522">Jaringan ini dibagikan kepada Anda.</translation>
 <translation id="8812593354822910461">Hapus juga data penjelajahan (<ph name="URL" />) yang akan membuat Anda logout dari <ph name="DOMAIN" />. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">Ingatkan saya nanti</translation>
 <translation id="8813698869395535039">Tidak dapat login ke <ph name="USERNAME" /></translation>
@@ -7336,7 +7343,6 @@ Tekan kunci tombol akses yang telah ditetapkan untuk menghapus penetapan.</trans
 <translation id="9021662811137657072">Virus terdeteksi</translation>
 <translation id="902236149563113779">Situs biasanya melacak posisi kamera Anda untuk fitur AR, seperti game atau petunjuk arah</translation>
 <translation id="9022847679183471841">Akun ini sudah digunakan di komputer ini dengan nama <ph name="AVATAR_NAME" />.</translation>
-<translation id="9023009238991294202">Pengguna lain di perangkat ini dapat menggunakan jaringan ini.</translation>
 <translation id="9023015617655685412">Bookmark tab ini...</translation>
 <translation id="9023909777842748145">Menonaktifkan fitur ini tidak memengaruhi kemampuan perangkat Anda dalam mengirimkan informasi yang diperlukan bagi layanan penting seperti keamanan dan update sistem.</translation>
 <translation id="9024127637873500333">&amp;Buka di Tab Baru</translation>

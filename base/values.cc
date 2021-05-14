@@ -1472,7 +1472,7 @@ bool DictionaryValue::RemovePath(StringPiece path,
   if (!GetDictionary(subdict_path, &subdict))
     return false;
   result = subdict->RemovePath(path.substr(delimiter_position + 1), out_value);
-  if (result && subdict->empty())
+  if (result && subdict->DictEmpty())
     RemoveKey(subdict_path);
 
   return result;
@@ -1493,7 +1493,7 @@ void DictionaryValue::Swap(DictionaryValue* other) {
 }
 
 DictionaryValue::Iterator::Iterator(const DictionaryValue& target)
-    : target_(target), it_(target.dict().begin()) {}
+    : target_(target), it_(target.DictItems().begin()) {}
 
 DictionaryValue::Iterator::Iterator(const Iterator& other) = default;
 

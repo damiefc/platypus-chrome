@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="da">
+<translation id="1001033507375626788">Dette netværk deles med dig</translation>
 <translation id="1001307489511021749">DIne apps, indstillinger og andre tilpasninger synkroniseres med alle de Chrome OS-enheder, hvor du er logget ind med din Google-konto.</translation>
 <translation id="1003088604756913841">Åbn linket i et nyt <ph name="APP" />-vindue</translation>
 <translation id="100323615638474026">USB-enhed (<ph name="VENDOR_ID" />:<ph name="PRODUCT_ID" />)</translation>
@@ -359,7 +360,6 @@
 <translation id="138784436342154190">Vil du gendanne standardopstartssiden?</translation>
 <translation id="1388253969141979417">Har tilladelse til at bruge din mikrofon</translation>
 <translation id="1388728792929436380"><ph name="DEVICE_TYPE" /> genstartes, når opdateringerne er fuldført.</translation>
-<translation id="138900021244932468">Der blev ikke fundet nogen profiler. Du kan konfigurere et nyt netværk ved at scanne QR-koden med kameraet på enheden eller ved at angive den aktiveringskode, du fik af dit mobilselskab.</translation>
 <translation id="139013308650923562">Har tilladelse til at bruge de skrifttyper, der er installeret på din enhed</translation>
 <translation id="1390548061267426325">Åbn som almindelig fane</translation>
 <translation id="1393283411312835250">Sol og skyer</translation>
@@ -962,6 +962,7 @@
 <translation id="1992924914582925289">Fjern fra enhed</translation>
 <translation id="1994173015038366702">Webadresse</translation>
 <translation id="1995916364271252349">Styrer, hvilke oplysninger websites kan anvende og vise (placering, kamera, pop op-vinduer m.m.)</translation>
+<translation id="1997437640397887843">Enhedens kamera er aktiveret. Placer QR-koden for dit eSIM foran kameraet.</translation>
 <translation id="1997616988432401742">Dine certifikater</translation>
 <translation id="1999115740519098545">Ved opstart</translation>
 <translation id="2000419248597011803">Sender visse cookies og søgninger fra adresselinjen og søgefeltet til din standardsøgemaskine</translation>
@@ -1017,6 +1018,7 @@ Du kan administrere indstillingerne for denne konto ved at installere Family Lin
 <translation id="2055585478631012616">Du logges ud af disse websites, også i åbne faner</translation>
 <translation id="205560151218727633">Google Assistent-logo</translation>
 <translation id="2058456167109518507">Der blev registreret en enhed</translation>
+<translation id="2058581283817163201">Bekræft med denne telefon</translation>
 <translation id="2059913712424898428">Tidszone</translation>
 <translation id="2060375639911876205">Fjern eSIM-profil</translation>
 <translation id="2062354623176996748">Brug internettet uden at gemme din browserhistorik ved hjælp af et inkognitovindue</translation>
@@ -2617,6 +2619,7 @@ og tryk på Ctrl+Alt+lysstyrke ned for at zoome ud.</translation>
 <translation id="3785308913036335955">Vis genveje for Apps</translation>
 <translation id="3785727820640310185">Gemte adgangskoder til dette website</translation>
 <translation id="3788301286821743879">Terminalappen kunne ikke startes.</translation>
+<translation id="3788331399335602504">disse filer</translation>
 <translation id="3788401245189148511">Den kunne:</translation>
 <translation id="3789841737615482174">Installer</translation>
 <translation id="379082410132524484">Dit kort er udløbet</translation>
@@ -3192,6 +3195,7 @@ Vil du starte <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="4438043733494739848">Gennemsigtig</translation>
 <translation id="4438639467177774583"><ph name="USERNAME" /> <ph name="MASKED_PASSWORD" /> gemmes på din Google-konto, <ph name="ACCOUNT" /></translation>
 <translation id="4439427728133035643">Netværk <ph name="NETWORK_INDEX" /> af <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, signalstyrke <ph name="SIGNAL_STRENGTH" /> %, opret forbindelse</translation>
+<translation id="4440097423000553826"><ph name="WEBSITE" /> har sendt en notifikation til din telefon. Bekræft din identitet ved at trykke på notifikationen "<ph name="NOTIFICATIONTITLE" />" og følge vejledningen.</translation>
 <translation id="4441124369922430666">Skal denne app startes automatisk, når du tænder computeren?</translation>
 <translation id="4441147046941420429">Hvis du vil fortsætte, skal du fjerne sikkerhedsnøglen fra din enhed og derefter sætte den i igen og trykke på den</translation>
 <translation id="444134486829715816">Udvid...</translation>
@@ -3494,6 +3498,7 @@ Vil du starte <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="4773112038801431077">Opgrader Linux</translation>
 <translation id="477647109558161443">Opret en genvej på skrivebordet</translation>
 <translation id="4776917500594043016">Adgangskode for <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="4777458362738635055">Andre brugere af denne enhed kan bruge dette netværk</translation>
 <translation id="4777825441726637019">Play Butik</translation>
 <translation id="4777943778632837590">Konfigurer navneservere for netværk</translation>
 <translation id="4778644898150334464">Brug en anden adgangskode</translation>
@@ -3807,7 +3812,7 @@ Vil du starte <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="5133483819862530305">Fra solnedgang til solopgang</translation>
 <translation id="5135085122826131075">Få adgang til din Google-assistent, når du siger "Hey Google".</translation>
 <translation id="5135533361271311778">Bogmærkeelementet blev ikke oprettet.</translation>
-<translation id="5136343472380336530">Sørg for, at begge enheder er låst op, er i nærheden af hinanden, og at både Bluetooth er aktiveret. <ph name="LINK_BEGIN" />Få flere oplysninger<ph name="LINK_END" /></translation>
+<translation id="5136343472380336530">Sørg for, at begge enheder er låst op, er i nærheden af hinanden og har Bluetooth aktiveret. <ph name="LINK_BEGIN" />Få flere oplysninger<ph name="LINK_END" /></translation>
 <translation id="5137501176474113045">Slet dette element</translation>
 <translation id="5139112070765735680"><ph name="QUERY_NAME" />, <ph name="DEFAULT_SEARCH_ENGINE_NAME" /> Søgning</translation>
 <translation id="5139823398361067371">Angiv pinkoden til din sikkerhedsnøgle. Hvis du ikke kender pinkoden, skal du nulstille sikkerhedsnøglen.</translation>
@@ -4329,6 +4334,7 @@ Vil du starte <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="5712153969432126546">Websites kan nogle gange udgive PDF-filer som f.eks. dokumenter, kontrakter og formularer</translation>
 <translation id="5715711091495208045">Pluginmægler: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">Standardsøgemaskiner</translation>
+<translation id="5719637365829998022">QR-koden blev scannet.</translation>
 <translation id="5719854774000914513">Websites kan anmode om tilladelse til at oprette forbindelse til HID-enheder</translation>
 <translation id="572155275267014074">Indstillinger for Android</translation>
 <translation id="5722086096420375088">Grøn og hvid</translation>
@@ -4540,6 +4546,7 @@ Vil du starte <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="5955721306465922729">Et website vil gerne åbne denne app.</translation>
 <translation id="5955809630138889698">Denne enhed er muligvis ikke kvalificeret til onlinedemotilstand. Kontakt din supportrepræsentant for at få flere oplysninger.</translation>
 <translation id="5956585768868398362">Var det den søgeside, du havde forventet?</translation>
+<translation id="5957918771633727933">Der er ingen tilgængelige eSIM-profiler. Download en ny <ph name="BEGIN_LINK" />profil<ph name="END_LINK" />.</translation>
 <translation id="5957987129450536192">Tryk på ikonet for tekstoplæsning i nærheden af dit profilbillede, og vælg derefter det, der skal læses højt.</translation>
 <translation id="5959471481388474538">Netværket er ikke tilgængeligt</translation>
 <translation id="595959584676692139">Genindlæs siden for at bruge denne udvidelse</translation>
@@ -5930,6 +5937,7 @@ Vil du starte <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="7506541170099744506">Din <ph name="DEVICE_TYPE" /> er tilmeldt virksomhedsadministration.</translation>
 <translation id="7507207699631365376">Se denne udbyders <ph name="BEGIN_LINK" />privatlivspolitik<ph name="END_LINK" /></translation>
 <translation id="7507930499305566459">Certifikat for statussvar</translation>
+<translation id="7509246181739783082">Bekræft din identitet</translation>
 <translation id="7513029293694390567">Log automatisk ind på websites ved hjælp af gemte loginoplysninger. Hvis funktionen er slået fra, bliver du bedt om bekræftelse, hver gang du vil logge ind på et website.</translation>
 <translation id="7514239104543605883">Kopiér til din enhed</translation>
 <translation id="7514365320538308">Download</translation>
@@ -6044,6 +6052,7 @@ Vil du starte <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="7638605456503525968">Serieporte</translation>
 <translation id="7639914187072011620">SAML-omdirigeringen kunne ikke hentes fra serveren</translation>
 <translation id="764017888128728"><ph name="PASSWORD_MANAGER_BRAND" /> logger dig automatisk ind på kvalificerede websites med adgangskoder, du har gemt.</translation>
+<translation id="7641513591566880111">Nyt profilnavn</translation>
 <translation id="7642778300616172920">Skjul følsomt indhold</translation>
 <translation id="7643842463591647490">{0,plural, =1{# åbent vindue}one{# åbent vindue}other{# åbne vinduer}}</translation>
 <translation id="7643932971554933646">Skal websitet kunne se filer?</translation>
@@ -6203,6 +6212,7 @@ Vil du starte <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="7800518121066352902">Roter m&amp;od uret</translation>
 <translation id="780301667611848630">Nej tak</translation>
 <translation id="7804072833593604762">Fanen er lukket</translation>
+<translation id="7805759469263222011">Scan en QR-kode med kameraet på din enhed, eller angiv den aktiveringskode, du har fået af dit mobilselskab</translation>
 <translation id="7805768142964895445">Status</translation>
 <translation id="7807067443225230855">Søgning og Assistent</translation>
 <translation id="7807711621188256451">Tillad altid, at <ph name="HOST" /> har adgang til dit kamera</translation>
@@ -6461,7 +6471,6 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8061091456562007989">Skift tilbage</translation>
 <translation id="8061991877177392872">Det ser ud til, at du allerede har konfigureret Voice Match med Google-assistenten på en anden enhed. Disse tidligere optagelser blev brugt til at oprette en stemmemodel på denne enhed.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{1 ark papir}one{{COUNT} ark papir}other{{COUNT} ark papir}}</translation>
-<translation id="8062879968880283306">Scan QR-koden ved hjælp af kameraet på enheden, eller angiv aktiveringskoden fra dit mobilselskab.</translation>
 <translation id="8063235345342641131">Grøn standardavatar</translation>
 <translation id="8063535366119089408">Se fil</translation>
 <translation id="8064279191081105977">Gruppe <ph name="GROUP_NAME" /> – <ph name="GROUP_CONTENTS" /> – <ph name="COLLAPSED_STATE" /></translation>
@@ -6683,6 +6692,7 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8300849813060516376">OTASP mislykkedes</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{Adresse}one{# adresse}other{# adresser}}</translation>
 <translation id="8304383784961451596">Du har ikke tilladelse til at bruge denne enhed. Kontakt administratoren for at få tilladelse til at logge ind, eller log ind med en Google-konto, der er konfigureret med forældrestyring i Family Link.</translation>
+<translation id="8308016398665340540">Du deler dette netværk med andre brugere af enheden</translation>
 <translation id="8308179586020895837">Spørg, om <ph name="HOST" /> vil have adgang til dit kamera</translation>
 <translation id="830868413617744215">Beta</translation>
 <translation id="8309458809024885768">Certifikatet eksisterer allerede</translation>
@@ -6882,7 +6892,6 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8551588720239073785">Indstillinger for dato og tid</translation>
 <translation id="8553342806078037065">Administrer andre personer</translation>
 <translation id="8554899698005018844">Intet sprog</translation>
-<translation id="8555195867496021627">Der er ingen tilgængelige eSIM-profiler. Download en ny profil <ph name="BEGIN_LINK" />her<ph name="END_LINK" />.</translation>
 <translation id="8557022314818157177">Bliv ved med at røre din sikkerhedsnøgle, indtil dit fingeraftryk er registreret</translation>
 <translation id="8557930019681227453">Manifest</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{Åbn alle i &amp;nyt vindue}=1{Åbn i &amp;nyt vindue}one{Åbn ({COUNT}) i &amp;nyt vindue}other{Åbn alle ({COUNT}) i &amp;nyt vindue}}</translation>
@@ -7062,7 +7071,6 @@ Tryk på en kontakt, der er tildelt en handling, for at fjerne tildelingen.</tra
 <translation id="8743164338060742337">Netværk <ph name="NETWORK_INDEX" /> af <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, signalstyrke <ph name="SIGNAL_STRENGTH" /> %, administreret af din administrator, opret forbindelse</translation>
 <translation id="8746654918629346731">Du har allerede anmodet om "<ph name="EXTENSION_NAME" />"</translation>
 <translation id="874689135111202667">{0,plural, =1{Vil du uploade én fil til dette website?}one{Vil du uploade # fil til dette website?}other{Vil du uploade # filer til dette website?}}</translation>
-<translation id="8749556627204742888">Du deler dette netværk med andre brugere af enheden.</translation>
 <translation id="8749805710397399240">Din skærm kan ikke castes. Tjek tilladelsen for skærmoptagelse under Systempræferencer.</translation>
 <translation id="8749863574775030885">Få adgang til USB-enheder fra en ukendt leverandør</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> anmoder om at oprette forbindelse til en seriel port</translation>
@@ -7126,7 +7134,6 @@ Tryk på en kontakt, der er tildelt en handling, for at fjerne tildelingen.</tra
 <translation id="8808744862003883508">På denne side kan du se alle de udvidelser, der er installeret i Chrome.</translation>
 <translation id="8809147117840417135">Lys turkis</translation>
 <translation id="8811862054141704416">Adgang til mikrofonen i Crostini</translation>
-<translation id="8812552797690463522">Dette netværk er delt med dig.</translation>
 <translation id="8812593354822910461">Ryd også browserdata (<ph name="URL" />), hvilket muligvis logger dig ud af <ph name="DOMAIN" />. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">Påmind mig senere</translation>
 <translation id="8813698869395535039">Det var ikke muligt at logge ind på <ph name="USERNAME" /></translation>
@@ -7338,7 +7345,6 @@ Tryk på en kontakt, der er tildelt en handling, for at fjerne tildelingen.</tra
 <translation id="9021662811137657072">Der er fundet en virus</translation>
 <translation id="902236149563113779">Websites registrerer normalt din kameraposition til AR-formål såsom spil eller overlejrede rutevejledninger</translation>
 <translation id="9022847679183471841">Denne konto bruges allerede på denne computer af <ph name="AVATAR_NAME" />.</translation>
-<translation id="9023009238991294202">Andre brugere af denne enhed kan bruge dette netværk.</translation>
 <translation id="9023015617655685412">Tilføj denne fane som bogmærke...</translation>
 <translation id="9023909777842748145">Deaktivering af denne funktion påvirker ikke enhedens evne til at sende oplysninger, der skal bruges til vigtige tjenester som f.eks. systemopdateringer og sikkerhed.</translation>
 <translation id="9024127637873500333">&amp;Åbn på ny fane</translation>

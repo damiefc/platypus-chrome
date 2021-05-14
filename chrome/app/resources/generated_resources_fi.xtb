@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fi">
+<translation id="1001033507375626788">Tämä verkko on jaettu sinulle</translation>
 <translation id="1001307489511021749">Sovelluksesi, asetuksesi ja muut muokkaukset synkronoidaan kaikilla Chrome-käyttöjärjestelmän laitteilla, joilla olet kirjautuneena Google-tilillesi.</translation>
 <translation id="1003088604756913841">Avaa linkki uudessa ikkunassa (<ph name="APP" />)</translation>
 <translation id="100323615638474026">USB-laite (<ph name="VENDOR_ID" />: <ph name="PRODUCT_ID" />)</translation>
@@ -358,7 +359,6 @@
 <translation id="138784436342154190">Palautetaanko oletusaloitussivu?</translation>
 <translation id="1388253969141979417">Mikrofonin käyttö sallittu</translation>
 <translation id="1388728792929436380"><ph name="DEVICE_TYPE" /> käynnistyy uudelleen, kun päivitykset ovat valmiit.</translation>
-<translation id="138900021244932468">Profiileja ei löytynyt. Jos haluat luoda uuden verkon, skannaa QR-koodi laitteen kameralla tai lisää operaattorisi antama aktivointikoodi.</translation>
 <translation id="139013308650923562">Laitteellesi asennettujen fonttien käyttäminen sallittu</translation>
 <translation id="1390548061267426325">Avaa tavallisella välilehdellä</translation>
 <translation id="1393283411312835250">Aurinko ja pilviä</translation>
@@ -516,6 +516,7 @@
 <translation id="1545775234664667895">Asennettin teema <ph name="THEME_NAME" /></translation>
 <translation id="1546280085599573572">Tämä laajennus on vaihtanut Etusivu-painikkeella avattavan sivun.</translation>
 <translation id="1546452108651444655"><ph name="CHILD_NAME" /> haluaa asentaa kohteen (<ph name="EXTENSION_TYPE" />), joka voi:</translation>
+<translation id="1547808936554660006">Ymmärrän, että powerwash ei poista asennettuja eSIM-profiileita</translation>
 <translation id="1549275686094429035">ARC käytössä</translation>
 <translation id="1549788673239553762"><ph name="APP_NAME" /> haluaa käyttää tallennusvälinettä <ph name="VOLUME_NAME" />. Luvan saatuaan sovellus voi muokata tai poistaa tiedostojasi.</translation>
 <translation id="1552301827267621511"><ph name="EXTENSION_NAME" /> muutti hakupalvelua, se on nyt <ph name="SEARCH_PROVIDER_DOMAIN" /></translation>
@@ -552,6 +553,7 @@
 <translation id="1588438908519853928">Normaali</translation>
 <translation id="158849752021629804">Kotiverkko tarvitaan</translation>
 <translation id="1588870296199743671">Avaa linkki sovelluksessa...</translation>
+<translation id="1588919647604819635">Kakkospainikekortti</translation>
 <translation id="1589055389569595240">Näytä oikeinkirjoitus ja kielioppi</translation>
 <translation id="1591679663873027990">Myönnä Parallels Desktopille pääsy USB-laitteisiin. Parallels Desktop ei muista USB-laitetta, kun se on poistettu.</translation>
 <translation id="1592074621872221573"><ph name="MANAGER" /> on poistanut ADB-virheenkorjauksen käytöstä, mikä nollaa laitteesi (<ph name="DEVICE_TYPE" />). Varmuuskopioi tiedostosi ennen kuin aloitat.</translation>
@@ -958,6 +960,7 @@
 <translation id="1992924914582925289">Poista laitteelta</translation>
 <translation id="1994173015038366702">Sivuston URL-osoite</translation>
 <translation id="1995916364271252349">Koskee tietoja, joita sivustot voivat käyttää ja näyttää (sijainti, kamera, ponnahdusikkunat ja muut)</translation>
+<translation id="1997437640397887843">Laitteen kamera on mennyt päälle. Aseta eSIMin QR-koodi kameran eteen.</translation>
 <translation id="1997616988432401742">Omat varmenteet</translation>
 <translation id="1999115740519098545">Käynnistyksessä</translation>
 <translation id="2000419248597011803">Lähettää joitakin osoitekentän ja hakukentän kautta tehtyjä hakuja sekä joitakin evästeitä oletushakukoneellesi</translation>
@@ -995,6 +998,7 @@ Muussa tapauksessa kirjaudu ulos nyt, jotta tilin muutokset näkyvät laitteella
 
 Voit ylläpitää tilin asetuksia asentamalla laitteellesi Family Link ‑sovelluksen.  Lähetimme sinulle ohjeet sähköpostitse.</translation>
 <translation id="2040460856718599782">Hups! Jotain meni vikaan todennuksen aikana. Tarkista kirjautumistietosi ja yritä uudelleen.</translation>
+<translation id="2042279886444479655">Aktiiviset profiilit</translation>
 <translation id="2044014337866019681">Avaa istunto varmistamalla, että vahvistamasi tili on <ph name="ACCOUNT" />.</translation>
 <translation id="2044023416777079300">Modeemia ei rekisteröity</translation>
 <translation id="204497730941176055">Microsoftin varmenteen mallin nimi</translation>
@@ -1012,6 +1016,7 @@ Voit ylläpitää tilin asetuksia asentamalla laitteellesi Family Link ‑sovell
 <translation id="2055585478631012616">Sinut kirjataan ulos näiltä sivustoilta, myös avoimilta välilehdiltä.</translation>
 <translation id="205560151218727633">Google Assistantin logo</translation>
 <translation id="2058456167109518507">Laite havaittu</translation>
+<translation id="2058581283817163201">Todenna tällä puhelimella</translation>
 <translation id="2059913712424898428">Aikavyöhyke</translation>
 <translation id="2060375639911876205">Poista eSIM-profiili</translation>
 <translation id="2062354623176996748">Avaa incognito-ikkuna, jos haluat selata verkkoa ilman selaushistorian tallentumista</translation>
@@ -1336,6 +1341,7 @@ Voit ylläpitää tilin asetuksia asentamalla laitteellesi Family Link ‑sovell
 <translation id="2395616325548404795">Yrityshallinta on otettu käyttöön laitteessa <ph name="DEVICE_TYPE" />, mutta laitetunnuksen ja sijaintitietojen lähettäminen epäonnistui. Lisää nämä laitetta koskevat tiedot hallintakonsolista manuaalisesti.</translation>
 <translation id="2396387085693598316"><ph name="EXTENSION_NAME" /> on järjestelmänvalvojan estämä</translation>
 <translation id="2396783860772170191">Lisää nelinumeroinen PIN-koodi (0000–9999)</translation>
+<translation id="2398546389094871088">Laitteen powerwash ei poista eSIM-profiileitasi. Voit poistaa profiilit manuaalisesti <ph name="LINK_BEGIN" />Mobiiliasetuksista<ph name="LINK_END" />.</translation>
 <translation id="2399699884460174994">Ilmoitukset laitettu päälle</translation>
 <translation id="2399939490305346086">Suojausavaimen kirjautumisdata</translation>
 <translation id="2400664245143453337">Päivitys vaaditaan välittömästi</translation>
@@ -1753,6 +1759,7 @@ ja loitonna painamalla Ctrl + Alt + kirkkauden vähennys.</translation>
 <translation id="2844809857160214557">Katso tulostustyöt ja ylläpidä niitä</translation>
 <translation id="2845382757467349449">Näytä kirjanmerkkipalkki aina</translation>
 <translation id="284805635805850872">Poistetaanko haittaohjelmia?</translation>
+<translation id="2849035674501872372">Hae</translation>
 <translation id="284970761985428403"><ph name="ASCII_NAME" /> (<ph name="UNICODE_NAME" />)</translation>
 <translation id="284975061945174219">Poisto epäonnistui</translation>
 <translation id="2849936225196189499">Kriittinen</translation>
@@ -2064,6 +2071,7 @@ ja loitonna painamalla Ctrl + Alt + kirkkauden vähennys.</translation>
 <translation id="3189187154924005138">Suuri kohdistin</translation>
 <translation id="3190558889382726167">Salasana on tallennettu</translation>
 <translation id="3192947282887913208">Äänitiedostot</translation>
+<translation id="3197453258332670132">Näytä valittuun tekstiin liittyviä tietoja klikkaamalla kakkospainikkeella tai painamalla pitkään</translation>
 <translation id="3199127022143353223">Palvelimet</translation>
 <translation id="3201422919974259695">Käytettävissä olevat USB-laitteet näkyvät täällä.</translation>
 <translation id="3202131003361292969">Reitti</translation>
@@ -2085,6 +2093,7 @@ ja loitonna painamalla Ctrl + Alt + kirkkauden vähennys.</translation>
 <translation id="3223531857777746191">Palautuspainike</translation>
 <translation id="3225084153129302039">Violetti oletusavatar</translation>
 <translation id="3225319735946384299">Koodin allekirjoitus</translation>
+<translation id="3226487301970807183">Näytä/piilota vasemmalle tasattu sivupaneeli</translation>
 <translation id="3227137524299004712">Mikrofoni</translation>
 <translation id="3233271424239923319">Varmuuskopioi Linux-sovellukset ja ‑tiedostot</translation>
 <translation id="3238192140106069382">Yhdistetään ja tarkistetaan</translation>
@@ -2354,6 +2363,7 @@ ja loitonna painamalla Ctrl + Alt + kirkkauden vähennys.</translation>
 <translation id="3515983984924808886">Vahvista nollaus koskettamalla suojausavainta uudelleen. Tällöin kaikki suojausavaimeen tallennetut tiedot, kuten sen PIN-koodi, poistetaan.</translation>
 <translation id="3518985090088779359">Hyväksy ja jatka</translation>
 <translation id="3519564332031442870">Tulostuksen backend-palvelu</translation>
+<translation id="3519938335881974273">Tallenna sivu nimellä…</translation>
 <translation id="3521606918211282604">Muuta levyn kokoa</translation>
 <translation id="3522088408596898827">Levytila on erittäin vähissä. Vapauta levytilaa ja yritä uudelleen.</translation>
 <translation id="3524965460886318643">Vie toiminta</translation>
@@ -2377,6 +2387,7 @@ ja loitonna painamalla Ctrl + Alt + kirkkauden vähennys.</translation>
 <translation id="3550593477037018652">Katkaise mobiiliverkkoyhteys</translation>
 <translation id="3550915441744863158">Chrome päivitetään automaattisesti, joten käytössäsi on aina uusin versio</translation>
 <translation id="3551320343578183772">Sulje välilehti</translation>
+<translation id="3552097563855472344"><ph name="NETWORK_NAME" /> – <ph name="SPAN_START" /><ph name="CARRIER_NAME" /><ph name="SPAN_END" /></translation>
 <translation id="3552780134252864554">Tyhjennetty poistumisen yhteydessä</translation>
 <translation id="3554493885489666172"><ph name="PROFILE_NAME" /> ylläpitää laitettasi. Järjestelmänvalvojilla on pääsy kaikkien tämän laitteen profiilien dataan.</translation>
 <translation id="3555812735919707620">Poista laajennus</translation>
@@ -2429,6 +2440,7 @@ ja loitonna painamalla Ctrl + Alt + kirkkauden vähennys.</translation>
 <translation id="3604713164406837697">Vaihda taustakuva</translation>
 <translation id="3605780360466892872">Dave</translation>
 <translation id="3608576286259426129">Käyttäjän kuvan esikatselu</translation>
+<translation id="3609277884604412258">Pikahaku</translation>
 <translation id="3610369246614755442">Telineen tuuletin kaipaa huoltoa</translation>
 <translation id="361106536627977100">Flash-tiedot</translation>
 <translation id="3611655097742243705">Löydät lisää sovelluksia Play Kaupasta</translation>
@@ -2605,6 +2617,7 @@ ja loitonna painamalla Ctrl + Alt + kirkkauden vähennys.</translation>
 <translation id="3785308913036335955">Näytä Apps-oikopolku</translation>
 <translation id="3785727820640310185">Tämän sivuston tallennetut salasanat</translation>
 <translation id="3788301286821743879">Kioskisovelluksen käynnistäminen ei onnistu.</translation>
+<translation id="3788331399335602504">nämä tiedostot</translation>
 <translation id="3788401245189148511">Se voisi:</translation>
 <translation id="3789841737615482174">Asenna</translation>
 <translation id="379082410132524484">Korttisi on vanhentunut.</translation>
@@ -3177,6 +3190,7 @@ ja loitonna painamalla Ctrl + Alt + kirkkauden vähennys.</translation>
 <translation id="4438043733494739848">Läpinäkyvä</translation>
 <translation id="4438639467177774583"><ph name="USERNAME" /> <ph name="MASKED_PASSWORD" /> tallennetaan Google-tilillesi: <ph name="ACCOUNT" /></translation>
 <translation id="4439427728133035643">Verkko <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, signaalin vahvuus <ph name="SIGNAL_STRENGTH" /> %, yhdistä</translation>
+<translation id="4440097423000553826"><ph name="WEBSITE" /> lähetti ilmoituksen puhelimeesi. Todista henkilöllisyytesi napauttamalla ilmoitusta (<ph name="NOTIFICATIONTITLE" />) ja seuraamalla ohjeita.</translation>
 <translation id="4441124369922430666">Haluatko käynnistää tämän sovelluksen automaattisesti koneen käynnistyessä?</translation>
 <translation id="4441147046941420429">Jos haluat jatkaa, poista suojausavain laitteesta, aseta se takaisin ja kosketa sitä</translation>
 <translation id="444134486829715816">Laajenna...</translation>
@@ -3370,6 +3384,7 @@ ja loitonna painamalla Ctrl + Alt + kirkkauden vähennys.</translation>
 <translation id="4636682061478263818">Drive-tiedostot</translation>
 <translation id="4636930964841734540">Tietoja</translation>
 <translation id="4637083375689622795">Lisää toimintoja, <ph name="EMAIL" /></translation>
+<translation id="4637189644956543313">Avaa kamera uudelleen</translation>
 <translation id="4637252186848840278">{COUNT,plural, =1{Teksti}other{# tekstiä}}</translation>
 <translation id="4638930039313743000">Ota käyttöön ADB-virheenkorjaus</translation>
 <translation id="4641539339823703554">Chrome ei voinut asettaa järjestelmän aikaa. Tarkista aika alta ja korjaa sitä tarvittaessa.</translation>
@@ -3478,6 +3493,7 @@ ja loitonna painamalla Ctrl + Alt + kirkkauden vähennys.</translation>
 <translation id="4773112038801431077">Päivitä Linux</translation>
 <translation id="477647109558161443">Luo työpöytäkuvake</translation>
 <translation id="4776917500594043016">Osoitteen <ph name="USER_EMAIL_ADDRESS" /> salasana</translation>
+<translation id="4777458362738635055">Muut laitteen käyttäjät voivat käyttää tätä verkkoa</translation>
 <translation id="4777825441726637019">Play Kauppa</translation>
 <translation id="4777943778632837590">Määritä verkon nimipalvelimet</translation>
 <translation id="4778644898150334464">Käytä toista salasanaa</translation>
@@ -4120,6 +4136,7 @@ ja loitonna painamalla Ctrl + Alt + kirkkauden vähennys.</translation>
 <translation id="5499313591153584299">Tämä tiedosto voi olla haitallinen tietokoneellesi.</translation>
 <translation id="5499453227627332024">Linux-säiliöösi on saatavilla päivitys. Voit myös päivittää myöhemmin Asetukset-sovelluksesta.</translation>
 <translation id="5500709606820808700">Turvatarkistus tehtiin tänään</translation>
+<translation id="5501322521654567960">Vasemmalle tasattu sivupaneeli</translation>
 <translation id="5501809658163361512">{COUNT,plural, =1{<ph name="ATTACHMENTS" /> jonka <ph name="DEVICE_NAME" /> lähetti ei tullut perille}other{<ph name="DEVICE_NAME" /> lähetti <ph name="ATTACHMENTS" />, mutta lähetys epäonnistui}}</translation>
 <translation id="5502500733115278303">Tuotu Firefoxista</translation>
 <translation id="5502915260472117187">Lapsi</translation>
@@ -4312,6 +4329,7 @@ ja loitonna painamalla Ctrl + Alt + kirkkauden vähennys.</translation>
 <translation id="5712153969432126546">Sivustot julkaisevat joskus PDF-tiedostoja, kuten asiakirjoja, sopimuksia ja lomakkeita</translation>
 <translation id="5715711091495208045">Laajennuksen välittäjä: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5719603411793408026">Oletushakukoneet</translation>
+<translation id="5719637365829998022">QR-koodi on skannattu.</translation>
 <translation id="5719854774000914513">Sivustot saavat pyytää lupaa yhdistää HID-laitteisiin</translation>
 <translation id="572155275267014074">Android-asetukset</translation>
 <translation id="5722086096420375088">Vihreä ja valkoinen</translation>
@@ -4523,6 +4541,7 @@ Julkinen eksponentti (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bittiä):
 <translation id="5955721306465922729">Sivusto haluaa avata tämän sovelluksen.</translation>
 <translation id="5955809630138889698">Laite ei välttämättä ole yhteensopiva offline-esittelytilan kanssa. Pyydä lisätietoja tukihenkilöltäsi.</translation>
 <translation id="5956585768868398362">Onko tämä haluamasi hakusivu?</translation>
+<translation id="5957918771633727933">Ei eSIM-profiileja saatavilla. Lataa uusi <ph name="BEGIN_LINK" />profiili<ph name="END_LINK" />.</translation>
 <translation id="5957987129450536192">Napauta Teksti puhuttuna ‑kuvaketta profiilikuvasi vierestä ja valitse, mitä haluat kuulla.</translation>
 <translation id="5959471481388474538">Verkko ei käytettävissä</translation>
 <translation id="595959584676692139">Lataa sivu uudelleen käyttääksesi tätä laajennusta</translation>
@@ -5331,6 +5350,7 @@ Julkinen eksponentti (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bittiä):
 <translation id="6856348640027512653">Virtuaalitodellisuuslaitteiden tai ‑datan käyttö kielletty</translation>
 <translation id="6856459657722366306">Verkko <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, <ph name="CONNECTION_STATUS" />, signaalin voimakkuus <ph name="SIGNAL_STRENGTH" /> %, lisätietoja</translation>
 <translation id="6856623341093082836">Määritä kosketusnäyttö ja säädä sen tarkkuutta</translation>
+<translation id="6857145580237920905">Poista eSIM-profiilit ennen powerwashia</translation>
 <translation id="6857699260879628349">Hae määritystiedot</translation>
 <translation id="6857725247182211756"><ph name="SECONDS" /> s</translation>
 <translation id="6860097299815761905">Välityspalvelimen asetukset...</translation>
@@ -5912,6 +5932,7 @@ Julkinen eksponentti (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bittiä):
 <translation id="7506541170099744506">Yrityshallinta on otettu käyttöön laitteessa <ph name="DEVICE_TYPE" />.</translation>
 <translation id="7507207699631365376">Katso tämän palveluntarjoajan <ph name="BEGIN_LINK" />tietosuojakäytäntö<ph name="END_LINK" /></translation>
 <translation id="7507930499305566459">Tilavastausvarmenne</translation>
+<translation id="7509246181739783082">Vahvista henkilöllisyys</translation>
 <translation id="7513029293694390567">Kirjaudu automaattisesti verkkosivustoille käyttämällä tallennettuja kirjautumistietoja. Jos toiminto ei ole käytössä, sinua pyydetään vahvistamaan kirjautuminen aina, kun kirjaudut sivustolle.</translation>
 <translation id="7514239104543605883">Kopioi laitteelle</translation>
 <translation id="7514365320538308">Lataa</translation>
@@ -6026,6 +6047,7 @@ Julkinen eksponentti (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bittiä):
 <translation id="7638605456503525968">Sarjaportit</translation>
 <translation id="7639914187072011620">SAML-uudelleenohjauksen URL-osoitetta ei voitu noutaa palvelimelta</translation>
 <translation id="764017888128728"><ph name="PASSWORD_MANAGER_BRAND" /> kirjaa sinut automaattisesti kelvollisille sivustoille, joiden salasanat olet tallentanut.</translation>
+<translation id="7641513591566880111">Uusi profiilin nimi</translation>
 <translation id="7642778300616172920">Piilota arkaluontoinen sisältö</translation>
 <translation id="7643842463591647490">{0,plural, =1{# avoin ikkuna}other{# avointa ikkunaa}}</translation>
 <translation id="7643932971554933646">Saako sivusto nähdä tiedostoja?</translation>
@@ -6185,6 +6207,7 @@ Julkinen eksponentti (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bittiä):
 <translation id="7800518121066352902">Käännä &amp;vastapäivään</translation>
 <translation id="780301667611848630">Ei kiitos</translation>
 <translation id="7804072833593604762">Välilehti suljettu</translation>
+<translation id="7805759469263222011">Skannaa QR-koodi laitteen kameralla tai lisää operaattorisi antama aktivointikoodi.</translation>
 <translation id="7805768142964895445">Tila</translation>
 <translation id="7807067443225230855">Haku ja Assistant</translation>
 <translation id="7807711621188256451">Anna aina sivuston <ph name="HOST" /> käyttää kameraasi</translation>
@@ -6443,7 +6466,6 @@ Tallenna avaintiedosto suojattuun sijaintiin. Tarvitset sitä, jos haluat luoda 
 <translation id="8061091456562007989">Vaihda takaisin</translation>
 <translation id="8061991877177392872">Näyttää siltä, että olet jo ottanut Assistantin Voice Matchin käyttöön toisella laitteella. Tämän laitteen äänimalli on luotu aiemmista tallenteista.</translation>
 <translation id="8062844841289846053">{COUNT,plural, =1{1 paperiarkki}other{{COUNT} paperiarkkia}}</translation>
-<translation id="8062879968880283306">Skannaa QR-koodi laitteen kameralla tai lisää operaattorisi antama aktivointikoodi.</translation>
 <translation id="8063235345342641131">Vihreä oletusavatar</translation>
 <translation id="8063535366119089408">Näytä tiedosto</translation>
 <translation id="8064279191081105977">Ryhmä <ph name="GROUP_NAME" /> – <ph name="GROUP_CONTENTS" /> – <ph name="COLLAPSED_STATE" /></translation>
@@ -6665,6 +6687,7 @@ Tallenna avaintiedosto suojattuun sijaintiin. Tarvitset sitä, jos haluat luoda 
 <translation id="8300849813060516376">OTASP epäonnistui</translation>
 <translation id="8303616404642252802">{COUNT,plural, =1{Osoite}other{# osoitetta}}</translation>
 <translation id="8304383784961451596">Sinulla ei ole tämän laitteen käyttölupaa. Pyydä kirjautumislupaa järjestelmänvalvojalta tai kirjaudu sisään Google-tilillä, jota valvotaan Family Linkillä.</translation>
+<translation id="8308016398665340540">Jaat tämä verkon muiden laitteen käyttäjien kanssa</translation>
 <translation id="8308179586020895837">Kysy, jos <ph name="HOST" /> haluaa käyttää kameraasi</translation>
 <translation id="830868413617744215">Beta</translation>
 <translation id="8309458809024885768">Sertifikaatti on jo olemassa.</translation>
@@ -6864,7 +6887,6 @@ Tallenna avaintiedosto suojattuun sijaintiin. Tarvitset sitä, jos haluat luoda 
 <translation id="8551588720239073785">Aika- ja päivämääräasetukset</translation>
 <translation id="8553342806078037065">Hallitse muita ihmisiä</translation>
 <translation id="8554899698005018844">Ei kieltä</translation>
-<translation id="8555195867496021627">Ei eSIM-profiileja saatavilla. Lataa uusi profiili <ph name="BEGIN_LINK" />täältä<ph name="END_LINK" />.</translation>
 <translation id="8557022314818157177">Jatka suojausavaimen koskettamista, kunnes sormenjälki tallennetaan</translation>
 <translation id="8557930019681227453">Luettelo</translation>
 <translation id="8560327176991673955">{COUNT,plural, =0{Avaa kaikki uudessa ikku&amp;nassa}=1{Avaa uudessa ikku&amp;nassa}other{Avaa kaikki ({COUNT}) uudessa ikku&amp;nassa}}</translation>
@@ -7044,7 +7066,6 @@ Paina määritettyä kytkintä, niin poistat sen määrityksen.</translation>
 <translation id="8743164338060742337">Verkko <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, signaalin voimakkuus, <ph name="SIGNAL_STRENGTH" /> %, järjestelmänvalvojan ylläpitämä, yhdistä</translation>
 <translation id="8746654918629346731">Pyysit jo tätä: <ph name="EXTENSION_NAME" /></translation>
 <translation id="874689135111202667">{0,plural, =1{Ladataanko sivustoon yksi tiedosto?}other{Ladataanko sivustoon # tiedostoa?}}</translation>
-<translation id="8749556627204742888">Jaat tämä verkon muiden laitteen käyttäjien kanssa.</translation>
 <translation id="8749805710397399240">Näytön striimaus ei onnistu. Tarkista näytön tallentajan lupa järjestelmäasetuksista.</translation>
 <translation id="8749863574775030885">Käyttää tuntemattoman myyjän USB-laitteita.</translation>
 <translation id="8750155211039279868"><ph name="ORIGIN" /> haluaa yhdistää sarjaporttiin</translation>
@@ -7106,7 +7127,6 @@ Paina määritettyä kytkintä, niin poistat sen määrityksen.</translation>
 <translation id="8808744862003883508">Tällä sivulla näet kaikki Chromeen asennetut laajennukset.</translation>
 <translation id="8809147117840417135">Vaalea turkoosi</translation>
 <translation id="8811862054141704416">Crostinin mikrofonin käyttöoikeus</translation>
-<translation id="8812552797690463522">Tämä verkko on jaettu kanssasi.</translation>
 <translation id="8812593354822910461">Poista myös selaustiedot (<ph name="URL" />), jolloin sinut kirjataan ulos <ph name="DOMAIN" />-sivulta. <ph name="LEARN_MORE" /></translation>
 <translation id="8813277370772331957">Muistuta myöhemmin</translation>
 <translation id="8813698869395535039">Sisäänkirjautuminen ei onnistu: <ph name="USERNAME" /></translation>
@@ -7318,7 +7338,6 @@ Paina määritettyä kytkintä, niin poistat sen määrityksen.</translation>
 <translation id="9021662811137657072">Virus havaittu</translation>
 <translation id="902236149563113779">Sivustot seuraavat yleensä kameran asentoa tarjotakseen AR-ominaisuuksia, kuten pelejä tai suuntailmoituksia</translation>
 <translation id="9022847679183471841">Tämä tili on jo henkilön <ph name="AVATAR_NAME" /> käytössä tässä tietokoneessa.</translation>
-<translation id="9023009238991294202">Muut laitteen käyttäjät voivat käyttää tätä verkkoa.</translation>
 <translation id="9023015617655685412">Lisää tämä välilehti kirjanmerkiksi…</translation>
 <translation id="9023909777842748145">Jos ominaisuus laitetaan pois päältä, laite voi edelleen lähettää järjestelmäpäivitysten, tietoturvan ja muiden tärkeiden palvelujen edellyttämiä tietoja.</translation>
 <translation id="9024127637873500333">Avaa uudessa välilehdessä</translation>

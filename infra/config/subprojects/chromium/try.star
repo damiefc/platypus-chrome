@@ -1140,8 +1140,11 @@ try_.chromium_linux_builder(
 
 try_.chromium_linux_builder(
     name = "linux-1mbu-compile-fyi-rel",
-    # TODO(crbug.com/1199853): Configure 1mbu mode through an input property
-    # for this builder.
+    properties = {
+        "bot_update_experiments": [
+            "no_sync",
+        ],
+    },
 )
 
 try_.chromium_linux_builder(
@@ -1160,19 +1163,6 @@ try_.chromium_linux_builder(
     name = "linux-bionic-rel",
     goma_jobs = goma.jobs.J150,
     os = os.LINUX_BIONIC,
-)
-
-try_.chromium_linux_builder(
-    name = "linux-experimental-next-rel",
-    branch_selector = branches.STANDARD_MILESTONE,
-    builderless = not settings.is_main,
-    goma_jobs = goma.jobs.J150,
-    os = os.LINUX_BIONIC,
-    main_list_view = "try",
-    tryjob = try_.job(
-        experiment_percentage = 10,
-    ),
-    use_clang_coverage = True,
 )
 
 try_.chromium_linux_builder(
@@ -1284,16 +1274,6 @@ try_.chromium_linux_builder(
     tryjob = try_.job(),
     use_clang_coverage = True,
     coverage_test_types = ["unit", "overall"],
-)
-
-# Experimental builder to check dual coverage on linux platform.
-try_.chromium_linux_builder(
-    name = "linux-rel-dual-coverage",
-    builderless = True,
-    goma_jobs = goma.jobs.J150,
-    tryjob = try_.job(experiment_percentage = 3),
-    coverage_test_types = ["unit", "overall"],
-    use_clang_coverage = True,
 )
 
 try_.chromium_linux_builder(
