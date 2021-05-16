@@ -9,11 +9,11 @@
 
 #include "base/files/file.h"
 #include "base/macros.h"
-#include "base/optional.h"
 #include "base/threading/thread_checker.h"
 #include "build/build_config.h"
 #include "media/base/audio_point.h"
 #include "media/base/audio_processing.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/renderer/platform/mediastream/media_constraints.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
@@ -79,7 +79,20 @@ struct PLATFORM_EXPORT AudioProcessingProperties {
 
   EchoCancellationType echo_cancellation_type =
       EchoCancellationType::kEchoCancellationAec3;
+  // Indicates whether system-level gain control and noise suppression
+  // functionalities are present that fill a role comparable to the browser
+  // counterparts.
+  bool system_gain_control_activated = false;
+  bool system_noise_suppression_activated = false;
+
+  // Used for an experiment for forcing certain system-level
+  // noise suppression functionalities to be off. In contrast to
+  // `system_noise_suppression_activated` the system-level noise suppression
+  // referred to does not correspond to something that can replace the browser
+  // counterpart. I.e., the browser counterpart should be on, even if
+  // `disable_hw_noise_suppression` is false.
   bool disable_hw_noise_suppression = false;
+
   bool goog_audio_mirroring = false;
   bool goog_auto_gain_control = true;
   bool goog_experimental_echo_cancellation =
@@ -130,23 +143,23 @@ struct PLATFORM_EXPORT AdaptiveGainController2Properties {
   bool neon_allowed;
 };
 
-// Configures automatic gain control in `apm_config`. If `agc_enabled` is true
-// and `agc2_properties` is specified, the AGC2 adaptive digital replaces the
-// adaptive digital controller of AGC1 - i.e., hybrid configuration (AGC1 analog
-// plus AGC2 adaptive digital).
+// Configures automatic gain control in `apm_config`. If
+// `properties.goog_auto_gain_control` is true and `agc2_properties` is
+// specified, the AGC2 adaptive digital replaces the adaptive digital controller
+// of AGC1 - i.e., hybrid configuration (AGC1 analog plus AGC2 adaptive
+// digital).
 // TODO(crbug.com/webrtc/7494): Clean up once hybrid AGC experiment finalized.
 PLATFORM_EXPORT void ConfigAutomaticGainControl(
-    bool agc_enabled,
-    bool experimental_agc_enabled,
-    base::Optional<AdaptiveGainController2Properties> agc2_properties,
-    base::Optional<double> compression_gain_db,
+    const AudioProcessingProperties& properties,
+    absl::optional<AdaptiveGainController2Properties> agc2_properties,
+    absl::optional<double> compression_gain_db,
     AudioProcessing::Config& apm_config);
 
 PLATFORM_EXPORT void PopulateApmConfig(
     AudioProcessing::Config* apm_config,
     const AudioProcessingProperties& properties,
-    const base::Optional<std::string>& audio_processing_platform_config_json,
-    base::Optional<double>* gain_control_compression_gain_db);
+    const absl::optional<std::string>& audio_processing_platform_config_json,
+    absl::optional<double>* gain_control_compression_gain_db);
 
 }  // namespace blink
 

@@ -183,8 +183,8 @@ void TestSurfaceBase::RemoveDataStoreEntry(base::StringPiece key) {
 }
 
 void TestSurfaceBase::Clear() {
-  initial_state = base::nullopt;
-  update = base::nullopt;
+  initial_state = absl::nullopt;
+  update = absl::nullopt;
   described_updates_.clear();
 }
 
@@ -428,11 +428,29 @@ void TestFeedNetwork::InjectRealFeedQueryResponse() {
   injected_response_ = response;
 }
 
+void TestFeedNetwork::InjectRealFeedQueryResponseWithNoContent() {
+  base::FilePath response_file_path;
+  CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &response_file_path));
+  response_file_path = response_file_path.AppendASCII(
+      "components/test/data/feed/response.binarypb");
+  std::string response_data;
+  CHECK(base::ReadFileToString(response_file_path, &response_data));
+
+  feedwire::Response response;
+  CHECK(response.ParseFromString(response_data));
+  // Keep only the first two operations, the CLEAR_ALL and root, but no content.
+  auto* data_operations =
+      response.mutable_feed_response()->mutable_data_operation();
+  data_operations->erase(data_operations->begin() + 2, data_operations->end());
+
+  injected_response_ = response;
+}
+
 void TestFeedNetwork::InjectEmptyActionRequestResult() {
   InjectApiRawResponse<UploadActionsDiscoverApi>({});
 }
 
-base::Optional<feedwire::UploadActionsRequest>
+absl::optional<feedwire::UploadActionsRequest>
 TestFeedNetwork::GetActionRequestSent() {
   return GetApiRequestSent<UploadActionsDiscoverApi>();
 }
@@ -504,7 +522,7 @@ RefreshResponseData TestWireResponseTranslator::TranslateWireResponse(
 }
 void TestWireResponseTranslator::InjectResponse(
     std::unique_ptr<StreamModelUpdateRequest> response,
-    base::Optional<std::string> session_id) {
+    absl::optional<std::string> session_id) {
   DCHECK(!response->stream_data.signed_in() || !session_id);
   RefreshResponseData data;
   data.model_update_request = std::move(response);

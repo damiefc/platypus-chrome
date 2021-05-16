@@ -4,8 +4,8 @@
 
 #include "chromeos/services/ime/decoder/proto_conversion.h"
 
-#include "base/optional.h"
 #include "chromeos/services/ime/public/cpp/suggestions.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace chromeos {
 namespace ime {
@@ -96,7 +96,7 @@ TextSuggestionMode ProtoToTextSuggestionMode(
   }
 }
 
-base::Optional<TextSuggestionType> ProtoToTextSuggestionType(
+absl::optional<TextSuggestionType> ProtoToTextSuggestionType(
     const SuggestionType& suggestion_type) {
   switch (suggestion_type) {
     case SuggestionType::SUGGESTION_TYPE_ASSISTIVE_EMOJI:
@@ -106,7 +106,21 @@ base::Optional<TextSuggestionType> ProtoToTextSuggestionType(
     case SuggestionType::SUGGESTION_TYPE_MULTI_WORD:
       return TextSuggestionType::kMultiWord;
     default:
+      return absl::nullopt;
+  }
+}
+
+base::Optional<mojom::InputMethodApiOperation> InputMethodApiOperationToMojo(
+    NonCompliantApiMetric::InputMethodApiOperation operation) {
+  switch (operation) {
+    case NonCompliantApiMetric::OPERATION_UNSPECIFIED:
       return base::nullopt;
+    case NonCompliantApiMetric::OPERATION_COMMIT_TEXT:
+      return mojom::InputMethodApiOperation::kCommitText;
+    case NonCompliantApiMetric::OPERATION_SET_COMPOSITION_TEXT:
+      return mojom::InputMethodApiOperation::kSetCompositionText;
+    case NonCompliantApiMetric::OPERATION_DELETE_SURROUNDING_TEXT:
+      return mojom::InputMethodApiOperation::kDeleteSurroundingText;
   }
 }
 
@@ -235,7 +249,7 @@ std::vector<TextSuggestion> ProtoToTextSuggestions(
     const chromeos::ime::DisplaySuggestions& display_suggestions) {
   std::vector<TextSuggestion> suggestions;
   for (const auto& candidate : display_suggestions.candidates()) {
-    base::Optional<TextSuggestionType> suggestion_type =
+    absl::optional<TextSuggestionType> suggestion_type =
         ProtoToTextSuggestionType(candidate.type());
     if (suggestion_type) {
       // Drop any unexpected suggestion types
@@ -246,6 +260,21 @@ std::vector<TextSuggestion> ProtoToTextSuggestions(
     }
   }
   return suggestions;
+}
+
+mojom::UkmEntryPtr ProtoToUkmEntry(const RecordUkm& record_ukm) {
+  switch (record_ukm.entry_case()) {
+    case RecordUkm::ENTRY_NOT_SET:
+      return nullptr;
+    case RecordUkm::kNonCompliantApi: {
+      auto operation = InputMethodApiOperationToMojo(
+          record_ukm.non_compliant_api().non_compliant_operation());
+      if (!operation)
+        return nullptr;
+      return mojom::UkmEntry::NewNonCompliantApi(
+          mojom::NonCompliantApiMetric::New(*operation));
+    }
+  }
 }
 
 }  // namespace ime

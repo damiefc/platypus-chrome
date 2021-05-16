@@ -366,7 +366,7 @@ void SearchResultTileItemView::OnGetContextMenuModel(
                          views::MenuRunner::FIXED_ANCHOR);
   if (!selected()) {
     selected_for_context_menu_ = true;
-    SetSelected(true, base::nullopt);
+    SetSelected(true, absl::nullopt);
   }
 }
 
@@ -376,7 +376,7 @@ void SearchResultTileItemView::OnMenuClosed() {
   context_menu_.reset();
   if (selected_for_context_menu_) {
     selected_for_context_menu_ = false;
-    SetSelected(false, base::nullopt);
+    SetSelected(false, absl::nullopt);
   }
 }
 
@@ -406,7 +406,8 @@ void SearchResultTileItemView::ActivateResult(int event_flags,
 
   RecordSearchResultOpenSource(result(), view_delegate_->GetModel(),
                                view_delegate_->GetSearchModel());
-  view_delegate_->OpenSearchResult(result()->id(), event_flags,
+  view_delegate_->OpenSearchResult(result()->id(), result()->result_type(),
+                                   event_flags,
                                    AppListLaunchedFrom::kLaunchedFromSearchBox,
                                    AppListLaunchType::kAppSearchResult,
                                    index_in_container(), launch_as_default);

@@ -9,14 +9,14 @@
 
 #include "base/bits.h"
 #include "base/fuchsia/fuchsia_logging.h"
-#include "base/process/process_metrics.h"
+#include "base/memory/page_size.h"
 
 namespace media {
 
 // static
 fuchsia::sysmem::BufferCollectionConstraints
 VmoBuffer::GetRecommendedConstraints(size_t min_buffer_count,
-                                     base::Optional<size_t> min_buffer_size,
+                                     absl::optional<size_t> min_buffer_size,
                                      bool writable) {
   fuchsia::sysmem::BufferCollectionConstraints buffer_constraints;
 

@@ -27,7 +27,7 @@
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/optional.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/animation_throughput_reporter.h"
@@ -176,8 +176,6 @@ void AppListPresenterImpl::Show(AppListViewState preferred_state,
     view_->GetWidget()->GetNativeWindow()->TrackOcclusionState();
   }
 
-  is_visible_ = true;
-
   controller_->UpdateLauncherContainer(display_id);
 
   // App list needs to know the new shelf layout in order to calculate its
@@ -248,7 +246,6 @@ void AppListPresenterImpl::Dismiss(base::TimeTicks event_time_stamp) {
   if (view_->GetWidget()->IsActive())
     view_->GetWidget()->Deactivate();
 
-  is_visible_ = false;
   event_filter_.reset();
   controller_->ViewClosing();
 
@@ -333,7 +330,7 @@ void AppListPresenterImpl::ProcessMouseWheelOffset(
 void AppListPresenterImpl::UpdateScaleAndOpacityForHomeLauncher(
     float scale,
     float opacity,
-    base::Optional<TabletModeAnimationTransition> transition,
+    absl::optional<TabletModeAnimationTransition> transition,
     UpdateHomeLauncherAnimationSettingsCallback callback) {
   if (!view_)
     return;
@@ -354,7 +351,7 @@ void AppListPresenterImpl::UpdateScaleAndOpacityForHomeLauncher(
     view_->ResetTransitionMetricsReporter();
   }
 
-  base::Optional<ui::ScopedLayerAnimationSettings> settings;
+  absl::optional<ui::ScopedLayerAnimationSettings> settings;
   if (!callback.is_null()) {
     settings.emplace(layer->GetAnimator());
     callback.Run(&settings.value());
@@ -375,7 +372,7 @@ void AppListPresenterImpl::UpdateScaleAndOpacityForHomeLauncher(
   // reported for transform animation only.
   layer->SetOpacity(opacity);
 
-  base::Optional<ui::AnimationThroughputReporter> reporter;
+  absl::optional<ui::AnimationThroughputReporter> reporter;
   if (settings.has_value() && transition.has_value()) {
     view_->OnTabletModeAnimationTransitionNotified(*transition);
     reporter.emplace(settings->GetAnimator(),
@@ -465,7 +462,7 @@ void AppListPresenterImpl::OnVisibilityWillChange(bool visible,
 }
 
 void AppListPresenterImpl::OnClosed() {
-  if (!is_visible_)
+  if (!is_target_visibility_show_)
     shelf_observation_.RemoveAllObservations();
   controller_->ViewClosed();
 }
@@ -513,6 +510,11 @@ void AppListPresenterImpl::OnWindowFocused(aura::Window* gained_focus,
         view_->OnHomeLauncherGainingFocusWithoutAnimation();
 
       OnVisibilityChanged(visible, GetDisplayId());
+    } else {
+      // In tablet mode, when Assistant UI lost focus after other new App window
+      // opened, we should reset the view.
+      if (app_list_lost_focus && IsShowingEmbeddedAssistantUI())
+        view_->Back();
     }
   }
 

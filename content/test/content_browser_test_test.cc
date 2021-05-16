@@ -239,7 +239,7 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, MAYBE_RunMockTests) {
   base::GetAppOutputAndError(command_line, &output);
 
   // Validate the resulting JSON file is the expected output.
-  base::Optional<base::Value> root =
+  absl::optional<base::Value> root =
       base::test_launcher_utils::ReadSummary(path);
   ASSERT_TRUE(root);
 
@@ -360,7 +360,7 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, RunTimeoutInstalled) {
   EXPECT_FATAL_FAILURE(static_on_timeout_cb.Run(FROM_HERE),
                        "RunLoop::Run() timed out. Timeout set at "
                        // We don't test the line number but it would be present.
-                       "ProxyRunTestOnMainThreadLoop@../../content/public/test/"
+                       "ProxyRunTestOnMainThreadLoop@content/public/test/"
                        "browser_test_base.cc:");
 }
 

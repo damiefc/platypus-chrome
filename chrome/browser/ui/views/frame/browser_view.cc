@@ -63,6 +63,7 @@
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
 #include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/browser/ui/recently_audible_helper.h"
 #include "chrome/browser/ui/sad_tab_helper.h"
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble_view.h"
@@ -1790,7 +1791,7 @@ void BrowserView::ShowIntentPickerBubble(
     bool show_stay_in_chrome,
     bool show_remember_selection,
     PageActionIconType icon_type,
-    const base::Optional<url::Origin>& initiating_origin,
+    const absl::optional<url::Origin>& initiating_origin,
     IntentPickerResponse callback) {
   toolbar_->ShowIntentPickerBubble(std::move(app_info), show_stay_in_chrome,
                                    show_remember_selection, icon_type,
@@ -1807,9 +1808,14 @@ BrowserView::ShowQRCodeGeneratorBubble(
     content::WebContents* contents,
     qrcode_generator::QRCodeGeneratorBubbleController* controller,
     const GURL& url) {
+  base::OnceClosure on_closing = base::BindOnce(
+      &qrcode_generator::QRCodeGeneratorBubbleController::OnBubbleClosed,
+      // Unretained is safe: controller is a WebContentsUserData, owned by
+      // WebContents, and the bubble can't outlive the WebContents.
+      base::Unretained(controller));
   qrcode_generator::QRCodeGeneratorBubble* bubble =
-      new qrcode_generator::QRCodeGeneratorBubble(GetLocationBarView(),
-                                                  contents, controller, url);
+      new qrcode_generator::QRCodeGeneratorBubble(
+          GetLocationBarView(), contents, std::move(on_closing), url);
 
   PageActionIconView* icon_view =
       toolbar_button_provider()->GetPageActionIconView(
@@ -2325,7 +2331,7 @@ std::u16string BrowserView::GetAccessibleTabLabel(bool include_app_name,
   std::u16string title =
       browser_->GetWindowTitleForTab(include_app_name, index);
 
-  base::Optional<tab_groups::TabGroupId> group =
+  absl::optional<tab_groups::TabGroupId> group =
       tabstrip_->tab_at(index)->group();
   if (group.has_value()) {
     std::u16string group_title = tabstrip_->GetGroupTitle(group.value());
@@ -2356,7 +2362,7 @@ std::u16string BrowserView::GetAccessibleTabLabel(bool include_app_name,
   }
 
   // Alert tab states.
-  base::Optional<TabAlertState> alert = tabstrip_->GetTabAlertState(index);
+  absl::optional<TabAlertState> alert = tabstrip_->GetTabAlertState(index);
   if (!alert.has_value())
     return title;
 

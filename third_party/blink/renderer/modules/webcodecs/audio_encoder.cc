@@ -7,6 +7,7 @@
 #include <cinttypes>
 #include <limits>
 
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "media/audio/audio_opus_encoder.h"
 #include "media/base/audio_parameters.h"
@@ -176,13 +177,16 @@ void AudioEncoder::ProcessConfigure(Request* request) {
       WrapCrossThreadPersistent(active_config_.Get()), reset_count_));
 
   auto done_callback = [](AudioEncoder* self, uint32_t reset_count,
-                          media::Status status) {
+                          media::AudioCodec codec, media::Status status) {
     if (!self || self->reset_count_ != reset_count)
       return;
     DCHECK_CALLED_ON_VALID_SEQUENCE(self->sequence_checker_);
     if (!status.is_ok()) {
       self->HandleError(
           self->logger_->MakeException("Encoding error.", status));
+    } else {
+      UMA_HISTOGRAM_ENUMERATION("Blink.WebCodecs.AudioEncoder.Codec", codec,
+                                media::kAudioCodecMax + 1);
     }
     self->stall_request_processing_ = false;
     self->ProcessRequests();
@@ -193,7 +197,8 @@ void AudioEncoder::ProcessConfigure(Request* request) {
   media_encoder_->Initialize(
       active_config_->options, std::move(output_cb),
       ConvertToBaseOnceCallback(CrossThreadBindOnce(
-          done_callback, WrapCrossThreadWeakPersistent(this), reset_count_)));
+          done_callback, WrapCrossThreadWeakPersistent(this), reset_count_,
+          active_config_->codec)));
 }
 
 void AudioEncoder::ProcessEncode(Request* request) {
@@ -274,7 +279,7 @@ void AudioEncoder::CallOutputCallback(
     ParsedConfig* active_config,
     uint32_t reset_count,
     media::EncodedAudioBuffer encoded_buffer,
-    base::Optional<media::AudioEncoder::CodecDescription> codec_desc) {
+    absl::optional<media::AudioEncoder::CodecDescription> codec_desc) {
   DCHECK(active_config);
   if (!script_state_->ContextIsValid() || !output_callback_ ||
       state_.AsEnum() != V8CodecState::Enum::kConfigured ||

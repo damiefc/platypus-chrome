@@ -5,15 +5,13 @@
 #ifndef CHROME_BROWSER_CHROMEOS_FULL_RESTORE_ARC_WINDOW_UTILS_H_
 #define CHROME_BROWSER_CHROMEOS_FULL_RESTORE_ARC_WINDOW_UTILS_H_
 
-#include <utility>
-
-#include "base/optional.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace chromeos {
 namespace full_restore {
 
-base::Optional<double> GetDisplayScaleFactor(int64_t display_id);
+absl::optional<double> GetDisplayScaleFactor(int64_t display_id);
 
 // Returns true if the ARC supports ghost window.
 bool IsArcGhostWindowEnabled();

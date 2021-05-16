@@ -14,6 +14,7 @@
 #include "base/format_macros.h"
 #include "base/memory/aligned_memory.h"
 #include "base/memory/discardable_shared_memory.h"
+#include "base/memory/page_size.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
@@ -330,7 +331,7 @@ size_t DiscardableSharedMemoryHeap::GetFreelistSize() const {
   return num_free_blocks_ * block_size_;
 }
 
-base::Optional<size_t> DiscardableSharedMemoryHeap::GetResidentSize() const {
+absl::optional<size_t> DiscardableSharedMemoryHeap::GetResidentSize() const {
   size_t resident_size = 0;
   // Each member of |free_spans_| is a LinkedList of Spans. We need to iterate
   // over each of these.
@@ -342,11 +343,11 @@ base::Optional<size_t> DiscardableSharedMemoryHeap::GetResidentSize() const {
       // |shared_memory|) has Span::start_ initialized to a value equivalent
       // to reinterpret_cast<shared_memory->memory()) / block_size_.
       void* mem = reinterpret_cast<void*>(free_span->start() * block_size_);
-      base::Optional<size_t> resident_in_span =
+      absl::optional<size_t> resident_in_span =
           base::trace_event::ProcessMemoryDump::CountResidentBytes(
               mem, free_span->length() * base::GetPageSize());
       if (!resident_in_span)
-        return base::nullopt;
+        return absl::nullopt;
       resident_size += resident_in_span.value();
     }
   }

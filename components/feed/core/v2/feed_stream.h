@@ -188,7 +188,7 @@ class FeedStream : public FeedApi,
   RequestThrottler* GetRequestThrottler() { return &request_throttler_; }
   const feedstore::Metadata& GetMetadata() const;
   void SetMetadata(feedstore::Metadata metadata);
-  bool SetMetadata(base::Optional<feedstore::Metadata> metadata);
+  bool SetMetadata(absl::optional<feedstore::Metadata> metadata);
   void SetStreamStale(const StreamType& stream_type, bool is_stale);
 
   MetricsReporter& GetMetricsReporter() const { return *metrics_reporter_; }
@@ -293,9 +293,7 @@ class FeedStream : public FeedApi,
     // |UnloadModel()|.
     std::unique_ptr<StreamModel> model;
     int unload_on_detach_sequence_number = 0;
-    // When new content was last added to this stream. Populated when we attempt
-    // to load the model or background refresh.
-    base::Time last_updated_time;
+    ContentIdSet content_ids;
     std::vector<UnreadContentNotifier> unread_content_notifiers;
     std::vector<base::OnceCallback<void(bool)>> load_more_complete_callbacks;
     bool is_activity_logging_enabled = false;

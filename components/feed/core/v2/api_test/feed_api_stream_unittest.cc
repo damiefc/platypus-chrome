@@ -864,7 +864,7 @@ TEST_F(FeedApiTest, HasUnreadContentAfterLoadFromNetwork) {
 
   WaitForIdleTaskQueue();
 
-  EXPECT_EQ(std::vector<bool>({true}), observer.calls);
+  EXPECT_EQ(std::vector<bool>({false, true}), observer.calls);
 }
 
 TEST_F(FeedApiTest, HasUnreadContentInitially) {
@@ -885,6 +885,31 @@ TEST_F(FeedApiTest, HasUnreadContentInitially) {
   EXPECT_EQ(std::vector<bool>({true}), observer.calls);
 }
 
+TEST_F(FeedApiTest, NetworkFetchWithNoNewContentDoesNotProvideUnreadContent) {
+  TestUnreadContentObserver observer;
+  stream_->AddUnreadContentObserver(kForYouStream, &observer);
+  // Load content from the network, and view it.
+  {
+    response_translator_.InjectResponse(MakeTypicalInitialModelState());
+    TestForYouSurface surface(stream_.get());
+    WaitForIdleTaskQueue();
+
+    stream_->ReportSliceViewed(
+        surface.GetSurfaceId(), surface.GetStreamType(),
+        surface.initial_state->updated_slices(1).slice().slice_id());
+  }
+  // Wait until the feed content is stale.
+
+  task_environment_.FastForwardBy(base::TimeDelta::FromHours(100));
+
+  // Load content from the network again. This time there is no new content.
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestForYouSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  EXPECT_EQ(std::vector<bool>({false, true, false}), observer.calls);
+}
+
 TEST_F(FeedApiTest, RemovedUnreadContentObserverDoesNotReceiveCalls) {
   response_translator_.InjectResponse(MakeTypicalInitialModelState());
   TestUnreadContentObserver observer;
@@ -894,7 +919,7 @@ TEST_F(FeedApiTest, RemovedUnreadContentObserverDoesNotReceiveCalls) {
 
   WaitForIdleTaskQueue();
 
-  EXPECT_EQ(std::vector<bool>(), observer.calls);
+  EXPECT_EQ(std::vector<bool>({false}), observer.calls);
 }
 
 TEST_F(FeedApiTest, DeletedUnreadContentObserverDoesNotCrash) {
@@ -911,10 +936,9 @@ TEST_F(FeedApiTest, DeletedUnreadContentObserverDoesNotCrash) {
 TEST_F(FeedApiTest, HasUnreadContentAfterLoadFromStore) {
   store_->OverwriteStream(kForYouStream, MakeTypicalInitialModelState(),
                           base::DoNothing());
-
+  TestForYouSurface surface(stream_.get());
   TestUnreadContentObserver observer;
   stream_->AddUnreadContentObserver(kForYouStream, &observer);
-  TestForYouSurface surface(stream_.get());
 
   WaitForIdleTaskQueue();
 
@@ -923,10 +947,9 @@ TEST_F(FeedApiTest, HasUnreadContentAfterLoadFromStore) {
 
 TEST_F(FeedApiTest, ReportSliceViewedUpdatesObservers) {
   response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestForYouSurface surface(stream_.get());
   TestUnreadContentObserver observer;
   stream_->AddUnreadContentObserver(kForYouStream, &observer);
-  TestForYouSurface surface(stream_.get());
-
   WaitForIdleTaskQueue();
 
   stream_->ReportSliceViewed(
@@ -960,7 +983,7 @@ TEST_P(FeedStreamTestForAllStreamTypes, LoadMoreAppendsContent) {
   // Ensure metrics reporter was informed at the start of the operation.
   EXPECT_EQ(surface.GetSurfaceId(), metrics_reporter_->load_more_surface_id);
   WaitForIdleTaskQueue();
-  ASSERT_EQ(base::Optional<bool>(true), callback.GetResult());
+  ASSERT_EQ(absl::optional<bool>(true), callback.GetResult());
   EXPECT_EQ("2 slices +spinner -> 4 slices", surface.DescribeUpdates());
 
   // Load page 3.
@@ -968,7 +991,7 @@ TEST_P(FeedStreamTestForAllStreamTypes, LoadMoreAppendsContent) {
   stream_->LoadMore(surface, callback.Bind());
 
   WaitForIdleTaskQueue();
-  ASSERT_EQ(base::Optional<bool>(true), callback.GetResult());
+  ASSERT_EQ(absl::optional<bool>(true), callback.GetResult());
   EXPECT_EQ("4 slices +spinner -> 6 slices", surface.DescribeUpdates());
 }
 
@@ -984,7 +1007,7 @@ TEST_P(FeedStreamTestForAllStreamTypes, LoadMorePersistsData) {
   stream_->LoadMore(surface, callback.Bind());
 
   WaitForIdleTaskQueue();
-  ASSERT_EQ(base::Optional<bool>(true), callback.GetResult());
+  ASSERT_EQ(absl::optional<bool>(true), callback.GetResult());
 
   // Verify stored state is equivalent to in-memory model.
   EXPECT_STRINGS_EQUAL(
@@ -1005,7 +1028,7 @@ TEST_F(FeedApiTest, LoadMorePersistAndLoadMore) {
   CallbackReceiver<bool> callback;
   stream_->LoadMore(surface, callback.Bind());
   WaitForIdleTaskQueue();
-  ASSERT_EQ(base::Optional<bool>(true), callback.GetResult());
+  ASSERT_EQ(absl::optional<bool>(true), callback.GetResult());
 
   surface.Detach();
   UnloadModel(kForYouStream);
@@ -1019,7 +1042,7 @@ TEST_F(FeedApiTest, LoadMorePersistAndLoadMore) {
   stream_->LoadMore(surface, callback.Bind());
   WaitForIdleTaskQueue();
 
-  ASSERT_EQ(base::Optional<bool>(true), callback.GetResult());
+  ASSERT_EQ(absl::optional<bool>(true), callback.GetResult());
   ASSERT_EQ("4 slices +spinner -> 6 slices", surface.DescribeUpdates());
   // Verify stored state is equivalent to in-memory model.
   EXPECT_STRINGS_EQUAL(
@@ -1086,10 +1109,10 @@ TEST_F(FeedApiTest, LoadMoreAbortsIfNoNextPageToken) {
   WaitForIdleTaskQueue();
 
   // LoadMore fails, and does not make an additional request.
-  EXPECT_EQ(base::Optional<bool>(false), callback.GetResult());
+  EXPECT_EQ(absl::optional<bool>(false), callback.GetResult());
   ASSERT_EQ(1, network_.send_query_call_count);
   EXPECT_EQ("loading -> 2 slices", surface.DescribeUpdates());
-  EXPECT_EQ(base::nullopt, metrics_reporter_->load_more_surface_id)
+  EXPECT_EQ(absl::nullopt, metrics_reporter_->load_more_surface_id)
       << "metrics reporter was informed about a load more operation which "
          "didn't begin";
 }
@@ -1106,7 +1129,7 @@ TEST_F(FeedApiTest, LoadMoreFail) {
   stream_->LoadMore(surface, callback.Bind());
   WaitForIdleTaskQueue();
 
-  EXPECT_EQ(base::Optional<bool>(false), callback.GetResult());
+  EXPECT_EQ(absl::optional<bool>(false), callback.GetResult());
   EXPECT_EQ("2 slices +spinner -> 2 slices", surface.DescribeUpdates());
 }
 
@@ -1122,7 +1145,7 @@ TEST_F(FeedApiTest, LoadMoreWithClearAllInResponse) {
   stream_->LoadMore(surface, callback.Bind());
 
   WaitForIdleTaskQueue();
-  ASSERT_EQ(base::Optional<bool>(true), callback.GetResult());
+  ASSERT_EQ(absl::optional<bool>(true), callback.GetResult());
 
   // Verify stored state is equivalent to in-memory model.
   EXPECT_STRINGS_EQUAL(
@@ -1151,7 +1174,7 @@ TEST_F(FeedApiTest, LoadMoreBeforeLoad) {
   TestForYouSurface surface;
   stream_->LoadMore(surface, callback.Bind());
 
-  EXPECT_EQ(base::Optional<bool>(false), callback.GetResult());
+  EXPECT_EQ(absl::optional<bool>(false), callback.GetResult());
 }
 
 TEST_F(FeedApiTest, ReadNetworkResponse) {
@@ -1182,6 +1205,20 @@ TEST_F(FeedApiTest, ReadNetworkResponse) {
 
   // The stream's user attributes are set, so activity logging is enabled.
   EXPECT_TRUE(stream_->IsActivityLoggingEnabled(kForYouStream));
+  // This network response has content.
+  EXPECT_TRUE(stream_->HasUnreadContent(kForYouStream));
+}
+
+TEST_F(FeedApiTest, ReadNetworkResponseWithNoContent) {
+  base::HistogramTester histograms;
+  network_.InjectRealFeedQueryResponseWithNoContent();
+  TestForYouSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  ASSERT_EQ("loading -> loading -> no-cards", surface.DescribeUpdates());
+
+  // This network response has no content.
+  EXPECT_FALSE(stream_->HasUnreadContent(kForYouStream));
 }
 
 TEST_F(FeedApiTest, ClearAllAfterLoadResultsInRefresh) {

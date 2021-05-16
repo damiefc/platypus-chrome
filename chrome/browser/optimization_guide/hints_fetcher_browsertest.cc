@@ -481,7 +481,7 @@ class HintsFetcherDisabledBrowserTest : public InProcessBrowserTest {
   // expected to arrive. This set is verified to match with the set of hosts and
   // URLs present in the hints request. If null, then the verification is not
   // done.
-  base::Optional<base::flat_set<std::string>>
+  absl::optional<base::flat_set<std::string>>
       expect_hints_request_for_hosts_and_urls_;
 
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> ukm_recorder_;
@@ -1242,7 +1242,7 @@ IN_PROC_BROWSER_TEST_F(HintsFetcherBrowserTest,
     histogram_tester->ExpectBucketCount(
         "OptimizationGuide.HintsManager.RaceNavigationFetchAttemptStatus",
         optimization_guide::RaceNavigationFetchAttemptStatus::
-            kRaceNavigationFetchHost,
+            kRaceNavigationFetchNotAttempted,
         1);
   }
 
@@ -1449,7 +1449,7 @@ IN_PROC_BROWSER_TEST_F(
     histogram_tester->ExpectBucketCount(
         "OptimizationGuide.HintsManager.RaceNavigationFetchAttemptStatus",
         optimization_guide::RaceNavigationFetchAttemptStatus::
-            kRaceNavigationFetchHost,
+            kRaceNavigationFetchNotAttempted,
         1);
   }
 }
