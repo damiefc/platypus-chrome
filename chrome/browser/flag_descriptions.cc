@@ -1191,11 +1191,6 @@ const char kExperimentalAccessibilityLabelsDescription[] =
     "Enables experimental accessibility labels feature. Note that this only "
     "enables the feature, and enabling the service is a profile preference.";
 
-const char kExperimentalExtensionApisName[] = "Experimental Extension APIs";
-const char kExperimentalExtensionApisDescription[] =
-    "Enables experimental extension APIs. Note that the extension gallery "
-    "doesn't allow you to upload extensions that use experimental APIs.";
-
 const char kExperimentalWebPlatformFeaturesName[] =
     "Experimental Web Platform features";
 const char kExperimentalWebPlatformFeaturesDescription[] =
@@ -4140,6 +4135,25 @@ const char kEnableAppDataSearchName[] = "Enable app data search in launcher";
 const char kEnableAppDataSearchDescription[] =
     "Allow launcher search to access data available through Firebase App "
     "Indexing";
+
+const char kCrOSEnforceSystemAecName[] = "Enforce using the system AEC in CrAS";
+const char kCrOSEnforceSystemAecDescription[] =
+    "Enforces using the system variant in CrAS of the AEC";
+
+const char kCrOSEnforceSystemAecAgcName[] =
+    "Enforce using the system AEC and AGC in CrAS";
+const char kCrOSEnforceSystemAecAgcDescription[] =
+    "Enforces using the system variants in CrAS of the AEC and AGC.";
+
+const char kCrOSEnforceSystemAecNsName[] =
+    "Enforce using the system AEC and NS in CrAS";
+const char kCrOSEnforceSystemAecNsDescription[] =
+    "Enforces using the system variants in CrAS of the AEC and NS.";
+
+const char kCrOSEnforceSystemAecNsAgcName[] =
+    "Enforce using the system AEC, NS and AGC in CrAS";
+const char kCrOSEnforceSystemAecNsAgcDescription[] =
+    "Enforces using the system variants in CrAS of the AEC, NS and AGC.";
 
 const char kEnableAppReinstallZeroStateName[] =
     "Enable Zero State App Reinstall Suggestions.";

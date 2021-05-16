@@ -154,7 +154,9 @@ TabHoverCardBubbleView::TabHoverCardBubbleView(Tab* tab)
   // not become active. Setting this to false creates the need to explicitly
   // hide the hovercard on press, touch, and keyboard events.
   SetCanActivate(false);
+#if defined(OS_MAC)
   set_accept_events(false);
+#endif
 
   // Set so that the tab hover card is not focus traversable when keyboard
   // navigating through the tab strip.
@@ -284,7 +286,7 @@ void TabHoverCardBubbleView::UpdateCardContent(const Tab* tab) {
     preview_image_->SetVisible(!tab->IsActive());
 
   std::u16string title;
-  base::Optional<TabAlertState> old_alert_state = alert_state_;
+  absl::optional<TabAlertState> old_alert_state = alert_state_;
   GURL domain_url;
   // Use committed URL to determine if no page has yet loaded, since the title
   // can be blank for some web pages.
@@ -293,7 +295,7 @@ void TabHoverCardBubbleView::UpdateCardContent(const Tab* tab) {
     title = tab->data().IsCrashed()
                 ? l10n_util::GetStringUTF16(IDS_HOVER_CARD_CRASHED_TITLE)
                 : l10n_util::GetStringUTF16(IDS_TAB_LOADING_TITLE);
-    alert_state_ = base::nullopt;
+    alert_state_ = absl::nullopt;
   } else {
     domain_url = tab->data().last_committed_url;
     title = tab->data().title;

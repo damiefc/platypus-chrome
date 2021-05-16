@@ -135,7 +135,7 @@ class ASH_EXPORT AppListPresenterImpl
   void UpdateScaleAndOpacityForHomeLauncher(
       float scale,
       float opacity,
-      base::Optional<TabletModeAnimationTransition> transition,
+      absl::optional<TabletModeAnimationTransition> transition,
       UpdateHomeLauncherAnimationSettingsCallback callback);
 
   // Shows or hides the Assistant page.
@@ -215,11 +215,6 @@ class ASH_EXPORT AppListPresenterImpl
   // The target visibility of the AppListView, true if the target visibility is
   // shown.
   bool is_target_visibility_show_ = false;
-
-  // Whether the app list is visible (or in the process of being shown).
-  // TODO(jamescook): Collapse with `is_target_visibility_show_`. This is left
-  // over from the historical AppListPresenterDelegateImpl.
-  bool is_visible_ = false;
 
   // The AppListView this class manages, owned by its widget.
   AppListView* view_ = nullptr;

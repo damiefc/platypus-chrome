@@ -26,8 +26,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/strings/grit/ui_strings.h"
 
-namespace chromeos {
-
+namespace ash {
 namespace {
 
 constexpr const char kUserActionAcceptUpdateOverCellular[] =
@@ -449,7 +448,7 @@ void UpdateScreen::SetUpdateStatusMessage(int percent,
 void UpdateScreen::UpdateBatteryWarningVisibility() {
   if (!view_)
     return;
-  const base::Optional<power_manager::PowerSupplyProperties>& proto =
+  const absl::optional<power_manager::PowerSupplyProperties>& proto =
       PowerManagerClient::Get()->GetLastStatus();
   if (!proto.has_value())
     return;
@@ -514,4 +513,4 @@ void UpdateScreen::OnErrorScreenHidden() {
   Show(context());
 }
 
-}  // namespace chromeos
+}  // namespace ash

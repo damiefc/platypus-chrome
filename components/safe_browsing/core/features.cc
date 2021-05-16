@@ -10,8 +10,10 @@
 #include <vector>
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "components/safe_browsing/buildflags.h"
+#include "components/variations/variations_associated_data.h"
 
 #include "base/macros.h"
 #include "base/values.h"
@@ -45,6 +47,9 @@ extern const base::Feature kClientSideDetectionModelVersion{
 
 extern const base::Feature kClientSideDetectionModelTag{
     "ClientSideDetectionTag", base::FEATURE_DISABLED_BY_DEFAULT};
+
+extern const base::Feature kClientSideDetectionModelHighMemoryTag{
+    "ClientSideDetectionHighMemoryTag", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kClientSideDetectionReferrerChain{
     "ClientSideDetectionReferrerChain", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -181,11 +186,45 @@ base::ListValue GetFeatureStatusList() {
     if (feature_status.show_state)
       AddFeatureAndAvailability(feature_status.feature, &param_list);
   }
+
+  // Manually add experimental features that we want param values for.
+  param_list.Append(base::Value(variations::GetVariationParamValueByFeature(
+      safe_browsing::kClientSideDetectionModelTag,
+      kClientSideDetectionTagParamName)));
+  param_list.Append(base::Value(kClientSideDetectionModelTag.name));
+  param_list.Append(base::Value(variations::GetVariationParamValueByFeature(
+      safe_browsing::kClientSideDetectionModelHighMemoryTag,
+      kClientSideDetectionTagParamName)));
+  param_list.Append(base::Value(kClientSideDetectionModelHighMemoryTag.name));
+
   return param_list;
 }
 
 bool GetShouldFillOldPhishGuardProto() {
   return kShouldFillOldPhishGuardProto.Get();
+}
+
+std::string GetClientSideDetectionTag() {
+  constexpr char kMemoryThresholdParamName[] = "memory_threshold_mb";
+  const int kDefaultMemoryThresholdMB = 4096;
+  if (base::FeatureList::IsEnabled(
+          safe_browsing::kClientSideDetectionModelTag)) {
+    return variations::GetVariationParamValueByFeature(
+        safe_browsing::kClientSideDetectionModelTag,
+        kClientSideDetectionTagParamName);
+  } else if (base::FeatureList::IsEnabled(
+                 safe_browsing::kClientSideDetectionModelHighMemoryTag)) {
+    int memory_threshold_mb = base::GetFieldTrialParamByFeatureAsInt(
+        safe_browsing::kClientSideDetectionModelHighMemoryTag,
+        kMemoryThresholdParamName, kDefaultMemoryThresholdMB);
+    if (base::SysInfo::AmountOfPhysicalMemoryMB() >= memory_threshold_mb) {
+      return variations::GetVariationParamValueByFeature(
+          safe_browsing::kClientSideDetectionModelHighMemoryTag,
+          kClientSideDetectionTagParamName);
+    }
+  }
+
+  return "default";
 }
 
 }  // namespace safe_browsing

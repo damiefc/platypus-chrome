@@ -5,7 +5,7 @@
 #include "third_party/blink/renderer/core/layout/ng/svg/ng_svg_text_layout_attributes_builder.h"
 
 #include "base/containers/adapters.h"
-#include "base/optional.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_length_list.h"
@@ -203,8 +203,9 @@ void NGSVGTextLayoutAttributesBuilder::Build(
     const Vector<NGInlineItem>& items) {
   LayoutAttributesStack attr_stack;
   unsigned addressable_index = 0;
+  bool is_first_char = true;
   bool in_text_path = false;
-  base::Optional<unsigned> text_path_start;
+  absl::optional<unsigned> text_path_start;
   bool first_char_in_text_path = false;
   const bool horizontal =
       IsHorizontalWritingMode(block_flow_->StyleRef().GetWritingMode());
@@ -289,6 +290,14 @@ void NGSVGTextLayoutAttributesBuilder::Build(
         data.y = 0.0f;
 
       first_char_in_text_path = false;
+
+      if (is_first_char) {
+        is_first_char = false;
+        if (!data.HasX())
+          data.x = 0.0f;
+        if (!data.HasY())
+          data.y = 0.0f;
+      }
 
       // 1.6.1.6. If i < length of dx, then set resolve_dx[index + j] to dx[i].
       data.dx = attr_stack.Dx();

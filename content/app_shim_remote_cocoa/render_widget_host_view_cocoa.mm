@@ -130,10 +130,9 @@ void ExtractUnderlines(NSAttributedString* string,
     NSDictionary* attrs = [string attributesAtIndex:i
                               longestEffectiveRange:&range
                                             inRange:NSMakeRange(i, length - i)];
-    if (NSNumber* style = [attrs objectForKey:NSUnderlineStyleAttributeName]) {
+    if (NSNumber* style = attrs[NSUnderlineStyleAttributeName]) {
       SkColor color = SK_ColorBLACK;
-      if (NSColor* colorAttr =
-              [attrs objectForKey:NSUnderlineColorAttributeName]) {
+      if (NSColor* colorAttr = attrs[NSUnderlineColorAttributeName]) {
         color = SkColorFromNSColor(
             [colorAttr colorUsingColorSpaceName:NSDeviceRGBColorSpace]);
       }
@@ -165,7 +164,7 @@ void ExtractUnderlines(NSAttributedString* string,
 // Private methods:
 @interface RenderWidgetHostViewCocoa () {
   bool _keyboardLockActive;
-  base::Optional<base::flat_set<ui::DomCode>> _lockedKeys;
+  absl::optional<base::flat_set<ui::DomCode>> _lockedKeys;
 
   API_AVAILABLE(macos(10.12.2))
   base::scoped_nsobject<NSCandidateListTouchBarItem> _candidateListTouchBarItem;
@@ -214,8 +213,8 @@ void ExtractUnderlines(NSAttributedString* string,
   RenderWidgetHostViewMacEditCommandHelper::AddEditingSelectorsToClass(self);
 }
 
-- (id)initWithHost:(RenderWidgetHostNSViewHost*)host
-    withHostHelper:(RenderWidgetHostNSViewHostHelper*)hostHelper {
+- (instancetype)initWithHost:(RenderWidgetHostNSViewHost*)host
+              withHostHelper:(RenderWidgetHostNSViewHostHelper*)hostHelper {
   self = [super initWithFrame:NSZeroRect];
   if (self) {
     self.acceptsTouchEvents = YES;
@@ -847,7 +846,7 @@ void ExtractUnderlines(NSAttributedString* string,
   }
 }
 
-- (void)lockKeyboard:(base::Optional<base::flat_set<ui::DomCode>>)keysToLock {
+- (void)lockKeyboard:(absl::optional<base::flat_set<ui::DomCode>>)keysToLock {
   // TODO(joedow): Integrate System-level keyboard hook into this method.
   _lockedKeys = std::move(keysToLock);
   _keyboardLockActive = true;
@@ -1040,7 +1039,7 @@ void ExtractUnderlines(NSAttributedString* string,
 
   // Sends key down events to input method first, then we can decide what should
   // be done according to input method's feedback.
-  [self interpretKeyEvents:[NSArray arrayWithObject:theEvent]];
+  [self interpretKeyEvents:@[ theEvent ]];
 
   _handlingKeyDown = NO;
 
@@ -1392,11 +1391,13 @@ void ExtractUnderlines(NSAttributedString* string,
   if (!enclosingWindow)
     return;
 
+  display::Screen* screen = display::Screen::GetScreen();
   // TODO(ccameron): This will call [enclosingWindow screen], which may return
   // nil. Do that call here to avoid sending bogus display info to the host.
-  display::Display display =
-      display::Screen::GetScreen()->GetDisplayNearestView(self);
-  _host->OnDisplayChanged(display);
+  display::DisplayList display_list(screen->GetAllDisplays(),
+                                    screen->GetPrimaryDisplay().id(),
+                                    screen->GetDisplayNearestView(self).id());
+  _host->OnDisplaysChanged(display_list);
 }
 
 // This will be called when the NSView's NSWindow moves from one NSScreen to
@@ -1490,14 +1491,11 @@ void ExtractUnderlines(NSAttributedString* string,
   // See http://crbug.com/47209
   [self cancelComposition];
 
-  NSNumber* direction = [NSNumber
-      numberWithUnsignedInteger:[[self window] keyViewSelectionDirection]];
-  NSDictionary* userInfo =
-      [NSDictionary dictionaryWithObject:direction forKey:kSelectionDirection];
+  NSNumber* direction = @([[self window] keyViewSelectionDirection]);
   [[NSNotificationCenter defaultCenter]
       postNotificationName:kViewDidBecomeFirstResponder
                     object:self
-                  userInfo:userInfo];
+                  userInfo:@{kSelectionDirection : direction}];
 
   return YES;
 }

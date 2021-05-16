@@ -248,7 +248,7 @@ TEST_F(ImageDecoderTest, DecodeGif) {
     EXPECT_TRUE(result->complete());
 
     auto* frame = result->image();
-    EXPECT_EQ(frame->timestamp(), base::nullopt);
+    EXPECT_EQ(frame->timestamp(), absl::nullopt);
     EXPECT_EQ(frame->duration(), 0u);
     EXPECT_EQ(frame->displayWidth(), 16u);
     EXPECT_EQ(frame->displayHeight(), 16u);
@@ -263,7 +263,7 @@ TEST_F(ImageDecoderTest, DecodeGif) {
     EXPECT_TRUE(result->complete());
 
     auto* frame = result->image();
-    EXPECT_EQ(frame->timestamp(), base::nullopt);
+    EXPECT_EQ(frame->timestamp(), absl::nullopt);
     EXPECT_EQ(frame->duration(), 0u);
     EXPECT_EQ(frame->displayWidth(), 16u);
     EXPECT_EQ(frame->displayHeight(), 16u);
@@ -496,7 +496,7 @@ TEST_F(ImageDecoderTest, DecoderReadableStream) {
     EXPECT_TRUE(result->complete());
 
     auto* frame = result->image();
-    EXPECT_EQ(frame->timestamp(), base::nullopt);
+    EXPECT_EQ(frame->timestamp(), absl::nullopt);
     EXPECT_EQ(*frame->duration(), 100000u);
     EXPECT_EQ(frame->displayWidth(), 100u);
     EXPECT_EQ(frame->displayHeight(), 100u);
@@ -565,7 +565,7 @@ TEST_F(ImageDecoderTest, DecoderReadableStreamAvif) {
   EXPECT_TRUE(result->complete());
 
   auto* frame = result->image();
-  EXPECT_EQ(frame->timestamp(), base::nullopt);
+  EXPECT_EQ(frame->timestamp(), absl::nullopt);
   EXPECT_EQ(*frame->duration(), 100000u);
   EXPECT_EQ(frame->displayWidth(), 159u);
   EXPECT_EQ(frame->displayHeight(), 159u);
@@ -601,7 +601,13 @@ TEST_F(ImageDecoderTest, ReadableStreamAvifStillYuvDecoding) {
       v8_scope.GetIsolate(), ToV8(DOMUint8Array::Create(data_ptr, data->size()),
                                   v8_scope.GetScriptState())));
 
-  base::RunLoop().RunUntilIdle();
+  // Wait for metadata so we know the append has occurred.
+  {
+    auto promise = decoder->tracks().ready(v8_scope.GetScriptState());
+    ScriptPromiseTester tester(v8_scope.GetScriptState(), promise);
+    tester.WaitUntilSettled();
+    ASSERT_TRUE(tester.IsFulfilled());
+  }
 
   // Attempt to decode a frame greater than the first.
   auto bad_promise = decoder->decode(MakeOptions(1, true));
@@ -627,8 +633,8 @@ TEST_F(ImageDecoderTest, ReadableStreamAvifStillYuvDecoding) {
 
     auto* frame = result->image();
     EXPECT_EQ(frame->format(), "I420");
-    EXPECT_EQ(frame->timestamp(), base::nullopt);
-    EXPECT_EQ(frame->duration(), base::nullopt);
+    EXPECT_EQ(frame->timestamp(), absl::nullopt);
+    EXPECT_EQ(frame->duration(), absl::nullopt);
     EXPECT_EQ(frame->displayWidth(), 3u);
     EXPECT_EQ(frame->displayHeight(), 3u);
   }
@@ -819,8 +825,8 @@ TEST_F(ImageDecoderTest, DecodeYuv) {
 
     auto* frame = result->image();
     EXPECT_EQ(frame->format(), "I420");
-    EXPECT_EQ(frame->timestamp(), base::nullopt);
-    EXPECT_EQ(frame->duration(), base::nullopt);
+    EXPECT_EQ(frame->timestamp(), absl::nullopt);
+    EXPECT_EQ(frame->duration(), absl::nullopt);
     EXPECT_EQ(frame->displayWidth(), 99u);
     EXPECT_EQ(frame->displayHeight(), 99u);
   }

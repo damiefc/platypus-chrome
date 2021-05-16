@@ -27,30 +27,30 @@ namespace {
 
 using NoiseSuppression = webrtc::AudioProcessing::Config::NoiseSuppression;
 
-base::Optional<double> GetGainControlCompressionGain(
+absl::optional<double> GetGainControlCompressionGain(
     const base::Value& config) {
   const base::Value* found = config.FindKey("gain_control_compression_gain_db");
   if (!found)
-    return base::nullopt;
+    return absl::nullopt;
   double gain = found->GetDouble();
   DCHECK_GE(gain, 0.f);
   return gain;
 }
 
-base::Optional<double> GetPreAmplifierGainFactor(const base::Value& config) {
+absl::optional<double> GetPreAmplifierGainFactor(const base::Value& config) {
   const base::Value* found = config.FindKey("pre_amplifier_fixed_gain_factor");
   if (!found)
-    return base::nullopt;
+    return absl::nullopt;
   double factor = found->GetDouble();
   DCHECK_GE(factor, 1.f);
   return factor;
 }
 
-base::Optional<NoiseSuppression::Level> GetNoiseSuppressionLevel(
+absl::optional<NoiseSuppression::Level> GetNoiseSuppressionLevel(
     const base::Value& config) {
   const base::Value* found = config.FindKey("noise_suppression_level");
   if (!found)
-    return base::nullopt;
+    return absl::nullopt;
   int level = found->GetInt();
   DCHECK_GE(level, static_cast<int>(NoiseSuppression::kLow));
   DCHECK_LE(level, static_cast<int>(NoiseSuppression::kVeryHigh));
@@ -59,9 +59,9 @@ base::Optional<NoiseSuppression::Level> GetNoiseSuppressionLevel(
 
 void GetExtraConfigFromJson(
     const std::string& audio_processing_platform_config_json,
-    base::Optional<double>* gain_control_compression_gain_db,
-    base::Optional<double>* pre_amplifier_fixed_gain_factor,
-    base::Optional<NoiseSuppression::Level>* noise_suppression_level) {
+    absl::optional<double>* gain_control_compression_gain_db,
+    absl::optional<double>* pre_amplifier_fixed_gain_factor,
+    absl::optional<NoiseSuppression::Level>* noise_suppression_level) {
   auto config = base::JSONReader::Read(audio_processing_platform_config_json);
   if (!config) {
     LOG(ERROR) << "Failed to parse platform config JSON.";
@@ -185,17 +185,26 @@ void StopEchoCancellationDump(AudioProcessing* audio_processing) {
 }
 
 void ConfigAutomaticGainControl(
-    bool agc_enabled,
-    bool experimental_agc_enabled,
-    base::Optional<AdaptiveGainController2Properties> agc2_properties,
-    base::Optional<double> compression_gain_db,
+    const AudioProcessingProperties& properties,
+    absl::optional<AdaptiveGainController2Properties> agc2_properties,
+    absl::optional<double> compression_gain_db,
     AudioProcessing::Config& apm_config) {
-  const bool use_fixed_digital_agc2 = agc_enabled &&
-                                      !experimental_agc_enabled &&
-                                      compression_gain_db.has_value();
+  // If system level gain control is activated, turn off all gain control
+  // functionality in WebRTC.
+  if (properties.system_gain_control_activated) {
+    apm_config.gain_controller1.enabled = false;
+    apm_config.gain_controller2.enabled = false;
+    apm_config.gain_controller2.adaptive_digital.enabled = false;
+    return;
+  }
+
+  const bool use_fixed_digital_agc2 =
+      properties.goog_auto_gain_control &&
+      !properties.goog_experimental_auto_gain_control &&
+      compression_gain_db.has_value();
   const bool use_hybrid_agc = agc2_properties.has_value();
-  const bool agc1_enabled =
-      agc_enabled && (use_hybrid_agc || !use_fixed_digital_agc2);
+  const bool agc1_enabled = properties.goog_auto_gain_control &&
+                            (use_hybrid_agc || !use_fixed_digital_agc2);
 
   // Configure AGC1.
   if (agc1_enabled) {
@@ -209,7 +218,7 @@ void ConfigAutomaticGainControl(
   }
 
   // Configure AGC2.
-  if (experimental_agc_enabled) {
+  if (properties.goog_experimental_auto_gain_control) {
     // Experimental AGC is enabled. Hybrid AGC may or may not be enabled. Config
     // AGC2 with adaptive mode and the given options, while ignoring
     // |use_fixed_digital_agc2|.
@@ -264,12 +273,12 @@ void ConfigAutomaticGainControl(
 void PopulateApmConfig(
     AudioProcessing::Config* apm_config,
     const AudioProcessingProperties& properties,
-    const base::Optional<std::string>& audio_processing_platform_config_json,
-    base::Optional<double>* gain_control_compression_gain_db) {
+    const absl::optional<std::string>& audio_processing_platform_config_json,
+    absl::optional<double>* gain_control_compression_gain_db) {
   // TODO(saza): When Chrome uses AGC2, handle all JSON config via the
   // webrtc::AudioProcessing::Config, crbug.com/895814.
-  base::Optional<double> pre_amplifier_fixed_gain_factor;
-  base::Optional<NoiseSuppression::Level> noise_suppression_level;
+  absl::optional<double> pre_amplifier_fixed_gain_factor;
+  absl::optional<NoiseSuppression::Level> noise_suppression_level;
   if (audio_processing_platform_config_json.has_value()) {
     GetExtraConfigFromJson(audio_processing_platform_config_json.value(),
                            gain_control_compression_gain_db,
@@ -285,7 +294,10 @@ void PopulateApmConfig(
         pre_amplifier_fixed_gain_factor.value();
   }
 
-  if (properties.goog_noise_suppression) {
+  DCHECK(!(!properties.goog_noise_suppression &&
+           properties.system_noise_suppression_activated));
+  if (properties.goog_noise_suppression &&
+      !properties.system_noise_suppression_activated) {
     apm_config->noise_suppression.enabled = true;
     apm_config->noise_suppression.level =
         noise_suppression_level.value_or(NoiseSuppression::kHigh);

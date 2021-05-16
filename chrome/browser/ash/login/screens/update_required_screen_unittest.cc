@@ -9,7 +9,6 @@
 #include "ash/constants/ash_switches.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/optional.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "chrome/browser/ash/login/screens/mock_error_screen.h"
 #include "chrome/browser/ash/login/startup_utils.h"
@@ -29,12 +28,16 @@
 #include "chromeos/tpm/stub_install_attributes.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
-using testing::_;
-using testing::AnyNumber;
-using testing::Return;
+namespace ash {
+namespace {
 
-namespace chromeos {
+// TODO(https://crbug.com/1164001): remove after migrated to ash::
+using ::chromeos::FakeUpdateRequiredScreenHandler;
+using ::testing::_;
+using ::testing::AnyNumber;
+using ::testing::Return;
 
 class UpdateRequiredScreenUnitTest : public testing::Test {
  public:
@@ -213,4 +216,5 @@ TEST_F(UpdateRequiredScreenUnitTest, HandlesCellularPermissionNeeded) {
             UpdateRequiredView::UPDATE_COMPLETED_NEED_REBOOT);
 }
 
-}  // namespace chromeos
+}  // namespace
+}  // namespace ash

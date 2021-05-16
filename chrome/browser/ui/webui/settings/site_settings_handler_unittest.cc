@@ -2225,7 +2225,7 @@ TEST_F(SiteSettingsHandlerChooserExceptionTest,
       UsbChooserContext::DeviceInfoToValue(*persistent_device_info_)));
 
   EXPECT_CALL(observer_,
-              OnObjectPermissionChanged(base::Optional<ContentSettingsType>(
+              OnObjectPermissionChanged(absl::optional<ContentSettingsType>(
                                             ContentSettingsType::USB_GUARD),
                                         ContentSettingsType::USB_CHOOSER_DATA));
   EXPECT_CALL(observer_, OnPermissionRevoked(kGoogleOrigin));
@@ -2272,7 +2272,7 @@ TEST_F(SiteSettingsHandlerChooserExceptionTest,
   }
 
   EXPECT_CALL(observer_,
-              OnObjectPermissionChanged(base::Optional<ContentSettingsType>(
+              OnObjectPermissionChanged(absl::optional<ContentSettingsType>(
                                             ContentSettingsType::USB_GUARD),
                                         ContentSettingsType::USB_CHOOSER_DATA));
   EXPECT_CALL(observer_, OnPermissionRevoked(kChromiumOrigin));
@@ -2318,7 +2318,7 @@ TEST_F(SiteSettingsHandlerChooserExceptionTest,
   }
 
   EXPECT_CALL(observer_,
-              OnObjectPermissionChanged(base::Optional<ContentSettingsType>(
+              OnObjectPermissionChanged(absl::optional<ContentSettingsType>(
                                             ContentSettingsType::USB_GUARD),
                                         ContentSettingsType::USB_CHOOSER_DATA));
   EXPECT_CALL(observer_, OnPermissionRevoked(kAndroidOrigin));
@@ -2484,7 +2484,7 @@ TEST_F(SiteSettingsHandlerTest, HandleGetFormattedBytes) {
   const double size = 120000000000;
   base::ListValue get_args;
   get_args.AppendString(kCallbackId);
-  get_args.AppendDouble(size);
+  get_args.Append(size);
   handler()->HandleGetFormattedBytes(&get_args);
 
   // Validate that this method can handle large data.

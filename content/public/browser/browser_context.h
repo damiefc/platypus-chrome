@@ -16,15 +16,16 @@
 
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
 #include "base/supports_user_data.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/blob/blob.mojom-forward.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging.mojom-forward.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging_status.mojom-forward.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_proto.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 
 #if !defined(OS_ANDROID)
@@ -60,6 +61,14 @@ class SpecialStoragePolicy;
 namespace variations {
 class VariationsClient;
 }  // namespace variations
+
+namespace perfetto {
+namespace protos {
+namespace pbzero {
+class ChromeBrowserContext;
+}
+}  // namespace protos
+}  // namespace perfetto
 
 namespace content {
 
@@ -194,7 +203,7 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
       const GURL& origin,
       int64_t service_worker_registration_id,
       const std::string& message_id,
-      base::Optional<std::string> payload,
+      absl::optional<std::string> payload,
       base::OnceCallback<void(blink::mojom::PushEventStatus)> callback);
 
   // Fires a push subscription change event to the Service Worker identified by
@@ -275,6 +284,11 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
 
   // Write a representation of this object into a trace.
   void WriteIntoTrace(perfetto::TracedValue context);
+
+  // Write a representation of this object into tracing proto.
+  void WriteIntoTrace(
+      perfetto::TracedProto<perfetto::protos::pbzero::ChromeBrowserContext>
+          context);
 
   //////////////////////////////////////////////////////////////////////////////
   // The //content embedder can override the methods below to change or extend

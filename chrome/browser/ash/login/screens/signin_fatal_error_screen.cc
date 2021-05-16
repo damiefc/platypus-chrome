@@ -4,19 +4,18 @@
 
 #include "chrome/browser/ash/login/screens/signin_fatal_error_screen.h"
 
-#include "base/optional.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_fatal_error_screen_handler.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
+namespace ash {
 namespace {
 
 constexpr char kUserActionScreenDismissed[] = "screen-dismissed";
 constexpr char kUserActionLearnMore[] = "learn-more";
 
 }  // namespace
-
-namespace chromeos {
 
 SignInFatalErrorScreen::SignInFatalErrorScreen(
     SignInFatalErrorView* view,
@@ -41,8 +40,8 @@ void SignInFatalErrorScreen::OnViewDestroyed(SignInFatalErrorView* view) {
 void SignInFatalErrorScreen::SetErrorState(Error error,
                                            const base::Value* params) {
   error_state_ = error;
-  extra_error_info_ = params ? base::make_optional<base::Value>(params->Clone())
-                             : base::nullopt;
+  extra_error_info_ = params ? absl::make_optional<base::Value>(params->Clone())
+                             : absl::nullopt;
 }
 
 void SignInFatalErrorScreen::SetCustomError(const std::string& error_text,
@@ -51,7 +50,7 @@ void SignInFatalErrorScreen::SetCustomError(const std::string& error_text,
                                             const std::string& help_link_text) {
   error_state_ = Error::CUSTOM;
   extra_error_info_ =
-      base::make_optional<base::Value>(base::Value::Type::DICTIONARY);
+      absl::make_optional<base::Value>(base::Value::Type::DICTIONARY);
   DCHECK(!error_text.empty());
   extra_error_info_->SetStringKey("errorText", error_text);
   if (!keyboard_hint.empty()) {
@@ -88,4 +87,4 @@ void SignInFatalErrorScreen::OnUserAction(const std::string& action_id) {
   }
 }
 
-}  // namespace chromeos
+}  // namespace ash

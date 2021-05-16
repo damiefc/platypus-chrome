@@ -19,7 +19,6 @@
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
-#include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -57,6 +56,7 @@
 #include "ppapi/cpp/size.h"
 #include "ppapi/cpp/var_array_buffer.h"
 #include "ppapi/cpp/var_dictionary.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -632,7 +632,7 @@ void OutOfProcessInstance::GetPrintPresetOptionsFromDocument(
       static_cast<PP_PrivateDuplexMode_Dev>(engine()->GetDuplexType());
   options->copies = engine()->GetCopiesToPrint();
 
-  base::Optional<gfx::Size> uniform_page_size =
+  absl::optional<gfx::Size> uniform_page_size =
       engine()->GetUniformPageSizePoints();
   options->is_page_size_uniform = PP_FromBool(uniform_page_size.has_value());
   options->uniform_page_size = PPSizeFromSize(
@@ -641,16 +641,22 @@ void OutOfProcessInstance::GetPrintPresetOptionsFromDocument(
 
 void OutOfProcessInstance::SelectionChanged(const gfx::Rect& left,
                                             const gfx::Rect& right) {
-  pp::Point l(left.x() + available_area().x(), left.y());
-  pp::Point r(right.x() + available_area().x(), right.y());
+  const gfx::Rect left_with_offset = left + plugin_rect().OffsetFromOrigin();
+  const gfx::Rect right_with_offset = right + plugin_rect().OffsetFromOrigin();
+
+  pp::Point l(left_with_offset.x() + available_area().x(),
+              left_with_offset.y());
+  pp::Point r(right_with_offset.x() + available_area().x(),
+              right_with_offset.y());
 
   float inverse_scale = 1.0f / device_scale();
   ScalePoint(inverse_scale, &l);
   ScalePoint(inverse_scale, &r);
 
-  pp::PDF::SelectionChanged(GetPluginInstance(),
-                            PP_MakeFloatPoint(l.x(), l.y()), left.height(),
-                            PP_MakeFloatPoint(r.x(), r.y()), right.height());
+  pp::PDF::SelectionChanged(
+      GetPluginInstance(), PP_MakeFloatPoint(l.x(), l.y()),
+      left_with_offset.height(), PP_MakeFloatPoint(r.x(), r.y()),
+      right_with_offset.height());
   if (accessibility_state() == AccessibilityState::kLoaded)
     PrepareAndSetAccessibilityViewportInfo();
 }

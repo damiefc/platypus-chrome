@@ -265,6 +265,13 @@ void HTMLPlugInElement::UpdatePlugin() {
   }
 }
 
+Node::InsertionNotificationRequest HTMLPlugInElement::InsertedInto(
+    ContainerNode& insertion_point) {
+  if (insertion_point.isConnected())
+    GetDocument().DelayLoadEventUntilLayoutTreeUpdate();
+  return HTMLFrameOwnerElement::InsertedInto(insertion_point);
+}
+
 void HTMLPlugInElement::RemovedFrom(ContainerNode& insertion_point) {
   // Plugins can persist only through reattachment during a lifecycle
   // update. This method shouldn't be called in that lifecycle phase.
@@ -729,7 +736,7 @@ bool HTMLPlugInElement::AllowedToLoadObject(const KURL& url,
          !MixedContentChecker::ShouldBlockFetch(
              frame, mojom::blink::RequestContextType::OBJECT, url,
              ResourceRequest::RedirectStatus::kNoRedirect, url,
-             /* devtools_id= */ base::nullopt, ReportingDisposition::kReport,
+             /* devtools_id= */ absl::nullopt, ReportingDisposition::kReport,
              GetDocument().Loader()->GetContentSecurityNotifier());
 }
 

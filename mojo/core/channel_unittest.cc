@@ -7,11 +7,10 @@
 #include <atomic>
 
 #include "base/bind.h"
+#include "base/memory/page_size.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_pump_type.h"
-#include "base/optional.h"
 #include "base/process/process_handle.h"
-#include "base/process/process_metrics.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
@@ -23,6 +22,7 @@
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace mojo {
 namespace core {
@@ -312,7 +312,7 @@ class RejectHandlesDelegate : public Channel::Delegate {
 
  private:
   size_t num_messages_ = 0;
-  base::Optional<base::RunLoop> wait_for_error_loop_;
+  absl::optional<base::RunLoop> wait_for_error_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(RejectHandlesDelegate);
 };

@@ -2663,9 +2663,6 @@ const FeatureEntry kFeatureEntries[] = {
      SINGLE_VALUE_TYPE(switches::kEnableNaCl)},
 #endif  // ENABLE_NACL
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-    {"extension-apis", flag_descriptions::kExperimentalExtensionApisName,
-     flag_descriptions::kExperimentalExtensionApisDescription, kOsDesktop,
-     SINGLE_VALUE_TYPE(extensions::switches::kEnableExperimentalExtensionApis)},
     {"extension-checkup", flag_descriptions::kExtensionsCheckupName,
      flag_descriptions::kExtensionsCheckupDescription, kOsDesktop,
      FEATURE_WITH_PARAMS_VALUE_TYPE(extensions_features::kExtensionsCheckup,
@@ -4993,6 +4990,22 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-use-aaudio-driver", flag_descriptions::kEnableUseAaudioDriverName,
      flag_descriptions::kEnableUseAaudioDriverDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(features::kUseAAudioDriver)},
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    {"enforce-system-aec", flag_descriptions::kCrOSEnforceSystemAecName,
+     flag_descriptions::kCrOSEnforceSystemAecDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(features::kCrOSEnforceSystemAec)},
+    {"enforce-system-aec-agc", flag_descriptions::kCrOSEnforceSystemAecAgcName,
+     flag_descriptions::kCrOSEnforceSystemAecAgcDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(features::kCrOSEnforceSystemAecAgc)},
+    {"enforce-system-aec-ns-agc",
+     flag_descriptions::kCrOSEnforceSystemAecNsAgcName,
+     flag_descriptions::kCrOSEnforceSystemAecNsAgcDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(features::kCrOSEnforceSystemAecNsAgc)},
+    {"enforce-system-aec-ns", flag_descriptions::kCrOSEnforceSystemAecNsName,
+     flag_descriptions::kCrOSEnforceSystemAecNsDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(features::kCrOSEnforceSystemAecNs)},
 #endif
 
     {"enable-sxg-subresource-prefetching",

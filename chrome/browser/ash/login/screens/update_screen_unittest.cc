@@ -8,7 +8,6 @@
 
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
-#include "base/optional.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "chrome/browser/ash/login/screens/mock_error_screen.h"
 #include "chrome/browser/ash/login/screens/mock_update_screen.h"
@@ -25,12 +24,13 @@
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
-using testing::_;
-using testing::AnyNumber;
-using testing::Return;
+namespace ash {
 
-namespace chromeos {
+using ::testing::_;
+using ::testing::AnyNumber;
+using ::testing::Return;
 
 class UpdateScreenUnitTest : public testing::Test {
  public:
@@ -115,7 +115,7 @@ class UpdateScreenUnitTest : public testing::Test {
   FakeUpdateEngineClient* fake_update_engine_client_;
   std::unique_ptr<WizardContext> wizard_context_;
 
-  base::Optional<UpdateScreen::Result> last_screen_result_;
+  absl::optional<UpdateScreen::Result> last_screen_result_;
 
  private:
   void HandleScreenExit(UpdateScreen::Result result) {
@@ -202,4 +202,4 @@ TEST_F(UpdateScreenUnitTest, HandleCriticalUpdateError) {
   EXPECT_EQ(UpdateScreen::Result::UPDATE_ERROR, last_screen_result_.value());
 }
 
-}  // namespace chromeos
+}  // namespace ash
