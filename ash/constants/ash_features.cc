@@ -422,6 +422,12 @@ const base::Feature kHandwritingGestureEditing{
 const base::Feature kHelpAppDiscoverTab{"HelpAppDiscoverTab",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables or disables the Help App Discover tab notifications on non-stable
+// Chrome OS channels. Used for testing.
+const base::Feature kHelpAppDiscoverTabNotificationAllChannels{
+    "HelpAppDiscoverTabNotificationAllChannels",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enable showing search results from the help app in the launcher.
 const base::Feature kHelpAppLauncherSearch{"HelpAppLauncherSearch",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
@@ -547,6 +553,9 @@ const base::Feature kPhoneHub{"PhoneHub", base::FEATURE_ENABLED_BY_DEFAULT};
 // entropy credentials regardless the form factor.
 const base::Feature kPinSetupForFamilyLink{"PinSetupForFamilyLink",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kPinSetupForManagedUsers{"PinSetupForManagedUsers",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Hides shelf in immersive mode and allows esc hold to exit.
 const base::Feature kPluginVmFullscreen{"PluginVmFullscreen",
@@ -916,6 +925,10 @@ bool IsSamlReauthenticationOnLockscreenEnabled() {
 
 bool IsPinSetupForFamilyLinkEnabled() {
   return base::FeatureList::IsEnabled(kPinSetupForFamilyLink);
+}
+
+bool IsPinSetupForManagedUsersEnabled() {
+  return base::FeatureList::IsEnabled(kPinSetupForManagedUsers);
 }
 
 bool IsPinAutosubmitFeatureEnabled() {

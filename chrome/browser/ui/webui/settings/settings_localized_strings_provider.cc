@@ -1496,8 +1496,6 @@ void AddPrivacySandboxStrings(content::WebUIDataSource* html_source,
          IDS_SETTINGS_PRIVACY_SANDBOX_PAGE_FLOC_COHORT_UPDATED},
         {"privacySandboxPageFlocResetCohort",
          IDS_SETTINGS_PRIVACY_SANDBOX_PAGE_FLOC_RESET_COHORT},
-        {"privacySandboxPageFlocResetExplanation",
-         IDS_SETTINGS_PRIVACY_SANDBOX_PAGE_FLOC_RESET_EXPLANATION},
     };
     html_source->AddLocalizedStrings(kLocalizedStringsBehindFlag);
 
@@ -1510,6 +1508,13 @@ void AddPrivacySandboxStrings(content::WebUIDataSource* html_source,
         l10n_util::GetStringFUTF16(
             IDS_SETTINGS_PRIVACY_SANDBOX_PAGE_EXPLANATION4,
             base::ASCIIToUTF16(features::kPrivacySandboxSettingsURL.Get())));
+
+    // The FLoC compute frequency string is constant through the life of the
+    // profile, and so the relevant string can be injected here, rather than
+    // fetched dynamically from JS.
+    html_source->AddString("privacySandboxPageFlocResetExplanation",
+                           PrivacySandboxSettingsFactory::GetForProfile(profile)
+                               ->GetFlocResetExplanationForDisplay());
   }
 }
 
@@ -2061,8 +2066,6 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_SITE_RESET_CONFIRMATION},
     {"thirdPartyCookie", IDS_NEW_TAB_OTR_THIRD_PARTY_COOKIE},
     {"thirdPartyCookieSublabel", IDS_NEW_TAB_OTR_THIRD_PARTY_COOKIE_SUBLABEL},
-    {"deleteDataPostSession",
-     IDS_SETTINGS_SITE_SETTINGS_DELETE_DATA_POST_SESSION},
     {"handlerIsDefault", IDS_SETTINGS_SITE_SETTINGS_HANDLER_IS_DEFAULT},
     {"handlerSetDefault", IDS_SETTINGS_SITE_SETTINGS_HANDLER_SET_DEFAULT},
     {"handlerRemove", IDS_SETTINGS_SITE_SETTINGS_REMOVE},
