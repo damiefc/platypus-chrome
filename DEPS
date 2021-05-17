@@ -384,7 +384,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling feed
   # and whatever else without interference from each other.
-  'libjxl_revision': '040eae8105b61b312a67791213091103f4c0d034',
+  'libjxl_revision': '30ea86ab4c1f1b98c21967a2e3d72a51fe77e454',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling feed
   # and whatever else without interference from each other.
@@ -946,7 +946,7 @@ deps = {
   # Tools used when building Chrome for Chrome OS. This affects both the Simple
   # Chrome workflow, as well as the chromeos-chrome ebuild.
   'src/third_party/chromite': {
-      'url': Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '523f996ed150852c16a26cd63e8df11ad61d6112',
+      'url': Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '43fb45ddbabad4db4abaa0102858561166d1546e',
       'condition': 'checkout_chromeos',
   },
 
@@ -1635,7 +1635,7 @@ deps = {
     Var('chromium_git') + '/v8/v8.git' + '@' +  Var('v8_revision'),
 
   'src-internal': {
-    'url': 'https://chrome-internal.googlesource.com/chrome/src-internal.git@5c57d84039b90325a02bb94c8c69cb1225f76b64',
+    'url': 'https://chrome-internal.googlesource.com/chrome/src-internal.git@829784642e05b44b4261df2d204c4fa9a77907ba',
     'condition': 'checkout_src_internal',
   },
 
