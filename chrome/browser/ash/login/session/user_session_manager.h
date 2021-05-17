@@ -110,19 +110,22 @@ class UserSessionManager
       public user_manager::UserManager::Observer {
  public:
   // Context of StartSession calls.
-  typedef enum {
+  enum class StartSessionType {
+    // No StartSession call happened yet.
+    kNone,
+
     // Starting primary user session, through login UI.
-    PRIMARY_USER_SESSION,
+    kPrimary,
 
     // Starting secondary user session, through multi-profiles login UI.
-    SECONDARY_USER_SESSION,
+    kSecondary,
 
     // Starting primary user session after browser crash.
-    PRIMARY_USER_SESSION_AFTER_CRASH,
+    kPrimaryAfterCrash,
 
     // Starting secondary user session after browser crash.
-    SECONDARY_USER_SESSION_AFTER_CRASH,
-  } StartSessionType;
+    kSecondaryAfterCrash,
+  };
 
   // Types of command-line switches for a user session. The command-line
   // switches of all types are combined.
@@ -319,6 +322,9 @@ class UserSessionManager
                           CommandLineSwitchesType switches_type,
                           const std::vector<std::string>& switches);
 
+  // This should only be called when the primary user session is being
+  // initialized. Calls outside of the primary user session initialization will
+  // be ignored.
   // Notify whether `service` wants session manager to save the user's login
   // password. If `save_password` is true, the login password is sent over D-Bus
   // to the session manager to save in a keyring. Once this method has been
@@ -333,6 +339,9 @@ class UserSessionManager
                                   bool save_password);
 
   UserContext* mutable_user_context_for_testing() { return &user_context_; }
+  void set_start_session_type_for_testing(StartSessionType start_session_type) {
+    start_session_type_ = start_session_type;
+  }
 
   bool token_handle_backfill_tried_for_testing() {
     return token_handle_backfill_tried_for_testing_;
@@ -540,7 +549,7 @@ class UserSessionManager
   // Authentication/user context.
   UserContext user_context_;
   scoped_refptr<Authenticator> authenticator_;
-  StartSessionType start_session_type_;
+  StartSessionType start_session_type_ = StartSessionType::kNone;
 
   std::unique_ptr<StubAuthenticatorBuilder> injected_authenticator_builder_;
 

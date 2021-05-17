@@ -1151,6 +1151,15 @@ void UserSessionManager::VoteForSavingLoginPassword(
     bool save_password) {
   DCHECK_LT(service, PasswordConsumingService::kCount);
 
+  // VoteForSavingLoginPassword should only be called for the primary user
+  // session. It also should not be called when restarting the browser after a
+  // crash, because in that case a password is not available to chrome anymore.
+  if (start_session_type_ != StartSessionType::kPrimary) {
+    DLOG(WARNING)
+        << "VoteForSavingPassword called for non-primary user session.";
+    return;
+  }
+
   VLOG(1) << "Password consuming service " << static_cast<size_t>(service)
           << " votes " << save_password;
 
@@ -1749,7 +1758,7 @@ bool UserSessionManager::InitializeUserSession(Profile* profile) {
 
   ProfileHelper::Get()->ProfileStartup(profile);
 
-  if (start_session_type_ == PRIMARY_USER_SESSION) {
+  if (start_session_type_ == StartSessionType::kPrimary) {
     WizardController* oobe_controller = WizardController::default_controller();
     base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
     bool skip_post_login_screens =
@@ -1975,7 +1984,7 @@ void UserSessionManager::RestorePendingUserSessions() {
     // Will call OnProfilePrepared() once profile has been loaded.
     // Only handling secondary users here since primary user profile
     // (and session) has been loaded on Chrome startup.
-    StartSession(user_context, SECONDARY_USER_SESSION_AFTER_CRASH,
+    StartSession(user_context, StartSessionType::kSecondaryAfterCrash,
                  false,  // has_auth_cookies
                  true,   // has_active_session, this is restart after crash
                  this);
