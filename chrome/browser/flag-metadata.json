@@ -262,12 +262,12 @@
   },
   {
     "name": "assistant-intent-page-url",
-    "owners": [ "jds", "chrome-language" ],
+    "owners": [ "jds", "chrome-language@google.com" ],
     "expiry_milestone": 94
   },
   {
     "name": "assistant-intent-translate-info",
-    "owners": [ "jds", "chrome-language" ],
+    "owners": [ "jds", "chrome-language@google.com" ],
     "expiry_milestone": 94
   },
   {
@@ -628,10 +628,7 @@
   },
   {
     "name": "content-languages-in-language-picker",
-    "owners": [
-      "basiaz",
-      "chrome-language"
-    ],
+    "owners": [ "basiaz", "chrome-language@google.com" ],
     "expiry_milestone": 93
   },
   {
@@ -954,11 +951,11 @@
   {
     "name": "detect-target-embedding-lookalikes",
     "owners": [ "jdeblasio", "meacer" ],
-    "expiry_milestone": 89
+    "expiry_milestone": 93
   },
   {
     "name": "detected-source-language-option",
-    "owners": [ "cuianthony", "chrome-language" ],
+    "owners": [ "cuianthony", "chrome-language@google.com" ],
     "expiry_milestone": 93
   },
   {
@@ -1271,7 +1268,7 @@
   {
     "name": "enable-aria-element-reflection",
     "owners": [ "aboxhall", "chrishall", "dmazzoni", "meredithl" ],
-    "expiry_milestone": 92
+    "expiry_milestone": 98
   },
   {
     "name": "enable-assistant-aec",
@@ -1413,7 +1410,7 @@
   },
   {
     "name": "enable-bluetooth-spp-in-serial-api",
-    "owners": [ "mattreynolds", "odejesush", "vickymin@google.com" ],
+    "owners": [ "mattreynolds", "odejesush" ],
     "expiry_milestone": 90
   },
   {
@@ -2228,7 +2225,7 @@
   },
   {
     "name": "enable-process-sharing-with-default-site-instances",
-    "owners": [ "acolwell" ],
+    "owners": [ "creis" ],
     "expiry_milestone": 81
   },
   {
@@ -3424,7 +3421,7 @@
   },
   {
     "name": "location-permissions-prompt",
-    "owners": [ "thegreenfrog", "bling-team" ],
+    "owners": [ "thegreenfrog", "bling-flags@google.com" ],
     "expiry_milestone": 91
   },
   {
@@ -4076,12 +4073,12 @@
   },
   {
     "name": "override-language-prefs-for-href-translate",
-    "owners": [ "sclittle", "chrome-language" ],
+    "owners": [ "sclittle", "chrome-language@google.com" ],
     "expiry_milestone": 91
   },
   {
     "name": "override-site-prefs-for-href-translate",
-    "owners": [ "sclittle", "chrome-language" ],
+    "owners": [ "sclittle", "chrome-language@google.com" ],
     "expiry_milestone": 91
   },
   {
@@ -5236,7 +5233,7 @@
   },
   {
     "name": "voice-button-in-top-toolbar",
-    "owners": [ "jds", "chrome-language" ],
+    "owners": [ "jds", "chrome-language@google.com" ],
     "expiry_milestone": 93
   },
   {

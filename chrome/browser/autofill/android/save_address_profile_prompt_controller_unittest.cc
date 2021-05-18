@@ -138,9 +138,10 @@ TEST_F(SaveAddressProfilePromptControllerTest,
   controller_->DisplayPrompt();
 
   AutofillProfile edited_profile = GetFullProfileNoStatus();
-  EXPECT_CALL(decision_callback_,
-              Run(AutofillClient::SaveAddressProfileOfferUserDecision::kEdited,
-                  edited_profile));
+  EXPECT_CALL(
+      decision_callback_,
+      Run(AutofillClient::SaveAddressProfileOfferUserDecision::kEditAccepted,
+          edited_profile));
   base::android::ScopedJavaLocalRef<jobject> edited_profile_java =
       PersonalDataManagerAndroid::CreateJavaProfileFromNative(env_,
                                                               edited_profile);
@@ -183,7 +184,7 @@ TEST_F(SaveAddressProfilePromptControllerTest,
        ShouldReturnDataToDisplay_Update) {
   SetUpController(/*is_update=*/true);
   EXPECT_EQ(u"Update address?", controller_->GetTitle());
-  EXPECT_EQ(u"For John Doe — 666 Erebus St.", controller_->GetSubtitle());
+  EXPECT_EQ(u"John Doe, 666 Erebus St.", controller_->GetSubtitle());
   std::pair<std::u16string, std::u16string> differences =
       controller_->GetDiffFromOldToNewProfile();
   EXPECT_EQ(u"John Doe", differences.first);

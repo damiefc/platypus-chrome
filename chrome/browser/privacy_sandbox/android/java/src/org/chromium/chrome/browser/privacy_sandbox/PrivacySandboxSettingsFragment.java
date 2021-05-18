@@ -35,17 +35,18 @@ import org.chromium.ui.widget.ChromeBulletSpan;
  */
 public class PrivacySandboxSettingsFragment
         extends PreferenceFragmentCompat implements Preference.OnPreferenceChangeListener {
-    public static final String PRIVACY_SANDBOX_DEFAULT_URL =
-            "https://web.dev/digging-into-the-privacy-sandbox/";
+    public static final String PRIVACY_SANDBOX_DEFAULT_URL = "https://www.privacysandbox.com";
     public static final String EXPERIMENT_URL_PARAM = "website-url";
     // Key for the argument with which the PrivacySandbox fragment will be launched. The value for
     // this argument should be part of the PrivacySandboxReferrer enum, which contains all points of
     // entry to the Privacy Sandbox UI.
     public static final String PRIVACY_SANDBOX_REFERRER = "privacy-sandbox-referrer";
 
+    public static final String EXPERIMENT_DESCRIPTION_TITLE = "privacy_sandbox_title";
     public static final String EXPERIMENT_DESCRIPTION_PREFERENCE = "privacy_sandbox_description";
     public static final String TOGGLE_DESCRIPTION_PREFERENCE = "privacy_sandbox_toggle_description";
     public static final String TOGGLE_PREFERENCE = "privacy_sandbox_toggle";
+    public static final String FLOC_PREFERENCE = "floc_page";
 
     private @PrivacySandboxReferrer int mPrivacySandboxReferrer;
     private PrivacySandboxHelpers.CustomTabIntentHelper mCustomTabHelper;
@@ -65,6 +66,21 @@ public class PrivacySandboxSettingsFragment
         // Add all preferences and set the title.
         getActivity().setTitle(R.string.prefs_privacy_sandbox);
         SettingsUtils.addPreferencesFromResource(this, R.xml.privacy_sandbox_preferences);
+
+        // Remove the FLoC page Preference if the Phase 2 flag is disabled.
+        Preference flocPreference = findPreference(FLOC_PREFERENCE);
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_2)) {
+            getPreferenceScreen().removePreference(flocPreference);
+        } else {
+            // Modify the Privacy Sandbox elements.
+            getPreferenceScreen().removePreference(findPreference(EXPERIMENT_DESCRIPTION_TITLE));
+            flocPreference.setSummary(PrivacySandboxBridge.getFlocStatusString());
+            // When the entire Privacy Sandbox is disabled, deactivate the preference.
+            if (!PrivacySandboxBridge.isPrivacySandboxEnabled()) {
+                flocPreference.setEnabled(false);
+            }
+        }
+
         // Format the Privacy Sandbox description, which has a link.
         findPreference(EXPERIMENT_DESCRIPTION_PREFERENCE)
                 .setSummary(SpanApplier.applySpans(
@@ -99,6 +115,12 @@ public class PrivacySandboxSettingsFragment
         RecordUserAction.record(enabled ? "Settings.PrivacySandbox.ApisEnabled"
                                         : "Settings.PrivacySandbox.ApisDisabled");
         PrivacySandboxBridge.setPrivacySandboxEnabled(enabled);
+        // Update the Preference linking to the FLoC page if shown.
+        Preference flocPreference = findPreference(FLOC_PREFERENCE);
+        if (flocPreference != null) {
+            flocPreference.setEnabled(enabled);
+            flocPreference.setSummary(PrivacySandboxBridge.getFlocStatusString());
+        }
         return true;
     }
 

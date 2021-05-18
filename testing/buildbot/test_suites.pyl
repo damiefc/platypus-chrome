@@ -383,6 +383,12 @@
       },
     },
 
+    'blink_unittests': {
+      'blink_unit_tests': {
+        'test': 'blink_unittests',
+      },
+    },
+
     'cast_audio_specific_chromium_gtests': {
       'cast_audio_backend_unittests': {},
       'cast_base_unittests': {},
@@ -926,37 +932,7 @@
       'base_unittests': {},
       'chrome_modern_public_bundle_fake_modules_smoke_test': {},
       'chrome_modern_public_bundle_smoke_test': {},
-      'content_browsertests': {
-        'swarming': {
-          'shards': 10,
-        },
-      },
-      'content_shell_test_apk': {
-        'swarming': {
-          'shards': 3,
-         },
-      },
-      'content_unittests': {
-        'swarming': {
-          'shards': 3,
-        },
-      },
-      'net_unittests': {
-        'swarming': {
-          'shards': 4,
-        },
-      },
-      'unit_tests': {
-        'swarming': {
-          'shards': 5,
-        },
-      },
       'weblayer_bundle_test': {},
-      'webview_instrumentation_test_apk': {
-        'swarming': {
-          'shards': 7,
-        },
-      },
     },
 
     'chromium_swarm_desktop_gtests': {
@@ -5979,7 +5955,7 @@
 
     'devtools_gtests': [
       'devtools_browser_tests',
-      'layout_ng_gtests',
+      'blink_unittests',
     ],
 
     'fuchsia_arm64_isolated_scripts': [

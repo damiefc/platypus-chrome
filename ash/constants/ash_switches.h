@@ -21,6 +21,7 @@ COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kAggressiveCacheDiscardThreshold[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kAllowFailedPolicyFetchForTest[];
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAllowOsInstall[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAllowRAInDevMode[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAppAutoLaunched[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAppOemManifestFile[];
@@ -206,6 +207,8 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kSamlPasswordChangeUrl[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kOfflineSignInTimeLimitInSecondsOverrideForTesting[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kTimeBeforeOnboardingSurveyInSecondsForTesting[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kSamlLockScreenReauthenticationEnabledOverrideForTesting[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kShelfHoverPreviews[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kShelfHotseat[];
@@ -303,6 +306,9 @@ bool IsOOBEChromeVoxHintEnabledForDevMode();
 // Returns true if the OEM Device Requisition can be configured.
 COMPONENT_EXPORT(ASH_CONSTANTS)
 bool IsDeviceRequisitionConfigurable();
+
+// Returns true if the OS installation UI flow can be entered.
+COMPONENT_EXPORT(ASH_CONSTANTS) bool IsOsInstallAllowed();
 
 }  // namespace switches
 }  // namespace chromeos

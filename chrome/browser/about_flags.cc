@@ -1481,7 +1481,9 @@ const FeatureEntry::FeatureParam kNtpChromeCartModuleFakeData[] = {
     {ntp_features::kNtpChromeCartModuleDataParam, "fake"},
     {ntp_features::kNtpChromeCartModuleAbandonedCartDiscountParam, "true"}};
 const FeatureEntry::FeatureParam kNtpChromeCartModuleAbandonedCartDiscount[] = {
-    {ntp_features::kNtpChromeCartModuleAbandonedCartDiscountParam, "true"}};
+    {ntp_features::kNtpChromeCartModuleAbandonedCartDiscountParam, "true"},
+    {"partner-merchant-pattern",
+     "(electronicexpress.com|zazzle.com|wish.com|homesquare.com)"}};
 const FeatureEntry::FeatureVariation kNtpChromeCartModuleVariations[] = {
     {"- Fake Data And Discount", kNtpChromeCartModuleFakeData,
      base::size(kNtpChromeCartModuleFakeData), nullptr},
@@ -3305,9 +3307,6 @@ const FeatureEntry kFeatureEntries[] = {
     {"crostini-use-dlc", flag_descriptions::kCrostiniUseDlcName,
      flag_descriptions::kCrostiniUseDlcDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(chromeos::features::kCrostiniUseDlc)},
-    {"crostini-enable-dlc", flag_descriptions::kCrostiniEnableDlcName,
-     flag_descriptions::kCrostiniEnableDlcDescription, kOsCrOS,
-     FEATURE_VALUE_TYPE(chromeos::features::kCrostiniEnableDlc)},
     {"pluginvm-fullscreen", flag_descriptions::kPluginVmFullscreenName,
      flag_descriptions::kPluginVmFullscreenDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(chromeos::features::kPluginVmFullscreen)},
