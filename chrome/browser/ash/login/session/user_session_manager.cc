@@ -31,6 +31,7 @@
 #include "base/path_service.h"
 #include "base/scoped_observation.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -214,6 +215,26 @@ constexpr char kEventInitUserDesktop[] = "InitUserDesktop";
 
 constexpr base::TimeDelta kActivityTimeBeforeOnboardingSurvey =
     base::TimeDelta::FromHours(1);
+
+base::TimeDelta GetActivityTimeBeforeOnboardingSurvey() {
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  const auto& time_switch =
+      chromeos::switches::kTimeBeforeOnboardingSurveyInSecondsForTesting;
+
+  if (!command_line->HasSwitch(time_switch)) {
+    return kActivityTimeBeforeOnboardingSurvey;
+  }
+  int seconds;
+  if (!base::StringToInt(command_line->GetSwitchValueASCII(time_switch),
+                         &seconds)) {
+    return kActivityTimeBeforeOnboardingSurvey;
+  }
+
+  if (seconds <= 0)
+    return kActivityTimeBeforeOnboardingSurvey;
+
+  return base::TimeDelta::FromSeconds(seconds);
+}
 
 void InitLocaleAndInputMethodsForNewUser(
     UserSessionManager* session_manager,
@@ -1163,6 +1184,18 @@ void UserSessionManager::VoteForSavingLoginPassword(
   VLOG(1) << "Password consuming service " << static_cast<size_t>(service)
           << " votes " << save_password;
 
+  if (service == PasswordConsumingService::kNetwork) {
+    // When the network management code voted to either save or not save the
+    // login password for the primary user session, it is safe to load shill
+    // profile. Note that it is OK to invoke this multiple times, the upstart
+    // task triggered by this can handle it. This could happen if chrome has
+    // been restarted (e.g. due to a crash) within an active Chrome OS user
+    // session.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&UserSessionManager::LoadShillProfile,
+                                  AsWeakPtr(), user_context_.GetAccountId()));
+  }
+
   // Prevent this code from being called twice from two services or else the
   // second service would trigger the warning below (since the password has been
   // cleared).
@@ -1711,7 +1744,7 @@ void UserSessionManager::InitializeBrowser(Profile* profile) {
   if (OnboardingUserActivityCounter::ShouldStart(profile->GetPrefs())) {
     onboarding_user_activity_counter_ =
         std::make_unique<OnboardingUserActivityCounter>(
-            profile->GetPrefs(), kActivityTimeBeforeOnboardingSurvey,
+            profile->GetPrefs(), GetActivityTimeBeforeOnboardingSurvey(),
             base::BindOnce(
                 &UserSessionManager::OnUserEligibleForOnboardingSurvey,
                 weak_factory_.GetWeakPtr(), profile));
@@ -2413,11 +2446,17 @@ void UserSessionManager::OnUserEligibleForOnboardingSurvey(Profile* profile) {
     return;
 
   if (!HatsNotificationController::ShouldShowSurveyToProfile(
-          profile, ash::kHatsOnboardingSurvey))
+          profile, ash::kHatsOnboardingSurvey)) {
     return;
+  }
 
   hats_notification_controller_ =
       new HatsNotificationController(profile, ash::kHatsOnboardingSurvey);
+}
+
+void UserSessionManager::LoadShillProfile(const AccountId& account_id) {
+  SessionManagerClient::Get()->LoadShillProfile(
+      cryptohome::CreateAccountIdentifierFromAccountId(account_id));
 }
 
 }  // namespace ash

@@ -8276,6 +8276,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
       label="Video tutorial summary card on NTP."/>
   <suffix name="IPH_VideoTutorial_NTP_VoiceSearch"
       label="Video tutorial card on NTP about voice search in chrome."/>
+  <suffix name="IPH_WebFeedFollow"
+      label="In product help for proactive Web Feed follow recommendations."/>
+  <suffix name="IPH_WebFeedPostFollowDialog"
+      label="In product help for Web Feed successful follow operations."/>
   <suffix name="IPH_WebUITabStrip"
       label="In product help for opening the WebUI tab strip."/>
   <affected-histogram name="InProductHelp.NotifyEventReadyState"/>
@@ -12408,6 +12412,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <suffix name="Connect.Next" label=""/>
   <suffix name="Connect.SetupDemo" label=""/>
   <suffix name="Connect.StartDemo" label=""/>
+  <suffix name="Connect.StartOsInstall" label=""/>
   <suffix name="Debugging.Next" label=""/>
   <suffix name="Demo-preferences.Canceled" label=""/>
   <suffix name="Demo-preferences.Completed" label=""/>
@@ -20080,6 +20085,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <suffix name="Eche" label="Eche"/>
   <suffix name="Help" label="Help"/>
   <suffix name="Media" label="Media"/>
+  <suffix name="OSFeedback" label="OSFeedback"/>
   <suffix name="OSSettings" label="OS Settings"/>
   <suffix name="Personalization" label="Personalization"/>
   <suffix name="PrintManagement" label="PrintManagement"/>
