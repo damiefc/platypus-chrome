@@ -216,6 +216,7 @@ class ReceiverPresentationServiceDelegate;
 class RenderFrameHost;
 class RenderProcessHost;
 class SerialDelegate;
+class SpeculationHostDelegate;
 class SiteInstance;
 class SpeechRecognitionManagerDelegate;
 class StoragePartition;
@@ -1307,8 +1308,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Allows the embedder to register per-scheme URLLoaderFactory
   // implementations to handle service worker main/imported script requests
   // initiated by the browser process for schemes not handled by the Network
-  // Service. Only called for service worker update check when
-  // ServiceWorkerImportedScriptUpdateCheck is enabled.
+  // Service. Only called for service worker update check.
   // The resulting |factories| must be used only by the browser process. The
   // caller must not send any of |factories| to any other process.
   virtual void RegisterNonNetworkServiceWorkerUpdateURLLoaderFactories(
@@ -2043,6 +2043,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   // main frame should be disallowed.
   virtual bool SuppressDifferentOriginSubframeJSDialogs(
       BrowserContext* browser_context);
+
+  // Allows the embedder to provide a SpeculationHostDelegate that will be used
+  // to process speculation rules provided by the document hosted by
+  // `render_frame_host`.
+  virtual std::unique_ptr<SpeculationHostDelegate>
+  CreateSpeculationHostDelegate(RenderFrameHost& render_frame_host);
 };
 
 }  // namespace content

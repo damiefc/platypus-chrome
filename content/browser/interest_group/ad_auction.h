@@ -21,7 +21,6 @@ namespace content {
 
 class AdAuctionServiceImpl;
 class AuctionRunner;
-class AuctionURLLoaderFactoryProxy;
 
 // Class for running a single FLEDGE auction.
 class AdAuction {
@@ -64,6 +63,7 @@ class AdAuction {
   // Validates the results, reports them to `callback_`, and updates the
   // InterestGroupStorage as needed.
   void WorkletComplete(const GURL& render_url,
+                       const std::string& ad_metadata,
                        const url::Origin& owner,
                        const std::string& name,
                        const GURL& bidder_report_url,
@@ -88,9 +88,6 @@ class AdAuction {
   // Buyers from `config->interest_group_buyers` that have yet to be retrieved
   // from interest group storage.
   std::vector<url::Origin> pending_buyers_;
-
-  // Proxy used for requests from the worklet process.
-  std::unique_ptr<AuctionURLLoaderFactoryProxy> url_loader_factory_proxy_;
 
   std::unique_ptr<AuctionRunner> auction_runner_;
 

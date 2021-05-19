@@ -1247,12 +1247,7 @@ RenderFrameHostImpl::RenderFrameHostImpl(
   }
 
   InitializePolicyContainerHost(renderer_initiated_creation_of_main_frame);
-
-  if (!base::FeatureList::IsEnabled(
-          features::kBlockInsecurePrivateNetworkRequests)) {
-    private_network_request_policy_ = network::mojom::
-        PrivateNetworkRequestPolicy::kWarnFromInsecureToMorePrivate;
-  }
+  InitializePrivateNetworkRequestPolicy();
 
   unload_event_monitor_timeout_ =
       std::make_unique<TimeoutMonitor>(base::BindRepeating(
@@ -1701,38 +1696,14 @@ bool RenderFrameHostImpl::IsDescendantOf(RenderFrameHost* ancestor) {
   return false;
 }
 
-namespace {
-
-template <typename RfhType>
-RenderFrameHostImpl::FrameIterationCallbackImpl ContinueIterationWrapper(
-    base::RepeatingCallback<void(RfhType*)> on_frame) {
-  return base::BindRepeating(
-      [](base::RepeatingCallback<void(RfhType*)> on_frame,
-         RenderFrameHostImpl* rfh) {
-        on_frame.Run(rfh);
-        return RenderFrameHost::FrameIterationAction::kContinue;
-      },
-      on_frame);
-}
-
-}  // namespace
-
 void RenderFrameHostImpl::ForEachRenderFrameHost(
     FrameIterationCallback on_frame) {
-  // There's no automatic conversion from FrameIterationCallback to
-  // FrameIterationCallbackImpl, so this wrapper just forwards the
-  // RenderFrameHost argument.
-  FrameIterationCallbackImpl on_frame_impl = base::BindRepeating(
-      [](FrameIterationCallback on_frame, RenderFrameHostImpl* rfh) {
-        return on_frame.Run(rfh);
-      },
-      on_frame);
-  ForEachRenderFrameHost(on_frame_impl);
+  ForEachRenderFrameHost(FrameIterationWrapper(on_frame));
 }
 
 void RenderFrameHostImpl::ForEachRenderFrameHost(
     FrameIterationAlwaysContinueCallback on_frame) {
-  ForEachRenderFrameHost(ContinueIterationWrapper(on_frame));
+  ForEachRenderFrameHost(FrameIterationWrapper(on_frame));
 }
 
 void RenderFrameHostImpl::ForEachRenderFrameHost(
@@ -1742,7 +1713,7 @@ void RenderFrameHostImpl::ForEachRenderFrameHost(
 
 void RenderFrameHostImpl::ForEachRenderFrameHost(
     FrameIterationAlwaysContinueCallbackImpl on_frame) {
-  ForEachRenderFrameHost(ContinueIterationWrapper(on_frame));
+  ForEachRenderFrameHost(FrameIterationWrapper(on_frame));
 }
 
 void RenderFrameHostImpl::ForEachRenderFrameHostIncludingSpeculative(
@@ -1752,8 +1723,7 @@ void RenderFrameHostImpl::ForEachRenderFrameHostIncludingSpeculative(
 
 void RenderFrameHostImpl::ForEachRenderFrameHostIncludingSpeculative(
     FrameIterationAlwaysContinueCallbackImpl on_frame) {
-  ForEachRenderFrameHostIncludingSpeculative(
-      ContinueIterationWrapper(on_frame));
+  ForEachRenderFrameHostIncludingSpeculative(FrameIterationWrapper(on_frame));
 }
 
 void RenderFrameHostImpl::ForEachRenderFrameHostImpl(
@@ -2525,6 +2495,42 @@ void RenderFrameHostImpl::SetPolicyContainerHost(
   policy_container_host_->AssociateWithFrameToken(GetFrameToken());
 }
 
+void RenderFrameHostImpl::InitializePrivateNetworkRequestPolicy() {
+  if (!policy_container_host_) {
+    // Only speculative RFHs may lack a policy container.
+    DCHECK_EQ(lifecycle_state_, LifecycleStateImpl::kSpeculative);
+    return;
+  }
+
+  const PolicyContainerPolicies& policies = policy_container_host_->policies();
+
+  // For now, we always allow private network requests from secure contexts;
+  // depending on a feature flag, we show a warning in DevTools.
+  if (policies.is_web_secure_context) {
+    private_network_request_policy_ =
+        base::FeatureList::IsEnabled(
+            features::kWarnAboutSecurePrivateNetworkRequests)
+            ? network::mojom::PrivateNetworkRequestPolicy::kWarn
+            : network::mojom::PrivateNetworkRequestPolicy::kAllow;
+    return;
+  }
+
+  // Requests from non-secure contexts in the unknown address space are allowed.
+  if (policies.ip_address_space == network::mojom::IPAddressSpace::kUnknown) {
+    private_network_request_policy_ =
+        network::mojom::PrivateNetworkRequestPolicy::kAllow;
+    return;
+  }
+
+  // Insecure private network request handling depends on a feature flag. Even
+  // if blocking is disabled, we warn developers when we notice such requests.
+  private_network_request_policy_ =
+      base::FeatureList::IsEnabled(
+          features::kBlockInsecurePrivateNetworkRequests)
+          ? network::mojom::PrivateNetworkRequestPolicy::kBlock
+          : network::mojom::PrivateNetworkRequestPolicy::kWarn;
+}
+
 void RenderFrameHostImpl::RenderProcessExited(
     RenderProcessHost* host,
     const ChildProcessTerminationInfo& info) {
@@ -2601,6 +2607,14 @@ void RenderFrameHostImpl::RenderProcessGone(
                   kRendererProcessCrashed
             : BackForwardCacheMetrics::NotRestoredReason::
                   kRendererProcessKilled);
+    return;
+  }
+
+  if (frame_tree()->is_prerendering()) {
+    CancelPrerendering(
+        info.status == base::TERMINATION_STATUS_PROCESS_CRASHED
+            ? PrerenderHost::FinalStatus::kRendererProcessCrashed
+            : PrerenderHost::FinalStatus::kRendererProcessKilled);
     return;
   }
 
@@ -5311,7 +5325,7 @@ void RenderFrameHostImpl::MaybeIsolateForUserActivation() {
           GetSiteInstance()->GetBrowserContext(),
           GetMainFrame()->GetLastCommittedURL(),
           ChildProcessSecurityPolicy::IsolatedOriginSource::WEB_TRIGGERED,
-          false /* should_persist */);
+          SiteIsolationPolicy::ShouldPersistIsolatedCOOPSites());
     }
   }
 }
@@ -9067,8 +9081,7 @@ RenderFrameHostImpl::BuildClientSecurityState() const {
         std::move(coep),
         /*is_web_secure_context=*/false,
         network::mojom::IPAddressSpace::kUnknown,
-        network::mojom::PrivateNetworkRequestPolicy::
-            kBlockFromInsecureToMorePrivate);
+        network::mojom::PrivateNetworkRequestPolicy::kBlock);
   }
 
   auto client_security_state = network::mojom::ClientSecurityState::New();

@@ -605,8 +605,20 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Records if the user has the Nearby Share feature enabled, and if not,
     records why the feature is not enabled. For example, the feature is not
     allowed by policy, or the user onboarded but later disabled the feature.
-    Emitted when the Nearby Share service starts. This happens at login if the
-    feature flag is on.
+    Emitted on sign-in and whenever the feature state changes, for instance,
+    from disabled to enabled.
+  </summary>
+</histogram>
+
+<histogram name="Nearby.Share.EnabledStateChanged" enum="BooleanEnabled"
+    expires_after="2021-10-25">
+  <owner>nohle@chromium.org</owner>
+  <owner>nearby-share-chromeos-eng@google.com</owner>
+  <summary>
+    Records the enabled/disabled state of Nearby Share. Emitted when the feature
+    state changes from disabled to enabled or vice versa. This can happen after
+    Nearby Share onboarding or when the user enables/disables the Nearby Share
+    feature toggle in Settings.
   </summary>
 </histogram>
 

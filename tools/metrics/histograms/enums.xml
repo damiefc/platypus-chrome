@@ -4755,6 +4755,15 @@ others/histograms.xml -->
   <int value="2" label="Processing in WebRTC"/>
 </enum>
 
+<enum name="AufofillStructuredTokenVerificationStatus">
+  <int value="0" label="No Status"/>
+  <int value="1" label="Parsed"/>
+  <int value="2" label="Formatted"/>
+  <int value="3" label="Observed"/>
+  <int value="4" label="User-Verified"/>
+  <int value="5" label="Server-Parsed"/>
+</enum>
+
 <enum name="AuthenticatedLaunchUserEvent">
   <obsolete>
     Removed in M90.
@@ -6849,6 +6858,12 @@ others/histograms.xml -->
   <int value="49"
       label="BFCache-Opt-In header not present, or does not include `unload`
              token, and an experimental config which requires it is active"/>
+  <int value="50"
+      label="Unload handler exists in the main frame, and the current
+             experimental config doesn't permit it to be BFCached."/>
+  <int value="51"
+      label="Unload handler exists in a sub frame, and the current
+             experimental config doesn't permit it to be BFCached."/>
 </enum>
 
 <enum name="BackForwardCacheReloadsAfterHistoryNavigation">
@@ -7403,8 +7418,6 @@ Called by update_bad_message_reasons.py.-->
       label="CPMD_BAD_ORIGIN_SHOW_MANUAL_PASSWORD_GENERATION_POPUP"/>
   <int value="12" label="CPMD_BAD_ORIGIN_SHOW_PASSWORD_EDITING_POPUP"/>
   <int value="13" label="CPMD_BAD_ORIGIN_GENERATION_AVAILABLE_FOR_FORM"/>
-  <int value="14" label="CPMD_BAD_ORIGIN_PASSWORD_FORM_CLEARED"/>
-  <int value="15" label="CPMD_BAD_ORIGIN_CHECK_SAFE_BROWSING_REPUTATION"/>
 </enum>
 
 <enum name="BadSyncDataReason">
@@ -20911,6 +20924,7 @@ Called by update_document_policy_enum.py.-->
   <int value="16" label="DEEP_SCANNED_OPENED_DANGEROUS"/>
   <int value="17" label="PROMPT_FOR_SCANNING"/>
   <int value="18" label="BLOCKED_UNSUPPORTED_FILETYPE"/>
+  <int value="19" label="DANGEROUS_ACCOUNT_COMPROMISE"/>
 </enum>
 
 <enum name="DownloadLaterDialogChoice">
@@ -32537,6 +32551,7 @@ Called by update_use_counter_feature_enum.py.-->
   <int value="3914" label="SVGTextHangingFromPath"/>
   <int value="3915" label="ClientHintsPrefersColorScheme"/>
   <int value="3916" label="OverscrollBehaviorWillBeFixed"/>
+  <int value="3917" label="ControlledWorkerWillBeUncontrolled"/>
 </enum>
 
 <enum name="FeaturePolicyAllowlistType">
@@ -32642,6 +32657,7 @@ Called by update_permissions_policy_enum.py.-->
   <int value="83" label="SharedAutofill"/>
   <int value="84" label="DirectSockets"/>
   <int value="85" label="ClientHintPrefersColorScheme"/>
+  <int value="86" label="WindowPlacement"/>
 </enum>
 
 <enum name="FeaturePolicyImageCompressionFormat">
@@ -40031,6 +40047,8 @@ Called by update_gpu_driver_bug_workaround_entries.py.-->
   <int value="10" label="AUTOCORRECT_SHOWN"/>
   <int value="11" label="AUTOCORRECT_UNDERLINED"/>
   <int value="12" label="AUTOCORRECT_REVERTED"/>
+  <int value="13" label="MULTIWORD_PREDICTION"/>
+  <int value="14" label="MULTIWORD_COMPLETION"/>
 </enum>
 
 <enum name="IMEAssistiveDisabledReason">
@@ -43719,6 +43737,11 @@ Called by update_gpu_driver_bug_workaround_entries.py.-->
   <int value="20" label="kOtherReason"/>
 </enum>
 
+<enum name="LinkGenerationCopiedLinkType">
+  <int value="0" label="Copied from new right-click menu generation"/>
+  <int value="1" label="Copied from existing highlight right-click menu"/>
+</enum>
+
 <enum name="LinkGenerationError">
   <int value="0" label="Incorrect selector"/>
   <int value="1" label="No range available"/>
@@ -47202,6 +47225,7 @@ from previous Chrome versions.
   <int value="176773784" label="EnableHardwareMirrorMode:disabled"/>
   <int value="178337215" label="enable-md-history"/>
   <int value="178693406" label="LockScreenMediaControls:disabled"/>
+  <int value="179687667" label="PwaUpdateDialogForNameAndIcon:enabled"/>
   <int value="179871410" label="ui-debug-tools:disabled"/>
   <int value="180074362" label="memory-pressure-thresholds"/>
   <int value="181150000" label="CrosVmCupsProxy:enabled"/>
@@ -47683,6 +47707,7 @@ from previous Chrome versions.
   <int value="603988014" label="NetworkService:enabled"/>
   <int value="604334859" label="Prerender2:enabled"/>
   <int value="605150752" label="WebUSB:disabled"/>
+  <int value="605672144" label="PwaUpdateDialogForNameAndIcon:disabled"/>
   <int value="606288133" label="enable-print-preview-register-promos"/>
   <int value="606512202" label="AutofillCreditCardPopupLayout:enabled"/>
   <int value="606611135" label="ContextMenuTranslateWithGoogleLens:disabled"/>
@@ -57122,6 +57147,15 @@ Called by update_net_trust_anchors.py.-->
   <int value="0" label="0x00000000 - STATUS_SUCCESS"/>
 </enum>
 
+<enum name="NukeProfileResult">
+  <int value="0" label="Success (1st attempt)"/>
+  <int value="1" label="Success (2nd attempt)"/>
+  <int value="2" label="Success (3rd attempt)"/>
+  <int value="10" label="Failure (1st attempt)"/>
+  <int value="11" label="Failure (2nd attempt)"/>
+  <int value="12" label="Failure (3rd attempt)"/>
+</enum>
+
 <enum name="NullableBoolean">
   <summary>
     A Nullable Boolean can True, False or Null (ie: unset or absent).
@@ -63620,6 +63654,8 @@ Called by update_net_trust_anchors.py.-->
   <int value="10" label="kMainFrameNavigation"/>
   <int value="11" label="kMojoBinderPolicy"/>
   <int value="12" label="kPlugin"/>
+  <int value="13" label="kRendererProcessCrashed"/>
+  <int value="14" label="kRendererProcessKilled"/>
 </enum>
 
 <enum name="PrerenderHoverEvent">
@@ -68658,6 +68694,13 @@ https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.1.pdf
   <int value="1" label="Cached StyleSheetContents was reused"/>
 </enum>
 
+<enum name="RestoreSetting">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Always restore"/>
+  <int value="2" label="Ask every time"/>
+  <int value="3" label="Do not restore"/>
+</enum>
+
 <enum name="ReusedPasswordType">
   <int value="0" label="Saved password"/>
   <int value="1" label="Primary account password"/>
@@ -70599,6 +70642,7 @@ https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.1.pdf
   <int value="4" label="Native was not initialized"/>
   <int value="5" label="Already extracting"/>
   <int value="6" label="WebContents had non-SRP URL"/>
+  <int value="7" label="Not enough results"/>
 </enum>
 
 <enum name="SearchTemplateURLEvent">
@@ -70711,6 +70755,11 @@ https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.1.pdf
 <enum name="SecurePaymentConfirmationSystemPromptResult">
   <int value="0" label="Canceled"/>
   <int value="1" label="Accepted"/>
+</enum>
+
+<enum name="SecurityAnomaly">
+  <int value="0"
+      label="Writable+executable mount found in the init mount namespace."/>
 </enum>
 
 <enum name="SecurityFilteredTouchResult">

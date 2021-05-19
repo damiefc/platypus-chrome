@@ -12,6 +12,8 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/strings/grit/components_strings.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace autofill {
 
@@ -24,7 +26,14 @@ SaveUpdateAddressProfileBubbleControllerImpl::
 }
 
 SaveUpdateAddressProfileBubbleControllerImpl::
-    ~SaveUpdateAddressProfileBubbleControllerImpl() = default;
+    ~SaveUpdateAddressProfileBubbleControllerImpl() {
+  // `address_profile_save_prompt_callback_` must have been invoked before
+  // destroying the controller to inform the backend of the output of the
+  // save/update flow. It's either invoked upon user action when accepting
+  // or rejecting the flow, or in cases when users ignore it, it's invoked
+  // when the web contents are destroyed.
+  DCHECK(address_profile_save_prompt_callback_.is_null());
+}
 
 void SaveUpdateAddressProfileBubbleControllerImpl::OfferSave(
     const AutofillProfile& profile,
@@ -32,9 +41,13 @@ void SaveUpdateAddressProfileBubbleControllerImpl::OfferSave(
     AutofillClient::SaveAddressProfilePromptOptions options,
     AutofillClient::AddressProfileSavePromptCallback
         address_profile_save_prompt_callback) {
-  // Don't show the bubble if it's already visible.
-  if (bubble_view())
+  // Don't show the bubble if it's already visible, and inform the backend.
+  if (bubble_view()) {
+    std::move(address_profile_save_prompt_callback)
+        .Run(AutofillClient::SaveAddressProfileOfferUserDecision::kAutoDeclined,
+             profile);
     return;
+  }
   address_profile_ = profile;
   original_profile_ = base::OptionalFromPtr(original_profile);
   address_profile_save_prompt_callback_ =
@@ -46,11 +59,9 @@ void SaveUpdateAddressProfileBubbleControllerImpl::OfferSave(
 
 std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetWindowTitle()
     const {
-  // TODO(crbug.com/1167060): Use internationalized string upon having final
-  // strings.
-  // TODO(crbug.com/1167060): Update prompt title should reflect the fields that
-  // are being updated.
-  return original_profile_ ? u"Update Address?" : u"Save Address?";
+  return l10n_util::GetStringUTF16(
+      original_profile_ ? IDS_AUTOFILL_UPDATE_ADDRESS_PROMPT_TITLE
+                        : IDS_AUTOFILL_SAVE_ADDRESS_PROMPT_TITLE);
 }
 
 const AutofillProfile&
@@ -67,18 +78,20 @@ void SaveUpdateAddressProfileBubbleControllerImpl::OnUserDecision(
     AutofillClient::SaveAddressProfileOfferUserDecision decision) {
   set_bubble_view(nullptr);
 
-  std::move(address_profile_save_prompt_callback_)
-      .Run(decision, address_profile_);
+  if (address_profile_save_prompt_callback_) {
+    std::move(address_profile_save_prompt_callback_)
+        .Run(decision, address_profile_);
+  }
 }
 
 void SaveUpdateAddressProfileBubbleControllerImpl::OnEditButtonClicked() {
-  HideBubble();
   EditAddressProfileDialogControllerImpl::CreateForWebContents(web_contents());
   EditAddressProfileDialogControllerImpl* controller =
       EditAddressProfileDialogControllerImpl::FromWebContents(web_contents());
   controller->OfferEdit(address_profile_,
                         /*is_update=*/original_profile_.has_value(),
                         std::move(address_profile_save_prompt_callback_));
+  HideBubble();
 }
 
 void SaveUpdateAddressProfileBubbleControllerImpl::OnBubbleClosed() {
@@ -98,9 +111,20 @@ bool SaveUpdateAddressProfileBubbleControllerImpl::IsBubbleActive() const {
   return !address_profile_save_prompt_callback_.is_null();
 }
 
+std::u16string
+SaveUpdateAddressProfileBubbleControllerImpl::GetPageActionIconTootip() const {
+  return GetWindowTitle();
+}
+
 AutofillBubbleBase*
 SaveUpdateAddressProfileBubbleControllerImpl::GetSaveBubbleView() const {
   return bubble_view();
+}
+
+void SaveUpdateAddressProfileBubbleControllerImpl::WebContentsDestroyed() {
+  AutofillBubbleControllerBase::WebContentsDestroyed();
+
+  OnUserDecision(AutofillClient::SaveAddressProfileOfferUserDecision::kIgnored);
 }
 
 PageActionIconType

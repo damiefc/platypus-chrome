@@ -1195,6 +1195,9 @@ extern const char kPullToRefreshName[];
 extern const char kPullToRefreshDescription[];
 extern const char kPullToRefreshEnabledTouchscreen[];
 
+extern const char kPwaUpdateDialogForNameAndIconName[];
+extern const char kPwaUpdateDialogForNameAndIconDescription[];
+
 extern const char kQuicName[];
 extern const char kQuicDescription[];
 
@@ -1743,9 +1746,6 @@ extern const char kEnableCommandLineOnNoRootedDescription[];
 extern const char kEnableUseAaudioDriverName[];
 extern const char kEnableUseAaudioDriverDescription[];
 
-extern const char kEphemeralTabUsingBottomSheetName[];
-extern const char kEphemeralTabUsingBottomSheetDescription[];
-
 extern const char kExploreSitesName[];
 extern const char kExploreSitesDescription[];
 
@@ -1843,9 +1843,6 @@ extern const char kPageInfoDiscoverabilityDescription[];
 
 extern const char kPageInfoHistoryName[];
 extern const char kPageInfoHistoryDescription[];
-
-extern const char kPageInfoV2Name[];
-extern const char kPageInfoV2Description[];
 
 extern const char kPhotoPickerVideoSupportName[];
 extern const char kPhotoPickerVideoSupportDescription[];

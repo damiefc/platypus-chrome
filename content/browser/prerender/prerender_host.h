@@ -62,7 +62,9 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
     kMainFrameNavigation = 10,
     kMojoBinderPolicy = 11,
     kPlugin = 12,
-    kMaxValue = kPlugin
+    kRendererProcessCrashed = 13,
+    kRendererProcessKilled = 14,
+    kMaxValue = kRendererProcessKilled
   };
 
   PrerenderHost(blink::mojom::PrerenderAttributesPtr attributes,
@@ -116,9 +118,6 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
   class PageHolder;
 
   void RecordFinalStatus(FinalStatus status);
-
-  // Returns the frame tree associated with |prerendered_contents_|;
-  FrameTree* GetPrerenderedFrameTree();
 
   void CreatePageHolder(WebContentsImpl& web_contents);
 

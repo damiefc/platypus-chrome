@@ -6,7 +6,6 @@
 #define COMPONENTS_SYNC_ENGINE_SYNC_SCHEDULER_H_
 
 #include <memory>
-#include <string>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
@@ -14,10 +13,6 @@
 #include "components/sync/base/invalidation_interface.h"
 #include "components/sync/engine/cycle/sync_cycle.h"
 #include "services/network/public/mojom/network_change_manager.mojom.h"
-
-namespace base {
-class Location;
-}  // namespace base
 
 namespace syncer {
 
@@ -90,16 +85,13 @@ class SyncScheduler : public SyncCycle::Delegate {
 
   // The LocalNudge indicates that we've made a local change, and that the
   // syncer should plan to commit this to the server some time soon.
-  virtual void ScheduleLocalNudge(ModelType type,
-                                  const base::Location& nudge_location) = 0;
+  virtual void ScheduleLocalNudge(ModelType type) = 0;
 
   // The LocalRefreshRequest occurs when we decide for some reason to manually
   // request updates.  This should be used sparingly.  For example, one of its
   // uses is to fetch the latest tab sync data when it's relevant to the UI on
   // platforms where tab sync is not registered for invalidations.
-  virtual void ScheduleLocalRefreshRequest(
-      ModelTypeSet types,
-      const base::Location& nudge_location) = 0;
+  virtual void ScheduleLocalRefreshRequest(ModelTypeSet types) = 0;
 
   // Invalidations are notifications the server sends to let us know when other
   // clients have committed data.  We need to contact the sync server (being
@@ -107,8 +99,7 @@ class SyncScheduler : public SyncCycle::Delegate {
   // order to fetch the update.
   virtual void ScheduleInvalidationNudge(
       ModelType type,
-      std::unique_ptr<InvalidationInterface> invalidation,
-      const base::Location& nudge_location) = 0;
+      std::unique_ptr<InvalidationInterface> invalidation) = 0;
 
   // Requests a non-blocking initial sync request for the specified type.
   //

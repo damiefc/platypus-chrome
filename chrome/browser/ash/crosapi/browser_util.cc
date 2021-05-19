@@ -16,6 +16,7 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/json/json_reader.h"
 #include "base/path_service.h"
 #include "base/process/process_handle.h"
 #include "base/stl_util.h"
@@ -34,10 +35,32 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/components/sensors/mojom/cros_sensor_service.mojom.h"
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
+#include "chromeos/crosapi/mojom/app_service.mojom.h"
+#include "chromeos/crosapi/mojom/automation.mojom.h"
 #include "chromeos/crosapi/mojom/cert_database.mojom.h"
+#include "chromeos/crosapi/mojom/clipboard.mojom.h"
+#include "chromeos/crosapi/mojom/clipboard_history.mojom.h"
+#include "chromeos/crosapi/mojom/content_protection.mojom.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
+#include "chromeos/crosapi/mojom/device_attributes.mojom.h"
+#include "chromeos/crosapi/mojom/download_controller.mojom.h"
+#include "chromeos/crosapi/mojom/feedback.mojom.h"
+#include "chromeos/crosapi/mojom/file_manager.mojom.h"
+#include "chromeos/crosapi/mojom/holding_space_service.mojom.h"
+#include "chromeos/crosapi/mojom/keystore_service.mojom.h"
+#include "chromeos/crosapi/mojom/local_printer.mojom.h"
+#include "chromeos/crosapi/mojom/message_center.mojom.h"
+#include "chromeos/crosapi/mojom/metrics_reporting.mojom.h"
+#include "chromeos/crosapi/mojom/prefs.mojom.h"
+#include "chromeos/crosapi/mojom/screen_manager.mojom.h"
+#include "chromeos/crosapi/mojom/system_display.mojom.h"
 #include "chromeos/crosapi/mojom/task_manager.mojom.h"
+#include "chromeos/crosapi/mojom/test_controller.mojom.h"
+#include "chromeos/crosapi/mojom/url_handler.mojom.h"
+#include "chromeos/crosapi/mojom/video_capture.mojom.h"
+#include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
 #include "components/account_manager_core/account.h"
 #include "components/account_manager_core/account_manager_util.h"
 #include "components/exo/shell_surface_util.h"
@@ -53,6 +76,9 @@
 #include "media/capture/mojom/video_capture.mojom.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/system/invitation.h"
+#include "services/device/public/mojom/hid.mojom.h"
+#include "services/media_session/public/mojom/audio_focus.mojom.h"
+#include "services/media_session/public/mojom/media_controller.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 using user_manager::User;
@@ -65,6 +91,10 @@ namespace {
 bool g_lacros_enabled_for_test = false;
 
 absl::optional<bool> g_lacros_primary_browser_for_test;
+
+// The rootfs lacros-chrome metadata keys.
+constexpr char kLacrosMetadataContentKey[] = "content";
+constexpr char kLacrosMetadataVersionKey[] = "version";
 
 // Some account types require features that aren't yet supported by lacros.
 // See https://crbug.com/1080693
@@ -592,6 +622,42 @@ void RecordDataVer(PrefService* local_state,
   DictionaryPrefUpdate update(local_state, kDataVerPref);
   base::DictionaryValue* dict = update.Get();
   dict->SetString(user_id_hash, version.GetString());
+}
+
+base::Version GetRootfsLacrosVersionMayBlock(
+    const base::FilePath& version_file_path) {
+  if (!base::PathExists(version_file_path)) {
+    LOG(WARNING) << "The rootfs lacros-chrome metadata is missing.";
+    return {};
+  }
+
+  std::string metadata;
+  if (!base::ReadFileToString(version_file_path, &metadata)) {
+    PLOG(WARNING) << "Failed to read rootfs lacros-chrome metadata.";
+    return {};
+  }
+
+  absl::optional<base::Value> v = base::JSONReader::Read(metadata);
+  if (!v || !v->is_dict()) {
+    LOG(WARNING) << "Failed to parse rootfs lacros-chrome metadata.";
+    return {};
+  }
+
+  const base::Value* content = v->FindKey(kLacrosMetadataContentKey);
+  if (!content || !content->is_dict()) {
+    LOG(WARNING)
+        << "Failed to parse rootfs lacros-chrome metadata content key.";
+    return {};
+  }
+
+  const base::Value* version = content->FindKey(kLacrosMetadataVersionKey);
+  if (!version || !version->is_string()) {
+    LOG(WARNING)
+        << "Failed to parse rootfs lacros-chrome metadata version key.";
+    return {};
+  }
+
+  return base::Version{version->GetString()};
 }
 
 }  // namespace browser_util

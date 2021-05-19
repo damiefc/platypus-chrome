@@ -68,30 +68,29 @@ public class PrivacySandboxSettingsFragment
         SettingsUtils.addPreferencesFromResource(this, R.xml.privacy_sandbox_preferences);
 
         // Remove the FLoC page Preference if the Phase 2 flag is disabled.
-        Preference flocPreference = findPreference(FLOC_PREFERENCE);
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_2)) {
-            getPreferenceScreen().removePreference(flocPreference);
+        if (!phaseTwoEnabled()) {
+            getPreferenceScreen().removePreference(findPreference(FLOC_PREFERENCE));
         } else {
             // Modify the Privacy Sandbox elements.
             getPreferenceScreen().removePreference(findPreference(EXPERIMENT_DESCRIPTION_TITLE));
-            flocPreference.setSummary(PrivacySandboxBridge.getFlocStatusString());
-            // When the entire Privacy Sandbox is disabled, deactivate the preference.
-            if (!PrivacySandboxBridge.isPrivacySandboxEnabled()) {
-                flocPreference.setEnabled(false);
-            }
+            updateFlocPreference();
         }
 
         // Format the Privacy Sandbox description, which has a link.
         findPreference(EXPERIMENT_DESCRIPTION_PREFERENCE)
                 .setSummary(SpanApplier.applySpans(
-                        getContext().getString(R.string.privacy_sandbox_description),
+                        getContext().getString(phaseTwoEnabled()
+                                        ? R.string.privacy_sandbox_description_two
+                                        : R.string.privacy_sandbox_description),
                         new SpanInfo("<link>", "</link>",
                                 new NoUnderlineClickableSpan(getContext().getResources(),
                                         (widget) -> openUrlInCct(getPrivacySandboxUrl())))));
         // Format the toggle description, which has bullet points.
         findPreference(TOGGLE_DESCRIPTION_PREFERENCE)
                 .setSummary(SpanApplier.applySpans(
-                        getContext().getString(R.string.privacy_sandbox_toggle_description),
+                        getContext().getString(phaseTwoEnabled()
+                                        ? R.string.privacy_sandbox_toggle_description_two
+                                        : R.string.privacy_sandbox_toggle_description),
                         new SpanInfo("<li1>", "</li1>", new ChromeBulletSpan(getContext())),
                         new SpanInfo("<li2>", "</li2>", new ChromeBulletSpan(getContext()))));
 
@@ -115,12 +114,7 @@ public class PrivacySandboxSettingsFragment
         RecordUserAction.record(enabled ? "Settings.PrivacySandbox.ApisEnabled"
                                         : "Settings.PrivacySandbox.ApisDisabled");
         PrivacySandboxBridge.setPrivacySandboxEnabled(enabled);
-        // Update the Preference linking to the FLoC page if shown.
-        Preference flocPreference = findPreference(FLOC_PREFERENCE);
-        if (flocPreference != null) {
-            flocPreference.setEnabled(enabled);
-            flocPreference.setSummary(PrivacySandboxBridge.getFlocStatusString());
-        }
+        updateFlocPreference();
         return true;
     }
 
@@ -148,6 +142,12 @@ public class PrivacySandboxSettingsFragment
             return true;
         }
         return false;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        updateFlocPreference();
     }
 
     /**
@@ -209,6 +209,19 @@ public class PrivacySandboxSettingsFragment
             RecordUserAction.record("Settings.PrivacySandbox.OpenedFromSettingsParent");
         } else if (mPrivacySandboxReferrer == PrivacySandboxReferrer.COOKIES_SNACKBAR) {
             RecordUserAction.record("Settings.PrivacySandbox.OpenedFromCookiesPageToast");
+        }
+    }
+
+    private boolean phaseTwoEnabled() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_2);
+    }
+
+    private void updateFlocPreference() {
+        // Update the Preference linking to the FLoC page if shown.
+        Preference flocPreference = findPreference(FLOC_PREFERENCE);
+        if (flocPreference != null) {
+            flocPreference.setEnabled(PrivacySandboxBridge.isPrivacySandboxEnabled());
+            flocPreference.setSummary(PrivacySandboxBridge.getFlocStatusString());
         }
     }
 }

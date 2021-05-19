@@ -1691,16 +1691,6 @@
     "expiry_milestone": 92
   },
   {
-    "name": "enable-ephemeral-tab",
-    "owners": [ "donnd", "jinsukkim" ],
-    "expiry_milestone": 92
-  },
-  {
-    "name": "enable-ephemeral-tab-bottom-sheet",
-    "owners": [ "donnd", "jinsukkim" ],
-    "expiry_milestone": 92
-  },
-  {
     "name": "enable-experimental-accessibility-dictation-extension",
     "owners": [ "akihiroota" ],
     "expiry_milestone": 92
@@ -1723,12 +1713,12 @@
   {
     "name": "enable-experimental-accessibility-language-detection",
     "owners": [ "chrishall", "//ui/accessibility/OWNERS" ],
-    "expiry_milestone": 91
+    "expiry_milestone": 98
   },
   {
     "name": "enable-experimental-accessibility-language-detection-dynamic",
     "owners": [ "chrishall", "//ui/accessibility/OWNERS" ],
-    "expiry_milestone": 91
+    "expiry_milestone": 98
   },
   {
     "name": "enable-experimental-accessibility-switch-access-setup-guide",
@@ -2996,7 +2986,7 @@
   {
     "name": "forced-colors",
     "owners": [ "almaher@microsoft.com" ],
-    "expiry_milestone": 92
+    "expiry_milestone": 95
   },
   {
     "name": "form-controls-dark-mode",
@@ -4318,6 +4308,11 @@
     "expiry_milestone": 99
   },
   {
+    "name": "pwa-update-dialog-for-name-and-icon",
+    "owners": [ "finnur", "beverloo" ],
+    "expiry_milestone": 99
+  },
+  {
     "name": "query-tiles",
     "owners": [ "shaktisahu", "qinmin" ],
     "expiry_milestone": 93
@@ -5008,8 +5003,8 @@
   },
   {
     "name": "touch-selection-strategy",
-    "owners": [ "omrilio" ],
-    "expiry_milestone": 80
+    "owners": [ "dovizu@google.com" ],
+    "expiry_milestone": 99
   },
   {
     "name": "trace-upload-url",

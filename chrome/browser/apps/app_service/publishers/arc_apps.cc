@@ -78,6 +78,21 @@ void CompleteWithCompressed(apps::mojom::Publisher::LoadIconCallback callback,
   std::move(callback).Run(std::move(iv));
 }
 
+void UpdateIconImage(apps::mojom::Publisher::LoadIconCallback callback,
+                     apps::mojom::IconValuePtr iv) {
+  if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon) &&
+      iv->icon_type == apps::mojom::IconType::kCompressed) {
+    iv->uncompressed.MakeThreadSafe();
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+        base::BindOnce(&apps::EncodeImageToPngBytes, iv->uncompressed,
+                       /*rep_icon_scale=*/1.0f),
+        base::BindOnce(&CompleteWithCompressed, std::move(callback)));
+    return;
+  }
+  std::move(callback).Run(std::move(iv));
+}
+
 void OnArcAppIconCompletelyLoaded(
     apps::mojom::IconType icon_type,
     int32_t size_hint_in_dip,
@@ -126,8 +141,10 @@ void OnArcAppIconCompletelyLoaded(
         iv->uncompressed = icon->image_skia();
       }
       if (icon_effects != apps::IconEffects::kNone) {
-        apps::ApplyIconEffects(icon_effects, size_hint_in_dip,
-                               &iv->uncompressed);
+        apps::ApplyIconEffects(
+            icon_effects, size_hint_in_dip, std::move(iv),
+            base::BindOnce(&UpdateIconImage, std::move(callback)));
+        return;
       }
       break;
     }
@@ -136,17 +153,7 @@ void OnArcAppIconCompletelyLoaded(
       break;
   }
 
-  if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon) &&
-      icon_type == apps::mojom::IconType::kCompressed) {
-    iv->uncompressed.MakeThreadSafe();
-    base::ThreadPool::PostTaskAndReplyWithResult(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-        base::BindOnce(&apps::EncodeImageToPngBytes, iv->uncompressed,
-                       /*rep_icon_scale=*/1.0f),
-        base::BindOnce(&CompleteWithCompressed, std::move(callback)));
-    return;
-  }
-  std::move(callback).Run(std::move(iv));
+  UpdateIconImage(std::move(callback), std::move(iv));
 }
 
 void UpdateAppPermissions(
@@ -450,12 +457,20 @@ apps::mojom::OptionalBool IsResizeLocked(ArcAppListPrefs* prefs,
   if (!arc_service_manager) {
     return apps::mojom::OptionalBool::kUnknown;
   }
+
+  // If we don't have the connection (e.g. for non-supported Android versions),
+  // returns unknown.
+  auto* compatibility_mode =
+      arc_service_manager->arc_bridge_service()->compatibility_mode();
+  if (!compatibility_mode->IsConnected()) {
+    return apps::mojom::OptionalBool::kUnknown;
+  }
+
   // Check if |SetResizeLockState| is available to see if Android is ready to
   // be synchronized. Otherwise we need to hide the corresponding setting by
   // returning unknown.
-  auto* instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_service_manager->arc_bridge_service()->compatibility_mode(),
-      SetResizeLockState);
+  auto* instance =
+      ARC_GET_INSTANCE_FOR_METHOD(compatibility_mode, SetResizeLockState);
   if (!instance) {
     return apps::mojom::OptionalBool::kUnknown;
   }

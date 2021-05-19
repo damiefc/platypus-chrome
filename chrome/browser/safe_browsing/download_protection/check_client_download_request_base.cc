@@ -503,8 +503,6 @@ void CheckClientDownloadRequestBase::SendRequest() {
       base::BindOnce(&CheckClientDownloadRequestBase::OnURLLoaderComplete,
                      GetWeakPtr()));
   request_start_time_ = base::TimeTicks::Now();
-  UMA_HISTOGRAM_COUNTS_1M("SBClientDownload.DownloadRequestPayloadSize",
-                          client_download_request_data_.size());
 
   // Add the access token to the proto for display on chrome://safe-browsing
   client_download_request_->set_access_token(access_token_);
@@ -576,6 +574,11 @@ void CheckClientDownloadRequestBase::OnURLLoaderComplete(
         case ClientDownloadResponse::UNKNOWN:
           reason = REASON_VERDICT_UNKNOWN;
           result = DownloadCheckResult::UNKNOWN;
+          break;
+        case ClientDownloadResponse::DANGEROUS_ACCOUNT_COMPROMISE:
+          reason = REASON_DOWNLOAD_DANGEROUS_ACCOUNT_COMPROMISE;
+          result = DownloadCheckResult::DANGEROUS_ACCOUNT_COMPROMISE;
+          token = response.token();
           break;
         default:
           LOG(DFATAL) << "Unknown download response verdict: "

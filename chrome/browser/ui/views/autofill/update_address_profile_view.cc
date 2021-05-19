@@ -12,7 +12,9 @@
 #include "components/autofill/core/browser/autofill_address_util.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
@@ -28,13 +30,6 @@ namespace {
 constexpr int kColumnSetId = 0;
 constexpr int kIconSize = 16;
 constexpr int kValuesLabelWidth = 190;
-
-int AddressDetailsIconSize() {
-  // Use the line height of the body small text. This allows the icons to adapt
-  // if the user changes the font size.
-  return views::style::GetLineHeight(views::style::CONTEXT_LABEL,
-                                     views::style::STYLE_PRIMARY);
-}
 
 const gfx::VectorIcon& GetVectorIconForType(ServerFieldType type) {
   switch (type) {
@@ -92,9 +87,8 @@ std::unique_ptr<views::View> CreateValuesView(
                     views::DISTANCE_RELATED_LABEL_HORIZONTAL)));
 
     auto icon_view = std::make_unique<views::ImageView>();
-    icon_view->SetImage(
-        ui::ImageModel::FromVectorIcon(GetVectorIconForType(diff_entry.type),
-                                       icon_color, AddressDetailsIconSize()));
+    icon_view->SetImage(ui::ImageModel::FromVectorIcon(
+        GetVectorIconForType(diff_entry.type), icon_color, kIconSize));
 
     value_row->AddChildView(std::move(icon_view));
     auto label_view =
@@ -117,11 +111,13 @@ void AddValuesRow(views::GridLayout* layout,
   layout->StartRow(/*vertical_resize=*/views::GridLayout::kFixedSize,
                    kColumnSetId);
 
-  // TODO(crbug.com/1167060): Use internationalized string.
   if (show_row_label) {
     std::unique_ptr<views::Label> label(new views::Label(
-        are_new_values ? u"New" : u"Old", views::style::CONTEXT_LABEL,
-        views::style::STYLE_SECONDARY));
+        l10n_util::GetStringUTF16(
+            are_new_values
+                ? IDS_AUTOFILL_UPDATE_ADDRESS_PROMPT_NEW_VALUES_SECTION_LABEL
+                : IDS_AUTOFILL_UPDATE_ADDRESS_PROMPT_OLD_VALUES_SECTION_LABEL),
+        views::style::CONTEXT_LABEL, views::style::STYLE_SECONDARY));
     layout->AddView(std::move(label), /*col_span=*/1, /*row_span=*/1,
                     /*h_align=*/views::GridLayout::LEADING,
                     /*v_align=*/views::GridLayout::LEADING);
@@ -139,8 +135,11 @@ void AddValuesRow(views::GridLayout* layout,
         views::CreateVectorImageButtonWithNativeTheme(
             std::move(edit_button_callback), vector_icons::kEditIcon,
             kIconSize);
-    // TODO(crbug.com/1167060): Use internationalized string.
-    edit_button->SetAccessibleName(u"Edit Address");
+
+    edit_button->SetAccessibleName(l10n_util::GetStringUTF16(
+        IDS_AUTOFILL_SAVE_ADDRESS_PROMPT_EDIT_BUTTON_TOOLTIP));
+    edit_button->SetTooltipText(l10n_util::GetStringUTF16(
+        IDS_AUTOFILL_SAVE_ADDRESS_PROMPT_EDIT_BUTTON_TOOLTIP));
     layout->AddView(std::move(edit_button), /*col_span=*/1, /*row_span=*/1,
                     /*h_align=*/views::GridLayout::LEADING,
                     /*v_align=*/views::GridLayout::LEADING);
@@ -187,6 +186,14 @@ UpdateAddressProfileView::UpdateAddressProfileView(
       &SaveUpdateAddressProfileBubbleController::OnUserDecision,
       base::Unretained(controller_),
       AutofillClient::SaveAddressProfileOfferUserDecision::kDeclined));
+
+  SetTitle(controller_->GetWindowTitle());
+  SetButtonLabel(ui::DIALOG_BUTTON_OK,
+                 l10n_util::GetStringUTF16(
+                     IDS_AUTOFILL_UPDATE_ADDRESS_PROMPT_OK_BUTTON_LABEL));
+  SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
+                 l10n_util::GetStringUTF16(
+                     IDS_AUTOFILL_UPDATE_ADDRESS_PROMPT_CANCEL_BUTTON_LABEL));
 
   SetLayoutManager(std::make_unique<views::FlexLayout>())
       ->SetOrientation(views::LayoutOrientation::kVertical)
