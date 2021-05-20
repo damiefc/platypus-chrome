@@ -70,8 +70,12 @@ std::string ItemTypeToString(HoldingSpaceItem::Type type) {
   switch (type) {
     case HoldingSpaceItem::Type::kArcDownload:
       return "ArcDownload";
+    case HoldingSpaceItem::Type::kDiagnosticsLog:
+      return "DiagnosticsLog";
     case HoldingSpaceItem::Type::kDownload:
       return "Download";
+    case HoldingSpaceItem::Type::kLacrosDownload:
+      return "LacrosDownload";
     case HoldingSpaceItem::Type::kNearbyShare:
       return "NearbyShare";
     case HoldingSpaceItem::Type::kPinnedFile:

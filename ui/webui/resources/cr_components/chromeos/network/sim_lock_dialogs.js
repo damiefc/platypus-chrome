@@ -73,6 +73,13 @@ Polymer({
       observer: 'updateSubmitButtonEnabled_',
     },
 
+    /** @private */
+    hasErrorText_: {
+      type: Boolean,
+      computed: 'computeHasErrorText_(error_, deviceState)',
+      reflectToAttribute: true,
+    },
+
     /**
      * Error, if defined, that error_ should be set as the next time deviceState
      * updates.
@@ -476,7 +483,11 @@ Polymer({
     if (this.$.enterPinDialog.open) {
       this.$.enterPin.focus();
     } else if (this.$.changePinDialog.open) {
-      this.$.changePinOld.focus();
+      if (this.isSecondNewPinInvalid_()) {
+        this.$.changePinNew2.focus();
+      } else {
+        this.$.changePinOld.focus();
+      }
     } else if (this.$.unlockPinDialog.open) {
       this.$.unlockPin.focus();
     } else if (this.$.unlockPukDialog.open) {
@@ -526,7 +537,10 @@ Polymer({
     return true;
   },
 
-  /** @private */
+  /**
+   * @return {string}
+   * @private
+   */
   getErrorMsg_() {
     if (this.error_ === ErrorType.NONE) {
       return '';
@@ -552,14 +566,128 @@ Polymer({
         assertNotReached();
     }
 
-    const retriesLeft = (this.deviceState && this.deviceState.simLockStatus) ?
-        this.deviceState.simLockStatus.retriesLeft :
-        0;
-    if (retriesLeft !== 1) {
+    // Invalid PIN errors show a separate string based on whether there is 1
+    // retry left or not.
+    const retriesLeft = this.getNumRetriesLeft_();
+    if (retriesLeft !== 1 &&
+        (this.error_ === ErrorType.INCORRECT_PIN ||
+         this.error_ === ErrorType.INVALID_PIN)) {
       errorStringId += 'Plural';
     }
+
     return this.i18n(errorStringId, retriesLeft);
   },
 
+  /**
+   * @return {number}
+   * @private
+   */
+  getNumRetriesLeft_() {
+    if (!this.deviceState || !this.deviceState.simLockStatus) {
+      return 0;
+    }
+
+    return this.deviceState.simLockStatus.retriesLeft;
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeHasErrorText_() {
+    return !!this.getErrorMsg_();
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getPinEntrySubtext_() {
+    const errorMessage = this.getErrorMsg_();
+    if (errorMessage) {
+      return errorMessage;
+    }
+
+    return this.i18n('networkSimEnterPinSubtext');
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isOldPinInvalid_() {
+    return this.error_ === ErrorType.INCORRECT_PIN ||
+        this.error_ === ErrorType.INVALID_PIN;
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getOldPinErrorMessage_() {
+    if (this.isOldPinInvalid_()) {
+      return this.getErrorMsg_();
+    }
+
+    return '';
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isSecondNewPinInvalid_() {
+    return this.error_ === ErrorType.MISMATCHED_PIN;
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getSecondNewPinErrorMessage_() {
+    if (this.isSecondNewPinInvalid_()) {
+      return this.getErrorMsg_();
+    }
+
+    return '';
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isPukInvalid_() {
+    return this.error_ === ErrorType.INCORRECT_PUK ||
+        this.error_ === ErrorType.INVALID_PUK;
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getPukErrorMessage_() {
+    if (this.isPukInvalid_()) {
+      return this.getErrorMsg_();
+    }
+
+    return '';
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getPukWarningMessage_() {
+    if (this.isPukInvalid_()) {
+      const retriesLeft = this.getNumRetriesLeft_();
+      if (retriesLeft === 1) {
+        return this.i18n('networkSimPukDialogWarningWithFailure', retriesLeft);
+      }
+
+      return this.i18n('networkSimPukDialogWarningWithFailures', retriesLeft);
+    }
+
+    return this.i18n('networkSimPukDialogWarningNoFailures');
+  },
 });
 })();

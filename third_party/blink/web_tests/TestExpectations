@@ -196,7 +196,7 @@ crbug.com/1124352 external/wpt/picture-in-picture/exit-picture-in-picture.html [
 crbug.com/1124352 external/wpt/picture-in-picture/picture-in-picture-element.html [ Crash Pass ]
 crbug.com/1124352 external/wpt/picture-in-picture/shadow-dom.html [ Crash Pass ]
 
-crbug.com/1174966 [ Mac ] external/wpt/webrtc/RTCPeerConnection-restartIce.https.html [ Pass Failure ]
+crbug.com/1174966 [ Mac ] external/wpt/webrtc/RTCPeerConnection-restartIce.https.html [ Pass Failure Timeout ]
 crbug.com/1174965 [ Mac ] virtual/webrtc-wpt-plan-b/external/wpt/webrtc/RTCDtlsTransport-state.html [ Pass Failure ]
 
 # These tests require portals, and some require cross-origin portals.
@@ -3192,9 +3192,6 @@ crbug.com/626703 [ Win ] external/wpt/resource-timing/cross-origin-start-end-tim
 crbug.com/626703 [ Win ] external/wpt/websockets/Create-url-with-space.any.html [ Failure ]
 crbug.com/626703 [ Win ] virtual/plz-dedicated-worker/external/wpt/resource-timing/cross-origin-start-end-time-with-redirects.html [ Failure ]
 
-# this test blocks import due to an issue with rebaselining it (crbug.com/1205249)
-crbug.com/1205249 [ Linux ] external/wpt/css/mediaqueries/test_media_queries.html [ Failure ]
-
 ### See crbug.com/891427 comment near the top of this file:
 crbug.com/626703 external/wpt/html/rendering/non-replaced-elements/the-fieldset-and-legend-elements/legend-block-margins-2.html [ Failure ]
 crbug.com/767352 external/wpt/css/css-backgrounds/border-image-width-008.html [ Failure ]
@@ -6081,8 +6078,7 @@ crbug.com/1161244 external/wpt/html/cross-origin-opener-policy/popup-coop-by-sw-
 
 # Sheriff 2020-12-22
 crbug.com/1161301 [ Mac10.15 ] external/wpt/webxr/xrSession_requestReferenceSpace_features.https.html [ Pass Timeout ]
-crbug.com/1161352 [ Mac10.14 ] virtual/controls-refresh-hc/fast/forms/color-scheme/search/search-appearance-basic.html [ Pass Timeout ]
-crbug.com/1161352 [ Mac10.14 ] external/wpt/webxr/xrSession_requestReferenceSpace_features.https.html [ Pass Failure Timeout ]
+crbug.com/1161301 [ Mac10.14 ] external/wpt/webxr/xrSession_requestReferenceSpace_features.https.html [ Pass Failure Timeout ]
 
 # Failing on Webkit Linux Leak only:
 crbug.com/1046784 http/tests/devtools/tracing/timeline-receive-response-event.js [ Pass Failure ]
@@ -6235,9 +6231,6 @@ crbug.com/1185676 [ Mac ] http/tests/devtools/tracing/timeline-js/timeline-js-li
 
 crbug.com/1185051 fast/canvas/OffscreenCanvas-Bitmaprenderer-toBlob-worker.html [ Pass Failure ]
 
-# Sheriff 2021-03-09
-crbug.com/1185121 fast/scroll-snap/animate-fling-to-snap-points-1.html [ Pass Failure ]
-
 # Sheriff 2021-03-11
 crbug.com/1186901 [ Linux ] http/tests/devtools/elements/styles-3/style-autocomplete.js [ Pass Failure ]
 
@@ -6312,6 +6305,7 @@ crbug.com/476553 virtual/scroll-unification/scrollbars/hidden-scrollbars-invisib
 crbug.com/476553 virtual/scroll-unification/fast/scrolling/overflow-scrollability.html [ Pass Failure Timeout Crash ]
 crbug.com/476553 virtual/scroll-unification/fast/events/touch/gesture/gesture-tap-paragraph-end.html [ Pass Failure Timeout Crash ]
 crbug.com/476553 virtual/scroll-unification/fast/events/drag-and-drop-autoscroll-mainframe.html [ Pass Failure Timeout Crash ]
+crbug.com/476553 virtual/scroll-unification/fast/scroll-snap/animate-fling-to-snap-points-1.html [ Pass Failure ]
 
 # Sheriff 2021-04-01
 crbug.com/1167679 accessibility/aom-focus-action.html [ Pass Failure Timeout Crash ]
@@ -6479,15 +6473,11 @@ crbug.com/1205673 [ Linux ] virtual/threaded-prefer-compositing/fast/scroll-snap
 crbug.com/1200134 [ Linux ] fast/gradients/unprefixed-repeating-gradient-color-hint.html [ Pass Failure ]
 
 # Sheriff 2021-05-05
-crbug.com/1205780 [ Win7 ] external/wpt/css/mediaqueries/test_media_queries.html [ Failure ]
-crbug.com/1205780 [ Mac10.14 ] external/wpt/css/mediaqueries/test_media_queries.html [ Failure ]
-crbug.com/1205780 [ Mac10.15 ] external/wpt/css/mediaqueries/test_media_queries.html [ Failure Pass ]
 crbug.com/1205796 [ Mac10.12 ] external/wpt/html/dom/idlharness.https.html?include=HTML.* [ Failure ]
 crbug.com/1205796 [ Mac10.14 ] external/wpt/html/dom/idlharness.https.html?include=HTML.* [ Failure ]
 crbug.com/1206019 [ Linux ] http/tests/devtools/sources/snippet-module.js [ Failure ]
 
 # Blink_web_tests 2021-05-06
-crbug.com/1205669 [ Mac10.13 ] external/wpt/css/mediaqueries/test_media_queries.html [ Failure ]
 crbug.com/1205669 [ Mac10.13 ] virtual/oopr-canvas2d/fast/canvas/canvas-blending-global-alpha.html [ Pass Timeout ]
 crbug.com/1205669 [ Mac10.13 ] external/wpt/fetch/api/idlharness.any.sharedworker.html [ Failure ]
 crbug.com/1205669 [ Mac10.13 ] external/wpt/gamepad/idlharness.https.window.html [ Failure ]

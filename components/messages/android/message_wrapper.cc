@@ -105,6 +105,11 @@ void MessageWrapper::SetIconResourceId(int resource_id) {
                                         resource_id);
 }
 
+void MessageWrapper::DisableIconTint() {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_MessageWrapper_disableIconTint(env, java_message_wrapper_);
+}
+
 int MessageWrapper::GetSecondaryIconResourceId() {
   JNIEnv* env = base::android::AttachCurrentThread();
   return Java_MessageWrapper_getSecondaryIconResourceId(env,
@@ -119,6 +124,11 @@ void MessageWrapper::SetSecondaryIconResourceId(int resource_id) {
 
 void MessageWrapper::SetSecondaryActionCallback(base::OnceClosure callback) {
   secondary_action_callback_ = std::move(callback);
+}
+
+void MessageWrapper::SetDuration(long customDuration) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_MessageWrapper_setDuration(env, java_message_wrapper_, customDuration);
 }
 
 void MessageWrapper::HandleActionClick(JNIEnv* env) {

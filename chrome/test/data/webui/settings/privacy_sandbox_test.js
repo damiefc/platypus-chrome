@@ -106,14 +106,25 @@ suite('PrivacySandbox_PrivacySandboxSettings2Disabled', function() {
     return testHatsBrowserProxy.whenCalled('tryShowPrivacySandboxSurvey');
   });
 
-  test('flocCardVisibility', function() {
+  test('phase2Visibility', function() {
+    assertTrue(isChildVisible(page, '#learnMoreButton'));
+    assertTrue(isChildVisible(page, '#pageHeader'));
+    assertTrue(isChildVisible(page, '#phase1SettingExplanation'));
     assertFalse(isChildVisible(page, '#flocCard'));
+    assertFalse(isChildVisible(page, '#phase2SettingExplanation'));
+  });
+
+  test('toggleClass', function() {
+    assertEquals('hr', page.$$('#apiToggleButton').className);
   });
 });
 
 suite('PrivacySandbox_PrivacySandboxSettings2Enabled', function() {
   /** @type {!PrivacySandboxAppElement} */
   let page;
+
+  /** @type {?TestMetricsBrowserProxy} */
+  let testMetricsBrowserProxy = null;
 
   /**
    * @implements {PrivacySandboxBrowserProxy}
@@ -138,6 +149,9 @@ suite('PrivacySandbox_PrivacySandboxSettings2Enabled', function() {
 
   setup(function() {
     document.body.innerHTML = '';
+
+    testMetricsBrowserProxy = new TestMetricsBrowserProxy();
+    MetricsBrowserProxyImpl.instance_ = testMetricsBrowserProxy;
 
     testPrivacySandboxBrowserProxy =
         TestBrowserProxy.fromClass(PrivacySandboxBrowserProxy);
@@ -198,5 +212,44 @@ suite('PrivacySandbox_PrivacySandboxSettings2Enabled', function() {
     setDefaultFlocID();
     page.set('prefs.generated.floc_enabled.value', false);
     await testPrivacySandboxBrowserProxy.whenCalled('getFlocId');
+  });
+
+  test('phase2Visibility', function() {
+    assertFalse(isChildVisible(page, '#learnMoreButton'));
+    assertFalse(isChildVisible(page, '#pageHeader'));
+    assertFalse(isChildVisible(page, '#phase1SettingExplanation'));
+    assertTrue(isChildVisible(page, '#flocCard'));
+    assertTrue(isChildVisible(page, '#phase2SettingExplanation'));
+  });
+
+  test('toggleClass', function() {
+    assertEquals(
+        'hr updated-toggle-button', page.$$('#apiToggleButton').className);
+  });
+
+  test('userActions', async function() {
+    page.$$('#flocToggleButton').click();
+    assertEquals(
+        'Settings.PrivacySandbox.FlocDisabled',
+        await testMetricsBrowserProxy.whenCalled('recordAction'));
+    testMetricsBrowserProxy.resetResolver('recordAction');
+
+    page.$$('#flocToggleButton').click();
+    assertEquals(
+        'Settings.PrivacySandbox.FlocEnabled',
+        await testMetricsBrowserProxy.whenCalled('recordAction'));
+    testMetricsBrowserProxy.resetResolver('recordAction');
+
+    page.$$('#resetFlocIdButton').click();
+    assertEquals(
+        'Settings.PrivacySandbox.ResetFloc',
+        await testMetricsBrowserProxy.whenCalled('recordAction'));
+    testMetricsBrowserProxy.resetResolver('recordAction');
+
+    // Ensure that an action is only recorded in response to interaction with
+    // the toggle, and not for the generated preference changing.
+    page.set('prefs.generated.floc_enabled.value', false);
+    await flushTasks();
+    assertEquals(0, testMetricsBrowserProxy.getCallCount('recordAction'));
   });
 });

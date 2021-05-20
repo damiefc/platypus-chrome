@@ -7,10 +7,13 @@
 #include <vector>
 
 #include "ash/public/cpp/ash_features.h"
+#include "chrome/browser/ash/crosapi/crosapi_ash.h"
+#include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/download/public/common/download_item.h"
 #include "content/public/browser/browser_context.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
 
@@ -19,6 +22,12 @@ namespace {
 content::DownloadManager* download_manager_for_testing = nullptr;
 
 // Helpers ---------------------------------------------------------------------
+
+// Returns whether the specified `download_item` is complete.
+bool IsComplete(download::DownloadItem* download_item) {
+  return download_item->GetState() ==
+         download::DownloadItem::DownloadState::COMPLETE;
+}
 
 // Returns whether the specified `download_item` is in progress.
 bool IsInProgress(download::DownloadItem* download_item) {
@@ -30,7 +39,8 @@ bool IsInProgress(download::DownloadItem* download_item) {
 
 // HoldingSpaceDownloadsDelegate::InProgressDownload ---------------------------
 
-// A class which observes an in-progress `download::DownloadItem`.
+// A wrapper around an in-progress `download::DownloadItem` which notifies its
+// associated delegate of changes in download state.
 // NOTE: Instances of this class are immediately destroyed when the underlying
 // `download::DownloadItem` is no longer in-progress.
 class HoldingSpaceDownloadsDelegate::InProgressDownload
@@ -38,7 +48,7 @@ class HoldingSpaceDownloadsDelegate::InProgressDownload
  public:
   InProgressDownload(HoldingSpaceDownloadsDelegate* delegate,
                      download::DownloadItem* download_item)
-      : delegate_(delegate) {
+      : delegate_(delegate), download_item_(download_item) {
     DCHECK(IsInProgress(download_item));
     download_item_observation_.Observe(download_item);
   }
@@ -47,20 +57,57 @@ class HoldingSpaceDownloadsDelegate::InProgressDownload
   InProgressDownload& operator=(const InProgressDownload&) = delete;
   ~InProgressDownload() override = default;
 
+  // Returns the file path associated with the underlying `download_item_`.
+  // NOTE: The file path may be empty before a target file path has been picked.
+  const base::FilePath& GetFilePath() const {
+    return download_item_->GetFullPath();
+  }
+
+  // Returns the current progress of the underlying `download_item_`.
+  // NOTE: If present, the progress is >= `0.f` and <= `1.f`. If absent, the
+  // progress is indeterminate.
+  absl::optional<float> GetProgress() const {
+    if (IsComplete(download_item_))
+      return 1.f;
+
+    absl::optional<float> progress;
+    if (download_item_->PercentComplete() >= 0) {
+      DCHECK_GE(download_item_->PercentComplete(), 0);
+      DCHECK_LE(download_item_->PercentComplete(), 100);
+      progress = download_item_->PercentComplete() / 100.f;
+    }
+    return progress;
+  }
+
  private:
   // download::DownloadItem::Observer:
   void OnDownloadUpdated(download::DownloadItem* download_item) override {
-    // NOTE: This method invocation may result in destruction.
-    delegate_->OnDownloadUpdated(download_item);
+    switch (download_item->GetState()) {
+      case download::DownloadItem::DownloadState::IN_PROGRESS:
+        delegate_->OnDownloadUpdated(this);
+        break;
+      case download::DownloadItem::DownloadState::COMPLETE:
+        // NOTE: This method invocation will result in destruction.
+        delegate_->OnDownloadCompleted(this);
+        break;
+      case download::DownloadItem::DownloadState::CANCELLED:
+      case download::DownloadItem::DownloadState::INTERRUPTED:
+        // NOTE: This method invocation will result in destruction.
+        delegate_->OnDownloadFailed(this);
+        break;
+      case download::DownloadItem::DownloadState::MAX_DOWNLOAD_STATE:
+        NOTREACHED();
+        break;
+    }
   }
 
   void OnDownloadDestroyed(download::DownloadItem* download_item) override {
     // NOTE: This method invocation will result in destruction.
-    delegate_->OnDownloadDestroyed(download_item);
+    delegate_->OnDownloadFailed(this);
   }
 
-  // NOTE: The `delegate_` owns `this`.
-  HoldingSpaceDownloadsDelegate* const delegate_;
+  HoldingSpaceDownloadsDelegate* const delegate_;  // NOTE: Owns `this`.
+  download::DownloadItem* const download_item_;
 
   base::ScopedObservation<download::DownloadItem,
                           download::DownloadItem::Observer>
@@ -74,7 +121,15 @@ HoldingSpaceDownloadsDelegate::HoldingSpaceDownloadsDelegate(
     HoldingSpaceModel* model)
     : HoldingSpaceKeyedServiceDelegate(service, model) {}
 
-HoldingSpaceDownloadsDelegate::~HoldingSpaceDownloadsDelegate() = default;
+HoldingSpaceDownloadsDelegate::~HoldingSpaceDownloadsDelegate() {
+  // Lacros Chrome downloads.
+  if (crosapi::CrosapiManager::IsInitialized()) {
+    crosapi::CrosapiManager::Get()
+        ->crosapi_ash()
+        ->download_controller_ash()
+        ->RemoveObserver(this);
+  }
+}
 
 // static
 void HoldingSpaceDownloadsDelegate::SetDownloadManagerForTesting(
@@ -93,10 +148,18 @@ void HoldingSpaceDownloadsDelegate::Init() {
       arc_intent_helper_observation_.Observe(arc_intent_helper_bridge);
   }
 
-  // Chrome downloads.
+  // Ash Chrome downloads.
   download_manager_observation_.Observe(download_manager_for_testing
                                             ? download_manager_for_testing
                                             : profile()->GetDownloadManager());
+
+  // Lacros Chrome downloads.
+  if (crosapi::CrosapiManager::IsInitialized()) {
+    crosapi::CrosapiManager::Get()
+        ->crosapi_ash()
+        ->download_controller_ash()
+        ->AddObserver(this);
+  }
 }
 
 void HoldingSpaceDownloadsDelegate::OnPersistenceRestored() {
@@ -132,7 +195,7 @@ void HoldingSpaceDownloadsDelegate::OnArcDownloadAdded(
     return;
   }
 
-  OnDownloadCompleted(HoldingSpaceItem::Type::kArcDownload, path);
+  service()->AddDownload(HoldingSpaceItem::Type::kArcDownload, path);
 }
 
 void HoldingSpaceDownloadsDelegate::OnManagerInitialized() {
@@ -150,10 +213,8 @@ void HoldingSpaceDownloadsDelegate::OnManagerInitialized() {
 
   for (download::DownloadItem* download_item : downloads) {
     if (IsInProgress(download_item)) {
-      in_progress_downloads_by_id_.emplace(
-          std::piecewise_construct,
-          /*id=*/std::forward_as_tuple(download_item->GetId()),
-          /*in_progress_download=*/std::forward_as_tuple(this, download_item));
+      in_progress_downloads_.emplace(
+          std::make_unique<InProgressDownload>(this, download_item));
     }
   }
 }
@@ -161,7 +222,7 @@ void HoldingSpaceDownloadsDelegate::OnManagerInitialized() {
 void HoldingSpaceDownloadsDelegate::ManagerGoingDown(
     content::DownloadManager* manager) {
   download_manager_observation_.Reset();
-  in_progress_downloads_by_id_.clear();
+  in_progress_downloads_.clear();
 }
 
 void HoldingSpaceDownloadsDelegate::OnDownloadCreated(
@@ -173,44 +234,43 @@ void HoldingSpaceDownloadsDelegate::OnDownloadCreated(
     return;
 
   if (IsInProgress(download_item)) {
-    in_progress_downloads_by_id_.emplace(
-        std::piecewise_construct,
-        /*id=*/std::forward_as_tuple(download_item->GetId()),
-        /*in_progress_download=*/std::forward_as_tuple(this, download_item));
+    in_progress_downloads_.emplace(
+        std::make_unique<InProgressDownload>(this, download_item));
   }
 }
 
+// TODO(crbug.com/1184438): Support in-progress downloads.
 void HoldingSpaceDownloadsDelegate::OnDownloadUpdated(
-    const download::DownloadItem* download_item) {
-  switch (download_item->GetState()) {
-    case download::DownloadItem::DownloadState::IN_PROGRESS:
-      // TODO(crbug.com/1184438): Support in-progress downloads.
-      break;
-    case download::DownloadItem::DownloadState::COMPLETE:
-      OnDownloadCompleted(HoldingSpaceItem::Type::kDownload,
-                          download_item->GetFullPath());
-      FALLTHROUGH;
-    case download::DownloadItem::DownloadState::CANCELLED:
-    case download::DownloadItem::DownloadState::INTERRUPTED:
-      in_progress_downloads_by_id_.erase(download_item->GetId());
-      break;
-    case download::DownloadItem::DownloadState::MAX_DOWNLOAD_STATE:
-      NOTREACHED();
-      break;
-  }
-}
-
-void HoldingSpaceDownloadsDelegate::OnDownloadDestroyed(
-    const download::DownloadItem* download_item) {
-  in_progress_downloads_by_id_.erase(download_item->GetId());
-}
+    const InProgressDownload* in_progress_download) {}
 
 void HoldingSpaceDownloadsDelegate::OnDownloadCompleted(
-    HoldingSpaceItem::Type type,
-    const base::FilePath& file_path) {
-  DCHECK(HoldingSpaceItem::IsDownload(type));
-  if (!is_restoring_persistence())
-    service()->AddDownload(type, file_path, /*progress=*/1.f);
+    const InProgressDownload* in_progress_download) {
+  service()->AddDownload(HoldingSpaceItem::Type::kDownload,
+                         in_progress_download->GetFilePath(),
+                         in_progress_download->GetProgress());
+  EraseDownload(in_progress_download);
 }
 
+void HoldingSpaceDownloadsDelegate::OnDownloadFailed(
+    const InProgressDownload* in_progress_download) {
+  EraseDownload(in_progress_download);
+}
+
+void HoldingSpaceDownloadsDelegate::EraseDownload(
+    const InProgressDownload* in_progress_download) {
+  auto it = in_progress_downloads_.find(in_progress_download);
+  DCHECK(it != in_progress_downloads_.end());
+  in_progress_downloads_.erase(it);
+}
+
+void HoldingSpaceDownloadsDelegate::OnLacrosDownloadUpdated(
+    const crosapi::mojom::DownloadEvent& event) {
+  // For now, we ignore incognito downloads to match current behavior.
+  if (event.is_from_icognito_profile)
+    return;
+  if (event.state == crosapi::mojom::DownloadState::kComplete) {
+    service()->AddDownload(ash::HoldingSpaceItem::Type::kLacrosDownload,
+                           event.target_file_path);
+  }
+}
 }  // namespace ash

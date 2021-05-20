@@ -9,7 +9,6 @@
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_address_util.h"
-#include "components/autofill/core/browser/data_model/autofill_profile_comparator.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/infobars/core/infobar.h"
@@ -70,11 +69,23 @@ std::u16string AutofillSaveUpdateAddressProfileDelegateIOS::GetEmailAddress()
 
 std::u16string AutofillSaveUpdateAddressProfileDelegateIOS::GetDescription()
     const {
-  // TODO(crbug.com/1167062): Pass proper `include_address_and_contacts` value
-  // and handle in UI empty description if needed.
   return GetProfileDescription(
       original_profile_ ? *original_profile_ : profile_, locale_,
       /*include_address_and_contacts=*/true);
+}
+
+std::u16string AutofillSaveUpdateAddressProfileDelegateIOS::GetSubtitle() {
+  DCHECK(original_profile_);
+  std::vector<ProfileValueDifference> differences =
+      GetProfileDifferenceForUi(original_profile_.value(), profile_, locale_);
+  bool address_updated =
+      std::find_if(differences.begin(), differences.end(),
+                   [](const ProfileValueDifference& diff) {
+                     return diff.type == ADDRESS_HOME_ADDRESS;
+                   }) != differences.end();
+  return GetProfileDescription(
+      original_profile_.value(), locale_,
+      /*include_address_and_contacts=*/!address_updated);
 }
 
 std::u16string
@@ -99,10 +110,10 @@ std::u16string AutofillSaveUpdateAddressProfileDelegateIOS::GetProfileInfo(
   return profile_.GetInfo(type, locale_);
 }
 
-base::flat_map<ServerFieldType, std::pair<std::u16string, std::u16string>>
+std::vector<ProfileValueDifference>
 AutofillSaveUpdateAddressProfileDelegateIOS::GetProfileDiff() const {
-  return AutofillProfileComparator::GetSettingsVisibleProfileDifferenceMap(
-      *GetProfile(), *GetOriginalProfile(), locale_);
+  return GetProfileDifferenceForUi(*GetProfile(), *GetOriginalProfile(),
+                                   locale_);
 }
 
 bool AutofillSaveUpdateAddressProfileDelegateIOS::EditAccepted() {

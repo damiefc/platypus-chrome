@@ -63,6 +63,7 @@
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/download/data_url_blob_reader.h"
 #include "content/browser/download/mhtml_generation_manager.h"
+#include "content/browser/feature_observer.h"
 #include "content/browser/file_system/file_system_manager_impl.h"
 #include "content/browser/file_system/file_system_url_loader_factory.h"
 #include "content/browser/file_system_access/file_system_access_manager_impl.h"
@@ -236,6 +237,7 @@
 #include "third_party/blink/public/common/loader/inter_process_time_ticks_converter.h"
 #include "third_party/blink/public/common/loader/resource_type_util.h"
 #include "third_party/blink/public/common/messaging/transferable_message.h"
+#include "third_party/blink/public/common/permissions_policy/document_policy.h"
 #include "third_party/blink/public/common/permissions_policy/document_policy_features.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/mojom/appcache/appcache.mojom.h"
@@ -801,8 +803,11 @@ void VerifyThatBrowserAndRendererCalculatedOriginsToCommitMatch(
     NavigationRequest* navigation_request,
     const mojom::DidCommitProvisionalLoadParams& params) {
   DCHECK(navigation_request);
+
+  // This should be called only when a new document is created. Navigations in
+  // the same document and page activations do not create a new document.
   DCHECK(!navigation_request->IsSameDocument());
-  DCHECK(!navigation_request->IsServedFromBackForwardCache());
+  DCHECK(!navigation_request->IsPageActivation());
 
   // Ignore for now cases where the NavigationRequest is in an unexpectedly
   // early state. Triggered by the following tests:
@@ -3725,7 +3730,8 @@ void RenderFrameHostImpl::Unload(RenderFrameProxyHost* proxy, bool is_loading) {
       GetMojomFrameInRenderer()->Unload(
           proxy->GetRoutingID(), is_loading,
           proxy->frame_tree_node()->current_replication_state().Clone(),
-          proxy->GetFrameToken());
+          proxy->GetFrameToken(),
+          proxy->BindAndPassRemoteMainFrameInterfaces());
       // Remember that a RenderFrameProxy was created as part of processing the
       // Unload message above.
       proxy->SetRenderFrameProxyCreated(true);
@@ -3758,7 +3764,7 @@ void RenderFrameHostImpl::SwapOuterDelegateFrame(RenderFrameProxyHost* proxy) {
   GetMojomFrameInRenderer()->Unload(
       proxy->GetRoutingID(), /*is_loading=*/false,
       frame_tree_node()->current_replication_state().Clone(),
-      proxy->GetFrameToken());
+      proxy->GetFrameToken(), proxy->BindAndPassRemoteMainFrameInterfaces());
 }
 
 void RenderFrameHostImpl::DetachFromProxy() {
@@ -5737,12 +5743,6 @@ void RenderFrameHostImpl::CreateNewWindow(
           effective_transient_activation_state, params->opener_suppressed,
           &no_javascript_access);
 
-  // Disallow window creation in prerendered pages.
-  if (blink::features::IsPrerender2Enabled() &&
-      frame_tree()->is_prerendering()) {
-    can_create_window = false;
-  }
-
   bool was_consumed = false;
   if (can_create_window) {
     // Consume activation even w/o User Activation v2, to sync other renderers
@@ -7066,7 +7066,7 @@ void RenderFrameHostImpl::CommitNavigation(
           url::kFileScheme,
           FileURLLoaderFactory::Create(
               browser_context->GetPath(),
-              BrowserContext::GetSharedCorsOriginAccessList(browser_context),
+              browser_context->GetSharedCorsOriginAccessList(),
               file_factory_priority));
     }
 
@@ -9402,12 +9402,10 @@ bool RenderFrameHostImpl::DidCommitNavigationInternal(
 
   isolation_info_ = navigation_request->isolation_info_for_subresources();
 
-  // Navigations in the same document, or navigations that activate an existing
-  // bfcached or prerendered document, do not create a new document.
+  // Navigations in the same document and page activations do not create a new
+  // document.
   bool created_new_document =
-      !is_same_document_navigation &&
-      !navigation_request->IsServedFromBackForwardCache() &&
-      !navigation_request->IsPrerenderedPageActivation();
+      !is_same_document_navigation && !navigation_request->IsPageActivation();
 
   // TODO(crbug.com/936696): Remove this after we have RenderDocument.
   // IsWaitingToCommit can be false inside DidCommitNavigationInternal only in
@@ -9501,9 +9499,10 @@ bool RenderFrameHostImpl::DidCommitNavigationInternal(
 void RenderFrameHostImpl::DidCommitNewDocument(
     const mojom::DidCommitProvisionalLoadParams& params,
     NavigationRequest* navigation_request) {
-  // BackForwardCache navigations restore existing document, but never create
-  // new ones.
-  DCHECK(!navigation_request->IsServedFromBackForwardCache());
+  // Navigations in the same document and page activations do not create a new
+  // document.
+  DCHECK(!navigation_request->IsSameDocument());
+  DCHECK(!navigation_request->IsPageActivation());
 
   ResetPermissionsPolicy();
   // There are two type of navigations committing new documents:

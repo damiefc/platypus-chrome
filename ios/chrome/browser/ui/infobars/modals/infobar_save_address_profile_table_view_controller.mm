@@ -7,7 +7,10 @@
 #include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/infobars/infobar_metrics_recorder.h"
+#import "ios/chrome/browser/ui/autofill/autofill_ui_type.h"
+#import "ios/chrome/browser/ui/autofill/autofill_ui_type_util.h"
 #import "ios/chrome/browser/ui/infobars/modals/infobar_modal_constants.h"
 #import "ios/chrome/browser/ui/infobars/modals/infobar_save_address_profile_modal_delegate.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_cells_constants.h"
@@ -32,8 +35,6 @@ namespace {
 // Height of the space used by header/footer when none is set. Default is
 // |estimatedSection{Header|Footer}Height|.
 const CGFloat kDefaultHeaderFooterHeight = 10;
-// Estimated height of the header/footer, used to speed the constraints.
-const CGFloat kEstimatedHeaderFooterHeight = 50;
 
 }  // namespace
 
@@ -98,16 +99,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)viewDidLoad {
   [super viewDidLoad];
+  self.styler.tableViewBackgroundColor = [UIColor colorNamed:kBackgroundColor];
   self.view.backgroundColor = [UIColor colorNamed:kBackgroundColor];
   self.styler.cellBackgroundColor = [UIColor colorNamed:kBackgroundColor];
-  if (self.isUpdateModal) {
-    self.tableView.estimatedSectionHeaderHeight = kEstimatedHeaderFooterHeight;
-    self.tableView.estimatedSectionFooterHeight = kEstimatedHeaderFooterHeight;
-  } else {
-    self.tableView.sectionHeaderHeight = 0;
-  }
-  [self.tableView
-      setSeparatorInset:UIEdgeInsetsMake(0, kTableViewHorizontalSpacing, 0, 0)];
+  self.tableView.sectionHeaderHeight = 0;
+
+  self.tableView.separatorInset =
+      UIEdgeInsetsMake(0, kTableViewSeparatorInsetWithIcon, 0, 0);
 
   // Configure the NavigationBar.
   UIBarButtonItem* cancelButton = [[UIBarButtonItem alloc]
@@ -129,11 +127,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   self.navigationController.navigationBar.prefersLargeTitles = NO;
 
-  // TODO(crbug.com/1167062): Replace with proper localized string.
   if (self.isUpdateModal) {
-    self.navigationItem.title = @"Update Address";
+    self.navigationItem.title =
+        l10n_util::GetNSString(IDS_IOS_AUTOFILL_UPDATE_ADDRESS_PROMPT_TITLE);
   } else {
-    self.navigationItem.title = @"Save Address";
+    self.navigationItem.title =
+        l10n_util::GetNSString(IDS_IOS_AUTOFILL_SAVE_ADDRESS_PROMPT_TITLE);
   }
 
   [self loadModel];
@@ -182,11 +181,28 @@ typedef NS_ENUM(NSInteger, ItemType) {
                addTarget:self
                   action:@selector(saveAddressProfileButtonWasPressed:)
         forControlEvents:UIControlEventTouchUpInside];
-  } else if (itemType == ItemTypeAddress) {
+  } else if (itemType == ItemTypeAddress || itemType == ItemTypeUpdateOld) {
     TableViewImageCell* managedcell =
         base::mac::ObjCCastStrict<TableViewImageCell>(cell);
-    managedcell.textLabel.numberOfLines =
-        [[self.address componentsSeparatedByString:@"\n"] count];
+    managedcell.textLabel.numberOfLines = 0;
+    managedcell.imageView.image = [managedcell.imageView.image
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    [managedcell.imageView setTintColor:[UIColor colorNamed:kGrey400Color]];
+  } else if (itemType == ItemTypePhoneNumber ||
+             itemType == ItemTypeEmailAddress) {
+    TableViewImageCell* managedcell =
+        base::mac::ObjCCastStrict<TableViewImageCell>(cell);
+    managedcell.imageView.image = [managedcell.imageView.image
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    [managedcell.imageView setTintColor:[UIColor colorNamed:kGrey400Color]];
+  } else if (itemType == ItemTypeUpdateNew) {
+    TableViewImageCell* managedcell =
+        base::mac::ObjCCastStrict<TableViewImageCell>(cell);
+    managedcell.textLabel.numberOfLines = 0;
+    managedcell.imageView.image = [managedcell.imageView.image
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    // Color is blue.
+    [managedcell.imageView setTintColor:[UIColor colorNamed:kBlueColor]];
   }
   return cell;
 }
@@ -253,8 +269,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
     }
   }
 
-  // TODO(crbug.com/1167062): Add image icons for the fields.
-  // TODO(crbug.com/1167062): Add line separators between sections.
   TableViewModel* model = self.tableViewModel;
 
   [model addSectionWithIdentifier:SectionIdentifierUpdateDescription];
@@ -265,18 +279,19 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addSectionWithIdentifier:SectionIdentifierUpdateModalNewFields];
 
   if (showOld) {
-    // TODO(crbug.com/1167062): Use i18n strings.
-    [model setHeader:[self updateHeaderWithText:@"New"]
+    [model setHeader:
+               [self
+                   updateHeaderWithText:
+                       l10n_util::GetNSString(
+                           IDS_AUTOFILL_UPDATE_ADDRESS_PROMPT_NEW_VALUES_SECTION_LABEL)]
         forSectionWithIdentifier:SectionIdentifierUpdateModalNewFields];
   }
   for (NSNumber* type in self.profileDataDiff) {
     if ([self.profileDataDiff[type][0] length] > 0) {
-      TableViewImageItem* item =
-          [[TableViewImageItem alloc] initWithType:ItemTypeUpdateNew];
-      // TODO(crbug.com/1167062): Use type for determining the icons.
-      item.title = self.profileDataDiff[type][0];
-      item.useCustomSeparator = YES;
-      [model addItem:item
+      [model addItem:[self detailItemWithType:ItemTypeUpdateNew
+                                         text:self.profileDataDiff[type][0]
+                                iconImageName:
+                                    [self iconForAutofillInputTypeNumber:type]]
           toSectionWithIdentifier:SectionIdentifierUpdateModalNewFields];
     }
   }
@@ -285,17 +300,19 @@ typedef NS_ENUM(NSInteger, ItemType) {
     // Old
     [model addSectionWithIdentifier:SectionIdentifierUpdateModalOldFields];
 
-    // TODO(crbug.com/1167062): Use i18n strings.
-    [model setHeader:[self updateHeaderWithText:@"Old"]
+    [model setHeader:
+               [self
+                   updateHeaderWithText:
+                       l10n_util::GetNSString(
+                           IDS_AUTOFILL_UPDATE_ADDRESS_PROMPT_OLD_VALUES_SECTION_LABEL)]
         forSectionWithIdentifier:SectionIdentifierUpdateModalOldFields];
     for (NSNumber* type in self.profileDataDiff) {
       if ([self.profileDataDiff[type][1] length] > 0) {
-        TableViewImageItem* item =
-            [[TableViewImageItem alloc] initWithType:ItemTypeUpdateOld];
-        // TODO(crbug.com/1167062): Use type for determining the icons.
-        item.title = self.profileDataDiff[type][1];
-        item.useCustomSeparator = YES;
-        [model addItem:item
+        [model addItem:[self
+                           detailItemWithType:ItemTypeUpdateOld
+                                         text:self.profileDataDiff[type][1]
+                                iconImageName:
+                                    [self iconForAutofillInputTypeNumber:type]]
             toSectionWithIdentifier:SectionIdentifierUpdateModalOldFields];
       }
     }
@@ -311,23 +328,33 @@ typedef NS_ENUM(NSInteger, ItemType) {
   TableViewModel* model = self.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierSaveModalFields];
 
-  TableViewImageItem* addressImageItem =
-      [[TableViewImageItem alloc] initWithType:ItemTypeAddress];
-  addressImageItem.title = self.address;
-  [model addItem:addressImageItem
+  [model addItem:[self
+                     detailItemWithType:ItemTypeAddress
+                                   text:self.address
+                          iconImageName:
+                              [self iconForAutofillUIType:
+                                        AutofillUITypeProfileHomeAddressStreet]]
       toSectionWithIdentifier:SectionIdentifierSaveModalFields];
 
-  TableViewImageItem* emailImageItem =
-      [[TableViewImageItem alloc] initWithType:ItemTypeEmailAddress];
-  emailImageItem.title = self.emailAddress;
-  [model addItem:emailImageItem
-      toSectionWithIdentifier:SectionIdentifierSaveModalFields];
-
-  TableViewImageItem* phoneImageItem =
-      [[TableViewImageItem alloc] initWithType:ItemTypePhoneNumber];
-  phoneImageItem.title = self.phoneNumber;
-  [model addItem:phoneImageItem
-      toSectionWithIdentifier:SectionIdentifierSaveModalFields];
+  if ([self.emailAddress length]) {
+    [model addItem:[self detailItemWithType:ItemTypeEmailAddress
+                                       text:self.emailAddress
+                              iconImageName:
+                                  [self iconForAutofillUIType:
+                                            AutofillUITypeProfileEmailAddress]]
+        toSectionWithIdentifier:SectionIdentifierSaveModalFields];
+  }
+  if ([self.phoneNumber length]) {
+    [model addItem:
+               [self
+                   detailItemWithType:ItemTypePhoneNumber
+                                 text:self.phoneNumber
+                        iconImageName:
+                            [self
+                                iconForAutofillUIType:
+                                    AutofillUITypeProfileHomePhoneWholeNumber]]
+        toSectionWithIdentifier:SectionIdentifierSaveModalFields];
+  }
 
   [model addItem:[self saveUpdateButton]
       toSectionWithIdentifier:SectionIdentifierSaveModalFields];
@@ -338,11 +365,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
       initWithType:ItemTypeAddressProfileSaveUpdateButton];
   saveUpdateButton.textAlignment = NSTextAlignmentNatural;
 
-  // TODO(crbug.com/1167062): Use i18n strings.
   if (self.isUpdateModal) {
-    saveUpdateButton.buttonText = @"Update";
+    saveUpdateButton.buttonText = l10n_util::GetNSString(
+        IDS_AUTOFILL_UPDATE_ADDRESS_PROMPT_OK_BUTTON_LABEL);
   } else {
-    saveUpdateButton.buttonText = @"Save";
+    saveUpdateButton.buttonText = l10n_util::GetNSString(
+        IDS_AUTOFILL_SAVE_ADDRESS_PROMPT_OK_BUTTON_LABEL);
   }
 
   saveUpdateButton.enabled = !self.currentAddressProfileSaved;
@@ -362,6 +390,44 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [[TableViewLinkHeaderFooterItem alloc] initWithType:ItemTypeFooter];
   footer.text = self.updateModalDescription;
   return footer;
+}
+
+- (NSString*)iconForAutofillUIType:(AutofillUIType)type {
+  switch (type) {
+    case AutofillUITypeNameFullWithHonorificPrefix:
+      return @"infobar_profile_icon";
+    case AutofillUITypeAddressHomeAddress:
+    case AutofillUITypeProfileHomeAddressStreet:
+      return @"infobar_autofill_address_icon";
+    case AutofillUITypeProfileEmailAddress:
+      return @"infobar_email_icon";
+    case AutofillUITypeProfileHomePhoneWholeNumber:
+      return @"infobar_phone_icon";
+    default:
+      NOTREACHED();
+      return @"";
+  }
+}
+
+- (NSString*)iconForAutofillInputTypeNumber:(NSNumber*)val {
+  return [self iconForAutofillUIType:(AutofillUIType)[val intValue]];
+}
+
+#pragma mark Item Constructors
+
+- (TableViewImageItem*)detailItemWithType:(NSInteger)type
+                                     text:(NSString*)text
+                            iconImageName:(NSString*)iconImageName {
+  TableViewImageItem* detailItem =
+      [[TableViewImageItem alloc] initWithType:type];
+  detailItem.title = text;
+  detailItem.enabled = NO;
+  detailItem.useCustomSeparator = YES;
+  if ([iconImageName length]) {
+    detailItem.image = [UIImage imageNamed:iconImageName];
+  }
+
+  return detailItem;
 }
 
 @end

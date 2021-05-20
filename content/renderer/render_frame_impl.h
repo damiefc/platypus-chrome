@@ -337,6 +337,9 @@ class CONTENT_EXPORT RenderFrameImpl
   std::unique_ptr<AXTreeSnapshotter> CreateAXTreeSnapshotter() override;
   int GetRoutingID() override;
   blink::WebLocalFrame* GetWebFrame() override;
+  const blink::WebLocalFrame* GetWebFrame() const override;
+  blink::WebView* GetWebView() override;
+  const blink::WebView* GetWebView() const override;
   const blink::web_pref::WebPreferences& GetBlinkPreferences() override;
   void ShowVirtualKeyboard() override;
   blink::WebPlugin* CreatePlugin(const WebPluginInfo& info,
@@ -790,7 +793,9 @@ class CONTENT_EXPORT RenderFrameImpl
   void Unload(int proxy_routing_id,
               bool is_loading,
               blink::mojom::FrameReplicationStatePtr replicated_frame_state,
-              const blink::RemoteFrameToken& frame_token) override;
+              const blink::RemoteFrameToken& frame_token,
+              mojom::RemoteMainFrameInterfacesPtr remote_main_frame_interfaces)
+      override;
   void Delete(mojom::FrameDeleteIntention intent) override;
   void BlockRequests() override;
   void ResumeBlockedRequests() override;

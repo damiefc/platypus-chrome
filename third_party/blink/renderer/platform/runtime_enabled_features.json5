@@ -116,6 +116,11 @@
       status: "stable",
     },
     {
+      name: "AccessibilityAriaTouchPassthrough",
+      status: "experimental",
+      origin_trial_feature_name: "AccessibilityAriaTouchPassthrough",
+    },
+    {
       name: "AccessibilityAriaVirtualContent",
       status: "experimental",
     },
@@ -201,6 +206,10 @@
     },
     {
       name: "AudioVideoTracks",
+      status: "experimental",
+    },
+    {
+      name: "AutofillShadowDOM",
       status: "experimental",
     },
     {
@@ -1190,6 +1199,10 @@
       status: "stable"
     },
     {
+      name: "LayoutNGTextCombine",
+      depends_on: ["LayoutNG"],
+    },
+    {
       name: "LayoutNGTextControl",
       depends_on: ["EditingNG"],
       status: "stable",
@@ -1248,6 +1261,10 @@
     {
       name: "MediaCapabilitiesSpatialAudio",
       status: "test",
+    },
+    {
+      name: "MediaCapabilitiesWebRtc",
+      status: "experimental",
     },
     {
       name: "MediaCapture",

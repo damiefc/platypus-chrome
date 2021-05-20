@@ -48,6 +48,9 @@ static_assert(
 struct DeferredUnmap {
   void* ptr = nullptr;
   size_t size = 0;
+#if BUILDFLAG(ENABLE_BRP_DIRECTMAP_SUPPORT)
+  bool use_brp_pool = false;
+#endif
 
   // In most cases there is no page to unmap and ptr == nullptr. This function
   // is inlined to avoid the overhead of a function call in the common case.
@@ -367,8 +370,8 @@ ALWAYS_INLINE char* GetSlotStartInSuperPage(char* maybe_inner_ptr) {
       reinterpret_cast<uintptr_t>(maybe_inner_ptr) & kSuperPageBaseMask);
   auto* extent = reinterpret_cast<PartitionSuperPageExtentEntry<thread_safe>*>(
       PartitionSuperPageToMetadataArea(super_page_ptr));
-  PA_DCHECK(
-      IsWithinSuperPagePayload(maybe_inner_ptr, extent->root->IsScanEnabled()));
+  PA_DCHECK(IsWithinSuperPagePayload(maybe_inner_ptr,
+                                     extent->root->IsQuarantineAllowed()));
 #endif
   auto* slot_span =
       SlotSpanMetadata<thread_safe>::FromSlotInnerPtr(maybe_inner_ptr);

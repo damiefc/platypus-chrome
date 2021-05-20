@@ -70,7 +70,9 @@ std::unique_ptr<HoldingSpaceItem> HoldingSpaceItem::CreateFileBackedItem(
 bool HoldingSpaceItem::IsDownload(HoldingSpaceItem::Type type) {
   switch (type) {
     case Type::kArcDownload:
+    case Type::kDiagnosticsLog:
     case Type::kDownload:
+    case Type::kLacrosDownload:
       return true;
     case Type::kNearbyShare:
     case Type::kPinnedFile:
@@ -198,7 +200,9 @@ bool HoldingSpaceItem::IsScreenCapture() const {
     case Type::kScreenshot:
       return true;
     case Type::kArcDownload:
+    case Type::kDiagnosticsLog:
     case Type::kDownload:
+    case Type::kLacrosDownload:
     case Type::kNearbyShare:
     case Type::kPinnedFile:
     case Type::kPrintedPdf:
