@@ -2205,6 +2205,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest,
                            CheckIsCurrentBeforeAndAfterUnload);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest,
+                           FindImmediateLocalRoots);
+  FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest,
                            HasCommittedAnyNavigation);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest, GetUkmSourceIds);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest,
@@ -2224,7 +2226,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   FRIEND_TEST_ALL_PREFIXES(
       RenderFrameHostManagerUnloadBrowserTest,
       PendingDeleteRFHProcessShutdownDoesNotRemoveSubframes);
-  FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest, FindImmediateLocalRoots);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            RenderViewHostIsNotReusedAfterDelayedUnloadACK);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
@@ -2276,6 +2277,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   FRIEND_TEST_ALL_PREFIXES(WebContentsImplBrowserTest, FrozenAndUnfrozenIPC);
 
   class DroppedInterfaceRequestLogger;
+  class SubresourceLoaderFactoriesConfig;
 
   RenderFrameHostImpl* FindAndVerifyChildInternal(
       RenderFrameHostOrProxy child_frame_or_proxy,
@@ -2423,7 +2425,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // RenderProcessHost::FilterURL, since it will be used to kill processes that
   // commit unauthorized origins.
   CanCommitStatus CanCommitOriginAndUrl(const url::Origin& origin,
-                                        const GURL& url);
+                                        const GURL& url,
+                                        bool is_same_document_navigation);
 
   // Asserts that the given RenderFrameHostImpl is part of the same browser
   // context (and crashes if not), then returns whether the given frame is
@@ -2461,24 +2464,12 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // exists.
   NavigationRequest* FindLatestNavigationRequestThatIsStillCommitting();
 
-  // Extracts all the |out_...| values from either the |navigation_request| (if
-  // present) or from |this| (if |navigation_request| is null).
-  void ExtractFactoryParamsFromNavigationRequestOrLastCommittedNavigation(
-      NavigationRequest* navigation_request,
-      url::Origin* out_main_world_origin,
-      net::IsolationInfo* out_isolation_info,
-      network::mojom::ClientSecurityStatePtr* out_client_security_state,
-      mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>*
-          coep_reporter_pending_remote,
-      network::mojom::TrustTokenRedemptionPolicy*
-          out_trust_token_redemption_policy);
-
   // Creates URLLoaderFactoryParams for main world of |this|, either based on
   // the |navigation_request|, or (if |navigation_request| is null) on the last
   // committed navigation.
   network::mojom::URLLoaderFactoryParamsPtr
   CreateURLLoaderFactoryParamsForMainWorld(
-      NavigationRequest* navigation_request,
+      const SubresourceLoaderFactoriesConfig& config,
       base::StringPiece debug_tag);
 
   // Like CreateNetworkServiceDefaultFactoryInternal but also sets up a
@@ -2659,13 +2650,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // based on its parent frame.
   void ResetPermissionsPolicy();
 
-  // TODO(ekaramad): One major purpose behind the API is to traverse the frame
-  // tree top-down to visit the  RenderWidgetHostViews of interest in the most
-  // efficient way. We might want to revisit this API, remove it from RFHImpl,
-  // and perhaps consolidate it with some of the existing ones such as
-  // WebContentsImpl::GetRenderWidgetHostViewsInTree() into a new more
-  // appropriate API for dealing with (virtual) RenderWidgetHost(View) tree.
-  // (see https://crbug.com/754726).
   // Runs |callback| for all the local roots immediately under this frame, i.e.
   // local roots which are under this frame and their first ancestor which is a
   // local root is either this frame or this frame's local root. For instance,
@@ -2677,7 +2661,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   //              D  A2    C   F             //
   // RFHs at nodes B, E, D, C, and F are all local roots in the given frame tree
   // under the root at A0, but only B, C, and E are considered immediate local
-  // roots of A0. Note that this will exclude any speculative or pending RFHs.
+  // roots of A0. Note that this will exclude any speculative RFHs.
   void ForEachImmediateLocalRoot(
       const base::RepeatingCallback<void(RenderFrameHostImpl*)>& callback);
 
@@ -2744,7 +2728,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // the last committed navigation.
   blink::PendingURLLoaderFactoryBundle::OriginMap
   CreateURLLoaderFactoriesForIsolatedWorlds(
-      NavigationRequest* navigation_request,
+      const SubresourceLoaderFactoriesConfig& config,
       const base::flat_set<url::Origin>& isolated_world_origins);
 
   // Based on the termination |status| and |exit_code|, may generate a crash

@@ -33,8 +33,6 @@
 #include "components/sync/engine/nigori/key_derivation_params.h"
 #include "components/sync/engine/polling_constants.h"
 #include "components/sync/engine/sync_scheduler.h"
-#include "components/sync/js/js_event_handler.h"
-#include "components/sync/js/js_test_util.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "components/sync/protocol/encryption.pb.h"
 #include "components/sync/protocol/extension_specifics.pb.h"
@@ -100,6 +98,7 @@ class SyncManagerObserverMock : public SyncManager::Observer {
   MOCK_METHOD(void, OnActionableError, (const SyncProtocolError&), (override));
   MOCK_METHOD(void, OnMigrationRequested, (ModelTypeSet), (override));
   MOCK_METHOD(void, OnProtocolEvent, (const ProtocolEvent&), (override));
+  MOCK_METHOD(void, OnSyncStatusChanged, (const SyncStatus&), (override));
 };
 
 class SyncEncryptionHandlerObserverMock
@@ -132,7 +131,12 @@ class MockSyncScheduler : public FakeSyncScheduler {
   MockSyncScheduler() = default;
   ~MockSyncScheduler() override = default;
   MOCK_METHOD(void, Start, (SyncScheduler::Mode, base::Time), (override));
-  MOCK_METHOD(void, ScheduleConfiguration, (ConfigurationParams), (override));
+  MOCK_METHOD(void,
+              ScheduleConfiguration,
+              (sync_pb::SyncEnums::GetUpdatesOrigin origin,
+               ModelTypeSet types_to_download,
+               base::OnceClosure ready_task),
+              (override));
 };
 
 class ComponentsFactory : public TestEngineComponentsFactory {
@@ -175,6 +179,9 @@ class SyncManagerImplTest : public testing::Test {
     encryption_observer_ = encryption_observer.get();
     auto scheduler = std::make_unique<MockSyncScheduler>();
     scheduler_ = scheduler.get();
+
+    // This should be the only method called by the Init() in the observer.
+    EXPECT_CALL(manager_observer_, OnSyncStatusChanged).Times(3);
 
     SyncManager::InitArgs args;
     args.service_url = GURL("https://example.com/");
@@ -223,21 +230,17 @@ class SyncManagerImplTest : public testing::Test {
 // Test that the configuration params are properly created and sent to
 // ScheduleConfigure. No callback should be invoked.
 TEST_F(SyncManagerImplTest, BasicConfiguration) {
-  ConfigurationParams params;
-  EXPECT_CALL(*scheduler(), Start(SyncScheduler::CONFIGURATION_MODE, _));
-  EXPECT_CALL(*scheduler(), ScheduleConfiguration)
-      .WillOnce(MoveArg<0>(&params));
-
+  ModelTypeSet types_to_download(BOOKMARKS, PREFERENCES);
   base::MockOnceClosure ready_task;
+  EXPECT_CALL(*scheduler(), Start(SyncScheduler::CONFIGURATION_MODE, _));
+  EXPECT_CALL(*scheduler(),
+              ScheduleConfiguration(sync_pb::SyncEnums::RECONFIGURATION,
+                                    types_to_download, _));
   EXPECT_CALL(ready_task, Run).Times(0);
 
-  ModelTypeSet types_to_download(BOOKMARKS, PREFERENCES);
   sync_manager()->ConfigureSyncer(
       CONFIGURE_REASON_RECONFIGURATION, types_to_download,
       SyncManager::SyncFeatureState::ON, ready_task.Get());
-
-  EXPECT_EQ(types_to_download, params.types_to_download);
-  EXPECT_EQ(sync_pb::SyncEnums::RECONFIGURATION, params.origin);
 }
 
 }  // namespace

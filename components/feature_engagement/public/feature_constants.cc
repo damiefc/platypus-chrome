@@ -117,6 +117,9 @@ const base::Feature kIPHKeyboardAccessoryPaymentFillingFeature{
     "IPH_KeyboardAccessoryPaymentFilling", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHKeyboardAccessoryPaymentOfferFeature{
     "IPH_KeyboardAccessoryPaymentOffer", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHKeyboardAccessoryPaymentVirtualCardFeature{
+    "IPH_KeyboardAccessoryPaymentVirtualCard",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHNewTabPageHomeButtonFeature{
     "IPH_NewTabPageHomeButton", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHMicToolbarFeature{"IPH_MicToolbar",
@@ -162,9 +165,11 @@ const base::Feature kIPHPwaInstallAvailableFeature{
 const base::Feature kIPHShareScreenshotFeature{
     "IPH_ShareScreenshot", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHWebFeedFollowFeature{"IPH_WebFeedFollow",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHWebFeedPostFollowDialogFeature{
-    "IPH_WebFeedPostFollowDialog", base::FEATURE_DISABLED_BY_DEFAULT};
+    "IPH_WebFeedPostFollowDialog", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kIPHSharedHighlightingBuilder{
+    "IPH_SharedHighlightingBuilder", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_IOS)

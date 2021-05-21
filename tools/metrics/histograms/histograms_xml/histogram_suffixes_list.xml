@@ -3679,6 +3679,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
       label="The context menu was shown from tap on highlighted text."/>
   <suffix name="Video" label="The context menu was shown for a video"/>
   <affected-histogram name="ContextMenu.SelectedOptionAndroid"/>
+  <affected-histogram name="ContextMenu.Shown"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="ContextMenuTypeDesktop" separator=".">
@@ -8221,7 +8222,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <suffix name="IPH_KeyboardAccessoryPaymentFilling"
       label="In-product help for payments autofill suggestions."/>
   <suffix name="IPH_KeyboardAccessoryPaymentOffer"
-      label="In-product help for payments autofill suggestions."/>
+      label="In-product help for payments autofill suggestions that have an
+             offer."/>
+  <suffix name="IPH_KeyboardAccessoryPaymentVirtualCard"
+      label="In-product help for payment autofill suggestions that are
+             virtual cards."/>
   <suffix name="IPH_LiveCaption" label="In product help for Live Caption."/>
   <suffix name="IPH_LongPressToolbarTip"
       label="In product help LongPress toolbar."/>
@@ -18990,6 +18995,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
       This never got launched and is removed.
     </obsolete>
   </suffix>
+  <suffix name="WORKSPACE_DESK" label="WORKSPACE_DESK"/>
   <affected-histogram name="FCMInvalidations.SubscriptionResponseCodeForTopic"/>
   <affected-histogram name="Sync.CommitLatency"/>
   <affected-histogram name="Sync.CommitResponse"/>

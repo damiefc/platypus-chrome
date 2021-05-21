@@ -16,6 +16,7 @@
 #include "components/autofill/core/browser/data_model/borrowed_transliterator.h"
 #include "components/autofill/core/browser/data_model/contact_info.h"
 #include "components/autofill/core/common/autofill_l10n_util.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace autofill {
 
@@ -28,6 +29,8 @@ struct ProfileValueDifference {
   std::u16string second_value;
   bool operator==(const ProfileValueDifference& right) const;
 };
+
+ServerFieldTypeSet GetUserVisibleTypes();
 
 // A utility class to assist in the comparison of AutofillProfile data.
 class AutofillProfileComparator {

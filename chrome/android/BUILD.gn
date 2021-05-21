@@ -539,6 +539,7 @@ android_library("chrome_java") {
     "//third_party/android_deps:com_google_code_findbugs_jsr305_java",
     "//third_party/android_deps:com_google_guava_listenablefuture_java",
     "//third_party/android_deps:dagger_java",
+    "//third_party/android_deps:guava_android_java",
     "//third_party/android_deps:javax_inject_javax_inject_java",
     "//third_party/android_deps:material_design_java",
     "//third_party/android_deps:protobuf_lite_runtime_java",
@@ -848,11 +849,15 @@ junit_binary("chrome_junit_tests") {
     "//mojo/public/mojom/base",
   ]
 
+  # Needed by androidx.test.core.app.ActivityScenario
+  android_manifest = chrome_public_android_manifest
+
   deps = [
     ":app_hooks_java",
     ":base_module_java",
     ":chrome_app_java_resources",
     ":chrome_java",
+    ":chrome_public_android_manifest",
     ":partner_location_descriptor_proto_java",
     "$google_play_services_package:google_play_services_base_java",
     "$google_play_services_package:google_play_services_basement_java",
@@ -896,6 +901,7 @@ junit_binary("chrome_junit_tests") {
     "//chrome/browser/enterprise/util:java",
     "//chrome/browser/feature_engagement:java",
     "//chrome/browser/feed/android:java",
+    "//chrome/browser/feed/android:junit",
     "//chrome/browser/feedback/android:java",
     "//chrome/browser/flags:flags_junit_tests",
     "//chrome/browser/flags:java",
@@ -1180,6 +1186,8 @@ android_library("chrome_test_java") {
     "//chrome/browser/banners/android:java",
     "//chrome/browser/browser_controls/android:java",
     "//chrome/browser/commerce/merchant_viewer/android:javatests",
+    "//chrome/browser/content_creation/notes/internal/android:java",
+    "//chrome/browser/content_creation/notes/internal/android:javatests",
     "//chrome/browser/contextmenu:java",
     "//chrome/browser/continuous_search:data_structures_java",
     "//chrome/browser/continuous_search:javatests",

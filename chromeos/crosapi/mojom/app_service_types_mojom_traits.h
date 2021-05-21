@@ -9,6 +9,7 @@
 
 #include "chromeos/crosapi/mojom/app_service_types.mojom.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace mojo {
 
@@ -268,6 +269,13 @@ struct StructTraits<crosapi::mojom::CapabilityAccessDataView,
 
   static bool Read(crosapi::mojom::CapabilityAccessDataView,
                    apps::mojom::CapabilityAccessPtr* out);
+};
+
+template <>
+struct EnumTraits<crosapi::mojom::IconType, apps::mojom::IconType> {
+  static crosapi::mojom::IconType ToMojom(apps::mojom::IconType input);
+  static bool FromMojom(crosapi::mojom::IconType input,
+                        apps::mojom::IconType* output);
 };
 
 }  // namespace mojo

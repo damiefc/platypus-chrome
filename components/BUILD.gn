@@ -399,6 +399,7 @@ test("components_unittests") {
       "//components/offline_items_collection/core:native_java_unittests_java",
       "//components/paint_preview/browser/android:java",
       "//components/paint_preview/player/android:unit_tests",
+      "//components/payments/content/android",
       "//components/permissions/android:java",
       "//components/policy/android:native_test_support_java",
       "//components/policy/android:policy_java",
@@ -508,6 +509,8 @@ test("components_unittests") {
       "//components/safe_browsing/content/browser:unit_tests",
       "//components/safe_browsing/content/renderer/phishing_classifier:unit_tests",
     ]
+  } else if (safe_browsing_mode == 2) {
+    deps += [ "//components/safe_browsing/content/browser:unit_tests" ]
   }
 
   if (use_dbus) {

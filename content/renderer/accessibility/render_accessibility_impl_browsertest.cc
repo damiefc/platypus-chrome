@@ -432,7 +432,7 @@ TEST_F(RenderAccessibilityImplTest, SendFullAccessibilityTreeOnReload) {
   WebDocument document = GetMainFrame()->GetDocument();
   WebAXObject root_obj = WebAXObject::FromWebDocument(document);
   GetRenderAccessibilityImpl()->HandleAXEvent(
-      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kLayoutComplete));
+      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kChildrenChanged));
   SendPendingAccessibilityEvents();
   EXPECT_EQ(1, CountAccessibilityNodesSentToBrowser());
   {
@@ -1252,6 +1252,7 @@ class AXImageAnnotatorTest : public RenderAccessibilityImplTest {
     GetRenderAccessibilityImpl()->tree_source_->RemoveImageAnnotator();
     GetRenderAccessibilityImpl()->tree_source_->AddImageAnnotator(
         GetRenderAccessibilityImpl()->ax_image_annotator_.get());
+    BlinkAXTreeSource::IgnoreProtocolChecksForTesting();
   }
 
   void TearDown() override {

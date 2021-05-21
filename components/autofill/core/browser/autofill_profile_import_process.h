@@ -10,6 +10,7 @@
 #include "base/util/type_safety/id_type.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace autofill {
 
@@ -100,6 +101,16 @@ class ProfileImportProcess {
   AutofillClient::SaveAddressProfileOfferUserDecision user_decision() const {
     return user_decision_;
   }
+
+  // Returns true if the user actively declined the save of update without
+  // differentiating between the actual type of decline.
+  // If no decision is available yet, return false.
+  bool UserDeclined() const;
+
+  // Returns true if the user actively accepted the save of update without
+  // differentiating if there have been additional edits by the user.
+  // If no decision is available yet, return false.
+  bool UserAccepted() const;
 
   const GURL& form_source_url() const { return form_source_url_; }
 

@@ -23,6 +23,7 @@
 #include "chrome/browser/web_applications/components/web_app_run_on_os_login.h"
 #include "chrome/browser/web_applications/components/web_application_info.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Profile;
 
@@ -143,6 +144,8 @@ class OsIntegrationManager {
   // Proxy calls for ProtocolHandlerManager.
   virtual absl::optional<GURL> TranslateProtocolUrl(const AppId& app_id,
                                                     const GURL& protocol_url);
+  virtual std::vector<ProtocolHandler> GetHandlersForProtocol(
+      const std::string& protocol);
 
   // Getter for testing FileHandlerManager
   FileHandlerManager& file_handler_manager_for_testing();

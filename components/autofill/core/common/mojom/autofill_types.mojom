@@ -67,9 +67,13 @@ enum ButtonTitleType {
   SPAN = 7                         // e.g. <span name='btn'>
 };
 
-// autofill::LocalFrameToken
-struct LocalFrameToken {
+
+// autofill::FrameToken
+struct FrameToken {
+  // The token wrapped by a LocalFrameToken or a RemoteFrameToken.
   mojo_base.mojom.UnguessableToken token;
+  // Indicates whether |token| represents a LocalFrameToken.
+  bool is_local;
 };
 
 // autofill::FormRendererId
@@ -124,8 +128,8 @@ struct FormFieldData {
   mojo_base.mojom.String16 css_classes;
   mojo_base.mojom.String16 aria_label;
   mojo_base.mojom.String16 aria_description;
-  LocalFrameToken host_frame;
   FieldRendererId unique_renderer_id;
+  FormRendererId host_form_id;
   uint32 properties_mask;
   int32 form_control_ax_id;
 
@@ -169,8 +173,9 @@ struct FormData {
   bool is_action_empty;
   url.mojom.Origin main_frame_origin;
   bool is_form_tag;
-  LocalFrameToken host_frame;
   FormRendererId unique_renderer_id;
+  array<FrameToken> child_frames;
+  array<int32> child_frame_predecessors;
   SubmissionIndicatorEvent submission_event;
   array<FormFieldData> fields;
   array<FieldRendererId> username_predictions;

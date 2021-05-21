@@ -9,6 +9,7 @@
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #include <vector>
 
@@ -56,15 +57,8 @@ class ProtocolHandlerManager {
       const std::vector<apps::ProtocolHandlerInfo>& protocol_handlers,
       base::OnceCallback<void(bool)> callback);
 
-  // Unregisters OS specific protocol handlers for OSs that need them, using the
-  // protocol handler information supplied in the app manifest.
+  // Unregisters OS specific protocol handlers for an app.
   void UnregisterOsProtocolHandlers(const AppId& app_id);
-
-  // Unregisters OS specific protocol handlers for OSs that need them, using
-  // arbitrary protocol handler information.
-  void UnregisterOsProtocolHandlers(
-      const AppId& app_id,
-      const std::vector<apps::ProtocolHandlerInfo>& protocol_handlers);
 
   AppRegistrar* app_registrar_;
 

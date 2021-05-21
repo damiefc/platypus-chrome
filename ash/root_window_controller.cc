@@ -78,7 +78,6 @@
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
-#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_client.h"
@@ -228,7 +227,7 @@ void ReparentAllWindows(aura::Window* src, aura::Window* dst) {
       kShellWindowId_PipContainer,
       kShellWindowId_SystemModalContainer,
       kShellWindowId_LockSystemModalContainer,
-      kShellWindowId_UnparentedControlContainer,
+      kShellWindowId_UnparentedContainer,
       kShellWindowId_OverlayContainer,
       kShellWindowId_LockActionHandlerContainer,
       kShellWindowId_MenuContainer,
@@ -1058,8 +1057,8 @@ void RootWindowController::CreateContainers() {
   app_list_tablet_mode_container->SetProperty(::wm::kUsesScreenCoordinatesKey,
                                               true);
 
-  CreateContainer(kShellWindowId_UnparentedControlContainer,
-                  "UnparentedControlContainer", non_lock_screen_containers);
+  CreateContainer(kShellWindowId_UnparentedContainer, "UnparentedContainer",
+                  non_lock_screen_containers);
 
   for (const auto& id : desks_util::GetDesksContainersIds()) {
     aura::Window* container = CreateContainer(
@@ -1237,7 +1236,7 @@ aura::Window* RootWindowController::CreateContainer(int window_id,
   window->SetId(window_id);
   window->SetName(name);
   parent->AddChild(window);
-  if (window_id != kShellWindowId_UnparentedControlContainer)
+  if (window_id != kShellWindowId_UnparentedContainer)
     window->Show();
   root_window_layout_manager_->AddContainer(window);
   return window;

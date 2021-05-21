@@ -44,8 +44,9 @@ WebAppFrameToolbarView::WebAppFrameToolbarView(views::Widget* widget,
   const auto* app_controller = browser_view_->browser()->app_controller();
 
   if (app_controller->HasMinimalUiButtons()) {
-    left_container_ = AddChildView(
-        std::make_unique<WebAppNavigationButtonContainer>(browser_view_));
+    left_container_ =
+        AddChildView(std::make_unique<WebAppNavigationButtonContainer>(
+            browser_view_, /*toolbar_button_provider=*/this));
     left_container_->SetProperty(
         views::kFlexBehaviorKey,
         views::FlexSpecification(
@@ -147,11 +148,6 @@ std::pair<int, int> WebAppFrameToolbarView::LayoutInContainer(
 void WebAppFrameToolbarView::LayoutForWindowControlsOverlay(
     gfx::Rect available_rect) {
   DCHECK(!left_container_);
-  center_container_->SetVisible(false);
-
-  // BrowserView paints to a layer, so this must do the same to ensure that it
-  // paints on top of the BrowserView.
-  SetPaintToLayer();
 
   const int width = std::min(available_rect.width(),
                              right_container_->GetPreferredSize().width());
@@ -251,6 +247,22 @@ bool WebAppFrameToolbarView::DoesIntersectRect(const View* target,
       gfx::ToEnclosingRect(rect_in_center_container_coords_f);
 
   return !center_container_->HitTestRect(rect_in_client_view_coords);
+}
+
+void WebAppFrameToolbarView::OnWindowControlsOverlayEnabledChanged() {
+  if (browser_view_->IsWindowControlsOverlayEnabled()) {
+    center_container_->SetBounds(0, 0, 0, 0);
+    SetBackground(views::CreateSolidBackground(
+        paint_as_active_ ? active_background_color_
+                         : inactive_background_color_));
+
+    // BrowserView paints to a layer, so this view must do the same to ensure
+    // that it paints on top of the BrowserView.
+    SetPaintToLayer();
+  } else {
+    SetBackground(nullptr);
+    DestroyLayer();
+  }
 }
 
 PageActionIconController*

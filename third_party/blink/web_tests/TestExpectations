@@ -1002,6 +1002,8 @@ virtual/layout_ng_block_frag/external/wpt/css/css-break/out-of-flow-in-multicolu
 virtual/layout_ng_block_frag/external/wpt/css/css-break/out-of-flow-in-multicolumn-043.html [ Pass ]
 virtual/layout_ng_block_frag/external/wpt/css/css-break/out-of-flow-in-multicolumn-044.html [ Pass ]
 virtual/layout_ng_block_frag/external/wpt/css/css-break/out-of-flow-in-multicolumn-045.html [ Pass ]
+virtual/layout_ng_block_frag/external/wpt/css/css-break/out-of-flow-in-multicolumn-046.html [ Pass ]
+virtual/layout_ng_block_frag/external/wpt/css/css-break/out-of-flow-in-multicolumn-047.html [ Pass ]
 virtual/layout_ng_block_frag/external/wpt/css/css-break/overflow-clip-000.html [ Pass ]
 virtual/layout_ng_block_frag/external/wpt/css/css-break/overflow-clip-001.html [ Pass ]
 virtual/layout_ng_block_frag/external/wpt/css/css-break/overflowed-block-with-no-room-after-000.html [ Pass ]
@@ -1033,6 +1035,7 @@ virtual/layout_ng_block_frag/external/wpt/css/css-multicol/multicol-span-all-008
 virtual/layout_ng_block_frag/external/wpt/css/css-multicol/multicol-span-all-009.html [ Pass ]
 virtual/layout_ng_block_frag/external/wpt/css/css-multicol/multicol-span-all-014.html [ Pass ]
 virtual/layout_ng_block_frag/external/wpt/css/css-multicol/multicol-span-all-015.html [ Pass ]
+virtual/layout_ng_block_frag/external/wpt/css/css-multicol/multicol-span-all-017.html [ Pass ]
 virtual/layout_ng_block_frag/external/wpt/css/css-multicol/multicol-span-all-fieldset-001.html [ Pass ]
 virtual/layout_ng_block_frag/external/wpt/css/css-multicol/multicol-span-all-fieldset-002.html [ Pass ]
 virtual/layout_ng_block_frag/external/wpt/css/css-multicol/multicol-span-all-fieldset-003.html [ Pass ]
@@ -1268,8 +1271,6 @@ crbug.com/929098 virtual/dark-color-scheme/external/wpt/css/css-color-adjust/ren
 
 crbug.com/1205953 external/wpt/css/css-will-change/will-change-fixpos-cb-position-1.html [ Failure ]
 crbug.com/1207788 external/wpt/css/css-will-change/will-change-stacking-context-mask-1.html [ Failure ]
-crbug.com/1207789 external/wpt/css/css-will-change/will-change-fixpos-cb-transform-style-1.html [ Failure ]
-crbug.com/1207789 external/wpt/css/css-will-change/will-change-fixpos-cb-contain-1.html [ Failure ]
 
 # color() function not implemented
 crbug.com/1068610 external/wpt/css/css-color/predefined-008.html [ Failure ]
@@ -1360,7 +1361,7 @@ crbug.com/1133390 virtual/css-calc-infinity-and-nan/external/wpt/css/css-values/
 # ====== Style team owned tests to here ======
 
 
-# Bug in FormControlsRefresh <select multiple> tap behavior:
+# Bug in <select multiple> tap behavior:
 crbug.com/1045672 fast/forms/select/listbox-tap.html [ Failure ]
 
 ### sheriff 2019-07-16
@@ -1417,8 +1418,6 @@ crbug.com/520194 http/tests/xmlhttprequest/timeout/xmlhttprequest-timeout-worker
 
 crbug.com/892032 fast/events/wheel/wheel-latched-scroll-node-removed.html [ Pass Failure ]
 
-
-# Tests that fail when FormControlsRefresh is enabled:
 crbug.com/1051136 fast/forms/select/listbox-overlay-scrollbar.html [ Failure ]
 
 # These performance-sensitive user-timing tests are flaky in debug on all platforms, and flaky on all configurations of windows.
@@ -3484,6 +3483,8 @@ crbug.com/829028 external/wpt/css/css-break/out-of-flow-in-multicolumn-042.html 
 crbug.com/829028 external/wpt/css/css-break/out-of-flow-in-multicolumn-043.html [ Failure ]
 crbug.com/829028 external/wpt/css/css-break/out-of-flow-in-multicolumn-044.html [ Failure ]
 crbug.com/829028 external/wpt/css/css-break/out-of-flow-in-multicolumn-045.html [ Failure ]
+crbug.com/829028 external/wpt/css/css-break/out-of-flow-in-multicolumn-046.html [ Failure ]
+crbug.com/829028 external/wpt/css/css-break/out-of-flow-in-multicolumn-047.html [ Failure ]
 crbug.com/829028 external/wpt/css/css-break/overflow-clip-000.html [ Failure ]
 crbug.com/829028 external/wpt/css/css-break/overflow-clip-001.html [ Failure ]
 crbug.com/829028 external/wpt/css/css-break/overflowed-block-with-no-room-after-001.html [ Failure ]
@@ -3546,6 +3547,7 @@ crbug.com/926685 external/wpt/css/css-multicol/multicol-span-all-010.html [ Fail
 crbug.com/915204 external/wpt/css/css-multicol/multicol-span-all-011.html [ Failure ]
 crbug.com/829028 external/wpt/css/css-multicol/multicol-span-all-014.html [ Failure ]
 crbug.com/829028 external/wpt/css/css-multicol/multicol-span-all-015.html [ Failure ]
+crbug.com/829028 external/wpt/css/css-multicol/multicol-span-all-017.html [ Failure ]
 crbug.com/892817 external/wpt/css/css-multicol/multicol-span-all-margin-bottom-001.xht [ Failure ]
 crbug.com/636055 external/wpt/css/css-multicol/multicol-span-all-margin-nested-002.xht [ Failure ]
 crbug.com/990240 external/wpt/css/css-multicol/multicol-span-all-rule-001.html [ Failure ]
@@ -3753,7 +3755,7 @@ virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-alignment-implie
 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-alignment-implies-size-change-035.html [ Pass ]
 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-alignment-implies-size-change-036.html [ Pass ]
 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-baseline-004.html [ Pass ]
-virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-baseline-align-cycles-001.html [ Pass ]
+virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-self-alignment-positioned-items-with-margin-border-padding-016.html [ Pass ]
 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/replaced-alignment-with-aspect-ratio-001.html [ Pass ]
 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/replaced-alignment-with-aspect-ratio-002.html [ Pass ]
 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/replaced-alignment-with-aspect-ratio-006.html [ Pass ]
@@ -3787,10 +3789,8 @@ virtual/layout-ng-grid/fast/css-grid-layout/maximize-tracks-definite-indefinite-
 ### Tests failing with LayoutNGGrid enabled:
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/abspos/grid-abspos-staticpos-align-self-safe-001.html [ Failure ]
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-baseline-align-001.html [ Failure ]
+crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-baseline-align-cycles-001.html [ Failure ]
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-baseline-justify-001.html [ Failure ]
-crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-column-axis-self-baseline-synthesized-001.html [ Failure ]
-crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-column-axis-self-baseline-synthesized-003.html [ Failure ]
-crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-column-axis-self-baseline-synthesized-005.html [ Failure ]
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-content-alignment-overflow-001.html [ Failure ]
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-item-no-aspect-ratio-stretch-4.html [ Failure ]
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-item-no-aspect-ratio-stretch-5.html [ Failure ]
@@ -3800,15 +3800,9 @@ crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/gri
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-row-axis-self-baseline-synthesized-002.html [ Failure ]
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-row-axis-self-baseline-synthesized-003.html [ Failure Crash ]
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-row-axis-self-baseline-synthesized-004.html [ Failure ]
-crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-row-axis-self-baseline-synthesized-005.html [ Failure ]
-crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-self-baseline-not-applied-if-sizing-cyclic-dependency-001.html [ Failure ]
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-self-baseline-not-applied-if-sizing-cyclic-dependency-002.html [ Failure ]
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/alignment/grid-self-baseline-not-applied-if-sizing-cyclic-dependency-003.html [ Failure ]
-crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/layout-algorithm/grid-as-flex-item-should-not-shrink-to-fit-007.html [ Failure ]
 crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/layout-algorithm/grid-intrinsic-size-with-orthogonal-items.html [ Failure ]
-crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/layout-algorithm/grid-minimum-contribution-baseline-shim-vertical-lr.html [ Failure ]
-crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/layout-algorithm/grid-minimum-contribution-baseline-shim-vertical-rl.html [ Failure ]
-crbug.com/1045599 virtual/layout-ng-grid/external/wpt/css/css-grid/layout-algorithm/grid-minimum-contribution-baseline-shim.html [ Failure ]
 crbug.com/1045599 virtual/layout-ng-grid/fast/css-grid-layout/percent-padding-margin-resolution-grid-item-update.html [ Failure ]
 
 ### Tests *expected* to be failing with LayoutNGGrid enabled:
@@ -3908,7 +3902,6 @@ crbug.com/1179585 virtual/layout_ng_svg_text/svg/batik/text/textEffect3.svg [ Fa
 crbug.com/1179585 virtual/layout_ng_svg_text/svg/batik/text/textFeatures.svg [ Failure ]
 crbug.com/1179585 virtual/layout_ng_svg_text/svg/batik/text/textLayout2.svg [ Failure ]
 crbug.com/1179585 virtual/layout_ng_svg_text/svg/batik/text/textOnPath.svg [ Failure ]
-crbug.com/1179585 virtual/layout_ng_svg_text/svg/batik/text/textOnPathSpaces.svg [ Failure ]
 crbug.com/1179585 virtual/layout_ng_svg_text/svg/batik/text/textProperties.svg [ Failure ]
 crbug.com/1179585 virtual/layout_ng_svg_text/svg/batik/text/verticalTextOnPath.svg [ Failure ]
 crbug.com/1179585 virtual/layout_ng_svg_text/svg/batik/text/xmlSpace.svg [ Failure ]

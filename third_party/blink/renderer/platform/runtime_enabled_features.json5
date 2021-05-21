@@ -503,15 +503,6 @@
       status: "test",
     },
     {
-      // When the color-scheme is supported via the CSS color-scheme property
-      // (CSSColorScheme) or the meta tag (MetaColorScheme), the only UA
-      // rendering change is for the canvas background and the :root element
-      // color property. Enabling this runtime flag will enable dark UA
-      // rendering for form controls, scrollbars, etc.
-      name: "CSSColorSchemeUARendering",
-      status: "stable",
-    },
-    {
       name: "CSSColorTypedOM",
       status:  "experimental",
     },
@@ -1969,7 +1960,7 @@
     // https://crbug.com/1190167
     {
       name: "SpeculationRulesPrefetchProxy",
-      origin_trial_feature_name: "SpeculationRulesPrefetchProxy",
+      origin_trial_feature_name: "SpeculationRulesPrefetch",
     },
     {
       name: "SrcsetMaxDensity",

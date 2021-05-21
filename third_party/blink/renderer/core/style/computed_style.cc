@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/css/css_paint_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_property_equality.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
 #include "third_party/blink/renderer/core/css/properties/longhand.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
@@ -1008,14 +1009,11 @@ void ComputedStyle::ClearCursorList() {
 static bool HasPropertyThatCreatesStackingContext(
     const Vector<CSSPropertyID>& properties) {
   for (CSSPropertyID property : properties) {
-    switch (property) {
+    switch (ResolveCSSPropertyID(property)) {
       case CSSPropertyID::kOpacity:
       case CSSPropertyID::kTransform:
-      case CSSPropertyID::kAliasWebkitTransform:
       case CSSPropertyID::kTransformStyle:
-      case CSSPropertyID::kAliasWebkitTransformStyle:
       case CSSPropertyID::kPerspective:
-      case CSSPropertyID::kAliasWebkitPerspective:
       case CSSPropertyID::kTranslate:
       case CSSPropertyID::kRotate:
       case CSSPropertyID::kScale:
@@ -1024,10 +1022,8 @@ static bool HasPropertyThatCreatesStackingContext(
       case CSSPropertyID::kWebkitMask:
       case CSSPropertyID::kWebkitMaskBoxImage:
       case CSSPropertyID::kClipPath:
-      case CSSPropertyID::kAliasWebkitClipPath:
       case CSSPropertyID::kWebkitBoxReflect:
       case CSSPropertyID::kFilter:
-      case CSSPropertyID::kAliasWebkitFilter:
       case CSSPropertyID::kBackdropFilter:
       case CSSPropertyID::kZIndex:
       case CSSPropertyID::kPosition:
@@ -1082,15 +1078,15 @@ void ComputedStyle::SetContent(ContentData* content_data) {
 }
 
 static bool IsWillChangeTransformHintProperty(CSSPropertyID property) {
-  switch (property) {
+  switch (ResolveCSSPropertyID(property)) {
     case CSSPropertyID::kTransform:
-    case CSSPropertyID::kAliasWebkitTransform:
     case CSSPropertyID::kPerspective:
     case CSSPropertyID::kTranslate:
     case CSSPropertyID::kScale:
     case CSSPropertyID::kRotate:
     case CSSPropertyID::kOffsetPath:
     case CSSPropertyID::kOffsetPosition:
+    case CSSPropertyID::kTransformStyle:
       return true;
     default:
       break;
@@ -1101,10 +1097,9 @@ static bool IsWillChangeTransformHintProperty(CSSPropertyID property) {
 static bool IsWillChangeCompositingHintProperty(CSSPropertyID property) {
   if (IsWillChangeTransformHintProperty(property))
     return true;
-  switch (property) {
+  switch (ResolveCSSPropertyID(property)) {
     case CSSPropertyID::kOpacity:
     case CSSPropertyID::kFilter:
-    case CSSPropertyID::kAliasWebkitFilter:
     case CSSPropertyID::kBackdropFilter:
     case CSSPropertyID::kTop:
     case CSSPropertyID::kLeft:
@@ -2222,7 +2217,7 @@ int ComputedStyle::OutlineOutsetExtent() const {
 }
 
 float ComputedStyle::GetOutlineStrokeWidthForFocusRing() const {
-  if (::features::IsFormControlsRefreshEnabled() && OutlineStyleIsAuto()) {
+  if (OutlineStyleIsAuto()) {
     return std::max(EffectiveZoom(), 3.f);
   }
 

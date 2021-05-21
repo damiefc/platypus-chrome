@@ -63,6 +63,7 @@ import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
+import org.chromium.chrome.browser.keyboard_accessory.ManualFillingComponent.UpdateAccessorySheetDelegate;
 import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryCoordinator;
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData;
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData.AccessorySheetData;
@@ -82,7 +83,6 @@ import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.ui.base.ApplicationViewportInsetSupplier;
 import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -124,8 +124,6 @@ public class ManualFillingControllerTest {
     private ConfirmationDialogHelper mMockConfirmationHelper;
     @Mock
     private FullscreenManager mMockFullscreenManager;
-    @Mock
-    private ApplicationViewportInsetSupplier mApplicationViewportInsetSupplier;
 
     @Rule
     public Features.JUnitProcessor mFeaturesProcessor = new Features.JUnitProcessor();
@@ -290,8 +288,6 @@ public class ManualFillingControllerTest {
         ShadowRecordHistogram.reset();
         MockitoAnnotations.initMocks(this);
         when(mMockWindow.getActivity()).thenReturn(new WeakReference<>(mMockActivity));
-        when(mMockWindow.getApplicationBottomInsetProvider())
-                .thenReturn(mApplicationViewportInsetSupplier);
         when(mMockSoftKeyboardDelegate.calculateSoftKeyboardHeight(any())).thenReturn(0);
         when(mMockActivity.getTabModelSelector()).thenReturn(mMockTabModelSelector);
         when(mMockActivity.getActivityTabProvider()).thenReturn(mActivityTabProvider);
@@ -379,11 +375,14 @@ public class ManualFillingControllerTest {
     public void testPasswordItemsPersistAfterSwitchingBrowserTabs() {
         SheetProviderHelper firstTabHelper = new SheetProviderHelper();
         SheetProviderHelper secondTabHelper = new SheetProviderHelper();
+        UpdateAccessorySheetDelegate firstSheetUpdater = mock(UpdateAccessorySheetDelegate.class);
+        UpdateAccessorySheetDelegate secondSheetUpdater = mock(UpdateAccessorySheetDelegate.class);
 
         // Simulate opening a new tab which automatically triggers the registration:
         Tab firstTab = addBrowserTab(mMediator, 1111, null);
         mController.registerSheetDataProvider(mLastMockWebContents, AccessoryTabType.PASSWORDS,
                 firstTabHelper.getSheetDataProvider());
+        mController.registerSheetUpdateDelegate(mLastMockWebContents, firstSheetUpdater);
         getStateForBrowserTab()
                 .getSheetDataProvider(AccessoryTabType.PASSWORDS)
                 .addObserver(firstTabHelper::record);
@@ -394,6 +393,7 @@ public class ManualFillingControllerTest {
         Tab secondTab = addBrowserTab(mMediator, 2222, firstTab);
         mController.registerSheetDataProvider(mLastMockWebContents, AccessoryTabType.PASSWORDS,
                 secondTabHelper.getSheetDataProvider());
+        mController.registerSheetUpdateDelegate(mLastMockWebContents, secondSheetUpdater);
         getStateForBrowserTab()
                 .getSheetDataProvider(AccessoryTabType.PASSWORDS)
                 .addObserver(secondTabHelper::record);
@@ -402,10 +402,16 @@ public class ManualFillingControllerTest {
 
         // Simulate switching back to the first tab:
         switchBrowserTab(mMediator, /*from=*/secondTab, /*to=*/firstTab);
+        // Wiring affects the same sheet only and is triggered after switching
+        verify(firstSheetUpdater).requestSheet(AccessoryTabType.PASSWORDS);
+        firstTabHelper.providePasswordSheet("FirstPassword");
         assertThat(firstTabHelper.getFirstRecordedPassword(), is("FirstPassword"));
 
         // And back to the second:
         switchBrowserTab(mMediator, /*from=*/firstTab, /*to=*/secondTab);
+        // Wiring affects the same sheet only and is triggered after switching
+        verify(secondSheetUpdater).requestSheet(AccessoryTabType.PASSWORDS);
+        secondTabHelper.providePasswordSheet("SecondPassword");
         assertThat(secondTabHelper.getFirstRecordedPassword(), is("SecondPassword"));
     }
 
@@ -507,8 +513,7 @@ public class ManualFillingControllerTest {
         mMediator.getTabObserverForTesting().onHidden(tab, TabHidingType.CHANGED_TABS);
         getStateForBrowserTab().getWebContentsObserverForTesting().wasHidden();
         // The state should be kept if the closure wasn't committed.
-        assertThat(getStateForBrowserTab().getAccessorySheet(AccessoryTabType.PASSWORDS),
-                is(not(nullValue())));
+        assertThat(getStateForBrowserTab().getTabs().length, is(1));
         mLastMockWebContents = null;
 
         // Simulate undo closing the tab and selecting it:
@@ -519,8 +524,8 @@ public class ManualFillingControllerTest {
         WebContents oldWebContents = mLastMockWebContents;
         closeBrowserTab(mMediator, tab);
         // The state should be cleaned up, now that it was committed.
-        assertThat(mCache.getStateFor(oldWebContents).getAccessorySheet(AccessoryTabType.PASSWORDS),
-                is(nullValue()));
+        assertThat(mMediator.getStateCacheForTesting().getStateFor(oldWebContents).getTabs().length,
+                is(0));
 
         ArgumentCaptor<KeyboardAccessoryData.Tab[]> barTabCaptor =
                 ArgumentCaptor.forClass(KeyboardAccessoryData.Tab[].class);
@@ -613,6 +618,7 @@ public class ManualFillingControllerTest {
         reset(mMockAccessorySheet);
         SheetProviderHelper firstTabHelper = new SheetProviderHelper();
         SheetProviderHelper secondTabHelper = new SheetProviderHelper();
+        UpdateAccessorySheetDelegate secondSheetUpdater = mock(UpdateAccessorySheetDelegate.class);
 
         // Simulate opening a new tab:
         Tab firstTab = addBrowserTab(mMediator, 1111, null);
@@ -631,6 +637,7 @@ public class ManualFillingControllerTest {
         Tab secondTab = addBrowserTab(mMediator, 2222, firstTab);
         mController.registerSheetDataProvider(mLastMockWebContents, AccessoryTabType.PASSWORDS,
                 secondTabHelper.getSheetDataProvider());
+        mController.registerSheetUpdateDelegate(mLastMockWebContents, secondSheetUpdater);
         mController.registerActionProvider(
                 mLastMockWebContents, secondTabHelper.getActionListProvider());
         getStateForBrowserTab()
@@ -648,13 +655,15 @@ public class ManualFillingControllerTest {
         mMediator.getTabObserverForTesting().onDestroyed(firstTab);
 
         // The current tab should not be influenced by the destruction...
+        // Wiring affects the same sheet only and is triggered after switching
+        verify(secondSheetUpdater).requestSheet(AccessoryTabType.PASSWORDS);
+        secondTabHelper.providePasswordSheet("SecondPassword");
         assertThat(secondTabHelper.getFirstRecordedPassword(), is("SecondPassword"));
         assertThat(secondTabHelper.getFirstRecordedAction().getCaption(), is("2BKept"));
         assertThat(getStateForBrowserTab(), is(mCache.getStateFor(secondTab)));
         // ... but the other tab's data should be gone.
         assertThat(mCache.getStateFor(firstTab).getActionsProvider(), nullValue());
-        assertThat(mCache.getStateFor(firstTab).getAccessorySheet(AccessoryTabType.PASSWORDS),
-                nullValue());
+        assertThat(mCache.getStateFor(firstTab).getTabs().length, is(0));
     }
 
     @Test

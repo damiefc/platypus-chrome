@@ -7096,7 +7096,7 @@ Called by update_bad_message_reasons.py.-->
 <!-- Generated from content/browser/bad_message.h.
 Called by update_bad_message_reasons.py.-->
 
-  <int value="0" label="NC_IN_PAGE_NAVIGATION"/>
+  <int value="0" label="OBSOLETE_NC_IN_PAGE_NAVIGATION"/>
   <int value="1" label="RFH_CAN_COMMIT_URL_BLOCKED"/>
   <int value="2" label="RFH_CAN_ACCESS_FILES_OF_PAGE_STATE"/>
   <int value="3" label="RFH_SANDBOX_FLAGS"/>
@@ -7379,6 +7379,10 @@ Called by update_bad_message_reasons.py.-->
   <int value="11" label="ESWMF_BAD_EVENT_ACK"/>
   <int value="12" label="MHVG_INVALID_PLUGIN_FRAME_ID"/>
   <int value="13" label="EMF_INVALID_CHANNEL_SOURCE_TYPE"/>
+  <int value="14" label="EMF_NO_EXTENSION_ID_FOR_EXTENSION_SOURCE"/>
+  <int value="15" label="EMF_INVALID_EXTENSION_ID_FOR_EXTENSION_SOURCE"/>
+  <int value="16" label="EMF_INVALID_EXTENSION_ID_FOR_CONTENT_SCRIPT"/>
+  <int value="17" label="EMF_INVALID_EXTENSION_ID_FOR_WORKER_CONTEXT"/>
 </enum>
 
 <enum name="BadMessageReasonGuestView">
@@ -7486,6 +7490,36 @@ Called by update_bad_message_reasons.py.-->
   <int value="0" label="Missing value"/>
   <int value="1" label="Parse Error"/>
   <int value="2" label="Valid"/>
+</enum>
+
+<enum name="BiometricAuthRequester">
+  <int value="0" label="Touch-to-Fill"/>
+  <int value="1" label="Autofill suggestion(dropdown or accessory)"/>
+  <int value="2" label="Manual fallback sheet"/>
+  <int value="3" label="List of all passwords"/>
+  <int value="4" label="Account chooser dialog"/>
+</enum>
+
+<enum name="BiometricAuthResult">
+  <int value="0" label="Success with unknown method"/>
+  <int value="1" label="Success with biometrics"/>
+  <int value="2" label="Success with device lock"/>
+  <int value="3" label="Cancelled by user"/>
+  <int value="4" label="Failed"/>
+  <int value="5" label="Success, but cancelled by Chrome"/>
+  <int value="6" label="Failed and cancelled by Chrome"/>
+  <int value="7" label="Auth still valid"/>
+</enum>
+
+<enum name="BiometricsAvailability">
+  <int value="0" label="Other error"/>
+  <int value="1" label="Available"/>
+  <int value="2" label="Available, but no fallback"/>
+  <int value="3" label="No hardware"/>
+  <int value="4" label="Hardware unavailable"/>
+  <int value="5" label="Not enrolled"/>
+  <int value="6" label="Security update required"/>
+  <int value="7" label="Android version not supported"/>
 </enum>
 
 <enum name="BiquadFilterType">
@@ -8772,6 +8806,11 @@ Called by update_bad_message_reasons.py.-->
 <enum name="BooleanHasToken">
   <int value="0" label="Lacks token"/>
   <int value="1" label="Has token"/>
+</enum>
+
+<enum name="BooleanHasUserGesture">
+  <int value="0" label="Does not have user gesture"/>
+  <int value="1" label="Has user gesture"/>
 </enum>
 
 <enum name="BooleanHasWithheldHosts">
@@ -11038,6 +11077,8 @@ histogram as enum -->
   <int value="1" label="Invoked from the share button in the Files app"/>
   <int value="2" label="Invoked from the context menu in the Files app"/>
   <int value="3" label="Invoked through WebShare"/>
+  <int value="4" label="Invoked from ARC++ to directly trigger Nearby Share"/>
+  <int value="5" label="Invoked through the omnibox entry point"/>
 </enum>
 
 <enum name="ChromeOSSharesheetShareAction">
@@ -11090,6 +11131,9 @@ histogram as enum -->
 </enum>
 
 <enum name="ChromeOSUserImageId">
+  <obsolete>
+    Deprecated in M92 in favor of ChromeOSUserImageId2.
+  </obsolete>
   <summary>
     Indices of the default images as defined in
     chrome/browser/ash/login/users/default_user_image/default_user_images.cc.
@@ -11185,6 +11229,110 @@ histogram as enum -->
   <int value="82" label="Sneaker"/>
   <int value="83" label="Van"/>
   <int value="84" label="Watermelon"/>
+</enum>
+
+<enum name="ChromeOSUserImageId2">
+  <summary>
+    Special images and default images as defined in
+    chrome/browser/ash/login/users/default_user_image/default_user_images.cc.
+    Value 0 is the image taken from camera. Value 1 is the image selected from
+    file or photo. Value 2 is the profile image. Values 3-9 are reserved for
+    other special images. Values 10-48 are legacy default images that are still
+    used by some users, but cannot be selected from Settings. Values &gt; 48 are
+    the newly added default images that are selectable from Settings &gt;
+    Personalization &gt; Change device account image.
+  </summary>
+<!-- Please append new values for default images to the end and do not change
+the order of existing values.
+
+In case of new special images, values 3 to 9 can be used. -->
+
+  <int value="0" label="Camera image"/>
+  <int value="1" label="User defined"/>
+  <int value="2" label="Profile image"/>
+  <int value="10" label="Beaker"/>
+  <int value="11" label="Bee"/>
+  <int value="12" label="Briefcase"/>
+  <int value="13" label="Circles"/>
+  <int value="14" label="Cloud"/>
+  <int value="15" label="Cupcake"/>
+  <int value="16" label="Day"/>
+  <int value="17" label="Flower"/>
+  <int value="18" label="Globe"/>
+  <int value="19" label="Hot air"/>
+  <int value="20" label="Ladybug"/>
+  <int value="21" label="Leaf"/>
+  <int value="22" label="Night"/>
+  <int value="23" label="Plane"/>
+  <int value="24" label="Robot body"/>
+  <int value="25" label="Robot head"/>
+  <int value="26" label="Toolbox"/>
+  <int value="27" label="User color"/>
+  <int value="28" label="User enterprise"/>
+  <int value="29" label="Bicycle"/>
+  <int value="30" label="Bokeh"/>
+  <int value="31" label="Chess"/>
+  <int value="32" label="Coffee"/>
+  <int value="33" label="Dragonfly"/>
+  <int value="34" label="Frog"/>
+  <int value="35" label="Gazania Flower"/>
+  <int value="36" label="Jack Russell Terrier"/>
+  <int value="37" label="Jellyfish"/>
+  <int value="38" label="Kiwi"/>
+  <int value="39" label="Penguin1"/>
+  <int value="40" label="Rainbowfish"/>
+  <int value="41" label="Record player"/>
+  <int value="42" label="Upside Down"/>
+  <int value="43" label="Cat"/>
+  <int value="44" label="Penguin2"/>
+  <int value="45" label="Fox"/>
+  <int value="46" label="Snail"/>
+  <int value="47" label="Red butterfly"/>
+  <int value="48" label="Cat"/>
+  <int value="49" label="Corgi"/>
+  <int value="50" label="Rabbit"/>
+  <int value="51" label="Pink butterfly"/>
+  <int value="52" label="Monkey"/>
+  <int value="53" label="Dragon"/>
+  <int value="54" label="Elephant"/>
+  <int value="55" label="Panda"/>
+  <int value="56" label="Unicorn"/>
+  <int value="57" label="Butterflies"/>
+  <int value="58" label="Bird"/>
+  <int value="59" label="Ramen"/>
+  <int value="60" label="Tamagotchi"/>
+  <int value="61" label="Cheese"/>
+  <int value="62" label="Football"/>
+  <int value="63" label="Basketball"/>
+  <int value="64" label="Vinyl record"/>
+  <int value="65" label="Sushi"/>
+  <int value="66" label="Bike"/>
+  <int value="67" label="Sunglasses"/>
+  <int value="68" label="Pizza"/>
+  <int value="69" label="Sandwich"/>
+  <int value="70" label="Cappuccino"/>
+  <int value="71" label="Ice water"/>
+  <int value="72" label="Ice cream"/>
+  <int value="73" label="Onigiri"/>
+  <int value="74" label="Melon"/>
+  <int value="75" label="Avocado"/>
+  <int value="76" label="Landing"/>
+  <int value="77" label="Lunar"/>
+  <int value="78" label="Dots"/>
+  <int value="79" label="Spin"/>
+  <int value="80" label="Grids"/>
+  <int value="81" label="Botanist"/>
+  <int value="82" label="Burger"/>
+  <int value="83" label="Graduate"/>
+  <int value="84" label="Guitar"/>
+  <int value="85" label="Waving"/>
+  <int value="86" label="Lion"/>
+  <int value="87" label="Planet"/>
+  <int value="88" label="Instant Camera"/>
+  <int value="89" label="Robot"/>
+  <int value="90" label="Sneaker"/>
+  <int value="91" label="Van"/>
+  <int value="92" label="Watermelon"/>
 </enum>
 
 <enum name="ChromePDFViewerActions">
@@ -12311,7 +12459,7 @@ histogram as enum -->
 
 <enum name="ClipboardHistoryDisplayFormat">
   <int value="0" label="Text"/>
-  <int value="1" label="Bitmap"/>
+  <int value="1" label="Png"/>
   <int value="2" label="Html"/>
   <int value="3" label="File"/>
 </enum>
@@ -12343,6 +12491,7 @@ histogram as enum -->
   <int value="4" label="Image with other urls"/>
   <int value="5" label="Base64 encoded image"/>
   <int value="6" label="Image with local file urls and RTF"/>
+  <int value="7" label="Image Load Error"/>
 </enum>
 
 <enum name="ClockdriftLevel">
@@ -14729,7 +14878,7 @@ Called by update_net_error_codes.py.-->
   <summary>
     List of currently defined Cr50 flash log event types. The latest and
     greatest set can be found in
-    https://chromium.googlesource.com/chromiumos/platform/ec/+/refs/heads/master/include/flash_log.h
+    https://chromium.googlesource.com/chromiumos/platform/ec/+/refs/heads/main/include/flash_log.h
     (enum flash_event_type and enum nvmem_failure_type). Note that NVMEM errors
     are logged as subevents of flash log event 5, we register them offset by
     200.
@@ -14771,7 +14920,7 @@ Called by update_net_error_codes.py.-->
 <enum name="CrasClientType">
   <summary>
     List of the client type of CRAS. The list can be found in
-    https://chromium.googlesource.com/chromiumos/third_party/adhd/+/master/cras/src/common/cras_types.h
+    https://chromium.googlesource.com/chromiumos/third_party/adhd/+/main/cras/src/common/cras_types.h
     (enum CRAS_CLIENT_TYPE).
   </summary>
   <int value="0" label="CRAS_CLIENT_TYPE_UNKNOWN">Unknown client.</int>
@@ -14795,7 +14944,7 @@ Called by update_net_error_codes.py.-->
 <enum name="CrasDeviceType">
   <summary>
     List of the device type of CRAS. The list can be found in
-    https://chromium.googlesource.com/chromiumos/third_party/adhd/+/master/cras/src/server/cras_server_metrics.c
+    https://chromium.googlesource.com/chromiumos/third_party/adhd/+/main/cras/src/server/cras_server_metrics.c
     (enum CRAS_METRICS_DEVICE_TYPE).
   </summary>
   <int value="0" label="CRAS_METRICS_DEVICE_INTERNAL_SPEAKER"/>
@@ -14978,7 +15127,7 @@ to ensure that the crash string is shown properly on the user-facing crash UI.
   <summary>
     List of known battery indicator supports in Bluetooth Hands-free profile.
     This list should be aligned with CRAS:
-    https://chromium.googlesource.com/chromiumos/third_party/adhd/+/master/cras/src/server/cras_hfp_slc.h
+    https://chromium.googlesource.com/chromiumos/third_party/adhd/+/main/cras/src/server/cras_hfp_slc.h
   </summary>
   <int value="0" label="CRAS_HFP_BATTERY_INDICATOR_NONE"/>
   <int value="1" label="CRAS_HFP_BATTERY_INDICATOR_HFP"/>
@@ -14994,7 +15143,7 @@ to ensure that the crash string is shown properly on the user-facing crash UI.
   <summary>
     List of codec ids used for SCO audio, in Bluetooth Hands-free profile. This
     list should be aligned with CRAS:
-    https://chromium.googlesource.com/chromiumos/third_party/adhd/+/master/cras/src/server/cras_hfp_slc.h
+    https://chromium.googlesource.com/chromiumos/third_party/adhd/+/main/cras/src/server/cras_hfp_slc.h
   </summary>
   <int value="0" label="HFP_CODEC_UNUSED"/>
   <int value="1" label="HFP_CODEC_ID_CVSD"/>
@@ -15005,7 +15154,7 @@ to ensure that the crash string is shown properly on the user-facing crash UI.
   <summary>
     List of results(success or error code) of setting up a SCO connection for
     Bluetooth Hands-free profile. This list should be aligned with CRAS:
-    https://chromium.googlesource.com/chromiumos/third_party/adhd/+/master/cras/src/server/cras_server_metrics.h
+    https://chromium.googlesource.com/chromiumos/third_party/adhd/+/main/cras/src/server/cras_server_metrics.h
   </summary>
   <int value="0" label="SKT_SUCCESS"/>
   <int value="1" label="SKT_CONNECTION_ERROR"/>
@@ -21658,6 +21807,11 @@ Called by update_document_policy_enum.py.-->
   <int value="16696" label="CECPQ2"/>
 </enum>
 
+<enum name="EcheNotificationInteraction">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="User opened app streaming"/>
+</enum>
+
 <enum name="EdidColorSpaceChecksOutcome">
   <int value="0" label="All checks passed"/>
   <int value="1" label="Bad primaries coordinates"/>
@@ -23213,6 +23367,12 @@ Called by update_document_policy_enum.py.-->
   <int value="8" label="Dlp interruption"/>
   <int value="9" label="Low disk space"/>
   <int value="10" label="HDCP interruption"/>
+  <int value="11" label="Recording service closing"/>
+  <int value="12" label="Viz video capturer disconnected"/>
+  <int value="13" label="Failed audio encoder initialization"/>
+  <int value="14" label="Failed video encoder initialization"/>
+  <int value="15" label="Audio encoding error"/>
+  <int value="16" label="Video encoding error"/>
 </enum>
 
 <enum name="EnhancedBookmarkViewMode">
@@ -24507,6 +24667,7 @@ Called by update_document_policy_enum.py.-->
   <int value="857" label="AdditionalDnsQueryTypesEnabled"/>
   <int value="858" label="TripleDESEnabled"/>
   <int value="859" label="CloudUserPolicyMerge"/>
+  <int value="860" label="ManagedAccountRestriction"/>
 </enum>
 
 <enum name="EnterprisePolicyDeviceIdValidity">
@@ -25767,6 +25928,7 @@ Called by update_extension_histograms.py.-->
   <int value="475" label="FILE_MANAGER_PRIVATE_ON_DRIVE_CONFIRM_DIALOG"/>
   <int value="476" label="TTS_ENGINE_ON_SPEAK_WITH_AUDIO_STREAM"/>
   <int value="477" label="ACCESSIBILITY_PRIVATE_ON_SHOW_CHROMEVOX_TUTORIAL"/>
+  <int value="478" label="STORAGE_SESSION_ON_CHANGE"/>
 </enum>
 
 <enum name="ExtensionFileWriteResult">
@@ -32555,6 +32717,12 @@ Called by update_use_counter_feature_enum.py.-->
   <int value="3918" label="ARIATouchpassthroughAttribute"/>
   <int value="3919" label="ARIAVirtualcontentAttribute"/>
   <int value="3920" label="AccessibilityTouchPassthroughSet"/>
+  <int value="3921" label="TextFragmentBlockedByForceLoadAtTop"/>
+  <int value="3922" label="UrnDocumentAccessedCookies"/>
+  <int value="3923" label="FontFaceAscentOverride"/>
+  <int value="3924" label="FontFaceDescentOverride"/>
+  <int value="3925" label="FontFaceLineGapOverride"/>
+  <int value="3926" label="FontFaceSizeAdjust"/>
 </enum>
 
 <enum name="FeaturePolicyAllowlistType">
@@ -32681,6 +32849,9 @@ Called by update_permissions_policy_enum.py.-->
 </enum>
 
 <enum name="FeedAutoplayEvent">
+  <obsolete>
+    Removed as of 05/2021. Replaced by FeedVideoPlayEvent.
+  </obsolete>
   <int value="0" label="Auto-play is triggered, but not started yet."/>
   <int value="1" label="The player starts to auto-play the video."/>
   <int value="2" label="Auto-play stops before reaching the end."/>
@@ -32900,6 +33071,40 @@ Called by update_permissions_policy_enum.py.-->
 
 <enum name="FeedUserCommandType">
   <int value="0" label="Enum placerholder. See crbug/1179826"/>
+</enum>
+
+<enum name="FeedVideoInitializationError">
+  <int value="0" label="Client library update required."/>
+  <int value="1" label="Developer key invalid."/>
+  <int value="2" label="Error connecting to service."/>
+  <int value="3" label="Internal error."/>
+  <int value="4" label="Invalid application signature."/>
+  <int value="5" label="Network error."/>
+  <int value="6" label="Service disabled."/>
+  <int value="7" label="Service invalid."/>
+  <int value="8" label="Service missing."/>
+  <int value="9" label="Service version update required."/>
+  <int value="10" label="Unknown error."/>
+</enum>
+
+<enum name="FeedVideoPlayError">
+  <int value="0" label="Not playable."/>
+  <int value="1" label="Unauthorized overlay."/>
+  <int value="2" label="Internal error."/>
+  <int value="3" label="Unknown error."/>
+  <int value="4" label="Autoplay disabled."/>
+  <int value="5" label="Unexpected service disconnection."/>
+  <int value="6" label="Not playable muted."/>
+  <int value="7" label="Network error."/>
+</enum>
+
+<enum name="FeedVideoPlayEvent">
+  <int value="0" label="Auto-play stops before reaching the end."/>
+  <int value="1" label="Auto-play reaches the end."/>
+  <int value="2" label="User clicks on the auto-play video."/>
+  <int value="3" label="Video playing is triggered, but not started yet."/>
+  <int value="4" label="The player starts to play the video."/>
+  <int value="5" label="An error occurs during the video playing."/>
 </enum>
 
 <enum name="FeedVideoPreviewsPreferenceUserActions">
@@ -38436,7 +38641,7 @@ Called by update_gpu_driver_bug_workaround_entries.py.-->
 <enum name="HardwareVerifierQualificationStatus">
   <summary>
     List of the possible qualification status of a component. This is defined in
-    https://chromium.googlesource.com/chromiumos/platform2/+/refs/heads/master/hardware_verifier/proto/hardware_verifier.proto
+    https://chromium.googlesource.com/chromiumos/platform2/+/refs/heads/main/hardware_verifier/proto/hardware_verifier.proto
     (enum QualificationStatus).
   </summary>
   <int value="0" label="UNQUALIFIED">Unqualified</int>
@@ -40546,7 +40751,7 @@ Called by update_gpu_driver_bug_workaround_entries.py.-->
     (i.e. extension with ID "jkghodnilhceideoidjikpgommlajknk" and defined in
     google_xkb_manifest.json [1]), although InputMethod.ID2 histogram is
     recorded for open-source Chromium OS and third-party IME extensions as well.
-    [1] https://source.chromium.org/chromium/chromium/src/+/master:chrome/browser/resources/chromeos/input_method/google_xkb_manifest.json?q=google_xkb_manifest.json
+    [1] https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/resources/chromeos/input_method/google_xkb_manifest.json?q=google_xkb_manifest.json
   -->
 
   <int value="-2082426075" label="xkb:cz:qwerty:cze"/>
@@ -41470,6 +41675,14 @@ Called by update_gpu_driver_bug_workaround_entries.py.-->
   <int value="0" label="Action Button"/>
   <int value="1" label="Cancel"/>
   <int value="2" label="Remind Me Later"/>
+</enum>
+
+<enum name="IOSDefaultBrowserPromoNonModalAction">
+  <int value="0" label="Accepted"/>
+  <int value="1" label="Appear"/>
+  <int value="2" label="Dismiss"/>
+  <int value="3" label="Timeout"/>
+  <int value="4" label="Background prevented impression"/>
 </enum>
 
 <enum name="IOSDefaultBrowserTailoredPromoType">
@@ -47819,6 +48032,7 @@ from previous Chrome versions.
   <int value="674627327" label="MagnifierNewFocusFollowing:enabled"/>
   <int value="674788251" label="EnableNewBadgeOnMenuItems:enabled"/>
   <int value="677866592" label="ClickToCallUI:disabled"/>
+  <int value="677883800" label="DiagnosticsAppNavigation:disabled"/>
   <int value="679931272" label="DcheckIsFatal:enabled"/>
   <int value="680070635"
       label="enable-fullscreen-handwriting-virtual-keyboard:disabled"/>
@@ -48523,6 +48737,7 @@ from previous Chrome versions.
   <int value="1288713607" label="EcheSWAResizing:disabled"/>
   <int value="1289433604" label="RecoverFromNeverSaveAndroid:enabled"/>
   <int value="1289495171" label="AssistantBetterOnboarding:disabled"/>
+  <int value="1290904214" label="DiagnosticsAppNavigation:enabled"/>
   <int value="1291257442" label="TabsInCBD:disabled"/>
   <int value="1291761696" label="CCTModuleDexLoading:disabled"/>
   <int value="1291966558" label="ScrollAnchoring:disabled"/>
@@ -48613,6 +48828,7 @@ from previous Chrome versions.
   <int value="1361073386" label="ContentSuggestionsNotifications:enabled"/>
   <int value="1363136936" label="VrCustomTabBrowsing:enabled"/>
   <int value="1363151585" label="SyncPseudoUSSAppList:enabled"/>
+  <int value="1365857480" label="WebUITabStripNewTabButtonInTabStrip:enabled"/>
   <int value="1367406392" label="VaapiVideoDecoder:disabled"/>
   <int value="1367467733" label="AutoplayIgnoreWebAudio:enabled"/>
   <int value="1367487214" label="VaapiJpegImageDecodeAcceleration:enabled"/>
@@ -49112,6 +49328,7 @@ from previous Chrome versions.
   <int value="1809940714" label="SpeculativeLaunchServiceWorker:disabled"/>
   <int value="1810258949" label="DisplayLocking:enabled"/>
   <int value="1810311887" label="WebAssemblyThreads:enabled"/>
+  <int value="1811266774" label="WebUITabStripNewTabButtonInTabStrip:disabled"/>
   <int value="1811744551" label="InterestFeedV2Hearts:enabled"/>
   <int value="1812368073" label="enable-new-app-list-mixer"/>
   <int value="1813370929"
@@ -51671,6 +51888,19 @@ Called by update_use_counter_css.py.-->
 <enum name="MediaRecorderVEAUsed">
   <int value="0" label="Not used"/>
   <int value="1" label="Used"/>
+</enum>
+
+<enum name="MediaRendererType">
+  <int value="0" label="kDefault"/>
+  <int value="1" label="kMojo"/>
+  <int value="2" label="kMediaPlayer"/>
+  <int value="3" label="kCourier"/>
+  <int value="4" label="kFlinging"/>
+  <int value="5" label="kCast"/>
+  <int value="6" label="kMediaFoundation"/>
+  <int value="7" label="kFuchsia"/>
+  <int value="8" label="kRemoting"/>
+  <int value="9" label="kCastStreaming"/>
 </enum>
 
 <enum name="MediaResponseCacheType">
@@ -54804,6 +55034,11 @@ Called by update_net_error_codes.py.-->
   <int value="4" label="Discarded: JSON invalid"/>
   <int value="5" label="Parsed"/>
   <int value="6" label="Removed: empty"/>
+</enum>
+
+<enum name="NetReportingHeaderType">
+  <int value="0" label="Report-To"/>
+  <int value="1" label="Invalid Report-To"/>
 </enum>
 
 <enum name="NetReportingReportOutcome">
@@ -64354,6 +64589,12 @@ Called by update_net_trust_anchors.py.-->
   <int value="4" label="PREVIEW_EVENT_INITIATED"/>
 </enum>
 
+<enum name="PrintPreviewInitializationEvents">
+  <int value="0" label="FUNCTION_INITIATED"/>
+  <int value="1" label="FUNCTION_SUCCESFUL"/>
+  <int value="2" label="FUNCTION_FAILED"/>
+</enum>
+
 <enum name="PrintPreviewPdfActionBuckets">
   <obsolete>
     Deprecated 07/2019.
@@ -69107,7 +69348,7 @@ https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.1.pdf
 
 <enum name="SafetyCheckExtensionsStatus">
   <int value="0" label="CHECKING"/>
-  <int value="1" label="ERROR"/>
+  <int value="1" label="DEPRECATED_ERROR"/>
   <int value="2" label="NONE_BLOCKLISTED"/>
   <int value="3" label="BLOCKLISTED_ALL_DISABLED"/>
   <int value="4" label="BLOCKLISTED_REENABLED_ALL_BY_USER"/>
@@ -71963,6 +72204,11 @@ https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.1.pdf
   <int value="5"/>
   <int value="6"/>
   <int value="7"/>
+</enum>
+
+<enum name="SharingHubSharesheetResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="Canceled"/>
 </enum>
 
 <enum name="SharingLongScreenshotsBitmapGenerationStatus">
@@ -76861,6 +77107,7 @@ would be helpful to identify which type is being sent.
   <int value="47" label="OS Priority Preferences"/>
   <int value="48" label="Sharing Message"/>
   <int value="49" label="Autofill Wallet Offer"/>
+  <int value="50" label="Workspace Desk"/>
 </enum>
 
 <enum name="SyncModelTypeStoreInitResult">

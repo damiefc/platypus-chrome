@@ -241,6 +241,10 @@ const base::Feature kDemoModeSWA{"DemoModeSWA",
 const base::Feature kDiagnosticsApp{"DiagnosticsApp",
                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
+// If enabled, the navigation panel will be shown in the diagnostics app.
+const base::Feature kDiagnosticsAppNavigation{
+    "DiagnosticsAppNavigation", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Disables the CryptAuth v1 DeviceSync flow. Note: During the first phase
 // of the v2 DeviceSync rollout, v1 and v2 DeviceSync run in parallel. This flag
 // is needed to disable the v1 service during the second phase of the rollout.
@@ -764,9 +768,13 @@ const base::Feature kWebApkGenerator{"WebApkGenerator",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether to enable the syncing of deletes of Wi-Fi configurations.
-// This controls both sending delete events to the Chrome Sync server and
-// applying incoming deletes.
+// This only controls sending delete events to the Chrome Sync server.
 const base::Feature kWifiSyncAllowDeletes{"WifiSyncAllowDeletes",
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls whether to apply incoming Wi-Fi configuration delete events from
+// the Chrome Sync server.
+const base::Feature kWifiSyncApplyDeletes{"WifiSyncApplyDeletes",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether to enable syncing of Wi-Fi configurations between
@@ -879,7 +887,8 @@ bool IsMinimumChromeVersionEnabled() {
 }
 
 bool IsNetworkingInDiagnosticsAppEnabled() {
-  return base::FeatureList::IsEnabled(kEnableNetworkingInDiagnosticsApp);
+  return base::FeatureList::IsEnabled(kEnableNetworkingInDiagnosticsApp) &&
+         base::FeatureList::IsEnabled(kDiagnosticsAppNavigation);
 }
 
 bool IsNewOobeLayoutEnabled() {

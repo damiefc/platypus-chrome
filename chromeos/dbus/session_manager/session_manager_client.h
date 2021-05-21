@@ -15,6 +15,7 @@
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/cros_system_api/dbus/login_manager/dbus-constants.h"
 
 namespace cryptohome {
@@ -97,7 +98,8 @@ class COMPONENT_EXPORT(SESSION_MANAGER) SessionManagerClient {
     virtual void EmitLoginPromptVisibleCalled() {}
 
     // Called when the ARC instance is stopped after it had already started.
-    virtual void ArcInstanceStopped() {}
+    virtual void ArcInstanceStopped(
+        login_manager::ArcContainerStopReason reason) {}
 
     // Called when screen lock state is updated.
     virtual void ScreenLockedStateUpdated() {}

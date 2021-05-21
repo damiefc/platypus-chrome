@@ -115,11 +115,6 @@ void SyncEngineBackend::OnConnectionStatusChange(ConnectionStatus status) {
              status);
 }
 
-void SyncEngineBackend::OnSyncStatusChanged(const SyncStatus& status) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  host_.Call(FROM_HERE, &SyncEngineImpl::HandleSyncStatusChanged, status);
-}
-
 void SyncEngineBackend::OnActionableError(const SyncProtocolError& sync_error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   host_.Call(FROM_HERE,
@@ -140,6 +135,11 @@ void SyncEngineBackend::OnProtocolEvent(const ProtocolEvent& event) {
     host_.Call(FROM_HERE, &SyncEngineImpl::HandleProtocolEventOnFrontendLoop,
                std::move(event_clone));
   }
+}
+
+void SyncEngineBackend::OnSyncStatusChanged(const SyncStatus& status) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  host_.Call(FROM_HERE, &SyncEngineImpl::HandleSyncStatusChanged, status);
 }
 
 void SyncEngineBackend::DoOnInvalidatorStateChange(
@@ -223,7 +223,6 @@ void SyncEngineBackend::DoInitialize(
   sync_manager_->AddObserver(this);
 
   SyncManager::InitArgs args;
-  args.event_handler = params.event_handler;
   args.service_url = params.service_url;
   args.enable_local_sync_backend = params.enable_local_sync_backend;
   args.local_sync_backend_folder = params.local_sync_backend_folder;
@@ -238,7 +237,6 @@ void SyncEngineBackend::DoInitialize(
   args.cache_guid = restored_local_transport_data.cache_guid;
   args.birthday = restored_local_transport_data.birthday;
   args.bag_of_chips = restored_local_transport_data.bag_of_chips;
-  args.sync_status_observers.push_back(this);
   sync_manager_->Init(&args);
 
   LoadAndConnectNigoriController();
@@ -314,12 +312,11 @@ void SyncEngineBackend::DoInitialProcessControlTypes() {
     return;
   }
 
-  host_.Call(FROM_HERE,
-             &SyncEngineImpl::HandleInitializationSuccessOnFrontendLoop,
-             sync_manager_->GetEnabledTypes(), sync_manager_->GetJsBackend(),
-             sync_manager_->GetDebugInfoListener(),
-             sync_manager_->GetModelTypeConnectorProxy(),
-             sync_manager_->birthday(), sync_manager_->bag_of_chips());
+  host_.Call(
+      FROM_HERE, &SyncEngineImpl::HandleInitializationSuccessOnFrontendLoop,
+      sync_manager_->GetEnabledTypes(), sync_manager_->GetDebugInfoListener(),
+      sync_manager_->GetModelTypeConnectorProxy(), sync_manager_->birthday(),
+      sync_manager_->bag_of_chips());
 }
 
 void SyncEngineBackend::DoSetDecryptionPassphrase(

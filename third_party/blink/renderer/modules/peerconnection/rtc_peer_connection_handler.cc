@@ -20,7 +20,6 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/media_switches.h"
@@ -1573,12 +1572,12 @@ webrtc::RTCErrorType RTCPeerConnectionHandler::SetConfiguration(
   return webrtc_error.type();
 }
 
-void RTCPeerConnectionHandler::AddICECandidate(
+void RTCPeerConnectionHandler::AddIceCandidate(
     RTCVoidRequest* request,
     RTCIceCandidatePlatform* candidate) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(dependency_factory_);
-  TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::addICECandidate");
+  TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::addIceCandidate");
   std::unique_ptr<webrtc::IceCandidateInterface> native_candidate(
       dependency_factory_->CreateIceCandidate(
           candidate->SdpMid(),

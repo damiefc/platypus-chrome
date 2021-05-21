@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_utils.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_menu_button.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_origin_text.h"
+#include "chrome/browser/ui/views/web_apps/frame_toolbar/window_controls_overlay_toggle_button.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/common/chrome_features.h"
@@ -79,6 +80,11 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
         std::make_unique<WebAppOriginText>(browser_view_->browser()));
   }
 
+  if (app_controller->AppUsesWindowControlsOverlay()) {
+    window_controls_overlay_toggle_button_ = AddChildView(
+        std::make_unique<WindowControlsOverlayToggleButton>(browser_view_));
+  }
+
   if (app_controller->HasTitlebarContentSettings()) {
     content_settings_container_ = AddChildView(
         std::make_unique<WebAppContentSettingsContainer>(this, this));
@@ -130,12 +136,8 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
     web_app_menu_button_ =
         AddChildView(std::make_unique<WebAppMenuButton>(browser_view_));
     web_app_menu_button_->SetID(VIEW_ID_APP_MENU);
-    const bool is_browser_focus_mode =
-        browser_view_->browser()->is_focus_mode();
-    SetInsetsForWebAppToolbarButton(web_app_menu_button_,
-                                    is_browser_focus_mode);
-    web_app_menu_button_->SetMinSize(
-        toolbar_button_provider_->GetToolbarButtonSize());
+    ConfigureWebAppToolbarButton(web_app_menu_button_, toolbar_button_provider_,
+                                 browser_view_->browser()->is_focus_mode());
     web_app_menu_button_->SetProperty(views::kFlexBehaviorKey,
                                       views::FlexSpecification());
   }
@@ -163,6 +165,13 @@ void WebAppToolbarButtonContainer::SetColors(SkColor foreground_color,
   background_color_ = background_color;
   if (web_app_origin_text_)
     web_app_origin_text_->SetTextColor(foreground_color_);
+  if (window_controls_overlay_toggle_button_) {
+    window_controls_overlay_toggle_button_->SetImageModel(
+        views::Button::STATE_NORMAL,
+        ui::ImageModel::FromVectorIcon(kOverflowChevronIcon,
+                                       foreground_color_));
+  }
+
   if (content_settings_container_)
     content_settings_container_->SetIconColor(foreground_color_);
   if (extensions_container_)

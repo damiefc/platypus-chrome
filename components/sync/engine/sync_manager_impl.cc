@@ -114,11 +114,10 @@ void SyncManagerImpl::ConfigureSyncer(ConfigureReason reason,
   DVLOG(1) << "Configuring -"
            << "\n\t"
            << "types to download: " << ModelTypeSetToString(to_download);
-  ConfigurationParams params(GetOriginFromReason(reason), to_download,
-                             std::move(ready_task));
 
   scheduler_->Start(SyncScheduler::CONFIGURATION_MODE, base::Time());
-  scheduler_->ScheduleConfiguration(std::move(params));
+  scheduler_->ScheduleConfiguration(GetOriginFromReason(reason), to_download,
+                                    std::move(ready_task));
   if (sync_feature_state != SyncFeatureState::INITIALIZING) {
     cycle_context_->set_is_sync_feature_enabled(sync_feature_state ==
                                                 SyncFeatureState::ON);
@@ -137,9 +136,6 @@ void SyncManagerImpl::Init(InitArgs* args) {
   DCHECK(args->encryption_observer_proxy);
   encryption_observer_proxy_ = std::move(args->encryption_observer_proxy);
 
-  AddObserver(&js_sync_manager_observer_);
-  SetJsEventHandler(args->event_handler);
-
   AddObserver(&debug_info_event_listener_);
 
   DCHECK(args->encryption_handler);
@@ -152,14 +148,17 @@ void SyncManagerImpl::Init(InitArgs* args) {
   sync_encryption_handler_->AddObserver(this);
   sync_encryption_handler_->AddObserver(encryption_observer_proxy_.get());
   sync_encryption_handler_->AddObserver(&debug_info_event_listener_);
-  sync_encryption_handler_->AddObserver(&js_sync_encryption_handler_observer_);
 
-  allstatus_.SetHasKeystoreKey(
+  // base::Unretained() is safe here because SyncManagerImpl outlives
+  // all_status_.
+  all_status_ = std::make_unique<AllStatus>(base::BindRepeating(
+      &SyncManagerImpl::NotifySyncStatusChanged, base::Unretained(this)));
+  all_status_->SetHasKeystoreKey(
       !sync_encryption_handler_->GetKeystoreKeysHandler()->NeedKeystoreKey());
 
   if (args->enable_local_sync_backend) {
     VLOG(1) << "Running against local sync backend.";
-    allstatus_.SetLocalBackendFolder(
+    all_status_->SetLocalBackendFolder(
         args->local_sync_backend_folder.AsUTF8Unsafe());
     connection_manager_ = std::make_unique<LoopbackConnectionManager>(
         args->local_sync_backend_folder);
@@ -171,24 +170,16 @@ void SyncManagerImpl::Init(InitArgs* args) {
   connection_manager_->AddListener(this);
 
   DVLOG(1) << "Setting sync client ID: " << args->cache_guid;
-  allstatus_.SetSyncId(args->cache_guid);
+  all_status_->SetSyncId(args->cache_guid);
   DVLOG(1) << "Setting invalidator client ID: " << args->invalidator_client_id;
-  allstatus_.SetInvalidatorClientId(args->invalidator_client_id);
-
-  // Add observers after all initializations. Each observer will get initialized
-  // status while being added.
-  for (SyncStatusObserver* observer : args->sync_status_observers) {
-    allstatus_.AddObserver(observer);
-  }
+  all_status_->SetInvalidatorClientId(args->invalidator_client_id);
 
   model_type_registry_ = std::make_unique<ModelTypeRegistry>(
       this, args->cancelation_signal, sync_encryption_handler_);
 
   // Build a SyncCycleContext and store the worker in it.
   DVLOG(1) << "Sync is bringing up SyncCycleContext.";
-  std::vector<SyncEngineEventListener*> listeners;
-  listeners.push_back(&allstatus_);
-  listeners.push_back(this);
+  std::vector<SyncEngineEventListener*> listeners = {this, all_status_.get()};
   cycle_context_ = args->engine_components_factory->BuildContext(
       connection_manager_.get(), args->extensions_activity, listeners,
       &debug_info_event_listener_, model_type_registry_.get(),
@@ -209,7 +200,6 @@ void SyncManagerImpl::Init(InitArgs* args) {
   }
 
   debug_info_event_listener_.InitializationComplete();
-  js_sync_manager_observer_.InitializationComplete();
 }
 
 void SyncManagerImpl::OnPassphraseRequired(
@@ -234,29 +224,29 @@ void SyncManagerImpl::OnBootstrapTokenUpdated(
     const std::string& bootstrap_token,
     BootstrapTokenType type) {
   if (type == KEYSTORE_BOOTSTRAP_TOKEN)
-    allstatus_.SetHasKeystoreKey(true);
+    all_status_->SetHasKeystoreKey(true);
 }
 
 void SyncManagerImpl::OnEncryptedTypesChanged(ModelTypeSet encrypted_types,
                                               bool encrypt_everything) {
-  allstatus_.SetEncryptedTypes(encrypted_types);
+  all_status_->SetEncryptedTypes(encrypted_types);
 }
 
 void SyncManagerImpl::OnCryptographerStateChanged(Cryptographer* cryptographer,
                                                   bool has_pending_keys) {
-  allstatus_.SetCryptographerCanEncrypt(cryptographer->CanEncrypt());
-  allstatus_.SetCryptoHasPendingKeys(has_pending_keys);
-  allstatus_.SetKeystoreMigrationTime(
+  all_status_->SetCryptographerCanEncrypt(cryptographer->CanEncrypt());
+  all_status_->SetCryptoHasPendingKeys(has_pending_keys);
+  all_status_->SetKeystoreMigrationTime(
       sync_encryption_handler_->GetKeystoreMigrationTime());
-  allstatus_.SetTrustedVaultDebugInfo(
+  all_status_->SetTrustedVaultDebugInfo(
       sync_encryption_handler_->GetTrustedVaultDebugInfo());
 }
 
 void SyncManagerImpl::OnPassphraseTypeChanged(
     PassphraseType type,
     base::Time explicit_passphrase_time) {
-  allstatus_.SetPassphraseType(type);
-  allstatus_.SetKeystoreMigrationTime(
+  all_status_->SetPassphraseType(type);
+  all_status_->SetKeystoreMigrationTime(
       sync_encryption_handler_->GetKeystoreMigrationTime());
 }
 
@@ -316,9 +306,6 @@ void SyncManagerImpl::ShutdownOnSyncThread() {
     sync_encryption_handler_->RemoveObserver(&debug_info_event_listener_);
     sync_encryption_handler_->RemoveObserver(this);
   }
-
-  SetJsEventHandler(WeakHandle<JsEventHandler>());
-  RemoveObserver(&js_sync_manager_observer_);
 
   RemoveObserver(&debug_info_event_listener_);
 
@@ -380,6 +367,12 @@ void SyncManagerImpl::NudgeForCommit(ModelType type) {
   scheduler_->ScheduleLocalNudge(type);
 }
 
+void SyncManagerImpl::NotifySyncStatusChanged(const SyncStatus& status) {
+  for (auto& observer : observers_) {
+    observer.OnSyncStatusChanged(status);
+  }
+}
+
 void SyncManagerImpl::OnSyncCycleEvent(const SyncCycleEvent& event) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Only send an event if this is due to a cycle ending and this cycle
@@ -428,17 +421,11 @@ void SyncManagerImpl::OnProtocolEvent(const ProtocolEvent& event) {
   }
 }
 
-void SyncManagerImpl::SetJsEventHandler(
-    const WeakHandle<JsEventHandler>& event_handler) {
-  js_sync_manager_observer_.SetJsEventHandler(event_handler);
-  js_sync_encryption_handler_observer_.SetJsEventHandler(event_handler);
-}
-
 void SyncManagerImpl::SetInvalidatorEnabled(bool invalidator_enabled) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   DVLOG(1) << "Invalidator enabled state is now: " << invalidator_enabled;
-  allstatus_.SetNotificationsEnabled(invalidator_enabled);
+  all_status_->SetNotificationsEnabled(invalidator_enabled);
   scheduler_->SetNotificationsEnabled(invalidator_enabled);
 }
 
@@ -447,7 +434,7 @@ void SyncManagerImpl::OnIncomingInvalidation(
     std::unique_ptr<InvalidationInterface> invalidation) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  allstatus_.IncrementNotificationsReceived();
+  all_status_->IncrementNotificationsReceived();
   scheduler_->ScheduleInvalidationNudge(type, std::move(invalidation));
 }
 
@@ -471,10 +458,6 @@ SyncManagerImpl::GetModelTypeConnectorProxy() {
   return std::make_unique<ModelTypeConnectorProxy>(
       base::SequencedTaskRunnerHandle::Get(),
       model_type_registry_->AsWeakPtr());
-}
-
-WeakHandle<JsBackend> SyncManagerImpl::GetJsBackend() {
-  return MakeWeakHandle(weak_ptr_factory_.GetWeakPtr());
 }
 
 WeakHandle<DataTypeDebugInfoListener> SyncManagerImpl::GetDebugInfoListener() {
@@ -519,7 +502,7 @@ void SyncManagerImpl::OnCookieJarChanged(bool account_mismatch) {
 
 void SyncManagerImpl::UpdateInvalidationClientId(const std::string& client_id) {
   DVLOG(1) << "Setting invalidator client ID: " << client_id;
-  allstatus_.SetInvalidatorClientId(client_id);
+  all_status_->SetInvalidatorClientId(client_id);
   cycle_context_->set_invalidator_client_id(client_id);
 }
 

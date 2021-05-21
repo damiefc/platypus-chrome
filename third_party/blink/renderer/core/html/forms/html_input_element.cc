@@ -305,10 +305,8 @@ bool HTMLInputElement::MayTriggerVirtualKeyboard() const {
 }
 
 bool HTMLInputElement::ShouldHaveFocusAppearance() const {
-  // For FormControlsRefresh don't draw focus ring for an input that has its
-  // popup open.
-  if (::features::IsFormControlsRefreshEnabled() &&
-      input_type_view_->HasOpenedPopup())
+  // Don't draw focus ring for an input that has its popup open.
+  if (input_type_view_->HasOpenedPopup())
     return false;
 
   return TextControlElement::ShouldHaveFocusAppearance();
@@ -1618,11 +1616,11 @@ bool HTMLInputElement::IsRequiredFormControl() const {
 }
 
 bool HTMLInputElement::MatchesReadOnlyPseudoClass() const {
-  return input_type_->SupportsReadOnly() && IsReadOnly();
+  return !input_type_->SupportsReadOnly() || IsDisabledOrReadOnly();
 }
 
 bool HTMLInputElement::MatchesReadWritePseudoClass() const {
-  return input_type_->SupportsReadOnly() && !IsReadOnly();
+  return input_type_->SupportsReadOnly() && !IsDisabledOrReadOnly();
 }
 
 void HTMLInputElement::OnSearch() {
