@@ -110,6 +110,8 @@
 using base::UserMetricsAction;
 using content::WebContents;
 
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(AppMenuModel, kHistoryMenuItem);
+
 namespace {
 
 constexpr size_t kMaxAppNameLength = 30;
@@ -807,6 +809,8 @@ void AppMenuModel::Build() {
         std::make_unique<RecentTabsSubMenuModel>(provider_, browser_));
     AddSubMenuWithStringId(IDC_RECENT_TABS_MENU, IDS_HISTORY_MENU,
                            sub_menus_.back().get());
+    SetElementIdentifierAt(GetIndexOfCommandId(IDC_RECENT_TABS_MENU),
+                           kHistoryMenuItem);
   }
   AddItemWithStringId(IDC_SHOW_DOWNLOADS, IDS_SHOW_DOWNLOADS);
   if (!browser_->profile()->IsGuestSession() &&
@@ -822,8 +826,8 @@ void AppMenuModel::Build() {
   AddSeparator(ui::UPPER_SEPARATOR);
 
   if (base::FeatureList::IsEnabled(sharing_hub::kSharingHubDesktopAppMenu)) {
-    sub_menus_.push_back(
-        std::make_unique<sharing_hub::SharingHubSubMenuModel>(browser_));
+    sub_menus_.push_back(std::make_unique<sharing_hub::SharingHubSubMenuModel>(
+        this, browser_->tab_strip_model()->GetActiveWebContents()));
     AddSubMenuWithStringId(IDC_SHARING_HUB_MENU, IDS_SHARING_HUB_TITLE,
                            sub_menus_.back().get());
   }
