@@ -511,16 +511,9 @@ bool KURL::SetProtocol(const String& protocol) {
   return true;
 }
 
-void KURL::SetHost(const String& host) {
-  StringUTF8Adaptor host_utf8(host);
-  url::Replacements<char> replacements;
-  replacements.SetHost(CharactersOrEmpty(host_utf8),
-                       url::Component(0, host_utf8.size()));
-  ReplaceComponents(replacements);
-}
+namespace {
 
-static String ParsePortFromStringPosition(const String& value,
-                                          unsigned port_start) {
+String ParsePortFromStringPosition(const String& value, unsigned port_start) {
   // "008080junk" needs to be treated as port "8080" and "000" as "0".
   size_t length = value.length();
   unsigned port_end = port_start;
@@ -532,10 +525,41 @@ static String ParsePortFromStringPosition(const String& value,
   return value.Substring(port_start, port_end - port_start);
 }
 
-void KURL::SetHostAndPort(const String& host_and_port) {
+// Align with https://url.spec.whatwg.org/#host-state step 3, and also with the
+// IsAuthorityTerminator() function in //url/third_party/mozilla/url_parse.cc.
+bool IsEndOfHost(UChar ch) {
+  return ch == '/' || ch == '?' || ch == '#';
+}
+
+bool IsEndOfHostSpecial(UChar ch) {
+  return IsEndOfHost(ch) || ch == '\\';
+}
+
+wtf_size_t FindHostEnd(const String& host, bool is_special) {
+  wtf_size_t end = host.Find(is_special ? IsEndOfHostSpecial : IsEndOfHost);
+  if (end == kNotFound)
+    end = host.length();
+  return end;
+}
+
+}  // namespace
+
+void KURL::SetHost(const String& host) {
+  wtf_size_t value_end = FindHostEnd(host, IsHierarchical());
+  String truncated_host = host.Substring(0, value_end);
+  StringUTF8Adaptor host_utf8(truncated_host);
+  url::Replacements<char> replacements;
+  replacements.SetHost(CharactersOrEmpty(host_utf8),
+                       url::Component(0, host_utf8.size()));
+  ReplaceComponents(replacements);
+}
+
+void KURL::SetHostAndPort(const String& orig_host_and_port) {
   // This method intentionally does very sloppy parsing for backwards
   // compatibility. See https://url.spec.whatwg.org/#host-state for what we
   // theoretically should be doing.
+  wtf_size_t value_end = FindHostEnd(orig_host_and_port, IsHierarchical());
+  String host_and_port = orig_host_and_port.Substring(0, value_end);
 
   // This logic for handling IPv6 addresses is adapted from ParseServerInfo in
   // //url/third_party/mozilla/url_parse.cc. There's a slight behaviour
@@ -549,32 +573,39 @@ void KURL::SetHostAndPort(const String& host_and_port) {
 
   wtf_size_t colon = host_and_port.find(':', ipv6_terminator);
 
+  // Legacy behavior: ignore input if host part is empty
   if (colon == 0)
     return;
 
+  String host;
+  String port;
   if (colon == kNotFound) {
-    // |host_and_port| does not include a port, so only overwrite the host.
+    host = host_and_port;
+  } else {
+    host = host_and_port.Substring(0, colon);
+    port = ParsePortFromStringPosition(host_and_port, colon + 1);
+  }
+
+  // Replace host and port separately in order to maintain the original port if
+  // a valid host and invalid port are provided together.
+
+  // Replace host first.
+  {
     url::Replacements<char> replacements;
-    StringUTF8Adaptor host_utf8(host_and_port);
+    StringUTF8Adaptor host_utf8(host);
     replacements.SetHost(CharactersOrEmpty(host_utf8),
                          url::Component(0, host_utf8.size()));
     ReplaceComponents(replacements);
-    return;
   }
 
-  String host = host_and_port.Substring(0, colon);
-  String port = ParsePortFromStringPosition(host_and_port, colon + 1);
-
-  StringUTF8Adaptor host_utf8(host);
-  StringUTF8Adaptor port_utf8(port);
-
-  url::Replacements<char> replacements;
-  replacements.SetHost(CharactersOrEmpty(host_utf8),
-                       url::Component(0, host_utf8.size()));
-  if (port_utf8.size())
+  // Replace port next.
+  if (is_valid_ && !port.IsEmpty()) {
+    url::Replacements<char> replacements;
+    StringUTF8Adaptor port_utf8(port);
     replacements.SetPort(CharactersOrEmpty(port_utf8),
                          url::Component(0, port_utf8.size()));
-  ReplaceComponents(replacements);
+    ReplaceComponents(replacements, /*preserve_validity=*/true);
+  }
 }
 
 void KURL::RemovePort() {
@@ -935,18 +966,21 @@ String KURL::ComponentString(const url::Component& component) const {
 }
 
 template <typename CHAR>
-void KURL::ReplaceComponents(const url::Replacements<CHAR>& replacements) {
+void KURL::ReplaceComponents(const url::Replacements<CHAR>& replacements,
+                             bool preserve_validity) {
   url::RawCanonOutputT<char> output;
   url::Parsed new_parsed;
 
   StringUTF8Adaptor utf8(string_);
-  is_valid_ =
+  bool replacements_valid =
       url::ReplaceComponents(utf8.data(), utf8.size(), parsed_, replacements,
                              nullptr, &output, &new_parsed);
-
-  parsed_ = new_parsed;
-  string_ = AtomicString::FromUTF8(output.data(), output.length());
-  InitProtocolMetadata();
+  if (replacements_valid || !preserve_validity) {
+    is_valid_ = replacements_valid;
+    parsed_ = new_parsed;
+    string_ = AtomicString::FromUTF8(output.data(), output.length());
+    InitProtocolMetadata();
+  }
 }
 
 bool KURL::IsSafeToSendToAnotherThread() const {
