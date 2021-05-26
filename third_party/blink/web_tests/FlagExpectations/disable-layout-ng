@@ -85,6 +85,7 @@ crbug.com/1033476 external/wpt/css/css-flexbox/flex-minimum-width-flex-items-015
 crbug.com/1173843 external/wpt/css/css-flexbox/frameset-crash.html [ Skip ]
 crbug.com/1069614 external/wpt/css/css-flexbox/overflow-area-001.html [ Failure ]
 crbug.com/1069614 external/wpt/css/css-flexbox/overflow-area-002.html [ Failure ]
+crbug.com/591099 external/wpt/css/css-flexbox/synthesize-vrl-baseline.html [ Failure ]
 crbug.com/1181403 external/wpt/css/css-flexbox/table-as-item-inflexible-in-column-2.html [ Failure ]
 crbug.com/1181403 external/wpt/css/css-flexbox/table-as-item-specified-height.html [ Failure ]
 crbug.com/1181403 external/wpt/css/css-flexbox/table-as-item-min-height-1.html [ Failure ]
@@ -633,6 +634,7 @@ crbug.com/591099 external/wpt/css/css-flexbox/flex-minimum-height-flex-items-023
 crbug.com/1132627 external/wpt/css/css-flexbox/flex-minimum-height-flex-items-007.xht [ Failure ]
 crbug.com/1132627 external/wpt/css/css-flexbox/flex-aspect-ratio-img-column-011.html [ Failure ]
 crbug.com/721123 css3/flexbox/flexitem.html [ Failure ]
+crbug.com/591099 css3/flexbox/flex-align-vertical-writing-mode.html [ Failure ]
 crbug.com/721123 external/wpt/css/css-flexbox/flexitem-stretch-image.html [ Failure ]
 crbug.com/704294 external/wpt/css/css-flexbox/flex-aspect-ratio-img-row-006.html [ Failure ]
 crbug.com/704294 external/wpt/css/css-flexbox/canvas-dynamic-change-001.html [ Failure ]
@@ -818,10 +820,6 @@ crbug.com/958381 virtual/text-antialias/international/bidi-layout-across-linebre
 
 ### Pass in Legacy, fail in NG
 crbug.com/958381 external/wpt/css/css-tables/visibility-collapse-rowspan-005.html [ Pass ]
-crbug.com/958381 fast/table/table-all-rowspans-height-distribution-in-rows-except-overlapped.html [ Pass ]
-crbug.com/958381 fast/table/table-all-rowspans-height-distribution-in-rows.html [ Pass ]
-crbug.com/958381 fast/table/table-rowspan-height-distribution-in-rows-1.html [ Pass ]
-crbug.com/958381 fast/table/table-rowspan-height-distribution-in-rows-2.html [ Pass ]
 crbug.com/958381 accessibility/inline-text-textarea.html [ Pass ]
 crbug.com/958381 accessibility/table-cells-with-colspan.html [ Pass ]
 crbug.com/958381 accessibility/table-with-hidden-head-section.html [ Pass ]

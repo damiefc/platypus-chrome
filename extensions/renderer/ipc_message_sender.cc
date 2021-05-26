@@ -94,8 +94,8 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
     DCHECK(!context->IsForServiceWorker());
     DCHECK_EQ(kMainThreadId, content::WorkerThread::GetCurrentId());
 
-    render_thread_->Send(new ExtensionHostMsg_AddLazyListener(
-        context->GetExtensionID(), event_name));
+    GetEventRouter()->AddLazyListenerForMainThread(context->GetExtensionID(),
+                                                   event_name);
   }
 
   void SendRemoveUnfilteredLazyEventListenerIPC(
@@ -104,8 +104,8 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
     DCHECK(!context->IsForServiceWorker());
     DCHECK_EQ(kMainThreadId, content::WorkerThread::GetCurrentId());
 
-    render_thread_->Send(new ExtensionHostMsg_RemoveLazyListener(
-        context->GetExtensionID(), event_name));
+    GetEventRouter()->RemoveLazyListenerForMainThread(context->GetExtensionID(),
+                                                      event_name);
   }
 
   void SendAddFilteredEventListenerIPC(ScriptContext* context,
@@ -292,9 +292,8 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
     DCHECK(context->IsForServiceWorker());
     DCHECK_NE(kMainThreadId, content::WorkerThread::GetCurrentId());
 
-    dispatcher_->Send(new ExtensionHostMsg_AddLazyServiceWorkerListener(
-        context->GetExtensionID(), event_name,
-        context->service_worker_scope()));
+    dispatcher_->SendAddEventLazyListener(
+        context->GetExtensionID(), context->service_worker_scope(), event_name);
   }
 
   void SendRemoveUnfilteredLazyEventListenerIPC(
@@ -303,9 +302,8 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
     DCHECK(context->IsForServiceWorker());
     DCHECK_NE(kMainThreadId, content::WorkerThread::GetCurrentId());
 
-    dispatcher_->Send(new ExtensionHostMsg_RemoveLazyServiceWorkerListener(
-        context->GetExtensionID(), event_name,
-        context->service_worker_scope()));
+    dispatcher_->SendRemoveEventLazyListener(
+        context->GetExtensionID(), context->service_worker_scope(), event_name);
   }
 
   void SendAddFilteredEventListenerIPC(ScriptContext* context,

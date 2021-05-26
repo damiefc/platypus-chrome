@@ -15,11 +15,11 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/cxx17_backports.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -6710,6 +6710,43 @@ TEST_F(ResidentKeyAuthenticatorImplTest, ConditionalUI) {
   GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
   EXPECT_EQ(AuthenticatorStatus::SUCCESS, result.status);
   EXPECT_TRUE(test_client_.is_conditional);
+}
+
+TEST_F(ResidentKeyAuthenticatorImplTest, NoDiscoverableCredentialsViaCable) {
+  // caBLE devices never support discoverable credentials currently and we
+  // shouldn't offer them for such requests.
+
+  EnableFeature(features::kWebAuthCable);
+  EnableFeature(device::kWebAuthCableSecondFactor);
+  NavigateAndCommit(GURL(kTestOrigin1));
+
+  device::VirtualCtap2Device::Config config;
+  config.resident_key_support = true;
+  config.internal_uv_support = true;
+  virtual_device_factory_->SetCtap2Config(config);
+  virtual_device_factory_->mutable_state()->fingerprints_enrolled = true;
+
+  ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectResidentKey(
+      /*credential_id=*/{{4, 3, 2, 1}}, kTestRelyingPartyId,
+      /*user_id=*/{{1, 2, 3, 4}}, absl::nullopt, absl::nullopt));
+
+  for (const auto transport :
+       {device::FidoTransportProtocol::kUsbHumanInterfaceDevice,
+        device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy}) {
+    virtual_device_factory_->SetTransport(transport);
+    PublicKeyCredentialRequestOptionsPtr options =
+        GetTestPublicKeyCredentialRequestOptions();
+    options->allow_credentials.clear();
+
+    if (transport == device::FidoTransportProtocol::kUsbHumanInterfaceDevice) {
+      EXPECT_EQ(AuthenticatorGetAssertion(std::move(options)).status,
+                AuthenticatorStatus::SUCCESS);
+    } else {
+      EXPECT_EQ(
+          AuthenticatorGetAssertionAndWaitForTimeout(std::move(options)).status,
+          AuthenticatorStatus::NOT_ALLOWED_ERROR);
+    }
+  }
 }
 
 class InternalAuthenticatorImplTest : public AuthenticatorTestBase {

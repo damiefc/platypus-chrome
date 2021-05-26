@@ -60,7 +60,7 @@
 #include "third_party/webrtc/api/call/call_factory_interface.h"
 #include "third_party/webrtc/api/peer_connection_interface.h"
 #include "third_party/webrtc/api/rtc_event_log/rtc_event_log_factory.h"
-#include "third_party/webrtc/api/video_track_source_proxy.h"
+#include "third_party/webrtc/api/video_track_source_proxy_factory.h"
 #include "third_party/webrtc/media/engine/fake_video_codec_factory.h"
 #include "third_party/webrtc/media/engine/multiplex_codec_factory.h"
 #include "third_party/webrtc/media/engine/webrtc_media_engine.h"
@@ -218,34 +218,40 @@ class PeerConnectionStaticDeps {
 
  private:
   static void LogTaskLatencyWorker(base::TimeDelta sample) {
-    UMA_HISTOGRAM_CUSTOM_TIMES("WebRTC.PeerConnection.Latency.Worker", sample,
-                               base::TimeDelta::FromMicroseconds(1),
-                               base::TimeDelta::FromSeconds(10), 50);
+    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+        "WebRTC.PeerConnection.Latency.Worker", sample,
+        base::TimeDelta::FromMicroseconds(1), base::TimeDelta::FromSeconds(10),
+        50);
   }
   static void LogTaskDurationWorker(base::TimeDelta sample) {
-    UMA_HISTOGRAM_CUSTOM_TIMES("WebRTC.PeerConnection.Duration.Worker", sample,
-                               base::TimeDelta::FromMicroseconds(1),
-                               base::TimeDelta::FromSeconds(10), 50);
+    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+        "WebRTC.PeerConnection.Duration.Worker", sample,
+        base::TimeDelta::FromMicroseconds(1), base::TimeDelta::FromSeconds(10),
+        50);
   }
   static void LogTaskLatencyNetwork(base::TimeDelta sample) {
-    UMA_HISTOGRAM_CUSTOM_TIMES("WebRTC.PeerConnection.Latency.Network", sample,
-                               base::TimeDelta::FromMicroseconds(1),
-                               base::TimeDelta::FromSeconds(10), 50);
+    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+        "WebRTC.PeerConnection.Latency.Network", sample,
+        base::TimeDelta::FromMicroseconds(1), base::TimeDelta::FromSeconds(10),
+        50);
   }
   static void LogTaskDurationNetwork(base::TimeDelta sample) {
-    UMA_HISTOGRAM_CUSTOM_TIMES("WebRTC.PeerConnection.Duration.Network", sample,
-                               base::TimeDelta::FromMicroseconds(1),
-                               base::TimeDelta::FromSeconds(10), 50);
+    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+        "WebRTC.PeerConnection.Duration.Network", sample,
+        base::TimeDelta::FromMicroseconds(1), base::TimeDelta::FromSeconds(10),
+        50);
   }
   static void LogTaskLatencySignaling(base::TimeDelta sample) {
-    UMA_HISTOGRAM_CUSTOM_TIMES("WebRTC.PeerConnection.Latency.Signaling",
-                               sample, base::TimeDelta::FromMicroseconds(1),
-                               base::TimeDelta::FromSeconds(10), 50);
+    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+        "WebRTC.PeerConnection.Latency.Signaling", sample,
+        base::TimeDelta::FromMicroseconds(1), base::TimeDelta::FromSeconds(10),
+        50);
   }
   static void LogTaskDurationSignaling(base::TimeDelta sample) {
-    UMA_HISTOGRAM_CUSTOM_TIMES("WebRTC.PeerConnection.Duration.Signaling",
-                               sample, base::TimeDelta::FromMicroseconds(1),
-                               base::TimeDelta::FromSeconds(10), 50);
+    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+        "WebRTC.PeerConnection.Duration.Signaling", sample,
+        base::TimeDelta::FromMicroseconds(1), base::TimeDelta::FromSeconds(10),
+        50);
   }
 
   static void InitializeOnThread(
@@ -417,8 +423,8 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
           blink::features::kWebRtcHideLocalIpsWithMdns)) {
     // Note that MdnsResponderAdapter is created on the main thread to have
     // access to the connector to the service manager.
-    // TODO(crbug.com/1178670): Pass MojoBindingContext and use its BIB to bind.
-    mdns_responder = std::make_unique<MdnsResponderAdapter>();
+    mdns_responder =
+        std::make_unique<MdnsResponderAdapter>(*GetSupplementable());
   }
 #endif  // BUILDFLAG(ENABLE_MDNS)
   PostCrossThreadTask(
@@ -721,8 +727,8 @@ PeerConnectionDependencyFactory::CreateVideoTrackSourceProxy(
   if (!PeerConnectionFactoryCreated())
     CreatePeerConnectionFactory();
 
-  return webrtc::VideoTrackSourceProxy::Create(GetSignalingThread(),
-                                               GetNetworkThread(), source)
+  return webrtc::CreateVideoTrackSourceProxy(GetSignalingThread(),
+                                             GetNetworkThread(), source)
       .get();
 }
 

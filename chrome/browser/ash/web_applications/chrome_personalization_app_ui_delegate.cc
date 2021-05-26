@@ -9,10 +9,13 @@
 #include <algorithm>
 #include <iterator>
 #include <memory>
+#include <string>
 #include <vector>
 
+#include "ash/public/cpp/wallpaper_info.h"
 #include "ash/public/cpp/wallpaper_types.h"
 #include "base/bind.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/backdrop_wallpaper_handlers/backdrop_wallpaper.pb.h"
 #include "chrome/browser/ash/backdrop_wallpaper_handlers/backdrop_wallpaper_handlers.h"
@@ -27,6 +30,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "url/gurl.h"
 
 namespace mojo {
 
@@ -61,8 +65,12 @@ struct TypeConverter<chromeos::personalization_app::mojom::WallpaperImagePtr,
     if (!image_url.is_valid())
       return nullptr;
 
+    std::vector<std::string> attribution;
+    for (const auto& attr : image.attribution())
+      attribution.push_back(attr.text());
+
     return chromeos::personalization_app::mojom::WallpaperImage::New(
-        image_url, image.asset_id());
+        GURL(image.image_url()), std::move(attribution), image.asset_id());
   }
 };
 
@@ -112,6 +120,41 @@ void ChromePersonalizationAppUiDelegate::FetchImagesForCollection(
       base::Unretained(this), std::move(callback)));
 }
 
+void ChromePersonalizationAppUiDelegate::GetCurrentWallpaper(
+    GetCurrentWallpaperCallback callback) {
+  auto* client = WallpaperControllerClientImpl::Get();
+  ash::WallpaperInfo info = client->GetActiveUserWallpaperInfo();
+
+  switch (info.type) {
+    case ash::WallpaperType::ONLINE: {
+      GURL url(info.location);
+      DCHECK(url.is_valid());
+
+      // TODO(b/186575680) fill in actual image attribution details and
+      // asset_id.
+      std::move(callback).Run(
+          chromeos::personalization_app::mojom::WallpaperImage::New(
+              url, /*attribution=*/std::vector<std::string>(), /*asset_id=*/0));
+
+      return;
+    }
+    case ash::WallpaperType::CUSTOMIZED:
+    case ash::WallpaperType::DAILY:
+    case ash::WallpaperType::DEFAULT:
+    case ash::WallpaperType::DEVICE:
+    case ash::WallpaperType::ONE_SHOT:
+    case ash::WallpaperType::POLICY:
+    case ash::WallpaperType::THIRDPARTY:
+      NOTIMPLEMENTED();
+      std::move(callback).Run(nullptr);
+      return;
+    case ash::WallpaperType::WALLPAPER_TYPE_COUNT:
+      NOTREACHED() << "Impossible WallpaperType";
+      std::move(callback).Run(nullptr);
+      return;
+  }
+}
+
 void ChromePersonalizationAppUiDelegate::SelectWallpaper(
     uint64_t image_asset_id,
     SelectWallpaperCallback callback) {
@@ -131,8 +174,9 @@ void ChromePersonalizationAppUiDelegate::SelectWallpaper(
 
   client->SetOnlineWallpaper(
       user->GetAccountId(),
-      GURL(it->second.spec() +
+      GURL(it->second.image_url.spec() +
            WallpaperControllerClientImpl::GetBackdropWallpaperSuffix()),
+      it->second.collection_id,
       ash::WallpaperLayout::WALLPAPER_LAYOUT_CENTER_CROPPED,
       /*preview_mode=*/false, std::move(callback));
 }
@@ -163,6 +207,7 @@ void ChromePersonalizationAppUiDelegate::OnFetchCollections(
 void ChromePersonalizationAppUiDelegate::OnFetchCollectionImages(
     FetchImagesForCollectionCallback callback,
     bool success,
+    const std::string& collection_id,
     const std::vector<backdrop::Image>& images) {
   DCHECK(wallpaper_images_info_fetcher_);
 
@@ -181,7 +226,8 @@ void ChromePersonalizationAppUiDelegate::OnFetchCollectionImages(
         LOG(WARNING) << "Invalid image discarded";
         continue;
       }
-      image_asset_id_map_.insert({mojom_image->asset_id, mojom_image->url});
+      image_asset_id_map_.insert(
+          {mojom_image->asset_id, {mojom_image->url, collection_id}});
       data.push_back(std::move(mojom_image));
     }
     result = std::move(data);

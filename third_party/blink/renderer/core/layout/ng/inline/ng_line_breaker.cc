@@ -220,7 +220,7 @@ NGLineBreaker::NGLineBreaker(NGInlineNode node,
       break_token_(break_token),
       break_iterator_(text_content_),
       shaper_(text_content_),
-      spacing_(text_content_),
+      spacing_(text_content_, is_svg_text_),
       leading_floats_(leading_floats),
       handled_leading_floats_index_(handled_leading_floats_index),
       base_direction_(node_.BaseDirection()) {
@@ -864,8 +864,18 @@ void NGLineBreaker::SplitTextByGlyphs(const NGInlineItem& item,
     result->should_create_line_box = true;
     auto shape_result_view =
         ShapeResultView::Create(&shape, offset_, glyph_end);
-    result->inline_size =
-        shape_result_view->SnappedWidth().ClampNegativeToZero();
+    // For general CSS text, we apply SnappedWidth().ClampNegativeToZero().
+    // However we need to remove ClampNegativeToZero() for SVG <text> in order
+    // to get similar character positioning.
+    //
+    // For general CSS text, a negative word-spacing value decreases
+    // inline_size of an NGInlineItemResult consisting of multiple characters,
+    // and the inline_size rarely becomes negative.  However, for SVG <text>,
+    // it decreases inline_size of an NGInlineItemResult consisting of only a
+    // space character, and the inline_size becomes negative easily.
+    //
+    // See svg/W3C-SVG-1.1/text-spacing-01-b.svg.
+    result->inline_size = shape_result_view->SnappedWidth();
     result->shape_result = std::move(shape_result_view);
     offset_ = glyph_end;
     position_ += result->inline_size;
@@ -1469,9 +1479,7 @@ void NGLineBreaker::ComputeTrailingCollapsibleSpace(NGLineInfo* line_info) {
 
   trailing_whitespace_ = WhitespaceState::kNone;
   const String& text = Text();
-  NGInlineItemResults* item_results = line_info->MutableResults();
-  for (auto it = item_results->rbegin(); it != item_results->rend(); ++it) {
-    NGInlineItemResult& item_result = *it;
+  for (auto& item_result : base::Reversed(*line_info->MutableResults())) {
     DCHECK(item_result.item);
     const NGInlineItem& item = *item_result.item;
     if (item.EndCollapseType() == NGInlineItem::kOpaqueToCollapsing)
@@ -2434,8 +2442,8 @@ void NGLineBreaker::SetCurrentStyle(const ComputedStyle& style) {
       DCHECK_EQ(enable_soft_hyphen_, style.GetHyphens() != Hyphens::kNone);
       DCHECK_EQ(break_iterator_.Locale(), style.LocaleForLineBreakIterator());
     }
-    ShapeResultSpacing<String> spacing(spacing_.Text());
-    spacing.SetSpacing(style.GetFont());
+    ShapeResultSpacing<String> spacing(spacing_.Text(), is_svg_text_);
+    spacing.SetSpacing(style.GetFont().GetFontDescription());
     DCHECK_EQ(spacing.LetterSpacing(), spacing_.LetterSpacing());
     DCHECK_EQ(spacing.WordSpacing(), spacing_.WordSpacing());
 #endif
@@ -2485,7 +2493,7 @@ void NGLineBreaker::SetCurrentStyle(const ComputedStyle& style) {
     break_iterator_.SetLocale(style.LocaleForLineBreakIterator());
   }
 
-  spacing_.SetSpacing(style.GetFont());
+  spacing_.SetSpacing(style.GetFont().GetFontDescription());
 }
 
 bool NGLineBreaker::IsPreviousItemOfType(NGInlineItem::NGInlineItemType type) {

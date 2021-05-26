@@ -23,6 +23,9 @@ namespace {
 class TestDownloadShelfHandler : public DownloadShelfHandler {
  public:
   MOCK_METHOD0(DoClose, void());
+  MOCK_METHOD0(DoShowAll, void());
+  MOCK_METHOD1(DiscardDownload, void(uint32_t));
+  MOCK_METHOD1(KeepDownload, void(uint32_t));
   MOCK_METHOD1(GetDownloads,
                void(download_shelf::mojom::PageHandler::GetDownloadsCallback));
   MOCK_METHOD4(ShowContextMenu,
@@ -31,6 +34,7 @@ class TestDownloadShelfHandler : public DownloadShelfHandler {
                     int32_t client_y,
                     double timestamp));
   MOCK_METHOD1(DoShowDownload, void(DownloadUIModel*));
+  MOCK_METHOD1(OnDownloadOpened, void(uint32_t download_id));
   MOCK_METHOD1(OnDownloadUpdated, void(DownloadUIModel*));
   MOCK_METHOD1(OnDownloadErased, void(uint32_t download_id));
 };

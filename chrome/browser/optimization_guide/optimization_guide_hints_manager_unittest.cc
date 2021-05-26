@@ -14,20 +14,23 @@
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/optimization_guide/optimization_guide_navigation_data.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_tab_url_provider.h"
 #include "chrome/browser/optimization_guide/optimization_guide_web_contents_observer.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/optimization_guide/content/browser/optimization_guide_decider.h"
 #include "components/optimization_guide/core/bloom_filter.h"
+#include "components/optimization_guide/core/hint_cache.h"
 #include "components/optimization_guide/core/hints_component_util.h"
 #include "components/optimization_guide/core/hints_fetcher.h"
 #include "components/optimization_guide/core/hints_fetcher_factory.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
+#include "components/optimization_guide/core/optimization_guide_navigation_data.h"
 #include "components/optimization_guide/core/optimization_guide_prefs.h"
 #include "components/optimization_guide/core/optimization_guide_store.h"
 #include "components/optimization_guide/core/optimization_guide_switches.h"
@@ -2005,6 +2008,182 @@ TEST_F(
       optimization_guide::OptimizationTypeDecision::kNotAllowedByHint, 1);
 }
 
+TEST_F(OptimizationGuideHintsManagerTest, RemoveFetchedEntriesByHintKeys_Host) {
+  int cache_duration_in_secs = 60;
+  GURL url("https://host.com/r/cats");
+
+  std::unique_ptr<optimization_guide::proto::GetHintsResponse>
+      get_hints_response =
+          std::make_unique<optimization_guide::proto::GetHintsResponse>();
+
+  optimization_guide::proto::Hint* hint = get_hints_response->add_hints();
+  hint->set_key(url.spec());
+  hint->set_key_representation(optimization_guide::proto::FULL_URL);
+  hint->mutable_max_cache_duration()->set_seconds(cache_duration_in_secs);
+  optimization_guide::proto::PageHint* page_hint = hint->add_page_hints();
+  page_hint->add_whitelisted_optimizations()->set_optimization_type(
+      optimization_guide::proto::PERFORMANCE_HINTS);
+  page_hint->set_page_pattern("whatever/*");
+
+  hint = get_hints_response->add_hints();
+  hint->set_key_representation(optimization_guide::proto::HOST);
+  hint->set_key(url.host());
+  page_hint = hint->add_page_hints();
+  page_hint->set_page_pattern("anything/*");
+
+  std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
+  hints_manager()->hint_cache()->UpdateFetchedHints(
+      std::move(get_hints_response), base::Time().Now(), {url.host()}, {url},
+      run_loop->QuitClosure());
+  EXPECT_TRUE(hints_manager()->hint_cache()->HasHint(url.host()));
+  EXPECT_TRUE(hints_manager()->hint_cache()->HasURLKeyedEntryForURL(url));
+
+  run_loop = std::make_unique<base::RunLoop>();
+  hints_manager()->RemoveFetchedEntriesByHintKeys(
+      run_loop->QuitClosure(),
+      optimization_guide::proto::KeyRepresentation::HOST, {url.host()});
+  run_loop->Run();
+
+  EXPECT_FALSE(hints_manager()->hint_cache()->HasHint(url.host()));
+  EXPECT_TRUE(hints_manager()->hint_cache()->HasURLKeyedEntryForURL(url));
+}
+
+TEST_F(OptimizationGuideHintsManagerTest, RemoveFetchedEntriesByHintKeys_URL) {
+  int cache_duration_in_secs = 60;
+  GURL url("https://host.com/r/cats");
+
+  std::unique_ptr<optimization_guide::proto::GetHintsResponse>
+      get_hints_response =
+          std::make_unique<optimization_guide::proto::GetHintsResponse>();
+
+  optimization_guide::proto::Hint* hint = get_hints_response->add_hints();
+  hint->set_key(url.spec());
+  hint->set_key_representation(optimization_guide::proto::FULL_URL);
+  hint->mutable_max_cache_duration()->set_seconds(cache_duration_in_secs);
+  optimization_guide::proto::PageHint* page_hint = hint->add_page_hints();
+  page_hint->add_whitelisted_optimizations()->set_optimization_type(
+      optimization_guide::proto::PERFORMANCE_HINTS);
+  page_hint->set_page_pattern("whatever/*");
+
+  hint = get_hints_response->add_hints();
+  hint->set_key_representation(optimization_guide::proto::HOST);
+  hint->set_key(url.host());
+  page_hint = hint->add_page_hints();
+  page_hint->set_page_pattern("anything/*");
+
+  std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
+  hints_manager()->hint_cache()->UpdateFetchedHints(
+      std::move(get_hints_response), base::Time().Now(), {url.host()}, {url},
+      run_loop->QuitClosure());
+  EXPECT_TRUE(hints_manager()->hint_cache()->HasHint(url.host()));
+  EXPECT_TRUE(hints_manager()->hint_cache()->HasURLKeyedEntryForURL(url));
+
+  run_loop = std::make_unique<base::RunLoop>();
+  hints_manager()->RemoveFetchedEntriesByHintKeys(
+      run_loop->QuitClosure(),
+      optimization_guide::proto::KeyRepresentation::FULL_URL, {url.spec()});
+  run_loop->Run();
+
+  // Both the host and url entries should have been removed to support upgrading
+  // hint keys from HOST to FULL_URL.
+  EXPECT_FALSE(hints_manager()->hint_cache()->HasHint(url.host()));
+  EXPECT_FALSE(hints_manager()->hint_cache()->HasURLKeyedEntryForURL(url));
+}
+
+TEST_F(OptimizationGuideHintsManagerTest, PurgeFetchedEntries) {
+  int cache_duration_in_secs = 60;
+  GURL url("https://host.com/r/cats");
+
+  std::unique_ptr<optimization_guide::proto::GetHintsResponse>
+      get_hints_response =
+          std::make_unique<optimization_guide::proto::GetHintsResponse>();
+
+  optimization_guide::proto::Hint* hint = get_hints_response->add_hints();
+  hint->set_key(url.spec());
+  hint->set_key_representation(optimization_guide::proto::FULL_URL);
+  hint->mutable_max_cache_duration()->set_seconds(cache_duration_in_secs);
+  optimization_guide::proto::PageHint* page_hint = hint->add_page_hints();
+  page_hint->add_whitelisted_optimizations()->set_optimization_type(
+      optimization_guide::proto::PERFORMANCE_HINTS);
+  page_hint->set_page_pattern("whatever/*");
+
+  hint = get_hints_response->add_hints();
+  hint->set_key_representation(optimization_guide::proto::HOST);
+  hint->set_key(url.host());
+  page_hint = hint->add_page_hints();
+  page_hint->set_page_pattern("anything/*");
+
+  std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
+  hints_manager()->hint_cache()->UpdateFetchedHints(
+      std::move(get_hints_response), base::Time().Now(), {url.host()}, {url},
+      run_loop->QuitClosure());
+  EXPECT_TRUE(hints_manager()->hint_cache()->HasHint(url.host()));
+  EXPECT_TRUE(hints_manager()->hint_cache()->HasURLKeyedEntryForURL(url));
+
+  run_loop = std::make_unique<base::RunLoop>();
+  hints_manager()->PurgeFetchedEntries(run_loop->QuitClosure());
+  run_loop->Run();
+
+  EXPECT_FALSE(hints_manager()->hint_cache()->HasHint(url.host()));
+  EXPECT_FALSE(hints_manager()->hint_cache()->HasURLKeyedEntryForURL(url));
+}
+
+TEST_F(OptimizationGuideHintsManagerTest, HintFetcherPrefUpdated_URL) {
+  base::Time expiry = base::Time::Now() + base::TimeDelta::FromHours(1);
+  optimization_guide::HintsFetcher::AddFetchedHostForTesting(
+      pref_service(), "host-key.com", expiry);
+  optimization_guide::HintsFetcher::AddFetchedHostForTesting(
+      pref_service(), "url-key.com", expiry);
+
+  ASSERT_TRUE(optimization_guide::HintsFetcher::WasHostCoveredByFetch(
+      pref_service(), "host-key.com"));
+  ASSERT_TRUE(optimization_guide::HintsFetcher::WasHostCoveredByFetch(
+      pref_service(), "url-key.com"));
+
+  std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
+  hints_manager()->RemoveFetchedEntriesByHintKeys(
+      run_loop->QuitClosure(),
+      optimization_guide::proto::KeyRepresentation::FULL_URL,
+      {
+          GURL("https://host-key.com/page").spec(),
+          GURL("https://url-key.com/page").spec(),
+      });
+  run_loop->Run();
+
+  EXPECT_FALSE(optimization_guide::HintsFetcher::WasHostCoveredByFetch(
+      pref_service(), "host-key.com"));
+  EXPECT_FALSE(optimization_guide::HintsFetcher::WasHostCoveredByFetch(
+      pref_service(), "url-key.com"));
+}
+
+TEST_F(OptimizationGuideHintsManagerTest, HintFetcherPrefUpdated_Hosts) {
+  base::Time expiry = base::Time::Now() + base::TimeDelta::FromHours(1);
+  optimization_guide::HintsFetcher::AddFetchedHostForTesting(
+      pref_service(), "host-key.com", expiry);
+  optimization_guide::HintsFetcher::AddFetchedHostForTesting(
+      pref_service(), "url-key.com", expiry);
+
+  ASSERT_TRUE(optimization_guide::HintsFetcher::WasHostCoveredByFetch(
+      pref_service(), "host-key.com"));
+  ASSERT_TRUE(optimization_guide::HintsFetcher::WasHostCoveredByFetch(
+      pref_service(), "url-key.com"));
+
+  std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
+  hints_manager()->RemoveFetchedEntriesByHintKeys(
+      run_loop->QuitClosure(),
+      optimization_guide::proto::KeyRepresentation::HOST,
+      {
+          "host-key.com",
+          "url-key.com",
+      });
+  run_loop->Run();
+
+  EXPECT_FALSE(optimization_guide::HintsFetcher::WasHostCoveredByFetch(
+      pref_service(), "host-key.com"));
+  EXPECT_FALSE(optimization_guide::HintsFetcher::WasHostCoveredByFetch(
+      pref_service(), "url-key.com"));
+}
+
 class OptimizationGuideHintsManagerFetchingTest
     : public OptimizationGuideHintsManagerTest {
  public:
@@ -2544,7 +2723,7 @@ TEST_F(OptimizationGuideHintsManagerFetchingTest,
 
     // Make sure navigation data is populated correctly.
     OptimizationGuideNavigationData* navigation_data =
-        OptimizationGuideNavigationData::GetFromNavigationHandle(
+        OptimizationGuideKeyedService::GetNavigationDataFromNavigationHandle(
             navigation_handle.get());
     EXPECT_TRUE(navigation_data->hints_fetch_latency().has_value());
     EXPECT_EQ(navigation_data->hints_fetch_attempt_status(),
@@ -2580,7 +2759,7 @@ TEST_F(OptimizationGuideHintsManagerFetchingTest,
 
     // Make sure navigation data is populated correctly.
     OptimizationGuideNavigationData* navigation_data =
-        OptimizationGuideNavigationData::GetFromNavigationHandle(
+        OptimizationGuideKeyedService::GetNavigationDataFromNavigationHandle(
             navigation_handle.get());
     EXPECT_FALSE(navigation_data->hints_fetch_latency().has_value());
     EXPECT_EQ(navigation_data->hints_fetch_attempt_status(),
@@ -2622,7 +2801,7 @@ TEST_F(OptimizationGuideHintsManagerFetchingTest,
 
     // Make sure navigation data is populated correctly.
     OptimizationGuideNavigationData* navigation_data =
-        OptimizationGuideNavigationData::GetFromNavigationHandle(
+        OptimizationGuideKeyedService::GetNavigationDataFromNavigationHandle(
             navigation_handle.get());
     EXPECT_TRUE(navigation_data->hints_fetch_latency().has_value());
     EXPECT_EQ(navigation_data->hints_fetch_attempt_status(),
@@ -2655,7 +2834,7 @@ TEST_F(OptimizationGuideHintsManagerFetchingTest,
             kRaceNavigationFetchHost,
         1);
     OptimizationGuideNavigationData* navigation_data =
-        OptimizationGuideNavigationData::GetFromNavigationHandle(
+        OptimizationGuideKeyedService::GetNavigationDataFromNavigationHandle(
             navigation_handle.get());
     EXPECT_TRUE(navigation_data->hints_fetch_latency().has_value());
     EXPECT_EQ(navigation_data->hints_fetch_attempt_status(),
@@ -2686,7 +2865,7 @@ TEST_F(OptimizationGuideHintsManagerFetchingTest,
       "OptimizationGuide.HintsFetcher.GetHintsRequest.HostCount", 0);
   // Make sure navigation data is populated correctly.
   OptimizationGuideNavigationData* navigation_data =
-      OptimizationGuideNavigationData::GetFromNavigationHandle(
+      OptimizationGuideKeyedService::GetNavigationDataFromNavigationHandle(
           navigation_handle.get());
   EXPECT_FALSE(navigation_data->hints_fetch_latency().has_value());
   EXPECT_FALSE(navigation_data->hints_fetch_attempt_status().has_value());
@@ -3017,7 +3196,7 @@ TEST_F(OptimizationGuideHintsManagerFetchingTest,
         "OptimizationGuide.HintsManager.ConcurrentPageNavigationFetches", 0);
 
     OptimizationGuideNavigationData* navigation_data =
-        OptimizationGuideNavigationData::GetFromNavigationHandle(
+        OptimizationGuideKeyedService::GetNavigationDataFromNavigationHandle(
             navigation_handle.get());
     // Set hints fetch end.so we can figure out if hints fetch start was set.
     navigation_data->set_hints_fetch_end(base::TimeTicks::Now());
@@ -3721,4 +3900,40 @@ TEST_F(OptimizationGuideHintsManagerFetchingNoBatchUpdateTest,
   MoveClockForwardBy(base::TimeDelta::FromSeconds(kUpdateFetchHintsTimeSecs));
   // Hints fetcher should not even be created.
   EXPECT_FALSE(batch_update_hints_fetcher());
+}
+
+class OptimizationGuideHintsManagerPushEnabledTest
+    : public OptimizationGuideHintsManagerTest {
+ public:
+  OptimizationGuideHintsManagerPushEnabledTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        optimization_guide::features::kPushNotifications);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(OptimizationGuideHintsManagerPushEnabledTest, PushManagerSetOnAndroid) {
+#if defined(OS_ANDROID)
+  EXPECT_TRUE(hints_manager()->push_notification_manager());
+#else
+  EXPECT_FALSE(hints_manager()->push_notification_manager());
+#endif
+}
+
+class OptimizationGuideHintsManagerPushDisabledTest
+    : public OptimizationGuideHintsManagerTest {
+ public:
+  OptimizationGuideHintsManagerPushDisabledTest() {
+    scoped_feature_list_.InitAndDisableFeature(
+        optimization_guide::features::kPushNotifications);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(OptimizationGuideHintsManagerPushDisabledTest, PushManagerSetOnAndroid) {
+  EXPECT_FALSE(hints_manager()->push_notification_manager());
 }

@@ -82,6 +82,7 @@
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "services/network/public/cpp/cross_origin_opener_policy.h"
 #include "services/network/public/mojom/fetch_api.mojom-forward.h"
+#include "services/network/public/mojom/mdns_responder.mojom.h"
 #include "services/network/public/mojom/url_loader_network_service_observer.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
@@ -1523,6 +1524,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void CreateInstalledAppProvider(
       mojo::PendingReceiver<blink::mojom::InstalledAppProvider> receiver);
 
+  void CreateCodeCacheHost(
+      mojo::PendingReceiver<blink::mojom::CodeCacheHost> receiver);
+
 #if defined(OS_ANDROID)
   void BindNFCReceiver(mojo::PendingReceiver<device::mojom::NFC> receiver);
 #endif
@@ -1699,6 +1703,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Returns the BackForwardCacheMetrics associated with the last
   // NavigationEntry this RenderFrameHostImpl committed.
   BackForwardCacheMetrics* GetBackForwardCacheMetrics();
+
+  blink::mojom::PreferredColorScheme GetPreferredColorScheme() const {
+    return preferred_color_scheme_;
+  }
 
   const std::string& GetEncoding() const { return canonical_encoding_; }
 
@@ -2084,6 +2092,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   const GURL& ManifestURL() override;
   const std::vector<blink::mojom::FaviconURLPtr>& FaviconURLs() override;
 
+#if BUILDFLAG(ENABLE_MDNS)
+  void CreateMdnsResponder(
+      mojo::PendingReceiver<network::mojom::MdnsResponder> receiver);
+#endif  // BUILDFLAG(ENABLE_MDNS)
+
 #if BUILDFLAG(ENABLE_PLUGINS)
   void PepperInstanceClosed(int32_t instance_id);
   void PepperSetVolume(int32_t instance_id, double volume);
@@ -2349,6 +2362,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void DidChangeName(const std::string& name,
                      const std::string& unique_name) override;
   void CancelInitialHistoryLoad() override;
+  void DidUpdatePreferredColorScheme(
+      blink::mojom::PreferredColorScheme preferred_color_scheme) override;
   void UpdateEncoding(const std::string& encoding) override;
   void UpdateState(const blink::PageState& state) override;
   void OpenURL(blink::mojom::OpenURLParamsPtr params) override;
@@ -3550,6 +3565,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   scoped_refptr<WebAuthRequestSecurityChecker>
       webauth_request_security_checker_;
 
+  // The preferred color scheme for this frame.
+  blink::mojom::PreferredColorScheme preferred_color_scheme_ =
+      blink::mojom::PreferredColorScheme::kLight;
+
   // Container for arbitrary document-associated feature-specific data. Should
   // be reset when committing a cross-document navigation in this
   // RenderFrameHost. RenderFrameHostImpl stores internal members here
@@ -3687,6 +3706,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // A counter which is incremented by one every time this RenderFrameHost sends
   // a `CommitNavigation` or `CommitFailedNavigation` IPC to the renderer.
   int commit_navigation_sent_counter_ = 0;
+
+  // CodeCacheHost processes requests to fetch / write generated code for
+  // JavaScript / WebAssembly resources.
+  mojo::UniqueReceiverSet<blink::mojom::CodeCacheHost>
+      code_cache_host_receivers_;
 
   // NOTE: This must be the last member.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_{this};

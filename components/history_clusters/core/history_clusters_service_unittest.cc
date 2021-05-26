@@ -8,10 +8,10 @@
 #include <string>
 
 #include "base/base64.h"
+#include "base/cxx17_backports.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/test/bind.h"
@@ -747,6 +747,28 @@ TEST_F(HistoryClustersServiceTest,
         history_clusters_service_->HasIncompleteVisitContextAnnotations(0));
     EXPECT_EQ(history_clusters_service_test_api_->GetVisits().size(), 1u);
   }
+}
+
+TEST_F(HistoryClustersServiceTest, DoesQueryMatchAnyCluster) {
+  EnableMemoriesWithEndpoint();
+
+  AddVisit(0, GURL{"https://google.com"}, u"Google title", 2, IntToTime(2), 3);
+  AddVisit(0, GURL{"https://github.com"}, u"Github title", 4, IntToTime(4), 5);
+
+  // Verify that initially, the test keyword doesn't match anything, but this
+  // query should have kicked off a cache population request.
+  EXPECT_FALSE(history_clusters_service_->DoesQueryMatchAnyCluster("appl"));
+
+  // Providing the response and running the task loop should populate the cache.
+  VerifyHardcodedTestDataInUrlLoaderRequest("");
+  InjectHardcodedTestDataToUrlLoaderResponse({{2, 4}, {4}});
+  history_clusters_service_test_api_->GetCacheQueryTaskTracker().PostTask(
+      task_environment_.GetMainThreadTaskRunner().get(), FROM_HERE,
+      run_loop_quit_);
+  run_loop_.Run();
+
+  // Now the query should match the populated cache.
+  EXPECT_TRUE(history_clusters_service_->DoesQueryMatchAnyCluster("appl"));
 }
 
 }  // namespace

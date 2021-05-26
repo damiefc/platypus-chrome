@@ -7,9 +7,9 @@
 #include <set>
 #include <string>
 
+#include "ash/app_list/app_list_bubble_presenter.h"
 #include "ash/app_list/app_list_metrics.h"
 #include "ash/app_list/app_list_test_view_delegate.h"
-#include "ash/app_list/bubble/app_list_bubble.h"
 #include "ash/app_list/test/app_list_test_helper.h"
 #include "ash/app_list/views/app_list_item_view.h"
 #include "ash/app_list/views/app_list_main_view.h"
@@ -19,6 +19,7 @@
 #include "ash/app_list/views/apps_grid_view_test_api.h"
 #include "ash/app_list/views/contents_view.h"
 #include "ash/app_list/views/expand_arrow_view.h"
+#include "ash/app_list/views/paged_apps_grid_view.h"
 #include "ash/app_list/views/search_box_view.h"
 #include "ash/constants/ash_features.h"
 #include "ash/ime/ime_controller_impl.h"
@@ -101,7 +102,7 @@ AppsGridView* GetAppsGridView() {
 void ShowAppListNow(AppListViewState state) {
   Shell::Get()->app_list_controller()->presenter()->Show(
       state, display::Screen::GetScreen()->GetPrimaryDisplay().id(),
-      base::TimeTicks::Now());
+      base::TimeTicks::Now(), /*show_source*/ absl::nullopt);
 }
 
 void DismissAppListNow() {
@@ -502,8 +503,9 @@ TEST_F(AppListControllerImplTest, MAYBE_CloseNotificationWithAppListShown) {
 // Verifiy that when showing the launcher, the virtual keyboard dismissed before
 // will not show automatically due to the feature called "transient blur" (see
 // https://crbug.com/1057320).
+// Disabled for flaky timeouts. https://crbug.com/1213226
 TEST_F(AppListControllerImplTest,
-       TransientBlurIsNotTriggeredWhenShowingLauncher) {
+       DISABLED_TransientBlurIsNotTriggeredWhenShowingLauncher) {
   // Enable animation.
   ui::ScopedAnimationDurationScaleMode non_zero_duration(
       ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
@@ -1248,7 +1250,7 @@ TEST_F(AppListControllerImplAppListBubbleTest, ShowAppListOpensBubble) {
   auto* controller = Shell::Get()->app_list_controller();
   controller->ShowAppList();
 
-  EXPECT_TRUE(controller->app_list_bubble_for_test()->IsShowing());
+  EXPECT_TRUE(controller->bubble_presenter_for_test()->IsShowing());
 }
 
 TEST_F(AppListControllerImplAppListBubbleTest, ToggleAppListOpensBubble) {
@@ -1257,7 +1259,7 @@ TEST_F(AppListControllerImplAppListBubbleTest, ToggleAppListOpensBubble) {
                             AppListShowSource::kShelfButton,
                             /*event_time_stamp=*/{});
 
-  EXPECT_TRUE(controller->app_list_bubble_for_test()->IsShowing());
+  EXPECT_TRUE(controller->bubble_presenter_for_test()->IsShowing());
 }
 
 TEST_F(AppListControllerImplAppListBubbleTest, DismissAppListClosesBubble) {
@@ -1266,7 +1268,7 @@ TEST_F(AppListControllerImplAppListBubbleTest, DismissAppListClosesBubble) {
 
   controller->DismissAppList();
 
-  EXPECT_FALSE(controller->app_list_bubble_for_test()->IsShowing());
+  EXPECT_FALSE(controller->bubble_presenter_for_test()->IsShowing());
 }
 
 TEST_F(AppListControllerImplAppListBubbleTest,
@@ -1276,7 +1278,7 @@ TEST_F(AppListControllerImplAppListBubbleTest,
   auto* controller = Shell::Get()->app_list_controller();
   controller->ShowAppList();
 
-  EXPECT_FALSE(controller->app_list_bubble_for_test()->IsShowing());
+  EXPECT_FALSE(controller->bubble_presenter_for_test()->IsShowing());
 }
 
 TEST_F(AppListControllerImplAppListBubbleTest,
@@ -1288,7 +1290,7 @@ TEST_F(AppListControllerImplAppListBubbleTest,
                             AppListShowSource::kShelfButton,
                             /*event_time_stamp=*/{});
 
-  EXPECT_FALSE(controller->app_list_bubble_for_test()->IsShowing());
+  EXPECT_FALSE(controller->bubble_presenter_for_test()->IsShowing());
 }
 
 TEST_F(AppListControllerImplAppListBubbleTest, EnteringTabletModeClosesBubble) {
@@ -1297,7 +1299,7 @@ TEST_F(AppListControllerImplAppListBubbleTest, EnteringTabletModeClosesBubble) {
 
   EnableTabletMode();
 
-  EXPECT_FALSE(controller->app_list_bubble_for_test()->IsShowing());
+  EXPECT_FALSE(controller->bubble_presenter_for_test()->IsShowing());
 }
 
 }  // namespace ash

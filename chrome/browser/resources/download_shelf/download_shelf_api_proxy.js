@@ -11,6 +11,8 @@ export class DownloadShelfApiProxy {
   /** @return {!PageCallbackRouter} */
   getCallbackRouter() {}
 
+  doShowAll() {}
+
   doClose() {}
 
   /**
@@ -26,6 +28,12 @@ export class DownloadShelfApiProxy {
    */
   getFileIcon(downloadId) {}
 
+  /** @param {number} downloadId */
+  discardDownload(downloadId) {}
+
+  /** @param {number} downloadId */
+  keepDownload(downloadId) {}
+
   /**
    * @param {number} downloadId
    * @param {number} clientX
@@ -33,6 +41,11 @@ export class DownloadShelfApiProxy {
    * @param {number} timestamp
    */
   showContextMenu(downloadId, clientX, clientY, timestamp) {}
+
+  /**
+   * @param {number} downloadId
+   */
+  openDownload(downloadId) {}
 }
 
 /** @implements {DownloadShelfApiProxy} */
@@ -56,6 +69,11 @@ export class DownloadShelfApiProxyImpl {
   }
 
   /** @override */
+  doShowAll() {
+    this.handler.doShowAll();
+  }
+
+  /** @override */
   doClose() {
     this.handler.doClose();
   }
@@ -73,8 +91,23 @@ export class DownloadShelfApiProxyImpl {
   }
 
   /** @override */
+  discardDownload(downloadId) {
+    this.handler.discardDownload(downloadId);
+  }
+
+  /** @override */
+  keepDownload(downloadId) {
+    this.handler.keepDownload(downloadId);
+  }
+
+  /** @override */
   showContextMenu(downloadId, clientX, clientY, timestamp) {
     this.handler.showContextMenu(downloadId, clientX, clientY, timestamp);
+  }
+
+  /** @override */
+  openDownload(downloadId) {
+    this.handler.openDownload(downloadId);
   }
 }
 

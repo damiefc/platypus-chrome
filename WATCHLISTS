@@ -997,6 +997,7 @@
                   'chrome/test/data/extensions/api_test/file_system_provider|' \
                   'components/drive|' \
                   'google_apis/drive|' \
+                  'ash/content/file_manager|' \
                   'ui/file_manager'
     },
     'freetype_update': {
@@ -2008,8 +2009,10 @@
       'filepath': 'chrome/browser/content_settings/'\
                   '|chrome/browser/ui/views/website_settings/'\
                   '|chrome/browser/ui/website_settings/'\
+                  '|chrome/browser/privacy_sandbox/privacy_sandbox_settings'\
                   '|chrome/common/content_settings'\
-                  '|components/content_settings/',
+                  '|components/content_settings/'\
+                  '|services/network/cookie_settings',
     },
     'windows_sandboxing': {
       'filepath': 'sandbox/win/',
@@ -2583,7 +2586,6 @@
                           'sbc@chromium.org'],
     'navigation': ['alexmos+watch@chromium.org',
                    'creis+watch@chromium.org',
-                   'nasko+codewatch@chromium.org',
                    'navigation-cc+reviews@chromium.org'],
     'nearby': ['cclem+watch-nearby@google.com',
                'hais+watch-nearby@google.com',
@@ -2618,8 +2620,7 @@
                       'dimich+watch@chromium.org',
                       'fgorski+watch@chromium.org',
                       'petewil+watch@chromium.org',
-                      'romax+watch@chromium.org',
-                      'harringtond+watch@google.com'],
+                      'romax+watch@chromium.org'],
     'omnibox': ['jdonnelly+watch@chromium.org'],
     'origin_trials': ['chasej+watch@chromium.org',
                       'iclelland+watch@chromium.org'],
@@ -2711,8 +2712,7 @@
     'site_engagement': ['dominickn+watch-engagement@chromium.org'],
     'site_instance': ['ajwong+watch@chromium.org',
                       'alexmos+watch@chromium.org',
-                      'creis+watch@chromium.org',
-                      'nasko+codewatch@chromium.org'],
+                      'creis+watch@chromium.org'],
     'smartlock': ['hansberry+watch-smartlock@chromium.org',
                   'vecore+watch-smartlock@google.com'],
     'smb': ['cros-enterprise-lax+smbwatch@chromium.org'],

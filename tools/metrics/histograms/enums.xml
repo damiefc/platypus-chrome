@@ -9699,6 +9699,19 @@ Called by update_bad_message_reasons.py.-->
   <int value="9" label="INTERACTION_COMPLETE"/>
 </enum>
 
+<enum name="BreakoutBoxUsage">
+  <int value="0" label="ReadableVideo"/>
+  <int value="1" label="ReadableVideoWorker"/>
+  <int value="2" label="ReadableAudio"/>
+  <int value="3" label="ReadableAudioWorker"/>
+  <int value="4" label="WritableVideo"/>
+  <int value="5" label="WritableVideoWorker"/>
+  <int value="6" label="WritableAudio"/>
+  <int value="7" label="WritableAudioWorker"/>
+  <int value="8" label="ReadableControlVideo"/>
+  <int value="9" label="WritableControlVideo"/>
+</enum>
+
 <enum name="BrokenAlternateProtocolLocation">
   <int value="0" label="HTTP_STREAM_FACTORY_JOB"/>
   <int value="1" label="QUIC_STREAM_FACTORY"/>
@@ -39165,6 +39178,7 @@ Called by update_gpu_driver_bug_workaround_entries.py.-->
   <int value="6" label="kPrintedPdf"/>
   <int value="7" label="kDiagnosticsLog"/>
   <int value="8" label="kLacrosDownload"/>
+  <int value="9" label="kScan"/>
 </enum>
 
 <enum name="HoldingSpacePodAction">
@@ -41578,6 +41592,9 @@ Called by update_gpu_driver_bug_workaround_entries.py.-->
 </enum>
 
 <enum name="InterstitialTypeEnum">
+  <obsolete>
+    Removed from the code May 2021.
+  </obsolete>
   <int value="0" label="Loud"/>
   <int value="1" label="Quiet small"/>
   <int value="2" label="Quiet giant"/>
@@ -45340,6 +45357,7 @@ from previous Chrome versions.
   <int value="-1632828661" label="PrivacyReorderedAndroid:disabled"/>
   <int value="-1631329950" label="ssl-version-max"/>
   <int value="-1630419335" label="enable-download-notification"/>
+  <int value="-1630332314" label="CellularForbidAttachApn:enabled"/>
   <int value="-1629518055"
       label="AdaptiveButtonInTopToolbarCustomization:enabled"/>
   <int value="-1626110605" label="WebBundles:disabled"/>
@@ -48189,6 +48207,7 @@ from previous Chrome versions.
   <int value="799680074" label="ContextualSearchTranslationModel:enabled"/>
   <int value="802463708" label="WebViewSurfaceControl:enabled"/>
   <int value="803282885" label="PreferHtmlOverPlugins:disabled"/>
+  <int value="803982925" label="CellularForbidAttachApn:disabled"/>
   <int value="804958673" label="LensCameraAssistedSearch:enabled"/>
   <int value="805882800" label="SafetyCheckChromeCleanerChild:disabled"/>
   <int value="806035639" label="EnableNeuralPalmDetectionFilter:disabled"/>
@@ -49181,6 +49200,7 @@ from previous Chrome versions.
   <int value="1664463407" label="FirstPartySets:enabled"/>
   <int value="1665349789" label="spurious-power-button-window"/>
   <int value="1665400247" label="OsSettingsDeepLinking:enabled"/>
+  <int value="1665430464" label="force-control-face-ae"/>
   <int value="1667584730" label="WebXR:disabled"/>
   <int value="1668611601" label="enable-encrypted-media"/>
   <int value="1669767166" label="NewTabPageBackgrounds:disabled"/>
@@ -59289,6 +59309,7 @@ Called by update_net_trust_anchors.py.-->
   <int value="1205" label="Offer Translation"/>
   <int value="1206" label="Add Input Method"/>
   <int value="1207" label="Spell Check"/>
+  <int value="1208" label="Show Predictive Writing"/>
   <int value="1300" label="Google Drive Connection"/>
   <int value="1400" label="Add Printer"/>
   <int value="1401" label="Saved Printers"/>
@@ -65500,6 +65521,33 @@ https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.1.pdf
   <int value="5" label="User elected to send feedback."/>
 </enum>
 
+<enum name="ProjectorMarkerColor">
+  <int value="0" label="Black"/>
+  <int value="1" label="White"/>
+  <int value="2" label="Blue"/>
+</enum>
+
+<enum name="ProjectorToolbar">
+  <int value="0" label="Toolbar opened"/>
+  <int value="1" label="Toolbar closed"/>
+  <int value="2" label="Key idea"/>
+  <int value="3" label="Laser pointer"/>
+  <int value="4" label="Marker tool"/>
+  <int value="5" label="Expand marker tools"/>
+  <int value="6" label="Collapse marker tools"/>
+  <int value="7" label="Clear all markers"/>
+  <int value="8" label="Start magnifier"/>
+  <int value="9" label="Stop magnifier"/>
+  <int value="10" label="Start selfie camera"/>
+  <int value="11" label="Stop selfie camera"/>
+  <int value="12" label="Start closed captions"/>
+  <int value="13" label="Stop closed captions"/>
+  <int value="14" label="Toggle toolbar location to bottom left"/>
+  <int value="15" label="Toggle toolbar location to top left"/>
+  <int value="16" label="Toggle toolbar location to top right"/>
+  <int value="17" label="Toggle toolbar location to bottom right"/>
+</enum>
+
 <enum name="PromoBrowserCommandEnum">
   <int value="0" label="Unknown Command"/>
   <int value="1" label="Open Safety Check"/>
@@ -69248,6 +69296,9 @@ https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.1.pdf
 </enum>
 
 <enum name="SafeBrowsingUserOptIn">
+  <obsolete>
+    Removed from the code May 2021.
+  </obsolete>
   <int value="0" label="User has opted-out"/>
   <int value="1" label="User has opted-in"/>
   <int value="2" label="Unable to determine user opt-in"/>
@@ -82281,6 +82332,22 @@ others/histograms.xml -->
 <enum name="WallpaperApps">
   <int value="0" label="Chrome OS Wallpaper Picker App"/>
   <int value="1" label="Android Wallpapers App"/>
+</enum>
+
+<enum name="WallpaperCollection">
+  <int value="-1750392449" label="Landscapes"/>
+  <int value="-1479919333" label="Made by Canvas"/>
+  <int value="-1094276707" label="Element"/>
+  <int value="-917389828" label="Collage"/>
+  <int value="-622998436" label="Imaginary"/>
+  <int value="711032077" label="Cityscapes"/>
+  <int value="1129315377" label="Composition"/>
+  <int value="1659755048" label="Illustrations"/>
+  <int value="1668389814" label="Art"/>
+  <int value="1804492839" label="Colors"/>
+  <int value="1894705443" label="Leisure"/>
+  <int value="2084467495" label="Dessert time"/>
+  <int value="2094027636" label="Solid colors"/>
 </enum>
 
 <enum name="WallpaperColorExtractionResult">

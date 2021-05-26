@@ -120,6 +120,13 @@ Polymer({
     return /** @type {?CrToggleElement} */ (this.$$('#simLockButton'));
   },
 
+  /**
+   * @return {?CrButtonElement}
+   */
+  getUnlockButton() {
+    return /** @type {?CrButtonElement} */ (this.$$('#unlockPinButton'));
+  },
+
   /** @private */
   onDialogOpenChanged_() {
     if (this.isDialogOpen_) {
@@ -162,7 +169,7 @@ Polymer({
       return;
     }
 
-    const lockEnabled = simLockStatus.lockEnabled;
+    const lockEnabled = this.isActiveSim_ && simLockStatus.lockEnabled;
     if (lockEnabled !== this.lockEnabled_) {
       this.setLockEnabled_ = lockEnabled;
       this.updateLockEnabled_();

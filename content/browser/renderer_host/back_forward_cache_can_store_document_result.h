@@ -33,6 +33,8 @@ class BackForwardCacheCanStoreDocumentResult {
 
   // Add reasons contained in the |other| to |this|.
   void AddReasonsFrom(const BackForwardCacheCanStoreDocumentResult& other);
+  bool HasNotStoredReason(
+      BackForwardCacheMetrics::NotRestoredReason reason) const;
 
   void No(BackForwardCacheMetrics::NotRestoredReason reason);
   void NoDueToFeatures(uint64_t features);
@@ -57,6 +59,7 @@ class BackForwardCacheCanStoreDocumentResult {
   std::string ToString() const;
 
  private:
+  void AddNotStoredReason(BackForwardCacheMetrics::NotRestoredReason reason);
   std::string NotRestoredReasonToString(
       BackForwardCacheMetrics::NotRestoredReason reason) const;
 

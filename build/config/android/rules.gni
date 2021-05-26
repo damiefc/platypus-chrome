@@ -2482,7 +2482,6 @@ if (enable_java_templates) {
                                "resources_config_paths",
                                "shared_resources",
                                "shared_resources_allowlist_locales",
-                               "support_zh_hk",
                                "uses_split",
                              ])
       short_resource_paths = _short_resource_paths
@@ -2754,6 +2753,7 @@ if (enable_java_templates) {
                                "secondary_native_lib_placeholders",
                                "sources",
                                "static_library_dependent_targets",
+                               "use_classic_desugar",
                                "library_always_compress",
                                "library_renames",
                              ])
@@ -3497,11 +3497,11 @@ if (enable_java_templates) {
                                "static_library_provider",
                                "static_library_synchronized_proguard",
                                "strip_resource_names",
-                               "support_zh_hk",
                                "target_sdk_version",
                                "testonly",
                                "uncompress_dex",
                                "uncompress_shared_libraries",
+                               "use_classic_desugar",
                                "library_always_compress",
                                "library_renames",
                                "use_chromium_linker",
@@ -3624,7 +3624,6 @@ if (enable_java_templates) {
                                "static_library_provider",
                                "static_library_synchronized_proguard",
                                "strip_resource_names",
-                               "support_zh_hk",
                                "target_sdk_version",
                                "testonly",
                                "uncompress_shared_libraries",
@@ -4333,6 +4332,7 @@ if (enable_java_templates) {
         "missing_classes_allowlist",
         "requires_android",
         "testonly",
+        "use_classic_desugar",
       ]
 
       # Create android_java_prebuilt target for extra jars within jars/.

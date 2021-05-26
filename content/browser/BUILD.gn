@@ -1271,6 +1271,8 @@ source_set("browser") {
     "portal/portal.h",
     "portal/portal_navigation_throttle.cc",
     "portal/portal_navigation_throttle.h",
+    "prerender/prerender_commit_deferring_condition.cc",
+    "prerender/prerender_commit_deferring_condition.h",
     "prerender/prerender_host.cc",
     "prerender/prerender_host.h",
     "prerender/prerender_host_registry.cc",
@@ -2368,6 +2370,8 @@ source_set("browser") {
       ]
       deps += [ "//ui/base/cursor" ]
     }
+
+    # TODO(crbug.com/1210549): Slow capturer should be removed once new path is stable.
     if (is_chromeos_ash) {
       sources += [
         "media/capture/slow_capture_overlay_chromeos.cc",

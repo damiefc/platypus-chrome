@@ -22031,6 +22031,15 @@ should be able to be added at any place in this file.
   <description>User enables FLoC on the privacy sandbox page.</description>
 </action>
 
+<action name="Settings.PrivacySandbox.FlocSubpageOpened">
+  <owner>andzaytsev@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User opens the FLoC subpage by clicking on an element on the privacy sandbox
+    page.
+  </description>
+</action>
+
 <action name="Settings.PrivacySandbox.OpenedFromCookiesPageToast">
   <owner>rainhard@chromium.org</owner>
   <owner>sauski@google.com</owner>
@@ -28376,6 +28385,8 @@ should be able to be added at any place in this file.
   <suffix name="ReadingListEntryPoint"
       label="For ReadingListEntryPoint feature."/>
   <suffix name="ReopenTab" label="For ReopenTab feature."/>
+  <suffix name="SharedHighlightingBuilder"
+      label="For SharedHighlightingBuilder feature."/>
   <suffix name="TabGroupsDragAndDrop" label="For drop-to-merge in tab group."/>
   <suffix name="TabGroupsQuicklyComparePages"
       label="For long press links to create tab groups."/>

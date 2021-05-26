@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/platform/loader/testing/bytes_consumer_test_reader.h"
 #include "third_party/blink/renderer/platform/loader/testing/mock_fetch_context.h"
 #include "third_party/blink/renderer/platform/loader/testing/test_resource_fetcher_properties.h"
+#include "third_party/blink/renderer/platform/testing/code_cache_loader_mock.h"
 #include "third_party/blink/renderer/platform/testing/mock_context_lifecycle_notifier.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support_with_mock_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -88,7 +89,7 @@ class ResourceLoaderTest : public testing::Test {
           std::move(freezable_task_runner));
     }
     std::unique_ptr<WebCodeCacheLoader> CreateCodeCacheLoader() override {
-      return Platform::Current()->CreateCodeCacheLoader();
+      return std::make_unique<CodeCacheLoaderMock>();
     }
   };
 
@@ -138,7 +139,7 @@ class ResourceLoaderTest : public testing::Test {
             resource_load_info_notifier_wrapper,
         WebURLLoaderClient*) override {}
 
-    void SetDefersLoading(LoaderFreezeMode) override {}
+    void Freeze(LoaderFreezeMode) override {}
     void DidChangePriority(WebURLRequest::Priority, int) override {
       NOTREACHED();
     }

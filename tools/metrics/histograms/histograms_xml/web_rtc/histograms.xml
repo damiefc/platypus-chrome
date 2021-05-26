@@ -931,7 +931,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebRTC.BWE.Probing.ProbeClusterSizeInBytes" units="bytes"
-    expires_after="2021-09-19">
+    expires_after="2021-11-21">
   <owner>jonasolsson@chromium.org</owner>
   <owner>crodbro@chromium.org</owner>
   <summary>
@@ -941,7 +941,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebRTC.BWE.Probing.ProbesPerCluster" units="units"
-    expires_after="2021-09-19">
+    expires_after="2021-11-21">
   <owner>jonasolsson@chromium.org</owner>
   <owner>crodbro@chromium.org</owner>
   <summary>
@@ -1334,6 +1334,54 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="WebRTC.PeerConnection.Duration.Network" units="microseconds"
+    expires_after="2022-05-24">
+  <owner>handellm@chromium.org</owner>
+  <owner>webrtc-dev@chromium.org</owner>
+  <summary>
+    Duration between the moment the WebRTC network thread's JingleThreadWrapper
+    begins running a task and the moment it ends executing it. It only measures
+    durations of tasks posted to rtc::Thread. Samples are acquired periodically
+    every several seconds by JingleThreadWrapper.
+
+    Warning: This metric does not include reports from clients with
+    low-resolution clocks (i.e. on Windows, ref.
+    |TimeTicks::IsHighResolution()|).
+  </summary>
+</histogram>
+
+<histogram name="WebRTC.PeerConnection.Duration.Signaling" units="microseconds"
+    expires_after="2022-05-24">
+  <owner>handellm@chromium.org</owner>
+  <owner>webrtc-dev@chromium.org</owner>
+  <summary>
+    Duration between the moment the WebRTC signaling thread's
+    JingleThreadWrapper begins running a task and the moment it ends executing
+    it. It only measures durations of tasks posted to rtc::Thread. Samples are
+    acquired periodically every several seconds by JingleThreadWrapper.
+
+    Warning: This metric does not include reports from clients with
+    low-resolution clocks (i.e. on Windows, ref.
+    |TimeTicks::IsHighResolution()|). solution.
+  </summary>
+</histogram>
+
+<histogram name="WebRTC.PeerConnection.Duration.Worker" units="microseconds"
+    expires_after="2022-05-24">
+  <owner>handellm@chromium.org</owner>
+  <owner>webrtc-dev@chromium.org</owner>
+  <summary>
+    Duration between the moment the WebRTC worker thread's JingleThreadWrapper
+    begins running a task and the moment it ends executing it. It only measures
+    durations of tasks posted to rtc::Thread. Samples are acquired periodically
+    every several seconds by JingleThreadWrapper.
+
+    Warning: This metric does not include reports from clients with
+    low-resolution clocks (i.e. on Windows, ref.
+    |TimeTicks::IsHighResolution()|).
+  </summary>
+</histogram>
+
 <histogram name="WebRTC.PeerConnection.IceRegatheringReason"
     enum="IceRegatheringReason" expires_after="M77">
   <owner>honghaiz@chromium.org</owner>
@@ -1432,6 +1480,54 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="WebRTC.PeerConnection.Latency.Network" units="microseconds"
+    expires_after="2022-05-24">
+  <owner>handellm@chromium.org</owner>
+  <owner>webrtc-dev@chromium.org</owner>
+  <summary>
+    Latency defined as the duration between the moment a task is scheduled from
+    the WebRTC network thread's JingleThreadWrapper's task runner, and the
+    moment it begins running. Samples are acquired periodically every several
+    seconds by JingleThreadWrapper.
+
+    Warning: This metric does not include reports from clients with
+    low-resolution clocks (i.e. on Windows, ref.
+    |TimeTicks::IsHighResolution()|).
+  </summary>
+</histogram>
+
+<histogram name="WebRTC.PeerConnection.Latency.Signaling" units="microseconds"
+    expires_after="2022-05-24">
+  <owner>handellm@chromium.org</owner>
+  <owner>webrtc-dev@chromium.org</owner>
+  <summary>
+    Latency defined as the duration between the moment a task is scheduled from
+    the WebRTC signaling thread's JingleThreadWrapper's task runner, and the
+    moment it begins running. Samples are acquired periodically every several
+    seconds by JingleThreadWrapper.
+
+    Warning: This metric does not include reports from clients with
+    low-resolution clocks (i.e. on Windows, ref.
+    |TimeTicks::IsHighResolution()|).
+  </summary>
+</histogram>
+
+<histogram name="WebRTC.PeerConnection.Latency.Worker" units="microseconds"
+    expires_after="2022-05-24">
+  <owner>handellm@chromium.org</owner>
+  <owner>webrtc-dev@chromium.org</owner>
+  <summary>
+    Latency defined as the duration between the moment a task is scheduled from
+    the WebRTC worker thread's JingleThreadWrapper's task runner, and the moment
+    it begins running. Samples are acquired periodically every several seconds
+    by JingleThreadWrapper.
+
+    Warning: This metric does not include reports from clients with
+    low-resolution clocks (i.e. on Windows, ref.
+    |TimeTicks::IsHighResolution()|).
+  </summary>
+</histogram>
+
 <histogram name="WebRTC.PeerConnection.OfferExtmapAllowMixed"
     enum="PeerConnectionOfferExtmapAllowMixed" expires_after="2021-10-31">
   <owner>kron@chromium.org</owner>
@@ -1454,7 +1550,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebRTC.PeerConnection.SdpComplexUsage.CreateAnswer"
-    enum="PeerConnectionSdpUsageCategory" expires_after="2021-11-07">
+    enum="PeerConnectionSdpUsageCategory" expires_after="2022-05-07">
   <owner>hbos@chromium.org</owner>
   <owner>webrtc-dev@chromium.org</owner>
   <summary>
@@ -1466,7 +1562,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebRTC.PeerConnection.SdpComplexUsage.CreateOffer"
-    enum="PeerConnectionSdpUsageCategory" expires_after="2021-07-01">
+    enum="PeerConnectionSdpUsageCategory" expires_after="2022-05-07">
   <owner>hbos@chromium.org</owner>
   <owner>webrtc-dev@chromium.org</owner>
   <summary>
@@ -1478,7 +1574,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebRTC.PeerConnection.SdpComplexUsage.SetLocalAnswer"
-    enum="PeerConnectionSdpUsageCategory" expires_after="2021-07-01">
+    enum="PeerConnectionSdpUsageCategory" expires_after="2022-05-07">
   <owner>hbos@chromium.org</owner>
   <owner>webrtc-dev@chromium.org</owner>
   <summary>
@@ -1491,7 +1587,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebRTC.PeerConnection.SdpComplexUsage.SetLocalOffer"
-    enum="PeerConnectionSdpUsageCategory" expires_after="2021-07-01">
+    enum="PeerConnectionSdpUsageCategory" expires_after="2022-05-07">
   <owner>hbos@chromium.org</owner>
   <owner>webrtc-dev@chromium.org</owner>
   <summary>
@@ -1504,7 +1600,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebRTC.PeerConnection.SdpComplexUsage.SetRemoteAnswer"
-    enum="PeerConnectionSdpUsageCategory" expires_after="2021-07-01">
+    enum="PeerConnectionSdpUsageCategory" expires_after="2022-05-07">
   <owner>hbos@chromium.org</owner>
   <owner>webrtc-dev@chromium.org</owner>
   <summary>
@@ -1517,7 +1613,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebRTC.PeerConnection.SdpComplexUsage.SetRemoteOffer"
-    enum="PeerConnectionSdpUsageCategory" expires_after="2021-07-01">
+    enum="PeerConnectionSdpUsageCategory" expires_after="2022-05-07">
   <owner>hbos@chromium.org</owner>
   <owner>webrtc-dev@chromium.org</owner>
   <summary>
@@ -1855,7 +1951,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="WebRTC.UnreliableDataChannelMessageSize" units="bytes"
-    expires_after="2021-09-19">
+    expires_after="2021-11-21">
   <owner>perkj@chromium.org</owner>
   <summary>
     Sizes of messages sent over unreliable data channels. The size of an

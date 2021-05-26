@@ -512,6 +512,8 @@ _CONFIG = [
             'ui::AXMode',
             'ui::AXNodeData',
             'ui::AXTreeID',
+            'ui::kAXModeBasic',
+            'ui::kAXModeComplete',
             'ax::mojom::BoolAttribute',
             'ax::mojom::HasPopup',
             'ax::mojom::State',
@@ -894,6 +896,15 @@ _CONFIG = [
         'paths': ['third_party/blink/renderer/core/workers/worker_thread.cc'],
         'allowed': [
             'base::ScopedAllowBaseSyncPrimitives',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/core/loader/document_loader.cc',
+            'third_party/blink/renderer/core/loader/document_loader.h',
+        ],
+        'allowed': [
+            'blink::mojom::CodeCacheHost',
         ],
     },
     {

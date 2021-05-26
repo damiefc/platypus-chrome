@@ -87,16 +87,14 @@ std::string GetReportPostBody(const content::ConversionReport& report) {
 
   // The API denotes this id as a string. Note that a uint64_t cannot be put in
   // a dict as an integer key.
-  dict.SetStringKey("source_event_id", report.impression.impression_data());
+  dict.SetStringKey("source_event_id",
+                    base::NumberToString(report.impression.impression_data()));
 
-  int trigger_data;
-  bool success = base::StringToInt(report.conversion_data, &trigger_data);
-  DCHECK(success);
-  dict.SetIntKey("trigger_data", trigger_data);
+  dict.SetIntKey("trigger_data", report.conversion_data);
 
   // Write the dict to json;
   std::string output_json;
-  success = base::JSONWriter::Write(dict, &output_json);
+  bool success = base::JSONWriter::Write(dict, &output_json);
   DCHECK(success);
   return output_json;
 }
@@ -175,7 +173,7 @@ void ConversionNetworkSenderImpl::SendReport(ConversionReport* report,
   // retry succeeds/fails.
   int retry_mode = network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE |
                    network::SimpleURLLoader::RETRY_ON_NAME_NOT_RESOLVED;
-  simple_url_loader_ptr->SetRetryOptions(1 /* max_retries */, retry_mode);
+  simple_url_loader_ptr->SetRetryOptions(/*max_retries=*/1, retry_mode);
 
   // Unretained is safe because the URLLoader is owned by |this| and will be
   // deleted before |this|.

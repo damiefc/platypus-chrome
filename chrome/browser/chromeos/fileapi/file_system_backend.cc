@@ -12,8 +12,8 @@
 #include "ash/content/file_manager/url_constants.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
+#include "base/cxx17_backports.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -244,8 +244,7 @@ bool FileSystemBackend::IsAccessAllowed(
 
 #if !defined(OFFICIAL_BUILD)
   // The chrome://file-manager can access its filesystem origin.
-  if (url.origin().GetURL() ==
-      chromeos::file_manager::kChromeUIFileManagerURL) {
+  if (url.origin().GetURL() == ash::file_manager::kChromeUIFileManagerURL) {
     return true;
   }
 #endif

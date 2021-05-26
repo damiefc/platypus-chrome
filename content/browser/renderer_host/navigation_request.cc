@@ -3577,16 +3577,13 @@ void NavigationRequest::OnWillProcessResponseChecksComplete(
       // helper will request fallback content (triggering completion) and report
       // the resource timing info once the entire response body is drained.
       //
-      // The response body fetcher has a lifetime that's weakly associated with
-      // `this`. The helper will check if `this` is still live before requesting
-      // fallback content and reporting the timing info to the renderer.
-      //
-      // TODO(dcheng): Migrate this to be a NavigationRequest::UserData once
-      // that's implemented.
+      // The response body fetcher takes advantage of base::SupportsUserData to
+      // ensure that the fetcher does not outlive `this`. This ensures that the
+      // fallback / resource timing are only reported if the navigation request
+      // is logically still pending.
       ObjectNavigationFallbackBodyLoader::CreateAndStart(
-          *common_params_, *commit_params_, *response(),
+          *this, *common_params_, *commit_params_, *response(),
           std::move(response_body_), std::move(url_loader_client_endpoints_),
-          weak_factory_.GetWeakPtr(),
           base::BindOnce(&NavigationRequest::OnRequestFailedInternal,
                          weak_factory_.GetWeakPtr(),
                          network::URLLoaderCompletionStatus(net::ERR_ABORTED),
@@ -4864,6 +4861,7 @@ void NavigationRequest::WillStartRequest() {
   }
 
   throttle_runner_->RegisterNavigationThrottles();
+  commit_deferrer_->RegisterDeferringConditions(*this);
 
   // If the content/ embedder did not pass the NavigationUIData at the beginning
   // of the navigation, ask for it now.
@@ -5594,6 +5592,7 @@ bool NavigationRequest::IsInPrimaryMainFrame() {
 }
 
 bool NavigationRequest::IsPrerenderedPageActivation() {
+  // TODO(https://crbug.com/1211736): Make this CHECK more robust.
   CHECK_GE(state_, WILL_START_REQUEST);
   return prerender_frame_tree_node_id_ != RenderFrameHost::kNoFrameTreeNodeId;
 }

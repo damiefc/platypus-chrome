@@ -7,8 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include "ash/app_list/app_list_bubble_presenter.h"
 #include "ash/app_list/app_list_metrics.h"
-#include "ash/app_list/bubble/app_list_bubble.h"
 #include "ash/app_list/model/app_list_folder_item.h"
 #include "ash/app_list/model/app_list_item.h"
 #include "ash/app_list/views/app_list_main_view.h"
@@ -16,6 +16,7 @@
 #include "ash/app_list/views/apps_container_view.h"
 #include "ash/app_list/views/apps_grid_view.h"
 #include "ash/app_list/views/contents_view.h"
+#include "ash/app_list/views/paged_apps_grid_view.h"
 #include "ash/app_list/views/search_box_view.h"
 #include "ash/assistant/assistant_controller_impl.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
@@ -255,12 +256,11 @@ GetTransitionFromMetricsAnimationInfo(
 
 AppListControllerImpl::AppListControllerImpl()
     : model_(std::make_unique<AppListModel>()),
-      color_provider_(AppListColorProviderImpl()),
       presenter_(this),
       is_notification_indicator_enabled_(
           ::features::IsNotificationIndicatorEnabled()) {
   if (features::IsAppListBubbleEnabled())
-    app_list_bubble_ = std::make_unique<AppListBubble>();
+    bubble_presenter_ = std::make_unique<AppListBubblePresenter>(this);
 
   model_->AddObserver(this);
   SessionControllerImpl* session_controller =
@@ -545,7 +545,7 @@ void AppListControllerImpl::DismissAppList() {
   // Don't check tablet mode here. This function can be called during tablet
   // mode transitions and we always want to close anyway.
   if (features::IsAppListBubbleEnabled())
-    app_list_bubble_->Dismiss();
+    bubble_presenter_->Dismiss();
 
   presenter_.Dismiss(base::TimeTicks());
 }
@@ -562,12 +562,13 @@ void AppListControllerImpl::GetAppInfoDialogBounds(
 void AppListControllerImpl::ShowAppList() {
   if (features::IsAppListBubbleEnabled() && !IsTabletMode()) {
     DCHECK(!presenter_.GetTargetVisibility());
-    app_list_bubble_->Show(GetDisplayIdToShowAppListOn());
+    bubble_presenter_->Show(GetDisplayIdToShowAppListOn());
     return;
   }
-  DCHECK(!features::IsAppListBubbleEnabled() || !app_list_bubble_->IsShowing());
+  DCHECK(!features::IsAppListBubbleEnabled() ||
+         !bubble_presenter_->IsShowing());
   presenter_.Show(AppListViewState::kPeeking, GetDisplayIdToShowAppListOn(),
-                  base::TimeTicks());
+                  base::TimeTicks(), /*show_source=*/absl::nullopt);
 }
 
 aura::Window* AppListControllerImpl::GetWindow() {
@@ -709,10 +710,11 @@ void AppListControllerImpl::Show(int64_t display_id,
     LogAppListShowSource(show_source.value());
 
   if (features::IsAppListBubbleEnabled() && !IsTabletMode()) {
-    app_list_bubble_->Show(display_id);
+    bubble_presenter_->Show(display_id);
     return;
   }
-  presenter_.Show(AppListViewState::kPeeking, display_id, event_time_stamp);
+  presenter_.Show(AppListViewState::kPeeking, display_id, event_time_stamp,
+                  show_source);
 }
 
 void AppListControllerImpl::UpdateYPositionAndOpacity(
@@ -760,9 +762,9 @@ ShelfAction AppListControllerImpl::ToggleAppList(
   }
 
   if (features::IsAppListBubbleEnabled()) {
-    app_list_bubble_->Toggle(display_id);
-    return app_list_bubble_->IsShowing() ? SHELF_ACTION_APP_LIST_SHOWN
-                                         : SHELF_ACTION_APP_LIST_DISMISSED;
+    bubble_presenter_->Toggle(display_id);
+    return bubble_presenter_->IsShowing() ? SHELF_ACTION_APP_LIST_SHOWN
+                                          : SHELF_ACTION_APP_LIST_DISMISSED;
   }
 
   base::AutoReset<bool> auto_reset(&should_dismiss_immediately_,

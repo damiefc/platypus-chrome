@@ -51,7 +51,6 @@
 #include "base/allocator/partition_allocator/thread_cache.h"
 #include "base/bits.h"
 #include "base/compiler_specific.h"
-#include "base/partition_alloc_buildflags.h"
 #include "build/build_config.h"
 
 // We use this to make MEMORY_TOOL_REPLACES_ALLOCATOR behave the same for max
@@ -421,13 +420,14 @@ struct BASE_EXPORT PartitionRoot {
     return bits::AlignUp(raw_size, SystemPageSize());
   }
 
-  static ALWAYS_INLINE size_t GetDirectMapReservedSize(size_t raw_size) {
+  static ALWAYS_INLINE size_t GetDirectMapReservedSize(size_t padded_raw_size) {
     // Caller must check that the size is not above the MaxDirectMapped()
     // limit before calling. This also guards against integer overflow in the
     // calculation here.
-    PA_DCHECK(raw_size <= MaxDirectMapped());
-    return bits::AlignUp(raw_size + GetDirectMapMetadataAndGuardPagesSize(),
-                         DirectMapAllocationGranularity());
+    PA_DCHECK(padded_raw_size <= MaxDirectMapped());
+    return bits::AlignUp(
+        padded_raw_size + GetDirectMapMetadataAndGuardPagesSize(),
+        DirectMapAllocationGranularity());
   }
 
 // PartitionRefCount contains a cookie if slow checks are enabled or
@@ -794,13 +794,10 @@ PartitionAllocGetSlotSpanForSizeQuery(void* ptr) {
 
 #if BUILDFLAG(ENABLE_BRP_DIRECTMAP_SUPPORT)
 ALWAYS_INLINE void* PartitionAllocGetDirectMapSlotStart(void* ptr) {
-  auto* offset_ptr = ReservationOffsetPointer(reinterpret_cast<uintptr_t>(ptr));
-  if (LIKELY(*offset_ptr == NotInDirectMapOffsetTag()))
+  uintptr_t reservation_start = GetDirectMapReservationStart(ptr);
+  if (!reservation_start)
     return nullptr;
-  // TODO(tasak): optimize this function. i.e. GetReservationStart calls
-  // ReservationOffsetPointer again.
-  return reinterpret_cast<void*>(GetReservationStart(ptr) +
-                                 PartitionPageSize());
+  return reinterpret_cast<void*>(reservation_start + PartitionPageSize());
 }
 #endif
 
@@ -1608,8 +1605,6 @@ ALWAYS_INLINE void* PartitionRoot<thread_safe>::AlignedAllocFlags(
   // Catch unsupported alignment requests early.
   PA_CHECK(alignment <= kMaxSupportedAlignment);
   size_t raw_size = AdjustSizeForExtrasAdd(requested_size);
-  // TODO(bartekn): Support direct map. Until then, catch unsupported requests.
-  PA_CHECK(alignment <= PartitionPageSize() || raw_size <= kMaxBucketed);
 
   size_t adjusted_size = requested_size;
   if (alignment <= PartitionPageSize()) {

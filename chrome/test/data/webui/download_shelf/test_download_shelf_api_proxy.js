@@ -10,8 +10,12 @@ export class TestDownloadShelfApiProxy extends TestBrowserProxy {
   constructor() {
     super([
       'doClose',
+      'doShowAll',
+      'discardDownload',
+      'keepDownload',
       'getDownloads',
       'getFileIcon',
+      'openDownload',
       'showContextMenu',
     ]);
 
@@ -32,6 +36,21 @@ export class TestDownloadShelfApiProxy extends TestBrowserProxy {
   }
 
   /** @override */
+  doShowAll() {
+    this.methodCalled('doShowAll');
+  }
+
+  /** @override */
+  discardDownload(downloadId) {
+    this.methodCalled('discardDownload', [downloadId]);
+  }
+
+  /** @override */
+  keepDownload(downloadId) {
+    this.methodCalled('keepDownload', [downloadId]);
+  }
+
+  /** @override */
   getDownloads() {
     this.methodCalled('getDownloads');
     return Promise.resolve({downloadItems: this.downloadItems_});
@@ -46,6 +65,11 @@ export class TestDownloadShelfApiProxy extends TestBrowserProxy {
   /** @override */
   showContextMenu(downloadId, clientX, clientY) {
     this.methodCalled('showContextMenu', [downloadId, clientX, clientY]);
+  }
+
+  /** @override */
+  openDownload(downloadId) {
+    this.methodCalled('openDownload', [downloadId]);
   }
 
   /** @override */

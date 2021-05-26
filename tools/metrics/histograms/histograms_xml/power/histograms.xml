@@ -97,7 +97,7 @@ Also used in tools/metrics/histograms/histograms_xml/others/histograms.xml
 </histogram>
 
 <histogram name="Power.BatteryDischargeRate" units="mW"
-    expires_after="2021-09-19">
+    expires_after="2021-11-21">
   <owner>tbroch@chromium.org</owner>
   <summary>
     Chrome OS battery discharge rate in mW sampled every 30 seconds while the
@@ -291,26 +291,32 @@ Also used in tools/metrics/histograms/histograms_xml/others/histograms.xml
   </summary>
 </histogram>
 
-<histogram name="Power.CpuTimeSecondsPerPowerMode" enum="PowerMode"
-    expires_after="2021-12-31">
+<histogram name="Power.CpuTimeSecondsPerPowerMode.{ProcessType}"
+    enum="PowerMode" expires_after="2021-12-31">
   <owner>eseckler@chromium.org</owner>
   <owner>skyostil@chromium.org</owner>
   <summary>
-    Total seconds of CPU time consumed by Chrome, split by process type and
-    power mode. Currently only implemented on Android. For every second of CPU
-    time consumed by a process of the chosen type, while a specific PowerMode
-    was active, a sample is recorded into the bucket for the PowerMode. Samples
-    are recorded periodically depending on the task load of each process's main
-    thread. The histogram thus shows the total sum of CPU time seconds spent per
-    PowerMode within all processes of the chosen type across all users.
+    Total seconds of CPU time consumed by Chrome's {ProcessType} process, split
+    by power mode. Currently only implemented on Android. For every second of
+    CPU time consumed by the process, while a specific PowerMode was active, a
+    sample is recorded into the bucket for the PowerMode. Samples are recorded
+    periodically depending on the task load of each process's main thread. The
+    histogram thus shows the total sum of CPU time seconds spent per PowerMode
+    within all {ProcessType} processes across all users.
 
     For a histogram of daily per-user values, select &quot;Per-Client
     Aggregation Mode&quot;.
   </summary>
+  <token key="ProcessType">
+    <variant name="Browser" summary="browser"/>
+    <variant name="GPU" summary="GPU"/>
+    <variant name="Other" summary="other type of"/>
+    <variant name="Renderer" summary="renderer"/>
+  </token>
 </histogram>
 
 <histogram name="Power.CpuTimeSecondsPerProcessType" enum="ProcessType2"
-    expires_after="2021-11-14">
+    expires_after="2021-11-21">
   <owner>eseckler@chromium.org</owner>
   <owner>skyostil@chromium.org</owner>
   <summary>
@@ -349,24 +355,30 @@ Also used in tools/metrics/histograms/histograms_xml/others/histograms.xml
   </token>
 </histogram>
 
-<histogram name="Power.CpuTimeSecondsPerThreadType"
+<histogram name="Power.CpuTimeSecondsPerThreadType.{ProcessType}"
     enum="CpuTimeMetricsThreadType" expires_after="2021-10-10">
   <owner>eseckler@chromium.org</owner>
   <owner>skyostil@chromium.org</owner>
   <summary>
-    Total seconds of CPU time consumed by Chrome, split by process type and
-    thread type. Currently only implemented on Android. For every second of CPU
-    time consumed by one thread, a sample is recorded into the bucket for the
-    thread's type. CPU time consumed by a process that cannot be attributed to a
-    specific thread is recorded into the &quot;UnattributedThread&quot; bucket.
-    Samples are recorded periodically depending on the task load of each
+    Total seconds of CPU time consumed by Chrome's {ProcessType} process, split
+    by thread type. Currently only implemented on Android. For every second of
+    CPU time consumed by one thread, a sample is recorded into the bucket for
+    the thread's type. CPU time consumed by a process that cannot be attributed
+    to a specific thread is recorded into the &quot;UnattributedThread&quot;
+    bucket. Samples are recorded periodically depending on the task load of each
     process's main thread. The histogram thus shows the total sum of CPU time
-    seconds spent per thread type (within processes of a specific type) across
-    all users.
+    seconds spent per thread type (within {ProcessType} processes) across all
+    users.
 
     For a histogram of daily per-user values, select &quot;Per-Client
     Aggregation Mode&quot;.
   </summary>
+  <token key="ProcessType">
+    <variant name="Browser" summary="browser"/>
+    <variant name="GPU" summary="GPU"/>
+    <variant name="Other" summary="other type of"/>
+    <variant name="Renderer" summary="renderer"/>
+  </token>
 </histogram>
 
 <histogram name="Power.DarkResumeWakeDurationMs" units="ms" expires_after="M85">
@@ -547,35 +559,46 @@ Also used in tools/metrics/histograms/histograms_xml/others/histograms.xml
   </summary>
 </histogram>
 
-<histogram name="Power.ForegroundBatteryDrain.30SecondsAvg" units="uAh"
-    expires_after="2021-11-07">
-  <owner>eseckler@chromium.org</owner>
-  <owner>skyostil@chromium.org</owner>
-  <summary>
-    Periodically samples the battery capacity drained while Chrome is the
-    foreground app and the device is on battery power. Sampled every 30 seconds
-    and when Chrome is backgrounded or the device connects to a charger. Sample
-    values are reported in microampere-hours and averaged over successive
-    sampling points without a change in capacity counter values.
-
-    Only supported on Android.
-  </summary>
-</histogram>
-
-<histogram name="Power.ForegroundBatteryDrain.30SecondsAvg.Exclusive"
+<histogram
+    name="Power.ForegroundBatteryDrain.30SecondsAvg{Exclusive}{DarkeningType}"
     units="uAh" expires_after="2021-11-07">
   <owner>eseckler@chromium.org</owner>
   <owner>skyostil@chromium.org</owner>
   <summary>
     Periodically samples the battery capacity drained while Chrome is the
-    foreground app and the device is on battery power. Sampled every 30 seconds
-    and when Chrome is backgrounded or the device connects to a charger. Sample
-    values are reported in microampere-hours and averaged over successive
-    sampling points without a change in capacity counter values. Only time
-    intervals where Chrome was the only foreground app are reported.
+    foreground app and the device is on battery power {DarkeningType}. Sampled
+    every 30 seconds and when Chrome is backgrounded or the device connects to a
+    charger. Sample values are reported in microampere-hours and averaged over
+    successive sampling points without a change in capacity counter values.
+    Since the capacity counter resolution differs between device models,
+    averaging the values allows us to make comparisons between frequent small
+    capacity drops and infrequent large drops. For example, a 20 mAh drop over
+    two successive periods of 30 seconds will be reported as two samples of 10
+    mAh. {Exclusive}
 
     Only supported on Android.
   </summary>
+  <token key="Exclusive">
+    <variant name="" summary=""/>
+    <variant name=".Exclusive"
+        summary="Only time intervals where Chrome was the only foreground app
+                 are reported."/>
+  </token>
+  <token key="DarkeningType">
+    <variant name="" summary=""/>
+    <variant name=".DarkMode"
+        summary="and the browser has dark theme preferred (web page darkening
+                 only) for all WebContents"/>
+    <variant name=".ForcedDarkMode"
+        summary="and the browser has forced dark mode (user-agent darkening)
+                 enabled for all WebContents"/>
+    <variant name=".LightMode"
+        summary="and the browser has forced dark mode disabled and light
+                 theme preferred for all WebContents"/>
+    <variant name=".MixedMode"
+        summary="and there is a mix of WebContents that have forced dark mode
+                 enabled, dark theme preferred, or light theme preferred"/>
+  </token>
 </histogram>
 
 <histogram name="Power.ForegroundBatteryDrain.Exclusive" units="0.1 mAh"
@@ -1021,6 +1044,19 @@ Also used in tools/metrics/histograms/histograms_xml/others/histograms.xml
   </summary>
 </histogram>
 
+<histogram name="Power.PowerScheduler.ThrottlingDurationPerCpuAffinityMode"
+    enum="CpuAffinityMode" expires_after="2021-10-29">
+  <owner>eseckler@chromium.org</owner>
+  <owner>skyostil@chromium.org</owner>
+  <summary>
+    Duration in milliseconds during which CPU throttling was active, split by
+    the CPU affinity for that duration. Only recorded when a CPU throttling
+    policy is active (e.g. throttle while idle). A sample is recorded every time
+    throttling stops (e.g. when exiting idle state), on the order of once per
+    second.
+  </summary>
+</histogram>
+
 <histogram name="Power.PowerSupplyMaxPower" units="W"
     expires_after="2021-10-31">
   <owner>bleung@chromium.org</owner>
@@ -1179,7 +1215,7 @@ Also used in tools/metrics/histograms/histograms_xml/others/histograms.xml
 </histogram>
 
 <histogram name="PowerML.NonModelDim.Result" enum="PowerMLFinalResult"
-    expires_after="2021-09-19">
+    expires_after="2021-11-21">
   <owner>napper@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
   <summary>

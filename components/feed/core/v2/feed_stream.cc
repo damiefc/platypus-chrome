@@ -203,8 +203,6 @@ void FeedStream::InitializeComplete(WaitForStoreInitializeTask::Result result) {
     }
   }
   metadata_populated_ = true;
-  // TODO(crbug/1152592): Test that the index is populated once there's an API
-  // to access the data.
   web_feed_subscription_coordinator_->Populate(result.web_feed_startup_data);
 
   for (const feedstore::StreamData& stream_data :
@@ -245,10 +243,10 @@ void FeedStream::InitialStreamLoadComplete(LoadStreamTask::Result result) {
 
   // When done loading the for-you feed, try to refresh the web-feed if there's
   // no unread content.
-  if (base::FeatureList::IsEnabled(kWebFeed) &&
-      GetFeedConfig().refresh_web_feed_after_for_you_feed_loads) {
+  if (base::FeatureList::IsEnabled(kWebFeed)) {
     if (result.stream_type.IsForYou()) {
-      if (!HasUnreadContent(kWebFeedStream)) {
+      if (!HasUnreadContent(kWebFeedStream) &&
+          subscriptions().IsWebFeedSubscriber()) {
         LoadStreamTask::Options options;
         options.load_type = LoadStreamTask::LoadType::kBackgroundRefresh;
         options.stream_type = kWebFeedStream;
@@ -582,7 +580,7 @@ void FeedStream::ForceRefreshForDebuggingTask() {
   if (base::FeatureList::IsEnabled(kWebFeed)) {
     UnloadModel(kWebFeedStream);
     store_->ClearStreamData(kWebFeedStream, base::DoNothing());
-    TriggerStreamLoad(kWebFeedStream);
+    // WebFeed is refreshed automatically after for-you.
   }
 }
 

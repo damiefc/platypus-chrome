@@ -15,6 +15,7 @@
 #include "base/strings/utf_offset_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/input_method/autocorrect_manager.h"
+#include "chrome/browser/chromeos/input_method/grammar_service_client.h"
 #include "chrome/browser/chromeos/input_method/suggestions_service_client.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
@@ -188,7 +189,9 @@ void NativeInputMethodEngine::Initialize(
       std::make_unique<chromeos::NativeInputMethodEngine::ImeObserver>(
           profile->GetPrefs(), std::move(observer),
           std::move(assistive_suggester), std::move(autocorrect_manager),
-          std::move(suggestions_collector), std::make_unique<GrammarManager>());
+          std::move(suggestions_collector),
+          std::make_unique<GrammarManager>(
+              profile, std::make_unique<GrammarServiceClient>(), this));
   InputMethodEngine::Initialize(std::move(native_observer), extension_id,
                                 profile);
 }
@@ -297,7 +300,7 @@ void NativeInputMethodEngine::ImeObserver::OnActivate(
 
     remote_manager_->ConnectToImeEngine(
         engine_id, remote_to_engine_.BindNewPipeAndPassReceiver(),
-        receiver_from_engine_.BindNewPipeAndPassRemote(), {},
+        receiver_from_engine_.BindNewPipeAndPassRemote(), /*extra=*/{0},
         base::BindOnce(&ImeObserver::OnConnected, base::Unretained(this),
                        base::Time::Now(), engine_id));
 
@@ -511,6 +514,9 @@ void NativeInputMethodEngine::ImeObserver::OnAssistiveWindowButtonClicked(
     case ui::ime::ButtonId::kSuggestion:
       if (assistive_suggester_->IsAssistiveFeatureEnabled()) {
         assistive_suggester_->AcceptSuggestion(button.index);
+      }
+      if (grammar_manager_->IsOnDeviceGrammarEnabled()) {
+        grammar_manager_->AcceptSuggestion();
       }
       break;
     case ui::ime::ButtonId::kUndo:

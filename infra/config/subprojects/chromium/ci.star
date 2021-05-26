@@ -1956,9 +1956,6 @@ ci.cipd_3pp_builder(
     schedule = "with 6h interval",
     triggered_by = [],
     properties = {
-        # TODO(hypan): Remove this property after chromium_3pp is
-        # migrated to a recipe module (crrev.com/c/2870555)
-        "platform": "linux-amd64",
         "$build/chromium_3pp": {
             "platform": "linux-amd64",
             "preprocess": [{
@@ -1981,6 +1978,7 @@ ci.cipd_builder(
         category = "android",
         short_name = "androidx",
     ),
+    notifies = ["chromium-androidx-packager"],
     executable = "recipe:android/androidx_packager",
     schedule = "0 7,14,22 * * * *",
     triggered_by = [],
@@ -1995,6 +1993,7 @@ ci.cipd_builder(
     executable = "recipe:android/avd_packager",
     schedule = "0 7 * * 0 *",
     triggered_by = [],
+    os = os.LINUX_BIONIC_REMOVE,
     properties = {
         "avd_configs": [
             "tools/android/avd/proto/creation/generic_android23.textpb",

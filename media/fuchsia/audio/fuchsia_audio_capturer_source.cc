@@ -9,9 +9,9 @@
 
 #include "base/bind.h"
 #include "base/bits.h"
+#include "base/cxx17_backports.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/location.h"
-#include "base/stl_util.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/base/audio_parameters.h"
@@ -172,7 +172,7 @@ void FuchsiaAudioCapturerSource::SetOutputDeviceForAec(
 void FuchsiaAudioCapturerSource::NotifyCaptureError(
     const std::string& message) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  callback_->OnCaptureError(message);
+  callback_->OnCaptureError(AudioCapturerSource::ErrorCode::kUnknown, message);
 }
 
 void FuchsiaAudioCapturerSource::NotifyCaptureStarted() {

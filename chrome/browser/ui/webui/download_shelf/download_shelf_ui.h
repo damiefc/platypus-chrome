@@ -41,6 +41,12 @@ class DownloadShelfUI : public ui::MojoWebUIController,
 
   void DoClose();
 
+  void DoShowAll();
+
+  void DiscardDownload(uint32_t download_id);
+
+  void KeepDownload(uint32_t download_id);
+
   void ShowContextMenu(uint32_t download_id,
                        int32_t client_x,
                        int32_t client_y,
@@ -48,6 +54,8 @@ class DownloadShelfUI : public ui::MojoWebUIController,
 
   void DoShowDownload(DownloadUIModel::DownloadUIModelPtr download_model,
                       base::TimeTicks show_download_start_time_ticks);
+
+  void OpenDownload(uint32_t download_id);
 
   std::vector<DownloadUIModel*> GetDownloads();
   base::TimeTicks GetShowDownloadTime(uint32_t download_id);
@@ -68,6 +76,10 @@ class DownloadShelfUI : public ui::MojoWebUIController,
       override;
 
   // DownloadItem::Observer
+  // The observer calls notify JS side when an download item is updated
+  // triggered download shelf or other places e.g. extension API or
+  // chrome://downloads.
+  void OnDownloadOpened(DownloadItem* download) override;
   void OnDownloadUpdated(DownloadItem* download) override;
   void OnDownloadRemoved(DownloadItem* download) override;
   void OnDownloadDestroyed(DownloadItem* download) override;

@@ -28,6 +28,16 @@ std::string DescribeFeatures(uint64_t blocklisted_features) {
 
 }  // namespace
 
+bool BackForwardCacheCanStoreDocumentResult::HasNotStoredReason(
+    BackForwardCacheMetrics::NotRestoredReason reason) const {
+  return not_stored_reasons_.test(static_cast<size_t>(reason));
+}
+
+void BackForwardCacheCanStoreDocumentResult::AddNotStoredReason(
+    BackForwardCacheMetrics::NotRestoredReason reason) {
+  not_stored_reasons_.set(static_cast<size_t>(reason));
+}
+
 bool BackForwardCacheCanStoreDocumentResult::CanStore() const {
   return not_stored_reasons_.none();
 }
@@ -171,29 +181,34 @@ std::string BackForwardCacheCanStoreDocumentResult::NotRestoredReasonToString(
 
 void BackForwardCacheCanStoreDocumentResult::No(
     BackForwardCacheMetrics::NotRestoredReason reason) {
-  not_stored_reasons_.set(static_cast<size_t>(reason));
+  // Callers should call NoDueToFeatures or
+  // NoDueToDisableForRenderFrameHostCalled instead.
+  DCHECK_NE(reason,
+            BackForwardCacheMetrics::NotRestoredReason::kBlocklistedFeatures);
+  DCHECK_NE(reason, BackForwardCacheMetrics::NotRestoredReason::
+                        kDisableForRenderFrameHostCalled);
+  AddNotStoredReason(reason);
 }
 
 void BackForwardCacheCanStoreDocumentResult::NoDueToFeatures(
     uint64_t features) {
-  not_stored_reasons_.set(static_cast<size_t>(
-      BackForwardCacheMetrics::NotRestoredReason::kBlocklistedFeatures));
+  AddNotStoredReason(
+      BackForwardCacheMetrics::NotRestoredReason::kBlocklistedFeatures);
   blocklisted_features_ |= features;
 }
 
 void BackForwardCacheCanStoreDocumentResult::
     NoDueToDisableForRenderFrameHostCalled(
         const std::set<BackForwardCache::DisabledReason>& reasons) {
-  not_stored_reasons_.set(
-      static_cast<size_t>(BackForwardCacheMetrics::NotRestoredReason::
-                              kDisableForRenderFrameHostCalled));
+  AddNotStoredReason(BackForwardCacheMetrics::NotRestoredReason::
+                         kDisableForRenderFrameHostCalled);
   for (const BackForwardCache::DisabledReason& reason : reasons)
     disabled_reasons_.insert(reason);
 }
 
 void BackForwardCacheCanStoreDocumentResult::AddReasonsFrom(
     const BackForwardCacheCanStoreDocumentResult& other) {
-  not_stored_reasons_ |= other.not_stored_reasons();
+  not_stored_reasons_ |= other.not_stored_reasons_;
   blocklisted_features_ |= other.blocklisted_features();
   for (const BackForwardCache::DisabledReason& reason :
        other.disabled_reasons()) {

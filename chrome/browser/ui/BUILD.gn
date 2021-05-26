@@ -2104,8 +2104,6 @@ static_library("ui") {
       "ash/shelf/extension_uninstaller.h",
       "ash/shelf/lacros_app_window.cc",
       "ash/shelf/lacros_app_window.h",
-      "ash/shelf/multi_profile_browser_status_monitor.cc",
-      "ash/shelf/multi_profile_browser_status_monitor.h",
       "ash/shelf/settings_window_observer.cc",
       "ash/shelf/settings_window_observer.h",
       "ash/shelf/shelf_app_updater.cc",
@@ -2688,6 +2686,7 @@ static_library("ui") {
       "//ash/shortcut_viewer",
       "//build:chromeos_buildflags",
       "//chrome/app:generated_resources",
+      "//chrome/browser/ash/crosapi",
       "//chrome/browser/ash/crostini:crostini_installer_types_mojom",
       "//chrome/browser/chromeos",
       "//chrome/browser/chromeos:backdrop_wallpaper_proto",
@@ -2829,7 +2828,10 @@ static_library("ui") {
       "//chrome/browser/ui/webui/chromeos/emoji:mojo_bindings",
       "//chromeos/services/multidevice_setup/public/mojom",
     ]
-    allow_circular_includes_from += [ "//chrome/browser/chromeos" ]
+    allow_circular_includes_from += [
+      "//chrome/browser/ash/crosapi",
+      "//chrome/browser/chromeos",
+    ]
 
     if (!is_official_build) {
       if (!use_real_dbus_clients) {
@@ -3251,8 +3253,6 @@ static_library("ui") {
       "views/frame/browser_non_client_frame_view_factory_mac.mm",
       "views/frame/browser_non_client_frame_view_mac.h",
       "views/frame/browser_non_client_frame_view_mac.mm",
-      "views/frame/caption_button_placeholder_container_mac.h",
-      "views/frame/caption_button_placeholder_container_mac.mm",
       "views/frame/immersive_mode_controller_mac.h",
       "views/frame/immersive_mode_controller_mac.mm",
       "views/frame/native_browser_frame_factory_mac.mm",
@@ -3502,6 +3502,13 @@ static_library("ui") {
       # This is the only component that can interact with gtk.
       deps += [ "//ui/gtk" ]
     }
+  }
+
+  if (is_win || is_mac || (is_linux && !is_chromeos_lacros)) {
+    sources += [
+      "startup/web_app_url_handling_startup_utils.cc",
+      "startup/web_app_url_handling_startup_utils.h",
+    ]
   }
 
   if (is_linux || is_chromeos) {  # Both desktop Linux and ChromeOS.
@@ -3829,6 +3836,8 @@ static_library("ui") {
       "views/frame/browser_view_layout.h",
       "views/frame/browser_view_layout_delegate.h",
       "views/frame/browser_window_factory.cc",
+      "views/frame/caption_button_placeholder_container.cc",
+      "views/frame/caption_button_placeholder_container.h",
       "views/frame/contents_layout_manager.cc",
       "views/frame/contents_layout_manager.h",
       "views/frame/contents_web_view.cc",
@@ -4393,8 +4402,6 @@ static_library("ui") {
       "views/webauthn/authenticator_request_sheet_view.h",
       "views/webauthn/authenticator_select_account_sheet_view.cc",
       "views/webauthn/authenticator_select_account_sheet_view.h",
-      "views/webauthn/authenticator_transport_selector_sheet_view.cc",
-      "views/webauthn/authenticator_transport_selector_sheet_view.h",
       "views/webauthn/hover_list_view.cc",
       "views/webauthn/hover_list_view.h",
       "views/webauthn/ring_progress_bar.cc",
@@ -4420,8 +4427,8 @@ static_library("ui") {
       "webauthn/authenticator_request_sheet_model.cc",
       "webauthn/authenticator_request_sheet_model.h",
       "webauthn/hover_list_model.h",
-      "webauthn/other_transports_menu_model.cc",
-      "webauthn/other_transports_menu_model.h",
+      "webauthn/other_mechanisms_menu_model.cc",
+      "webauthn/other_mechanisms_menu_model.h",
       "webauthn/sheet_models.cc",
       "webauthn/sheet_models.h",
       "webauthn/transport_hover_list_model.cc",

@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/page/scrolling/text_fragment_selector_generator.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
 #include "base/time/default_tick_clock.h"
@@ -410,6 +411,9 @@ void TextFragmentSelectorGenerator::NoMatchFound() {
 
 void TextFragmentSelectorGenerator::OnSelectorReady(
     const TextFragmentSelector& selector) {
+  // Check that frame is not deattched and generator is still valid.
+  DCHECK(selection_frame_);
+
   RecordAllMetrics(selector);
   if (pending_generate_selector_callback_) {
     NotifyClientSelectorReady(selector);
@@ -433,6 +437,7 @@ void TextFragmentSelectorGenerator::ClearSelection() {
 }
 
 void TextFragmentSelectorGenerator::Detach() {
+  Reset();
   selection_frame_ = nullptr;
 }
 

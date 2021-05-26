@@ -70,6 +70,9 @@ constexpr base::TimeDelta kMinCapturePeriod = base::TimeDelta::FromMicroseconds(
     base::Time::kMicrosecondsPerSecond / kMaxFrameRate);
 constexpr media::VideoPixelFormat kFormat = media::PIXEL_FORMAT_I420;
 
+// Video buffer parameters.
+constexpr bool kNotPremapped = false;
+
 // Helper to return the capture parameters packaged in a VideoCaptureParams.
 media::VideoCaptureParams GetCaptureParams() {
   media::VideoCaptureParams params;
@@ -104,9 +107,12 @@ class MockFrameSinkVideoCapturer : public viz::mojom::FrameSinkVideoCapturer {
   void ChangeTarget(const absl::optional<viz::FrameSinkId>& frame_sink_id,
                     const viz::SubtreeCaptureId& subtree_capture_id) final {
     DCHECK_NOT_ON_DEVICE_THREAD();
-    MockChangeTarget(frame_sink_id ? *frame_sink_id : viz::FrameSinkId());
+    MockChangeTarget(FrameSinkVideoCaptureDevice::VideoCaptureTarget{
+        frame_sink_id.value_or(viz::FrameSinkId{}), subtree_capture_id});
   }
-  MOCK_METHOD1(MockChangeTarget, void(const viz::FrameSinkId& frame_sink_id));
+  MOCK_METHOD1(
+      MockChangeTarget,
+      void(const FrameSinkVideoCaptureDevice::VideoCaptureTarget& target));
   void Start(
       mojo::PendingRemote<viz::mojom::FrameSinkVideoConsumer> consumer) final {
     DCHECK_NOT_ON_DEVICE_THREAD();
@@ -334,12 +340,13 @@ class FrameSinkVideoCaptureDeviceTest : public testing::Test {
     EXPECT_CALL(capturer_, SetMinCapturePeriod(kMinCapturePeriod));
     EXPECT_CALL(capturer_,
                 SetResolutionConstraints(kResolution, kResolution, _));
-    constexpr viz::FrameSinkId frame_sink_id(1, 1);
-    EXPECT_CALL(capturer_, MockChangeTarget(frame_sink_id));
+    FrameSinkVideoCaptureDevice::VideoCaptureTarget target{
+        .frame_sink_id = {1, 1}};
+    EXPECT_CALL(capturer_, MockChangeTarget(target));
     EXPECT_CALL(capturer_, MockStart(NotNull()));
 
     EXPECT_FALSE(capturer_.is_bound());
-    POST_DEVICE_METHOD_CALL(OnTargetChanged, frame_sink_id);
+    POST_DEVICE_METHOD_CALL(OnTargetChanged, target);
     POST_DEVICE_METHOD_CALL(AllocateAndStartWithReceiver, GetCaptureParams(),
                             std::move(receiver));
     WAIT_FOR_DEVICE_TASKS();
@@ -384,7 +391,7 @@ class FrameSinkVideoCaptureDeviceTest : public testing::Test {
               std::move(data),
               media::mojom::VideoFrameInfo::New(
                   kMinCapturePeriod * frame_number, media::VideoFrameMetadata(),
-                  kFormat, kResolution, gfx::Rect(kResolution),
+                  kFormat, kResolution, gfx::Rect(kResolution), kNotPremapped,
                   gfx::ColorSpace::CreateREC709(), nullptr),
               gfx::Rect(kResolution), std::move(callbacks_remote));
         },
@@ -578,7 +585,9 @@ TEST_F(FrameSinkVideoCaptureDeviceTest, ShutsDownOnFatalError) {
   // consumption, unbind the capturer, log an error with the VideoFrameReceiver,
   // and destroy the VideoFrameReceiver.
   {
-    EXPECT_CALL(capturer_, MockChangeTarget(viz::FrameSinkId()));
+    EXPECT_CALL(
+        capturer_,
+        MockChangeTarget(FrameSinkVideoCaptureDevice::VideoCaptureTarget{}));
     EXPECT_CALL(capturer_, MockStop());
     POST_DEVICE_METHOD_CALL0(OnTargetPermanentlyLost);
     WAIT_FOR_DEVICE_TASKS();

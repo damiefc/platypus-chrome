@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//build/config/python.gni")
 import("//build/config/ui.gni")
 import("//chromeos/assistant/ambient.gni")
 import("//chromeos/components/sensors/buildflags.gni")
@@ -26,6 +25,7 @@ component("ash") {
   friend = [
     ":*",
     "//ash/app_list:*",
+    "//chrome/test:browser_tests",
     "//components/exo:*",
     "//components/exo/wayland:*",
   ]
@@ -80,6 +80,7 @@ component("ash") {
     "shell_delegate.h",
     "shell_init_params.h",
     "shell_observer.h",
+    "style/scoped_light_mode_as_default.h",
     "system/pcie_peripheral/pcie_peripheral_notification_controller.h",
     "system/status_area_widget.h",
     "system/tray/system_tray_notifier.h",
@@ -631,6 +632,7 @@ component("ash") {
     "login/ui/login_big_user_view.h",
     "login/ui/login_button.cc",
     "login/ui/login_button.h",
+    "login/ui/login_constants.h",
     "login/ui/login_data_dispatcher.cc",
     "login/ui/login_data_dispatcher.h",
     "login/ui/login_detachable_base_model.cc",
@@ -728,6 +730,8 @@ component("ash") {
     "projector/projector_metadata_controller.h",
     "projector/projector_metadata_model.cc",
     "projector/projector_metadata_model.h",
+    "projector/projector_metrics.cc",
+    "projector/projector_metrics.h",
     "projector/projector_ui_controller.cc",
     "projector/projector_ui_controller.h",
     "projector/ui/projector_bar_view.cc",
@@ -894,7 +898,6 @@ component("ash") {
     "style/default_colors.cc",
     "style/default_colors.h",
     "style/scoped_light_mode_as_default.cc",
-    "style/scoped_light_mode_as_default.h",
     "system/accessibility/accessibility_feature_disable_dialog.cc",
     "system/accessibility/accessibility_feature_disable_dialog.h",
     "system/accessibility/accessibility_feature_pod_controller.cc",
@@ -1584,6 +1587,8 @@ component("ash") {
     "wm/gestures/back_gesture/back_gesture_event_handler.h",
     "wm/gestures/back_gesture/back_gesture_metrics.cc",
     "wm/gestures/back_gesture/back_gesture_metrics.h",
+    "wm/gestures/wm_fling_handler.cc",
+    "wm/gestures/wm_fling_handler.h",
     "wm/gestures/wm_gesture_handler.cc",
     "wm/gestures/wm_gesture_handler.h",
     "wm/immersive_context_ash.cc",
@@ -1993,8 +1998,7 @@ component("ash") {
   }
 }
 
-# TODO(crbug.com/1112471): Get this to run cleanly under Python 3.
-python2_action("dbus_service_files") {
+action("dbus_service_files") {
   sources = [
     "dbus/org.chromium.DisplayService.conf",
     "dbus/org.chromium.GesturePropertiesService.conf",
@@ -2625,6 +2629,7 @@ static_library("test_support") {
     "//ash/app_list:*",
     "//ash/shortcut_viewer:*",
     "//chrome/test:accessibility_live_site_tests",
+    "//chrome/test:browser_tests",
     "//chrome/test:captured_sites_interactive_tests",
     "//chrome/test:test_support",
     "//chrome/test:test_support_ui",

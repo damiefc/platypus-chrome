@@ -11,8 +11,8 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/cxx17_backports.h"
 #include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -297,7 +297,6 @@ class TestPrintManagerHost
       EXPECT_EQ(number_pages, number_pages_);
     printer_->SetPrintedPagesCount(cookie, number_pages);
   }
-  void DidGetDocumentCookie(int32_t cookie) override {}
   void DidPrintDocument(mojom::DidPrintDocumentParamsPtr params,
                         DidPrintDocumentCallback callback) override {
     base::RunLoop().RunUntilIdle();

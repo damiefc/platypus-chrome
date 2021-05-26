@@ -36,6 +36,7 @@ this['DiagnosticsApp'] = class extends PolymerTest {
       enabled: [
         'chromeos::features::kDiagnosticsApp',
         'chromeos::features::kEnableNetworkingInDiagnosticsApp',
+        'chromeos::features::kDiagnosticsAppNavigation',
       ],
     };
   }
@@ -57,6 +58,7 @@ const debug_suites_list = [
   'FakeNetworkHealthProvider',
   'FakeSystemDataProvider',
   'FakeSystemRoutineContoller',
+  'InputList',
   'MemoryCard',
   'NetworkCard',
   'NetworkInfo',

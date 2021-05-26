@@ -1232,10 +1232,9 @@ void WebContentsImpl::SetDelegate(WebContentsDelegate* delegate) {
   delegate_ = delegate;
   if (delegate_) {
     delegate_->Attach(this);
-    // RenderFrameDevToolsAgentHost should not be told about the main renderer
-    // frame until/unless there is a `delegate_`.
-    if (GetMainFrame()->IsRenderFrameLive())
-      RenderFrameDevToolsAgentHost::WebContentsMainFrameCreated(this);
+    // RenderFrameDevToolsAgentHost should not be told about the WebContents
+    // until there is a `delegate_`.
+    RenderFrameDevToolsAgentHost::AttachToWebContents(this);
   }
 
   // Re-read values from the new delegate and apply them.
@@ -4432,8 +4431,8 @@ WebContents* WebContentsImpl::OpenURL(const OpenURLParams& params) {
   RenderFrameHost* source_render_frame_host = RenderFrameHost::FromID(
       params.source_render_process_id, params.source_render_frame_id);
 
-  // Prevent frames that are not active from opening new windows, tabs, popups,
-  // etc.
+  // Prevent frames that are not active (e.g. a prerendering page) from opening
+  // new windows, tabs, popups, etc.
   if (params.disposition != WindowOpenDisposition::CURRENT_TAB &&
       source_render_frame_host && !source_render_frame_host->IsCurrent()) {
     return nullptr;
@@ -4448,6 +4447,19 @@ WebContents* WebContentsImpl::OpenURL(const OpenURLParams& params) {
       // against this->frame_tree_.
       FrameTree* frame_tree = frame_tree_node->frame_tree();
       CHECK_EQ(frame_tree->controller().GetWebContents(), this);
+
+      if (blink::features::IsPrerender2Enabled()) {
+        // Prerendering is generally hidden from embedders. If the navigation is
+        // targeting a frame in a prerendering frame tree, we shouldn't run that
+        // navigation through the embedder delegate. Instead, we just navigate
+        // directly on the prerendering frame tree.
+        if (frame_tree->type() == FrameTree::Type::kPrerender) {
+          DCHECK_EQ(params.disposition, WindowOpenDisposition::CURRENT_TAB);
+          frame_tree->controller().LoadURLWithParams(
+              NavigationController::LoadURLParams(params));
+          return this;
+        }
+      }
     } else {
       // If the node doesn't exist it was probably removed from its frame tree.
       // In that case, abort since continuing would navigate the root frame.
@@ -6516,15 +6528,6 @@ void WebContentsImpl::RenderFrameCreated(
       if (!delegate_ || delegate_->ShouldFocusPageAfterCrash()) {
         view_->Focus();
       }
-    }
-
-    // RenderFrameDevToolsAgentHost should not be told about the main renderer
-    // frame until/unless there is a `delegate_`.
-    if (delegate_) {
-      // TODO(crbug.com/1199687): Under MPArch, with multiple frame trees in a
-      // WebContents, this is intended to just notify about the main frame of
-      // the root page.
-      RenderFrameDevToolsAgentHost::WebContentsMainFrameCreated(this);
     }
   }
 

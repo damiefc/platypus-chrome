@@ -2241,16 +2241,19 @@
             ],
             "experiments": [
                 {
-                    "name": "EnabledWithTextShopSimilarProducts_20201022",
+                    "name": "EnabledWithTextShopImageWithGoogleLens",
                     "params": {
                         "disableOnIncognito": "true",
-                        "lensShopVariation": "ShopSimilarProducts",
+                        "lensShopVariation": "ShopImageWithGoogleLens",
+                        "logUkm": "true",
                         "minAgsaVersionNameForShopping": "11.17"
                     },
                     "enable_features": [
                         "ContextMenuEnableLensShoppingAllowlist",
-                        "ContextMenuSearchAndShopWithGoogleLens",
                         "ContextMenuShopWithGoogleLens"
+                    ],
+                    "disable_features": [
+                        "ContextMenuSearchAndShopWithGoogleLens"
                     ]
                 }
             ]
@@ -2686,15 +2689,14 @@
             ],
             "experiments": [
                 {
-                    "name": "ShoppingTasksRecipeTasksChromeCart_Enabled",
+                    "name": "RecipeTasksChromeCart_Enabled",
                     "params": {
                         "NtpModulesLoadTimeoutMillisecondsParam": "3000"
                     },
                     "enable_features": [
                         "NtpChromeCartModule",
                         "NtpModules",
-                        "NtpRecipeTasksModule",
-                        "NtpShoppingTasksModule"
+                        "NtpRecipeTasksModule"
                     ]
                 }
             ]
@@ -2721,25 +2723,6 @@
                     },
                     "enable_features": [
                         "IPH_DesktopPwaInstall"
-                    ]
-                }
-            ]
-        }
-    ],
-    "DesktopReadingList": [
-        {
-            "platforms": [
-                "chromeos",
-                "chromeos_lacros",
-                "linux",
-                "mac",
-                "windows"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "ReadLater"
                     ]
                 }
             ]
@@ -3738,6 +3721,27 @@
             ]
         }
     ],
+    "HatsOnboardingExperience": [
+        {
+            "platforms": [
+                "chromeos"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "params": {
+                        "prob": "0.05",
+                        "survey_cycle_length": "2147483647",
+                        "survey_start_date_ms": "1617260400000",
+                        "trigger_id": "NAgJpJZhz0jBnuKU19R0UuVK5EA7"
+                    },
+                    "enable_features": [
+                        "HappinessTrackingOnboardingExperience"
+                    ]
+                }
+            ]
+        }
+    ],
     "HeapProfiling": [
         {
             "platforms": [
@@ -4120,6 +4124,29 @@
             ]
         }
     ],
+    "IPH_ProfileSwitch": [
+        {
+            "platforms": [
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "params": {
+                        "availability": "any",
+                        "event_trigger": "name:profile_switch_trigger;comparator:==0;window:360;storage:360",
+                        "event_used": "name:profile_menu_shown;comparator:==0;window:360;storage:360",
+                        "session_rate": "any"
+                    },
+                    "enable_features": [
+                        "IPH_ProfileSwitch"
+                    ]
+                }
+            ]
+        }
+    ],
     "IdentifiabilityStudy": [
         {
             "platforms": [
@@ -4170,7 +4197,7 @@
             ]
         }
     ],
-    "IllustratedEmptyStates": [
+    "IncognitoBiometricReauth": [
         {
             "platforms": [
                 "ios"
@@ -4179,7 +4206,7 @@
                 {
                     "name": "Enabled",
                     "enable_features": [
-                        "IllustratedEmptyStates"
+                        "enable-incognito-authentication-ios"
                     ]
                 }
             ]
@@ -4987,6 +5014,21 @@
             ]
         }
     ],
+    "NearbySharingChildAccounts": [
+        {
+            "platforms": [
+                "chromeos"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "NearbySharingChildAccounts"
+                    ]
+                }
+            ]
+        }
+    ],
     "NetworkServiceSandbox": [
         {
             "platforms": [
@@ -5012,31 +5054,6 @@
                     "name": "Enabled",
                     "enable_features": [
                         "NotificationsViaHelperApp"
-                    ]
-                }
-            ]
-        }
-    ],
-    "NtpRepeatableQueriesDesktop": [
-        {
-            "platforms": [
-                "chromeos",
-                "chromeos_lacros",
-                "linux",
-                "mac",
-                "windows"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "params": {
-                        "NtpRepeatableQueriesAgeThresholdDays": "180",
-                        "NtpRepeatableQueriesFrequencyExponent": "2",
-                        "NtpRepeatableQueriesInsertPosition": "start",
-                        "NtpRepeatableQueriesRecencyHalfLifeSeconds": "604800"
-                    },
-                    "enable_features": [
-                        "NtpRepeatableQueries"
                     ]
                 }
             ]
@@ -6216,29 +6233,6 @@
             ]
         }
     ],
-    "ProfileSwitchIPH": [
-        {
-            "platforms": [
-                "linux",
-                "mac",
-                "windows"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "params": {
-                        "availability": "any",
-                        "event_trigger": "name:profile_switch_trigger;comparator:==0;window:360;storage:360",
-                        "event_used": "name:profile_menu_shown;comparator:==0;window:360;storage:360",
-                        "session_rate": "any"
-                    },
-                    "enable_features": [
-                        "IPH_ProfileSwitch"
-                    ]
-                }
-            ]
-        }
-    ],
     "ProtoDBSharedMigration": [
         {
             "platforms": [
@@ -6741,6 +6735,25 @@
                     "name": "Enabled",
                     "enable_features": [
                         "SafeBrowsingCSDRequestWithToken"
+                    ]
+                }
+            ]
+        }
+    ],
+    "SafeBrowsingCrxAllowlistShowWarnings": [
+        {
+            "platforms": [
+                "chromeos",
+                "chromeos_lacros",
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "SafeBrowsingCrxAllowlistShowWarnings"
                     ]
                 }
             ]
@@ -8789,21 +8802,6 @@
                     },
                     "enable_features": [
                         "WebRtcHybridAgc"
-                    ]
-                }
-            ]
-        }
-    ],
-    "WebRtcThermalResource-ChromeOS": [
-        {
-            "platforms": [
-                "chromeos"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "WebRtcThermalResource"
                     ]
                 }
             ]

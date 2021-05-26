@@ -73,7 +73,8 @@ OnDeviceSpeechRecognizer::OnDeviceSpeechRecognizer(
     const base::WeakPtr<SpeechRecognizerDelegate>& delegate,
     Profile* profile,
     std::string language_or_locale,
-    bool recognition_mode_ime)
+    bool recognition_mode_ime,
+    bool enable_formatting)
     : SpeechRecognizer(delegate),
       state_(SpeechRecognizerStatus::SPEECH_RECOGNIZER_OFF),
       is_multichannel_supported_(false),
@@ -91,7 +92,8 @@ OnDeviceSpeechRecognizer::OnDeviceSpeechRecognizer(
       speech_recognition_client_receiver_.BindNewPipeAndPassRemote(),
       media::mojom::SpeechRecognitionOptions::New(
           recognition_mode_ime ? media::mojom::SpeechRecognitionMode::kIme
-                               : media::mojom::SpeechRecognitionMode::kCaption),
+                               : media::mojom::SpeechRecognitionMode::kCaption,
+          enable_formatting),
       media::BindToCurrentLoop(
           base::BindOnce(&OnDeviceSpeechRecognizer::OnRecognizerBound,
                          weak_factory_.GetWeakPtr())));
@@ -132,13 +134,15 @@ void OnDeviceSpeechRecognizer::OnSpeechRecognitionRecognitionEvent(
     media::mojom::SpeechRecognitionResultPtr result,
     OnSpeechRecognitionRecognitionEventCallback reply) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // Returning true ensures the speech recognition continues.
+  std::move(reply).Run(true);
+
   if (!result->transcription.size())
     return;
   UpdateStatus(SpeechRecognizerStatus::SPEECH_RECOGNIZER_IN_SPEECH);
   delegate()->OnSpeechResult(base::UTF8ToUTF16(result->transcription),
                              result->is_final, absl::nullopt);
-  // Returning true ensures the speech recognition continues.
-  std::move(reply).Run(true);
 }
 
 void OnDeviceSpeechRecognizer::OnSpeechRecognitionError() {

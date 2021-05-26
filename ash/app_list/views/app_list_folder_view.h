@@ -22,11 +22,12 @@
 namespace ash {
 
 class AppsContainerView;
-class AppsGridView;
 class AppListFolderItem;
 class AppListItemView;
 class AppListModel;
+class AppListViewDelegate;
 class FolderHeaderView;
+class PagedAppsGridView;
 class PageSwitcher;
 
 class ASH_EXPORT AppListFolderView : public views::View,
@@ -38,7 +39,8 @@ class ASH_EXPORT AppListFolderView : public views::View,
 
   AppListFolderView(AppsContainerView* container_view,
                     AppListModel* model,
-                    ContentsView* contents_view);
+                    ContentsView* contents_view,
+                    AppListViewDelegate* view_delegate);
   AppListFolderView(const AppListFolderView&) = delete;
   AppListFolderView& operator=(const AppListFolderView&) = delete;
   ~AppListFolderView() override;
@@ -88,7 +90,7 @@ class ASH_EXPORT AppListFolderView : public views::View,
   // closing the folder.
   bool IsAnimationRunning() const;
 
-  AppsGridView* items_grid_view() { return items_grid_view_; }
+  PagedAppsGridView* items_grid_view() { return items_grid_view_; }
 
   FolderHeaderView* folder_header_view() { return folder_header_view_; }
 
@@ -169,7 +171,7 @@ class ASH_EXPORT AppListFolderView : public views::View,
   views::View* contents_container_;  // Owned by views hierarchy.
 
   FolderHeaderView* folder_header_view_;  // Owned by views hierarchy.
-  AppsGridView* items_grid_view_;         // Owned by views hierarchy.
+  PagedAppsGridView* items_grid_view_;    // Owned by views hierarchy.
   PageSwitcher* page_switcher_;           // Owned by views hierarchy.
 
   std::unique_ptr<views::ViewModel> view_model_;

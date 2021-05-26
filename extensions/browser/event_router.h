@@ -154,6 +154,13 @@ class EventRouter : public KeyedService,
                                    int64_t service_worker_version_id,
                                    int32_t worker_thread_id) override;
 
+  void AddLazyListenerForMainThread(const std::string& extension_id,
+                                    const std::string& name) override;
+
+  void AddLazyListenerForServiceWorker(const std::string& extension_id,
+                                       const GURL& worker_scope_url,
+                                       const std::string& name) override;
+
   void RemoveListenerForMainThread(mojom::EventListenerParamPtr param,
                                    const std::string& name) override;
 
@@ -162,6 +169,13 @@ class EventRouter : public KeyedService,
                                       const std::string& name,
                                       int64_t service_worker_version_id,
                                       int32_t worker_thread_id) override;
+
+  void RemoveLazyListenerForMainThread(const std::string& extension_id,
+                                       const std::string& name) override;
+
+  void RemoveLazyListenerForServiceWorker(const std::string& extension_id,
+                                          const GURL& worker_scope_url,
+                                          const std::string& name) override;
 
   // Removes an extension as an event listener for |event_name|.
   //
@@ -208,14 +222,6 @@ class EventRouter : public KeyedService,
                             const ExtensionId& extension_id);
   void RemoveLazyEventListener(const std::string& event_name,
                                const ExtensionId& extension_id);
-  // Similar to Add/RemoveLazyEventListener, but applies to extension service
-  // workers.
-  void AddLazyServiceWorkerEventListener(const std::string& event_name,
-                                         const ExtensionId& extension_id,
-                                         const GURL& service_worker_scope);
-  void RemoveLazyServiceWorkerEventListener(const std::string& event_name,
-                                            const ExtensionId& extension_id,
-                                            const GURL& service_worker_scope);
 
   // If |add_lazy_listener| is true also add the lazy version of this listener.
   void AddFilteredEventListener(

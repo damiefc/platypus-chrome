@@ -300,7 +300,7 @@ bool ResourceLoader::CodeCacheRequest::FetchFromCodeCache(
   // ensure that the resource receives cached code before the response data.
   // This directly calls the WebURLLoader's SetDefersLoading without going
   // through ResourceLoader.
-  url_loader->SetDefersLoading(LoaderFreezeMode::kStrict);
+  url_loader->Freeze(LoaderFreezeMode::kStrict);
 
   WebCodeCacheLoader::FetchCodeCacheCallback callback =
       base::BindOnce(&ResourceLoader::CodeCacheRequest::DidReceiveCachedCode,
@@ -464,6 +464,12 @@ void ResourceLoader::Trace(Visitor* visitor) const {
 
 bool ResourceLoader::ShouldFetchCodeCache() {
   if (!RuntimeEnabledFeatures::IsolatedCodeCacheEnabled())
+    return false;
+
+  // Since code cache requests use a per-frame interface, don't fetch cached
+  // code for keep-alive requests. These are only used for beaconing and we
+  // don't expect code cache to help there.
+  if (ShouldBeKeptAliveWhenDetached())
     return false;
 
   const ResourceRequestHead& request = resource_->GetResourceRequest();
@@ -676,7 +682,7 @@ void ResourceLoader::SetDefersLoading(LoaderFreezeMode mode) {
     }
   }
 
-  loader_->SetDefersLoading(mode);
+  loader_->Freeze(mode);
   if (mode != LoaderFreezeMode::kNone) {
     resource_->VirtualTimePauser().UnpauseVirtualTime();
   } else {

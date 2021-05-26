@@ -145,18 +145,10 @@ class PrerenderHost::PageHolder : public FrameTree::Delegate,
   }
 
   ActivateResult Activate(NavigationRequest& navigation_request) {
-    if (frame_tree_->root()->HasNavigation()) {
-      // We do not yet support activation if there is an ongoing navigation in
-      // the main frame as the code assumes that NavigationRequest is associated
-      // with the fixed frame tree node. Ongoing navigations in frames are
-      // supported experimentally and require more investigation to ensure that
-      // these NavigationRequests can be transferred to a new
-      // NavigationController and that new NavigationEntries will be correctly
-      // created for them.
-      // TODO(https://crbug.com/1190644): Make sure sub-frame navigations are
-      // fine.
-      return ActivateResult(FinalStatus::kInProgressNavigation, nullptr);
-    }
+    // There should be no ongoing main-frame navigation during activation.
+    // TODO(https://crbug.com/1190644): Make sure sub-frame navigations are
+    // fine.
+    DCHECK(!frame_tree_->root()->HasNavigation());
 
     // NOTE: TakePrerenderedPage() clears the current_frame_host value of
     // frame_tree_->root(). Do not add any code between here and
@@ -231,12 +223,16 @@ class PrerenderHost::PageHolder : public FrameTree::Delegate,
  private:
   // WebContents where this prerenderer is embedded.
   WebContentsImpl& web_contents_;
+
+  // This can be called when |frame_tree_| is destroyed so it must be
+  // destructed after |frame_tree_|.
+  base::OnceClosure on_stopped_loading_for_tests_;
+
   // Frame tree created for the prerenderer to load the page and prepare it for
   // a future activation. During activation, the prerendered page will be taken
   // out from |frame_tree_| and moved over to |web_contents_|'s primary frame
   // tree, while |frame_tree_| will be deleted.
   std::unique_ptr<FrameTree> frame_tree_;
-  base::OnceClosure on_stopped_loading_for_tests_;
 };
 
 PrerenderHost::PrerenderHost(blink::mojom::PrerenderAttributesPtr attributes,
