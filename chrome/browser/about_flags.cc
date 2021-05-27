@@ -1488,14 +1488,14 @@ const FeatureEntry::FeatureVariation kNtpChromeCartModuleVariations[] = {
 };
 
 const FeatureEntry::FeatureParam kNtpRecipeTasksModuleFakeData[] = {
-    {ntp_features::kNtpStatefulTasksModuleDataParam, "fake"}};
+    {ntp_features::kNtpRecipeTasksModuleDataParam, "fake"}};
 const FeatureEntry::FeatureVariation kNtpRecipeTasksModuleVariations[] = {
     {"- Fake Data", kNtpRecipeTasksModuleFakeData,
      base::size(kNtpRecipeTasksModuleFakeData), nullptr},
 };
 
 const FeatureEntry::FeatureParam kNtpShoppingTasksModuleFakeData[] = {
-    {ntp_features::kNtpStatefulTasksModuleDataParam, "fake"}};
+    {ntp_features::kNtpShoppingTasksModuleDataParam, "fake"}};
 const FeatureEntry::FeatureVariation kNtpShoppingTasksModuleVariations[] = {
     {"- Fake Data", kNtpShoppingTasksModuleFakeData,
      base::size(kNtpShoppingTasksModuleFakeData),
@@ -6421,6 +6421,9 @@ const FeatureEntry kFeatureEntries[] = {
 #endif  // !defined(OS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+    {"productivity-launcher", flag_descriptions::kAppListBubbleName,
+     flag_descriptions::kAppListBubbleDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(chromeos::features::kAppListBubble)},
     {"enable-launcher-app-paging",
      flag_descriptions::kNewDragSpecInLauncherName,
      flag_descriptions::kNewDragSpecInLauncherDescription, kOsCrOS,

@@ -5,10 +5,6 @@
 #include "chrome/browser/enterprise/connectors/file_system/box_uploader.h"
 
 #include "base/files/file_util.h"
-#include "base/i18n/time_formatting.h"
-#include "base/i18n/unicodestring.h"
-#include "base/metrics/histogram_functions.h"
-#include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/enterprise/connectors/connectors_prefs.h"
@@ -16,8 +12,6 @@
 #include "chrome/browser/enterprise/connectors/file_system/box_upload_file_chunks_handler.h"
 #include "components/prefs/pref_service.h"
 #include "net/http/http_status_code.h"
-#include "third_party/icu/source/common/unicode/utypes.h"
-#include "third_party/icu/source/i18n/unicode/calendar.h"
 
 namespace {
 
@@ -54,11 +48,10 @@ std::unique_ptr<BoxUploader> BoxUploader::Create(
 
 BoxUploader::BoxUploader(download::DownloadItem* download_item)
     : local_file_path_(download_item->GetFullPath()),
-      target_file_name_(download_item->GetTargetFilePath().BaseName()),
-      download_start_time_(download_item->GetStartTime()),
-      uniquifier_(0) {}
+      target_file_name_(download_item->GetTargetFilePath().BaseName()) {}
 
 BoxUploader::~BoxUploader() = default;
+// TODO(https://crbug.com/1213761) May need to TerminateTask() to resume later.
 
 void BoxUploader::Init(
     base::RepeatingCallback<void(void)> authen_retry_callback,
@@ -88,6 +81,12 @@ void BoxUploader::TryCurrentApiCall() {
   } else {
     StartCurrentApiCall();
   }
+}
+
+void BoxUploader::TerminateTask() {
+  current_api_call_.reset(nullptr);
+  // TODO(https://crbug.com/1213761) May need to resume upload later.
+  OnApiCallFlowFailure();
 }
 
 bool BoxUploader::EnsureSuccessResponse(bool success, int response_code) {
@@ -122,11 +121,11 @@ void BoxUploader::OnApiCallFlowDone(bool upload_success, GURL file_url) {
     // for trusted testers (TT), deleting as usual for now. Need to determine
     // how to communicate the failure/error to user.
   } else {
+    DCHECK(file_url_.is_empty());
     file_url_ = file_url;
   }
 
-  PostDeleteFileTask(base::BindOnce(
-      &BoxUploader::OnFileDeleted, weak_factory_.GetWeakPtr(), upload_success));
+  PostDeleteFileTask(upload_success);
 }
 
 void BoxUploader::NotifyResult(bool success) {
@@ -167,42 +166,18 @@ void BoxUploader::OnCreateUpstreamFolderResponse(bool success,
   TryCurrentApiCall();
 }
 
-void BoxUploader::LogUniquifierCountToUma() {
-  base::UmaHistogramSparse("Enterprise.FileSystem.Uniquifier", uniquifier_);
-}
-
 void BoxUploader::OnPreflightCheckResponse(bool success, int response_code) {
   if (success) {
     // Create an upload session with the same folder_id and name and continue
     CHECK_EQ(response_code, net::HTTP_OK);
-    LogUniquifierCountToUma();
     SetCurrentApiCall(MakeFileUploadApiCall());
     TryCurrentApiCall();
     return;
   }
   switch (response_code) {
     case net::HTTP_CONFLICT:
-      if (uniquifier_ <
-          EnterpriseFilesystemUploadAttemptCount::kMaxRenamedWithSuffix) {
-        ++uniquifier_;
-      } else if (uniquifier_ == EnterpriseFilesystemUploadAttemptCount::
-                                    kMaxRenamedWithSuffix) {
-        uniquifier_ =
-            EnterpriseFilesystemUploadAttemptCount::kTimestampBasedName;
-      } else {
-        uniquifier_ = EnterpriseFilesystemUploadAttemptCount::kAbandonedUpload;
-      }
-
-      if (uniquifier_ <
-          EnterpriseFilesystemUploadAttemptCount::kAbandonedUpload) {
-        SetCurrentApiCall(MakePreflightCheckApiCall());
-        TryCurrentApiCall();
-      } else {
-        // TODO(https://crbug.com/1168815): Surface this error to user.
-        DLOG(WARNING) << "Box upload failed for file " << GetTargetFileName();
-        LogUniquifierCountToUma();
-        OnApiCallFlowFailure();
-      }
+      // TODO(https://crbug.com/1198617) Deal with filename conflict.
+      OnApiCallFlowFailure();
       break;
     case net::HTTP_UNAUTHORIZED:
       // Authentication failure, we need to reauth and redo the preflight check.
@@ -257,47 +232,7 @@ const base::FilePath BoxUploader::GetLocalFilePath() const {
 }
 
 const base::FilePath BoxUploader::GetTargetFileName() const {
-  if (uniquifier_ == EnterpriseFilesystemUploadAttemptCount::kNotRenamed) {
-    return target_file_name_;
-  } else if (uniquifier_ <=
-             EnterpriseFilesystemUploadAttemptCount::kMaxRenamedWithSuffix) {
-    return target_file_name_.InsertBeforeExtensionASCII(
-        base::StringPrintf(" (%d)", uniquifier_));
-  } else if (uniquifier_ ==
-             EnterpriseFilesystemUploadAttemptCount::kTimestampBasedName) {
-    // Generate an ISO8601 compliant local timestamp suffix that avoids
-    // reserved characters that are forbidden on some OSes like Windows.
-    base::Time::Exploded exploded;
-    download_start_time_.LocalExplode(&exploded);
-
-    // Instead of using the raw_offset, use the offset in effect now.
-    // For instance, US Pacific Time, the offset shown will be -7 in summer
-    // while it'll be -8 in winter. Time zone information appended to the format
-    // generated by CreateUniqueFilename in
-    // components/download/internal/common/download_path_reservation_tracker.cc
-    int raw_offset, dst_offset;
-    UDate now = icu::Calendar::getNow();
-    std::unique_ptr<icu::TimeZone> zone(icu::TimeZone::createDefault());
-    UErrorCode status = U_ZERO_ERROR;
-    zone.get()->getOffset(now, false, raw_offset, dst_offset, status);
-    DCHECK(U_SUCCESS(status));
-    int offset = raw_offset + dst_offset;
-    // |offset| is in msec.
-    int minute_offset = offset / 60000;
-    int hour_offset = minute_offset / 60;
-    int min_remainder = std::abs(minute_offset) % 60;
-    // Some timezones have a non-integral hour offset. So, we need to use hh:mm
-    // form.
-    std::string suffix = base::StringPrintf(
-        " - %04d-%02d-%02dT%02d%02d%02d.%03d UTC%+dh%02d", exploded.year,
-        exploded.month, exploded.day_of_month, exploded.hour, exploded.minute,
-        exploded.second, exploded.millisecond, hour_offset, min_remainder);
-    return target_file_name_.InsertBeforeExtensionASCII(suffix);
-  } else {
-    DCHECK_EQ(uniquifier_,
-              EnterpriseFilesystemUploadAttemptCount::kAbandonedUpload);
-    return target_file_name_.InsertBeforeExtensionASCII(".abandoned");
-  }
+  return target_file_name_;
 }
 
 const std::string BoxUploader::GetFolderId() {
@@ -324,9 +259,10 @@ void BoxUploader::SetCurrentApiCall(
 
 // File Delete /////////////////////////////////////////////////////////////////
 
-void BoxUploader::PostDeleteFileTask(
-    base::OnceCallback<void(bool)> delete_file_reply) {
+void BoxUploader::PostDeleteFileTask(bool upload_success) {
   auto delete_file_task = base::BindOnce(&DeleteIfExists, GetLocalFilePath());
+  auto delete_file_reply = base::BindOnce(
+      &BoxUploader::OnFileDeleted, weak_factory_.GetWeakPtr(), upload_success);
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
       std::move(delete_file_task), std::move(delete_file_reply));
@@ -349,8 +285,8 @@ void BoxUploader::NotifyOAuth2ErrorForTesting() {
   authentication_retry_callback_.Run();
 }
 
-void BoxUploader::NotifyResultForTesting(bool success) {
-  NotifyResult(success);
+void BoxUploader::SetUploadApiCallFlowDoneForTesting(bool success) {
+  OnApiCallFlowDone(success, {});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

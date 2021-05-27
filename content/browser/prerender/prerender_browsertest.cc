@@ -1335,6 +1335,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, FeatureRestriction_WindowOpen) {
 }
 
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, RenderFrameHostLifecycleState) {
+  base::HistogramTester histogram_tester;
   const GURL kInitialUrl = GetUrl("/prerender/add_prerender.html");
   const GURL kPrerenderingUrl = GetUrl("/prerender/add_prerender.html");
 
@@ -1363,12 +1364,18 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, RenderFrameHostLifecycleState) {
   // Both rfh_a and rfh_b lifecycle state's should be kActive after activation.
   EXPECT_EQ(LifecycleStateImpl::kActive, rfh_a->lifecycle_state());
   EXPECT_EQ(LifecycleStateImpl::kActive, rfh_b->lifecycle_state());
+
+  // "Navigation.TimeToActivatePrerender" histogram should be recorded on every
+  // prerender activation.
+  histogram_tester.ExpectTotalCount("Navigation.TimeToActivatePrerender", 1u);
 }
 
 // Test that prerender activation is deferred and resumed after the ongoing
 // (in-flight) main-frame navigation in the prerendering frame tree commits.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
                        SupportActivationWithOngoingMainFrameNavigation) {
+  base::HistogramTester histogram_tester;
+
   // Create a HTTP response to control prerendering main-frame navigation.
   net::test_server::ControllableHttpResponse main_document_response(
       embedded_test_server(), "/main_document");
@@ -1443,6 +1450,11 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
     EXPECT_FALSE(HasHostForUrl(kPrerenderingUrl));
     EXPECT_EQ(shell()->web_contents()->GetURL(), kPrerenderingUrl);
   }
+
+  // "Navigation.Prerender.ActivationCommitDeferTime" histogram should be
+  // recorded as PrerenderCommitDeferringCondition defers the navigation.
+  histogram_tester.ExpectTotalCount(
+      "Navigation.Prerender.ActivationCommitDeferTime", 1u);
 }
 
 // Tests that prerendering is gated behind CSP:prefetch-src

@@ -16096,6 +16096,17 @@ metrics consent we also won't be able to send UMA metrics. -->
   <int value="29" label="Need Update"/>
 </enum>
 
+<enum name="CrostiniSshfsResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="NotDefaultContainer"/>
+  <int value="2" label="ContainerNotRunning"/>
+  <int value="3" label="GetSshKeysFailed"/>
+  <int value="4" label="GetContainerInfoFailed"/>
+  <int value="5" label="MountErrorInternal"/>
+  <int value="6" label="MountErrorProgramFailed"/>
+  <int value="7" label="MountErrorOther"/>
+</enum>
+
 <enum name="CrostiniTerminalSetting">
   <int value="0" label="unknown"/>
   <int value="1" label="alt-gr-mode"/>
@@ -23783,21 +23794,6 @@ Called by update_document_policy_enum.py.-->
 <enum name="EnterpriseExistingInstallAttributesLockType">
   <int value="0" label="Fresh lock"/>
   <int value="1" label="Reused lock"/>
-</enum>
-
-<enum name="EnterpriseFilesystemUploadAttemptCount">
-  <int value="0" label="File not renamed"/>
-  <int value="1" label="Renamed with suffix (1)"/>
-  <int value="2" label="Renamed with suffix (2)"/>
-  <int value="3" label="Renamed with suffix (3)"/>
-  <int value="4" label="Renamed with suffix (4)"/>
-  <int value="5" label="Renamed with suffix (5)"/>
-  <int value="6" label="Renamed with suffix (6)"/>
-  <int value="7" label="Renamed with suffix (7)"/>
-  <int value="8" label="Renamed with suffix (8)"/>
-  <int value="9" label="Renamed with suffix (9)"/>
-  <int value="1000" label="TimestampBasedName"/>
-  <int value="2000" label="Abandoned upload"/>
 </enum>
 
 <enum name="EnterpriseInitialEnrollmentRequirement">
@@ -46578,6 +46574,7 @@ from previous Chrome versions.
   <int value="-660160292" label="enable-apps-show-on-first-paint"/>
   <int value="-658319177" label="VaapiAV1Decoder:disabled"/>
   <int value="-657808907" label="CopyLinkToText:disabled"/>
+  <int value="-657656374" label="AppListBubble:disabled"/>
   <int value="-656743717" label="HelpAppDiscoverTab:enabled"/>
   <int value="-654705905" label="ShortcutCustomizationApp:enabled"/>
   <int value="-654196854" label="PasswordsKeyboardAccessory:enabled"/>
@@ -47385,6 +47382,7 @@ from previous Chrome versions.
   <int value="59992411" label="ChangePasswordAffiliationInfo:enabled"/>
   <int value="60023885" label="AutofillNoLocalSaveOnUnmaskSuccess:disabled"/>
   <int value="60442188" label="MultilingualTyping:enabled"/>
+  <int value="60461879" label="AppListBubble:enabled"/>
   <int value="61130490" label="WebViewBrotliSupport:enabled"/>
   <int value="61205887" label="enable-text-input-focus-manager"/>
   <int value="61466986" label="AsyncDns:disabled"/>
@@ -77523,6 +77521,11 @@ would be helpful to identify which type is being sent.
   <int value="28" label="Price Drop Alerts"/>
 </enum>
 
+<enum name="TabActivationTypes">
+  <int value="0" label="Activate a tab"/>
+  <int value="1" label="Activate the context menu of a tab"/>
+</enum>
+
 <enum name="TabBackgroundLoadStatus">
   <int value="0" label="Loaded on creation and shown"/>
   <int value="1" label="Loaded on creation and lost"/>
@@ -86587,6 +86590,11 @@ Called by update_scheduler_enums.py.-->
   <int value="51" label="Uninstall app"/>
   <int value="52" label="Show Kaleidoscope"/>
   <int value="53" label="Show tips for Chrome"/>
+</enum>
+
+<enum name="WrongConfigurationMetric">
+  <int value="0" label="Thunderbolt peripheral - wrong cable"/>
+  <int value="1" label="USB4 peripheral - wrong cable"/>
 </enum>
 
 <enum name="XFrameOptions">

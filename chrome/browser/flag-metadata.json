@@ -4278,6 +4278,11 @@
     "expiry_milestone": 94
   },
   {
+    "name": "productivity-launcher",
+    "owners": [ "cros-system-ui-eng@google.com" ],
+    "expiry_milestone": 100
+  },
+  {
     "name": "prominent-dark-mode-active-tab-title",
     "owners": [ "dfried" ],
     "expiry_milestone": 82
@@ -5271,7 +5276,7 @@
   {
     "name": "web-otp-backend",
     "owners": [ "yigu", "majidvp" ],
-    "expiry_milestone": 92
+    "expiry_milestone": 96
   },
   {
     "name": "web-share",
