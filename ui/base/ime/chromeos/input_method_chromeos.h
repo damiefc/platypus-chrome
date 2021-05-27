@@ -146,6 +146,17 @@ class COMPONENT_EXPORT(UI_BASE_IME_CHROMEOS) InputMethodChromeOS
   // Hides the composition text.
   void HidePreeditText();
 
+  // Whether the focused text input client supports inline composition.
+  bool CanComposeInline() const;
+
+  // Check whether text entered into the focused text input client should be
+  // used to improve typing suggestions for the user.
+  bool GetClientShouldDoLearning() const;
+
+  // Gets the text input flags of the focused text input client. Returns
+  // 0 if there is no focused client.
+  int GetTextInputFlags() const;
+
   // Called from the engine when it completes processing.
   void ProcessKeyEventDone(ui::KeyEvent* event, bool is_handled);
 

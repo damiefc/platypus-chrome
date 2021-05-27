@@ -186,8 +186,8 @@ const char kOverrideEnabledCdmInterfaceVersion[] =
 
 // Overrides hardware secure codecs support for testing. If specified, real
 // platform hardware secure codecs check will be skipped. Codecs are separated
-// by comma. Valid video codecs are "vp8", "vp9" and "avc1", and the only valid
-// audio codec is "vorbis". For example:
+// by comma. Valid video codecs are "vp8", "vp9", "avc1" and "hevc", and the
+// only valid audio codec is "vorbis". For example:
 //  --override-hardware-secure-codecs-for-testing=vp8,vp9
 //  --override-hardware-secure-codecs-for-testing=avc1
 // CENC encryption scheme is assumed to be supported for the specified codecs.
@@ -275,10 +275,10 @@ const base::Feature kMediaCapabilitiesWithParameters{
 const base::Feature kMediaCastOverlayButton{"MediaCastOverlayButton",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Use AndroidOverlay for more cases than just player-element fullscreen?  This
-// requires that |kOverlayFullscreenVideo| is true, else it is ignored.
-const base::Feature kUseAndroidOverlayAggressively{
-    "UseAndroidOverlayAggressively", base::FEATURE_ENABLED_BY_DEFAULT};
+// Use AndroidOverlay only if required for secure video playback. This requires
+// that |kOverlayFullscreenVideo| is true, else it is ignored.
+const base::Feature kUseAndroidOverlayForSecureOnly{
+    "UseAndroidOverlayForSecureOnly", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If enabled, RTCVideoDecoderAdapter will wrap a DecoderStream as a video
 // decoder, rather than using MojoVideoDecoder.  This causes the RTC external

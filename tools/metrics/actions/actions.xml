@@ -15845,6 +15845,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileTabGridSelectionDone">
+  <owner>mrefaat@chromium.org</owner>
+  <owner>michaeldo@chromium.org</owner>
+  <description>
+    User in the iOS tab grid used the Done button to exit selection mode and
+    return to regular or incognito tabs panel.
+  </description>
+</action>
+
 <action name="MobileTabGridSelectRegularPanel">
   <owner>edchin@chromium.org</owner>
   <owner>marq@chromium.org</owner>
@@ -16780,6 +16789,16 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="NewTabPage.Carts.DismissLastCartHidesModule">
+  <owner>wychen@chromium.org</owner>
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    The last cart in the module is temporarily hidden or permanently removed,
+    which causes the module to hide.
+  </description>
+</action>
+
 <action name="NewTabPage.Carts.HideModule">
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
@@ -16807,6 +16826,16 @@ should be able to be added at any place in this file.
   <description>
     The 'Never show carts' option is clicked in the cart module menu to
     permanently remove the module.
+  </description>
+</action>
+
+<action name="NewTabPage.Carts.RestoreLastCartRestoresModule">
+  <owner>wychen@chromium.org</owner>
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    An attempt to temporarily hide or permanently remove the last cart in module
+    is undone, which causes the hidden module to be restored.
   </description>
 </action>
 

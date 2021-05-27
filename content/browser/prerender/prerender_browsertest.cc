@@ -38,6 +38,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_document_host_user_data.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/speculation_host_delegate.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -152,6 +153,14 @@ class PrerenderBrowserTest : public ContentBrowserTest {
 
   int AddPrerender(const GURL& prerendering_url) {
     return prerender_helper_->AddPrerender(prerendering_url);
+  }
+
+  int AddSpeculationRules(const GURL& prerendering_url) {
+    return prerender_helper_->AddSpeculationRules(prerendering_url);
+  }
+
+  void AddSpeculationRulesAsync(const GURL& prerendering_url) {
+    prerender_helper_->AddSpeculationRulesAsync(prerendering_url);
   }
 
   void NavigatePrimaryPage(const GURL& url) {
@@ -881,6 +890,63 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, ActivatePageWithInnerContents) {
   EXPECT_EQ(web_contents()->GetURL(), kPrerenderingUrl);
   EXPECT_EQ(GetRequestCount(kPrerenderingUrl), 1);
   EXPECT_EQ(GetRequestCount(kInnerContentsUrl), 1);
+}
+
+// Ensure that whether or not a NavigationRequest is for a prerender activation
+// is available in WebContentsObserver::DidStartNavigation.
+class IsActivationObserver : public WebContentsObserver {
+ public:
+  IsActivationObserver(WebContents& web_contents, const GURL& url)
+      : WebContentsObserver(&web_contents), url_(url) {}
+  bool did_navigate() { return did_navigate_; }
+  bool was_activation() { return was_activation_; }
+
+ private:
+  void DidStartNavigation(NavigationHandle* handle) override {
+    if (handle->GetURL() != url_)
+      return;
+    did_navigate_ = true;
+    was_activation_ = handle->IsPrerenderedPageActivation();
+  }
+
+  const GURL url_;
+  bool did_navigate_ = false;
+  bool was_activation_ = false;
+};
+
+IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
+                       NavigationRequestIsPrerenderedPageActivation) {
+  const GURL kInitialUrl = GetUrl("/prerender/add_prerender.html");
+  const GURL kPrerenderingUrl = GetUrl("/empty.html");
+
+  test::PrerenderHostObserver prerender_observer(*shell()->web_contents(),
+                                                 kPrerenderingUrl);
+
+  // Navigate to an initial page and start a prerender. Note, AddPrerender will
+  // wait until the prerendered page has finished navigating.
+  {
+    ASSERT_TRUE(NavigateToURL(shell(), kInitialUrl));
+    ASSERT_EQ(web_contents()->GetURL(), kInitialUrl);
+    AddPrerender(kPrerenderingUrl);
+    ASSERT_NE(GetHostForUrl(kPrerenderingUrl),
+              RenderFrameHost::kNoFrameTreeNodeId);
+  }
+
+  IsActivationObserver is_activation_observer(*shell()->web_contents(),
+                                              kPrerenderingUrl);
+
+  // Now navigate the primary page to the prerendered URL so that we activate
+  // the prerender.
+  {
+    ASSERT_TRUE(ExecJs(web_contents()->GetMainFrame(),
+                       JsReplace("location = $1", kPrerenderingUrl)));
+    prerender_observer.WaitForActivation();
+  }
+
+  // Ensure that WebContentsObservers see the correct value for
+  // IsPrerenderedPageActivation in DidStartNavigation.
+  ASSERT_TRUE(is_activation_observer.did_navigate());
+  EXPECT_TRUE(is_activation_observer.was_activation());
 }
 
 // Ensures that if we attempt to open a URL while prerendering with a window
@@ -2637,6 +2703,201 @@ IN_PROC_BROWSER_TEST_P(PrerenderWithBackForwardCacheBrowserTest,
       break;
   }
 }
+
+// Tests for speculation rules =================================================
+
+// Tests that the new trigger of speculationrules works.
+IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, SpeculationRulesPrerender) {
+  const GURL kInitialUrl = GetUrl("/empty.html");
+  const GURL kPrerenderingUrl = GetUrl("/empty.html?prerender");
+
+  // Navigate to an initial page.
+  ASSERT_TRUE(NavigateToURL(shell(), kInitialUrl));
+  ASSERT_EQ(web_contents()->GetURL(), kInitialUrl);
+
+  // Add <script type="speculationrule"> that will prerender `kPrerenderingUrl`.
+  ASSERT_EQ(GetRequestCount(kPrerenderingUrl), 0);
+  const int host_id = AddSpeculationRules(kPrerenderingUrl);
+  ASSERT_NE(host_id, RenderFrameHost::kNoFrameTreeNodeId);
+  ASSERT_EQ(GetRequestCount(kPrerenderingUrl), 1);
+
+  NavigatePrimaryPage(kPrerenderingUrl);
+
+  // The prerender host should be consumed.
+  EXPECT_FALSE(HasHostForUrl(kPrerenderingUrl));
+
+  // Activating the prerendered page should not issue a request.
+  EXPECT_EQ(GetRequestCount(kPrerenderingUrl), 1);
+}
+
+// Tests that the speculationrules-triggered prerender would be destroyed after
+// its initiator navigates away.
+IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, SpeculationInitiatorNavigateAway) {
+  const GURL kInitialUrl = GetUrl("/empty.html");
+  const GURL kPrerenderingUrl = GetUrl("/empty.html?prerender");
+
+  ASSERT_TRUE(NavigateToURL(shell(), kInitialUrl));
+  const int host_id = AddSpeculationRules(kPrerenderingUrl);
+  ASSERT_NE(host_id, RenderFrameHost::kNoFrameTreeNodeId);
+
+  // Navigate the initiator page to a non-prerendered page. This destroys the
+  // prerendered page.
+  test::PrerenderHostObserver host_observer(*web_contents_impl(), host_id);
+  NavigatePrimaryPage(GetUrl("/empty.html?elsewhere"));
+  host_observer.WaitForDestroyed();
+
+  // The prerender host should be destroyed.
+  EXPECT_FALSE(HasHostForUrl(kPrerenderingUrl));
+}
+
+class TestSpeculationHostDelegate final : public SpeculationHostDelegate {
+ public:
+  TestSpeculationHostDelegate() = default;
+  ~TestSpeculationHostDelegate() override = default;
+
+  // Disallows copy and move operations.
+  TestSpeculationHostDelegate(const TestSpeculationHostDelegate&) = delete;
+  TestSpeculationHostDelegate& operator=(const TestSpeculationHostDelegate&) =
+      delete;
+
+  // SpeculationRulesDelegate implementation.
+  void ProcessCandidates(
+      std::vector<blink::mojom::SpeculationCandidatePtr>& candidates) override {
+    EXPECT_FALSE(processed_);
+    processed_ = true;
+    if (waiting_for_processing_) {
+      // SpeculationHostImpl processes prerender candidates right after
+      // ProcessCandidates(). Run the quit closure asynchronously so that
+      // the closure can see results of processing the candidates.
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, std::move(waiting_for_processing_));
+    }
+  }
+
+  base::WeakPtr<TestSpeculationHostDelegate> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+
+  void ResetProcessingState() {
+    processed_ = false;
+    waiting_for_processing_.Reset();
+  }
+
+  void WaitUntilCandidatesAreProcessed() {
+    if (processed_)
+      return;
+    base::RunLoop loop;
+    waiting_for_processing_ = loop.QuitClosure();
+    loop.Run();
+  }
+
+ private:
+  base::OnceClosure waiting_for_processing_;
+  bool processed_ = false;
+
+  base::WeakPtrFactory<TestSpeculationHostDelegate> weak_ptr_factory_{this};
+};
+
+class ScopedSpeculationHostImplContentBrowserClient
+    : public TestContentBrowserClient {
+ public:
+  ScopedSpeculationHostImplContentBrowserClient() {
+    old_browser_client_ = SetBrowserClientForTesting(this);
+  }
+
+  ~ScopedSpeculationHostImplContentBrowserClient() override {
+    EXPECT_EQ(this, SetBrowserClientForTesting(old_browser_client_));
+  }
+
+  std::unique_ptr<SpeculationHostDelegate> CreateSpeculationHostDelegate(
+      RenderFrameHost& render_frame_host) override {
+    auto delegate = std::make_unique<TestSpeculationHostDelegate>();
+    speculation_host_delegate_ = delegate->GetWeakPtr();
+    if (waiting_for_created_)
+      std::move(waiting_for_created_).Run();
+    return delegate;
+  }
+
+  void WaitForDelegateCreation() {
+    if (speculation_host_delegate_)
+      return;
+    base::RunLoop loop;
+    waiting_for_created_ = loop.QuitClosure();
+    loop.Run();
+  }
+
+  base::WeakPtr<TestSpeculationHostDelegate> speculation_host_delegate() {
+    return speculation_host_delegate_;
+  }
+
+ private:
+  ContentBrowserClient* old_browser_client_;
+  base::OnceClosure waiting_for_created_;
+  base::WeakPtr<TestSpeculationHostDelegate> speculation_host_delegate_;
+};
+
+// Tests that SpeculationHostImpl only triggers prerendering for the first
+// prerender speculation rule it receives.
+IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, AddSpeculationRulesMultipleTimes) {
+  ScopedSpeculationHostImplContentBrowserClient test_browser_client;
+
+  const GURL kInitialUrl = GetUrl("/empty.html");
+  const GURL kFirstPrerenderingUrl = GetUrl("/empty.html?prerender1");
+  const GURL kSecondPrerenderingUrl = GetUrl("/empty.html?prerender2");
+
+  ASSERT_TRUE(NavigateToURL(shell(), kInitialUrl));
+  const int host_id = AddSpeculationRules(kFirstPrerenderingUrl);
+
+  // The first prerender rule should be applied, so the prerender host for
+  // kFirstPrerenderingUrl should be registered.
+  ASSERT_NE(host_id, RenderFrameHost::kNoFrameTreeNodeId);
+
+  base::WeakPtr<TestSpeculationHostDelegate> delegate =
+      test_browser_client.speculation_host_delegate();
+  ASSERT_TRUE(delegate);
+  delegate->ResetProcessingState();
+
+  // Add a new speculation rule. Since SpeculationHostImpl limits the number of
+  // prerenders to one, this rule should not be applied.
+  AddSpeculationRulesAsync(kSecondPrerenderingUrl);
+  delegate->WaitUntilCandidatesAreProcessed();
+
+  // The kSecondPrerenderingUrl request should not be issued.
+  EXPECT_EQ(GetRequestCount(kSecondPrerenderingUrl), 0);
+  EXPECT_FALSE(HasHostForUrl(kSecondPrerenderingUrl));
+  EXPECT_TRUE(HasHostForUrl(kFirstPrerenderingUrl));
+}
+
+// Tests that speculationrules cannot trigger cross-origin prerendering.
+IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, CrossOriginSpeculationRules) {
+  ScopedSpeculationHostImplContentBrowserClient test_browser_client;
+  const GURL kInitialUrl = GetUrl("/empty.html");
+  const GURL kFirstPrerenderingUrlCrossOrigin =
+      GetCrossOriginUrl("/empty.html?crossorigin");
+  const GURL kSecondPrerenderingUrlSameOrigin =
+      GetUrl("/empty.html?sameorigin");
+
+  ASSERT_TRUE(NavigateToURL(shell(), kInitialUrl));
+
+  // Add a cross-origin prerender speculation rule, and it should be ignored.
+  AddSpeculationRulesAsync(kFirstPrerenderingUrlCrossOrigin);
+  test_browser_client.WaitForDelegateCreation();
+  base::WeakPtr<TestSpeculationHostDelegate> delegate =
+      test_browser_client.speculation_host_delegate();
+  ASSERT_TRUE(delegate);
+  delegate->WaitUntilCandidatesAreProcessed();
+
+  // Cross-origin prerender candidates should be ignored.
+  EXPECT_FALSE(HasHostForUrl(kFirstPrerenderingUrlCrossOrigin));
+  delegate->ResetProcessingState();
+
+  // Since the first one was ignored, the second one should be processed by
+  // SpeculationHostImpl and trigger prerendering.
+  const int host_id = AddSpeculationRules(kSecondPrerenderingUrlSameOrigin);
+  EXPECT_NE(host_id, RenderFrameHost::kNoFrameTreeNodeId);
+}
+
+// END: Tests for speculation rules ============================================
 
 }  // namespace
 }  // namespace content

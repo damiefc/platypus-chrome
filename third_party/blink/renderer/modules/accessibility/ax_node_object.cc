@@ -126,6 +126,35 @@
 
 namespace {
 
+// It is not easily possible to find out if an element is the target of an
+// in-page link.
+// As a workaround, we consider the following to be in-page link targets:
+// - <a name>
+// - An element with an id that is not SVG, a <label> or <optgroup>.
+//   <label> does not make much sense as an in-page link target.
+//   Exposing <optgroup> is redundant, as thr group is already exposed via a
+//   child in its shadow DOM, which contains the accessible name.
+//   This is a compromise that does not include too many elements, and
+//   has minimal impact on tests.
+bool IsInPageLinkTarget(blink::Element& element) {
+  // We exclude elements that are in the shadow DOM.
+  if (element.ContainingShadowRoot() || element.IsSVGElement())
+    return false;
+
+  if (auto* anchor = blink::DynamicTo<blink::HTMLAnchorElement>(&element)) {
+    if (anchor->HasName())
+      return true;
+  }
+
+  if (element.HasID() && !element.ContainingShadowRoot() &&
+      !blink::IsA<blink::HTMLLabelElement>(element) &&
+      !blink::IsA<blink::HTMLOptGroupElement>(element)) {
+    return true;
+  }
+
+  return false;
+}
+
 blink::HTMLMapElement* GetMapForImage(blink::LayoutObject* layout_object) {
   blink::LayoutImage* layout_image =
       blink::DynamicTo<blink::LayoutImage>(layout_object);
@@ -346,6 +375,21 @@ AXObjectInclusion AXNodeObject::ShouldIncludeBasedOnSemantics(
     return kDefaultBehavior;
   }
 
+  // Avoid double speech. The ruby text describes pronunciation of the ruby
+  // base, and generally produces redundant screen reader output. Expose it only
+  // as a description on the <ruby> element so that screen reader users can
+  // toggle it on/off as with other descriptions/annotations.
+  if (RoleValue() == ax::mojom::blink::Role::kRubyAnnotation ||
+      (RoleValue() == ax::mojom::blink::Role::kStaticText && ParentObject() &&
+       ParentObject()->RoleValue() ==
+           ax::mojom::blink::Role::kRubyAnnotation)) {
+    return kIgnoreObject;
+  }
+
+  Element* element = GetElement();
+  if (!element)
+    return kDefaultBehavior;
+
   if (IsTableLikeRole() || IsTableRowLikeRole() || IsTableCellLikeRole())
     return kIncludeObject;
 
@@ -353,7 +397,7 @@ AXObjectInclusion AXNodeObject::ShouldIncludeBasedOnSemantics(
   if (!IsA<HTMLBodyElement>(node) && CanSetFocusAttribute())
     return kIncludeObject;
 
-  if (IsLink() || IsInPageLinkTarget())
+  if (IsLink())
     return kIncludeObject;
 
   // A click handler might be placed on an otherwise ignored non-empty block
@@ -363,7 +407,7 @@ AXObjectInclusion AXNodeObject::ShouldIncludeBasedOnSemantics(
   if (IsClickable())
     return kIncludeObject;
 
-  if (IsHeading() || IsLandmarkRelated())
+  if (IsHeading())
     return kIncludeObject;
 
   // Header and footer tags may also be exposed as landmark roles but not
@@ -402,24 +446,54 @@ AXObjectInclusion AXNodeObject::ShouldIncludeBasedOnSemantics(
   static const HashSet<ax::mojom::blink::Role> always_included_computed_roles =
       {
           ax::mojom::blink::Role::kAbbr,
+          ax::mojom::blink::Role::kApplication,
+          ax::mojom::blink::Role::kArticle,
+          ax::mojom::blink::Role::kBanner,
           ax::mojom::blink::Role::kBlockquote,
+          ax::mojom::blink::Role::kComplementary,
           ax::mojom::blink::Role::kContentDeletion,
+          ax::mojom::blink::Role::kContentInfo,
           ax::mojom::blink::Role::kContentInsertion,
-          ax::mojom::blink::Role::kDetails,
           ax::mojom::blink::Role::kDescriptionList,
           ax::mojom::blink::Role::kDescriptionListDetail,
           ax::mojom::blink::Role::kDescriptionListTerm,
+          ax::mojom::blink::Role::kDetails,
           ax::mojom::blink::Role::kDialog,
+          ax::mojom::blink::Role::kDocAcknowledgments,
+          ax::mojom::blink::Role::kDocAfterword,
+          ax::mojom::blink::Role::kDocAppendix,
+          ax::mojom::blink::Role::kDocBibliography,
+          ax::mojom::blink::Role::kDocChapter,
+          ax::mojom::blink::Role::kDocConclusion,
+          ax::mojom::blink::Role::kDocCredits,
+          ax::mojom::blink::Role::kDocEndnotes,
+          ax::mojom::blink::Role::kDocEpilogue,
+          ax::mojom::blink::Role::kDocErrata,
+          ax::mojom::blink::Role::kDocForeword,
+          ax::mojom::blink::Role::kDocGlossary,
+          ax::mojom::blink::Role::kDocIntroduction,
+          ax::mojom::blink::Role::kDocPart,
+          ax::mojom::blink::Role::kDocPreface,
+          ax::mojom::blink::Role::kDocPrologue,
+          ax::mojom::blink::Role::kDocToc,
           ax::mojom::blink::Role::kFigcaption,
           ax::mojom::blink::Role::kFigure,
+          ax::mojom::blink::Role::kFooter,
+          ax::mojom::blink::Role::kForm,
+          ax::mojom::blink::Role::kHeader,
           ax::mojom::blink::Role::kList,
           ax::mojom::blink::Role::kListItem,
+          ax::mojom::blink::Role::kMain,
           ax::mojom::blink::Role::kMark,
           ax::mojom::blink::Role::kMath,
           ax::mojom::blink::Role::kMeter,
+          ax::mojom::blink::Role::kNavigation,
           ax::mojom::blink::Role::kPluginObject,
           ax::mojom::blink::Role::kProgressIndicator,
+          ax::mojom::blink::Role::kRegion,
           ax::mojom::blink::Role::kRuby,
+          ax::mojom::blink::Role::kSearch,
+          ax::mojom::blink::Role::kSection,
           ax::mojom::blink::Role::kSplitter,
           ax::mojom::blink::Role::kTime,
       };
@@ -427,17 +501,6 @@ AXObjectInclusion AXNodeObject::ShouldIncludeBasedOnSemantics(
   if (always_included_computed_roles.find(RoleValue()) !=
       always_included_computed_roles.end())
     return kIncludeObject;
-
-  // Avoid double speech. The ruby text describes pronunciation of the ruby
-  // base, and generally produces redundant screen reader output. Expose it only
-  // as a description on the <ruby> element so that screen reader users can
-  // toggle it on/off as with other descriptions/annotations.
-  if (RoleValue() == ax::mojom::blink::Role::kRubyAnnotation ||
-      (RoleValue() == ax::mojom::blink::Role::kStaticText && ParentObject() &&
-       ParentObject()->RoleValue() ==
-           ax::mojom::blink::Role::kRubyAnnotation)) {
-    return kIgnoreObject;
-  }
 
   // Using the title or accessibility description (so we
   // check if there's some kind of accessible name for the element)
@@ -457,6 +520,10 @@ AXObjectInclusion AXNodeObject::ShouldIncludeBasedOnSemantics(
       ignored_reasons->push_back(IgnoredReason(kAXEmptyAlt));
     return kIgnoreObject;
   }
+
+  // Process potential in-page link targets
+  if (IsInPageLinkTarget(*element))
+    return kIncludeObject;
 
   // <span> tags are inline tags and not meant to convey information if they
   // have no other ARIA information on them. If we don't ignore them, they may
@@ -1185,30 +1252,6 @@ bool AXNodeObject::IsInputImage() const {
   return false;
 }
 
-// It is not easily possible to find out if an element is the target of an
-// in-page link.
-// As a workaround, we check if the element is a sectioning element with an ID,
-// or an anchor with a name.
-bool AXNodeObject::IsInPageLinkTarget() const {
-  auto* element = DynamicTo<Element>(node_.Get());
-  if (!element)
-    return false;
-  // We exclude elements that are in the shadow DOM.
-  if (element->ContainingShadowRoot())
-    return false;
-
-  if (auto* anchor = DynamicTo<HTMLAnchorElement>(element)) {
-    return anchor->HasName() || anchor->HasID();
-  }
-
-  if (element->HasID() &&
-      (IsLandmarkRelated() || IsA<HTMLSpanElement>(element) ||
-       IsA<HTMLDivElement>(element))) {
-    return true;
-  }
-  return false;
-}
-
 bool AXNodeObject::IsLoaded() const {
   if (!GetDocument())
     return false;
@@ -1729,7 +1772,7 @@ void AXNodeObject::SerializeMarkerAttributes(ui::AXNodeData* node_data) const {
 }
 
 AXObject* AXNodeObject::InPageLinkTarget() const {
-  if (!IsAnchor() || !GetDocument())
+  if (!IsLink() || !GetDocument())
     return AXObject::InPageLinkTarget();
 
   const Element* anchor = AnchorElement();
@@ -1753,6 +1796,11 @@ AXObject* AXNodeObject::InPageLinkTarget() const {
     return AXObject::InPageLinkTarget();
   // If the target is not in the accessibility tree, get the first unignored
   // sibling.
+  // TODO(accessibility) Ensure all in-page targets are unignored so that
+  // this extra logic becomes unnecessary. We should be able to simply call
+  // GetOrCreate(target) and DCHECK() that it's unignored.
+  // See IsInPageLinkTarget(), which includes almost all elements with an id,
+  // except for a few which affected tests.
   return AXObjectCache().FirstAccessibleObjectFromNode(target);
 }
 
@@ -2411,18 +2459,8 @@ bool AXNodeObject::StepValueForRange(float* out_value) const {
 }
 
 KURL AXNodeObject::Url() const {
-  if (IsAnchor()) {
-    const Element* anchor = AnchorElement();
-
-    if (const auto* html_anchor = DynamicTo<HTMLAnchorElement>(anchor)) {
-      return html_anchor->Href();
-    }
-
-    // Some non-HTML elements, most notably SVG <a> elements, can act as
-    // links/anchors.
-    if (anchor)
-      return anchor->HrefURL();
-  }
+  if (IsLink())  // <area>, <link>, <html:a> or <svg:a>
+    return GetElement()->HrefURL();
 
   if (IsWebArea() && GetDocument())
     return GetDocument()->Url();
@@ -3983,6 +4021,8 @@ Element* AXNodeObject::ActionElement() const {
     return element;
 
   Element* anchor = AnchorElement();
+  if (anchor && !anchor->IsLiveLink())
+    anchor = nullptr;  // Non-interactive link target like <a name>.
   Element* click_element = MouseButtonListener();
   if (!anchor || (click_element && click_element->IsDescendantOf(anchor)))
     return click_element;
@@ -3990,24 +4030,16 @@ Element* AXNodeObject::ActionElement() const {
 }
 
 Element* AXNodeObject::AnchorElement() const {
-  Node* node = GetNode();
-  if (!node)
-    return nullptr;
-
-  AXObjectCacheImpl& cache = AXObjectCache();
-
-  // search up the DOM tree for an anchor element
-  // NOTE: this assumes that any non-image with an anchor is an
-  // HTMLAnchorElement
-  for (; node; node = node->parentNode()) {
-    if (IsA<HTMLAnchorElement>(*node))
-      return To<Element>(node);
-
-    if (LayoutObject* layout_object = node->GetLayoutObject()) {
-      AXObject* ax_object = cache.GetOrCreate(layout_object);
-      if (ax_object && ax_object->IsAnchor())
-        return To<Element>(node);
+  // Search up the DOM tree for an anchor. This can be anything that has the
+  // linked state, such as an HTMLAnchorElement or role=link/doc-backlink.
+  const AXObject* current = this;
+  while (current) {
+    if (current->IsLink()) {
+      DCHECK(current->GetElement())
+          << "An AXObject* that is a link should always have an element.";
+      return current->GetElement();
     }
+    current = current->ParentObject();
   }
 
   return nullptr;

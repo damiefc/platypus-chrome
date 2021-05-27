@@ -3314,9 +3314,6 @@ const FeatureEntry kFeatureEntries[] = {
      FEATURE_VALUE_TYPE(ash::features::kLockScreenNotifications)},
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    {"crostini-use-dlc", flag_descriptions::kCrostiniUseDlcName,
-     flag_descriptions::kCrostiniUseDlcDescription, kOsCrOS,
-     FEATURE_VALUE_TYPE(chromeos::features::kCrostiniUseDlc)},
     {"pluginvm-fullscreen", flag_descriptions::kPluginVmFullscreenName,
      flag_descriptions::kPluginVmFullscreenDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(chromeos::features::kPluginVmFullscreen)},
@@ -3856,12 +3853,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAriaElementReflectionDescription, kOsAll,
      FEATURE_VALUE_TYPE(features::kEnableAriaElementReflection)},
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    {"enable-encryption-migration",
-     flag_descriptions::kEnableEncryptionMigrationName,
-     flag_descriptions::kEnableEncryptionMigrationDescription, kOsCrOS,
-     ENABLE_DISABLE_VALUE_TYPE(
-         chromeos::switches::kEnableEncryptionMigration,
-         chromeos::switches::kDisableEncryptionMigration)},
     {"enable-cros-ime-assist-autocorrect",
      flag_descriptions::kImeAssistAutocorrectName,
      flag_descriptions::kImeAssistAutocorrectDescription, kOsCrOS,
@@ -5459,10 +5450,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kMeteredShowToggleDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(features::kMeteredShowToggle)},
 
-    {"printer-status", flag_descriptions::kPrinterStatusName,
-     flag_descriptions::kPrinterStatusDescription, kOsCrOS,
-     FEATURE_VALUE_TYPE(chromeos::features::kPrinterStatus)},
-
     {"printer-status-dialog", flag_descriptions::kPrinterStatusDialogName,
      flag_descriptions::kPrinterStatusDialogDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(chromeos::features::kPrinterStatusDialog)},
@@ -6574,15 +6561,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAImageReaderDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(features::kAImageReader)},
 #endif  // OS_ANDROID
-
-#if defined(OS_ANDROID)
-    {"enable-autofill-credit-card-cvc-prompt-google-logo",
-     flag_descriptions::kEnableAutofillCreditCardCvcPromptGoogleLogoName,
-     flag_descriptions::kEnableAutofillCreditCardCvcPromptGoogleLogoDescription,
-     kOsAndroid,
-     FEATURE_VALUE_TYPE(
-         autofill::features::kAutofillDownstreamCvcPromptUseGooglePayLogo)},
-#endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     {"enable-auto-select", flag_descriptions::kEnableAutoSelectName,

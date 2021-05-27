@@ -883,6 +883,10 @@ static_library("browser_tests_runner") {
   if (is_win) {
     deps += [ "//chrome/installer/util:strings" ]
   }
+
+  if (is_android) {
+    deps += [ "//ui/compositor" ]
+  }
 }
 
 if (!is_android) {
@@ -2034,7 +2038,7 @@ if (!is_android) {
       sources +=
           [ "../browser/speech/speech_recognition_service_browsertest.cc" ]
       if (is_mac) {
-        data_deps += [ "//third_party/soda-mac:soda_resources" ]
+        data_deps += [ "//third_party/soda-mac64:soda_resources" ]
       } else if (is_win && target_cpu == "x86") {
         data_deps += [ "//third_party/soda-win32:soda_resources" ]
       } else if (is_win && target_cpu == "x64") {
@@ -3353,7 +3357,6 @@ if (!is_android) {
         "../browser/ui/views/crostini/crostini_package_install_failure_view_browsertest.cc",
         "../browser/ui/views/crostini/crostini_recovery_view_browsertest.cc",
         "../browser/ui/views/crostini/crostini_uninstaller_view_browsertest.cc",
-        "../browser/ui/views/crostini/crostini_update_component_view_browsertest.cc",
         "../browser/ui/views/crostini/crostini_update_filesystem_view_browsertest.cc",
         "../browser/ui/views/extensions/extension_dialog_bounds_browsertest.cc",
         "../browser/ui/views/frame/browser_frame_ash_browsertest.cc",
@@ -5593,17 +5596,17 @@ test("unit_tests") {
       "../browser/nearby_sharing/nearby_share_profile_info_provider_impl_unittest.cc",
       "../browser/nearby_sharing/nearby_share_settings_unittest.cc",
       "../browser/nearby_sharing/nearby_sharing_service_impl_unittest.cc",
+      "../browser/nearby_sharing/network_traversal_ice_config_fetcher_unittest.cc",
       "../browser/nearby_sharing/paired_key_verification_runner_unittest.cc",
       "../browser/nearby_sharing/payload_tracker_unittest.cc",
       "../browser/nearby_sharing/sharesheet/nearby_share_action_unittest.cc",
+      "../browser/nearby_sharing/tachyon_ice_config_fetcher_unittest.cc",
       "../browser/nearby_sharing/text_attachment_unittest.cc",
       "../browser/nearby_sharing/webrtc_request_builder_unittest.cc",
       "../browser/nearby_sharing/webrtc_signaling_messenger_unittest.cc",
       "../browser/notifications/chrome_ash_message_center_client_unittest.cc",
       "../browser/notifications/web_page_notifier_controller_unittest.cc",
       "../browser/policy/printing_restrictions_policy_handler_unittest.cc",
-      "../browser/sharing/webrtc/network_traversal_ice_config_fetcher_unittest.cc",
-      "../browser/sharing/webrtc/tachyon_ice_config_fetcher_unittest.cc",
       "../browser/speech/tts_chromeos_unittest.cc",
       "../browser/speech/tts_controller_delegate_impl_unittest.cc",
       "../browser/sync/sync_error_notifier_ash_unittest.cc",
@@ -8317,17 +8320,15 @@ if (is_chromeos_ash) {
       "../browser/ash/child_accounts/time_limit_consistency_test/consistency_test_utils.h",
       "../browser/ash/child_accounts/time_limit_consistency_test/proto_matcher.h",
       "../browser/ash/child_accounts/time_limit_consistency_test/run_all_unittests.cc",
-      "../browser/ash/child_accounts/time_limit_override.cc",
-      "../browser/ash/child_accounts/time_limit_override.h",
       "../browser/ash/child_accounts/time_limit_test_utils.cc",
       "../browser/ash/child_accounts/time_limit_test_utils.h",
-      "../browser/ash/child_accounts/usage_time_limit_processor.cc",
-      "../browser/ash/child_accounts/usage_time_limit_processor.h",
     ]
     deps = [
       ":consistency_golden_proto",
       "//base",
       "//base/test:test_support",
+      "//chrome/browser",
+      "//chrome/browser/chromeos",
       "//chromeos/settings",
       "//testing/gmock",
       "//testing/gtest",

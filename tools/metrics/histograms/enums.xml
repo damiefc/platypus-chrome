@@ -23785,6 +23785,21 @@ Called by update_document_policy_enum.py.-->
   <int value="1" label="Reused lock"/>
 </enum>
 
+<enum name="EnterpriseFilesystemUploadAttemptCount">
+  <int value="0" label="File not renamed"/>
+  <int value="1" label="Renamed with suffix (1)"/>
+  <int value="2" label="Renamed with suffix (2)"/>
+  <int value="3" label="Renamed with suffix (3)"/>
+  <int value="4" label="Renamed with suffix (4)"/>
+  <int value="5" label="Renamed with suffix (5)"/>
+  <int value="6" label="Renamed with suffix (6)"/>
+  <int value="7" label="Renamed with suffix (7)"/>
+  <int value="8" label="Renamed with suffix (8)"/>
+  <int value="9" label="Renamed with suffix (9)"/>
+  <int value="1000" label="TimestampBasedName"/>
+  <int value="2000" label="Abandoned upload"/>
+</enum>
+
 <enum name="EnterpriseInitialEnrollmentRequirement">
   <obsolete>
     Removed in M91 since the data is not monitored.
@@ -27574,6 +27589,7 @@ Called by update_extension_histograms.py.-->
   <int value="1552" label="AUTOTESTPRIVATE_ISSYSTEMWEBAPPOPENFUNCTION"/>
   <int value="1553" label="TTSENGINE_SENDTTSAUDIO"/>
   <int value="1554" label="AUTOTESTPRIVATE_ACTIVATEAPPWINDOW"/>
+  <int value="1555" label="FILEMANAGERPRIVATEINTERNAL_CANCELZIP"/>
 </enum>
 
 <enum name="ExtensionIconState">
@@ -44001,11 +44017,26 @@ Called by update_gpu_driver_bug_workaround_entries.py.-->
   <int value="2" label="Generation failed (shared text)"/>
 </enum>
 
+<enum name="LinkGenerationState">
+  <int value="0" label="kNotStarted: Link generation is not strated."/>
+  <int value="1"
+      label="kNeedsNewCandidate: New candidate selector is being generated."/>
+  <int value="2" label="kTestCandidate: Candidate selector is being tested."/>
+  <int value="3" label="kFailure: Link generation completed with failure."/>
+  <int value="4" label="kSuccess: Link generation completed with success."/>
+</enum>
+
 <enum name="LinkMonitorFailureType">
   <int value="0" label="Local MAC Address Not Found"/>
   <int value="1" label="Client Startup Failure"/>
   <int value="2" label="Transmission Failure"/>
   <int value="3" label="Failure Threshold Reached"/>
+</enum>
+
+<enum name="LinkToTextDiagnoseStatus">
+  <int value="0" label="Show sharing hub is requested for highlighted text"/>
+  <int value="1" label="Selector is requested for highlighted text"/>
+  <int value="2" label="Selector is received for highlighted text"/>
 </enum>
 
 <enum name="LinkToTextShouldOfferResult">
@@ -79148,6 +79179,7 @@ Full version information for the fingerprint enum values:
   <int value="28" label="kSettingsResetPromptLastTriggeredForHomepage"/>
   <int value="29" label="kMediaStorageIdSalt"/>
   <int value="30" label="kModuleBlocklistCacheMD5Digest"/>
+  <int value="32" label="kMediaCdmOrigin"/>
 </enum>
 
 <enum name="TranslateAssistContentResult">

@@ -42,8 +42,7 @@ ui::IMEEngineHandlerInterface* GetEngine() {
 InputMethodChromeOS::InputMethodChromeOS(
     internal::InputMethodDelegate* delegate)
     : InputMethodBase(delegate),
-      typing_session_manager_(
-          TypingSessionManager(base::DefaultClock::GetInstance())) {
+      typing_session_manager_(base::DefaultClock::GetInstance()) {
   ResetContext();
 }
 
@@ -776,6 +775,21 @@ void InputMethodChromeOS::HidePreeditText() {
     }
     composition_changed_ = false;
   }
+}
+
+bool InputMethodChromeOS::CanComposeInline() const {
+  TextInputClient* client = GetTextInputClient();
+  return client ? client->CanComposeInline() : true;
+}
+
+bool InputMethodChromeOS::GetClientShouldDoLearning() const {
+  TextInputClient* client = GetTextInputClient();
+  return client && client->ShouldDoLearning();
+}
+
+int InputMethodChromeOS::GetTextInputFlags() const {
+  TextInputClient* client = GetTextInputClient();
+  return client ? client->GetTextInputFlags() : 0;
 }
 
 void InputMethodChromeOS::SendKeyEvent(KeyEvent* event) {
