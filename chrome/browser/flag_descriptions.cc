@@ -800,6 +800,11 @@ const char kEnableTLS13EarlyDataDescription[] =
     "during the handshake when resuming a connection to a compatible TLS 1.3 "
     "server.";
 
+const char kEnhancedNetworkVoicesName[] = "Enhanced network voices";
+const char kEnhancedNetworkVoicesDescription[] =
+    "This option enables high-quality, network-based voices in "
+    "Select-to-speak.";
+
 const char kPostQuantumCECPQ2Name[] = "TLS Post-Quantum Confidentiality";
 const char kPostQuantumCECPQ2Description[] =
     "This option enables a post-quantum (i.e. resistent to quantum computers) "
@@ -2289,6 +2294,11 @@ const char kSplitCacheByNetworkIsolationKeyName[] = "HTTP Cache Partitioning";
 const char kSplitCacheByNetworkIsolationKeyDescription[] =
     "Partitions the HTTP Cache by (top-level site, current-frame site) to "
     "disallow cross-site tracking.";
+
+const char kStrictExtensionIsolationName[] = "Strict Extension Isolation";
+const char kStrictExtensionIsolationDescription[] =
+    "Experimental security mode that prevents extensions from sharing a "
+    "process with each other.";
 
 const char kStrictOriginIsolationName[] = "Strict-Origin-Isolation";
 const char kStrictOriginIsolationDescription[] =

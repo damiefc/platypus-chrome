@@ -2739,6 +2739,11 @@
     "expiry_milestone": 90
   },
   {
+    "name": "enhanced-network-voices",
+    "owners": ["joelriley@google.com", "leileilei@google.com", "dmazzoni"],
+    "expiry_milestone": 95
+  },
+  {
     "name": "enterprise-realtime-extension-request",
     "owners": ["zmin", "parastoog"],
     "expiry_milestone": 98
@@ -4874,6 +4879,14 @@
     "name": "storage-access-api",
     "owners": [ "brandm@microsoft.com" ],
     "expiry_milestone": 90
+  },
+  {
+    "name": "strict-extension-isolation",
+    "owners": [ "creis" ],
+    // This prevents extensions from sharing a process with each other. It is
+    // useful for improving security but launching it will depend on trials that
+    // will monitor the effect on process count, etc.
+    "expiry_milestone": 100
   },
   {
     "name": "strict-origin-isolation",

@@ -6,10 +6,13 @@
 
 #include <limits>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "ash/app_list/bubble/scrollable_apps_grid_view.h"
+#include "ash/bubble/bubble_utils.h"
 #include "base/check.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
@@ -19,6 +22,15 @@
 using views::BoxLayout;
 
 namespace ash {
+namespace {
+
+std::unique_ptr<views::Label> CreateLabel(const std::u16string& text) {
+  auto label = std::make_unique<views::Label>(text);
+  bubble_utils::ApplyStyle(label.get(), bubble_utils::LabelStyle::kBody);
+  return label;
+}
+
+}  // namespace
 
 BubbleAppsPage::BubbleAppsPage(AppListViewDelegate* view_delegate) {
   DCHECK(view_delegate);
@@ -31,6 +43,8 @@ BubbleAppsPage::BubbleAppsPage(AppListViewDelegate* view_delegate) {
   scroll->SetDrawOverflowIndicator(false);
   scroll->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kDisabled);
+  // Don't paint a background. The bubble already has one.
+  scroll->SetBackgroundColor(absl::nullopt);
 
   auto scroll_contents = std::make_unique<views::View>();
   auto* layout = scroll_contents->SetLayoutManager(
@@ -39,8 +53,7 @@ BubbleAppsPage::BubbleAppsPage(AppListViewDelegate* view_delegate) {
 
   // TODO(https://crbug.com/1204551): Localized strings.
   // TODO(https://crbug.com/1204551): Styling.
-  auto* continue_label =
-      scroll_contents->AddChildView(std::make_unique<views::Label>(u"Label"));
+  auto* continue_label = scroll_contents->AddChildView(CreateLabel(u"Label"));
   continue_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
   auto* continue_section =
@@ -54,7 +67,7 @@ BubbleAppsPage::BubbleAppsPage(AppListViewDelegate* view_delegate) {
   continue_layout->set_cross_axis_alignment(
       BoxLayout::CrossAxisAlignment::kStretch);
   for (int i = 0; i < 4; ++i) {
-    continue_section->AddChildView(std::make_unique<views::Label>(u"Item"));
+    continue_section->AddChildView(CreateLabel(u"Item"));
   }
 
   // TODO(https://crbug.com/1204551): Replace with real recent apps view.
@@ -68,7 +81,7 @@ BubbleAppsPage::BubbleAppsPage(AppListViewDelegate* view_delegate) {
   recent_apps_layout->set_main_axis_alignment(
       views::BoxLayout::MainAxisAlignment::kCenter);
   for (int i = 0; i < 5; ++i) {
-    recent_apps->AddChildView(std::make_unique<views::Label>(u"Item"));
+    recent_apps->AddChildView(CreateLabel(u"Item"));
   }
 
   // All apps section.
